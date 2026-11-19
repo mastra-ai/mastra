@@ -2540,6 +2540,7 @@ export class EventedRun<
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
+    tracingContext?: TracingContext;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     const fgaProvider = this.mastra?.getServer()?.fga;
     if (fgaProvider && !this.isInternalWorkflow) {
@@ -2715,6 +2716,7 @@ export class EventedRun<
         resumedFromSpanId: snapshot.tracingContext?.spanId,
       },
       tracingPolicy: this.tracingPolicy,
+      tracingContext: params.tracingContext,
       resumeFrom: snapshot.tracingContext,
       requestContext,
       mastra: this.mastra,

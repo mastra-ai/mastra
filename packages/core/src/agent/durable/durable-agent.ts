@@ -28,6 +28,7 @@ import {
   createObservabilityContext,
   getOrCreateSpan,
   getResumeTracingContext,
+  getWorkflowResumeTracingContext,
   SpanType,
   EntityType,
 } from '../../observability';
@@ -55,6 +56,7 @@ import { applyReservedMemoryContextKeys, recoverySkip, TRANSIENT_RECOVERY_RETRY_
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { modelSpanAttributes } from '../model-span-attributes';
+import { buildResumeSpanInput } from '../resume-span-input';
 import { whenRunStepsSettle } from '../run-lease-fence';
 import { SaveQueueManager } from '../save-queue';
 import type { AgentScopesSnapshot } from '../scopes';
@@ -3891,6 +3893,7 @@ export class DurableAgent<
     let resumedText: { priorText: string; stepText: string } | undefined;
     let resumeOffset: number | 'latest';
     let persistedInput: DurableAgenticWorkflowInput | undefined;
+    let suspendedToolCallIds: string[] = [];
     try {
       // A concurrent resume of the same suspension may have claimed and run it while this one
       // waited for the execution claim. Report that as a lost race, not a generic failure.
@@ -3931,6 +3934,7 @@ export class DurableAgent<
       // (resumeGenerate) would immediately close on the replayed SUSPENDED.
       resumeOffset = await this.#getPubsubOffset(runId);
       persistedInput = current?.context?.input as DurableAgenticWorkflowInput | undefined;
+      suspendedToolCallIds = Object.keys(current?.resumeLabels ?? {});
       // A parked run that lost its thread lease must hold it again before the segment runs. Later
       // registration fails open, so take it here: a successor that now holds the thread refuses this
       // resume instead of running beside it, and the run stays parked.
@@ -4033,6 +4037,10 @@ export class DurableAgent<
         const rawConfig = typeof (ag as any).toRawConfig === 'function' ? (ag as any).toRawConfig() : undefined;
         const resolvedVersionId = rawConfig?.resolvedVersionId as string | undefined;
         const agentTracingPolicy = typeof ag.getTracingPolicy === 'function' ? ag.getTracingPolicy() : undefined;
+        const suspendedToolCallId = resolvedOptions.toolCallId ?? suspendedToolCallIds[0];
+        // The first call's trace settings hold unless this resume call sets its own. The agent's
+        // defaults are already part of them, so they must not win here.
+        const { hideInput, hideOutput, requestContextKeys } = options?.tracingOptions ?? {};
         const resumeAgentSpan = getOrCreateSpan({
           type: SpanType.AGENT_RUN,
           outcome: null,
@@ -4040,17 +4048,28 @@ export class DurableAgent<
           entityType: EntityType.AGENT,
           entityId: ag.id,
           entityName: ag.name,
-          attributes: modelSpanAttributes(resumeModel),
+          input: buildResumeSpanInput(resumeData, {
+            toolCallId: suspendedToolCallId,
+            toolName: initialToolCalls.find(call => call.payload.toolCallId === suspendedToolCallId)?.payload.toolName,
+          }),
+          attributes: { conversationId: memoryInfo?.threadId, ...modelSpanAttributes(resumeModel) },
           metadata: {
             runId,
+            resourceId: memoryInfo?.resourceId,
+            threadId: memoryInfo?.threadId,
             resumed: true,
             ...(origSpanId ? { resumedFromSpanId: origSpanId } : {}),
             ...(resolvedVersionId ? { entityVersionId: resolvedVersionId } : {}),
           },
-          resumeFrom: getResumeTracingContext(entry.agentSpan),
+          resumeFrom: getWorkflowResumeTracingContext(entry.agentSpan),
           tracingPolicy: agentTracingPolicy,
-          tracingOptions: { traceId: origTraceId, ...entry.agentSpan?.traceState },
-          traceState: entry.agentSpan?.traceState,
+          tracingOptions: {
+            ...resolvedOptions.tracingOptions,
+            hideInput,
+            hideOutput,
+            requestContextKeys,
+            traceId: origTraceId,
+          },
           samplingDecision: entry.agentSpan?.isValid,
           requestContext: resolvedOptions.requestContext,
           mastra: this.#mastra,
