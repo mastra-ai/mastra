@@ -4,7 +4,9 @@ import { expect, within } from 'storybook/test';
 
 import { Button } from '../Button/Button';
 import { Input } from '../Input/input';
+import { Kbd } from '../Kbd/kbd';
 import { Switch } from '../Switch/switch';
+import { Txt } from '../Txt/Txt';
 import { FormLayout } from './index';
 import { MainCard } from '@/ds/new/layout/app-shell/main-card';
 import { SettingsContainer } from '@/ds/new/settings/settings-container';
@@ -141,7 +143,6 @@ export const LongText: Story = {
   ),
 };
 
-/** A live preview beside the form on wide screens, and above the fields on small ones. */
 export const WithAside: Story = {
   render: args => (
     <StoryFrame>
@@ -162,4 +163,33 @@ export const WithAside: Story = {
       </FormLayout>
     </StoryFrame>
   ),
+};
+
+export const PhoneWidth: Story = {
+  args: { backHref: '#factory', backLabel: 'Factory', title: 'New Factory' },
+  render: args => (
+    <div className="flex h-200 w-80 bg-sidebar p-2">
+      <MainCard>
+        <FormLayout {...args}>
+          <div className="flex items-center gap-3">
+            <Txt as="span" className="truncate">
+              acme-platform/payments-billing-reliability-service-monorepo
+            </Txt>
+            <Kbd>Esc</Kbd>
+          </div>
+        </FormLayout>
+      </MainCard>
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const column = canvasElement.querySelector<HTMLElement>('[data-slot="form-layout"]');
+    const content = canvasElement.querySelector<HTMLElement>('[data-slot="form-layout-content"]');
+    const label = within(canvasElement).getByText(/acme-platform/);
+    if (!column || !content) throw new Error('Missing the form column');
+
+    const columnRight = column.getBoundingClientRect().right;
+    await expect(content.getBoundingClientRect().right).toBeLessThanOrEqual(columnRight);
+    await expect(label.getBoundingClientRect().right).toBeLessThanOrEqual(columnRight);
+    await expect(label.scrollWidth).toBeGreaterThan(label.clientWidth);
+  },
 };

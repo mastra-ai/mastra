@@ -4,9 +4,7 @@ import { PageHeader } from '@/ds/new/layout/page-header';
 import { cn } from '@/lib/utils';
 
 export interface SettingsLayoutProps {
-  /** Left side of the page header row. */
   breadcrumbs?: ReactNode;
-  /** Right side of the page header row. */
   headerActions?: ReactNode;
   /** The page title. Leave it out when the app's own header already names the page. */
   title?: ReactNode;
