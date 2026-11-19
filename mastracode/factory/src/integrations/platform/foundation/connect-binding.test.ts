@@ -1,6 +1,7 @@
 import { MastraConnectError } from '@mastra/connect';
 import { describe, expect, it, vi } from 'vitest';
 
+import { createFactoryStorageForTests } from '../../../storage/test-utils.js';
 import { PlatformConnectBinding, PlatformConnectionNotConnectedError } from './connect-binding.js';
 import { problem, startFakePlatform } from './test-utils.js';
 import type { FakePlatform } from './test-utils.js';
@@ -328,5 +329,105 @@ describe('PlatformConnectBinding.linkOrgConnections', () => {
 
     expect(platform.count('GET', '/v2/connections')).toBe(0);
     expect(platform.linked.size).toBe(1);
+  });
+});
+
+describe('PlatformConnectBinding boot linking across restarts', () => {
+  async function orgPlatform(): Promise<FakePlatform> {
+    const platform = await startFakePlatform();
+    platform.orgConnections = [
+      { id: 'conn-linked', integrationId: 'jira', status: 'active' },
+      { id: 'conn-unlinked', integrationId: 'jira', status: 'active' },
+    ];
+    platform.linked.add('conn-linked');
+    return platform;
+  }
+
+  async function linkStore() {
+    return (await createFactoryStorageForTests()).integrations.forIntegration('jira');
+  }
+
+  /** A fresh binding over the same storage, as a restarted deployment gets. */
+  async function boot(platform: FakePlatform, store: Awaited<ReturnType<typeof linkStore>>) {
+    const jira = binding(platform, { linkOrgConnectionsAtBoot: true });
+    await jira.ensureBootLinked(store);
+    return jira;
+  }
+
+  const linkPosts = (platform: FakePlatform, id: string) =>
+    platform.count('POST', `/v2/projects/proj_factory/connections/${id}`);
+
+  it('leaves a connection detached from the project alone on the next boot', async () => {
+    const platform = await orgPlatform();
+    const store = await linkStore();
+    await boot(platform, store);
+    expect([...platform.linked].sort()).toEqual(['conn-linked', 'conn-unlinked']);
+
+    // Someone removes both from the project: one Factory linked, one the project already had.
+    platform.linked.delete('conn-unlinked');
+    platform.linked.delete('conn-linked');
+    const restarted = await boot(platform, store);
+
+    expect(linkPosts(platform, 'conn-unlinked')).toBe(1);
+    expect(linkPosts(platform, 'conn-linked')).toBe(0);
+    await expect(restarted.listConnections()).resolves.toEqual([]);
+    expect(restarted.needsLinking).toEqual([]);
+    await expect(store.settings.get('__platform_connect_links__', 'project:proj_factory')).resolves.toEqual({
+      version: 1,
+      connectionIds: ['conn-linked', 'conn-unlinked'],
+    });
+  });
+
+  it('still links, once, an org connection made after the last boot', async () => {
+    const platform = await orgPlatform();
+    const store = await linkStore();
+    await boot(platform, store);
+
+    platform.orgConnections.push({ id: 'conn-new', integrationId: 'jira', status: 'active' });
+    await boot(platform, store);
+    expect(platform.linked.has('conn-new')).toBe(true);
+
+    platform.linked.delete('conn-new');
+    await boot(platform, store);
+    expect(linkPosts(platform, 'conn-new')).toBe(1);
+  });
+
+  it('keeps trying, on later boots, a link the platform refused', async () => {
+    const platform = await orgPlatform();
+    const store = await linkStore();
+    platform.linkReplies.set('conn-unlinked', problem(403, 'forbidden'));
+    expect((await boot(platform, store)).needsLinking).toMatchObject([{ connectionId: 'conn-unlinked' }]);
+
+    platform.linkReplies.delete('conn-unlinked');
+    const restarted = await boot(platform, store);
+
+    expect(platform.linked.has('conn-unlinked')).toBe(true);
+    expect(restarted.needsLinking).toEqual([]);
+  });
+
+  it('links a detached connection again when an admin asks for it', async () => {
+    const platform = await orgPlatform();
+    const store = await linkStore();
+    await boot(platform, store);
+    platform.linked.delete('conn-unlinked');
+    const restarted = await boot(platform, store);
+    expect(platform.linked.has('conn-unlinked')).toBe(false);
+
+    await expect(restarted.linkOrgConnections({ relinkDetached: true })).resolves.toEqual({
+      linked: ['conn-unlinked'],
+      needsLinking: [],
+    });
+  });
+
+  it('links as before when storage cannot say what the project had', async () => {
+    const platform = await orgPlatform();
+    const store = await linkStore();
+    await boot(platform, store);
+    platform.linked.delete('conn-unlinked');
+    vi.spyOn(store.settings, 'get').mockRejectedValueOnce(new Error('storage down'));
+
+    await boot(platform, store);
+
+    expect(platform.linked.has('conn-unlinked')).toBe(true);
   });
 });
