@@ -40,7 +40,7 @@ import { TaskSignalProvider } from '@mastra/core/signals';
 import type { SignalProvider } from '@mastra/core/signals';
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '@mastra/core/tools';
-import type { MastraVector } from '@mastra/core/vector';
+import type { MastraEmbeddingOptions, MastraVector } from '@mastra/core/vector';
 import type { DuckDBStore } from '@mastra/duckdb';
 
 import { GithubSignals } from '@mastra/github-signals';
@@ -64,6 +64,7 @@ import {
 } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
+import type { MemoryEmbedder } from './agents/memory.js';
 import {
   canUseProvider,
   createMastraCodeGateway,
@@ -369,6 +370,14 @@ export interface MastraCodeConfig {
   storageBackend?: 'libsql' | 'pg';
   /** Pre-built vector store instance for recall search. Skips the default vector store creation. */
   vector?: MastraVector;
+  /**
+   * Embedder for recall vectors: a `provider/model` router string (e.g.
+   * `'openai/text-embedding-3-small'`) or an AI SDK embedding model. Used only when a vector store
+   * is set. Omitted → local `fastembed.small` (bge-small, 384 dimensions).
+   */
+  embedder?: MemoryEmbedder;
+  /** Options passed to every embedding call, e.g. provider options or headers. */
+  embedderOptions?: MastraEmbeddingOptions;
   /**
    * Knowledge for the code agent, attached like an Agent's `knowledge`. Unset, it follows the
    * `signals.experimentalKnowledge` global setting (off; on means `true`). `false` keeps it off
@@ -913,6 +922,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     config?.memory === undefined
       ? getDynamicMemory(storage, vector, config?.settingsPath, {
           disableSettingsOmSeed: config?.disableSettingsOmSeed,
+          embedder: config?.embedder,
+          embedderOptions: config?.embedderOptions,
         })
       : undefined;
   const memory =
