@@ -15,12 +15,14 @@ import type { FGACheckParams } from '../../auth/ee';
 import { MastraNonRetryableError } from '../../error';
 import type { Event } from '../../events';
 import { EventEmitterPubSub } from '../../events/event-emitter';
+import { noopLogger } from '../../logger/noop-logger';
 import { Mastra } from '../../mastra';
 import type { Processor } from '../../processors';
-import { PROCESSOR_ABORT_SIGNAL } from '../../processors/abort-signal-scope';
+import { ProcessorRunner } from '../../processors/runner';
 import { ProcessorStepSchema } from '../../processors/step-schema';
 import { RequestContext } from '../../request-context';
 import { MockStore } from '../../storage/mock';
+import { ChunkFrom } from '../../stream/types';
 import { createEventedEngineTestSuite } from '../test-utils/evented-engine-suite';
 import { WorkflowEventProcessor } from './workflow-event-processor';
 import { createStep, createWorkflow } from '.';
@@ -518,7 +520,7 @@ describe('Workflow (Evented Engine Specific)', () => {
     }
   });
 
-  describe('processor chain abort signal over a serializing pubsub (#29208)', () => {
+  describe('processor chain abort signal (#29208)', () => {
     // Real brokers JSON round-trip events, which turns an AbortSignal into `{}`.
     // The outputStream phase is used because a MessageList does not survive that round trip either.
     class SerializingPubSub extends EventEmitterPubSub {
@@ -527,7 +529,11 @@ describe('Workflow (Evented Engine Specific)', () => {
       }
     }
 
-    const setup = (id: string, onSecond?: () => Promise<void>) => {
+    const setup = (
+      id: string,
+      onSecond?: () => Promise<void>,
+      pubsub: EventEmitterPubSub = new SerializingPubSub(),
+    ) => {
       const received: Array<AbortSignal | undefined> = [];
       const recorder = (stepId: string, wait?: () => Promise<void>): Processor => ({
         id: stepId,
@@ -550,7 +556,7 @@ describe('Workflow (Evented Engine Specific)', () => {
       const mastra = new Mastra({
         workflows: { [id]: workflow },
         storage: testStorage,
-        pubsub: new SerializingPubSub(),
+        pubsub,
       });
       return { received, workflow, mastra };
     };
@@ -562,16 +568,30 @@ describe('Workflow (Evented Engine Specific)', () => {
         abortSignal: signal,
       }) as any;
 
-    it("passes the caller's live signal to every processor", async () => {
-      const { received, workflow, mastra } = setup('evented-processor-abort-signal-chain');
+    it("passes the caller's live signal to every processor run by the processor runner", async () => {
+      // The runner's payload also carries a processorStates Map, which a serializing pubsub
+      // breaks before any processor runs, so this covers the runner wiring in-process.
+      const { received, workflow, mastra } = setup(
+        'evented-processor-abort-signal-chain',
+        undefined,
+        new EventEmitterPubSub(),
+      );
       await mastra.startWorkers();
       try {
         const controller = new AbortController();
-        const run = await workflow.createRun();
-        mastra.__createRunScope(run.runId).set(PROCESSOR_ABORT_SIGNAL, controller.signal);
-        const result = await run.start({ inputData: inputData(controller.signal) });
+        const runner = new ProcessorRunner({ logger: noopLogger, agentName: 'agent', outputProcessors: [workflow] });
+        const result = await runner.processPart(
+          { type: 'text-delta', runId: 'run', from: ChunkFrom.AGENT, payload: { id: '1', text: 'hi' } },
+          new Map(),
+          undefined,
+          undefined,
+          undefined,
+          0,
+          undefined,
+          controller.signal,
+        );
 
-        expect(result.status).toBe('success');
+        expect(result.blocked).toBe(false);
         expect(received).toEqual([controller.signal, controller.signal]);
       } finally {
         await mastra.stopWorkers();
