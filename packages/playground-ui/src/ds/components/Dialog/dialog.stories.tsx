@@ -637,8 +637,9 @@ export const SettingsRowsInDialog: Story = {
     const page = within(canvasElement.ownerDocument.body);
     await userEvent.click(canvas.getByRole('button', { name: 'New destination' }));
     const name = await waitFor(() => page.getByRole('textbox', { name: 'Name' }));
+    // From `sm` up (below it the dialog is a drawer and rows stack), the field stays beside its label.
+    if (!canvasElement.ownerDocument.defaultView?.matchMedia('(min-width: 40rem)').matches) return;
     const label = page.getByText('Name', { selector: 'label' });
-    // At dialog width the field stays beside its label, not wrapped under it.
     await expect(name.getBoundingClientRect().left).toBeGreaterThan(label.getBoundingClientRect().right);
   },
 };
