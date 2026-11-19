@@ -10,6 +10,11 @@ export interface UseTraceAggregateArgs<TData = AggregateTracesResponse> {
   queryOptions?: MastraQueryOptions<AggregateTracesResponse, TData>;
 }
 
+/** Cache key of `useTraceAggregate`. Pass the same `request` to share it. */
+export const traceAggregateQueryKey = (
+  request: AggregateTracesArgs,
+): readonly ['trace-aggregate', AggregateTracesArgs] => ['trace-aggregate', request];
+
 /**
  * Runs `aggregateTraces()` for `request`. Check `useTraceAggregateAvailable()` before enabling it.
  *
@@ -24,7 +29,7 @@ export function useTraceAggregate<TData = AggregateTracesResponse>({
 }: UseTraceAggregateArgs<TData>): UseQueryResult<TData, Error> {
   const client = useMastraClient();
   return useQuery({
-    queryKey: ['trace-aggregate', request],
+    queryKey: traceAggregateQueryKey(request),
     queryFn: ({ signal }) => client.aggregateTraces(request, { signal }),
     enabled,
     retry: false,

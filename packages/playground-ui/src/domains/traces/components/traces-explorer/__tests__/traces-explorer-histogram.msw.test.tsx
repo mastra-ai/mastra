@@ -4,7 +4,7 @@ import { planTraceAggregate, traceAggregateRequestSchema } from '@mastra/core/st
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TracesExplorer } from '../index';
 import { DEFAULT_TRACES_FILTERS, DEFAULT_TRACES_SORT, EMPTY_TRACES_SELECTION } from '../traces-explorer-actions';
 import type { TracesFilters, TracesSort } from '../traces-explorer-actions';
@@ -256,6 +256,49 @@ describe('TracesExplorer.Histogram', () => {
 
       expect(lastBody(onAggregate)?.where).toBeDefined();
       expect(lastBody(onAggregate)?.where).toEqual(lastBody(onTraceQuery)?.where);
+    });
+  });
+
+  describe('when the traces page is opened again', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-10-27T12:00:00.000Z'));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    // Technical: the rolling preset resolves to a window a minute later, so the chart asks with a new
+    // key; the counts last shown for the same filters stand in until it answers.
+    it('shows the last counts while it loads the new ones', async () => {
+      setHandlers();
+      const page = (open: boolean) => <TestLinkProvider>{open ? <Harness /> : null}</TestLinkProvider>;
+      const { rerender, queryClient } = renderWithProviders(page(true));
+      await settle(queryClient);
+      rerender(page(false));
+      vi.setSystemTime(Date.now() + 60_000);
+      let release = () => {};
+      const released = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/aggregate`, async ({ request }) => {
+          const body = (await request.json()) as RequestBody & { timeRange: { from: string; to: string } };
+          onAggregate(body);
+          await released;
+          return HttpResponse.json(traceCountsAggregate(body.timeRange));
+        }),
+      );
+
+      rerender(page(true));
+
+      const region = await screen.findByRole('region', { name: 'Traces over time' });
+      expect(within(region).getByText('8 traces, 2 errors')).toBeTruthy();
+      await waitFor(() => expect(onAggregate).toHaveBeenCalledTimes(2));
+
+      release();
+      await settle(queryClient);
     });
   });
 

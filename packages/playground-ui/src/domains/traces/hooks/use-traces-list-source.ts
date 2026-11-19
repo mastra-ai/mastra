@@ -1,7 +1,16 @@
-import { useTraceQuery, useTraceQueryLatest } from '@mastra/react/hooks/traces';
+import type { MastraClient, TraceQueryKeysetTraceResponse } from '@mastra/client-js';
+import {
+  TRACE_QUERY_PER_PAGE,
+  traceQueryKey,
+  traceQueryLegacyKey,
+  useTraceQuery,
+  useTraceQueryLatest,
+} from '@mastra/react/hooks/traces';
 import type { TraceQueryArgs, UseTraceQueryArgs } from '@mastra/react/hooks/traces';
+import type { InfiniteData } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { toTracesListViewTraces } from '../components/traces-list-view-adapter';
+import { useSelectionPlaceholder } from '@/domains/observability/hooks/use-selection-cache';
 import {
   OBSERVABILITY_LIST_HORIZON_MS,
   OBSERVABILITY_LIST_POLL_INTERVAL_MS,
@@ -12,6 +21,8 @@ import {
 
 /** Fixed clock for comparing selections: filter and date changes move the query, time passing does not. */
 const SELECTION_CLOCK = new Date(0);
+
+type LegacyTracesPage = Awaited<ReturnType<MastraClient['listTracesLight']>>;
 
 export interface UseTracesListSourceArgs {
   query: (now: Date) => TraceQueryArgs;
@@ -26,6 +37,12 @@ export interface UseTracesListSourceArgs {
   /** Rows per page; defaults to `TRACE_QUERY_PER_PAGE`. */
   limit?: number;
   enabled?: boolean;
+  /**
+   * What the list shows, without the clock (date preset, filters, sort). A rolling preset resolves to
+   * a new window on every visit; with this, a visit shows the last rows listed for the same selection
+   * while its first page loads, instead of a skeleton.
+   */
+  selectionKey?: string;
 }
 
 export function useTracesListSource({
@@ -36,8 +53,9 @@ export function useTracesListSource({
   withQueryTrace,
   withDeltaPolling = false,
   legacyFilters,
-  limit,
+  limit = TRACE_QUERY_PER_PAGE,
   enabled = true,
+  selectionKey,
 }: UseTracesListSourceArgs) {
   const [tickNow, setTickNow] = useState(() => new Date());
   const delta = withDeltaPolling && withQueryTrace !== false;
@@ -76,10 +94,18 @@ export function useTracesListSource({
       : built;
   const query = orderBy ? { ...anchored, orderBy } : anchored;
 
+  const traceQueryPlaceholder = useSelectionPlaceholder<
+    InfiniteData<TraceQueryKeysetTraceResponse, string | undefined>
+  >(selectionKey && JSON.stringify(['trace-query', limit, selectionKey]), traceQueryKey(query, limit));
+  const legacyPlaceholder = useSelectionPlaceholder<InfiniteData<LegacyTracesPage, number>>(
+    selectionKey && JSON.stringify(['trace-query-legacy', limit, selectionKey]),
+    traceQueryLegacyKey(legacyFilters, limit, query.orderBy),
+  );
+
   const result = useTraceQuery({
     queryOptions: {
-      traceQuery: { refetchInterval, refetchOnWindowFocus },
-      legacy: { refetchInterval, refetchOnWindowFocus },
+      traceQuery: { refetchInterval, refetchOnWindowFocus, placeholderData: traceQueryPlaceholder },
+      legacy: { refetchInterval, refetchOnWindowFocus, placeholderData: legacyPlaceholder },
     },
     query,
     withQueryTrace,

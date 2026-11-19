@@ -1,6 +1,7 @@
 import { EntityType } from '@mastra/core/observability';
 import type { TraceQueryArgs } from '@mastra/react/hooks/traces';
-import { useMemo, useRef, useState } from 'react';
+import { DISCOVERY_STALE_TIME } from '@mastra/react/hooks/traces';
+import { useMemo, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { resolveTraceQueryTimeRange } from '../../trace-query-filters';
 import type { FeedbackOptions } from '../feedback-options';
@@ -21,6 +22,7 @@ import {
   selectTrace,
   setSpanTab,
   setSpanView,
+  tracesDateSelection,
 } from './traces-explorer-actions';
 import type { TracesExplorerState, TracesFilters, TracesSelection, TracesSort } from './traces-explorer-actions';
 import { TracesColumnsProvider } from './traces-explorer-columns-provider';
@@ -46,6 +48,7 @@ import {
   useTraceQueryDiscoveryAvailable,
   useTraceQueryRootDurationAvailable,
 } from '@/domains/capabilities';
+import { useSelectionClock } from '@/domains/observability/hooks/use-selection-cache';
 import { hasTokenSearchFilter } from '@/domains/observability/lib/token-search-predicate';
 import { rangeBeforeZoom, rememberZoom } from '@/domains/observability/lib/zoom-memory';
 import type { ZoomMemory } from '@/domains/observability/lib/zoom-memory';
@@ -230,13 +233,21 @@ export function TracesExplorerRoot({
   }, []);
   const { selectionActions, filtersActions, onSortChange } = actions;
 
-  // Discovery is keyed off the date window with a mount-time `now`, not the list's rolling one,
-  // so its query key (and the skeleton) doesn't churn on every auto-refresh tick.
-  const [discoveryNow] = useState(() => new Date());
-  const discoveryTimeRange = useMemo(
-    () => resolveTraceQueryTimeRange(dateFrom, dateTo, discoveryNow),
-    [dateFrom, dateTo, discoveryNow],
-  );
+  // Discovery is keyed off the date window with its own `now`, not the list's rolling one, so its
+  // query key (and the skeleton) doesn't churn on every auto-refresh tick. That `now` outlives the
+  // page for as long as discovery stays fresh, so coming back to the same range within that time
+  // reads the cached fields instead of asking the store again.
+  const discoverySelection = tracesDateSelection(rawFilters);
+  const discoveryNow = useSelectionClock(`traces-discovery:${discoverySelection}`, DISCOVERY_STALE_TIME);
+  const discoveryTimeRange = useMemo(() => {
+    const window = resolveTracesDateWindow(
+      rawFilters.datePreset,
+      fromMs === undefined ? undefined : new Date(fromMs),
+      toMs === undefined ? undefined : new Date(toMs),
+      discoveryNow,
+    );
+    return resolveTraceQueryTimeRange(window.dateFrom, window.dateTo, discoveryNow);
+  }, [rawFilters.datePreset, fromMs, toMs, discoveryNow]);
 
   const listId = listIdForScope(scope);
   const hasFeedbackOptions = feedbackOptions !== undefined;
@@ -264,6 +275,7 @@ export function TracesExplorerRoot({
       isCapabilitiesLoading: traceQuery.isLoading,
       metricsSupport,
       discoveryTimeRange,
+      discoverySelection,
     }),
     [
       listId,
@@ -291,6 +303,7 @@ export function TracesExplorerRoot({
       traceQuery.isLoading,
       metricsSupport,
       discoveryTimeRange,
+      discoverySelection,
     ],
   );
 

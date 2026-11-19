@@ -122,6 +122,18 @@ export function getLegacyTraceQueryNextPageParam(lastPage: ListTracesLightRespon
 export const traceQueryKey = (query: TraceQueryArgs | undefined, limit: number = TRACE_QUERY_PER_PAGE) =>
   ['trace-query', query, limit] as const;
 
+/** Cache key of `useTraceQuery`'s legacy list. Pass the same `legacyFilters`, `limit` and `orderBy` to share it. */
+export const traceQueryLegacyKey = (
+  legacyFilters: LegacyTraceListFilters | undefined,
+  limit: number = TRACE_QUERY_PER_PAGE,
+  orderBy?: TraceQueryArgs['orderBy'],
+): readonly ['trace-query-legacy', LegacyTraceListFilters | undefined, number, TraceQueryArgs['orderBy']] => [
+  'trace-query-legacy',
+  legacyFilters,
+  limit,
+  orderBy,
+];
+
 type TraceQueryOrderBy = NonNullable<TraceQueryArgs['orderBy']>[number];
 
 function traceSortValue(trace: TraceQueryTrace, field: TraceQueryOrderBy['field']): number | null {
@@ -248,7 +260,7 @@ export function useTraceQuery({
   const orderBy = query?.orderBy;
   const legacyDirection = orderBy?.[0]?.direction === 'asc' ? 'ASC' : 'DESC';
   const legacyResult = useInfiniteQuery<ListTracesLightResponse, Error, TraceQueryTrace[], readonly unknown[], number>({
-    queryKey: ['trace-query-legacy', legacyFilters, limit, orderBy] as const,
+    queryKey: traceQueryLegacyKey(legacyFilters, limit, orderBy),
     queryFn: ({ pageParam }) =>
       client.listTracesLight({
         // Core's date-range filter types `start`/`end` loosely; the client param type is stricter.

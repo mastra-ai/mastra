@@ -4,7 +4,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { delay, http, HttpResponse } from 'msw';
 import { Profiler, useState } from 'react';
 import type { ReactNode } from 'react';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   TRACE_DATE_PRESET_PARAM,
   TRACE_FILTER_BAR_OPERATORS,
@@ -1776,5 +1776,108 @@ describe('TracesExplorer.Layout', () => {
 
       expect(screen.queryByLabelText(/^View: /)).toBeNull();
     });
+  });
+});
+
+describe('TracesExplorer, opened again', () => {
+  const MINUTE = 60_000;
+  const onFieldsRequest = vi.fn<() => void>();
+
+  function Page({ open }: { open: boolean }) {
+    return <TestLinkProvider>{open ? <Harness /> : null}</TestLinkProvider>;
+  }
+
+  /** Holds a response until the test releases it. */
+  const hold = () => {
+    let release = () => {};
+    const released = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    return { released, release };
+  };
+
+  /** Opens the page, lets it load, leaves it, and comes back `awayMs` later. */
+  const openAgainAfter = async (awayMs: number, beforeReturn?: () => void) => {
+    const { rerender, queryClient } = renderWithProviders(<Page open />);
+    await settle(queryClient);
+    rerender(<Page open={false} />);
+    vi.setSystemTime(Date.now() + awayMs);
+    beforeReturn?.();
+    rerender(<Page open />);
+    return queryClient;
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-27T12:00:00.000Z'));
+    onFieldsRequest.mockClear();
+    setExplorerHandlers();
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, () => {
+        onFieldsRequest();
+        return HttpResponse.json(emptyTraceQueryFields);
+      }),
+    );
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // Technical: "Last 7 days" resolves against the clock when the page opens, so the list asks with a
+  // new key on every visit; the rows last listed for the same filters stand in until it answers.
+  it('shows the traces it listed last time while it refreshes them, instead of a skeleton', async () => {
+    const list = hold();
+    const queryClient = await openAgainAfter(MINUTE, () =>
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          const body = await request.json();
+          if (isDeltaPoll(body)) return HttpResponse.json(idleDeltaBatch);
+          onTraceQuery(body);
+          await list.released;
+          return HttpResponse.json(workflowTracesPage);
+        }),
+      ),
+    );
+
+    expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+    expect(await screen.findByText('Book a table for two')).toBeTruthy();
+    await waitFor(() => expect(onTraceQuery).toHaveBeenCalledTimes(2));
+    const [[first], [second]] = onTraceQuery.mock.calls as [
+      [{ timeRange: { to: string } }],
+      [{ timeRange: { to: string } }],
+    ];
+    expect(Date.parse(second.timeRange.to) - Date.parse(first.timeRange.to)).toBe(MINUTE);
+
+    list.release();
+    await waitFor(() => expect(screen.queryByText('Book a table for two')).toBeNull());
+    await settle(queryClient);
+  });
+
+  it('reads the trace fields from the cache when it is opened again within five minutes', async () => {
+    const queryClient = await openAgainAfter(MINUTE);
+    await settle(queryClient);
+
+    expect(onFieldsRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks for the trace fields again once they are five minutes old, without hiding the page meanwhile', async () => {
+    const fields = hold();
+    const queryClient = await openAgainAfter(6 * MINUTE, () =>
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, async () => {
+          onFieldsRequest();
+          await fields.released;
+          return HttpResponse.json(emptyTraceQueryFields);
+        }),
+      ),
+    );
+
+    expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+    expect(await screen.findByText('What is the weather in Paris?')).toBeTruthy();
+    await waitFor(() => expect(onFieldsRequest).toHaveBeenCalledTimes(2));
+
+    fields.release();
+    await settle(queryClient);
   });
 });

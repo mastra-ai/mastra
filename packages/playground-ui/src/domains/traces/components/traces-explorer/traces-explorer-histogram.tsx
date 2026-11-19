@@ -1,11 +1,11 @@
-import type { AggregateTracesArgs } from '@mastra/client-js';
+import type { AggregateTracesArgs, AggregateTracesResponse } from '@mastra/client-js';
 import { useTraceAggregateAvailable } from '@mastra/react/hooks/capabilities';
-import { useTraceAggregate } from '@mastra/react/hooks/traces';
-import { keepPreviousData } from '@tanstack/react-query';
+import { traceAggregateQueryKey, useTraceAggregate } from '@mastra/react/hooks/traces';
 import { useMemo } from 'react';
-import { buildTracesQueryRequest } from './traces-explorer-actions';
+import { buildTracesQueryRequest, tracesFilterSelection } from './traces-explorer-actions';
 import { useTracesConfig, useTracesFilters } from './traces-explorer-context';
 import { ObservabilityHistogram } from '@/domains/observability/components/observability-histogram';
+import { useSelectionPlaceholder } from '@/domains/observability/hooks/use-selection-cache';
 import {
   bucketCountRows,
   exceedsAggregateWindow,
@@ -91,10 +91,16 @@ export function TracesExplorerHistogram() {
     runningSelected ||
     exceedsAggregateWindow(request.timeRange);
 
+  // A visit resolves a rolling preset to a new window: until its counts load, show the last ones
+  // for the same filters.
+  const placeholderData = useSelectionPlaceholder<AggregateTracesResponse>(
+    `traces-histogram:${tracesFilterSelection(filters)}`,
+    traceAggregateQueryKey(request),
+  );
   const { data, isLoading, isError, isPlaceholderData } = useTraceAggregate({
     request,
     enabled: !hidden,
-    queryOptions: { placeholderData: keepPreviousData },
+    queryOptions: { placeholderData },
   });
 
   const buckets = useMemo(() => bucketCountRows(data?.rows ?? [], request.timeRange), [data, request.timeRange]);

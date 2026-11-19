@@ -59,6 +59,8 @@ export type TracesConfigContextValue = {
   metricsSupport: TracesMetricsSupport;
   /** Shared by every discovery consumer so they hit the same cached query. */
   discoveryTimeRange: TraceQueryDiscoveryTimeRange;
+  /** The date range `discoveryTimeRange` was resolved from, without the clock. */
+  discoverySelection: string;
 };
 
 export type TracesFiltersActions = {

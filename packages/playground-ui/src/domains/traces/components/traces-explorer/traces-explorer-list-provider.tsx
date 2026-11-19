@@ -2,7 +2,12 @@ import { memo, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { useTracesListSource } from '../../hooks/use-traces-list-source';
 import { hasTraceColumn } from '../../trace-list-columns';
-import { buildTracesLegacyFilters, buildTracesQueryRequest, DEFAULT_TRACES_SORT } from './traces-explorer-actions';
+import {
+  buildTracesLegacyFilters,
+  buildTracesQueryRequest,
+  DEFAULT_TRACES_SORT,
+  tracesFilterSelection,
+} from './traces-explorer-actions';
 import type { TracesSort } from './traces-explorer-actions';
 import {
   TracesListContext,
@@ -79,6 +84,7 @@ export const TracesListProvider = memo(function TracesListProvider({
     withDeltaPolling: !hasTokenSearch && rootSource !== 'aggregated' && withDeltaPolling,
     enabled: !isCapabilitiesLoading,
     legacyFilters: buildTracesLegacyFilters({ filters, dateFrom, dateTo }),
+    selectionKey: JSON.stringify([tracesFilterSelection(filters), sort, rootSource ?? null]),
   });
 
   const {

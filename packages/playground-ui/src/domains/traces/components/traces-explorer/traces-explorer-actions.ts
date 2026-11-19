@@ -214,3 +214,16 @@ export const resolveTracesDateWindow = (
   const ms = PRESET_MS[datePreset];
   return { dateFrom: ms ? new Date(now.getTime() - ms) : undefined, dateTo: undefined };
 };
+
+/** The picked date range without the clock: a rolling preset by name, a custom range by its dates. */
+export const tracesDateSelection = ({ datePreset, dateFrom, dateTo }: TracesFilters) =>
+  datePreset === 'custom'
+    ? JSON.stringify([datePreset, dateFrom?.toISOString() ?? null, dateTo?.toISOString() ?? null])
+    : JSON.stringify([datePreset]);
+
+/**
+ * The picked filters without the clock, so two visits to "Last 24 hours" with the same filters
+ * compare equal although the windows they resolve to don't.
+ */
+export const tracesFilterSelection = (filters: TracesFilters) =>
+  JSON.stringify([tracesDateSelection(filters), filters.tokens, filters.groups]);
