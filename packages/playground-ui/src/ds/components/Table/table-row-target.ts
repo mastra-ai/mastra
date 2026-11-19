@@ -9,12 +9,17 @@ export function tableRowTargetStyles(variant: TableVariant) {
 }
 
 // Things in a row that take their own clicks.
-const ROW_CONTROLS = 'a[href],button,input,select,textarea,label,[role="button"],[tabindex]:not([tabindex="-1"])';
+const ROW_CONTROLS = [
+  'a[href],button,input,select,textarea,label,summary,[contenteditable=""],[contenteditable="true"]',
+  '[role="button"],[role="link"],[role="checkbox"],[role="switch"],[role="menuitem"]',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
 
-let forwarding = false;
+// The clicks the row hands on, so the row skips them when they bubble back up.
+const forwarded = new WeakSet<Event>();
 
-export function isForwardedRowClick() {
-  return forwarding;
+export function isForwardedRowClick(event: MouseEvent<HTMLTableRowElement>) {
+  return forwarded.has(event.nativeEvent);
 }
 
 /**
@@ -32,10 +37,6 @@ export function forwardRowClick(event: MouseEvent<HTMLTableRowElement>) {
   if (control && control !== row && row.contains(control)) return;
   const rowTarget = row.querySelector<HTMLElement>('[data-row-target]');
   if (!rowTarget) return;
-  forwarding = true;
-  try {
-    rowTarget.click();
-  } finally {
-    forwarding = false;
-  }
+  rowTarget.addEventListener('click', click => forwarded.add(click), { capture: true, once: true });
+  rowTarget.click();
 }

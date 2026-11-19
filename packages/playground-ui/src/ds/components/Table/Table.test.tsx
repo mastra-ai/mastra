@@ -515,3 +515,57 @@ it('names collapsed page ranges for screen readers', () => {
   render(<Table.Pagination page={10} pageCount={24} onPageChange={() => {}} />);
   expect(screen.getAllByText('More pages')).toHaveLength(2);
 });
+
+describe('inset row click forwarding', () => {
+  it('leaves a native summary and a roving-tabindex menu item alone', () => {
+    const onOpen = vi.fn();
+    const onItem = vi.fn();
+    render(
+      <Table variant="inset" aria-label="Credits">
+        <Table.Body>
+          <Table.Row>
+            <Table.Cell>
+              <Table.RowButton onClick={onOpen}>Credit grant</Table.RowButton>
+            </Table.Cell>
+            <Table.Cell>
+              <details>
+                <summary>More</summary>
+                Details
+              </details>
+            </Table.Cell>
+            <Table.Cell>
+              <div role="menuitem" tabIndex={-1} onClick={onItem}>
+                Rename
+              </div>
+            </Table.Cell>
+          </Table.Row>
+        </Table.Body>
+      </Table>,
+    );
+    fireEvent.click(screen.getByText('More'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Rename' }));
+    expect(onItem).toHaveBeenCalledTimes(1);
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it("runs another row's onClick when a row target's handler clicks that row", () => {
+    const onOther = vi.fn();
+    render(
+      <Table variant="inset" aria-label="Credits">
+        <Table.Body>
+          <Table.Row>
+            <Table.Cell>
+              <Table.RowButton onClick={() => screen.getByText('$20').click()}>First</Table.RowButton>
+            </Table.Cell>
+            <Table.Cell>$10</Table.Cell>
+          </Table.Row>
+          <Table.Row onClick={onOther}>
+            <Table.Cell>$20</Table.Cell>
+          </Table.Row>
+        </Table.Body>
+      </Table>,
+    );
+    fireEvent.click(screen.getByText('$10'));
+    expect(onOther).toHaveBeenCalledTimes(1);
+  });
+});
