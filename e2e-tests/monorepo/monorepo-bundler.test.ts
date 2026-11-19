@@ -112,6 +112,23 @@ class AliasDeployer extends Deployer {
 
           const outputPackageJson = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
           expect(outputPackageJson.dependencies ?? {}).not.toHaveProperty('ajv');
+
+          // A target that cannot be resolved must fail the build instead of silently keeping the original module.
+          const aliasedConfig = await readFile(mastraConfigPath, 'utf-8');
+          await writeFile(
+            mastraConfigPath,
+            aliasedConfig.replace('./src/ajv-2020-shim.mjs', './src/missing-ajv-2020-shim.mjs'),
+          );
+          const missingTargetResult = await execa(pkgManager, ['build'], {
+            cwd: appDir,
+            reject: false,
+            env: { ...process.env, MASTRA_BUILD_SKIP_INSTALL: 'true' },
+          });
+          const missingTargetOutput = `${missingTargetResult.stdout}\n${missingTargetResult.stderr}`;
+          expect(missingTargetResult.exitCode, missingTargetOutput).not.toBe(0);
+          expect(missingTargetOutput).toContain(
+            'Could not resolve deployer alias `ajv/dist/2020.js` to `./src/missing-ajv-2020-shim.mjs`',
+          );
         } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
         }
