@@ -134,7 +134,7 @@ export class DurableExecutionEngine {
     runId: string,
     parentSnapshot: WorkflowRunState,
     getPubsub: () => PubSub,
-    logger: IMastraLogger,
+    getLogger: () => IMastraLogger,
   ): Promise<number | undefined> {
     try {
       const nestedRunId = parentSnapshot.context?.[DurableStepIds.AGENTIC_EXECUTION]?.metadata?.nestedRunId;
@@ -163,7 +163,7 @@ export class DurableExecutionEngine {
         ) ?? starts.find(event => event.generation === latestGeneration)
       )?.index;
     } catch (error) {
-      logger.warn(`[DurableAgent] recover(${runId}) couldn't locate the uncheckpointed stream tail`, { error });
+      getLogger().warn(`[DurableAgent] recover(${runId}) couldn't locate the uncheckpointed stream tail`, { error });
     }
   }
 

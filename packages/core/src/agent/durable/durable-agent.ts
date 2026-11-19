@@ -5271,7 +5271,7 @@ export class DurableAgent<
       runId,
       parentSnapshot,
       () => this.pubsub,
-      this.logger,
+      () => this.logger,
     );
   }
 
