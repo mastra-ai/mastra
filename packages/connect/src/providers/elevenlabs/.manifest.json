@@ -3,7 +3,7 @@
   "localId": "elevenlabs",
   "templateSha": "bb789a55bfcf744b3c83aa9132e4ffa562106aa3",
   "templateRepo": "NangoHQ/integration-templates",
-  "generatedAt": "2026-11-17T18:04:38.951Z",
+  "generatedAt": "2026-11-19T01:18:29.348Z",
   "toolCount": 29,
   "skippedActions": [],
   "files": {
@@ -25,7 +25,7 @@
     "tools/get-knowledge-base-document.ts": "b7e7405753200eb0e78f3efb1e9bc64bd7a4956c133395bfd8e2ac0e262569eb",
     "tools/get-pronunciation-dictionary.ts": "b6c73667461a8b768b178d2064b4972d418d82008d122d67eab4ba06c8db6368",
     "tools/get-user-subscription.ts": "ec4355fcfc34d7394fc4656dcdcb5411973cb4635fb891854dfa196d64e3b3e8",
-    "tools/get-user.ts": "247d1e798012eacdc4630ec4f15e2a3dbcb98dce2db8fe46cbba0917e152aefd",
+    "tools/get-user.ts": "ed4446c6c0be230f44ed720114f1aea78bbb0c8c081d4f45e90883854df809ff",
     "tools/get-voice-settings.ts": "3eef0026b13f9deed9b2cfdfa8f05979ce9d67221f97914e5695e66d373909ec",
     "tools/get-voice.ts": "fabdaf05e5075466eee73514deab49fe432abb0f9eeea59dee78aeb0527cbab7",
     "tools/list-agents.ts": "6c4cd81097f9d72f56df45c3a87c629e4dfcf45902adebcaec85bbc069a8297f",

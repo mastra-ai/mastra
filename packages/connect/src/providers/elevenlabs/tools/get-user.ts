@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
+import { withoutSecretFields } from '../../../runtime/redact.js';
 
 export const getUserInputSchema = z.object({});
 
@@ -40,6 +41,7 @@ const ProviderUserSchema = z.object({
   user_id: z.string(),
   subscription: SubscriptionSchema.optional(),
   is_new_user: z.boolean().optional(),
+  xi_api_key: z.string().nullable().optional(),
   can_use_delayed_payment_methods: z.boolean().optional(),
   is_onboarding_completed: z.boolean().optional(),
   is_onboarding_checklist_completed: z.boolean().optional(),
@@ -55,21 +57,27 @@ const ProviderUserSchema = z.object({
 
 export const getUserOutputSchema = ProviderUserSchema;
 
+/** Provider secrets removed before the result leaves the tool. */
+export const getUserOutputSchemaRedacted = getUserOutputSchema.omit({ xi_api_key: true });
+
 export function getUserTool(proxy: PlatformProxy) {
   return createTool({
     id: 'elevenlabs_get_user',
     description: 'Get user/account details.',
     inputSchema: getUserInputSchema,
-    outputSchema: getUserOutputSchema,
-    execute: async (input, { requestContext }): Promise<z.infer<typeof getUserOutputSchema>> => {
+    outputSchema: getUserOutputSchemaRedacted,
+    execute: async (input, { requestContext }): Promise<z.infer<typeof getUserOutputSchemaRedacted>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      // https://elevenlabs.io/docs/api-reference/user/get
-      const response = await platformProxy.get({
-        endpoint: '/v1/user',
-        retries: 3,
-      });
+      const result = await (async (): Promise<z.infer<typeof getUserOutputSchema>> => {
+        // https://elevenlabs.io/docs/api-reference/user/get
+        const response = await platformProxy.get({
+          endpoint: '/v1/user',
+          retries: 3,
+        });
 
-      return ProviderUserSchema.parse(response.data);
+        return ProviderUserSchema.parse(response.data);
+      })();
+      return withoutSecretFields(result, ['xi_api_key']);
     },
   });
 }
