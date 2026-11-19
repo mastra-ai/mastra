@@ -149,7 +149,7 @@ const EXECUTION_LOSS_MESSAGES: Record<ExecutionLossErrorId, (runId: string) => s
   [EXECUTION_UNVERIFIED_ERROR_ID]: runId =>
     `Durable run ${runId}: could not verify that this execution still owns the run; stopping without writing.`,
   [EXECUTION_ABANDONED_ERROR_ID]: runId =>
-    `Durable run ${runId}: the process shut down before this execution finished; it stopped without writing and released the run for recovery.`,
+    `Durable run ${runId}: the process shut down before this execution finished; it stopped without writing, and the run is left for recovery.`,
 };
 type ExecutionDetails = { agentId: string; runId: string; executionId: string };
 
@@ -1215,7 +1215,7 @@ export class ExecutionFence implements RunFenceScope {
    *
    * With `releaseWhen`, the claim is released only once it resolves, for work
    * the abort leaves running, so recovery can't run it beside that work. Until
-   * then the claim is held unrenewed and expires if the process dies first.
+   * then the claim is held unrenewed, so it still frees once it expires.
    *
    * A no-op once the execution has settled or lost the run.
    */

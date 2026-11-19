@@ -251,11 +251,6 @@ export function isDurableAgentExecutionDetached(mastra: Mastra, runId: string): 
   return !!entry && entry.mastra === mastra && detachesOnShutdown(mastra, entry);
 }
 
-/**
- * Abandon the durable-agent executions `mastra` is still running: each stops
- * without writing and releases its run, so recovery can take it right away.
- * Executions that already settled are left alone.
- */
 const toolCallsInFlight = new WeakMap<
   RunRegistryEntry,
   { count: number; settled: Promise<void>; resolve: () => void }
@@ -283,6 +278,12 @@ export function startToolCall(entry: RunRegistryEntry | undefined): () => void {
   };
 }
 
+/**
+ * Abandon the durable-agent executions `mastra` is still running: each stops
+ * without writing. Its run is released right away, or once its running tool
+ * calls settle; the claim is not renewed meanwhile, so it also frees once it
+ * expires. Executions that already settled are left alone.
+ */
 export async function abandonDurableAgentExecutions(mastra: Mastra): Promise<void> {
   await stopDurableExecutionParticipants(mastra);
   await Promise.allSettled(
