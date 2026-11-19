@@ -77,7 +77,7 @@ function buildApp(
 const org1 = (): TestAuthUser => ({ workosId: 'u1', organizationId: 'org1' });
 
 describe('platform connect routes', () => {
-  it("lists the project's connections that sessions use, not the organization's or GitHub's", async () => {
+  it("lists the project's connections that sessions use, not the organization's or source control's", async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async input => {
       const url = String(input);
       if (url.endsWith('/v2/projects/proj_1/connections')) {
@@ -86,6 +86,8 @@ describe('platform connect routes', () => {
             connection('conn-mcp', 'neon-mcp', 'needs_reauth'),
             connection('conn-linear', 'linear'),
             connection('conn-github', 'github'),
+            connection('conn-gitlab', 'gitlab'),
+            connection('conn-gitlab-self-hosted', 'gitlab-self-hosted'),
           ],
         });
       }
