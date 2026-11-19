@@ -596,13 +596,13 @@ export function createTraceFilterBarFields({
     strict: true,
     suggestions,
   });
+  const toOptions = (values: string[]) => values.map(value => ({ value }));
   // A known list of values is a strict pick; without one, the host has nothing to offer and the value is typed.
   const pickOrText = (
     id: string,
     values: string[] | undefined,
     operators: TraceFilterOperatorId[] = TRACE_STRING_OPERATORS,
   ): FilterBarField => (values ? pick(id, toOptions(values), operators) : { ...traceFieldBase(id), operators });
-  const toOptions = (values: string[]) => values.map(value => ({ value }));
   const text = (id: string): FilterBarField => ({
     ...traceFieldBase(id),
     operators: id === 'traceId' ? TRACE_REQUIRED_STRING_OPERATORS : TRACE_STRING_OPERATORS,
