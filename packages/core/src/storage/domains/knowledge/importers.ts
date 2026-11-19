@@ -15,6 +15,11 @@ export interface KnowledgeImporterBindingRecord {
   importer: string;
   /** `<scope>#<path>`. */
   target: string;
+  /**
+   * The page the first applying flush created at `target`, or null before that and after a rebind.
+   * The binding owns this page only while it is still live at `target`.
+   */
+  anchorPageId: string | null;
   createdAt: Date;
 }
 
@@ -42,6 +47,8 @@ export interface KnowledgeImporterRunRecord {
   /** Flushes after this are refused. */
   deadlineAt: Date | null;
   cancelRequestedAt: Date | null;
+  /** Last heartbeat from the runner; null before the first. A host reclaims a run whose heartbeat is stale. */
+  heartbeatAt: Date | null;
   /** 0 before the first flush. */
   lastSeq: number;
   /** The normalized finish request, compared on replay. Null while running. */
@@ -130,6 +137,15 @@ export abstract class KnowledgeImportersStorage {
     target: string;
   }): Promise<{ status: 'created' | 'unchanged'; binding: KnowledgeImporterBindingRecord }>;
   abstract getBinding(id: string): Promise<KnowledgeImporterBindingRecord | null>;
+  /**
+   * Sets the binding's anchor to `pageId` only if it is currently `expected`; returns whether it did.
+   * False for a missing binding.
+   */
+  abstract setBindingAnchor(input: {
+    bindingId: string;
+    expected: string | null;
+    pageId: string | null;
+  }): Promise<boolean>;
   abstract listBindings(): Promise<KnowledgeImporterBindingRecord[]>;
 
   /**
@@ -149,6 +165,19 @@ export abstract class KnowledgeImportersStorage {
   abstract listRuns(bindingId: string, options?: { limit?: number }): Promise<KnowledgeImporterRunRecord[]>;
   /** Sets `cancelRequestedAt` on a running run; returns the run, or null when none is running. */
   abstract requestCancel(runId: string): Promise<KnowledgeImporterRunRecord | null>;
+  /** Sets `heartbeatAt` on a running run; returns the run (with any cancel request), or null when it isn't running. */
+  abstract heartbeat(runId: string): Promise<KnowledgeImporterRunRecord | null>;
+  /**
+   * Ends a running run as `failed` with `finish`, whatever its seq or generation: for a host
+   * reclaiming a run whose runner went away. Returns the run, or null when it wasn't running. Its
+   * later flushes and finish are refused as `not_running`.
+   */
+  abstract abandonRun(input: { runId: string; finish: unknown }): Promise<KnowledgeImporterRunRecord | null>;
+  /**
+   * Inside a transaction: reads the run and locks its row until commit (take the writer guard lock
+   * first). Null when there's no such run.
+   */
+  abstract lockRun(runId: string): Promise<KnowledgeImporterRunRecord | null>;
 
   abstract getFlush(runId: string, generation: number, seq: number): Promise<KnowledgeImporterFlushRecord | null>;
   /**

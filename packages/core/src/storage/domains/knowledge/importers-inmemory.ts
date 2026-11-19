@@ -80,13 +80,19 @@ export class InMemoryKnowledgeImportersStorage extends KnowledgeImportersStorage
       }
       return { status: 'unchanged' as const, binding: { ...existing } };
     }
-    const binding = { ...input, createdAt: new Date() };
+    const binding = { ...input, anchorPageId: null, createdAt: new Date() };
     this.#s.bindings.set(input.id, binding);
     return { status: 'created' as const, binding: { ...binding } };
   }
   async getBinding(id: string) {
     const binding = this.#s.bindings.get(id);
     return binding ? { ...binding } : null;
+  }
+  async setBindingAnchor(input: { bindingId: string; expected: string | null; pageId: string | null }) {
+    const binding = this.#s.bindings.get(input.bindingId);
+    if (!binding || binding.anchorPageId !== input.expected) return false;
+    binding.anchorPageId = input.pageId;
+    return true;
   }
   async listBindings() {
     return [...this.#s.bindings.values()].sort((a, b) => byteOrder(a.id, b.id)).map(b => ({ ...b }));
@@ -114,6 +120,7 @@ export class InMemoryKnowledgeImportersStorage extends KnowledgeImportersStorage
       fireKey: input.fireKey ?? null,
       deadlineAt: input.deadlineAt ?? null,
       cancelRequestedAt: null,
+      heartbeatAt: null,
       lastSeq: 0,
       finish: null,
       counts: {},
@@ -139,6 +146,24 @@ export class InMemoryKnowledgeImportersStorage extends KnowledgeImportersStorage
     if (!run || run.status !== 'running') return null;
     run.cancelRequestedAt ??= new Date();
     return structuredClone(run);
+  }
+  async heartbeat(runId: string) {
+    const run = this.#s.runs.get(runId);
+    if (!run || run.status !== 'running') return null;
+    run.heartbeatAt = new Date();
+    return structuredClone(run);
+  }
+  async abandonRun(input: { runId: string; finish: unknown }) {
+    const run = this.#s.runs.get(input.runId);
+    if (!run || run.status !== 'running') return null;
+    run.status = 'failed';
+    run.finish = structuredClone(input.finish);
+    run.completedAt = new Date();
+    return structuredClone(run);
+  }
+  /** Transactions run one at a time in memory, so a read is as good as a lock. */
+  async lockRun(runId: string) {
+    return this.getRun(runId);
   }
 
   #activeRun(runId: string, generation: number): KnowledgeImporterRunRecord {

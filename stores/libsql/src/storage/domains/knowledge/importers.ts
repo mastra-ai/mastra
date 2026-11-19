@@ -38,6 +38,7 @@ export const KNOWLEDGE_IMPORTER_DDL = [
     id TEXT PRIMARY KEY,
     importer TEXT NOT NULL,
     target TEXT NOT NULL,
+    anchorPageId TEXT,
     createdAt INTEGER NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS "${T.nodes}" (
@@ -66,6 +67,7 @@ export const KNOWLEDGE_IMPORTER_DDL = [
     fireKey TEXT,
     deadlineAt INTEGER,
     cancelRequestedAt INTEGER,
+    heartbeatAt INTEGER,
     lastSeq INTEGER NOT NULL DEFAULT 0,
     finish TEXT,
     counts TEXT NOT NULL DEFAULT '{}',
@@ -128,6 +130,7 @@ const toRun = (row: Row): KnowledgeImporterRunRecord => ({
   fireKey: row.fireKey === null ? null : String(row.fireKey),
   deadlineAt: date(row.deadlineAt),
   cancelRequestedAt: date(row.cancelRequestedAt),
+  heartbeatAt: date(row.heartbeatAt),
   lastSeq: Number(row.lastSeq),
   finish: row.finish === null ? null : JSON.parse(String(row.finish)),
   counts: JSON.parse(String(row.counts)),
@@ -157,6 +160,7 @@ const toBinding = (row: Row): KnowledgeImporterBindingRecord => ({
   id: String(row.id),
   importer: String(row.importer),
   target: String(row.target),
+  anchorPageId: row.anchorPageId === null || row.anchorPageId === undefined ? null : String(row.anchorPageId),
   createdAt: new Date(Number(row.createdAt)),
 });
 
@@ -223,12 +227,21 @@ export class LibSQLKnowledgeImporters implements KnowledgeImportersStorage {
         sql: `INSERT INTO "${T.bindings}" (id, importer, target, createdAt) VALUES (?, ?, ?, ?)`,
         args: [input.id, input.importer, input.target, createdAt],
       });
-      return { status: 'created' as const, binding: { ...input, createdAt: new Date(createdAt) } };
+      return { status: 'created' as const, binding: { ...input, anchorPageId: null, createdAt: new Date(createdAt) } };
     });
   }
   async getBinding(id: string) {
     const row = (await this.#read.execute({ sql: `SELECT * FROM "${T.bindings}" WHERE id = ?`, args: [id] })).rows[0];
     return row ? toBinding(row) : null;
+  }
+  async setBindingAnchor(input: { bindingId: string; expected: string | null; pageId: string | null }) {
+    return this.#transaction(async tx => {
+      const result = await tx.execute({
+        sql: `UPDATE "${T.bindings}" SET anchorPageId = ? WHERE id = ? AND anchorPageId IS ?`,
+        args: [input.pageId, input.bindingId, input.expected],
+      });
+      return result.rowsAffected === 1;
+    });
   }
   async listBindings() {
     return (await this.#read.execute(`SELECT * FROM "${T.bindings}" ORDER BY id`)).rows.map(toBinding);
@@ -296,6 +309,37 @@ export class LibSQLKnowledgeImporters implements KnowledgeImportersStorage {
       const row = (
         await tx.execute({ sql: `SELECT * FROM "${T.runs}" WHERE id = ? AND status = 'running'`, args: [runId] })
       ).rows[0];
+      return row ? toRun(row) : null;
+    });
+  }
+
+  async heartbeat(runId: string) {
+    return this.#transaction(async tx => {
+      await tx.execute({
+        sql: `UPDATE "${T.runs}" SET heartbeatAt = ? WHERE id = ? AND status = 'running'`,
+        args: [Date.now(), runId],
+      });
+      const row = (
+        await tx.execute({ sql: `SELECT * FROM "${T.runs}" WHERE id = ? AND status = 'running'`, args: [runId] })
+      ).rows[0];
+      return row ? toRun(row) : null;
+    });
+  }
+  async abandonRun(input: { runId: string; finish: unknown }) {
+    return this.#transaction(async tx => {
+      const result = await tx.execute({
+        sql: `UPDATE "${T.runs}" SET status = 'failed', finish = ?, completedAt = ? WHERE id = ? AND status = 'running'`,
+        args: [JSON.stringify(input.finish), Date.now(), input.runId],
+      });
+      if (result.rowsAffected !== 1) return null;
+      const row = (await tx.execute({ sql: `SELECT * FROM "${T.runs}" WHERE id = ?`, args: [input.runId] })).rows[0];
+      return row ? toRun(row) : null;
+    });
+  }
+  /** SQLite has one writer: inside a write transaction the row is already held until commit. */
+  async lockRun(runId: string) {
+    return this.#transaction(async tx => {
+      const row = (await tx.execute({ sql: `SELECT * FROM "${T.runs}" WHERE id = ?`, args: [runId] })).rows[0];
       return row ? toRun(row) : null;
     });
   }

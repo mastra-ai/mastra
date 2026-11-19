@@ -56,6 +56,7 @@ export function pgKnowledgeImportersDDL(schemaName?: string): string[] {
       id text PRIMARY KEY,
       importer text NOT NULL,
       target text NOT NULL,
+      anchor_page_id text,
       created_at timestamptz NOT NULL DEFAULT now()
     )`,
     `CREATE TABLE IF NOT EXISTS ${t.nodes} (
@@ -84,6 +85,7 @@ export function pgKnowledgeImportersDDL(schemaName?: string): string[] {
       fire_key text,
       deadline_at timestamptz,
       cancel_requested_at timestamptz,
+      heartbeat_at timestamptz,
       last_seq integer NOT NULL DEFAULT 0,
       finish jsonb,
       counts jsonb NOT NULL DEFAULT '{}',
@@ -137,6 +139,7 @@ const toRun = (row: Row): KnowledgeImporterRunRecord => ({
   fireKey: row.fire_key ?? null,
   deadlineAt: row.deadline_at ?? null,
   cancelRequestedAt: row.cancel_requested_at ?? null,
+  heartbeatAt: row.heartbeat_at ?? null,
   lastSeq: Number(row.last_seq),
   finish: row.finish ?? null,
   counts: row.counts ?? {},
@@ -166,6 +169,7 @@ const toBinding = (row: Row): KnowledgeImporterBindingRecord => ({
   id: row.id,
   importer: row.importer,
   target: row.target,
+  anchorPageId: row.anchor_page_id ?? null,
   createdAt: row.created_at,
 });
 
@@ -237,6 +241,13 @@ export class PgKnowledgeImporters implements KnowledgeImportersStorage {
     const row = await this.#client.oneOrNone(`SELECT * FROM ${this.#t.bindings} WHERE id = $1`, [id]);
     return row ? toBinding(row) : null;
   }
+  async setBindingAnchor(input: { bindingId: string; expected: string | null; pageId: string | null }) {
+    const row = await this.#client.oneOrNone(
+      `UPDATE ${this.#t.bindings} SET anchor_page_id = $3 WHERE id = $1 AND anchor_page_id IS NOT DISTINCT FROM $2 RETURNING id`,
+      [input.bindingId, input.expected, input.pageId],
+    );
+    return row !== null;
+  }
   async listBindings() {
     return (await this.#client.any(`SELECT * FROM ${this.#t.bindings} ORDER BY id COLLATE "C"`)).map(toBinding);
   }
@@ -287,6 +298,25 @@ export class PgKnowledgeImporters implements KnowledgeImportersStorage {
        WHERE id = $1 AND status = 'running' RETURNING *`,
       [runId],
     );
+    return row ? toRun(row) : null;
+  }
+  async heartbeat(runId: string) {
+    const row = await this.#client.oneOrNone(
+      `UPDATE ${this.#t.runs} SET heartbeat_at = clock_timestamp() WHERE id = $1 AND status = 'running' RETURNING *`,
+      [runId],
+    );
+    return row ? toRun(row) : null;
+  }
+  async abandonRun(input: { runId: string; finish: unknown }) {
+    const row = await this.#client.oneOrNone(
+      `UPDATE ${this.#t.runs} SET status = 'failed', finish = $2::jsonb, completed_at = clock_timestamp()
+       WHERE id = $1 AND status = 'running' RETURNING *`,
+      [input.runId, JSON.stringify(input.finish)],
+    );
+    return row ? toRun(row) : null;
+  }
+  async lockRun(runId: string) {
+    const row = await this.#client.oneOrNone(`SELECT * FROM ${this.#t.runs} WHERE id = $1 FOR UPDATE`, [runId]);
     return row ? toRun(row) : null;
   }
 

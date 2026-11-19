@@ -96,6 +96,18 @@ export function createKnowledgeImportersStorageTests(createFixture: () => Promis
         expect(await importers.getBinding('b1')).toMatchObject({ importer: 'notion', target: 'org:acme#notion' });
         expect((await importers.listBindings()).map(b => b.id)).toEqual(['b1']);
       });
+
+      it('sets the anchor only from the expected value (r347 O3 §A″)', async () => {
+        expect((await importers.getBinding('b1'))?.anchorPageId).toBeNull();
+        expect(await importers.setBindingAnchor({ bindingId: 'b1', expected: null, pageId: 'p-anchor' })).toBe(true);
+        // A second first-flush that read null loses.
+        expect(await importers.setBindingAnchor({ bindingId: 'b1', expected: null, pageId: 'p-other' })).toBe(false);
+        expect((await importers.getBinding('b1'))?.anchorPageId).toBe('p-anchor');
+        // A rebind clears it from the current value.
+        expect(await importers.setBindingAnchor({ bindingId: 'b1', expected: 'p-anchor', pageId: null })).toBe(true);
+        expect((await importers.getBinding('b1'))?.anchorPageId).toBeNull();
+        expect(await importers.setBindingAnchor({ bindingId: 'missing', expected: null, pageId: 'p' })).toBe(false);
+      });
     });
 
     describe('runs', () => {
@@ -124,6 +136,40 @@ export function createKnowledgeImportersStorageTests(createFixture: () => Promis
         await start();
         expect((await importers.requestCancel(runId))?.cancelRequestedAt).toBeInstanceOf(Date);
         expect(await importers.requestCancel('missing')).toBeNull();
+      });
+
+      it('records heartbeats on a running run and returns its cancel request (r347 O3 §D)', async () => {
+        const started = await start();
+        expect(started.run.heartbeatAt).toBeNull();
+        const beat = await importers.heartbeat(runId);
+        expect(beat?.heartbeatAt).toBeInstanceOf(Date);
+        expect(beat?.cancelRequestedAt).toBeNull();
+        await importers.requestCancel(runId);
+        expect((await importers.heartbeat(runId))?.cancelRequestedAt).toBeInstanceOf(Date);
+        expect(await importers.heartbeat('missing')).toBeNull();
+      });
+
+      it('abandons only a running run, which then refuses its flushes and frees the binding (r347 O3 §D)', async () => {
+        await start();
+        const finish = { outcome: 'failed', error: { code: 'stopped' } };
+        const abandoned = await importers.abandonRun({ runId, finish });
+        expect(abandoned).toMatchObject({ id: runId, status: 'failed', finish });
+        expect(abandoned?.completedAt).toBeInstanceOf(Date);
+        expect(await importers.abandonRun({ runId, finish })).toBeNull();
+        await expect(
+          fixture.store.transaction(async tx => {
+            await importersOf(tx).lockWriterGuard('share');
+            await importersOf(tx).recordFlush({ runId, generation: 1, seq: 1, digest: 'd', receipt: {}, counts });
+          }),
+        ).rejects.toMatchObject({ reason: 'not_running' });
+        expect((await start(`${runId}-next`)).status).toBe('started');
+      });
+
+      it('reads a run under lock inside a transaction', async () => {
+        await start();
+        const locked = await fixture.store.transaction(async tx => importersOf(tx).lockRun(runId));
+        expect(locked).toMatchObject({ id: runId, status: 'running' });
+        expect(await fixture.store.transaction(async tx => importersOf(tx).lockRun('missing'))).toBeNull();
       });
     });
 
