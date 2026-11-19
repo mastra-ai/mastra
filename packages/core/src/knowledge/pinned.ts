@@ -92,7 +92,7 @@ async function resolveListing(
 /**
  * Fills `maxTokens` a level at a time: every depth-1 line that fits, then depth 2, and so on, stopping
  * at the first line that doesn't fit (always at least one). Lines print in tree order, so each child
- * still sits under its parent; a cut ends with a pointer to knowledge_list.
+ * still sits under its parent; a cut ends with a pointer to knowledge_list when the run has it.
  */
 function renderListing(listing: PinnedListing, ref: string, maxTokens: number, read: boolean): string {
   const head = `Pages under ${listing.origin.name} (${ref}, depth ${listing.depth}):`;
@@ -248,7 +248,7 @@ function overflowLine(names: string[], more: number, read: boolean): string {
  * are delivered. A run costs a fixed handful of store calls however many pins exist.
  */
 /** `read` is whether the run has `knowledge_read` and `knowledge_list`; without them no entry names either. */
-export async function knowledgeDeliveredPins(run: KnowledgeRun, budget: PinBudget, read = true): Promise<PinEntry[]> {
+export async function knowledgeDeliveredPins(run: KnowledgeRun, budget: PinBudget, read: boolean): Promise<PinEntry[]> {
   // Store calls per turn: (pinnedContextPriority tiers the run holds) + 3 (one count, one getPages for pin
   // pages, one countNotes) + one getPages per page-tree level above the pinned pages, plus the config-pin
   // lookups and one tree walk per pinned listing; never one per page pin.
