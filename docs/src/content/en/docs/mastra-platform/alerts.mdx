@@ -205,8 +205,8 @@ Each platform alert watches one or more events:
 | Deploy failed | A build or deploy fails to reach a running state. |
 | Service crashed | A running service exhausts its restart policy and stops. |
 | Service out of memory | A service is stopped after running out of memory. |
-| Service unreachable | Health checks get no response from a deployed service for several minutes in a row. |
-| Elevated error rate | More than 10% of requests to a deployed service return `5xx` errors over a 5-minute window. |
+| Service unreachable | A deployed service fails three consecutive health checks. |
+| Elevated error rate | At least 10% of requests return `5xx` errors on two consecutive checks. Each check counts requests over the past five minutes and requires at least 50 requests. |
 | Resource usage threshold crossed | An environment uses more CPU, memory, or egress over a window than the thresholds you set. |
 | Usage threshold crossed | Organization usage nears or reaches a plan limit. |
 | Alert rule | An observability alert in the covered projects opens or closes. Use it to route every observability alert to one place, such as an on-call PagerDuty service. |
