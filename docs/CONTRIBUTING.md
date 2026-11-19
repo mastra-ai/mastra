@@ -102,6 +102,7 @@ Every listed package ships its own copy of the page, so list only the packages w
 - Add `@mastra/core` to broader framework guides, because every Mastra project installs it.
 - On overview pages that compare several adapters, list the shared interface package, not every adapter. Each adapter's own page lists the adapter package.
 - Keep the list to four packages or fewer. `pnpm check` warns above that.
+- Omit `packages` on Mastra platform pages that describe the hosted product, such as its UI, settings, or REST API. No npm package's users need those pages embedded. Add `packages` only when the page documents a package's API, such as `PlatformMemory` from `@mastra/platform`. `pnpm check` doesn't require `packages` under `docs/mastra-platform/`.
 
 ### Headings
 

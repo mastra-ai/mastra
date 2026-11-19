@@ -114,4 +114,4 @@ Run `CHECKLIST.md`, then:
 
 ## Example
 
-`docs/src/content/en/docs/mastra-platform/deploy.mdx` shows the structure: a result-first opening, `## Before you begin`, a `Steps` sequence, later variations, and `## Related`. Its frontmatter predates the `packages` requirement; include `packages` in new pages.
+`docs/src/content/en/docs/mastra-platform/deploy/overview.mdx` shows the structure: a result-first opening, `## Before you begin`, a `Steps` sequence, later variations, and `## Related`. Like other Mastra platform pages about the hosted product, it omits `packages`. Include `packages` in new pages that document an npm package's API.
