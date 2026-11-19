@@ -160,40 +160,51 @@ function formatSeconds(seconds: number): string {
 }
 
 type OutputSink = (type: 'data-sandbox-stdout' | 'data-sandbox-stderr', data: string) => void;
+type ExitResult = Awaited<ReturnType<ProcessHandle['wait']>>;
+
+interface Reader {
+  onOutput: OutputSink;
+  resolve: (result: ExitResult) => void;
+  reject: (error: unknown) => void;
+}
 
 interface ExitWait {
-  exited: ReturnType<ProcessHandle['wait']>;
-  sinks: Set<OutputSink>;
+  readers: Set<Reader>;
   abort: AbortController;
 }
 
 /**
  * One wait per process, shared by every read of it. A handle keeps a wait's callbacks until the
  * process exits, so a wait per read would leave one more set behind each time a read ran out.
+ * Reads join `readers` while they wait and leave when they stop, so nothing is kept per read.
  */
 const exitWaits = new WeakMap<ProcessHandle, ExitWait>();
 
 function exitWaitFor(handle: ProcessHandle): ExitWait {
   const existing = exitWaits.get(handle);
   if (existing) return existing;
-  const sinks = new Set<OutputSink>();
-  const abort = new AbortController();
-  const exited = handle.wait({
-    abortSignal: abort.signal,
-    onStdout: data => {
-      for (const sink of sinks) sink('data-sandbox-stdout', data);
-    },
-    onStderr: data => {
-      for (const sink of sinks) sink('data-sandbox-stderr', data);
-    },
-  });
-  const wait = { exited, sinks, abort };
+  const readers = new Set<Reader>();
+  const wait: ExitWait = { readers, abort: new AbortController() };
   exitWaits.set(handle, wait);
-  // Settled either way, the wait is over; a failure is reported to whichever read is waiting.
-  const forget = () => {
+  const settle = (deliver: (reader: Reader) => void) => {
     if (exitWaits.get(handle) === wait) exitWaits.delete(handle);
+    for (const reader of readers) deliver(reader);
+    readers.clear();
   };
-  exited.then(forget, forget);
+  handle
+    .wait({
+      abortSignal: wait.abort.signal,
+      onStdout: data => {
+        for (const reader of readers) reader.onOutput('data-sandbox-stdout', data);
+      },
+      onStderr: data => {
+        for (const reader of readers) reader.onOutput('data-sandbox-stderr', data);
+      },
+    })
+    .then(
+      result => settle(reader => reader.resolve(result)),
+      error => settle(reader => reader.reject(error)),
+    );
   return wait;
 }
 
@@ -201,29 +212,39 @@ function exitWaitFor(handle: ProcessHandle): ExitWait {
  * Wait for a process to exit, for at most `ms`. Returns undefined when the wait ran out
  * first; the process is left running. Aborting `abortSignal` during the wait kills the process.
  */
-async function waitForExit(
+function waitForExit(
   handle: ProcessHandle,
   ms: number,
   abortSignal: AbortSignal | undefined,
   onOutput: OutputSink,
-) {
-  const { exited, sinks, abort } = exitWaitFor(handle);
-  let timer: Parameters<typeof clearTimeout>[0];
-  // Forward the run's abort only while this read is waiting, so an abort after the wait ran
-  // out leaves the process alone.
-  const onAbort = () => abort.abort(abortSignal?.reason);
-  if (abortSignal?.aborted) onAbort();
-  else abortSignal?.addEventListener('abort', onAbort, { once: true });
-  sinks.add(onOutput);
-
-  const ranOut = new Promise<undefined>(resolve => {
-    timer = setTimeout(resolve, ms);
+): Promise<ExitResult | undefined> {
+  const { readers, abort } = exitWaitFor(handle);
+  return new Promise<ExitResult | undefined>((resolve, reject) => {
+    // Forward the run's abort only while this read is waiting, so an abort after the wait ran
+    // out leaves the process alone.
+    const onAbort = () => abort.abort(abortSignal?.reason);
+    const leave = () => {
+      clearTimeout(timer);
+      readers.delete(reader);
+      abortSignal?.removeEventListener('abort', onAbort);
+    };
+    const reader: Reader = {
+      onOutput,
+      resolve: result => {
+        leave();
+        resolve(result);
+      },
+      reject: error => {
+        leave();
+        reject(error);
+      },
+    };
+    const timer = setTimeout(() => {
+      leave();
+      resolve(undefined);
+    }, ms);
+    readers.add(reader);
+    if (abortSignal?.aborted) onAbort();
+    else abortSignal?.addEventListener('abort', onAbort, { once: true });
   });
-  try {
-    return await Promise.race([exited, ranOut]);
-  } finally {
-    clearTimeout(timer);
-    sinks.delete(onOutput);
-    abortSignal?.removeEventListener('abort', onAbort);
-  }
 }
