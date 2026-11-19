@@ -14270,10 +14270,8 @@ export class Agent<
   /**
    * Execute the durable workflow.
    *
-   * Subclasses override this method to customize how the workflow is executed:
-   * - DurableAgent (this): Runs the workflow directly via createRun + start
-   * - EventedAgent: Runs steps through event workers and tracks completion
-   * - InngestAgent: Uses inngest.send() to trigger Inngest function
+   * Engines select the blocking or background execution path.
+   * Subclasses such as InngestAgent may override execution for an external backend.
    *
    * @param runId - The unique run ID
    * @param workflowInput - The serialized workflow input
@@ -14283,6 +14281,9 @@ export class Agent<
     runId: string,
     workflowInput: DurableAgenticWorkflowInput,
   ): Promise<{ status?: string } | void> {
+    if (this.executionEngine.executionMode === 'background') {
+      return this.#executeBackgroundWorkflow(runId, workflowInput);
+    }
     const workflow = this.getWorkflow();
     const entry = getRunRegistryEntry(runId, this.#mastra);
     const requestContext = entry?.requestContext;
@@ -14321,6 +14322,77 @@ export class Agent<
     }
   }
 
+  async #executeBackgroundWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
+    // Captured now: a later resume() replaces the registry's fence before this
+    // segment's background promise settles.
+    const entry = getRunRegistryEntry(runId, this.#mastra);
+    const executionFence = entry?.executionFence;
+    const pubsub = this.#mastra?.pubsub ?? this.getPubSub();
+    const { sharedExecution, usesRunPubSub } = this.executionEngine.prepareExecution(
+      pubsub,
+      executionFence,
+      this.workflowEngine,
+      this.logger,
+      this.guardrailLogger,
+    );
+    if (entry) entry.eventedExecution = sharedExecution;
+    try {
+      const workflow = this.getWorkflow();
+      await this.executionEngine.ensureEngineWorkersStarted(this.workflowEngine, this.logger);
+      const memoryInfo = (
+        workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
+      )?.memoryInfo;
+      const threadId = workflowInput.state?.threadId ?? memoryInfo?.threadId;
+      const resourceId = workflowInput.state?.resourceId ?? memoryInfo?.resourceId;
+      if (sharedExecution && pubsub && entry?.requestContext && executionFence && threadId) {
+        await agentThreadStreamRuntime.claimDurableThreadLease(
+          pubsub,
+          runId,
+          threadId,
+          resourceId,
+          executionFence.generation,
+          executionFence.executionId,
+        );
+        setExecutionClaim(entry.requestContext, runId, {
+          ...executionFence.claim,
+          threadId,
+          resourceId,
+        });
+      }
+      // Evented workers publish on the host bus. A default-engine fallback must
+      // instead publish on this run's transport or the caller's stream hangs.
+      const run = await this.executionEngine.createRun(workflow, {
+        runId,
+        resourceId,
+        ...(usesRunPubSub ? { pubsub: this.fenceRunPubSub(executionFence, entry?.abortController) } : {}),
+      });
+      // Track completion so an immediate resume waits for suspension persistence.
+      await this.executionEngine
+        .startRun(
+          run,
+          workflowInput,
+          entry?.requestContext,
+          createObservabilityContext({ currentSpan: entry?.agentSpan }),
+        )
+        .then(
+          result => this.executionEngine.finishExecution(runId, executionFence, sharedExecution, { result }),
+          error => this.executionEngine.finishExecution(runId, executionFence, sharedExecution, { error }),
+        )
+        .then(outcome => {
+          if (outcome.owner === 'agent') return this.settleExecution(runId, executionFence, outcome);
+          if (outcome.error) {
+            return this.emitError(runId, outcome.error, executionFence?.generation).catch(publishError =>
+              this.logger.warn(`Failed to publish error event for run ${runId}`, { runId, error: publishError }),
+            );
+          }
+        });
+    } catch (error) {
+      await this.settleExecution(runId, executionFence, {
+        error: this.executionEngine.workflowExecutionError(error, 'Workflow execution failed'),
+      });
+    }
+  }
+
   /**
    * Run a workflow leg with suspension chunks/events held back until the leg
    * returns, i.e. until the engine has saved the suspended snapshot. Without
@@ -14328,7 +14400,7 @@ export class Agent<
    * leaves a run that `resume()` rejects (#26435).
    */
   async #withSuspensionAfterPersist<T>(runId: string, execute: () => Promise<T>): Promise<T> {
-    const entry = this.suspendPersistedOnReturn ? getRunRegistryEntry(runId, this.#mastra) : undefined;
+    const entry = this.executionEngine.suspendPersistedOnReturn ? getRunRegistryEntry(runId, this.#mastra) : undefined;
     if (!entry) return execute();
     const pending: Array<() => Promise<void>> = [];
     entry.pendingSuspensionEvents = pending;
@@ -14350,18 +14422,6 @@ export class Agent<
       }
     }
     return result;
-  }
-
-  /**
-   * Whether `executeWorkflow()` resolves only after a suspended snapshot has
-   * been persisted, reporting `{ status: 'suspended' }`. When true,
-   * `closeOnSuspend` streams close on that result instead of on the SUSPENDED
-   * pubsub event (which the tool-call step publishes before persistence), so
-   * an immediate cold resume finds the `suspended` snapshot.
-   * @internal
-   */
-  protected get suspendPersistedOnReturn(): boolean {
-    return true;
   }
 
   /**
@@ -14619,7 +14679,8 @@ export class Agent<
     // Generate closes at suspension; stream defaults to staying open for a
     // same-reader resume. The same value gates stream's continuation.
     const closeOnSuspend = methodType === 'generate' || (options?.closeOnSuspend ?? false);
-    const closeOnPersistedSuspend = methodType === 'stream' && closeOnSuspend && this.suspendPersistedOnReturn;
+    const closeOnPersistedSuspend =
+      methodType === 'stream' && closeOnSuspend && this.executionEngine.suspendPersistedOnReturn;
 
     // 3. Create the durable agent stream (subscribes to pubsub)
     const {

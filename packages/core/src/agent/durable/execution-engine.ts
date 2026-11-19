@@ -82,6 +82,15 @@ export class DurableExecutionEngine {
     return this.#workflow;
   }
 
+  get executionMode(): 'blocking' | 'background' {
+    return 'blocking';
+  }
+
+  /** Whether execution returns a suspended result only after its snapshot is persisted. */
+  get suspendPersistedOnReturn(): boolean {
+    return true;
+  }
+
   async readReplayFloor(
     pubsub: PubSub,
     runId: string,
