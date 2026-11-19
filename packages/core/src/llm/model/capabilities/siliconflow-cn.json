@@ -17,6 +17,7 @@
     "Qwen/Qwen3.6-35B-A3B",
     "Qwen/Qwen3.8-27B",
     "deepseek-ai/DeepSeek-OCR",
+    "deepseek-ai/DeepSeek-V4.1-Flash",
     "zai-org/GLM-4.5V",
     "zai-org/GLM-5.3-Flash"
   ],
@@ -58,6 +59,7 @@
     "deepseek-ai/DeepSeek-V3.2",
     "deepseek-ai/DeepSeek-V4-Flash",
     "deepseek-ai/DeepSeek-V4-Pro",
+    "deepseek-ai/DeepSeek-V4.1-Flash",
     "inclusionAI/Ling-flash-2.0",
     "stepfun-ai/Step-3.5-Flash",
     "tencent/Hunyuan-A13B-Instruct",
@@ -147,6 +149,15 @@
       }
     ],
     "deepseek-ai/DeepSeek-V4-Pro": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4.1-Flash": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["high", "max"]

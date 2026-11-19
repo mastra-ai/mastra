@@ -1,5 +1,18 @@
 {
   "attachment": [
+    "auto/anthropic/claude-fable-5",
+    "auto/anthropic/claude-fable-5.1",
+    "auto/anthropic/claude-haiku-4.5",
+    "auto/anthropic/claude-haiku-5.5",
+    "auto/anthropic/claude-opus-4.5",
+    "auto/anthropic/claude-opus-4.6",
+    "auto/anthropic/claude-opus-4.7",
+    "auto/anthropic/claude-opus-4.8",
+    "auto/anthropic/claude-opus-5",
+    "auto/anthropic/claude-opus-5.5",
+    "auto/anthropic/claude-sonnet-4.6",
+    "auto/anthropic/claude-sonnet-5",
+    "auto/anthropic/claude-sonnet-5.5",
     "auto/mistralai/ministral-14b-2512",
     "auto/mistralai/ministral-3b-2512",
     "auto/mistralai/ministral-8b-2512",
@@ -29,6 +42,10 @@
     "auto/openai/o3"
   ],
   "temperature": [
+    "auto/anthropic/claude-haiku-4.5",
+    "auto/anthropic/claude-opus-4.5",
+    "auto/anthropic/claude-opus-4.6",
+    "auto/anthropic/claude-sonnet-4.6",
     "auto/mistralai/codestral-2508",
     "auto/mistralai/ministral-14b-2512",
     "auto/mistralai/ministral-3b-2512",
@@ -44,6 +61,13 @@
     "auto/openai/gpt-5.2",
     "auto/openai/gpt-5.4",
     "auto/openai/gpt-5.4-mini",
+    "auto/openai/gpt-5.5",
+    "auto/openai/gpt-5.6-luna",
+    "auto/openai/gpt-5.6-sol",
+    "auto/openai/gpt-5.6-terra",
+    "auto/openai/gpt-6-luna",
+    "auto/openai/gpt-6-sol",
+    "auto/openai/gpt-6.1-terra",
     "auto/openai/gpt-oss-120b",
     "auto/openai/gpt-oss-20b",
     "auto/openai/gpt-oss-safeguard-120b",
@@ -206,6 +230,84 @@
       {
         "type": "effort",
         "values": ["none", "high"]
+      }
+    ],
+    "auto/anthropic/claude-opus-4.6": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "auto/anthropic/claude-haiku-5.5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "auto/anthropic/claude-opus-4.8": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "auto/anthropic/claude-opus-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "auto/anthropic/claude-fable-5.1": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "auto/anthropic/claude-sonnet-4.6": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "auto/anthropic/claude-opus-4.7": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "auto/anthropic/claude-fable-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "auto/anthropic/claude-sonnet-5.5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "auto/anthropic/claude-opus-5.5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "auto/anthropic/claude-haiku-4.5": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "auto/anthropic/claude-sonnet-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "auto/anthropic/claude-opus-4.5": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ]
   }

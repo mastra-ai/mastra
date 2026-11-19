@@ -1,0 +1,214 @@
+{
+  "attachment": [
+    "claude-haiku-4-5-20251001",
+    "claude-opus-4-7",
+    "claude-opus-4-8",
+    "claude-opus-5",
+    "claude-opus-5.5",
+    "claude-sonnet-5",
+    "claude-sonnet-5.5",
+    "deepseek-v4.1-flash",
+    "gpt-5.5",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-6-astra",
+    "gpt-6.1-sol",
+    "gpt-6.1-terra",
+    "grok-4.7",
+    "kimi-k2.6",
+    "kimi-k3",
+    "kimi-k3.1-pro",
+    "qwen3.8-max"
+  ],
+  "temperature": [
+    "claude-haiku-4-5-20251001",
+    "deepseek-v4-flash",
+    "deepseek-v4-pro",
+    "deepseek-v4.1-flash",
+    "glm-5.3",
+    "gpt-5.5",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-6.1-terra",
+    "grok-4.7",
+    "kimi-k2.6",
+    "qwen3.8-max"
+  ],
+  "structuredOutput": [
+    "claude-haiku-4-5-20251001",
+    "claude-opus-4-7",
+    "claude-opus-4-8",
+    "claude-opus-5",
+    "claude-opus-5.5",
+    "claude-sonnet-5",
+    "claude-sonnet-5.5",
+    "deepseek-v4-flash",
+    "deepseek-v4-pro",
+    "deepseek-v4.1-flash",
+    "glm-5.3",
+    "gpt-5.5",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-6-astra",
+    "gpt-6.1-sol",
+    "gpt-6.1-terra",
+    "grok-4.7",
+    "kimi-k2.6",
+    "kimi-k3",
+    "kimi-k3.1-pro",
+    "qwen3.8-max"
+  ],
+  "reasoning": {
+    "grok-4.7": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "claude-opus-4-7": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "claude-haiku-4-5-20251001": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024
+      }
+    ],
+    "claude-opus-4-8": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "kimi-k2.6": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "qwen3.8-max": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 0,
+        "max": 262144
+      }
+    ],
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "claude-opus-5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepseek-v4-pro": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "gpt-5.6-sol": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gpt-6.1-terra": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gpt-6-astra": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "claude-sonnet-5.5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepseek-v4.1-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "kimi-k3.1-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "claude-opus-5.5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "claude-sonnet-5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gpt-5.6-terra": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gpt-6.1-sol": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepseek-v4-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "gpt-5.5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ]
+  }
+}

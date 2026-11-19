@@ -48,7 +48,7 @@ const text = await output.text
 cleanup()
 ```
 
-### Plain Agent stream configuration
+### Plain agent stream configuration
 
 The `durable` option on a plain `Agent` controls resumable streams only. It never wraps the agent or enables checkpoints. Use `createDurableAgent({ agent })` explicitly for durable execution, and pass execution options such as `maxSteps` and `shouldPersistSnapshot` to that factory.
 
@@ -372,7 +372,7 @@ A failed cache write loses only that event from the cache. It has no `index`, an
 
 An evented agent (`createEventedAgent()`) on a cross-process PubSub, such as Redis Streams, can use the default in-memory server cache when its steps run in the process that started the run. That process numbers the events. Use a shared cache such as `RedisServerCache` on the `Mastra` instance when steps run in another process, such as a dedicated worker started with `workers: true`. That process can't share the in-memory counter, so its events aren't numbered and an offset can't skip them. Mastra logs a warning in the worker when this happens. Also use a shared cache when an observer reconnects through another process, such as a different server replica, because it can't replay from the starting process's in-memory cache.
 
-By default `observe()` waits indefinitely for events. If the process running the run stops unexpectedly, the run stops producing events but never emits a completion event, so the observed stream would wait forever. Pass `idleTimeoutMs` to end the stream after a bounded period of silence. Before timing out, `observe()` can consult an optional `isAlive` check. Return `true` while work continues, such as during a long-running tool call or a pause for human input. A `false` result ends the stream with an error, as does omitting `isAlive`. A transient throw from `isAlive` is treated as "still alive", so a momentary check failure never ends a live stream.
+By default `observe()` waits indefinitely for events. If the process running the run dies, the run stops producing events but never emits a completion event, so the observed stream would wait forever. Pass `idleTimeoutMs` to end the stream after a bounded period of silence. Before timing out, `observe()` can consult an optional `isAlive` check. Return `true` while work continues, such as during a long-running tool call or a pause for human input. A `false` result ends the stream with an error, as does omitting `isAlive`. A transient throw from `isAlive` is treated as "still alive", so a momentary check failure never ends a live stream.
 
 ```typescript
 const { output } = await durableAgent.observe(runId, {

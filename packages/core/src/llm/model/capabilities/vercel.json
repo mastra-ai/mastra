@@ -4,6 +4,7 @@
     "alibaba/qwen3.5-flash",
     "alibaba/qwen3.5-plus",
     "alibaba/qwen3.6-27b",
+    "alibaba/qwen3.6-35b-a3b",
     "alibaba/qwen3.6-plus",
     "alibaba/qwen3.7-flash",
     "alibaba/qwen3.7-plus",
@@ -14,6 +15,7 @@
     "alibaba/qwen3.8-max-0902",
     "alibaba/qwen3.8-max-prime",
     "alibaba/qwen3.8-omni-flash",
+    "alibaba/qwen4-max",
     "alibaba/wan-v2.5-t2v-preview",
     "alibaba/wan-v2.6-i2v",
     "alibaba/wan-v2.6-i2v-flash",
@@ -57,15 +59,12 @@
     "bfl/flux-kontext-max",
     "bfl/flux-kontext-pro",
     "bfl/flux-pro-1.0-fill",
-    "bytedance/seed-1.6",
-    "bytedance/seed-1.8",
     "bytedance/seed-2.1-turbo",
     "bytedance/seedance-2.0",
     "bytedance/seedance-2.0-fast",
     "bytedance/seedance-2.0-mini",
     "bytedance/seedance-v1.0-pro",
     "bytedance/seedance-v1.0-pro-fast",
-    "bytedance/seedance-v1.5-pro",
     "bytedance/seedream-4.0",
     "bytedance/seedream-4.5",
     "bytedance/seedream-5.0-lite",
@@ -101,6 +100,7 @@
     "google/gemini-3.8-live-extended-thinking",
     "google/gemini-4-argon",
     "google/gemini-4-carbon",
+    "google/gemini-4-hydrogen",
     "google/gemini-nano-banana-2.1",
     "google/gemini-omni-1.2-flash",
     "google/gemini-omni-flash-preview",
@@ -211,6 +211,10 @@
     "openai/gpt-6.1-sol-fast",
     "openai/gpt-6.1-terra",
     "openai/gpt-6.1-terra-fast",
+    "openai/gpt-6.2-astra",
+    "openai/gpt-6.2-astra-fast",
+    "openai/gpt-6.2-sol",
+    "openai/gpt-6.2-sol-fast",
     "openai/gpt-image-1-mini",
     "openai/gpt-image-1.5",
     "openai/gpt-image-2",
@@ -228,6 +232,7 @@
     "openai/o3-pro",
     "openai/o4-mini",
     "openai/whisper-1",
+    "paperinstruments/ultramarine-1-flash",
     "particle/particle-1",
     "perplexity/sonar",
     "quiverai/arrow-2",
@@ -254,7 +259,9 @@
     "stepfun/step-3.7-flash",
     "stepfun/step-5-preview",
     "tencent/hy4",
+    "tencent/hy4-flash",
     "thinkingmachines/inkling",
+    "thinkingmachines/inkling-2-small",
     "thinkingmachines/inkling-small",
     "topaz/wonder-3.5",
     "xiaomi/mimo-v2.6-flash",
@@ -268,19 +275,17 @@
   ],
   "temperature": [
     "alibaba/qwen-3-14b",
-    "alibaba/qwen-3-235b",
     "alibaba/qwen-3-30b",
     "alibaba/qwen-3-32b",
-    "alibaba/qwen3-coder",
     "alibaba/qwen3-coder-30b-a3b",
     "alibaba/qwen3-coder-next",
     "alibaba/qwen3-max-thinking",
     "alibaba/qwen3-next-80b-a3b-instruct",
-    "alibaba/qwen3-next-80b-a3b-thinking",
     "alibaba/qwen3-vl-instruct",
     "alibaba/qwen3.5-flash",
     "alibaba/qwen3.5-plus",
     "alibaba/qwen3.6-27b",
+    "alibaba/qwen3.6-35b-a3b",
     "alibaba/qwen3.6-plus",
     "alibaba/qwen3.7-flash",
     "alibaba/qwen3.7-max",
@@ -292,6 +297,7 @@
     "alibaba/qwen3.8-max-0902",
     "alibaba/qwen3.8-max-prime",
     "alibaba/qwen3.8-omni-flash",
+    "alibaba/qwen4-max",
     "amazon/nova-2-lite",
     "amazon/nova-lite",
     "amazon/nova-micro",
@@ -304,8 +310,6 @@
     "anthropic/claude-opus-4.8-fast",
     "anthropic/claude-sonnet-4.5",
     "anthropic/claude-sonnet-4.6",
-    "bytedance/seed-1.6",
-    "bytedance/seed-1.8",
     "bytedance/seed-2.1-turbo",
     "cohere/command-a",
     "deepseek/deepseek-r1",
@@ -342,9 +346,6 @@
     "google/gemini-omni-flash-preview",
     "google/gemma-4-26b-a4b-it",
     "google/gemma-4-31b-it",
-    "inception/mercury-2",
-    "inception/mercury-2.5",
-    "inception/mercury-coder-small",
     "inclusionai/ling-3.0-flash",
     "inclusionai/ling-3.0-flash-fin",
     "inclusionai/ling-3.0-flash-sante",
@@ -364,13 +365,9 @@
     "meta/muse-spark-1.3",
     "meta/muse-spark-open",
     "meta/muse-wonder-1.0",
-    "minimax/minimax-m2",
     "minimax/minimax-m2.1",
-    "minimax/minimax-m2.1-lightning",
     "minimax/minimax-m2.5",
-    "minimax/minimax-m2.5-highspeed",
     "minimax/minimax-m2.7",
-    "minimax/minimax-m2.7-highspeed",
     "minimax/minimax-m3",
     "minimax/minimax-m3.1-flash",
     "mistral/codestral",
@@ -390,7 +387,6 @@
     "moonshotai/kimi-k2.7-code-highspeed",
     "morph/morph-v3-fast",
     "morph/morph-v3-large",
-    "nvidia/nemotron-3-nano-30b-a3b",
     "nvidia/nemotron-3-super-120b-a12b",
     "nvidia/nemotron-3-ultra-550b-a55b",
     "nvidia/nemotron-3.5-lightning",
@@ -425,10 +421,20 @@
     "openai/gpt-5.4-nano",
     "openai/gpt-5.4-pro",
     "openai/gpt-5.5",
+    "openai/gpt-5.5-fast",
     "openai/gpt-5.5-pro",
     "openai/gpt-5.6-luna",
+    "openai/gpt-5.6-luna-fast",
     "openai/gpt-5.6-sol",
+    "openai/gpt-5.6-sol-fast",
     "openai/gpt-5.6-terra",
+    "openai/gpt-5.6-terra-fast",
+    "openai/gpt-6-luna",
+    "openai/gpt-6-luna-fast",
+    "openai/gpt-6-sol",
+    "openai/gpt-6-sol-fast",
+    "openai/gpt-6.1-terra",
+    "openai/gpt-6.1-terra-fast",
     "openai/gpt-live-1",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
@@ -440,7 +446,6 @@
     "openai/gpt-realtime-mini",
     "openai/o3-pro",
     "perplexity/sonar",
-    "poolside/laguna-s-2.1",
     "reflection/beam",
     "reflection/beam-free",
     "sakana/fugu-ultra",
@@ -456,8 +461,10 @@
     "stepfun/step-5-preview",
     "tencent/hy3",
     "tencent/hy4",
+    "tencent/hy4-flash",
     "tencent/hy4-preview",
     "thinkingmachines/inkling",
+    "thinkingmachines/inkling-2-small",
     "thinkingmachines/inkling-small",
     "xiaomi/mimo-v2.6-flash",
     "xiaomi/mimo-v2.6-pro",
@@ -492,8 +499,6 @@
     "alibaba/qwen3.8-omni-flash",
     "anthropic/claude-haiku-5.5",
     "anthropic/claude-sonnet-4.5",
-    "bytedance/seed-1.6",
-    "bytedance/seed-1.8",
     "bytedance/seed-2.1-turbo",
     "cohere/command-a",
     "deepseek/deepseek-v3.2",
@@ -519,8 +524,6 @@
     "google/gemini-4-argon",
     "google/gemma-4-26b-a4b-it",
     "google/gemma-4-31b-it",
-    "inception/mercury-2",
-    "inception/mercury-2.5",
     "inference-net/schematron-v2-small",
     "inference-net/schematron-v2-turbo",
     "meta/muse-glimmer-30b",
@@ -583,6 +586,10 @@
     "openai/gpt-6-sol-fast",
     "openai/gpt-6.1-sol",
     "openai/gpt-6.1-sol-fast",
+    "openai/gpt-6.2-astra",
+    "openai/gpt-6.2-astra-fast",
+    "openai/gpt-6.2-sol",
+    "openai/gpt-6.2-sol-fast",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
     "openai/gpt-oss-safeguard-120b",
@@ -640,14 +647,12 @@
     ],
     "inclusionai/ling-3.1-flash": [
       {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "type": "toggle"
       }
     ],
     "inclusionai/ling-3.0-flash-sante": [
       {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "type": "toggle"
       }
     ],
     "inclusionai/ling-3.0-flash": [
@@ -657,8 +662,7 @@
     ],
     "inclusionai/ling-3.1-flash-1019": [
       {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "type": "toggle"
       }
     ],
     "inclusionai/ling-3.0-flash-fin": [
@@ -719,14 +723,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "minimax/minimax-m2.7-highspeed": [
-      {
-        "type": "budget_tokens"
-      }
-    ],
     "minimax/minimax-m2.7": [
       {
-        "type": "budget_tokens"
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "minimax/minimax-m3.1-flash": [
@@ -740,22 +740,10 @@
         "type": "budget_tokens"
       }
     ],
-    "minimax/minimax-m2.1-lightning": [
-      {
-        "type": "budget_tokens"
-      }
-    ],
     "minimax/minimax-m3": [
       {
-        "type": "budget_tokens"
-      }
-    ],
-    "minimax/minimax-m2.5-highspeed": [
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "minimax/minimax-m2": [
+        "type": "toggle"
+      },
       {
         "type": "budget_tokens"
       }
@@ -765,24 +753,16 @@
         "type": "budget_tokens"
       }
     ],
-    "bytedance/seed-1.8": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
     "bytedance/seed-2.1-turbo": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "bytedance/seed-1.6": [
+    "thinkingmachines/inkling-2-small": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "thinkingmachines/inkling-small": [
@@ -800,19 +780,7 @@
     "amazon/nova-2-lite": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "inception/mercury-2.5": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "inception/mercury-2": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "medium"]
       }
     ],
     "deepseek/deepseek-v3.1": [
@@ -848,7 +816,7 @@
     "deepseek/deepseek-v4.1-flash-1017-fast": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "deepseek/deepseek-v4.1-flash": [
@@ -885,6 +853,9 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
+      },
+      {
+        "type": "budget_tokens"
       }
     ],
     "quiverai/arrow-2-telos": [
@@ -903,6 +874,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "tencent/hy4-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ],
     "tencent/hy4": [
@@ -995,6 +972,9 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
+      },
+      {
+        "type": "budget_tokens"
       }
     ],
     "zai/glm-5v-turbo": [
@@ -1027,10 +1007,19 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "google/gemini-3.5-flash": [
+    "recursive/flint-v1.0": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "google/gemini-3.5-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
       }
     ],
     "google/gemini-omni-1.2-flash": [
@@ -1042,13 +1031,13 @@
     "google/gemini-3.5-flash-lite": [
       {
         "type": "effort",
-        "values": ["low", "high"]
+        "values": ["minimal", "low", "medium", "high"]
       }
     ],
     "google/gemini-3.8-flash": [
       {
         "type": "effort",
-        "values": ["low", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "google/gemini-4-carbon": [
@@ -1059,8 +1048,11 @@
     ],
     "google/gemini-3.1-flash-lite-image": [
       {
+        "type": "toggle"
+      },
+      {
         "type": "effort",
-        "values": ["low", "high"]
+        "values": ["minimal", "high"]
       }
     ],
     "google/gemini-2.5-flash-lite": [
@@ -1069,25 +1061,32 @@
         "values": ["none", "low", "medium", "high"]
       },
       {
-        "type": "budget_tokens"
+        "type": "budget_tokens",
+        "min": 512
       }
     ],
     "google/gemini-3.1-flash-image": [
       {
+        "type": "toggle"
+      },
+      {
         "type": "effort",
-        "values": ["low", "high"]
+        "values": ["minimal", "high"]
       }
     ],
     "google/gemini-3.6-flash": [
       {
+        "type": "toggle"
+      },
+      {
         "type": "effort",
-        "values": ["low", "high"]
+        "values": ["minimal", "low", "medium", "high"]
       }
     ],
     "google/gemini-3.1-pro-preview": [
       {
         "type": "effort",
-        "values": ["low", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "google/gemini-4-argon": [
@@ -1102,31 +1101,44 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
+    "google/gemini-4-hydrogen": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
     "google/gemini-2.5-pro": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["low", "medium", "high"]
       },
       {
-        "type": "budget_tokens"
+        "type": "budget_tokens",
+        "min": 128
       }
     ],
     "google/gemini-3.7-flash": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "google/gemini-3.1-flash-lite": [
       {
+        "type": "toggle"
+      },
+      {
         "type": "effort",
-        "values": ["low", "high"]
+        "values": ["minimal", "low", "medium", "high"]
       }
     ],
     "google/gemini-3-flash": [
       {
+        "type": "toggle"
+      },
+      {
         "type": "effort",
-        "values": ["low", "high"]
+        "values": ["minimal", "low", "medium", "high"]
       }
     ],
     "google/gemini-nano-banana-2.1": [
@@ -1145,11 +1157,6 @@
       },
       {
         "type": "budget_tokens"
-      }
-    ],
-    "poolside/laguna-s-2.1": [
-      {
-        "type": "toggle"
       }
     ],
     "nvidia/nemotron-3-ultra-550b-a55b": [
@@ -1171,12 +1178,6 @@
       }
     ],
     "nvidia/nemotron-3.5-super-vl": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "nvidia/nemotron-3-nano-30b-a3b": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
@@ -1204,6 +1205,11 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "max"]
+      }
+    ],
+    "alibaba/qwen3.6-35b-a3b": [
+      {
+        "type": "toggle"
       }
     ],
     "alibaba/qwen3.7-plus": [
@@ -1237,10 +1243,18 @@
         "max": 262144
       }
     ],
-    "alibaba/qwen3-next-80b-a3b-thinking": [
+    "alibaba/qwen4-max": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "xhigh"]
+      },
       {
         "type": "budget_tokens",
-        "min": 1
+        "min": 0,
+        "max": 262144
       }
     ],
     "alibaba/qwen-3-30b": [
@@ -1339,12 +1353,6 @@
         "max": 131072
       }
     ],
-    "alibaba/qwen-3-235b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
     "alibaba/qwen3.5-plus": [
       {
         "type": "effort",
@@ -1420,13 +1428,13 @@
     "openai/gpt-5.4-mini-fast": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
     "openai/gpt-5.2-fast": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
     "openai/gpt-5-fast": [
@@ -1438,7 +1446,7 @@
     "openai/gpt-5.1-codex-mini": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "openai/gpt-5-codex": [
@@ -1480,7 +1488,7 @@
     "openai/gpt-5.1-thinking-fast": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "openai/gpt-6-sol-fast": [
@@ -1498,7 +1506,7 @@
     "openai/gpt-5.2-codex": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "openai/o3-pro": [
@@ -1516,13 +1524,13 @@
     "openai/gpt-5.4-nano": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
     "openai/gpt-5.3-codex-fast": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
     "openai/gpt-5-nano": [
@@ -1540,25 +1548,37 @@
     "openai/gpt-5.6-sol-fast": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "openai/gpt-5.5-fast": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
     "openai/gpt-5.4-mini": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
     "openai/gpt-oss-20b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-6.2-astra-fast": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "openai/gpt-6.2-sol-fast": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "openai/gpt-oss-safeguard-20b": [
@@ -1582,7 +1602,7 @@
     "openai/gpt-5.6-terra-fast": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "openai/gpt-5-pro": [
@@ -1594,25 +1614,37 @@
     "openai/gpt-5.1-thinking": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-6.2-astra": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "openai/gpt-5.4": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "openai/gpt-6.2-sol": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "openai/gpt-5.4-pro": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
+        "values": ["medium", "high", "xhigh"]
       }
     ],
     "openai/gpt-5.6-sol": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "openai/gpt-6.1-terra": [
@@ -1642,7 +1674,7 @@
     "openai/gpt-5.4-fast": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
     "openai/gpt-6-luna": [
@@ -1660,7 +1692,7 @@
     "openai/gpt-5.1-codex": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "openai/gpt-5": [
@@ -1678,13 +1710,13 @@
     "openai/gpt-5.3-codex": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
     "openai/gpt-5.6-terra": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "openai/gpt-6.1-sol": [
@@ -1708,13 +1740,13 @@
     "openai/gpt-5.1-codex-max": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "openai/gpt-5.2": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
     "openai/gpt-oss-120b": [
@@ -1732,7 +1764,7 @@
     "openai/gpt-5.5": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
     "spacexai/grok-4.7": [
@@ -1774,7 +1806,7 @@
     "spacexai/grok-4.20-multi-agent": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "spacexai/grok-build-0.1": [
@@ -1786,7 +1818,7 @@
     "spacexai/grok-4.20-multi-agent-beta": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "fireworks/ember-1": [
@@ -1915,13 +1947,20 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "paperinstruments/ultramarine-1-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024
+      }
+    ],
     "anthropic/claude-opus-4.8-fast": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      },
-      {
-        "type": "budget_tokens"
       }
     ],
     "anthropic/claude-opus-4.6": [
@@ -1949,18 +1988,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      },
-      {
-        "type": "budget_tokens"
       }
     ],
     "anthropic/claude-opus-5": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      },
-      {
-        "type": "budget_tokens"
       }
     ],
     "anthropic/claude-fable-5.2": [
@@ -1988,9 +2021,6 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      },
-      {
-        "type": "budget_tokens"
       }
     ],
     "anthropic/claude-fable-5": [
@@ -2030,18 +2060,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      },
-      {
-        "type": "budget_tokens"
       }
     ],
     "anthropic/claude-opus-5-fast": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      },
-      {
-        "type": "budget_tokens"
       }
     ],
     "anthropic/claude-opus-4.5": [

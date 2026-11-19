@@ -1,3 +1,32 @@
 {
-  "temperature": ["Ling-1T", "Ring-1T"]
+  "attachment": ["Ling-3.0-flash-VL", "Ling-3.2-flash"],
+  "temperature": ["Ling-3.0-flash", "Ling-3.0-flash-VL", "Ling-3.0-tiny", "Ling-3.1-flash", "Ling-3.2-flash"],
+  "structuredOutput": ["Ling-3.0-flash", "Ling-3.0-flash-VL", "Ling-3.0-tiny", "Ling-3.1-flash", "Ling-3.2-flash"],
+  "reasoning": {
+    "Ling-3.1-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Ling-3.0-tiny": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Ling-3.0-flash-VL": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Ling-3.0-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Ling-3.2-flash": [
+      {
+        "type": "toggle"
+      }
+    ]
+  }
 }

@@ -18,9 +18,13 @@
     "moonshotai/kimi-k3",
     "moonshotai/kimi-k3.1-pro",
     "moonshotai/kimi-k3.1-pro-highspeed",
+    "openai/gpt-6.1-terra",
+    "openai/gpt-6.2-astra",
+    "openai/gpt-6.2-sol",
     "paddlepaddle/paddleocr-vl",
     "qwen/qwen3-omni-30b-a3b-thinking",
     "qwen/qwen3-vl-30b-a3b-instruct",
+    "qwen/qwen3-vl-plus",
     "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3.5-27b",
     "qwen/qwen3.5-35b-a3b",
@@ -30,9 +34,11 @@
     "qwen/qwen3.8-27b",
     "qwen/qwen3.8-flash",
     "qwen/qwen3.8-max",
+    "qwen/qwen4-max",
     "stepfun/step-3.7-flash",
     "stepfun/step-5-preview",
     "tencent/hy4",
+    "tencent/hy4-flash",
     "xiaomimimo/mimo-v2.5",
     "xiaomimimo/mimo-v2.6-flash",
     "xiaomimimo/mimo-v2.6-pro",
@@ -87,11 +93,13 @@
     "moonshotai/kimi-k2.6",
     "nousresearch/hermes-2-pro-llama-3-8b",
     "nvidia/nemotron-3-nano-30b-a3b",
+    "openai/gpt-6.1-terra",
     "openai/gpt-oss-120b",
     "paddlepaddle/paddleocr-vl",
     "qwen/qwen-mt-plus",
     "qwen/qwen3-omni-30b-a3b-thinking",
     "qwen/qwen3-vl-30b-a3b-instruct",
+    "qwen/qwen3-vl-plus",
     "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3.5-27b",
     "qwen/qwen3.5-35b-a3b",
@@ -103,10 +111,12 @@
     "qwen/qwen3.8-27b",
     "qwen/qwen3.8-flash",
     "qwen/qwen3.8-max",
+    "qwen/qwen4-max",
     "stepfun/step-3.7-flash",
     "stepfun/step-5-preview",
     "tencent/hy3",
     "tencent/hy4",
+    "tencent/hy4-flash",
     "tencent/hy4-preview",
     "xiaomimimo/mimo-v2.5",
     "xiaomimimo/mimo-v2.5-pro",
@@ -158,9 +168,13 @@
     "moonshotai/kimi-k3.1-pro-highspeed",
     "nousresearch/hermes-2-pro-llama-3-8b",
     "nvidia/nemotron-3-nano-30b-a3b",
+    "openai/gpt-6.1-terra",
+    "openai/gpt-6.2-astra",
+    "openai/gpt-6.2-sol",
     "openai/gpt-oss-120b",
     "qwen/qwen3-omni-30b-a3b-thinking",
     "qwen/qwen3-vl-30b-a3b-instruct",
+    "qwen/qwen3-vl-plus",
     "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3.5-27b",
     "qwen/qwen3.5-35b-a3b",
@@ -172,10 +186,12 @@
     "qwen/qwen3.8-27b",
     "qwen/qwen3.8-flash",
     "qwen/qwen3.8-max",
+    "qwen/qwen4-max",
     "stepfun/step-3.7-flash",
     "stepfun/step-5-preview",
     "tencent/hy3",
     "tencent/hy4",
+    "tencent/hy4-flash",
     "tencent/hy4-preview",
     "xiaomimimo/mimo-v2.5",
     "xiaomimimo/mimo-v2.5-pro",
@@ -398,6 +414,12 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "tencent/hy4-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
     "tencent/hy4": [
       {
         "type": "effort",
@@ -443,6 +465,24 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "openai/gpt-6.2-astra": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "openai/gpt-6.2-sol": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "openai/gpt-6.1-terra": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
     "openai/gpt-oss-120b": [
       {
         "type": "effort",
@@ -480,6 +520,20 @@
       {
         "type": "effort",
         "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "qwen/qwen4-max": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "xhigh"]
+      }
+    ],
+    "qwen/qwen3-vl-plus": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
       }
     ],
     "qwen/qwen3.7-max": [

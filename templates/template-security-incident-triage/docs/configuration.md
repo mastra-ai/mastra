@@ -23,7 +23,7 @@ Generate independent application secrets with `openssl rand -hex 32`. GeoIP keys
 
 ## Optional defaults
 
-- `MASTRA_MODEL=openai/gpt-4o-mini`; another Mastra model identifier requires that provider's authentication configuration. OpenAI startup validation applies to `openai/` models.
+- `MASTRA_MODEL=openai/gpt-6-luna`; another Mastra model identifier requires that provider's authentication configuration. OpenAI startup validation applies to `openai/` models.
 - `MASTRA_STORAGE_URL=file:./incident.db` in the example; omitting the setting retains the compatible `file:./mastra.db` default. `MASTRA_STORAGE_AUTH_TOKEN` is optional for authenticated remote LibSQL. Keep storage persistent across restarts.
 - `PORT=3000`, `RUNBOOK_FASTEMBED_CACHE_DIR=.cache/fastembed`. Local HTTP binds to `127.0.0.1`; hosted HTTP binds to `0.0.0.0`. The development launcher rejects an occupied port before preparing storage.
 - `ALERT_WEBHOOK_SOURCES=reference-auth`; explicit source lists restrict signed producers. `DEVICE_TRUST_ALERT_SOURCE=first-party-device-trust`.

@@ -7,7 +7,7 @@ description: "Browse Volcengine Ark Coding Plan model IDs, capabilities, and con
 
 # <img src="https://models.dev/logos/volcengine-coding-plan.svg" alt="Volcengine Ark Coding Plan logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Volcengine Ark Coding Plan
 
-Access 10 Volcengine Ark Coding Plan models through Mastra's model router. Authentication is handled automatically using the `ARK_CODING_PLAN_API_KEY` environment variable.
+Access 17 Volcengine Ark Coding Plan models through Mastra's model router. Authentication is handled automatically using the `ARK_CODING_PLAN_API_KEY` environment variable.
 
 Learn more in the [Volcengine Ark Coding Plan documentation](https://www.volcengine.com/docs/82379/1928261).
 
@@ -70,13 +70,73 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "volcengine-coding-plan/doubao-seed-evolving",
+    "model": "volcengine-coding-plan/deepseek-v4.1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "volcengine-coding-plan/deepseek-v4.1-flash-economy",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "volcengine-coding-plan/doubao-seed-2.0-mini",
     "imageInput": true,
     "audioInput": false,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 256000,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "volcengine-coding-plan/doubao-seed-2.1-lite",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1024000,
+    "maxOutput": 256000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "volcengine-coding-plan/doubao-seed-2.1-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1024000,
+    "maxOutput": 256000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "volcengine-coding-plan/doubao-seed-evolving",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1024000,
     "maxOutput": 256000,
     "inputCost": null,
     "outputCost": null
@@ -106,6 +166,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
+    "model": "volcengine-coding-plan/kimi-k2.8-preview",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 32768,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "volcengine-coding-plan/kimi-k3",
     "imageInput": true,
     "audioInput": false,
@@ -113,7 +185,19 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 131072,
+    "maxOutput": 1048576,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "volcengine-coding-plan/kimi-k3.1-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
     "inputCost": null,
     "outputCost": null
   }

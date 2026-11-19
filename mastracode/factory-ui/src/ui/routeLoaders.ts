@@ -18,6 +18,7 @@ import { incidentioStatusQueryOptions } from '../hooks/useIncidentioData';
 import { intakeBindingsQueryOptions, intakeConfigQueryOptions } from '../hooks/useIntakeConfig';
 import { jiraStatusQueryOptions } from '../hooks/useJiraData';
 import { linearStatusQueryOptions } from '../hooks/useLinearData';
+import { activePlatformConnectionQueryOptions } from '../hooks/usePlatformConnections';
 import { serverFeaturesQueryOptions } from '../hooks/useServerFeatures';
 import { sessionActivityQueryOptions, sessionRowsQueryOptions } from '../hooks/useSessionRows';
 import {
@@ -163,6 +164,8 @@ export const prefetchBoard: Prefetch = (services, { params, request }) => {
     void queryClient.query(linearStatusQueryOptions(api.baseUrl)).catch(noop);
     void queryClient.query(jiraStatusQueryOptions(api.baseUrl)).catch(noop);
     void queryClient.query(incidentioStatusQueryOptions(api.baseUrl)).catch(noop);
+    // The source filter offers Vanta while a Vanta connection is active.
+    void queryClient.query(activePlatformConnectionQueryOptions(api.baseUrl, 'vanta')).catch(noop);
   });
 };
 

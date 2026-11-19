@@ -1,5 +1,5 @@
 {
-  "attachment": ["deepseek-v4.1-flash", "deepseek-v4.1-flash-1017", "glm-5.3-flash", "kimi-k3", "qwen3.8-27b"],
+  "attachment": ["deepseek-v4.1-flash", "deepseek-v4.1-flash-1017", "glm-5.3-flash", "kimi-k3", "kimi-k3.1-pro"],
   "temperature": [
     "deepseek-v4-flash-0731",
     "deepseek-v4.1-flash",
@@ -19,6 +19,7 @@
     "glm-5.3",
     "glm-5.3-flash",
     "kimi-k3",
+    "kimi-k3.1-pro",
     "qwen3.6-35b-a3b",
     "qwen3.8-27b"
   ],
@@ -79,6 +80,11 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "kimi-k3.1-pro": [
+      {
+        "type": "toggle"
       }
     ],
     "qwen3.8-27b": [

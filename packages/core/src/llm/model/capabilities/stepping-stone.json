@@ -1,0 +1,89 @@
+{
+  "attachment": [
+    "Qwen/Qwen3.5-35B-A3B-FP8",
+    "Qwen/Qwen3.8-27B",
+    "allenai/olmOCR-2-7B",
+    "apertus-ai/Apertus-v1.5-8B",
+    "google/gemma-4-31B-it",
+    "lightonai/LightOnOCR-2-1B",
+    "opendatalab/MinerU2.5-2509-1.2B",
+    "zai-org/GLM-5.3-Flash"
+  ],
+  "temperature": [
+    "MiniMaxAI/MiniMax-M2.5",
+    "NVIDIA/NVIDIA-Nemotron-3-Super-120B-A12B",
+    "Qwen/Qwen3-Coder-Next",
+    "Qwen/Qwen3.5-35B-A3B-FP8",
+    "Qwen/Qwen3.8-27B",
+    "allenai/olmOCR-2-7B",
+    "apertus-ai/Apertus-v1.5-8B",
+    "deepseek-ai/DeepSeek-V4-Flash-0731",
+    "google/gemma-4-31B-it",
+    "lightonai/LightOnOCR-2-1B",
+    "openai/gpt-oss-120b",
+    "opendatalab/MinerU2.5-2509-1.2B",
+    "zai-org/GLM-5.3-Flash"
+  ],
+  "reasoning": {
+    "zai-org/GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "apertus-ai/Apertus-v1.5-8B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "NVIDIA/NVIDIA-Nemotron-3-Super-120B-A12B": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium"]
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Flash-0731": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "google/gemma-4-31B-it": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "Qwen/Qwen3.5-35B-A3B-FP8": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "Qwen/Qwen3.8-27B": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ]
+  }
+}

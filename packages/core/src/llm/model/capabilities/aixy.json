@@ -14,7 +14,14 @@
     "openai/gpt-6-sol",
     "openai/gpt-6.1-sol"
   ],
-  "temperature": ["gemini/gemini-3.8-flash"],
+  "temperature": [
+    "gemini/gemini-3.8-flash",
+    "openai/gpt-5.6-luna",
+    "openai/gpt-5.6-sol",
+    "openai/gpt-5.6-terra",
+    "openai/gpt-6-luna",
+    "openai/gpt-6-sol"
+  ],
   "structuredOutput": [
     "anthropic/claude-fable-5-1",
     "anthropic/claude-haiku-5-5",

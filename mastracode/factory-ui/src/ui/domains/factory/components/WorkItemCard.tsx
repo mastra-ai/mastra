@@ -55,6 +55,7 @@ export function WorkItemCard({
   sessionHolds,
   ownerCurrent = true,
   onMove,
+  onMoveToBoard,
   onRemove,
   layout,
 }: {
@@ -90,6 +91,7 @@ export function WorkItemCard({
    */
   ownerCurrent?: boolean;
   onMove: (toStage: string) => void;
+  onMoveToBoard: (toBoard: string, toStage: string) => void;
   onRemove: () => void;
   layout: BoardLayout;
 }) {
@@ -147,6 +149,7 @@ export function WorkItemCard({
     onApproveProposal,
     onDismissProposal,
     onMove,
+    onMoveToBoard,
     onRemove,
   };
 

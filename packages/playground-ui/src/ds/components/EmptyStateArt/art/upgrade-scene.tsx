@@ -1,18 +1,28 @@
 import { s } from './scene-style';
 import type { SceneProps } from './scene-style';
 
-export function UpgradeScene(_props: SceneProps) {
+export function UpgradeScene({ id }: SceneProps) {
   return (
     <>
-      <path
-        d="M-88.4,31.8Q-88.4,30.1 -86.4,29.1L-9,-9.6Q-7.1,-10.6 -5.1,-9.6L75.8,30.8Q77.8,31.8 77.8,33.5L77.8,33.9Q77.8,35.6 75.8,36.6L-1.6,75.3Q-3.5,76.2 -5.5,75.3L-86.4,34.8Q-88.4,33.8 -88.4,32.1Z"
-        fill="var(--face)"
-        stroke="var(--line)"
-        strokeWidth="1"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        vectorEffect="non-scaling-stroke"
-      />
+      <defs>
+        <pattern id={`${id}-gh`} patternUnits="userSpaceOnUse" width="1.8" height="1.8" patternTransform="rotate(-30)">
+          <line x1="0" y1="0" x2="0" y2="1.8" stroke="var(--detail)" strokeOpacity=".42" strokeWidth=".34" />
+        </pattern>
+        <radialGradient id={`${id}-gg0`} gradientUnits="userSpaceOnUse" cx="-3.3" cy="34.7" r="75.6">
+          <stop offset=".2" stopColor="#fff" />
+          <stop offset=".9" stopColor="#fff" stopOpacity="0" />
+        </radialGradient>
+        <mask id={`${id}-gm0`} maskUnits="userSpaceOnUse" x="-400" y="-400" width="800" height="800">
+          <rect x="-400" y="-400" width="800" height="800" fill={`url(#${id}-gg0)`} />
+        </mask>
+      </defs>
+      <g className="ground">
+        <path
+          mask={`url(#${id}-gm0)`}
+          d="M-78.7,29.1C-81,26.3 -72.1,25.8 -68.8,24.1C-65.5,22.5 -65.5,21.8 -58.9,19.1C-52.4,16.4 -39.4,11.6 -29.6,7.8C-19.8,4.1 -5.5,-1.7 0,-3.4C5.5,-5.1 2.2,-2.8 3.3,-2.4C4.4,-2.1 1.1,-4.1 6.6,-1.4C12.1,1.2 26.5,8.6 36.4,13.5C46.2,18.5 62.1,24.3 65.8,28.5C69.5,32.6 61.1,35.2 58.7,38.6C56.3,41.9 52.9,46.9 51.6,48.7C50.2,50.5 50.9,49.1 50.6,49.3C50.3,49.6 53.9,48.4 49.7,50C45.5,51.6 33.7,56.1 25.6,59.1C17.5,62.1 5.8,66.8 1.2,68.2C-3.4,69.5 -1,67.5 -2.1,67.2C-3.2,66.9 -2.6,67.5 -5.4,66.2C-8.2,64.9 -14.4,61.7 -18.9,59.4C-23.4,57.2 -26.2,55.7 -32.4,52.6C-38.5,49.5 -47.9,44.7 -55.6,40.8C-63.3,36.9 -76.5,31.9 -78.7,29.1Z"
+          fill={`url(#${id}-gh)`}
+        />
+      </g>
       <path
         d="M-38.9,-28.4Q-38.9,-30.6 -36.9,-31.5L-2,-49Q0,-50 2,-49L51.1,-24.5Q53,-23.5 53,-21.3L53,24.3Q53,26.5 51.1,27.5L16.1,45Q14.1,46 12.2,45L-36.9,20.4Q-38.9,19.4 -38.9,17.2Z"
         fill="var(--face)"

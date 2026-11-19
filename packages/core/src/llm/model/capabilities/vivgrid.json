@@ -46,9 +46,13 @@
     "glm-5.2",
     "glm-5.3",
     "glm-5.3-flash",
+    "gpt-5.5",
     "gpt-5.6-luna",
     "gpt-5.6-sol",
-    "gpt-5.6-terra"
+    "gpt-5.6-terra",
+    "gpt-6-luna",
+    "gpt-6-sol",
+    "gpt-6.1-terra"
   ],
   "structuredOutput": [
     "claude-fable-5",

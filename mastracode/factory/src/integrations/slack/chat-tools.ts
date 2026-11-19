@@ -110,6 +110,53 @@ export function createSlackChatTools({
 
   return {
     fetchMessages: note(fetchMessages(chat, guard)),
+    downloadSlackAttachment: createTool({
+      id: 'downloadSlackAttachment',
+      description:
+        'Inspect a JPEG, PNG, or WebP attachment from a Slack message in a channel this session can read. For top-level messages (including DMs), find the message id with fetchChannelMessages; for threaded replies use fetchMessages. Supply its threadId, messageId, and zero-based attachmentIndex. Images must fit within 5 MB when base64-encoded; they are shown directly to the model without storing a sandbox file.',
+      inputSchema: z.object({
+        threadId: z.string().min(1),
+        messageId: z.string().regex(/^\d+\.\d+$/),
+        attachmentIndex: z.number().int().min(0),
+      }),
+      outputSchema: z.object({ name: z.string().optional(), mimeType: z.string(), base64: z.string() }),
+      execute: async ({ threadId, messageId, attachmentIndex }) => {
+        guard(threadId);
+        const lookupThreadId = threadId.split(':')[2] ? threadId : `${channelOf(chat, withPrefix(threadId))}:${messageId}`;
+        const message = await (chat.getAdapter('slack') as SlackAdapter).fetchMessage(lookupThreadId, messageId);
+        if (!message) throw new Error('Message not found in this thread.');
+        const attachment = message.attachments[attachmentIndex];
+        if (!attachment) throw new Error('Attachment not found on this message.');
+        const mimeType = attachment.mimeType;
+        if (!mimeType?.startsWith('image/')) throw new Error('Only image attachments can be inspected.');
+        if (!['image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) {
+          throw new Error('Unsupported image format; use JPEG, PNG, or WebP.');
+        }
+        if (!attachment.fetchData) throw new Error('This attachment cannot be downloaded.');
+        const maxBytes = 8 * 1024 * 1024;
+        const maxModelBytes = 3_750_000; // 5 MB when base64-encoded
+        if (attachment.size === undefined) throw new Error('Attachment size is unavailable; cannot verify the 8 MiB limit.');
+        if (attachment.size > maxBytes) throw new Error('Attachment exceeds 8 MiB.');
+        if (attachment.size > maxModelBytes) throw new Error('Attachment exceeds the 5 MB encoded model input limit.');
+        const bytes = await attachment.fetchData();
+        const data = Buffer.from(bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : bytes);
+        if (data.byteLength > maxBytes) throw new Error('Attachment exceeds 8 MiB.');
+        if (data.byteLength > maxModelBytes) throw new Error('Attachment exceeds the 5 MB encoded model input limit.');
+        const matchesFormat =
+          mimeType === 'image/jpeg'
+            ? data.length >= 5 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff && data.at(-2) === 0xff && data.at(-1) === 0xd9
+            : mimeType === 'image/png'
+              ? data.length >= 57 && data.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) &&
+                data.subarray(12, 16).equals(Buffer.from('IHDR')) && data.readUInt32BE(8) === 13 &&
+                data.includes(Buffer.from('IDAT'), 33) && data.subarray(-8, -4).equals(Buffer.from('IEND'))
+              : data.length >= 12 && data.subarray(0, 4).equals(Buffer.from('RIFF')) && data.subarray(8, 12).equals(Buffer.from('WEBP'));
+        if (!matchesFormat) throw new Error('Attachment bytes do not match the declared image format.');
+        return { name: attachment.name, mimeType, base64: data.toString('base64') };
+      },
+      toModelOutput: ({ mimeType, base64 }) => ({
+        type: 'content', value: [{ type: 'image-data', data: base64, mediaType: mimeType }],
+      }),
+    }),
     fetchChannelMessages: note(fetchChannelMessages(chat, guard)),
     fetchThread: fetchThread(chat, guard),
     listThreads: note(listThreads(chat, guard)),

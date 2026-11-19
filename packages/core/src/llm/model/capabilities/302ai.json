@@ -1,6 +1,7 @@
 {
   "attachment": [
     "MiniMax-M3",
+    "MiniMax-M3.1-Flash",
     "claude-fable-5",
     "claude-fable-5-1",
     "claude-haiku-4-5",
@@ -110,6 +111,7 @@
     "MiniMax-M2.5",
     "MiniMax-M2.7",
     "MiniMax-M3",
+    "MiniMax-M3.1-Flash",
     "claude-haiku-4-5",
     "claude-haiku-4-5-20251001",
     "claude-opus-4-1-20250805",
@@ -163,6 +165,15 @@
     "gpt-4o",
     "gpt-5-thinking",
     "gpt-5.3-chat-latest",
+    "gpt-5.5",
+    "gpt-5.6-luna",
+    "gpt-5.6-luna-pro",
+    "gpt-5.6-sol",
+    "gpt-5.6-sol-pro",
+    "gpt-5.6-terra",
+    "gpt-5.6-terra-pro",
+    "gpt-6-luna",
+    "gpt-6-sol",
     "grok-4-1-fast-reasoning",
     "grok-4-fast-non-reasoning",
     "grok-4-fast-reasoning",
@@ -492,6 +503,12 @@
       {
         "type": "effort",
         "values": ["high"]
+      }
+    ],
+    "MiniMax-M3.1-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "glm-5": [

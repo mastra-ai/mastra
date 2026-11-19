@@ -1,6 +1,7 @@
 {
   "attachment": [
     "deepseek-v4.1-flash-1017",
+    "deepseek-v4.1-flash-1017-economy",
     "glm-5.3-flash",
     "inkling",
     "kimi-k3",
@@ -12,7 +13,8 @@
     "prism-flash",
     "qwen3.8-27b",
     "qwen3.8-flash",
-    "qwen3.8-max"
+    "qwen3.8-max",
+    "qwen4-max"
   ],
   "temperature": [
     "deepseek-v4-pro-0813",
@@ -27,7 +29,8 @@
     "qwen3.8-2.4t-a95b",
     "qwen3.8-27b",
     "qwen3.8-flash",
-    "qwen3.8-max"
+    "qwen3.8-max",
+    "qwen4-max"
   ],
   "structuredOutput": [
     "deepseek-v4-pro-0813",
@@ -54,10 +57,28 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "qwen3.8-max": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "deepseek-v4.1-flash-1017-economy": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "qwen4-max": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
     "inkling": [

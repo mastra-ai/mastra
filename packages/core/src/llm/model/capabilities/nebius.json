@@ -2,12 +2,13 @@
   "attachment": [
     "MiniMaxAI/MiniMax-M3.1-Flash",
     "Qwen/Qwen3.8-27B",
-    "deepseek-ai/DeepSeek-V4.1-Flash",
     "deepseek-ai/DeepSeek-V4.1-Flash-1017",
     "google/gemma-3-27b-it",
     "meta-models/muse-spark-open",
     "moonshotai/Kimi-K3",
+    "moonshotai/Kimi-K3.1-Pro",
     "nvidia/Nemotron-3.5-Super-VL",
+    "thinkingmachines/Inkling-2-Small",
     "zai-org/GLM-5.3-Flash"
   ],
   "temperature": [
@@ -16,21 +17,19 @@
     "NousResearch/Hermes-4-405B",
     "Qwen/Qwen3-235B-A22B-Instruct-2507",
     "Qwen/Qwen3-30B-A3B-Instruct-2507",
-    "Qwen/Qwen3.5-397B-A17B",
     "Qwen/Qwen3.8-27B",
-    "deepseek-ai/DeepSeek-V4-Flash-0731",
-    "deepseek-ai/DeepSeek-V4-Pro",
     "deepseek-ai/DeepSeek-V4-Pro-0813",
-    "deepseek-ai/DeepSeek-V4.1-Flash",
     "deepseek-ai/DeepSeek-V4.1-Flash-1017",
     "google/gemma-3-27b-it",
     "meta-models/muse-spark-open",
+    "moonshotai/Kimi-K3.1-Pro",
     "nvidia/Nemotron-3-Ultra-550b-a55b",
     "nvidia/Nemotron-3.5-Super-VL",
     "nvidia/Nemotron-3_5-Lightning",
     "nvidia/nemotron-3-super-120b-a12b",
     "openai/gpt-oss-120b",
     "reflection/beam",
+    "thinkingmachines/Inkling-2-Small",
     "zai-org/GLM-5.2",
     "zai-org/GLM-5.3",
     "zai-org/GLM-5.3-Flash"
@@ -39,22 +38,19 @@
     "MiniMaxAI/MiniMax-M3.1-Flash",
     "NousResearch/Hermes-4-405B",
     "Qwen/Qwen3-30B-A3B-Instruct-2507",
-    "Qwen/Qwen3.5-397B-A17B",
     "Qwen/Qwen3.8-27B",
-    "deepseek-ai/DeepSeek-V4-Flash-0731",
-    "deepseek-ai/DeepSeek-V4-Pro",
     "deepseek-ai/DeepSeek-V4-Pro-0813",
-    "deepseek-ai/DeepSeek-V4.1-Flash",
     "deepseek-ai/DeepSeek-V4.1-Flash-1017",
     "google/gemma-3-27b-it",
     "meta-models/muse-spark-open",
-    "moonshotai/Kimi-K2.7-Code",
     "moonshotai/Kimi-K3",
+    "moonshotai/Kimi-K3.1-Pro",
     "nvidia/Nemotron-3.5-Super-VL",
     "nvidia/Nemotron-3_5-Lightning",
     "nvidia/nemotron-3-super-120b-a12b",
     "openai/gpt-oss-120b",
     "reflection/beam",
+    "thinkingmachines/Inkling-2-Small",
     "zai-org/GLM-5.2",
     "zai-org/GLM-5.3",
     "zai-org/GLM-5.3-Flash"
@@ -84,28 +80,22 @@
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
+    "moonshotai/Kimi-K3.1-Pro": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
     "moonshotai/Kimi-K3": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Flash-0731": [
+    "thinkingmachines/Inkling-2-Small": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Pro": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4.1-Flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "deepseek-ai/DeepSeek-V4.1-Flash-1017": [
@@ -148,11 +138,6 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "Qwen/Qwen3.5-397B-A17B": [
-      {
-        "type": "toggle"
       }
     ],
     "MiniMaxAI/MiniMax-M3.1-Flash": [

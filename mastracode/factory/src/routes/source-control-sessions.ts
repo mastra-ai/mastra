@@ -65,6 +65,8 @@ export interface SourceControlSessionRoutesOptions {
     Partial<Pick<WorkItemsStorage, 'listWorkItemSubscribers' | 'findActiveRunBindingForSession' | 'get'>>;
   /** Moves a thread, with everything keyed by its resource, when a session's visibility changes. */
   moveThread?: (input: { threadId: string; resourceId: string }) => Promise<unknown>;
+  /** Stores a title a person typed on a thread, pinned so automatic naming leaves it alone. */
+  renameThread?: (input: { threadId: string; title: string }) => Promise<unknown>;
 }
 
 const ABORT_SETTLE_TIMEOUT_MS = 5_000;
@@ -326,14 +328,41 @@ function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/**
+ * Title writes for one session, one at a time and in the order they were asked
+ * for. A title touches the conversation and the session row, so two writers
+ * interleaving would leave the two disagreeing, and a regeneration still
+ * waiting on its model would replace a title typed after it started.
+ */
 function createSessionNaming() {
   const inFlight = new Map<string, Promise<string | null>>();
-  return (sessionId: string, run: () => Promise<string | null>) => {
-    const pending = inFlight.get(sessionId);
-    if (pending) return pending;
-    const started = run().finally(() => inFlight.delete(sessionId));
-    inFlight.set(sessionId, started);
-    return started;
+  const tails = new Map<string, Promise<unknown>>();
+  const inTurn = <T>(sessionId: string, run: () => Promise<T>): Promise<T> => {
+    const turn = (tails.get(sessionId) ?? Promise.resolve()).then(run, run);
+    const tail = turn.catch(() => {});
+    tails.set(sessionId, tail);
+    void tail.then(() => {
+      if (tails.get(sessionId) === tail) tails.delete(sessionId);
+    });
+    return turn;
+  };
+  return {
+    /** Ask the model for a title. A second ask while one is pending shares its answer. */
+    generate(sessionId: string, run: () => Promise<string | null>) {
+      const pending = inFlight.get(sessionId);
+      if (pending) return pending;
+      const started: Promise<string | null> = inTurn(sessionId, run).finally(() => {
+        if (inFlight.get(sessionId) === started) inFlight.delete(sessionId);
+      });
+      inFlight.set(sessionId, started);
+      return started;
+    },
+    /** Store a typed title after every title write asked for before it. */
+    rename<T>(sessionId: string, run: () => Promise<T>): Promise<T> {
+      // A regeneration asked for after this must run after it, not share the answer of one before it.
+      inFlight.delete(sessionId);
+      return inTurn(sessionId, run);
+    },
   };
 }
 
@@ -882,6 +911,48 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
       },
     }),
     registerApiRoute('/web/user-sessions/:sessionId/title', {
+      method: 'PUT',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), options.auth);
+        if ('response' in resolved) return resolved.response;
+        const body: { title?: unknown } | null = await c.req.json().catch(() => null);
+        const title = typeof body?.title === 'string' ? normalizeSessionTitle(body.title) : null;
+        if (!title) return c.json({ error: 'Enter a title for the session.' }, 400);
+        const sessionId = c.req.param('sessionId');
+        const match = await resolveSession(options.sourceControls, sessionId);
+        const row = match?.session;
+        // Only the owner may rename; everyone else gets the same 404 as a missing session.
+        if (!match || !row || row.orgId !== resolved.tenant.orgId || row.userId !== resolved.tenant.userId) {
+          return c.json({ error: 'Session not found' }, 404);
+        }
+        if (!options.controller || !options.renameThread) {
+          return c.json({ error: 'Renaming sessions is not available on this server.' }, 503);
+        }
+        // A session id is chosen by its creator, so threads found only because their resource
+        // matches it may be someone else's. Only the session's own thread, or one stamped with
+        // its id, takes a typed title.
+        const threads = (await listFactorySessionThreads(options.controller, row, options.workItems)).filter(
+          candidate => candidate.id === sessionId || candidate.metadata?.factorySessionId === sessionId,
+        );
+        const thread = threads.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
+        // The first reply names a new conversation, which would replace a title set before it.
+        if (!thread) return c.json({ error: 'This session has no conversation to name yet.' }, 409);
+        const renameThread = options.renameThread;
+        const renamed = await nameSession.rename(sessionId, async () => {
+          // Waiting behind an earlier title write can outlast the owner check above.
+          const current = await match.sourceControl.sessions.getBySessionId(sessionId);
+          if (current?.userId !== resolved.tenant.userId) return false;
+          // The thread goes first: its pin is what keeps the next automatic title off the row.
+          await renameThread({ threadId: thread.id, title });
+          await match.sourceControl.sessions.rename({ sessionId, title });
+          return true;
+        });
+        if (!renamed) return c.json({ error: 'Session not found' }, 404);
+        return c.json({ title });
+      },
+    }),
+    registerApiRoute('/web/user-sessions/:sessionId/title', {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
@@ -901,7 +972,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         const requestContext = new RequestContext();
         requestContext.set('user', { workosId: row.userId, organizationId: row.orgId });
         try {
-          const title = await nameSession(sessionId, async () => {
+          const title = await nameSession.generate(sessionId, async () => {
             const generated = await options.controller!.generateThreadTitle({
               threadId: thread.id,
               sessionId,

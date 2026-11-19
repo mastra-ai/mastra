@@ -3,6 +3,7 @@
   "temperature": [
     "ambient/large",
     "ambient/small",
+    "deepseek/deepseek-v4.1-flash-1017",
     "minimax/minimax-m3",
     "qwen/qwen3-30b-a3b-instruct-2507",
     "qwen/qwen3.6-27b",
@@ -14,6 +15,7 @@
   ],
   "structuredOutput": [
     "ambient/large",
+    "deepseek/deepseek-v4.1-flash-1017",
     "minimax/minimax-m3",
     "qwen/qwen3-30b-a3b-instruct-2507",
     "qwen/qwen3.6-27b",
@@ -38,6 +40,15 @@
       {
         "type": "effort",
         "values": ["high", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4.1-flash-1017": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "z-ai/glm-5.2": [

@@ -1,7 +1,6 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import type { ReactElement } from 'react';
 
-import { externalLinkLabel } from '../boardItems';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { boardLoop } from '../boardFlow';
 import { itemBoard, itemStageOptions } from '../boardStages';
@@ -9,10 +8,12 @@ import { canMoveTo, canStartRun } from '../boardCardState';
 import type { BoardCardOwner } from '../boardCardState';
 import { awaitsTriageDecision, triageDecisions } from '../cardPrimaryAction';
 import type { CardMove } from '../cardPrimaryAction';
+import { CARD_SOURCES } from '../cardSources';
 import type { FactoryDecisionSummary } from '../services/decisions';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { BoardStageIcon, actionIcon } from './BoardIcons';
+import { IconArrowBoxRight } from '@mastra/playground-ui/icons/central/IconArrowBoxRight';
 import { IconArrowUpRight } from '@mastra/playground-ui/icons/central/IconArrowUpRight';
 import { IconCircleBanSign } from '@mastra/playground-ui/icons/central/IconCircleBanSign';
 import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
@@ -30,6 +31,8 @@ export interface WorkItemMenuProps {
   onApproveProposal: (decisionId: string) => void;
   onDismissProposal: (decisionId: string) => void;
   onMove: (toStage: string) => void;
+  /** Moves the card to a phase on another installed board. */
+  onMoveToBoard: (toBoard: string, toStage: string) => void;
   onRemove: () => void;
 }
 
@@ -55,6 +58,7 @@ export function WorkItemMenuItems({
   onApproveProposal,
   onDismissProposal,
   onMove,
+  onMoveToBoard,
   onRemove,
 }: WorkItemMenuProps): ReactElement {
   const catalog = useBoardCatalog(item.githubProjectId);
@@ -76,6 +80,7 @@ export function WorkItemMenuItems({
   const runsBlocked = !canStartRun(owner.kind);
   const yourRequestInFlight = owner.kind === 'you';
   const phaseKind = (stage: string) => board?.phases.find(phase => phase.id === stage)?.kind;
+  const otherBoards = catalog.data?.filter(candidate => candidate.id !== boardId) ?? [];
   return (
     <>
       {awaitsTriage &&
@@ -108,7 +113,7 @@ export function WorkItemMenuItems({
       {item.url !== null && (
         <DropdownMenu.Item render={<a href={item.url} target="_blank" rel="noreferrer" />}>
           <IconArrowUpRight aria-hidden />
-          <span>{externalLinkLabel(item.source)}</span>
+          <span>{CARD_SOURCES[item.source].linkLabel}</span>
         </DropdownMenu.Item>
       )}
       {stages
@@ -126,6 +131,34 @@ export function WorkItemMenuItems({
             </span>
           </DropdownMenu.Item>
         ))}
+      {otherBoards.length > 0 && (
+        <DropdownMenu.Sub>
+          <DropdownMenu.SubTrigger disabled={yourRequestInFlight}>
+            <IconArrowBoxRight aria-hidden />
+            <span>Move to board</span>
+          </DropdownMenu.SubTrigger>
+          <DropdownMenu.SubContent>
+            {otherBoards.map(target => (
+              <DropdownMenu.Sub key={target.id}>
+                <DropdownMenu.SubTrigger>
+                  <span>{target.name ?? target.title}</span>
+                </DropdownMenu.SubTrigger>
+                <DropdownMenu.SubContent>
+                  {/* A card finishes on its own board, so another board's terminal phases are not offered. */}
+                  {target.phases
+                    .filter(phase => phase.kind !== 'terminal')
+                    .map(phase => (
+                      <DropdownMenu.Item key={phase.id} onClick={() => onMoveToBoard(target.id, phase.id)}>
+                        <BoardStageIcon stage={phase.id} kind={phase.kind} decorative />
+                        <span>{phase.name ?? phase.title}</span>
+                      </DropdownMenu.Item>
+                    ))}
+                </DropdownMenu.SubContent>
+              </DropdownMenu.Sub>
+            ))}
+          </DropdownMenu.SubContent>
+        </DropdownMenu.Sub>
+      )}
       <DropdownMenu.Item disabled={yourRequestInFlight} onClick={onRemove}>
         <TrashIcon aria-hidden />
         <span>Remove</span>

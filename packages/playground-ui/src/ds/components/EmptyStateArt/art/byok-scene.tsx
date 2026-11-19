@@ -4,15 +4,25 @@ import type { SceneProps } from './scene-style';
 export function ByokScene({ id }: SceneProps) {
   return (
     <>
-      <path
-        d="M-49.5,21.2Q-49.5,19.4 -47.5,18.5L-2,-4.3Q0,-5.3 2,-4.3L44,16.7Q46,17.7 46,19.4L46,19.7Q46,21.4 44,22.4L-1.6,45.2Q-3.5,46.2 -5.5,45.2L-47.5,24.2Q-49.5,23.2 -49.5,21.5Z"
-        fill="var(--face)"
-        stroke="var(--line)"
-        strokeWidth="1"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        vectorEffect="non-scaling-stroke"
-      />
+      <defs>
+        <pattern id={`${id}-gh`} patternUnits="userSpaceOnUse" width="1.8" height="1.8" patternTransform="rotate(-30)">
+          <line x1="0" y1="0" x2="0" y2="1.8" stroke="var(--detail)" strokeOpacity=".42" strokeWidth=".34" />
+        </pattern>
+        <radialGradient id={`${id}-gg0`} gradientUnits="userSpaceOnUse" cx="4.4" cy="15.5" r="43.9">
+          <stop offset=".2" stopColor="#fff" />
+          <stop offset=".9" stopColor="#fff" stopOpacity="0" />
+        </radialGradient>
+        <mask id={`${id}-gm0`} maskUnits="userSpaceOnUse" x="-400" y="-400" width="800" height="800">
+          <rect x="-400" y="-400" width="800" height="800" fill={`url(#${id}-gg0)`} />
+        </mask>
+      </defs>
+      <g className="ground">
+        <path
+          mask={`url(#${id}-gm0)`}
+          d="M-32.8,13.2C-33.5,10.1 -22.1,7.7 -16.6,5C-11.2,2.2 -3.5,-2.2 -0.2,-3.4C3.1,-4.6 2,-2.7 3.1,-2.4C4.2,-2.1 2.4,-3.4 6.5,-1.4C10.5,0.5 20.6,5.7 27.6,9.2C34.5,12.7 47.4,16.6 48.1,19.7C48.8,22.9 37.4,25.2 32,28C26.5,30.7 18.9,35.1 15.6,36.3C12.3,37.6 13.3,35.7 12.2,35.4C11.1,35 13,36.3 8.9,34.4C4.8,32.4 -5.3,27.2 -12.2,23.7C-19.2,20.2 -32,16.3 -32.8,13.2Z"
+          fill={`url(#${id}-gh)`}
+        />
+      </g>
       <path
         d="M-26.5,-22Q-26.5,-24.2 -24.6,-25.2L-2,-36.5Q0,-37.5 2,-36.5L33.4,-20.8Q35.4,-19.8 35.4,-17.6L35.4,15.5Q35.4,17.7 33.4,18.7L10.8,30Q8.8,30.9 6.9,30L-24.6,14.2Q-26.5,13.3 -26.5,11.1Z"
         fill="var(--face)"
@@ -70,6 +80,7 @@ export function ByokScene({ id }: SceneProps) {
       <g className="okonly">
         <clipPath id={`${id}-bk-slot`}>
           <path d="M-8,-139.8L-4.4,-141.6L18.6,-130.1L18.6,-17.6L15,-15.8L-8,-27.3Z" />
+          <path d="M-19.4,-145.6L-15.9,-147.3L30.1,-124.4L30.1,-13.6L26.5,-11.8L-19.4,-34.8Z" />
         </clipPath>
         <g clipPath={`url(#${id}-bk-slot)`}>
           <g className="acc created drawer" style={s({ '--shift': '0px 17.5px' })}>
@@ -106,6 +117,7 @@ export function ByokScene({ id }: SceneProps) {
       <g className="fail">
         <clipPath id={`${id}-bk-slot2`}>
           <path d="M-8,-139.8L-4.4,-141.6L18.6,-130.1L18.6,-17.6L15,-15.8L-8,-27.3Z" />
+          <path d="M-19.4,-145.6L-15.9,-147.3L30.1,-124.4L30.1,-13.6L26.5,-11.8L-19.4,-34.8Z" />
         </clipPath>
         <g clipPath={`url(#${id}-bk-slot2)`}>
           <g className="fx fx-bk-card">

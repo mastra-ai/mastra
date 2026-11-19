@@ -347,12 +347,22 @@ async function advanceForEach(
       suspendMeta.resumeLabels = collectedResumeLabels;
     }
 
+    // Concurrent per-item writes can drop each other's entries from the stored foreachOutput, so
+    // each suspended item's record comes from the merged output, where every item has its own slot.
+    const foreachOutput = [...(currentResult?.suspendPayload?.__workflow_meta?.foreachOutput ?? [])];
+    currentResult.output.forEach((iterResult: any, i: number) => {
+      if (iterResult?.status !== 'suspended') return;
+      const { payload: _payload, ...iterationRecord } = iterResult;
+      foreachOutput[i] = iterationRecord;
+    });
+
     const aggregatedSuspendPayload = {
       ...firstSuspendedIterationPayload,
       __workflow_meta: {
         ...currentResult?.suspendPayload?.__workflow_meta,
         ...(firstSuspendedIterationPayload?.__workflow_meta as Record<string, unknown> | undefined),
         ...suspendMeta,
+        foreachOutput,
       },
     };
 

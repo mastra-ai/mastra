@@ -5,12 +5,15 @@
     "umans-deepseek-v4.1-flash-1017",
     "umans-flash",
     "umans-glm-5.3-flash",
-    "umans-kimi-k3"
+    "umans-kimi-k3",
+    "umans-kimi-k3.1-pro"
   ],
   "temperature": [
+    "umans-coder",
     "umans-deepseek-v4-flash-0731",
     "umans-deepseek-v4.1-flash",
     "umans-deepseek-v4.1-flash-1017",
+    "umans-flash",
     "umans-glm-5.3",
     "umans-glm-5.3-flash"
   ],
@@ -22,7 +25,8 @@
     "umans-flash",
     "umans-glm-5.3",
     "umans-glm-5.3-flash",
-    "umans-kimi-k3"
+    "umans-kimi-k3",
+    "umans-kimi-k3.1-pro"
   ],
   "reasoning": {
     "umans-deepseek-v4.1-flash-1017": [
@@ -49,13 +53,22 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "umans-kimi-k3.1-pro": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "umans-flash": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "high", "max"]
       }
     ],
     "umans-deepseek-v4-flash-0731": [
@@ -68,6 +81,9 @@
       }
     ],
     "umans-coder": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["low", "high", "max"]

@@ -1,33 +1,81 @@
 {
   "attachment": [
+    "anthropic/claude-fable-5-1",
+    "anthropic/claude-haiku-5-5",
+    "anthropic/claude-opus-5-5",
+    "anthropic/claude-sonnet-5-5",
+    "deepseek/deepseek-v4.1-flash-1017",
+    "gemini/gemini-3.8-flash",
+    "gemini/gemini-4-argon",
     "minimax/minimax-m3",
+    "moonshotai/kimi-k2.5",
+    "moonshotai/kimi-k2.6",
     "moonshotai/kimi-k3",
+    "openai/gpt-6-astra",
+    "openai/gpt-6-luna",
+    "openai/gpt-6.1-sol",
     "qwen/qwen3.8-2.4t-a95b",
     "qwen/qwen3.8-27b",
+    "qwen/qwen3.8-flash",
+    "qwen/qwen3.8-max",
     "z-ai/glm-5.3-flash"
   ],
   "temperature": [
     "deepseek/deepseek-v4-flash-0731",
     "deepseek/deepseek-v4-pro-0813",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
+    "gemini/gemini-3.8-flash",
+    "minimax/minimax-m2.5",
+    "minimax/minimax-m2.7",
     "minimax/minimax-m3",
+    "moonshotai/kimi-k2.6",
     "moonshotai/kimi-k2.7-code",
     "moonshotai/kimi-k3",
+    "openai/gpt-6-luna",
     "qwen/qwen3.8-2.4t-a95b",
     "qwen/qwen3.8-27b",
+    "qwen/qwen3.8-flash",
+    "qwen/qwen3.8-max",
+    "z-ai/glm-5.2",
     "z-ai/glm-5.3",
     "z-ai/glm-5.3-flash"
   ],
   "structuredOutput": [
+    "anthropic/claude-fable-5-1",
+    "anthropic/claude-opus-5-5",
+    "anthropic/claude-sonnet-5-5",
     "deepseek/deepseek-v4-flash-0731",
     "deepseek/deepseek-v4-pro-0813",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
+    "gemini/gemini-3.8-flash",
+    "gemini/gemini-4-argon",
+    "minimax/minimax-m2.5",
+    "moonshotai/kimi-k2.5",
+    "moonshotai/kimi-k2.6",
     "moonshotai/kimi-k2.7-code",
     "moonshotai/kimi-k3",
+    "openai/gpt-6-astra",
+    "openai/gpt-6-luna",
+    "openai/gpt-6.1-sol",
     "qwen/qwen3.8-2.4t-a95b",
-    "qwen/qwen3.8-27b"
+    "qwen/qwen3.8-27b",
+    "qwen/qwen3.8-flash",
+    "qwen/qwen3.8-max",
+    "z-ai/glm-5.2"
   ],
   "reasoning": {
+    "moonshotai/kimi-k2.5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "moonshotai/kimi-k2.6": [
+      {
+        "type": "toggle"
+      }
+    ],
     "moonshotai/kimi-k3": [
       {
         "type": "effort",
@@ -46,6 +94,12 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "deepseek/deepseek-v4.1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "deepseek/deepseek-v4.1-flash": [
       {
         "type": "effort",
@@ -58,10 +112,61 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "z-ai/glm-5.2": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
     "z-ai/glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "gemini/gemini-3.8-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gemini/gemini-4-argon": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-6-astra": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "openai/gpt-6-luna": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "openai/gpt-6.1-sol": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "qwen/qwen3.8-max": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
       }
     ],
     "qwen/qwen3.8-2.4t-a95b": [
@@ -80,6 +185,42 @@
       {
         "type": "effort",
         "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "qwen/qwen3.8-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "anthropic/claude-fable-5-1": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "anthropic/claude-sonnet-5-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "anthropic/claude-haiku-5-5": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "anthropic/claude-opus-5-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ]
   }
