@@ -70,7 +70,58 @@ export interface DbClient {
    * Execute a function within a transaction.
    * Automatically handles BEGIN, COMMIT, and ROLLBACK.
    */
-  tx<T>(callback: (t: TxClient) => Promise<T>): Promise<T>;
+  tx<T>(callback: (t: TxClient) => Promise<T>, options?: TxOptions): Promise<T>;
+}
+
+/** @experimental */
+export interface TxOptions {
+  /**
+   * Absolute time (epoch ms) by which the transaction's work must be done. Getting a connection,
+   * every statement and every lock wait share it: each statement runs with `statement_timeout` and
+   * `lock_timeout` set to the time left, nothing is sent once it has passed, and it's checked again
+   * before COMMIT. COMMIT itself, once sent, isn't bounded.
+   */
+  deadlineAt?: number;
+}
+
+/** The transaction ran past its `deadlineAt` and was rolled back. Nothing in it was applied. */
+export class TransactionDeadlineError extends Error {
+  readonly retryable = true;
+  constructor(options?: { cause?: unknown }) {
+    super('The transaction ran past its deadline and was rolled back.', options);
+    this.name = 'TransactionDeadlineError';
+  }
+}
+
+/** `query_canceled` (statement_timeout) and `lock_not_available` (lock_timeout). */
+const DEADLINE_SQLSTATES = new Set(['57014', '55P03']);
+
+function remainingMs(deadlineAt: number): number {
+  return Math.ceil(deadlineAt - Date.now());
+}
+
+/** Waits for a pooled connection no longer than the deadline; a late one goes back to the pool. */
+async function connectBy(pool: Pool, deadlineAt: number | undefined): Promise<PoolClient> {
+  if (deadlineAt === undefined) return pool.connect();
+  const left = remainingMs(deadlineAt);
+  if (left <= 0) throw new TransactionDeadlineError();
+  const connecting = pool.connect();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new TransactionDeadlineError()), left);
+  });
+  try {
+    return await Promise.race([connecting, late]);
+  } catch (error) {
+    if (error instanceof TransactionDeadlineError)
+      void connecting.then(
+        client => client.release(),
+        () => {},
+      );
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
@@ -164,8 +215,9 @@ export class PoolAdapter implements DbClient {
     return this.$pool.query(query, values);
   }
 
-  async tx<T>(callback: (t: TxClient) => Promise<T>): Promise<T> {
-    const client = await this.$pool.connect();
+  async tx<T>(callback: (t: TxClient) => Promise<T>, options?: TxOptions): Promise<T> {
+    const deadlineAt = options?.deadlineAt;
+    const client = await connectBy(this.$pool, deadlineAt);
     let destroyClient = false;
     try {
       try {
@@ -174,11 +226,12 @@ export class PoolAdapter implements DbClient {
         destroyClient = true;
         throw error;
       }
-      const txClient = new TransactionClient(client);
+      const txClient = new TransactionClient(client, deadlineAt);
       try {
         const result = await callback(txClient);
         // Drain before COMMIT so fire-and-forget / batch tails can't race it.
         await txClient.drain();
+        txClient.assertWithinDeadline();
         assertCommitted(await client.query('COMMIT'));
         return result;
       } catch (error) {
@@ -240,7 +293,31 @@ export class TransactionClient implements TxClient {
   #tail: Promise<void> = Promise.resolve();
   #error: { value: unknown } | undefined;
 
-  constructor(private readonly client: PoolClient) {}
+  constructor(
+    private readonly client: PoolClient,
+    private readonly deadlineAt?: number,
+  ) {}
+
+  /** Throws {@link TransactionDeadlineError} once the transaction's deadline has passed. */
+  assertWithinDeadline(): void {
+    if (this.deadlineAt !== undefined && remainingMs(this.deadlineAt) <= 0) throw new TransactionDeadlineError();
+  }
+
+  /** One statement, bounded by what is left of the deadline (statement time and lock waits). */
+  async #run(query: string, values?: QueryValues): Promise<QueryResult> {
+    if (this.deadlineAt === undefined) return this.client.query(query, values);
+    const left = remainingMs(this.deadlineAt);
+    if (left <= 0) throw new TransactionDeadlineError();
+    await this.client.query(`SET LOCAL statement_timeout = ${left}; SET LOCAL lock_timeout = ${left}`);
+    try {
+      return await this.client.query(query, values);
+    } catch (error) {
+      const code = (error as { code?: unknown } | null)?.code;
+      if (typeof code === 'string' && DEADLINE_SQLSTATES.has(code))
+        throw new TransactionDeadlineError({ cause: error });
+      throw error;
+    }
+  }
 
   #enqueue<T>(fn: () => Promise<T>): Promise<T> {
     const next = this.#tail.then(fn);
@@ -281,21 +358,22 @@ export class TransactionClient implements TxClient {
       return result;
     } catch (error) {
       await this.drain().catch(() => undefined);
-      await this.none(`ROLLBACK TO SAVEPOINT ${name}`);
+      // Not bounded by the deadline: it takes no locks, and it keeps the caller's own error.
+      await this.#enqueue(() => this.client.query(`ROLLBACK TO SAVEPOINT ${name}`));
       throw error;
     }
   }
 
   none(query: string, values?: QueryValues): Promise<null> {
     return this.#enqueue(async () => {
-      await this.client.query(query, values);
+      await this.#run(query, values);
       return null;
     });
   }
 
   one<T = any>(query: string, values?: QueryValues): Promise<T> {
     return this.#enqueue(async () => {
-      const result = await this.client.query(query, values);
+      const result = await this.#run(query, values);
       if (result.rows.length === 0) {
         throw new Error(`No data returned from query: ${truncateQuery(query)}`);
       }
@@ -308,7 +386,7 @@ export class TransactionClient implements TxClient {
 
   oneOrNone<T = any>(query: string, values?: QueryValues): Promise<T | null> {
     return this.#enqueue(async () => {
-      const result = await this.client.query(query, values);
+      const result = await this.#run(query, values);
       if (result.rows.length === 0) {
         return null;
       }
@@ -321,7 +399,7 @@ export class TransactionClient implements TxClient {
 
   any<T = any>(query: string, values?: QueryValues): Promise<T[]> {
     return this.#enqueue(async () => {
-      const result = await this.client.query(query, values);
+      const result = await this.#run(query, values);
       return result.rows as T[];
     });
   }
@@ -332,7 +410,7 @@ export class TransactionClient implements TxClient {
 
   many<T = any>(query: string, values?: QueryValues): Promise<T[]> {
     return this.#enqueue(async () => {
-      const result = await this.client.query(query, values);
+      const result = await this.#run(query, values);
       if (result.rows.length === 0) {
         throw new Error(`No data returned from query: ${truncateQuery(query)}`);
       }
@@ -341,7 +419,7 @@ export class TransactionClient implements TxClient {
   }
 
   query(query: string, values?: QueryValues): Promise<QueryResult> {
-    return this.#enqueue(() => this.client.query(query, values));
+    return this.#enqueue(() => this.#run(query, values));
   }
 
   async batch<T>(promises: Promise<T>[]): Promise<T[]> {
@@ -478,7 +556,7 @@ export class PinnedClientAdapter implements DbClient {
     return this.#enqueue(() => this.pinnedClient.query(query, values));
   }
 
-  tx<T>(callback: (t: TxClient) => Promise<T>): Promise<T> {
+  tx<T>(callback: (t: TxClient) => Promise<T>, options?: TxOptions): Promise<T> {
     // Enqueue the entire BEGIN/work/COMMIT block so concurrent callers
     // can't interleave statements inside someone else's transaction.
     return this.#enqueue(async () => {
@@ -488,10 +566,11 @@ export class PinnedClientAdapter implements DbClient {
         this.#rollbackError = error;
         throw error;
       }
-      const txClient = new TransactionClient(this.pinnedClient);
+      const txClient = new TransactionClient(this.pinnedClient, options?.deadlineAt);
       try {
         const result = await callback(txClient);
         await txClient.drain();
+        txClient.assertWithinDeadline();
         assertCommitted(await this.pinnedClient.query('COMMIT'));
         return result;
       } catch (error) {
@@ -602,7 +681,7 @@ export class RoutingDbClient implements DbClient, SchemaSnapshotHost {
     return this.active.query(query, values);
   }
 
-  tx<T>(callback: (t: TxClient) => Promise<T>): Promise<T> {
-    return this.active.tx<T>(callback);
+  tx<T>(callback: (t: TxClient) => Promise<T>, options?: TxOptions): Promise<T> {
+    return this.active.tx<T>(callback, options);
   }
 }

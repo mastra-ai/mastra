@@ -1,10 +1,10 @@
 import { createKnowledgePagesCoreLoader, KNOWLEDGE_PAGES_SCHEMA_VERSION } from '@internal/core/knowledge-compat';
 import { coreFeatures } from '@mastra/core/features';
 import { KnowledgeStorage } from '@mastra/core/storage';
-import type { KnowledgePageStore } from '@mastra/core/storage';
+import type { KnowledgePageStore, KnowledgeTransactionOptions } from '@mastra/core/storage';
 import { defaults as pgDefaults } from 'pg';
 
-import { TransactionClient } from '../../client';
+import { TransactionClient, TransactionDeadlineError } from '../../client';
 import type { TxClient } from '../../client';
 import type { DbClient, PgDomainConfig } from '../../db';
 import { resolvePgConfig } from '../../db';
@@ -181,6 +181,7 @@ export class KnowledgePG extends KnowledgeStorage {
       supportsExplicitReset: true,
       supportsPinKinds: true,
       supportsTransactions: true,
+      enforcesTransactionDeadline: true,
     } as const;
   }
 
@@ -193,18 +194,35 @@ export class KnowledgePG extends KnowledgeStorage {
     await initPgKnowledgePagesSchema(this.#client, this.#schemaName);
   }
 
-  override transaction<T>(operation: (tx: KnowledgeStorage) => Promise<T>): Promise<T> {
-    // A view joins its own transaction through a savepoint.
+  override async transaction<T>(
+    operation: (tx: KnowledgeStorage) => Promise<T>,
+    options?: KnowledgeTransactionOptions,
+  ): Promise<T> {
+    // A view joins its own transaction through a savepoint, under the outer deadline.
     if (transactionClients.has(this)) return this.#client.tx(() => operation(this));
-    return this.#client.tx(tx => {
-      const view = new KnowledgePG({
-        client: new TransactionDbClient(tx),
-        schemaName: this.#schemaName,
-        storageIsolationKey: this.getStorageIsolationKey(),
-      });
-      transactionClients.set(view, tx);
-      return operation(view);
-    });
+    try {
+      return await this.#client.tx(
+        tx => {
+          const view = new KnowledgePG({
+            client: new TransactionDbClient(tx),
+            schemaName: this.#schemaName,
+            storageIsolationKey: this.getStorageIsolationKey(),
+          });
+          transactionClients.set(view, tx);
+          return operation(view);
+        },
+        { deadlineAt: options?.deadlineAt },
+      );
+    } catch (error) {
+      if (!(error instanceof TransactionDeadlineError)) throw error;
+      // Cores from before transaction deadlines have no class for it; they get the pg error.
+      const core = (await import('@mastra/core/storage')) as {
+        KnowledgeTransactionDeadlineError?: new (o: object) => Error;
+      };
+      throw core.KnowledgeTransactionDeadlineError
+        ? new core.KnowledgeTransactionDeadlineError({ cause: error })
+        : error;
+    }
   }
 
   override async inspectSchema() {

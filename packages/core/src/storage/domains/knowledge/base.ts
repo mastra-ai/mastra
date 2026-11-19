@@ -21,6 +21,23 @@ export interface KnowledgeStorageCapabilities {
   supportsPinKinds?: boolean;
   /** The adapter implements {@link KnowledgeStorage.transaction}. */
   supportsTransactions?: boolean;
+  /**
+   * The adapter enforces {@link KnowledgeTransactionOptions.deadlineAt}. Without it, the option is
+   * ignored and nothing bounds how long a transaction runs.
+   */
+  enforcesTransactionDeadline?: boolean;
+}
+
+/** @experimental */
+export interface KnowledgeTransactionOptions {
+  /**
+   * Absolute time (epoch ms) by which the transaction's work must be done, on adapters with
+   * `enforcesTransactionDeadline`: getting a connection, every statement and every lock wait share
+   * it, and it's checked again before COMMIT. Past it the transaction rolls back and fails with
+   * {@link KnowledgeTransactionDeadlineError}. COMMIT, once sent, isn't bounded. Ignored by a view's
+   * nested `transaction`, which shares the outer deadline.
+   */
+  deadlineAt?: number;
 }
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
@@ -96,6 +113,15 @@ export class KnowledgeUnsupportedCapabilityError extends Error {
   constructor(capability: string) {
     super(`This Knowledge storage adapter does not expose ${capability}.`);
     this.name = 'KnowledgeUnsupportedCapabilityError';
+  }
+}
+
+/** A transaction ran past its `deadlineAt` and was rolled back; nothing in it was applied. Retrying is safe. */
+export class KnowledgeTransactionDeadlineError extends Error {
+  readonly retryable = true;
+  constructor(options?: { cause?: unknown }) {
+    super('The Knowledge transaction ran past its deadline and was rolled back.', options);
+    this.name = 'KnowledgeTransactionDeadlineError';
   }
 }
 
@@ -195,7 +221,7 @@ export abstract class KnowledgeStorage extends StorageDomain implements Knowledg
    *
    * @experimental
    */
-  transaction<T>(_operation: (tx: KnowledgeStorage) => Promise<T>): Promise<T> {
+  transaction<T>(_operation: (tx: KnowledgeStorage) => Promise<T>, _options?: KnowledgeTransactionOptions): Promise<T> {
     return Promise.reject(new KnowledgeUnsupportedCapabilityError('transactions'));
   }
 
