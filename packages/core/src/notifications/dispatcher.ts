@@ -8,6 +8,7 @@ import { resolveDeliveryFailureUpdate } from './delivery-policy';
 import { readNotificationRoutingRequirement } from './routing';
 import { createNotificationSignal, createNotificationSummarySignal, summarizeNotifications } from './signals';
 import type { NotificationsStorage } from './storage';
+import { isNotificationDue } from './storage';
 import type { NotificationDeliveryDecision, NotificationDeliveryThreadState, NotificationRecord } from './types';
 
 type NotificationDispatchAgent = {
@@ -379,9 +380,11 @@ export async function dispatchDueNotifications({
   // Notification ids are unique per thread, not across threads.
   const key = (record: NotificationRecord) => `${record.threadId}\0${record.id}`;
   const acted = () => result.delivered.length + result.failed.length;
-  // How many records this pass has read (and left due) that still occupy a slot
-  // at the head of the due list: held for another process, or failed below the
-  // attempt cap. The next page is sized to reach past them.
+  // `left` is the number of records this pass has already read that are still due
+  // (held for another process, failed below the attempt cap, or summarized but
+  // still due for the full delivery). The page sizing relies on it being exact:
+  // every one of those records still sits at the head of the due list, so a page
+  // of `left + (limit - acted)` reaches past them to at least one unread record.
   let left = 0;
   while (acted() < limit) {
     const actedBefore = acted();
@@ -390,12 +393,15 @@ export async function dispatchDueNotifications({
     const due = page.filter(record => !seen.has(key(record)));
     for (const record of due) seen.add(key(record));
     const departed = await dispatchRecords({ mastra, storage, now, due, result });
-    // A record that failed below the cap is acted on but stays due, so it has to
-    // keep counting toward `left`; only records that left the due list don't.
+    // Only records that left the due list stop counting toward `left`; a record
+    // acted on but still due (failed below the cap, held, or summarized with a
+    // `deliverAt` still to come) keeps its slot.
     left += due.length - departed;
-    // The due list ran out. A full page always holds at least one unread record,
-    // because it is sized to reach past every seen-but-still-due record.
-    if (page.length < pageSize) break;
+    // Stop when the due list ran out, or when a full page holds only records this
+    // pass already read. The second case cannot happen while `left` is exact, but
+    // a departure counted while the record stays due would shrink `pageSize` to a
+    // page of already-seen records and spin, so treat it as no progress.
+    if (page.length < pageSize || due.length === 0) break;
   }
   return result;
 }
@@ -488,7 +494,11 @@ async function dispatchRecords({
           if (!result) continue;
           delivered.push(...result.records);
           signals.push(result.signal);
-          departed += result.records.length;
+          // A summary clears only `summaryAt`. A high-priority record keeps its
+          // `deliverAt`, so it stays due for the full delivery — counting it as
+          // departed would undercount `left` and let the next page shrink to a
+          // page of already-seen records.
+          departed += result.records.filter(record => !isNotificationDue(record, now)).length;
         } catch (error) {
           for (const record of item.records) {
             await fail(record, error);

@@ -790,13 +790,15 @@ describe('notification inbox', () => {
   it('leaves a record dismissed during routing untouched instead of recording a failed attempt', async () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');
-    const sendSignal = vi.fn(async signal => {
+    const sendSignal = vi.fn(signal => {
       // The user dismisses the notification while the signal is still in flight.
-      await storage.updateNotification({ id: 'n1', threadId: 'thread-1', status: 'dismissed' });
-      return {
-        accepted: Promise.resolve({ action: 'blocked', reason: 'thread-blocked', runId: 'run-blocked' }),
-        signal,
-      };
+      // `sendSignal` returns its result synchronously; the dismissal rides on the
+      // `accepted` promise the dispatcher awaits before recording the failure.
+      const accepted = (async () => {
+        await storage.updateNotification({ id: 'n1', threadId: 'thread-1', status: 'dismissed' });
+        return { action: 'blocked' as const, reason: 'thread-blocked', runId: 'run-blocked' };
+      })();
+      return { accepted, signal };
     });
     const mastra = { getAgentById: vi.fn(async () => ({ sendSignal })) } as any;
     await storage.createNotification({
@@ -817,6 +819,65 @@ describe('notification inbox', () => {
     expect(stored).toMatchObject({ status: 'dismissed' });
     expect(stored?.deliveryAttempts ?? 0).toBe(0);
     expect(stored?.lastDeliveryError).toBeUndefined();
+  });
+
+  it('terminates instead of re-reading a page of already-seen records when summaries stay due', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const sendSignal = vi.fn((signal: unknown) => ({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }),
+      persisted: Promise.resolve(),
+      signal,
+    }));
+    // Another process's dispatcher owns the held threads, so this pass leaves them.
+    const resolveNotificationDeliveryDecision = vi.fn(async ({ record }: { record: { threadId: string } }) => ({
+      action: 'deliver' as const,
+      hold: record.threadId.startsWith('held-'),
+    }));
+    const mastra = {
+      getAgentById: vi.fn(async () => ({ sendSignal, resolveNotificationDeliveryDecision })),
+    } as any;
+    const base = {
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      source: 'github',
+      kind: 'ci',
+      priority: 'high',
+    } as const;
+    // A high-priority summary clears only `summaryAt`; `deliverAt` keeps each
+    // record due for the full delivery, so all six stay in the due list.
+    for (let i = 0; i < 6; i += 1) {
+      await storage.createNotification({
+        ...base,
+        id: `summary-${i}`,
+        threadId: `summary-thread-${i}`,
+        summary: 'summary',
+        summaryAt: new Date(now.getTime() - 30_000),
+        deliverAt: new Date(now.getTime() - 30_000),
+      });
+    }
+    for (let i = 0; i < 4; i += 1) {
+      await storage.createNotification({
+        ...base,
+        id: `held-${i}`,
+        threadId: `held-thread-${i}`,
+        summary: 'held',
+        deliverAt: new Date(now.getTime() - 20_000),
+      });
+    }
+
+    // The loop must stop once a page holds only records it already read. Bound the
+    // reads so a loop that re-reads the same page fails here instead of hanging.
+    const realListDue = storage.listDueNotifications.bind(storage);
+    let pages = 0;
+    storage.listDueNotifications = async input => {
+      pages += 1;
+      if (pages > 10) throw new Error('dispatch re-read a page of already-seen records');
+      return realListDue(input);
+    };
+
+    await expect(dispatchDueNotifications({ mastra, storage, now, limit: 10 })).resolves.toBeDefined();
+    expect(pages).toBeLessThanOrEqual(10);
   });
 
   it('starts a deferred delivery with the scopes it was sent with, queueing it when the active run holds others', async () => {
