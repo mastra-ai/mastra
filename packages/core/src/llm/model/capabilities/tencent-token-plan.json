@@ -1,11 +1,82 @@
 {
-  "attachment": ["hy4"],
-  "temperature": ["hy3", "hy4", "hy4-preview"],
+  "attachment": [
+    "deepseek/deepseek-flash",
+    "glm-5.3-flash",
+    "hy4",
+    "kimi-k2.7-code",
+    "kimi-k3",
+    "mimo-v2.6-flash",
+    "minimax-m-3-0",
+    "minimax-m3"
+  ],
+  "temperature": [
+    "deepseek/deepseek-flash",
+    "deepseek/deepseek-v4-pro",
+    "glm-5-2",
+    "glm-5-3",
+    "glm-5.2",
+    "glm-5.3",
+    "glm-5.3-flash",
+    "hy3",
+    "hy4",
+    "hy4-preview",
+    "mimo-v2.6-flash",
+    "minimax-m-3-0",
+    "minimax-m3"
+  ],
+  "structuredOutput": [
+    "deepseek/deepseek-flash",
+    "deepseek/deepseek-v4-pro",
+    "glm-5-2",
+    "glm-5-3",
+    "glm-5.2",
+    "glm-5.3",
+    "glm-5.3-flash",
+    "kimi-k2.7-code",
+    "kimi-k3",
+    "mimo-v2.6-flash"
+  ],
   "reasoning": {
+    "kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-5-2": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-5.2": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
     "hy4": [
       {
         "type": "effort",
         "values": ["none", "high"]
+      }
+    ],
+    "glm-5-3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "hy4-preview": [
@@ -17,6 +88,22 @@
         "values": ["none", "high"]
       }
     ],
+    "minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "minimax-m-3-0": [
+      {
+        "type": "toggle"
+      }
+    ],
     "hy3": [
       {
         "type": "toggle"
@@ -24,6 +111,29 @@
       {
         "type": "effort",
         "values": ["none", "high"]
+      }
+    ],
+    "mimo-v2.6-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "deepseek/deepseek-v4-pro": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek/deepseek-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

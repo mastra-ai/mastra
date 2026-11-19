@@ -7,7 +7,7 @@ description: "Browse Novita AI model IDs, capabilities, context windows, and pri
 
 # <img src="https://models.dev/logos/novita-ai.svg" alt="Novita AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Novita AI
 
-Access 91 Novita AI models through Mastra's model router. Authentication is handled automatically using the `NOVITA_API_KEY` environment variable.
+Access 97 Novita AI models through Mastra's model router. Authentication is handled automatically using the `NOVITA_API_KEY` environment variable.
 
 Learn more in the [Novita AI documentation](https://novita.ai/docs/guides/introduction).
 
@@ -658,6 +658,42 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.2
   },
   {
+    "model": "novita-ai/openai/gpt-6.1-terra",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 1,
+    "outputCost": 5
+  },
+  {
+    "model": "novita-ai/openai/gpt-6.2-astra",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 8,
+    "outputCost": 40
+  },
+  {
+    "model": "novita-ai/openai/gpt-6.2-sol",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
     "model": "novita-ai/openai/gpt-oss-120b",
     "imageInput": false,
     "audioInput": false,
@@ -740,6 +776,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": 0.2,
     "outputCost": 0.7
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-vl-plus",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262000,
+    "maxOutput": 32000,
+    "inputCost": 0.144,
+    "outputCost": 1.434
   },
   {
     "model": "novita-ai/qwen/qwen3.5-122b-a10b",
@@ -874,6 +922,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 6
   },
   {
+    "model": "novita-ai/qwen/qwen4-max",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131000,
+    "inputCost": 1.413,
+    "outputCost": 4.24
+  },
+  {
     "model": "novita-ai/stepfun/step-3.7-flash",
     "imageInput": true,
     "audioInput": false,
@@ -920,6 +980,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 64000,
     "inputCost": 0.417,
     "outputCost": 1.2505
+  },
+  {
+    "model": "novita-ai/tencent/hy4-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 64000,
+    "inputCost": 0.07,
+    "outputCost": 0.281
   },
   {
     "model": "novita-ai/tencent/hy4-preview",

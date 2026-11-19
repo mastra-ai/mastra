@@ -146,7 +146,7 @@ describe('custom-only board routing', () => {
     await waitForMutationsIdle(client);
 
     const queued = await screen.findByTestId('board-column-queued');
-    expect(await within(queued).findByText('No rule here takes new items')).toBeVisible();
+    expect(await within(queued).findByText('No rule files new issues here')).toBeVisible();
     expect(within(queued).queryByText('Intake is clear')).not.toBeInTheDocument();
     expect(within(queued).queryByText(/No intake sources/)).not.toBeInTheDocument();
     expect(within(queued).queryByRole('link', { name: 'Connect issue source' })).not.toBeInTheDocument();

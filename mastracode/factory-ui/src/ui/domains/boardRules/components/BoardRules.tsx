@@ -3,20 +3,24 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useRef, useState } from 'react';
-import { Link } from 'react-router';
+import { useSearchParams } from 'react-router';
 
 import type { InstalledBoardInfo, IntakeRouteInfo } from '../../../../api/types';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { BoardRequestError } from '../../../../hooks/useBoardEditor';
 import { useIntakeOrderQuery, useSkippedRulesQuery } from '../../../../hooks/useIntakeOrder';
-import { useBoardRulesQuery, useIntakeRouteWrites } from '../../../../hooks/useIntakeRoutes';
+import { useBoardRulesQuery, useIntakeRoutesQuery, useIntakeRouteWrites } from '../../../../hooks/useIntakeRoutes';
 import type { RouteWrite } from '../../../../hooks/useIntakeRoutes';
-import { boardIntakePath, INTAKE_ORDER_ANCHOR } from '../../boardConfig/boardConfigPaths';
-import { phaseOptions, reorderWithin } from '../ruleTargets';
-import { arrivalFallback, intakePosition, isOpenedLane, LANE_SECTIONS, laneRules, shadowedBy } from '../ruleLanes';
+import { boardRulesPath, RULES_INTO_PARAM, RULES_LEAVING_PARAM } from '../../boardConfig/boardConfigPaths';
+import { boardFlow } from '../boardFlow';
+import { phaseName, phaseOptions, reorderWithin } from '../ruleTargets';
+import { arrivalFallback, isOpenedLane, LANE_SECTIONS, laneRules, shadowedBy } from '../ruleLanes';
 import type { RuleEvent } from '../ruleLanes';
+import { IncomingRules } from './IncomingRules';
+import { IntakeChain } from './IntakeChain';
 import { RuleBuilderDialog } from './RuleBuilderDialog';
 import type { RuleDraft, RuleStep } from './RuleBuilderDialog';
+import { IntoFilter } from './IntoFilter';
 import { RuleLane } from './RuleLane';
 import type { RuleFocus } from './RuleLane';
 
@@ -57,6 +61,7 @@ function BoardLanes({
   boards: readonly InstalledBoardInfo[];
 }) {
   const query = useBoardRulesQuery(factoryId, board.id);
+  const projectRules = useIntakeRoutesQuery(factoryId);
   const order = useIntakeOrderQuery(factoryId);
   const skipped = useSkippedRulesQuery(factoryId);
   const writes = useIntakeRouteWrites(factoryId);
@@ -71,9 +76,22 @@ function BoardLanes({
   const rules = query.data?.intakeRoutes ?? [];
   const canEdit = query.data?.canEdit ?? false;
   const options = phaseOptions(board);
+  const incoming = (projectRules.data?.intakeRoutes ?? []).filter(
+    rule => rule.target.moveToBoardKey === board.id && rule.target.boardKey !== board.id,
+  );
   const skips = new Map(skipped.data?.skipped.map(skip => [skip.routeId, skip]));
+  const [params] = useSearchParams();
+  const into = params.get(RULES_INTO_PARAM) ?? undefined;
+  const leaving = params.has(RULES_LEAVING_PARAM);
+  const focused = leaving || into !== undefined;
+  const flow =
+    focused && projectRules.data
+      ? boardFlow(projectRules.data.intakeRoutes, { key: board.id, initialPhase: board.initialPhase })
+      : undefined;
+  const only = flow && new Set((leaving ? flow.leaving : (flow.into.get(into ?? '') ?? [])).map(rule => rule.id));
+  const shows = (lane: readonly IntakeRouteInfo[]) => !only || lane.some(rule => only.has(rule.id));
 
-  if (query.isPending) return <Skeleton className="h-64 w-full" />;
+  if (query.isPending || (focused && projectRules.isPending)) return <Skeleton className="h-64 w-full" />;
   if (query.isError) return <Notice variant="destructive">This board’s rules didn’t load.</Notice>;
 
   const run = (changes: RouteWrite[]) => writes.mutateAsync(changes).catch(error => toast.error(failureMessage(error)));
@@ -165,19 +183,52 @@ function BoardLanes({
     await writes.mutateAsync([{ kind: 'reorder', boardKey: board.id, ids: reorderWithin(fresh, ids, at, above) }]);
   };
 
-  const position = order.data ? intakePosition(order.data.boards, board.id) : undefined;
-  const arrivalFooter = arrivalFallback(order.data?.boards, board.id);
+  const arrivalFooter =
+    order.data?.evaluator === 'route-list'
+      ? 'Otherwise: the old route list decides'
+      : arrivalFallback(order.data?.boards, board.id);
 
   return (
     <div className="flex flex-col gap-8">
-      {LANE_SECTIONS.map(section => (
+      {projectRules.isError && (
+        <Notice variant="warning">Rules on other boards that move cards here didn’t load, so they aren’t shown.</Notice>
+      )}
+      {focused && (
+        <IntoFilter
+          count={only?.size}
+          into={leaving || !into ? 'other boards' : (phaseName(board, into) ?? into)}
+          leaving={leaving}
+          showAll={boardRulesPath(factoryId, board.id)}
+        />
+      )}
+      {LANE_SECTIONS.filter(section =>
+        section.events.some(event => shows([...laneRules(rules, event), ...laneRules(incoming, event)])),
+      ).map(section => (
         <section key={section.title} aria-label={section.title} className="flex flex-col gap-3">
-          <Txt as="h2" variant="subheading" tone="ink">
-            {section.title}
-          </Txt>
+          <div className="flex flex-col gap-1.5">
+            <Txt as="h2" variant="subheading" tone="ink">
+              {section.title}
+            </Txt>
+            {section.events.some(isOpenedLane) ? (
+              order.data && (
+                <IntakeChain
+                  factoryId={factoryId}
+                  boardKey={board.id}
+                  order={order.data.boards}
+                  evaluator={order.data.evaluator}
+                />
+              )
+            ) : (
+              <Txt as="p" variant="caption" tone="muted">
+                Only cards already on this board; other boards never see them.
+              </Txt>
+            )}
+          </div>
           {section.events.map(event => {
             const opened = isOpenedLane(event);
             const lane = laneRules(rules, event);
+            const arriving = laneRules(incoming, event).filter(rule => !only || only.has(rule.id));
+            if (!shows([...lane, ...arriving])) return null;
             return (
               <RuleLane
                 key={event}
@@ -188,23 +239,13 @@ function BoardLanes({
                 phaseOptions={options}
                 canEdit={canEdit}
                 skips={skips}
-                note={
-                  opened ? (
-                    <Txt as="p" variant="caption" tone="muted">
-                      Creates new work items:{' '}
-                      {position && (
-                        <>
-                          <Link to={boardIntakePath(factoryId, board.id, INTAKE_ORDER_ANCHOR)} className="underline">
-                            {position.charAt(0).toLowerCase() + position.slice(1)}
-                          </Link>
-                          ;{' '}
-                        </>
-                      )}
-                      first matching rule files it on this board.
-                    </Txt>
+                footer={opened ? arrivalFooter : undefined}
+                only={only}
+                incoming={
+                  arriving.length ? (
+                    <IncomingRules factoryId={factoryId} rules={arriving} board={board} boards={boards} />
                   ) : undefined
                 }
-                footer={opened ? arrivalFooter : undefined}
                 onEdit={(rule, focus: RuleFocus) => open({ rule, step: focus })}
                 onAdd={() => open({ event, step: 'conditions' })}
                 onMove={(from, to) => move(event, from, to)}

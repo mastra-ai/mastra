@@ -8,7 +8,6 @@
     "claude-haiku-4-5@eu",
     "claude-haiku-5-5",
     "claude-haiku-5-5@eu",
-    "claude-opus-4-1",
     "claude-opus-4-5",
     "claude-opus-4-5@eu",
     "claude-opus-4-6",
@@ -25,7 +24,6 @@
     "claude-sonnet-4-5@eu",
     "claude-sonnet-4-6",
     "claude-sonnet-4-6@eu",
-    "claude-sonnet-4@eu",
     "claude-sonnet-5",
     "claude-sonnet-5-5",
     "claude-sonnet-5-5@eu",
@@ -34,6 +32,8 @@
     "deepseek-v4.1-flash-1017",
     "deepseek-v4.1-flash-1017@eu",
     "deepseek-v4.1-flash@eu",
+    "devstral-latest",
+    "devstral-latest@eu",
     "fugu-ultra",
     "gemini-2.5-flash-lite@eu",
     "gemini-2.5-flash@eu",
@@ -54,6 +54,11 @@
     "gemini-3.8-flash@eu",
     "gemini-4-argon",
     "gemini-4-argon@eu",
+    "gemini-4-carbon",
+    "gemini-4-carbon@eu",
+    "gemini-4-hydrogen",
+    "gemini-4-hydrogen@eu",
+    "gemini-4-hydrogen@us",
     "gemma-4-26b-a4b-it",
     "gemma-4-31b-it",
     "glm-5.3-flash",
@@ -90,6 +95,10 @@
     "gpt-6.1-sol@eu",
     "gpt-6.1-terra",
     "gpt-6.1-terra@eu",
+    "gpt-6.2-astra",
+    "gpt-6.2-astra@eu",
+    "gpt-6.2-sol",
+    "gpt-6.2-sol@eu",
     "grok-4.2-beta",
     "grok-4.3",
     "grok-4.5",
@@ -100,13 +109,15 @@
     "inkling-256k",
     "kimi-k2.5@eu",
     "kimi-k2.6",
-    "kimi-k2.6@eu",
     "kimi-k2.7-code",
     "kimi-k2.7-code@eu",
     "kimi-k3",
     "kimi-k3.1-pro",
     "kimi-k3.1-pro-highspeed",
+    "kimi-k3.1-pro@eu",
     "kimi-k3@eu",
+    "leanstral-1-5",
+    "leanstral-1-5@eu",
     "mimo-v2.5",
     "mimo-v2.6-flash",
     "mimo-v2.6-pro",
@@ -127,7 +138,6 @@
     "muse-spark-open",
     "muse-wonder-1.0",
     "nemotron-3-nano-omni-30b-a3b-reasoning",
-    "nemotron-3.5-content-safety",
     "o4-mini@eu",
     "qwen3.5-27b",
     "qwen3.5-2b",
@@ -148,7 +158,6 @@
   "temperature": [
     "claude-haiku-4-5",
     "claude-haiku-4-5@eu",
-    "claude-opus-4-1",
     "claude-opus-4-5",
     "claude-opus-4-5@eu",
     "claude-opus-4-6",
@@ -157,7 +166,6 @@
     "claude-sonnet-4-5@eu",
     "claude-sonnet-4-6",
     "claude-sonnet-4-6@eu",
-    "claude-sonnet-4@eu",
     "deepseek-v4-flash",
     "deepseek-v4-flash-0731",
     "deepseek-v4-flash-0731@eu",
@@ -189,7 +197,6 @@
     "gemma-4-26b-a4b-it",
     "gemma-4-31b-it",
     "glm-5.1",
-    "glm-5.1@eu",
     "glm-5.2",
     "glm-5.2@eu",
     "glm-5.3",
@@ -206,6 +213,20 @@
     "gpt-5.4-mini",
     "gpt-5.4-nano",
     "gpt-5.4@eu",
+    "gpt-5.5",
+    "gpt-5.5@eu",
+    "gpt-5.6-luna",
+    "gpt-5.6-luna@eu",
+    "gpt-5.6-sol",
+    "gpt-5.6-sol@eu",
+    "gpt-5.6-terra",
+    "gpt-5.6-terra@eu",
+    "gpt-6-luna",
+    "gpt-6-luna@eu",
+    "gpt-6-sol",
+    "gpt-6-sol@eu",
+    "gpt-6.1-terra",
+    "gpt-6.1-terra@eu",
     "grok-4.2-beta",
     "grok-4.3",
     "grok-4.5",
@@ -216,9 +237,6 @@
     "inkling",
     "inkling-256k",
     "kimi-k2.6",
-    "kimi-k2.6@eu",
-    "laguna-m.1",
-    "laguna-xs.2",
     "mimo-v2.5",
     "mimo-v2.5-pro",
     "mimo-v2.6-flash",
@@ -242,9 +260,7 @@
     "muse-spark-open",
     "muse-wonder-1.0",
     "nemotron-3-nano-omni-30b-a3b-reasoning",
-    "nemotron-3-super-120b-a12b",
     "nemotron-3-ultra-550b-a55b",
-    "nemotron-3.5-content-safety",
     "nemotron-3.5-lightning-30b-a3b",
     "nvidia-nemotron-3-super-120b-a12b",
     "nvidia-nemotron-3-ultra",
@@ -275,7 +291,6 @@
     "claude-haiku-4-5@eu",
     "claude-haiku-5-5",
     "claude-haiku-5-5@eu",
-    "claude-opus-4-1",
     "claude-opus-4-5",
     "claude-opus-4-5@eu",
     "claude-opus-4-6",
@@ -292,7 +307,6 @@
     "claude-sonnet-4-5@eu",
     "claude-sonnet-4-6",
     "claude-sonnet-4-6@eu",
-    "claude-sonnet-4@eu",
     "claude-sonnet-5",
     "claude-sonnet-5-5",
     "claude-sonnet-5-5@eu",
@@ -328,8 +342,12 @@
     "gemini-3.8-flash@eu",
     "gemini-4-argon",
     "gemini-4-argon@eu",
+    "gemini-4-carbon",
+    "gemini-4-carbon@eu",
+    "gemini-4-hydrogen",
+    "gemini-4-hydrogen@eu",
+    "gemini-4-hydrogen@us",
     "gemma-4-26b-a4b-it",
-    "glm-5.1@eu",
     "glm-5.2",
     "glm-5.2@eu",
     "glm-5.3-flash",
@@ -366,6 +384,10 @@
     "gpt-6.1-sol@eu",
     "gpt-6.1-terra",
     "gpt-6.1-terra@eu",
+    "gpt-6.2-astra",
+    "gpt-6.2-astra@eu",
+    "gpt-6.2-sol",
+    "gpt-6.2-sol@eu",
     "grok-4.2-beta",
     "grok-4.3",
     "grok-4.5",
@@ -375,14 +397,17 @@
     "hy3",
     "kimi-k2.5@eu",
     "kimi-k2.6",
-    "kimi-k2.6@eu",
+    "kimi-k2.7-code",
     "kimi-k2.7-code@eu",
     "kimi-k3",
     "kimi-k3.1-pro",
     "kimi-k3.1-pro-highspeed",
+    "kimi-k3.1-pro@eu",
     "kimi-k3@eu",
     "leanstral-1-5",
     "leanstral-1-5@eu",
+    "mimo-v2.5",
+    "mimo-v2.5-pro",
     "mimo-v2.6-flash",
     "mimo-v2.6-pro",
     "minimax-m2.7",
@@ -401,8 +426,6 @@
     "mistral-small-2603@eu",
     "muse-spark-1.3",
     "muse-wonder-1.0",
-    "nemotron-3-nano-omni",
-    "nemotron-3-nano-omni@eu",
     "nemotron-lightning-3.5-30b-a3b",
     "nvidia-nemotron-3-super-120b-a12b",
     "o4-mini@eu",
@@ -428,12 +451,6 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
-    "nemotron-3-nano-omni": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
     "gemini-3.5-flash": [
       {
         "type": "effort",
@@ -446,19 +463,7 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
-    "ling-3.0-tiny": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
     "muse-spark-1.3": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
-    "laguna-xs.2": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -471,6 +476,12 @@
       }
     ],
     "grok-4.7": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "kimi-k3.1-pro@eu": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -513,6 +524,18 @@
       }
     ],
     "mistral-medium-latest@eu": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "claude-sonnet-4-5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "gpt-6.2-sol@eu": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -572,6 +595,12 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
+    "claude-haiku-4-5@eu": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
     "deepseek-v4-pro@eu": [
       {
         "type": "effort",
@@ -579,6 +608,12 @@
       }
     ],
     "claude-opus-4-7@eu": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "gemini-4-carbon": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -626,6 +661,12 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
+    "gpt-6.2-astra@eu": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
     "gpt-5.4@eu": [
       {
         "type": "effort",
@@ -668,6 +709,18 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
+    "claude-opus-4-5@eu": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "gemini-3.1-flash-image": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
     "gpt-5.4-nano": [
       {
         "type": "effort",
@@ -705,6 +758,12 @@
       }
     ],
     "minimax-m2.7": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "gemini-4-hydrogen@eu": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -806,7 +865,7 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
-    "claude-sonnet-4@eu": [
+    "gemini-4-hydrogen": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -842,12 +901,6 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
-    "nemotron-3-nano-omni@eu": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
     "qwen3.8-flash-next@eu": [
       {
         "type": "effort",
@@ -855,6 +908,12 @@
       }
     ],
     "minimax-m3.1-flash@eu": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "mimo-v2.5-pro": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -879,6 +938,12 @@
       }
     ],
     "gpt-6.1-terra@eu": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "gemini-4-hydrogen@us": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -992,7 +1057,19 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
+    "gpt-6.2-astra": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
     "gpt-5.4": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "gpt-6.2-sol": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -1028,12 +1105,6 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
-    "nemotron-3.5-content-safety": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
     "gemini-3.1-flash-lite": [
       {
         "type": "effort",
@@ -1053,12 +1124,6 @@
       }
     ],
     "gpt-6-astra": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
-    "laguna-m.1": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -1094,12 +1159,6 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
-    "glm-5.1@eu": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
     "qwen3.7-max": [
       {
         "type": "effort",
@@ -1124,7 +1183,7 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
-    "glm-5.2-fast": [
+    "gemini-4-carbon@eu": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -1149,6 +1208,12 @@
       }
     ],
     "qwen3.6-plus": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "claude-opus-4-5": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -1202,6 +1267,12 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
+    "claude-haiku-4-5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
     "kimi-k3.1-pro": [
       {
         "type": "effort",
@@ -1220,12 +1291,6 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
-    "ring-2.6-1t": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
     "claude-sonnet-5": [
       {
         "type": "effort",
@@ -1239,12 +1304,6 @@
       }
     ],
     "hy3": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
-    "kimi-k2.6@eu": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -1292,7 +1351,19 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
+    "mimo-v2.5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
     "gpt-5.5-pro": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "claude-sonnet-4-5@eu": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -1328,12 +1399,6 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
-    "claude-opus-4-1": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
     "gpt-6-luna@eu": [
       {
         "type": "effort",
@@ -1341,12 +1406,6 @@
       }
     ],
     "seed-2.0-mini": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
-    "nemotron-3-super-120b-a12b": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]

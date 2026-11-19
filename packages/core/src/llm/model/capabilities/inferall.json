@@ -1,0 +1,55 @@
+{
+  "attachment": ["nvidia/nemotron-3.5-super-vl-120b-a12b", "z-ai/glm-5.3-flash"],
+  "temperature": [
+    "nvidia/nemotron-3-ultra-550b-a55b",
+    "nvidia/nemotron-3.5-lightning-30b-a3b",
+    "nvidia/nemotron-3.5-super-vl-120b-a12b",
+    "openai/gpt-oss-20b",
+    "z-ai/glm-5.3",
+    "z-ai/glm-5.3-flash"
+  ],
+  "structuredOutput": [
+    "nvidia/nemotron-3-ultra-550b-a55b",
+    "nvidia/nemotron-3.5-lightning-30b-a3b",
+    "nvidia/nemotron-3.5-super-vl-120b-a12b",
+    "openai/gpt-oss-20b",
+    "z-ai/glm-5.3",
+    "z-ai/glm-5.3-flash"
+  ],
+  "reasoning": {
+    "nvidia/nemotron-3-ultra-550b-a55b": [
+      {
+        "type": "effort",
+        "values": ["none", "medium", "high"]
+      }
+    ],
+    "nvidia/nemotron-3.5-super-vl-120b-a12b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/nemotron-3.5-lightning-30b-a3b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "z-ai/glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "z-ai/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "openai/gpt-oss-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ]
+  }
+}

@@ -8,6 +8,7 @@
     "@cf/moonshotai/kimi-k2.6",
     "@cf/moonshotai/kimi-k2.7-code",
     "@cf/qwen/qwen3.8-27b",
+    "@cf/thinkingmachines/inkling-2-small",
     "@cf/zai-org/glm-5.3-flash"
   ],
   "temperature": [
@@ -35,6 +36,7 @@
     "@cf/qwen/qwen3-30b-a3b-fp8",
     "@cf/qwen/qwen3.8-27b",
     "@cf/qwen/qwq-32b",
+    "@cf/thinkingmachines/inkling-2-small",
     "@cf/zai-org/glm-4.7-flash",
     "@cf/zai-org/glm-5.2",
     "@cf/zai-org/glm-5.3",
@@ -51,6 +53,7 @@
     "@cf/openai/gpt-oss-120b",
     "@cf/openai/gpt-oss-20b",
     "@cf/qwen/qwen3.8-27b",
+    "@cf/thinkingmachines/inkling-2-small",
     "@cf/zai-org/glm-4.7-flash",
     "@cf/zai-org/glm-5.2",
     "@cf/zai-org/glm-5.3",
@@ -84,6 +87,12 @@
       {
         "type": "effort",
         "values": ["none", "high"]
+      }
+    ],
+    "@cf/thinkingmachines/inkling-2-small": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "max"]
       }
     ],
     "@cf/deepseek-ai/deepseek-v4-flash-0731": [

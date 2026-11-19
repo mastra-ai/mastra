@@ -24,6 +24,8 @@
     "gemini-3.8-flash",
     "gemini-4-argon",
     "gemini-4-carbon",
+    "gemini-4-hydrogen",
+    "gemini-4-neon",
     "gemini-embedding-2",
     "gemini-flash-latest",
     "gemini-flash-lite-latest",
@@ -62,6 +64,8 @@
     "gemini-3.8-flash",
     "gemini-4-argon",
     "gemini-4-carbon",
+    "gemini-4-hydrogen",
+    "gemini-4-neon",
     "gemini-flash-latest",
     "gemini-flash-lite-latest",
     "gemini-omni-flash-preview",
@@ -87,6 +91,8 @@
     "gemini-3.8-flash",
     "gemini-4-argon",
     "gemini-4-carbon",
+    "gemini-4-hydrogen",
+    "gemini-4-neon",
     "gemini-flash-latest",
     "gemini-flash-lite-latest",
     "gemini-pro-latest",
@@ -170,6 +176,12 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "gemini-4-hydrogen": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
     "gemini-3-pro-image": [
       {
         "type": "effort",
@@ -243,6 +255,12 @@
         "type": "budget_tokens",
         "min": 0,
         "max": 24576
+      }
+    ],
+    "gemini-4-neon": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ]
   }

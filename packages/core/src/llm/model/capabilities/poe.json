@@ -113,7 +113,8 @@
     "novita/glm-4.7",
     "novita/glm-5",
     "novita/kimi-k2.5",
-    "novita/kimi-k2.6"
+    "novita/kimi-k2.6",
+    "openai/gpt-5.5"
   ],
   "structuredOutput": [
     "google/gemini-3-flash",

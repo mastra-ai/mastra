@@ -83,7 +83,7 @@ export function boardFilterFields({
         (option.value === PULL_REQUEST_SOURCE_FILTER &&
           (connectedSources?.has('github') === true || connectedSources?.has('gitlab') === true)) ||
         filters.source.has(option.value),
-    ).map(option => ({ ...option, start: <BoardSourceIcon source={option.value} /> })),
+    ).map(option => ({ value: option.value, label: option.label, start: <BoardSourceIcon option={option} /> })),
     linearProject: linearProjects.map(project => ({
       value: project.id,
       label: project.name,

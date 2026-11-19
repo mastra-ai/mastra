@@ -74,6 +74,7 @@ export interface SessionRowsRequest {
   owner: string;
   status?: SessionRowsQuery['status'];
   updated?: SessionRowsQuery['updated'];
+  source?: SessionRowsQuery['source'];
   children: boolean;
   pin: readonly string[];
   open?: string;

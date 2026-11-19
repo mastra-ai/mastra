@@ -46,7 +46,6 @@
     "gpt-6-luna",
     "gpt-6-sol",
     "grok-4-6",
-    "inkling",
     "kimi-k3",
     "llama-4-maverick"
   ],
@@ -73,11 +72,16 @@
     "gpt-5-4",
     "gpt-5-4-mini",
     "gpt-5-4-nano",
+    "gpt-5-5",
+    "gpt-5-6-luna",
+    "gpt-5-6-sol",
+    "gpt-5-6-terra",
+    "gpt-6-luna",
+    "gpt-6-sol",
     "gpt-oss-120b",
     "gpt-oss-20b",
     "grok-4-6",
     "grok-4-7",
-    "inkling",
     "kimi-k3",
     "llama-4-maverick",
     "meta-llama-3-1-8b-instruct",
@@ -300,15 +304,6 @@
         "type": "budget_tokens",
         "min": 1024,
         "max": 63999
-      }
-    ],
-    "inkling": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "max"]
       }
     ],
     "glm-5-3": [

@@ -1,0 +1,72 @@
+{
+  "attachment": [
+    "deepseek-v4-1-flash-1017-uncensored",
+    "gemma-4-31b:web",
+    "gpt-5-6-luna",
+    "kimi-k2.7-code:web",
+    "nvidia-nemotron-3-5-super-vl-120b-a12b"
+  ],
+  "temperature": [
+    "MiniMax-M2.7:web",
+    "deepseek-v4-1-flash-1017-uncensored",
+    "deepseek-v4-flash:web",
+    "gemma-4-31b:web",
+    "gpt-5-6-luna",
+    "gpt-oss-120b",
+    "nvidia-nemotron-3-5-super-vl-120b-a12b",
+    "qwen3-235b:web",
+    "qwen3-coder-480b-a35b-instruct",
+    "z-ai-glm-5-3-flash"
+  ],
+  "reasoning": {
+    "deepseek-v4-flash:web": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek-v4-1-flash-1017-uncensored": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "Claude Haiku 5.5": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gpt-5-6-luna": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "nvidia-nemotron-3-5-super-vl-120b-a12b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3-235b:web": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "z-ai-glm-5-3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ]
+  }
+}

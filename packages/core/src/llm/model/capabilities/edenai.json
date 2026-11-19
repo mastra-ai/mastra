@@ -46,8 +46,8 @@
     "azure/gpt-5.2-codex",
     "cloudflare/@cf/deepseek-ai/deepseek-v4.1-flash-1017",
     "cloudflare/@cf/mistralai/mistral-small-3.1-24b-instruct",
+    "cloudflare/@cf/thinkingmachines/inkling-2-small",
     "deepinfra/ByteDance/Seed-2.0-code",
-    "deepinfra/ByteDance/Seed-2.0-mini",
     "deepinfra/Qwen/Qwen3-VL-235B-A22B-Instruct",
     "deepinfra/Qwen/Qwen3-VL-30B-A3B-Instruct",
     "deepinfra/deepseek-ai/DeepSeek-V4.1-Flash",
@@ -62,8 +62,8 @@
     "deepinfra/stepfun-ai/Step-3.7-Flash",
     "deepinfra/stepfun-ai/Step-5-Preview",
     "deepinfra/thinkingmachines/Inkling",
+    "deepinfra/thinkingmachines/Inkling-2-Small",
     "deepinfra/thinkingmachines/Inkling-Small",
-    "deepseek-v4-flash-vision-exp",
     "deepseek/deepseek-v4-flash",
     "deepseek/deepseek-v4-flash-vision-exp",
     "fireworks_ai/accounts/fireworks/models/ember-1",
@@ -71,7 +71,6 @@
     "fireworks_ai/accounts/fireworks/models/muse-spark-open",
     "flexai/DeepSeek-V4.1-Flash-1017",
     "flexai/Muse-Glimmer-30B",
-    "flexai/Step-3.7-Flash",
     "google/deep-research-max-preview-04-2026",
     "google/deep-research-preview-04-2026",
     "google/gemini-2.5-flash-image",
@@ -92,6 +91,7 @@
     "google/gemini-3.8-flash",
     "google/gemini-4-argon",
     "google/gemini-4-carbon",
+    "google/gemini-4-hydrogen",
     "google/gemini-flash-latest",
     "google/gemini-nano-banana-2.1",
     "google/gemini-pro-latest",
@@ -123,8 +123,6 @@
     "mistral/mistral-large-4@eu",
     "mistral/mistral-large-latest",
     "mistral/mistral-large-latest@eu",
-    "mistral/mistral-medium-2505",
-    "mistral/mistral-medium-2505@eu",
     "mistral/mistral-medium-2604",
     "mistral/mistral-medium-2604@eu",
     "mistral/mistral-medium-3",
@@ -146,6 +144,7 @@
     "moonshot/kimi-k3.1-pro",
     "nebius/deepseek-ai/DeepSeek-V4.1-Flash-1017",
     "nebius/meta-models/muse-spark-open",
+    "nebius/thinkingmachines/Inkling-2-Small",
     "openai/gpt-4.1",
     "openai/gpt-4.1-mini",
     "openai/gpt-4o",
@@ -175,6 +174,8 @@
     "openai/gpt-6-sol",
     "openai/gpt-6.1-sol",
     "openai/gpt-6.1-terra",
+    "openai/gpt-6.2-astra",
+    "openai/gpt-6.2-sol",
     "openai/gpt-latest",
     "openai/gpt-mini-latest",
     "openai/gpt-pro-latest",
@@ -190,6 +191,7 @@
     "qwen/qwen3.8-max",
     "qwen/qwen3.8-max-0902",
     "qwen/qwen3.8-omni-flash",
+    "qwen/qwen4-max",
     "scaleway/deepseek-v4.1-flash",
     "scaleway/deepseek-v4.1-flash-1017",
     "scaleway/gemma-3-27b-it",
@@ -205,6 +207,7 @@
     "together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017",
     "together_ai/meta-models/Muse-Glimmer-30B",
     "together_ai/thinkingmachines/Inkling",
+    "together_ai/thinkingmachines/Inkling-2-Small",
     "vertex/gemini-2.5-flash-image",
     "vertex/gemini-3-flash-preview",
     "vertex/gemini-3-pro-image",
@@ -235,6 +238,9 @@
     "vertex/gemini-4-carbon",
     "vertex/gemini-4-carbon@eu",
     "vertex/gemini-4-carbon@us",
+    "vertex/gemini-4-hydrogen",
+    "vertex/gemini-4-hydrogen@eu",
+    "vertex/gemini-4-hydrogen@us",
     "vertex/gemini-flash-latest",
     "vertex/gemini-nano-banana-2.1",
     "vertex/gemini-pro-latest",
@@ -301,6 +307,7 @@
     "cloudflare/@cf/openai/gpt-oss-120b",
     "cloudflare/@cf/openai/gpt-oss-20b",
     "cloudflare/@cf/qwen/qwen2.5-coder-32b-instruct",
+    "cloudflare/@cf/thinkingmachines/inkling-2-small",
     "cloudflare/@cf/zai-org/glm-4.7-flash",
     "cohere/c4ai-aya-expanse-32b",
     "cohere/command-a-03-2025",
@@ -314,7 +321,6 @@
     "databricks/databricks-qwen3-next-80b-a3b-instruct",
     "databricks/databricks-qwen3-next-80b-a3b-instruct@eu",
     "deepinfra/ByteDance/Seed-2.0-code",
-    "deepinfra/ByteDance/Seed-2.0-mini",
     "deepinfra/Gryphe/MythoMax-L2-13b",
     "deepinfra/NousResearch/Hermes-3-Llama-3.1-405B",
     "deepinfra/NousResearch/Hermes-3-Llama-3.1-70B",
@@ -360,9 +366,9 @@
     "deepinfra/tencent/Hy3",
     "deepinfra/tencent/Hy4-preview",
     "deepinfra/thinkingmachines/Inkling",
+    "deepinfra/thinkingmachines/Inkling-2-Small",
     "deepinfra/thinkingmachines/Inkling-Small",
     "deepinfra/zai-org/GLM-4.7-Flash",
-    "deepseek-v4-flash-vision-exp",
     "deepseek/deepseek-chat",
     "deepseek/deepseek-v4-flash",
     "deepseek/deepseek-v4-flash-vision-exp",
@@ -376,9 +382,9 @@
     "flexai/DeepSeek-V4-Flash-0731@eu",
     "flexai/DeepSeek-V4.1-Flash-1017",
     "flexai/Muse-Glimmer-30B",
-    "flexai/Step-3.7-Flash",
     "flexai/gpt-oss-120b",
     "flexai/gpt-oss-20b",
+    "flexai/gpt-oss-20b@eu",
     "google/gemini-2.5-flash-image",
     "google/gemini-3-flash-preview",
     "google/gemini-3-pro-image",
@@ -444,8 +450,6 @@
     "mistral/mistral-large-4@eu",
     "mistral/mistral-large-latest",
     "mistral/mistral-large-latest@eu",
-    "mistral/mistral-medium-2505",
-    "mistral/mistral-medium-2505@eu",
     "mistral/mistral-medium-2604",
     "mistral/mistral-medium-2604@eu",
     "mistral/mistral-medium-3",
@@ -470,6 +474,7 @@
     "nebius/nvidia/Nemotron-3-Ultra-550b-a55b",
     "nebius/nvidia/nemotron-3-super-120b-a12b",
     "nebius/openai/gpt-oss-120b",
+    "nebius/thinkingmachines/Inkling-2-Small",
     "openai/gpt-4.1",
     "openai/gpt-4.1-mini",
     "openai/gpt-4o",
@@ -482,6 +487,15 @@
     "openai/gpt-5.4",
     "openai/gpt-5.4-mini",
     "openai/gpt-5.4-nano",
+    "openai/gpt-5.5",
+    "openai/gpt-5.6-luna",
+    "openai/gpt-5.6-sol",
+    "openai/gpt-5.6-terra",
+    "openai/gpt-6-luna",
+    "openai/gpt-6-sol",
+    "openai/gpt-6.1-terra",
+    "openai/gpt-mini-latest",
+    "openai/gpt-pro-latest",
     "ovhcloud/gpt-oss-120b",
     "ovhcloud/gpt-oss-20b",
     "perplexityai/sonar",
@@ -500,6 +514,7 @@
     "qwen/qwen3.8-max",
     "qwen/qwen3.8-max-0902",
     "qwen/qwen3.8-omni-flash",
+    "qwen/qwen4-max",
     "scaleway/deepseek-v4-flash-0731",
     "scaleway/deepseek-v4.1-flash",
     "scaleway/deepseek-v4.1-flash-1017",
@@ -529,6 +544,8 @@
     "together_ai/openai/gpt-oss-120b",
     "together_ai/reflection/Beam-1.0-501B-A23B",
     "together_ai/thinkingmachines/Inkling",
+    "together_ai/thinkingmachines/Inkling-2-Small",
+    "tsystems/gpt-oss-120b",
     "vertex/gemini-2.5-flash-image",
     "vertex/gemini-3-flash-preview",
     "vertex/gemini-3-pro-image",
@@ -622,12 +639,12 @@
     "cloudflare/@cf/deepseek-ai/deepseek-v4.1-flash-1017",
     "cloudflare/@cf/mistralai/mistral-small-3.1-24b-instruct",
     "cloudflare/@cf/qwen/qwen2.5-coder-32b-instruct",
+    "cloudflare/@cf/thinkingmachines/inkling-2-small",
     "cloudflare/@cf/zai-org/glm-4.7-flash",
     "cohere/command-a-03-2025",
     "cohere/command-r-08-2024",
     "cohere/command-r-plus-08-2024",
     "cohere/command-r7b-12-2024",
-    "deepinfra/ByteDance/Seed-2.0-mini",
     "deepinfra/Gryphe/MythoMax-L2-13b",
     "deepinfra/NousResearch/Hermes-3-Llama-3.1-405B",
     "deepinfra/NousResearch/Hermes-3-Llama-3.1-70B",
@@ -662,9 +679,9 @@
     "deepinfra/tencent/Hy3",
     "deepinfra/tencent/Hy4-preview",
     "deepinfra/thinkingmachines/Inkling",
+    "deepinfra/thinkingmachines/Inkling-2-Small",
     "deepinfra/thinkingmachines/Inkling-Small",
     "deepinfra/zai-org/GLM-4.7-Flash",
-    "deepseek-v4-flash-vision-exp",
     "deepseek/deepseek-chat",
     "deepseek/deepseek-v4-flash",
     "deepseek/deepseek-v4-flash-vision-exp",
@@ -677,9 +694,9 @@
     "flexai/DeepSeek-V4-Flash-0731@eu",
     "flexai/DeepSeek-V4.1-Flash-1017",
     "flexai/Muse-Glimmer-30B",
-    "flexai/Step-3.7-Flash",
     "flexai/gpt-oss-120b",
     "flexai/gpt-oss-20b",
+    "flexai/gpt-oss-20b@eu",
     "google/gemini-2.5-flash-image",
     "google/gemini-3-flash-preview",
     "google/gemini-3-pro-image",
@@ -698,6 +715,7 @@
     "google/gemini-3.8-flash",
     "google/gemini-4-argon",
     "google/gemini-4-carbon",
+    "google/gemini-4-hydrogen",
     "google/gemini-flash-latest",
     "google/gemini-nano-banana-2.1",
     "google/gemini-pro-latest",
@@ -747,8 +765,6 @@
     "mistral/mistral-large-4@eu",
     "mistral/mistral-large-latest",
     "mistral/mistral-large-latest@eu",
-    "mistral/mistral-medium-2505",
-    "mistral/mistral-medium-2505@eu",
     "mistral/mistral-medium-2604",
     "mistral/mistral-medium-2604@eu",
     "mistral/mistral-medium-3",
@@ -770,6 +786,7 @@
     "nebius/Qwen/Qwen3-235B-A22B-Instruct-2507",
     "nebius/Qwen/Qwen3-30B-A3B-Instruct-2507",
     "nebius/openai/gpt-oss-120b",
+    "nebius/thinkingmachines/Inkling-2-Small",
     "openai/gpt-4.1",
     "openai/gpt-4.1-mini",
     "openai/gpt-4o",
@@ -799,6 +816,8 @@
     "openai/gpt-6-sol",
     "openai/gpt-6.1-sol",
     "openai/gpt-6.1-terra",
+    "openai/gpt-6.2-astra",
+    "openai/gpt-6.2-sol",
     "openai/gpt-latest",
     "openai/gpt-mini-latest",
     "openai/gpt-pro-latest",
@@ -817,6 +836,7 @@
     "qwen/qwen3.8-max",
     "qwen/qwen3.8-max-0902",
     "qwen/qwen3.8-omni-flash",
+    "qwen/qwen4-max",
     "sference/deepseek-ai/DeepSeek-V4-Flash-0731",
     "sference/deepseek-ai/DeepSeek-V4.1-Flash-1017",
     "tencent/deepseek-v4-pro-0813",
@@ -835,6 +855,8 @@
     "together_ai/openai/gpt-oss-120b",
     "together_ai/reflection/Beam-1.0-501B-A23B",
     "together_ai/thinkingmachines/Inkling",
+    "together_ai/thinkingmachines/Inkling-2-Small",
+    "tsystems/gpt-oss-120b",
     "vertex/gemini-2.5-flash-image",
     "vertex/gemini-3-flash-preview",
     "vertex/gemini-3-pro-image",
@@ -865,6 +887,9 @@
     "vertex/gemini-4-carbon",
     "vertex/gemini-4-carbon@eu",
     "vertex/gemini-4-carbon@us",
+    "vertex/gemini-4-hydrogen",
+    "vertex/gemini-4-hydrogen@eu",
+    "vertex/gemini-4-hydrogen@us",
     "vertex/gemini-flash-latest",
     "vertex/gemini-pro-latest",
     "xai/grok-4.20-0309-non-reasoning",
@@ -884,12 +909,6 @@
     "zai/glm-5v-turbo"
   ],
   "reasoning": {
-    "deepseek-v4-flash-vision-exp": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
     "databricks/databricks-gpt-oss-120b@eu": [
       {
         "type": "effort",
@@ -972,6 +991,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "cloudflare/@cf/thinkingmachines/inkling-2-small": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "max"]
       }
     ],
     "cloudflare/@cf/deepseek-ai/deepseek-v4-flash-0731": [
@@ -1076,6 +1101,12 @@
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
+    "together_ai/thinkingmachines/Inkling-2-Small": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "max"]
+      }
+    ],
     "together_ai/thinkingmachines/Inkling": [
       {
         "type": "effort",
@@ -1130,6 +1161,12 @@
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
+    "deepinfra/thinkingmachines/Inkling-2-Small": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "max"]
+      }
+    ],
     "deepinfra/thinkingmachines/Inkling-Small": [
       {
         "type": "effort",
@@ -1182,12 +1219,6 @@
       {
         "type": "effort",
         "values": ["none", "low", "high"]
-      }
-    ],
-    "deepinfra/ByteDance/Seed-2.0-mini": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
     "deepinfra/ByteDance/Seed-2.0-code": [
@@ -1436,6 +1467,12 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "vertex/gemini-4-hydrogen@eu": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
     "vertex/gemini-3.5-flash-lite@eu": [
       {
         "type": "effort",
@@ -1454,10 +1491,22 @@
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
+    "vertex/gemini-4-hydrogen": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
     "vertex/gemini-3-pro-image": [
       {
         "type": "effort",
         "values": ["low", "high"]
+      }
+    ],
+    "vertex/gemini-4-hydrogen@us": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "vertex/gemini-3.5-flash@eu": [
@@ -1604,6 +1653,12 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "google/gemini-4-hydrogen": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
     "google/gemini-3-pro-image": [
       {
         "type": "effort",
@@ -1658,10 +1713,22 @@
         "values": ["minimal", "medium", "high"]
       }
     ],
+    "tsystems/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "nebius/meta-models/muse-spark-open": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "nebius/thinkingmachines/Inkling-2-Small": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "max"]
       }
     ],
     "nebius/deepseek-ai/DeepSeek-V4.1-Flash-1017": [
@@ -1886,10 +1953,22 @@
         "values": ["high"]
       }
     ],
+    "openai/gpt-6.2-astra": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "openai/gpt-5.4": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "openai/gpt-6.2-sol": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "openai/gpt-5.4-pro": [
@@ -1994,6 +2073,12 @@
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
+    "flexai/gpt-oss-20b@eu": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "flexai/DeepSeek-V4-Flash-0731@eu": [
       {
         "type": "effort",
@@ -2010,12 +2095,6 @@
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "flexai/Step-3.7-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ],
     "flexai/DeepSeek-V4.1-Flash-1017": [
@@ -2058,6 +2137,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "qwen/qwen4-max": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "xhigh"]
       }
     ],
     "qwen/deepseek-v4.1-flash-1017": [

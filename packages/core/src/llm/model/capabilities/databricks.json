@@ -50,6 +50,10 @@
     "databricks-gpt-5-4",
     "databricks-gpt-5-4-mini",
     "databricks-gpt-5-4-nano",
+    "databricks-gpt-5-5",
+    "databricks-gpt-5-6-luna",
+    "databricks-gpt-5-6-sol",
+    "databricks-gpt-5-6-terra",
     "databricks-gpt-oss-120b",
     "databricks-gpt-oss-20b"
   ],

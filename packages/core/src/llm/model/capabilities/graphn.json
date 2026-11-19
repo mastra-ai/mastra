@@ -1,0 +1,55 @@
+{
+  "attachment": ["deepseek-v4.1-flash", "gemma-4-e4b", "qwen3-vl", "qwen3.8-27b"],
+  "temperature": [
+    "deepseek-v4.1-flash",
+    "gemma-4-e4b",
+    "glm-5.3",
+    "gpt-oss-120b",
+    "qwen3-80b",
+    "qwen3-vl",
+    "qwen3.8-27b"
+  ],
+  "structuredOutput": ["qwen3-80b", "qwen3-vl", "qwen3.8-27b"],
+  "reasoning": {
+    "qwen3-vl": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "gemma-4-e4b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "deepseek-v4.1-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "qwen3.8-27b": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ]
+  }
+}

@@ -10,8 +10,9 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
 
 import type { BoardCardStatus } from '../boardCardState';
-import { SOURCE_LABELS, cardLabels, metadataLabelColors } from '../boardItems';
+import { cardLabels, metadataLabelColors } from '../boardItems';
 import type { CardAction } from '../cardPrimaryAction';
+import { CARD_SOURCES } from '../cardSources';
 import { changeRequestStatus } from '../changeRequestState';
 import type { PullRequestSubscription } from '../services/githubSubscriptions';
 import { isPullRequestSource } from '../services/workItems';
@@ -26,7 +27,7 @@ import './card-actions.css';
 export function SourceTitle({ source, title }: { source: WorkItemSource; title: string }) {
   return (
     <>
-      <span className="sr-only">{SOURCE_LABELS[source]}: </span>
+      <span className="sr-only">{CARD_SOURCES[source].label}: </span>
       {title}
     </>
   );

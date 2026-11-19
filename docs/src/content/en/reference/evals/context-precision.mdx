@@ -92,7 +92,7 @@ If you pass `context`, the array must be non-empty. The constructor throws `Cont
 
 ## Scoring details
 
-### Mean Average Precision (MAP)
+### Mean average precision (MAP)
 
 Context Precision uses **Mean Average Precision** to evaluate both relevance and positioning:
 
@@ -101,7 +101,7 @@ Context Precision uses **Mean Average Precision** to evaluate both relevance and
 1. **Average Precision**: Sum all precision values and divide by total relevant items
 1. **Final Score**: Multiply by scale factor and round to 2 decimals
 
-### Scoring Formula
+### Scoring formula
 
 ```text
 MAP = (Σ Precision@k) / R
@@ -112,12 +112,12 @@ Where:
 - Only calculated at positions where relevant items appear
 ```
 
-### Score Interpretation
+### Score interpretation
 
-- **0.9-1.0**: Excellent precision - all relevant context early in sequence
+- **0.9-1.0**: High precision - all relevant context early in sequence
 - **0.7-0.8**: Good precision - most relevant context well-positioned
 - **0.4-0.6**: Moderate precision - relevant context mixed with irrelevant
-- **0.1-0.3**: Poor precision - little relevant context or poorly positioned
+- **0.1-0.3**: Poor precision - little relevant context or badly positioned
 - **0.0**: No relevant context found
 
 ### Reason analysis
@@ -137,7 +137,7 @@ Use results to:
 - **Tune chunk size**: Balance context detail vs. relevance precision
 - **Evaluate embeddings**: Test different embedding models for better retrieval
 
-### Example Calculation
+### Example calculation
 
 context: `[relevant, irrelevant, relevant, irrelevant]`
 

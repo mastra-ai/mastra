@@ -14,7 +14,18 @@
     "xpersona-frieren-coder",
     "xpersona-gpt-5.5"
   ],
-  "temperature": ["claude-haiku-4-5", "claude-sonnet-4-6", "gemini-3.5-flash", "gpt-5.4", "gpt-5.4-mini"],
+  "temperature": [
+    "claude-haiku-4-5",
+    "claude-sonnet-4-6",
+    "gemini-3.5-flash",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.5",
+    "gpt-5.6",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "xpersona-gpt-5.5"
+  ],
   "structuredOutput": [
     "gemini-3.5-flash",
     "gpt-5.4",

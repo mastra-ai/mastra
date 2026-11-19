@@ -2,6 +2,7 @@
   "attachment": [
     "codestral-2508",
     "codestral-latest",
+    "deepseek-v4-1-flash-1017",
     "labs-devstral-small-2512",
     "labs-leanstral-1-5-1",
     "magistral-medium-latest",
@@ -98,6 +99,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "mistral-large-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "glm-5-2": [

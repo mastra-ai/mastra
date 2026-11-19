@@ -31,14 +31,12 @@
     "TEE/gemma4-31b",
     "TEE/gemma4-31b:thinking",
     "TEE/glm-5.3-flash",
+    "TEE/inkling-2-small",
     "TEE/kimi-k2.6",
     "TEE/kimi-k3",
     "TEE/kimi-k3.1-pro",
     "TEE/qwen3.6-27b",
     "TEE/qwen3.8-27b",
-    "TheDrummer/Artemis-v1.1",
-    "TheDrummer/UnslopNemo-12B-v4.1",
-    "TheDrummer/skyfall-36b-v2",
     "abliteration-ai/abliterated-model",
     "abliteration-ai/abliterated-model-large-flash",
     "anthracite-org/magnum-v4-72b",
@@ -82,40 +80,26 @@
     "bytedance-seed/seed-2.0-code",
     "bytedance-seed/seed-2.0-lite",
     "bytedance/doubao-seed-character",
-    "deepseek-ai/DeepSeek-V3.1",
-    "deepseek-chat",
-    "deepseek-chat-cheaper",
-    "deepseek/deepseek-v3.2",
-    "deepseek/deepseek-v3.2:thinking",
     "deepseek/deepseek-v4-flash-latest",
     "deepseek/deepseek-v4-flash-vision-exp",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-0910-uncensored",
+    "deepseek/deepseek-v4.1-flash-0910-uncensored:thinking",
     "deepseek/deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4.1-flash-1017-uncensored",
+    "deepseek/deepseek-v4.1-flash-1017-uncensored:thinking",
     "deepseek/deepseek-v4.1-flash-1017:thinking",
+    "deepseek/deepseek-v4.1-flash-uncensored",
+    "deepseek/deepseek-v4.1-flash-uncensored:thinking",
     "deepseek/deepseek-v4.1-flash:thinking",
     "elorian/glimpse",
     "fireworks/ember-1",
-    "gemini-2.0-pro-exp-02-05",
-    "gemini-2.0-pro-reasoner",
     "gemini-2.5-flash",
     "gemini-2.5-flash-lite",
-    "gemini-2.5-flash-lite-preview-06-17",
-    "gemini-2.5-flash-lite-preview-09-2025",
-    "gemini-2.5-flash-lite-preview-09-2025-thinking",
     "gemini-2.5-flash-nothinking",
-    "gemini-2.5-flash-preview-04-17",
-    "gemini-2.5-flash-preview-04-17:thinking",
-    "gemini-2.5-flash-preview-05-20",
-    "gemini-2.5-flash-preview-05-20:thinking",
-    "gemini-2.5-flash-preview-09-2025",
-    "gemini-2.5-flash-preview-09-2025-thinking",
     "gemini-2.5-pro",
-    "gemini-2.5-pro-exp-03-25",
-    "gemini-2.5-pro-preview-03-25",
-    "gemini-2.5-pro-preview-05-06",
     "gemini-2.5-pro-preview-06-05",
     "gemini-3-pro-image-preview",
-    "gemini-exp-1206",
     "gemma-4-12b-it",
     "gemma-4-12b-it-semancer",
     "gemma-4-12b-it-starry-ocean",
@@ -150,6 +134,8 @@
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
     "google/gemini-4-argon",
+    "google/gemini-4-carbon",
+    "google/gemini-4-hydrogen",
     "google/gemini-flash-latest",
     "google/gemini-flash-lite-latest",
     "google/gemini-pro-latest",
@@ -162,12 +148,13 @@
     "holo3-35b-a3b",
     "holo3-35b-a3b:thinking",
     "inclusionai/ling-3.0-flash-vl",
+    "jiunsong/supergemma4-26b-uncensored",
     "kimi-k2-instruct-fast",
     "lightonai/LightOnOCR-2-1B",
     "meituan/longcat-2.5-preview",
-    "meta-llama/llama-3.2-3b-instruct",
     "meta-llama/llama-4-maverick",
     "meta-llama/llama-4-scout",
+    "meta/muse-ember",
     "meta/muse-glimmer-30b",
     "meta/muse-spark-1.1",
     "meta/muse-spark-1.2",
@@ -244,13 +231,16 @@
     "openai/gpt-6.1-sol-pro",
     "openai/gpt-6.1-terra",
     "openai/gpt-6.1-terra-pro",
+    "openai/gpt-6.2-astra",
+    "openai/gpt-6.2-astra-pro",
+    "openai/gpt-6.2-sol",
+    "openai/gpt-6.2-sol-pro",
     "openai/gpt-astra-latest",
     "openai/gpt-chat-latest",
     "openai/gpt-latest",
     "openai/gpt-luna-latest",
     "openai/gpt-sol-latest",
     "openai/gpt-terra-latest",
-    "openai/o1-pro",
     "orca/orcacyber-flash-1.0",
     "orca/orcacyber-flash-1.0:thinking",
     "orca/orcacyber-glm-5.3-flash",
@@ -266,10 +256,8 @@
     "pqhaz/DeepSeek-V4.1-Flash-1017-heretic:thinking",
     "prism-ml/ternary-bonsai-2-27b",
     "qwen/qwen2.5-vl-72b-instruct",
-    "qwen/qwen3-235b-a22b",
     "qwen/qwen3-32b",
     "qwen/qwen3-vl-235b-a22b-instruct",
-    "qwen/qwen3-vl-235b-a22b-thinking",
     "qwen/qwen3.5-27b",
     "qwen/qwen3.5-27b:thinking",
     "qwen/qwen3.5-35b-a3b",
@@ -299,7 +287,6 @@
     "qwen/qwen3.8-27b-darkidol",
     "qwen/qwen3.8-27b-fable",
     "qwen/qwen3.8-27b-fimi",
-    "qwen/qwen3.8-27b-hemmingway",
     "qwen/qwen3.8-27b-kimiko",
     "qwen/qwen3.8-27b-kiwen",
     "qwen/qwen3.8-27b-novelist",
@@ -314,6 +301,8 @@
     "qwen/qwen3.8-max-prime",
     "qwen/qwen3.8-max:thinking",
     "qwen/qwen3.8-omni-flash",
+    "qwen/qwen4-max",
+    "qwen/qwen4-max:thinking",
     "qwen3-vl-235b-a22b-instruct-original",
     "reka/reka-edge-2603",
     "sakana/fugu-max",
@@ -328,7 +317,6 @@
     "thinkingmachines/inkling:thinking",
     "unbiased/pareto-26.10",
     "unbiased/pareto-26.9",
-    "undi95/remm-slerp-l2-13b",
     "unsloth/gemma-3-12b-it",
     "unsloth/gemma-3-27b-it",
     "unsloth/gemma-3-4b-it",
@@ -363,8 +351,6 @@
   ],
   "temperature": [
     "Gryphe/MythoMax-L2-13b",
-    "MiniMaxAI/MiniMax-M1-80k",
-    "Sao10K/L3.1-70B-Euryale-v2.2",
     "Sao10K/L3.3-70B-Euryale-v2.3",
     "TEE/deepseek-v3.2",
     "TEE/deepseek-v4.1-flash",
@@ -378,13 +364,12 @@
     "TEE/glm-5.3",
     "TEE/glm-5.3-flash",
     "TEE/gpt-oss-120b",
+    "TEE/inkling-2-small",
     "TEE/kimi-k2.6",
     "TEE/llama3-3-70b",
     "TEE/qwen3.6-27b",
     "TEE/qwen3.6-35b-a3b",
     "TEE/qwen3.8-27b",
-    "TheDrummer/Cydonia-24B-v4.1",
-    "TheDrummer/skyfall-36b-v2",
     "aion-labs/aion-2.0",
     "aion-labs/aion-3.0",
     "aion-labs/aion-3.0-mini",
@@ -413,7 +398,6 @@
     "anthropic/claude-sonnet-4.5:thinking",
     "anthropic/claude-sonnet-4.6",
     "anthropic/claude-sonnet-4.6:thinking",
-    "arcee-ai/trinity-large-thinking",
     "bytedance-seed/seed-2-1-turbo",
     "bytedance-seed/seed-2.0-code",
     "bytedance-seed/seed-2.0-lite",
@@ -434,10 +418,8 @@
     "deepseek/deepseek-v4-flash-0731:thinking",
     "deepseek/deepseek-v4-flash-vision-exp",
     "deepseek/deepseek-v4-flash:thinking",
-    "deepseek/deepseek-v4-pro",
     "deepseek/deepseek-v4-pro-0813",
     "deepseek/deepseek-v4-pro-0813:thinking",
-    "deepseek/deepseek-v4-pro:thinking",
     "deepseek/deepseek-v4.1-flash",
     "deepseek/deepseek-v4.1-flash-1017",
     "deepseek/deepseek-v4.1-flash-1017:thinking",
@@ -448,11 +430,6 @@
     "fireworks/ember-1",
     "gemini-2.5-flash",
     "gemini-2.5-flash-lite",
-    "gemini-2.5-flash-lite-preview-06-17",
-    "gemini-2.5-flash-lite-preview-09-2025",
-    "gemini-2.5-flash-lite-preview-09-2025-thinking",
-    "gemini-2.5-flash-preview-05-20",
-    "gemini-2.5-flash-preview-05-20:thinking",
     "gemini-2.5-pro",
     "gemini-2.5-pro-preview-06-05",
     "gemini-3-pro-image-preview",
@@ -482,10 +459,13 @@
     "inclusionai/ling-3.0-flash",
     "inclusionai/ling-3.0-flash-vl",
     "inclusionai/ling-3.0-flash:thinking",
+    "inclusionai/ling-3.0-tiny",
+    "inclusionai/ling-3.0-tiny:thinking",
     "inclusionai/ling-3.1-flash",
     "inference-net/schematron-v2-small",
     "inference-net/schematron-v2-turbo",
     "kimi-k2-instruct-fast",
+    "lightonai/LightOnOCR-2-1B",
     "longcat-2.0",
     "longcat-2.0:thinking",
     "mercury-2",
@@ -532,7 +512,6 @@
     "moonshotai/kimi-k2.6",
     "moonshotai/kimi-k2.6:thinking",
     "nvidia/Llama-3.1-Nemotron-70B-Instruct-HF",
-    "nvidia/Llama-3.3-Nemotron-Super-49B-v1",
     "nvidia/nemotron-3-nano-30b-a3b",
     "nvidia/nemotron-3-super-120b-a12b",
     "nvidia/nemotron-3-super-120b-a12b:thinking",
@@ -556,9 +535,20 @@
     "openai/gpt-5.4",
     "openai/gpt-5.4-mini",
     "openai/gpt-5.4-nano",
+    "openai/gpt-5.5",
+    "openai/gpt-5.6-luna",
+    "openai/gpt-5.6-luna-pro",
+    "openai/gpt-5.6-sol",
+    "openai/gpt-5.6-sol-pro",
+    "openai/gpt-5.6-terra",
+    "openai/gpt-5.6-terra-pro",
+    "openai/gpt-6-luna",
+    "openai/gpt-6-sol",
+    "openai/gpt-6.1-terra",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
     "openai/gpt-oss-safeguard-20b",
+    "particle-ai/particle-1",
     "perceptron/perceptron-mk1",
     "perceptron/perceptron-mk1.5",
     "phi-4-mini-instruct",
@@ -567,7 +557,6 @@
     "qwen/qwen-plus",
     "qwen/qwen-turbo",
     "qwen/qwen2.5-coder-32b-instruct",
-    "qwen/qwen3-235b-a22b",
     "qwen/qwen3-235b-a22b-instruct-2507",
     "qwen/qwen3-235b-a22b-thinking-2507",
     "qwen/qwen3-30b-a3b",
@@ -579,9 +568,7 @@
     "qwen/qwen3-coder-flash",
     "qwen/qwen3-coder-next",
     "qwen/qwen3-next-80b-a3b-instruct",
-    "qwen/qwen3-next-80b-a3b-thinking",
     "qwen/qwen3-vl-235b-a22b-instruct",
-    "qwen/qwen3-vl-235b-a22b-thinking",
     "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3.5-122b-a10b:thinking",
     "qwen/qwen3.5-27b",
@@ -616,13 +603,14 @@
     "qwen/qwen3.8-max-prime",
     "qwen/qwen3.8-max:thinking",
     "qwen/qwen3.8-omni-flash",
+    "qwen/qwen4-max",
+    "qwen/qwen4-max:thinking",
     "qwen3-vl-235b-a22b-instruct-original",
     "reflection/beam-1.0",
     "reka/reka-edge-2603",
     "reka/reka-flash-3",
     "sarvam-105b",
     "stepfun-ai/step-3.5-flash",
-    "stepfun-ai/step-3.5-flash-2603",
     "stepfun/step-3.7-flash:thinking",
     "stepfun/step-5-preview",
     "tencent/hy3",
@@ -632,13 +620,12 @@
     "thinkingmachines/Inkling-Small:thinking",
     "thinkingmachines/inkling",
     "thinkingmachines/inkling:thinking",
-    "undi95/remm-slerp-l2-13b",
+    "unbiased/pareto-26.10",
     "unsloth/gemma-3-12b-it",
     "unsloth/gemma-3-27b-it",
     "unsloth/gemma-3-4b-it",
     "upstage/solar-mini4",
     "upstage/solar-mini4:thinking",
-    "upstage/solar-pro-3",
     "upstage/solar-pro4",
     "upstage/solar-pro4:thinking",
     "x-ai/grok-4.3",
@@ -695,6 +682,7 @@
     "TEE/glm-5.2:thinking",
     "TEE/glm-5.3",
     "TEE/glm-5.3-flash",
+    "TEE/inkling-2-small",
     "TEE/kimi-k3",
     "TEE/kimi-k3.1-pro",
     "TEE/qwen3.8-27b",
@@ -739,6 +727,7 @@
     "anthropic/claude-sonnet-5.5:thinking",
     "anthropic/claude-sonnet-5:thinking",
     "anthropic/claude-sonnet-latest",
+    "baidu/ernie-light-dt-1.0-intl",
     "bytedance-seed/seed-2-1-turbo",
     "bytedance-seed/seed-2.0-lite",
     "claw-high",
@@ -747,7 +736,6 @@
     "deepseek-ai/DeepSeek-V3.1-Terminus",
     "deepseek-ai/DeepSeek-V3.1-Terminus:thinking",
     "deepseek-chat",
-    "deepseek-chat-cheaper",
     "deepseek-v3-0324",
     "deepseek/deepseek-latest",
     "deepseek/deepseek-v3.2",
@@ -760,20 +748,16 @@
     "deepseek/deepseek-v4-flash-latest",
     "deepseek/deepseek-v4-flash-vision-exp",
     "deepseek/deepseek-v4-flash:thinking",
-    "deepseek/deepseek-v4-pro",
     "deepseek/deepseek-v4-pro-0813",
     "deepseek/deepseek-v4-pro-0813:thinking",
-    "deepseek/deepseek-v4-pro:thinking",
+    "deepseek/deepseek-v4-pro-20260423",
+    "deepseek/deepseek-v4-pro-20260423:thinking",
     "deepseek/deepseek-v4.1-flash",
     "deepseek/deepseek-v4.1-flash-1017",
     "deepseek/deepseek-v4.1-flash-1017:thinking",
     "deepseek/deepseek-v4.1-flash:thinking",
     "elorian/glimpse",
     "fireworks/ember-1",
-    "gemini-2.5-flash-lite-preview-09-2025",
-    "gemini-2.5-flash-lite-preview-09-2025-thinking",
-    "gemini-2.5-flash-preview-09-2025",
-    "gemini-2.5-flash-preview-09-2025-thinking",
     "gemma-4-12b-it",
     "google/gemini-3-flash-preview",
     "google/gemini-3.1-flash-lite",
@@ -787,6 +771,8 @@
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
     "google/gemini-4-argon",
+    "google/gemini-4-carbon",
+    "google/gemini-4-hydrogen",
     "google/gemini-flash-latest",
     "google/gemini-flash-lite-latest",
     "google/gemini-pro-latest",
@@ -805,13 +791,17 @@
     "inclusionai/ling-3.1-flash",
     "inference-net/schematron-v2-small",
     "inference-net/schematron-v2-turbo",
+    "jcartu/deepseek-v4.1-flash-1017-abliterated-lossless-csf",
+    "jiunsong/supergemma4-26b-uncensored",
     "liquid/lfm-2.5-2.6b",
     "liquid/lfm-2.5-24b-a2b",
     "liquid/lfm-3-1.7b",
+    "lyber/kimi-k3.1-pro-abliterated",
     "mercury-2",
     "meta-llama/llama-3.3-70b-instruct",
     "meta-llama/llama-4-maverick",
     "meta-llama/llama-4-scout",
+    "meta/muse-ember",
     "meta/muse-glimmer-30b",
     "meta/muse-spark-1.2",
     "meta/muse-spark-1.2-contributor",
@@ -877,6 +867,10 @@
     "openai/gpt-6.1-sol-pro",
     "openai/gpt-6.1-terra",
     "openai/gpt-6.1-terra-pro",
+    "openai/gpt-6.2-astra",
+    "openai/gpt-6.2-astra-pro",
+    "openai/gpt-6.2-sol",
+    "openai/gpt-6.2-sol-pro",
     "openai/gpt-astra-latest",
     "openai/gpt-chat-latest",
     "openai/gpt-latest",
@@ -884,15 +878,18 @@
     "openai/gpt-oss-120b",
     "openai/gpt-sol-latest",
     "openai/gpt-terra-latest",
-    "openai/o3-mini-low",
     "openai/o3-pro-2025-06-10",
     "orca/orcacyber-flash-1.0",
     "orca/orcacyber-flash-1.0:thinking",
+    "orca/orcacyber-glm-5.3",
     "orca/orcacyber-glm-5.3-flash",
+    "orca/orcacyber-hy4",
     "orca/orcacyber-k3.1-pro",
     "orca/orcacyber-mimo-flash",
     "orca/orcacyber-minimax-m3.1-flash",
     "orca/orcacyber-qwen3.8-flash-next",
+    "orca/orcacyber-ultra-1.0",
+    "orca/orcacyber-zero-1.0",
     "orca/orcacyber-zero-1.5",
     "ornith-ai/ornith-1.5-122b",
     "ornith-ai/ornith-1.5-35b-a3b",
@@ -901,7 +898,6 @@
     "perceptron/perceptron-mk1.5",
     "pokee-isaac",
     "prism-ml/ternary-bonsai-2-27b",
-    "qwen/qwen3-235b-a22b",
     "qwen/qwen3-235b-a22b-instruct-2507",
     "qwen/qwen3-coder",
     "qwen/qwen3-coder-30b-a3b-instruct",
@@ -921,6 +917,8 @@
     "qwen/qwen3.8-max-prime",
     "qwen/qwen3.8-max:thinking",
     "qwen/qwen3.8-omni-flash",
+    "qwen/qwen4-max",
+    "qwen/qwen4-max:thinking",
     "reflection/beam-1.0",
     "reka/reka-edge-2603",
     "reka/reka-flash-3",
@@ -954,7 +952,6 @@
     "xiaomi/mimo-v2.6-flash",
     "xiaomi/mimo-v2.6-pro",
     "xiaomi/mimo-v2.6-pro-ultraspeed",
-    "xingchen-agi/xing4.0-29b-a4b",
     "z-ai/GLM-4.5-Air",
     "z-ai/GLM-4.5-Air:thinking",
     "z-ai/glm-4.6",
@@ -1018,12 +1015,6 @@
         "values": ["none", "high"]
       }
     ],
-    "gemini-2.5-pro-exp-03-25": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "Gemma-4-31B-MeroMero": [
       {
         "type": "effort",
@@ -1036,12 +1027,6 @@
         "values": ["none", "high"]
       }
     ],
-    "gemini-2.5-flash-lite-preview-09-2025-thinking": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "gemini-2.5-flash-lite": [
       {
         "type": "effort",
@@ -1052,18 +1037,6 @@
       {
         "type": "effort",
         "values": ["none", "high"]
-      }
-    ],
-    "gemini-2.5-flash-preview-04-17:thinking": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "gemini-2.5-pro-preview-05-06": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ],
     "claw-low": [
@@ -1090,19 +1063,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "gemini-2.5-flash-preview-04-17": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "gemini-2.5-pro": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "gemini-2.5-flash-lite-preview-09-2025": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -1126,22 +1087,10 @@
         "values": ["none", "high"]
       }
     ],
-    "gemini-2.5-flash-preview-09-2025": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "claw-medium": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "gemini-2.5-flash-lite-preview-06-17": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ],
     "Qwen3.5-27B-BlueStar-v3-Derestricted": [
@@ -1154,18 +1103,6 @@
       {
         "type": "effort",
         "values": ["none", "high"]
-      }
-    ],
-    "gemini-2.5-flash-preview-05-20:thinking": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "gemini-2.5-pro-preview-03-25": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ],
     "Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-Derestricted": [
@@ -1201,12 +1138,6 @@
     "holo3-35b-a3b": [
       {
         "type": "toggle"
-      }
-    ],
-    "gemini-2.5-flash-preview-09-2025-thinking": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ],
     "Gemma-4-31B-Animus-V14.1": [
@@ -1347,6 +1278,24 @@
         "values": ["none", "medium", "high"]
       }
     ],
+    "lyber/kimi-k3.1-pro-abliterated": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "lyber/deepseek-v4.1-flash-1017-abliterated": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "baidu/ernie-light-dt-1.0-intl": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
     "inclusionai/ling-3.0-flash-vl": [
       {
         "type": "effort",
@@ -1369,6 +1318,12 @@
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "TEE/inkling-2-small": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "TEE/kimi-k3": [
@@ -1489,12 +1444,6 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "xingchen-agi/xing4.0-29b-a4b": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
     "inception/mercury-3": [
       {
         "type": "effort",
@@ -1511,6 +1460,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4.1-flash-uncensored:thinking": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "deepseek/deepseek-v4-flash-0731": [
@@ -1531,7 +1486,25 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
+    "deepseek/deepseek-v4.1-flash-1017-uncensored:thinking": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4-pro-20260423:thinking": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
     "deepseek/deepseek-v4-flash-0423:thinking": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4.1-flash-1017-uncensored": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -1543,13 +1516,13 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "deepseek/deepseek-v4-pro": [
+    "deepseek/deepseek-v4.1-flash-1017:thinking": [
       {
         "type": "effort",
-        "values": ["none", "high", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
-    "deepseek/deepseek-v4.1-flash-1017:thinking": [
+    "deepseek/deepseek-v4.1-flash-0910-uncensored:thinking": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -1573,16 +1546,34 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "deepseek/deepseek-v4-pro:thinking": [
+    "deepseek/deepseek-v4.1-flash-1017-abliterated": [
       {
         "type": "effort",
-        "values": ["none", "high", "max"]
+        "values": ["none", "high"]
+      }
+    ],
+    "deepseek/deepseek-v4.1-flash-0910-uncensored": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4.1-flash-uncensored": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "deepseek/deepseek-v4.1-flash": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4.1-flash-1017-abliterated:thinking": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ],
     "deepseek/deepseek-v4-flash-vision-exp": [
@@ -1651,6 +1642,12 @@
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
+    "google/gemini-4-carbon": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "google/gemini-3.6-flash": [
       {
         "type": "effort",
@@ -1667,6 +1664,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "google/gemini-4-hydrogen": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "google/gemma-4-31b-it": [
@@ -2001,6 +2004,12 @@
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
+    "openai/gpt-6.2-sol-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "openai/gpt-5.1-codex-mini": [
       {
         "type": "effort",
@@ -2103,6 +2112,18 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
+    "openai/gpt-6.2-astra": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "openai/gpt-6.2-astra-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "openai/gpt-5.4": [
       {
         "type": "effort",
@@ -2110,6 +2131,12 @@
       }
     ],
     "openai/gpt-6.1-sol-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "openai/gpt-6.2-sol": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -2161,12 +2188,6 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "openai/o3-mini-low": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ],
     "openai/gpt-5.1-codex": [
@@ -2271,6 +2292,12 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
+    "orca/orcacyber-ultra-1.0": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "orca/orcacyber-zero-1.5": [
       {
         "type": "effort",
@@ -2283,10 +2310,22 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
+    "orca/orcacyber-hy4": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
     "orca/orcacyber-glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "max"]
+      }
+    ],
+    "orca/orcacyber-zero-1.0": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "orca/orcacyber-flash-1.0": [
@@ -2299,6 +2338,12 @@
       {
         "type": "effort",
         "values": ["none", "high"]
+      }
+    ],
+    "orca/orcacyber-glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "fireworks/ember-1": [
@@ -2319,10 +2364,10 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "stepfun-ai/step-3.5-flash-2603": [
+    "jcartu/deepseek-v4.1-flash-1017-abliterated-lossless-csf": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "stepfun-ai/step-3.5-flash": [
@@ -2336,6 +2381,12 @@
         "type": "toggle"
       }
     ],
+    "qwen/qwen4-max:thinking": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "xhigh"]
+      }
+    ],
     "qwen/qwen3.7-plus": [
       {
         "type": "effort",
@@ -2346,6 +2397,12 @@
       {
         "type": "effort",
         "values": ["none", "high"]
+      }
+    ],
+    "qwen/qwen4-max": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "xhigh"]
       }
     ],
     "qwen/qwen3.7-flash:thinking": [
@@ -2406,6 +2463,12 @@
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "meta/muse-ember": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "meta/muse-glimmer-30b": [

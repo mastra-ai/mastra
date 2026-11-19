@@ -16,6 +16,7 @@
     "Qwen/Qwen3.8-27B",
     "Qwen/Qwen3.8-Flash",
     "Qwen/Qwen3.8-Max",
+    "Qwen/Qwen4-Max",
     "XiaomiMiMo/MiMo-V2.5",
     "XiaomiMiMo/MiMo-V2.5-Pro",
     "XiaomiMiMo/MiMo-V2.6-Flash",
@@ -42,6 +43,7 @@
     "stepfun-ai/Step-3.7-Flash",
     "stepfun-ai/Step-5-Preview",
     "thinkingmachines/Inkling",
+    "thinkingmachines/Inkling-2-Small",
     "thinkingmachines/Inkling-Small",
     "zai-org/GLM-5.3-Flash"
   ],
@@ -71,6 +73,7 @@
     "Qwen/Qwen3.8-27B",
     "Qwen/Qwen3.8-Flash",
     "Qwen/Qwen3.8-Max",
+    "Qwen/Qwen4-Max",
     "XiaomiMiMo/MiMo-V2.5",
     "XiaomiMiMo/MiMo-V2.5-Pro",
     "XiaomiMiMo/MiMo-V2.6-Flash",
@@ -110,6 +113,7 @@
     "tencent/Hy3",
     "tencent/Hy4-preview",
     "thinkingmachines/Inkling",
+    "thinkingmachines/Inkling-2-Small",
     "thinkingmachines/Inkling-Small",
     "zai-org/GLM-4.6",
     "zai-org/GLM-4.7",
@@ -145,6 +149,7 @@
     "Qwen/Qwen3.8-27B",
     "Qwen/Qwen3.8-Flash",
     "Qwen/Qwen3.8-Max",
+    "Qwen/Qwen4-Max",
     "XiaomiMiMo/MiMo-V2.5",
     "XiaomiMiMo/MiMo-V2.5-Pro",
     "XiaomiMiMo/MiMo-V2.6-Flash",
@@ -185,6 +190,7 @@
     "tencent/Hy3",
     "tencent/Hy4-preview",
     "thinkingmachines/Inkling",
+    "thinkingmachines/Inkling-2-Small",
     "thinkingmachines/Inkling-Small",
     "zai-org/GLM-4.6",
     "zai-org/GLM-4.7",
@@ -282,6 +288,12 @@
     "XiaomiMiMo/MiMo-V2.5-Pro": [
       {
         "type": "toggle"
+      }
+    ],
+    "thinkingmachines/Inkling-2-Small": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "max"]
       }
     ],
     "deepseek-ai/DeepSeek-V3.1": [
@@ -390,6 +402,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "Qwen/Qwen4-Max": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "xhigh"]
       }
     ],
     "Qwen/Qwen3.8-2.4T-A95B": [

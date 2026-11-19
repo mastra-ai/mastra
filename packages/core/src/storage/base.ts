@@ -1,4 +1,5 @@
 import { MastraBase } from '../base';
+import type { IMastraLogger } from '../logger';
 
 import type {
   AgentsStorage,
@@ -518,6 +519,32 @@ export class MastraCompositeStore extends MastraBase {
       } else {
         seen.add(target);
       }
+    };
+    if (this.parentDefault) cascade(this.parentDefault);
+    if (this.parentEditor) cascade(this.parentEditor);
+    if (this.stores) {
+      for (const domain of Object.values(this.stores)) cascade(domain);
+    }
+  }
+
+  /**
+   * Set the logger on this store and cascade it to every owned domain store and
+   * parent composite. Domain stores build their own default logger in their
+   * constructor, so without this cascade `new Mastra({ logger })` (including
+   * `logger: false`) would never reach the code that does the reads and writes.
+   * @internal
+   */
+  override __setLogger(logger: IMastraLogger, seen: Set<unknown> = new Set<unknown>()): void {
+    if (seen.has(this)) return;
+    seen.add(this);
+    super.__setLogger(logger);
+    const cascade = (target: unknown) => {
+      if (!target || typeof target !== 'object' || seen.has(target)) return;
+      const fn = (target as { __setLogger?: (l: IMastraLogger, s?: Set<unknown>) => void }).__setLogger;
+      if (typeof fn === 'function') {
+        fn.call(target, logger, seen);
+      }
+      seen.add(target);
     };
     if (this.parentDefault) cascade(this.parentDefault);
     if (this.parentEditor) cascade(this.parentEditor);

@@ -1,0 +1,20 @@
+{
+  "attachment": ["jad-ai", "jad-code", "jad-go"],
+  "reasoning": {
+    "jad-ai": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "jad-go": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "jad-code": [
+      {
+        "type": "toggle"
+      }
+    ]
+  }
+}

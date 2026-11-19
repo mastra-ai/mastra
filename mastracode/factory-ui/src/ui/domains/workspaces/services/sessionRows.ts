@@ -5,7 +5,7 @@ import type { CardChangeRequest, PullRequestStatus } from '@mastra/factory/work-
 
 import type { SessionRowWire, SessionRowsResponse } from '../../../../api/types';
 import type { SessionPullRequestTarget } from '../../../../hooks/useSessionPullRequestSubscriptions';
-import { externalLinkLabel } from '../../factory/boardItems';
+import { CARD_SOURCES } from '../../factory/cardSources';
 import { CHANGE_REQUEST_TERMS, changeRequestStatus } from '../../factory/changeRequestState';
 import { cardLink } from '../../factory/services/workItems';
 import type { WorkItemSource } from '../../factory/services/workItems';
@@ -111,7 +111,7 @@ function factorySessionName(session: SessionRowSession, card: SessionRowCard | u
 function sessionExternalLinkLabel(source: WorkItemSource): string {
   if (source === 'github-pr') return 'Open pull request';
   if (source === 'gitlab-pr') return 'Open merge request';
-  return externalLinkLabel(source);
+  return CARD_SOURCES[source].linkLabel;
 }
 
 function sessionExternalLinks(

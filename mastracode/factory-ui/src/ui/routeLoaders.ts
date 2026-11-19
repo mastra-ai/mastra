@@ -18,6 +18,7 @@ import { incidentioStatusQueryOptions } from '../hooks/useIncidentioData';
 import { intakeBindingsQueryOptions, intakeConfigQueryOptions } from '../hooks/useIntakeConfig';
 import { jiraStatusQueryOptions } from '../hooks/useJiraData';
 import { linearStatusQueryOptions } from '../hooks/useLinearData';
+import { activePlatformConnectionQueryOptions } from '../hooks/usePlatformConnections';
 import { serverFeaturesQueryOptions } from '../hooks/useServerFeatures';
 import { sessionActivityQueryOptions, sessionRowsQueryOptions } from '../hooks/useSessionRows';
 import {
@@ -28,7 +29,9 @@ import {
   workItemQueryOptions,
   workItemStartersQueryOptions,
 } from '../hooks/useWorkItems';
+import { threadMessagesQueryOptions } from '../hooks/useAgentControllerThreadMessages';
 import { userSessionQueryOptions } from '../hooks/useWorkspaces';
+import { AGENT_CONTROLLER_ID } from './domains/chat/services/constants';
 import { boardPhasesRequest } from './domains/factory/boardPhasesRequest';
 import { boardFiltersFromParams } from './domains/factory/boardFilters';
 import { BOARD_VIEW_QUERY } from './domains/factory/boardSavedViews';
@@ -53,12 +56,19 @@ export interface RouteLoaderServices {
   api: ApiConfig;
 }
 
-export type Prefetch = (services: RouteLoaderServices, args: LoaderFunctionArgs) => void | Promise<void>;
+/** Starts a page's reads. A prefetch may return the reads a held navigation waits for. */
+export type Prefetch = (services: RouteLoaderServices, args: LoaderFunctionArgs) => void | Promise<unknown>;
 
+/**
+ * Route loaders start a page's code and reads as the navigation begins, and a click never waits
+ * for them: the page opens at once and shows its own loading states while the reads it shares
+ * with the loader answer. Only a navigation that keeps the page on screen (`holdsNavigation`),
+ * such as a draft continuing into its thread, waits for the reads its prefetch returns.
+ */
 export function createLoadOnEntry(services: RouteLoaderServices | undefined, holdsNavigation?: () => boolean) {
   return function loadOnEntry(
     prefetch?: Prefetch,
-    page?: LazyPageComponent,
+    page?: Pick<LazyPageComponent, 'preload'>,
     shouldRevalidate: ShouldRevalidateFunction = () => false,
   ) {
     if (!services) return {};
@@ -154,6 +164,8 @@ export const prefetchBoard: Prefetch = (services, { params, request }) => {
     void queryClient.query(linearStatusQueryOptions(api.baseUrl)).catch(noop);
     void queryClient.query(jiraStatusQueryOptions(api.baseUrl)).catch(noop);
     void queryClient.query(incidentioStatusQueryOptions(api.baseUrl)).catch(noop);
+    // The source filter offers Vanta while a Vanta connection is active.
+    void queryClient.query(activePlatformConnectionQueryOptions(api.baseUrl, 'vanta')).catch(noop);
   });
 };
 
@@ -201,13 +213,21 @@ export const prefetchCardDraft: Prefetch = (services, args) => {
   void queryClient.query(boardDecisionsQueryOptions(api.baseUrl, factoryId)).catch(noop);
 };
 
+// The loader fills in what is missing; the page's own queries refresh what is cached.
 const CACHED_UNLESS_INVALIDATED = { staleTime: Infinity };
 
-export const loadSessionFrame: Prefetch = async (services, { params }) => {
+/**
+ * A session's frame (its card, board and PR subscriptions) and its first message window, all
+ * read at once. A click opens the page before they answer, and the header, panel and transcript
+ * fill in from their own loading states. A draft continuing into its thread waits for the frame
+ * (the returned reads), not the transcript, which it already shows.
+ */
+export const prefetchSessionFrame: Prefetch = (services, { params, request }) => {
   const { queryClient, api } = services;
   const { factoryId, threadId } = params;
   const sessionId = params.sessionId ?? threadId;
   if (!factoryId || !sessionId || !threadId) return;
+  prefetchThreadHistory(services, request, params.sessionId, sessionId, threadId);
   const cardReads = params.sessionId
     ? [
         queryClient
@@ -221,10 +241,44 @@ export const loadSessionFrame: Prefetch = async (services, { params }) => {
           .catch(noop),
       ]
     : [];
-  await Promise.all([...cardReads, loadSessionSubscriptions(services, factoryId, sessionId, threadId)]);
+  return Promise.all([
+    ...cardReads,
+    prefetchSessionSubscriptions(services, factoryId, sessionId, threadId).catch(noop),
+  ]);
 };
 
-async function loadSessionSubscriptions(
+/**
+ * The thread's first message window, read beside the session's own metadata
+ * rather than after it: the server resolves the session's memory resource from
+ * its id, so the transcript can show before the session's details answer. A
+ * window already cached is kept (a draft seeds its new thread's), and the page
+ * re-reads it on mount for whatever the live stream missed.
+ */
+function prefetchThreadHistory(
+  { queryClient, api }: RouteLoaderServices,
+  request: Request,
+  routeSessionId: string | undefined,
+  sessionId: string,
+  threadId: string,
+) {
+  // Mirrors the chat's address: a workspace link may name another session to bind to.
+  const search = new URL(request.url).searchParams;
+  const address = routeSessionId ? (search.get('sessionId') ?? search.get('resourceId') ?? sessionId) : sessionId;
+  void queryClient
+    .query({
+      ...threadMessagesQueryOptions({
+        agentControllerId: AGENT_CONTROLLER_ID,
+        sessionId: address,
+        threadId,
+        baseUrl: api.baseUrl,
+        isSessionThread: threadId === sessionId,
+      }),
+      ...CACHED_UNLESS_INVALIDATED,
+    })
+    .catch(noop);
+}
+
+async function prefetchSessionSubscriptions(
   { queryClient, api }: RouteLoaderServices,
   factoryId: string,
   sessionId: string,

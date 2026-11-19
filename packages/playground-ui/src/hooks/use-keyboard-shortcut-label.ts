@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
 type NavigatorWithUserAgentData = Navigator & {
   userAgentData?: {
@@ -24,11 +24,9 @@ export function useIsApplePlatform() {
   return isApplePlatform;
 }
 
-export function useKeyboardShortcutLabel(key: string) {
-  const isApplePlatform = useIsApplePlatform();
+export const keyboardShortcutLabel = (key: string, isApplePlatform: boolean) =>
+  `${isApplePlatform ? '⌘' : 'Ctrl'} ${key.trim().toUpperCase()}`;
 
-  return useMemo(() => {
-    const normalizedKey = key.trim().toUpperCase();
-    return `${isApplePlatform ? '⌘' : 'Ctrl'} ${normalizedKey}`;
-  }, [isApplePlatform, key]);
+export function useKeyboardShortcutLabel(key: string) {
+  return keyboardShortcutLabel(key, useIsApplePlatform());
 }

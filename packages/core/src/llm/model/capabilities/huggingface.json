@@ -26,11 +26,15 @@
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
     "moonshotai/Kimi-K3",
+    "moonshotai/Kimi-K3.1-Pro",
     "stepfun-ai/Step-3.7-Flash",
+    "tencent/Hy4-flash",
     "thinkingmachines/Inkling",
+    "thinkingmachines/Inkling-2-Small",
     "thinkingmachines/Inkling-Small",
     "zai-org/AutoGLM-Phone-9B-Multilingual",
     "zai-org/GLM-4.5V",
+    "zai-org/GLM-4.6V",
     "zai-org/GLM-4.6V-Flash",
     "zai-org/GLM-5.3-Flash"
   ],
@@ -98,13 +102,17 @@
     "stepfun-ai/Step-3.5-Flash",
     "stepfun-ai/Step-3.7-Flash",
     "tencent/Hy3",
+    "tencent/Hy4-flash",
     "tencent/Hy4-preview",
     "thinkingmachines/Inkling",
+    "thinkingmachines/Inkling-2-Small",
     "thinkingmachines/Inkling-Small",
     "zai-org/AutoGLM-Phone-9B-Multilingual",
+    "zai-org/GLM-4.5",
     "zai-org/GLM-4.5-Air",
     "zai-org/GLM-4.5V",
     "zai-org/GLM-4.6",
+    "zai-org/GLM-4.6V",
     "zai-org/GLM-4.6V-Flash",
     "zai-org/GLM-4.7",
     "zai-org/GLM-4.7-Flash",
@@ -157,11 +165,14 @@
     "meta-llama/Llama-3.3-70B-Instruct",
     "moonshotai/Kimi-K2.7-Code",
     "moonshotai/Kimi-K3",
+    "moonshotai/Kimi-K3.1-Pro",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
     "tencent/Hy3",
+    "tencent/Hy4-flash",
     "tencent/Hy4-preview",
     "thinkingmachines/Inkling",
+    "thinkingmachines/Inkling-2-Small",
     "zai-org/GLM-5.2",
     "zai-org/GLM-5.3",
     "zai-org/GLM-5.3-Flash"
@@ -174,6 +185,12 @@
       }
     ],
     "zai-org/GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "moonshotai/Kimi-K3.1-Pro": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -195,6 +212,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "thinkingmachines/Inkling-2-Small": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "max"]
       }
     ],
     "thinkingmachines/Inkling": [
@@ -243,6 +266,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "high"]
+      }
+    ],
+    "tencent/Hy4-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ],
     "tencent/Hy4-preview": [
