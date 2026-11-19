@@ -1,4 +1,5 @@
 import { TraceAsItemDialog } from '@mastra/playground-ui/domains/observability/components/trace-as-item-dialog';
+import { ScoreAsItemDialog } from '@mastra/playground-ui/domains/scores/components/score-as-item-dialog';
 import { TraceScoresList } from '@mastra/playground-ui/domains/scores/components/trace-scores-list';
 import {
   LiveSpanInput,
@@ -25,7 +26,7 @@ import { useNavigate } from 'react-router';
 import { STUDIO_TRACES_FEATURES } from './features';
 import { CreateDatasetDialog } from '@/domains/datasets/components/create-dataset-dialog';
 import { LiveKitRecordingReview } from '@/domains/voice/components/livekit-recording-review';
-import { traceScoreLink } from '@/lib/app-routing';
+import { paths, traceScoreLink } from '@/lib/app-routing';
 
 type TracesPanelProps = {
   selection: TracesSelection;
@@ -91,6 +92,8 @@ export const TracesPanel = memo(function TracesPanel({
       renderDatasetDialog={dialog => (
         <TraceAsItemDialog {...dialog} renderCreateDatasetDialog={props => <CreateDatasetDialog {...props} />} />
       )}
+      onOpenScoreTrace={(traceId, spanId) => navigate(paths.traceLink(traceId, spanId))}
+      renderScoreDatasetDialog={dialog => <ScoreAsItemDialog {...dialog} />}
       headerActionsSlot={({ traceId, spans }) => (
         <LiveKitRecordingReview key={traceId} traceId={traceId} spans={spans} />
       )}

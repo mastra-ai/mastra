@@ -9,7 +9,8 @@ import type { TracePanelMessagesProps, TracePanelScoreDialogProps, TracePanelSpa
 import { TraceSpanPanelView } from '../trace-span-panel-view';
 import { useTracesConfig, useTracesList, useTracesSelection } from './traces-explorer-context';
 import type { TracesExplorerOpenTrace } from './traces-explorer-data';
-import { ScoreDataPanel } from '@/domains/scores/components/score-data-panel';
+import { ScoreDataPanelView } from '@/domains/scores/components/score-data-panel-view';
+import type { ScoreDataPanelDatasetDialogArgs } from '@/domains/scores/components/score-data-panel-view';
 
 export type TracesExplorerPanelThreadArgs = {
   /** Keep the thread mounted and toggle `open`, so its drawer animates in and out. */
@@ -64,6 +65,10 @@ export type TracesExplorerPanelProps = {
   renderThread?: (args: TracesExplorerPanelThreadArgs) => ReactNode;
   /** The dialog that saves the trace as a dataset item. Without it, the panel offers no "Add to dataset". */
   renderDatasetDialog?: (args: TracesExplorerPanelDatasetDialogArgs) => ReactNode;
+  /** Opens the trace a selected score ran on, or its span when `spanId` is given. Without it, the score drawer shows both ids as text. */
+  onOpenScoreTrace?: (traceId: string, spanId?: string) => void;
+  /** The dialog that saves a selected score as a dataset item. Without it, the score drawer offers no "Save as dataset item". */
+  renderScoreDatasetDialog?: (args: ScoreDataPanelDatasetDialogArgs) => ReactNode;
   /** Host integration actions rendered alongside the trace controls. */
   headerActionsSlot?: (args: { traceId: string; spans: TracePanelSpan[] | undefined }) => ReactNode;
 };
@@ -90,6 +95,8 @@ export function TracesExplorerPanel({
   renderScores,
   renderThread,
   renderDatasetDialog,
+  onOpenScoreTrace,
+  renderScoreDatasetDialog,
   headerActionsSlot,
 }: TracesExplorerPanelProps) {
   const { withFeedback, feedbackOptions } = useTracesConfig();
@@ -210,7 +217,13 @@ export function TracesExplorerPanel({
         onClose: () => setFullThreadTraceId(null),
         feedbackOptions,
       })}
-      <ScoreDataPanel depth={depth} score={featuredScore} onClose={() => selectScore(null)} />
+      <ScoreDataPanelView
+        depth={depth}
+        score={featuredScore}
+        onClose={() => selectScore(null)}
+        onOpenTrace={onOpenScoreTrace}
+        renderDatasetDialog={renderScoreDatasetDialog}
+      />
       {renderDatasetDialog?.({
         traceId: datasetDialogTarget?.traceId,
         rootSpanId: datasetDialogTarget?.rootSpanId,

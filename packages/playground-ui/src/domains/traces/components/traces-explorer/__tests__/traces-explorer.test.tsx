@@ -23,6 +23,7 @@ import type {
 import { DEFAULT_TRACES_FILTERS, DEFAULT_TRACES_SORT, EMPTY_TRACES_SELECTION } from '../traces-explorer-actions';
 import { traceAggregateCapabilities, traceCountsAggregate, traceQueryCapabilities } from './fixtures/traces-explorer';
 import { TRACE_THREAD_ID, TRACE_THREAD_ITEM_ID, travelTrace, travelTracesPage } from './fixtures/traces-page';
+import { buildScore } from '@/domains/scores/components/__tests__/fixtures/trace-scores';
 import { LinkComponentProvider } from '@/lib/framework';
 import type { LinkComponentProps, LinkComponentProviderProps } from '@/lib/framework';
 import { recordRequests } from '@/test/record-requests';
@@ -89,6 +90,7 @@ type AppProps = {
   data?: AppData;
   initialTraceId?: string;
   initialSpanId?: string;
+  initialScoreId?: string;
   feedbackOptions?: TracesExplorerRootProps['feedbackOptions'];
   /** The filter bar's suggestions; defaults to the app's entity names and environments. */
   suggestions?: TracesExplorerFilterSuggestions;
@@ -103,6 +105,7 @@ function AppTracesPage({
   data = appData(),
   initialTraceId,
   initialSpanId,
+  initialScoreId,
   feedbackOptions,
   suggestions = APP_SUGGESTIONS,
   onChange,
@@ -111,7 +114,7 @@ function AppTracesPage({
   panel,
 }: AppProps) {
   const [state, setState] = useState<TracesExplorerState>({
-    selection: { ...EMPTY_TRACES_SELECTION, traceId: initialTraceId, spanId: initialSpanId },
+    selection: { ...EMPTY_TRACES_SELECTION, traceId: initialTraceId, spanId: initialSpanId, scoreId: initialScoreId },
     filters: DEFAULT_TRACES_FILTERS,
   });
   const [sort, setSort] = useState(DEFAULT_TRACES_SORT);
@@ -623,6 +626,80 @@ describe('The traces page in an app other than Studio', () => {
       await new Promise(resolve => setTimeout(resolve, 100));
 
       expect(onChange).not.toHaveBeenCalled();
+    });
+  });
+  describe('when a score of the open trace is open', () => {
+    const SCORE = buildScore({ id: 'score-relevancy', traceId: TRACE_THREAD_ITEM_ID, spanId: 'agent-root' });
+    const openScore = (panel: Partial<TracesExplorerPanelProps> = {}, wrap = (node: ReactNode) => node) => {
+      const data = appData();
+      return render(
+        wrap(
+          <AppTracesPage
+            initialTraceId={TRACE_THREAD_ITEM_ID}
+            initialScoreId={SCORE.id}
+            data={{ ...data, openTrace: { ...data.openTrace, scores: { total: 1, records: [SCORE] } } }}
+            panel={panel}
+          />,
+        ),
+      );
+    };
+    // The score drawer stacks over the trace drawer, whose modal layer hides it from the role queries in jsdom.
+    const scoreDialog = () => screen.findByRole('dialog', { name: `Score ${SCORE.id}`, hidden: true });
+
+    it('sends no request of its own', async () => {
+      const requests = recordRequests();
+      openScore({ onOpenScoreTrace: vi.fn(), renderScoreDatasetDialog: () => null });
+      await scoreDialog();
+
+      expect(requests).toEqual([]);
+    });
+
+    it('needs no Studio link provider and draws no link', async () => {
+      const { container } = openScore({ onOpenScoreTrace: vi.fn() }, node => (
+        <StudioLinkTripwire>{node}</StudioLinkTripwire>
+      ));
+      await scoreDialog();
+
+      expect(container.ownerDocument.querySelectorAll('a[href]')).toHaveLength(0);
+    });
+
+    it('opens the trace the score ran on through the app', async () => {
+      const onOpenScoreTrace = vi.fn<NonNullable<TracesExplorerPanelProps['onOpenScoreTrace']>>();
+      openScore({ onOpenScoreTrace });
+
+      fireEvent.click(within(await scoreDialog()).getByRole('button', { name: TRACE_THREAD_ITEM_ID, hidden: true }));
+
+      expect(onOpenScoreTrace).toHaveBeenCalledWith(TRACE_THREAD_ITEM_ID);
+    });
+
+    it('opens the span the score ran on through the app', async () => {
+      const onOpenScoreTrace = vi.fn<NonNullable<TracesExplorerPanelProps['onOpenScoreTrace']>>();
+      openScore({ onOpenScoreTrace });
+
+      fireEvent.click(within(await scoreDialog()).getByRole('button', { name: 'agent-root', hidden: true }));
+
+      expect(onOpenScoreTrace).toHaveBeenCalledWith(TRACE_THREAD_ITEM_ID, 'agent-root');
+    });
+
+    it('hands the app the score to save as a dataset item', async () => {
+      const renderScoreDatasetDialog = vi.fn<NonNullable<TracesExplorerPanelProps['renderScoreDatasetDialog']>>(
+        () => null,
+      );
+      openScore({ renderScoreDatasetDialog });
+
+      fireEvent.click(within(await scoreDialog()).getByRole('button', { name: 'Save as dataset item', hidden: true }));
+
+      expect(renderScoreDatasetDialog).toHaveBeenLastCalledWith(
+        expect.objectContaining({ score: SCORE, isOpen: true }),
+      );
+    });
+
+    it('offers no dataset item when the app has no dialog for it', async () => {
+      openScore();
+
+      expect(
+        within(await scoreDialog()).queryByRole('button', { name: 'Save as dataset item', hidden: true }),
+      ).toBeNull();
     });
   });
 });

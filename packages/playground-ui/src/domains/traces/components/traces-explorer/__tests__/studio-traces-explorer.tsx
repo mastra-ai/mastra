@@ -30,6 +30,7 @@ import type {
   TracesSelection,
 } from '../index';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
+import { ScoreAsItemDialog } from '@/domains/scores/components/score-as-item-dialog';
 import { TraceScoresList } from '@/domains/scores/components/trace-scores-list';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -170,7 +171,7 @@ export function StudioPanel(props: Partial<TracesExplorerPanelProps>) {
   const support = resolveTracesSupport(capabilities, features);
   const trace = useOpenTraceQuery({ selection, traces, capabilities, features, columns, metricsSupport });
   const studioNavigation = useStudioTraceNavigation();
-  const { navigate } = useLinkComponent();
+  const { navigate, paths } = useLinkComponent();
   const scorers = useScorers();
   const triggerScorer = useTriggerScorer();
   const download = useDownloadTraceJson();
@@ -201,6 +202,8 @@ export function StudioPanel(props: Partial<TracesExplorerPanelProps>) {
         />
       )}
       renderDatasetDialog={dialog => <TraceAsItemDialog {...dialog} />}
+      onOpenScoreTrace={(traceId, spanId) => navigate(paths.traceLink(traceId, spanId))}
+      renderScoreDatasetDialog={dialog => <ScoreAsItemDialog {...dialog} />}
       {...props}
     />
   );

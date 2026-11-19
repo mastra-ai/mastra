@@ -43,6 +43,7 @@ import { TracesExplorer } from '@mastra/playground-ui/domains/traces/components/
 - Studio data hooks that load those records through the Mastra client: `useTracesListQuery`, `useTracesDiscoveryQuery`, `useTracesFilterSuggestionsQuery`, `useTracesHistogramQuery`, `useTracesUsageQuery` and `useOpenTraceQuery`, exported from `domains/traces/hooks`.
 - Helpers that build the same queries for any host: `buildTracesListQuery`, `buildTracesHistogramRequest`, `canShowTracesHistogram`, `resolveTracesSupport`, `resolveTracesSort` and `resolveTraceUsageColumns`.
 - `TraceSpanPanelView`, the trace drawer drawn from the records you pass, with no fetching. `TraceSpanPanel` keeps loading them through the Mastra client.
+- `ScoreDataPanelView`, the score drawer drawn from the score you pass: its trace and span open through `onOpenTrace`, and its dataset dialog is yours (`renderDatasetDialog`). `TracesExplorer.Panel` takes them as `onOpenScoreTrace` and `renderScoreDatasetDialog`. `ScoreDataPanel` keeps Studio's router and dataset dialog; its trace and span ids are now buttons that go to the same pages, so they no longer open in a new tab on middle-click.
 
 **Breaking**
 
