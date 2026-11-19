@@ -304,6 +304,27 @@ describe('MastraGateway', () => {
       expect(gatewayFetch).toHaveBeenCalledTimes(3);
     });
 
+    it('keeps waiting to retry when the last good catalog expires during the wait', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+      const gatewayFetch = vi.fn(async () => catalog(['openai/chat-model']));
+      const gateway = gatewayWith('deployment-key', gatewayFetch);
+      await gateway.fetchProviders();
+
+      gatewayFetch.mockImplementation(async () => new Response('unavailable', { status: 503 }));
+      now.mockReturnValue(1_000_000 + 599_000);
+      expect((await gateway.fetchProviders()).mastra?.models).toEqual(['openai/chat-model']);
+      expect(gatewayFetch).toHaveBeenCalledTimes(2);
+
+      // The list is now older than ten minutes, and the 15 second wait has 13 seconds left.
+      now.mockReturnValue(1_000_000 + 601_000);
+      await expect(gateway.fetchProviders()).rejects.toThrow('Gateway model catalog unavailable (503)');
+      expect(gatewayFetch).toHaveBeenCalledTimes(2);
+
+      now.mockReturnValue(1_000_000 + 599_000 + 16_000);
+      await expect(gateway.fetchProviders()).rejects.toThrow('Gateway model catalog unavailable (503)');
+      expect(gatewayFetch).toHaveBeenCalledTimes(3);
+    });
+
     it('keeps catalogs fetched through different global fetch implementations apart', async () => {
       const firstFetch = vi.fn(async () => catalog(['openai/model-a']));
       const secondFetch = vi.fn(async () => catalog(['openai/model-b']));

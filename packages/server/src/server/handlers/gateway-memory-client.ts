@@ -299,13 +299,21 @@ function isV2GatewayKey(key: string): boolean {
  *
  * Pass `mastra` so the registered Mastra gateway answers: it holds the key model calls use, which
  * may be set in its config rather than the environment, and its `isV2()` applies the same rules.
+ * The project key rule is also applied here, to the key the gateway uses, because older
+ * `@mastra/core` releases in the peer range do not apply it.
  * Keep the environment rules below in sync with `MastraGateway.isV2` in `@mastra/core`.
  */
 export function isGatewayV2(mastra?: { listGateways?: () => Record<string, unknown> | undefined }): boolean {
   const gateways = mastra?.listGateways?.() ?? {};
   for (const gateway of Object.values(gateways)) {
-    const candidate = gateway as { id?: string; isV2?: () => boolean };
-    if (candidate?.id === 'mastra' && typeof candidate.isV2 === 'function') return candidate.isV2();
+    const candidate = gateway as { id?: string; isV2?: () => boolean; config?: { apiKey?: unknown } };
+    if (candidate?.id === 'mastra' && typeof candidate.isV2 === 'function') {
+      // `@mastra/core` releases before the project key rule answer v2 for a `msk_` key when
+      // MASTRA_GATEWAY_VERSION=v2 is set, so the key the gateway uses is checked here first.
+      const key = candidate.config?.apiKey ?? process.env.MASTRA_GATEWAY_API_KEY;
+      if (typeof key === 'string' && key.startsWith('msk_')) return false;
+      return candidate.isV2();
+    }
   }
   return isGatewayV2ByEnvironment();
 }
