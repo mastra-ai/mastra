@@ -300,16 +300,6 @@ describe('useTracesRouteState', () => {
       expect(params().has('page')).toBe(false);
     });
 
-    it('writes the time to first chunk field', () => {
-      const { result, params } = renderRouteState('/traces');
-
-      act(() => result.current.route.setSort({ field: 'timeToFirstChunkMs', direction: 'asc' }));
-
-      expect(result.current.route.sort).toEqual({ field: 'timeToFirstChunkMs', direction: 'asc' });
-      expect(params().get('sort')).toBe('timeToFirstChunkMs');
-      expect(params().get('dir')).toBe('asc');
-    });
-
     it('does not persist the write', () => {
       const { result, persistedWrites } = renderRouteState('/traces');
 

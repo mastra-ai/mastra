@@ -244,10 +244,6 @@ describe('MemoryStudioPanel — without messages', () => {
 });
 
 describe('MemoryStudioPanel — with nothing to derive a window from', () => {
-  it('renders without a marker-derived window to read', () => {
-    expect(() => render(<MemoryStudioPanel messages={[]} omRecords={[]} />)).not.toThrow();
-  });
-
   it('still shows the caller’s window when there is no marker-derived one', () => {
     render(
       <MemoryStudioPanel

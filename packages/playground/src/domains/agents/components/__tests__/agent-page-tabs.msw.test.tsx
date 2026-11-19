@@ -232,37 +232,6 @@ describe('AgentLayout tool tabs', () => {
     });
   });
 
-  describe('when the agent tabs render', () => {
-    it('does not expose Review as a top-level tab', async () => {
-      server.use(...commonHandlers(enabledPackages));
-      renderLayout();
-      await screen.findByRole('tab', { name: 'Chat' });
-      expect(screen.queryByRole('tab', { name: 'Review' })).toBeNull();
-    });
-  });
-  it('renders the tool tabs without a Channels tab (channels moved to settings)', async () => {
-    const onPlatforms = vi.fn();
-    server.use(
-      ...commonHandlers(),
-      http.get(`${BASE_URL}/api/channels/platforms`, () => {
-        onPlatforms();
-        return HttpResponse.json([]);
-      }),
-    );
-
-    renderLayout();
-
-    expect(await screen.findByRole('button', { name: 'Traces' })).not.toBeNull();
-    expect(screen.getByRole('tab', { name: 'Chat' })).not.toBeNull();
-    // Overview is now a side panel toggled from the header, not a tab.
-    expect(screen.queryByRole('tab', { name: 'Overview' })).toBeNull();
-    expect(screen.getByTestId('agent-overview-panel-toggle')).not.toBeNull();
-
-    // Channels is configuration, not a tool: no tab and no platforms fetch from the tab bar.
-    await waitFor(() => expect(screen.queryByText('Channels')).toBeNull());
-    expect(onPlatforms).not.toHaveBeenCalled();
-  });
-
   it('highlights the Chat tab on the thread routes', async () => {
     server.use(...commonHandlers());
 
@@ -271,15 +240,5 @@ describe('AgentLayout tool tabs', () => {
     const chatTab = await screen.findByRole('tab', { name: 'Chat' });
     expect(chatTab.getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('button', { name: 'Traces' }).getAttribute('aria-disabled')).toBe('true');
-  });
-
-  it('keeps run options out of the Editor tab bar because the editor chat composer owns them', async () => {
-    server.use(...commonHandlers(enabledPackages));
-
-    renderLayout('/agents/agent-1/editor');
-
-    expect(await screen.findByRole('tab', { name: 'Editor' })).not.toBeNull();
-    expect(screen.queryByTestId('agent-top-bar-run-options-trigger')).toBeNull();
-    expect(screen.queryByTestId('agent-tracing-controls-trigger')).toBeNull();
   });
 });

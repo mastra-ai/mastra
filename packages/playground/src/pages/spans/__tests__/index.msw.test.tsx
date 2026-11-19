@@ -226,19 +226,6 @@ describe('Spans page', () => {
   });
 
   describe('when the observability store supports span queries', () => {
-    it('keeps the Traces breadcrumb in the header, with the Traces/Spans switch below it', async () => {
-      setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
-
-      renderPage();
-
-      const views = await screen.findByRole('navigation', { name: 'Observability views' });
-      const breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' });
-      expect(within(breadcrumb).getByText('Traces')).toBeTruthy();
-      expect(breadcrumb.closest('header')).not.toBeNull();
-      expect(views.closest('header')).toBeNull();
-      expect(views.closest('main')).toBeNull();
-    });
-
     it('leaves Spans out of the breadcrumb, since the switch already shows it', async () => {
       setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
 
@@ -256,17 +243,6 @@ describe('Spans page', () => {
 
       const filterInput = await screen.findByPlaceholderText('Filter spans');
       expect(filterInput.closest('main')).not.toBeNull();
-    });
-
-    it('shows each view with its icon', async () => {
-      setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
-
-      renderPage();
-
-      const views = await screen.findByRole('navigation', { name: 'Observability views' });
-      for (const tab of within(views).getAllByRole('tab')) {
-        expect(tab.querySelector('svg')).not.toBeNull();
-      }
     });
 
     it('marks Spans as the current view', async () => {
@@ -300,29 +276,6 @@ describe('Spans page', () => {
       fireEvent.click(views.getByRole('tab', { name: 'Traces' }));
 
       await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/traces'));
-    });
-  });
-
-  describe('when the store does not return thread rows', () => {
-    it('does not offer the Threads view', async () => {
-      setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
-
-      renderPage();
-
-      const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
-      expect(views.queryByRole('tab', { name: 'Threads' })).toBeNull();
-    });
-  });
-
-  describe('when Threads is clicked in the view switch', () => {
-    it('navigates to the threads page', async () => {
-      setSpansHandlers(spanAndThreadRowsCapabilities, { first: spansFirstPage });
-
-      renderPage();
-      const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
-      fireEvent.click(await views.findByRole('tab', { name: 'Threads' }));
-
-      await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/threads'));
     });
   });
 

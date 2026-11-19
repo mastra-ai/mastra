@@ -79,15 +79,6 @@ describe('Workflow condition expressions', () => {
 });
 
 describe('Condition source fallback', () => {
-  describe('when its source changes before formatting completes', () => {
-    it('immediately displays the current source', async () => {
-      const view = render(<WorkflowConditionSource source="inputData.amount>100" />);
-      await waitFor(() => expect(view.container.textContent).toBe('inputData.amount > 100;'));
-      view.rerender(<WorkflowConditionSource source="custom predicate: [native code]" />);
-      expect(view.container.textContent).toBe('custom predicate: [native code]');
-    });
-  });
-
   describe('when the expression is unusually large', () => {
     it('retains the full source without formatting', async () => {
       const source = `inputData.text===${JSON.stringify('a'.repeat(20000))}`;

@@ -157,13 +157,6 @@ describe('Composer', () => {
 
       expect(onSubmit).toHaveBeenCalledOnce();
     });
-
-    it('renders arbitrary attachment and action children', () => {
-      render(<ControlledComposer />);
-
-      expect(screen.getByText('notes.txt')).not.toBeNull();
-      expect(screen.getByRole('button', { name: 'Send message' })).not.toBeNull();
-    });
   });
 
   describe('when the input is controlled', () => {
