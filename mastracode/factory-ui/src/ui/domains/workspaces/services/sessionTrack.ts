@@ -2,6 +2,7 @@ import { isHumanActorId } from '@mastra/factory/storage/domains/audit/actors';
 import { differenceInCalendarDays, format } from 'date-fns';
 
 import type { AuditEvent } from '../../factory/services/audit';
+import { stageMoves, stageStays } from '../../factory/stageStays';
 import type { WorkItem } from '../../factory/services/workItems';
 
 export interface RunInterval {
@@ -15,7 +16,7 @@ export interface OwnerChange {
   toOwnerId: string;
 }
 
-/** Horizontal placement on the track, in percent of its width, and the moments it covers once clipped to the track. */
+/** Placement on the track in percent of its width, clipped to the session; `from` and `to` are the span's own moments. */
 export interface TrackSpan {
   left: number;
   width: number;
@@ -67,39 +68,33 @@ export function auditOwnerChanges(events: readonly AuditEvent[], sessionRowId: s
 export function layoutSessionTrack({
   startedAt,
   now,
-  stageHistory,
+  card,
   runs,
   ownerChanges,
 }: {
   startedAt: number;
   now: number;
-  stageHistory: WorkItem['stageHistory'];
+  card: Pick<WorkItem, 'stageHistory' | 'createdAt'> | undefined;
   runs: readonly RunInterval[];
   ownerChanges: readonly OwnerChange[];
 }): TrackLayout {
-  const duration = Math.max(now - startedAt, 1);
+  const stays = stageStays(card?.stageHistory ?? [], now);
+  const end = Math.max(now, ...stays.map(stay => stay.to));
+  const duration = Math.max(end - startedAt, 1);
   const percentAt = (time: number) => ((time - startedAt) / duration) * 100;
   const spanBetween = (from: number, to: number): TrackSpan | undefined => {
-    const clippedFrom = Math.max(from, startedAt);
-    const clippedTo = Math.min(to, now);
-    if (clippedTo <= clippedFrom) return undefined;
-    return {
-      left: percentAt(clippedFrom),
-      width: percentAt(clippedTo) - percentAt(clippedFrom),
-      from: clippedFrom,
-      to: clippedTo,
-    };
+    if (to <= startedAt || from > end) return undefined;
+    const left = percentAt(Math.max(from, startedAt));
+    return { left, width: percentAt(Math.min(to, end)) - left, from, to };
   };
-  const withinTrack = (time: number) => time >= startedAt && time <= now;
+  const withinTrack = (time: number) => time >= startedAt && time <= end;
 
-  const history = stageHistory.toSorted((a, b) => Date.parse(a.enteredAt) - Date.parse(b.enteredAt));
-  const stages = history.flatMap(entry => {
-    const span = spanBetween(Date.parse(entry.enteredAt), entry.exitedAt ? Date.parse(entry.exitedAt) : now);
+  const stages = stays.flatMap(({ entry, from, to }) => {
+    const span = spanBetween(from, to);
     return span ? [{ ...span, stage: entry.stage }] : [];
   });
 
-  const [, ...movesAfterArrival] = history;
-  const moves = movesAfterArrival.flatMap(entry => {
+  const moves = (card ? stageMoves(card) : []).flatMap(entry => {
     const at = Date.parse(entry.enteredAt);
     if (!isHumanActorId(entry.by) || !withinTrack(at)) return [];
     return [{ left: percentAt(at), at, personId: entry.by, stage: entry.stage }];

@@ -1,0 +1,10 @@
+import { createCentralIcon } from './create-central-icon';
+
+export const IconFilter1 = createCentralIcon('IconFilter1', () => (
+  <path
+    d="M18 4H6C4.89543 4 4 4.89543 4 6V7.17157C4 7.70201 4.21071 8.21071 4.58579 8.58579L9.41421 13.4142C9.78929 13.7893 10 14.298 10 14.8284V20.057C10 20.7552 10.6974 21.2385 11.3511 20.9933L13.3511 20.2433C13.7414 20.097 14 19.7238 14 19.307V14.8284C14 14.298 14.2107 13.7893 14.5858 13.4142L19.4142 8.58579C19.7893 8.21071 20 7.70201 20 7.17157V6C20 4.89543 19.1046 4 18 4Z"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinejoin="round"
+  />
+));

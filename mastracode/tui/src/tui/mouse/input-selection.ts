@@ -23,7 +23,7 @@ const RESET = '\x1b[0m';
 const ESCAPE_RE = /(\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b_[^\x07]*\x07|\x1b\][^\x07]*\x07)/;
 const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
-function before(a: TextPosition, b: TextPosition): boolean {
+export function before(a: TextPosition, b: TextPosition): boolean {
   return a.line < b.line || (a.line === b.line && a.col < b.col);
 }
 
@@ -38,6 +38,16 @@ export class InputSelection {
 
   extend(position: TextPosition): void {
     if (this.anchor) this.head = position;
+  }
+
+  set(anchor: TextPosition, head: TextPosition): void {
+    this.anchor = anchor;
+    this.head = head;
+  }
+
+  /** Where the selection started (kept even while it is empty), if one was started. */
+  anchorPosition(): TextPosition | undefined {
+    return this.anchor;
   }
 
   clear(): void {

@@ -30,7 +30,6 @@ export { workSeedWithTriage } from './boards/work-seeds.js';
 export type { StoredBoardInput, StoredBoardScope, StoredPhaseInput } from './storage/domains/boards/base.js';
 export type { RuleCondition, RuleGroup, RuleOperator } from './rules/rule-group.js';
 export { MastraFactory } from './factory.js';
-export { waitForPendingFilesystemCapture } from './session/filesystem-capture.js';
 export type {
   FactoryTools,
   MastraArgs,
@@ -39,6 +38,7 @@ export type {
   MastraFactorySandboxOption,
   FactorySandboxStart,
 } from './factory.js';
+export type { FactoryMetricsOptions, MetricGroup } from './metrics/index.js';
 export { LocalFactorySandbox, type LocalFactorySandboxOptions } from './sandbox/local-factory-sandbox.js';
 // The option type for `MastraFactoryConfig.github.rules`, so callers can
 // annotate a custom handler without importing the deep integration subpath.

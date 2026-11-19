@@ -76,3 +76,10 @@ export const skillSignalRootDetail: GetSpanResponse = {
     output: { text: 'done' },
   },
 };
+
+/** What the server answers once a scorer has started on the trace. */
+export const scoreStarted: Awaited<ReturnType<MastraClient['score']>> = {
+  status: 'success',
+  message: 'Scoring started',
+  traceCount: 1,
+};

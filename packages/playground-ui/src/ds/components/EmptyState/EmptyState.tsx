@@ -1,13 +1,14 @@
-import { CircleSlashIcon, CircleXIcon } from 'lucide-react';
 import * as React from 'react';
 import { Txt } from '@/ds/components/Txt';
+import { IconCircleBanSign } from '@/ds/icons/central/IconCircleBanSign';
+import { IconCircleX } from '@/ds/icons/central/IconCircleX';
 import { cn } from '@/lib/utils';
 
 type EmptyStateTone = 'default' | 'error';
 
 const defaultIconByTone: Record<EmptyStateTone, React.ReactNode> = {
-  default: <CircleSlashIcon />,
-  error: <CircleXIcon />,
+  default: <IconCircleBanSign />,
+  error: <IconCircleX />,
 };
 
 const iconColorByTone: Record<EmptyStateTone, string> = {
@@ -21,6 +22,7 @@ export type EmptyStateProps = {
   titleSlot: React.ReactNode;
   descriptionSlot?: React.ReactNode;
   actionSlot?: React.ReactNode;
+  statusSlot?: React.ReactNode;
   className?: string;
   as?: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
   /** Colors the icon or illustration; an icon with its own text color keeps it. */
@@ -30,6 +32,7 @@ export type EmptyStateProps = {
    * `fill` centers it in the full height of its parent — the parent must have a definite height.
    */
   variant?: 'inline' | 'fill';
+  layout?: 'stacked' | 'split';
 };
 
 export function EmptyState({
@@ -38,27 +41,65 @@ export function EmptyState({
   titleSlot,
   descriptionSlot,
   actionSlot,
+  statusSlot,
   className,
   as: HeadingTag = 'h3',
   variant = 'inline',
+  layout = 'stacked',
 }: EmptyStateProps) {
+  const split = layout === 'split';
+  const text = (
+    <>
+      <HeadingTag className={cn('text-foreground', split ? 'text-heading' : 'text-subheading')}>{titleSlot}</HeadingTag>
+      {descriptionSlot && (
+        <Txt variant={split ? 'body' : 'caption'} tone="muted" className="mt-1.5 max-w-md wrap-anywhere">
+          {descriptionSlot}
+        </Txt>
+      )}
+      {actionSlot && <div className={cn('max-w-full', split ? 'mt-6' : 'mt-4')}>{actionSlot}</div>}
+      {statusSlot && (
+        <Txt as="p" variant="caption" tone="muted" className="mt-2 flex max-w-full items-center gap-2">
+          {statusSlot}
+        </Txt>
+      )}
+    </>
+  );
+
   const content = (
     <div
+      data-slot="empty-state"
       data-tone={tone}
+      data-layout={layout}
       className={cn(
-        'group/empty-state flex max-w-full flex-col items-center justify-center px-4 py-6 text-center',
+        'group/empty-state flex max-w-full px-4 py-6',
+        split ? '@container w-full justify-center' : 'flex-col items-center justify-center text-center',
         'transition-opacity duration-normal ease-out-custom',
         className,
       )}
     >
-      {iconSlot && <div className={cn('mb-3 max-w-full [&>svg]:size-5', iconColorByTone[tone])}>{iconSlot}</div>}
-      <HeadingTag className="text-subheading text-foreground">{titleSlot}</HeadingTag>
-      {descriptionSlot && (
-        <Txt variant="caption" tone="muted" className="mt-1.5 max-w-md wrap-anywhere">
-          {descriptionSlot}
-        </Txt>
+      {split ? (
+        <div className="flex flex-col items-center gap-6 text-center @2xl:flex-row @2xl:gap-12 @2xl:text-left">
+          {iconSlot && (
+            <div
+              data-slot="empty-state-art-slot"
+              className={cn(
+                'flex h-60 w-52 max-w-full shrink-0 items-center justify-center [&_svg]:max-h-full [&_svg]:max-w-full',
+                iconColorByTone[tone],
+              )}
+            >
+              {iconSlot}
+            </div>
+          )}
+          <div className="flex w-80 max-w-full flex-col items-center @2xl:items-start">{text}</div>
+        </div>
+      ) : (
+        <>
+          {iconSlot && (
+            <div className={cn('mb-3 max-w-full [&>svg]:size-icon-lg', iconColorByTone[tone])}>{iconSlot}</div>
+          )}
+          {text}
+        </>
       )}
-      {actionSlot && <div className="mt-4 max-w-full">{actionSlot}</div>}
     </div>
   );
 

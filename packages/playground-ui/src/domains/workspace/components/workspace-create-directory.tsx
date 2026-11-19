@@ -1,5 +1,4 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { FolderPlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { parentOf, ROOT_PATH } from '../path';
 import { useWorkspaceContext } from './use-workspace-context';
@@ -14,6 +13,7 @@ import {
   DialogTitle,
 } from '@/ds/components/Dialog';
 import { Input } from '@/ds/components/Input';
+import { IconFolderAddRight } from '@/ds/icons/central/IconFolderAddRight';
 
 /** "New folder" icon button; renders nothing unless `onCreateDirectory` is provided. */
 export function WorkspaceCreateDirectory({ labeled = false }: { labeled?: boolean } = {}) {
@@ -45,12 +45,12 @@ export function WorkspaceCreateDirectory({ labeled = false }: { labeled?: boolea
   return (
     <>
       {labeled ? (
-        <Button variant="ghost" icon={<FolderPlusIcon />} onClick={() => setOpen(true)}>
+        <Button variant="ghost" icon={<IconFolderAddRight />} onClick={() => setOpen(true)}>
           New folder
         </Button>
       ) : (
         <Button variant="ghost" size="icon-sm" tooltip="New folder" onClick={() => setOpen(true)}>
-          <FolderPlusIcon />
+          <IconFolderAddRight />
         </Button>
       )}
       <Dialog open={open} onOpenChange={setOpen} pending={pending}>

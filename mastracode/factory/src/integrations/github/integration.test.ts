@@ -4,7 +4,8 @@ import { describe, expect, it, vi, afterEach } from 'vitest';
 import { fakeRouteAuth } from '../../routes/test-utils.js';
 import { createStateSigner } from '../../state-signing.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
-import { GithubIntegration, normalizePrivateKey } from './integration.js';
+import { GithubIntegration, narrowRepos, normalizePrivateKey } from './integration.js';
+import { openPullRequestLister } from './rules.js';
 
 // Real RSA key so we can prove Node's PEM decoder accepts the normalized
 // output (the failure mode is `error:1E08010C:DECODER routines::unsupported`).
@@ -74,6 +75,37 @@ describe('normalizePrivateKey', () => {
 
   it('leaves non-PEM values untouched', () => {
     expect(normalizePrivateKey('not-a-key')).toBe('not-a-key');
+  });
+});
+
+describe('narrowRepos', () => {
+  const repo = (fullName: string, pushedAt: string | null) => ({
+    id: fullName.length,
+    fullName,
+    name: fullName.split('/')[1]!,
+    owner: fullName.split('/')[0]!,
+    defaultBranch: 'main',
+    private: false,
+    installationId: 1,
+    pushedAt,
+  });
+  const repos = [
+    repo('acme/old-agent', '2026-01-01T00:00:00Z'),
+    repo('acme/web', '2026-11-01T00:00:00Z'),
+    repo('acme/never-pushed-agent', null),
+    repo('acme/Agent-New', '2026-10-01T00:00:00Z'),
+  ];
+
+  it('keeps names containing the query case-insensitively, most recently pushed first', () => {
+    expect(narrowRepos(repos, ' AGENT ').map(r => r.fullName)).toEqual([
+      'acme/Agent-New',
+      'acme/old-agent',
+      'acme/never-pushed-agent',
+    ]);
+  });
+
+  it('returns only the most recent repositories up to the limit', () => {
+    expect(narrowRepos(repos, '', 2).map(r => r.fullName)).toEqual(['acme/web', 'acme/Agent-New']);
   });
 });
 
@@ -743,6 +775,185 @@ describe('GithubIntegration capability surface', () => {
     expect(pulls.createReplyForReviewComment).toHaveBeenCalledWith(expect.objectContaining({ comment_id: 91 }));
   });
 
+  describe('resolveReviewThread', () => {
+    const connection = { type: 'app-installation' as const, installationId: 7 };
+    const reviewCommentLookup = (pullNumber = 34) =>
+      vi.fn(async () => ({
+        data: { id: 91, pull_request_url: `https://api.github.com/repos/acme/app/pulls/${pullNumber}` },
+      }));
+    const page = (hasNextPage: boolean, endCursor: string | null = null) => ({ hasNextPage, endCursor });
+    const thread = (id: string, commentIds: Array<number | string>, comments = page(false)) => ({
+      id,
+      comments: { nodes: commentIds.map(commentId => ({ fullDatabaseId: String(commentId) })), pageInfo: comments },
+    });
+    const threadsPage = (threads: ReturnType<typeof thread>[], pageInfo = page(false)) => ({
+      repository: { pullRequest: { reviewThreads: { nodes: threads, pageInfo } } },
+    });
+
+    function setup(graphql: ReturnType<typeof vi.fn>, getReviewComment = reviewCommentLookup()) {
+      const github = new GithubIntegration(validConfig());
+      vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ pulls: { getReviewComment }, graphql } as any);
+      return { github, graphql, getReviewComment };
+    }
+
+    it('finds the thread of a reply on a later page and resolves it', async () => {
+      const graphql = vi
+        .fn()
+        .mockResolvedValueOnce(threadsPage([thread('T1', [10, 11])], page(true, 'threads-1')))
+        .mockResolvedValueOnce(threadsPage([thread('T2', [80, 91])]))
+        .mockResolvedValueOnce({ resolveReviewThread: { thread: { id: 'T2' } } });
+      const { github, getReviewComment } = setup(graphql);
+
+      await github.versionControl.resolveReviewThread!({
+        connection,
+        sourceId: 'acme/app',
+        commentId: '91',
+        resolved: true,
+      });
+
+      expect(getReviewComment).toHaveBeenCalledWith({ owner: 'acme', repo: 'app', comment_id: 91 });
+      expect(graphql).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining('reviewThreads'),
+        expect.objectContaining({ owner: 'acme', repo: 'app', number: 34, cursor: null }),
+      );
+      expect(graphql).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('reviewThreads'),
+        expect.objectContaining({ cursor: 'threads-1' }),
+      );
+      expect(graphql).toHaveBeenNthCalledWith(3, expect.stringContaining('resolveReviewThread('), {
+        threadId: 'T2',
+      });
+      expect(graphql).toHaveBeenCalledTimes(3);
+    });
+
+    it('pages through the comments of a long thread and unresolves it', async () => {
+      const graphql = vi
+        .fn()
+        .mockResolvedValueOnce(threadsPage([thread('T1', [10], page(true, 'comments-1')), thread('T2', [20])]))
+        .mockResolvedValueOnce({
+          node: { comments: { nodes: [{ fullDatabaseId: '12' }], pageInfo: page(true, 'comments-2') } },
+        })
+        .mockResolvedValueOnce({ node: { comments: { nodes: [{ fullDatabaseId: '91' }], pageInfo: page(false) } } })
+        .mockResolvedValueOnce({ unresolveReviewThread: { thread: { id: 'T1' } } });
+      const { github } = setup(graphql);
+
+      await github.versionControl.resolveReviewThread!({
+        connection,
+        sourceId: 'acme/app',
+        commentId: '91',
+        resolved: false,
+      });
+
+      expect(graphql).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('PullRequestReviewThread'),
+        expect.objectContaining({ threadId: 'T1', cursor: 'comments-1' }),
+      );
+      expect(graphql).toHaveBeenNthCalledWith(
+        3,
+        expect.stringContaining('PullRequestReviewThread'),
+        expect.objectContaining({ threadId: 'T1', cursor: 'comments-2' }),
+      );
+      expect(graphql).toHaveBeenNthCalledWith(4, expect.stringContaining('unresolveReviewThread('), {
+        threadId: 'T1',
+      });
+    });
+
+    it('checks every thread on a page before paging the comments of long threads', async () => {
+      const graphql = vi
+        .fn()
+        .mockResolvedValueOnce(threadsPage([thread('T1', [10], page(true, 'comments-1')), thread('T2', [91])]))
+        .mockResolvedValueOnce({ resolveReviewThread: { thread: { id: 'T2' } } });
+      const { github } = setup(graphql);
+
+      await github.versionControl.resolveReviewThread!({
+        connection,
+        sourceId: 'acme/app',
+        commentId: '91',
+        resolved: true,
+      });
+
+      expect(graphql).toHaveBeenCalledTimes(2);
+      expect(graphql).toHaveBeenLastCalledWith(expect.stringContaining('resolveReviewThread('), { threadId: 'T2' });
+    });
+
+    it('matches comment ids above the 32-bit GraphQL Int range', async () => {
+      const graphql = vi
+        .fn()
+        .mockResolvedValueOnce(threadsPage([thread('T1', ['3000000000'])]))
+        .mockResolvedValueOnce({ resolveReviewThread: { thread: { id: 'T1' } } });
+      const getReviewComment = vi.fn(async () => ({
+        data: { id: 3000000000, pull_request_url: 'https://api.github.com/repos/acme/app/pulls/34' },
+      }));
+      const { github } = setup(graphql, getReviewComment);
+
+      await github.versionControl.resolveReviewThread!({
+        connection,
+        sourceId: 'acme/app',
+        commentId: '3000000000',
+        resolved: true,
+      });
+
+      expect(graphql).toHaveBeenNthCalledWith(1, expect.stringContaining('fullDatabaseId'), expect.anything());
+      expect(graphql).toHaveBeenLastCalledWith(expect.stringContaining('resolveReviewThread('), { threadId: 'T1' });
+    });
+
+    it('explains what to do when no thread holds the comment', async () => {
+      const graphql = vi.fn().mockResolvedValueOnce(threadsPage([thread('T1', [10])]));
+      const { github } = setup(graphql);
+
+      await expect(
+        github.versionControl.resolveReviewThread!({
+          connection,
+          sourceId: 'acme/app',
+          commentId: '91',
+          resolved: true,
+        }),
+      ).rejects.toThrow(
+        'GitHub review comment 91 on pull request #34 is not part of a published review thread, so there is no thread to resolve.',
+      );
+      expect(graphql).toHaveBeenCalledTimes(1);
+    });
+
+    it('explains what to do when the comment does not exist', async () => {
+      const graphql = vi.fn();
+      const getReviewComment = vi.fn(async () => {
+        throw Object.assign(new Error('Not Found'), { status: 404 });
+      });
+      const { github } = setup(graphql, getReviewComment);
+
+      await expect(
+        github.versionControl.resolveReviewThread!({
+          connection,
+          sourceId: 'acme/app',
+          commentId: '91',
+          resolved: true,
+        }),
+      ).rejects.toThrow('GitHub review comment 91 was not found in acme/app.');
+      expect(graphql).not.toHaveBeenCalled();
+    });
+
+    it('surfaces GitHub permission errors unchanged', async () => {
+      const forbidden = new Error('Resource not accessible by integration');
+      const graphql = vi
+        .fn()
+        .mockResolvedValueOnce(threadsPage([thread('T1', [91])]))
+        .mockRejectedValueOnce(forbidden);
+      const { github } = setup(graphql);
+
+      await expect(
+        github.versionControl.resolveReviewThread!({
+          connection,
+          sourceId: 'acme/app',
+          commentId: '91',
+          resolved: true,
+        }),
+      ).rejects.toBe(forbidden);
+    });
+  });
+
   it('implements reviews and reviewer requests through VersionControl', async () => {
     const github = new GithubIntegration(validConfig());
     const review = {
@@ -1030,6 +1241,116 @@ describe('GithubIntegration open issue discovery', () => {
     await github.listOpenIssueStates({ installationId: 7, repository: 'acme/api' });
 
     expect(listForRepo).toHaveBeenCalledTimes(5);
+  });
+});
+
+describe('GithubIntegration open pull request discovery', () => {
+  const openPullRequest = (number: number, draft = false, createdAt = '2026-07-01T00:00:00Z') => ({
+    ...pullRequestData(),
+    number,
+    html_url: `https://github.com/acme/app/pull/${number}`,
+    draft,
+    labels: [{ name: 'bug' }],
+    created_at: createdAt,
+  });
+  const linkedAt = Date.parse('2026-06-01T00:00:00Z');
+  const beforeLink = '2026-05-01T00:00:00Z';
+  const page = (first: number, createdAt?: string) =>
+    Array.from({ length: 30 }, (_, index) => openPullRequest(first + index, false, createdAt));
+
+  it('lists open non-draft pull requests with their author and labels, following pages until a short page', async () => {
+    const github = new GithubIntegration(validConfig());
+    const fullPage = Array.from({ length: 30 }, (_, index) => openPullRequest(index + 1, index === 0));
+    const list = vi
+      .fn()
+      .mockResolvedValueOnce({ data: fullPage })
+      .mockResolvedValueOnce({ data: [openPullRequest(31)] });
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ pulls: { list } } as any);
+
+    const pullRequests = await openPullRequestLister(github.versionControl)({
+      installationId: 7,
+      repository: 'acme/app',
+      createdSince: linkedAt,
+    });
+
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(list).toHaveBeenLastCalledWith({ owner: 'acme', repo: 'app', state: 'open', per_page: 30, page: 2 });
+    expect(pullRequests.map(({ number }) => number)).not.toContain(1);
+    expect(pullRequests).toHaveLength(30);
+    expect(pullRequests.at(-1)).toMatchObject({
+      number: 31,
+      url: 'https://github.com/acme/app/pull/31',
+      state: 'open',
+      draft: false,
+      author: 'ada',
+      labels: ['bug'],
+      headBranch: 'feat/intake',
+      baseBranch: 'main',
+      createdAt: '2026-07-01T00:00:00Z',
+      headSha: 'abc123',
+      updatedAt: '2026-07-02T00:00:00Z',
+    });
+  });
+
+  it('keeps paging past 150 open pull requests opened since the link, stopping at the first page opened entirely before it', async () => {
+    const github = new GithubIntegration(validConfig());
+    const list = vi.fn();
+    for (let index = 0; index < 7; index += 1) list.mockResolvedValueOnce({ data: page(index * 30 + 1) });
+    list.mockResolvedValueOnce({ data: page(211, beforeLink) });
+    // Never reached: the page before it already predates the link.
+    list.mockResolvedValue({ data: page(241) });
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ pulls: { list } } as any);
+
+    const pullRequests = await openPullRequestLister(github.versionControl)({
+      installationId: 7,
+      repository: 'acme/app',
+      createdSince: linkedAt,
+    });
+
+    expect(list).toHaveBeenCalledTimes(8);
+    expect(pullRequests).toHaveLength(210);
+    expect(pullRequests.at(-1)?.number).toBe(210);
+  });
+
+  it('reads on through a page of drafts and a page straddling the link, keeping only what opened since', async () => {
+    const github = new GithubIntegration(validConfig());
+    const drafts = Array.from({ length: 30 }, (_, index) => openPullRequest(index + 1, true));
+    const straddling = [...page(31).slice(0, 10), ...page(41, beforeLink).slice(0, 20)];
+    const list = vi
+      .fn()
+      .mockResolvedValueOnce({ data: drafts })
+      .mockResolvedValueOnce({ data: straddling })
+      .mockResolvedValueOnce({ data: page(61, beforeLink) })
+      .mockResolvedValue({ data: page(91) });
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ pulls: { list } } as any);
+
+    const pullRequests = await openPullRequestLister(github.versionControl)({
+      installationId: 7,
+      repository: 'acme/app',
+      createdSince: linkedAt,
+    });
+
+    expect(list).toHaveBeenCalledTimes(3);
+    expect(pullRequests.map(({ number }) => number)).toEqual(Array.from({ length: 10 }, (_, index) => 31 + index));
+  });
+
+  it('stops after twenty pages when a repository keeps listing pull requests opened since the link', async () => {
+    const github = new GithubIntegration(validConfig());
+    const list = vi.fn();
+    for (let index = 0; index < 25; index += 1) list.mockResolvedValueOnce({ data: page(index * 30 + 1) });
+    list.mockResolvedValue({ data: [] });
+    // Only `pulls.list` is exercised, so the stub stands in for the full client.
+    const octokit = { pulls: { list } } as unknown as ReturnType<GithubIntegration['getInstallationOctokit']>;
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue(octokit);
+
+    const pullRequests = await openPullRequestLister(github.versionControl)({
+      installationId: 7,
+      repository: 'acme/app',
+      createdSince: linkedAt,
+    });
+
+    expect(list).toHaveBeenCalledTimes(20);
+    expect(pullRequests).toHaveLength(600);
   });
 });
 

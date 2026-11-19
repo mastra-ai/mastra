@@ -63,12 +63,20 @@ function keys(rows: SpanQueryIdentity[], values: unknown[], alias = ''): string 
     .join(' OR ');
 }
 
+function sortColumn(plan: TrustedSpanQueryPlan): string {
+  const column = `s.${plan.orderBy.field}`;
+  return plan.orderBy.field === 'model' || plan.orderBy.field === 'provider' ? `${column} COLLATE "C"` : column;
+}
+
 function afterCursor(plan: TrustedSpanQueryPlan): { sql: string; values: unknown[] } {
   if (!plan.cursor) return { sql: 'TRUE', values: [] };
   const cursor = plan.cursor;
-  const sort = `s.${plan.orderBy.field}`;
+  const sort = sortColumn(plan);
   const empty = cursor.sortValue === null;
-  const value = `CAST(? AS ${typeof cursor.sortValue === 'number' ? 'DOUBLE' : 'TIMESTAMP'})`;
+  const stringSort = plan.orderBy.field === 'model' || plan.orderBy.field === 'provider';
+  const value = stringSort
+    ? 'CAST(? AS VARCHAR) COLLATE "C"'
+    : `CAST(? AS ${typeof cursor.sortValue === 'number' ? 'DOUBLE' : 'TIMESTAMP'})`;
   // Empty values sort last: a set cursor is followed by every empty value, an empty cursor only by its ties.
   const comparisons = empty
     ? []
@@ -144,9 +152,9 @@ export function compileDuckDBSpanQuery(plan: TrustedSpanQueryPlan) {
   const after = afterCursor(plan);
   values.push(...after.values, plan.limit + 1);
   const sql = `WITH ${ctes.join(', ')}
-  SELECT ${[...fields, 'startedAt', 'endedAt', 'durationMs', 'status', 'cursorId'].map(field => `s.${field}`).join(', ')}
+  SELECT ${[...fields, 'startedAt', 'endedAt', 'durationMs', 'status', 'cursorId', 'model', 'provider'].map(field => `s.${field}`).join(', ')}
   FROM selected s WHERE ${after.sql}
-  ORDER BY s.${plan.orderBy.field} ${plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC'} NULLS LAST, ${identityFields.map(field => `s.${field} ASC NULLS LAST`).join(', ')}
+  ORDER BY ${sortColumn(plan)} ${plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC'} NULLS LAST, ${identityFields.map(field => `s.${field} ASC NULLS LAST`).join(', ')}
   LIMIT ?`;
   return { sql, values };
 }
@@ -157,7 +165,7 @@ const previewPayloads = [
   ['errorPreview', 'error'],
 ] as const;
 
-type Selected = Omit<SpanQuerySelectedRow, 'startedAt' | 'endedAt' | 'model' | 'provider'> & {
+type Selected = Omit<SpanQuerySelectedRow, 'startedAt' | 'endedAt'> & {
   startedAt: Date;
   endedAt: Date;
   cursorId: number | null;
@@ -204,6 +212,9 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
       ...row
     }) => ({
       ...row,
+      ...((plan.orderBy.field === 'model' || plan.orderBy.field === 'provider') && {
+        cursorSortValue: row[plan.orderBy.field],
+      }),
       startedAt: startedAt.toISOString(),
       endedAt: endedAt.toISOString(),
       ...(timeToFirstChunkSupported && {
@@ -218,7 +229,7 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
   const page = rows.slice(0, plan.limit);
   if (!page.length) return buildSpanQueryResponse(plan, [], []);
   // Model and provider fall back to span attributes for rows written before their columns existed;
-  // that fallback is returned, never filtered on.
+  // that fallback is returned, never filtered or sorted on.
   const lookupColumns = `${identities}, CAST(stopReasonContext AS VARCHAR) AS stopReasonContext,
     COALESCE(model, CASE WHEN json_type(attributes, '$.model') = 'VARCHAR' THEN json_extract_string(attributes, '$.model') END) AS model,
     COALESCE(provider, CASE WHEN json_type(attributes, '$.provider') = 'VARCHAR' THEN json_extract_string(attributes, '$.provider') END) AS provider,

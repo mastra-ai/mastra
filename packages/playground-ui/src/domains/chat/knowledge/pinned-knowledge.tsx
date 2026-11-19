@@ -1,10 +1,10 @@
-import { Pin } from 'lucide-react';
 import { useState } from 'react';
 import { KnowledgePageLink } from './knowledge-links';
 import type { PinnedKnowledge, PinnedRow } from './pinned-knowledge-data';
 import { ActivityItem } from '@/ds/components/ai/activity';
 import { Badge } from '@/ds/components/Badge';
 import { Txt } from '@/ds/components/Txt';
+import { IconPin } from '@/ds/icons/central/IconPin';
 
 const CHANGE_MARK = { add: '+', change: '~', remove: '−' } as const;
 const CHANGE_LABEL = { add: 'Added', change: 'Changed', remove: 'Removed' } as const;
@@ -16,6 +16,29 @@ function summary({ mode, rows }: PinnedKnowledge): string {
     .filter(change => count(change) > 0)
     .map(change => `${CHANGE_MARK[change]}${count(change)}`)
     .join(' ');
+}
+
+/**
+ * Pages a listing names: its `- ` entries plus the count in its closing "…and N more" line.
+ * Core ends a listing cut short with a bare "…and more", so the count is then only a lower bound.
+ */
+function listedPageCount(text: string): { count: number; atLeast: boolean } {
+  const lines = text.split('\n').map(line => line.trim());
+  const listed = lines.filter(line => line.startsWith('- ')).length;
+  const more = lines.map(line => /^…and (\d+) more/.exec(line)?.[1]).find(Boolean);
+  return {
+    count: listed + (more ? Number(more) : 0),
+    atLeast: lines.some(line => line.startsWith('…and more')),
+  };
+}
+
+function toggleLabel(row: PinnedRow, open: boolean): string {
+  if (!row.listOf) return open ? 'Hide text' : 'Text';
+  if (open) return 'Hide pages';
+  const { count, atLeast } = listedPageCount(row.text ?? '');
+  if (count === 0) return 'Show pages';
+  if (atLeast) return `Show ${count}+ pages`;
+  return count === 1 ? 'Show 1 page' : `Show ${count} pages`;
 }
 
 function PinnedRowItem({ row }: { row: PinnedRow }) {
@@ -51,7 +74,8 @@ function PinnedRowItem({ row }: { row: PinnedRow }) {
             onClick={() => setOpen(value => !value)}
           >
             <Txt as="span" variant="meta">
-              {open ? (row.listOf ? 'Hide pages' : 'Hide text') : row.listOf ? 'Pages' : 'Text'}
+              {toggleLabel(row, open)}
+              {row.listOf ? <span aria-hidden>{open ? ' ▴' : ' ▾'}</span> : null}
             </Txt>
           </button>
         ) : null}
@@ -78,7 +102,7 @@ export function PinnedKnowledgeActivity({ pinned, defaultOpen }: { pinned: Pinne
   const label = pinned.mode === 'snapshot' ? 'Pinned knowledge' : 'Pinned knowledge updated';
   return (
     <ActivityItem
-      icon={<Pin className="text-badge-amber-indicator" aria-hidden />}
+      icon={<IconPin className="text-badge-amber-indicator" aria-hidden />}
       label={label}
       detail={summary(pinned)}
       badges={<Badge size="xs">{pinned.mode}</Badge>}

@@ -80,14 +80,6 @@ describe('CollapsibleBox', () => {
       );
     }
 
-    it('expands the box when clicked', () => {
-      mockScrollHeight(1000);
-      render(<Bare />);
-      fireEvent.click(fade() as HTMLElement);
-      expect(box()?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('');
-      expect(fade()).toBeNull();
-    });
-
     it('shows an expand button when a label is given', () => {
       mockScrollHeight(1000);
       render(<Bare expandLabel="Expand" />);

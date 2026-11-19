@@ -19,7 +19,7 @@ import {
 
 describe('IntakeSection incidentio', () => {
   describe('given incident.io follow-up intake is configured', () => {
-    it('routes only follow-up sources and marks incident board configuration as coming soon', async () => {
+    it('routes only follow-up sources to a Factory', async () => {
       seedFactories();
       const { savedBindings } = useIncidentioHandlers();
       server.use(
@@ -33,8 +33,6 @@ describe('IntakeSection incidentio', () => {
         await within(section).findByRole('button', { name: 'Remove Incident follow-ups (acme)' }),
       ).toBeInTheDocument();
       expect(within(section).queryByText('Incidents (acme)')).not.toBeInTheDocument();
-      expect(within(section).getByText('Incident board configuration')).toBeInTheDocument();
-      expect(within(section).getByText('Coming soon')).toBeInTheDocument();
 
       await userEvent.click(await screen.findByLabelText('Factory for Incident follow-ups (acme)'));
       await userEvent.click(await screen.findByRole('option', { name: 'Acme Web' }));
@@ -45,7 +43,6 @@ describe('IntakeSection incidentio', () => {
         sourceId: 'incidentio-source:follow-ups',
         factoryProjectId: FACTORY_A,
       });
-      expect(screen.queryByLabelText('Board for Incident follow-ups (acme)')).not.toBeInTheDocument();
     });
   });
 
@@ -100,9 +97,6 @@ describe('IntakeSection incidentio', () => {
       const section = await screen.findByRole('region', { name: 'incident.io' });
       expect(await within(section).findByText('incident.io API key configured on this server')).toBeInTheDocument();
       expect(within(section).queryByRole('button', { name: 'Connect incident.io' })).not.toBeInTheDocument();
-      const toggle = within(section).getByRole('switch', { name: 'Sync incident.io follow-ups' });
-      expect(toggle).toBeChecked();
-      expect(toggle).toBeEnabled();
       expect(await within(section).findByRole('button', { name: 'Remove Incident follow-ups (acme)' })).toBeEnabled();
       expect(await screen.findByLabelText('Factory for Incident follow-ups (acme)')).toBeInTheDocument();
     });
@@ -139,9 +133,6 @@ describe('IntakeSection incidentio', () => {
       const section = await screen.findByRole('region', { name: 'incident.io' });
       expect(await within(section).findByText('incident.io API key configured on this server')).toBeInTheDocument();
       expect(within(section).queryByText("Couldn't load incident.io connections.")).not.toBeInTheDocument();
-      const toggle = within(section).getByRole('switch', { name: 'Sync incident.io follow-ups' });
-      expect(toggle).toBeChecked();
-      expect(toggle).toBeEnabled();
       expect(await within(section).findByRole('button', { name: 'Remove Incident follow-ups (acme)' })).toBeEnabled();
     });
 
@@ -169,7 +160,7 @@ describe('IntakeSection incidentio', () => {
 
       renderIntakeSection();
 
-      await screen.findByRole('switch', { name: 'Sync GitHub issues' });
+      await screen.findByRole('region', { name: 'GitHub' });
       expect(screen.queryByRole('region', { name: 'incident.io' })).not.toBeInTheDocument();
       expect(sourceRequests).toBe(0);
     });

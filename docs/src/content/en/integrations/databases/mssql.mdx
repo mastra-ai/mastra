@@ -92,7 +92,7 @@ const store5 = new MSSQLStore({
 
 ## Additional notes
 
-### Schema Management
+### Schema management
 
 The storage implementation handles schema creation and updates automatically. It creates the following tables:
 
@@ -143,7 +143,7 @@ const thread = await memoryStore?.getThreadById({ threadId: '...' })
 If `init()` isn't called, tables won't be created and storage operations will fail silently or throw errors.
 :::
 
-### Direct Database and Pool Access
+### Direct database and pool access
 
 `MSSQLStore` exposes the mssql connection pool as public fields:
 

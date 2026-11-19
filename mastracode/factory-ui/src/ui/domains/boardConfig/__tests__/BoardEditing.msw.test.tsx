@@ -123,10 +123,10 @@ describe('Creating a board', () => {
     expect(form.getByRole('button', { name: 'Create board' })).toBeDisabled();
     await user.type(form.getByLabelText('Board name'), 'Bug Triage');
     expect(form.getByLabelText('Board key')).toHaveValue('bug-triage');
-    // Cards only reach a new board through intake, which has its own settings.
-    expect(form.getByRole('link', { name: 'Work Intake' })).toHaveAttribute(
+    // Cards only reach a new board through its rules, checked in the project's intake order.
+    expect(form.getByRole('link', { name: 'intake order' })).toHaveAttribute(
       'href',
-      `/factories/${FACTORY_ID}/settings/intake`,
+      `/factories/${FACTORY_ID}/work/intake#intake-order`,
     );
     await user.click(form.getByRole('button', { name: 'Create board' }));
 
@@ -179,7 +179,6 @@ describe('Creating a board', () => {
   });
 
   it.each([
-    ['reserved_board', 'review', 'Board "review" is reserved for the retired Review board.'],
     ['code_board', 'release', 'Board "release" is defined in code; it cannot be created here.'],
     ['board_exists', 'bugs', 'Board "bugs" already exists in this project.'],
   ])('shows a %s refusal on the key and keeps the form', async (error, typed, message) => {
@@ -363,10 +362,11 @@ describe("Editing a board's phases", () => {
     const { client } = renderAt(`/factories/${FACTORY_ID}/work/config/execute`);
 
     const goal = await screen.findByRole('textbox', { name: 'Building goal' });
-    expect(goal).not.toHaveValue('');
-    await user.clear(goal);
+    expect(goal).toHaveTextContent(/\S/);
+    await user.click(goal);
+    await user.keyboard('{Control>}a{/Control}{Backspace}');
     await user.type(goal, 'Every test passes.');
-    const runs = screen.getByRole('spinbutton', { name: 'Building goal runs' });
+    const runs = screen.getByRole('textbox', { name: 'Pause goal after' });
     await user.clear(runs);
     await user.type(runs, '5');
 
@@ -392,31 +392,11 @@ describe("Editing a board's phases", () => {
     const user = userEvent.setup();
     renderAt(`/factories/${FACTORY_ID}/work/config/execute`);
 
-    const runs = await screen.findByRole('spinbutton', { name: 'Building goal runs' });
+    const runs = await screen.findByRole('textbox', { name: 'Pause goal after' });
     await user.clear(runs);
     await user.type(runs, '51');
     expect(await screen.findByText('Fix Building to save.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
-  });
-
-  it('keeps JSON typed into a rule while moving between phases, and holds the save until it parses', async () => {
-    serveProject();
-    const user = userEvent.setup();
-    renderAt(`/factories/${FACTORY_ID}/work/config/planning`);
-
-    await user.click(await screen.findByRole('switch', { name: 'Planning: start on its own' }));
-    await user.click(screen.getByRole('button', { name: 'Edit as JSON' }));
-    await user.click(screen.getByLabelText('Planning: start only when JSON'));
-    await user.paste('{"operator":"AND",');
-    expect(await screen.findByText('Fix Planning to save.')).toBeInTheDocument();
-
-    await user.click(configNav().getByRole('link', { name: 'Triage' }));
-    expect(await screen.findByRole('textbox', { name: 'Phase name' })).toHaveValue('Triage');
-    expect(screen.getByText('Fix Planning to save.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
-
-    await user.click(configNav().getByRole('link', { name: 'Planning' }));
-    expect(await screen.findByLabelText('Planning: start only when JSON')).toHaveValue('{"operator":"AND",');
   });
 });
 

@@ -1,0 +1,55 @@
+{
+  "name": "template-agent-workflow-billing",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Configurable billing for Mastra agents and workflows with provider reservations.",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": "^22.13.0 || ^24.0.0"
+  },
+  "scripts": {
+    "dev": "node scripts/mastra.mjs dev",
+    "build": "node scripts/mastra.mjs build",
+    "start": "node scripts/mastra.mjs start",
+    "check": "tsc --noEmit && oxfmt --check .",
+    "format": "oxfmt .",
+    "test:unit": "vitest run tests/billing/policies.test.ts",
+    "test:integration": "vitest run tests/billing/provider-contracts.test.ts tests/billing/storage.test.ts tests/billing/identity-organizations.test.ts tests/billing/accounting.test.ts tests/billing/mastra.test.ts tests/billing/recovery.test.ts tests/billing/images.test.ts && vitest run tests/billing/http.test.ts",
+    "setup": "node scripts/setup.mjs",
+    "setup:autumn": "node scripts/autumn-sandbox.mjs setup",
+    "autumn:renew": "node scripts/autumn-sandbox.mjs renew",
+    "autumn:header": "node scripts/autumn-sandbox.mjs header",
+    "autumn:check": "node scripts/autumn-sandbox.mjs check",
+    "test:local": "vitest run tests/template/local.test.ts tests/template/studio.test.ts tests/template/autumn-sandbox.test.ts",
+    "test:openai": "node --env-file=.env scripts/test-openai-smoke.mjs --live",
+    "test:provider": "vitest run tests/billing/autumn-reservations.test.ts",
+    "test:autumn": "node --env-file=.env scripts/test-autumn-sandbox.mjs --live",
+    "images": "node scripts/images.mjs",
+    "test:images": "vitest run tests/billing/images.test.ts"
+  },
+  "dependencies": {
+    "@libsql/client": "0.18.0",
+    "@mastra/core": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/memory": "1.41.0",
+    "autumn-js": "1.5.72",
+    "fzstd": "0.1.1",
+    "hono": "4.13.16",
+    "jose": "6.2.15",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "mastra": "latest",
+    "oxfmt": "latest",
+    "typescript": "^5.9.0",
+    "vitest": "5.1.0"
+  },
+  "overrides": {
+    "@hono/node-server": "2.1.6",
+    "readdir-glob": {
+      "minimatch": "11.0.9"
+    }
+  }
+}

@@ -6,7 +6,7 @@ import type { AgentInstructions, AgentMemoryOption, ToolsInput } from '../agent/
 import { tryStreamWithJsonFallback } from '../agent/utils';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '../error';
 import { resolveModelConfig } from '../llm/model/resolve-model';
-import type { MastraModelConfig } from '../llm/model/shared.types';
+import type { MastraModelConfig, WidenedMastraModelConfig } from '../llm/model/shared.types';
 import { noopLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
@@ -260,6 +260,13 @@ interface ScorerRun<TInput = any, TOutput = any> {
   /** @internal Framework controls that must not affect scorer execution or returned results. */
   _internal?: {
     emitObservabilityScore?: boolean;
+    /**
+     * Inherited from the scored target's trace (`tracingOptions.hideInput`). Hides the
+     * scorer's own trace input and keeps the judge's reason out of the emitted score.
+     */
+    hideInput?: boolean;
+    /** Inherited from the scored target's trace (`tracingOptions.hideOutput`). */
+    hideOutput?: boolean;
   };
 }
 
@@ -1032,6 +1039,8 @@ class MastraScorer<
 
   async run(input: ScorerRun<TInput, TRunOutput>): Promise<ScorerRunResult<TAccumulatedResults, TInput, TRunOutput>> {
     const { _internal, ...scorerInput } = input;
+    const hideInput = _internal?.hideInput === true;
+    const hideOutput = _internal?.hideOutput === true;
 
     // Runtime check: execute only allowed after generateScore
     if (!this.hasGenerateScore) {
@@ -1086,6 +1095,11 @@ class MastraScorer<
         ...(prepared.targetTraceId ? { targetTraceId: prepared.targetTraceId } : {}),
         ...(prepared.targetSpanId ? { targetSpanId: prepared.targetSpanId } : {}),
       },
+      // The scorer run is its own trace, so the scored target's hide flags do not reach it
+      // through span parentage. Its spans don't split along the target's input/output: the
+      // run's span input holds the scored output, step inputs and judge prompts hold both, and
+      // the reason can quote either. So hiding either side hides both sides of this trace.
+      ...(hideInput || hideOutput ? { tracingOptions: { hideInput: true, hideOutput: true } } : {}),
       mastra: this.#mastra,
     });
     const run: ScorerRun<TInput, TRunOutput> & { runId: string; scoreTraceId?: string } = {
@@ -1218,7 +1232,10 @@ class MastraScorer<
             scorerName: this.name,
             ...(input.scoreSource ? { scoreSource: input.scoreSource } : {}),
             score: scorerResult.score,
-            ...(typeof scorerResult.reason === 'string' ? { reason: scorerResult.reason } : {}),
+            // A judge's reason routinely quotes the data it scored.
+            ...(typeof scorerResult.reason === 'string' && !hideInput && !hideOutput
+              ? { reason: scorerResult.reason }
+              : {}),
             ...(typeof scorerResult.scoreTraceId === 'string' ? { scoreTraceId: scorerResult.scoreTraceId } : {}),
             ...(input.targetEntityType ? { targetEntityType: input.targetEntityType } : {}),
             metadata: {
@@ -1341,10 +1358,13 @@ class MastraScorer<
             throw attachFailedScorerStep(error, scorerStep.name as ScorerStepName);
           }
 
-          if (prompt !== undefined || judgeModel !== undefined) {
+          // Hide flags only clear span input/output, but the judge prompt quotes the scored data.
+          const traceHidesData = stepSpan?.traceState?.hideInput === true || stepSpan?.traceState?.hideOutput === true;
+          const recordedPrompt = traceHidesData ? undefined : prompt;
+          if (recordedPrompt !== undefined || judgeModel !== undefined) {
             stepSpan?.update({
               attributes: {
-                ...(prompt !== undefined ? { prompt } : {}),
+                ...(recordedPrompt !== undefined ? { prompt: recordedPrompt } : {}),
                 ...(judgeModel !== undefined ? { judgeModel } : {}),
               },
             });
@@ -1477,7 +1497,8 @@ class MastraScorer<
 
     const prompt = await originalStep.createPrompt(context);
     const judgeRequestContext = this.mergeJudgeRequestContext(context.run.requestContext);
-    const modelConfig = originalStep.judge?.model ?? this.config.judge?.model;
+    const modelConfig: WidenedMastraModelConfig | undefined =
+      (originalStep.judge?.model as WidenedMastraModelConfig | undefined) ?? this.config.judge?.model;
     const instructions = originalStep.judge?.instructions ?? this.config.judge?.instructions;
     const jsonPromptInjection =
       originalStep.judge?.jsonPromptInjection ?? this.config.judge?.jsonPromptInjection ?? 'auto';

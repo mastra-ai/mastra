@@ -26,7 +26,6 @@ import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { LinearIntegration, LinearProject, LinearTeam } from './integration.js';
 import { LinearReauthRequiredError } from './integration.js';
-import type { LinearRulesIngress } from './rules.js';
 
 type RouteContext = Context;
 
@@ -80,8 +79,8 @@ export interface MountLinearRoutesOptions {
    */
   stateSigner?: StateSigner;
   /**
-   * Cross-integration intake selection domain. Required for the issues route's
-   * project filter; when absent, only the disabled `status` route is served.
+   * Cross-integration intake selection domain. Required for the issue detail route's
+   * routing check; when absent, only the disabled `status` route is served.
    */
   intake?: IntakeStorage;
   /**
@@ -90,7 +89,6 @@ export interface MountLinearRoutesOptions {
    * belonging to no project.
    */
   projects?: { list(input: { orgId: string }): Promise<unknown[]> };
-  ingestFactoryIssues?: (input: LinearRulesIngress) => Promise<unknown>;
   /**
    * Work-item lookup so the detail route can keep serving a card this Factory
    * already holds after the issue's winning source was routed elsewhere. When
@@ -106,10 +104,10 @@ export interface MountLinearRoutesOptions {
  * Factory project.
  *
  * A Linear issue carries no Factory project of its own, so without a binding
- * every board view would ingest every selected source's issues into whichever
+ * every board view would show every selected source's issues in whichever
  * project happened to be on screen. Routing is explicit: a source feeds this
- * project only when it is bound to the project. The project's intake routes
- * then decide where each card lands.
+ * project only when it is bound to the project. The intake discovery sweep
+ * uses the same binding rule when it creates cards.
  */
 async function scopeSourceIdsToProject({
   intake,
@@ -152,17 +150,6 @@ async function resolveOrgTenant(
     };
   }
   return { tenant: { orgId: tenant.orgId, userId: tenant.userId } };
-}
-
-/**
- * Validate an opaque Linear pagination cursor from the query string. Cursors
- * are server-issued (`pageInfo.endCursor`), so anything outside a conservative
- * charset/length is rejected rather than forwarded to Linear.
- */
-function parseAfterCursor(raw: string | undefined): string | undefined | null {
-  if (raw === undefined || raw === '') return undefined;
-  if (raw.length > 8192 || !/^[\w+/=.:-]+$/.test(raw)) return null;
-  return raw;
 }
 
 /** Human issue key as it appears on a card (`ENG-123`). */
@@ -397,100 +384,6 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
           const accessToken = await linear.getFreshAccessToken(connection);
           const teams = await linear.listTeams(accessToken);
           return c.json({ teams });
-        } catch (err) {
-          return linearFetchError(loose(c), err);
-        }
-      },
-    }),
-  );
-
-  // ── List the workspace's active issues (cursor-paged) ───────────────────
-  // Respects the org's intake config: disabled Linear intake 404s the
-  // source, and an explicit project selection narrows the issue filter.
-  routes.push(
-    registerApiRoute('/web/linear/issues', {
-      method: 'GET',
-      requiresAuth: false,
-      handler: async c => {
-        const resolved = await resolveOrgTenant(loose(c), auth);
-        if ('response' in resolved) return resolved.response;
-
-        const after = parseAfterCursor(c.req.query('after'));
-        if (after === null) return c.json({ error: 'invalid_cursor' }, 400);
-        const factoryProjectId = c.req.query('factoryProjectId');
-        if (factoryProjectId && !UUID_RE.test(factoryProjectId)) {
-          return c.json({ error: 'invalid_factory_project_id' }, 400);
-        }
-
-        const connection = await linear.loadConnection(resolved.tenant.orgId);
-        if (!connection) {
-          return c.json({ error: 'linear_not_connected', message: 'Connect Linear to see intake issues.' }, 409);
-        }
-
-        await intake.ensureReady();
-        const config = await intake.getConfig({ orgId: resolved.tenant.orgId, integrationIds: ['linear'] });
-        const selection = config.linear!;
-        if (!selection.enabled) {
-          return c.json({ error: 'linear_intake_disabled', message: 'Linear intake is turned off in Settings.' }, 404);
-        }
-
-        // No sources selected means nothing is synced — don't fan out to Linear.
-        const selectedIds = selection.sourceIds ?? [];
-        // A board request is also an ingest, so it only ever sees the sources
-        // bound to that Factory project. Sources may be projects or whole
-        // teams; both are keyed by their opaque source id.
-        const boundSourceIds = factoryProjectId
-          ? await scopeSourceIdsToProject({
-              intake,
-              orgId: resolved.tenant.orgId,
-              factoryProjectId,
-              selectedIds,
-            })
-          : null;
-        const routedSourceIds = boundSourceIds ?? selectedIds;
-        if (routedSourceIds.length === 0) {
-          return c.json({ issues: [], nextCursor: null });
-        }
-
-        try {
-          const accessToken = await linear.getFreshAccessToken(connection);
-          const { issues, nextCursor } = await linear.intake.listIssues({
-            connection: { type: 'oauth', accessToken },
-            sourceIds: routedSourceIds,
-            attributionSourceIds: selectedIds,
-            cursor: after,
-          });
-          // Source precedence must be resolved against the complete selection,
-          // then the winning issues can be narrowed to this Factory project.
-          const routedIssues = boundSourceIds
-            ? issues.filter(issue => issue.sourceId != null && routedSourceIds.includes(issue.sourceId))
-            : issues;
-          const issuePayload = routedIssues.map(issue => ({
-            id: issue.id,
-            identifier: issue.identifier,
-            title: issue.title,
-            url: issue.url,
-            state: issue.state ?? '',
-            stateType: issue.stateType ?? '',
-            priorityLabel: issue.priority ?? '',
-            assignee: issue.assignee,
-            creator: issue.author,
-            team: issue.source,
-            labels: issue.labels,
-            createdAt: issue.createdAt,
-            updatedAt: issue.updatedAt,
-            sourceId: issue.sourceId ?? null,
-            projectId: issue.projectId ?? null,
-          }));
-          if (factoryProjectId && boundSourceIds && options.ingestFactoryIssues) {
-            await options.ingestFactoryIssues({
-              orgId: resolved.tenant.orgId,
-              userId: resolved.tenant.userId,
-              factoryProjectId,
-              issues: issuePayload,
-            });
-          }
-          return c.json({ issues: issuePayload, nextCursor });
         } catch (err) {
           return linearFetchError(loose(c), err);
         }

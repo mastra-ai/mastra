@@ -13,7 +13,7 @@ import type {
 } from '../../trace-filters';
 import { buildTraceQueryRequest, TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS } from '../../trace-query-filters';
 import type { SpanTab, TraceDatePreset } from '../../types';
-import type { TraceSpanView } from '../trace-data-panel-view';
+import type { TraceSpanView } from '../trace-panel';
 
 export type TracesSelection = {
   traceId?: string;
@@ -139,7 +139,10 @@ const isQueryableToken = (token: TraceFilterToken, unqueryableFieldIds: Readonly
  */
 export const sanitizeTracesFilters = (filters: TracesFilters, support: TraceQueryFieldSupport): TracesFilters => {
   const unqueryableFieldIds = traceQueryUnqueryableFieldIds(support);
-  const tokens = filters.tokens.filter(token => isQueryableToken(token, unqueryableFieldIds));
+  const tokens = filters.tokens.filter(
+    token =>
+      isQueryableToken(token, unqueryableFieldIds) && (support.withTokenSearch || token.operatorId !== 'hasAllTokens'),
+  );
   return tokens.length === filters.tokens.length ? filters : { ...filters, tokens };
 };
 
@@ -186,6 +189,7 @@ export const buildTracesQueryRequest = ({
     tokens: filters.tokens,
     groups: filters.groups,
     excludedFieldIds: traceQueryUnqueryableFieldIds(support),
+    withTokenSearch: support.withTokenSearch,
     now,
   });
 

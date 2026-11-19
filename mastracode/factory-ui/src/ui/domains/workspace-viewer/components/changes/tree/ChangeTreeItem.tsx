@@ -1,10 +1,10 @@
 import { Tree } from '@mastra/playground-ui/components/Tree';
-import { Folder, FolderOpen } from 'lucide-react';
-
 import { treeRowContainmentClass } from '../../../layout';
 import { ChangeCounts } from '../ChangeCounts';
 import { ChangeStatusIcon } from '../ChangeStatusIcon';
 import type { ChangeTreeNode } from './change-tree';
+import { IconFolder1 } from '@mastra/playground-ui/icons/central/IconFolder1';
+import { IconFolderOpen } from '@mastra/playground-ui/icons/central/IconFolderOpen';
 
 const FOLDER_CLASS = 'text-muted-foreground!';
 
@@ -35,7 +35,7 @@ export function ChangeTreeItem({
       >
         <Tree.FolderTrigger>
           <Tree.Icon>
-            {isOpen ? <FolderOpen className={FOLDER_CLASS} /> : <Folder className={FOLDER_CLASS} />}
+            {isOpen ? <IconFolderOpen className={FOLDER_CLASS} /> : <IconFolder1 className={FOLDER_CLASS} />}
           </Tree.Icon>
           <Tree.Label className={FOLDER_CLASS}>{node.name}</Tree.Label>
         </Tree.FolderTrigger>

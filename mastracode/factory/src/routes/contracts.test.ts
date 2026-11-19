@@ -21,11 +21,13 @@ import {
   createWorkItemBodySchema,
   decisionQuerySchema,
   FACTORY_ROUTE_CONTRACTS,
+  sessionRowsQuerySchema,
   transitionBodySchema,
   updateProjectBodySchema,
 } from './contracts.js';
 import { IntakeRouteRoutes } from './intake-routes.js';
 import { ProjectRoutes } from './projects.js';
+import { SandboxEnvRoutes } from './sandbox-envs.js';
 import { SkillRoutes } from './skills.js';
 import { WorkItemRoutes } from './work-items.js';
 
@@ -49,6 +51,8 @@ function registeredFactoryRoutes() {
     workItems,
     queueHealth: {},
     liveSessions: {},
+    projectSessions: async () => [],
+    activeRuns: () => [],
   } as never).routes();
   const attention = buildAttentionRoutes({
     workItems: workItems as never,
@@ -78,7 +82,13 @@ function registeredFactoryRoutes() {
     storage: {},
     boards: {},
   } as never).routes();
-  return [...projects, ...work, ...attention, ...automationRuns, ...boards, ...skills, ...intakeRoutes];
+  const sandboxEnvs = new SandboxEnvRoutes({
+    auth: {},
+    projects: {},
+    sandboxEnvs: {},
+    writable: true,
+  } as never).routes();
+  return [...projects, ...work, ...attention, ...automationRuns, ...boards, ...skills, ...intakeRoutes, ...sandboxEnvs];
 }
 
 describe('Factory route contracts', () => {
@@ -122,7 +132,7 @@ describe('Factory route contracts', () => {
     };
     const list = FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema;
     const single = FACTORY_ROUTE_CONTRACTS.workItemCreate.responseSchema;
-    const listed = { workItems: [legacy], runningSessionIds: [], parkedSessionIds: [] };
+    const listed = { workItems: [legacy] };
     expect(list.parse(listed)).toEqual(listed);
     expect(single.parse({ workItem: legacy })).toEqual({ workItem: legacy });
     expect(single.safeParse({ workItem: { ...legacy, workItem: { provider: 'github' } } }).success).toBe(false);
@@ -227,6 +237,39 @@ describe('Factory route contracts', () => {
     );
   });
 
+  it('parses a sidebar session-rows view, reading repeated pins and windows', () => {
+    expect(sessionRowsQuerySchema.parse({})).toEqual({
+      sort: 'activity',
+      groupBy: 'none',
+      owner: 'all',
+      pin: new Set(),
+      window: new Map(),
+    });
+    const view = sessionRowsQuerySchema.parse({
+      owner: 'owner:user-2',
+      children: 'true',
+      pin: ['session-1', 'session-2', 'session-1'],
+      window: ['board:work:25', 'user:500'],
+    });
+    expect(view.pin).toEqual(new Set(['session-1', 'session-2']));
+    expect(view.window).toEqual(
+      new Map([
+        ['board:work', 25],
+        ['user', 500],
+      ]),
+    );
+    expect(view.owner).toBe('owner:user-2');
+    for (const window of ['user:0', 'user:501', 'user:01', 'user:', ':5', 'user']) {
+      expect(sessionRowsQuerySchema.safeParse({ window: [window] }).success, window).toBe(false);
+    }
+    expect(sessionRowsQuerySchema.safeParse({ window: ['user:1'] }).success).toBe(true);
+    expect(sessionRowsQuerySchema.safeParse({ window: ['board:work:5', 'board:work:10'] }).success).toBe(false);
+    for (const owner of ['someone', 'owner:', 'mine ']) {
+      expect(sessionRowsQuerySchema.safeParse({ owner }).success, owner).toBe(false);
+    }
+    expect(sessionRowsQuerySchema.safeParse({ children: 'false' }).success).toBe(false);
+  });
+
   it('accepts representative successful response envelopes', () => {
     const ATTENTION_KINDS = ['automation-failed', 'automation-proposed', 'agent-waiting'];
     expect(
@@ -250,8 +293,6 @@ describe('Factory route contracts', () => {
             },
           },
         ],
-        runningSessionIds: ['session-1'],
-        parkedSessionIds: ['session-2'],
       }).success,
     ).toBe(true);
     expect(

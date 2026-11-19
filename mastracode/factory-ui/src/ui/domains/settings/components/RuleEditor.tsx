@@ -1,111 +1,50 @@
-import { cardRuleGroupSchema } from '@mastra/factory/rules/rule-group';
+import type { RuleGroup } from '@mastra/factory/rules/rule-group';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
-import { RuleBuilder } from '@mastra/playground-ui/components/RuleBuilder';
-import type { RuleBuilderProps } from '@mastra/playground-ui/components/RuleBuilder';
+import type { FilterBarOption } from '@mastra/playground-ui/components/FilterBar';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useId, useState } from 'react';
 import type { z } from 'zod';
 
 import { rawRuleProblem, readRawRule, ruleProblem } from '../services/rules';
+import { ConditionRows } from './ConditionRows';
+import { CARD_FACTS, describeRule } from './conditionFields';
+import type { Facts } from './conditionFields';
 
-type Facts = RuleBuilderProps['schema'];
-
-const CARD_FACT_PROPERTIES = {
-  item: {
-    type: 'object',
-    title: 'Card',
-    properties: {
-      labels: { type: 'string', title: 'Labels' },
-      title: { type: 'string', title: 'Title' },
-      author: { type: 'string', title: 'Author' },
-      key: { type: 'string', title: 'Key' },
-      state: { type: 'string', title: 'State' },
-      assignees: { type: 'string', title: 'Assignees' },
-      pullRequest: { type: 'number', title: 'Open pull request' },
-    },
-  },
-  author: { type: 'object', title: 'Author', properties: { trusted: { type: 'boolean', title: 'Trusted' } } },
-  source: {
-    type: 'object',
-    title: 'Source',
-    properties: {
-      kind: { type: 'string', title: 'Kind' },
-      integration: { type: 'string', title: 'Integration' },
-      provider: { type: 'string', title: 'Provider' },
-      // A GitHub repository or GitLab project path, a Linear team key, a Jira project key.
-      repository: { type: 'string', title: 'Repository, team or project' },
-    },
-  },
-} satisfies Facts['properties'];
-
-/** The card facts a phase rule can test (`CARD_RULE_FIELDS`), as the rule builder's field tree. */
-export const CARD_FACTS: Facts = { type: 'object', properties: CARD_FACT_PROPERTIES };
+const UNFINISHED = 'Finish or remove unfinished conditions to save.';
 
 /**
- * The facts an intake route can test (`INTAKE_ROUTE_RULE_FIELDS`): the card's, the status event a
- * route moves cards on, and the issue a pull request closes.
- */
-const ROUTE_FACT_PROPERTIES = {
-  ...CARD_FACT_PROPERTIES,
-  pullRequest: {
-    type: 'object',
-    title: 'Pull request',
-    properties: { closesIssue: { type: 'boolean', title: 'Closes an issue' } },
-  },
-  closedIssue: {
-    type: 'object',
-    title: 'Closed issue',
-    properties: {
-      phase: { type: 'string', title: 'Phase' },
-      hasPullRequest: { type: 'boolean', title: 'Has a pull request' },
-    },
-  },
-} as const;
-
-/**
- * The facts an intake route handling `on` can test. As the route API requires, event facts
- * apply only to a route handling an event besides `work_item.created`, and `event.reason` only
- * to one handling `work_item.closed`, the one event that carries a reason.
- */
-export function intakeRouteFacts(on: readonly string[]): Facts {
-  if (on.every(type => type === 'work_item.created')) return { type: 'object', properties: ROUTE_FACT_PROPERTIES };
-  const event = {
-    type: { type: 'string', title: 'Type' },
-    ...(on.includes('work_item.closed') ? { reason: { type: 'string', title: 'Reason' } } : {}),
-  };
-  return {
-    type: 'object',
-    properties: { ...ROUTE_FACT_PROPERTIES, event: { type: 'object', title: 'Event', properties: event } },
-  };
-}
-
-/**
- * A rule, edited with the rule builder or as raw JSON. Unset means "every card".
+ * A rule, edited as condition rows or as raw JSON. Unset means "every card".
  * Reports a rule the server would refuse, so the form can hold back the save.
  * `facts` defaults to the card facts a phase rule tests. Pass `json` to keep the JSON being typed outside
  * the editor, so it outlives the editor; otherwise the editor keeps it.
  */
-export function RuleEditor<Rule>({
+export function RuleEditor({
   label,
   description,
   rule,
   disabled,
   facts = CARD_FACTS,
+  options,
   schema,
   json,
   onChange,
+  onUnfinished,
 }: {
   label: string;
   description: string;
-  rule: Rule | null | undefined;
+  rule: RuleGroup | null | undefined;
   disabled: boolean;
   facts?: Facts;
-  schema: z.ZodType<Rule>;
-  /** The JSON being typed, unset while the rule builder shows. */
+  /** Values to pick from per field, such as a board's phases. */
+  options?: Record<string, FilterBarOption[]>;
+  schema: z.ZodType<RuleGroup>;
+  /** The JSON being typed, unset while the conditions show. */
   json?: { text: string | undefined; onChange: (text: string | undefined) => void };
-  onChange: (rule: Rule | null, problem: string | undefined) => void;
+  onChange: (rule: RuleGroup | null, problem: string | undefined) => void;
+  /** Whether a condition row is half filled in, which the form should treat as a problem until it isn't. */
+  onUnfinished?: (unfinished: boolean) => void;
 }) {
   const [ownRaw, setOwnRaw] = useState<string | undefined>(undefined);
   const raw = json ? json.text : ownRaw;
@@ -134,11 +73,11 @@ export function RuleEditor<Rule>({
               return;
             }
             setRaw(undefined);
-            // The builder edits the last valid rule, so JSON that never parsed no longer holds the save.
+            // The rows edit the last valid rule, so JSON that never parsed no longer holds the save.
             onChange(rule ?? null, ruleProblem(schema, rule));
           }}
         >
-          {raw === undefined ? 'Edit as JSON' : 'Use rule builder'}
+          {raw === undefined ? 'Edit as JSON' : 'Edit as conditions'}
         </Button>
       </div>
       <FieldDescription>{description}</FieldDescription>
@@ -153,17 +92,20 @@ export function RuleEditor<Rule>({
         />
       ) : disabled ? (
         <Txt id={id} as="p" variant="caption" tone="muted">
-          {rule ? JSON.stringify(rule) : 'Every card.'}
+          {describeRule(rule, options)}
         </Txt>
       ) : (
         <div id={id}>
-          <RuleBuilder
-            schema={facts}
-            // Factory's rule groups have the builder's shape; the server validates the depth.
-            ruleGroup={(rule ?? undefined) as RuleBuilderProps['ruleGroup']}
-            onChange={next => {
-              const value = (next ?? null) as Rule | null;
-              onChange(value, ruleProblem(schema, value));
+          <ConditionRows
+            label={label}
+            rule={rule}
+            facts={facts}
+            options={options}
+            onChange={(next, incomplete) => {
+              onUnfinished?.(incomplete);
+              // A half-filled row keeps the last whole rule, so saving never quietly drops a condition.
+              if (incomplete) onChange(rule ?? null, UNFINISHED);
+              else onChange(next, ruleProblem(schema, next));
             }}
           />
         </div>

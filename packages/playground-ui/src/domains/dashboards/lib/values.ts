@@ -86,8 +86,38 @@ export const VALUE_FORMATS = ['count', 'usd', 'duration', 'percent', 'score'] as
 export const formatSchema = z.enum(VALUE_FORMATS);
 export type ValueFormat = z.infer<typeof formatSchema>;
 
-export const CHART_COLOR_NAMES = ['green', 'sky', 'violet', 'teal', 'indigo', 'warning', 'error', 'neutral'] as const;
+export const CHART_COLOR_NAMES = [
+  'green',
+  'sky',
+  'violet',
+  'teal',
+  'indigo',
+  'warning',
+  'error',
+  'neutral',
+  'blue',
+  'orange',
+  'pink',
+  'yellow',
+  'red',
+  'purple',
+] as const;
+/** The colors series without one of their own take by position, leaving out the colors that mean something. */
+export const SERIES_COLORS = [
+  'green',
+  'sky',
+  'violet',
+  'teal',
+  'indigo',
+  'blue',
+  'orange',
+  'pink',
+  'purple',
+  'yellow',
+] as const;
+
 export const colorSchema = z.enum(CHART_COLOR_NAMES);
+export type ChartColorName = z.infer<typeof colorSchema>;
 
 /** Every ref an expression reads, in order. */
 export function exprRefs(expr: ValueExpr): ValueRef[] {

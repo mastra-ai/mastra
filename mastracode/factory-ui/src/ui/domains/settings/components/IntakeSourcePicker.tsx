@@ -13,15 +13,20 @@ import {
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check, Plus, RotateCcw, Trash2, X } from 'lucide-react';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { Fragment, useId, useRef, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 
 import { useSidePanelDrawer } from '../../../lib/hooks/useSidePanelDrawer';
-import { SettingsAddRow } from './common/SettingsAddRow';
-import { settingsRowLayout } from './common/settings-row-layout';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
+
+/** A source row in the picker drawer, which has no settings card around it to space its rows. */
+const drawerRowLayout = 'flex min-h-11 w-full min-w-0 flex-wrap items-center gap-2 px-4 py-2 text-left';
 
 export interface SourcePickerItem {
   id: string;
@@ -156,13 +161,13 @@ export function SourcePicker(props: SourcePickerProps) {
 
   return (
     <Drawer {...sidePanel} open={open} onOpenChange={setOpen}>
-      <div role="group" aria-label={label} className="flex w-full min-w-0 flex-col">
+      <div role="group" aria-label={label} className="flex min-w-0 flex-col">
         {selected.length > 0 && (
-          <ul className="divide-border border-border divide-y border-b">
+          <ul className="contents">
             {selected.map(({ item, groupLabel }) => {
               const details = itemDetails?.(item);
               return (
-                <li key={item.id} className={cn(settingsRowLayout, 'flex flex-wrap items-center')}>
+                <li key={item.id} className="flex min-w-0 flex-wrap items-center gap-2 py-1 first:pt-0">
                   <SourceItemSummary
                     item={item}
                     icon={itemIcon}
@@ -174,7 +179,7 @@ export function SourcePicker(props: SourcePickerProps) {
                     <Button
                       size="sm"
                       variant="ghost"
-                      icon={<Trash2 />}
+                      icon={<TrashIcon />}
                       aria-label={`Remove ${sourcePickerItemText(item)}`}
                       onClick={() => {
                         onToggleItem(item.id);
@@ -190,35 +195,34 @@ export function SourcePicker(props: SourcePickerProps) {
             })}
           </ul>
         )}
-        <DrawerTrigger
-          render={
-            <SettingsAddRow ref={trigger} aria-label={`${addLabel} to ${label}`}>
-              {addLabel}
-            </SettingsAddRow>
-          }
-        />
-        {!open && saving && (
-          <div className="px-4 py-3">
-            <SavingStatus label={label} />
-          </div>
-        )}
+        {loading && <SettingsSkeleton label={`Loading ${label}`} variant="item" rows={1} />}
+        <div className={cn('flex items-center gap-2', selected.length > 0 && 'pt-1')}>
+          <DrawerTrigger
+            render={
+              <Button
+                ref={trigger}
+                type="button"
+                size="sm"
+                variant="ghost"
+                icon={<IconPlusMedium />}
+                aria-label={`${addLabel} to ${label}`}
+              >
+                {addLabel}
+              </Button>
+            }
+          />
+          {!open && saving && <SavingStatus label={label} />}
+        </div>
         {!open && error && (
-          <div className="flex items-center gap-2 px-4 py-3">
+          <div className="flex items-center gap-2 pt-2">
             <Txt as="p" variant="caption" tone="muted" role="alert" className="min-w-0 flex-1 wrap-anywhere">
               {error}
             </Txt>
             {onRetry && (
-              <Button size="sm" variant="ghost" icon={<RotateCcw />} onClick={onRetry}>
+              <Button size="sm" variant="ghost" icon={<IconArrowRotateCounterClockwise />} onClick={onRetry}>
                 Retry
               </Button>
             )}
-          </div>
-        )}
-        {!open && loading && (
-          <div className="px-4 py-3">
-            <Txt as="p" variant="caption" tone="muted" role="status">
-              Loading {label}…
-            </Txt>
           </div>
         )}
       </div>
@@ -275,13 +279,13 @@ function SourcePickerDrawer({
         {error ? (
           <SettingsRow label={label} description={error}>
             {onRetry && (
-              <Button size="sm" variant="ghost" icon={<RotateCcw />} onClick={onRetry}>
+              <Button size="sm" variant="ghost" icon={<IconArrowRotateCounterClockwise />} onClick={onRetry}>
                 Retry
               </Button>
             )}
           </SettingsRow>
         ) : loading ? (
-          <SettingsRow label={`Loading ${label}…`} />
+          <SettingsSkeleton label={`Loading ${label}`} variant="item" rows={3} />
         ) : (
           <>
             {added.length > 0 && (
@@ -289,7 +293,7 @@ function SourcePickerDrawer({
                 <SectionHeading id={addedHeading}>Added</SectionHeading>
                 <ul>
                   {added.map(({ item, groupLabel }) => (
-                    <li key={item.id} className={cn(settingsRowLayout, 'flex flex-wrap items-center')}>
+                    <li key={item.id} className={drawerRowLayout}>
                       <SourceItemSummary
                         item={item}
                         context={[groupLabel, item.hint]}
@@ -307,7 +311,7 @@ function SourcePickerDrawer({
                             focusSearch();
                           }}
                         >
-                          <X />
+                          <IconCrossMedium />
                         </Button>
                       </div>
                     </li>
@@ -336,10 +340,7 @@ function SourcePickerDrawer({
                       )}
                       <ul>
                         {group.items.map(item => (
-                          <li
-                            key={`${group.id}:${item.id}`}
-                            className={cn(settingsRowLayout, 'flex flex-wrap items-center')}
-                          >
+                          <li key={`${group.id}:${item.id}`} className={drawerRowLayout}>
                             <SourceItemSummary item={item} context={[item.hint]} />
                             <div className="ml-auto flex max-w-full min-w-0 items-center justify-end gap-2">
                               {pickControl ? (
@@ -348,7 +349,7 @@ function SourcePickerDrawer({
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  icon={<Plus />}
+                                  icon={<IconPlusMedium />}
                                   aria-label={`Add ${sourcePickerItemText(item)}`}
                                   onClick={() => {
                                     onToggleItem(item.id);
@@ -372,7 +373,7 @@ function SourcePickerDrawer({
         {saving && <SavingStatus label={label} />}
         <DrawerClose
           render={
-            <Button size="sm" icon={<Check />}>
+            <Button size="sm" icon={<IconCheckmark2Medium />}>
               Done
             </Button>
           }
@@ -384,7 +385,7 @@ function SourcePickerDrawer({
 
 function SectionHeading({ id, children }: { id?: string; children: ReactNode }) {
   return (
-    <Txt as="h3" id={id} variant="meta" tone="muted" className="m-0 px-4 pt-4 pb-1 uppercase">
+    <Txt as="h3" id={id} variant="meta" tone="muted" className="m-0 px-4 pt-4 pb-1">
       {children}
     </Txt>
   );

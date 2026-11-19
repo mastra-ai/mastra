@@ -192,6 +192,14 @@ export function buildTracesDrilldownUrl({
   appendArray(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.tags, dashboardFilter.tags);
 
   if (scope.span) params.append(TRACE_FILTER_GROUP_PARAM, JSON.stringify(spanFilterGroup(scope.span)));
+  if (scope.model) {
+    const model: TraceFilterGroup = {
+      id: 'metrics-model',
+      logic: 'and',
+      nodes: [{ id: 'model', fieldId: 'spans.model', value: scope.model }],
+    };
+    params.append(TRACE_FILTER_GROUP_PARAM, JSON.stringify(model));
+  }
 
   const query = params.toString();
   return query ? `${tracesBasePath}?${query}` : tracesBasePath;

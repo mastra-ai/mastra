@@ -22,7 +22,7 @@ const { runId } = await run.startAsync({
 })
 
 // Optionally poll for completion later
-const result = await workflow.getWorkflowRunExecutionResult(runId)
+const state = await workflow.getWorkflowRunById(runId)
 ```
 
 ## Parameters
@@ -128,18 +128,21 @@ Use `startAsync()` instead of `start()` when:
 
 ## Checking workflow status
 
-After calling `startAsync()`, you can check the workflow status using:
+After calling `startAsync()`, check the workflow status with `workflow.getWorkflowRunById()`. It returns the run state, including `status`, `steps`, `result`, and `error`, or `null` if the run isn't found.
+
+Without configured [storage](/docs/storage), or before the run is persisted, the method returns an in-memory state with `isFromInMemory: true`, empty `steps`, and no `result` or `error`. Configure storage to read a run's result after it finishes.
 
 ```typescript
-// Get the execution result (including step outputs)
-const result = await workflow.getWorkflowRunExecutionResult(runId)
+const state = await workflow.getWorkflowRunById(runId)
 
-if (result?.status === 'success') {
-  console.log('Workflow completed:', result.steps)
-} else if (result?.status === 'failed') {
-  console.log('Workflow failed:', result.error)
-} else if (result?.status === 'running') {
-  console.log('Workflow still running...')
+if (!state) {
+  console.log('Workflow run not found')
+} else if (state.status === 'success') {
+  console.log('Workflow completed:', state.result)
+} else if (state.status === 'failed') {
+  console.log('Workflow failed:', state.error)
+} else {
+  console.log('Workflow status:', state.status)
 }
 ```
 

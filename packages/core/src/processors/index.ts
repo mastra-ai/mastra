@@ -564,6 +564,18 @@ export interface ProcessToolResultArgs<TTripwireMetadata = unknown> extends Proc
    * from the provider stream, which is not run through `ensureSerializable`.
    */
   result: unknown;
+  /**
+   * The tool's `toModelOutput` mapping of `result`: what the next model call
+   * and stored history read in place of the raw result. `undefined` when the
+   * tool has no `toModelOutput` or it returned nothing.
+   *
+   * To replace it (e.g. resize or remove images), commit a `result`-state
+   * part with `messageList.updateToolInvocation` that carries the new value in
+   * `providerMetadata.mastra.modelOutput`; `null` there drops the mapping so
+   * the model reads the raw result. Replacing only `result` re-runs
+   * `toModelOutput` on the new value.
+   */
+  modelOutput?: unknown;
   /** Whether this result came from a provider-executed tool (e.g. Anthropic web_search) */
   providerExecuted?: boolean;
   /** All system messages */
@@ -1061,6 +1073,7 @@ export {
 } from './stream-error-retry-processor';
 export type { CompatRule } from './provider-history-compat';
 export { ProcessorState, ProcessorRunner } from './runner';
+export { REPROCESS_PART_KEY } from './stream-reprocess';
 export { createProcessorSendSignal } from './send-signal';
 export { createBackgroundWorkSignalProcessor } from './background-work-signals';
 export type {

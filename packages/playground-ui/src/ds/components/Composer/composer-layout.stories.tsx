@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ArrowUp, Mic } from 'lucide-react';
 import { useState } from 'react';
 
 import { ModelPicker } from '../../../domains/llm/model-picker';
@@ -24,6 +23,8 @@ import {
   ComposerRing,
   ComposerStatus,
 } from './index';
+import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
+import { IconMicrophone } from '@/ds/icons/central/IconMicrophone';
 
 const providers: ModelPickerProvider[] = [
   {
@@ -105,7 +106,7 @@ const LayoutStory = ({ reconnecting = false, status = false, singleProvider = fa
                   <ThinkingLevelIcon options={thinkingLevels} value={thinking} />
                 </ModelPicker>
                 <Button type="button" variant="ghost" size="icon-sm" tooltip="Start dictation">
-                  <Mic />
+                  <IconMicrophone />
                 </Button>
                 <Button
                   type="submit"
@@ -114,7 +115,7 @@ const LayoutStory = ({ reconnecting = false, status = false, singleProvider = fa
                   disabled={reconnecting}
                   tooltip={reconnecting ? 'You can send once reconnected' : 'Send'}
                 >
-                  <ArrowUp />
+                  <IconArrowUp />
                 </Button>
               </ComposerActionsEnd>
             </ComposerActions>

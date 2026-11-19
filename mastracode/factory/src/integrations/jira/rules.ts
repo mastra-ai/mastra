@@ -11,13 +11,12 @@ import {
 import type { BoardRegistry } from '../../boards/index.js';
 import { toBoardSource } from '../../boards/project-boards.js';
 import type { ProjectBoardSource } from '../../boards/project-boards.js';
-import { deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
+import { commitObservedChange, deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
 import type { FactoryJiraRuleContext, FactoryRuleDecision } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { StoredBoardScope } from '../../storage/domains/boards/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
-import type { IntegrationContext } from '../base.js';
 import type { JiraEventRules } from './default-rules.js';
 
 const RULE_TIMEOUT_MS = 5_000;
@@ -87,7 +86,7 @@ export function boardEventFor(context: Pick<FactoryJiraRuleContext, 'event' | 'i
   if (context.event === 'issueClosed') {
     return { type: 'work_item.closed', reason: closeReason(context.issue.stateType === 'canceled') };
   }
-  return context.item ? undefined : { type: 'work_item.created' };
+  return context.item ? undefined : { type: 'work_item.opened' };
 }
 
 export class JiraRules {
@@ -109,12 +108,19 @@ export class JiraRules {
       factoryProjectId: input.factoryProjectId,
       sources: input.issues.map(issue => ({ integrationId: 'jira', type: 'issue', externalId: issue.id })),
     });
-    const items = await this.options.storage.list({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
+    // The shared list is the cache itself: only the card handed on to rules is cloned.
+    const items = await this.options.storage.listShared({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
     const itemsBySourceKey = new Map(items.map(item => [item.externalSource?.externalId, item]));
+    // A card filed by hand from Settings › Intake holds the issue key, while the
+    // sweep names the issue by its id. Its browse URL names both the site and the key.
+    const itemsByUrl = new Map(
+      items.flatMap(item => (item.externalSource?.url ? [[item.externalSource.url, item] as const] : [])),
+    );
     const statuses: IngressStatus[] = [];
     for (const issue of input.issues) {
       // One card per Jira issue per project; other projects may file their own.
-      statuses.push(await this.#ingestIssue(input, issue, itemsBySourceKey.get(issue.id)));
+      const relatedItem = itemsBySourceKey.get(issue.id) ?? itemsByUrl.get(issue.url);
+      statuses.push(await this.#ingestIssue(input, issue, relatedItem && structuredClone(relatedItem)));
     }
     if (statuses.some(status => status === 'committed')) return { status: 'committed', ingested: statuses.length };
     if (statuses.some(status => status === 'replayed')) return { status: 'replayed', ingested: statuses.length };
@@ -223,8 +229,7 @@ export class JiraRules {
       orgId: input.orgId,
       factoryProjectId: input.factoryProjectId,
       workItemId: relatedItem?.id ?? null,
-      ingress: { identity: ingressId, triggerType: 'jira.issueObserved' },
-      configVersion: this.options.configVersion,
+      ingress: { identity: ingressId },
       expectedRevision: relatedItem?.revision ?? null,
       actor,
       outcome,
@@ -241,21 +246,18 @@ export class JiraRules {
       if (relatedItem && !fresh) return 'missing';
       return this.#ingestIssue(input, issue, fresh ?? undefined, attempt + 1);
     }
+    if (relatedItem && event === 'issueObserved' && outcome.status === 'accepted' && !ownedByDeployment) {
+      await commitObservedChange(this.options.storage, {
+        orgId: input.orgId,
+        factoryProjectId: input.factoryProjectId,
+        item: relatedItem,
+        ingressId,
+        actor,
+        labels: issue.labels,
+        assignee: issue.assignee,
+        observedAt: issue.updatedAt,
+      });
+    }
     return committed.status;
   }
-}
-
-export function attachJiraRules(
-  jira: { readonly rules: JiraEventRules },
-  context: IntegrationContext,
-): ((input: JiraRulesIngress) => Promise<unknown>) | undefined {
-  if (!context.runtime) return undefined;
-  const rules = new JiraRules({
-    projects: context.storage.projects,
-    storage: context.runtime.workItems,
-    configVersion: context.runtime.configVersion,
-    boards: context.runtime.boards,
-    jiraRules: jira.rules,
-  });
-  return input => rules.ingest(input);
 }

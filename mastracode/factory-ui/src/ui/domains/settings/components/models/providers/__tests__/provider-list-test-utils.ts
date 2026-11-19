@@ -6,7 +6,7 @@ import { expect } from 'vitest';
 
 import { server } from '../../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../../../e2e/ui/render';
-import type { OAuthStartResponse, ProviderInfo } from '../../../../../../../api/types';
+import type { CustomProviderInfo, OAuthStartResponse, ProviderInfo } from '../../../../../../../api/types';
 
 export const PROVIDERS_URL = `${TEST_BASE_URL}/web/config/providers`;
 export const keyUrl = (provider: string) => `${PROVIDERS_URL}/${encodeURIComponent(provider)}/key`;
@@ -36,6 +36,48 @@ export async function openAddProvider(user: UserEvent, container: HTMLElement = 
   await waitFor(() => expect(add).toBeEnabled());
   await user.click(add);
   return screen.findByRole('dialog', { name: 'Add provider' });
+}
+
+export const CUSTOM_PROVIDERS_URL = `${TEST_BASE_URL}/web/config/custom-providers`;
+export const customProviderUrl = (id: string) => `${CUSTOM_PROVIDERS_URL}/${encodeURIComponent(id)}`;
+
+export function stubCustomProviders(providers: CustomProviderInfo[]) {
+  server.use(http.get(CUSTOM_PROVIDERS_URL, () => HttpResponse.json({ providers })));
+}
+
+/** The row of a custom endpoint, found by the name the user gave it. */
+export async function findCustomRow(name: string, container: HTMLElement = document.body): Promise<HTMLElement> {
+  const row = (await within(container).findByText(name)).closest('li');
+  if (!(row instanceof HTMLElement)) throw new Error(`Custom endpoint row not found for ${name}`);
+  return row;
+}
+
+export async function pickCustomRowAction(
+  user: UserEvent,
+  name: string,
+  action: string,
+  container: HTMLElement = document.body,
+) {
+  const trigger = within(await findCustomRow(name, container)).getByRole('button', { name: `${name} actions` });
+  await waitFor(() => expect(trigger).toBeEnabled());
+  await user.click(trigger);
+  await user.click(await screen.findByRole('menuitem', { name: action }));
+}
+
+/** Opens the custom endpoint form from an open Add provider dialog. */
+export async function openCustomEndpointForm(user: UserEvent, addProviderDialog: HTMLElement) {
+  await user.click(within(addProviderDialog).getByRole('button', { name: 'Add a custom endpoint' }));
+  return screen.findByRole('dialog', { name: 'Add custom endpoint' });
+}
+
+export async function fillCustomEndpoint(
+  user: UserEvent,
+  form: HTMLElement,
+  endpoint: { name: string; url: string; models: string },
+) {
+  await user.type(within(form).getByPlaceholderText('e.g. my-llm'), endpoint.name);
+  await user.type(within(form).getByPlaceholderText('https://api.example.com/v1'), endpoint.url);
+  await user.type(within(form).getByPlaceholderText('model-a, model-b'), endpoint.models);
 }
 
 export async function saveKey(user: UserEvent, key: string) {

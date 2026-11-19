@@ -37,6 +37,7 @@ import { createGoalStep } from './workflows/agentic-execution/goal-step';
 import { createIsTaskCompleteStep } from './workflows/agentic-execution/is-task-complete-step';
 import { createLLMExecutionStep } from './workflows/agentic-execution/llm-execution-step';
 import { createLLMMappingStep } from './workflows/agentic-execution/llm-mapping-step';
+import { resolveRunToolApprovalPolicy } from './workflows/agentic-execution/tool-approval-verdict';
 import {
   normalizeToolCallConcurrency,
   resolveEmittedToolCallConcurrency,
@@ -373,7 +374,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
           // evaluating a potentially stateful policy a second time.
           const approvalVerdicts = new Map<string, boolean>();
           toolCallForeachOptions.concurrency = await resolveEmittedToolCallConcurrency({
-            requireToolApproval: rest.requireToolApproval ?? requestContext?.get('__mastra_requireToolApproval'),
+            requireToolApproval: resolveRunToolApprovalPolicy(rest.requireToolApproval, requestContext),
             tools: (readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as Tools | undefined) ?? rest.tools,
             activeTools: stepActiveTools,
             configuredConcurrency: configuredToolCallConcurrency,
@@ -385,7 +386,16 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
             logger: rest.logger,
           });
           emittedConcurrencyResolved = true;
-          writeScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts', approvalVerdicts);
+          // Calls that all start at once run on the verdicts they were scheduled with. When some
+          // calls wait for a free slot, every call is judged again when it starts, so a policy
+          // changed by an earlier call applies to the calls after it.
+          const keepVerdicts = toolCalls.length <= toolCallForeachOptions.concurrency;
+          writeScoped(
+            scopeCtx,
+            TOOL_APPROVAL_VERDICTS_KEY,
+            'toolApprovalVerdicts',
+            keepVerdicts ? approvalVerdicts : undefined,
+          );
           writeScoped(scopeCtx, STEP_USAGE_KEY, 'stepUsage', typedInputData.output.usage);
           writeScoped(
             scopeCtx,
@@ -407,9 +417,13 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
             return toolCallForeachOptions.concurrency;
           }
           const scopeCtx = { mastra: rest.mastra, runId: rest.runId, _internal };
+          // Verdicts cached before the step suspended are stale: the policy may have changed
+          // while it waited. Calls that have not run yet are judged again when they start.
+          writeScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts', undefined);
           const toolCalls = Array.isArray(inputData) ? (inputData as { toolName?: unknown }[]) : [];
           return resolveToolCallConcurrency({
-            requireToolApproval: rest.requireToolApproval ?? rest.requestContext?.get('__mastra_requireToolApproval'),
+            // A function policy is gone on resume; its stored stand-in keeps the calls sequential.
+            requireToolApproval: resolveRunToolApprovalPolicy(rest.requireToolApproval, rest.requestContext),
             tools: (readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as Tools | undefined) ?? rest.tools,
             activeTools:
               readScoped(scopeCtx, STEP_ACTIVE_TOOLS_KEY, 'stepActiveTools') ??
@@ -724,7 +738,9 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         agentSpan.traceId === previousContext.traceId &&
         agentSpan.getParentSpanId() === previousContext.spanId;
 
-      const own = getResumeTracingContext(agentSpan);
+      // An unsampled agent run saves no trace and decides again on resume; the empty context
+      // keeps the loop from saving its own span's decision instead.
+      const own = getResumeTracingContext(agentSpan) ?? {};
       resumeTracingContext = continuesSavedLineage
         ? { ...own, spanId: previousContext.spanId, parentSpanId: previousContext.parentSpanId }
         : own;

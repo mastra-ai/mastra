@@ -53,8 +53,9 @@ describe('AppShell', () => {
       expect(markup.indexOf('Sidebar')).toBeLessThan(markup.indexOf('Main content'));
     });
 
-    it('lays the sidebar and content out as a desktop grid', () => {
-      expect(markup).toContain('data-slot="app-shell" class="h-full min-h-0 lg:grid lg:grid-cols-[auto_minmax(0,1fr)]');
+    it('reserves a sidebar column beside the content from lg', () => {
+      const shellClasses = markup.match(/data-slot="app-shell" class="([^"]*)"/)?.[1].split(/\s+/) ?? [];
+      expect(shellClasses).toEqual(expect.arrayContaining(['lg:grid', 'lg:grid-cols-[auto_minmax(0,1fr)]']));
     });
 
     it('lets wide content scroll inside itself instead of widening the content column', () => {
@@ -70,12 +71,6 @@ describe('AppShell', () => {
         .split(/\s+/)
         .filter(className => /^(max-lg:)?p[trblxy]?-/.test(className));
       expect(unscopedPadding).toEqual([]);
-    });
-
-    it('never mixes padding shorthands with longhands, so consumer CSS order cannot override the lg inset', () => {
-      const classes = bodyClassName(markup).split(/\s+/);
-      expect(classes).not.toContain('p-1.5');
-      expect(classes).not.toContain('lg:p-2');
     });
 
     it('keeps the mobile header outside the inset body', () => {

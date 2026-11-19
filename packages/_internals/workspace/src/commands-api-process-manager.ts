@@ -43,6 +43,8 @@ export interface CommandsApi {
       stdin?: boolean;
       cwd?: string;
       envs?: Record<string, string>;
+      /** OS user to run the command as. Omitted when the provider has no user configured. */
+      user?: string;
     },
   ): Promise<CommandsApiHandle>;
   connect(pid: number, opts?: CommandsApiStreamOptions): Promise<CommandsApiHandle>;
@@ -189,6 +191,9 @@ export class CommandsApiProcessHandle extends ProcessHandle {
           background: true,
           stdin: false,
           timeoutMs: KILL_DESCENDANTS_TIMEOUT_MS,
+          // Signal the tree as the same user that started it: a different user
+          // cannot signal these processes, and the tree would be left running.
+          ...(this.manager.defaultUser !== undefined && { user: this.manager.defaultUser }),
         });
         await descendants.wait();
       } catch {}
@@ -217,6 +222,12 @@ export interface CommandsApiProcessManagerOptions {
   env?: Record<string, string | undefined>;
   /** Default timeout in milliseconds for commands that don't specify one. */
   defaultTimeout?: number;
+  /**
+   * OS user every command this manager starts runs as. Providers pass the user
+   * their sandbox is configured with; leaving it unset keeps the provider's own
+   * default user.
+   */
+  user?: string;
 }
 
 /**
@@ -227,10 +238,13 @@ export abstract class CommandsApiProcessManager<
   TSandbox extends MastraSandbox = MastraSandbox,
 > extends SandboxProcessManager<TSandbox> {
   protected readonly defaultTimeout?: number;
+  /** Read by {@link CommandsApiProcessHandle.kill}, which must run as the same user. */
+  readonly defaultUser?: string;
 
-  constructor({ defaultTimeout, ...options }: CommandsApiProcessManagerOptions = {}) {
+  constructor({ defaultTimeout, user, ...options }: CommandsApiProcessManagerOptions = {}) {
     super(options);
     this.defaultTimeout = defaultTimeout;
+    this.defaultUser = user;
   }
 
   /** Run `fn` against the provider's current commands handle. */
@@ -267,6 +281,8 @@ export abstract class CommandsApiProcessManager<
         // Without this the SDK falls back to its own 60s connection deadline,
         // which bounds the whole command and kills anything that runs longer.
         timeoutMs: options.timeout ?? this.defaultTimeout,
+        // Left off entirely when unset, so the provider keeps its own default user.
+        ...(this.defaultUser !== undefined && { user: this.defaultUser }),
         onStdout: output.onStdout,
         onStderr: output.onStderr,
       });

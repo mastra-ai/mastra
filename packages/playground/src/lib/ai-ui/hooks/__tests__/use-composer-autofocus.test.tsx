@@ -32,7 +32,13 @@ describe('useComposerAutofocus', () => {
 
   describe('when disabled', () => {
     it('does not focus the textarea', () => {
-      render(<Harness threadId="t1" disabled />);
+      const HookDisabledHarness = () => {
+        const ref = useRef<HTMLTextAreaElement>(null);
+        useComposerAutofocus(ref, { threadId: 't1', disabled: true });
+        // The textarea itself stays focusable, so only the hook's own guard keeps focus away.
+        return <textarea ref={ref} aria-label="composer" defaultValue="draft" />;
+      };
+      render(<HookDisabledHarness />);
       expect(document.activeElement).not.toBe(screen.getByRole('textbox', { name: 'composer' }));
     });
   });

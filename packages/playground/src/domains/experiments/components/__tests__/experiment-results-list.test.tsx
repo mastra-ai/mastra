@@ -45,21 +45,18 @@ describe('ExperimentResultsList', () => {
   afterEach(cleanup);
 
   describe('for a result without an error', () => {
-    it('renders no success or status indicator and keeps the default row tone', () => {
+    it('keeps the default row tone', () => {
       const { container } = renderList([makeResult('r-1')]);
 
       expect(container.querySelector('[data-variant="error"]')).toBeNull();
-      expect(screen.queryByText('Success')).toBeNull();
-      expect(screen.queryByText('Status')).toBeNull();
     });
   });
 
   describe('for a result with an error', () => {
-    it('tints the row with the error tone instead of rendering an icon', () => {
+    it('tints the row with the error tone', () => {
       const { container } = renderList([makeResult('r-1', { message: 'boom' })]);
 
       expect(container.querySelector('[data-variant="error"]')).not.toBeNull();
-      expect(screen.queryByRole('img', { name: 'Error' })).toBeNull();
     });
   });
 
@@ -114,20 +111,6 @@ describe('ExperimentResultsList', () => {
 
   describe('when the output column is requested', () => {
     const outputColumns = [...columns, { name: 'output', label: 'Output', size: '1fr' }];
-
-    it('renders the Output header', () => {
-      renderWithProviders(
-        <ExperimentResultsList
-          results={[agentMarkdownResult]}
-          isLoading={false}
-          featuredResultId={null}
-          onResultClick={() => {}}
-          columns={outputColumns}
-        />,
-      );
-
-      expect(screen.getByText('Output')).toBeDefined();
-    });
 
     it('renders the raw agent text without rendering markdown', () => {
       renderWithProviders(

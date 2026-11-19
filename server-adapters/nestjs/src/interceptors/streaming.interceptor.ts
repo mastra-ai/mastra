@@ -52,6 +52,11 @@ export class StreamingInterceptor implements NestInterceptor {
     }
   }
 
+  /** Module `mcpOptions` win; otherwise use `server.mcpOptions` from the Mastra config. */
+  private resolveMcpOptions() {
+    return this.options.mcpOptions ?? this.options.mastra.getServer()?.mcpOptions;
+  }
+
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     return next.handle().pipe(
       switchMap((result: RouteHandlerResult | unknown) => {
@@ -258,7 +263,7 @@ export class StreamingInterceptor implements NestInterceptor {
 
     try {
       // Merge module-level mcpOptions with route-specific options (route takes precedence)
-      const { setRequestAuth, ...options } = { ...this.options.mcpOptions, ...routeMcpOptions };
+      const { setRequestAuth, ...options } = { ...this.resolveMcpOptions(), ...routeMcpOptions };
       const requestUrl = (request as Request & { originalUrl?: string }).originalUrl ?? request.url;
       await applyMcpRequestAuth({
         req: request,
@@ -308,7 +313,7 @@ export class StreamingInterceptor implements NestInterceptor {
       await applyMcpRequestAuth({
         req: request,
         requestContext: result.requestContext,
-        setRequestAuth: this.options.mcpOptions?.setRequestAuth,
+        setRequestAuth: this.resolveMcpOptions()?.setRequestAuth,
       });
 
       await server.startSSE({

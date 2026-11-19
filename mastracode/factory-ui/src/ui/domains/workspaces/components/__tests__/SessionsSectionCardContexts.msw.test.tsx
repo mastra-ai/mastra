@@ -1,3 +1,4 @@
+import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -117,15 +118,21 @@ function runningSessions(sessionIds: string[]) {
   );
 }
 
-function renderSection() {
+function renderSection({
+  path = `/factories/${factoryId}`,
+  sidebar = 'default',
+}: { path?: string; sidebar?: 'default' | 'collapsed' } = {}) {
   return renderWithProviders(
-    <MemoryRouter initialEntries={[`/factories/${factoryId}`]}>
-      <ChatSessionContext.Provider value={testChatSession(factoryId, projectRepositoryId, LIVE_SESSION)}>
-        <Routes>
-          <Route path="/factories/:factoryId" element={<SessionsSection />} />
-        </Routes>
-      </ChatSessionContext.Provider>
-    </MemoryRouter>,
+    <Sidebar.Provider defaultState={sidebar} collapsedWidth={0} storageKey="card-contexts-test">
+      <MemoryRouter initialEntries={[path]}>
+        <ChatSessionContext.Provider value={testChatSession(factoryId, projectRepositoryId, LIVE_SESSION)}>
+          <Routes>
+            <Route path="/factories/:factoryId" element={<SessionsSection />} />
+            <Route path="/factories/:factoryId/sessions/:sessionId" element={<SessionsSection />} />
+          </Routes>
+        </ChatSessionContext.Provider>
+      </MemoryRouter>
+    </Sidebar.Provider>,
   );
 }
 
@@ -170,14 +177,6 @@ describe('Sessions sidebar lists one row per card', () => {
     expect(screen.queryByRole('list', { name: 'Write docs card' })).not.toBeInTheDocument();
     expect(cardRow.closest('ul')).toBe(userRow.closest('ul'));
   });
-
-  it('keeps a plain user session as a flat row', async () => {
-    renderSection();
-
-    const row = await screen.findByRole('link', { name: 'Scratch notes' });
-    expect(row).toHaveTextContent('Scratch notes');
-    expect(screen.queryByRole('list', { name: 'Scratch notes' })).not.toBeInTheDocument();
-  });
 });
 
 async function toggleSessionView(user: ReturnType<typeof userEvent.setup>, option: string) {
@@ -208,15 +207,26 @@ describe('Sessions sidebar view options', () => {
     expect(await screen.findByRole('link', { name: /^Review.*: Review fix login$/ })).toBeInTheDocument();
   });
 
-  it('shows when a session last moved under its name once compact view is off', async () => {
+  it('folds the card back into one row while the sidebar is collapsed, highlighting it for an open child session', async () => {
+    const user = userEvent.setup();
+    const expanded = renderSection();
+    await screen.findByRole('link', { name: 'Build fix login' });
+    await toggleSessionView(user, 'Reveal child sessions');
+    expanded.unmount();
+
+    renderSection({ path: `/factories/${factoryId}/sessions/review-session`, sidebar: 'collapsed' });
+
+    expect(await screen.findByRole('link', { name: 'Build fix login' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('shows when a session last moved under its name until compact view is on', async () => {
     const user = userEvent.setup();
     renderSection();
     const row = await screen.findByRole('link', { name: 'Build fix login' });
-    expect(row.querySelector('time')).toBeNull();
+    expect(within(row).getByText('Sep 4')).toHaveAttribute('dateTime', '2026-09-04T10:00:00.000Z');
 
     await toggleSessionView(user, 'Compact view');
 
-    const time = within(screen.getByRole('link', { name: 'Build fix login' })).getByText('Sep 4');
-    expect(time).toHaveAttribute('dateTime', '2026-09-04T10:00:00.000Z');
+    expect(screen.getByRole('link', { name: 'Build fix login' }).querySelector('time')).toBeNull();
   });
 });

@@ -64,13 +64,22 @@ export const valeCheck: Check = {
     const files = ctx.files.filter(isFormattedFile).map(file => file.path)
     if (files.length === 0) return { findings: [] }
 
+    // A missing or broken Vale binary is an error, not a skip, so a run without Vale never looks green.
+    const unavailable = (message: string): CheckResult => ({
+      findings: [
+        finding(
+          'mastra/vale-unavailable',
+          message,
+          {},
+          {
+            suggestion: 'Run `pnpm vale:download`, or pass `--no-vale` to skip Vale on purpose',
+          },
+        ),
+      ],
+    })
+
     const vale = await findVale(ctx.rootDir)
-    if (!vale) {
-      return {
-        findings: [],
-        skipped: [{ check: 'mastra/vale-*', reason: 'Vale is not installed; run `pnpm vale:download`' }],
-      }
-    }
+    if (!vale) return unavailable('Vale is not installed, so prose was not checked')
 
     let stdout: string
     try {
@@ -82,12 +91,7 @@ export const valeCheck: Check = {
       // Vale exits 1 when it reports errors; the JSON is still on stdout.
       const err = error as { code?: number; stdout?: string; stderr?: string }
       if (err.code !== 1 || !err.stdout) {
-        return {
-          findings: [],
-          skipped: [
-            { check: 'mastra/vale-*', reason: `Vale failed: ${(err.stderr || String(error)).trim().split('\n')[0]}` },
-          ],
-        }
+        return unavailable(`Vale failed to run: ${(err.stderr || String(error)).trim().split('\n')[0]}`)
       }
       stdout = err.stdout
     }

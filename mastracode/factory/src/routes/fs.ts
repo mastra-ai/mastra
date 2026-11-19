@@ -105,6 +105,16 @@ export interface WorkspaceTreeListing {
   entries: WorkspaceTreeEntry[];
 }
 
+export interface WorkspaceFileIndex {
+  workspacePath: string;
+  /** False when this process holds no sandbox for the session, so nothing was read. */
+  available: boolean;
+  /** Tracked and untracked files git doesn't ignore, workspace-relative, in each checkout's order. */
+  paths: string[];
+  /** Files are left out: a checkout's list hit the size cap, or a checkout couldn't be listed. */
+  truncated: boolean;
+}
+
 export type WorkspaceChangeStatus =
   | 'modified'
   | 'added'
@@ -264,10 +274,11 @@ function assertRelativePath(path: string, label: string): string {
   return normalized;
 }
 
-function assertApprovedRenderedRoot(renderedRoot: string): string {
+function assertApprovedRenderedRoot(renderedRoot: string, layout?: SessionLayout): string {
   const safeRoot = assertRelativePath(renderedRoot, 'root');
-  if (!APPROVED_RENDERED_ROOTS.has(safeRoot)) throw new Error('Root is not approved for rendered workspace access');
-  return safeRoot;
+  if (APPROVED_RENDERED_ROOTS.has(safeRoot)) return safeRoot;
+  if (layout?.repos.length && layout.repos.some(repo => `${repo.prefix}.artifacts` === safeRoot)) return safeRoot;
+  throw new Error('Root is not approved for rendered workspace access');
 }
 
 async function confinedWorkspacePath(
@@ -565,11 +576,18 @@ export async function listSessionRenderedPath(
   session: SourceControlSession,
   renderedRoot: string,
 ): Promise<WorkspaceRenderedListing> {
-  const safeRoot = assertApprovedRenderedRoot(renderedRoot);
   const handle = await sessionSandbox(session);
+  const safeRoot = assertApprovedRenderedRoot(renderedRoot, handle?.layout);
   const rootPath = posixPath.join(handle?.layout.root ?? '', safeRoot);
   const empty: WorkspaceRenderedListing = { workspacePath: session.sessionId, root: safeRoot, rootPath, entries: [] };
   if (!handle) return empty;
+
+  // Do not enumerate a checkout reached through a symlink: even listing would
+  // expose names and metadata outside the session's physical workspace.
+  const physical = await realPaths(handle.sandbox, handle.layout.root, [safeRoot]);
+  if (physical.paths[0] && physical.paths[0] !== posixPath.join(physical.root, safeRoot)) {
+    throw new Error('Path is not available in this session');
+  }
 
   // One round trip: emit "type\tsize\tmtime\tpath" per entry. `safeRoot` comes
   // from a fixed allowlist so interpolating it (quoted) is safe. The listing is
@@ -655,19 +673,20 @@ async function ignoredPaths(sandbox: ExecutableSandbox, repoDir: string, paths: 
 
 /**
  * The real absolute location of each path (relative to `root`), following
- * every symlink, or `''` when it doesn't exist; plus `root`'s own. Paths go in
- * as positional arguments and come back NUL-separated.
+ * every symlink, or `''` when it fails `test` (exists, or is a file); plus
+ * `root`'s own. Paths go in as positional arguments and come back NUL-separated.
  */
 async function realPaths(
   sandbox: ExecutableSandbox,
   root: string,
   paths: string[],
+  test: '-e' | '-f' = '-e',
 ): Promise<{ root: string; paths: string[] }> {
   const result = await sandbox.executeCommand(
     'sh',
     [
       '-c',
-      'cd "$1" && shift && printf \'%s\\0\' "$(pwd -P)" && for p; do printf \'%s\\0\' "$([ -e "$p" ] && readlink -f -- "$p")"; done',
+      `cd "$1" && shift && printf '%s\\0' "$(pwd -P)" && for p; do printf '%s\\0' "$([ ${test} "$p" ] && readlink -f -- "$p")"; done`,
       'sh',
       root,
       ...paths,
@@ -801,6 +820,193 @@ export async function listSessionWorkspaceTree(
   return { ...listing, available: true, entries };
 }
 
+const MAX_FILE_INDEX_BYTES = 4 * 1024 * 1024;
+/** Prints gitlinks and symlinks as NUL-terminated `<mode> …\t<path>` records; it lstats only untracked entries, which are few. */
+const SPECIAL_ENTRIES_SCRIPT = `
+set -e
+cd "$1"
+staged=$(mktemp)
+untracked=$(mktemp)
+trap 'rm -f "$staged" "$untracked"' EXIT
+git ls-files -z --stage >"$staged"
+git ls-files -z --others --exclude-standard >"$untracked"
+grep -z '^1[26]0000 ' "$staged" || [ $? -eq 1 ]
+xargs -0 sh -c 'for p; do if [ -L "$p" ]; then printf "120000 untracked\\t%s\\0" "$p"; fi; done' sh <"$untracked"
+`;
+
+/** Whole NUL-terminated paths of a listing capped at `MAX_FILE_INDEX_BYTES + 1` bytes, and whether the cap cut it. */
+function boundedPaths(stdout: string): { paths: string[]; truncated: boolean } {
+  const truncated = Buffer.byteLength(stdout) > MAX_FILE_INDEX_BYTES;
+  return { paths: (truncated ? stdout.slice(0, stdout.lastIndexOf('\0') + 1) : stdout).split('\0'), truncated };
+}
+
+async function refusedLinks(sandbox: ExecutableSandbox, layout: SessionLayout, links: string[]): Promise<Set<string>> {
+  if (links.length === 0) return new Set();
+  const real = await realPaths(sandbox, layout.root, links, '-f');
+  const targets = links.map((_, i) => treePathOf(layout, real.root, real.paths[i] ?? ''));
+  const ignored = await ignoredTreePaths(
+    sandbox,
+    layout,
+    targets.filter((target): target is string => target !== undefined),
+  );
+  return new Set(
+    links.filter((_, i) => {
+      const target = targets[i];
+      return target === undefined || ignored.has(target);
+    }),
+  );
+}
+
+async function checkoutFiles(
+  sandbox: ExecutableSandbox,
+  layout: SessionLayout,
+  repo: SessionLayoutRepository,
+): Promise<{ paths: string[]; truncated: boolean }> {
+  const options = { timeout: 30_000, maxRetainedBytes: Infinity };
+  const [listed, deleted, special] = await Promise.all([
+    sandbox.executeCommand(
+      'sh',
+      [
+        '-c',
+        BOUNDED_OUTPUT_SCRIPT,
+        'mastracode-bounded',
+        String(MAX_FILE_INDEX_BYTES + 1),
+        'git',
+        '-C',
+        repo.dir,
+        'ls-files',
+        '-z',
+        '--cached',
+        '--others',
+        '--exclude-standard',
+      ],
+      options,
+    ),
+    sandbox.executeCommand('git', ['-C', repo.dir, 'ls-files', '-z', '--deleted'], options),
+    sandbox.executeCommand('sh', ['-c', SPECIAL_ENTRIES_SCRIPT, 'mastracode-special-entries', repo.dir], options),
+  ]);
+  for (const result of [listed, deleted, special]) {
+    if (result.exitCode !== 0) throw new Error(`Unable to list files: ${result.stderr.trim() || 'git failed'}`);
+  }
+  const listing = boundedPaths(listed.stdout);
+  const records = special.stdout.split('\0');
+  const entriesOfMode = (mode: string) =>
+    records.filter(record => record.startsWith(`${mode} `)).map(record => record.slice(record.indexOf('\t') + 1));
+  const unopenable = new Set([...deleted.stdout.split('\0'), ...entriesOfMode('160000')]);
+  // A conflicted file is listed once per stage; an untracked repository as its folder, ending in `/`.
+  const paths = new Set(
+    listing.paths.filter(
+      path =>
+        path &&
+        !path.endsWith('/') &&
+        !unopenable.has(path) &&
+        !path.split('/').some(segment => HIDDEN_TREE_ENTRIES.has(segment)),
+    ),
+  );
+  const links = [...new Set(entriesOfMode('120000'))].filter(path => paths.has(path));
+  const refused = await refusedLinks(
+    sandbox,
+    layout,
+    links.map(path => `${repo.prefix}${path}`),
+  );
+  return {
+    paths: Array.from(paths, path => `${repo.prefix}${path}`).filter(path => !refused.has(path)),
+    truncated: listing.truncated,
+  };
+}
+
+/** Walks a multi-repository root as the tree does: no ignore rules, no git internals or setup markers, no symlinked folders. */
+async function rootFiles(
+  sandbox: ExecutableSandbox,
+  layout: SessionLayout,
+): Promise<{ paths: string[]; truncated: boolean }> {
+  const options = { timeout: 30_000, maxRetainedBytes: Infinity };
+  const skipped = [
+    ...[...HIDDEN_TREE_ENTRIES].map(name => ['-name', name]),
+    ...layout.repos.map(repo => ['-path', `./${repo.prefix.slice(0, -1)}`]),
+  ].flatMap((test, i) => (i === 0 ? test : ['-o', ...test]));
+  const walk = [
+    '-c',
+    'cd "$1" && shift && exec find . "$@"',
+    'mastracode-root-files',
+    layout.root,
+    '(',
+    ...skipped,
+    ')',
+    '-prune',
+    '-o',
+  ];
+  const [listed, linked] = await Promise.all([
+    sandbox.executeCommand(
+      'sh',
+      [
+        '-c',
+        BOUNDED_OUTPUT_SCRIPT,
+        'mastracode-bounded',
+        String(MAX_FILE_INDEX_BYTES + 1),
+        'sh',
+        ...walk,
+        '(',
+        '-type',
+        'f',
+        '-o',
+        '-type',
+        'l',
+        ')',
+        '-print0',
+      ],
+      options,
+    ),
+    sandbox.executeCommand('sh', [...walk, '-type', 'l', '-print0'], options),
+  ]);
+  for (const result of [listed, linked]) {
+    if (result.exitCode !== 0) throw new Error(`Unable to list files: ${result.stderr.trim() || 'find failed'}`);
+  }
+  const listing = boundedPaths(listed.stdout);
+  const paths = new Set(listing.paths.filter(Boolean).map(path => path.slice('./'.length)));
+  const links = linked.stdout
+    .split('\0')
+    .map(path => path.slice('./'.length))
+    .filter(path => paths.has(path));
+  const refused = await refusedLinks(sandbox, layout, links);
+  return { paths: [...paths].filter(path => !refused.has(path)), truncated: listing.truncated };
+}
+
+// Passive like every session read: no sandbox in this process means `available: false`, never a new sandbox.
+export async function listSessionWorkspaceFiles(session: SourceControlSession): Promise<WorkspaceFileIndex> {
+  const handle = await sessionSandbox(session);
+  if (!handle) return { workspacePath: session.sessionId, available: false, paths: [], truncated: false };
+  const { layout, sandbox } = handle;
+  const physical =
+    layout.repos.length > 1
+      ? realPaths(
+          sandbox,
+          layout.root,
+          layout.repos.map(repo => repo.prefix),
+        )
+      : undefined;
+  const settled = await Promise.allSettled([
+    ...layout.repos.map(async (repo, i) => {
+      const real = await physical;
+      // Git follows a symlinked checkout, so one would list a repository outside the session's physical workspace.
+      if (real && `${real.paths[i]}/` !== posixPath.join(real.root, repo.prefix)) {
+        throw new Error('Path is not available in this session');
+      }
+      return checkoutFiles(sandbox, layout, repo);
+    }),
+    ...(layout.repos.length > 1 ? [rootFiles(sandbox, layout)] : []),
+  ]);
+  const checkouts = settled.flatMap(checkout => (checkout.status === 'fulfilled' ? [checkout.value] : []));
+  const failed = settled.find((checkout): checkout is PromiseRejectedResult => checkout.status === 'rejected');
+  if (failed && checkouts.length === 0) throw failed.reason;
+  return {
+    workspacePath: session.sessionId,
+    available: true,
+    paths: checkouts.flatMap(checkout => checkout.paths),
+    truncated: failed !== undefined || checkouts.some(checkout => checkout.truncated),
+  };
+}
+
 /**
  * Read a file inside a session's sandbox: anything under an approved rendered
  * root, or anything the tree would list (not git internals, not ignored by its
@@ -812,7 +1018,7 @@ export async function readSessionWorkspaceFile(session: SourceControlSession, pa
   const handle = await sessionSandbox(session);
   if (!handle) throw new Error('Session workspace is not available');
   const { layout, sandbox } = handle;
-  treeLocation(layout, safePath);
+  const location = treeLocation(layout, safePath);
   // Judge the file by where it really is as well as by the path asked for: a
   // symlink to `.env` must not serve it. Rendered roots (plans, reports) are
   // served even when a checkout ignores them, but not through such a symlink.
@@ -822,7 +1028,9 @@ export async function readSessionWorkspaceFile(session: SourceControlSession, pa
   // The file itself may be a symlink, but not a folder on the way to it.
   const throughLink = parent !== '.' && real.paths[1] !== posixPath.join(real.root, parent);
   if (target === undefined || throughLink) throw new Error('Path is not available in this session');
-  const trusted = APPROVED_RENDERED_ROOTS.has(safePath.split('/')[0] ?? '');
+  const trusted =
+    APPROVED_RENDERED_ROOTS.has(safePath.split('/')[0] ?? '') ||
+    Boolean(location.repo && location.relative.startsWith('.artifacts/'));
   const checked = [...new Set([...(trusted ? [] : [safePath]), ...(target === safePath ? [] : [target])])];
   if ((await ignoredTreePaths(sandbox, layout, checked)).size > 0) {
     throw new Error('Path is not available in this session');
@@ -1372,6 +1580,22 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
                 ? 404
                 : 500;
           return c.json({ error: message }, status);
+        }
+      },
+    }),
+    registerApiRoute('/web/workspace/files', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const workspacePath = c.req.query('workspacePath');
+        if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
+        try {
+          const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
+          if (!session || !sessionFs) return c.json({ error: 'Session workspace is not available' }, 403);
+          return c.json(await listSessionWorkspaceFiles(session));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          return c.json({ error: message }, message.includes('not available') ? 403 : 500);
         }
       },
     }),

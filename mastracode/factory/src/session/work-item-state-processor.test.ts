@@ -12,6 +12,7 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createBoardRegistry } from '../boards/index.js';
 import { ProjectBoardCache } from '../boards/project-boards.js';
 import { workSeedWithSelfReview } from '../boards/work-migrations.js';
+import { createFactoryTransitionTools } from '../rules/tools.js';
 import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../storage/test-utils.js';
 import { FactoryWorkItemStateProcessor } from './work-item-state-processor.js';
@@ -292,8 +293,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
         await workItems.attachSource({ orgId: 'org-1', id: item.id, ...attached });
       }
       const processor = new FactoryWorkItemStateProcessor({ storage: workItems, boards: createBoardRegistry() });
-      const signal = await processor.computeStateSignal(stateArgs(requestContext(project.id)));
-      return { item, contents: signal!.contents };
+      const context = requestContext(project.id);
+      const signal = await processor.computeStateSignal(stateArgs(context));
+      return { item, contents: signal!.contents, cacheKey: signal!.cacheKey, processor, workItems, context };
     }
 
     const pullRequest23029: ExternalWorkItemSource = {
@@ -453,6 +455,90 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
       const firstPass = (await githubCard({ pullRequestHeadSha: NEW })).contents;
       expect(firstPass).toContain(`This review pass covers head \`${NEW}\`. Record your verdict for that head.`);
       expect(new Set([pushed, unmoved, unknownHead, firstPass]).size).toBe(4);
+    });
+
+    it('tells the reviewer its pass is complete in the run that recorded the verdict, and only there', async () => {
+      const card = await githubCard({ pullRequestHeadSha: NEW });
+      expect(card.contents).toContain(`This review pass covers head \`${NEW}\`. Record your verdict for that head.`);
+
+      const tools = await createFactoryTransitionTools({
+        requestContext: card.context,
+        storage: card.workItems,
+        transitionService: { transition: async () => ({ status: 'rejected' }) } as never,
+        boards: createBoardRegistry(),
+      });
+      const verdictTool = tools.factory_record_review_verdict as unknown as {
+        execute: (input: unknown, context: unknown) => Promise<unknown>;
+      };
+      await verdictTool.execute(
+        { verdict: 'approve', reviewedHeadSha: NEW },
+        { requestContext: card.context, agent: { toolCallId: 'verdict-1' } },
+      );
+
+      const resend = (steps: unknown[]) =>
+        card.processor.computeStateSignal(
+          stateArgs(card.context, {
+            steps,
+            lastSnapshot: { metadata: { state: { cacheKey: card.cacheKey } } },
+            contextWindow: { hasSnapshot: true },
+          }),
+        );
+
+      // The verdict changed the card, so the session is sent the card again before its next step.
+      const call = { type: 'tool-call', toolCallId: 'verdict-1', toolName: 'factory_record_review_verdict' };
+      const result = {
+        type: 'tool-result',
+        toolCallId: 'verdict-1',
+        toolName: 'factory_record_review_verdict',
+        output: { type: 'json', value: { status: 'recorded' } },
+      };
+      const sameRun = await resend([{ content: [call, result], toolCalls: [call], toolResults: [result] }]);
+      expect(sameRun?.contents).toContain(`Last PR review: approve on #23029 at ${NEW}`);
+      expect(sameRun?.contents).toContain(`Your verdict for this review pass is recorded: "approve" on \`${NEW}\`.`);
+      expect(sameRun?.contents).not.toContain('new review pass');
+
+      // A step can arrive without its tool results; the call alone still marks the pass complete.
+      expect((await resend([{ content: [call], toolCalls: [call], toolResults: [] }]))?.contents).toContain(
+        'Your verdict for this review pass is recorded',
+      );
+      // A verdict call that failed recorded nothing, so the reviewer is still asked for one.
+      // This is how a failed call reads once the step's content is rebuilt from the thread.
+      const failed = { ...result, output: { type: 'error-text', value: 'The Review card changed' } };
+      expect(
+        (await resend([{ content: [call, failed], toolCalls: [call], toolResults: [failed] }]))?.contents,
+      ).not.toContain('Your verdict for this review pass is recorded');
+      // One call failing does not undo another that recorded a verdict in the same step.
+      const lost = { ...call, toolCallId: 'verdict-2' };
+      const lostResult = { ...failed, toolCallId: 'verdict-2' };
+      expect(
+        (
+          await resend([
+            { content: [call, result, lost, lostResult], toolCalls: [call, lost], toolResults: [result, lostResult] },
+          ])
+        )?.contents,
+      ).toContain('Your verdict for this review pass is recorded');
+
+      // A later run is a new pass: a re-requested review, or a person disputing a finding, on
+      // the same head must still be able to end in a verdict.
+      const laterRun = await resend([]);
+      expect(laterRun?.contents).toContain('This is a new review pass.');
+      expect(laterRun?.contents).toContain(`record a verdict for \`${NEW}\``);
+      expect(laterRun?.contents).not.toContain('Your verdict for this review pass is recorded');
+
+      // A re-requested review changes nothing on the card, and the copy the session last saw
+      // says its pass is complete. The next run must be sent the card again, and only once.
+      const after = (steps: unknown[], cacheKey: string | undefined) =>
+        card.processor.computeStateSignal(
+          stateArgs(card.context, {
+            steps,
+            lastSnapshot: { metadata: { state: { cacheKey } } },
+            contextWindow: { hasSnapshot: true },
+          }),
+        );
+      const reRequested = await after([], sameRun?.cacheKey);
+      expect(reRequested?.contents).toContain('This is a new review pass.');
+      expect(reRequested?.contents).toContain('read the newest comments and reviews on the change request');
+      expect(await after([], reRequested?.cacheKey)).toBeUndefined();
     });
 
     it('keeps malformed head metadata out of the review guidance', async () => {

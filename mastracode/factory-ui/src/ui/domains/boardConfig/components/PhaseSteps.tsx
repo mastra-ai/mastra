@@ -28,7 +28,7 @@ export function PhaseStep({
       aria-labelledby={titleId}
       className="before:bg-border relative grid grid-cols-[--spacing(7)_minmax(0,1fr)] gap-x-3 pb-8 before:absolute before:top-9 before:bottom-1 before:left-[calc(--spacing(3.5)-0.5px)] before:w-px last:pb-0 last:before:hidden"
     >
-      <span className="border-border bg-card text-muted-foreground flex size-7 items-center justify-center rounded-full border [&_svg]:size-3.5">
+      <span className="border-border bg-card text-muted-foreground [&_svg]:size-icon-sm flex size-7 items-center justify-center rounded-full border">
         {icon}
       </span>
       <div className="flex min-w-0 flex-col gap-3">

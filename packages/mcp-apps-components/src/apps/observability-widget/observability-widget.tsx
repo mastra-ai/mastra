@@ -12,16 +12,18 @@ import {
   prepareWidget,
 } from '@mastra/playground-ui/domains/dashboards';
 import type { DashboardScope, ReadyPreparedWidget, WidgetState } from '@mastra/playground-ui/domains/dashboards';
+import { IconCircleInfo } from '@mastra/playground-ui/icons/central/IconCircleInfo';
+import { IconExclamationCircle } from '@mastra/playground-ui/icons/central/IconExclamationCircle';
 import { applyDocumentTheme } from '@modelcontextprotocol/ext-apps';
 import type { App, McpUiTheme } from '@modelcontextprotocol/ext-apps';
 import { useApp } from '@modelcontextprotocol/ext-apps/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { InfoIcon, OctagonAlertIcon } from 'lucide-react';
-import { Component, useEffect, useMemo, useState } from 'react';
+import { Component, useLayoutEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { readOpened, readView } from './opened';
 import type { HostView, Opened } from './opened';
 import { OBSERVABILITY_WIDGET_VIEW_CONTEXT_KEY } from './tool';
+import { useConfigure } from './use-configure';
 import { usePin } from './use-pin';
 import { useToolResults } from './use-tool-results';
 
@@ -49,7 +51,7 @@ function AppState({ children, ...props }: { children: ReactNode; role?: 'alert' 
 }
 
 function AppMessage({ tone, title, children }: { tone: 'error' | 'info'; title: string; children: ReactNode }) {
-  const Icon = tone === 'error' ? OctagonAlertIcon : InfoIcon;
+  const Icon = tone === 'error' ? IconExclamationCircle : IconCircleInfo;
   return (
     <AppState role="alert">
       <div className="flex min-w-0 items-start gap-3">
@@ -96,7 +98,8 @@ function Widget({
 }) {
   const { env } = opened;
   const [state, setState] = useState<WidgetState>({});
-  const pin = usePin(app, widget, opened.datePreset, opened.customRange, opened.filters);
+  const configureButton = useConfigure(app, widget, opened.datePreset, opened.customRange, opened.filters);
+  const pinButton = usePin(app, widget, opened.datePreset, opened.customRange, opened.filters);
   const first = planWidget(prepared, env, state);
   const discovered = useToolResults(app, first.status === 'ready' ? first.discover : [], opened.projectId);
   // Planned again with the discover answers so far; both lists go out in the same render.
@@ -115,7 +118,14 @@ function Widget({
         sent.retry();
       }}
       scope={scope}
-      pin={pin}
+      actions={
+        configureButton || pinButton ? (
+          <>
+            {configureButton}
+            {pinButton}
+          </>
+        ) : undefined
+      }
     />
   );
 }
@@ -193,7 +203,8 @@ export function ObservabilityWidget() {
       };
     },
   });
-  useEffect(() => applyTheme(app?.getHostContext()?.theme), [app]);
+  // Before paint, so the first frame after connecting is already in the host's theme.
+  useLayoutEffect(() => applyTheme(app?.getHostContext()?.theme), [app]);
   const opened = useMemo(() => shown && readOpened(shown.content, shown.now, shown.view), [shown]);
 
   if (error) {

@@ -1,5 +1,6 @@
 import type { ChunkType, MastraStepResult, StepFinishPayload, StepStartPayload } from '../../stream/types';
 import type { AgentFinishEventData } from '../durable/types';
+import type { ResponseMessagesDiff } from './response-messages';
 
 /**
  * The shape of the step events a run publishes on its stream topic
@@ -41,7 +42,15 @@ export interface AgentStreamStepFinishPayload {
   };
   /** The finished step's content, which readers can't rebuild without the run's messages. */
   _durableStepContent?: MastraStepResult['content'];
-  /** The run's response messages so far, reported as `step.response.messages`. */
+  /**
+   * The run's response messages so far (`step.response.messages`), as the part
+   * that changed since the producer's previous step-finish. Readers rebuild the
+   * list (see `response-messages.ts`). It replaces the full list
+   * (`_durableResponseMessages`), so a reader that can't rebuild it reports no
+   * messages rather than a partial list.
+   */
+  _durableResponseMessagesDiff?: ResponseMessagesDiff;
+  /** The whole list, from producers that don't send diffs (DurableAgent and EventedAgent). */
   _durableResponseMessages?: NonNullable<StepFinishPayload['messages']>['nonUser'];
 }
 
@@ -65,10 +74,12 @@ export function toStreamStepStart(payload: StepStartPayload) {
  *
  * @param content The finished step's content, when the publisher can read it
  * from the run's messages. Readers otherwise fall back to their own messages.
+ * @param responseMessages The step's response messages, from `diffResponseMessages`.
  */
 export function toStreamStepFinish(
   payload: StepFinishPayload<any, any>,
   content: MastraStepResult<any>['content'] | undefined,
+  responseMessages: ResponseMessagesDiff | undefined,
 ): AgentStreamStepFinishPayload {
   const metadata: AgentStreamStepFinishPayload['metadata'] = {};
   for (const field of STEP_METADATA_FIELDS) {
@@ -86,7 +97,7 @@ export function toStreamStepFinish(
       ...(tripwire ? { steps: [{ tripwire }] as [{ tripwire: typeof tripwire }] } : {}),
     },
     ...(content ? { _durableStepContent: content } : {}),
-    ...(payload.messages ? { _durableResponseMessages: payload.messages.nonUser } : {}),
+    ...(responseMessages ? { _durableResponseMessagesDiff: responseMessages } : {}),
   };
 }
 

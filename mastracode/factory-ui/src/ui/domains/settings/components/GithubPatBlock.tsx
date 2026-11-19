@@ -1,7 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Check, Pencil, Plus, RotateCcw, Trash2, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -10,10 +9,15 @@ import {
   useRemoveGithubPatMutation,
   useSaveGithubPatMutation,
 } from '../../../../hooks/useGithubPat';
-import { SettingsRowsSkeleton } from '../../../ui/SettingsRowsSkeleton';
 import type { GithubPatKind } from '../../workspaces/services/github';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { SettingsSubsection } from './SettingsSubsection';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
 // GitHub App tokens cannot authorize the gh CLI endpoints; sandboxes use PATs.
 export function GithubPatBlock() {
@@ -34,12 +38,12 @@ function TokenRows() {
   const statusQuery = useGithubPatStatusQuery();
 
   if (statusQuery.isPending) {
-    return <SettingsRowsSkeleton label="Loading GitHub CLI tokens" rows={2} />;
+    return <SettingsSkeleton label="Loading GitHub CLI tokens" rows={2} />;
   }
   if (statusQuery.error) {
     return (
       <SettingsRow label="GitHub CLI tokens" errorMsg={statusQuery.error.message}>
-        <Button size="sm" icon={<RotateCcw />} onClick={() => void statusQuery.refetch()}>
+        <Button size="sm" icon={<IconArrowRotateCounterClockwise />} onClick={() => void statusQuery.refetch()}>
           Retry
         </Button>
       </SettingsRow>
@@ -101,7 +105,7 @@ function TokenRow({
         <Button
           ref={editButton}
           size="sm"
-          icon={configured ? <Pencil /> : <Plus />}
+          icon={configured ? <IconPencil /> : <IconPlusMedium />}
           disabled={removeMutation.isPending}
           onClick={() => setEditing(true)}
         >
@@ -110,7 +114,7 @@ function TokenRow({
         {configured && (
           <Button
             size="sm"
-            icon={<Trash2 />}
+            icon={<TrashIcon />}
             disabled={removeMutation.isPending}
             onClick={() => removeMutation.mutate()}
           >
@@ -162,13 +166,13 @@ function TokenEditor({
           }}
         />
         <div className="flex items-center gap-2">
-          <Button size="sm" icon={<X />} disabled={saveMutation.isPending} onClick={onClose}>
+          <Button size="sm" icon={<IconCrossMedium />} disabled={saveMutation.isPending} onClick={onClose}>
             Cancel
           </Button>
           <Button
             variant="primary"
             size="sm"
-            icon={<Check />}
+            icon={<IconCheckmark2Medium />}
             disabled={saveMutation.isPending || !draft.trim()}
             onClick={save}
           >

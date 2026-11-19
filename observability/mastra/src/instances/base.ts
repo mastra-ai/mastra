@@ -34,6 +34,7 @@ import type {
 } from '@mastra/core/observability';
 import { getNestedValue, setNestedValue } from '@mastra/core/utils';
 import { ObservabilityBus } from '../bus';
+import type { ObservabilityHandler } from '../bus/route-event';
 import type { ObservabilityInstanceConfig } from '../config';
 import { SamplingStrategyType } from '../config';
 import { LoggerContextImpl } from '../context/logger';
@@ -385,6 +386,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       entityType: cached.entityType,
       entityId: cached.entityId,
       entityName: cached.entityName,
+      tags: cached.tags,
       tracingPolicy: cached.isInternal ? { internal: InternalSpans.ALL } : undefined,
       traceState: this.rebuildTraceState(cached),
     });
@@ -392,6 +394,8 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     // The rebuilt span has no live parent, so restore the lineage computed before export
     if (span instanceof BaseSpan) {
       span.restoreEntityLineage(cached);
+      span.restoreErrorCount(cached);
+      span.requestContext = cached.requestContext;
     }
 
     // Rebuilding an existing completed segment must not reopen its outcome.
@@ -571,7 +575,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     }
 
     const correlationContext = span?.getCorrelationContext?.() ?? this.buildFallbackCorrelationContext();
-    const metadata: Record<string, unknown> | undefined = span?.metadata ? structuredClone(span.metadata) : undefined;
+    // Pass metadata through untouched: LoggerContextImpl snapshots it in its
+    // constructor, so cloning here would deep-copy span metadata twice.
+    const metadata: Record<string, unknown> | undefined = span?.metadata;
 
     return new LoggerContextImpl({
       traceId: span?.traceId,
@@ -593,7 +599,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   getMetricsContext(span?: AnySpan): MetricsContext {
     const correlationContext = span?.getCorrelationContext?.() ?? this.buildFallbackCorrelationContext();
-    const metadata: Record<string, unknown> | undefined = span?.metadata ? structuredClone(span.metadata) : undefined;
+    // Pass metadata through untouched: MetricsContextImpl snapshots it in its
+    // constructor, so cloning here would deep-copy span metadata twice.
+    const metadata: Record<string, unknown> | undefined = span?.metadata;
 
     return new MetricsContextImpl({
       traceId: span?.traceId,
@@ -619,8 +627,12 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * Internal hook used by RecordedTrace/RecordedSpan hydration to route
    * non-tracing annotation events back through the normal exporter pipeline.
    */
-  __emitRecordedEvent(event: ObservabilityEvent): void {
-    this.emitObservabilityEvent(event);
+  __emitRecordedEvent(event: ObservabilityEvent, shouldHandle?: (handler: ObservabilityHandler) => boolean): void {
+    if (shouldHandle) {
+      this.observabilityBus.emit(event, shouldHandle);
+    } else {
+      this.emitObservabilityEvent(event);
+    }
   }
 
   /**
@@ -734,8 +746,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     const configuredKeys = this.config.requestContextKeys ?? [];
     const additionalKeys = tracingOptions?.requestContextKeys ?? [];
 
-    // Merge: configured + additional
-    const allKeys = [...configuredKeys, ...additionalKeys];
+    // Merge: configured + additional. A resume passes the saved trace state's keys back in, which
+    // already hold the configured ones.
+    const allKeys = [...new Set([...configuredKeys, ...additionalKeys])];
 
     const hideInput = tracingOptions?.hideInput;
     const hideOutput = tracingOptions?.hideOutput;
@@ -1200,23 +1213,26 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     // Phase 1: Shutdown the ObservabilityBus first (flushes remaining events, clears subscribers)
     await this.observabilityBus.shutdown();
 
-    // Phase 2: Shutdown exporters, processors, and bridge after bus has flushed
-    const shutdownPromises: Promise<void>[] = [
-      ...this.exporters.map(e => e.shutdown()),
-      ...this.spanOutputProcessors.map(p => p.shutdown()),
-    ];
-    if (this.config.bridge) {
-      shutdownPromises.push(this.config.bridge.shutdown());
-    }
-    if (shutdownPromises.length > 0) {
-      const results = await Promise.allSettled(shutdownPromises);
-      for (const result of results) {
-        if (result.status === 'rejected') {
-          this.logger.error(`[Observability] Component shutdown failed [name=${this.name}]:`, result.reason);
-        }
-      }
-    }
+    // Phase 2: Shutdown exporters, processors, and bridge after bus has flushed. An exporter can
+    // report drops while it shuts down, so the handlers of those reports get and flush them first.
+    const handlers = [...this.exporters, ...(this.config.bridge ? [this.config.bridge] : [])];
+    const dropHandlers = handlers.filter(h => h.onDroppedEvent);
+    const others = [...handlers.filter(h => !h.onDroppedEvent), ...this.spanOutputProcessors];
+    await this.settleShutdownSteps(others.map(c => c.shutdown()));
+    await this.observabilityBus.drainPendingHandlers();
+    await this.settleShutdownSteps(dropHandlers.map(h => h.flush()));
+    await this.settleShutdownSteps(dropHandlers.map(h => h.shutdown()));
+    await this.observabilityBus.drainPendingHandlers();
 
     this.logger.info(`[Observability] Shutdown completed [name=${this.name}]`);
+  }
+
+  private async settleShutdownSteps(steps: Promise<void>[]): Promise<void> {
+    const results = await Promise.allSettled(steps);
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        this.logger.error(`[Observability] Component shutdown failed [name=${this.name}]:`, result.reason);
+      }
+    }
   }
 }
