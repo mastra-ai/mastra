@@ -4728,6 +4728,10 @@ export class Agent<
     this.#memory = memory;
   }
 
+  public __setKnowledge(knowledge: Knowledge) {
+    this.#knowledge = knowledge;
+  }
+
   public __setPubSub(pubsub: PubSub) {
     this.#inheritedPubSub = pubsub;
   }
