@@ -1,4 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+/** Lets a test act while the runner is computing a flush digest. */
+const digestHook = vi.hoisted(() => ({ before: undefined as undefined | (() => Promise<void>) }));
+vi.mock('../host', async importOriginal => {
+  const actual = await importOriginal<typeof import('../host')>();
+  return {
+    ...actual,
+    knowledgeImporterFlushDigest: async (flush: Parameters<typeof actual.knowledgeImporterFlushDigest>[0]) => {
+      const before = digestHook.before;
+      digestHook.before = undefined;
+      await before?.();
+      return actual.knowledgeImporterFlushDigest(flush);
+    },
+  };
+});
 
 import { defineKnowledgeImporter, KnowledgeImporterHostError, KnowledgeImporterSourceError } from '../define';
 import type { KnowledgeImporterContext } from '../define';
@@ -33,7 +48,16 @@ class RecordingHost implements KnowledgeImporterHost {
   /** Fail the next n flush attempts with this, before or after committing. */
   failures: Array<{ error: Error; afterCommit?: boolean }> = [];
 
+  /** startRun never answers: a hung host. */
+  hangStart = false;
+  startCalls = 0;
+  /** heartbeat never answers. */
+  hangHeartbeats = false;
+  heartbeatTimes: number[] = [];
+
   async startRun() {
+    this.startCalls++;
+    if (this.hangStart) return new Promise<never>(() => {});
     return { status: 'started' as const, runId: 'run-1', generation: 1, state: { ...this.state }, lastSeq: 0, binding };
   }
   /** Flush attempts that never answer: a hung host. */
@@ -67,6 +91,8 @@ class RecordingHost implements KnowledgeImporterHost {
   }
   async heartbeat() {
     this.heartbeats++;
+    this.heartbeatTimes.push(Date.now());
+    if (this.hangHeartbeats) return new Promise<never>(() => {});
     return { cancel: this.cancel };
   }
   async finishRun(request: KnowledgeImporterFinishRequest): Promise<KnowledgeImporterRunReceipt> {
@@ -335,6 +361,116 @@ describe('runKnowledgeImport', () => {
 
   describe('stop wakes the runner (O3 part 1 review)', () => {
     const never = () => new Promise<void>(() => {});
+
+    /** Timers still armed (not fired, not cleared) with at least `minMs`, while `run` executes. */
+    async function armedTimersAfter(run: () => Promise<unknown>, minMs: number) {
+      const armed = new Map<unknown, number>();
+      const realSet = globalThis.setTimeout;
+      const realClear = globalThis.clearTimeout;
+      const set = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) => {
+        const id: unknown = realSet(() => {
+          armed.delete(id);
+          fn();
+        }, ms);
+        armed.set(id, ms ?? 0);
+        return id;
+      }) as typeof setTimeout);
+      const clear = vi.spyOn(globalThis, 'clearTimeout').mockImplementation(((id: unknown) => {
+        armed.delete(id);
+        realClear(id as ReturnType<typeof setTimeout>);
+      }) as typeof clearTimeout);
+      try {
+        await run();
+      } finally {
+        set.mockRestore();
+        clear.mockRestore();
+      }
+      const left = [...armed].filter(([, ms]) => ms >= minMs);
+      for (const [id] of left) realClear(id as ReturnType<typeof setTimeout>);
+      return left.map(([, ms]) => ms);
+    }
+
+    it("doesn't wait past the hard deadline for the last flush of a pass", async () => {
+      const host = new RecordingHost();
+      host.hangFlushes = true;
+      const startedAt = Date.now();
+      // One item, below bufferSize: it goes out in the flush after sync returns.
+      const result = await runKnowledgeImport({
+        definitions: [importer(async ctx => ctx.items.upsert(item(1)))],
+        host,
+        bindingId: 'b1',
+        budgetMs: 50,
+        graceMs: 50,
+        hostCallTimeoutMs: 60_000,
+      });
+      expect(Date.now() - startedAt).toBeLessThan(1000);
+      expect(host.attempts).toHaveLength(1);
+      expect(result).toMatchObject({ outcome: 'failed', lastSeq: 0, error: { code: 'stopped' } });
+    }, 3000);
+
+    it('sends no flush when cancel arrives while its digest is computed', async () => {
+      const host = new RecordingHost();
+      digestHook.before = async () => {
+        host.cancel = true;
+        await new Promise(resolve => setTimeout(resolve, 50));
+      };
+      const result = await runKnowledgeImport({
+        definitions: [importer(async ctx => ctx.items.upsert(item(1)))],
+        host,
+        bindingId: 'b1',
+        heartbeatMs: 5,
+      });
+      expect(host.attempts).toEqual([]);
+      expect(result).toMatchObject({ outcome: 'canceled', lastSeq: 0 });
+    }, 3000);
+
+    it('leaves no deadline timer armed after a canceled run returns', async () => {
+      const host = new RecordingHost();
+      const left = await armedTimersAfter(
+        () =>
+          runKnowledgeImport({
+            definitions: [
+              importer(async ctx => {
+                await ctx.items.upsert(item(1));
+                host.cancel = true;
+                await never();
+              }),
+            ],
+            host,
+            bindingId: 'b1',
+            heartbeatMs: 5,
+            budgetMs: 60_000,
+            graceMs: 60_000,
+          }),
+        1000,
+      );
+      expect(left).toEqual([]);
+    }, 3000);
+
+    it("bounds startRun and doesn't resend it", async () => {
+      const host = new RecordingHost();
+      host.hangStart = true;
+      await expect(
+        runKnowledgeImport({ definitions: [importer(async () => {})], host, bindingId: 'b1', hostCallTimeoutMs: 20 }),
+      ).rejects.toBeInstanceOf(KnowledgeImporterHostError);
+      expect(host.startCalls).toBe(1);
+    }, 3000);
+
+    it('never has two heartbeats in flight, and a hung one times out', async () => {
+      const host = new RecordingHost();
+      host.hangHeartbeats = true;
+      await runKnowledgeImport({
+        definitions: [importer(async () => new Promise(resolve => setTimeout(resolve, 150)))],
+        host,
+        bindingId: 'b1',
+        heartbeatMs: 5,
+        hostCallTimeoutMs: 30,
+      });
+      // Every 5ms unless one is in flight: each hung heartbeat holds the next off for its 30ms timeout.
+      const gaps = host.heartbeatTimes.slice(1).map((t, i) => t - host.heartbeatTimes[i]!);
+      expect(gaps.length).toBeGreaterThan(0);
+      for (const gap of gaps) expect(gap).toBeGreaterThanOrEqual(25);
+    }, 3000);
 
     it('returns on cancel while sync ignores its abort signal', async () => {
       const host = new RecordingHost();

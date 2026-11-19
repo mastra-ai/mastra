@@ -57,8 +57,15 @@ export type RunKnowledgeImportResult =
    */
   | { status: 'unfinished'; runId: string; lastSeq: number };
 
-const never = new Promise<never>(() => {});
-const delay = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+/** Waits `ms`, or until `cut` settles; the timer is cleared either way. */
+async function sleep(ms: number, cut?: Promise<unknown>): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([new Promise<void>(resolve => (timer = setTimeout(resolve, ms))), ...(cut ? [cut] : [])]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /** `promise`, or `onTimeout()` thrown after `ms`. */
 async function within<T>(promise: Promise<T>, ms: number, onTimeout: () => Error): Promise<T> {
@@ -113,7 +120,13 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     retryDelayMs = (attempt: number) => Math.min(250 * 2 ** attempt, 10_000),
   } = options;
 
-  const started = await host.startRun(options.bindingId, options.start);
+  // Bounded but never resent: a start that timed out may have opened a run, which the host's
+  // liveness check reclaims.
+  const started = await within(
+    host.startRun(options.bindingId, options.start),
+    hostCallTimeoutMs,
+    () => new KnowledgeImporterHostError('host call timed out'),
+  );
   if (started.status === 'skipped') return started;
   const { runId, generation } = started;
   const startedAt = Date.now();
@@ -126,10 +139,14 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
   let stop: RunStop | undefined;
   let hostFailure: KnowledgeImporterRunError | undefined;
   const controller = new AbortController();
+  let deadlineHit!: () => void;
+  /** Settles at the hard deadline; never otherwise. */
+  const deadlinePassed = new Promise<void>(resolve => (deadlineHit = resolve));
   let wake!: () => void;
   /** Settles when the run stops for any reason, so nothing waits on a sync or a backoff past it. */
   const stopped = new Promise<void>(resolve => (wake = resolve));
   const halt = (reason: RunStop['reason']) => {
+    if (reason === 'stopped') deadlineHit();
     stop ??= new RunStop(reason);
     controller.abort(stop);
     wake();
@@ -147,7 +164,7 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
       } catch (error) {
         if (!isRetryable(error) || attempt >= maxRetries) throw error;
         if (kind === 'mutation' && stop) throw error;
-        await Promise.race([delay(retryDelayMs(attempt)), kind === 'mutation' ? stopped : never]);
+        await sleep(retryDelayMs(attempt), kind === 'mutation' ? stopped : undefined);
         if (kind === 'mutation' && stop) throw error;
       }
     }
@@ -162,7 +179,10 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
       if (ops.length === 0 && !staged) return;
       const body = { ops, ...(staged ? { state: staged } : {}) };
       const seq = lastSeq + 1;
-      const request = { runId, generation, seq, digest: await knowledgeImporterFlushDigest(body), ...body };
+      const digest = await knowledgeImporterFlushDigest(body);
+      // A stop that arrived while the digest was computed: send nothing.
+      if (stop) throw stop;
+      const request = { runId, generation, seq, digest, ...body };
       unsettledSeq = seq;
       try {
         await withRetries(() => host.flush(request), 'mutation');
@@ -233,13 +253,18 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     },
   };
 
+  // One heartbeat at a time, each bounded: a hung one is given up after the host-call timeout.
+  let beating = false;
   const heartbeat = setInterval(() => {
-    host.heartbeat(runId, generation).then(
-      ({ cancel }) => cancel && halt('canceled'),
-      () => {},
-    );
+    if (beating) return;
+    beating = true;
+    within(host.heartbeat(runId, generation), hostCallTimeoutMs, () => new KnowledgeImporterHostError('timed out'))
+      .then(
+        ({ cancel }) => cancel && halt('canceled'),
+        () => {},
+      )
+      .finally(() => (beating = false));
   }, heartbeatMs);
-  const hardDeadlineAt = startedAt + budgetMs + graceMs;
   const hardStop = setTimeout(() => halt('stopped'), budgetMs + graceMs);
 
   let failure: KnowledgeImporterRunError | undefined;
@@ -249,7 +274,7 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
       try {
         // A sync that ignores the signal is left behind when the run stops; its writes are refused.
         await Promise.race([importer.sync(ctx), stopped]);
-        if (!stop) await flush();
+        if (!stop) await Promise.race([flush(), stopped]);
       } catch (error) {
         if (stop) break;
         if (error instanceof KnowledgeImporterSourceError) failure = sourceError(error);
@@ -262,9 +287,10 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
   } finally {
     clearInterval(heartbeat);
   }
-  // Wait for a flush in flight, but not past the hard deadline: if it is still unanswered then, its
-  // seq stays unsettled and the finish names whichever seq the host holds.
-  await Promise.race([flushing, stopped.then(() => delay(Math.max(0, hardDeadlineAt - Date.now())))]);
+  // Wait for a flush in flight, but not past the hard deadline (which halts the run and so wakes
+  // `stopped`): if it is still unanswered then, its seq stays unsettled and the finish names
+  // whichever seq the host holds.
+  if (!stop || stop.reason !== 'stopped') await Promise.race([flushing, deadlinePassed]);
   clearTimeout(hardStop);
 
   if (stop?.reason === 'canceled') return finish({ outcome: 'canceled', backlog: false });
