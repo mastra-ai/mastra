@@ -37011,9 +37011,9 @@
     },
     "mastracode/factory/src/sandbox/context-sandboxes.test.ts": {
       "tier": "in",
-      "since": "2026-11-16",
-      "last_failure": "2026-11-16",
-      "reason": "pr-catch",
+      "since": "2026-11-19",
+      "last_failure": "2026-11-19",
+      "reason": "versioning-fail",
       "pr_failures": {
         "133513245855": {
           "date": "2026-11-16",
