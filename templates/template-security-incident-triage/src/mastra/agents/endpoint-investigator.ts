@@ -29,7 +29,7 @@ export function createEndpointInvestigator(model: MastraModelConfig) {
   });
 }
 
-export const endpointInvestigator = createEndpointInvestigator(process.env.MASTRA_MODEL ?? 'openai/gpt-4o-mini');
+export const endpointInvestigator = createEndpointInvestigator(process.env.MASTRA_MODEL ?? 'openai/gpt-6-luna');
 
 export const invokeEndpointInvestigator: InvestigatorInvoker = async (input, _attempt, signal) =>
   (

@@ -1,7 +1,8 @@
 import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { relatedCardIndex } from '@mastra/factory/work-items/related-cards';
 import type { PullRequestFacts } from '@mastra/factory/work-items/related-cards';
-import { githubNumberForItem, SOURCE_LABELS, sourceCreatedAt, sourceMetadata, workItemKey } from '../boardItems';
+import { githubNumberForItem, sourceCreatedAt, sourceMetadata, workItemKey } from '../boardItems';
+import { CARD_SOURCES } from '../cardSources';
 import { CHANGE_REQUEST_TERMS } from '../changeRequestState';
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { rememberedBoardPath } from './boardViews';
@@ -134,7 +135,7 @@ export function workItemMeta(item: WorkItem, contextRepository?: string): readon
   const assignee = typeof metadata.assignee === 'string' ? metadata.assignee : undefined;
   const age = relativeTime(sourceCreatedAt(metadata) ?? item.createdAt);
   const reference = workItemReference(item, contextRepository);
-  if (reference === undefined) return [SOURCE_LABELS[item.source], age];
+  if (reference === undefined) return [CARD_SOURCES[item.source].label, age];
   const owner = githubNumberForItem(item) === undefined ? (assignee ?? author) : author;
   return [reference, ...(owner ? [owner] : []), age];
 }

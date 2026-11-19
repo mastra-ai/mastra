@@ -176,6 +176,8 @@ export interface FactoryApiRoutesDeps {
   sessionRetirement?: import('../sandbox/session-retirement.js').SessionRetirementCoordinator;
   /** Moves a thread with its observation vectors onto another memory resource. */
   moveThread?: (input: { threadId: string; resourceId: string }) => Promise<unknown>;
+  /** Stores a title a person typed on a thread, pinned so automatic naming leaves it alone. */
+  renameThread?: (input: { threadId: string; title: string }) => Promise<unknown>;
   /** This process's dispatcher run slots, for the run queue; `undefined` until the dispatcher exists. */
   runSlots?: () => { inUse: number; cap: number; interactive: { inUse: number; cap: number } } | undefined;
   onFactoryRuntime?: (runtime: {
@@ -865,6 +867,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           sandboxRecreateSupported: deps.sandbox !== undefined && deps.sandbox.provider !== 'local',
           ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
           ...(deps.moveThread ? { moveThread: deps.moveThread } : {}),
+          ...(deps.renameThread ? { renameThread: deps.renameThread } : {}),
           ...(githubStorage ? { githubRepositories: githubStorage.repositories } : {}),
         });
   // Absent known integrations still get their disabled-status stub.

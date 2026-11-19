@@ -65,5 +65,5 @@ Guidelines:
 
 The questions should help someone thoroughly understand and engage with the source material, especially when dealing with structured data formats.
   `,
-  model: 'openai/gpt-5-mini',
+  model: 'openai/gpt-6.1-terra',
 });

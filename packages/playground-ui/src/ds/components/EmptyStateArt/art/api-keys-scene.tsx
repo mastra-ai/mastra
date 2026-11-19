@@ -1,17 +1,27 @@
 import type { SceneProps } from './scene-style';
 
-export function ApiKeysScene(_props: SceneProps) {
+export function ApiKeysScene({ id }: SceneProps) {
   return (
     <>
-      <path
-        d="M-35.4,14.1Q-35.4,12.4 -33.4,11.4L-2,-4.3Q0,-5.3 2,-4.3L52.8,21.1Q54.8,22.1 54.8,23.8L54.8,24.1Q54.8,25.9 52.8,26.8L21.4,42.5Q19.4,43.5 17.5,42.5L-33.4,17.1Q-35.4,16.1 -35.4,14.4Z"
-        fill="var(--face)"
-        stroke="var(--line)"
-        strokeWidth="1"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        vectorEffect="non-scaling-stroke"
-      />
+      <defs>
+        <pattern id={`${id}-gh`} patternUnits="userSpaceOnUse" width="1.8" height="1.8" patternTransform="rotate(-30)">
+          <line x1="0" y1="0" x2="0" y2="1.8" stroke="var(--detail)" strokeOpacity=".42" strokeWidth=".34" />
+        </pattern>
+        <radialGradient id={`${id}-gg0`} gradientUnits="userSpaceOnUse" cx="14.1" cy="14.1" r="42.1">
+          <stop offset=".2" stopColor="#fff" />
+          <stop offset=".9" stopColor="#fff" stopOpacity="0" />
+        </radialGradient>
+        <mask id={`${id}-gm0`} maskUnits="userSpaceOnUse" x="-400" y="-400" width="800" height="800">
+          <rect x="-400" y="-400" width="800" height="800" fill={`url(#${id}-gg0)`} />
+        </mask>
+      </defs>
+      <g className="ground">
+        <path
+          mask={`url(#${id}-gm0)`}
+          d="M-20.4,6.9C-22.7,4 -13.8,3.6 -10.4,1.9C-7.1,0.2 -2.6,-2.6 -0.4,-3.3C1.8,-4 1.8,-2.6 2.9,-2.3C4,-2 1.5,-3.5 6.2,-1.3C10.9,0.9 23,6.9 31.1,11C39.3,15.1 52.8,20.4 55.2,23.3C57.5,26.2 48.6,26.7 45.2,28.4C41.9,30.1 37.4,32.9 35.2,33.5C33,34.2 33,32.9 31.9,32.6C30.8,32.3 33.3,33.8 28.6,31.6C23.9,29.4 11.8,23.4 3.7,19.3C-4.5,15.2 -18,9.8 -20.4,6.9Z"
+          fill={`url(#${id}-gh)`}
+        />
+      </g>
       <path
         d="M-14.1,-60.7Q-14.1,-62.9 -12.2,-63.9L-2,-69Q0,-70 2,-69L40.5,-49.8Q42.4,-48.8 42.4,-46.6L42.4,19Q42.4,21.2 40.5,22.2L30.3,27.3Q28.3,28.3 26.3,27.3L-12.2,8.1Q-14.1,7.1 -14.1,4.9Z"
         fill="var(--face)"

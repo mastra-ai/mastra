@@ -33,6 +33,36 @@
     "Qwen3.8-27B"
   ],
   "reasoning": {
+    "Kimi-K3": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "Qwen3.8-27B": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "DeepSeek-V4-Pro": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "DeepSeek-V4-Flash-0731-Fast": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
     "Kimi-K3.1-Pro": [
       {
         "type": "effort",
@@ -45,19 +75,19 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "Kimi-K3": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "DeepSeek-V4-Flash-0731-Fast": [
+    "DeepSeek-V4-Flash-0423": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "DeepSeek-V4-Flash-0423": [
+    "GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "GLM-5.2": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -67,36 +97,6 @@
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "GLM-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "Qwen3.8-27B": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "GLM-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "DeepSeek-V4-Pro": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "GLM-5.3-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ]
   }
