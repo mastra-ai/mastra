@@ -10,7 +10,10 @@ vi.mock('node:child_process', () => ({
   execFileSync: vi.fn(),
 }));
 
-vi.mock('node:fs', () => ({
+// The default export stays a stub. The named exports stay real because modules imported through
+// the display code read files when they load.
+vi.mock('node:fs', async importOriginal => ({
+  ...(await importOriginal<typeof import('node:fs')>()),
   default: {},
 }));
 
