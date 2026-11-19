@@ -20537,9 +20537,9 @@
     },
     "packages/mcp/src/server/server-tasks.test.ts": {
       "tier": "in",
-      "since": "2026-10-29",
-      "last_failure": null,
-      "reason": "new"
+      "since": "2026-11-19",
+      "last_failure": "2026-11-19",
+      "reason": "versioning-fail"
     },
     "packages/mcp/src/server/server-tool-annotations.test.ts": {
       "tier": "out",
