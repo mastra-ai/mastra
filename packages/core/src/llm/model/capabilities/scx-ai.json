@@ -41,28 +41,16 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
+    "GLM-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
     "Kimi-K3.1-Pro": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "DeepSeek-V4-pro": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "DeepSeek-V4-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ],
     "DeepSeek-V4.1-flash": [
@@ -83,7 +71,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "GLM-5.3-Flash": [
+    "gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "DeepSeek-V4-pro": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -95,22 +92,13 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "Qwen3.8-Max": [
+    "DeepSeek-V4-flash": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "GLM-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "GLM-5.2-Fast": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
     "GLM-5.3": [
@@ -119,10 +107,22 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "gpt-oss-120b": [
+    "GLM-5.3-Flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "Qwen3.8-Max": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "GLM-5.2-Fast": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
       }
     ]
   }
