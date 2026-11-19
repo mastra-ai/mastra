@@ -1,5 +1,7 @@
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 import { useAgentMessages } from '@mastra/react/hooks/agents';
+import { ToolCard } from '../tool-card';
+import type { ToolCardProps } from '../tool-card';
 import type { AgentMessage } from './agent-badge';
 import { AgentBadge } from './agent-badge';
 import { getRecordedSubAgentMessages } from './recorded-sub-agent-messages';
@@ -20,6 +22,8 @@ interface AgentBadgeWrapperProps extends Omit<ToolApprovalRequest, 'toolCalled'>
   status?: ActivityStatus;
   errorText?: string;
 }
+
+const renderLiveToolCard = (props: ToolCardProps) => <ToolCard {...props} />;
 
 export const AgentBadgeWrapper = ({
   agentId,
@@ -77,6 +81,7 @@ export const AgentBadgeWrapper = ({
       errorText={errorText}
       onLoadPrevious={onLoadPrevious}
       isLoadingPrevious={isFetchingNextPage}
+      renderToolCard={renderLiveToolCard}
     />
   );
 };
