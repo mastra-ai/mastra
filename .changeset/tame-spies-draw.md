@@ -9,4 +9,4 @@ Runs stored with the experimental workflow `storageVersion: 2` option now keep l
 
 `init()` adds a `first_seq` column to the `mastra_workflow_run_entries` table, which keeps steps in the order they were first written. Runs stored before the upgrade keep working.
 
-These stores now require `@mastra/core` 1.85.0 or newer, since they use the state cleanup and table definitions it exports.
+These stores now require `@mastra/core` 1.86.0 or newer, the first release that exports the state cleanup helper and table definitions they use.
