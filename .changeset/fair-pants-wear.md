@@ -30,4 +30,4 @@ const showObservabilityDashboard = createTool({
 +   const reader = project ? await projectClient(project, context) : client;
 ```
 
-A server that still reads `projectId` in either place never sees the widget's `project`, so its reads cover every project.
+A server that still reads `projectId` in either place never sees the widget's `project`, so its reads may fall back to covering every project, or fail, depending on what that server does with a request that carries no project.
