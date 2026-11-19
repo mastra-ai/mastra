@@ -131,6 +131,7 @@ import {
   createDurableAgentStream,
   createRunGenerationFilter,
   createSupersededEventFilter,
+  newestLogIndex,
   emitChunkEvent,
   emitErrorEvent,
   emitFinishEvent,
@@ -5541,18 +5542,32 @@ export class DurableAgent<
    * Runs fenced by a pubsub lease have no generation and are unaffected.
    * The floor only adds protection, so a failed read must not fail the reconnect;
    * the reader reads the claim again before an event can end its stream.
+   *
+   * A reader that closes on suspension (`closeOnSuspend`) also gets how far the
+   * run had got, so a replay from the start of a run doesn't end the stream at an
+   * approval that was given long ago.
    */
   async #readReplayFloor(
     runId: string,
     offset: number | undefined,
+    closeOnSuspend = false,
   ): Promise<
-    Pick<DurableStreamAdapterOptions, 'minGeneration' | 'rereadMinGeneration' | 'keepReplayEvent'> & {
+    Pick<
+      DurableStreamAdapterOptions,
+      'minGeneration' | 'rereadMinGeneration' | 'keepReplayEvent' | 'attachedAtLogIndex'
+    > & {
       refreshReplayFilter?: () => Promise<unknown>;
     }
   > {
     try {
       const history = (await this.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)) as AgentStreamEvent[];
-      const initialFilter = createSupersededEventFilter(history);
+      let attachedAt = newestLogIndex(history);
+      const attachedAtLogIndex = closeOnSuspend ? () => attachedAt : undefined;
+      const buildFilter = (entries: AgentStreamEvent[]) => {
+        attachedAt = newestLogIndex(entries);
+        return createSupersededEventFilter(entries);
+      };
+      const initialFilter = buildFilter(history);
       let refreshedFilter: Promise<typeof initialFilter> | undefined;
       let currentFilter: typeof initialFilter | undefined;
       // Subscription can replay a newer claim than the snapshot above. Refresh
@@ -5560,7 +5575,7 @@ export class DurableAgent<
       const refreshReplayFilter = () => {
         refreshedFilter ??= this.pubsub
           .getHistory(AGENT_STREAM_TOPIC(runId), 0)
-          .then(entries => (currentFilter = createSupersededEventFilter(entries as AgentStreamEvent[])))
+          .then(entries => (currentFilter = buildFilter(entries as AgentStreamEvent[])))
           .catch(() => (currentFilter = initialFilter));
         return refreshedFilter;
       };
@@ -5569,7 +5584,7 @@ export class DurableAgent<
         if (currentFilter) return currentFilter(event);
         return refreshReplayFilter().then(filter => filter(event));
       };
-      if (!offset) return { keepReplayEvent, refreshReplayFilter };
+      if (!offset) return { keepReplayEvent, attachedAtLogIndex, refreshReplayFilter };
       const skipped = history.slice(0, offset);
       if (skipped.length === offset) {
         let floor: number | undefined;
@@ -5577,9 +5592,14 @@ export class DurableAgent<
           const generation = event.generation;
           if (typeof generation === 'number' && (floor === undefined || generation > floor)) floor = generation;
         }
-        return { minGeneration: floor, keepReplayEvent, refreshReplayFilter };
+        return { minGeneration: floor, keepReplayEvent, attachedAtLogIndex, refreshReplayFilter };
       }
-      return { minGeneration: await readRunGeneration(this.#mastra, runId), keepReplayEvent, refreshReplayFilter };
+      return {
+        minGeneration: await readRunGeneration(this.#mastra, runId),
+        keepReplayEvent,
+        attachedAtLogIndex,
+        refreshReplayFilter,
+      };
     } catch (error) {
       this.logger.warn(`[DurableAgent] Couldn't read the claim of run ${runId}; observing it without a floor`, {
         error,
@@ -5833,6 +5853,13 @@ export class DurableAgent<
    * `idleTimeoutMs` (no `isAlive`) only detaches this observer, so pass
    * `isAlive` if you rely on the timeout to reclaim a crashed run's state. Both
    * options are opt-in; omit them for the current unbounded behavior.
+   *
+   * By default the observed stream stays open when the run suspends (e.g. for
+   * tool approval) so a later resume can continue on the same reader. Pass
+   * `closeOnSuspend: true` to end the stream at the suspension boundary so
+   * `fullStream`/`text`/`getFullOutput()` resolve instead of hanging; closing
+   * stays observer-scoped, keeping the run's registry entry and replay history
+   * so it can still be resumed with `resume()`/`resumeStream()`.
    */
   async observe(
     runId: string,
@@ -5849,6 +5876,18 @@ export class DurableAgent<
       offset?: number;
       idleTimeoutMs?: number;
       isAlive?: () => boolean | Promise<boolean>;
+      /**
+       * Whether this observer's stream closes when the observed run suspends
+       * (e.g. for tool approval). Defaults to `false`: the stream stays open
+       * across suspension so a later resume can continue on this same reader.
+       *
+       * Set to `true` so `fullStream`, `text`, and `getFullOutput()` resolve at
+       * the suspension boundary instead of hanging. Closing stays
+       * observer-scoped — the run's registry entry and replay history are
+       * preserved. Resume the run with `resumeStream()`/`resume()`, which always
+       * return a fresh stream.
+       */
+      closeOnSuspend?: boolean;
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
       experimentalTransform?: MastraStreamTransformOptions<TOutput>;
       onStepFinish?: (result: DurableAgentStepFinishResult) => void | Promise<void>;
@@ -6123,7 +6162,7 @@ export class DurableAgent<
       await options?.onChunk?.(chunk);
     };
 
-    const replayFloor = await this.#readReplayFloor(runId, options?.offset);
+    const replayFloor = await this.#readReplayFloor(runId, options?.offset, options?.closeOnSuspend);
 
     const stream = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
@@ -6141,6 +6180,7 @@ export class DurableAgent<
       ...replayFloor,
       idleTimeoutMs: options?.idleTimeoutMs,
       isAlive: options?.isAlive,
+      closeOnSuspend: options?.closeOnSuspend,
       onChunk: handleObservedChunk,
       experimentalTransform: options?.experimentalTransform,
       onStepFinish: options?.onStepFinish,
