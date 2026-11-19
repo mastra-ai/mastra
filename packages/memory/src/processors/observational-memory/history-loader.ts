@@ -30,6 +30,14 @@ export function supportsObservationHistoryPaging(storage: MemoryStorage): storag
   );
 }
 
+export function supportsObservationHistoryBootstrap(storage: MemoryStorage): storage is ObservationHistoryStorage {
+  return (
+    supportsObservationHistoryPaging(storage) &&
+    'supportsObservationHistoryBootstrap' in storage &&
+    storage.supportsObservationHistoryBootstrap === true
+  );
+}
+
 export function getObservationHistoryState(record: ObservationalMemoryRecord): ObservationHistoryState | undefined {
   const state = record.metadata?.observationHistory;
   if (!state || typeof state !== 'object') return undefined;
@@ -79,6 +87,14 @@ export async function getInitialObservationHistory(args: {
     });
     for (const message of page.messages) {
       const cursor = { createdAt: new Date(message.createdAt).toISOString(), id: message.id };
+      if (
+        before &&
+        (cursor.createdAt > before.createdAt ||
+          (cursor.createdAt === before.createdAt &&
+            Buffer.compare(Buffer.from(cursor.id), Buffer.from(before.id)) >= 0))
+      ) {
+        throw new Error('Observation history reverse page did not advance');
+      }
       // The first excluded tuple is the existing cursor's exclusive lower bound.
       if (hasMessages && tokens >= args.budget) return { after: cursor };
       before = cursor;
@@ -88,7 +104,9 @@ export async function getInitialObservationHistory(args: {
         tokens += await args.tokenCounter.countMessageAsync(observable);
       }
     }
-    if (!page.hasMore || !page.messages.length) return undefined;
+    // No excluded history means no bootstrap barrier: preserve normal explicit/async handling.
+    if (!page.hasMore) return undefined;
+    if (!page.messages.length) throw new Error('Observation history reverse page did not advance');
   }
 }
 

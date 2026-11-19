@@ -318,6 +318,7 @@ import {
   getInitialObservationHistory,
   getObservationHistoryState,
   loadObservationHistory,
+  supportsObservationHistoryBootstrap,
   supportsObservationHistoryPaging,
 } from './history-loader';
 import { createBufferingStartMarker, createActivationMarker } from './markers';
@@ -1515,7 +1516,7 @@ export class ObservationalMemory {
       // Capture the timezone used for Observer date formatting
       const observedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-      const observationHistory = supportsObservationHistoryPaging(this.storage)
+      const observationHistory = supportsObservationHistoryBootstrap(this.storage)
         ? await getInitialObservationHistory({
             storage: this.storage,
             threadId: ids.threadId ?? undefined,
@@ -4453,10 +4454,11 @@ ${formattedMessages}
           if (
             useWindow &&
             unobservedMessages.length === 0 &&
-            historyWindow.state.after &&
-            getObservationHistoryState(freshRecord)?.end
+            initialHistory &&
+            !initialHistory.complete &&
+            (historyWindow.state.after || initialHistory.end)
           ) {
-            const completedAt = new Date(historyWindow.state.after.createdAt);
+            const completedAt = new Date(historyWindow.state.after?.createdAt ?? initialHistory.end!);
             // A tail containing only excluded state/system rows still completes catch-up.
             await runOMCommit(lockKey, () =>
               this.storage.commitActiveObservations({

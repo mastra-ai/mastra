@@ -536,6 +536,7 @@ export class MemoryLibSQL extends MemoryStorage {
   }
 
   readonly supportsObservationHistoryPaging = true;
+  readonly supportsObservationHistoryBootstrap = true;
 
   async listObservationHistory(input: import('@internal/core/memory').ObservationHistoryPageInput) {
     if (!input.threadId && !input.resourceId) throw new Error('A thread or resource is required');

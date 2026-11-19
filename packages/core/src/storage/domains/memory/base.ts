@@ -55,6 +55,9 @@ export abstract class MemoryStorage extends StorageDomain {
   /** Supports tuple-ordered history pages and atomically commits observationHistory with observations. */
   readonly supportsObservationHistoryPaging?: boolean = false;
 
+  /** Supports exclusive reverse pages and atomically initializes the initial observationHistory cursor. */
+  readonly supportsObservationHistoryBootstrap?: boolean = false;
+
   async listObservationHistory(_input: ObservationHistoryPageInput): Promise<ObservationHistoryPage<MastraDBMessage>> {
     throw new Error('Bounded observation history is not implemented by this adapter');
   }

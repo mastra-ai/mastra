@@ -71,6 +71,93 @@ async function setup(
 }
 
 describe('bounded initial observation history', () => {
+  it.each([false, undefined])(
+    'does not bootstrap backwards on an older forward-only adapter (%s)',
+    async capability => {
+      const { store, om, rows } = await setup('thread', false, false, 12000);
+      Object.defineProperty(store, 'supportsObservationHistoryBootstrap', { value: capability });
+      const list = store.listObservationHistory.bind(store);
+      const reads = vi
+        .spyOn(store, 'listObservationHistory')
+        .mockImplementation(input => list({ ...input, before: undefined }));
+      const loaded = await om.loadUnobservedMessages({ threadId, resourceId });
+      expect(reads.mock.calls.some(([input]) => input.order === 'desc' && input.limit === 40)).toBe(false);
+      expect(loaded.map(row => row.id)).toEqual(rows.slice(0, loaded.length).map(row => row.id));
+    },
+  );
+
+  it('rejects a non-advancing reverse page even when the adapter claims bootstrap support', async () => {
+    const { store, om, rows } = await setup('thread', false, false);
+    await store.saveMessages({ messages: rows.map(row => ({ ...row, role: 'system' as const })) });
+    const list = store.listObservationHistory.bind(store);
+    let calls = 0;
+    vi.spyOn(store, 'listObservationHistory').mockImplementation(input => {
+      if (++calls > 3) throw new Error('probe stopped repeated pages');
+      return list({ ...input, before: undefined });
+    });
+    await expect(om.getOrCreateRecord(threadId, resourceId)).rejects.toThrow(/advance/);
+    expect(calls).toBe(2);
+    expect(await om.getRecord(threadId, resourceId)).toBeNull();
+  });
+
+  it.each(['thread', 'resource'] as const)(
+    'completes an exhausted %s bootstrap without observing filtered retained rows',
+    async scope => {
+      const { store, om, open } = await setup(scope, false, false);
+      const retained = await om.loadUnobservedMessages({ threadId, resourceId });
+      await store.saveMessages({ messages: retained.map(row => ({ ...row, role: 'system' as const })) });
+      const observer = vi.fn();
+      const result = await om.observe({ threadId, resourceId, force: true, hooks: { onObservationStart: observer } });
+      expect(result.observed).toBe(false);
+      expect(observer).not.toHaveBeenCalled();
+      expect(result.record.metadata?.observationHistory).toMatchObject({ complete: true });
+      expect(result.record.observedMessageIds ?? []).toEqual([]);
+      const restarted = (await open().omEngine)!;
+      const live = message(999, new Date('2026-01-02T00:00:00Z'));
+      await restarted.observe({ threadId, resourceId, messages: [live], force: true });
+      expect((await restarted.getRecord(threadId, resourceId))?.observedMessageIds).toContain(live.id);
+    },
+  );
+
+  it.each(['thread', 'resource'] as const)(
+    'preserves normal explicit-message handling when all initial %s history fits in budget',
+    async scope => {
+      const { om } = await setup(scope, false, false, 1_000_000);
+      const record = await om.getOrCreateRecord(threadId, resourceId);
+      expect(record.metadata?.observationHistory).toBeUndefined();
+      const live = message(999, new Date('2026-01-02T00:00:00Z'));
+      await om.observe({ threadId, resourceId, messages: [live], force: true });
+      expect((await om.getRecord(threadId, resourceId))?.observedMessageIds).toContain(live.id);
+    },
+  );
+
+  it('rejects an empty reverse page that claims more rows exist', async () => {
+    const { store, om } = await setup('thread', false, false);
+    vi.spyOn(store, 'listObservationHistory').mockResolvedValue({ messages: [], hasMore: true });
+    await expect(om.getOrCreateRecord(threadId, resourceId)).rejects.toThrow(/advance/);
+    expect(await om.getRecord(threadId, resourceId)).toBeNull();
+  });
+
+  it.each(['thread', 'resource'] as const)(
+    'allows live %s messages after initial rows are deleted, with and without a cutoff',
+    async scope => {
+      for (const budget of [300, 1_000_000]) {
+        const { store, om, open, rows } = await setup(scope, false, false, budget);
+        await om.loadUnobservedMessages({ threadId, resourceId });
+        await store.deleteMessages(rows.map(row => row.id));
+        const result = await om.observe({ threadId, resourceId, force: true });
+        expect(result.observed).toBe(false);
+        if (budget === 300) expect(result.record.metadata?.observationHistory).toMatchObject({ complete: true });
+        else expect(result.record.metadata?.observationHistory).toBeUndefined();
+        expect(result.record.observedMessageIds ?? []).toEqual([]);
+        const restarted = (await open().omEngine)!;
+        const live = message(999, new Date('2026-01-02T00:00:00Z'));
+        await restarted.observe({ threadId, resourceId, messages: [live], force: true });
+        expect((await restarted.getRecord(threadId, resourceId))?.observedMessageIds).toContain(live.id);
+      }
+    },
+  );
+
   it('retains at least one newest message even below the conversation-overhead budget', async () => {
     const { om, rows } = await setup('thread', false, false, 20);
     expect((await om.loadUnobservedMessages({ threadId, resourceId })).map(message => message.id)).toEqual([
