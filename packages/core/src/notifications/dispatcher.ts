@@ -177,6 +177,13 @@ const groupKey = (record: NotificationRecord): string | undefined => {
   return [record.agentId, record.resourceId, record.threadId].join('\0');
 };
 
+/**
+ * Records a failed delivery attempt and reports whether the record left the due
+ * list. A record dismissed or delivered between the read that picked it up and
+ * this write is left untouched (so a dismissal is never resurrected), and a
+ * record that reaches the attempt cap is marked `failed`. Either way it is no
+ * longer due; a record that failed below the cap stays due for a later pass.
+ */
 async function recordDeliveryFailure({
   storage,
   record,
@@ -187,14 +194,18 @@ async function recordDeliveryFailure({
   record: NotificationRecord;
   now: Date;
   error: unknown;
-}) {
+}): Promise<boolean> {
+  const current = await storage.getNotification({ threadId: record.threadId, id: record.id });
+  if (!current || current.status !== 'pending') return true;
+  const update = resolveDeliveryFailureUpdate(current);
   await storage.updateNotification({
     id: record.id,
     threadId: record.threadId,
-    ...resolveDeliveryFailureUpdate(record),
+    ...update,
     lastDeliveryAttemptAt: now,
     lastDeliveryError: errorMessage(error),
   });
+  return update.status === 'failed';
 }
 
 async function sendNotificationRecord({
@@ -368,6 +379,9 @@ export async function dispatchDueNotifications({
   // Notification ids are unique per thread, not across threads.
   const key = (record: NotificationRecord) => `${record.threadId}\0${record.id}`;
   const acted = () => result.delivered.length + result.failed.length;
+  // How many records this pass has read (and left due) that still occupy a slot
+  // at the head of the due list: held for another process, or failed below the
+  // attempt cap. The next page is sized to reach past them.
   let left = 0;
   while (acted() < limit) {
     const actedBefore = acted();
@@ -375,11 +389,13 @@ export async function dispatchDueNotifications({
     const page = await storage.listDueNotifications({ now, limit: pageSize, ...(resourceId ? { resourceId } : {}) });
     const due = page.filter(record => !seen.has(key(record)));
     for (const record of due) seen.add(key(record));
-    await dispatchRecords({ mastra, storage, now, due, result });
-    const leftThisPage = due.length - (acted() - actedBefore);
-    left += leftThisPage;
-    // The due list ran out, or nothing was left ahead of the records still unread.
-    if (page.length < pageSize || leftThisPage === 0) break;
+    const departed = await dispatchRecords({ mastra, storage, now, due, result });
+    // A record that failed below the cap is acted on but stays due, so it has to
+    // keep counting toward `left`; only records that left the due list don't.
+    left += due.length - departed;
+    // The due list ran out. A full page always holds at least one unread record,
+    // because it is sized to reach past every seen-but-still-due record.
+    if (page.length < pageSize) break;
   }
   return result;
 }
@@ -396,9 +412,16 @@ async function dispatchRecords({
   now: Date;
   due: NotificationRecord[];
   result: DispatchDueNotificationsResult;
-}): Promise<void> {
+}): Promise<number> {
   const groups = new Map<string, DueDispatchGroup>();
   const ungroupedIndividual: NotificationRecord[] = [];
+  // How many of `due` left the due list (delivered, or failed at the cap). The
+  // caller uses this to keep the records still due from eating the next page.
+  let departed = 0;
+  const fail = async (record: NotificationRecord, error: unknown) => {
+    if (await recordDeliveryFailure({ storage, record, now, error })) departed += 1;
+    failed.push({ record, error: errorMessage(error) });
+  };
 
   for (const record of due) {
     const key = groupKey(record);
@@ -407,8 +430,7 @@ async function dispatchRecords({
         const error = new Error(
           `Notification ${record.id} cannot be summarized without agentId, resourceId, and threadId`,
         );
-        await recordDeliveryFailure({ storage, record, now, error });
-        failed.push({ record, error: error.message });
+        await fail(record, error);
       } else {
         ungroupedIndividual.push(record);
       }
@@ -438,8 +460,7 @@ async function dispatchRecords({
       batchThreadState = await getBatchThreadState({ mastra, group });
     } catch (error) {
       for (const record of records) {
-        await recordDeliveryFailure({ storage, record, now, error });
-        failed.push({ record, error: errorMessage(error) });
+        await fail(record, error);
       }
       continue;
     }
@@ -467,10 +488,10 @@ async function dispatchRecords({
           if (!result) continue;
           delivered.push(...result.records);
           signals.push(result.signal);
+          departed += result.records.length;
         } catch (error) {
           for (const record of item.records) {
-            await recordDeliveryFailure({ storage, record, now, error });
-            failed.push({ record, error: errorMessage(error) });
+            await fail(record, error);
           }
         }
         continue;
@@ -481,9 +502,9 @@ async function dispatchRecords({
         if (!result) continue;
         delivered.push(result.record);
         signals.push(result.signal);
+        departed += 1;
       } catch (error) {
-        await recordDeliveryFailure({ storage, record: item.record, now, error });
-        failed.push({ record: item.record, error: errorMessage(error) });
+        await fail(item.record, error);
       }
     }
   }
@@ -500,9 +521,11 @@ async function dispatchRecords({
       if (!result) continue;
       delivered.push(result.record);
       signals.push(result.signal);
+      departed += 1;
     } catch (error) {
-      await recordDeliveryFailure({ storage, record, now, error });
-      failed.push({ record, error: errorMessage(error) });
+      await fail(record, error);
     }
   }
+
+  return departed;
 }

@@ -732,6 +732,93 @@ describe('notification inbox', () => {
     });
   });
 
+  it('dispatches past a record that failed but stays due instead of ending the pass early', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const sendSignal = vi.fn((signal, target: { threadId: string }) => ({
+      accepted: Promise.resolve(
+        target.threadId === 'blocked-thread'
+          ? { action: 'blocked', reason: 'thread-blocked', runId: 'run-blocked' }
+          : { action: 'deliver', runId: 'run-1' },
+      ),
+      persisted: Promise.resolve(),
+      signal,
+    }));
+    // Another process's dispatcher delivers 'held-thread', so this one holds it.
+    const resolveNotificationDeliveryDecision = vi.fn(async ({ record }: { record: { threadId: string } }) => ({
+      action: 'deliver' as const,
+      hold: record.threadId === 'held-thread',
+    }));
+    const mastra = {
+      getAgentById: vi.fn(async () => ({ sendSignal, resolveNotificationDeliveryDecision })),
+    } as any;
+    const base = { agentId: 'agent-1', resourceId: 'resource-1', source: 'github', kind: 'ci', summary: 'CI' } as const;
+    await storage.createNotification({
+      ...base,
+      id: 'blocked',
+      threadId: 'blocked-thread',
+      priority: 'high',
+      deliverAt: new Date(now.getTime() - 30_000),
+    });
+    await storage.createNotification({
+      ...base,
+      id: 'held',
+      threadId: 'held-thread',
+      priority: 'high',
+      deliverAt: new Date(now.getTime() - 20_000),
+    });
+    await storage.createNotification({
+      ...base,
+      id: 'mine',
+      threadId: 'mine-thread',
+      priority: 'high',
+      deliverAt: new Date(now.getTime() - 10_000),
+    });
+
+    // The first page holds only the failed and held records. Both stay due, so
+    // the pass must size its next page past them and still deliver 'mine'.
+    const result = await dispatchDueNotifications({ mastra, storage, now, limit: 2 });
+
+    expect(result.failed.map(entry => entry.record.id)).toEqual(['blocked']);
+    expect(result.delivered.map(record => record.id)).toEqual(['mine']);
+    await expect(storage.getNotification({ threadId: 'blocked-thread', id: 'blocked' })).resolves.toMatchObject({
+      status: 'pending',
+      deliveryAttempts: 1,
+    });
+  });
+
+  it('leaves a record dismissed during routing untouched instead of recording a failed attempt', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const sendSignal = vi.fn(async signal => {
+      // The user dismisses the notification while the signal is still in flight.
+      await storage.updateNotification({ id: 'n1', threadId: 'thread-1', status: 'dismissed' });
+      return {
+        accepted: Promise.resolve({ action: 'blocked', reason: 'thread-blocked', runId: 'run-blocked' }),
+        signal,
+      };
+    });
+    const mastra = { getAgentById: vi.fn(async () => ({ sendSignal })) } as any;
+    await storage.createNotification({
+      id: 'n1',
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'ci-status',
+      priority: 'high',
+      summary: 'CI failed',
+      deliverAt: now,
+    });
+
+    await dispatchDueNotifications({ mastra, storage, now });
+
+    const stored = await storage.getNotification({ threadId: 'thread-1', id: 'n1' });
+    expect(stored).toMatchObject({ status: 'dismissed' });
+    expect(stored?.deliveryAttempts ?? 0).toBe(0);
+    expect(stored?.lastDeliveryError).toBeUndefined();
+  });
+
   it('starts a deferred delivery with the scopes it was sent with, queueing it when the active run holds others', async () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');

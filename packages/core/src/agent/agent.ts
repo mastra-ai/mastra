@@ -10874,6 +10874,15 @@ export class Agent<
       );
     }
 
+    // Several inputs in one batch can coalesce into a single stored record, so
+    // `records` can hold stale snapshots of the same notification (same id).
+    // Track the latest saved version per id: repeated failures in one batch must
+    // count up from the last write, not each recompute from the same snapshot.
+    const latestRecords = new Map<string, NotificationRecord>();
+    for (const record of records) {
+      latestRecords.set(record.id, record);
+    }
+
     const threadState = agentThreadStreamRuntime.getThreadState(
       { resourceId: target.resourceId, threadId: target.threadId },
       this.getPubSub(),
@@ -10910,10 +10919,11 @@ export class Agent<
           id: record.id,
           threadId: record.threadId,
           deliverAt: now,
-          ...resolveDeliveryFailureUpdate(record),
+          ...resolveDeliveryFailureUpdate(latestRecords.get(record.id) ?? record),
           lastDeliveryAttemptAt: new Date(),
           lastDeliveryError: entry.error instanceof Error ? entry.error.message : String(entry.error),
         });
+        latestRecords.set(record.id, failed);
         needsDispatcher = true;
         results.push({
           record: failed,
@@ -10997,10 +11007,16 @@ export class Agent<
               // `summaryAt` was cleared to emit this summary. Restore it so the
               // record stays due and the dispatcher can retry it.
               summaryAt: now,
-              ...resolveDeliveryFailureUpdate(updated),
+              ...resolveDeliveryFailureUpdate(latestRecords.get(updated.id) ?? updated),
               lastDeliveryAttemptAt: new Date(),
               lastDeliveryError: error instanceof Error ? error.message : 'Notification summary signal was rejected',
             });
+            latestRecords.set(updated.id, failed);
+            // The emit-now branch cleared `summaryAt` before sending, so the
+            // arming check above saw no schedule and left `needsDispatcher`
+            // false. This catch restored `summaryAt`, so activate the dispatcher
+            // here too, or the record stays pending with no pass to retry it.
+            needsDispatcher = true;
             results.push({ record: failed, decision });
             continue;
           }
@@ -11071,11 +11087,12 @@ export class Agent<
           id: record.id,
           threadId: record.threadId,
           deliverAt: now,
-          ...resolveDeliveryFailureUpdate(record),
+          ...resolveDeliveryFailureUpdate(latestRecords.get(record.id) ?? record),
           lastDeliveryAttemptAt: new Date(),
           lastDeliveryError: error instanceof Error ? error.message : 'Notification signal was rejected',
           deliveryReason: decision.reason,
         });
+        latestRecords.set(record.id, failed);
         needsDispatcher = true;
         results.push({ record: failed, decision });
         continue;
