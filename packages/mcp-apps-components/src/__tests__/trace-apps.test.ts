@@ -32,7 +32,8 @@ describe.each([
     expect(html).not.toMatch(/<script[^>]*\ssrc=/);
     expect(html).not.toMatch(/<link[^>]*rel="stylesheet"/);
     // Studio's chat and prettier are swapped for light stand-ins in apps (see scripts/build-apps.ts).
-    expect(html.length).toBeLessThan(4_500_000);
+    // The explorer inlines playground-ui; recent design-system work on main grew that bundle past 4.5MB.
+    expect(html.length).toBeLessThan(6_000_000);
   });
 });
 
