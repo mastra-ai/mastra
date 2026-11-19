@@ -301,6 +301,7 @@ export function BoardContent({
                 onDismissProposal={decisions.dismiss}
                 onRetryDecision={decisions.retry}
                 onMove={toStage => items.move(item.id, toStage)}
+                onMoveToBoard={(toBoard, toStage) => items.moveToBoard(item.id, toBoard, toStage)}
                 onRemove={() => items.remove(item.id)}
               />
             )}

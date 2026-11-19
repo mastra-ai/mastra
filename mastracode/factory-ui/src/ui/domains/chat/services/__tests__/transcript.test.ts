@@ -2481,3 +2481,58 @@ describe('transcript reducer prompts answered elsewhere', () => {
     expect(prompts(next)).toEqual(['c2']);
   });
 });
+
+describe('a retracted prompt', () => {
+  it('drops the prompt the server cancelled and keeps the others', () => {
+    let state = initialTranscript;
+    for (const toolCallId of ['plan', 'question']) {
+      state = transcriptReducer(state, {
+        type: 'event',
+        event: { type: 'tool_suspended', toolCallId, toolName: 'ask_user', args: {}, suspendPayload: {} },
+      });
+    }
+
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'tool_suspension_cancelled',
+        toolCallId: 'plan',
+        toolName: 'ask_user',
+        reason: 'could not find a suspended run',
+      },
+    });
+
+    expect(state.entries.filter(entry => entry.kind === 'suspension').map(entry => entry.id)).toEqual([
+      'suspension-question',
+    ]);
+  });
+
+  it('keeps a prompt when the cancellation names another run', () => {
+    let state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: {
+        type: 'tool_suspended',
+        toolCallId: 'plan',
+        toolName: 'ask_user',
+        args: {},
+        suspendPayload: {},
+        runId: 'run-b',
+      },
+    });
+
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'tool_suspension_cancelled',
+        toolCallId: 'plan',
+        toolName: 'ask_user',
+        reason: 'gone',
+        runId: 'run-a',
+      },
+    });
+
+    expect(state.entries.filter(entry => entry.kind === 'suspension').map(entry => entry.id)).toEqual([
+      'suspension-plan',
+    ]);
+  });
+});

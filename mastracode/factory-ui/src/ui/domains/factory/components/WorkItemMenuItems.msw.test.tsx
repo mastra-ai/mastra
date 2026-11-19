@@ -57,6 +57,7 @@ function renderMenu(
             owner={{ kind: 'free' }}
             {...props}
             onMove={onMove}
+            onMoveToBoard={vi.fn()}
             onRemove={vi.fn()}
             onApproveProposal={vi.fn()}
             onDismissProposal={vi.fn()}

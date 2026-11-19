@@ -20,7 +20,7 @@ how it looks and behaves.
 
 - **Node.js 24.15.0 or later** and NPM.
 - **[OpenAI API key](https://platform.openai.com/api-keys)**: set `OPENAI_API_KEY` in `.env` for the
-  default `gpt-4.1-mini` model. Optionally set `ANALYSIS_MODEL` to another OpenAI model ID available
+  default `gpt-6-luna` model. Optionally set `ANALYSIS_MODEL` to another OpenAI model ID available
   to your account.
 
 ## Quickstart 🚀

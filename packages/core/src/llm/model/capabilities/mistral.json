@@ -2,6 +2,7 @@
   "attachment": [
     "codestral-2508",
     "codestral-latest",
+    "deepseek-v4-1-flash-1017",
     "labs-devstral-small-2512",
     "labs-leanstral-1-5-1",
     "magistral-medium-latest",
@@ -94,6 +95,18 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "mistral-medium-latest": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "mistral-small-2603": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
     "deepseek-v4-1-flash-1017": [
       {
         "type": "effort",
@@ -106,13 +119,13 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "zai-glm-5-3-flash": [
+    "mistral-large-latest": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high"]
       }
     ],
-    "labs-leanstral-1-5-1": [
+    "magistral-medium-latest": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -124,16 +137,10 @@
         "values": ["none", "high"]
       }
     ],
-    "zai-glm-5-3": [
+    "mistral-large-4-0-8": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "mistral-small-2603": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "zai-glm-5-2": [
@@ -142,25 +149,25 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "mistral-medium-latest": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
     "mistral-medium-2604": [
       {
         "type": "effort",
         "values": ["none", "high"]
       }
     ],
-    "mistral-large-4-0-8": [
+    "zai-glm-5-3-flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "high", "max"]
       }
     ],
-    "magistral-medium-latest": [
+    "zai-glm-5-3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "labs-leanstral-1-5-1": [
       {
         "type": "effort",
         "values": ["none", "high"]

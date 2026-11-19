@@ -1,9 +1,10 @@
+import type { ConnectClient } from '@mastra/connect';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
-import { Octokit } from '@octokit/rest';
 
+import { Octokit } from '@octokit/rest';
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
 import type {
   CreateIntakeCommentInput,
@@ -82,14 +83,9 @@ import {
 import { settleOrAbort } from '../../github/settle-or-abort.js';
 import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
 import { parseAuthorizedBotsEnv } from '../../github/webhook.js';
-import {
-  logPlatformBootInfo,
-  logPlatformInfo,
-  logPlatformWarn,
-  PlatformApiClient,
-  PlatformApiError,
-  platformApiClientConfigFromEnv,
-} from '../api-client.js';
+import { logPlatformBootInfo, logPlatformInfo, logPlatformWarn } from '../logging.js';
+import { createPlatformConnectClient, platformErrorStatus } from '../platform-connect.js';
+import type { PlatformConnectOption } from '../platform-connect.js';
 import { PlatformGithubEventWorker } from './event-worker.js';
 import type { PlatformGithubEventStorage } from './event-worker.js';
 
@@ -266,7 +262,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   get rules(): GithubEventRules {
     return this.#rules;
   }
-  readonly #client: PlatformApiClient;
+  readonly #client: ConnectClient;
   readonly #endpointHost: string;
   readonly #slug: string | undefined;
   /**
@@ -510,7 +506,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           const token = await this.#client.request<{ token: string }>(
             'POST',
             `${API_PREFIX}/github-app/installations/${installationId}/token`,
-            { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
+            { body: { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS } },
           );
           const access: RepositoryAccess = {
             cloneUrl,
@@ -545,7 +541,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
               token = await this.#client.request<{ token: string }>(
                 'POST',
                 `${API_PREFIX}/github-app/installations/${candidateInstallationId}/token`,
-                { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
+                { body: { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS } },
               );
             } catch (candidateErr) {
               if (isDeadInstallation(candidateErr)) continue;
@@ -594,8 +590,10 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           'POST',
           `${API_PREFIX}/github-app/installations/${installationId}/token`,
           {
-            repositories: found.map(repository => splitRepository(repository.slug).repo),
-            permissions: REPOSITORY_TOKEN_PERMISSIONS,
+            body: {
+              repositories: found.map(repository => splitRepository(repository.slug).repo),
+              permissions: REPOSITORY_TOKEN_PERMISSIONS,
+            },
           },
         );
         const authorization = { scheme: 'bearer' as const, token: token.token };
@@ -650,12 +648,13 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       rules?: GithubRuleOverrides;
       /** GitHub App slug used to recognize Factory's own webhook writes. */
       slug?: string;
+      /** Connect client, or options for one; defaults to the platform environment. */
+      connect?: PlatformConnectOption;
     } = {},
   ) {
     this.#rules = resolveGithubRules(options.rules);
-    const config = platformApiClientConfigFromEnv();
-    this.#client = new PlatformApiClient(config);
-    this.#endpointHost = new URL(config.baseUrl).host;
+    this.#client = createPlatformConnectClient(options.connect);
+    this.#endpointHost = new URL(this.#client.baseUrl).host;
     this.#slug = options.slug;
     // Identity is deliberately NOT taken from `options.slug`. That slug names
     // the deployment's own self-hosted GitHub App, which is a different App
@@ -1202,7 +1201,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       const comment = await this.#client.request<GithubComment>(
         'PATCH',
         repositoryPath(input.repository, `issues/comments/${existing.id}`),
-        { body: input.body },
+        { body: { body: input.body } },
       );
       this.#observeSelfAuthor(comment, undefined);
       return { action: 'updated', commentId: String(comment.id), url: comment.htmlUrl };
@@ -1210,7 +1209,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const comment = await this.#client.request<GithubComment>(
       'POST',
       repositoryPath(input.repository, `issues/${input.issueNumber}/comments`),
-      { body: input.body },
+      { body: { body: input.body } },
     );
     this.#observeSelfAuthor(comment, undefined);
     return { action: 'created', commentId: String(comment.id), url: comment.htmlUrl };
@@ -1283,7 +1282,6 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         const result = await this.#client.request<{ permission: GithubRepositoryPermission }>(
           'GET',
           `${API_PREFIX}/github/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.repo)}/collaborators/${encodeURIComponent(username)}/permission`,
-          undefined,
           { signal: AbortSignal.timeout(COLLABORATOR_PERMISSION_LOOKUP_TIMEOUT_MS) },
         );
         // Failures are not cached: a rate-limited or aborted lookup must retry
@@ -1368,7 +1366,12 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const result = await this.#client.request<{ token: string }>(
       'POST',
       `${API_PREFIX}/github-app/installations/${installationId}/token`,
-      { repositories: repositories.map(repository => repository.name), permissions: REPOSITORY_TOKEN_PERMISSIONS },
+      {
+        body: {
+          repositories: repositories.map(repository => repository.name),
+          permissions: REPOSITORY_TOKEN_PERMISSIONS,
+        },
+      },
     );
     return result.token;
   }
@@ -1382,7 +1385,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const result = await this.#client.request<{ labels: string[] }>(
       'POST',
       repositoryPath(sourceId, `issues/${issueNumber}/labels`),
-      { labels },
+      { body: { labels } },
     );
     return result.labels;
   }
@@ -1470,10 +1473,12 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         'PATCH',
         repositoryPath(repository, `issues/${issueNumber}`),
         {
-          state: targetState,
-          ...(stateReason ? { state_reason: stateReason } : {}),
+          body: {
+            state: targetState,
+            ...(stateReason ? { state_reason: stateReason } : {}),
+          },
+          ...actingUser(input.actingUserId),
         },
-        { actingUserId: input.actingUserId },
       );
       return parseIntakeIssue(repository, issue);
     } catch (error) {
@@ -1500,8 +1505,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       const comment = await this.#client.request<GithubComment>(
         'POST',
         repositoryPath(repository, `issues/${issueNumber}/comments`),
-        { body: input.body },
-        { actingUserId: input.actingUserId },
+        { body: { body: input.body }, ...actingUser(input.actingUserId) },
       );
       this.#observeSelfAuthor(comment, input.actingUserId);
       return { id: String(comment.id), url: comment.htmlUrl };
@@ -1544,18 +1548,16 @@ export class PlatformGithubIntegration implements FactoryIntegration {
 
   async #createPullRequest(input: CreatePullRequestInput) {
     requireGithubConnection(input.connection);
-    const result = await this.#client.request<GithubPullRequest>(
-      'POST',
-      repositoryPath(input.sourceId, 'pulls'),
-      {
+    const result = await this.#client.request<GithubPullRequest>('POST', repositoryPath(input.sourceId, 'pulls'), {
+      body: {
         head: input.headBranch,
         base: input.baseBranch,
         title: input.title,
         body: input.body,
         draft: input.draft,
       },
-      { actingUserId: input.actingUserId },
-    );
+      ...actingUser(input.actingUserId),
+    });
     const created = parsePullRequest(result);
     if (input.actingUserId && input.connection.type === 'app-installation') {
       try {
@@ -1566,7 +1568,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           const { token } = await this.#client.request<{ token: string }>(
             'POST',
             `${API_PREFIX}/github-app/installations/${input.connection.installationId}/token`,
-            { repositories: [repo], permissions: REPOSITORY_TOKEN_PERMISSIONS },
+            { body: { repositories: [repo], permissions: REPOSITORY_TOKEN_PERMISSIONS } },
           );
           const octokit = new Octokit({ auth: token, request: { timeout: 15_000 } });
           const { data } = await octokit.issues.addAssignees({
@@ -1592,17 +1594,15 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   }
 
   async #updatePullRequest(input: UpdatePullRequestInput) {
-    const result = await this.#client.request<GithubPullRequest>(
-      'PATCH',
-      pullRequestPath(input, input.pullRequestId),
-      {
+    const result = await this.#client.request<GithubPullRequest>('PATCH', pullRequestPath(input, input.pullRequestId), {
+      body: {
         title: input.title,
         body: input.body === null ? '' : input.body,
         base: input.baseBranch,
         state: input.state,
       },
-      { actingUserId: input.actingUserId },
-    );
+      ...actingUser(input.actingUserId),
+    });
     return parsePullRequest(result);
   }
 
@@ -1610,8 +1610,10 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     return this.#client.request<{ merged: boolean; message: string; sha: string | null }>(
       'PUT',
       `${pullRequestPath(input, input.pullRequestId)}/merge`,
-      { commitTitle: input.commitTitle, commitMessage: input.commitMessage, method: input.method },
-      { actingUserId: input.actingUserId },
+      {
+        body: { commitTitle: input.commitTitle, commitMessage: input.commitMessage, method: input.method },
+        ...actingUser(input.actingUserId),
+      },
     );
   }
 
@@ -1631,8 +1633,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const comment = await this.#client.request<GithubComment>(
       'POST',
       repositoryPath(input.sourceId, `issues/${requirePositiveId(input.pullRequestId, 'pull request')}/comments`),
-      { body: input.body },
-      { actingUserId: input.actingUserId },
+      { body: { body: input.body }, ...actingUser(input.actingUserId) },
     );
     this.#observeSelfAuthor(comment, input.actingUserId);
     return parseComment(comment);
@@ -1643,8 +1644,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const comment = await this.#client.request<GithubComment>(
       'PATCH',
       repositoryPath(input.sourceId, `issues/comments/${requirePositiveId(input.commentId, 'comment')}`),
-      { body: input.body },
-      { actingUserId: input.actingUserId },
+      { body: { body: input.body }, ...actingUser(input.actingUserId) },
     );
     return parseComment(comment);
   }
@@ -1654,8 +1654,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     await this.#client.request<void>(
       'DELETE',
       repositoryPath(input.sourceId, `issues/comments/${requirePositiveId(input.commentId, 'comment')}`),
-      undefined,
-      { actingUserId: input.actingUserId },
+      { ...actingUser(input.actingUserId) },
     );
   }
 
@@ -1689,8 +1688,10 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const review = await this.#client.request<GithubReview>(
       'POST',
       `${pullRequestPath(input, input.pullRequestId)}/reviews`,
-      { body: input.body, commitId: input.commitId, event: input.event ? reviewEvent(input.event) : undefined },
-      { actingUserId: input.actingUserId },
+      {
+        body: { body: input.body, commitId: input.commitId, event: input.event ? reviewEvent(input.event) : undefined },
+        ...actingUser(input.actingUserId),
+      },
     );
     return parseReview(review);
   }
@@ -1702,18 +1703,20 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       'POST',
       repositoryPath(input.sourceId, 'check-runs'),
       {
-        name: input.name,
-        headSha: input.headSha,
-        ...(input.status === 'in-progress'
-          ? { status: 'in_progress' }
-          : { status: 'completed', conclusion: input.status }),
-        output: {
-          title: input.title.slice(0, CHECK_TITLE_LIMIT),
-          summary: input.summary.slice(0, CHECK_TEXT_LIMIT),
-          ...(input.details ? { text: input.details.slice(0, CHECK_TEXT_LIMIT) } : {}),
+        body: {
+          name: input.name,
+          headSha: input.headSha,
+          ...(input.status === 'in-progress'
+            ? { status: 'in_progress' }
+            : { status: 'completed', conclusion: input.status }),
+          output: {
+            title: input.title.slice(0, CHECK_TITLE_LIMIT),
+            summary: input.summary.slice(0, CHECK_TEXT_LIMIT),
+            ...(input.details ? { text: input.details.slice(0, CHECK_TEXT_LIMIT) } : {}),
+          },
         },
+        ...actingUser(input.actingUserId),
       },
-      { actingUserId: input.actingUserId },
     );
     return { id: String(run.id), name: input.name, headSha: input.headSha, status: input.status, url: run.htmlUrl };
   }
@@ -1722,8 +1725,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const review = await this.#client.request<GithubReview>(
       'PUT',
       `${pullRequestPath(input, input.pullRequestId)}/reviews/${requirePositiveId(input.reviewId, 'review')}`,
-      { body: input.body },
-      { actingUserId: input.actingUserId },
+      { body: { body: input.body }, ...actingUser(input.actingUserId) },
     );
     return parseReview(review);
   }
@@ -1732,8 +1734,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const review = await this.#client.request<GithubReview>(
       'POST',
       `${pullRequestPath(input, input.pullRequestId)}/reviews/${requirePositiveId(input.reviewId, 'review')}/events`,
-      { body: input.body, event: reviewEvent(input.event) },
-      { actingUserId: input.actingUserId },
+      { body: { body: input.body, event: reviewEvent(input.event) }, ...actingUser(input.actingUserId) },
     );
     return parseReview(review);
   }
@@ -1742,8 +1743,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const review = await this.#client.request<GithubReview>(
       'PUT',
       `${pullRequestPath(input, input.pullRequestId)}/reviews/${requirePositiveId(input.reviewId, 'review')}/dismissals`,
-      { message: input.message },
-      { actingUserId: input.actingUserId },
+      { body: { message: input.message }, ...actingUser(input.actingUserId) },
     );
     return parseReview(review);
   }
@@ -1752,8 +1752,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     await this.#client.request<void>(
       'DELETE',
       `${pullRequestPath(input, input.pullRequestId)}/reviews/${requirePositiveId(input.reviewId, 'review')}`,
-      undefined,
-      { actingUserId: input.actingUserId },
+      { ...actingUser(input.actingUserId) },
     );
   }
 
@@ -1791,8 +1790,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       await this.#client.request<GithubReviewComment>(
         'POST',
         `${pullRequestPath(input, input.pullRequestId)}/comments`,
-        body,
-        { actingUserId: input.actingUserId },
+        { body: body, ...actingUser(input.actingUserId) },
       ),
     );
   }
@@ -1803,8 +1801,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       await this.#client.request<GithubReviewComment>(
         'PATCH',
         repositoryPath(input.sourceId, `pulls/comments/${requirePositiveId(input.commentId, 'review comment')}`),
-        { body: input.body },
-        { actingUserId: input.actingUserId },
+        { body: { body: input.body }, ...actingUser(input.actingUserId) },
       ),
     );
   }
@@ -1814,8 +1811,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     await this.#client.request<void>(
       'DELETE',
       repositoryPath(input.sourceId, `pulls/comments/${requirePositiveId(input.commentId, 'review comment')}`),
-      undefined,
-      { actingUserId: input.actingUserId },
+      { ...actingUser(input.actingUserId) },
     );
   }
 
@@ -1824,8 +1820,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     return this.#client.request<{ users: string[]; teams: string[] }>(
       method,
       `${pullRequestPath(input, input.pullRequestId)}/requested-reviewers`,
-      method === 'GET' ? undefined : { users: input.users, teams: input.teams },
-      method === 'GET' ? undefined : { actingUserId: input.actingUserId },
+      method === 'GET' ? {} : { body: { users: input.users, teams: input.teams }, ...actingUser(input.actingUserId) },
     );
   }
 }
@@ -2008,12 +2003,21 @@ function reviewEvent(event: 'approve' | 'request-changes' | 'comment') {
   return 'COMMENT' as const;
 }
 
+/**
+ * Names the Factory user a platform GitHub write acts for, so the platform
+ * authors it with that user's GitHub connection instead of the App bot.
+ */
+function actingUser(actingUserId: string | undefined): { headers?: Record<string, string> } {
+  return actingUserId ? { headers: { 'x-acting-user-id': actingUserId } } : {};
+}
+
 function isNotFound(error: unknown): boolean {
-  return error instanceof PlatformApiError && error.status === 404;
+  return platformErrorStatus(error) === 404;
 }
 
 // Platform answers 404 when the installation row is gone, 409 when it is suspended or soft-deleted.
 // A 502 also covers a dead installation but is indistinguishable from a transient GitHub outage.
 function isDeadInstallation(error: unknown): boolean {
-  return error instanceof PlatformApiError && (error.status === 404 || error.status === 409);
+  const status = platformErrorStatus(error);
+  return status === 404 || status === 409;
 }

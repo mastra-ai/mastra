@@ -7,8 +7,8 @@ import type { SearchableCard, SearchTerm } from '@mastra/factory/work-items/sear
 import { boardOf } from '../../factory/boardFlow';
 import type { BoardInfo } from '../../factory/boardFlow';
 import type { WorkspacesData } from '../../../../hooks/useWorkspaces';
-import { SOURCE_LABELS } from '../../factory/boardItems';
 import { currentItemStageLabel } from '../../factory/boardStages';
+import { CARD_SOURCES } from '../../factory/cardSources';
 import { relationshipLabel, relationshipPath, workItemIdentifier } from '../../factory/services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../../factory/services/workItems';
 import { threadPath } from '../../workspaces/services/factoryPaths';
@@ -237,7 +237,7 @@ export function createSessionSearchGroups(input: {
 
 function createWorkItemResult(factoryId: string, item: WorkItem, board: BoardInfo | undefined): WorkItemSearchResult {
   const identifier = workItemIdentifier(item);
-  const sourceLabel = SOURCE_LABELS[item.source];
+  const sourceLabel = CARD_SOURCES[item.source].label;
   const stage = currentItemStageLabel(item, board);
   const number = workItemNumber(item);
   const value = joinValue([

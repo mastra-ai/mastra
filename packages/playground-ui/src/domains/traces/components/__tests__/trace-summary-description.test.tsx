@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, assert, describe, expect, it } from 'vitest';
+import { afterEach, assert, describe, expect, it, vi } from 'vitest';
 import { TraceSummaryDescription } from '../trace-summary-description';
 
 afterEach(cleanup);
@@ -47,22 +47,20 @@ describe('TraceSummaryDescription', () => {
     expect(screen.getByLabelText('Trace status').textContent).toBe(label);
   });
 
-  it('links the entity name when a href is provided', () => {
-    render(
-      <TraceSummaryDescription
-        rootSpan={rootSpan}
-        entityHref="/agents/weather-agent/chat/new"
-        LinkComponent={props => <a {...props} />}
-      />,
-    );
+  it('opens the entity through onOpenEntity', () => {
+    const onOpenEntity = vi.fn();
+    render(<TraceSummaryDescription rootSpan={rootSpan} onOpenEntity={onOpenEntity} />);
 
-    const link = screen.getByRole('link', { name: /Weather Agent/ });
-    expect(link.getAttribute('href')).toBe('/agents/weather-agent/chat/new');
+    fireEvent.click(screen.getByRole('button', { name: /Weather Agent/ }));
+
+    expect(onOpenEntity).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('link')).toBeNull();
   });
 
-  it('renders the entity name as plain text without a href', () => {
+  it('renders the entity name as plain text without onOpenEntity', () => {
     render(<TraceSummaryDescription rootSpan={rootSpan} />);
 
+    expect(screen.queryByRole('button', { name: /Weather Agent/ })).toBeNull();
     expect(screen.queryByRole('link')).toBeNull();
   });
 

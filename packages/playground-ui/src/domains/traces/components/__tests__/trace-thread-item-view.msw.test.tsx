@@ -5,12 +5,13 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
+import { useLiveToolCalls } from '../../hooks/use-live-tool-calls';
 import { TraceThreadItemView } from '../trace-thread-item-view';
+import type { TraceThreadItemViewProps } from '../trace-thread-item-view';
 import {
   agentTraceWithTools,
   agentTraceWithSkill,
   basicAgentTrace,
-  TRACE_THREAD_ITEM_ID,
   TRACE_WORKFLOW_ID,
   traceWorkflow,
   traceWorkflowRuns,
@@ -18,11 +19,11 @@ import {
 import { ActivatedSkillsProvider, useActivatedSkills } from '@/domains/agents/context/activated-skills-context';
 import { BrowserToolCallsProvider, useBrowserToolCalls } from '@/domains/agents/context/browser-tool-calls-context';
 import { server } from '@/test/msw-server';
+import { recordRequests } from '@/test/record-requests';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 const installToolTraceHandlers = () => {
   server.use(
-    http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(agentTraceWithTools)),
     http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })),
     http.get(`${TEST_BASE_URL}/api/workflows/${TRACE_WORKFLOW_ID}`, () => HttpResponse.json(traceWorkflow)),
     http.get(`${TEST_BASE_URL}/api/workflows/${TRACE_WORKFLOW_ID}/runs`, () => HttpResponse.json(traceWorkflowRuns)),
@@ -31,6 +32,11 @@ const installToolTraceHandlers = () => {
     ),
   );
 };
+
+/** The view as Studio composes it: the trace's tool calls drawn with the chat's live cards. */
+const LiveTraceThreadItemView = (props: TraceThreadItemViewProps) => (
+  <TraceThreadItemView {...props} {...useLiveToolCalls()} />
+);
 
 const BrowserToolCallCount = () => {
   const { toolCalls } = useBrowserToolCalls();
@@ -45,11 +51,7 @@ const SkillActivationStatus = () => {
 describe('TraceThreadItemView', () => {
   describe('when the trace contains a completed agent turn', () => {
     it('renders the user input and assistant response through the chat UI', async () => {
-      server.use(
-        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(basicAgentTrace)),
-      );
-
-      const { queryClient } = renderWithProviders(<TraceThreadItemView traceId={TRACE_THREAD_ITEM_ID} />);
+      const { queryClient } = renderWithProviders(<TraceThreadItemView spans={basicAgentTrace.spans} />);
 
       expect(await screen.findByText('Plan a weekend in Paris')).not.toBeNull();
       expect(screen.getByText('Your Paris itinerary is ready.')).not.toBeNull();
@@ -58,13 +60,12 @@ describe('TraceThreadItemView', () => {
 
     it('leaves feedback controls to the dedicated Feedback tab', async () => {
       server.use(
-        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(basicAgentTrace)),
         http.get(`${TEST_BASE_URL}/api/observability/feedback`, () =>
           HttpResponse.json({ feedback: [], pagination: { page: 0, perPage: 10, total: 0, hasMore: false } }),
         ),
       );
 
-      const { queryClient } = renderWithProviders(<TraceThreadItemView traceId={TRACE_THREAD_ITEM_ID} />);
+      const { queryClient } = renderWithProviders(<TraceThreadItemView spans={basicAgentTrace.spans} />);
 
       expect(await screen.findByText('Plan a weekend in Paris')).not.toBeNull();
       expect(screen.queryByPlaceholderText('Leave feedback')).toBeNull();
@@ -82,13 +83,10 @@ describe('TraceThreadItemView', () => {
         ...rest,
       ];
       server.use(
-        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () =>
-          HttpResponse.json({ ...basicAgentTrace, spans }),
-        ),
         http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })),
       );
 
-      const { queryClient } = renderWithProviders(<TraceThreadItemView traceId={TRACE_THREAD_ITEM_ID} />);
+      const { queryClient } = renderWithProviders(<TraceThreadItemView spans={spans} />);
 
       expect(await screen.findByLabelText('Skill: factory-triage')).not.toBeNull();
       expect(screen.queryByText(/<skill name=/)).toBeNull();
@@ -135,13 +133,10 @@ describe('TraceThreadItemView', () => {
         },
       ];
       server.use(
-        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () =>
-          HttpResponse.json({ ...basicAgentTrace, spans }),
-        ),
         http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })),
       );
 
-      const { queryClient } = renderWithProviders(<TraceThreadItemView traceId={TRACE_THREAD_ITEM_ID} />);
+      const { queryClient } = renderWithProviders(<TraceThreadItemView spans={spans} />);
 
       expect(await screen.findByText('Changes requested')).not.toBeNull();
       expect(screen.getByText('Add a museum on Sunday')).not.toBeNull();
@@ -151,15 +146,33 @@ describe('TraceThreadItemView', () => {
   });
 
   describe('when the trace contains tool and workflow executions', () => {
-    it('renders every top-level execution with the agent chat cards', async () => {
-      installToolTraceHandlers();
+    it('draws every top-level execution from what the trace recorded', async () => {
+      renderWithProviders(<TraceThreadItemView spans={agentTraceWithTools.spans} />);
 
-      const { queryClient } = renderWithProviders(<TraceThreadItemView traceId={TRACE_THREAD_ITEM_ID} />, {});
+      // The workflow, the MCP, client and provider tools: one card each.
+      expect(await screen.findAllByTestId('tool-badge')).toHaveLength(4);
+    });
 
-      expect(await screen.findByTestId('workflow-badge')).not.toBeNull();
-      expect(await screen.findByTestId('workflow-graph-viewport')).not.toBeNull();
-      expect(screen.getAllByTestId('tool-badge')).toHaveLength(3);
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    it('asks the network for nothing', async () => {
+      const requests = recordRequests();
+      renderWithProviders(<TraceThreadItemView spans={agentTraceWithTools.spans} />);
+
+      await screen.findAllByTestId('tool-badge');
+
+      expect(requests).toEqual([]);
+    });
+
+    describe('when the host draws them with the chat’s live cards', () => {
+      it('draws the workflow with its graph', async () => {
+        installToolTraceHandlers();
+
+        const { queryClient } = renderWithProviders(<LiveTraceThreadItemView spans={agentTraceWithTools.spans} />);
+
+        expect(await screen.findByTestId('workflow-badge')).not.toBeNull();
+        expect(await screen.findByTestId('workflow-graph-viewport')).not.toBeNull();
+        expect(screen.getAllByTestId('tool-badge')).toHaveLength(3);
+        await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      });
     });
   });
 
@@ -168,7 +181,7 @@ describe('TraceThreadItemView', () => {
       installToolTraceHandlers();
 
       const { queryClient } = renderWithProviders(
-        <TraceThreadItemView traceId={TRACE_THREAD_ITEM_ID} onHighlightSpans={vi.fn()} />,
+        <TraceThreadItemView spans={agentTraceWithTools.spans} onHighlightSpans={vi.fn()} />,
       );
 
       await screen.findByText('Your Paris itinerary is ready.');
@@ -183,7 +196,7 @@ describe('TraceThreadItemView', () => {
       const onHighlightSpans = vi.fn();
 
       const { queryClient } = renderWithProviders(
-        <TraceThreadItemView traceId={TRACE_THREAD_ITEM_ID} onHighlightSpans={onHighlightSpans} />,
+        <TraceThreadItemView spans={agentTraceWithTools.spans} onHighlightSpans={onHighlightSpans} />,
       );
 
       await screen.findByText('Your Paris itinerary is ready.');
@@ -206,9 +219,10 @@ describe('TraceThreadItemView', () => {
     it('does not register them as active browser calls', async () => {
       installToolTraceHandlers();
 
+      // Through the live cards: the ones that could register a call, were it not read back.
       const { queryClient } = renderWithProviders(
         <BrowserToolCallsProvider>
-          <TraceThreadItemView traceId={TRACE_THREAD_ITEM_ID} />
+          <LiveTraceThreadItemView spans={agentTraceWithTools.spans} />
           <BrowserToolCallCount />
         </BrowserToolCallsProvider>,
       );
@@ -222,7 +236,6 @@ describe('TraceThreadItemView', () => {
   describe('when a historical skill tool is rendered', () => {
     it('does not activate the skill in the current chat', async () => {
       server.use(
-        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(agentTraceWithSkill)),
         http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })),
         http.get(`${TEST_BASE_URL}/api/observability/feedback`, () =>
           HttpResponse.json({ feedback: [], pagination: { page: 0, perPage: 10, total: 0, hasMore: false } }),
@@ -231,7 +244,7 @@ describe('TraceThreadItemView', () => {
 
       const { queryClient } = renderWithProviders(
         <ActivatedSkillsProvider>
-          <TraceThreadItemView traceId={TRACE_THREAD_ITEM_ID} />
+          <TraceThreadItemView spans={agentTraceWithSkill.spans} />
           <SkillActivationStatus />
         </ActivatedSkillsProvider>,
       );

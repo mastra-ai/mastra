@@ -1,47 +1,55 @@
 // @vitest-environment jsdom
 import { SpanType } from '@mastra/core/observability';
-import { fireEvent, screen, within } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { SpanRecord } from '../../../types';
 import { SpanDataPanelView } from '../../span-data-panel-view';
 import { SpanDetailsView } from '../../span-details-view';
+import type { TraceNavigation } from '../../trace-navigation';
 import { makeSpan, traceWithoutToolCalls } from './fixtures/span-payloads';
 import { registeredTools } from './fixtures/tools';
-import { TestLinkProvider } from '@/test/link-provider';
-import { server } from '@/test/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 // jsdom does not provide PointerEvent, which Base UI switches dispatch.
 beforeAll(() => vi.stubGlobal('PointerEvent', MouseEvent));
 afterAll(() => vi.unstubAllGlobals());
 
-beforeEach(() => {
-  server.use(
-    http.get(`${TEST_BASE_URL}/api/tools`, () => HttpResponse.json(registeredTools)),
-    http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(traceWithoutToolCalls)),
-  );
-});
-
 // Agents expose each workflow they own as a tool named `workflow-<key>` and each
-// sub-agent as `agent-<key>`; the workflow and agent pages resolve that key.
+// sub-agent as `agent-<key>`; the host opens that key wherever it shows workflows and agents.
 const KINDS = [
-  { kind: 'workflow', callLabel: 'Run workflow', key: 'myWorkflow', page: '/workflows/myWorkflow' },
-  { kind: 'agent', callLabel: 'Delegate', key: 'balanceAgent', page: '/agents/balanceAgent' },
+  { kind: 'workflow', callLabel: 'Run workflow', key: 'myWorkflow', opens: 'onOpenWorkflow' },
+  { kind: 'agent', callLabel: 'Delegate', key: 'balanceAgent', opens: 'onOpenAgent' },
 ] as const;
 
 const LAYOUTS = [
   {
     layout: 'data panel',
-    renderSpan: (span: SpanRecord) => <SpanDataPanelView traceId="t" spanId="s" span={span} />,
+    renderSpan: (span: SpanRecord, navigation?: TraceNavigation) => (
+      <SpanDataPanelView
+        traceId="t"
+        spanId="s"
+        span={span}
+        traceSpans={traceWithoutToolCalls.spans}
+        registeredTools={registeredTools}
+        navigation={navigation}
+      />
+    ),
     // What the span got sits in the Input tab, what it produced in the Output tab.
     open: (tab: 'input' | 'output') => fireEvent.click(screen.getByRole('tab', { name: new RegExp(`^${tab}`, 'i') })),
     toolsSection: () => screen.getByRole('region', { name: 'Available tools' }),
   },
   {
     layout: 'details',
-    renderSpan: (span: SpanRecord) => <SpanDetailsView traceId="t" spanId="s" span={span} />,
+    renderSpan: (span: SpanRecord, navigation?: TraceNavigation) => (
+      <SpanDetailsView
+        traceId="t"
+        spanId="s"
+        span={span}
+        traceSpans={traceWithoutToolCalls.spans}
+        registeredTools={registeredTools}
+        navigation={navigation}
+      />
+    ),
     open: () => {},
     toolsSection: () => {
       const found = screen.getByText('Available tools (2)').closest('[data-slot="span-payload-section"]');
@@ -51,15 +59,8 @@ const LAYOUTS = [
   },
 ] as const;
 
-const linksTo = (prefix: string) =>
-  screen
-    .getAllByRole('link')
-    .filter(link => link.getAttribute('href')?.startsWith(prefix))
-    .map(link => [link.textContent, link.getAttribute('href')]);
-
-describe.each(KINDS)('$kind tools', ({ kind, callLabel, key, page }) => {
+describe.each(KINDS)('$kind tools', ({ kind, callLabel, key, opens }) => {
   const toolName = `${kind}-${key}`;
-  const pagePrefix = page.slice(0, page.lastIndexOf('/') + 1);
 
   const offeredSpan = makeSpan({
     spanId: `span-offered-${kind}`,
@@ -112,49 +113,82 @@ describe.each(KINDS)('$kind tools', ({ kind, callLabel, key, page }) => {
   });
 
   describe.each(LAYOUTS)('$layout', ({ renderSpan, open, toolsSection }) => {
-    const renderWithLinks = (span: SpanRecord) => {
-      const view = renderWithProviders(<TestLinkProvider>{renderSpan(span)}</TestLinkProvider>);
-      return view;
+    // No provider: the span is drawn from its record, and every navigation goes through the host's callbacks.
+    const renderWithNavigation = (span: SpanRecord) => {
+      const navigation = { onOpenAgent: vi.fn(), onOpenWorkflow: vi.fn(), onOpenTool: vi.fn() };
+      const view = render(renderSpan(span, navigation));
+      return { ...view, navigation };
     };
 
-    it(`links a ${kind} the span offered as a tool to its page`, () => {
-      renderWithLinks(offeredSpan);
+    it(`opens a ${kind} the span offered as a tool through ${opens}`, () => {
+      const { navigation } = renderWithNavigation(offeredSpan);
       open('input');
 
-      const tools = toolsSection();
-      expect(within(tools).getByRole('link', { name: toolName }).getAttribute('href')).toBe(page);
-      expect(within(tools).queryByRole('link', { name: `${kind}-` })).toBeNull();
+      fireEvent.click(within(toolsSection()).getByRole('button', { name: toolName }));
+
+      expect(navigation[opens]).toHaveBeenCalledWith(key);
     });
 
-    it(`links a ${kind} the model called from the opened tool call, and only that call`, () => {
-      renderWithLinks(calledSpan);
+    it(`leaves a ${kind} prefix with nothing behind it as text`, () => {
+      renderWithNavigation(offeredSpan);
       open('input');
 
-      expect(screen.queryAllByRole('link')).toHaveLength(0);
+      expect(within(toolsSection()).queryByRole('button', { name: `${kind}-` })).toBeNull();
+    });
+
+    it(`opens a ${kind} the model called from the opened tool call, and only that call`, () => {
+      const { navigation } = renderWithNavigation(calledSpan);
+      open('input');
+
+      expect(screen.queryByRole('button', { name: key })).toBeNull();
       for (const button of screen.getAllByRole('button', { name: new RegExp(`^(${callLabel}|CookingTool)$`) })) {
         fireEvent.click(button);
       }
-      expect(screen.getAllByRole('link').map(link => [link.textContent, link.getAttribute('href')])).toEqual([
-        [key, page],
-      ]);
+      fireEvent.click(screen.getByRole('button', { name: key }));
+
+      expect(navigation[opens]).toHaveBeenCalledWith(key);
     });
 
-    it(`links the ${kind} a run suspended in`, () => {
-      renderWithLinks(suspendedSpan);
+    it(`opens the ${kind} a run suspended in`, () => {
+      const { navigation } = renderWithNavigation(suspendedSpan);
       open('output');
-      expect(linksTo(pagePrefix)).toEqual([[toolName, page]]);
+
+      fireEvent.click(screen.getByRole('button', { name: toolName }));
+
+      expect(navigation[opens]).toHaveBeenCalledWith(key);
     });
 
-    it(`links the ${kind} a run resumed into`, () => {
-      renderWithLinks(resumedSpan);
+    it(`opens the ${kind} a run resumed into`, () => {
+      const { navigation } = renderWithNavigation(resumedSpan);
       open('input');
-      expect(linksTo(pagePrefix)).toEqual([[toolName, page]]);
+
+      fireEvent.click(screen.getByRole('button', { name: toolName }));
+
+      expect(navigation[opens]).toHaveBeenCalledWith(key);
     });
 
-    it(`links the ${kind} whose result a processor handled`, () => {
-      renderWithLinks(resultProcessorSpan);
+    it(`opens the ${kind} whose result a processor handled`, () => {
+      const { navigation } = renderWithNavigation(resultProcessorSpan);
       open('input');
-      expect(linksTo(pagePrefix)).toEqual([[toolName, page]]);
+
+      fireEvent.click(screen.getByRole('button', { name: toolName }));
+
+      expect(navigation[opens]).toHaveBeenCalledWith(key);
+    });
+
+    it(`draws no link to the ${kind}: the host navigates`, () => {
+      const { container } = renderWithNavigation(offeredSpan);
+      open('input');
+
+      expect(container.querySelectorAll('a')).toHaveLength(0);
+    });
+
+    it(`shows the ${kind} as text when the host does not navigate`, () => {
+      render(renderSpan(offeredSpan));
+      open('input');
+
+      expect(within(toolsSection()).queryByRole('button', { name: toolName })).toBeNull();
+      expect(within(toolsSection()).getByText(toolName)).toBeTruthy();
     });
   });
 });

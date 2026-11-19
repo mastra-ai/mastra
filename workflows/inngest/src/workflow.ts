@@ -528,6 +528,7 @@ export class InngestWorkflow<
           timeTravel,
           perStep,
           tracingOptions,
+          parentSampled,
           actor,
           parentStream,
           nestedWorkflowOutputMode: requestedNestedWorkflowOutputMode,
@@ -630,6 +631,8 @@ export class InngestWorkflow<
             tracingOptions,
             requestContext,
             resumeFrom: suspendedTracingContext,
+            // A nested run repeats the decision of the run that invoked it.
+            samplingDecision: parentSampled,
             mastra,
           });
 
@@ -671,6 +674,7 @@ export class InngestWorkflow<
               ? {
                   traceId: workflowSpanData.traceId,
                   workflowSpanId: workflowSpanData.id,
+                  sampled: workflowResumeTracingContext(workflowSpanData)?.sampled,
                 }
               : undefined,
             outputOptions,
