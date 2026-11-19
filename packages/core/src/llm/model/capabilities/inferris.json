@@ -1,13 +1,7 @@
 {
   "temperature": ["glm-5.3", "glm-5.3-flash"],
   "reasoning": {
-    "glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "kimi-k3.1-pro": [
+    "kimi-k3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -19,7 +13,13 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "kimi-k3": [
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "kimi-k3.1-pro": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
