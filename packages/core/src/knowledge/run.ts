@@ -54,11 +54,18 @@ export class KnowledgeRun {
     runtime: KnowledgeScopeRuntime,
     storage: KnowledgeStorage,
     context: KnowledgeRunContext | undefined,
-    options: { write?: boolean } = {},
+    options: { write?: boolean; principals?: readonly string[]; author?: string } = {},
   ): Promise<KnowledgeRun> {
     await runtime.resolve();
-    const principals = knowledgeRunPrincipals(runtime, context);
-    const author = context?.agent?.agentId ? `agent:${context.agent.agentId}` : 'agent';
+    let principals: string[];
+    if (options.principals) {
+      // Host-vouched: checked again against declarations the store may have changed since.
+      principals = [...options.principals];
+      runtime.validatePrincipals(principals);
+    } else {
+      principals = knowledgeRunPrincipals(runtime, context);
+    }
+    const author = options.author ?? (context?.agent?.agentId ? `agent:${context.agent.agentId}` : 'agent');
     const provenance: KnowledgeProvenance = {
       author,
       ...(context?.agent?.threadId ? { sourceThreadId: context.agent.threadId } : {}),

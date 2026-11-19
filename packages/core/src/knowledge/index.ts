@@ -61,6 +61,19 @@ const MIN_TOKENS_PER_CONFIG_PIN = 50;
 /** Overrides which tool groups `createTools` and `getInstructions` cover. */
 type KnowledgeToolSelection = { read?: boolean; write?: boolean; pinnedContext?: boolean };
 
+/** Options for {@link Knowledge.createTools}. */
+export type KnowledgeCreateToolsOptions = KnowledgeToolSelection & {
+  /**
+   * **Host-only.** Fixed principals for every call, for hosts that run the tools outside an agent run
+   * (an MCP server acting for an external agent). Each must match a declared scope type. When set, the
+   * call's own run scopes and Memory ids are ignored, and access follows the scope rules for these
+   * principals. Never take them from the request.
+   */
+  principals?: readonly string[];
+  /** Author recorded on writes made through these tools. Defaults to `agent:<id>` of the run, or `agent`. */
+  author?: string;
+};
+
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export class Knowledge extends MastraBase {
   readonly id: string;
@@ -215,7 +228,8 @@ export class Knowledge extends MastraBase {
   }
 
   /** Tools for explicit wiring; defaults to the groups configured on this Knowledge. */
-  createTools(options?: KnowledgeToolSelection): Record<string, ToolAction<any, any, any>> {
+  createTools(options?: KnowledgeCreateToolsOptions): Record<string, ToolAction<any, any, any>> {
+    const principals = options?.principals ? this.#hostPrincipals(options.principals) : undefined;
     return buildKnowledgePageTools(
       {
         runtime: this.#runtime,
@@ -223,6 +237,8 @@ export class Knowledge extends MastraBase {
         semantic: this.#semantic,
         warn: message => this.logger.warn(message),
         maxTokens: this.#tools.maxTokens,
+        ...(principals ? { principals } : {}),
+        ...(options?.author ? { author: options.author } : {}),
       },
       this.#groups(options),
       // A pin write changes what the pins lane shows; drop the turn's memoized read.
@@ -358,6 +374,26 @@ export class Knowledge extends MastraBase {
   /** The run's principals as a stable key; throws when the run has none or holds an undeclared scope. @internal */
   __principalsKey(context: KnowledgeRunContext): string {
     return knowledgeRunPrincipals(this.#runtime, context).sort().join('\n');
+  }
+
+  /**
+   * The pinned pages a host-run caller with these principals receives, rendered as an agent run
+   * receives them: only pages they can read, within this instance's pin budget. For hosts that serve
+   * Knowledge outside an agent run, alongside {@link Knowledge.createTools} with `principals`.
+   */
+  async getPinnedContext(options: { principals: readonly string[] }): Promise<PinEntry[]> {
+    const principals = this.#hostPrincipals(options.principals);
+    const budget = this.#pins || resolvePins(true);
+    if (!budget) return [];
+    const run = await KnowledgeRun.start(this.#runtime, await this.getStorage(), undefined, { principals });
+    return knowledgeDeliveredPins(run, budget);
+  }
+
+  #hostPrincipals(principals: readonly string[]): string[] {
+    const unique = [...new Set(principals)];
+    if (unique.length === 0) throw new Error('Knowledge `principals` needs at least one scope address.');
+    this.#runtime.validatePrincipals(unique);
+    return unique;
   }
 
   /** The pinned pages a run receives this turn. @internal */
@@ -529,6 +565,7 @@ export type {
   KnowledgeTreePage,
 } from './explorer-pages';
 export type { KnowledgeConfig } from './config';
+export type { PinEntry as KnowledgePinnedEntry } from './pinned';
 export { knowledgeScopeAddress, knowledgeMemoryScopes, KnowledgeDeclarationError } from './declarations';
 export { decodeKnowledgeScopeId, encodeKnowledgeScopeId } from './scope-address';
 export type {
