@@ -913,16 +913,7 @@ export class DurableAgent<
       });
     }
 
-    const persisted = await workflowsStore.getWorkflowRunById({
-      runId,
-      workflowName: DurableStepIds.AGENTIC_LOOP,
-    });
-    if (!persisted) return undefined;
-    const snapshot: WorkflowRunState =
-      typeof persisted.snapshot === 'string' ? JSON.parse(persisted.snapshot) : persisted.snapshot;
-    const workflowInput = snapshot?.context?.input as DurableAgenticWorkflowInput | undefined;
-    if (workflowInput?.__workflowKind !== 'durable-agent' || workflowInput.agentId !== this.id) return undefined;
-    return workflowInput.requestContextEntries?.[key];
+    return this.executionEngine.loadSuspendedRequestContextValue(workflowsStore, runId, this.id, key);
   }
 
   // ===========================================================================
@@ -5275,35 +5266,13 @@ export class DurableAgent<
     runId: string,
     parentSnapshot: WorkflowRunState,
   ): Promise<number | undefined> {
-    try {
-      const nestedRunId = parentSnapshot.context?.[DurableStepIds.AGENTIC_EXECUTION]?.metadata?.nestedRunId;
-      const nested = await workflowsStore.getWorkflowRunById({
-        runId: typeof nestedRunId === 'string' ? nestedRunId : runId,
-        workflowName: DurableStepIds.AGENTIC_EXECUTION,
-      });
-      const snapshot = typeof nested?.snapshot === 'string' ? JSON.parse(nested.snapshot) : nested?.snapshot;
-      if (!snapshot || snapshot.context?.[DurableStepIds.LLM_EXECUTION]?.status === 'success') return;
-      const stepIndex = snapshot.context?.input?.iterationCount;
-      if (typeof stepIndex !== 'number') return;
-      const history = (await this.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)) as AgentStreamEvent[];
-      const starts = history.filter(
-        event =>
-          (event.type === AgentStreamEventTypes.ITERATION_START || event.type === AgentStreamEventTypes.STEP_START) &&
-          event.stepIndex === stepIndex,
-      );
-      const latestGeneration = starts.reduce<number | undefined>(
-        (latest, event) =>
-          typeof event.generation === 'number' ? Math.max(latest ?? event.generation, event.generation) : latest,
-        undefined,
-      );
-      return (
-        starts.find(
-          event => event.type === AgentStreamEventTypes.ITERATION_START && event.generation === latestGeneration,
-        ) ?? starts.find(event => event.generation === latestGeneration)
-      )?.index;
-    } catch (error) {
-      this.logger.warn(`[DurableAgent] recover(${runId}) couldn't locate the uncheckpointed stream tail`, { error });
-    }
+    return this.executionEngine.recoverySupersededFrom(
+      workflowsStore,
+      runId,
+      parentSnapshot,
+      () => this.pubsub,
+      this.logger,
+    );
   }
 
   /**

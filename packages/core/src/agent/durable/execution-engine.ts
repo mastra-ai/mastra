@@ -7,6 +7,8 @@ import type { RequestContext } from '../../request-context';
 import type { MemoryStorage, WorkflowsStorage } from '../../storage';
 import type { ShouldPersistSnapshotFn, WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import {
+  AGENT_STREAM_TOPIC,
+  AgentStreamEventTypes,
   DURABLE_STOP_WHEN_ERROR_ID,
   DurableStepIds,
   markErrorForStreamRejection,
@@ -19,7 +21,7 @@ import { ExecutionFence, fencePubSub, resolveLeaseProvider, supportsRunFencing }
 import type { UntrackedRunLiveness } from './execution-fence';
 import { withExecutionStreamProducer } from './execution-stream-publisher';
 import { emitAbortEvent } from './stream-adapter';
-import type { DurableAgenticWorkflowInput, DurableToolCallInput } from './types';
+import type { AgentStreamEvent, DurableAgenticWorkflowInput, DurableToolCallInput } from './types';
 import { createDurableAgenticWorkflow } from './workflows/create-durable-agentic-workflow';
 import { readAccumulatedSteps } from './workflows/shared/accumulated-steps';
 import { latestMessageListState } from './workflows/shared/message-list-state';
@@ -124,6 +126,63 @@ export class DurableExecutionEngine {
       .join('');
 
     return { toolCalls, resumedText: { priorText, stepText } };
+  }
+
+  /** Locate the start of the model step that recovery will re-execute, if it was published. */
+  async recoverySupersededFrom(
+    workflowsStore: WorkflowsStorage,
+    runId: string,
+    parentSnapshot: WorkflowRunState,
+    getPubsub: () => PubSub,
+    logger: IMastraLogger,
+  ): Promise<number | undefined> {
+    try {
+      const nestedRunId = parentSnapshot.context?.[DurableStepIds.AGENTIC_EXECUTION]?.metadata?.nestedRunId;
+      const nested = await workflowsStore.getWorkflowRunById({
+        runId: typeof nestedRunId === 'string' ? nestedRunId : runId,
+        workflowName: DurableStepIds.AGENTIC_EXECUTION,
+      });
+      const snapshot = typeof nested?.snapshot === 'string' ? JSON.parse(nested.snapshot) : nested?.snapshot;
+      if (!snapshot || snapshot.context?.[DurableStepIds.LLM_EXECUTION]?.status === 'success') return;
+      const stepIndex = snapshot.context?.input?.iterationCount;
+      if (typeof stepIndex !== 'number') return;
+      const history = (await getPubsub().getHistory(AGENT_STREAM_TOPIC(runId), 0)) as AgentStreamEvent[];
+      const starts = history.filter(
+        event =>
+          (event.type === AgentStreamEventTypes.ITERATION_START || event.type === AgentStreamEventTypes.STEP_START) &&
+          event.stepIndex === stepIndex,
+      );
+      const latestGeneration = starts.reduce<number | undefined>(
+        (latest, event) =>
+          typeof event.generation === 'number' ? Math.max(latest ?? event.generation, event.generation) : latest,
+        undefined,
+      );
+      return (
+        starts.find(
+          event => event.type === AgentStreamEventTypes.ITERATION_START && event.generation === latestGeneration,
+        ) ?? starts.find(event => event.generation === latestGeneration)
+      )?.index;
+    } catch (error) {
+      logger.warn(`[DurableAgent] recover(${runId}) couldn't locate the uncheckpointed stream tail`, { error });
+    }
+  }
+
+  async loadSuspendedRequestContextValue(
+    workflowsStore: WorkflowsStorage,
+    runId: string,
+    agentId: string,
+    key: string,
+  ): Promise<unknown> {
+    const persisted = await workflowsStore.getWorkflowRunById({
+      runId,
+      workflowName: DurableStepIds.AGENTIC_LOOP,
+    });
+    if (!persisted) return undefined;
+    const snapshot: WorkflowRunState =
+      typeof persisted.snapshot === 'string' ? JSON.parse(persisted.snapshot) : persisted.snapshot;
+    const workflowInput = snapshot?.context?.input as DurableAgenticWorkflowInput | undefined;
+    if (workflowInput?.__workflowKind !== 'durable-agent' || workflowInput.agentId !== agentId) return undefined;
+    return workflowInput.requestContextEntries?.[key];
   }
 
   async loadRecoverableSnapshot(
