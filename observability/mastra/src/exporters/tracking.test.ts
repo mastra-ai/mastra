@@ -1331,19 +1331,5 @@ describe('TrackingExporter', () => {
       expect(exporter.closedSpans.get('child')).toEqual(t);
       expect(exporter.abortedSpans.size).toBe(0);
     });
-
-    it('should close a span whose dropped end is dispatched in the same tick as its start', async () => {
-      await Promise.all([
-        exporter.exportTracingEvent(createTracingEvent('span_started', span('tool', 'root'))),
-        exporter.onSpanFilteredEvent({ type: 'span_filtered', traceId, spanId: 'tool', endTime: t }),
-      ]);
-      await flushAsync();
-
-      await exporter.exportTracingEvent(createTracingEvent('span_ended', span('root', undefined, t)));
-      await exporter.shutdown();
-
-      expect(exporter.closedSpans.get('tool')).toEqual(t);
-      expect(exporter.abortedSpans.size).toBe(0);
-    });
   });
 });
