@@ -32,6 +32,9 @@ import type {
   KnowledgeUpsertPageInput,
   KnowledgeUpsertPageResult,
 } from './host-writes';
+import { runKnowledgeImport } from './importers';
+import type { KnowledgeImporterHost, RunKnowledgeImportOptions, RunKnowledgeImportResult } from './importers';
+import { createLocalKnowledgeImporterHost } from './importers/local-host';
 import { buildKnowledgeInstructions } from './instructions';
 import type { KnowledgeInstructionsOption } from './instructions';
 import { reindexKnowledgeLinks } from './links';
@@ -75,6 +78,7 @@ export class Knowledge extends MastraBase {
   #tools: { read: boolean; write: boolean; maxTokens?: number };
   #pins: false | PinBudget;
   #instructions?: KnowledgeInstructionsOption;
+  #importers?: KnowledgeConfig['importers'];
   #semantic?: KnowledgeSemanticIndex;
   #listeners = new Set<KnowledgeChangeListener>();
 
@@ -124,6 +128,7 @@ export class Knowledge extends MastraBase {
     }
     this.#pins = resolvePins(config.pinnedContext);
     this.#instructions = config.instructions;
+    this.#importers = config.importers;
     if (Boolean(config.vector) !== Boolean(config.embedder)) {
       throw new Error('Knowledge semantic search needs both `vector` and `embedder`; pass both or neither.');
     }
@@ -306,6 +311,23 @@ export class Knowledge extends MastraBase {
    */
   removeNote(input: { id: string; author?: string }): Promise<KnowledgeNote | null> {
     return removeKnowledgeNote(this.#hostWriter(), input);
+  }
+
+  /**
+   * The app's importers: `host` applies flushes to this Knowledge's storage, and `run` runs one
+   * binding's importer through it. Undefined without `importers` in the config. Host-only, like
+   * {@link Knowledge.upsertPage}: never expose `run` without admin-level auth.
+   *
+   * @experimental
+   */
+  get importers(): KnowledgeImporters | undefined {
+    const config = this.#importers;
+    if (!config) return undefined;
+    const host = createLocalKnowledgeImporterHost(this.#hostWriter(), { bindings: config.bindings });
+    return {
+      host,
+      run: (bindingId, options) => runKnowledgeImport({ ...options, definitions: config.definitions, host, bindingId }),
+    };
   }
 
   #hostWriter() {
@@ -561,3 +583,12 @@ export type {
   KnowledgeUpsertPageResult,
 } from './host-writes';
 export * from './importers';
+
+/** @experimental */
+export interface KnowledgeImporters {
+  host: KnowledgeImporterHost;
+  run(
+    bindingId: string,
+    options?: Omit<RunKnowledgeImportOptions, 'definitions' | 'host' | 'bindingId'>,
+  ): Promise<RunKnowledgeImportResult>;
+}

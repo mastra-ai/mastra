@@ -1,4 +1,5 @@
 import {
+  createKnowledgeImporterHostTests,
   createKnowledgeImportersStorageTests,
   createKnowledgeLegacyUpgradeTests,
   createKnowledgePageStoreTests,
@@ -344,4 +345,17 @@ describe('KnowledgePG transaction: a failure caught outside a savepoint', () => 
       await pool.query(`DROP SCHEMA IF EXISTS "${GATE_SCHEMA}" CASCADE`);
     }
   });
+});
+
+let importerHostSchemas = 0;
+createKnowledgeImporterHostTests(async () => {
+  const schemaName = `knowledge_importer_host_${process.pid}_${++importerHostSchemas}`;
+  await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+  await pool.query(`CREATE SCHEMA "${schemaName}"`);
+  return {
+    storage: new PostgresStore({ id: 'importer-host', pool, schemaName }),
+    cleanup: async () => {
+      await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+    },
+  };
 });

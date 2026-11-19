@@ -849,6 +849,14 @@ export class PgKnowledgePages implements KnowledgePageStore {
 
   // Pages ----------------------------------------------------------------------------------------
 
+  /** Inside a transaction: locks the pages' rows until commit, in id order. */
+  async lockPages(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    await this.#client.query(`SELECT "id" FROM ${this.#pages} WHERE "id" = ANY($1) ORDER BY "id" FOR UPDATE`, [
+      [...new Set(ids)],
+    ]);
+  }
+
   async getPage(input: { id: string; read: KnowledgeReadScope }): Promise<KnowledgePage | null> {
     const params = new Params();
     const id = params.add(input.id);

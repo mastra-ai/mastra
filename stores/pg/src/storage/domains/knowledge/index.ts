@@ -280,6 +280,10 @@ export class KnowledgePG extends KnowledgeStorage {
     return this.#pages.getPages(input);
   }
 
+  override lockPages(ids: string[]): Promise<void> {
+    return this.#pages.lockPages(ids);
+  }
+
   override getPage(input: Parameters<KnowledgePageStore['getPage']>[0]): ReturnType<KnowledgePageStore['getPage']> {
     return this.#pages.getPage(input);
   }

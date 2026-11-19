@@ -33,3 +33,6 @@ export {
   defineKnowledgeImporter,
   knowledgeImporterRegistry,
 } from './define';
+export type { RunKnowledgeImportOptions, RunKnowledgeImportResult } from './runner';
+export { runKnowledgeImport } from './runner';
+export { REMOVED_PARENT_BODY as KNOWLEDGE_IMPORT_REMOVED_PARENT_BODY, knowledgeImportKey } from './sink';

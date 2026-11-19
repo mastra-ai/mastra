@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Added the Knowledge importer contract (experimental), exported from `@mastra/core/knowledge`. Nothing runs importers yet: this release has the types, the manifest and the host interface, so hosts and importer authors can build against them.
+Added the Knowledge importer contract (experimental), exported from `@mastra/core/knowledge`. It has the types, the manifest and the host interface, so hosts and importer authors can build against them.
 
 - `defineKnowledgeImporter({ id, label, settings, credentials, sync })` defines an importer that writes a source into Knowledge as items keyed by the source's own IDs. It checks the definition when you call it. `parseSettings` and `checkCredentials` check a binding's values.
 - `definition.toManifest()` returns plain JSON for a UI: the settings form as draft-07 JSON Schema (the input side, so fields with defaults are optional), plus the credential slots and the default schedule.

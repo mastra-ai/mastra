@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import * as knowledgeCompat from '@internal/core/knowledge-compat';
 import { KNOWLEDGE_PAGES_TABLE_NAMES } from '@internal/core/knowledge-compat';
 import {
+  createKnowledgeImporterHostTests,
   createKnowledgeImportersStorageTests,
   createKnowledgeLegacyUpgradeTests,
   createKnowledgeSchemaResetTests,
@@ -297,6 +298,18 @@ createKnowledgeImportersStorageTests(async () => {
       writer.close();
       readerClient.close();
       unprovisionedClient.close();
+      rmSync(dir, { recursive: true, force: true });
+    },
+  };
+});
+
+createKnowledgeImporterHostTests(async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'knowledge-importer-host-'));
+  const storage = new LibSQLStore({ id: 'importer-host', url: `file:${join(dir, 'knowledge.db')}` });
+  return {
+    storage,
+    cleanup: async () => {
+      await storage.close?.();
       rmSync(dir, { recursive: true, force: true });
     },
   };

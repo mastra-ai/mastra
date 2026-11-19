@@ -32,8 +32,7 @@ export type KnowledgeImporterRunStart =
       lastSeq: number;
       /**
        * The binding as the host recorded it for this run. A remote host sends it because the app
-       * trusts only what the host returns here; the runner then uses it instead of a local binding.
-       * The local host leaves it out.
+       * trusts only what the host returns here; the runner picks the importer from it.
        */
       binding?: KnowledgeImporterRunBinding;
     }

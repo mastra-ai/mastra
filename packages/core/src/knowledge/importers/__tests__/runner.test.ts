@@ -172,7 +172,11 @@ describe('runKnowledgeImport', () => {
       { error: new KnowledgeImporterHostError('lost ack', 503), afterCommit: true },
     ];
     await runKnowledgeImport({
-      definitions: [importer(async ctx => void (await ctx.items.upsert(item(1))))],
+      definitions: [
+        importer(async ctx => {
+          await ctx.items.upsert(item(1));
+        }),
+      ],
       host,
       bindingId: 'b1',
       retryDelayMs: () => 0,
@@ -190,7 +194,11 @@ describe('runKnowledgeImport', () => {
       const host = new RecordingHost();
       host.failures = [{ error }];
       await runKnowledgeImport({
-        definitions: [importer(async ctx => void (await ctx.items.upsert(item(1))))],
+        definitions: [
+          importer(async ctx => {
+            await ctx.items.upsert(item(1));
+          }),
+        ],
         host,
         bindingId: 'b1',
         retryDelayMs: () => 0,
@@ -310,7 +318,11 @@ describe('runKnowledgeImport', () => {
       afterCommit: i === 0,
     }));
     const receipt = await runKnowledgeImport({
-      definitions: [importer(async ctx => void (await ctx.items.upsert(item(1))))],
+      definitions: [
+        importer(async ctx => {
+          await ctx.items.upsert(item(1));
+        }),
+      ],
       host,
       bindingId: 'b1',
       retryDelayMs: () => 0,
@@ -329,7 +341,11 @@ describe('runKnowledgeImport', () => {
     const host = new RecordingHost();
     host.finishFailures = [new KnowledgeImporterHostError('lost ack', 502)];
     const receipt = await runKnowledgeImport({
-      definitions: [importer(async ctx => void (await ctx.items.upsert(item(1))))],
+      definitions: [
+        importer(async ctx => {
+          await ctx.items.upsert(item(1));
+        }),
+      ],
       host,
       bindingId: 'b1',
       retryDelayMs: () => 0,
@@ -412,7 +428,10 @@ describe('runKnowledgeImport', () => {
       const host = new RecordingHost();
       digestHook.before = async () => {
         host.cancel = true;
-        await new Promise(resolve => setTimeout(resolve, 50));
+        // Wait for a heartbeat to hand the cancel back, then let the runner act on it.
+        const seen = host.heartbeats;
+        while (host.heartbeats === seen) await new Promise(resolve => setTimeout(resolve, 1));
+        await new Promise(resolve => setTimeout(resolve, 0));
       };
       const result = await runKnowledgeImport({
         definitions: [importer(async ctx => ctx.items.upsert(item(1)))],

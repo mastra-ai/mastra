@@ -228,6 +228,17 @@ export abstract class KnowledgeStorage extends StorageDomain implements Knowledg
   }
 
   /**
+   * On a {@link transaction} view: locks the pages' rows against other writers until commit. A no-op
+   * on stores whose transactions already exclude every other writer (one write transaction at a
+   * time).
+   *
+   * @experimental
+   */
+  lockPages(_ids: string[]): Promise<void> {
+    return Promise.resolve();
+  }
+
+  /**
    * Importer bookkeeping on the same database and namespace as the pages, or undefined when the
    * adapter has none. On a {@link transaction} view it belongs to that transaction.
    *

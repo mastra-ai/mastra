@@ -1,0 +1,244 @@
+import {
+  Knowledge,
+  KnowledgeImporterHostConflictError,
+  defineKnowledgeImporter,
+  knowledgeImporterFlushDigest,
+} from '@mastra/core/knowledge';
+import type { KnowledgeImporterHost, KnowledgeImportItem, KnowledgeImporterOp } from '@mastra/core/knowledge';
+import type { MastraCompositeStore } from '@mastra/core/storage';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+export interface KnowledgeImporterHostFixture {
+  /** A store whose Knowledge domain is provisioned (pages and importer tables) and empty. */
+  storage: MastraCompositeStore;
+  cleanup(): Promise<void>;
+}
+
+/**
+ * The local importer host (r347 O3) end to end through `knowledge.importers`: placement, ownership
+ * refusals, stubs, replay and finish rules. Each test gets a fresh, provisioned store.
+ */
+export function createKnowledgeImporterHostTests(createFixture: () => Promise<KnowledgeImporterHostFixture>): void {
+  let fixture: KnowledgeImporterHostFixture;
+  beforeEach(async () => {
+    fixture = await createFixture();
+  });
+  afterEach(async () => {
+    await fixture.cleanup();
+  });
+
+  function setup(bindings: { id: string; target: string }[] = [{ id: 'b1', target: 'docs:acme#notion' }]) {
+    let ops: KnowledgeImporterOp[] = [];
+    const importer = defineKnowledgeImporter({
+      id: 'notes',
+      label: 'Notes',
+      sync: async ctx => {
+        for (const op of ops) {
+          if (op.op === 'upsert') await ctx.items.upsert(op.item);
+          else if (op.op === 'declare') await ctx.items.declare(op.item);
+          else await ctx.items.remove(op.sourceId);
+        }
+      },
+    });
+    const knowledge = new Knowledge({
+      scopes: { 'docs:$orgId': {} },
+      storage: fixture.storage,
+      importers: {
+        definitions: [importer],
+        bindings: bindings.map(b => ({ ...b, importer: 'notes', settings: {}, credentials: {} })),
+      },
+    });
+    const run = async (next: KnowledgeImporterOp[], bindingId = 'b1') => {
+      ops = next;
+      return knowledge.importers!.run(bindingId);
+    };
+    const page = async (path: string) => {
+      const storage = await knowledge.getStorage();
+      const [scope] = await storage.getScopesByAddress(['docs:acme']);
+      return scope ? storage.getPageByPath({ scopeId: scope.id, path: path.split('/'), read: 'all' }) : null;
+    };
+    return { knowledge, run, page };
+  }
+
+  const upsert = (item: Partial<KnowledgeImportItem> & { sourceId: string }): KnowledgeImporterOp => ({
+    op: 'upsert',
+    item: { title: item.sourceId.toUpperCase(), body: `body of ${item.sourceId}`, ...item },
+  });
+
+  async function flushOnce(
+    host: KnowledgeImporterHost,
+    runId: string,
+    generation: number,
+    seq: number,
+    ops: KnowledgeImporterOp[],
+  ) {
+    const digest = await knowledgeImporterFlushDigest({ ops });
+    return host.flush({ runId, generation, seq, digest, ops });
+  }
+
+  describe('local importer host', () => {
+    it('creates the anchor, places children under parents that arrive later in the flush, and links them', async () => {
+      const { run, page } = setup();
+      const receipt = await run([
+        upsert({ sourceId: 'c1', parent: 'p1', links: [{ sourceId: 'p1', rel: 'up' }] }),
+        upsert({ sourceId: 'p1' }),
+      ]);
+      expect(receipt).toMatchObject({ outcome: 'succeeded', counts: { created: 2, refused: 0 } });
+      expect((await page('notion'))?.name).toBe('notion');
+      const child = await page('notion/p1/c1');
+      expect(child?.name).toBe('C1');
+      expect(child?.body).toBe('body of c1\n\nLinks:\n- up: [[docs:acme#notion/p1]]');
+    });
+
+    it('escapes source IDs into keys and writes nothing on an unchanged rerun', async () => {
+      const { run, page } = setup();
+      await run([upsert({ sourceId: 'a/b:c' })]);
+      const first = await page('notion/a~2Fb~3Ac');
+      expect(first).toBeTruthy();
+      const again = await run([upsert({ sourceId: 'a/b:c' })]);
+      expect(again).toMatchObject({ counts: { created: 0, updated: 0, unchanged: 1 } });
+      expect((await page('notion/a~2Fb~3Ac'))?.version).toBe(first!.version);
+    });
+
+    it('refuses every op when an unowned page already sits at the target, and never adopts it', async () => {
+      const { knowledge, run, page } = setup();
+      await knowledge.upsertPage({ scope: 'docs:acme', path: 'notion', name: 'Mine', body: 'human' });
+      const receipt = await run([upsert({ sourceId: 'p1' })]);
+      expect(receipt).toMatchObject({ outcome: 'succeeded', counts: { created: 0, refused: 1 } });
+      expect(await page('notion/p1')).toBeNull();
+      expect((await page('notion'))?.body).toBe('human');
+    });
+
+    it('refuses an item whose path a human page holds, and lands the rest of the flush', async () => {
+      const { knowledge, run, page } = setup();
+      await run([upsert({ sourceId: 'p1' })]);
+      await knowledge.upsertPage({ scope: 'docs:acme', path: 'notion/p2', name: 'Human', body: 'mine' });
+      const receipt = await run([upsert({ sourceId: 'p2' }), upsert({ sourceId: 'p3' })]);
+      expect(receipt).toMatchObject({ counts: { created: 1, refused: 1 } });
+      expect((await page('notion/p2'))?.body).toBe('mine');
+      expect(await page('notion/p3')).toBeTruthy();
+    });
+
+    it('refuses to touch an imported page a human moved out of the target', async () => {
+      const { knowledge, run, page } = setup();
+      await run([upsert({ sourceId: 'p1' })]);
+      await knowledge.movePage({ scope: 'docs:acme', path: 'notion/p1', parent: '' });
+      const receipt = await run([upsert({ sourceId: 'p1', body: 'new' })]);
+      expect(receipt).toMatchObject({ counts: { updated: 0, refused: 1 } });
+      expect((await page('p1'))?.body).toBe('body of p1');
+    });
+
+    it('refuses every op after the anchor moved away from its configured path', async () => {
+      const { knowledge, run } = setup();
+      await run([upsert({ sourceId: 'p1' })]);
+      await knowledge.upsertPage({ scope: 'docs:acme', path: 'archive', name: 'Archive' });
+      await knowledge.movePage({ scope: 'docs:acme', path: 'notion', parent: 'archive' });
+      const receipt = await run([upsert({ sourceId: 'p2' })]);
+      expect(receipt).toMatchObject({ counts: { created: 0, refused: 1 } });
+    });
+
+    it('stubs a removed item with children, deletes a leaf, and removes a parent with its children child-first', async () => {
+      const { run, page } = setup();
+      await run([
+        upsert({ sourceId: 'p1' }),
+        upsert({ sourceId: 'c1', parent: 'p1' }),
+        upsert({ sourceId: 'p2' }),
+        upsert({ sourceId: 'c2', parent: 'p2' }),
+      ]);
+      const stubbed = await run([{ op: 'remove', sourceId: 'p1' }]);
+      expect(stubbed).toMatchObject({ counts: { stubbed: 1, removed: 0 } });
+      expect((await page('notion/p1'))?.body).toBe(
+        'Removed from the source. Kept because pages are still nested under it.',
+      );
+      const both = await run([
+        { op: 'remove', sourceId: 'p2' },
+        { op: 'remove', sourceId: 'c2' },
+      ]);
+      expect(both).toMatchObject({ counts: { removed: 2, stubbed: 0 } });
+      expect(await page('notion/p2')).toBeNull();
+      const unknown = await run([{ op: 'remove', sourceId: 'never-seen' }]);
+      expect(unknown).toMatchObject({ counts: { removed: 0, refused: 0 } });
+    });
+
+    it('a declare places an item without blanking the body an upsert wrote', async () => {
+      const { run, page } = setup();
+      await run([upsert({ sourceId: 'p1' })]);
+      await run([{ op: 'declare', item: { sourceId: 'p1', title: 'Renamed' } }]);
+      expect(await page('notion/p1')).toMatchObject({ name: 'Renamed', body: 'body of p1' });
+    });
+
+    it('replays a committed flush to its stored receipt without applying it again, and refuses other content for that seq', async () => {
+      const { knowledge, page } = setup();
+      const host = knowledge.importers!.host;
+      const started = await host.startRun('b1');
+      if (started.status !== 'started') throw new Error('not started');
+      const ops = [upsert({ sourceId: 'p1' })];
+      const first = await flushOnce(host, started.runId, started.generation, 1, ops);
+      const version = (await page('notion/p1'))!.version;
+      const replay = await flushOnce(host, started.runId, started.generation, 1, ops);
+      expect(replay).toEqual(first);
+      expect((await page('notion/p1'))!.version).toBe(version);
+
+      const changed = [upsert({ sourceId: 'p1', body: 'other' })];
+      const originalDigest = await knowledgeImporterFlushDigest({ ops });
+      await expect(
+        host.flush({
+          runId: started.runId,
+          generation: started.generation,
+          seq: 1,
+          digest: originalDigest,
+          ops: changed,
+        }),
+      ).rejects.toMatchObject({ code: 'digest_mismatch' });
+      await expect(flushOnce(host, started.runId, started.generation, 1, changed)).rejects.toMatchObject({
+        code: 'digest_mismatch',
+      });
+      await expect(flushOnce(host, started.runId, started.generation, 3, ops)).rejects.toMatchObject({
+        code: 'seq_mismatch',
+      });
+    });
+
+    it('commits state with its flush, and replays a finish exactly once recorded', async () => {
+      const { knowledge } = setup();
+      const host = knowledge.importers!.host;
+      const started = await host.startRun('b1');
+      if (started.status !== 'started') throw new Error('not started');
+      const ops = [upsert({ sourceId: 'p1' })];
+      const digest = await knowledgeImporterFlushDigest({ ops, state: { cursor: 'c1' } });
+      await host.flush({
+        runId: started.runId,
+        generation: started.generation,
+        seq: 1,
+        digest,
+        ops,
+        state: { cursor: 'c1' },
+      });
+      const request = {
+        runId: started.runId,
+        generation: started.generation,
+        outcome: 'succeeded' as const,
+        backlog: false,
+        lastSeq: 1,
+      };
+      const receipt = await host.finishRun(request);
+      expect(receipt.counts.created).toBe(1);
+      expect(await host.finishRun(request)).toEqual(receipt);
+      await expect(host.finishRun({ ...request, backlog: true })).rejects.toBeInstanceOf(
+        KnowledgeImporterHostConflictError,
+      );
+      await expect(flushOnce(host, started.runId, started.generation, 2, ops)).rejects.toMatchObject({
+        code: 'run_not_active',
+      });
+      const next = await host.startRun('b1');
+      expect(next).toMatchObject({ status: 'started', state: { cursor: 'c1' }, lastSeq: 0 });
+    });
+
+    it('refuses a binding whose target nests inside another', async () => {
+      const { run } = setup([
+        { id: 'b1', target: 'docs:acme#notion' },
+        { id: 'b2', target: 'docs:acme#notion/inner' },
+      ]);
+      await expect(run([upsert({ sourceId: 'p1' })], 'b2')).rejects.toMatchObject({ status: 409 });
+    });
+  });
+}

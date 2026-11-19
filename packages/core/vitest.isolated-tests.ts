@@ -103,6 +103,7 @@ export const isolatedTestFiles = [
   'src/events/unix-socket-pubsub-lease-recovery.test.ts', // vi.mock
   'src/events/unix-socket-pubsub.test.ts', // heap
   'src/hooks/index.test.ts', // global
+  'src/knowledge/importers/__tests__/runner.test.ts', // vi.mock
   'src/llm/model/cloudflare-workers-ai-url.test.ts', // vi.mock,env
   'src/llm/model/gateways/azure.test.ts', // vi.mock,global
   'src/llm/model/gateways/custom-gateway.test.ts', // env
