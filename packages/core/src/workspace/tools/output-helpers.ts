@@ -101,6 +101,93 @@ function splitTail(output: string, tail: number | null | undefined): TailSplit {
 // ---------------------------------------------------------------------------
 
 /**
+ * tokenx is synchronous and allocates per word, so running it over a multi-MB
+ * output blocks the event loop for seconds. Outputs longer than this many chars
+ * per kept token are first cut to a window around the kept end, and only that
+ * window is counted exactly. tokenx never counts more than 6 non-space chars as
+ * one token, so a window this size normally holds the whole budget; the cap only
+ * bites on text that is mostly whitespace, which tokenx counts as free.
+ */
+const WINDOW_CHARS_PER_TOKEN = 32;
+
+// Char classes for approximateTokenCount, mirroring tokenx's segment split.
+const WS = 0;
+const PUNCT = 1;
+const DIGIT = 2;
+const WORD = 3;
+const CHAR_CLASS = new Uint8Array(128).fill(WORD);
+for (const c of ' \t\n\r\v\f') CHAR_CLASS[c.charCodeAt(0)] = WS;
+for (const c of '.,!?;(){}[]<>:/\\|@#$%^&*+=`~_"-') CHAR_CLASS[c.charCodeAt(0)] = PUNCT;
+for (let c = 48; c <= 57; c++) CHAR_CLASS[c] = DIGIT;
+
+function runTokens(kind: number, length: number, onlyDigits: boolean): number {
+  if (kind === WS) return 0;
+  if (kind === PUNCT) return Math.ceil(length / 2);
+  if (onlyDigits) return Math.ceil(length / 3);
+  return length <= 3 ? 1 : Math.ceil(length / 6);
+}
+
+/**
+ * Cheap word-based token estimate: one pass over char codes, no allocations.
+ * Follows tokenx's rules for ASCII text, so it lands close to the exact count
+ * for command output; it is only used for the "of ~N tokens" total.
+ */
+function approximateTokenCount(text: string): number {
+  let tokens = 0;
+  let kind = -1;
+  let length = 0;
+  let onlyDigits = true;
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    const cls = code < 128 ? CHAR_CLASS[code]! : WORD;
+    const runKind = cls === DIGIT ? WORD : cls;
+    if (runKind !== kind) {
+      if (length) tokens += runTokens(kind, length, onlyDigits);
+      kind = runKind;
+      length = 0;
+      onlyDigits = true;
+    }
+    length++;
+    if (cls !== DIGIT) onlyDigits = false;
+  }
+  if (length) tokens += runTokens(kind, length, onlyDigits);
+  return tokens;
+}
+
+/**
+ * The part of `output` that token counting and slicing need to look at to keep
+ * `limit` tokens from one end: the whole output when it is small, otherwise a
+ * prefix (`'head'`) or suffix (`'tail'`) that grows until it holds more than
+ * `limit` tokens or reaches the size cap.
+ */
+function tokenWindow(output: string, limit: number, side: 'head' | 'tail'): string {
+  const cap = Math.max(limit, 1) * WINDOW_CHARS_PER_TOKEN;
+  if (output.length <= cap) return output;
+  for (let size = Math.max(limit, 1) * 8; ; size = Math.min(size * 2, cap)) {
+    const window = side === 'head' ? output.slice(0, size) : output.slice(-size);
+    if (size >= cap || estimateTokenCount(window) > limit) return window;
+  }
+}
+
+/**
+ * Exact token count when it is cheap, else the word-based approximation.
+ * Returns `undefined` when the output fits `limit`, so callers return it as is.
+ */
+function countTokensOver(output: string, limit: number): number | undefined {
+  if (output.length <= Math.max(limit, 1) * WINDOW_CHARS_PER_TOKEN) {
+    const exact = estimateTokenCount(output);
+    return exact <= limit ? undefined : exact;
+  }
+  const approx = approximateTokenCount(output);
+  // Few approximate tokens means few tokenx segments, so the exact check is cheap.
+  if (approx <= limit) {
+    const exact = estimateTokenCount(output);
+    return exact <= limit ? undefined : exact;
+  }
+  return approx;
+}
+
+/**
  * Token-based output limit. Truncates output to fit within a token budget.
  * Uses tokenx for fast token estimation and truncates at the token level
  * (not line boundaries) to maximise use of the budget.
@@ -118,10 +205,13 @@ export async function applyTokenLimit(
 ): Promise<string> {
   if (!output) return output;
 
-  const totalTokens = estimateTokenCount(output);
-  if (totalTokens <= limit) return output;
+  const totalTokens = countTokensOver(output, limit);
+  if (totalTokens === undefined) return output;
 
-  const kept = from === 'start' ? sliceByTokensSafe(output, -limit) : sliceByTokensSafe(output, 0, limit);
+  const kept =
+    from === 'start'
+      ? sliceByTokensSafe(tokenWindow(output, limit, 'tail'), -limit)
+      : sliceByTokensSafe(tokenWindow(output, limit, 'head'), 0, limit);
 
   const position = from === 'start' ? 'last' : 'first';
   return from === 'start'
@@ -158,14 +248,14 @@ export async function applyTokenLimitSandwich(
 function sandwich(output: string, limit: number, headRatio: number, firstLine: number): string {
   if (!output) return output;
 
-  const totalTokens = estimateTokenCount(output);
-  if (totalTokens <= limit) return output;
+  const totalTokens = countTokensOver(output, limit);
+  if (totalTokens === undefined) return output;
   const headBudget = Math.floor(limit * headRatio);
   const tailBudget = limit - headBudget;
 
   // `head` is a prefix and `tail` a suffix of `output` (the surrogate repair keeps lengths).
-  let head = headBudget > 0 ? sliceByTokensSafe(output, 0, headBudget) : '';
-  let tail = tailBudget > 0 ? sliceByTokensSafe(output, -tailBudget) : '';
+  let head = headBudget > 0 ? sliceByTokensSafe(tokenWindow(output, headBudget, 'head'), 0, headBudget) : '';
+  let tail = tailBudget > 0 ? sliceByTokensSafe(tokenWindow(output, tailBudget, 'tail'), -tailBudget) : '';
   const headEnd = head.length;
   let tailStart = output.length - tail.length;
   // The notice gets its own line, so a line break (`\n` or `\r\n`) at either cut is redundant.
