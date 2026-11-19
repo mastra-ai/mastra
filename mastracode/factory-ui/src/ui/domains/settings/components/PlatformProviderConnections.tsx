@@ -19,7 +19,11 @@ import {
   useConnectPlatformProviderMutation,
   useReconnectPlatformProviderMutation,
 } from '../../../../hooks/usePlatformConnections';
-import { MASTRA_PLATFORM_URL, PLATFORM_CONNECT_PROVIDERS } from '../../factory/services/platformConnect';
+import {
+  MASTRA_PLATFORM_URL,
+  PLATFORM_CONNECT_PROVIDERS,
+  reconnectProvider,
+} from '../../factory/services/platformConnect';
 import type { PlatformConnectProviderId, PlatformProviderConnection } from '../../factory/services/platformConnect';
 import { ConnectionManagementButton } from './common/ConnectionManagementButton';
 import { IconChainLink3 } from '@mastra/playground-ui/icons/central/IconChainLink3';
@@ -27,6 +31,7 @@ import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedi
 
 const platformIcons = {
   gitlab: 'gitlab',
+  'gitlab-self-hosted': 'gitlab',
   jira: 'jira',
   'incident-io': 'incidentio',
   vanta: 'vanta',
@@ -40,35 +45,54 @@ interface ApiKeyDialogProps {
   provider: PlatformConnectProviderId;
   title: string;
   pending: boolean;
-  onSubmit: (apiKey: string) => void;
+  onSubmit: (apiKey: string, params: Record<string, string> | undefined) => void;
   onClose: () => void;
 }
 
 function ApiKeyDialog({ provider, title, pending, onSubmit, onClose }: ApiKeyDialogProps) {
   const meta = PLATFORM_CONNECT_PROVIDERS[provider];
+  const credentialName = meta.credentialName ?? 'API key';
+  const fields = meta.params ?? [];
   const [apiKey, setApiKey] = useState('');
+  const [params, setParams] = useState<Record<string, string>>({});
+  const value = (key: string) => params[key]?.trim() ?? '';
+  const complete = Boolean(apiKey.trim()) && fields.every(field => value(field.key));
+  const submit = () =>
+    onSubmit(
+      apiKey.trim(),
+      fields.length > 0 ? Object.fromEntries(fields.map(field => [field.key, value(field.key)])) : undefined,
+    );
   return (
     <Dialog open onOpenChange={open => !open && onClose()} pending={pending}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
-            Paste an API key from your {meta.displayName} dashboard. The key is stored by Mastra Platform and never
-            reaches the browser again.
+            Paste an {credentialName} from your {meta.displayName} account. The {credentialName} is stored by Mastra
+            Platform and never reaches the browser again.
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
+          {fields.map(field => (
+            <Input
+              key={field.key}
+              aria-label={field.label}
+              placeholder={field.placeholder}
+              value={params[field.key] ?? ''}
+              onChange={event => setParams(current => ({ ...current, [field.key]: event.target.value }))}
+            />
+          ))}
           <Input
-            aria-label={`${meta.displayName} API key`}
+            aria-label={`${meta.displayName} ${credentialName}`}
             type="password"
-            placeholder="Paste your API key"
+            placeholder={`Paste your ${credentialName}`}
             value={apiKey}
             onChange={event => setApiKey(event.target.value)}
           />
         </DialogBody>
         <DialogFooter>
           <DialogCancel>Cancel</DialogCancel>
-          <DialogAction disabled={!apiKey.trim()} onConfirm={() => onSubmit(apiKey.trim())}>
+          <DialogAction disabled={!complete} onConfirm={submit}>
             {pending ? 'Connecting…' : 'Connect'}
           </DialogAction>
         </DialogFooter>
@@ -106,14 +130,12 @@ export function ProviderConnectControl({
   const [collectingApiKey, setCollectingApiKey] = useState(false);
   const pending = connectMutation.isPending || reconnectMutation.isPending;
 
-  const run = async (credentials?: Record<string, string>) => {
+  const run = async (credentials?: Record<string, string>, params?: Record<string, string>) => {
+    const auth = { ...(credentials ? { credentials } : {}), ...(params ? { params } : {}) };
     try {
       const connection = reconnectConnectionId
-        ? await reconnectMutation.mutateAsync({
-            connectionId: reconnectConnectionId,
-            ...(credentials ? { credentials } : {}),
-          })
-        : await connectMutation.mutateAsync({ ...(credentials ? { credentials } : {}) });
+        ? await reconnectMutation.mutateAsync({ connectionId: reconnectConnectionId, ...auth })
+        : await connectMutation.mutateAsync(auth);
       setCollectingApiKey(false);
       if (connection) {
         toast.success(`${meta.displayName} connected`);
@@ -144,7 +166,7 @@ export function ProviderConnectControl({
           provider={provider}
           title={label}
           pending={pending}
-          onSubmit={apiKey => void run({ apiKey })}
+          onSubmit={(apiKey, params) => void run({ apiKey }, params)}
           onClose={() => setCollectingApiKey(false)}
         />
       )}
@@ -157,12 +179,18 @@ export function platformIntegration(provider: PlatformConnectProviderId) {
   return { provider: platformIcons[provider], name: PLATFORM_CONNECT_PROVIDERS[provider].displayName };
 }
 
-export function PlatformConnectButton({ provider }: { provider: PlatformConnectProviderId }) {
+export function PlatformConnectButton({
+  provider,
+  buttonLabel = 'Connect',
+}: {
+  provider: PlatformConnectProviderId;
+  buttonLabel?: string;
+}) {
   return (
     <ProviderConnectControl
       provider={provider}
       label={`Connect ${PLATFORM_CONNECT_PROVIDERS[provider].displayName}`}
-      buttonLabel="Connect"
+      buttonLabel={buttonLabel}
       icon={<IconChainLink3 />}
     />
   );
@@ -207,18 +235,24 @@ export function PlatformConnectionActions({
   const expired = connections.find(connection => connection.status === 'needs_reauth');
   return (
     <>
-      {expired && <PlatformReconnectButton provider={provider} connectionId={expired.id} />}
+      {expired && <PlatformReconnectButton provider={reconnectProvider(provider, expired)} connectionId={expired.id} />}
       <PlatformManageLink provider={provider} />
     </>
   );
 }
 
-export function AddPlatformAccountButton({ provider }: { provider: PlatformConnectProviderId }) {
+export function AddPlatformAccountButton({
+  provider,
+  buttonLabel = 'Add account',
+}: {
+  provider: PlatformConnectProviderId;
+  buttonLabel?: string;
+}) {
   return (
     <ProviderConnectControl
       provider={provider}
       label={`Add account to ${PLATFORM_CONNECT_PROVIDERS[provider].displayName}`}
-      buttonLabel="Add account"
+      buttonLabel={buttonLabel}
       variant="ghost"
       icon={<IconPlusMedium />}
     />
