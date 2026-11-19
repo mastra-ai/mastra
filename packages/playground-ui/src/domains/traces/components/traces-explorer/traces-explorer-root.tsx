@@ -1,8 +1,7 @@
-import { EntityType } from '@mastra/core/observability';
-import type { TraceQueryArgs } from '@mastra/react/hooks/traces';
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { resolveTraceQueryTimeRange } from '../../trace-query-filters';
+import { TRACE_COLUMN_CATALOGS } from '../../trace-list-columns';
+import type { TraceColumnPreferences } from '../../trace-list-columns';
 import type { FeedbackOptions } from '../feedback-options';
 import {
   applyDate,
@@ -13,8 +12,6 @@ import {
   DEFAULT_TRACES_FILTERS,
   highlightSpans,
   isSelectionEmpty,
-  resolveTracesDateWindow,
-  sanitizeTracesFilters,
   selectsRunningStatus,
   selectScore,
   selectSpan,
@@ -27,25 +24,22 @@ import { TracesColumnsProvider } from './traces-explorer-columns-provider';
 import { TracesConfigContext, TracesFiltersContext, TracesSelectionContext } from './traces-explorer-context';
 import type {
   TracesConfigContextValue,
-  TracesExplorerFeatures,
-  TracesExplorerScope,
   TracesFiltersActions,
   TracesFiltersContextValue,
-  TracesMetricsSupport,
   TracesSelectionActions,
   TracesSelectionContextValue,
 } from './traces-explorer-context';
+import { NO_TRACES_DISCOVERY } from './traces-explorer-data';
+import type { TracesExplorerCapabilities, TracesExplorerDiscovery, TracesExplorerTraces } from './traces-explorer-data';
 import { TracesListProvider } from './traces-explorer-list-provider';
-import {
-  useFeedbackAvailable,
-  useObservabilityCapabilities,
-  useSpanQueryAvailable,
-  useThreadQueryAvailable,
-  useTraceQueryAvailable,
-  useTraceQueryDeltaPollingAvailable,
-  useTraceQueryDiscoveryAvailable,
-  useTraceQueryRootDurationAvailable,
-} from '@/domains/capabilities';
+import { resolveTracesSupport, sanitizeTracesFiltersFor, tracesListIdForScope } from './traces-explorer-support';
+import type {
+  TracesExplorerFeatures,
+  TracesExplorerScope,
+  TracesMetricsSupport,
+  TracesRootSource,
+} from './traces-explorer-support';
+import { useTracesDateWindow } from './use-traces-date-window';
 import { hasTokenSearchFilter } from '@/domains/observability/lib/token-search-predicate';
 import { rangeBeforeZoom, rememberZoom } from '@/domains/observability/lib/zoom-memory';
 import type { ZoomMemory } from '@/domains/observability/lib/zoom-memory';
@@ -57,6 +51,16 @@ export type TracesExplorerRootProps = {
   onChange: (next: TracesExplorerState) => void;
   sort: TracesSort;
   onSortChange: (next: TracesSort) => void;
+  /** The visible columns. The host owns them (and their persistence, e.g. `useTraceColumnPreferences`). */
+  columns: TraceColumnPreferences;
+  /** Receives the whole next column selection on every change. */
+  onColumnsChange: (next: TraceColumnPreferences) => void;
+  /** What the store supports. The explorer never fetches: the host loads them (Studio: `useObservabilityCapabilities`). */
+  capabilities: TracesExplorerCapabilities;
+  /** The traces list, loaded by the host for these filters and this sort (Studio: `useTracesListQuery`). */
+  traces: TracesExplorerTraces;
+  /** The metadata fields observed in the window, for the filter bar and the columns menu (Studio: `useTracesDiscoveryQuery`). */
+  discovery?: TracesExplorerDiscovery;
   /** Pins the explorer to one entity: its fields stay in the filters but never surface as chips. */
   scope?: TracesExplorerScope;
   /** Resolved by the host, which may know better than the storage capabilities (e.g. hosted deployments). */
@@ -64,8 +68,11 @@ export type TracesExplorerRootProps = {
   /** Host switches combined with the server capabilities; a feature runs only when both allow it. */
   features?: TracesExplorerFeatures;
   /** Host-selected root projection. Hosts should offer aggregated roots only when the server advertises support. */
-  rootSource?: TraceQueryArgs['rootSource'];
-  /** Write context and action support for feedback in trace, span and thread panels. */
+  rootSource?: TracesRootSource;
+  /**
+   * Write context and action support for feedback in trace, span and thread panels. The panel hands it to
+   * its feedback and thread views (`renderFeedback`, `renderSpanFeedback`, `renderThread`).
+   */
   feedbackOptions?: FeedbackOptions;
   /** The host's default filters. Filters matching them don't count as applied (e.g. in empty states). */
   initialFilters?: TracesFilters;
@@ -77,14 +84,10 @@ const HIDDEN_SCOPED_FIELD_IDS: readonly string[] = ['rootEntityType', 'entityId'
 const NO_FIELD_IDS: ReadonlySet<string> = new Set();
 const NO_HIDDEN_FIELD_IDS: readonly string[] = [];
 
-const listIdForScope = (scope?: TracesExplorerScope) =>
-  scope?.entityType === EntityType.AGENT
-    ? 'agent-traces'
-    : scope?.entityType === EntityType.WORKFLOW_RUN
-      ? 'workflows-traces'
-      : 'all-traces';
-
-type Latest = Pick<TracesExplorerRootProps, 'selection' | 'filters' | 'onChange' | 'onSortChange'> & {
+type Latest = Pick<
+  TracesExplorerRootProps,
+  'selection' | 'filters' | 'onChange' | 'onSortChange' | 'onColumnsChange'
+> & {
   scopedFieldIds: ReadonlySet<string>;
 };
 
@@ -94,6 +97,11 @@ export function TracesExplorerRoot({
   onChange,
   sort,
   onSortChange: onHostSortChange,
+  columns,
+  onColumnsChange,
+  capabilities,
+  traces,
+  discovery = NO_TRACES_DISCOVERY,
   scope,
   metricsSupport,
   features,
@@ -102,63 +110,53 @@ export function TracesExplorerRoot({
   initialFilters = DEFAULT_TRACES_FILTERS,
   children,
 }: TracesExplorerRootProps) {
-  // Servers without the trace-query API list through `listTracesLight` and don't expose feedback.
-  const traceQuery = useTraceQueryAvailable();
-  const withQueryTrace = traceQuery.enabled && features?.traceQuery !== false;
-  const withFeedback = useFeedbackAvailable().enabled && features?.feedback !== false;
-  // Opt-in: span queries need both the server capability and the host turning them on.
-  const withSpanQuery = useSpanQueryAvailable().enabled && features?.spanQuery === true;
-  // Opt-in like span queries: thread rows need the server capability and the host turning them on.
-  const withThreadQuery = useThreadQueryAvailable().enabled && features?.threadQuery === true;
-  const { enabled: withRootDuration } = useTraceQueryRootDurationAvailable();
-  const { enabled: withDeltaPolling } = useTraceQueryDeltaPollingAvailable();
-  const withDiscovery = useTraceQueryDiscoveryAvailable().enabled && withQueryTrace;
-  // `listTracesLight` rows never carry it, so it needs the trace query API as well.
-  const { data: capabilities } = useObservabilityCapabilities();
-  const withTimeToFirstChunk = withQueryTrace && (capabilities?.capabilities.traceQueryTimeToFirstChunk ?? false);
-  const withTimeToFirstChunkSort =
-    withTimeToFirstChunk && (capabilities?.capabilities.traceQueryTimeToFirstChunkSort ?? false);
-  const withTimeToFirstToken = withQueryTrace && (capabilities?.capabilities.traceQueryTimeToFirstToken ?? false);
-  const withTimeToFirstTokenSort =
-    withTimeToFirstToken && (capabilities?.capabilities.traceQueryTimeToFirstTokenSort ?? false);
-  const withOutcomeFields = withQueryTrace && (capabilities?.capabilities.traceQueryOutcomeFields ?? false);
+  const {
+    withQueryTrace,
+    withTokenSearch,
+    withFeedback,
+    withSpanQuery,
+    withThreadQuery,
+    withRootDuration,
+    withOutcomeFields,
+    withTimeToFirstChunk,
+    withTimeToFirstChunkSort,
+    withTimeToFirstToken,
+    withTimeToFirstTokenSort,
+    withDiscovery,
+    withTraceAggregate,
+    isCapabilitiesLoading,
+  } = resolveTracesSupport(capabilities, features);
 
-  const withTokenSearch =
-    withQueryTrace &&
-    !!(capabilities?.capabilities.traceQueryTokenSearch && capabilities.capabilities.traceAggregateTokenSearch);
-
-  // Sanitize for display/query without rewriting host state. A later filter edit replaces the displayed token list.
-  const filters = useMemo(() => {
-    return sanitizeTracesFilters(rawFilters, {
-      withTokenSearch,
-      withRootDuration,
-      withTimeToFirstChunk,
-      withTimeToFirstToken,
-      withOutcomeFields,
-    });
-  }, [rawFilters, withRootDuration, withTimeToFirstChunk, withTimeToFirstToken, withOutcomeFields, withTokenSearch]);
+  // Sanitize for display without rewriting host state. A later filter edit replaces the displayed token list.
+  const filters = useMemo(
+    () =>
+      sanitizeTracesFiltersFor(rawFilters, {
+        withTokenSearch,
+        withRootDuration,
+        withTimeToFirstChunk,
+        withTimeToFirstToken,
+        withOutcomeFields,
+      }),
+    [rawFilters, withRootDuration, withTimeToFirstChunk, withTimeToFirstToken, withOutcomeFields, withTokenSearch],
+  );
 
   const isScoped = !!scope;
   const scopedFieldIds = isScoped ? SCOPED_FIELD_IDS : NO_FIELD_IDS;
   const hiddenFieldIds = isScoped ? HIDDEN_SCOPED_FIELD_IDS : NO_HIDDEN_FIELD_IDS;
 
-  // Rolling presets pin their start when the preset (or custom bound) changes, not on every render.
-  const fromMs = rawFilters.dateFrom?.getTime();
-  const toMs = rawFilters.dateTo?.getTime();
-  const { dateFrom, dateTo } = useMemo(
-    () =>
-      resolveTracesDateWindow(
-        rawFilters.datePreset,
-        fromMs === undefined ? undefined : new Date(fromMs),
-        toMs === undefined ? undefined : new Date(toMs),
-      ),
-    [rawFilters.datePreset, fromMs, toMs],
-  );
+  const { dateFrom, dateTo } = useTracesDateWindow(rawFilters);
 
   // Actions read the latest props when they run, so the host doesn't need stable callbacks.
   // `latest` is written as soon as a change is emitted, so a second action in the same tick
   // (the date picker fires a preset then its dates) builds on the first instead of the stale props.
-  const current: Latest = { selection, filters: rawFilters, onChange, onSortChange: onHostSortChange, scopedFieldIds };
+  const current: Latest = {
+    selection,
+    filters: rawFilters,
+    onChange,
+    onSortChange: onHostSortChange,
+    onColumnsChange,
+    scopedFieldIds,
+  };
   const latest = useRef(current);
   latest.current = current;
   // Not part of the host's filters: a shared or reloaded link has no zoom to undo.
@@ -226,31 +224,21 @@ export function TracesExplorerRoot({
       },
     };
     const onSortChange = (next: TracesSort) => latest.current.onSortChange(next);
-    return { selectionActions, filtersActions, onSortChange };
+    const setColumns = (next: TraceColumnPreferences) => latest.current.onColumnsChange(next);
+    return { selectionActions, filtersActions, onSortChange, setColumns };
   }, []);
-  const { selectionActions, filtersActions, onSortChange } = actions;
+  const { selectionActions, filtersActions, onSortChange, setColumns } = actions;
 
-  // Discovery is keyed off the date window with a mount-time `now`, not the list's rolling one,
-  // so its query key (and the skeleton) doesn't churn on every auto-refresh tick.
-  const [discoveryNow] = useState(() => new Date());
-  const discoveryTimeRange = useMemo(
-    () => resolveTraceQueryTimeRange(dateFrom, dateTo, discoveryNow),
-    [dateFrom, dateTo, discoveryNow],
-  );
-
-  const listId = listIdForScope(scope);
+  const listId = tracesListIdForScope(scope);
+  // Keyed on its fields, so a host handing a fresh discovery object each render doesn't re-render every part.
+  const { fields: discoveryFields, canonicalFields, isLoading: isDiscoveryLoading } = discovery;
   const hasFeedbackOptions = feedbackOptions !== undefined;
   const { contextMode, feedbackUserId, allowDelete, allowReview } = feedbackOptions ?? {};
   const configValue = useMemo<TracesConfigContextValue>(
     () => ({
-      listId,
-      rootSource,
-      scopedFieldIds,
-      hiddenFieldIds,
       withQueryTrace,
       withTokenSearch,
       withFeedback,
-      feedbackOptions: hasFeedbackOptions ? { contextMode, feedbackUserId, allowDelete, allowReview } : undefined,
       withSpanQuery,
       withThreadQuery,
       withRootDuration,
@@ -259,38 +247,45 @@ export function TracesExplorerRoot({
       withTimeToFirstChunkSort,
       withTimeToFirstToken,
       withTimeToFirstTokenSort,
-      withDeltaPolling,
       withDiscovery,
-      isCapabilitiesLoading: traceQuery.isLoading,
-      metricsSupport,
-      discoveryTimeRange,
-    }),
-    [
+      withTraceAggregate,
+      isCapabilitiesLoading,
       listId,
       rootSource,
       scopedFieldIds,
       hiddenFieldIds,
+      feedbackOptions: hasFeedbackOptions ? { contextMode, feedbackUserId, allowDelete, allowReview } : undefined,
+      metricsSupport,
+      discovery: { fields: discoveryFields, canonicalFields, isLoading: isDiscoveryLoading },
+    }),
+    [
       withQueryTrace,
       withTokenSearch,
       withFeedback,
+      withSpanQuery,
+      withThreadQuery,
+      withRootDuration,
+      withOutcomeFields,
+      withTimeToFirstChunk,
+      withTimeToFirstChunkSort,
+      withTimeToFirstToken,
+      withTimeToFirstTokenSort,
+      withDiscovery,
+      withTraceAggregate,
+      isCapabilitiesLoading,
+      listId,
+      rootSource,
+      scopedFieldIds,
+      hiddenFieldIds,
       hasFeedbackOptions,
       contextMode,
       feedbackUserId,
       allowDelete,
       allowReview,
-      withSpanQuery,
-      withThreadQuery,
-      withRootDuration,
-      withOutcomeFields,
-      withTimeToFirstChunk,
-      withTimeToFirstChunkSort,
-      withTimeToFirstToken,
-      withTimeToFirstTokenSort,
-      withDeltaPolling,
-      withDiscovery,
-      traceQuery.isLoading,
       metricsSupport,
-      discoveryTimeRange,
+      discoveryFields,
+      canonicalFields,
+      isDiscoveryLoading,
     ],
   );
 
@@ -333,8 +328,12 @@ export function TracesExplorerRoot({
     <TracesConfigContext.Provider value={configValue}>
       <TracesFiltersContext.Provider value={filtersValue}>
         <TracesSelectionContext.Provider value={selectionValue}>
-          <TracesColumnsProvider>
-            <TracesListProvider key={rootSource ?? 'legacy'} sort={sort} onSortChange={onSortChange}>
+          <TracesColumnsProvider
+            preferences={columns}
+            setPreferences={setColumns}
+            defaults={TRACE_COLUMN_CATALOGS.traces.defaults}
+          >
+            <TracesListProvider traces={traces} sort={sort} onSortChange={onSortChange}>
               {children}
             </TracesListProvider>
           </TracesColumnsProvider>
