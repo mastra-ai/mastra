@@ -45,5 +45,11 @@
     "oxfmt": "latest",
     "typescript": "^5.9.0",
     "vitest": "5.1.0"
+  },
+  "overrides": {
+    "@hono/node-server": "2.1.6",
+    "readdir-glob": {
+      "minimatch": "11.0.9"
+    }
   }
 }

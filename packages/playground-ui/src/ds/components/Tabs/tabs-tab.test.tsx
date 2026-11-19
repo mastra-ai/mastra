@@ -260,6 +260,66 @@ describe('Tab', () => {
     expect(screen.getByRole('tab', { name: 'Second' }).getAttribute('aria-selected')).toBe('true');
   });
 
+  describe('pill tabs with overflow="menu"', () => {
+    const pills = (
+      props: { overflow?: 'scroll' | 'menu'; onValueChange?: (value: string) => void } = { overflow: 'menu' },
+    ) => (
+      <Tabs defaultTab="first" onValueChange={props.onValueChange}>
+        <TabList variant="pill" size="sm" overflow={props.overflow}>
+          <Tab value="first">First</Tab>
+          <Tab value="second">Second</Tab>
+          <Tab value="third">Third</Tab>
+        </TabList>
+      </Tabs>
+    );
+    // Room for two 100px tabs on the track and the "+N" menu, not three.
+    const narrow = () => {
+      vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(290);
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 28));
+    };
+
+    it('folds the tabs that do not fit into a "+N" menu', () => {
+      narrow();
+      render(pills());
+      expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['First', 'Second']);
+      expect(screen.getByRole('button', { name: '1 more tabs' })).toBeTruthy();
+    });
+
+    it('opens a folded tab from the menu, which then shows as the selected tab', () => {
+      narrow();
+      const onValueChange = vi.fn();
+      render(pills({ overflow: 'menu', onValueChange }));
+      fireEvent.click(screen.getByRole('button', { name: '1 more tabs' }));
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Third' }));
+      expect(onValueChange).toHaveBeenCalledWith('third');
+      expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['First', 'Third']);
+      expect(screen.getByRole('tab', { name: 'Third' }).getAttribute('aria-selected')).toBe('true');
+    });
+
+    it('keeps every tab when they fit exactly, with no room left for a menu', () => {
+      // Three 100px tabs, two 4px gaps and the track's 4px inset.
+      vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(312);
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 28));
+      render(pills());
+      expect(screen.getAllByRole('tab')).toHaveLength(3);
+      expect(screen.queryByRole('button', { name: /more tabs/ })).toBeNull();
+    });
+
+    it('keeps every tab in the row when they all fit', () => {
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 28));
+      render(pills());
+      expect(screen.getAllByRole('tab')).toHaveLength(3);
+      expect(screen.queryByRole('button', { name: /more tabs/ })).toBeNull();
+    });
+
+    it('scrolls instead by default', () => {
+      narrow();
+      render(pills({}));
+      expect(screen.getAllByRole('tab')).toHaveLength(3);
+      expect(screen.queryByRole('button', { name: /more tabs/ })).toBeNull();
+    });
+  });
+
   describe('keepMounted panels', () => {
     const renderTabs = () => (
       <Tabs defaultTab="first" appearance="contained" frame="inset">

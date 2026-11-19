@@ -366,7 +366,7 @@ describe("a skill's page", () => {
     await user.type(description, ' locally');
     serveChangelogLint({ description: 'Lint every changelog', content: '# Lint all' });
     await client.refetchQueries();
-    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Instructions' })).toHaveTextContent('# Lint all'));
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Instructions' })).toHaveTextContent('Lint all'));
     expect(description).toHaveValue('Lint every changelog locally');
     expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
   });

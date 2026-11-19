@@ -1346,7 +1346,7 @@ In Platform mode, issue, note, merge request and push events reach Factory by po
 | `MASTRA_PLATFORM_GITLAB_POLLING_ENABLED` | `true` | Set `false` to stop polling the Platform event log for GitLab events. |
 | `MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS` | `20000` | Positive polling interval in milliseconds. |
 
-These sit next to `MASTRA_PLATFORM_GITHUB_POLLING_ENABLED` and `MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS` and follow the same rules. One replica polls at a time; the cursor for each connection is stored in the integration settings table and only advances once a page of events has been processed. `diagnostics()` reports `pollingEnabled` and `pollingIntervalMs`.
+These sit next to `MASTRA_PLATFORM_GITHUB_POLLING_ENABLED` and `MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS` and follow the same rules. The reads are done by the deployment's Platform Connect event poller, which every Platform integration that reads a connection event log shares; it reads at the shortest interval any of them asks for. One replica polls at a time. Each connection's cursor is stored in the integration settings table and advances past an event once its handler finishes. A handler that still fails after three attempts is skipped and its integration reconciles. A connection read for the first time starts at the present, and its integration reconciles once to cover what came before. `diagnostics()` reports `pollingEnabled` and `pollingIntervalMs`.
 
 ### incident.io intake
 

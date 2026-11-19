@@ -2,28 +2,17 @@ import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 import { useAgentMessages } from '@mastra/react/hooks/agents';
 import type { AgentMessage } from './agent-badge';
 import { AgentBadge } from './agent-badge';
+import { getRecordedSubAgentMessages } from './recorded-sub-agent-messages';
+import type { SubAgentResult } from './recorded-sub-agent-messages';
 import { resolveToChildMessages } from './resolve-child-messages';
 import type { MessageMetadata } from '@/domains/chat';
 import { LoadingBadge } from '@/domains/chat/components/loading-badge';
 import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
 
-interface SubAgentToolResult {
-  toolName: string;
-  toolCallId: string;
-  result: any;
-  args: any;
-}
-
 interface AgentBadgeWrapperProps extends Omit<ToolApprovalRequest, 'toolCalled'> {
   agentId: string;
-  result?: {
-    childMessages?: AgentMessage[];
-    subAgentResourceId?: string;
-    subAgentThreadId?: string;
-    subAgentToolResults?: SubAgentToolResult[];
-    text?: string;
-  };
+  result?: SubAgentResult;
   metadata?: MessageMetadata;
   suspendPayload?: any;
   toolCalled?: boolean;
@@ -61,25 +50,7 @@ export const AgentBadgeWrapper = ({
 
   const convertedMessages = data?.messages ? toAISdkV5Messages(data.messages) : [];
 
-  let childMessages = result?.childMessages?.length ? result.childMessages : undefined;
-
-  if (!childMessages && result?.subAgentToolResults?.length) {
-    const toolMessages: AgentMessage[] = result.subAgentToolResults.map(tr => ({
-      type: 'tool' as const,
-      toolName: tr.toolName,
-      toolCallId: tr.toolCallId,
-      args: tr.args,
-      toolOutput: tr.result,
-    }));
-    if (result.text) {
-      toolMessages.push({ type: 'text' as const, content: result.text });
-    }
-    childMessages = toolMessages;
-  }
-
-  if (!childMessages && result?.text) {
-    childMessages = [{ type: 'text' as const, content: result.text }];
-  }
+  let childMessages = getRecordedSubAgentMessages(result);
 
   let onLoadPrevious: (() => void) | undefined;
   if (!childMessages) {

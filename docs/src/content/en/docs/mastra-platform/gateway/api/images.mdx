@@ -1,0 +1,53 @@
+---
+title: "Images | Gateway"
+description: "Generate and edit images through Gateway with the OpenAI Images API."
+---
+
+# Images
+
+```text
+POST https://gateway-api.mastra.ai/v1/images/generations
+POST https://gateway-api.mastra.ai/v1/images/edits
+```
+
+Compatible with the OpenAI Images API. The generation example uses `black-forest-labs/flux-3-image-klein`. Editing needs a model that supports image edits, such as `qwen/qwen-image-2.1-turbo`. Find other image models in [`/v1/models`](/docs/mastra-platform/gateway/api/models). The API has these limits:
+
+- Requests and responses are JSON. Multipart uploads aren't supported.
+- Each request returns one image as base64 (`b64_json`). `n` must be `1` if set.
+- Responses don't stream.
+- `prompt` is 1 to 32,000 characters. The request body can be up to 16 MiB.
+
+## Generate an image
+
+```typescript
+import OpenAI from 'openai'
+
+const client = new OpenAI({
+  apiKey: process.env.MASTRA_GATEWAY_API_KEY,
+  baseURL: 'https://gateway-api.mastra.ai/v1',
+})
+
+const result = await client.images.generate({
+  model: 'black-forest-labs/flux-3-image-klein',
+  prompt: 'A lighthouse at dusk, watercolor',
+})
+
+const png = Buffer.from(result.data?.[0]?.b64_json ?? '', 'base64')
+```
+
+## Edit an image
+
+Pass the source image as a PNG, JPEG, or WebP `data:` URL, or as an HTTP(S) URL:
+
+```bash
+curl https://gateway-api.mastra.ai/v1/images/edits \
+  -H "Authorization: Bearer $MASTRA_GATEWAY_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "qwen/qwen-image-2.1-turbo",
+    "prompt": "Add a full moon to the sky",
+    "image": "https://example.com/lighthouse.png"
+  }'
+```
+
+You're billed only for images that are delivered. If a provider fails before returning an image, Gateway retries another eligible route.

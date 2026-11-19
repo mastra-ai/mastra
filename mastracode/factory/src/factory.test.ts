@@ -1639,6 +1639,9 @@ describe('MastraFactory.prepare', () => {
 
         expect(Object.keys(tools).filter(name => name.startsWith('linear_'))).toEqual([]);
         expect(warn).toHaveBeenCalledWith(expect.stringContaining('Mastra Connect tools are unavailable for this run'));
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining('[factory] incidentio tools are unavailable for this run'),
+        );
       });
 
       it("offers the host's own tools instead of the project's connections", async () => {
@@ -3225,6 +3228,33 @@ describe('MastraFactory.prepare integrations', () => {
     const args = await factory.prepare();
     expect(workers).not.toHaveBeenCalled();
     expect(args).not.toHaveProperty('workers');
+  });
+
+  it('runs one Platform Connect event poller, routing to the Platform integrations that read event logs', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_factory');
+    onTestFinished(() => vi.unstubAllEnvs());
+    const args = await new MastraFactory({ secretEncryption, storage: fakeStorage() }).prepare();
+
+    const names = (args.workers ?? []).map(worker => worker.name);
+    expect(names.filter(name => name === 'platform-connect-event-poller')).toHaveLength(1);
+    expect(names).not.toContain('platform-gitlab-events');
+  });
+
+  it('runs no Platform Connect event poller when no installed integration reads event logs', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_factory');
+    onTestFinished(() => vi.unstubAllEnvs());
+    // Explicit integrations fill every Platform slot but Vanta, which has no events.
+    const args = await new MastraFactory({
+      secretEncryption,
+      storage: fakeStorage(),
+      integrations: ['github', 'incidentio', 'jira', 'gitlab', 'linear'].map(id => fakeIntegration({ id })),
+    }).prepare();
+
+    const names = (args.workers ?? []).map(worker => worker.name);
+    expect(names).not.toContain('platform-connect-event-poller');
+    expect(names).toContain('vanta-issue-reconcile');
   });
 
   it('omits the workers option when no integration contributes workers', async () => {

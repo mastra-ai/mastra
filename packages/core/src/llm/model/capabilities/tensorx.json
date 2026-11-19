@@ -58,31 +58,7 @@
     "z-ai/glm-5.3-flash"
   ],
   "reasoning": {
-    "qwen/qwen3.5-9b": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "qwen/qwen3.8-flash-next": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "qwen/qwen3.8-27b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "qwen/qwen3.8-2.4t-a95b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "qwen/qwen3.5-122b-a10b": [
+    "deepseek/deepseek-v3.2": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
@@ -106,7 +82,7 @@
         "values": ["high", "max"]
       }
     ],
-    "deepseek/deepseek-v4-pro": [
+    "deepseek/deepseek-v4-flash-0731": [
       {
         "type": "toggle"
       },
@@ -115,7 +91,7 @@
         "values": ["high", "max"]
       }
     ],
-    "deepseek/deepseek-v4-flash-0731": [
+    "deepseek/deepseek-v4-pro": [
       {
         "type": "toggle"
       },
@@ -130,33 +106,45 @@
         "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "deepseek/deepseek-v3.2": [
+    "qwen/qwen3.8-flash-next": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "qwen/qwen3.8-27b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "qwen/qwen3.5-122b-a10b": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "z-ai/glm-5v-turbo": [
+    "qwen/qwen3.8-2.4t-a95b": [
       {
-        "type": "toggle"
-      },
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "qwen/qwen3.5-9b": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "z-ai/glm-5.1": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "z-ai/glm-5.3-flash": [
-      {
-        "type": "toggle"
-      },
+    "minimax/minimax-m2.5": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "minimax/minimax-m3": [
+      {
+        "type": "toggle"
       }
     ],
     "z-ai/glm-5": [
@@ -165,7 +153,7 @@
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "z-ai/glm-5-turbo": [
+    "z-ai/glm-5.1": [
       {
         "type": "toggle"
       }
@@ -179,6 +167,15 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "z-ai/glm-5v-turbo": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "z-ai/glm-5.2": [
       {
         "type": "toggle"
@@ -188,15 +185,18 @@
         "values": ["high", "max"]
       }
     ],
-    "minimax/minimax-m3": [
+    "z-ai/glm-5-turbo": [
       {
         "type": "toggle"
       }
     ],
-    "minimax/minimax-m2.5": [
+    "z-ai/glm-5.3-flash": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "high", "max"]
       }
     ]
   }
