@@ -32,13 +32,7 @@ import {
   EntityType,
 } from '../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, Span } from '../../observability';
-import {
-  MASTRA_RESOURCE_ID_KEY,
-  MASTRA_SCOPES_KEY,
-  MASTRA_THREAD_ID_KEY,
-  RequestContext,
-  withoutLiveRequestKeys,
-} from '../../request-context';
+import { MASTRA_SCOPES_KEY, RequestContext, withoutLiveRequestKeys } from '../../request-context';
 import type { DeclaredAgentSchedule } from '../../schedules/define';
 import type { MemoryStorage, WorkflowsStorage } from '../../storage';
 import { runOutsideRunFenceScope } from '../../storage/run-fencing';
@@ -57,6 +51,7 @@ import type { ShouldPersistSnapshotFn, WorkflowRunState, WorkflowRunStatus } fro
 import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
 import { beginGoalActivity, stopGoalActivity } from '../goal';
+import { applyReservedMemoryContextKeys, recoverySkip, TRANSIENT_RECOVERY_RETRY_DELAY_MS } from '../helpers';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { modelSpanAttributes } from '../model-span-attributes';
@@ -76,7 +71,6 @@ import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thre
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
 import type { AgentAbortThreadOptions, AgentDurableOption, AgentModelManagerConfig, ToolsInput } from '../types';
 import { isDurableAgentLike } from '../types';
-import { resolveThreadIdFromArgs } from '../utils';
 
 import { publishAbortRequest, releaseRemoteAbortListener, requestAcknowledgedAbort } from './abort-transport';
 import {
@@ -104,7 +98,6 @@ import {
   readRunGeneration,
   RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID,
   resolveLeaseProvider,
-  RUN_ACTIVE_ERROR_ID,
   setExecutionClaim,
   supportsRunFencing,
 } from './execution-fence';
@@ -163,7 +156,13 @@ import type { createDurableAgenticWorkflow } from './workflows';
 import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
 import { deadlineMessageListState, runDurableDeadlineOutputPass } from './workflows/finalize-run';
 import { readAccumulatedSteps } from './workflows/shared/accumulated-steps';
-import { hydrateMessageListState, loadMessageListStateForResume } from './workflows/shared/message-list-state';
+import {
+  hydrateMessageListState,
+  latestMessageListState,
+  loadMessageListStateForResume,
+} from './workflows/shared/message-list-state';
+
+export { applyReservedMemoryContextKeys } from '../helpers';
 
 function createLocalRequestReader(runId: string, entry: RunRegistryEntry, mastra: Mastra | undefined) {
   const scope = (entry.runScope ??= createRunScope());
@@ -186,70 +185,6 @@ const RESUMED_SPAN_DATA = Symbol('mastra.durable.resumedSpanData');
 const localRecoveryClaims = new Map<string, string>();
 const RECOVER_SHUTDOWN_ERROR_ID = 'DURABLE_AGENT_RECOVER_SHUTDOWN';
 const OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS = 5_000;
-
-/**
- * Reserved request-context keys win over `memory` options, matching the base Agent: server
- * middleware sets them from the authenticated identity so a request body cannot route memory
- * to another user's thread or resource.
- */
-export function applyReservedMemoryContextKeys<T extends { requestContext?: RequestContext; memory?: any }>(
-  options: T | undefined,
-): T | undefined {
-  const requestContext = options?.requestContext;
-  if (!options || !requestContext) return options;
-  const threadId = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
-  const resourceId = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
-  if (!threadId && !resourceId) return options;
-  const memory = { ...(options.memory ?? {}) };
-  if (threadId) memory.thread = resolveThreadIdFromArgs({ memory, overrideId: threadId });
-  if (resourceId) memory.resource = resourceId;
-  return { ...options, memory };
-}
-
-const TRANSIENT_RECOVERY_RETRY_DELAY_MS = 30_000;
-const TRANSIENT_RECOVERY_ERROR_CODES = new Set([
-  'ECONNRESET',
-  'ECONNREFUSED',
-  'ETIMEDOUT',
-  'ESOCKETTIMEDOUT',
-  'LOADING',
-]);
-
-function isTransientRecoveryError(error: unknown): boolean {
-  const seen = new Set<object>();
-  let transient = false;
-  while (typeof error === 'object' && error !== null && !seen.has(error)) {
-    seen.add(error);
-    if ('name' in error && error.name === 'AbortError') return false;
-    if ('code' in error && typeof error.code === 'string' && TRANSIENT_RECOVERY_ERROR_CODES.has(error.code)) {
-      transient = true;
-    }
-    if ('message' in error && typeof error.message === 'string' && /^LOADING(?:\s|$)/.test(error.message)) {
-      transient = true;
-    }
-    error = 'cause' in error ? error.cause : undefined;
-  }
-  return transient;
-}
-
-/** Why `recover()` should be deferred, or `undefined` for a permanent failure. */
-function recoverySkip(error: unknown): Pick<DurableAgentRecoveredRun, 'reason' | 'retryAt'> | undefined {
-  const { id, details } = (error ?? {}) as { id?: unknown; details?: { retryAt?: unknown } };
-  switch (id) {
-    case RUN_ACTIVE_ERROR_ID:
-      return typeof details?.retryAt === 'number'
-        ? { reason: 'run-active', retryAt: details.retryAt }
-        : { reason: 'run-active' };
-    case RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID:
-      return { reason: 'run-active-locally' };
-    case RECOVER_ALREADY_IN_PROGRESS_ERROR_ID:
-      return { reason: 'already-in-progress' };
-    default:
-      return isTransientRecoveryError(error)
-        ? { reason: 'transient-error', retryAt: Date.now() + TRANSIENT_RECOVERY_RETRY_DELAY_MS }
-        : undefined;
-  }
-}
 
 /** Whether a failed owned recovery should terminate observers of the run. */
 function shouldReportRecoveryFailure(error: unknown): boolean {
@@ -820,27 +755,6 @@ export interface DurableAgentRecoverOptions<OUTPUT = undefined> {
    * `DURABLE_AGENT_RUN_ACTIVE` for a live run.
    */
   force?: boolean;
-}
-
-/** The most recent transcript in a snapshot: workflow state, else the last step output carrying one. */
-function latestMessageListState(snapshot: {
-  value?: Record<string, any>;
-  state?: Record<string, any>;
-  context?: Record<string, any>;
-}): unknown {
-  // Evented checkpoints keep the latest setState under context.__state;
-  // value can still contain the transcript from the start of the iteration.
-  if (snapshot.context?.__state?.messageListState) return snapshot.context.__state.messageListState;
-  // The default engine persists workflow state under `value`.
-  if (snapshot.value?.messageListState) return snapshot.value.messageListState;
-  if (snapshot.state?.messageListState) return snapshot.state.messageListState;
-  let latest: { at: number; value: unknown } | undefined;
-  for (const step of Object.values(snapshot.context ?? {})) {
-    const value = step?.output?.messageListState;
-    const at = step?.endedAt ?? step?.startedAt ?? 0;
-    if (value && (!latest || at >= latest.at)) latest = { at, value };
-  }
-  return latest?.value;
 }
 
 export class DurableAgent<
