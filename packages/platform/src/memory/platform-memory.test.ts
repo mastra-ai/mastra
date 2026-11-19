@@ -20,6 +20,8 @@ function fakeMemoryApi() {
   const requests: { method: string; path: string; headers: Headers; body?: any }[] = [];
   let observations: string | null = null;
   const workingMemory = new Map<string, string>();
+  // Observation generations per thread, newest first; the first is the current record.
+  const observationRecords = new Map<string, Record<string, unknown>[]>();
 
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = new URL(String(input));
@@ -94,6 +96,23 @@ function fakeMemoryApi() {
       }
       return json({ aborted: null, chunks: [], rotations: 0, messageList: list });
     }
+    if (path === '/config' && method === 'GET') {
+      return json({
+        observationTokens: 30_000,
+        reflectionTokens: 40_000,
+        overrides: { observationTokens: null, reflectionTokens: null },
+      });
+    }
+    if ((m = path.match(/^\/threads\/([^/]+)\/observations$/)) && method === 'GET') {
+      const id = decodeURIComponent(m[1]!);
+      if (!threads.has(id)) return json({ title: 'Not found' }, 404);
+      const [record, ...past] = observationRecords.get(id) ?? [];
+      const historyLimit = url.searchParams.get('historyLimit');
+      return json({
+        record: record ?? null,
+        ...(historyLimit ? { history: past.slice(0, Number(historyLimit)) } : {}),
+      });
+    }
     if ((m = path.match(/^\/threads\/([^/]+)\/context$/))) {
       const id = decodeURIComponent(m[1]!);
       // Like the service: read-only, observations first as `om-system`, then unobserved messages.
@@ -145,6 +164,9 @@ function fakeMemoryApi() {
     messages,
     observe(text: string) {
       observations = text;
+    },
+    setObservationRecords(threadId: string, records: Record<string, unknown>[]) {
+      observationRecords.set(threadId, records);
     },
   };
 }
@@ -451,6 +473,145 @@ describe('PlatformMemory', () => {
       memoryConfig: resourceScope,
     });
     expect(api.requests.at(-1)!.body).toEqual({ resourceId: 'u', workingMemory: 'x' });
+  });
+
+  describe('Observational Memory reads', () => {
+    const hostedRecord = (generationCount: number, overrides: Record<string, unknown> = {}) => ({
+      id: `om_${generationCount}`,
+      scope: 'thread',
+      threadId: 'thread_1',
+      resourceId: 'user',
+      originType: generationCount === 0 ? 'initial' : 'reflection',
+      generationCount,
+      createdAt: '2026-11-01T00:00:00.000Z',
+      updatedAt: '2026-11-02T00:00:00.000Z',
+      activeObservations: `generation ${generationCount}`,
+      lastObservedAt: '2026-11-02T00:00:00.000Z',
+      observationTokenCount: 120,
+      totalTokensObserved: 4_000,
+      pendingMessageTokens: 50,
+      isObserving: false,
+      isReflecting: false,
+      isBufferingObservation: false,
+      isBufferingReflection: false,
+      ...overrides,
+    });
+
+    it('reports hosted Observational Memory settings from the instance config', async () => {
+      const { memory } = agentWith([]);
+      await expect(memory.getObservationalMemoryConfig()).resolves.toEqual({
+        enabled: true,
+        scope: 'thread',
+        messageTokens: 30_000,
+        observationTokens: 40_000,
+      });
+      expect(api.requests.at(-1)).toMatchObject({ method: 'GET', path: '/config' });
+      expect(api.requests.at(-1)!.headers.get('authorization')).toBe('Bearer tok_1');
+    });
+
+    it('returns an empty result for a thread with no observations yet', async () => {
+      const { memory } = agentWith([]);
+      await memory.client.createThread({ id: 'thread_1', resourceId: 'user' });
+      await expect(memory.getObservationalMemoryRecords({ threadId: 'thread_1', resourceId: 'user' })).resolves.toEqual(
+        {
+          record: null,
+          history: [],
+        },
+      );
+    });
+
+    it('returns an empty result for a thread the hosted service does not know', async () => {
+      const { memory } = agentWith([]);
+      await expect(memory.getObservationalMemoryRecords({ threadId: 'missing', resourceId: 'user' })).resolves.toEqual({
+        record: null,
+        history: [],
+      });
+    });
+
+    it('maps the current record and requested history from the hosted service', async () => {
+      const { memory } = agentWith([]);
+      await memory.client.createThread({ id: 'thread_1', resourceId: 'user' });
+      api.setObservationRecords('thread_1', [
+        hostedRecord(2, { isObserving: true }),
+        hostedRecord(1),
+        hostedRecord(0, { lastObservedAt: null, activeObservations: null }),
+      ]);
+
+      const result = await memory.getObservationalMemoryRecords({
+        threadId: 'thread_1',
+        resourceId: 'user',
+        historyLimit: 5,
+      });
+
+      expect(api.requests.at(-1)!.path).toBe('/threads/thread_1/observations');
+      expect(result.record).toMatchObject({
+        id: 'om_2',
+        scope: 'thread',
+        threadId: 'thread_1',
+        resourceId: 'user',
+        originType: 'reflection',
+        generationCount: 2,
+        activeObservations: 'generation 2',
+        totalTokensObserved: 4_000,
+        observationTokenCount: 120,
+        isObserving: true,
+        isReflecting: false,
+      });
+      expect(result.record!.createdAt).toEqual(new Date('2026-11-01T00:00:00.000Z'));
+      expect(result.record!.lastObservedAt).toEqual(new Date('2026-11-02T00:00:00.000Z'));
+      expect(result.history.map(r => r.id)).toEqual(['om_1', 'om_0']);
+      expect(result.history[1]).toMatchObject({ activeObservations: '', lastObservedAt: undefined });
+    });
+
+    it('passes the history limit to the hosted service and omits history when none is requested', async () => {
+      const { memory } = agentWith([]);
+      await memory.client.createThread({ id: 'thread_1', resourceId: 'user' });
+      api.setObservationRecords('thread_1', [hostedRecord(2), hostedRecord(1), hostedRecord(0)]);
+
+      const limited = await memory.getObservationalMemoryRecords({ threadId: 'thread_1', historyLimit: 1 });
+      expect(limited.history.map(r => r.id)).toEqual(['om_1']);
+
+      const current = await memory.getObservationalMemoryRecords({ threadId: 'thread_1' });
+      expect(current.record!.id).toBe('om_2');
+      expect(current.history).toEqual([]);
+    });
+
+    it('does not return records that belong to another resource', async () => {
+      const { memory } = agentWith([]);
+      await memory.client.createThread({ id: 'thread_1', resourceId: 'user' });
+      api.setObservationRecords('thread_1', [hostedRecord(1), hostedRecord(0)]);
+
+      await expect(
+        memory.getObservationalMemoryRecords({ threadId: 'thread_1', resourceId: 'someone-else', historyLimit: 5 }),
+      ).resolves.toEqual({ record: null, history: [] });
+    });
+
+    it.each([
+      [{ resourceId: 'user' }, /pass a threadId/],
+      [{ threadId: 'thread_1', from: new Date() }, /from, to, or offset/],
+      [{ threadId: 'thread_1', to: new Date() }, /from, to, or offset/],
+      [{ threadId: 'thread_1', offset: 2 }, /from, to, or offset/],
+      [{ threadId: 'thread_1', historyLimit: 51 }, /at most 50/],
+    ])('rejects reads the hosted service cannot serve: %o', async (args, message) => {
+      const { memory } = agentWith([]);
+      const before = api.requests.length;
+      const error = await memory.getObservationalMemoryRecords(args).catch(e => e);
+      expect(error.message).toMatch(message);
+      expect(error.details).toEqual({ status: 400 });
+      expect(api.requests.length).toBe(before);
+    });
+
+    it('surfaces hosted errors other than a missing thread', async () => {
+      const memory = new PlatformMemory({
+        accessToken: 'tok_1',
+        instanceId: 'mem_1',
+        apiUrl: 'https://platform.test',
+        fetch: async () => new Response(JSON.stringify({ title: 'Forbidden' }), { status: 403 }),
+      });
+      await expect(memory.getObservationalMemoryRecords({ threadId: 'thread_1' })).rejects.toMatchObject({
+        status: 403,
+      });
+    });
   });
 });
 
