@@ -16,14 +16,18 @@ const showObservabilityDashboard = createTool({
 });
 ```
 
-**Breaking:** `projectId` is renamed to `project` everywhere it crosses the MCP boundary, matching the `project` argument (an id or slug) that other observability tools take. Rename it in `observabilityWidgetHost` options and in your `queryObservability` input schema:
+**Breaking:** `projectId` is renamed to `project` everywhere it crosses the MCP boundary, matching the `project` argument (an id or slug) that other observability tools take. Rename it in `observabilityWidgetHost` options, and in both the input schema and the handler of your `queryObservability` tool:
 
 ```diff
 - observabilityWidgetHost({ resourceUri, projectId })
 + observabilityWidgetHost({ resourceUri, project })
 
 - inputSchema: z.object({ action, args, projectId: z.string().optional() }),
+- execute: async ({ action, args, projectId }, context) => {
+-   const reader = projectId ? await projectClient(projectId, context) : client;
 + inputSchema: z.object({ action, args, project: z.string().optional() }),
++ execute: async ({ action, args, project }, context) => {
++   const reader = project ? await projectClient(project, context) : client;
 ```
 
-A server that still declares `projectId` drops the widget's `project`, so its reads cover every project.
+A server that still reads `projectId` in either place never sees the widget's `project`, so its reads cover every project.
