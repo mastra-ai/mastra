@@ -115,36 +115,14 @@ export function createSupersededEventFilter(history: AgentStreamEvent[]): (event
     );
 }
 
-/**
- * Keep only the suspension the run is still parked at. A reader that replays a
- * run from its start also replays suspensions that were approved and resumed
- * since; a `closeOnSuspend` reader that stopped at one of those would drop the
- * output the resume produced. The newest frame in the log is the run's current
- * position, so a suspension older than it has already been moved past. Order is
- * kept, and a log with no indexed frames keeps everything (live-tail transport).
- */
-export function createCurrentSuspensionFilter(history: AgentStreamEvent[]): (event: AgentStreamEvent) => boolean {
-  let newestIndex: number | undefined;
+/** The newest run-log index in `history`, i.e. how far the run had got when it was read. */
+export function newestLogIndex(history: AgentStreamEvent[]): number | undefined {
+  let newest: number | undefined;
   for (const event of history) {
     if (typeof event.index !== 'number' || event.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED) continue;
-    if (newestIndex === undefined || event.index > newestIndex) newestIndex = event.index;
+    if (newest === undefined || event.index > newest) newest = event.index;
   }
-  if (newestIndex === undefined) return () => true;
-  // `>=` keeps a suspension published after this snapshot, which is live and
-  // therefore the run's current position.
-  const currentIndex = newestIndex;
-  // An expired log restarts numbering at 0 while a reader stays attached, so
-  // indexes after that no longer compare against the snapshot.
-  let previousIndex: number | undefined;
-  let restarted = false;
-  return event => {
-    if (typeof event.index === 'number' && event.type !== AgentStreamEventTypes.OWNERSHIP_CLAIMED) {
-      if (previousIndex !== undefined && event.index < previousIndex) restarted = true;
-      previousIndex = event.index;
-    }
-    if (restarted || event.type !== AgentStreamEventTypes.SUSPENDED || typeof event.index !== 'number') return true;
-    return event.index >= currentIndex;
-  };
+  return newest;
 }
 
 function callbackToolCalls(records: unknown[], runId: string): ToolCallChunk[] {
@@ -370,10 +348,11 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   /** Reject events in uncheckpointed tails superseded before this reader attached. */
   keepReplayEvent?: (event: AgentStreamEvent) => boolean | Promise<boolean>;
   /**
-   * With `closeOnSuspend`, whether this SUSPENDED event ends the stream. A
-   * suspension that does not still runs `onSuspended` and the stream stays open.
+   * With `closeOnSuspend`, how far the run had got when this reader attached. A
+   * replayed SUSPENDED below it was already resumed past: it is delivered as usual
+   * (`onSuspended` fires) but does not end the stream.
    */
-  closesOnSuspend?: (event: AgentStreamEvent) => boolean;
+  attachedAtLogIndex?: () => number | undefined;
   /** Refresh takeover ranges after replay attachment and before delivering cached events. */
   refreshReplayFilter?: () => Promise<unknown>;
   /**
@@ -515,7 +494,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     minGeneration,
     rereadMinGeneration,
     keepReplayEvent,
-    closesOnSuspend,
+    attachedAtLogIndex,
     refreshReplayFilter,
     idleTimeoutMs,
     isAlive,
@@ -774,6 +753,14 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   let onChunkDelivery = Promise.resolve();
   let activityVersion = 0;
   let terminalSettlement: Promise<void> | undefined;
+  // An expired log restarts numbering at 0 while this reader stays attached;
+  // from then on indexes no longer compare against `attachedAtLogIndex`.
+  let previousLogIndex: number | undefined;
+  let logRestarted = false;
+  const isPastSuspension = (event: AgentStreamEvent) => {
+    const attachedAt = attachedAtLogIndex?.();
+    return !logRestarted && attachedAt !== undefined && typeof event.index === 'number' && event.index < attachedAt;
+  };
 
   const handleEvent = async (event: Event) => {
     // Deliveries resume in arrival order once the skipped events are folded.
@@ -817,6 +804,10 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     armIdleTimer();
 
     if (streamEvent.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED) return;
+    if (typeof streamEvent.index === 'number') {
+      if (previousLogIndex !== undefined && streamEvent.index < previousLogIndex) logRestarted = true;
+      previousLogIndex = streamEvent.index;
+    }
 
     // Public chunks carry their run-log index so a client can resume at index + 1.
     const logIndex = typeof streamEvent.index === 'number' ? { index: streamEvent.index } : undefined;
@@ -1037,7 +1028,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           // keep streaming chunks (the watchdog stays armed; a suspended-but-live
           // run reads as attachable via isAlive). `generate()`/`resumeGenerate()`
           // opt into closing so `getFullOutput()` can resolve.
-          if (closeOnSuspend && (closesOnSuspend?.(streamEvent) ?? true)) {
+          if (closeOnSuspend && !isPastSuspension(streamEvent)) {
             // Mark terminal BEFORE awaiting onSuspended: handleEvent re-armed the
             // watchdog at the top, and a slow callback (> idleTimeoutMs) would
             // otherwise let it fire and emit a spurious idle error on an

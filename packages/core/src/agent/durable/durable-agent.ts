@@ -128,10 +128,10 @@ import {
 import { carrySegmentSpans, openedSegment } from './segment-spans';
 import type { SegmentSpanData } from './segment-spans';
 import {
-  createCurrentSuspensionFilter,
   createDurableAgentStream,
   createRunGenerationFilter,
   createSupersededEventFilter,
+  newestLogIndex,
   emitChunkEvent,
   emitErrorEvent,
   emitFinishEvent,
@@ -5543,10 +5543,9 @@ export class DurableAgent<
    * The floor only adds protection, so a failed read must not fail the reconnect;
    * the reader reads the claim again before an event can end its stream.
    *
-   * A reader that closes on suspension (`closeOnSuspend`) does not close on a
-   * suspension the run has already moved past, so a replay from the start of a
-   * run cannot end the stream at an approval that was given long ago. The event
-   * is still delivered, so `onSuspended` fires as it does without the option.
+   * A reader that closes on suspension (`closeOnSuspend`) also gets how far the
+   * run had got, so a replay from the start of a run doesn't end the stream at an
+   * approval that was given long ago.
    */
   async #readReplayFloor(
     runId: string,
@@ -5555,24 +5554,18 @@ export class DurableAgent<
   ): Promise<
     Pick<
       DurableStreamAdapterOptions,
-      'minGeneration' | 'rereadMinGeneration' | 'keepReplayEvent' | 'closesOnSuspend'
+      'minGeneration' | 'rereadMinGeneration' | 'keepReplayEvent' | 'attachedAtLogIndex'
     > & {
       refreshReplayFilter?: () => Promise<unknown>;
     }
   > {
     try {
       const history = (await this.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)) as AgentStreamEvent[];
-      // Suspensions the run has moved past stay in the stream; they only stop closing it.
-      const pastSuspensions = new WeakSet<AgentStreamEvent>();
-      const closesOnSuspend = closeOnSuspend ? (event: AgentStreamEvent) => !pastSuspensions.has(event) : undefined;
-      const buildFilter = (entries: AgentStreamEvent[]): ((event: AgentStreamEvent) => boolean) => {
-        const superseded = createSupersededEventFilter(entries);
-        if (!closeOnSuspend) return superseded;
-        const currentSuspension = createCurrentSuspensionFilter(entries);
-        return event => {
-          if (!currentSuspension(event)) pastSuspensions.add(event);
-          return superseded(event);
-        };
+      let attachedAt = newestLogIndex(history);
+      const attachedAtLogIndex = closeOnSuspend ? () => attachedAt : undefined;
+      const buildFilter = (entries: AgentStreamEvent[]) => {
+        attachedAt = newestLogIndex(entries);
+        return createSupersededEventFilter(entries);
       };
       const initialFilter = buildFilter(history);
       let refreshedFilter: Promise<typeof initialFilter> | undefined;
@@ -5591,7 +5584,7 @@ export class DurableAgent<
         if (currentFilter) return currentFilter(event);
         return refreshReplayFilter().then(filter => filter(event));
       };
-      if (!offset) return { keepReplayEvent, closesOnSuspend, refreshReplayFilter };
+      if (!offset) return { keepReplayEvent, attachedAtLogIndex, refreshReplayFilter };
       const skipped = history.slice(0, offset);
       if (skipped.length === offset) {
         let floor: number | undefined;
@@ -5599,12 +5592,12 @@ export class DurableAgent<
           const generation = event.generation;
           if (typeof generation === 'number' && (floor === undefined || generation > floor)) floor = generation;
         }
-        return { minGeneration: floor, keepReplayEvent, closesOnSuspend, refreshReplayFilter };
+        return { minGeneration: floor, keepReplayEvent, attachedAtLogIndex, refreshReplayFilter };
       }
       return {
         minGeneration: await readRunGeneration(this.#mastra, runId),
         keepReplayEvent,
-        closesOnSuspend,
+        attachedAtLogIndex,
         refreshReplayFilter,
       };
     } catch (error) {

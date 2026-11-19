@@ -28,11 +28,12 @@ import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage/mock';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
-import { AgentStreamEventTypes } from '../../streams/constants';
+import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../../streams/constants';
 import type { AgentStreamEvent } from '../../streams/types';
 import { createDurableAgent } from '../create-durable-agent';
 import { globalRunRegistry } from '../run-registry';
-import { createCurrentSuspensionFilter } from '../stream-adapter';
+import { createDurableAgentStream } from '../stream-adapter';
+import type { DurableAgentStreamResult } from '../stream-adapter';
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
@@ -251,38 +252,62 @@ describe('DurableAgent.observe() closeOnSuspend (#29692)', () => {
   }, 30_000);
 });
 
-describe('createCurrentSuspensionFilter', () => {
-  const event = (type: AgentStreamEvent['type'], index: number): AgentStreamEvent => ({
-    type,
-    runId: 'run',
-    data: {},
-    index,
+describe('createDurableAgentStream attachedAtLogIndex', () => {
+  // Plain EventEmitterPubSub passes `index` through, so each case controls the
+  // log position directly, including a log that restarts numbering at 0.
+  const open = (runId: string, attachedAt: number) => {
+    const pubsub = new EventEmitterPubSub();
+    const onSuspended = vi.fn();
+    const stream = createDurableAgentStream({
+      pubsub,
+      runId,
+      messageId: `msg-${runId}`,
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      closeOnSuspend: true,
+      attachedAtLogIndex: () => attachedAt,
+      onSuspended,
+    }) as DurableAgentStreamResult<any>;
+    let closed = false;
+    const done = (async () => {
+      for await (const _chunk of stream.output.fullStream) {
+        // drain
+      }
+      closed = true;
+    })();
+    const publish = (type: AgentStreamEvent['type'], index: number) =>
+      pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+        type,
+        runId,
+        data:
+          type === AgentStreamEventTypes.SUSPENDED
+            ? { type: 'suspension' }
+            : { type: 'text-delta', payload: { id: 't', text: 'x' } },
+        index,
+      } as any);
+    return { stream, onSuspended, done, publish, isClosed: () => closed };
+  };
+
+  it('delivers a suspension below the attach point without closing, then closes on the current one', async () => {
+    const reader = open('past-suspension', 2);
+    await reader.stream.ready;
+    await reader.publish(AgentStreamEventTypes.SUSPENDED, 0);
+    await delay(20);
+    expect(reader.onSuspended).toHaveBeenCalledTimes(1);
+    expect(reader.isClosed()).toBe(false);
+
+    await reader.publish(AgentStreamEventTypes.SUSPENDED, 3);
+    await reader.done;
+    expect(reader.onSuspended).toHaveBeenCalledTimes(2);
+    expect(reader.isClosed()).toBe(true);
   });
 
-  it('drops a suspension the run has moved past', () => {
-    const history = [
-      event(AgentStreamEventTypes.SUSPENDED, 0),
-      event(AgentStreamEventTypes.CHUNK, 1),
-      event(AgentStreamEventTypes.CHUNK, 2),
-    ];
-    const keep = createCurrentSuspensionFilter(history);
-    expect(history.map(keep)).toEqual([false, true, true]);
-    expect(keep(event(AgentStreamEventTypes.SUSPENDED, 3))).toBe(true);
-  });
-
-  it('keeps a suspension from a log that restarted numbering at 0', () => {
-    const keep = createCurrentSuspensionFilter([
-      event(AgentStreamEventTypes.CHUNK, 0),
-      event(AgentStreamEventTypes.CHUNK, 1),
-      event(AgentStreamEventTypes.CHUNK, 2),
-    ]);
-    const delivered = [
-      event(AgentStreamEventTypes.CHUNK, 0),
-      event(AgentStreamEventTypes.CHUNK, 1),
-      event(AgentStreamEventTypes.CHUNK, 2),
-      event(AgentStreamEventTypes.CHUNK, 0),
-      event(AgentStreamEventTypes.SUSPENDED, 1),
-    ];
-    expect(delivered.map(keep)).toEqual([true, true, true, true, true]);
+  it('closes on a suspension from a log that restarted numbering at 0', async () => {
+    const reader = open('restarted-log', 2);
+    await reader.stream.ready;
+    await reader.publish(AgentStreamEventTypes.CHUNK, 2);
+    await reader.publish(AgentStreamEventTypes.CHUNK, 0);
+    await reader.publish(AgentStreamEventTypes.SUSPENDED, 1);
+    await reader.done;
+    expect(reader.isClosed()).toBe(true);
   });
 });
