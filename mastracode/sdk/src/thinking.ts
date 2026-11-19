@@ -81,12 +81,18 @@ export function requestableReasoningOptions(
   const format = thinkingRequestFormatFor(modelId);
   if (!format) return isThinkingAdapterProvider(splitProvider(modelId).provider) ? reasoningOptions : [];
   const acceptedEfforts = format.sendEffort ? (format.acceptedEfforts ?? ACTIVE_THINKING_LEVELS) : [];
-  return reasoningOptions.flatMap((option): ModelReasoningOption[] => {
+  const requestable = reasoningOptions.flatMap((option): ModelReasoningOption[] => {
     if (option.type === 'toggle') return format.enableThinking ? [option] : [];
     if (option.type !== 'effort') return [];
     const values = option.values.filter(value => acceptedEfforts.some(effort => effort === value));
     return values.length ? [{ type: 'effort', values }] : [];
   });
+  const publishesOnlyBudget =
+    reasoningOptions.length > 0 && reasoningOptions.every(option => option.type === 'budget_tokens');
+  if (requestable.length === 0 && publishesOnlyBudget && format.effortsForBudgetCatalog) {
+    return [{ type: 'effort', values: [...format.effortsForBudgetCatalog] }];
+  }
+  return requestable;
 }
 
 function closestOfferedEffort(
