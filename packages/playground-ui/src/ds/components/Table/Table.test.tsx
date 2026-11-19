@@ -568,4 +568,27 @@ describe('inset row click forwarding', () => {
     fireEvent.click(screen.getByText('$10'));
     expect(onOther).toHaveBeenCalledTimes(1);
   });
+
+  it('runs the row onClick for a real click after cell clicks on a disabled row button', () => {
+    const onRow = vi.fn();
+    const credits = (disabled: boolean) => (
+      <Table variant="inset" aria-label="Credits">
+        <Table.Body>
+          <Table.Row onClick={onRow}>
+            <Table.Cell>
+              <Table.RowButton disabled={disabled}>Credit grant</Table.RowButton>
+            </Table.Cell>
+            <Table.Cell>$10</Table.Cell>
+          </Table.Row>
+        </Table.Body>
+      </Table>
+    );
+    const { rerender } = render(credits(true));
+    fireEvent.click(screen.getByText('$10'));
+    fireEvent.click(screen.getByText('$10'));
+    expect(onRow).toHaveBeenCalledTimes(2);
+    rerender(credits(false));
+    fireEvent.click(screen.getByRole('button', { name: 'Credit grant' }));
+    expect(onRow).toHaveBeenCalledTimes(3);
+  });
 });

@@ -37,6 +37,11 @@ export function forwardRowClick(event: MouseEvent<HTMLTableRowElement>) {
   if (control && control !== row && row.contains(control)) return;
   const rowTarget = row.querySelector<HTMLElement>('[data-row-target]');
   if (!rowTarget) return;
-  rowTarget.addEventListener('click', click => forwarded.add(click), { capture: true, once: true });
-  rowTarget.click();
+  const mark = (click: Event) => forwarded.add(click);
+  rowTarget.addEventListener('click', mark, { capture: true });
+  try {
+    rowTarget.click();
+  } finally {
+    rowTarget.removeEventListener('click', mark, { capture: true });
+  }
 }
