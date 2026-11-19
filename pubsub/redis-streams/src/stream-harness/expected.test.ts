@@ -28,6 +28,44 @@ const plainOf = (cell: Cell): Cell => ({ ...cell, engine: 'plain' });
 const clone = (capture: RunCapture): RunCapture => JSON.parse(JSON.stringify(capture));
 const types = (frames: Frame[] | undefined) => (frames ?? []).map(f => f.type).join(',');
 
+// Hosted run 44215558450: shared publisher cleanup removed the control topic (#30376).
+const capturedBusKeys = [
+  { type: 'key', shape: ':agent.thread-stream.harness-user%00<thread> ttl=hours' },
+  { type: 'key', shape: ':scheduler ttl=hours' },
+  { type: 'key', shape: ':workflows ttl=hours' },
+];
+const capturedEventedKeys = [
+  capturedBusKeys[0]!,
+  { type: 'key', shape: ':lease:workflow-step-run:<id>:<id> ttl=seconds' },
+  { type: 'key', shape: ':lease:workflow-step-run:<run>:<id> ttl=seconds' },
+  capturedBusKeys[1]!,
+  { type: 'key', shape: ':workflow.control ttl=hours' },
+  capturedBusKeys[2]!,
+  { type: 'key', shape: ':workflows-finish ttl=hours' },
+];
+const cleanupCells: Cell[] = LAYOUTS.filter(layout => layout.backend !== 'memory').flatMap(layout =>
+  (['durable', 'evented'] as const).map(engine => ({ scenario: 'key-cleanup', engine, ...layout })),
+);
+
+it.each(cleanupCells)(
+  'matches captured cleanup keys without hiding control-topic leaks: $engine / $backend / $topology',
+  cell => {
+    const capture = clone(expectedCapture(cell));
+    capture.keys = clone({ keys: cell.engine === 'evented' ? capturedEventedKeys : capturedBusKeys }).keys;
+    const plain = expectedCapture(plainOf(cell));
+    const result = checkCell(cell, capture, plain);
+    expect(result.verdict).toEqual({ unlisted: [], stale: [] });
+    expect(result.drift).toEqual([]);
+    const pins = knownDifferencesFor(cell).filter(pin => pin.reader === 'keys');
+    expect(pins.some(pin => pin.ticket === 'COR-1540')).toBe(false);
+    if (cell.engine === 'durable') expect(pins.every(pin => pin.against === 'live')).toBe(true);
+    capture.keys!.unshift({ type: 'key', shape: ':agent.control.<run> ttl=hours' });
+    const leaked = checkCell(cell, capture, plain);
+    expect(leaked.drift.some(diff => diff.reader === 'keys')).toBe(true);
+    expect(leaked.verdict.unlisted.length).toBeGreaterThan(0);
+  },
+);
+
 const iterationStartTopics = {
   'tool-approval':
     'start,iteration-start,step-start,tool-call-input-streaming-start,tool-call-delta,tool-call-delta,tool-call-delta,tool-call-delta,tool-call-delta,tool-call-input-streaming-end,tool-call,tool-call-approval,suspended,tool-call-resumed,tool-result[{"value":"found:harness"}],step-finish,iteration-complete,iteration-start,step-start,text-start,text-delta[The lookup found it.],text-end,step-finish,iteration-complete,finish',

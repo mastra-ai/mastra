@@ -287,29 +287,24 @@ const REMAINING_KEYS: Attribution = {
   ticket: 'COR-1534',
   cause: 'plain-layer',
   evidence:
-    'Run cleanup deletes run/control/ack topics, not the thread-stream topic (agent/streams/publisher.ts:216). ' +
+    'Shared execution-owner cleanup clears run/control/ack topics for plain and durable agents ' +
+    '(#30376, 5053f97664a; agent/streams/publisher.ts:380-406), not the thread-stream topic. ' +
     'The dedicated fixture prefix also exposes scheduler/workflow infrastructure keys; these are reported, not ' +
-    `claimed as leaked run logs. TTLs bucketed 4s after finish (${MAIN}; stream-harness-node.entry.ts:332).`,
-};
-const DURABLE_REMAINING_KEYS: Attribution = {
-  ticket: 'COR-1540',
-  cause: 'durable-stream',
-  evidence:
-    'Durable cleanup clears its run topic (agent/durable/durable-agent.ts:6123), leaving agent.control.<run> ' +
-    `with hours TTL after the 2s cleanup window; plain removes it (${MAIN}; stream-harness-node.entry.ts:332).`,
+    'claimed as leaked run logs. Hosted run 44215558450 captures the same three keys for plain/durable, ' +
+    'with hours TTLs 4s after finish (stream-harness-node.entry.ts).',
 };
 const EVENTED_INFRA_KEYS: Attribution = {
   ticket: 'COR-1534',
   cause: 'engine',
   evidence:
-    'Evented execution additionally leaves workflow control/finish and short-lived workflow-step lease keys ' +
-    `(stream-harness-node.entry.ts:332). These are engine infrastructure, not extra agent stream histories (${MAIN}).`,
+    'Evented execution additionally leaves workflow control/finish and short-lived workflow-step lease keys. ' +
+    'Hosted run 44215558450 captures seven keys after #30376 removes the agent control topic. ' +
+    'These are engine infrastructure, not extra agent stream histories (stream-harness-node.entry.ts).',
 };
 const BUS_KEYS =
   'key[:agent.thread-stream.harness-user%00<thread> ttl=hours],key[:scheduler ttl=hours],key[:workflows ttl=hours]';
-const DURABLE_KEYS = 'key[:agent.control.<run> ttl=hours],' + BUS_KEYS;
 const EVENTED_KEYS =
-  'key[:agent.control.<run> ttl=hours],key[:agent.thread-stream.harness-user%00<thread> ttl=hours],' +
+  'key[:agent.thread-stream.harness-user%00<thread> ttl=hours],' +
   'key[:lease:workflow-step-run:<id>:<id> ttl=seconds],key[:lease:workflow-step-run:<run>:<id> ttl=seconds],' +
   'key[:scheduler ttl=hours],key[:workflow.control ttl=hours],key[:workflows ttl=hours],key[:workflows-finish ttl=hours]';
 
@@ -451,8 +446,7 @@ export const OBSERVATIONS: readonly Observation[] = [
     },
     { layouts: SPLIT },
   ),
-  obs('key-cleanup', PLAIN, ['keys'], BUS_KEYS, REMAINING_KEYS, { layouts: OVER_BUS }),
-  obs('key-cleanup', ['durable'], ['keys'], DURABLE_KEYS, DURABLE_REMAINING_KEYS, { layouts: OVER_BUS }),
+  obs('key-cleanup', ['plain', 'durable'], ['keys'], BUS_KEYS, REMAINING_KEYS, { layouts: OVER_BUS }),
   obs('key-cleanup', ['evented'], ['keys'], EVENTED_KEYS, EVENTED_INFRA_KEYS, { layouts: OVER_BUS }),
   // structured-output
   obs('structured-output', DURABLE, ['live', 'observe-mid', 'thread'], STRUCTURED_DURABLE, REBUILT_OBJECT),
