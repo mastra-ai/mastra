@@ -1,7 +1,7 @@
 import { estimateTokenCount } from 'tokenx';
 
 import { isValidationError } from '../../tools/validation';
-import { sliceByTokensSafe } from '../../utils/slice-by-tokens';
+import { MAX_CHARS_PER_TOKEN, headByTokens, tailByTokens } from '../../utils/slice-by-tokens';
 
 /** Default number of lines to return (tail). */
 export const DEFAULT_TAIL_LINES = 200;
@@ -100,10 +100,45 @@ function splitTail(output: string, tail: number | null | undefined): TailSplit {
 // Token-based truncation (uses tokenx for fast, lightweight estimation)
 // ---------------------------------------------------------------------------
 
+/** Outputs up to this many characters get an exact token total in their notice. */
+const TOTAL_TOKENS_EXACT_LIMIT = 1_000_000;
+/** Characters sampled from each of three windows to extrapolate a large total. */
+const TOTAL_SAMPLE_CHARS = 32_768;
+
+/**
+ * Estimated token total for a truncation notice. Exact for outputs up to
+ * {@link TOTAL_TOKENS_EXACT_LIMIT}; above it, three fixed-size windows (start,
+ * middle, end) are counted and scaled by the length ratio, so the cost stays
+ * bounded (~96k characters) no matter how large the output is.
+ */
+function estimateTotalTokens(text: string): number {
+  if (text.length <= TOTAL_TOKENS_EXACT_LIMIT) return estimateTokenCount(text);
+
+  const sampleStart = estimateTokenCount(text.slice(0, TOTAL_SAMPLE_CHARS));
+  const middleStart = Math.floor((text.length - TOTAL_SAMPLE_CHARS) / 2);
+  const sampleMiddle = estimateTokenCount(text.slice(middleStart, middleStart + TOTAL_SAMPLE_CHARS));
+  const sampleEnd = estimateTokenCount(text.slice(-TOTAL_SAMPLE_CHARS));
+
+  const sampledTokens = sampleStart + sampleMiddle + sampleEnd;
+  return Math.round((sampledTokens / (TOTAL_SAMPLE_CHARS * 3)) * text.length);
+}
+
+/**
+ * True when `output` is short enough that tokenx (which never estimates below
+ * one token per 6 characters) may still fit in `limit` tokens. Only such outputs
+ * are worth counting in full; anything longer certainly exceeds the budget.
+ */
+function fitsTokenLimit(output: string, limit: number): boolean {
+  return output.length <= limit * MAX_CHARS_PER_TOKEN && estimateTokenCount(output) <= limit;
+}
+
 /**
  * Token-based output limit. Truncates output to fit within a token budget.
  * Uses tokenx for fast token estimation and truncates at the token level
  * (not line boundaries) to maximise use of the budget.
+ *
+ * Token work is bounded to a window derived from `limit`, so a multi-megabyte
+ * output is never tokenised in full.
  *
  * @param output - The text to truncate
  * @param limit - Maximum tokens (default: DEFAULT_MAX_OUTPUT_TOKENS)
@@ -117,11 +152,10 @@ export async function applyTokenLimit(
   from: 'start' | 'end' = 'start',
 ): Promise<string> {
   if (!output) return output;
+  if (fitsTokenLimit(output, limit)) return output;
 
-  const totalTokens = estimateTokenCount(output);
-  if (totalTokens <= limit) return output;
-
-  const kept = from === 'start' ? sliceByTokensSafe(output, -limit) : sliceByTokensSafe(output, 0, limit);
+  const kept = from === 'start' ? tailByTokens(output, limit) : headByTokens(output, limit);
+  const totalTokens = estimateTotalTokens(output);
 
   const position = from === 'start' ? 'last' : 'first';
   return from === 'start'
@@ -157,15 +191,14 @@ export async function applyTokenLimitSandwich(
  */
 function sandwich(output: string, limit: number, headRatio: number, firstLine: number): string {
   if (!output) return output;
+  if (fitsTokenLimit(output, limit)) return output;
 
-  const totalTokens = estimateTokenCount(output);
-  if (totalTokens <= limit) return output;
   const headBudget = Math.floor(limit * headRatio);
   const tailBudget = limit - headBudget;
 
   // `head` is a prefix and `tail` a suffix of `output` (the surrogate repair keeps lengths).
-  let head = headBudget > 0 ? sliceByTokensSafe(output, 0, headBudget) : '';
-  let tail = tailBudget > 0 ? sliceByTokensSafe(output, -tailBudget) : '';
+  let head = headBudget > 0 ? headByTokens(output, headBudget) : '';
+  let tail = tailBudget > 0 ? tailByTokens(output, tailBudget) : '';
   const headEnd = head.length;
   let tailStart = output.length - tail.length;
   // The notice gets its own line, so a line break (`\n` or `\r\n`) at either cut is redundant.
@@ -177,6 +210,7 @@ function sandwich(output: string, limit: number, headRatio: number, firstLine: n
 
   const lines = describeCutLines(output, headEnd, tailStart, firstLine - 1);
   const dropped = lines.dropped ? `dropped ${lines.dropped}; ` : '';
+  const totalTokens = estimateTotalTokens(output);
   const notice = `[...output truncated — ${dropped}showing first ~${headBudget} tokens${lines.head} + last ~${tailBudget} tokens${lines.tail} of ~${totalTokens} tokens...]`;
   return [head, notice, tail].filter(Boolean).join('\n');
 }

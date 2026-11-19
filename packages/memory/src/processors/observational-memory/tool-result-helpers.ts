@@ -7,6 +7,37 @@ const ENCRYPTED_CONTENT_REDACTION_THRESHOLD = 256;
 
 export const DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS = 5_000;
 
+/**
+ * Upper bound on characters per token for tokenx's default estimator: it never
+ * estimates below one token per 6 default characters. Multiplying a token budget
+ * by this bounds the characters that can hold it, so truncation never has to
+ * tokenise the whole (possibly multi-megabyte) string.
+ */
+const MAX_CHARS_PER_TOKEN = 8;
+
+/** Texts up to this many characters get an exact token total in their notice. */
+const TOTAL_TOKENS_EXACT_LIMIT = 1_000_000;
+/** Characters sampled from each of three windows to extrapolate a large total. */
+const TOTAL_SAMPLE_CHARS = 32_768;
+
+/**
+ * Estimated token total for a truncation notice. Exact for texts up to
+ * {@link TOTAL_TOKENS_EXACT_LIMIT}; above it, three fixed-size windows (start,
+ * middle, end) are counted and scaled by the length ratio, so the cost no longer
+ * grows with the input size.
+ */
+function estimateTotalTokens(text: string): number {
+  if (text.length <= TOTAL_TOKENS_EXACT_LIMIT) return estimateTokenCount(text);
+
+  const sampleStart = estimateTokenCount(text.slice(0, TOTAL_SAMPLE_CHARS));
+  const middleStart = Math.floor((text.length - TOTAL_SAMPLE_CHARS) / 2);
+  const sampleMiddle = estimateTokenCount(text.slice(middleStart, middleStart + TOTAL_SAMPLE_CHARS));
+  const sampleEnd = estimateTokenCount(text.slice(-TOTAL_SAMPLE_CHARS));
+
+  const sampledTokens = sampleStart + sampleMiddle + sampleEnd;
+  return Math.round((sampledTokens / (TOTAL_SAMPLE_CHARS * 3)) * text.length);
+}
+
 function isObjectLike(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -110,10 +141,14 @@ export function truncateStringByTokens(text: string, maxTokens: number): string 
     return '';
   }
 
-  const totalTokens = estimateTokenCount(text);
-  if (totalTokens <= maxTokens) {
+  // tokenx never estimates below one token per 6 characters, so only text within
+  // `maxTokens * MAX_CHARS_PER_TOKEN` characters can still fit; anything longer is
+  // known to exceed the budget without counting it in full.
+  if (text.length <= maxTokens * MAX_CHARS_PER_TOKEN && estimateTokenCount(text) <= maxTokens) {
     return text;
   }
+
+  const totalTokens = estimateTotalTokens(text);
 
   const buildCandidate = (sliceEnd: number) => {
     const visible = safeSlice(text, sliceEnd);
@@ -121,7 +156,9 @@ export function truncateStringByTokens(text: string, maxTokens: number): string 
   };
 
   let low = 0;
-  let high = text.length;
+  // Bound the search to the characters that can hold the budget, so no iteration
+  // tokenises a near-full copy of a multi-megabyte input.
+  let high = Math.min(text.length, maxTokens * MAX_CHARS_PER_TOKEN);
   let best = buildCandidate(0);
 
   while (low <= high) {
