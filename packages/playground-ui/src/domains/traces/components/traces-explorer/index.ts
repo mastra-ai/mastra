@@ -64,5 +64,6 @@ export {
 export type { TracesExplorerFeatures, TracesExplorerScope, TracesMetricsSupport } from './traces-explorer-context';
 export { useTracesFilterBar, useTracesFilterBarFields } from './use-traces-filter-bar';
 export { useTracesDiscovery } from './use-traces-discovery';
+export { useTracesHistogramView } from './traces-explorer-histogram-context';
 
 export type { FeedbackOptions } from '../feedback-options';
