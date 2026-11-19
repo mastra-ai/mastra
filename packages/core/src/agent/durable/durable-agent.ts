@@ -189,7 +189,6 @@ const RESUMED_SPAN_DATA = Symbol('mastra.durable.resumedSpanData');
 /** Recoveries in progress in this process, keyed by agent and run. */
 const localRecoveryClaims = new Map<string, string>();
 const RECOVER_SHUTDOWN_ERROR_ID = 'DURABLE_AGENT_RECOVER_SHUTDOWN';
-const OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS = 5_000;
 
 /** Whether a failed owned recovery should terminate observers of the run. */
 function shouldReportRecoveryFailure(error: unknown): boolean {
@@ -1295,6 +1294,7 @@ export class DurableAgent<
         // not on the SUSPENDED event, which can precede a resumable snapshot.
         closeOnSuspend: false,
         messageList,
+        messageListFollowsStream: () => !this.executesStepsLocally,
         structuredOutput: registryEntry.structuredOutput,
         requestContext: registryEntry.requestContext,
         tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
@@ -2422,6 +2422,15 @@ export class DurableAgent<
   }
 
   /**
+   * Whether this process runs the run's steps, which keep its registered MessageList in sync.
+   * Otherwise its readers take each step's response messages from the stream.
+   * @internal
+   */
+  protected get executesStepsLocally(): boolean {
+    return true;
+  }
+
+  /**
    * Create the durable workflow for this agent.
    *
    * Retained for direct calls and subclass super calls. Run execution creates
@@ -3208,6 +3217,7 @@ export class DurableAgent<
       returnScorerData: workflowInput.options.returnScorerData,
       tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
       messageList,
+      messageListFollowsStream: () => !this.executesStepsLocally,
     });
     streamCleanup = createdStreamCleanup;
 
@@ -4023,6 +4033,7 @@ export class DurableAgent<
       returnScorerData: options?.returnScorerData ?? entry.returnScorerData ?? resolvedOptions.returnScorerData,
       tracingContext: resumeSegmentSpan ? { currentSpan: resumeSegmentSpan } : undefined,
       messageList: globalEntry?.messageList ?? this.#runRegistry.getMessageList(runId),
+      messageListFollowsStream: () => !this.executesStepsLocally,
     });
     streamCleanup = createdStreamCleanup;
 
@@ -4848,6 +4859,7 @@ export class DurableAgent<
       returnScorerData: workflowInput.options.returnScorerData,
       tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
       messageList,
+      messageListFollowsStream: () => !this.executesStepsLocally,
     });
 
     // 4. Wait for subscription to be ready, then execute workflow
@@ -5874,67 +5886,6 @@ export class DurableAgent<
       returnScorerData = workflowInput.options?.returnScorerData;
     }
 
-    const refreshObservedMessageList = async (isExpired: () => boolean) => {
-      const targetMessageList = messageList;
-      const snapshot = workflowInputSnapshot ?? loopSnapshot;
-      if (!workflowsStore || !snapshot || !targetMessageList) return;
-
-      try {
-        const inputMessages = targetMessageList.get.input.db();
-        const latestState = await this.#loadLatestMessageListState(workflowsStore, runId, snapshot);
-        if (latestState && !isExpired()) {
-          targetMessageList.deserialize(latestState);
-          if (targetMessageList.get.input.db().length === 0 && inputMessages.length > 0) {
-            targetMessageList.add(inputMessages, 'input');
-          }
-        }
-      } catch (error) {
-        this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] observe(${runId}) messageList refresh failed: ${error}`);
-      }
-    };
-
-    const refreshObservedMessageListWithTimeout = async () => {
-      const refreshTimeoutMs = Math.min(
-        options?.idleTimeoutMs && options.idleTimeoutMs > 0
-          ? options.idleTimeoutMs
-          : OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS,
-        OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS,
-      );
-      let expired = false;
-      let timeout: ReturnType<typeof setTimeout> | undefined;
-      const timedOut = new Promise<boolean>(resolve => {
-        timeout = setTimeout(() => {
-          expired = true;
-          resolve(true);
-        }, refreshTimeoutMs);
-      });
-
-      try {
-        const didTimeOut = await Promise.race([refreshObservedMessageList(() => expired).then(() => false), timedOut]);
-        if (didTimeOut) {
-          this.#mastra
-            ?.getLogger?.()
-            ?.warn?.(`[DurableAgent] observe(${runId}) messageList refresh timed out after ${refreshTimeoutMs}ms`);
-        }
-      } finally {
-        if (timeout) clearTimeout(timeout);
-      }
-    };
-
-    let observedResponseText = '';
-    const handleObservedChunk = async (chunk: ChunkType<TOutput>) => {
-      if (chunk.type === 'text-delta' && typeof chunk.payload.text === 'string') {
-        observedResponseText += chunk.payload.text;
-      }
-      if (chunk.type === 'step-finish') {
-        await refreshObservedMessageListWithTimeout();
-        if (messageList && messageList.get.response.db().length === 0 && observedResponseText) {
-          messageList.add({ role: 'assistant', content: observedResponseText }, 'response');
-        }
-      }
-      await options?.onChunk?.(chunk);
-    };
-
     const replayFloor = await this.#readReplayFloor(runId, options?.offset, options?.closeOnSuspend);
 
     const stream = createDurableAgentStream<TOutput>({
@@ -5954,7 +5905,7 @@ export class DurableAgent<
       idleTimeoutMs: options?.idleTimeoutMs,
       isAlive: options?.isAlive,
       closeOnSuspend: options?.closeOnSuspend,
-      onChunk: handleObservedChunk,
+      onChunk: options?.onChunk,
       experimentalTransform: options?.experimentalTransform,
       onStepFinish: options?.onStepFinish,
       onFinish: options?.onFinish,
@@ -5985,6 +5936,9 @@ export class DurableAgent<
       requestContext,
       tracingContext: observedAgentSpan ? { currentSpan: observedAgentSpan } : undefined,
       messageList,
+      // A list loaded from storage has the conversation up to attach; the stream brings each
+      // step's response messages from there.
+      messageListFollowsStream: () => !liveEntry || !this.executesStepsLocally,
     });
     const { output, ready, detach } = stream;
     streamCleanup = stream.cleanup;
