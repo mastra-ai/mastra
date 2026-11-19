@@ -28,5 +28,10 @@ tester.run('no-page-width', plugin.rules['no-page-width'], {
       errors: 1,
     },
     { name: 'flags a template literal', code: 'const c = `mx-auto max-w-5xl ${extra}`;', errors: 1 },
+    {
+      name: 'flags a centred column written across lines',
+      code: 'const c = `mx-auto\n  w-full\n  max-w-2xl`;',
+      errors: 1,
+    },
   ],
 });

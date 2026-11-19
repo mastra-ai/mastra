@@ -54,6 +54,7 @@ describe('SettingsLayout', () => {
     );
 
     expect(output).toContain('data-slot="page-layout"');
+    expect(output).toContain('aria-label="Breadcrumb"');
     expect(output.indexOf('aria-label="Breadcrumb"')).toBeLessThan(output.indexOf('<main'));
     expect(output.indexOf('data-slot="settings-layout"')).toBeGreaterThan(output.indexOf('<main'));
   });
