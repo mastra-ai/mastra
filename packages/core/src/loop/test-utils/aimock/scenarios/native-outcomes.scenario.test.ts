@@ -934,9 +934,9 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
   });
 
   // The regular Agent does not keep the first call's hide flags on a resume.
-  it.skipIf(engine === 'normal' || engine === 'fs')(
-    "keeps the first call's hideInput on the resumed part over the agent's default",
-    async () => {
+  it.skipIf(engine === 'normal' || engine === 'fs').each([{}, { untilIdle: true }])(
+    "keeps the first call's hideInput on the resumed part over the agent's default (resume options: %o)",
+    async resumeOptions => {
       const { observability, ended } = capture();
       const { output } = await runApprovalScenario({
         engine,
@@ -946,6 +946,7 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
         decision: () => true,
         defaultOptions: { tracingOptions: { hideInput: false } },
         tracingOptions: { hideInput: true },
+        resumeOptions,
         ...approvedLookup,
       });
       expect(await output.text).toBe('shipped');

@@ -765,8 +765,8 @@ export async function runApprovalScenario({
     approvals.push(`${approve ? 'approve' : 'decline'}:${toolCallId}`);
 
     run = (await (approve
-      ? agent.approveToolCall({ runId, toolCallId, ...memoryOption, ...resumeOptions })
-      : agent.declineToolCall({ runId, toolCallId, ...memoryOption, ...resumeOptions }))) as unknown as RunHandle;
+      ? agent.approveToolCall({ runId, toolCallId, ...resumeOptions })
+      : agent.declineToolCall({ runId, toolCallId, ...resumeOptions }))) as unknown as RunHandle;
   }
 
   await afterStream?.();

@@ -3777,6 +3777,10 @@ export class DurableAgent<
       resumeScopesSnapshot,
     )) as DurableAgentResumeOptions<TOutput>;
     validateModelTimeoutSettings(resolvedOptions.modelSettings?.timeout);
+    // The first call's trace settings hold unless this resume call sets its own. The agent's
+    // defaults are already part of them, so they must not win here.
+    const { hideInput, hideOutput, requestContextKeys } = options?.tracingOptions ?? {};
+    const resumeTracingOptions = { ...resolvedOptions.tracingOptions, hideInput, hideOutput, requestContextKeys };
     // Scoped runs execute on a run-scoped copy of the request context.
     resumeRequestContext = (resolvedOptions.requestContext as typeof resumeRequestContext) ?? resumeRequestContext;
 
@@ -3799,7 +3803,10 @@ export class DurableAgent<
         getDefaultOptions: () => ({}),
         getMemory: (args?: any) => this.getMemory(args),
         resume: (innerRunId: string, innerResumeData: unknown, innerOptions?: DurableAgentResumeOptions<TOutput>) =>
-          this.resume(innerRunId, innerResumeData, innerOptions),
+          this.resume(innerRunId, innerResumeData, {
+            ...innerOptions,
+            tracingOptions: resumeTracingOptions,
+          } as DurableAgentResumeOptions<TOutput>),
         stream: (innerMessages: MessageListInput, innerOptions?: DurableAgentStreamOptions<TOutput>) =>
           this.stream(innerMessages, innerOptions),
       } as unknown as DurableAgent<any, any, TOutput>;
@@ -4038,9 +4045,6 @@ export class DurableAgent<
         const resolvedVersionId = rawConfig?.resolvedVersionId as string | undefined;
         const agentTracingPolicy = typeof ag.getTracingPolicy === 'function' ? ag.getTracingPolicy() : undefined;
         const suspendedToolCallId = resolvedOptions.toolCallId ?? suspendedToolCallIds[0];
-        // The first call's trace settings hold unless this resume call sets its own. The agent's
-        // defaults are already part of them, so they must not win here.
-        const { hideInput, hideOutput, requestContextKeys } = options?.tracingOptions ?? {};
         const resumeAgentSpan = getOrCreateSpan({
           type: SpanType.AGENT_RUN,
           outcome: null,
@@ -4063,13 +4067,7 @@ export class DurableAgent<
           },
           resumeFrom: getWorkflowResumeTracingContext(entry.agentSpan),
           tracingPolicy: agentTracingPolicy,
-          tracingOptions: {
-            ...resolvedOptions.tracingOptions,
-            hideInput,
-            hideOutput,
-            requestContextKeys,
-            traceId: origTraceId,
-          },
+          tracingOptions: { ...resumeTracingOptions, traceId: origTraceId },
           samplingDecision: entry.agentSpan?.isValid,
           requestContext: resolvedOptions.requestContext,
           mastra: this.#mastra,
