@@ -456,20 +456,29 @@ describe('runKnowledgeImport', () => {
       expect(host.startCalls).toBe(1);
     }, 3000);
 
-    it('never has two heartbeats in flight, and a hung one times out', async () => {
+    it('sends no new heartbeat while one is still unanswered, across several host timeouts', async () => {
       const host = new RecordingHost();
       host.hangHeartbeats = true;
       await runKnowledgeImport({
-        definitions: [importer(async () => new Promise(resolve => setTimeout(resolve, 150)))],
+        definitions: [importer(async () => new Promise(resolve => setTimeout(resolve, 200)))],
         host,
         bindingId: 'b1',
         heartbeatMs: 5,
-        hostCallTimeoutMs: 30,
+        hostCallTimeoutMs: 20,
       });
-      // Every 5ms unless one is in flight: each hung heartbeat holds the next off for its 30ms timeout.
-      const gaps = host.heartbeatTimes.slice(1).map((t, i) => t - host.heartbeatTimes[i]!);
-      expect(gaps.length).toBeGreaterThan(0);
-      for (const gap of gaps) expect(gap).toBeGreaterThanOrEqual(25);
+      // 200ms of run is 10 host timeouts and 40 heartbeat ticks; the first heartbeat never settles.
+      expect(host.heartbeats).toBe(1);
+    }, 3000);
+
+    it('sends the next heartbeat once the previous one has settled', async () => {
+      const host = new RecordingHost();
+      await runKnowledgeImport({
+        definitions: [importer(async () => new Promise(resolve => setTimeout(resolve, 100)))],
+        host,
+        bindingId: 'b1',
+        heartbeatMs: 5,
+      });
+      expect(host.heartbeats).toBeGreaterThan(3);
     }, 3000);
 
     it('returns on cancel while sync ignores its abort signal', async () => {

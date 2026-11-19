@@ -253,12 +253,15 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     },
   };
 
-  // One heartbeat at a time, each bounded: a hung one is given up after the host-call timeout.
+  // One heartbeat at a time: the next is sent only once the previous call has settled, so a hung
+  // host holds one call, not one per tick. Nothing awaits it; a host that stops answering stops
+  // seeing heartbeats, and its liveness check reclaims the run.
   let beating = false;
   const heartbeat = setInterval(() => {
     if (beating) return;
     beating = true;
-    within(host.heartbeat(runId, generation), hostCallTimeoutMs, () => new KnowledgeImporterHostError('timed out'))
+    host
+      .heartbeat(runId, generation)
       .then(
         ({ cancel }) => cancel && halt('canceled'),
         () => {},
