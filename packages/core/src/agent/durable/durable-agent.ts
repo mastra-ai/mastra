@@ -52,7 +52,13 @@ import type { ShouldPersistSnapshotFn, WorkflowRunState, WorkflowRunStatus } fro
 import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
 import { beginGoalActivity, stopGoalActivity } from '../goal';
-import { applyReservedMemoryContextKeys, recoverySkip, TRANSIENT_RECOVERY_RETRY_DELAY_MS } from '../helpers';
+import {
+  applyReservedMemoryContextKeys,
+  drainAgentOutput,
+  recoverySkip,
+  resolveRunId,
+  TRANSIENT_RECOVERY_RETRY_DELAY_MS,
+} from '../helpers';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { modelSpanAttributes } from '../model-span-attributes';
@@ -3006,7 +3012,7 @@ export class DurableAgent<
 
     validateModelTimeoutSettings(options?.modelSettings?.timeout);
 
-    const runId = options?.runId ?? crypto.randomUUID();
+    const runId = resolveRunId(options?.runId);
     const requestContext = options?.requestContext ?? new RequestContext();
     return this.#onReservedThread(runId, options, () => this.#startStream(messages, options, runId, requestContext));
   }
@@ -4686,7 +4692,7 @@ export class DurableAgent<
 
     validateModelTimeoutSettings(options?.modelSettings?.timeout);
 
-    const runId = options?.runId ?? crypto.randomUUID();
+    const runId = resolveRunId(options?.runId);
     const requestContext = options?.requestContext ?? new RequestContext();
     return this.#onReservedThread(runId, options, () => this.#runGenerate(messages, options, runId, requestContext));
   }
@@ -4894,10 +4900,7 @@ export class DurableAgent<
 
     let suspended = false;
     try {
-      const fullOutput = (await output.getFullOutput()) as FullOutput<TOutput>;
-      if (fullOutput.error) {
-        throw fullOutput.error;
-      }
+      const fullOutput = (await drainAgentOutput(output)) as FullOutput<TOutput>;
       suspended = fullOutput.finishReason === 'suspended';
       // On suspend, the SUSPENDED event is emitted from the tool-call step
       // before the workflow engine has persisted the snapshot. Awaiting the
@@ -4954,10 +4957,7 @@ export class DurableAgent<
     } as Parameters<DurableAgent<TAgentId, TTools, TOutput>['resume']>[2]);
     let suspended = false;
     try {
-      const fullOutput = (await result.output.getFullOutput()) as FullOutput<TOutput>;
-      if (fullOutput.error) {
-        throw fullOutput.error;
-      }
+      const fullOutput = (await drainAgentOutput(result.output)) as FullOutput<TOutput>;
       suspended = fullOutput.finishReason === 'suspended';
       if (suspended) {
         await getRunRegistryEntry(result.runId, this.#mastra)?.workflowExecution;
