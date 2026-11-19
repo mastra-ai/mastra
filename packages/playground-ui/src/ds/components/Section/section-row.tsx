@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/ds/components/Field';
 import type { FieldProps } from '@/ds/components/Field';
 import { SettingsRowControl } from '@/ds/new/settings/settings-row';
+import { settingsRowLabelClassName } from '@/ds/new/settings/settings-row-label';
 import { cn } from '@/lib/utils';
 
 export type SectionRowProps = Omit<FieldProps, 'children' | 'invalid' | 'orientation'> & {
@@ -44,7 +45,7 @@ function SectionRowBase({
         <FieldLabel
           {...(htmlFor ? { htmlFor } : {})}
           required={required}
-          className={cn(destructive && 'text-destructive-foreground')}
+          className={settingsRowLabelClassName(destructive ? 'destructive' : 'default')}
         >
           {label}
         </FieldLabel>

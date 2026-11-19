@@ -1,3 +1,6 @@
+import { unstartedCards } from '@mastra/factory/routes/work-item-selection';
+
+import { storedCard } from '../../../../../../e2e/ui/board-reads';
 import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import type { WorkItem } from '../../../factory/services/workItems';
 import type { FactoryProjectPayload } from '../../../workspaces/services/github';
@@ -218,22 +221,15 @@ export function listWorkItemsResponse(cards: WorkItem[], query: URLSearchParams)
   let total: number | undefined;
   if (scope !== null && scope !== 'sessions') return null;
   if (query.get('started') === 'false') {
-    const words = (query.get('q') ?? '').toLowerCase().split(/\s+/).filter(Boolean);
-    const matches = cards
-      .filter(card => !holdsSession(card))
-      .filter(card => {
-        // The number the server's `workItemNumber` reads: the source's own, else the one given to a card filed by hand.
-        const facts = card.workItem?.metadata;
-        const number =
-          facts?.number ?? facts?.githubIssueNumber ?? facts?.githubPullRequestNumber ?? card.metadata.cardNumber;
-        const text = [card.title, card.workItem?.key, typeof number === 'number' ? `#${number}` : null, card.sourceKey]
-          .join(' ')
-          .toLowerCase();
-        return words.every(word => text.includes(word));
-      })
-      .toSorted((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-    listed = matches.slice(0, Number(query.get('limit') ?? 20));
-    total = matches.length;
+    // The server's own search, over the cards as the server stores them.
+    const byId = new Map(cards.map(card => [card.id, card]));
+    const found = unstartedCards(
+      cards.map(card => storedCard(toWireWorkItem(card))),
+      query.get('q') ?? '',
+      Number(query.get('limit') ?? 20),
+    );
+    listed = found.cards.map(card => byId.get(card.id)!);
+    total = found.total;
   } else if (scope === 'sessions') {
     listed = cards.filter(holdsSession);
   } else if (sessionIds.length > 0) {

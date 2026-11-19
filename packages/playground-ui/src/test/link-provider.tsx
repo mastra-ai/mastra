@@ -82,13 +82,16 @@ export const stubLinkPaths = paths as LinkComponentProviderProps['paths'];
 export function TestLinkProvider({
   children,
   paths: overrides,
+  navigate = () => {},
 }: {
   children: ReactNode;
   /** Overrides individual paths, e.g. `() => ''` to simulate an app without that route. */
   paths?: Partial<LinkComponentProviderProps['paths']>;
+  /** Where the app navigates to; spy on it to assert a route a button opens. */
+  navigate?: LinkComponentProviderProps['navigate'];
 }) {
   return (
-    <LinkComponentProvider Link={StubLink} navigate={() => {}} paths={{ ...stubLinkPaths, ...overrides }}>
+    <LinkComponentProvider Link={StubLink} navigate={navigate} paths={{ ...stubLinkPaths, ...overrides }}>
       {children}
     </LinkComponentProvider>
   );

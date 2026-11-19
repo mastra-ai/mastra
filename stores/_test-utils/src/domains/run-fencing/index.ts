@@ -244,7 +244,16 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
           live: false,
         });
         expect(await workflows.releaseRunOwnership(fenceA)).toBe(true);
-        expect((await workflows.renewRunOwnership({ ...fenceA, leaseMs: LEASE_MS })).renewed).toBe(false);
+        // A renewal after release fails and returns the released record unchanged; core reads it to tell its own
+        // release from a takeover (#30206).
+        const lateRenewal = await workflows.renewRunOwnership({ ...fenceA, leaseMs: LEASE_MS });
+        expect(lateRenewal.renewed).toBe(false);
+        expect(lateRenewal.record).toMatchObject({
+          generation: fenceA.generation,
+          ownerId: 'owner-a',
+          leaseExpiresAt: null,
+          live: false,
+        });
 
         const fenceB = await claimed(runId, 'owner-b');
         expect(fenceB.generation).toBe(fenceA.generation + 1);

@@ -57,7 +57,7 @@ function ErrorSession({
     initialMessages: messages,
   });
   useEffect(() => {
-    if (liveEvent) onEvent(liveEvent);
+    if (liveEvent) onEvent(liveEvent, false);
   }, [liveEvent, onEvent]);
   const session = (
     <ChatSessionContext.Provider
@@ -94,7 +94,7 @@ function ErrorSession({
             busy: false,
             phase: 'awaiting',
             initializing: false,
-            historyInitializing: false,
+            loadingHistory: false,
             initialHistoryReady: true,
             localUser,
             failLocalUser,

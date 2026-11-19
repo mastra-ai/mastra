@@ -724,13 +724,31 @@ describe('MastraFactory.prepare', () => {
     await expect(factory.prepare()).resolves.toBeDefined();
   });
 
-  it('passes the host-owned keyed Knowledge instance through the SDK mount', async () => {
-    const instance = new Knowledge({ id: 'mastra', description: 'Factory knowledge', scopes: {} });
-    const knowledge = { key: 'mastra', instance };
+  it('mounts a bare Knowledge instance and serves its reads under the instance id', async () => {
+    const knowledge = new Knowledge({ id: 'shared', description: 'Factory knowledge', scopes: {} });
 
     const config = await prepareFactory({ storage: fakeStorage(), knowledge });
+    assembleFactoryApiRoutesSpy.mockClear();
+    (config.buildApiRoutes as (deps: object) => ApiRoute[])({ controller: sessionNotifierStub, authStorage: {} });
 
-    expect(config.knowledge).toEqual(knowledge);
+    expect(config.knowledge).toBe(knowledge);
+    expect(assembleFactoryApiRoutesSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ knowledgeEnabled: true, knowledgeKey: 'shared' }),
+    );
+  });
+
+  it('still mounts the { key, instance } form and serves its reads under that key', async () => {
+    const instance = new Knowledge({ id: 'shared', description: 'Factory knowledge', scopes: {} });
+    const knowledge = { key: 'legacy', instance };
+
+    const config = await prepareFactory({ storage: fakeStorage(), knowledge });
+    assembleFactoryApiRoutesSpy.mockClear();
+    (config.buildApiRoutes as (deps: object) => ApiRoute[])({ controller: sessionNotifierStub, authStorage: {} });
+
+    expect(config.knowledge).toBe(knowledge);
+    expect(assembleFactoryApiRoutesSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ knowledgeEnabled: true, knowledgeKey: 'legacy' }),
+    );
   });
 
   it('turns Knowledge off in the SDK mount when the Factory has no Knowledge config', async () => {
@@ -1621,6 +1639,9 @@ describe('MastraFactory.prepare', () => {
 
         expect(Object.keys(tools).filter(name => name.startsWith('linear_'))).toEqual([]);
         expect(warn).toHaveBeenCalledWith(expect.stringContaining('Mastra Connect tools are unavailable for this run'));
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining('[factory] incidentio tools are unavailable for this run'),
+        );
       });
 
       it("offers the host's own tools instead of the project's connections", async () => {
@@ -3207,6 +3228,33 @@ describe('MastraFactory.prepare integrations', () => {
     const args = await factory.prepare();
     expect(workers).not.toHaveBeenCalled();
     expect(args).not.toHaveProperty('workers');
+  });
+
+  it('runs one Platform Connect event poller, routing to the Platform integrations that read event logs', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_factory');
+    onTestFinished(() => vi.unstubAllEnvs());
+    const args = await new MastraFactory({ secretEncryption, storage: fakeStorage() }).prepare();
+
+    const names = (args.workers ?? []).map(worker => worker.name);
+    expect(names.filter(name => name === 'platform-connect-event-poller')).toHaveLength(1);
+    expect(names).not.toContain('platform-gitlab-events');
+  });
+
+  it('runs no Platform Connect event poller when no installed integration reads event logs', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_factory');
+    onTestFinished(() => vi.unstubAllEnvs());
+    // Explicit integrations fill every Platform slot but Vanta, which has no events.
+    const args = await new MastraFactory({
+      secretEncryption,
+      storage: fakeStorage(),
+      integrations: ['github', 'incidentio', 'jira', 'gitlab', 'linear'].map(id => fakeIntegration({ id })),
+    }).prepare();
+
+    const names = (args.workers ?? []).map(worker => worker.name);
+    expect(names).not.toContain('platform-connect-event-poller');
+    expect(names).toContain('vanta-issue-reconcile');
   });
 
   it('omits the workers option when no integration contributes workers', async () => {

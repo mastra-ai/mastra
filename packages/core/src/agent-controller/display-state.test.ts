@@ -746,6 +746,38 @@ describe('tool lifecycle', () => {
       expect([...session.displayState.get().pendingSuspensions.values()].map(s => s.runId)).toEqual(['run-other']);
     });
 
+    it('clears only the prompts of the ending run when another run ends while its listener waits', async () => {
+      for (const runId of ['run-a', 'run-b', 'run-other']) {
+        emit(session, {
+          type: 'tool_suspended',
+          resourceId: 'resource',
+          threadId: 'thread',
+          runId,
+          toolCallId: `call-${runId}`,
+          toolName: 'ask_user',
+          args: {},
+          suspendPayload: {},
+        });
+      }
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      const seen: Array<string | null> = [];
+      let calls = 0;
+      session.onBeforeAgentEnd(async (_event, context) => {
+        // The first run to end waits here while the second one ends.
+        if (calls++ === 0) await gate;
+        seen.push(context?.runId ?? null);
+      });
+
+      const endA = session.finishAgentRun('error', { runId: 'run-a' });
+      await session.finishAgentRun('error', { runId: 'run-b' });
+      release();
+      await endA;
+
+      expect(seen).toEqual(['run-b', 'run-a']);
+      expect([...session.displayState.get().pendingSuspensions.values()].map(s => s.runId)).toEqual(['run-other']);
+    });
+
     it('keeps duplicate tool-call ids from separate runs independently addressable', () => {
       for (const runId of ['run-a', 'run-b']) {
         emit(session, {

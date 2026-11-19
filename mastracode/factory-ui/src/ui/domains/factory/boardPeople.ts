@@ -3,6 +3,7 @@ import { BOARD_PERSON_FIELDS, factoryParticipantId } from '@mastra/factory/work-
 import type { ProviderPerson } from '@mastra/factory/work-items/card-people';
 
 import type { BoardFilterFieldId, BoardFilterState } from './boardFilters';
+import { githubAvatarUrl } from './githubAvatar';
 import type { AuditActorProfile, AuditEventPage } from './services/audit';
 
 export interface BoardParticipant extends AuditActorProfile {
@@ -50,7 +51,7 @@ export function withPeopleUnfolded(filters: BoardFilterState, personId: PersonId
 
 function providerParticipant(person: ProviderPerson): BoardParticipant {
   if (person.source !== 'github') return person;
-  return { ...person, avatarUrl: `https://github.com/${encodeURIComponent(person.name)}.png?size=64` };
+  return { ...person, avatarUrl: githubAvatarUrl(person.name) };
 }
 
 /**

@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
 import { Mastra } from '@mastra/core/mastra';
@@ -1198,6 +1200,52 @@ describe('agent-controller routes', () => {
       expect([first.value, second.value]).toEqual([{ type: 'agent_start' }, { type: 'agent_end' }]);
     });
 
+    it('opens a displayState=false stream on the message in flight, then streams its deltas', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({
+        resourceId: 'user-late-no-snapshots',
+        id: 'user-late-no-snapshots',
+        ownerId: 'code',
+      });
+      const message = {
+        id: 'assistant-in-flight',
+        role: 'assistant',
+        createdAt: new Date('2026-01-02T03:04:05.000Z'),
+        content: { format: 2, parts: [{ type: 'text', text: '' }] },
+      } as any;
+      session.emit({ type: 'agent_start' });
+      session.emit({ type: 'message_start', message });
+      session.emit({ type: 'message_update', id: message.id, event: { type: 'text-delta', delta: 'so far' } });
+
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-late-no-snapshots',
+        displayState: false,
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+      const reader = stream.getReader();
+      session.emit({ type: 'message_update', id: message.id, event: { type: 'text-delta', delta: ' and on' } });
+      const frames: any[] = [];
+      while (frames.length < 2) {
+        const { value } = await reader.read();
+        if (value && typeof value === 'object') frames.push(value);
+      }
+      await reader.cancel();
+
+      expect(frames).toEqual([
+        {
+          type: 'message_start',
+          message: expect.objectContaining({
+            id: 'assistant-in-flight',
+            content: expect.objectContaining({ parts: [{ type: 'text', text: 'so far' }] }),
+          }),
+        },
+        { type: 'message_update', id: 'assistant-in-flight', event: { type: 'text-delta', delta: ' and on' } },
+      ]);
+    });
+
     // The adapter can hand the route a signal that aborted while earlier middleware ran. Without checking
     // `aborted` up front the session subscription and its 25 s heartbeat stay alive until something cancels the
     // stream, which a client that already left never does. (#28480)
@@ -1222,7 +1270,8 @@ describe('agent-controller routes', () => {
       const frames: unknown[] = [];
       for (let next = await reader.read(); !next.done; next = await reader.read()) frames.push(next.value);
 
-      expect(frames.map(frame => (frame as { type: string }).type)).toEqual(['display_state_changed']);
+      // Frames still waiting for a client that is gone are discarded with it.
+      expect(frames).toEqual([]);
     });
 
     it('still sends live display state changes by default', async () => {
@@ -1768,7 +1817,8 @@ describe('agent-controller routes', () => {
         const controller = mastra.getAgentController('code')!;
         await controller.init();
         const session = await controller.createSession({ resourceId: 'user-held', id: 'user-held', ownerId: 'code' });
-        const readers = [await openStream('user-held'), await openStream('user-held')];
+        // Both clients keep up, so every snapshot reaches them.
+        const wires = Promise.all([await openStream('user-held'), await openStream('user-held')].map(readWire));
 
         session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'write_file', args: { path: 'a.ts' } });
         session.emit({ type: 'tool_end', toolCallId: 'call-1', result: 'ok', isError: false });
@@ -1779,7 +1829,7 @@ describe('agent-controller routes', () => {
         session.emit(held);
         session.emit({ type: 'agent_end', reason: 'complete' });
 
-        for (const frames of await Promise.all(readers.map(readWire))) {
+        for (const frames of await wires) {
           const snapshots = frames.filter(frame => frame.type === 'display_state_changed');
           // Seed, tool_start, tool_end, the held event twice, agent_end.
           expect(snapshots.map(frame => Object.keys(frame.displayState.modifiedFiles))).toEqual([
@@ -1790,6 +1840,238 @@ describe('agent-controller routes', () => {
             [],
             [],
           ]);
+        }
+      });
+    });
+
+    // A tab whose client reads slower than the session emits (a laptop asleep,
+    // a bad network, a dead connection not yet detected, or a server too busy to
+    // write) used to hold every frame in memory, each snapshot a full copy of the
+    // display state. Frames now wait in a backlog the route bounds.
+    describe('a client that reads slower than the session emits', () => {
+      // Real runs emit over many event-loop turns, not in one synchronous loop.
+      const nextTurn = () => new Promise(resolve => setImmediate(resolve));
+      const wire = (frame: unknown) => {
+        const serialized = serializeStreamChunk(redactStreamChunk(frame as any));
+        if (!serialized.ok) throw serialized.error;
+        return serialized.json;
+      };
+
+      async function openSession(id: string) {
+        const controller = mastra.getAgentController('code')!;
+        await controller.init();
+        const session = await controller.createSession({ resourceId: id, id, ownerId: 'code' });
+        const open = async () => {
+          const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+            mastra,
+            controllerId: 'code',
+            sessionId: id,
+            abortSignal: new AbortController().signal,
+          } as any)) as ReadableStream<unknown>;
+          return stream.getReader();
+        };
+        return { session, open };
+      }
+
+      function recordMetrics() {
+        const emitted: { name: string; value: number; labels?: Record<string, string> }[] = [];
+        vi.spyOn(mastra, 'metrics', 'get').mockReturnValue({
+          emit: (name: string, value: number, labels?: Record<string, string>) => emitted.push({ name, value, labels }),
+        } as any);
+        return emitted;
+      }
+
+      it('a tab that stops reading holds one snapshot, not one per update, and still gets every event in order', async () => {
+        const { session, open } = await openSession('user-stalled');
+        const metrics = recordMetrics();
+        const reader = await open();
+        let snapshotsSent = 1; // the seed
+        session.subscribe(event => {
+          if (event.type === 'display_state_changed') snapshotsSent++;
+        });
+
+        const emitted: string[] = [];
+        for (let i = 0; i < 500; i++) {
+          session.emit({
+            type: 'tool_start',
+            toolCallId: `call-${i}`,
+            toolName: 'read_file',
+            args: { path: `${i}.ts` },
+          });
+          session.emit({ type: 'tool_end', toolCallId: `call-${i}`, result: `contents of ${i}.ts`, isError: false });
+          emitted.push(`tool_start:call-${i}`, `tool_end:call-${i}`);
+          await nextTurn();
+        }
+
+        // The tab wakes up and reads everything it was sent.
+        const frames: any[] = [];
+        let last: any;
+        do {
+          const { done, value } = await reader.read();
+          expect(done).toBe(false);
+          last = value;
+          if (typeof last !== 'string') frames.push(last);
+        } while (
+          !(
+            last?.type === 'display_state_changed' &&
+            frames.some(f => f.type === 'tool_end' && f.toolCallId === 'call-499')
+          )
+        );
+        await reader.cancel();
+
+        const snapshots = frames.filter(frame => frame.type === 'display_state_changed');
+        // Only the snapshots of the last turn were still waiting, not one per update.
+        expect(snapshots.length).toBeLessThanOrEqual(2);
+        expect(
+          frames.filter(frame => frame.type.startsWith('tool_')).map(frame => `${frame.type}:${frame.toolCallId}`),
+        ).toEqual(emitted);
+        // The last snapshot is the state now, as a tab connecting now is seeded with it.
+        const fresh = await open();
+        const seed = (await fresh.read()).value;
+        await fresh.cancel();
+        expect(wire(frames.at(-1))).toBe(wire(seed));
+        expect(metrics).toContainEqual({
+          name: 'mastra_agent_controller_sse_snapshots_dropped_total',
+          value: snapshotsSent - snapshots.length,
+          labels: { controllerId: 'code' },
+        });
+      });
+
+      it('a tab that keeps up gets every frame the session sent, byte for byte', async () => {
+        const { session, open } = await openSession('user-keeps-up');
+        const reader = await open();
+
+        // What the route sent before it bounded the backlog: every event as it
+        // was dispatched, display-state Maps as records.
+        const wireEvent = (event: any) =>
+          event.type === 'display_state_changed'
+            ? {
+                ...event,
+                displayState: Object.fromEntries(
+                  Object.entries(event.displayState).map(([key, value]) => [
+                    key,
+                    value instanceof Map ? Object.fromEntries(value) : value,
+                  ]),
+                ),
+              }
+            : event;
+        const expected = [wire(wireEvent({ type: 'display_state_changed', displayState: session.displayState.get() }))];
+        session.subscribe(event => {
+          expected.push(wire(wireEvent(event)));
+        });
+
+        const received: string[] = [];
+        const reading = (async () => {
+          for (let next = await reader.read(); !next.done; next = await reader.read()) {
+            if (typeof next.value !== 'string') received.push(wire(next.value));
+          }
+        })();
+
+        // A turn with streamed text and, in single synchronous bursts, a tool
+        // call that starts and ends and a run that ends with its message.
+        const message = {
+          id: 'assistant-1',
+          role: 'assistant',
+          createdAt: new Date('2026-01-02T03:04:05.000Z'),
+          content: { format: 2, parts: [{ type: 'text', text: '' }] },
+        } as any;
+        session.emit({ type: 'agent_start' });
+        session.emit({ type: 'message_start', message });
+        for (let i = 0; i < 20; i++) {
+          session.emit({ type: 'message_update', id: message.id, event: { type: 'text-delta', delta: `word ${i} ` } });
+          await new Promise(resolve => setTimeout(resolve, i % 4 === 0 ? 20 : 0));
+        }
+        session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'grep', args: { query: 'needle' } });
+        session.emit({ type: 'tool_end', toolCallId: 'call-1', result: { matches: 3 }, isError: false });
+        await nextTurn();
+        session.emit({ type: 'message_end', id: message.id });
+        session.emit({ type: 'agent_end', reason: 'complete' });
+        await new Promise(resolve => setTimeout(resolve, 30));
+        await reader.cancel();
+        await reading;
+
+        const hash = (frames: string[]) => createHash('sha256').update(frames.join('\n')).digest('hex');
+        expect(received).toHaveLength(expected.length);
+        expect(hash(received)).toBe(hash(expected));
+      });
+
+      it('a tab too far behind is closed, and its reconnect starts from the current state', async () => {
+        const { session, open } = await openSession('user-far-behind');
+        const metrics = recordMetrics();
+        const reader = await open();
+
+        // A long run the tab never reads: 5,200 events, none of which are dropped.
+        for (let i = 0; i < 2_600; i++) {
+          session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'bash', args: { step: i } });
+          session.emit({ type: 'tool_end', toolCallId: 'call-1', result: `step ${i}`, isError: false });
+          await nextTurn();
+        }
+
+        // The backlog was discarded and the stream ended, so the client reconnects.
+        expect(await reader.read()).toEqual({ done: true, value: undefined });
+        expect(metrics).toContainEqual({
+          name: 'mastra_agent_controller_sse_slow_client_closes_total',
+          value: 1,
+          labels: { controllerId: 'code', reason: 'max_pending' },
+        });
+
+        session.emit({ type: 'tool_start', toolCallId: 'call-2', toolName: 'bash', args: { step: 'after' } });
+        const reconnected = await open();
+        const seed = (await reconnected.read()).value as any;
+        await reconnected.cancel();
+        expect(seed.type).toBe('display_state_changed');
+        expect(seed.displayState.activeTools['call-1']).toMatchObject({ status: 'completed', result: 'step 2599' });
+        expect(seed.displayState.activeTools['call-2']).toMatchObject({ status: 'running' });
+      });
+
+      it('a tab that stopped reading over a minute ago is closed even when the session goes quiet', async () => {
+        const { session, open } = await openSession('user-asleep');
+        const metrics = recordMetrics();
+        vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+        try {
+          const reader = await open();
+          session.emit({ type: 'agent_start' });
+
+          // Heartbeats find the same frames still waiting at 25 s and 50 s.
+          vi.advanceTimersByTime(50_000);
+          expect(metrics).toEqual([]);
+          vi.advanceTimersByTime(25_000);
+
+          expect(metrics).toContainEqual({
+            name: 'mastra_agent_controller_sse_slow_client_closes_total',
+            value: 1,
+            labels: { controllerId: 'code', reason: 'max_wait' },
+          });
+          expect(await reader.read()).toEqual({ done: true, value: undefined });
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      // The age cap measures the oldest frame still waiting. A snapshot that a
+      // newer one replaced must not count once the frames before it are read.
+      it('a tab that is still reading is not closed for a snapshot that was replaced', async () => {
+        const { session, open } = await openSession('user-reading-slowly');
+        const metrics = recordMetrics();
+        vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+        try {
+          const reader = await open();
+          expect(((await reader.read()).value as any).type).toBe('display_state_changed');
+          session.emit({ type: 'agent_start' });
+          await nextTurn();
+          vi.advanceTimersByTime(50_000);
+          // Its snapshot replaces the one queued with agent_start 50 s ago.
+          session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'bash', args: {} });
+          expect(((await reader.read()).value as any).type).toBe('agent_start');
+
+          // What is waiting now has waited 25 s.
+          vi.advanceTimersByTime(25_000);
+
+          expect(metrics.filter(m => m.name === 'mastra_agent_controller_sse_slow_client_closes_total')).toEqual([]);
+          expect(((await reader.read()).value as any).type).toBe('tool_start');
+          await reader.cancel();
+        } finally {
+          vi.useRealTimers();
         }
       });
     });

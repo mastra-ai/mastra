@@ -1,12 +1,8 @@
 import { KnowledgeLinksProvider } from '@mastra/playground-ui/domains/chat/knowledge';
-import { forwardRef } from 'react';
-import type { AnchorHTMLAttributes, ReactNode } from 'react';
-import { Link as RouterLink, useParams } from 'react-router';
+import type { ReactNode } from 'react';
+import { useParams } from 'react-router';
 
-const Link = forwardRef<HTMLAnchorElement, AnchorHTMLAttributes<HTMLAnchorElement>>(({ href = '', ...props }, ref) => (
-  <RouterLink ref={ref} to={href} {...props} />
-));
-Link.displayName = 'FactoryKnowledgeLink';
+import { HrefLink } from '../../../../ui/HrefLink';
 
 /** Knowledge page links in chat open this Factory's Knowledge page; a chat outside a Factory shows names only. */
 export function FactoryKnowledgeLinks({ children }: { children: ReactNode }) {
@@ -16,7 +12,7 @@ export function FactoryKnowledgeLinks({ children }: { children: ReactNode }) {
       ? `/factories/${encodeURIComponent(factoryId)}/knowledge?page=${encodeURIComponent(pageId)}&view=page`
       : undefined;
   return (
-    <KnowledgeLinksProvider pageHref={pageHref} Link={Link}>
+    <KnowledgeLinksProvider pageHref={pageHref} Link={HrefLink}>
       {children}
     </KnowledgeLinksProvider>
   );

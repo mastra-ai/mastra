@@ -14,7 +14,7 @@
  * be compared for both cost and output.
  *
  * Run from packages/server after building @mastra/core:
- *   pnpm tsx scripts/bench-agent-controller-stream.ts [--deltas 500] [--clients 0,1,5] [--result-kb 100] [--repeat 5]
+ *   pnpm tsx scripts/bench-agent-controller-stream.ts [--deltas 500] [--clients 0,1,5] [--result-kb 100] [--repeat 5] [--display-state false]
  */
 import { createHash } from 'node:crypto';
 import { Session as InspectorSession } from 'node:inspector/promises';
@@ -38,6 +38,7 @@ const { values } = parseArgs({
     'result-kb': { type: 'string', default: '100' },
     'gap-ms': { type: 'string', default: '17' },
     repeat: { type: 'string', default: '5' },
+    'display-state': { type: 'string', default: 'true' },
   },
 });
 const DELTAS = Number(values.deltas);
@@ -45,6 +46,7 @@ const CLIENT_COUNTS = values.clients!.split(',').map(Number);
 const RESULT_BYTES = Number(values['result-kb']) * 1024;
 const GAP_MS = Number(values['gap-ms']);
 const REPEAT = Number(values.repeat);
+const DISPLAY_STATE = values['display-state'] !== 'false';
 
 type Client = { bytes: number; frames: number; hash: ReturnType<typeof createHash>; done: Promise<void> };
 
@@ -56,6 +58,7 @@ async function openClient(mastra: Mastra, sessionId: string, abortSignal: AbortS
     mastra,
     controllerId: 'code',
     sessionId,
+    displayState: DISPLAY_STATE,
     abortSignal,
   } as any)) as ReadableStream<unknown>;
   const reader = stream.getReader();
@@ -228,7 +231,9 @@ const fmt = (n: number) => n.toFixed(1);
 const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)]!;
 
 async function main() {
-  console.log(`deltas=${DELTAS} result=${RESULT_BYTES / 1024}KB gap=${GAP_MS}ms node=${process.version}`);
+  console.log(
+    `deltas=${DELTAS} result=${RESULT_BYTES / 1024}KB gap=${GAP_MS}ms displayState=${DISPLAY_STATE} node=${process.version}`,
+  );
   await measure(1, false); // warm up
   for (const clientCount of CLIENT_COUNTS) {
     // Profile first: once the stream path is fully optimized, inlined frames can
