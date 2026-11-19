@@ -30,6 +30,7 @@ export const CardGridItem = ({
   href,
   logo,
   preserveLogoColor = false,
+  centerLogo = false,
   children,
 }: {
   title: string
@@ -37,6 +38,7 @@ export const CardGridItem = ({
   href: string
   logo?: string | React.ReactNode
   preserveLogoColor?: boolean
+  centerLogo?: boolean
   children?: React.ReactNode
 }) => {
   const hasContent = !!(children || description)
@@ -58,11 +60,11 @@ export const CardGridItem = ({
               />
             ) : (
               <div
-                className={
-                  preserveLogoColor
-                    ? 'inline-flex h-8 w-8 items-center justify-center'
-                    : 'inline-flex h-8 w-8 items-center justify-center text-black dark:text-white'
-                }
+                className={cn(
+                  'h-8 w-8',
+                  !preserveLogoColor && 'text-black dark:text-white',
+                  centerLogo && 'inline-flex items-center justify-center',
+                )}
               >
                 {logo}
               </div>
