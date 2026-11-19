@@ -7,7 +7,7 @@ description: "How Gateway names models, chooses a provider route, and fails over
 
 ## Model IDs
 
-Models use `provider/model` IDs, for example `__GATEWAY_OPENAI_MODEL__` or `__GATEWAY_ANTHROPIC_MODEL_SONNET__`. [`GET /v1/models`](/docs/mastra-platform/gateway/api/models) lists every ID available to your key. A model is listed in the catalog only when Gateway has a published price for it.
+Models use `provider/model` IDs, for example `__GATEWAY_OPENAI_MODEL__` or `__GATEWAY_ANTHROPIC_MODEL_SONNET__`. Browse IDs in the [model catalog](https://mastra.ai/ai-gateway/models), or call [`GET /v1/models`](/docs/mastra-platform/gateway/api/models) to list every ID available to your key. A model is listed in the catalog only when Gateway has a published price for it.
 
 From a Mastra agent, add the `mastra/` prefix: `mastra/__GATEWAY_OPENAI_MODEL__`.
 

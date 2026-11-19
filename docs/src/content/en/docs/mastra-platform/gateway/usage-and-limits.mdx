@@ -7,7 +7,7 @@ description: "How Gateway bills requests, records usage, applies spend caps and 
 
 ## Pricing
 
-Gateway uses prepaid credit. Each model's price is published in the catalog, and a model is listed in [`/v1/models`](/docs/mastra-platform/gateway/api/models) only when it has a price.
+Gateway uses prepaid credit. Each model's price is published in the [model catalog](https://mastra.ai/ai-gateway/models), and a model is listed in [`/v1/models`](/docs/mastra-platform/gateway/api/models) only when it has a price.
 
 - You pay for the attempt that served you. Failed token-endpoint attempts with a known provider cost are charged at that cost, without markup, even if every attempt fails.
 - Web search calls and generated images are priced separately. Images are charged only when delivered.
