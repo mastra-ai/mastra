@@ -1,10 +1,8 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { useObservabilityViews } from '../hooks/use-observability-views';
 import type { ObservabilityViewsState } from '../hooks/use-observability-views';
 import { useSavedViewsSource } from '../saved-views/saved-views-source';
 import { ObservabilityHeaderSlotContext } from './observability-header-slot';
-import type { TracesExplorerFeatures } from '@/domains/traces/components/traces-explorer/traces-explorer-context';
 import { TracesSpansSwitch, TracesSpansSwitchSkeleton } from '@/domains/traces/components/traces-spans-switch';
 import type { ObservabilityView } from '@/domains/traces/components/traces-spans-switch';
 import { PageLayout } from '@/ds/components/PageLayout';
@@ -15,7 +13,8 @@ export type ObservabilityBreadcrumbsState = Pick<ObservabilityViewsState, 'isLoa
 
 export type ObservabilityPageLayoutProps = {
   current: ObservabilityView;
-  features?: TracesExplorerFeatures;
+  /** The views to offer and whether the switch shows. The layout never fetches (Studio: `useObservabilityViews`). */
+  views: ObservabilityViewsState;
   onViewChange: (view: ObservabilityView) => void;
   /** The host's breadcrumbs. They can name the current view when the switch does not show it. */
   breadcrumbs: (state: ObservabilityBreadcrumbsState) => ReactNode;
@@ -24,16 +23,16 @@ export type ObservabilityPageLayoutProps = {
 
 /**
  * The header shared by the traces, spans and threads pages: breadcrumbs plus the view switch pinned
- * under them. Router-agnostic: the host passes the current view, navigation and its page body.
+ * under them. Router-agnostic and data-agnostic: the host passes the current view, the views it offers,
+ * navigation and its page body.
  */
 export function ObservabilityPageLayout({
   current,
-  features,
+  views: { views, isLoading, showSwitch },
   onViewChange,
   breadcrumbs,
   children,
 }: ObservabilityPageLayoutProps) {
-  const { views, isLoading, showSwitch } = useObservabilityViews({ current, features });
   const [headerSlot, setHeaderSlot] = useState<HTMLElement | null>(null);
   // Saved views portal into the end of this row, so it exists whenever the host stores them.
   const savedViews = useSavedViewsSource();

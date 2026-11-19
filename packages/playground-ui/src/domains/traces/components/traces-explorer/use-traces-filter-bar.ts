@@ -1,6 +1,3 @@
-import type { EntityType } from '@mastra/core/observability';
-import { useMastraClient } from '@mastra/react';
-import { createTraceQueryValuesResolver, useEntityNames, useEnvironments } from '@mastra/react/hooks/traces';
 import { useMemo } from 'react';
 import {
   createTraceFilterBarFields,
@@ -8,10 +5,8 @@ import {
   traceFiltersToFilterBarExpression,
   traceTokensToFilterBarItems,
 } from '../../trace-filters';
-import type { TraceQueryRelatedScope } from '../../trace-query-filters';
-import { getSelectedEntityOption } from './traces-explorer-actions';
 import { useTracesConfig, useTracesFilters } from './traces-explorer-context';
-import { useTracesDiscovery } from './use-traces-discovery';
+import type { TracesExplorerFilterSuggestions } from './traces-explorer-data';
 import { withTokenSearchFields } from '@/domains/observability/lib/token-search-predicate';
 import { isFilterBarGroup } from '@/ds/components/FilterBar';
 import type { FilterBarExpression, FilterBarField, FilterBarItem } from '@/ds/components/FilterBar';
@@ -23,8 +18,16 @@ import {
 
 const NO_SUGGESTIONS: string[] = [];
 
-/** The fields the trace filter bar offers: time range, trace fields, and discovered metadata. */
-export function useTracesFilterBarFields(): FilterBarField[] {
+/**
+ * The fields the trace filter bar offers: time range, trace fields, and discovered metadata. The
+ * suggestions come from the host (Studio: `useTracesFilterSuggestionsQuery`); without them, the
+ * fields take free text.
+ */
+export function useTracesFilterBarFields({
+  rootEntityNames = NO_SUGGESTIONS,
+  environments = NO_SUGGESTIONS,
+  resolveValues,
+}: TracesExplorerFilterSuggestions = {}): FilterBarField[] {
   const {
     hiddenFieldIds,
     withTokenSearch,
@@ -33,15 +36,8 @@ export function useTracesFilterBarFields(): FilterBarField[] {
     withTimeToFirstChunk,
     withTimeToFirstToken,
     withOutcomeFields,
-    discoveryTimeRange,
+    discovery: { fields: metadataFields, canonicalFields },
   } = useTracesConfig();
-  const { filters } = useTracesFilters();
-  const selectedEntityType = getSelectedEntityOption(filters.tokens)?.entityType as EntityType | undefined;
-
-  const { data: rootEntityNames = NO_SUGGESTIONS } = useEntityNames({ entityType: selectedEntityType, rootOnly: true });
-  const { data: environments = NO_SUGGESTIONS } = useEnvironments();
-  const { fields: metadataFields, canonicalFields } = useTracesDiscovery();
-  const client = useMastraClient();
 
   // Memoized for correctness: static suggestion lists live on the fields and become the value
   // editor's Combobox `items`, which loops if handed a new array on every render.
@@ -55,10 +51,7 @@ export function useTracesFilterBarFields(): FilterBarField[] {
           hiddenFieldIds,
           metadataFields,
           canonicalTraceFields: canonicalFields,
-          valueSuggestions: withQueryTrace
-            ? (relatedScope: TraceQueryRelatedScope | 'trace', path: string) =>
-                createTraceQueryValuesResolver(client, discoveryTimeRange, relatedScope, path)
-            : undefined,
+          valueSuggestions: withQueryTrace ? resolveValues : undefined,
           withQueryTrace,
           withRootDuration,
           withTimeToFirstChunk,
@@ -81,8 +74,7 @@ export function useTracesFilterBarFields(): FilterBarField[] {
       withTimeToFirstChunk,
       withTimeToFirstToken,
       withOutcomeFields,
-      client,
-      discoveryTimeRange,
+      resolveValues,
     ],
   );
 }

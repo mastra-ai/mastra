@@ -15,13 +15,13 @@ import type { TraceColumnPreferences } from '../../../trace-list-columns';
 import { TracesExplorer, useTracesConfig, useTracesFilterBar, useTracesFilterBarFields } from '../index';
 import type {
   FeedbackOptions,
+  TracesExplorerFeatures,
   TracesExplorerLayoutProps,
   TracesExplorerPanelProps,
   TracesExplorerRootProps,
 } from '../index';
 import { DEFAULT_TRACES_FILTERS, DEFAULT_TRACES_SORT, EMPTY_TRACES_SELECTION } from '../traces-explorer-actions';
 import type { TracesExplorerState, TracesFilters, TracesSelection, TracesSort } from '../traces-explorer-actions';
-import type { TracesExplorerFeatures } from '../traces-explorer-context';
 import {
   emptyDatasets,
   emptyEntityNames,
@@ -54,6 +54,8 @@ import {
   weatherThreadLightTraces,
   weatherThreadTraceSpans,
 } from './fixtures/traces-explorer';
+import { StudioFilterBar, StudioList, StudioPanel, StudioTracesExplorer } from './studio-traces-explorer';
+import type { StudioTracesExplorerProps } from './studio-traces-explorer';
 import {
   OBSERVABILITY_LIST_POLL_INTERVAL_MS,
   OBSERVABILITY_LIST_REFETCH_INTERVAL_MS,
@@ -170,7 +172,7 @@ type HarnessProps = {
   onChange?: (next: TracesExplorerState) => void;
   initialSort?: TracesSort;
   onSortChange?: (next: TracesSort) => void;
-  traceHref?: TracesExplorerPanelProps['traceHref'];
+  traceHref?: StudioTracesExplorerProps['traceHref'];
   renderError?: TracesExplorerLayoutProps['renderError'];
   panelProps?: Partial<TracesExplorerPanelProps>;
 };
@@ -196,7 +198,7 @@ function Harness({
   rootSource,
   feedbackOptions,
   baselineFilters,
-  filterBar = <TracesExplorer.FilterBar />,
+  filterBar,
   onChange,
   initialSort = DEFAULT_TRACES_SORT,
   onSortChange,
@@ -210,7 +212,7 @@ function Harness({
   const [sort, setSort] = useState<TracesSort>(initialSort);
 
   return (
-    <TracesExplorer
+    <StudioTracesExplorer
       selection={selection}
       filters={filters}
       onChange={next => {
@@ -229,6 +231,7 @@ function Harness({
       rootSource={rootSource}
       feedbackOptions={feedbackOptions}
       initialFilters={baselineFilters}
+      traceHref={traceHref}
     >
       <TracesExplorer.Layout
         renderError={renderError}
@@ -240,15 +243,15 @@ function Harness({
         }
         actionRow={
           <div>
-            {filterBar}
+            {filterBar ?? <StudioFilterBar />}
             <TracesExplorer.ColumnsMenu />
           </div>
         }
       >
-        <TracesExplorer.List />
-        <TracesExplorer.Panel onOpenScore={() => {}} traceHref={traceHref} {...panelProps} />
+        <StudioList />
+        <StudioPanel {...panelProps} />
       </TracesExplorer.Layout>
-    </TracesExplorer>
+    </StudioTracesExplorer>
   );
 }
 
@@ -419,7 +422,7 @@ describe('TracesExplorer', () => {
 
   describe('when a trace is open', () => {
     const openTrace = async (
-      traceHref?: TracesExplorerPanelProps['traceHref'],
+      traceHref?: StudioTracesExplorerProps['traceHref'],
       navigate?: ComponentProps<typeof TestLinkProvider>['navigate'],
     ) => {
       setExplorerHandlers();
@@ -1463,8 +1466,8 @@ describe('TracesExplorer', () => {
       expect(within(dialog).getByRole('button', { name: 'Add to dataset' })).toBeTruthy();
     });
 
-    it('hides "Add to dataset" when the host turns it off', async () => {
-      const dialog = await openTracePanel({ withAddTraceToDataset: false });
+    it('hides "Add to dataset" when the host renders no dataset dialog', async () => {
+      const dialog = await openTracePanel({ renderDatasetDialog: undefined });
 
       expect(within(dialog).queryByRole('button', { name: 'Add to dataset' })).toBeNull();
       expect(within(dialog).getByRole('button', { name: 'Download trace JSON' })).toBeTruthy();
@@ -1700,7 +1703,7 @@ describe('TracesExplorer.Layout', () => {
   const renderLayout = () =>
     renderWithProviders(
       <TestLinkProvider>
-        <TracesExplorer
+        <StudioTracesExplorer
           selection={EMPTY_TRACES_SELECTION}
           filters={DEFAULT_TRACES_FILTERS}
           onChange={() => {}}
@@ -1713,13 +1716,13 @@ describe('TracesExplorer.Layout', () => {
             tabs={<nav aria-label="Views">Tabs</nav>}
             toolbar={
               <div role="toolbar" aria-label="Trace filters">
-                <TracesExplorer.FilterBar />
+                <StudioFilterBar />
               </div>
             }
           >
-            <TracesExplorer.List />
+            <StudioList />
           </TracesExplorer.Layout>
-        </TracesExplorer>
+        </StudioTracesExplorer>
       </TestLinkProvider>,
     );
 
