@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { createRef } from 'react';
 import type { ComponentProps } from 'react';
+import { createPortal } from 'react-dom';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Cell, TxtCell, EntryCell, DateTimeCell } from './Cells';
@@ -12,6 +13,18 @@ import { Table, Thead, Th, Tbody, Row } from './Table';
 afterEach(() => {
   cleanup();
 });
+
+const rowOf = (element: Element) => {
+  const row = element.closest('tr');
+  if (!row) throw new Error('Expected the element to sit in a table row');
+  return row;
+};
+
+const secondCell = (element: Element) => {
+  const cell = rowOf(element).cells[1];
+  if (!cell) throw new Error('Expected the row to have a second cell');
+  return cell;
+};
 
 const CreditTable = ({ onAction }: { onAction?: () => void }) => (
   <Table variant="inset" aria-label="Credit history">
@@ -74,6 +87,101 @@ describe('Table', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Refund' }));
 
     expect(onAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('has no stretched overlay, so nothing depends on the row being a containing block', () => {
+    render(<CreditTable />);
+
+    const link = screen.getByRole('link', { name: 'Credit grant' });
+    const row = rowOf(link);
+    expect(link.className).not.toMatch(/after:/);
+    expect(row.className).not.toMatch(/(^|\s)has-\[\[data-row-target\]\]:relative(\s|$)/);
+  });
+
+  it('follows the row link when any other part of the row is clicked', () => {
+    const onFollow = vi.fn((event: MouseEvent) => event.preventDefault());
+    render(<CreditTable />);
+    const link = screen.getByRole('link', { name: 'Credit grant' });
+    link.addEventListener('click', onFollow);
+
+    fireEvent.click(secondCell(link));
+
+    expect(onFollow).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes modifier keys and the middle button through to the row link, so it opens in a new tab', () => {
+    const seen: Array<Pick<MouseEvent, 'button' | 'metaKey' | 'ctrlKey' | 'shiftKey'>> = [];
+    render(<CreditTable />);
+    const link = screen.getByRole('link', { name: 'Credit grant' });
+    link.addEventListener('click', event => {
+      event.preventDefault();
+      seen.push({ button: event.button, metaKey: event.metaKey, ctrlKey: event.ctrlKey, shiftKey: event.shiftKey });
+    });
+    const cell = secondCell(link);
+
+    fireEvent.click(cell, { metaKey: true });
+    fireEvent.click(cell, { ctrlKey: true });
+    fireEvent(cell, new MouseEvent('auxclick', { bubbles: true, cancelable: true, button: 1 }));
+    fireEvent(cell, new MouseEvent('auxclick', { bubbles: true, cancelable: true, button: 2 }));
+
+    expect(seen).toEqual([
+      { button: 0, metaKey: true, ctrlKey: false, shiftKey: false },
+      { button: 0, metaKey: false, ctrlKey: true, shiftKey: false },
+      { button: 1, metaKey: false, ctrlKey: false, shiftKey: false },
+    ]);
+  });
+
+  it('leaves clicks on the link itself, other controls, portaled content and text selections alone', () => {
+    const onFollow = vi.fn((event: MouseEvent) => event.preventDefault());
+    const onAction = vi.fn();
+    const portal = document.createElement('div');
+    document.body.append(portal);
+    const PortaledMenu = () => createPortal(<span>Menu item</span>, portal);
+    render(
+      <Table variant="inset" aria-label="Credits">
+        <Table.Body>
+          <Table.Row>
+            <Table.Cell>
+              <Table.RowLink href="/credits/1">Credit grant</Table.RowLink>
+            </Table.Cell>
+            <Table.Cell>
+              <button type="button" onClick={onAction}>
+                Refund <span>now</span>
+              </button>
+              <a href="/docs">Docs</a>
+              <input aria-label="Note" />
+              <span tabIndex={0}>Tooltip trigger</span>
+              <PortaledMenu />
+              <span>Plain text</span>
+            </Table.Cell>
+          </Table.Row>
+        </Table.Body>
+      </Table>,
+    );
+    const link = screen.getByRole('link', { name: 'Credit grant' });
+    link.addEventListener('click', onFollow);
+    screen.getByRole('link', { name: 'Docs' }).addEventListener('click', event => event.preventDefault());
+
+    fireEvent.click(screen.getByText('now'));
+    fireEvent.click(screen.getByRole('link', { name: 'Docs' }));
+    fireEvent.click(screen.getByRole('textbox', { name: 'Note' }));
+    fireEvent.click(screen.getByText('Tooltip trigger'));
+    fireEvent.click(screen.getByText('Menu item'));
+    fireEvent.click(link);
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(onFollow).toHaveBeenCalledTimes(1);
+
+    const text = screen.getByText('Plain text');
+    const selection = window.getSelection();
+    if (!selection) throw new Error('Expected a selection');
+    selection.selectAllChildren(text);
+    fireEvent.click(text);
+    expect(onFollow).toHaveBeenCalledTimes(1);
+    selection.removeAllRanges();
+
+    fireEvent.click(text);
+    expect(onFollow).toHaveBeenCalledTimes(2);
+    portal.remove();
   });
 
   it('renders the row link through a router link component', () => {
@@ -340,6 +448,12 @@ describe('Table.RowButton', () => {
     await user.click(screen.getByRole('button', { name: 'Refund' }));
     expect(onOpen).toHaveBeenCalledTimes(1);
     expect(onRefund).toHaveBeenCalledTimes(1);
+
+    expect(open.className).not.toMatch(/after:/);
+    fireEvent.click(secondCell(open));
+    expect(onOpen).toHaveBeenCalledTimes(2);
+    fireEvent(secondCell(open), new MouseEvent('auxclick', { bubbles: true, button: 1 }));
+    expect(onOpen).toHaveBeenCalledTimes(2);
   });
 });
 
