@@ -3,7 +3,9 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { fakeRouteAuth, mountApiRoutes } from '../../../routes/test-utils.js';
 import type { TestAuthUser } from '../../../routes/test-utils.js';
+import { createFactoryStorageForTests } from '../../../storage/test-utils.js';
 import { PlatformConnectBinding } from '../foundation/connect-binding.js';
+import type { PlatformConnectLinkStore } from '../foundation/connect-binding.js';
 import { createPlatformConnectClient } from '../platform-connect.js';
 import { buildConnectToolListRoute, buildConnectToolsRoute, buildPlatformConnectRoutes } from './routes.js';
 import type { ConnectToolsSetupMissing, ConnectToolsSource } from './routes.js';
@@ -34,6 +36,8 @@ function buildApp(
     missing?: ConnectToolsSetupMissing;
     resolveTools?: ConnectToolsSource['resolveTools'];
     isAdmin?: boolean;
+    /** Storage the bindings remember linked connections in, as boot linking gives them. */
+    linkStore?: PlatformConnectLinkStore;
   } = {},
 ): Hono {
   const app = new Hono();
@@ -51,12 +55,11 @@ function buildApp(
     projectId: 'proj_factory',
     fetch: fetchImpl,
   });
-  const providers = ['jira', 'incident-io', 'gitlab', 'vanta'].map(integrationId => ({
-    provider: integrationId,
-    integrationId,
-    connectionIntegrationIds: [integrationId],
-    binding: new PlatformConnectBinding({ integrationId, providerKeys: [integrationId], connect: client }),
-  }));
+  const providers = ['jira', 'incident-io', 'gitlab', 'vanta'].map(integrationId => {
+    const binding = new PlatformConnectBinding({ integrationId, providerKeys: [integrationId], connect: client });
+    if (options.linkStore) void binding.ensureBootLinked(options.linkStore);
+    return { provider: integrationId, integrationId, connectionIntegrationIds: [integrationId], binding };
+  });
   const projectId = options.connectToolsProjectId;
   const source: ConnectToolsSource | { missing: ConnectToolsSetupMissing } = projectId
     ? {
@@ -349,6 +352,36 @@ describe('platform connect routes', () => {
       method: 'POST',
     });
     expect(signedOut.status).toBe(401);
+  });
+
+  it('lets an organization admin link again a connection someone detached from the project', async () => {
+    const linked = new Set<string>();
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/v2/connections')) return json({ connections: [connection('conn-jira', 'jira')] });
+      if (url.endsWith('/v2/projects/proj_factory/connections')) {
+        return json({ connections: [...linked].map(id => connection(id, 'jira')) });
+      }
+      if (init?.method === 'POST' && url.endsWith('/v2/projects/proj_factory/connections/conn-jira')) {
+        linked.add('conn-jira');
+        return new Response(null, { status: 204 });
+      }
+      throw new Error(`Unexpected fetch: ${init?.method ?? 'GET'} ${url}`);
+    });
+    // The project had conn-jira linked before; it was detached since.
+    const linkStore = (await createFactoryStorageForTests()).integrations.forIntegration('jira');
+    await linkStore.settings.save('__platform_connect_links__', 'project:proj_factory', {
+      version: 1,
+      connectionIds: ['conn-jira'],
+    });
+
+    const admin = await buildApp(org1(), fetchImpl, { linkStore }).request(
+      '/web/integrations/platform/jira/link-connections',
+      { method: 'POST' },
+    );
+
+    await expect(admin.json()).resolves.toEqual({ linked: ['conn-jira'], needsLinking: [] });
+    expect(linked).toEqual(new Set(['conn-jira']));
   });
 
   it('mints a GitLab connect session through the platform registry', async () => {
