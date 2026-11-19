@@ -6,8 +6,13 @@ type StoredRecord = { status?: string; startedAt?: number; endedAt?: number; met
 
 const TERMINAL_STATUSES = new Set(['success', 'failed', 'canceled', 'tripwire']);
 
-/** The branch statuses a parallel or conditional entry counts as finished when it aggregates. */
-const BRANCH_DONE_STATUSES = new Set(['success', 'skipped', 'suspended']);
+/**
+ * The branch statuses `aggregateBranchResults` counts as accounted for. Once every branch of a
+ * parallel or conditional entry has one, a branch's completion aggregates the entry: it goes past
+ * the entry when all branches succeeded or were skipped, and suspends the run (not continues past
+ * the entry) when any branch is suspended.
+ */
+const BRANCH_SETTLED_STATUSES = new Set(['success', 'skipped', 'suspended']);
 
 /**
  * What a worker does with a delivery of a step occurrence: run the step, drop
@@ -75,8 +80,8 @@ function isFinal(record: StoredRecord | undefined, step: LeafEntry, stepGuards: 
  * continues only when a restart dispatched it, since the restart is then what
  * recovers the run, only while the run's active path is still inside the
  * branch's parallel or conditional entry, and only when the restart read every
- * sibling branch (`siblings`) as finished. Any other finished delivery is
- * dropped.
+ * sibling branch (`siblings`) as settled (see `BRANCH_SETTLED_STATUSES`). Any
+ * other finished delivery is dropped.
  *
  * `stepGuards` tells whether the store has workflow step guards. Records they
  * stamped are left to the guards on the deliveries the guards arbitrate
@@ -161,14 +166,14 @@ export function finishedOccurrence({
   // The next leaf records itself as the active path when it starts. Sibling branches overwrite
   // that path, so for a branch it only tells whether the run went past the branch's parallel or
   // conditional entry, and only a restart (the run's recovery) continues from a branch.
-  // A sibling the restart read as unfinished ends the entry itself when it finishes, and it then
-  // sees this branch's saved result, so continuing here as well would end the entry twice.
+  // A sibling the restart read as unsettled aggregates the entry itself when it settles, and it
+  // then sees this branch's saved result, so continuing here as well would aggregate it twice.
   const notMovedOn =
     executionPath.length === 1
       ? samePath(snapshot.activePaths, executionPath)
       : restartTarget &&
         snapshot.activePaths?.[0] === executionPath[0] &&
-        (siblings ?? []).every(id => BRANCH_DONE_STATUSES.has(restart?.stepResults?.[id]?.status as string));
+        (siblings ?? []).every(id => BRANCH_SETTLED_STATUSES.has(restart?.stepResults?.[id]?.status as string));
 
   return notMovedOn ? { continueFrom: stored as StepResult<any, any, any, any> } : 'drop';
 }
