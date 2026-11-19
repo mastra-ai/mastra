@@ -22,8 +22,11 @@ export type LinearConnectEventOutcome =
   | 'unknown_connection';
 
 export interface LinearConnectEventDeps {
-  /** The Linear workspace a connection serves, or null when the project has no such active connection. */
-  connectionWorkspace(connectionId: string): Promise<{ linearWorkspaceId: string } | null>;
+  /**
+   * The Linear workspace a connection serves, or null when the project has no such active connection.
+   * `resourceId` is the Factory project a resource-scoped connection belongs to, or null for an org-level one.
+   */
+  connectionWorkspace(connectionId: string): Promise<{ linearWorkspaceId: string; resourceId: string | null } | null>;
   projects: Pick<FactoryProjectsStorage, 'listAll'>;
   workItems: Pick<WorkItemsStorage, 'listShared' | 'copyLegacyCards'>;
   ingest(input: LinearRulesIngress): Promise<unknown>;
@@ -42,6 +45,14 @@ export interface LinearConnectEventDeps {
  * issue in projects that never chose its source (a cross-tenant leak). The
  * first sighting of an issue comes from the reconcile's intake discovery,
  * which only lists sources a project bound.
+ *
+ * Dispatch stays inside the organization that owns the connection: the org of
+ * a resource-scoped connection's project, or for an org-level connection the
+ * deployment's only organization. Identifiers like ENG-42 repeat across
+ * workspaces, so a card that only knows its identifier is matched there and
+ * nowhere else. When the owner can't be told (an org-level connection in a
+ * deployment serving several organizations), only cards that know the issue's
+ * id are updated: that id names this one Linear issue.
  *
  * Throws when a project's ingest fails, so the event poller retries; ingest
  * is idempotent per issue revision, so projects that already succeeded are
@@ -93,8 +104,20 @@ export async function handleLinearConnectEvent(
   }
 
   const sourceKey = `linear:${issue.identifier}`;
+  const projects = await deps.projects.listAll();
+  const owner = connectionOwner(workspace.resourceId, projects);
+  if (owner.kind === 'unknown_project') {
+    logPlatformWarn('Platform Linear event names a connection scoped to a Factory project this deployment lacks; skipped.', {
+      connectionId: event.connectionId,
+      eventId: event.id,
+      resourceId: workspace.resourceId,
+    });
+    return 'unknown_connection';
+  }
   const failures: string[] = [];
-  for (const project of await deps.projects.listAll()) {
+  for (const project of projects) {
+    const ownedByConnection = owner.kind === 'org' && owner.orgId === project.orgId;
+    if (owner.kind === 'org' && !ownedByConnection) continue;
     try {
       // A finished card may still be only in the legacy table; copy it so the event finds it.
       await deps.workItems.copyLegacyCards({
@@ -108,7 +131,7 @@ export async function handleLinearConnectEvent(
         // Identifiers like ENG-42 repeat across workspaces: a card that knows its issue's id must match it.
         const issueId = item.workItem.metadata?.linearIssueId;
         if (typeof issueId === 'string' && issueId.length > 0) return issueId === issue.id;
-        return item.externalSource.externalId === sourceKey;
+        return ownedByConnection && item.externalSource.externalId === sourceKey;
       });
       if (!tracked) continue;
       await deps.ingest({
@@ -125,6 +148,21 @@ export async function handleLinearConnectEvent(
     throw new Error(`Linear issue ${issue.identifier} could not be applied to ${failures.join('; ')}`);
   }
   return remember(deps.recentKeys, key, 'dispatched');
+}
+
+type ConnectionOwner = { kind: 'org'; orgId: string } | { kind: 'ambiguous' } | { kind: 'unknown_project' };
+
+/** The organization a connection's events belong to, as Vanta attributes its connections. */
+function connectionOwner(
+  resourceId: string | null,
+  projects: ReadonlyArray<{ id: string; orgId: string }>,
+): ConnectionOwner {
+  if (resourceId) {
+    const project = projects.find(candidate => candidate.id === resourceId);
+    return project ? { kind: 'org', orgId: project.orgId } : { kind: 'unknown_project' };
+  }
+  const orgIds = new Set(projects.map(project => project.orgId));
+  return orgIds.size === 1 ? { kind: 'org', orgId: [...orgIds][0]! } : { kind: 'ambiguous' };
 }
 
 function remember(keys: Set<string>, key: string, outcome: LinearConnectEventOutcome): LinearConnectEventOutcome {

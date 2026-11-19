@@ -226,11 +226,11 @@ export class PlatformLinearIntake extends PlatformIntakeCapability {
   }
 
   /** The workspace an active project connection serves, or null when the project lists no such connection. */
-  async connectionWorkspace(connectionId: string): Promise<LinearIdentity | null> {
+  async connectionWorkspace(connectionId: string): Promise<(LinearIdentity & { resourceId: string | null }) | null> {
     const connection = (await this.#integration.listConnections()).find(
       candidate => candidate.id === connectionId && candidate.status === 'active',
     );
-    return connection ? this.#identity(connection) : null;
+    return connection ? { ...(await this.#identity(connection)), resourceId: connection.resourceId } : null;
   }
 
   /** Connected workspaces, one per workspace. */
