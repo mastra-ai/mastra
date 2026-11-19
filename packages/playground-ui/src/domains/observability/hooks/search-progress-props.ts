@@ -30,7 +30,8 @@ export function searchProgressProps({
     if (list.searching) list.fetchNextPage();
   };
   if (histogram) {
-    return { ...histogram, failed: histogram.failed || list.chunkError !== null, onStop, onContinue };
+    const { chunkError: _chunkError, stop: _stop, resume: _resume, ...state } = histogram;
+    return { ...state, failed: state.failed || list.chunkError !== null, onStop, onContinue };
   }
   return {
     requestedRange,

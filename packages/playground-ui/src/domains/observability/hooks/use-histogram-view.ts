@@ -10,6 +10,8 @@ type CountRows = { rows: Parameters<typeof bucketCountRows>[0] };
 
 /** A progressive word search's progress, with the controls `SearchProgress` needs. */
 export type SearchProgressControl = SearchProgressState & {
+  /** The error that stopped the search at a chunk, or `null`. Results from earlier chunks are kept. */
+  chunkError: unknown;
   stop: () => void;
   resume: () => void;
 };
@@ -56,9 +58,18 @@ export function useHistogramView({
   const progress = useMemo<SearchProgressControl | undefined>(
     () =>
       progressive && !hidden && !capped
-        ? { requestedRange: timeRange, searchedRange, searching: progressing, stopped, failed, stop, resume }
+        ? {
+            requestedRange: timeRange,
+            searchedRange,
+            searching: progressing,
+            stopped,
+            failed,
+            chunkError,
+            stop,
+            resume,
+          }
         : undefined,
-    [progressive, hidden, capped, timeRange, searchedRange, progressing, stopped, failed, stop, resume],
+    [progressive, hidden, capped, timeRange, searchedRange, progressing, stopped, failed, chunkError, stop, resume],
   );
 
   return useMemo(
