@@ -178,6 +178,9 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    outputs:
+      core-version: ${{ steps.core-version.outputs.version }}
+      core-minor-or-major: ${{ steps.core-version.outputs.minor_or_major }}
     steps:
       - name: Initial checkout
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
@@ -287,6 +290,17 @@ jobs:
           version=$(node -p 'require("./packages/cli/package.json").version')
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+      - name: Get core version
+        id: core-version
+        run: |
+          version=$(node -p 'require("./packages/core/package.json").version')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$version" =~ ^[0-9]+\.[0-9]+\.0$ ]]; then
+            echo "minor_or_major=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "minor_or_major=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # TODO: Remove continue-on-error once production CF R2 credentials are configured.
       - name: Upload studio assets to R2 (production)
         if: ${{ !inputs.dry_run }}
@@ -351,38 +365,17 @@ jobs:
       github.event_name == 'workflow_dispatch' &&
       github.event.inputs.publish_type == 'stable' &&
       !inputs.dry_run &&
-      needs.stable.result == 'success'
+      needs.stable.result == 'success' &&
+      needs.stable.outputs.core-minor-or-major == 'true'
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    permissions: {}
     env:
       SITREP_SERVER_URL: ${{ secrets.SITREP_SERVER_URL }}
     steps:
-      - name: Checkout core package.json
-        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        timeout-minutes: 20
-        with:
-          ref: main
-          persist-credentials: false
-          sparse-checkout: packages/core/package.json
-          sparse-checkout-cone-mode: false
-
-      - name: Get core version
-        id: core-version
-        run: |
-          version=$(node -p 'require("./packages/core/package.json").version')
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          if [[ "$version" =~ ^[0-9]+\.[0-9]+\.0$ ]]; then
-            echo "minor_or_major=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "minor_or_major=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Start release-notes-workflow
-        if: steps.core-version.outputs.minor_or_major == 'true'
         env:
           SITREP_API_TOKEN: ${{ secrets.SITREP_API_TOKEN }}
-          CORE_VERSION: ${{ steps.core-version.outputs.version }}
+          CORE_VERSION: ${{ needs.stable.outputs.core-version }}
         run: |
           run_id=$(curl --fail-with-body -sS -X POST \
             "${SITREP_SERVER_URL}/api/workflows/release-notes-workflow/create-run" \
