@@ -1,6 +1,6 @@
 ---
 title: "Custom dashboards | Mastra platform"
-description: "Create saved Mastra platform dashboards, then add, configure, arrange, and save widgets that chart your observability data."
+description: "Create saved Mastra platform dashboards, then add, configure, and arrange widgets that chart your observability data."
 packages:
   - "mastra"
 ---
@@ -10,7 +10,7 @@ import StepItem from "@site/src/components/StepItem";
 
 # Build custom dashboards
 
-A custom dashboard is a saved set of charts and numbers on the Mastra platform **Metrics** page. Use dashboards to keep the views your team checks often, such as failed runs per agent, cost per model, or tool latency, next to the built-in **Metrics** dashboard.
+A custom dashboard is a saved set of charts and numbers on the Mastra platform **Metrics** page. Use dashboards to keep the views your team checks often, such as failed runs per agent, cost per model, or tool latency, next to the built-in **Default** dashboard.
 
 By the end of this page, you'll have a saved dashboard with at least one widget that your organization can open from the **Metrics** page.
 
@@ -25,7 +25,7 @@ Custom dashboards are a Mastra platform feature. They're separate from local Stu
 
 <Steps>
   <StepItem>
-    Open the [Mastra platform dashboard](https://projects.mastra.ai) without selecting a project, then select **Observability** > **Metrics**. The **Dashboards** page lists the organization's dashboards, starting with **Metrics**.
+    Open the [Mastra platform dashboard](https://projects.mastra.ai) without selecting a project, then select **Observability** > **Metrics**. The **Dashboards** page lists the organization's dashboards, starting with **Default**.
 
     If **Metrics** opens a single dashboard instead of the **Dashboards** list, custom dashboards aren't available for your organization yet.
   </StepItem>
@@ -35,47 +35,44 @@ Custom dashboards are a Mastra platform feature. They're separate from local Stu
   </StepItem>
 
   <StepItem>
-    Select **Add widget**, next to the filters. The dashboard shows a new **Untitled widget** card.
+    Select **Add widget** at the top of the page. In the **Add widgets** dialog, pick one or more ready-made widgets, such as agent runs, latency, or cost per model, then select **Add \<number> widgets**. To build your own chart instead, select **Create custom widget…**.
   </StepItem>
 
   <StepItem>
-    On the new card, select **Configure**. In the dialog, enter a title, choose the widget type, and pick the metrics the widget shows. The preview updates as you change the settings. Select **Save** to apply them to the card.
-  </StepItem>
-
-  <StepItem>
-    Select **Save** next to the filters to keep the dashboard.
-  </StepItem>
-
-  <StepItem>
-    Check the result. Select **Metrics** in the breadcrumb. Your dashboard is in the **Dashboards** list with its widget count, and other members of your organization see it too.
+    Check the result. The widgets appear at the top of the dashboard, and Mastra saves the change as you make it. Select **Metrics** in the breadcrumb. Your dashboard is in the **Dashboards** list with its widget count, and other members of your organization see it too.
   </StepItem>
 </Steps>
 
 ## Manage dashboards
 
-After you create a dashboard, add and arrange its widgets, filter them, and manage the dashboard itself.
+After you create a dashboard, add and arrange its widgets, filter them, and manage the dashboard itself. Mastra saves each change as soon as you make it and shows **Saving…** in the header while it does. If a change can't be saved, the dashboard goes back to how it was and Mastra shows the reason.
 
-### Add and configure widgets
+### Add widgets
 
-Select **Add widget** to add an empty card to the dashboard, then select **Configure** on the card. A dashboard holds up to 20 widgets.
+Select **Add widget** at the top of the dashboard. The **Add widgets** dialog lists ready-made widgets under **Overview**, **Activity**, and **Performance and cost**, and previews the highlighted one. Widgets the dashboard already has are tagged **On dashboard**. Search the list, pick as many widgets as you need, then select **Add \<number> widgets**. To remove the widgets you added, select **Undo** in the confirmation message.
 
-In the **Configure** dialog, you can:
+A dashboard holds up to 20 widgets. When it's full, **Add widget** is unavailable until you unpin a widget.
 
-- Change the widget title at the top of the dialog.
+### Build a custom widget
+
+To chart something the ready-made widgets don't cover, select **Create custom widget…** at the end of the **Add widgets** list. To place the widget at a specific spot, select **Add widget here** or **Add widget on a new row** between widgets instead.
+
+In the widget editor, you can:
+
+- Change the widget title at the top.
 - Choose the widget type: **KPI**, **Line**, **Stacked bars**, **Table**, or **Scores**. A type that can't show the selected metrics is unavailable.
+- Pick the metrics the widget shows. The preview updates as you change the settings.
 - Select **Add tab** to give the widget more than one view, each with its own metrics.
 
-Select **Save** in the dialog to apply the changes to the card.
+Select **Save** to add the widget. The widget isn't added until you save it.
 
-### Arrange widgets
+### Arrange and change widgets
 
 Members and admins can change a dashboard in place:
 
-- Drag a widget to move it between rows, or resize it.
-- Select **Configure \<widget name>** on a widget to change it.
-- Select **Unpin \<widget name>** on a widget to remove it from the dashboard. A new widget that you haven't configured shows **Remove \<widget name>** instead.
-
-Changes stay in a draft until you select **Save** next to the filters. Select **Cancel** to discard them. Mastra asks before you leave a dashboard with changes that aren't saved.
+- Drag **Move widget** to move a widget. Each row holds one full-width widget or two side by side.
+- Select **Configure \<widget name>** on a widget to open the widget editor, then select **Save** to apply the changes.
+- Select **Unpin \<widget name>** to remove a widget from the dashboard.
 
 ### Filter dashboards
 
@@ -85,11 +82,11 @@ Widgets use the date range, project, and filters selected above the dashboard. C
 
 On the **Dashboards** list or on the dashboard's page, select **More actions for \<dashboard name>**, then select **Rename** or **Delete**. Deleting a dashboard removes it and its widgets for everyone in the organization.
 
-### Change the Metrics dashboard
+### Change the default dashboard
 
-The **Metrics** dashboard is the default dashboard in the list. Members and admins can arrange and save it like a custom dashboard, and the saved version replaces the default for the organization. The **Metrics** dashboard can't be renamed or deleted.
+The **Default** dashboard comes first in the list and starts with the built-in metrics charts. Members and admins can change it like a custom dashboard, and the changed version replaces the built-in one for the organization. The **Default** dashboard can't be renamed or deleted, and no other dashboard can be named **Default**.
 
-A project's **Metrics** page shows a single, read-only **Metrics** dashboard for that project.
+A project's **Metrics** page shows a single, read-only dashboard for that project.
 
 ### Create alerts from widgets
 
