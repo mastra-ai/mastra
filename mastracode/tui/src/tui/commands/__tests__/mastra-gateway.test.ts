@@ -102,9 +102,7 @@ describe('handleMastraGatewayCommand', () => {
     expect(mockSaveSettings).toHaveBeenCalledWith({ memoryGateway: { baseUrl: 'http://localhost:4111' } });
     expect(mockGatewayRegistryGetInstance).toHaveBeenCalledWith({ useDynamicLoading: true });
     expect(mockGatewayRegistrySyncGateways).toHaveBeenCalledWith(true);
-    expect(ctx.showInfo).toHaveBeenLastCalledWith(
-      'Gateway configured. Memory mode changes take effect on next restart.',
-    );
+    expect(ctx.showInfo).toHaveBeenLastCalledWith('Gateway configured.');
   });
 
   it('prefills the existing API key and stores the localhost URL without prompting for custom input', async () => {
@@ -164,6 +162,6 @@ describe('handleMastraGatewayCommand', () => {
     expect(process.env.MASTRA_GATEWAY_API_KEY).toBeUndefined();
     expect(process.env.MASTRA_GATEWAY_URL).toBeUndefined();
     expect(mockGatewayRegistrySyncGateways).toHaveBeenCalledWith(true);
-    expect(ctx.showInfo).toHaveBeenLastCalledWith('Gateway cleared. Memory mode changes take effect on next restart.');
+    expect(ctx.showInfo).toHaveBeenLastCalledWith('Gateway cleared.');
   });
 });
