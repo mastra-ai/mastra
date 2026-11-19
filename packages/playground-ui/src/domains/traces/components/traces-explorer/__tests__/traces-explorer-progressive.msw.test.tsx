@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { AggregateTracesResponse, GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
-import { delay, http, HttpResponse } from 'msw';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { TracesExplorer } from '../index';
@@ -19,6 +19,8 @@ import {
   weatherTraceUsage,
 } from './fixtures/traces-explorer';
 import { useFixedChartSize } from '@/test/chart-size';
+import { chunkGate } from '@/test/chunk-gate';
+import type { ChunkGate } from '@/test/chunk-gate';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -66,9 +68,12 @@ const chunkedAggregate = (body: Body): AggregateTracesResponse => {
 const setHandlers = ({
   capabilities = progressiveCapabilities,
   aggregate = body => HttpResponse.json(chunkedAggregate(body)),
+  gate,
 }: {
   capabilities?: GetObservabilityCapabilitiesResponse;
   aggregate?: (body: Body) => Response | Promise<Response>;
+  /** Holds each chart chunk until the test lets it through. */
+  gate?: ChunkGate;
 } = {}) => {
   const queries: Body[] = [];
   const aggregates: Body[] = [];
@@ -83,7 +88,7 @@ const setHandlers = ({
     http.post(`${TEST_BASE_URL}/api/observability/traces/aggregate`, async ({ request }) => {
       const body = (await request.json()) as Body;
       aggregates.push(body);
-      await delay(20);
+      await gate?.pass(body.continuation);
       return aggregate(body);
     }),
     http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () => HttpResponse.json(emptyLightTraces)),
@@ -132,6 +137,14 @@ const renderExplorer = (props: { withChart?: boolean } = {}) =>
 const progressLine = () => screen.queryAllByRole('status').find(element => element.tagName === 'P');
 const status = () => progressLine()?.textContent;
 
+/** Waits for the status after each chunk, then lets the next one through. */
+async function stepThrough(gate: ChunkGate, days: number[]) {
+  for (const day of days) {
+    await waitFor(() => expect(status()).toBe(`Searched the last ${day} of 30 days…`));
+    gate.next();
+  }
+}
+
 beforeAll(() => {
   Element.prototype.getAnimations ??= () => [];
   if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
@@ -143,10 +156,12 @@ describe('TracesExplorer progressive word search', () => {
 
   describe('when the server searches in chunks', () => {
     it('charts the range one chunk at a time and follows the chart in the status line', async () => {
-      const { queries, aggregates } = setHandlers();
+      const gate = chunkGate();
+      const { queries, aggregates } = setHandlers({ gate });
       renderExplorer();
 
-      await waitFor(() => expect(status()).toBe('Searched all 30 days.'), { timeout: 3000 });
+      await stepThrough(gate, [7, 14, 21, 28]);
+      await waitFor(() => expect(status()).toBe('Searched all 30 days.'));
       expect(aggregates.map(body => body.continuation)).toEqual([undefined, '1', '2', '3', '4']);
       expect(aggregates.every(body => body.progressive === true)).toBe(true);
       expect(queries[0]).toMatchObject({ progressive: true });
@@ -154,27 +169,20 @@ describe('TracesExplorer progressive word search', () => {
     });
 
     it('stops charting on Stop and goes on with Continue', async () => {
-      let release: () => void = () => {};
-      const held = new Promise<void>(resolve => (release = resolve));
-      const { aggregates } = setHandlers({
-        aggregate: async body => {
-          if (body.continuation === '1') await held;
-          return HttpResponse.json(chunkedAggregate(body));
-        },
-      });
+      const gate = chunkGate();
+      const { aggregates } = setHandlers({ gate });
       renderExplorer();
 
-      await waitFor(() => expect(status()).toBe('Searched the last 7 of 30 days…'), { timeout: 3000 });
+      await waitFor(() => expect(status()).toBe('Searched the last 7 of 30 days…'));
       fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
-      await act(async () => {
-        release();
-        await delay(200);
-      });
+      // The chunk already asked for lands; no later one is asked for.
+      gate.next();
+      await waitFor(() => expect(status()).toBe('Stopped after the last 14 of 30 days.'));
       expect(aggregates.map(body => body.continuation)).toEqual([undefined, '1']);
-      expect(status()).toBe('Stopped after the last 14 of 30 days.');
 
       fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-      await waitFor(() => expect(status()).toBe('Searched all 30 days.'), { timeout: 3000 });
+      await stepThrough(gate, [14, 21, 28]);
+      await waitFor(() => expect(status()).toBe('Searched all 30 days.'));
     });
 
     it('follows the list when there is no chart', async () => {
@@ -182,7 +190,7 @@ describe('TracesExplorer progressive word search', () => {
       renderExplorer({ withChart: false });
 
       // The list loads its newest chunk; older ones load as the user scrolls.
-      await waitFor(() => expect(status()).toBe('Searched the last 7 of 30 days…'), { timeout: 3000 });
+      await waitFor(() => expect(status()).toBe('Searched the last 7 of 30 days…'));
       expect(queries).toHaveLength(1);
       expect(aggregates).toHaveLength(0);
     });

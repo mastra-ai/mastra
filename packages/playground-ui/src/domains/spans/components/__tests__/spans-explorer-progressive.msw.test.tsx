@@ -11,6 +11,8 @@ import {
 } from '../../__tests__/fixtures/spans';
 import { SpansExplorerBody } from '../spans-explorer-body';
 import { useFixedChartSize } from '@/test/chart-size';
+import { chunkGate } from '@/test/chunk-gate';
+import type { ChunkGate } from '@/test/chunk-gate';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 import { SearchParamsHost } from '@/test/search-params-host';
@@ -76,9 +78,12 @@ const chunkedSpans = (body: Body): QuerySpansResult => {
 const renderAt = ({
   capabilities = progressiveCapabilities,
   aggregate = body => HttpResponse.json(chunkedAggregate(body)),
+  gate,
 }: {
   capabilities?: GetObservabilityCapabilitiesResponse;
   aggregate?: (body: Body) => Response | Promise<Response>;
+  /** Holds each chart chunk until the test lets it through. */
+  gate?: ChunkGate;
 } = {}) => {
   const queries: Body[] = [];
   const aggregates: Body[] = [];
@@ -99,7 +104,7 @@ const renderAt = ({
       inFlight += 1;
       maxInFlight = Math.max(maxInFlight, inFlight);
       try {
-        await delay(20);
+        await gate?.pass(body.continuation);
         return await aggregate(body);
       } finally {
         inFlight -= 1;
@@ -125,6 +130,14 @@ const renderAt = ({
 const progressLine = () => screen.queryAllByRole('status').find(element => element.tagName === 'P');
 const status = () => progressLine()?.textContent;
 
+/** Waits for the status after each chunk, then lets the next one through. */
+async function stepThrough(gate: ChunkGate, days: number[]) {
+  for (const day of days) {
+    await waitFor(() => expect(status()).toBe(`Searched the last ${day} of 30 days…`));
+    gate.next();
+  }
+}
+
 describe('SpansExplorerBody progressive word search', () => {
   useFixedChartSize(1200, 800);
   // Base UI ScrollArea calls getAnimations once a ResizeObserver exists; jsdom has no Web Animations API.
@@ -136,9 +149,11 @@ describe('SpansExplorerBody progressive word search', () => {
 
   describe('when the server searches in chunks', () => {
     it('charts the 30 days one chunk at a time, newest first, then says it searched them all', async () => {
-      const { queries, aggregates, maxInFlight } = renderAt();
+      const gate = chunkGate();
+      const { queries, aggregates, maxInFlight } = renderAt({ gate });
 
-      await waitFor(() => expect(status()).toBe('Searched all 30 days.'), { timeout: 3000 });
+      await stepThrough(gate, [7, 14, 21, 28]);
+      await waitFor(() => expect(status()).toBe('Searched all 30 days.'));
       expect(aggregates.map(body => body.continuation)).toEqual([undefined, '1', '2', '3', '4']);
       expect(aggregates.every(body => body.progressive === true)).toBe(true);
       expect(maxInFlight()).toBe(1);
@@ -148,35 +163,31 @@ describe('SpansExplorerBody progressive word search', () => {
     });
 
     it('shows how far it got with the older days pending, and Stop holds it there', async () => {
-      let release: () => void = () => {};
-      const held = new Promise<void>(resolve => (release = resolve));
-      const { aggregates } = renderAt({
-        aggregate: async body => {
-          if (Number(body.continuation ?? 0) >= 2) await held;
-          return HttpResponse.json(chunkedAggregate(body));
-        },
-      });
+      const gate = chunkGate();
+      const { aggregates } = renderAt({ gate });
 
-      await waitFor(() => expect(status()).toBe('Searched the last 14 of 30 days…'), { timeout: 3000 });
+      await stepThrough(gate, [7]);
+      await waitFor(() => expect(status()).toBe('Searched the last 14 of 30 days…'));
       expect(screen.getByTestId('histogram-pending-band')).toBeTruthy();
 
       fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
       expect(status()).toBe('Stopped after the last 14 of 30 days.');
-      await act(async () => {
-        release();
-        await delay(200);
-      });
       // The chunk already asked for lands; no later one is asked for.
+      gate.next();
+      await waitFor(() => expect(status()).toBe('Stopped after the last 21 of 30 days.'));
       expect(aggregates.map(body => body.continuation)).toEqual([undefined, '1', '2']);
-      expect(status()).toBe('Stopped after the last 21 of 30 days.');
 
       fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-      await waitFor(() => expect(status()).toBe('Searched all 30 days.'), { timeout: 3000 });
+      await stepThrough(gate, [21, 28]);
+      await waitFor(() => expect(status()).toBe('Searched all 30 days.'));
+      expect(aggregates.map(body => body.continuation)).toEqual([undefined, '1', '2', '3', '4']);
     });
 
     it('keeps the chunks it charted when a later one takes too long, and tries again', async () => {
       let failing = true;
+      const gate = chunkGate();
       renderAt({
+        gate,
         aggregate: body =>
           failing && body.continuation === '2'
             ? HttpResponse.json(
@@ -186,13 +197,15 @@ describe('SpansExplorerBody progressive word search', () => {
             : HttpResponse.json(chunkedAggregate(body)),
       });
 
-      await waitFor(() => expect(status()).toBe("Couldn't search past the last 14 of 30 days."), { timeout: 3000 });
+      await stepThrough(gate, [7, 14]);
+      await waitFor(() => expect(status()).toBe("Couldn't search past the last 14 of 30 days."));
       expect(screen.getByRole('region', { name: 'Spans over time' }).textContent).toContain('10 spans');
       expect(screen.getByText('agent run: weather')).toBeTruthy();
 
       failing = false;
       fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
-      await waitFor(() => expect(status()).toBe('Searched all 30 days.'), { timeout: 3000 });
+      await stepThrough(gate, [21, 28]);
+      await waitFor(() => expect(status()).toBe('Searched all 30 days.'));
     });
 
     it('charts only the newest chunk, with a note, when the server cannot merge chunks', async () => {
@@ -200,7 +213,7 @@ describe('SpansExplorerBody progressive word search', () => {
         aggregate: body => HttpResponse.json({ ...chunkedAggregate(body), mergeable: false }),
       });
 
-      await screen.findByText('The chart covers the last 7 days of this search.', undefined, { timeout: 3000 });
+      await screen.findByText('The chart covers the last 7 days of this search.');
       await act(() => delay(200));
       expect(aggregates).toHaveLength(1);
     });

@@ -94,9 +94,11 @@ export function useTracesListSource({
   useTraceQueryLatest({
     query,
     limit,
-    enabled: enabled && delta && autoRefetch,
+    // Paused during a progressive search: delta only covers the newest minutes, and the server
+    // doesn't chunk delta requests.
+    enabled: enabled && delta && refreshing,
     refetchInterval: OBSERVABILITY_LIST_POLL_INTERVAL_MS,
-    queryOptions: { refetchOnWindowFocus: autoRefetch },
+    queryOptions: { refetchOnWindowFocus: refreshing },
   });
 
   // Moving the query key refreshes the cursor chain once, without a second polling request.
