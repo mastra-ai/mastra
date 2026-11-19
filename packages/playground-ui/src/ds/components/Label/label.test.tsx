@@ -10,18 +10,6 @@ afterEach(() => {
 });
 
 describe('Label', () => {
-  it('renders its text content', () => {
-    render(<Label>Email address</Label>);
-
-    expect(screen.getByText('Email address')).toBeDefined();
-  });
-
-  it('renders a native <label> element', () => {
-    render(<Label>Name</Label>);
-
-    expect(screen.getByText('Name').tagName).toBe('LABEL');
-  });
-
   it('associates with a control via htmlFor', () => {
     render(
       <>

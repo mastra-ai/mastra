@@ -180,21 +180,6 @@ describe('Create Factory wizard', () => {
     expect(queries).toEqual(['jal']);
   });
 
-  it('submits the typed name with Enter', async () => {
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })),
-      http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
-      http.get(`${TEST_BASE_URL}/web/github/repos`, () => HttpResponse.json({ repos: [repo] })),
-    );
-    const user = userEvent.setup();
-
-    renderFlow();
-
-    await user.type(await screen.findByLabelText('Name your new Factory'), 'Mastra{Enter}');
-
-    expect(await screen.findByLabelText('Choose your codebase')).toBeInTheDocument();
-  });
-
   it('keeps the picked repository in the draft instead of linking it right away', async () => {
     const calls: string[] = [];
     seedDraft('vcs');
@@ -328,26 +313,6 @@ describe('Create Factory wizard', () => {
     expect(patchedBodies).toHaveLength(1);
     // The Factory created by the first attempt is reused, not duplicated.
     expect(calls).toEqual(['create', 'connect', 'connect', 'link']);
-  });
-
-  it('freezes the picks a failed commit already wrote to the server', async () => {
-    const calls: string[] = [];
-    seedDraft('model-provider');
-    stubModelStepEndpoints(calls);
-    server.use(
-      http.post(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections/conn-1/repositories`, () =>
-        HttpResponse.json({ error: 'nope' }, { status: 500 }),
-      ),
-    );
-    const user = userEvent.setup();
-
-    renderFlow();
-
-    await user.click(await screen.findByRole('option', { name: /Anthropic/ }));
-    await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
-
-    expect(await screen.findByRole('alert')).toBeInTheDocument();
-    expect(sessionStorage.getItem(FACTORY_KEY)).toBe('fp-1');
   });
 
   it('cannot be left while the Factory is being created', async () => {

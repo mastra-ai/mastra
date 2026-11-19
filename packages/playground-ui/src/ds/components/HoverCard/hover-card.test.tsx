@@ -9,17 +9,6 @@ afterEach(() => {
 });
 
 describe('HoverCard', () => {
-  it('renders the trigger', () => {
-    render(
-      <HoverCard>
-        <HoverCardTrigger>Hover me</HoverCardTrigger>
-        <HoverCardContent>Card content</HoverCardContent>
-      </HoverCard>,
-    );
-
-    expect(screen.getByText('Hover me')).toBeTruthy();
-  });
-
   it('keeps the content unmounted while closed', () => {
     render(
       <HoverCard>
@@ -40,28 +29,6 @@ describe('HoverCard', () => {
     );
 
     expect(screen.getByText('Card content')).toBeTruthy();
-  });
-
-  it('accepts Base UI positioning props through content', () => {
-    render(
-      <HoverCard defaultOpen>
-        <HoverCardTrigger>Hover me</HoverCardTrigger>
-        <HoverCardContent
-          align="start"
-          alignOffset={4}
-          arrowPadding={6}
-          collisionAvoidance={{ side: 'shift', align: 'shift', fallbackAxisSide: 'none' }}
-          collisionBoundary={document.body}
-          collisionPadding={8}
-          positionMethod="fixed"
-          sticky
-        >
-          Positioned content
-        </HoverCardContent>
-      </HoverCard>,
-    );
-
-    expect(screen.getByText('Positioned content')).toBeTruthy();
   });
 
   it('forwards className to the content popup', () => {

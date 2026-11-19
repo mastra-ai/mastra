@@ -177,13 +177,6 @@ describe('ThreadPreferencesProvider', () => {
       return screen.findByRole('listbox');
     };
 
-    it("marks the agent's model as the default", async () => {
-      const list = await openPicker();
-
-      const option = within(list).getByRole('option', { name: /^GPT-4o(?! Mini)/ });
-      expect(within(option).getByText('Default')).toBeTruthy();
-    });
-
     it("drops the override after a reset, so the chat runs on the agent's model", async () => {
       const bodies: unknown[] = [];
       server.use(

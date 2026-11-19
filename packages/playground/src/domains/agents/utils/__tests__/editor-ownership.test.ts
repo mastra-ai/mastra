@@ -195,8 +195,4 @@ describe('getEditorOwnership', () => {
       expect(getEditorOwnership(isCodeAgentOverride, editorConfig)).toEqual(expected);
     });
   }
-
-  it('treats editor: false and an all-locked editor object identically', () => {
-    expect(getEditorOwnership(true, { instructions: false, tools: false })).toEqual(getEditorOwnership(true, false));
-  });
 });

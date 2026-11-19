@@ -156,6 +156,36 @@ export const agentTraceWithTools: GetTraceResponse = {
   ],
 };
 
+/** A turn that delegated to a sub-agent: the delegation is a tool call whose output carries the sub-agent's answer. */
+export const agentTraceWithSubAgent: GetTraceResponse = {
+  traceId: TRACE_THREAD_ITEM_ID,
+  spans: [
+    rootSpan,
+    {
+      ...baseSpan,
+      spanId: 'sub-agent-generation',
+      parentSpanId: 'agent-root',
+      name: 'Model generation',
+      spanType: SpanType.MODEL_GENERATION,
+      startedAt: new Date('2026-08-30T12:00:00.100Z'),
+    },
+    {
+      ...baseSpan,
+      spanId: 'sub-agent-tool',
+      parentSpanId: 'sub-agent-generation',
+      name: 'Ask the weather agent',
+      spanType: SpanType.TOOL_CALL,
+      entityType: 'tool',
+      entityId: 'agent-weatherAgent',
+      entityName: 'agent-weatherAgent',
+      input: { prompt: 'Weather in Paris this weekend?' },
+      output: { text: 'Sunny all weekend.', subAgentThreadId: 'sub-thread', subAgentResourceId: 'weatherAgent' },
+      attributes: { toolCallId: 'call-sub-agent' },
+      startedAt: new Date('2026-08-30T12:00:00.200Z'),
+    },
+  ],
+};
+
 export const agentTraceWithSkill: GetTraceResponse = {
   traceId: TRACE_THREAD_ITEM_ID,
   spans: [

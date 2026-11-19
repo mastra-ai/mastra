@@ -888,6 +888,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   /** Returns the span saved for a later `rebuildSpan()`, with its trace state */
   public snapshot(): SpanSnapshot<TType> {
     const { includeInternalSpans, spanFilter } = this.observabilityInstance.getConfig();
+    const { tags } = this.getCorrelationContext();
     const exportedSpan = this.exportSpan(includeInternalSpans);
     // The rebuilt span has no live parent, so the parent ids to export past filtered starts travel with it.
     const reparented = {
@@ -899,6 +900,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       reparented.externalParentSpanId !== exportedSpan.externalParentSpanId;
     return {
       ...exportedSpan,
+      // An export has tags on the root only. A rebuilt child needs them for its metrics.
+      ...(tags ? { tags } : {}),
       ownEntityVersionId: this.ownEntityVersionId ?? null,
       ...(this.errorOccurrenceIds ? { errorOccurrenceIds: [...this.errorOccurrenceIds] } : {}),
       ...(this.traceState ? { traceState: this.traceState } : {}),

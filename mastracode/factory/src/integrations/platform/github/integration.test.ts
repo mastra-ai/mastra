@@ -717,7 +717,7 @@ describe('PlatformGithubIntegration', () => {
       const url = String(input);
       const pathname = new URL(url).pathname;
       const method = init?.method;
-      if (method === 'DELETE') return json(undefined, 204);
+      if (method === 'DELETE' || pathname.endsWith('/thread')) return json(undefined, 204);
       if (pathname.endsWith('/merge')) return json({ merged: true, message: 'merged', sha: 'def456' });
       if (url.includes('/requested-reviewers')) return json({ users: ['grace'], teams: ['platform'] });
       if (url.includes('/pulls/comments/')) return json(reviewComment);
@@ -777,6 +777,7 @@ describe('PlatformGithubIntegration', () => {
       body: 'Updated nit',
     });
     await integration.versionControl.deleteReviewComment({ connection, sourceId, commentId: '77' });
+    await integration.versionControl.resolveReviewThread!({ connection, sourceId, commentId: '77', resolved: true });
     await integration.versionControl.listRequestedReviewers(ref);
     await integration.versionControl.requestReviewers({ ...ref, users: ['grace'] });
     await integration.versionControl.removeRequestedReviewers({ ...ref, teams: ['platform'] });
@@ -805,10 +806,13 @@ describe('PlatformGithubIntegration', () => {
       'POST /v1/server/github/repos/acme/app/pulls/34/comments',
       'PATCH /v1/server/github/repos/acme/app/pulls/comments/77',
       'DELETE /v1/server/github/repos/acme/app/pulls/comments/77',
+      'PUT /v1/server/github/repos/acme/app/pulls/comments/77/thread',
       'GET /v1/server/github/repos/acme/app/pulls/34/requested-reviewers',
       'POST /v1/server/github/repos/acme/app/pulls/34/requested-reviewers',
       'DELETE /v1/server/github/repos/acme/app/pulls/34/requested-reviewers',
     ]);
+    const threadCall = fetchImpl.mock.calls.find(call => String(call[0]).endsWith('/pulls/comments/77/thread'));
+    expect(JSON.parse(String((threadCall?.[1] as RequestInit).body))).toEqual({ resolved: true });
   });
 
   it('mints a repository-scoped platform token for git access', async () => {
