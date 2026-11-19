@@ -29,15 +29,49 @@ curl https://gateway-api.mastra.ai/v1/videos \
   }'
 ```
 
-| Field | Required | Value |
-| - | - | - |
-| `model` | Yes | A video model ID. |
-| `prompt` | Yes | 1 to 32,000 characters. |
-| `duration` | Yes | Length in whole seconds, 1 to 120. |
-| `resolution` | No | `360p`, `480p`, `720p`, `768p`, `1080p`, `1K`, `2K`, or `4K`. |
-| `aspect_ratio` | No | `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `3:2`, `2:3`, `21:9`, or `9:21`. |
-| `generate_audio` | No | `true` to generate an audio track. |
-| `seed` | No | Integer, 0 to 2,147,483,647. |
+<PropertiesTable
+  content={[
+  {
+    name: 'model',
+    type: 'string',
+    description: 'A video model ID.',
+  },
+  {
+    name: 'prompt',
+    type: 'string',
+    description: '1 to 32,000 characters.',
+  },
+  {
+    name: 'duration',
+    type: 'number',
+    description: 'Length in whole seconds, 1 to 120.',
+  },
+  {
+    name: 'resolution',
+    type: "'360p' | '480p' | '720p' | '768p' | '1080p' | '1K' | '2K' | '4K'",
+    isOptional: true,
+    description: 'Output resolution.',
+  },
+  {
+    name: 'aspect_ratio',
+    type: "'16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '3:2' | '2:3' | '21:9' | '9:21'",
+    isOptional: true,
+    description: 'Output aspect ratio.',
+  },
+  {
+    name: 'generate_audio',
+    type: 'boolean',
+    isOptional: true,
+    description: '`true` to generate an audio track.',
+  },
+  {
+    name: 'seed',
+    type: 'number',
+    isOptional: true,
+    description: 'Integer, 0 to 2,147,483,647.',
+  },
+]}
+/>
 
 Each job produces one video. Unknown fields return `422`. Each model supports its own set of durations, resolutions, and aspect ratios. If no route serves the combination you ask for, the request is refused before any credit is held.
 

@@ -26,12 +26,32 @@ curl https://gateway-api.mastra.ai/v1/audio/speech \
   --output speech.mp3
 ```
 
-| Field | Description |
-| - | - |
-| `model` | Required. A speech model from `/v1/models`. |
-| `input` | Required. 1 to 4,096 characters. |
-| `voice` | Required. A voice supported by the model. |
-| `response_format` | Optional. `mp3` (default) or `pcm`. `pcm` is available only on models that support it. |
+<PropertiesTable
+  content={[
+  {
+    name: 'model',
+    type: 'string',
+    description: 'A speech model from [`/v1/models`](/docs/mastra-platform/gateway/api/models).',
+  },
+  {
+    name: 'input',
+    type: 'string',
+    description: 'Text to speak, 1 to 4,096 characters.',
+  },
+  {
+    name: 'voice',
+    type: 'string',
+    description: 'A voice supported by the model.',
+  },
+  {
+    name: 'response_format',
+    type: "'mp3' | 'pcm'",
+    isOptional: true,
+    defaultValue: 'mp3',
+    description: 'Audio format. `pcm` is available only on models that support it.',
+  },
+]}
+/>
 
 A speech request stays on one voice and model, so it doesn't fail over to a different model.
 
