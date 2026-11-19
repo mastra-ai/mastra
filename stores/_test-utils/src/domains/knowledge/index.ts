@@ -138,3 +138,5 @@ export function createKnowledgeLegacyUpgradeTests(fixture: KnowledgeLegacyUpgrad
 }
 
 export { createKnowledgePageStoreTests } from './pages';
+export { createKnowledgeTransactionTests, knowledgeStoreThroughTransactions } from './transaction';
+export type { KnowledgeTransactionFixture, KnowledgeTransactionImporterRows } from './transaction';

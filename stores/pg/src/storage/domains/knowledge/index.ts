@@ -4,6 +4,8 @@ import { KnowledgeStorage } from '@mastra/core/storage';
 import type { KnowledgePageStore } from '@mastra/core/storage';
 import { defaults as pgDefaults } from 'pg';
 
+import { TransactionClient } from '../../client';
+import type { TxClient } from '../../client';
 import type { DbClient, PgDomainConfig } from '../../db';
 import { resolvePgConfig } from '../../db';
 import { PgKnowledgePages, pgKnowledgePagesDDL } from './pages';
@@ -77,6 +79,60 @@ export function getPgKnowledgeIsolationKey(config: PgKnowledgeIsolationConfig): 
   return `pg:unidentified:schema:${schema}`;
 }
 
+/**
+ * A `DbClient` over one open transaction, for a {@link KnowledgePG} transaction view. Every query runs
+ * on the transaction; `tx` opens a savepoint, so a store method that fails undoes only its own
+ * statements and leaves the transaction usable. Savepoints nest, so calls on a view are awaited one
+ * at a time, as on a single connection.
+ */
+class TransactionDbClient implements DbClient {
+  readonly #tx: TxClient;
+  #savepoints = 0;
+
+  constructor(tx: TxClient) {
+    this.#tx = tx;
+  }
+
+  get $pool(): never {
+    throw new Error('A Knowledge transaction view has no pool of its own.');
+  }
+
+  connect(): never {
+    throw new Error('A Knowledge transaction view has no pool of its own.');
+  }
+
+  none: DbClient['none'] = (query, values) => this.#tx.none(query, values);
+  one: DbClient['one'] = (query, values) => this.#tx.one(query, values);
+  oneOrNone: DbClient['oneOrNone'] = (query, values) => this.#tx.oneOrNone(query, values);
+  any: DbClient['any'] = (query, values) => this.#tx.any(query, values);
+  manyOrNone: DbClient['manyOrNone'] = (query, values) => this.#tx.manyOrNone(query, values);
+  many: DbClient['many'] = (query, values) => this.#tx.many(query, values);
+  query: DbClient['query'] = (query, values) => this.#tx.query(query, values);
+
+  tx<T>(callback: (t: TxClient) => Promise<T>): Promise<T> {
+    const tx = this.#tx;
+    if (!(tx instanceof TransactionClient)) {
+      return Promise.reject(
+        new Error('Knowledge transactions need a client from @mastra/pg (a pool, connection string or PoolAdapter).'),
+      );
+    }
+    return tx.savepoint(`knowledge_sp_${++this.#savepoints}`, () => callback(tx));
+  }
+}
+
+const transactionClients = new WeakMap<KnowledgeStorage, TxClient>();
+
+/**
+ * The transaction behind a {@link KnowledgePG} transaction view, for tables in this package that
+ * must commit with the page writes.
+ * @internal
+ */
+export function pgKnowledgeTransactionClient(view: KnowledgeStorage): TxClient {
+  const tx = transactionClients.get(view);
+  if (!tx) throw new Error('Not a KnowledgePG transaction view.');
+  return tx;
+}
+
 type PageStoreMethod = {
   [K in keyof KnowledgePageStore]: KnowledgePageStore[K] extends (...args: never[]) => unknown ? K : never;
 }[keyof KnowledgePageStore];
@@ -116,11 +172,26 @@ export class KnowledgePG extends KnowledgeStorage {
       supportsSchemaInspection: true,
       supportsExplicitReset: true,
       supportsPinKinds: true,
+      supportsTransactions: true,
     } as const;
   }
 
   async init(): Promise<void> {
     await initPgKnowledgePagesSchema(this.#client, this.#schemaName);
+  }
+
+  override transaction<T>(operation: (tx: KnowledgeStorage) => Promise<T>): Promise<T> {
+    // A view joins its own transaction through a savepoint.
+    if (transactionClients.has(this)) return this.#client.tx(() => operation(this));
+    return this.#client.tx(tx => {
+      const view = new KnowledgePG({
+        client: new TransactionDbClient(tx),
+        schemaName: this.#schemaName,
+        storageIsolationKey: this.getStorageIsolationKey(),
+      });
+      transactionClients.set(view, tx);
+      return operation(view);
+    });
   }
 
   override async inspectSchema() {

@@ -64,16 +64,34 @@ export function getLibSQLKnowledgeIsolationKey(
   return urlKey ? `libsql:${urlKey}` : (client ?? config.client ?? config);
 }
 
+/** Set on the config of a transaction view: the write transaction it runs on. */
+const IN_TRANSACTION = Symbol('knowledge transaction');
+const transactions = new WeakMap<KnowledgeStorage, Transaction>();
+
+/**
+ * The write transaction behind a {@link KnowledgeLibSQL} transaction view, for tables in this
+ * package that must commit with the page writes.
+ * @internal
+ */
+export function libsqlKnowledgeTransaction(view: KnowledgeStorage): Transaction {
+  const tx = transactions.get(view);
+  if (!tx) throw new Error('Not a KnowledgeLibSQL transaction view.');
+  return tx;
+}
+
 export class KnowledgeLibSQL extends KnowledgeStorage {
   readonly #client: Client;
   readonly #db: LibSQLDB;
   readonly #pages: LibSQLKnowledgePages;
+  readonly #inTransaction?: Transaction;
+  #savepoints = 0;
 
-  constructor(config: LibSQLDomainConfig) {
+  constructor(config: LibSQLDomainConfig & { [IN_TRANSACTION]?: Transaction }) {
     const client = resolveClient(config);
     const storageIsolationKey = config.storageIsolationKey ?? getLibSQLKnowledgeIsolationKey(config, client);
     super({ storageIsolationKey });
     this.#client = client;
+    this.#inTransaction = config[IN_TRANSACTION];
     this.#db = new LibSQLDB({
       client: this.#client,
       maxRetries: config.maxRetries,
@@ -81,7 +99,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       getLogger: () => this.logger,
     });
     this.#pages = new LibSQLKnowledgePages({
-      read: this.#client,
+      read: this.#inTransaction ?? this.#client,
       transaction: operation => this.#transaction(operation),
     });
   }
@@ -93,6 +111,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       supportsSchemaInspection: true,
       supportsExplicitReset: true,
       supportsPinKinds: true,
+      supportsTransactions: true,
     } as const;
   }
 
@@ -352,7 +371,34 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     return this.#pages.listPins(input);
   }
 
+  override transaction<T>(operation: (tx: KnowledgeStorage) => Promise<T>): Promise<T> {
+    if (this.#inTransaction) return this.#transaction(() => operation(this));
+    return this.#transaction(tx => {
+      const view = new KnowledgeLibSQL({
+        client: this.#client,
+        storageIsolationKey: this.getStorageIsolationKey(),
+        [IN_TRANSACTION]: tx,
+      });
+      transactions.set(view, tx);
+      return operation(view);
+    });
+  }
+
   async #transaction<T>(operation: (tx: Transaction) => Promise<T>): Promise<T> {
+    // In a transaction view, a savepoint: a failed store method undoes only its own writes.
+    const open = this.#inTransaction;
+    if (open) {
+      const name = `knowledge_sp_${++this.#savepoints}`;
+      await open.execute(`SAVEPOINT ${name}`);
+      try {
+        const result = await operation(open);
+        await open.execute(`RELEASE SAVEPOINT ${name}`);
+        return result;
+      } catch (error) {
+        await open.execute(`ROLLBACK TO SAVEPOINT ${name}`);
+        throw error;
+      }
+    }
     return this.#db.executeWriteOperationWithRetry(
       () =>
         withClientWriteLock(this.#client, async () => {

@@ -18,6 +18,8 @@ export interface KnowledgeStorageCapabilities {
    * pin kinds don't report it, and core refuses listing pins on them rather than store a page pin.
    */
   supportsPinKinds?: boolean;
+  /** The adapter implements {@link KnowledgeStorage.transaction}. */
+  supportsTransactions?: boolean;
 }
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
@@ -177,6 +179,23 @@ export abstract class KnowledgeStorage extends StorageDomain implements Knowledg
       supportsSchemaInspection: false,
       supportsExplicitReset: false,
     };
+  }
+
+  /**
+   * Runs `operation` against a view of this store whose reads and writes all belong to one
+   * transaction: it commits when `operation` resolves and rolls back when it throws, and no other
+   * connection sees its writes until it commits. A store method that fails inside the view undoes
+   * only its own writes, so the caller can catch it and go on. `transaction` on the view joins the
+   * same transaction the same way. Adapters in the same package can write their own tables through
+   * the view, so they commit with the page writes.
+   *
+   * Calls on this store (not the view) while `operation` runs are outside the transaction. Await
+   * calls on the view one at a time, as on a single connection.
+   *
+   * @experimental
+   */
+  transaction<T>(_operation: (tx: KnowledgeStorage) => Promise<T>): Promise<T> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('transactions'));
   }
 
   async inspectSchema(): Promise<KnowledgeSchemaInspection> {

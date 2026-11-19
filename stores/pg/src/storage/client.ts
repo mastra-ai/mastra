@@ -216,7 +216,7 @@ export class PoolAdapter implements DbClient {
  * those internally and emits a DeprecationWarning; pg@9 will throw.
  * (#20820)
  */
-class TransactionClient implements TxClient {
+export class TransactionClient implements TxClient {
   /**
    * Serialization tail. Without this gate, concurrent t.none()/t.query()
    * from Promise.all / batch land on the same PoolClient at once.
@@ -248,6 +248,25 @@ class TransactionClient implements TxClient {
       const { value } = this.#error;
       this.#error = undefined;
       throw value;
+    }
+  }
+
+  /**
+   * Runs `callback` inside a savepoint. When it fails, the transaction rolls back to the savepoint
+   * and stays usable, so its failure isn't kept for COMMIT; the caller gets it.
+   */
+  async savepoint<T>(name: string, callback: () => Promise<T>): Promise<T> {
+    await this.drain();
+    await this.none(`SAVEPOINT ${name}`);
+    try {
+      const result = await callback();
+      await this.drain();
+      await this.none(`RELEASE SAVEPOINT ${name}`);
+      return result;
+    } catch (error) {
+      await this.drain().catch(() => undefined);
+      await this.none(`ROLLBACK TO SAVEPOINT ${name}`);
+      throw error;
     }
   }
 
