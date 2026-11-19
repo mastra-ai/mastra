@@ -427,6 +427,28 @@ describe('authorized unfiled approval-order exception', () => {
     expect(pass(durable, captureFor(durable), plain)).toBe(true);
     expect(check.symptoms).toEqual([expect.objectContaining({ cell: approval, ticket: 'UNFILED_APPROVAL_ORDER' })]);
   });
+  // Real Redis trace approval-order-trace-1795066889-85753, round 2:
+  // plain publishes resumed before suspended; unchanged durable topics then differ from that reference.
+  it.each(['durable', 'evented'] as const)(
+    'keeps a Redis plain-reference inversion red without waiving %s marker pins',
+    engine => {
+      const redis: Cell = { ...approval, backend: 'redis' };
+      const plain = captureFor(redis);
+      invertApproval(plain);
+      const before = structuredClone(plain);
+      const plainCheck = checkCell(redis, plain);
+      expect(plainCheck.verdict.unlisted).toEqual([expect.objectContaining({ reader: 'topic', against: 'live' })]);
+      const caller: Cell = { ...redis, engine };
+      const capture = captureFor(caller);
+      expect(pass(caller, capture, captureFor(redis))).toBe(true);
+      const check = checkCell(caller, capture, plain);
+      expect(check.verdict.unlisted).toEqual([expect.objectContaining({ reader: 'topic', against: 'plain' })]);
+      expect(check.verdict.stale).toHaveLength(2);
+      expect(check.verdict.stale.every(pin => pin.ticket === 'COR-1557')).toBe(true);
+      expect(check.symptoms ?? []).toEqual([]);
+      expect(plain).toEqual(before);
+    },
+  );
   it.each([{ backend: 'redis' }, { topology: 'split' }] as const)(
     'does not broaden the inversion exception to another layout: %j',
     layout => {

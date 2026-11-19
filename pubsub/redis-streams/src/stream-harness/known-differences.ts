@@ -291,7 +291,7 @@ const REMAINING_KEYS: Attribution = {
     '(#30376, 5053f97664a; agent/streams/publisher.ts:380-406), not the thread-stream topic. ' +
     'The dedicated fixture prefix also exposes scheduler/workflow infrastructure keys; these are reported, not ' +
     'claimed as leaked run logs. Hosted run 44215558450 captures the same three keys for plain/durable, ' +
-    'with hours TTLs 4s after finish (stream-harness-node.entry.ts).',
+    'with hours TTLs 4s after finish (stream-harness-node.entry.ts:580-614).',
 };
 const EVENTED_INFRA_KEYS: Attribution = {
   ticket: 'COR-1534',
@@ -299,7 +299,7 @@ const EVENTED_INFRA_KEYS: Attribution = {
   evidence:
     'Evented execution additionally leaves workflow control/finish and short-lived workflow-step lease keys. ' +
     'Hosted run 44215558450 captures seven keys after #30376 removes the agent control topic. ' +
-    'These are engine infrastructure, not extra agent stream histories (stream-harness-node.entry.ts).',
+    'These are engine infrastructure, not extra agent stream histories (stream-harness-node.entry.ts:580-614).',
 };
 const BUS_KEYS =
   'key[:agent.thread-stream.harness-user%00<thread> ttl=hours],key[:scheduler ttl=hours],key[:workflows ttl=hours]';
