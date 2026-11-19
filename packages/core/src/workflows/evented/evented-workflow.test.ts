@@ -10,7 +10,7 @@ import { EventEmitter } from 'node:events';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
-import { Agent } from '../../agent';
+import { Agent, MessageList } from '../../agent';
 import type { FGACheckParams } from '../../auth/ee';
 import { MastraNonRetryableError } from '../../error';
 import type { Event } from '../../events';
@@ -512,6 +512,53 @@ describe('Workflow (Evented Engine Specific)', () => {
 
       expect(result.status).toBe('success');
       expect((processorStates.get('tracking-processor') as any)?.customState).toEqual({ messageCount: 1 });
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+
+  it('passes the abort signal to every processor in a chain (#29208)', async () => {
+    const received: Array<AbortSignal | undefined> = [];
+    const recorder = (id: string): Processor => ({
+      id,
+      processInputStep: async ({ messageList, abortSignal }) => {
+        received.push(abortSignal);
+        return messageList;
+      },
+    });
+    const workflow = createWorkflow({
+      id: 'evented-processor-abort-signal-chain',
+      inputSchema: ProcessorStepSchema,
+      outputSchema: ProcessorStepSchema,
+      type: 'processor',
+      options: { validateInputs: false },
+    })
+      .then(createStep(recorder('first')))
+      .then(createStep(recorder('second')))
+      .commit();
+
+    const mastra = new Mastra({
+      workflows: { 'evented-processor-abort-signal-chain': workflow },
+      storage: testStorage,
+      pubsub: new EventEmitterPubSub(),
+    });
+    await mastra.startWorkers();
+
+    try {
+      const controller = new AbortController();
+      const run = await workflow.createRun();
+      const result = await run.start({
+        inputData: {
+          phase: 'inputStep',
+          messages: [],
+          messageList: new MessageList(),
+          stepNumber: 0,
+          abortSignal: controller.signal,
+        } as any,
+      });
+
+      expect(result.status).toBe('success');
+      expect(received).toEqual([controller.signal, controller.signal]);
     } finally {
       await mastra.stopWorkers();
     }
