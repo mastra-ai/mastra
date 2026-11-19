@@ -9,7 +9,7 @@
  * must not inherit that error: before the evented engine was re-enabled they ran
  * the loop in-process regardless of storage, so throwing here would turn a working
  * agent into a hard failure on upgrade. They degrade with a warning instead, the
- * same way a hostless EventedAgent does (see DurableAgent.resolveWorkflowEngine).
+ * same way a hostless EventedAgent does (see DurableExecutionEngine.resolveWorkflowEngine).
  *
  * A workflow that opts into the engine directly via `schedule` still gets the
  * error — see workflows/evented/storage-capability-gate.test.ts.
