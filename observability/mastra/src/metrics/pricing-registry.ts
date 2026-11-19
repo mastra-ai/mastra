@@ -4,7 +4,6 @@ import path from 'node:path';
 import type { MastraModelGatewayInterface } from '@mastra/core/llm';
 import { MIN_PRICED_MODELS, MODELS_DEV_API_URL, modelsDevToPricingModels, pickModelsDevCosts } from './models-dev';
 import type { ModelsDevCosts } from './models-dev';
-// Imported, not read from disk: a bundled app (a Cloudflare Worker, for example) has no package files.
 import pricingData from './pricing-data.json';
 import type { PricingModel } from './pricing-model';
 
