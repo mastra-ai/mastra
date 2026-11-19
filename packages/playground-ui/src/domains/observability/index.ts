@@ -41,3 +41,8 @@ export type {
   SavedViewsProviderProps,
   SavedViewsSource,
 } from './saved-views';
+export { SearchProgress } from './components/search-progress';
+export type { SearchProgressProps } from './components/search-progress';
+export { searchProgressProps } from './hooks/search-progress-props';
+export type { HistogramView, SearchProgressControl } from './hooks/use-histogram-view';
+export { hasWordSearch, searchesInChunks } from './lib/progressive-search';

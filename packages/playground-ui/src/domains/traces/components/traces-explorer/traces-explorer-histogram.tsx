@@ -1,21 +1,23 @@
-import type { AggregateTracesArgs } from '@mastra/client-js';
-import { useTraceAggregateAvailable } from '@mastra/react/hooks/capabilities';
-import { useTraceAggregate } from '@mastra/react/hooks/traces';
-import { keepPreviousData } from '@tanstack/react-query';
-import { useMemo } from 'react';
-import { buildTracesQueryRequest } from './traces-explorer-actions';
-import { useTracesConfig, useTracesFilters } from './traces-explorer-context';
+import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useTracesHistogram } from '../../hooks/use-traces-histogram';
+import { useTracesFilters } from './traces-explorer-context';
+import { TracesHistogramContext } from './traces-explorer-histogram-context';
 import { ObservabilityHistogram } from '@/domains/observability/components/observability-histogram';
-import {
-  bucketCountRows,
-  exceedsAggregateWindow,
-  HISTOGRAM_MEASURES,
-  histogramPlan,
-  zoomWindow,
-} from '@/domains/observability/lib/histogram-buckets';
+import { zoomWindow } from '@/domains/observability/lib/histogram-buckets';
 
-/** Compares selections, not instants: only filter or date changes move the chart's `now`. */
-const SELECTION_CLOCK = new Date(0);
+/** The histogram's counts, shared by `Histogram` and `SearchProgress`. Loads only while a `Histogram` is mounted. */
+export function TracesHistogramProvider({ children }: { children: ReactNode }) {
+  const [charts, setCharts] = useState(0);
+  const register = useCallback(() => {
+    setCharts(count => count + 1);
+    return () => setCharts(count => count - 1);
+  }, []);
+  const view = useTracesHistogram(charts > 0);
+  const histogram = charts > 0 ? view : undefined;
+  const value = useMemo(() => ({ histogram, register }), [histogram, register]);
+  return <TracesHistogramContext.Provider value={value}>{children}</TracesHistogramContext.Provider>;
+}
 
 /**
  * Trace and error counts over the list's time range, built from the same filters as the list query.
@@ -24,81 +26,15 @@ const SELECTION_CLOCK = new Date(0);
  * Dragging across bars narrows the list to their time span as a custom range.
  */
 export function TracesExplorerHistogram() {
-  const {
-    rootSource,
-    withQueryTrace,
-    withTokenSearch,
-    withRootDuration,
-    withTimeToFirstChunk,
-    withTimeToFirstToken,
-    withOutcomeFields,
-  } = useTracesConfig();
-  const { filters, dateFrom, dateTo, runningSelected, zoomDateRange } = useTracesFilters();
-  const aggregateAvailable = useTraceAggregateAvailable();
+  const context = useContext(TracesHistogramContext);
+  if (!context) throw new Error('TracesExplorer.Histogram must be used inside <TracesExplorer>');
+  const { histogram, register } = context;
+  const { zoomDateRange } = useTracesFilters();
 
-  const selectionKey = JSON.stringify(
-    buildTracesQueryRequest({
-      filters,
-      dateFrom,
-      dateTo,
-      withTokenSearch,
-      withRootDuration,
-      withTimeToFirstChunk,
-      withTimeToFirstToken,
-      withOutcomeFields,
-      now: SELECTION_CLOCK,
-    }),
-  );
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- `selectionKey` is the trigger, not an input.
-  const now = useMemo(() => new Date(), [selectionKey]);
+  useEffect(register, [register]);
 
-  const request = useMemo<AggregateTracesArgs>(() => {
-    const { timeRange, where } = buildTracesQueryRequest({
-      filters,
-      dateFrom,
-      dateTo,
-      withTokenSearch,
-      withRootDuration,
-      withTimeToFirstChunk,
-      withTimeToFirstToken,
-      withOutcomeFields,
-      now,
-    });
-    return {
-      timeRange,
-      ...(where ? { where } : {}),
-      interval: histogramPlan(timeRange).interval,
-      measures: [...HISTOGRAM_MEASURES],
-      // No groupBy means a single group; the default limit would multiply past the server's row cap.
-      limit: 1,
-    };
-  }, [
-    filters,
-    dateFrom,
-    dateTo,
-    withRootDuration,
-    withTimeToFirstChunk,
-    withTimeToFirstToken,
-    withOutcomeFields,
-    withTokenSearch,
-    now,
-  ]);
-
-  const hidden =
-    rootSource === 'aggregated' ||
-    !withQueryTrace ||
-    !aggregateAvailable.enabled ||
-    runningSelected ||
-    exceedsAggregateWindow(request.timeRange);
-
-  const { data, isLoading, isError, isPlaceholderData } = useTraceAggregate({
-    request,
-    enabled: !hidden,
-    queryOptions: { placeholderData: keepPreviousData },
-  });
-
-  const buckets = useMemo(() => bucketCountRows(data?.rows ?? [], request.timeRange), [data, request.timeRange]);
-
+  if (!histogram) return null;
+  const { hidden, buckets, chartRange, isLoading, isError, isUpdating, pendingBefore, note } = histogram;
   if (hidden) return null;
 
   return (
@@ -108,9 +44,11 @@ export function TracesExplorerHistogram() {
       buckets={buckets}
       isLoading={isLoading}
       isError={isError}
-      isUpdating={isPlaceholderData}
+      isUpdating={isUpdating}
+      pendingBefore={pendingBefore}
+      note={note}
       onZoom={range => {
-        const { from, to } = zoomWindow(buckets, range, request.timeRange);
+        const { from, to } = zoomWindow(buckets, range, chartRange);
         zoomDateRange(from, to);
       }}
     />

@@ -41,19 +41,6 @@ export function useTracesListSource({
 }: UseTracesListSourceArgs) {
   const [tickNow, setTickNow] = useState(() => new Date());
   const delta = withDeltaPolling && withQueryTrace !== false;
-  // A fixed window polls in place. Transient failures keep polling (a blip must not silence the
-  // list), but a request the server refuses ends it: each retry would only clear the error, flash
-  // the placeholder list, and fail again. With delta polling the list stays put and only retries
-  // a transient failure.
-  const refetchInterval = !autoRefetch
-    ? false
-    : delta
-      ? (query: { state: { error: unknown } }) => recoveryRefetchInterval(query.state.error)
-      : !rolling
-        ? (query: { state: { error: unknown } }) => fixedWindowRefetchInterval(query.state.error)
-        : false;
-  const refetchOnWindowFocus = autoRefetch && !delta;
-
   // Delta polls need the same time range every poll, so `now` only moves when the filters or dates
   // change: the new list and the new cursor start from the current time. Sorting is not part of the
   // selection and keeps the cursor.
@@ -65,6 +52,22 @@ export function useTracesListSource({
   const now = delta ? anchoredNow : refreshedNow;
 
   const built = buildQuery(now);
+  // A progressive word search doesn't refresh: a rolling tick or refetch would search the whole range again.
+  const progressive = withQueryTrace !== false && built.progressive === true;
+  const refreshing = autoRefetch && !progressive;
+  // A fixed window polls in place. Transient failures keep polling (a blip must not silence the
+  // list), but a request the server refuses ends it: each retry would only clear the error, flash
+  // the placeholder list, and fail again. With delta polling the list stays put and only retries
+  // a transient failure.
+  const refetchInterval = !refreshing
+    ? false
+    : delta
+      ? (query: { state: { error: unknown } }) => recoveryRefetchInterval(query.state.error)
+      : !rolling
+        ? (query: { state: { error: unknown } }) => fixedWindowRefetchInterval(query.state.error)
+        : false;
+  const refetchOnWindowFocus = refreshing && !delta;
+
   // Delta polls must keep the exact time range, so a rolling window reaches into the future
   // instead of moving its end every tick.
   const anchored =
@@ -91,25 +94,34 @@ export function useTracesListSource({
   useTraceQueryLatest({
     query,
     limit,
-    enabled: enabled && delta && autoRefetch,
+    // Paused during a progressive search: delta only covers the newest minutes, and the server
+    // doesn't chunk delta requests.
+    enabled: enabled && delta && refreshing,
     refetchInterval: OBSERVABILITY_LIST_POLL_INTERVAL_MS,
-    queryOptions: { refetchOnWindowFocus: autoRefetch },
+    queryOptions: { refetchOnWindowFocus: refreshing },
   });
 
   // Moving the query key refreshes the cursor chain once, without a second polling request.
   useEffect(() => {
-    if (delta || !autoRefetch || !rolling || result.error) return;
+    if (delta || !refreshing || !rolling || result.error) return;
     const timer = setInterval(() => setTickNow(new Date()), OBSERVABILITY_LIST_REFETCH_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [delta, autoRefetch, rolling, result.error]);
+  }, [delta, refreshing, rolling, result.error]);
 
   // A rolling tick moves the query key; keep the previous rows when the data is the same so
   // consumers keyed on `rows` don't re-render every tick.
   const rows = useMemo(() => toTracesListViewTraces(result.data ?? []), [result.data]);
+  // Only a progressive search reports its range: a rolling tick would otherwise re-render every list consumer.
+  const from = progressive ? query.timeRange?.from : undefined;
+  const to = progressive ? query.timeRange?.to : undefined;
+  const timeRange = useMemo(() => (from && to ? { from, to } : undefined), [from, to]);
 
   return {
     ...result,
     rows,
-    autoRefetch,
+    autoRefetch: refreshing,
+    progressive,
+    /** A progressive search's time range, as requested. */
+    timeRange,
   };
 }

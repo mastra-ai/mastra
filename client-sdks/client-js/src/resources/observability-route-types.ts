@@ -24,12 +24,34 @@ export type ListTracesLightResponse = Response<'GET /observability/traces/light'
 export type TraceQueryRequest = Body<'POST /observability/traces/query'>;
 export type TraceQueryResponse = Response<'POST /observability/traces/query'>;
 export type TraceQueryTraceResponse = Extract<TraceQueryResponse, { traces: unknown[] }>;
-export type TraceQueryKeysetTraceResponse = Extract<TraceQueryTraceResponse, { page: { next: string | null } }>;
+/**
+ * Opt-in progressive word search, on span and trace queries and aggregates. A server that reports the
+ * `progressiveTokenSearch` capability searches a long range one chunk (up to 7 days) per request.
+ * Servers without it reject these fields, so send them only when the capability is on.
+ */
+export type ProgressiveSearchRequest = {
+  progressive?: true;
+  /** From the previous response. Send the same body plus this field, without `page.after`. */
+  continuation?: string;
+};
+
+/** Present only when the request sent `progressive: true`. */
+export type ProgressiveSearchResponse = {
+  /** The part of the requested range searched by this request and the earlier ones in the sequence. */
+  searchedRange?: { from: string; to: string };
+  /** Pass to the next request; `null` once the whole range has been searched. */
+  continuation?: string | null;
+  /** Aggregates only: whether results from different chunks can be appended. */
+  mergeable?: boolean;
+};
+
+export type TraceQueryKeysetTraceResponse = Extract<TraceQueryTraceResponse, { page: { next: string | null } }> &
+  ProgressiveSearchResponse;
 export type TraceQueryGroupResponse = Extract<TraceQueryResponse, { groups: unknown[] }>;
-export type AggregateTracesArgs = Body<'POST /observability/traces/aggregate'>;
-export type AggregateTracesResponse = Response<'POST /observability/traces/aggregate'>;
-export type AggregateSpansArgs = Body<'POST /observability/spans/aggregate'>;
-export type AggregateSpansResponse = Response<'POST /observability/spans/aggregate'>;
+export type AggregateTracesArgs = Body<'POST /observability/traces/aggregate'> & ProgressiveSearchRequest;
+export type AggregateTracesResponse = Response<'POST /observability/traces/aggregate'> & ProgressiveSearchResponse;
+export type AggregateSpansArgs = Body<'POST /observability/spans/aggregate'> & ProgressiveSearchRequest;
+export type AggregateSpansResponse = Response<'POST /observability/spans/aggregate'> & ProgressiveSearchResponse;
 export type GetTraceQueryFieldsArgs = Body<'POST /observability/traces/query/fields'>;
 export type GetTraceQueryFieldsResponse = Extract<
   Response<'POST /observability/traces/query/fields'>,

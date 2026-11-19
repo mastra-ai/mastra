@@ -12,6 +12,9 @@ import {
   useTracesFilters,
 } from './traces-explorer-context';
 import type { TracesListContextValue } from './traces-explorer-context';
+import { hasWordSearch, searchesInChunks } from '@/domains/observability/lib/progressive-search';
+
+const NOOP = () => {};
 
 type TracesListProviderProps = {
   sort: TracesSort;
@@ -39,6 +42,7 @@ export const TracesListProvider = memo(function TracesListProvider({
     withTimeToFirstTokenSort,
     withOutcomeFields,
     withDeltaPolling,
+    withProgressiveSearch,
     isCapabilitiesLoading,
   } = useTracesConfig();
   const { filters, hasTokenSearch, dateFrom, dateTo } = useTracesFilters();
@@ -68,9 +72,17 @@ export const TracesListProvider = memo(function TracesListProvider({
         withOutcomeFields,
         now,
       });
+      // A word search over more than 7 days loads one chunk of the range at a time, when the server can.
+      // The server chunks only start-time sorts.
+      const progressive =
+        withProgressiveSearch &&
+        sort.field === 'startedAt' &&
+        hasWordSearch(query.where) &&
+        searchesInChunks(query.timeRange);
       return {
         ...query,
         ...(rootSource === 'aggregated' ? { rootSource } : {}),
+        ...(progressive ? { progressive: true as const } : {}),
       };
     },
     orderBy: [sort],
@@ -91,7 +103,17 @@ export const TracesListProvider = memo(function TracesListProvider({
     refetch,
     isFetching,
     autoRefetch,
+    progressive,
+    timeRange,
   } = list;
+  // The progress fields follow the query key, which a rolling tick moves: outside a progressive search they stay
+  // fixed so a tick doesn't re-render every list consumer.
+  const searchedRange = progressive ? list.searchedRange : undefined;
+  const searching = progressive && list.searching;
+  const stopped = progressive && list.stopped;
+  const chunkError = progressive ? list.chunkError : null;
+  const stop = progressive ? list.stop : NOOP;
+  const fetchNextPage = progressive ? list.fetchNextPage : NOOP;
   const value = useMemo<TracesListContextValue>(
     () => ({
       rows,
@@ -102,6 +124,14 @@ export const TracesListProvider = memo(function TracesListProvider({
       error,
       refetch,
       autoRefetch,
+      progressive,
+      searchedRange,
+      searching,
+      stopped,
+      stop,
+      chunkError,
+      fetchNextPage,
+      timeRange,
       sort,
       onSortChange,
     }),
@@ -114,6 +144,14 @@ export const TracesListProvider = memo(function TracesListProvider({
       error,
       refetch,
       autoRefetch,
+      progressive,
+      searchedRange,
+      searching,
+      stopped,
+      stop,
+      chunkError,
+      fetchNextPage,
+      timeRange,
       sort,
       onSortChange,
     ],

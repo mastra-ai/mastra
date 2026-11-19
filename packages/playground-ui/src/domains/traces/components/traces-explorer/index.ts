@@ -11,6 +11,7 @@ import { TracesExplorerList } from './traces-explorer-list';
 import { TracesExplorerPanel } from './traces-explorer-panel';
 import { TracesExplorerRoot } from './traces-explorer-root';
 import { TracesExplorerSavedViews } from './traces-explorer-saved-views';
+import { TracesExplorerSearchProgress } from './traces-explorer-search-progress';
 
 export const TracesExplorer = Object.assign(TracesExplorerRoot, {
   Layout: TracesExplorerLayout,
@@ -23,6 +24,7 @@ export const TracesExplorer = Object.assign(TracesExplorerRoot, {
   List: TracesExplorerList,
   Panel: TracesExplorerPanel,
   SavedViews: TracesExplorerSavedViews,
+  SearchProgress: TracesExplorerSearchProgress,
 });
 
 export type { TracesExplorerRootProps } from './traces-explorer-root';
@@ -62,5 +64,6 @@ export {
 export type { TracesExplorerFeatures, TracesExplorerScope, TracesMetricsSupport } from './traces-explorer-context';
 export { useTracesFilterBar, useTracesFilterBarFields } from './use-traces-filter-bar';
 export { useTracesDiscovery } from './use-traces-discovery';
+export { useTracesHistogramView } from './traces-explorer-histogram-context';
 
 export type { FeedbackOptions } from '../feedback-options';

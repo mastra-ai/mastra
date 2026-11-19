@@ -1,6 +1,7 @@
 import type { SpanQueryArgs } from '@mastra/react/hooks/traces';
 import { useMemo } from 'react';
 import type { ReactNode } from 'react';
+import { useSpansHistogram } from '../hooks/use-spans-histogram';
 import { useSpansListSource } from '../hooks/use-spans-list-source';
 import { buildSpanQueryWhere } from '../span-filters';
 import { spanToListRow } from '../span-list-row';
@@ -9,8 +10,11 @@ import { SpansExplorerHistogram } from './spans-explorer-histogram';
 import { SpansFilterBar } from './spans-filter-bar';
 import { useObservabilityCapabilities } from '@/domains/capabilities';
 import { ObservabilityListBody } from '@/domains/observability/components/observability-list-body';
+import { SearchProgress } from '@/domains/observability/components/search-progress';
+import { searchProgressProps } from '@/domains/observability/hooks/search-progress-props';
 import { useObservabilityListFilters } from '@/domains/observability/hooks/use-observability-list-filters';
 import type { ObservabilityListUrlState } from '@/domains/observability/hooks/use-observability-list-filters';
+import { hasWordSearch, searchesInChunks } from '@/domains/observability/lib/progressive-search';
 import { SPAN_LIST_SORT_FIELDS } from '@/domains/observability/observability-list-url-state';
 import { ObservabilitySavedViews } from '@/domains/observability/saved-views';
 import { ColumnsMenu } from '@/domains/traces/components/columns-menu';
@@ -55,6 +59,7 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
   const withTimeToFirstToken = capabilities?.capabilities.traceQueryTimeToFirstToken ?? false;
   const withOutcomeFields = capabilities?.capabilities.spanQueryOutcomeFields ?? false;
   const withModelFields = capabilities?.capabilities.spanQueryModelFields ?? false;
+  const withProgressiveSearch = capabilities?.capabilities.progressiveTokenSearch ?? false;
 
   // Stored columns the store can't fill stay saved but aren't drawn, so they come back on a store that can.
   const displayedColumns = useMemo(
@@ -111,23 +116,29 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
       withTimeToFirstToken,
     ],
   );
+  // A word search over more than 7 days loads one chunk of the range at a time, when the server can.
+  // The server chunks only start-time sorts.
+  const progressive =
+    withProgressiveSearch && sortField === 'startedAt' && hasWordSearch(where) && searchesInChunks(timeRange);
   const query = useMemo<SpanQueryArgs>(
     () => ({
       timeRange,
       orderBy: [{ field: sortField, direction: sortDirection }],
       where,
+      ...(progressive ? { progressive: true as const } : {}),
     }),
-    [timeRange, sortField, sortDirection, where],
+    [timeRange, sortField, sortDirection, where, progressive],
   );
 
-  const { spans, hasNextPage, isFetchingNextPage, setEndOfListElement, isLoading, isError, error } = useSpansListSource(
-    {
-      query,
-      enabled: !isCapabilitiesLoading,
-      rolling: filters.rolling,
-      fixedStart: filters.datePreset === 'custom',
-    },
-  );
+  const list = useSpansListSource({
+    query,
+    enabled: !isCapabilitiesLoading,
+    rolling: filters.rolling,
+    fixedStart: filters.datePreset === 'custom',
+  });
+  const { spans, hasNextPage, isFetchingNextPage, setEndOfListElement, isLoading, isError, error } = list;
+  const histogram = useSpansHistogram({ timeRange, where });
+  const progress = searchProgressProps({ progressive, requestedRange: timeRange, histogram: histogram.progress, list });
 
   const rows = useMemo(() => (spans ?? []).map(spanToListRow), [spans]);
   const panelSpans = useMemo(
@@ -174,10 +185,12 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
                 <ColumnsMenu scope="spans" value={columns.preferences} onChange={columns.setPreferences} />
               </ActionRow.End>
             </ActionRow>
+            {progress && <SearchProgress {...progress} />}
           </>
         }
         chart={
           <SpansExplorerHistogram
+            histogram={histogram}
             timeRange={timeRange}
             where={where}
             onZoom={({ from, to }) => filters.onZoom(from, to)}

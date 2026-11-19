@@ -340,6 +340,21 @@ describe('useTracesListSource', () => {
       expect(requests.listRequests).toHaveLength(1);
     });
 
+    it('does not poll deltas during a progressive word search', async () => {
+      const requests = deltaHandlers();
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'], shouldAdvanceTime: true });
+      const progressive = (now: Date) => ({ ...query(now), progressive: true as const });
+      renderHook(() => useTracesListSource({ query: progressive, withDeltaPolling: true }), { wrapper: Wrapper });
+      await waitFor(() => expect(requests.listRequests).toHaveLength(1));
+
+      await nextTick();
+      await nextTick();
+      await refocus();
+
+      expect(requests.deltaRequests).toEqual([]);
+      expect(requests.listRequests).toHaveLength(1);
+    });
+
     it('sends the caller time range unchanged when the window is fixed', async () => {
       const requests = deltaHandlers();
       const fixed = () => ({ timeRange: { from: '2026-09-01T00:00:00.000Z', to: '2026-09-02T00:00:00.000Z' } });

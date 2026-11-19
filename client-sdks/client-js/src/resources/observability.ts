@@ -36,6 +36,8 @@ import type {
   AggregateTracesResponse,
   AggregateSpansArgs,
   AggregateSpansResponse,
+  ProgressiveSearchRequest,
+  ProgressiveSearchResponse,
   GetTraceQueryFieldsArgs,
   GetTraceQueryFieldsResponse,
   GetTraceQueryValuesArgs,
@@ -153,6 +155,8 @@ export interface LegacyGetTracesResponse {
 
 export type ListScoresBySpanParams = SpanIds & PaginationArgs;
 
+type RequestSignal = { signal?: AbortSignal };
+
 type QueryTracesBaseInput = Omit<
   TraceQueryRequest,
   'group' | 'where' | 'page' | 'pagination' | 'mode' | 'after' | 'limit'
@@ -160,14 +164,15 @@ type QueryTracesBaseInput = Omit<
   where?: TraceQueryPredicate;
 };
 
-export type QueryTracesKeysetInput = QueryTracesBaseInput & {
-  group?: never;
-  page?: TraceQueryRequest['page'];
-  pagination?: never;
-  mode?: never;
-  after?: never;
-  limit?: never;
-};
+export type QueryTracesKeysetInput = QueryTracesBaseInput &
+  ProgressiveSearchRequest & {
+    group?: never;
+    page?: TraceQueryRequest['page'];
+    pagination?: never;
+    mode?: never;
+    after?: never;
+    limit?: never;
+  };
 
 export type QueryTracesPaginatedInput = QueryTracesBaseInput & {
   group?: never;
@@ -209,8 +214,8 @@ export type QueryTraceThreadsResult<T extends QueryTraceThreadsInput = ThreadQue
 }
   ? ThreadQueryResponse
   : QueryThreadsResult;
-export type QuerySpansInput = SpanQueryRequest;
-export type QuerySpansResult = SpanQueryResponse;
+export type QuerySpansInput = SpanQueryRequest & ProgressiveSearchRequest;
+export type QuerySpansResult = SpanQueryResponse & ProgressiveSearchResponse;
 
 // ============================================================================
 // Observability Resource
@@ -345,13 +350,19 @@ export class Observability extends BaseResource {
    * @param params - Advanced trace query, including its required time range
    * @returns Matching lightweight traces
    */
-  queryTraces(params: QueryTracesGroupedInput): Promise<TraceQueryGroupResponse>;
-  queryTraces(params: QueryTracesDeltaInput): Promise<Extract<TraceQueryResponse, { delta: unknown }>>;
-  queryTraces(params: QueryTracesPaginatedInput): Promise<Extract<TraceQueryResponse, { pagination: unknown }>>;
-  queryTraces(params: QueryTracesKeysetInput): Promise<TraceQueryKeysetTraceResponse>;
-  queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse>;
-  queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse> {
-    return this.request('/observability/traces/query', { method: 'POST', body: params });
+  queryTraces(params: QueryTracesGroupedInput, options?: RequestSignal): Promise<TraceQueryGroupResponse>;
+  queryTraces(
+    params: QueryTracesDeltaInput,
+    options?: RequestSignal,
+  ): Promise<Extract<TraceQueryResponse, { delta: unknown }>>;
+  queryTraces(
+    params: QueryTracesPaginatedInput,
+    options?: RequestSignal,
+  ): Promise<Extract<TraceQueryResponse, { pagination: unknown }>>;
+  queryTraces(params: QueryTracesKeysetInput, options?: RequestSignal): Promise<TraceQueryKeysetTraceResponse>;
+  queryTraces(params: QueryTracesInput, options?: RequestSignal): Promise<TraceQueryResponse>;
+  queryTraces(params: QueryTracesInput, options?: RequestSignal): Promise<TraceQueryResponse> {
+    return this.request('/observability/traces/query', { method: 'POST', body: params, signal: options?.signal });
   }
 
   /**
@@ -372,11 +383,12 @@ export class Observability extends BaseResource {
    * Token and cost measures count usage recorded on each span itself. Check `capabilities.spanAggregate` from
    * `getObservabilityCapabilities()` first; servers without it return 404 or 501.
    */
-  aggregateSpans(params: AggregateSpansArgs): Promise<AggregateSpansResponse> {
+  aggregateSpans(params: AggregateSpansArgs, options?: RequestSignal): Promise<AggregateSpansResponse> {
     return this.request('/observability/spans/aggregate', {
       method: 'POST',
       body: params,
       retries: this.readRetries(),
+      signal: options?.signal,
     });
   }
 
@@ -422,8 +434,13 @@ export class Observability extends BaseResource {
    * @param params - Span query, including its required time range
    * @returns Matching span rows with model/provider fields and input/output/error previews
    */
-  querySpans(params: QuerySpansInput): Promise<QuerySpansResult> {
-    return this.request('/observability/spans/query', { method: 'POST', body: params, retries: this.readRetries() });
+  querySpans(params: QuerySpansInput, options?: RequestSignal): Promise<QuerySpansResult> {
+    return this.request('/observability/spans/query', {
+      method: 'POST',
+      body: params,
+      retries: this.readRetries(),
+      signal: options?.signal,
+    });
   }
 
   /**
