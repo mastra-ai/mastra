@@ -403,8 +403,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       span.errorInfo = cached.errorInfo;
     }
 
-    // No start event is emitted here, so ask `spanFilter` again to restore its start verdict.
-    if (this.config.spanFilter) this.judgeSpanStart(span);
+    // No start event is emitted here. Snapshots from older versions lack the start verdict
+    // of `spanFilter`, so ask the filter again for those.
+    if (this.config.spanFilter && cached.isStartFiltered === undefined) this.judgeSpanStart(span);
 
     // Wire up lifecycle events (but skip SPAN_STARTED since it was already emitted)
     this.wireSpanLifecycle(span);

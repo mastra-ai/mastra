@@ -502,6 +502,34 @@ describe('Span Filtering', () => {
       ]);
     });
 
+    it('should close a span rebuilt after an update changed the answer of the filter', async () => {
+      const closed: SpanFilteredEvent[] = [];
+      const exporter = Object.assign(testExporter, {
+        onSpanFilteredEvent: async (event: SpanFilteredEvent) => void closed.push(event),
+      });
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [exporter],
+        spanFilter: span => span.metadata?.hide !== true,
+      });
+
+      const agentSpan = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'test-agent' });
+      // Exporters receive the start of this span, then an update hides it.
+      const toolSpan = agentSpan.createChildSpan({ type: SpanType.TOOL_CALL, name: "tool: 'my_tool'" });
+      toolSpan.update({ metadata: { hide: true } });
+      // Durable engines end a span from its snapshot, in a process that did not see its start.
+      const rebuiltToolSpan = tracing.rebuildSpan(toolSpan.snapshot!());
+      rebuiltToolSpan.end();
+      agentSpan.end();
+      await tracing.flush();
+
+      expect(closed).toEqual([
+        { type: 'span_filtered', traceId: toolSpan.traceId, spanId: toolSpan.id, endTime: rebuiltToolSpan.endTime },
+      ]);
+    });
+
     it('should deliver the close after the start of a span that starts and ends in the same tick', async () => {
       const handled: string[] = [];
       const exporter: ObservabilityExporter = {

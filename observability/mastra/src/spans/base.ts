@@ -724,13 +724,14 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
    */
   public restoreEntityLineage(
     cached: SpanEntityLineage &
-      Pick<SpanSnapshot<SpanType>, 'ownEntityVersionId' | 'reparented'> & { isRootSpan?: boolean },
+      Pick<SpanSnapshot<SpanType>, 'ownEntityVersionId' | 'reparented' | 'isStartFiltered'> & { isRootSpan?: boolean },
   ): void {
     // Snapshots from older versions lack this. Their metadata version may belong to an
     // ancestor entity, so treat ownership as unknown rather than guess.
     this.ownEntityVersionId = cached.ownEntityVersionId ?? undefined;
     this.restoredIsRootSpan = cached.isRootSpan;
     this.restoredReparented = cached.reparented;
+    this.isStartFiltered = cached.isStartFiltered ?? false;
     const lineage = definedLineage(cached);
     if (Object.keys(lineage).length > 0) {
       this.restoredLineage = lineage;
@@ -886,7 +887,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
 
   /** Returns the span saved for a later `rebuildSpan()`, with its trace state */
   public snapshot(): SpanSnapshot<TType> {
-    const includeInternalSpans = this.observabilityInstance.getConfig().includeInternalSpans;
+    const { includeInternalSpans, spanFilter } = this.observabilityInstance.getConfig();
     const exportedSpan = this.exportSpan(includeInternalSpans);
     // The rebuilt span has no live parent, so the parent ids to export past filtered starts travel with it.
     const reparented = {
@@ -902,6 +903,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       ...(this.errorOccurrenceIds ? { errorOccurrenceIds: [...this.errorOccurrenceIds] } : {}),
       ...(this.traceState ? { traceState: this.traceState } : {}),
       ...(isReparented ? { reparented } : {}),
+      // The filter may answer differently later, so the answer it gave at the start travels with the span.
+      ...(spanFilter ? { isStartFiltered: this.isStartFiltered } : {}),
     };
   }
 

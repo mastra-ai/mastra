@@ -1728,6 +1728,8 @@ export interface SpanSnapshot<TType extends SpanType> extends ExportedSpan<TType
    * `parentSpanId` stays the parent the span was created under, which is what `spanFilter` sees.
    */
   reparented?: { parentSpanId?: string; externalParentSpanId?: string };
+  /** @internal Whether `spanFilter` dropped the span's start event. Absent in snapshots from older versions. */
+  isStartFiltered?: boolean;
 }
 
 /**
