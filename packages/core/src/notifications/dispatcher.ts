@@ -394,18 +394,19 @@ export async function dispatchDueNotifications({
     // more unread records than the budget that is left. Hand `dispatchRecords` no
     // more than that budget, and mark only those read: `limit` bounds the records a
     // pass delivers or fails, not the ones it leaves for the next pass.
-    const due = page.filter(record => !seen.has(key(record))).slice(0, limit - actedBefore);
+    const unread = page.filter(record => !seen.has(key(record)));
+    const due = unread.slice(0, limit - actedBefore);
     for (const record of due) seen.add(key(record));
     const departed = await dispatchRecords({ mastra, storage, now, due, result });
     // Only records that left the due list stop counting toward `left`; a record
     // acted on but still due (failed below the cap, held, or summarized with a
     // `deliverAt` still to come) keeps its slot.
     left += due.length - departed;
-    // Stop when the due list ran out, or when a full page holds only records this
-    // pass already read. The second case cannot happen while `left` is exact, but
-    // a departure counted while the record stays due would shrink `pageSize` to a
-    // page of already-seen records and spin, so treat it as no progress.
-    if (page.length < pageSize || due.length === 0) break;
+    // Stop once there is nothing left to read: the due list ran out (a short page)
+    // and this pass selected every unseen record on it. A short page whose slice
+    // left records unread must keep paging, or they would never be processed; a
+    // page with no unread records must stop rather than spin.
+    if (due.length === 0 || (page.length < pageSize && due.length === unread.length)) break;
   }
   return result;
 }

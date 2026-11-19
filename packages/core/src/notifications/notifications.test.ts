@@ -843,6 +843,60 @@ describe('notification inbox', () => {
     expect(result.failed.length + result.delivered.length).toBeLessThanOrEqual(2);
   });
 
+  it('keeps paging when a short page leaves a deliverable record unread', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const sendSignal = vi.fn((signal: unknown) => ({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }),
+      persisted: Promise.resolve(),
+      signal,
+    }));
+    // This dispatcher holds every thread except 'e-thread', so only 'e' is deliverable.
+    const resolveNotificationDeliveryDecision = vi.fn(async ({ record }: { record: { threadId: string } }) => ({
+      action: 'deliver' as const,
+      hold: record.threadId !== 'e-thread',
+    }));
+    const mastra = {
+      getAgentById: vi.fn(async () => ({ sendSignal, resolveNotificationDeliveryDecision })),
+    } as any;
+    const base = {
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      source: 'github',
+      kind: 'ci',
+      priority: 'high',
+    } as const;
+    const createdAt = new Date(now.getTime() - 60_000);
+    const records: Array<[string, string]> = [
+      ['a', 'a-thread'],
+      ['b', 'b-thread'],
+      ['c', 'c-thread'],
+      ['d', 'd-thread'],
+      ['e', 'e-thread'],
+    ];
+    for (const [id, threadId] of records) {
+      await storage.createNotification({ ...base, id, threadId, summary: id, deliverAt: now, createdAt });
+    }
+    // Between pages another dispatcher delivers 'a' and 'b'. They leave the due list
+    // while this pass still counts them in `left`, so its next page is short but holds
+    // 'e', which is unread and deliverable — the pass must page on and deliver it.
+    const realListDue = storage.listDueNotifications.bind(storage);
+    let pages = 0;
+    storage.listDueNotifications = async input => {
+      pages += 1;
+      const page = await realListDue(input);
+      if (pages === 1) {
+        await storage.updateNotification({ threadId: 'a-thread', id: 'a', status: 'dismissed' });
+        await storage.updateNotification({ threadId: 'b-thread', id: 'b', status: 'dismissed' });
+      }
+      return page;
+    };
+
+    const result = await dispatchDueNotifications({ mastra, storage, now, limit: 2 });
+
+    expect(result.delivered.map(record => record.id)).toContain('e');
+  });
+
   it('leaves a record dismissed during routing untouched instead of recording a failed attempt', async () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');
