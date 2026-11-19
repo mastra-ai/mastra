@@ -1,8 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
-import type { ChatSendArgs } from '@mastra/playground-ui/domains/chat/context/chat-context';
-import { injectBufferingEnds } from '@mastra/playground-ui/domains/chat/om/om-parts-converter';
-import { toUntrustedAppContext } from '@mastra/playground-ui/utils/mcp-app-context';
 import { useMastraClient } from '@mastra/react';
 import {
   memoryStatusQueryKey,
@@ -12,12 +9,15 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-
 import {
   buildMaxStepsStreamErrorMessage,
   buildStreamErrorMessage,
   isMaxStepsFinishChunk,
-} from '@/services/stream-error-message';
+} from './stream-error-message';
+import type { ChatSendArgs } from '@/domains/chat/context/chat-context';
+import { injectBufferingEnds } from '@/domains/chat/om/om-parts-converter';
+
+import { toUntrustedAppContext } from '@/utils/mcp-app-context';
 
 /**
  * The OM/error stream chunks this hook reacts to are not part of the typed
@@ -121,12 +121,17 @@ const mayHaveBeenStored = (error: unknown) => {
   return typeof status === 'number' && status >= 500;
 };
 
-const didUpdateWorkingMemory = (chunk: any) =>
-  (chunk.type === 'tool-result' || chunk.type === 'tool-execution-end') &&
-  chunk.payload?.toolName === 'updateWorkingMemory' &&
-  typeof chunk.payload.result === 'object' &&
-  'success' in chunk.payload.result! &&
-  chunk.payload.result?.success;
+const didUpdateWorkingMemory = (chunk: any) => {
+  const result = chunk.payload?.result;
+  return (
+    (chunk.type === 'tool-result' || chunk.type === 'tool-execution-end') &&
+    chunk.payload?.toolName === 'updateWorkingMemory' &&
+    typeof result === 'object' &&
+    result !== null &&
+    'success' in result &&
+    result.success
+  );
+};
 
 export const useChatSendHandler = ({
   agentId,

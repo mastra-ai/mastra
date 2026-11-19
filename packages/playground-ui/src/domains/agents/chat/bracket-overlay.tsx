@@ -51,6 +51,7 @@ export function BracketOverlay({ containerRef }: { containerRef: React.RefObject
 
     for (let i = 0; i < badges.length; i++) {
       const badge = badges[i];
+      if (!badge) continue;
       const cycleId = badge.getAttribute('data-om-badge') || '';
       const state = (badge.getAttribute('data-om-state') || 'complete') as HighlightPosition['state'];
       const omType = (badge.getAttribute('data-om-type') || 'observation') as OmType;
@@ -171,6 +172,7 @@ export function BracketOverlay({ containerRef }: { containerRef: React.RefObject
 function findPreviousBadge(badges: HTMLElement[], currentIndex: number, omType: OmType): HTMLElement | null {
   for (let j = currentIndex - 1; j >= 0; j--) {
     const badge = badges[j];
+    if (!badge) continue;
     const badgeState = badge.getAttribute('data-om-state');
 
     // Skip failed badges - they shouldn't be used as anchors
@@ -214,7 +216,7 @@ function HighlightBlock({ highlight, visible }: { highlight: HighlightPosition; 
 
   return (
     <div
-      className="absolute right-0 left-0 transition-opacity duration-200"
+      className="absolute inset-x-0 transition-opacity duration-200"
       style={{
         top: highlight.top,
         height: highlight.height,
