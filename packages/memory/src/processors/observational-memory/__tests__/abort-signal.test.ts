@@ -374,8 +374,8 @@ describe('Cancellation of in-flight Observational Memory (#27792)', () => {
 });
 
 describe('Cancellation of an observation chained after another input-step processor (#29208)', () => {
-  // A stored processor graph can place Observational Memory after a processor that runs its
-  // own input step (workspace instructions, skills, channels, a user processor).
+  // Observational Memory listed after a processor that runs its own input step (workspace
+  // instructions, skills, a user processor) is reached through the chain's passThrough.
   it.each(['agent', 'durable'] as const)('cancels a sync observation in a %s run', async engine => {
     const controller = new AbortController();
     const observer = createLatchedModel('<observations>\n- Late observation\n</observations>', true);
