@@ -122,10 +122,10 @@ function bodyMarkup(root: HTMLElement) {
  * Same markup. A widget that lists its views as tabs (the Breakdown) titles itself apart from the card's
  * title menu, so then only the bodies are compared.
  */
-export function expectSameMarkup(card: HTMLElement, widget: HTMLElement) {
+export function expectSameMarkup(card: HTMLElement, widget: HTMLElement, message?: string) {
   const tabs = widget.querySelector('[data-slot="tabs"]') !== null;
   const markup = (root: HTMLElement) => normalise(tabs ? bodyMarkup(root) : root.innerHTML);
-  expect(markup(widget)).toBe(markup(card));
+  expect(markup(widget), message).toBe(markup(card));
 }
 
 /** Waits until nothing is in flight and the request count has stopped growing. */

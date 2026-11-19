@@ -13,4 +13,4 @@
 </Tabs>
 ```
 
-The metrics Breakdown card and dashboard tables with several views now list their views as pill tabs under the title ("Agents", "Tools", …) instead of a dropdown in the title: every view that fits is one click away, the rest are in the "+N" menu, and switching is instant. `CardViewTabs` is exported from `domains/metrics/components` for other cards with several views.
+Dashboard tables with several views, such as the Metrics page's Breakdown, now list them as pill tabs under the title ("Agents", "Tools", …) instead of a dropdown in the title: every view that fits is one click away, the rest are in the "+N" menu, and switching is instant. The standalone `BreakdownCard` keeps its title menu.
