@@ -1,9 +1,8 @@
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { IconCircleInfo } from '@mastra/playground-ui/icons/central/IconCircleInfo';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { cn } from '@mastra/playground-ui/utils/cn';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../../ds/components/Tooltip';
+import { Txt } from '../../../ds/components/Txt';
+import { IconCircleInfo } from '../../../ds/icons/central/IconCircleInfo';
+import { Icon } from '../../../ds/icons/Icon';
+import { cn } from '../../../utils/cn';
 
 const sectionAccentIcon = {
   amber: 'text-badge-amber-indicator',
@@ -38,7 +37,6 @@ export const AgentMetadataSection = ({
   children,
   hint,
 }: AgentMetadataSectionProps) => {
-  const { Link } = useLinkComponent();
   return (
     <section className="group/metadata grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3 p-4">
       <header className="col-span-2 flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 group-has-[[data-slot=metadata-empty]]/metadata:col-span-1">
@@ -64,7 +62,7 @@ export const AgentMetadataSection = ({
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Link
+                  <a
                     href={hint.link}
                     aria-label={hint.title}
                     target="_blank"
@@ -74,7 +72,7 @@ export const AgentMetadataSection = ({
                     <Icon className="text-muted-foreground" size="xs">
                       {hint.icon || <IconCircleInfo />}
                     </Icon>
-                  </Link>
+                  </a>
                 </TooltipTrigger>
                 <TooltipContent>{hint.title}</TooltipContent>
               </Tooltip>

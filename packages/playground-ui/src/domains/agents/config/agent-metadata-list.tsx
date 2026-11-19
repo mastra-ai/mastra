@@ -1,5 +1,5 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { cn } from '@mastra/playground-ui/utils/cn';
+import { Txt } from '../../../ds/components/Txt';
+import { cn } from '../../../utils/cn';
 
 export interface AgentMetadataListProps {
   children: React.ReactNode;

@@ -1,5 +1,5 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { useState } from 'react';
+import { Button } from '../../../ds/components/Button';
 import { AgentMetadataList, AgentMetadataListItem } from './agent-metadata-list';
 
 export const AGENT_METADATA_LIST_LIMIT = 10;

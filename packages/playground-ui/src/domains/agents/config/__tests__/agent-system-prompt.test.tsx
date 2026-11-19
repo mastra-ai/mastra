@@ -1,6 +1,7 @@
-import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+// @vitest-environment jsdom
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { TooltipProvider } from '../../../../ds/components/Tooltip';
 import { AgentSystemPrompt } from '../agent-system-prompt';
 
 const instructions =
