@@ -150,6 +150,7 @@ export interface RunLoopScenarioOptions {
     autoResumeSuspendedTools?: boolean;
     inputProcessors?: any;
     hooks?: ToolHooks;
+    tracingOptions?: TracingOptions;
   };
   /** Per-call tool hooks forwarded to agent.stream(). */
   hooks?: ToolHooks;
@@ -476,8 +477,14 @@ export interface RunApprovalScenarioOptions extends Pick<
   | 'observability'
   | 'afterStream'
   | 'agentOutputProcessors'
+  | 'memory'
+  | 'threadId'
+  | 'resourceId'
+  | 'defaultOptions'
 > {
   tracingOptions?: TracingOptions;
+  /** Options passed to every `approveToolCall` / `declineToolCall`, such as the resume call's `tracingOptions`. */
+  resumeOptions?: Record<string, unknown>;
   /**
    * Decide whether to approve (`true`) or decline (`false`) each suspended tool
    * call. Called once per approval, in order. `approvalIndex` is the 0-based

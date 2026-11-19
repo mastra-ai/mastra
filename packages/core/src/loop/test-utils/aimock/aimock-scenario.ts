@@ -702,6 +702,11 @@ export async function runApprovalScenario({
   tracingOptions,
   afterStream,
   agentOutputProcessors,
+  memory,
+  threadId,
+  resourceId,
+  resumeOptions,
+  defaultOptions,
 }: RunApprovalScenarioOptions): Promise<LoopScenarioResult & { chunks: ChunkType[]; approvals: string[] }> {
   fixtures(llm);
 
@@ -712,8 +717,12 @@ export async function runApprovalScenario({
     engine,
     observability,
     agentOutputProcessors,
+    memory,
+    defaultOptions,
   });
   const isDurable = isDurableEngineVariant(engine);
+  const memoryOption =
+    memory && threadId ? { memory: { thread: threadId, ...(resourceId ? { resource: resourceId } : {}) } } : {};
 
   const chunks: ChunkType[] = [];
   const approvals: string[] = [];
@@ -725,6 +734,7 @@ export async function runApprovalScenario({
 
   let run = (await agent.stream(prompt, {
     tracingOptions,
+    ...memoryOption,
     ...(requireToolApproval !== false ? { requireToolApproval } : {}),
     ...(stopWhen ? { stopWhen } : {}),
     // Durable needs maxSteps as a fallback when stopWhen is the only bound.
@@ -755,8 +765,8 @@ export async function runApprovalScenario({
     approvals.push(`${approve ? 'approve' : 'decline'}:${toolCallId}`);
 
     run = (await (approve
-      ? agent.approveToolCall({ runId, toolCallId })
-      : agent.declineToolCall({ runId, toolCallId }))) as unknown as RunHandle;
+      ? agent.approveToolCall({ runId, toolCallId, ...memoryOption, ...resumeOptions })
+      : agent.declineToolCall({ runId, toolCallId, ...memoryOption, ...resumeOptions }))) as unknown as RunHandle;
   }
 
   await afterStream?.();
