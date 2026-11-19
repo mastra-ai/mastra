@@ -29,7 +29,6 @@ describe('PricingRegistry bundled snapshot', () => {
   it('prices a model when the package files are not on disk', async () => {
     const costs = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, 'pricing-data.json'), 'utf-8'));
     const [model] = Object.keys(costs.openai.models);
-    vi.spyOn(fs, 'existsSync').mockReturnValue(false);
     vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
       throw new Error('ENOENT');
     });
@@ -38,7 +37,7 @@ describe('PricingRegistry bundled snapshot', () => {
       vi.resetModules();
       const { PricingRegistry: Registry } = await import('./pricing-registry');
 
-      expect(Registry.getGlobal()?.get({ provider: 'openai', model: model! })?.id).toBe(`openai/${model}`);
+      expect(Registry.getGlobal().get({ provider: 'openai', model: model! })?.id).toBe(`openai/${model}`);
     } finally {
       vi.restoreAllMocks();
     }
