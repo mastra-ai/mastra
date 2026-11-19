@@ -30,16 +30,10 @@ Use `@ai-sdk/openai-compatible` for any model, or `@ai-sdk/anthropic` for the Me
 
 ```typescript title="src/gateway.ts"
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import { createAnthropic } from '@ai-sdk/anthropic'
 import { generateText } from 'ai'
 
 export const gateway = createOpenAICompatible({
   name: 'mastra-gateway',
-  baseURL: 'https://gateway-api.mastra.ai/v1',
-  apiKey: process.env.MASTRA_GATEWAY_API_KEY,
-})
-
-export const anthropicGateway = createAnthropic({
   baseURL: 'https://gateway-api.mastra.ai/v1',
   apiKey: process.env.MASTRA_GATEWAY_API_KEY,
 })

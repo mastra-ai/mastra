@@ -18,7 +18,7 @@ Point the client at Gateway and prefix model IDs with `openai/`:
 +  baseURL: 'https://gateway-api.mastra.ai/v1',
  })
 
--  model: 'gpt-5.6',
+-  model: 'gpt-5.6-sol',
 +  model: '__GATEWAY_OPENAI_MODEL_BASE__',
 ```
 
@@ -26,7 +26,7 @@ To keep billing on your OpenAI account, add an OpenAI [BYOK connection](/docs/ma
 
 ## From Anthropic
 
-The Anthropic SDK appends `/v1/messages` to its base URL, so set the base URL without `/v1`:
+The Anthropic SDK appends `/v1/messages` to its base URL, so set the base URL without `/v1`. Gateway model IDs use dots in version numbers, so `claude-sonnet-5-5` becomes `anthropic/claude-sonnet-5.5`. Check IDs against [`GET /v1/models`](/docs/mastra-platform/gateway/api/models):
 
 ```diff
  const client = new Anthropic({

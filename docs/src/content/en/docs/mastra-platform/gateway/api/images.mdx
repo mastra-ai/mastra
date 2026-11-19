@@ -10,7 +10,7 @@ POST https://gateway-api.mastra.ai/v1/images/generations
 POST https://gateway-api.mastra.ai/v1/images/edits
 ```
 
-Compatible with the OpenAI Images API. The examples use `black-forest-labs/flux-3-image-klein`. Find other image models in [`/v1/models`](/docs/mastra-platform/gateway/api/models). The API has these limits:
+Compatible with the OpenAI Images API. The generation example uses `black-forest-labs/flux-3-image-klein`. Editing needs a model that supports image edits, such as `qwen/qwen-image-2.1-turbo`. Find other image models in [`/v1/models`](/docs/mastra-platform/gateway/api/models). The API has these limits:
 
 - Requests and responses are JSON. Multipart uploads aren't supported.
 - Each request returns one image as base64 (`b64_json`). `n` must be `1` if set.
@@ -32,7 +32,7 @@ const result = await client.images.generate({
   prompt: 'A lighthouse at dusk, watercolor',
 })
 
-const png = Buffer.from(result.data[0].b64_json!, 'base64')
+const png = Buffer.from(result.data?.[0]?.b64_json ?? '', 'base64')
 ```
 
 ## Edit an image
@@ -44,7 +44,7 @@ curl https://gateway-api.mastra.ai/v1/images/edits \
   -H "Authorization: Bearer $MASTRA_GATEWAY_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "black-forest-labs/flux-3-image-klein",
+    "model": "qwen/qwen-image-2.1-turbo",
     "prompt": "Add a full moon to the sky",
     "image": "https://example.com/lighthouse.png"
   }'
