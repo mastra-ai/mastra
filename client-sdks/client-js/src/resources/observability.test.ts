@@ -572,6 +572,33 @@ describe('Observability Methods', () => {
 
       expect(global.fetch).toHaveBeenCalledTimes(1);
     });
+
+    it('should not retry a word search that took too long', async () => {
+      vi.mocked(global.fetch).mockImplementation(
+        async () =>
+          new Response(JSON.stringify({ name: 'search_too_expensive', title: 'Search took too long', status: 504 }), {
+            status: 504,
+          }),
+      );
+      const retryingClient = new MastraClient({ ...clientOptions, retries: 2, backoffMs: 0 });
+
+      await expect(
+        retryingClient.queryTraces({ timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' } }),
+      ).rejects.toMatchObject({ status: 504, body: { name: 'search_too_expensive' } });
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('should still retry a 504 that is not a query timeout', async () => {
+      vi.mocked(global.fetch).mockImplementation(async () => new Response('Gateway Timeout', { status: 504 }));
+      const retryingClient = new MastraClient({ ...clientOptions, retries: 2, backoffMs: 0 });
+
+      await expect(
+        retryingClient.queryTraces({ timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' } }),
+      ).rejects.toMatchObject({ status: 504 });
+
+      expect(global.fetch).toHaveBeenCalledTimes(3);
+    });
   });
 
   describe('aggregateTraces()', () => {
