@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-11-18",
+  "updated": "2026-11-19",
   "scope": "all",
   "files": {
     ".github/scripts/ci-routing.test.ts": {
@@ -3782,6 +3782,10 @@
         "133080252413": {
           "date": "2026-11-16",
           "verdict": "catch"
+        },
+        "131135059238": {
+          "date": "2026-11-12",
+          "verdict": "catch"
         }
       }
     },
@@ -4043,12 +4047,6 @@
       "last_failure": "2026-10-30",
       "reason": "pr-fail"
     },
-    "mastracode/factory/src/integrations/platform/api-client.test.ts": {
-      "tier": "out",
-      "since": "2026-11-14",
-      "last_failure": null,
-      "reason": "seed-rule-b"
-    },
     "mastracode/factory/src/integrations/platform/connect/routes.test.ts": {
       "tier": "out",
       "since": "2026-11-14",
@@ -4174,12 +4172,6 @@
           "verdict": "catch"
         }
       }
-    },
-    "mastracode/factory/src/integrations/platform/gitlab/event-worker.test.ts": {
-      "tier": "out",
-      "since": "2026-11-14",
-      "last_failure": null,
-      "reason": "seed-rule-b"
     },
     "mastracode/factory/src/integrations/platform/incidentio/integration.test.ts": {
       "tier": "out",
@@ -4352,12 +4344,16 @@
     "mastracode/factory/src/routes/boards.test.ts": {
       "tier": "in",
       "since": "2026-10-31",
-      "last_failure": "2026-10-31",
-      "reason": "pr-fail",
+      "last_failure": "2026-11-18",
+      "reason": "pr-catch",
       "pr_failures": {
         "133780125354": {
           "date": "2026-11-17",
           "verdict": "flake"
+        },
+        "135096181854": {
+          "date": "2026-11-18",
+          "verdict": "catch"
         }
       }
     },
@@ -5175,7 +5171,13 @@
       "tier": "in",
       "since": "2026-11-18",
       "last_failure": "2026-11-18",
-      "reason": "versioning-fail"
+      "reason": "versioning-fail",
+      "pr_failures": {
+        "134644155593": {
+          "date": "2026-11-18",
+          "verdict": "catch"
+        }
+      }
     },
     "mastracode/sdk/src/agent-connections/__tests__/messaging-processor.test.ts": {
       "tier": "out",
@@ -5343,7 +5345,17 @@
       "tier": "in",
       "since": "2026-11-18",
       "last_failure": "2026-11-18",
-      "reason": "versioning-fail"
+      "reason": "versioning-fail",
+      "pr_failures": {
+        "134848078341": {
+          "date": "2026-11-18",
+          "verdict": "catch"
+        },
+        "134826818126": {
+          "date": "2026-11-18",
+          "verdict": "catch"
+        }
+      }
     },
     "mastracode/sdk/src/agents/mastracode-gateway.test.ts": {
       "tier": "out",
@@ -5570,7 +5582,7 @@
     "mastracode/sdk/src/headless/run-mc.test.ts": {
       "tier": "in",
       "since": "2026-10-29",
-      "last_failure": "2026-11-17",
+      "last_failure": "2026-11-18",
       "reason": "pr-catch",
       "pr_failures": {
         "133762068397": {
@@ -5583,6 +5595,10 @@
         },
         "133784290199": {
           "date": "2026-11-17",
+          "verdict": "catch"
+        },
+        "135106675247": {
+          "date": "2026-11-18",
           "verdict": "catch"
         }
       }
@@ -8184,6 +8200,18 @@
         "133201868872": {
           "date": "2026-11-16",
           "verdict": "catch"
+        },
+        "131106262839": {
+          "date": "2026-11-12",
+          "verdict": "catch"
+        },
+        "131102553731": {
+          "date": "2026-11-12",
+          "verdict": "catch"
+        },
+        "131067453583": {
+          "date": "2026-11-12",
+          "verdict": "catch"
         }
       }
     },
@@ -9420,14 +9448,30 @@
     "packages/core/src/agent-controller/__tests__/session-parked-prompt-later-run.test.ts": {
       "tier": "in",
       "since": "2026-10-18",
-      "last_failure": null,
-      "reason": "new"
+      "last_failure": "2026-11-18",
+      "reason": "pr-catch",
+      "pr_failures": {
+        "134556651104": {
+          "date": "2026-11-18",
+          "verdict": "test-fix"
+        },
+        "134537475072": {
+          "date": "2026-11-18",
+          "verdict": "catch"
+        }
+      }
     },
     "packages/core/src/agent-controller/__tests__/session-parked-prompt-stays-visible.test.ts": {
       "tier": "in",
       "since": "2026-10-18",
-      "last_failure": null,
-      "reason": "new"
+      "last_failure": "2026-11-18",
+      "reason": "pr-catch",
+      "pr_failures": {
+        "134537474850": {
+          "date": "2026-11-18",
+          "verdict": "catch"
+        }
+      }
     },
     "packages/core/src/agent-controller/__tests__/session-thread-derived-state.test.ts": {
       "tier": "out",
@@ -10422,7 +10466,7 @@
     "packages/core/src/agent/__tests__/signals-claimed-ownership.test.ts": {
       "tier": "in",
       "since": "2026-11-14",
-      "last_failure": "2026-11-16",
+      "last_failure": "2026-11-18",
       "reason": "pr-catch",
       "pr_failures": {
         "132186473740": {
@@ -10543,6 +10587,14 @@
         },
         "132283451895": {
           "date": "2026-11-14",
+          "verdict": "catch"
+        },
+        "134556650966": {
+          "date": "2026-11-18",
+          "verdict": "test-fix"
+        },
+        "134537474850": {
+          "date": "2026-11-18",
           "verdict": "catch"
         }
       }
@@ -12300,10 +12352,16 @@
       "reason": "seed-rule-b"
     },
     "packages/core/src/agent/durable/workflows/steps/tool-call-bg.test.ts": {
-      "tier": "out",
-      "since": "2026-11-14",
-      "last_failure": "2026-10-08",
-      "reason": "seed-rule-b"
+      "tier": "in",
+      "since": "2026-11-12",
+      "last_failure": "2026-11-12",
+      "reason": "pr-catch",
+      "pr_failures": {
+        "131113246648": {
+          "date": "2026-11-12",
+          "verdict": "catch"
+        }
+      }
     },
     "packages/core/src/agent/durable/workflows/steps/tool-call-cold-resume.test.ts": {
       "tier": "out",
@@ -13056,10 +13114,20 @@
       "reason": "seed-rule-b"
     },
     "packages/core/src/channels/__tests__/agent-controller-channels.test.ts": {
-      "tier": "out",
-      "since": "2026-11-14",
-      "last_failure": "2026-10-06",
-      "reason": "seed-rule-b"
+      "tier": "in",
+      "since": "2026-11-12",
+      "last_failure": "2026-11-12",
+      "reason": "pr-catch",
+      "pr_failures": {
+        "130977625383": {
+          "date": "2026-11-12",
+          "verdict": "catch"
+        },
+        "130960153133": {
+          "date": "2026-11-12",
+          "verdict": "catch"
+        }
+      }
     },
     "packages/core/src/channels/__tests__/controller-channels-instance-injection.test.ts": {
       "tier": "out",
@@ -13815,7 +13883,13 @@
       "tier": "in",
       "since": "2026-11-18",
       "last_failure": "2026-11-18",
-      "reason": "versioning-fail"
+      "reason": "versioning-fail",
+      "pr_failures": {
+        "134826818126": {
+          "date": "2026-11-18",
+          "verdict": "catch"
+        }
+      }
     },
     "packages/core/src/llm/model/registry-generator.test.ts": {
       "tier": "out",
@@ -13944,10 +14018,16 @@
       "reason": "versioning-fail"
     },
     "packages/core/src/loop/network/index.test.ts": {
-      "tier": "out",
-      "since": "2026-11-14",
-      "last_failure": null,
-      "reason": "seed-rule-b"
+      "tier": "in",
+      "since": "2026-11-12",
+      "last_failure": "2026-11-12",
+      "reason": "pr-catch",
+      "pr_failures": {
+        "130960153296": {
+          "date": "2026-11-12",
+          "verdict": "catch"
+        }
+      }
     },
     "packages/core/src/loop/network/run-command-tool.test.ts": {
       "tier": "out",
@@ -14279,6 +14359,10 @@
         },
         "131983257729": {
           "date": "2026-11-13",
+          "verdict": "catch"
+        },
+        "131002745261": {
+          "date": "2026-11-12",
           "verdict": "catch"
         }
       }
@@ -15718,10 +15802,20 @@
       "reason": "new"
     },
     "packages/core/src/loop/test-utils/aimock/scenarios/text-streaming.scenario.test.ts": {
-      "tier": "out",
-      "since": "2026-11-14",
-      "last_failure": null,
-      "reason": "seed-rule-b"
+      "tier": "in",
+      "since": "2026-11-12",
+      "last_failure": "2026-11-12",
+      "reason": "pr-catch",
+      "pr_failures": {
+        "130962525720": {
+          "date": "2026-11-12",
+          "verdict": "catch"
+        },
+        "130951044991": {
+          "date": "2026-11-12",
+          "verdict": "catch"
+        }
+      }
     },
     "packages/core/src/loop/test-utils/aimock/scenarios/threadless-abort-run-id.scenario.test.ts": {
       "tier": "in",
@@ -16138,6 +16232,22 @@
           "verdict": "catch"
         },
         "133513245855": {
+          "date": "2026-11-16",
+          "verdict": "catch"
+        },
+        "133458552577": {
+          "date": "2026-11-16",
+          "verdict": "catch"
+        },
+        "133457647596": {
+          "date": "2026-11-16",
+          "verdict": "catch"
+        },
+        "133454870944": {
+          "date": "2026-11-16",
+          "verdict": "catch"
+        },
+        "133454346016": {
           "date": "2026-11-16",
           "verdict": "catch"
         }
@@ -19144,10 +19254,16 @@
       "reason": "seed-rule-b"
     },
     "packages/deployer/src/build/fs-routing/exec-codegen.test.ts": {
-      "tier": "out",
-      "since": "2026-11-14",
-      "last_failure": null,
-      "reason": "seed-rule-b"
+      "tier": "in",
+      "since": "2026-11-18",
+      "last_failure": "2026-11-18",
+      "reason": "pr-catch",
+      "pr_failures": {
+        "134482980060": {
+          "date": "2026-11-18",
+          "verdict": "catch"
+        }
+      }
     },
     "packages/deployer/src/build/fs-routing/fs-routing.test.ts": {
       "tier": "out",
@@ -19926,8 +20042,14 @@
     "packages/mcp-registry-registry/src/registry/__tests__/fetch-servers.test.ts": {
       "tier": "in",
       "since": "2026-10-23",
-      "last_failure": "2026-10-23",
-      "reason": "versioning-fail"
+      "last_failure": "2026-11-12",
+      "reason": "pr-catch",
+      "pr_failures": {
+        "130989852134": {
+          "date": "2026-11-12",
+          "verdict": "catch"
+        }
+      }
     },
     "packages/mcp-registry-registry/src/registry/__tests__/list-registries.test.ts": {
       "tier": "out",
@@ -20377,6 +20499,26 @@
         },
         "131988149811": {
           "date": "2026-11-13",
+          "verdict": "catch"
+        },
+        "131031918959": {
+          "date": "2026-11-12",
+          "verdict": "flake"
+        },
+        "131003908446": {
+          "date": "2026-11-12",
+          "verdict": "test-fix"
+        },
+        "130972342071": {
+          "date": "2026-11-12",
+          "verdict": "test-fix"
+        },
+        "131141032866": {
+          "date": "2026-11-12",
+          "verdict": "catch"
+        },
+        "131123664747": {
+          "date": "2026-11-12",
           "verdict": "catch"
         }
       }
@@ -28114,6 +28256,10 @@
         "133369023201": {
           "date": "2026-11-16",
           "verdict": "catch"
+        },
+        "131080012823": {
+          "date": "2026-11-12",
+          "verdict": "catch"
         }
       }
     },
@@ -28276,6 +28422,10 @@
         "133369023201": {
           "date": "2026-11-16",
           "verdict": "catch"
+        },
+        "131080012823": {
+          "date": "2026-11-12",
+          "verdict": "catch"
         }
       }
     },
@@ -28423,6 +28573,10 @@
         },
         "133369022847": {
           "date": "2026-11-16",
+          "verdict": "catch"
+        },
+        "131080012805": {
+          "date": "2026-11-12",
           "verdict": "catch"
         }
       }
@@ -28613,6 +28767,10 @@
         },
         "133369023201": {
           "date": "2026-11-16",
+          "verdict": "catch"
+        },
+        "131080012823": {
+          "date": "2026-11-12",
           "verdict": "catch"
         }
       }
@@ -28845,6 +29003,10 @@
         },
         "133369023023": {
           "date": "2026-11-16",
+          "verdict": "catch"
+        },
+        "131080012665": {
+          "date": "2026-11-12",
           "verdict": "catch"
         }
       }
@@ -34282,11 +34444,15 @@
     "job:e2e/create-mastra": {
       "tier": "in",
       "since": "2026-11-01",
-      "last_failure": "2026-11-13",
+      "last_failure": "2026-11-17",
       "reason": "pr-job-fail",
       "pr_failures": {
         "131942713543": {
           "date": "2026-11-13",
+          "verdict": "fail"
+        },
+        "134177543301": {
+          "date": "2026-11-17",
           "verdict": "fail"
         }
       }
@@ -34327,6 +34493,14 @@
         },
         "133411857633": {
           "date": "2026-11-16",
+          "verdict": "fail"
+        },
+        "134206982308": {
+          "date": "2026-11-17",
+          "verdict": "fail"
+        },
+        "134097768043": {
+          "date": "2026-11-17",
           "verdict": "fail"
         }
       }
@@ -34474,8 +34648,8 @@
     "job:e2e/monorepo": {
       "tier": "in",
       "since": "2026-11-17",
-      "last_failure": "2026-11-17",
-      "reason": "versioning-fail",
+      "last_failure": "2026-11-18",
+      "reason": "pr-job-fail",
       "pr_failures": {
         "131196720686": {
           "date": "2026-11-12",
@@ -34547,6 +34721,58 @@
         },
         "133391565275": {
           "date": "2026-11-16",
+          "verdict": "fail"
+        },
+        "134600136480": {
+          "date": "2026-11-18",
+          "verdict": "fail"
+        },
+        "134559938087": {
+          "date": "2026-11-18",
+          "verdict": "fail"
+        },
+        "134540403580": {
+          "date": "2026-11-18",
+          "verdict": "fail"
+        },
+        "134483904254": {
+          "date": "2026-11-18",
+          "verdict": "fail"
+        },
+        "134482279766": {
+          "date": "2026-11-18",
+          "verdict": "fail"
+        },
+        "134353002539": {
+          "date": "2026-11-17",
+          "verdict": "fail"
+        },
+        "134078089695": {
+          "date": "2026-11-17",
+          "verdict": "fail"
+        },
+        "134004938641": {
+          "date": "2026-11-17",
+          "verdict": "fail"
+        },
+        "133882479163": {
+          "date": "2026-11-17",
+          "verdict": "fail"
+        },
+        "131157150267": {
+          "date": "2026-11-12",
+          "verdict": "fail"
+        },
+        "131080566658": {
+          "date": "2026-11-12",
+          "verdict": "fail"
+        },
+        "131031691061": {
+          "date": "2026-11-12",
+          "verdict": "fail"
+        },
+        "131016119470": {
+          "date": "2026-11-12",
           "verdict": "fail"
         }
       }
@@ -34848,6 +35074,50 @@
         "133297205543": {
           "date": "2026-11-16",
           "verdict": "fail"
+        },
+        "134614500239": {
+          "date": "2026-11-18",
+          "verdict": "fail"
+        },
+        "134596538000": {
+          "date": "2026-11-18",
+          "verdict": "fail"
+        },
+        "134526427751": {
+          "date": "2026-11-18",
+          "verdict": "fail"
+        },
+        "134413706349": {
+          "date": "2026-11-17",
+          "verdict": "fail"
+        },
+        "134366749301": {
+          "date": "2026-11-17",
+          "verdict": "fail"
+        },
+        "134352182883": {
+          "date": "2026-11-17",
+          "verdict": "fail"
+        },
+        "134315567597": {
+          "date": "2026-11-17",
+          "verdict": "fail"
+        },
+        "134277954827": {
+          "date": "2026-11-17",
+          "verdict": "fail"
+        },
+        "134255945767": {
+          "date": "2026-11-17",
+          "verdict": "fail"
+        },
+        "134248093019": {
+          "date": "2026-11-17",
+          "verdict": "fail"
+        },
+        "134133500568": {
+          "date": "2026-11-17",
+          "verdict": "fail"
         }
       }
     },
@@ -34901,6 +35171,42 @@
         },
         "133715231927": {
           "date": "2026-11-17",
+          "verdict": "fail"
+        },
+        "131144892560": {
+          "date": "2026-11-12",
+          "verdict": "fail"
+        },
+        "131130475678": {
+          "date": "2026-11-12",
+          "verdict": "fail"
+        },
+        "131113845697": {
+          "date": "2026-11-12",
+          "verdict": "fail"
+        },
+        "131104518607": {
+          "date": "2026-11-12",
+          "verdict": "fail"
+        },
+        "131080012382": {
+          "date": "2026-11-12",
+          "verdict": "fail"
+        },
+        "131033222240": {
+          "date": "2026-11-12",
+          "verdict": "fail"
+        },
+        "131031918538": {
+          "date": "2026-11-12",
+          "verdict": "fail"
+        },
+        "131051839369": {
+          "date": "2026-11-12",
+          "verdict": "fail"
+        },
+        "131017981956": {
+          "date": "2026-11-12",
           "verdict": "fail"
         }
       }
@@ -34958,8 +35264,14 @@
     "job:store/convex": {
       "tier": "in",
       "since": "2026-11-01",
-      "last_failure": "2026-10-13",
-      "reason": "failed-last-30d"
+      "last_failure": "2026-11-12",
+      "reason": "pr-job-fail",
+      "pr_failures": {
+        "131010609215": {
+          "date": "2026-11-12",
+          "verdict": "fail"
+        }
+      }
     },
     "job:store/couchbase": {
       "tier": "in",
@@ -35039,6 +35351,26 @@
         },
         "133674800687": {
           "date": "2026-11-16",
+          "verdict": "fail"
+        },
+        "131115542010": {
+          "date": "2026-11-12",
+          "verdict": "fail"
+        },
+        "131114418736": {
+          "date": "2026-11-12",
+          "verdict": "fail"
+        },
+        "131112286789": {
+          "date": "2026-11-12",
+          "verdict": "fail"
+        },
+        "131107906566": {
+          "date": "2026-11-12",
+          "verdict": "fail"
+        },
+        "131101082561": {
+          "date": "2026-11-12",
           "verdict": "fail"
         }
       }
@@ -35166,11 +35498,19 @@
     "job:store/mssql": {
       "tier": "in",
       "since": "2026-11-01",
-      "last_failure": "2026-11-16",
+      "last_failure": "2026-11-17",
       "reason": "pr-job-fail",
       "pr_failures": {
         "133525406417": {
           "date": "2026-11-16",
+          "verdict": "fail"
+        },
+        "134231705288": {
+          "date": "2026-11-17",
+          "verdict": "fail"
+        },
+        "134090466029": {
+          "date": "2026-11-17",
           "verdict": "fail"
         }
       }
@@ -35353,6 +35693,22 @@
         },
         "133332293260": {
           "date": "2026-11-16",
+          "verdict": "fail"
+        },
+        "134539988064": {
+          "date": "2026-11-18",
+          "verdict": "fail"
+        },
+        "134384518225": {
+          "date": "2026-11-17",
+          "verdict": "fail"
+        },
+        "134237523359": {
+          "date": "2026-11-17",
+          "verdict": "fail"
+        },
+        "131113240506": {
+          "date": "2026-11-12",
           "verdict": "fail"
         }
       }
@@ -35584,6 +35940,10 @@
         "133055439097": {
           "date": "2026-11-16",
           "verdict": "catch"
+        },
+        "131097918570": {
+          "date": "2026-11-12",
+          "verdict": "catch"
         }
       }
     },
@@ -35608,6 +35968,10 @@
         "131538526844": {
           "date": "2026-11-12",
           "verdict": "catch"
+        },
+        "131250652926": {
+          "date": "2026-11-12",
+          "verdict": "test-fix"
         }
       }
     },
@@ -35714,6 +36078,10 @@
           "verdict": "fail"
         },
         "131404101416": {
+          "date": "2026-11-12",
+          "verdict": "fail"
+        },
+        "131016208749": {
           "date": "2026-11-12",
           "verdict": "fail"
         }
@@ -37526,8 +37894,14 @@
     "packages/core/src/mastra/restart-active-runs-rule.test.ts": {
       "tier": "in",
       "since": "2026-11-16",
-      "last_failure": null,
-      "reason": "new"
+      "last_failure": "2026-11-12",
+      "reason": "pr-catch",
+      "pr_failures": {
+        "131151892088": {
+          "date": "2026-11-12",
+          "verdict": "catch"
+        }
+      }
     },
     "packages/core/src/memory/message-embeddings.test.ts": {
       "tier": "in",
@@ -38058,12 +38432,6 @@
       "reason": "new"
     },
     "packages/playground-ui/src/ds/components/Composer/composer-sheets.test.tsx": {
-      "tier": "in",
-      "since": "2026-11-16",
-      "last_failure": null,
-      "reason": "new"
-    },
-    "packages/playground-ui/src/ds/components/CopyInput/copy-input.test.tsx": {
       "tier": "in",
       "since": "2026-11-16",
       "last_failure": null,
@@ -39345,7 +39713,13 @@
       "tier": "in",
       "since": "2026-11-17",
       "last_failure": null,
-      "reason": "new"
+      "reason": "new",
+      "pr_failures": {
+        "131604972084": {
+          "date": "2026-11-13",
+          "verdict": "test-fix"
+        }
+      }
     },
     "client-sdks/client-js/src/resources/observability.trace-page.test.ts": {
       "tier": "in",
@@ -39470,8 +39844,14 @@
     "packages/mcp-apps-components/src/__tests__/observability-explorer.test.tsx": {
       "tier": "in",
       "since": "2026-11-18",
-      "last_failure": null,
-      "reason": "new"
+      "last_failure": "2026-11-12",
+      "reason": "pr-catch",
+      "pr_failures": {
+        "131538526816": {
+          "date": "2026-11-12",
+          "verdict": "catch"
+        }
+      }
     },
     "packages/mcp-apps-components/src/__tests__/observability-fetch.test.ts": {
       "tier": "in",
@@ -39500,8 +39880,14 @@
     "packages/mcp-apps-components/src/__tests__/trace-viewer.test.tsx": {
       "tier": "in",
       "since": "2026-11-18",
-      "last_failure": null,
-      "reason": "new"
+      "last_failure": "2026-11-12",
+      "reason": "pr-catch",
+      "pr_failures": {
+        "131538527038": {
+          "date": "2026-11-12",
+          "verdict": "catch"
+        }
+      }
     },
     "packages/mcp/src/server/server-apps.test.ts": {
       "tier": "in",
@@ -39590,6 +39976,276 @@
     "stores/pg/src/storage/domains/observability/v-next/token-search-rejection.test.ts": {
       "tier": "in",
       "since": "2026-11-18",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "client-sdks/client-js/src/resources/agent.client-tool-validation-error.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "client-sdks/react/src/hooks/traces/__tests__/pending-feedback-deletions.msw.test.tsx": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "mastracode/factory-ui/src/ui/__tests__/BoardPageCardSources.msw.test.tsx": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "mastracode/factory-ui/src/ui/domains/search/services/searchResults.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "mastracode/factory-ui/src/ui/domains/workspaces/components/__tests__/UserSessionsRename.msw.test.tsx": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "mastracode/factory/src/integrations/platform/foundation/connect-binding.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "mastracode/factory/src/integrations/platform/foundation/connect-event-poller.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "mastracode/factory/src/integrations/platform/foundation/integration.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "mastracode/factory/src/integrations/platform/gitlab/connect-events.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "mastracode/factory/src/integrations/platform/platform-connect.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "mastracode/factory/src/metrics/session.scenario.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "mastracode/factory/src/work-items/search-terms.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "observability/mastra/src/workflow-tool-step-input.integration.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "packages/connect/src/__tests__/connect-client.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "packages/connect/src/__tests__/events.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "packages/core/src/agent-controller/__tests__/session-unresumable-suspension.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "packages/core/src/agent/__tests__/input-processor-tripwire-logging.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "packages/core/src/agent/__tests__/workflow-tool-background-marker.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "packages/core/src/loop/test-utils/aimock/scenarios/fresh-tool-call-approval.scenario.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "packages/core/src/loop/test-utils/aimock/scenarios/to-model-output-validation-error.scenario.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "packages/core/src/storage/composite-logger.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "packages/core/src/workflows/start-async-lifecycle-callbacks.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "packages/mcp/src/client/connect-failure-cleanup.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "packages/playground-ui/src/ds/components/CopyField/copy-field.test.tsx": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "packages/playground-ui/src/ds/components/MarkdownEditor/__tests__/markdown-editor.test.tsx": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "stores/cloudflare-d1/src/storage/domains/memory/large-id-list.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "stores/cloudflare/src/do/storage/domains/memory/large-id-list.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "stores/libsql/src/__tests__/cross-process/xproc-resume-spans.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "stores/libsql/src/__tests__/cross-process/xproc-workflow-resume-tracing.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "stores/libsql/src/storage/logger-propagation.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "templates/template-agent-workflow-billing/tests/billing/accounting.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "templates/template-agent-workflow-billing/tests/billing/autumn-reservations.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "templates/template-agent-workflow-billing/tests/billing/autumn-sandbox.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "templates/template-agent-workflow-billing/tests/billing/http.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "templates/template-agent-workflow-billing/tests/billing/identity-organizations.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "templates/template-agent-workflow-billing/tests/billing/images.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "templates/template-agent-workflow-billing/tests/billing/mastra.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "templates/template-agent-workflow-billing/tests/billing/policies.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "templates/template-agent-workflow-billing/tests/billing/provider-contracts.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "templates/template-agent-workflow-billing/tests/billing/recovery.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "templates/template-agent-workflow-billing/tests/billing/storage.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "templates/template-agent-workflow-billing/tests/template/autumn-sandbox.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "templates/template-agent-workflow-billing/tests/template/local.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "templates/template-agent-workflow-billing/tests/template/studio.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "workflows/inngest/src/__tests__/workflow-sampling.test.ts": {
+      "tier": "in",
+      "since": "2026-11-19",
       "last_failure": null,
       "reason": "new"
     }
@@ -41656,23 +42312,19 @@
     },
     "43912231956": {
       "day": "2026-11-16",
-      "attempt": 1,
-      "waiting": true
+      "attempt": 1
     },
     "43911974055": {
       "day": "2026-11-16",
-      "attempt": 1,
-      "waiting": true
+      "attempt": 1
     },
     "43911142249": {
       "day": "2026-11-16",
-      "attempt": 1,
-      "waiting": true
+      "attempt": 1
     },
     "43911040139": {
       "day": "2026-11-16",
-      "attempt": 1,
-      "waiting": true
+      "attempt": 1
     },
     "43908581850": {
       "day": "2026-11-16",
@@ -43281,49 +43933,35 @@
     },
     "44248581476": {
       "day": "2026-11-18",
-      "attempt": 1,
-      "waiting": true,
-      "recheck_after": "2026-11-19T06:10:15.000Z"
+      "attempt": 1
     },
     "44244246571": {
       "day": "2026-11-18",
-      "attempt": 1,
-      "waiting": true,
-      "recheck_after": "2026-11-19T05:33:33.000Z"
+      "attempt": 1
     },
     "44243072481": {
       "day": "2026-11-18",
-      "attempt": 1,
-      "waiting": true,
-      "recheck_after": "2026-11-19T05:23:04.000Z"
+      "attempt": 1
     },
     "44231928481": {
       "day": "2026-11-18",
-      "attempt": 1,
-      "waiting": true,
-      "recheck_after": "2026-11-19T03:47:28.000Z"
+      "attempt": 1
     },
     "44230941825": {
       "day": "2026-11-18",
-      "attempt": 1,
-      "waiting": true
+      "attempt": 1
     },
     "44225884489": {
       "day": "2026-11-18",
-      "attempt": 1,
-      "waiting": true,
-      "recheck_after": "2026-11-19T02:56:33.000Z"
+      "attempt": 1
     },
     "44225173780": {
       "day": "2026-11-18",
-      "attempt": 1,
-      "waiting": true
+      "attempt": 1
     },
     "44222014547": {
       "day": "2026-11-18",
-      "attempt": 1,
-      "waiting": true,
-      "recheck_after": "2026-11-19T02:22:39.000Z"
+      "attempt": 1
     },
     "44210179370": {
       "day": "2026-11-18",
@@ -43332,15 +43970,12 @@
     },
     "44208660852": {
       "day": "2026-11-18",
-      "attempt": 1,
-      "waiting": true,
-      "recheck_after": "2026-11-19T00:43:56.000Z"
+      "attempt": 1
     },
     "44208334775": {
       "day": "2026-11-18",
       "attempt": 1,
-      "waiting": true,
-      "recheck_after": "2026-11-19T00:43:08.000Z"
+      "waiting": true
     },
     "44208238203": {
       "day": "2026-11-18",
@@ -43349,39 +43984,27 @@
     },
     "44188961030": {
       "day": "2026-11-17",
-      "attempt": 1,
-      "waiting": true,
-      "recheck_after": "2026-11-18T22:25:26.000Z"
+      "attempt": 1
     },
     "44180286475": {
       "day": "2026-11-17",
-      "attempt": 1,
-      "waiting": true,
-      "recheck_after": "2026-11-18T21:35:06.000Z"
+      "attempt": 1
     },
     "44175475783": {
       "day": "2026-11-17",
-      "attempt": 1,
-      "waiting": true,
-      "recheck_after": "2026-11-18T21:07:35.000Z"
+      "attempt": 1
     },
     "44171159113": {
       "day": "2026-11-17",
-      "attempt": 1,
-      "waiting": true,
-      "recheck_after": "2026-11-18T20:49:40.000Z"
+      "attempt": 1
     },
     "44160692400": {
       "day": "2026-11-17",
-      "attempt": 1,
-      "waiting": true,
-      "recheck_after": "2026-11-18T19:47:40.000Z"
+      "attempt": 1
     },
     "44150216369": {
       "day": "2026-11-17",
-      "attempt": 1,
-      "waiting": true,
-      "recheck_after": "2026-11-18T18:47:31.000Z"
+      "attempt": 1
     },
     "44146954797": {
       "day": "2026-11-17",
@@ -43395,75 +44018,51 @@
     },
     "44144327584": {
       "day": "2026-11-17",
-      "attempt": 1,
-      "waiting": true,
-      "recheck_after": "2026-11-18T18:12:02.000Z"
+      "attempt": 1
     },
     "44141991440": {
       "day": "2026-11-17",
-      "attempt": 1,
-      "waiting": true,
-      "recheck_after": "2026-11-18T18:00:50.000Z"
+      "attempt": 1
     },
     "44138780626": {
       "day": "2026-11-17",
-      "attempt": 1,
-      "waiting": true,
-      "recheck_after": "2026-11-18T17:41:44.000Z"
+      "attempt": 1
     },
     "44137180486": {
       "day": "2026-11-17",
-      "attempt": 1,
-      "waiting": true,
-      "recheck_after": "2026-11-18T17:38:00.000Z"
+      "attempt": 1
     },
     "44130098321": {
       "day": "2026-11-17",
-      "attempt": 1,
-      "waiting": true,
-      "recheck_after": "2026-11-18T16:55:21.000Z"
+      "attempt": 1
     },
     "44121551685": {
       "day": "2026-11-17",
-      "attempt": 1,
-      "waiting": true,
-      "recheck_after": "2026-11-18T16:12:34.000Z"
+      "attempt": 1
     },
     "44109979617": {
       "day": "2026-11-17",
-      "attempt": 1,
-      "waiting": true,
-      "recheck_after": "2026-11-18T15:09:22.000Z"
+      "attempt": 1
     },
     "44099264380": {
       "day": "2026-11-17",
-      "attempt": 1,
-      "waiting": true,
-      "recheck_after": "2026-11-18T14:12:10.000Z"
+      "attempt": 1
     },
     "44097470871": {
       "day": "2026-11-17",
-      "attempt": 1,
-      "waiting": true,
-      "recheck_after": "2026-11-18T13:58:58.000Z"
+      "attempt": 1
     },
     "44094061833": {
       "day": "2026-11-17",
-      "attempt": 1,
-      "waiting": true,
-      "recheck_after": "2026-11-18T13:41:15.000Z"
+      "attempt": 1
     },
     "44072604949": {
       "day": "2026-11-17",
-      "attempt": 1,
-      "waiting": true,
-      "recheck_after": "2026-11-18T11:26:22.000Z"
+      "attempt": 1
     },
     "44036706993": {
       "day": "2026-11-17",
-      "attempt": 1,
-      "waiting": true,
-      "recheck_after": "2026-11-18T07:18:41.000Z"
+      "attempt": 1
     },
     "43483207135": {
       "day": "2026-11-13",
@@ -43507,6 +44106,1878 @@
     },
     "43388489089": {
       "day": "2026-11-13",
+      "attempt": 1,
+      "waiting": true
+    },
+    "44473199053": {
+      "day": "2026-11-19",
+      "attempt": 1
+    },
+    "44469350207": {
+      "day": "2026-11-19",
+      "attempt": 1
+    },
+    "44466238511": {
+      "day": "2026-11-19",
+      "attempt": 1
+    },
+    "44463115217": {
+      "day": "2026-11-19",
+      "attempt": 1
+    },
+    "44457799909": {
+      "day": "2026-11-19",
+      "attempt": 1
+    },
+    "44456953635": {
+      "day": "2026-11-19",
+      "attempt": 1
+    },
+    "44454939338": {
+      "day": "2026-11-19",
+      "attempt": 1
+    },
+    "44452407088": {
+      "day": "2026-11-19",
+      "attempt": 1
+    },
+    "44450981229": {
+      "day": "2026-11-19",
+      "attempt": 1
+    },
+    "44447501666": {
+      "day": "2026-11-19",
+      "attempt": 1
+    },
+    "44445368328": {
+      "day": "2026-11-19",
+      "attempt": 1
+    },
+    "44437411945": {
+      "day": "2026-11-19",
+      "attempt": 1
+    },
+    "44436878506": {
+      "day": "2026-11-19",
+      "attempt": 1
+    },
+    "44436762598": {
+      "day": "2026-11-19",
+      "attempt": 1
+    },
+    "44436762420": {
+      "day": "2026-11-19",
+      "attempt": 1
+    },
+    "44425765748": {
+      "day": "2026-11-19",
+      "attempt": 1
+    },
+    "44425765591": {
+      "day": "2026-11-19",
+      "attempt": 1
+    },
+    "44425764085": {
+      "day": "2026-11-19",
+      "attempt": 1
+    },
+    "44425763843": {
+      "day": "2026-11-19",
+      "attempt": 1
+    },
+    "44424652232": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44424652272": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44424323741": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44424323577": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44419507820": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44419507754": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44418518766": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44414851199": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44412034692": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44411732159": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44409660197": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44409659655": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44409371783": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44409371558": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44406510109": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44396737137": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44396351381": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44396351089": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44395514621": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44394757233": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44394320959": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44394052974": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44390042010": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44389289939": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44387051593": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44386366494": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44386366353": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44383747320": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44381847755": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44379385962": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44369401162": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44365422181": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44360516640": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44345951925": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44345951523": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44345692650": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44344283453": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44344283920": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44344283297": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44344283730": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44343556444": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44340490828": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44337719024": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44337253559": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44337252778": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44336414552": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44335947762": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44335935036": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44335932044": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44334976491": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44332455592": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44332323454": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44331643153": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44331630363": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44330892140": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44330813801": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44323657229": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44323656768": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44322869274": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44322869074": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44322585981": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44321354606": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44319988488": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44317227085": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44316391857": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44316340982": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44316340608": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44316311561": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44316311308": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44315190977": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44315144594": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44314498939": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44314498698": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44313887616": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44313319854": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44312664142": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44312664067": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44311490352": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44311103514": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44311103507": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44310050182": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44309031026": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44308614126": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44307425656": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44306052261": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44306051870": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44305995384": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44305995018": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44305645096": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44304918620": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44304918445": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44304461171": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44304461084": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44304460978": {
+      "day": "2026-11-18",
+      "attempt": 2
+    },
+    "44304266152": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44304266422": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44304258990": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44304259133": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44303171167": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44302811606": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44302807815": {
+      "day": "2026-11-18",
+      "attempt": 2
+    },
+    "44302798309": {
+      "day": "2026-11-18",
+      "attempt": 2
+    },
+    "44302662433": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44302036926": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44301975891": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44299378957": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44294303805": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44294303372": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44284706196": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44284189895": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44283739004": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44283113493": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44280935406": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44280935291": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44280624237": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44280624346": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44280444063": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44280443460": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44271724710": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44271724601": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44256729880": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44256180182": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "44254743510": {
+      "day": "2026-11-18",
+      "attempt": 1
+    },
+    "43357423390": {
+      "day": "2026-11-13",
+      "attempt": 1
+    },
+    "43357423255": {
+      "day": "2026-11-13",
+      "attempt": 1
+    },
+    "43357060551": {
+      "day": "2026-11-13",
+      "attempt": 1
+    },
+    "43357060398": {
+      "day": "2026-11-13",
+      "attempt": 1
+    },
+    "43356797944": {
+      "day": "2026-11-13",
+      "attempt": 1
+    },
+    "43356797842": {
+      "day": "2026-11-13",
+      "attempt": 1
+    },
+    "43356792424": {
+      "day": "2026-11-13",
+      "attempt": 1
+    },
+    "43347533596": {
+      "day": "2026-11-13",
+      "attempt": 1
+    },
+    "43347419553": {
+      "day": "2026-11-13",
+      "attempt": 1
+    },
+    "43347419682": {
+      "day": "2026-11-13",
+      "attempt": 1
+    },
+    "43344821838": {
+      "day": "2026-11-13",
+      "attempt": 1
+    },
+    "43343182996": {
+      "day": "2026-11-13",
+      "attempt": 1
+    },
+    "43341636074": {
+      "day": "2026-11-13",
+      "attempt": 1
+    },
+    "43340433349": {
+      "day": "2026-11-13",
+      "attempt": 1
+    },
+    "43340226126": {
+      "day": "2026-11-13",
+      "attempt": 1
+    },
+    "43339632851": {
+      "day": "2026-11-13",
+      "attempt": 1
+    },
+    "43338130872": {
+      "day": "2026-11-13",
+      "attempt": 1
+    },
+    "43338072877": {
+      "day": "2026-11-13",
+      "attempt": 1
+    },
+    "43338072809": {
+      "day": "2026-11-13",
+      "attempt": 1
+    },
+    "43337752457": {
+      "day": "2026-11-13",
+      "attempt": 1
+    },
+    "43337648638": {
+      "day": "2026-11-13",
+      "attempt": 1
+    },
+    "43336658703": {
+      "day": "2026-11-13",
+      "attempt": 1
+    },
+    "43336107571": {
+      "day": "2026-11-13",
+      "attempt": 1
+    },
+    "43334738439": {
+      "day": "2026-11-13",
+      "attempt": 1
+    },
+    "43334738359": {
+      "day": "2026-11-13",
+      "attempt": 1
+    },
+    "43334081571": {
+      "day": "2026-11-13",
+      "attempt": 1
+    },
+    "43333204425": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43332463341": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43331726901": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43331331359": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43330938400": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43328765048": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43321707544": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43321511163": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43320654850": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43320423870": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43319647422": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43319647515": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43318968369": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43318608365": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43318608291": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43318549877": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43318549817": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43317665611": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43314802059": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43314011896": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43313701433": {
+      "day": "2026-11-12",
+      "attempt": 2
+    },
+    "43312318919": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43312235958": {
+      "day": "2026-11-12",
+      "attempt": 2
+    },
+    "43311642996": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43310869929": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43310603310": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43310602845": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43310422566": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43310030928": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43310030925": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43309003590": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43307784651": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43301983077": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43300754285": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43300023993": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43299928279": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43299663938": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43299663723": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43298799925": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43297378072": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43294271116": {
+      "day": "2026-11-12",
+      "attempt": 2
+    },
+    "43294130234": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43294130067": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43291514840": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43289612714": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43289590705": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43287963808": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43286655348": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43286655169": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43285951774": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43285951557": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43285859558": {
+      "day": "2026-11-12",
+      "attempt": 2
+    },
+    "43285687984": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43284913835": {
+      "day": "2026-11-12",
+      "attempt": 2
+    },
+    "43284690590": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43284664915": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43282695701": {
+      "day": "2026-11-12",
+      "attempt": 3
+    },
+    "43282589953": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43282020692": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43282020000": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43281505609": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43281505355": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43280616747": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43280609832": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43280609465": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43280263429": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43280085753": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43279721018": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43279704266": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43278814780": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43278179227": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43278179468": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43277459689": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43277359138": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43277228385": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43277191003": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43277184370": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43277184062": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43277097506": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43277097107": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43276502652": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43276502410": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43276314471": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43275930130": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43275930067": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43275177012": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43275033383": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43275029968": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43275030061": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43275029862": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43275014577": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43274545436": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43272938939": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43272940533": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43272938771": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43272939203": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43272936537": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43272936912": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43272936562": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43271940780": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43270566503": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43269176292": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43268538625": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43267783065": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43261889170": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43261889034": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43261811561": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43260980064": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43258442354": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43253377656": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43252764628": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43252764618": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43247631856": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43247073358": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43247069646": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43247069915": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43246464154": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43245881248": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43245880885": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43245877166": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43245879838": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43245877272": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43245879277": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43245876584": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43241550308": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43240488554": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43240363282": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43240321247": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43239129896": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43238274016": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43238273980": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43237807215": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43237435966": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43237435724": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43237434218": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43237434037": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43237434889": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43237433983": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43237433721": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43237433445": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43237433528": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43237433737": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43237433168": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43237435467": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43237433326": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43237433323": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43237148468": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43236436358": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43230187845": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43224906531": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43223954965": {
+      "day": "2026-11-12",
+      "attempt": 3
+    },
+    "43222279697": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43221763084": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43221762595": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43221742044": {
+      "day": "2026-11-12",
+      "attempt": 2
+    },
+    "43221626659": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43220061992": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43220062154": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43219834999": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43219729891": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43218891375": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43218322118": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43218322020": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43217577803": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43217281093": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43216152377": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43213153259": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43212048610": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43211431924": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43211344747": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43210079196": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43208710372": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43206885588": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43205698478": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43205279273": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43205279192": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43203766140": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43202630145": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43200415011": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43200406148": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43197886960": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43197805928": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43197599710": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43197598465": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43197598252": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43197517531": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43197372440": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43197036925": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43195714139": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43195630552": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43194720426": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43194514994": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43193777783": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43193116942": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43193057836": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43187612851": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43184097538": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43178055492": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43177541076": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43177540974": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43175917065": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43173576530": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43173095243": {
+      "day": "2026-11-12",
+      "attempt": 2
+    },
+    "43172958281": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43172797228": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43171211209": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43171053136": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43170973289": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43170973176": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43170379902": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43170379879": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43168997463": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43168534047": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43168533891": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43168111402": {
+      "day": "2026-11-12",
+      "attempt": 2
+    },
+    "43167595330": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43167595041": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43166596694": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43166278863": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43166278629": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43166246268": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43166246141": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43165792496": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43164487875": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43164167516": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43163819440": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43163819166": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43160121340": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43159756137": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43159756015": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43158979793": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43158405146": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43157874324": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43157874186": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43157642193": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43157097298": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43157097335": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43156227281": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43154545799": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43154063021": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43153427410": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43151584318": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43150809779": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "43148108547": {
+      "day": "2026-11-12",
+      "attempt": 1
+    },
+    "44467908382": {
+      "day": "2026-11-19",
+      "attempt": 1,
+      "waiting": true,
+      "recheck_after": "2026-11-20T05:56:19.000Z"
+    },
+    "44457800233": {
+      "day": "2026-11-19",
+      "attempt": 1,
+      "waiting": true,
+      "recheck_after": "2026-11-20T04:28:43.000Z"
+    },
+    "44456953748": {
+      "day": "2026-11-19",
+      "attempt": 1,
+      "waiting": true,
+      "recheck_after": "2026-11-20T04:21:09.000Z"
+    },
+    "44454939523": {
+      "day": "2026-11-19",
+      "attempt": 1,
+      "waiting": true,
+      "recheck_after": "2026-11-20T04:03:51.000Z"
+    },
+    "44454508911": {
+      "day": "2026-11-19",
+      "attempt": 1,
+      "waiting": true,
+      "recheck_after": "2026-11-20T03:58:58.000Z"
+    },
+    "44452407316": {
+      "day": "2026-11-19",
+      "attempt": 1,
+      "waiting": true,
+      "recheck_after": "2026-11-20T03:41:12.000Z"
+    },
+    "44450981211": {
+      "day": "2026-11-19",
+      "attempt": 1,
+      "waiting": true,
+      "recheck_after": "2026-11-20T03:29:14.000Z"
+    },
+    "44439612134": {
+      "day": "2026-11-19",
+      "attempt": 1,
+      "waiting": true,
+      "recheck_after": "2026-11-20T01:53:08.000Z"
+    },
+    "44438199524": {
+      "day": "2026-11-19",
+      "attempt": 1,
+      "waiting": true,
+      "recheck_after": "2026-11-20T01:43:11.000Z"
+    },
+    "44438194657": {
+      "day": "2026-11-19",
+      "attempt": 1,
+      "waiting": true,
+      "recheck_after": "2026-11-20T01:40:55.000Z"
+    },
+    "44418518751": {
+      "day": "2026-11-18",
+      "attempt": 1,
+      "waiting": true,
+      "recheck_after": "2026-11-19T23:17:37.000Z"
+    },
+    "44414851172": {
+      "day": "2026-11-18",
+      "attempt": 1,
+      "waiting": true,
+      "recheck_after": "2026-11-19T22:53:41.000Z"
+    },
+    "44405872409": {
+      "day": "2026-11-18",
+      "attempt": 1,
+      "waiting": true
+    },
+    "44401761372": {
+      "day": "2026-11-18",
+      "attempt": 1,
+      "waiting": true
+    },
+    "44396298313": {
+      "day": "2026-11-18",
+      "attempt": 1,
+      "waiting": true
+    },
+    "44396082990": {
+      "day": "2026-11-18",
+      "attempt": 1,
+      "waiting": true
+    },
+    "44389306682": {
+      "day": "2026-11-18",
+      "attempt": 1,
+      "waiting": true,
+      "recheck_after": "2026-11-19T20:23:14.000Z"
+    },
+    "44345692982": {
+      "day": "2026-11-18",
+      "attempt": 1,
+      "waiting": true,
+      "recheck_after": "2026-11-19T16:24:43.000Z"
+    },
+    "44340491171": {
+      "day": "2026-11-18",
+      "attempt": 1,
+      "waiting": true,
+      "recheck_after": "2026-11-19T15:58:11.000Z"
+    },
+    "44334965734": {
+      "day": "2026-11-18",
+      "attempt": 1,
+      "waiting": true,
+      "recheck_after": "2026-11-19T15:29:56.000Z"
+    },
+    "44333622726": {
+      "day": "2026-11-18",
+      "attempt": 1,
+      "waiting": true
+    },
+    "44330655541": {
+      "day": "2026-11-18",
+      "attempt": 1,
+      "waiting": true
+    },
+    "44324361291": {
+      "day": "2026-11-18",
+      "attempt": 1,
+      "waiting": true
+    },
+    "44301975784": {
+      "day": "2026-11-18",
+      "attempt": 1,
+      "waiting": true,
+      "recheck_after": "2026-11-19T12:17:29.000Z"
+    },
+    "44301943397": {
+      "day": "2026-11-18",
+      "attempt": 1,
+      "waiting": true,
+      "recheck_after": "2026-11-19T12:17:45.000Z"
+    },
+    "44300822917": {
+      "day": "2026-11-18",
+      "attempt": 1,
+      "waiting": true,
+      "recheck_after": "2026-11-19T12:12:40.000Z"
+    },
+    "44283144455": {
+      "day": "2026-11-18",
+      "attempt": 1,
+      "waiting": true,
+      "recheck_after": "2026-11-19T10:21:01.000Z"
+    },
+    "44280029908": {
+      "day": "2026-11-18",
+      "attempt": 1,
+      "waiting": true,
+      "recheck_after": "2026-11-19T09:58:13.000Z"
+    },
+    "44277706692": {
+      "day": "2026-11-18",
+      "attempt": 1,
+      "waiting": true,
+      "recheck_after": "2026-11-19T09:46:25.000Z"
+    },
+    "44266538382": {
+      "day": "2026-11-18",
+      "attempt": 1,
+      "waiting": true,
+      "recheck_after": "2026-11-19T08:27:26.000Z"
+    },
+    "44257478574": {
+      "day": "2026-11-18",
+      "attempt": 1,
+      "waiting": true,
+      "recheck_after": "2026-11-19T07:20:17.000Z"
+    },
+    "43344242448": {
+      "day": "2026-11-13",
+      "attempt": 1,
+      "waiting": true
+    },
+    "43337885773": {
+      "day": "2026-11-13",
+      "attempt": 1,
+      "waiting": true
+    },
+    "43284799694": {
+      "day": "2026-11-12",
+      "attempt": 1,
+      "waiting": true
+    },
+    "43281333595": {
+      "day": "2026-11-12",
+      "attempt": 1,
+      "waiting": true
+    },
+    "43281129777": {
+      "day": "2026-11-12",
+      "attempt": 1,
+      "waiting": true
+    },
+    "43280955811": {
+      "day": "2026-11-12",
+      "attempt": 1,
+      "waiting": true
+    },
+    "43280780439": {
+      "day": "2026-11-12",
+      "attempt": 1,
+      "waiting": true
+    },
+    "43262557222": {
+      "day": "2026-11-12",
+      "attempt": 1,
+      "waiting": true
+    },
+    "43162546179": {
+      "day": "2026-11-12",
       "attempt": 1,
       "waiting": true
     }
