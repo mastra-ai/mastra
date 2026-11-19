@@ -841,6 +841,14 @@ const sidebars = {
     },
     {
       type: 'doc',
+      id: 'mastra-platform/mcp',
+      label: 'MCP server',
+      customProps: {
+        tags: ['new'],
+      },
+    },
+    {
+      type: 'doc',
       id: 'mastra-platform/studio',
       label: 'Studio',
     },
