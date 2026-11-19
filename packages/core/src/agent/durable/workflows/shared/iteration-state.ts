@@ -1,3 +1,4 @@
+import { isUsageIncomplete } from '../../../../observability/usage';
 import type { LanguageModelUsage, StepTripwireData } from '../../../../stream/types';
 import type { DurableAgenticExecutionOutput, RunRegistryEntry } from '../../types';
 import type { AccumulatedUsage, BaseIterationState } from './schemas';
@@ -214,14 +215,11 @@ export function createBaseIterationStateUpdate(
         ],
     accumulatedUsage: newUsage,
     usageAggregationVersion: signalPreempted ? currentState.usageAggregationVersion : 1,
-    // The suspension that ended this step reported the run total so far on its MODEL_GENERATION.
-    // A count the provider left unknown was not reported, so its earlier value stands.
+    // The suspension that ended this step reported the run total so far on its MODEL_GENERATION,
+    // unless the provider left part of that total unknown: then it reported nothing.
     generationReportedUsage:
-      currentState.generationReportedUsage && executionOutput.suspensionReportedUsage
-        ? {
-            ...currentState.generationReportedUsage,
-            ...Object.fromEntries(Object.entries(newUsage).filter(([, count]) => count !== undefined)),
-          }
+      currentState.generationReportedUsage && executionOutput.suspensionReportedUsage && !isUsageIncomplete(newUsage)
+        ? newUsage
         : currentState.generationReportedUsage,
     lastStepResult,
     deferredStepFinishChunk: executionOutput.deferredStepFinishChunk,

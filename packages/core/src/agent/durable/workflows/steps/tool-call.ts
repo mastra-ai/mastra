@@ -47,7 +47,7 @@ import type {
   SpanTermination,
 } from '../../../../observability';
 import { compactStopReasonContext } from '../../../../observability/outcome-schema';
-import { extractUsageMetrics, subtractReportedUsage } from '../../../../observability/usage';
+import { extractUsageMetrics, isUsageIncomplete, subtractReportedUsage } from '../../../../observability/usage';
 import type { ProcessorState } from '../../../../processors';
 import { BACKGROUND_WORK_CONTEXT } from '../../../../processors/background-work-signals';
 import { isProcessorWorkflow } from '../../../../processors/is-processor-workflow';
@@ -557,14 +557,14 @@ export function createDurableToolCallStep() {
           // suspension of the same step, after a resume, made none. The generation records the
           // run total so far less what earlier suspensions recorded, like the regular agent.
           // Tool calls that run side by side can each suspend here, so none of them records it.
+          // A total the provider left partly unknown is not recorded either: its known detail
+          // counts would be reported without the total they are part of.
           const ownsStep = !!typedInput.stepSpanData && segmentOwnsStep(segment, typedInput.stepSpanData);
           const reported = initData.generationReportedUsage;
+          const total = calculateAccumulatedUsage(initData.accumulatedUsage, typedInput.stepUsage);
           const usage =
-            reported && ownsStep && !typedInput.sideBySide
-              ? subtractReportedUsage(
-                  calculateAccumulatedUsage(initData.accumulatedUsage, typedInput.stepUsage),
-                  reported,
-                )
+            reported && ownsStep && !typedInput.sideBySide && !isUsageIncomplete(total)
+              ? subtractReportedUsage(total, reported)
               : undefined;
           if (ownsStep) {
             obs.rebuildSpan(typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>)?.end({
