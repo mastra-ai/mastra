@@ -127,6 +127,17 @@ export async function fireClientToolOutputHooks({
   }
 }
 
+function stripModelOutputMarkers(part: { providerMetadata?: unknown }): void {
+  const mastra = (part.providerMetadata as { mastra?: unknown } | undefined)?.mastra;
+  if (!mastra || typeof mastra !== 'object' || !('modelOutput' in mastra || 'modelOutputComputed' in mastra)) return;
+  const {
+    modelOutput: _untrustedOutput,
+    modelOutputComputed: _untrustedMarker,
+    ...restMastra
+  } = mastra as Record<string, unknown>;
+  part.providerMetadata = { ...(part.providerMetadata as object), mastra: restMastra };
+}
+
 /**
  * Apply a server-defined `toModelOutput` to client-supplied tool results.
  *
@@ -137,7 +148,7 @@ export async function fireClientToolOutputHooks({
  * `providerMetadata.mastra.modelOutput` — the exact contract the execution
  * path writes — so prompt conversion restores it with no downstream changes.
  *
- * Only this request's input messages are walked: results in memory-recalled
+ * Only this request's input messages are mapped: results in memory-recalled
  * history either already carry the cached mapping from the request that
  * ingested them, or predate it and stay raw — re-mapping them here would
  * re-run user code on every request without ever persisting.
@@ -164,6 +175,19 @@ export async function applyClientToolModelOutput({
   if (!tools) return;
   if (!Object.values(tools).some(isClientTool)) return;
 
+  // Memory-recalled history is not re-mapped (see above), but a stored mapping
+  // on a client tool without `toModelOutput` can only have come from a client:
+  // the server never writes one there. Releases before the input strip below
+  // could persist such a forged mapping, so drop it before prompt building.
+  for (const message of messageList.get.remembered.db()) {
+    if (message.role !== 'assistant' || message.content?.format !== 2 || !message.content.parts) continue;
+    for (const part of message.content.parts) {
+      if (part.type !== 'tool-invocation' || part.toolInvocation?.state !== 'result') continue;
+      const tool = tools[part.toolInvocation.toolName];
+      if (tool && isClientTool(tool) && typeof tool.toModelOutput !== 'function') stripModelOutputMarkers(part);
+    }
+  }
+
   for (const message of messageList.get.input.db()) {
     if (message.role !== 'assistant' || message.content?.format !== 2 || !message.content.parts) continue;
 
@@ -185,24 +209,7 @@ export async function applyClientToolModelOutput({
       // below, so markers on wire-delivered parts are stripped and the
       // mapping is recomputed from the raw result. Only parts this process
       // enriched itself (tracked by identity) keep their markers.
-      if (!serverComputedParts.has(part)) {
-        const wireMastra = part.providerMetadata?.mastra;
-        if (
-          wireMastra &&
-          typeof wireMastra === 'object' &&
-          ('modelOutput' in wireMastra || 'modelOutputComputed' in wireMastra)
-        ) {
-          const {
-            modelOutput: _untrustedOutput,
-            modelOutputComputed: _untrustedMarker,
-            ...restMastra
-          } = wireMastra as Record<string, unknown>;
-          part.providerMetadata = {
-            ...part.providerMetadata,
-            mastra: restMastra,
-          } as unknown as typeof part.providerMetadata;
-        }
-      }
+      if (!serverComputedParts.has(part)) stripModelOutputMarkers(part);
 
       // The server never stores a mapping for a client tool without one.
       const toModelOutput = tool.toModelOutput;
