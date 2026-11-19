@@ -24,7 +24,6 @@ Mastra platform has two kinds of alerts. Both are managed on the same **Alerts**
 ## Before you begin
 
 - Use an organization admin account. Members and viewers can see alerts and destinations, but only admins can create, change, or delete them.
-- Check that your plan includes alerts. On a plan without alerts, **New alert** offers **Upgrade plan**. Your plan also sets how many observability alerts can be enabled at once.
 - For observability alerts, send traces to [Mastra Platform Observability](/docs/mastra-platform/observability/overview). A backtest needs recent data to show anything useful.
 
 Open the [Mastra platform dashboard](https://projects.mastra.ai), then select **Observability** > **Alerts**. The page has three tabs:
@@ -32,8 +31,6 @@ Open the [Mastra platform dashboard](https://projects.mastra.ai), then select **
 - **Alerts**: Every alert with its state, type, and destinations.
 - **Activity**: Which alerts opened and closed, and where each notification went.
 - **Destinations**: Where alerts send notifications.
-
-If **Alerts** isn't under **Observability**, your organization still uses the earlier alerts page. Open your organization settings and select **Alerts** to manage platform alerts and destinations there.
 
 ## Add a destination
 
@@ -120,11 +117,11 @@ Select **New alert** on the **Alerts** tab, then choose the kind of alert.
       </StepItem>
 
       <StepItem>
-        Under **What to watch**, choose **All projects** or one project. An alert for all projects reads the projects in one region, which you choose under **Region** if the field is shown. You can't change the project choice later.
+        Under **What to watch**, choose **All projects** or one project. You can't change the project choice later.
       </StepItem>
 
       <StepItem>
-        A blank alert starts with **Watch** set to **Traces** for whole runs. Choose **Spans** for individual operations. For either source, select a **Metric** and, when offered, a statistic. To watch evaluation results, choose **Scores**, select a scorer, and choose how to combine its scores. Add filters to narrow the data. Each record must match all the filters. The available fields depend on what you watch. For example, switch to **Spans** to filter by **Primitive type**.
+        A blank alert starts with **Watch** set to **Traces** for whole runs. Choose **Spans** for individual operations. For either source, select a **Metric** and, when offered, a statistic. To watch evaluation results, choose **Scores**, select a scorer, and choose how to combine its scores. For traces and spans, select **Add a filter** to narrow the data. For example, if your application records its deployment region in **Environment**, filter on that value. Switch to **Spans** to filter by **Primitive type**. Each record must match all the filters.
       </StepItem>
 
       <StepItem>
@@ -174,12 +171,6 @@ Select **New alert** on the **Alerts** tab, then choose the kind of alert.
   </TabItem>
 </Tabs>
 
-### Create an alert from a dashboard card
-
-On the **Metrics** page of the organization or a project, admins see a **Create alert** action, shown as a bell icon, on dashboard cards. It opens a new observability alert with the card's measure, filters, and grouping filled in. From a project, the alert applies to that project. Review the threshold and window, then continue from the backtest step.
-
-Some cards can't become alerts, so their action is disabled. For example, the card shows every scorer instead of one, filters by labels or tags, uses a metric that alerts can't watch yet, or has filters that exclude every run. Hover over or focus the action to see the reason.
-
 ## How notifications work
 
 When an alert's condition is met, the alert opens and Mastra sends a notification to each of its destinations. The alert stays open while the condition lasts. Once the condition clears, the alert closes and Mastra sends a **Closed** notification.
@@ -193,13 +184,13 @@ Notifications for an open observability alert let you close it by hand. Slack me
 
 ## Observability alert checks
 
-Mastra normally checks enabled observability alerts every five minutes. If a query keeps failing for 15 minutes, Mastra checks it less often. With **the last 1h**, each check measures the preceding hour. With **since midnight UTC**, each check measures from 00:00 UTC to the end of the evaluation window.
+Mastra schedules a check every five minutes. **Over** sets how much data each check reads. With **the last 15m**, Mastra checks every five minutes and measures the previous 15 minutes each time. With **since midnight UTC**, the window starts at 00:00 UTC.
 
 Open **Advanced** in the alert form for these settings:
 
-- **Recovers below** or **Recovers above**: A level further from the threshold, so a value that hovers near it doesn't keep opening and closing the alert. For example, an alert that opens above a 5% error rate and recovers below 2% stays open until the error rate drops to 2%.
+- Set a recovery threshold if an alert keeps opening and closing near the same value. The form shows one recovery field based on the firing condition. For example, if an alert opens above a 5% error rate, set **Recovers below** to 2%. The alert stays open at 2% and closes when a check measures less than 2%.
 - **Skip agents with fewer than**, or the same setting for another group such as models: For spans and traces with a separate alert for each group, a minimum number of runs per check, so an agent with one failure out of two runs doesn't open the alert.
-- **Wait for late data**: A minute or two of the newest data to skip, if an alert on a short window opens and closes on its own within minutes. Keep **None** unless that happens.
+- Leave **Wait for late data** at **None** if your data arrives on time. If your exporter sends spans in batches, choose the shortest delay that covers the usual time between the end of a span and when you can see it in Mastra. For example, if spans arrive up to 90 seconds late, choose **2m**. A 10:15 check with a 15-minute window then reads 09:58 to 10:13. The next check still runs at 10:20. A longer delay gives data more time to arrive but also delays detection.
 
 Some alerts can measure each group on its own. Under **Alert for**, choose **One alert for all traffic** for one check over everything, or a separate alert for each group, such as **A separate alert for each agent**, so one failing agent isn't hidden by healthy ones. If you filter to a single agent, the form drops the option to split by agent. It also hides splits when the selected project has only one known value for that field.
 
@@ -252,6 +243,8 @@ Open an alert from the **Alerts** tab to see its state, settings, and notificati
 - Use the switch next to the alert's name to turn it off or on.
 - Select **Edit** to change the alert, then select **Save changes**.
 - Select **Edit** > **Delete alert** to delete it. Its past incidents stay on the **Activity** tab.
+
+An organization can have up to 50 observability alerts enabled at once. If you need more, [contact Mastra](https://mastra.ai/contact).
 
 Inside a project, the **Alerts** page shows that project's alerts plus the organization's alerts that apply to all projects. Edit an alert that applies to all projects from the organization's **Alerts** page.
 
