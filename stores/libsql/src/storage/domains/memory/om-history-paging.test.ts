@@ -9,6 +9,66 @@ import { MemoryLibSQL } from './index';
 const createdAt = new Date('2026-01-01T00:00:00Z');
 
 describe('bounded observational history in LibSQL', () => {
+  it.each(['thread', 'resource'] as const)(
+    'persists the initial %s lower boundary before an observation or restart',
+    async scope => {
+      const directory = await mkdtemp(join(tmpdir(), 'om-initial-boundary-'));
+      const url = `file:${join(directory, 'history.db')}`;
+      let client = createClient({ url });
+      try {
+        let store = new MemoryLibSQL({ client });
+        await store.init();
+        await store.saveThread({
+          thread: { id: 'thread', title: 'Initial history', resourceId: 'resource', createdAt, updatedAt: createdAt },
+        });
+        const ids = ['Z', 'a', 'z', 'é', '😀'];
+        await store.saveMessages({
+          messages: ids.map(id => ({
+            id,
+            role: 'user',
+            threadId: 'thread',
+            resourceId: 'resource',
+            createdAt,
+            content: { format: 2, parts: [{ type: 'text', text: id }] },
+          })),
+        });
+        const selection = scope === 'thread' ? { threadId: 'thread' } : { resourceId: 'resource' };
+        const first = await store.listObservationHistory({ ...selection, order: 'desc', limit: 2 });
+        expect(first.messages.map(message => message.id)).toEqual(['😀', 'é']);
+        const before = { createdAt: createdAt.toISOString(), id: 'é' };
+        const second = await store.listObservationHistory({ ...selection, order: 'desc', before, limit: 2 });
+        expect(second.messages.map(message => message.id)).toEqual(['z', 'a']);
+        const after = { createdAt: createdAt.toISOString(), id: 'z' };
+        const input = {
+          threadId: scope === 'thread' ? 'thread' : null,
+          resourceId: 'resource',
+          scope,
+          config: {},
+          observationHistory: { after },
+        };
+        const record = await store.initializeObservationalMemory(input);
+        expect(record.metadata?.observationHistory).toEqual({ after });
+        expect(record.lastObservedAt).toBeUndefined();
+        // A losing initializer must use the winner's boundary, not its own snapshot.
+        const loser = await store.initializeObservationalMemory({ ...input, observationHistory: { after: before } });
+        expect(loser.id).toBe(record.id);
+        expect(loser.metadata?.observationHistory).toEqual({ after });
+        client.close();
+        client = createClient({ url });
+        store = new MemoryLibSQL({ client });
+        await store.init();
+        const reopened = (await store.getObservationalMemory(input.threadId, input.resourceId))!;
+        expect(reopened.metadata?.observationHistory).toEqual({ after });
+        expect(
+          (await store.listObservationHistory({ ...selection, after, limit: 40 })).messages.map(message => message.id),
+        ).toEqual(['é', '😀']);
+      } finally {
+        client.close();
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
   it('uses a stable timestamp/id boundary across tied rows and a database reopen', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'om-history-'));
     let client = createClient({ url: `file:${join(directory, 'history.db')}` });

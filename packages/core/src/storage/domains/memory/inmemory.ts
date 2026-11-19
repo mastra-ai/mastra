@@ -161,6 +161,7 @@ export class InMemoryMemory extends MemoryStorage {
     const afterTime = input.after ? new Date(input.after.createdAt).getTime() : undefined;
     const startTime = input.start ? new Date(input.start).getTime() : undefined;
     const endTime = input.end ? new Date(input.end).getTime() : undefined;
+    const beforeTime = input.before ? new Date(input.before.createdAt).getTime() : undefined;
     const rows = Array.from(this.db.messages.values()).filter(row => {
       if (input.threadId && row.thread_id !== input.threadId) return false;
       if (
@@ -172,6 +173,12 @@ export class InMemoryMemory extends MemoryStorage {
       const time = new Date(row.createdAt).getTime();
       if (startTime !== undefined && time < startTime) return false;
       if (endTime !== undefined && time > endTime) return false;
+      if (
+        beforeTime !== undefined &&
+        (time > beforeTime ||
+          (time === beforeTime && Buffer.compare(Buffer.from(row.id), Buffer.from(input.before!.id)) >= 0))
+      )
+        return false;
       return (
         afterTime === undefined ||
         time > afterTime ||
@@ -983,7 +990,7 @@ export class InMemoryMemory extends MemoryStorage {
       // Timezone used for observation date formatting
       observedTimezone,
       // Extensible metadata (optional)
-      metadata: {},
+      metadata: input.observationHistory ? { observationHistory: input.observationHistory } : {},
     };
 
     // Add as first record (most recent)

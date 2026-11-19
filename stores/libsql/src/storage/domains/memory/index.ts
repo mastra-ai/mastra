@@ -556,6 +556,10 @@ export class MemoryLibSQL extends MemoryStorage {
       conditions.push('("createdAt" > ? OR ("createdAt" = ? AND id COLLATE BINARY > ?))');
       args.push(input.after.createdAt, input.after.createdAt, input.after.id);
     }
+    if (input.before) {
+      conditions.push('("createdAt" < ? OR ("createdAt" = ? AND id COLLATE BINARY < ?))');
+      args.push(input.before.createdAt, input.before.createdAt, input.before.id);
+    }
     if (input.start) {
       conditions.push('"createdAt" >= ?');
       args.push(input.start);
@@ -1370,8 +1374,7 @@ export class MemoryLibSQL extends MemoryStorage {
             args: [threadId],
           });
           const row = result.rows?.[0] as
-            | (Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string })
-            | undefined;
+            (Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }) | undefined;
 
           if (!row) {
             throw new Error(`Thread "${threadId}" not found`);
@@ -2268,6 +2271,7 @@ export class MemoryLibSQL extends MemoryStorage {
         lastBufferedAtTime: null,
         config: input.config,
         observedTimezone: input.observedTimezone,
+        metadata: input.observationHistory ? { observationHistory: input.observationHistory } : {},
         supersededBy: null,
       };
 
@@ -2283,8 +2287,8 @@ export class MemoryLibSQL extends MemoryStorage {
             "originType", config, "generationCount", "lastObservedAt", "lastReflectionAt",
             "pendingMessageTokens", "totalTokensObserved", "observationTokenCount",
             "isObserving", "isReflecting", "isBufferingObservation", "isBufferingReflection", "lastBufferedAtTokens", "lastBufferedAtTime",
-            "observedTimezone", "createdAt", "updatedAt"
-          ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            "observedTimezone", "createdAt", "updatedAt", metadata
+          ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
           WHERE NOT EXISTS (SELECT 1 FROM "${OM_TABLE}" WHERE "lookupKey" = ? AND "supersededBy" IS NULL)`,
           args: [
             id,
@@ -2311,6 +2315,7 @@ export class MemoryLibSQL extends MemoryStorage {
             input.observedTimezone || null,
             now.toISOString(),
             now.toISOString(),
+            JSON.stringify(record.metadata),
             lookupKey,
           ],
         });

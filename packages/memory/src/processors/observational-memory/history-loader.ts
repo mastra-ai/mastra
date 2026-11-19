@@ -4,6 +4,7 @@ type ObservationHistoryPageInput = {
   threadId?: string;
   resourceId?: string;
   after?: { createdAt: string; id: string };
+  before?: { createdAt: string; id: string };
   start?: string;
   end?: string;
   limit: number;
@@ -54,6 +55,41 @@ export function getObservationHistoryState(record: ObservationalMemoryRecord): O
     ...(value.end === undefined ? {} : { end: value.end as string }),
     ...(value.complete === true ? { complete: true } : {}),
   };
+}
+
+/** Choose the initial suffix before publishing the record, so failures cannot reopen older history. */
+export async function getInitialObservationHistory(args: {
+  storage: ObservationHistoryStorage;
+  threadId?: string;
+  resourceId?: string;
+  tokenCounter: TokenCounter;
+  budget: number;
+  getObservableMessage(message: MastraDBMessage): MastraDBMessage | undefined;
+}): Promise<ObservationHistoryState | undefined> {
+  let before: ObservationHistoryPageInput['before'];
+  let tokens = 24;
+  let hasMessages = false;
+  while (true) {
+    const page = await args.storage.listObservationHistory({
+      threadId: args.threadId,
+      resourceId: args.resourceId,
+      before,
+      order: 'desc',
+      limit: 40,
+    });
+    for (const message of page.messages) {
+      const cursor = { createdAt: new Date(message.createdAt).toISOString(), id: message.id };
+      // The first excluded tuple is the existing cursor's exclusive lower bound.
+      if (hasMessages && tokens >= args.budget) return { after: cursor };
+      before = cursor;
+      const observable = args.getObservableMessage(message);
+      if (observable) {
+        hasMessages = true;
+        tokens += await args.tokenCounter.countMessageAsync(observable);
+      }
+    }
+    if (!page.hasMore || !page.messages.length) return undefined;
+  }
 }
 
 export async function loadObservationHistory(args: {

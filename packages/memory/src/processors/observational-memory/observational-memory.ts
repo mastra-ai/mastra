@@ -314,7 +314,12 @@ import {
   buildThreadMetadataFromExtractedValues,
   getPriorExtractedValues,
 } from './extracted-values';
-import { getObservationHistoryState, loadObservationHistory, supportsObservationHistoryPaging } from './history-loader';
+import {
+  getInitialObservationHistory,
+  getObservationHistoryState,
+  loadObservationHistory,
+  supportsObservationHistoryPaging,
+} from './history-loader';
 import { createBufferingStartMarker, createActivationMarker } from './markers';
 import {
   findLastCompletedObservationBoundary,
@@ -1041,8 +1046,7 @@ export class ObservationalMemory {
     const resolved = {
       ...tiered,
       model: (await this.resolveModelFunction(tiered.model, options?.requestContext)) as
-        | ResolvedInvocationModel
-        | 'auto',
+        ResolvedInvocationModel | 'auto',
     };
     if (resolved.model !== 'auto') {
       return resolved as InvocationModelResolution<ResolvedInvocationModel>;
@@ -1511,7 +1515,25 @@ export class ObservationalMemory {
       // Capture the timezone used for Observer date formatting
       const observedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
+      const observationHistory = supportsObservationHistoryPaging(this.storage)
+        ? await getInitialObservationHistory({
+            storage: this.storage,
+            threadId: ids.threadId ?? undefined,
+            resourceId: ids.threadId ? undefined : ids.resourceId,
+            tokenCounter: this.tokenCounter,
+            budget: Math.max(
+              getMaxThreshold(this.observationConfig.messageTokens),
+              this.observationConfig.blockAfter ?? 0,
+            ),
+            getObservableMessage: message => {
+              if (message.role === 'system' || isWorkingMemoryStateSignal(message)) return undefined;
+              if (this.hasInProgressObservation(message)) return message;
+              return this.createUnobservedMessage(message) ?? undefined;
+            },
+          })
+        : undefined;
       return this.storage.initializeObservationalMemory({
+        observationHistory,
         threadId: ids.threadId,
         resourceId: ids.resourceId,
         scope: this.scope,
@@ -2182,8 +2204,7 @@ export class ObservationalMemory {
   ): { threadId: string; resourceId?: string } | null {
     // First try RequestContext (set by Memory)
     const memoryContext = requestContext?.get('MastraMemory') as
-      | { thread?: { id: string }; resourceId?: string }
-      | undefined;
+      { thread?: { id: string }; resourceId?: string } | undefined;
 
     if (memoryContext?.thread?.id) {
       return {
@@ -3665,9 +3686,10 @@ ${formattedMessages}
       return { buffered: false, record };
     }
 
-    // Drain an oversized stored prefix synchronously before starting live async buffering.
-    // Buffered timestamp cursors cannot safely represent half of a timestamp cohort.
-    if (opts.messages && getObservationHistoryState(record)?.end) return { buffered: false, record };
+    // Commit the initial stored window before live async buffering. Buffered timestamp
+    // cursors cannot represent the initial tuple boundary (including timestamp ties).
+    const initialHistory = getObservationHistoryState(record);
+    if (opts.messages && initialHistory && !initialHistory.complete) return { buffered: false, record };
     if (
       !opts.messages &&
       !record.bufferedObservationChunks?.length &&
@@ -3676,7 +3698,7 @@ ${formattedMessages}
       (!record.lastObservedAt || getObservationHistoryState(record)?.end)
     ) {
       const window = await this.loadHistoryWindow(threadId, resourceId, record);
-      if (window && (window.hasMore || getObservationHistoryState(record)?.end)) {
+      if (window && (window.hasMore || (initialHistory && !initialHistory.complete))) {
         if (record.bufferedObservationChunks?.length) return { buffered: false, record };
         await opts.beforeBuffer?.(window.messages);
         const result = await this.observe({ ...opts, useStoredHistory: true });
@@ -4409,8 +4431,9 @@ ${formattedMessages}
           recordInsideLock = freshRecord;
           generationBefore = freshRecord.generationCount;
 
+          const initialHistory = getObservationHistoryState(freshRecord);
           const historyWindow =
-            !messages || opts.useStoredHistory
+            !messages || opts.useStoredHistory || (initialHistory && !initialHistory.complete)
               ? await this.loadHistoryWindow(threadId, resourceId, freshRecord)
               : undefined;
           // During initial catch-up, observe only the stored prefix. A later live message

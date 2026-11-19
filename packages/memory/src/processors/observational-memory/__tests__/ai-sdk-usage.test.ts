@@ -918,6 +918,8 @@ describe('AI SDK: finalize()', () => {
   it('activates remaining chunks and observes if threshold crossed', async () => {
     // Low threshold so observe triggers
     const om = createOM(storage, { messageTokens: 50, bufferTokens: 0.2 });
+    // This case exercises live buffering, after initial OM setup.
+    await om.getOrCreateRecord(threadId);
 
     await storage.saveMessages({ messages: createMessagesExceedingThreshold(5, threadId) });
     await om.buffer({ threadId });

@@ -22,7 +22,12 @@ function message(index: number, createdAt = timestamp): MastraDBMessage {
   };
 }
 
-async function setup(scope: 'thread' | 'resource' = 'thread', asyncBuffering = false) {
+async function setup(
+  scope: 'thread' | 'resource' = 'thread',
+  asyncBuffering = false,
+  existingRecord = true,
+  messageTokens = 300,
+) {
   const storage = new InMemoryStore();
   const model = new MockLanguageModelV2({
     doStream: async () => ({
@@ -48,7 +53,7 @@ async function setup(scope: 'thread' | 'resource' = 'thread', asyncBuffering = f
         workingMemory: { enabled: false },
         observationalMemory: {
           scope,
-          observation: { model, messageTokens: 300, bufferTokens: asyncBuffering ? 0.2 : false },
+          observation: { model, messageTokens, bufferTokens: asyncBuffering ? 0.2 : false },
           reflection: { model, observationTokens: 100_000 },
         },
       },
@@ -57,13 +62,145 @@ async function setup(scope: 'thread' | 'resource' = 'thread', asyncBuffering = f
   await memory.createThread({ threadId, resourceId, title: 'Bounded history' });
   const store = (await storage.getStore('memory'))!;
   const rows = Array.from({ length: 121 }, (_, index) => message(index));
-  await store.saveMessages({ messages: rows });
   const om = await memory.omEngine;
   if (!om) throw new Error('OM engine unavailable');
-  return { store, open, rows, om };
+  // Existing-record tests retain the resumable oldest-first migration behavior.
+  if (existingRecord) await om.getOrCreateRecord(threadId, resourceId);
+  await store.saveMessages({ messages: rows });
+  return { store, open, rows, om, model };
 }
 
 describe('bounded initial observation history', () => {
+  it('retains at least one newest message even below the conversation-overhead budget', async () => {
+    const { om, rows } = await setup('thread', false, false, 20);
+    expect((await om.loadUnobservedMessages({ threadId, resourceId })).map(message => message.id)).toEqual([
+      rows.at(-1)!.id,
+    ]);
+    expect((await om.observe({ threadId, resourceId, force: true })).observed).toBe(true);
+  });
+
+  it('uses one resource-wide budget and boundary across threads', async () => {
+    const { om, store, rows } = await setup('resource', false, false);
+    const otherThread = `${threadId}-other`;
+    await store.saveThread({
+      thread: { id: otherThread, resourceId, title: 'Other thread', createdAt: timestamp, updatedAt: timestamp },
+    });
+    await store.saveMessages({
+      messages: rows.map((message, index) => ({ ...message, threadId: index % 2 ? otherThread : threadId })),
+    });
+    const first = await om.loadUnobservedMessages({ threadId, resourceId });
+    const second = await om.loadUnobservedMessages({ threadId: otherThread, resourceId });
+    expect(first.map(message => message.id)).toEqual(rows.slice(-first.length).map(message => message.id));
+    expect(second.map(message => message.id)).toEqual(first.map(message => message.id));
+    expect(new Set(first.map(message => message.threadId)).size).toBe(2);
+    expect(first.length).toBeLessThan(10);
+  });
+
+  it.each(['thread', 'resource'] as const)(
+    'pages backward through tied rows until the %s token budget is reached',
+    async scope => {
+      const { store, om, rows } = await setup(scope, false, false, 12000);
+      const reads = vi.spyOn(store, 'listObservationHistory');
+      const loaded = await om.loadUnobservedMessages({ threadId, resourceId });
+      expect(loaded.length).toBeGreaterThan(40);
+      expect(loaded.length).toBeLessThan(rows.length);
+      expect(loaded.map(row => row.id)).toEqual(rows.slice(-loaded.length).map(row => row.id));
+      const descending = reads.mock.calls.map(([input]) => input).filter(input => input.order === 'desc');
+      expect(descending.length).toBeGreaterThan(1);
+      expect(descending.every(input => input.limit === 40)).toBe(true);
+      expect(descending[1]!.before).toEqual({ createdAt: timestamp.toISOString(), id: rows.at(-40)!.id });
+    },
+  );
+
+  it('does not reopen pre-OM history while buffering the initial suffix', async () => {
+    const { store, om, rows, open } = await setup('thread', true, false);
+    const first = await om.loadUnobservedMessages({ threadId, resourceId });
+    const unboundedRead = vi.spyOn(store, 'listMessages');
+    const candidates: string[] = [];
+    expect(
+      (
+        await om.buffer({
+          threadId,
+          resourceId,
+          pendingTokens: 500,
+          beforeBuffer: async messages => {
+            candidates.push(...messages.map(message => message.id));
+          },
+        })
+      ).buffered,
+    ).toBe(false);
+    expect(candidates).toEqual(first.map(message => message.id));
+    expect(candidates).not.toContain(rows[0]!.id);
+    expect(unboundedRead.mock.calls.every(([input]) => typeof input.perPage === 'number' && input.perPage <= 40)).toBe(
+      true,
+    );
+    expect((await om.getRecord(threadId, resourceId))?.observedMessageIds).toEqual(first.map(message => message.id));
+    expect(await (await open().omEngine)!.loadUnobservedMessages({ threadId, resourceId })).toEqual([]);
+  });
+
+  it.each(['thread', 'resource'] as const)(
+    'drains the selected %s suffix before acknowledging explicit live messages',
+    async scope => {
+      const { om, rows, open } = await setup(scope, false, false);
+      const first = await om.loadUnobservedMessages({ threadId, resourceId });
+      const live = message(999, new Date('2026-01-02T00:00:00Z'));
+      await om.observe({ threadId, resourceId, messages: [...rows, live], force: true });
+      expect((await om.getRecord(threadId, resourceId))?.observedMessageIds).toEqual(first.map(message => message.id));
+      expect(await (await open().omEngine)!.loadUnobservedMessages({ threadId, resourceId })).toEqual([]);
+      await om.observe({ threadId, resourceId, messages: [live], force: true });
+      expect((await om.getRecord(threadId, resourceId))?.observedMessageIds).toContain(live.id);
+    },
+  );
+
+  it.each(['thread', 'resource'] as const)(
+    'starts a new %s record from only the newest budget of history',
+    async scope => {
+      const { store, om, rows, model } = await setup(scope, false, false);
+      const observer = vi.spyOn(model, 'doStream');
+      const reads = vi.spyOn(store, 'listObservationHistory');
+      const loaded = await om.loadUnobservedMessages({ threadId, resourceId });
+      expect(loaded.length).toBeGreaterThan(0);
+      expect(loaded.length).toBeLessThan(10);
+      expect(loaded.map(row => row.id)).toEqual(rows.slice(-loaded.length).map(row => row.id));
+      expect(reads.mock.calls.some(([input]) => input.order === 'desc' && input.limit === 40)).toBe(true);
+      expect(reads.mock.calls.every(([input]) => input.limit <= 40)).toBe(true);
+      await om.observe({ threadId, resourceId, force: true });
+      const record = await om.getRecord(threadId, resourceId);
+      expect(record?.observedMessageIds).toEqual(loaded.map(row => row.id));
+      expect(JSON.stringify(observer.mock.calls)).toContain('Fact 120.');
+      expect(JSON.stringify(observer.mock.calls)).not.toContain('Fact 0.');
+    },
+  );
+
+  it.each(['thread', 'resource'] as const)(
+    'keeps pre-OM history out before commit, after failure and after restart (%s)',
+    async scope => {
+      const { store, om, rows, open } = await setup(scope, scope === 'thread', false);
+      const first = await om.loadUnobservedMessages({ threadId, resourceId });
+      const retained = new Set(first.map(row => row.id));
+      const assertContext = async (engine: typeof om) => {
+        const record = await engine.getRecord(threadId, resourceId);
+        expect(record?.lastObservedAt).toBeUndefined();
+        const list = new MessageList().add(structuredClone(rows), 'memory');
+        filterObservedMessages({ messageList: list, record: record! });
+        expect(list.get.all.db().map(row => row.id)).toEqual(first.map(row => row.id));
+      };
+      await assertContext(om);
+      const commit = vi.spyOn(store, 'commitActiveObservations').mockRejectedValue(new Error('first commit fails'));
+      await om.observe({ threadId, resourceId, force: true }).catch(() => undefined);
+      commit.mockRestore();
+      const restarted = (await open().omEngine)!;
+      await assertContext(restarted);
+      expect((await restarted.loadUnobservedMessages({ threadId, resourceId })).map(row => row.id)).toEqual(
+        first.map(row => row.id),
+      );
+      await restarted.observe({ threadId, resourceId, force: true });
+      const record = await restarted.getRecord(threadId, resourceId);
+      expect(record?.observedMessageIds?.every(id => retained.has(id))).toBe(true);
+      expect(await (await open().omEngine)!.loadUnobservedMessages({ threadId, resourceId })).toEqual([]);
+    },
+  );
+
   it.each(['thread', 'resource'] as const)('uses finite oldest-first pages for %s scope', async scope => {
     const { store, om, rows } = await setup(scope);
     const threadReads = vi.spyOn(store, 'listMessages');

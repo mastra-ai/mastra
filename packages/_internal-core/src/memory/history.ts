@@ -11,6 +11,7 @@ export type ObservationHistoryPageInput = {
   threadId?: string;
   resourceId?: string;
   after?: ObservationHistoryCursor;
+  before?: ObservationHistoryCursor;
   start?: string;
   end?: string;
   limit: number;

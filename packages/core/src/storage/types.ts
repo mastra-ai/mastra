@@ -1385,6 +1385,8 @@ export interface ObservationalMemoryRecord {
  * Input for creating a new observational memory record
  */
 export interface CreateObservationalMemoryInput {
+  /** Initial lower history boundary, atomically persisted by paging-capable adapters. */
+  observationHistory?: import('@internal/core/memory').ObservationHistoryState;
   threadId: string | null;
   resourceId: string;
   scope: ObservationalMemoryScope;
@@ -2334,9 +2336,7 @@ export type StorageWorkspaceRef =
  * - An untagged `SerializedMemoryConfig` is the legacy inline form and behaves like `inline`.
  */
 export type StorageMemoryRef =
-  | { type: 'id'; memoryId: string }
-  | { type: 'inline'; config: SerializedMemoryConfig }
-  | SerializedMemoryConfig;
+  { type: 'id'; memoryId: string } | { type: 'inline'; config: SerializedMemoryConfig } | SerializedMemoryConfig;
 
 // ============================================
 // Workflow Storage Types
