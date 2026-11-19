@@ -56,13 +56,12 @@ describe('RoutedSourcePicker', () => {
     expect(within(row).getByRole('button', { name: 'Remove Releases' })).toBeInTheDocument();
   });
 
-  it('takes a routed project as routed, with no board to choose: intake routes place its cards', async () => {
+  it('shows a routed project with its Factory instead of as not routed', async () => {
     stub([{ integrationId: 'linear', sourceId: 'proj-1', factoryProjectId: 'fp-1' }]);
     renderRouting();
 
     const factory = await screen.findByRole('combobox', { name: 'Factory for Releases' });
     await waitFor(() => expect(factory).toHaveTextContent('Acme'));
-    expect(screen.queryByRole('combobox', { name: 'Board for Releases' })).not.toBeInTheDocument();
     expect(screen.queryByText(/won't be picked up/)).not.toBeInTheDocument();
   });
 

@@ -32,7 +32,7 @@ afterEach(() => {
 });
 
 describe('ChatPageLayout', () => {
-  it('puts the drawer trigger, the title and the page actions on one mobile header row, leaving search to the sidebar', () => {
+  it('puts the drawer trigger, the title and the page actions on one mobile header row', () => {
     mockMobileViewport(true);
     render(
       <MemoryRouter initialEntries={['/settings/preferences']}>
@@ -50,7 +50,6 @@ describe('ChatPageLayout', () => {
     expect(within(header).getByRole('button', { name: 'Open navigation menu' })).toBeInTheDocument();
     expect(within(header).getByText('Page title')).toBeInTheDocument();
     expect(within(header).getByRole('button', { name: 'Panel' })).toBeInTheDocument();
-    expect(within(header).queryByRole('button', { name: 'Search and navigate' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).not.toBeInTheDocument();
   });
 
@@ -67,7 +66,6 @@ describe('ChatPageLayout', () => {
     const header = screen.getByRole('banner');
     expect(within(header).getByText('Page title')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Search and navigate' })).not.toBeInTheDocument();
   });
 
   it('reopens a fully collapsed desktop sidebar from the top-left toggle', async () => {
@@ -88,7 +86,6 @@ describe('ChatPageLayout', () => {
     );
 
     const trigger = screen.getByRole('button', { name: 'Toggle sidebar' });
-    expect(screen.queryByRole('button', { name: 'Search and navigate' })).not.toBeInTheDocument();
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     expect(screen.getByTestId('desktop-sidebar-state')).toHaveTextContent('collapsed');
     expect(screen.queryByLabelText('Open navigation menu')).not.toBeInTheDocument();

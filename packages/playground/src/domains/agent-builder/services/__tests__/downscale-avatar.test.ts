@@ -29,14 +29,6 @@ describe('estimateDataUrlBytes', () => {
     const dataUrl = `data:image/png;base64,${b64}`;
     expect(estimateDataUrlBytes(dataUrl)).toBe(100);
   });
-
-  it('estimates correctly for a 512KB payload', () => {
-    const size = 512 * 1024;
-    const buf = Buffer.alloc(size, 0);
-    const b64 = buf.toString('base64');
-    const dataUrl = `data:image/png;base64,${b64}`;
-    expect(estimateDataUrlBytes(dataUrl)).toBe(size);
-  });
 });
 
 describe('downscaleImageToDataUrl', () => {

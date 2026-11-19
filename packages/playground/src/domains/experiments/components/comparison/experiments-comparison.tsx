@@ -268,7 +268,6 @@ export function ExperimentsComparison({
       <ComparisonTracePanel
         traceId={featuredTraceId}
         onClose={() => setFeaturedTraceId(undefined)}
-        withQueryTrace={traceQuery.enabled}
         withFeedback={traceQuery.enabled}
       />
     </>

@@ -97,8 +97,8 @@ overrides:
   prismjs@<1.30.0: ^1.30.0
   serialize-javascript@<7.0.5: ^7.1.4
   axios@>=1.0.0 <1.20.0: 1.20.0
-  minimatch@>=7.0.0 <11.0.1: 11.0.5
-  ws@>=8.0.0 <8.21.3: 8.22.0
+  minimatch@>=7.0.0 <11.0.9: 11.0.9
+  ws@>=8.0.0 <8.23.0: 8.23.0
   qs@>=6.7.0 <6.16.1: 6.16.1
   e2b>undici8: npm:undici@8.12.4
   '@opentelemetry/core@>=2.0.0 <2.8.0': 2.12.0
@@ -477,7 +477,7 @@ importers:
         version: link:../../packages/core
       '@openai/agents':
         specifier: ^0.11.8
-        version: 0.11.8(@aws-sdk/credential-provider-node@3.972.92)(@cfworker/json-schema@4.1.4)(@smithy/signature-v4@5.7.5)(bufferutil@4.1.0)(supports-color@10.2.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
+        version: 0.11.8(@aws-sdk/credential-provider-node@3.972.92)(@cfworker/json-schema@4.1.4)(@smithy/signature-v4@5.7.5)(bufferutil@4.1.0)(supports-color@10.2.2)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7)
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -2150,10 +2150,10 @@ importers:
         version: 1.20.3
       imvectordb:
         specifier: ^0.0.6
-        version: 0.0.6(encoding@0.1.14)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
+        version: 0.0.6(encoding@0.1.14)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7)
       openai:
         specifier: ^4.104.0
-        version: 4.104.0(encoding@0.1.14)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
+        version: 4.104.0(encoding@0.1.14)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7)
       ora:
         specifier: ^8.2.0
         version: 8.2.0
@@ -3166,7 +3166,7 @@ importers:
         version: link:../mastra
       deepeval:
         specifier: ^0.1.32
-        version: 0.1.32(@anthropic-ai/sdk@1.4.0(zod@4.6.7))(@aws-sdk/client-bedrock-runtime@3.1161.0)(@aws-sdk/credential-provider-node@3.972.92)(@google/genai@1.52.0(@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7))(bufferutil@4.1.0)(supports-color@10.2.2))(@mastra/core@packages+core)(@mastra/observability@observability+mastra)(@opentelemetry/core@2.12.0(@opentelemetry/api@1.10.0))(@opentelemetry/exporter-trace-otlp-http@0.223.2(@opentelemetry/api@1.10.0))(@smithy/signature-v4@5.7.5)(ai@7.0.162(zod@4.6.7))(chokidar@3.6.0)(debug@4.4.3(supports-color@10.2.2))(rxjs@7.8.2)(supports-color@10.2.2)(ws@8.22.0(bufferutil@4.1.0))
+        version: 0.1.32(@anthropic-ai/sdk@1.4.0(zod@4.6.7))(@aws-sdk/client-bedrock-runtime@3.1161.0)(@aws-sdk/credential-provider-node@3.972.92)(@google/genai@1.52.0(@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7))(bufferutil@4.1.0)(supports-color@10.2.2))(@mastra/core@packages+core)(@mastra/observability@observability+mastra)(@opentelemetry/core@2.12.0(@opentelemetry/api@1.10.0))(@opentelemetry/exporter-trace-otlp-http@0.223.2(@opentelemetry/api@1.10.0))(@smithy/signature-v4@5.7.5)(ai@7.0.162(zod@4.6.7))(chokidar@3.6.0)(debug@4.4.3(supports-color@10.2.2))(rxjs@7.8.2)(supports-color@10.2.2)(ws@8.23.0(bufferutil@4.1.0))
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -3307,7 +3307,7 @@ importers:
         version: link:../mastra
       langsmith:
         specifier: ^0.11.0
-        version: 0.11.7(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.300.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.1(@opentelemetry/api@1.10.0))(openai@7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.4)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0))
+        version: 0.11.7(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.300.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.1(@opentelemetry/api@1.10.0))(openai@7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.4)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7))(ws@8.23.0(bufferutil@4.1.0))
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.139
@@ -4735,8 +4735,8 @@ importers:
         specifier: ^2.9.0
         version: 2.9.1
       ws:
-        specifier: ^8.22.0
-        version: 8.22.1(bufferutil@4.1.0)
+        specifier: ^8.23.0
+        version: 8.23.0(bufferutil@4.1.0)
       xxhash-wasm:
         specifier: ^1.1.0
         version: 1.1.0
@@ -5063,8 +5063,8 @@ importers:
         specifier: ^0.2.17
         version: 0.2.17
       ws:
-        specifier: ^8.22.0
-        version: 8.22.1(bufferutil@4.1.0)
+        specifier: ^8.23.0
+        version: 8.23.0(bufferutil@4.1.0)
       yaml:
         specifier: ^2.9.1
         version: 2.9.1
@@ -5155,10 +5155,10 @@ importers:
         version: 2.4.1
       '@composio/core':
         specifier: ^0.18.1
-        version: 0.18.1(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
+        version: 0.18.1(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7)
       '@composio/mastra':
         specifier: ^0.10.6
-        version: 0.10.6(@composio/core@0.18.1(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7))(@mastra/core@packages+core)(zod@4.6.7)
+        version: 0.10.6(@composio/core@0.18.1(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7))(@mastra/core@packages+core)(zod@4.6.7)
       '@mastra/memory':
         specifier: workspace:*
         version: link:../memory
@@ -7028,8 +7028,8 @@ importers:
         specifier: ^2.1.0
         version: 2.1.0
       ws:
-        specifier: ^8.22.0
-        version: 8.22.1(bufferutil@4.1.0)
+        specifier: ^8.23.0
+        version: 8.23.0(bufferutil@4.1.0)
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.139
@@ -9149,8 +9149,8 @@ importers:
         specifier: ^10.9.1
         version: 10.9.1(supports-color@10.2.2)
       ws:
-        specifier: ^8.22.0
-        version: 8.22.1(bufferutil@4.1.0)
+        specifier: ^8.23.0
+        version: 8.23.0(bufferutil@4.1.0)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -9195,8 +9195,8 @@ importers:
   voice/inworld:
     dependencies:
       ws:
-        specifier: ^8.22.0
-        version: 8.22.1(bufferutil@4.1.0)
+        specifier: ^8.23.0
+        version: 8.23.0(bufferutil@4.1.0)
       zod-to-json-schema:
         specifier: ^3.25.2
         version: 3.25.2(zod@4.6.7)
@@ -9349,7 +9349,7 @@ importers:
     dependencies:
       openai:
         specifier: ^6.49.0
-        version: 6.49.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
+        version: 6.49.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7)
       zod:
         specifier: 4.6.7
         version: 4.6.7
@@ -9394,8 +9394,8 @@ importers:
         specifier: ^1.0.8
         version: 1.0.8(bufferutil@4.1.0)
       ws:
-        specifier: ^8.22.0
-        version: 8.22.1(bufferutil@4.1.0)
+        specifier: ^8.23.0
+        version: 8.23.0(bufferutil@4.1.0)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -9553,8 +9553,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/schema-compat
       ws:
-        specifier: ^8.22.0
-        version: 8.22.1(bufferutil@4.1.0)
+        specifier: ^8.23.0
+        version: 8.23.0(bufferutil@4.1.0)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -10298,7 +10298,7 @@ importers:
     dependencies:
       files-sdk:
         specifier: ^1.9.0
-        version: 1.9.0(dc94129cd3a5467678d506e4e59024e9)
+        version: 1.9.0(ee41115b393a820f5819f13a01b5a1c0)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -26566,7 +26566,7 @@ packages:
   isomorphic-ws@5.0.0:
     resolution: {integrity: sha512-muId7Zzn9ywDsyXgTIafTry2sV3nySZeUDe6YedVd1Hvuuep5AsIlqK+XefWpYTyJG5e503F2xIuT2lcU6rCSw==}
     peerDependencies:
-      ws: 8.22.0
+      ws: 8.23.0
 
   isstream@0.1.2:
     resolution: {integrity: sha512-Yljz7ffyPbrLpLngrMtZ7NduUgVvi6wG9RJ9IUcyCd59YQ911PBJphODUcbOVbqYfxe1wuYf/LJ8PauMRwsM/g==}
@@ -26872,7 +26872,7 @@ packages:
       '@opentelemetry/exporter-trace-otlp-proto': '*'
       '@opentelemetry/sdk-trace-base': '*'
       openai: '*'
-      ws: 8.22.0
+      ws: 8.23.0
     peerDependenciesMeta:
       '@opentelemetry/api':
         optional: true
@@ -27689,8 +27689,8 @@ packages:
   minimalistic-assert@1.0.1:
     resolution: {integrity: sha512-UtJcAD4yEaGtjPezWuO9wC4nwUnVH/8/Im3yEHQP4b67cXlD/Qr9hdITCU1xDbSEXg2XKNaP8jsReV7vQd00/A==}
 
-  minimatch@11.0.5:
-    resolution: {integrity: sha512-snPlVppFcYWfLLFQGhDxUyBcHNtMlWmn3jtj7pEaO+DP8pqL0IvAzXhMYmn1z9ASNtgmwLBdFxSf4tMUB0OTKA==}
+  minimatch@11.0.9:
+    resolution: {integrity: sha512-KCFkfyjqerNlSstjlhIGNXIKZGA/6O4V4RlhZ+Dsr621SPPw0mzlypE9D9ZOoPiVefHID+j7/XuMMlqfD/F60Q==}
     engines: {node: 20 || >=22}
 
   minimatch@3.1.5:
@@ -28256,7 +28256,7 @@ packages:
     resolution: {integrity: sha512-p99EFNsA/yX6UhVO93f5kJsDRLAg+CTA2RBqdHK4RtK8u5IJw32Hyb2dTGKbnnFmnuoBv5r7Z2CURI9sGZpSuA==}
     hasBin: true
     peerDependencies:
-      ws: 8.22.0
+      ws: 8.23.0
       zod: ^3.23.8
     peerDependenciesMeta:
       ws:
@@ -28270,7 +28270,7 @@ packages:
       '@aws-sdk/credential-provider-node': '>=3.972.0 <4'
       '@smithy/hash-node': '>=4.3.0 <5'
       '@smithy/signature-v4': '>=5.4.0 <6'
-      ws: 8.22.0
+      ws: 8.23.0
       zod: 4.6.7
     peerDependenciesMeta:
       '@aws-sdk/credential-provider-node':
@@ -28293,7 +28293,7 @@ packages:
       '@smithy/signature-v4': '>=5.4.0 <6'
       google-auth-library: '>=9.15.1 <12'
       undici: 8.12.4
-      ws: 8.22.0
+      ws: 8.23.0
       zod: 4.6.7
     peerDependenciesMeta:
       '@aws-sdk/credential-provider-node':
@@ -32289,20 +32289,8 @@ packages:
       utf-8-validate:
         optional: true
 
-  ws@8.22.0:
-    resolution: {integrity: sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg==}
-    engines: {node: '>=10.0.0'}
-    peerDependencies:
-      bufferutil: ^4.0.1
-      utf-8-validate: '>=5.0.2'
-    peerDependenciesMeta:
-      bufferutil:
-        optional: true
-      utf-8-validate:
-        optional: true
-
-  ws@8.22.1:
-    resolution: {integrity: sha512-oyL6OPYme/CmiFvNuGzeoxCJ4nOrZE2O1FwM9MWM1AsGri6nLXB2pg+lNA8aLeXMSav0J6eIVS1j6vUPzUtK9g==}
+  ws@8.23.0:
+    resolution: {integrity: sha512-wCkmX8QMOrKjgO8HW2WyDbTSGeqkocxgDzS9iR79rEAexty6/2qzilx3Ag8Tqf9ykop3irLKle0MtVn5qjVnoQ==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -35119,7 +35107,7 @@ snapshots:
       jwt-decode: 4.0.0
       smol-toml: 1.9.0
       uuid: 11.1.1
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.23.0(bufferutil@4.1.0)
       yaml: 2.9.1
       zod: 4.6.7
     transitivePeerDependencies:
@@ -35184,11 +35172,11 @@ snapshots:
       ai: 5.0.285(zod@4.6.7)
       devtools-protocol: 0.0.1642743
       fetch-cookie: 3.2.0
-      openai: 4.104.0(encoding@0.1.14)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
+      openai: 4.104.0(encoding@0.1.14)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7)
       pino: 9.14.0
       pino-pretty: 13.2.0
       uuid: 11.1.1
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.23.0(bufferutil@4.1.0)
       zod: 4.6.7
       zod-to-json-schema: 3.25.2(zod@4.6.7)
     optionalDependencies:
@@ -35664,13 +35652,13 @@ snapshots:
 
   '@composio/client@0.1.0-alpha.76': {}
 
-  '@composio/core@0.18.1(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)':
+  '@composio/core@0.18.1(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7)':
     dependencies:
       '@composio/client': 0.1.0-alpha.76
       '@composio/json-schema-to-zod': 0.3.2(zod@4.6.7)
       '@types/json-schema': 7.0.15
       is-fs-case-sensitive: 2.0.0
-      openai: 7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.4)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
+      openai: 7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.4)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7)
       picocolors: 1.1.1
       pusher-js: 8.6.0
       semver: 7.8.6
@@ -35690,9 +35678,9 @@ snapshots:
       dequal: 2.0.3
       zod: 4.6.7
 
-  '@composio/mastra@0.10.6(@composio/core@0.18.1(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7))(@mastra/core@packages+core)(zod@4.6.7)':
+  '@composio/mastra@0.10.6(@composio/core@0.18.1(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7))(@mastra/core@packages+core)(zod@4.6.7)':
     dependencies:
-      '@composio/core': 0.18.1(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
+      '@composio/core': 0.18.1(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7)
       '@mastra/core': link:packages/core
       '@mastra/schema-compat': 1.3.17(zod@4.6.7)
       zod: 4.6.7
@@ -36219,14 +36207,14 @@ snapshots:
       busboy: 1.6.0
       expand-tilde: 2.0.2
       form-data: 4.0.6
-      isomorphic-ws: 5.0.0(ws@8.22.0(bufferutil@4.1.0))
+      isomorphic-ws: 5.0.0(ws@8.23.0(bufferutil@4.1.0))
       pathe: 2.0.3
       shell-quote: 1.12.0
       socket.io-client: 4.8.4(bufferutil@4.1.0)(supports-color@10.2.2)
       tar: 7.5.22
       tinyglobby: 0.2.17
       tslib: 2.8.1
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.23.0(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bufferutil
       - debug
@@ -36251,7 +36239,7 @@ snapshots:
       cross-fetch: 3.2.0(encoding@0.1.14)
       deepmerge: 4.3.1
       events: 3.3.0
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.23.0(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bufferutil
       - encoding
@@ -36306,7 +36294,7 @@ snapshots:
       '@vladfrangu/async_event_emitter': 2.4.7
       discord-api-types: 0.38.57
       tslib: 2.9.1
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.23.0(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -36327,7 +36315,7 @@ snapshots:
       openapi-fetch: 0.17.0
       p-retry: 7.1.0
       undici: 8.12.4
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.23.0(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -37966,7 +37954,7 @@ snapshots:
     dependencies:
       '@eslint/object-schema': 3.0.5
       debug: 4.4.3(supports-color@10.2.2)
-      minimatch: 11.0.5
+      minimatch: 11.0.9
     transitivePeerDependencies:
       - supports-color
 
@@ -38326,7 +38314,7 @@ snapshots:
       google-auth-library: 10.9.1(supports-color@10.2.2)
       p-retry: 4.6.2
       protobufjs: 8.8.0
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.23.0(bufferutil@4.1.0)
     optionalDependencies:
       '@modelcontextprotocol/sdk': 1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7)
     transitivePeerDependencies:
@@ -38339,7 +38327,7 @@ snapshots:
       google-auth-library: 10.9.1(supports-color@10.2.2)
       p-retry: 4.6.2
       protobufjs: 8.8.0
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.23.0(bufferutil@4.1.0)
     optionalDependencies:
       '@modelcontextprotocol/sdk': 1.32.2(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7)
     transitivePeerDependencies:
@@ -38480,7 +38468,7 @@ snapshots:
     dependencies:
       '@hono/node-server': 2.1.7(hono@4.13.18)
       hono: 4.13.18
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.23.0(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -39324,7 +39312,7 @@ snapshots:
   '@libsql/isomorphic-ws@0.1.5(bufferutil@4.1.0)':
     dependencies:
       '@types/ws': 8.18.2
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.23.0(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -39387,7 +39375,7 @@ snapshots:
       '@livekit/agents': 1.9.5(@aws-sdk/credential-provider-node@3.972.92)(@livekit/rtc-node@1.2.1)(@modelcontextprotocol/client@2.4.0)(@smithy/signature-v4@5.7.5)(@types/node@22.19.15)(bufferutil@4.1.0)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7)
       '@livekit/rtc-node': 1.2.1
       onnxruntime-node: 1.24.3
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.23.0(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -39426,12 +39414,12 @@ snapshots:
       jsonrepair: 3.15.0
       livekit-server-sdk: 2.19.2
       ofetch: 1.5.1
-      openai: 6.49.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
+      openai: 6.49.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7)
       pidusage: 4.1.0
       pino: 8.21.0
       pino-pretty: 11.3.0
       sharp: 0.35.5(@types/node@22.19.15)
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.23.0(bufferutil@4.1.0)
       zod: 4.6.7
       zod-to-json-schema: 3.25.2(zod@4.6.7)
     optionalDependencies:
@@ -39824,7 +39812,7 @@ snapshots:
       '@rushstack/terminal': 0.24.8(@types/node@22.19.15)
       '@rushstack/ts-command-line': 5.3.18(@types/node@22.19.15)
       diff: 8.0.4
-      minimatch: 11.0.5
+      minimatch: 11.0.9
       resolve: 1.22.13
       semver: 7.7.4
       source-map: 0.6.1
@@ -39907,7 +39895,7 @@ snapshots:
   '@mistralai/mistralai@2.7.0(@opentelemetry/api@1.10.0)(@opentelemetry/resources@2.12.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.1(@opentelemetry/api@1.10.0))(bufferutil@4.1.0)':
     dependencies:
       '@opentelemetry/semantic-conventions': 1.44.0
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.23.0(bufferutil@4.1.0)
       zod: 4.6.7
       zod-to-json-schema: 3.25.2(zod@4.6.7)
     optionalDependencies:
@@ -40465,7 +40453,7 @@ snapshots:
     dependencies:
       '@npmcli/name-from-folder': 2.0.0
       glob: 14.0.4
-      minimatch: 11.0.5
+      minimatch: 11.0.9
       read-package-json-fast: 3.0.2
 
   '@npmcli/name-from-folder@2.0.0': {}
@@ -40609,10 +40597,10 @@ snapshots:
 
   '@open-draft/until@2.1.0': {}
 
-  '@openai/agents-core@0.11.8(@aws-sdk/credential-provider-node@3.972.92)(@cfworker/json-schema@4.1.4)(@smithy/signature-v4@5.7.5)(supports-color@10.2.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)':
+  '@openai/agents-core@0.11.8(@aws-sdk/credential-provider-node@3.972.92)(@cfworker/json-schema@4.1.4)(@smithy/signature-v4@5.7.5)(supports-color@10.2.2)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7)':
     dependencies:
       debug: 4.4.3(supports-color@10.2.2)
-      openai: 6.49.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
+      openai: 6.49.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7)
     optionalDependencies:
       '@modelcontextprotocol/sdk': 1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7)
       zod: 4.6.7
@@ -40624,11 +40612,11 @@ snapshots:
       - supports-color
       - ws
 
-  '@openai/agents-openai@0.11.8(@aws-sdk/credential-provider-node@3.972.92)(@cfworker/json-schema@4.1.4)(@smithy/signature-v4@5.7.5)(supports-color@10.2.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)':
+  '@openai/agents-openai@0.11.8(@aws-sdk/credential-provider-node@3.972.92)(@cfworker/json-schema@4.1.4)(@smithy/signature-v4@5.7.5)(supports-color@10.2.2)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7)':
     dependencies:
-      '@openai/agents-core': 0.11.8(@aws-sdk/credential-provider-node@3.972.92)(@cfworker/json-schema@4.1.4)(@smithy/signature-v4@5.7.5)(supports-color@10.2.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
+      '@openai/agents-core': 0.11.8(@aws-sdk/credential-provider-node@3.972.92)(@cfworker/json-schema@4.1.4)(@smithy/signature-v4@5.7.5)(supports-color@10.2.2)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7)
       debug: 4.4.3(supports-color@10.2.2)
-      openai: 6.49.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
+      openai: 6.49.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7)
       zod: 4.6.7
     transitivePeerDependencies:
       - '@aws-sdk/credential-provider-node'
@@ -40640,10 +40628,10 @@ snapshots:
 
   '@openai/agents-realtime@0.11.8(@aws-sdk/credential-provider-node@3.972.92)(@cfworker/json-schema@4.1.4)(@smithy/signature-v4@5.7.5)(bufferutil@4.1.0)(supports-color@10.2.2)(zod@4.6.7)':
     dependencies:
-      '@openai/agents-core': 0.11.8(@aws-sdk/credential-provider-node@3.972.92)(@cfworker/json-schema@4.1.4)(@smithy/signature-v4@5.7.5)(supports-color@10.2.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
+      '@openai/agents-core': 0.11.8(@aws-sdk/credential-provider-node@3.972.92)(@cfworker/json-schema@4.1.4)(@smithy/signature-v4@5.7.5)(supports-color@10.2.2)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7)
       '@types/ws': 8.18.2
       debug: 4.4.3(supports-color@10.2.2)
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.23.0(bufferutil@4.1.0)
       zod: 4.6.7
     transitivePeerDependencies:
       - '@aws-sdk/credential-provider-node'
@@ -40654,13 +40642,13 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@openai/agents@0.11.8(@aws-sdk/credential-provider-node@3.972.92)(@cfworker/json-schema@4.1.4)(@smithy/signature-v4@5.7.5)(bufferutil@4.1.0)(supports-color@10.2.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)':
+  '@openai/agents@0.11.8(@aws-sdk/credential-provider-node@3.972.92)(@cfworker/json-schema@4.1.4)(@smithy/signature-v4@5.7.5)(bufferutil@4.1.0)(supports-color@10.2.2)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7)':
     dependencies:
-      '@openai/agents-core': 0.11.8(@aws-sdk/credential-provider-node@3.972.92)(@cfworker/json-schema@4.1.4)(@smithy/signature-v4@5.7.5)(supports-color@10.2.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
-      '@openai/agents-openai': 0.11.8(@aws-sdk/credential-provider-node@3.972.92)(@cfworker/json-schema@4.1.4)(@smithy/signature-v4@5.7.5)(supports-color@10.2.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
+      '@openai/agents-core': 0.11.8(@aws-sdk/credential-provider-node@3.972.92)(@cfworker/json-schema@4.1.4)(@smithy/signature-v4@5.7.5)(supports-color@10.2.2)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7)
+      '@openai/agents-openai': 0.11.8(@aws-sdk/credential-provider-node@3.972.92)(@cfworker/json-schema@4.1.4)(@smithy/signature-v4@5.7.5)(supports-color@10.2.2)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7)
       '@openai/agents-realtime': 0.11.8(@aws-sdk/credential-provider-node@3.972.92)(@cfworker/json-schema@4.1.4)(@smithy/signature-v4@5.7.5)(bufferutil@4.1.0)(supports-color@10.2.2)(zod@4.6.7)
       debug: 4.4.3(supports-color@10.2.2)
-      openai: 6.49.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
+      openai: 6.49.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7)
       zod: 4.6.7
     transitivePeerDependencies:
       - '@aws-sdk/credential-provider-node'
@@ -43714,7 +43702,7 @@ snapshots:
       '@types/node': 22.19.15
       '@types/ws': 8.18.2
       eventemitter3: 5.0.4
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.23.0(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bufferutil
       - debug
@@ -44115,7 +44103,7 @@ snapshots:
       execa: 9.6.1
       json-rpc-2.0: 1.8.1
       lodash.groupby: 4.6.0
-      minimatch: 11.0.5
+      minimatch: 11.0.9
       mutation-server-protocol: 0.4.1
       mutation-testing-elements: 3.8.4
       mutation-testing-metrics: 3.8.4
@@ -44812,7 +44800,7 @@ snapshots:
 
   '@ts-morph/common@0.29.0':
     dependencies:
-      minimatch: 11.0.5
+      minimatch: 11.0.9
       path-browserify: 1.0.1
       tinyglobby: 0.2.17
 
@@ -45514,7 +45502,7 @@ snapshots:
       '@typescript-eslint/types': 8.72.1
       '@typescript-eslint/visitor-keys': 8.72.1
       debug: 4.4.3(supports-color@10.2.2)
-      minimatch: 11.0.5
+      minimatch: 11.0.9
       semver: 7.8.6
       tinyglobby: 0.2.17
       ts-api-utils: 2.5.0(typescript@5.9.3)
@@ -45529,7 +45517,7 @@ snapshots:
       '@typescript-eslint/types': 8.72.1
       '@typescript-eslint/visitor-keys': 8.72.1
       debug: 4.4.3(supports-color@10.2.2)
-      minimatch: 11.0.5
+      minimatch: 11.0.9
       semver: 7.8.6
       tinyglobby: 0.2.17
       ts-api-utils: 2.5.0(typescript@7.0.2)
@@ -45765,7 +45753,7 @@ snapshots:
       http-errors: 2.0.1
       http-status-codes: 2.3.0
       lodash: 4.18.1
-      minimatch: 11.0.5
+      minimatch: 11.0.9
       process-warning: 1.0.0
       semver: 7.8.5
 
@@ -47012,7 +47000,7 @@ snapshots:
       express: 5.3.0(supports-color@10.2.2)
       http-errors: 2.0.1
       meriyah: 6.1.4
-      minimatch: 11.0.5
+      minimatch: 11.0.9
       module-details-from-path: 1.0.4
       mustache: 4.2.0
       pluralize: 8.0.0
@@ -47646,7 +47634,7 @@ snapshots:
     dependencies:
       esbuild: 0.27.0
       prettier: 3.9.10
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.23.0(bufferutil@4.1.0)
     optionalDependencies:
       react: 19.3.1
     transitivePeerDependencies:
@@ -48267,7 +48255,7 @@ snapshots:
 
   deep-is@0.1.4: {}
 
-  deepeval@0.1.32(@anthropic-ai/sdk@1.4.0(zod@4.6.7))(@aws-sdk/client-bedrock-runtime@3.1161.0)(@aws-sdk/credential-provider-node@3.972.92)(@google/genai@1.52.0(@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7))(bufferutil@4.1.0)(supports-color@10.2.2))(@mastra/core@packages+core)(@mastra/observability@observability+mastra)(@opentelemetry/core@2.12.0(@opentelemetry/api@1.10.0))(@opentelemetry/exporter-trace-otlp-http@0.223.2(@opentelemetry/api@1.10.0))(@smithy/signature-v4@5.7.5)(ai@7.0.162(zod@4.6.7))(chokidar@3.6.0)(debug@4.4.3(supports-color@10.2.2))(rxjs@7.8.2)(supports-color@10.2.2)(ws@8.22.0(bufferutil@4.1.0)):
+  deepeval@0.1.32(@anthropic-ai/sdk@1.4.0(zod@4.6.7))(@aws-sdk/client-bedrock-runtime@3.1161.0)(@aws-sdk/credential-provider-node@3.972.92)(@google/genai@1.52.0(@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7))(bufferutil@4.1.0)(supports-color@10.2.2))(@mastra/core@packages+core)(@mastra/observability@observability+mastra)(@opentelemetry/core@2.12.0(@opentelemetry/api@1.10.0))(@opentelemetry/exporter-trace-otlp-http@0.223.2(@opentelemetry/api@1.10.0))(@smithy/signature-v4@5.7.5)(ai@7.0.162(zod@4.6.7))(chokidar@3.6.0)(debug@4.4.3(supports-color@10.2.2))(rxjs@7.8.2)(supports-color@10.2.2)(ws@8.23.0(bufferutil@4.1.0)):
     dependencies:
       '@opentelemetry/api': 1.10.0
       '@opentelemetry/exporter-trace-otlp-grpc': 0.207.0(@opentelemetry/api@1.10.0)
@@ -48283,7 +48271,7 @@ snapshots:
       dotenv: 16.6.1
       nunjucks: 3.2.4(chokidar@3.6.0)
       open: 9.1.0
-      openai: 6.49.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
+      openai: 6.49.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7)
       ora: 6.3.1
       papaparse: 5.7.0
       posthog-node: 5.61.2(@opentelemetry/api@1.10.0)(rxjs@7.8.2)
@@ -48728,7 +48716,7 @@ snapshots:
       '@socket.io/component-emitter': 3.1.2
       debug: 4.4.3(supports-color@10.2.2)
       engine.io-parser: 5.2.3
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.23.0(bufferutil@4.1.0)
       xmlhttprequest-ssl: 2.1.2
     transitivePeerDependencies:
       - bufferutil
@@ -48987,7 +48975,7 @@ snapshots:
       imurmurhash: 0.1.4
       is-glob: 4.0.3
       json-stable-stringify-without-jsonify: 1.0.1
-      minimatch: 11.0.5
+      minimatch: 11.0.9
       natural-compare: 1.4.0
       optionator: 0.9.4
     optionalDependencies:
@@ -49424,7 +49412,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  files-sdk@1.9.0(dc94129cd3a5467678d506e4e59024e9):
+  files-sdk@1.9.0(ee41115b393a820f5819f13a01b5a1c0):
     dependencies:
       commander: 15.0.0
       picomatch: 4.0.7
@@ -49436,14 +49424,14 @@ snapshots:
       '@azure/identity': 4.14.1(supports-color@10.2.2)
       '@azure/storage-blob': 12.34.0(supports-color@10.2.2)
       '@modelcontextprotocol/sdk': 1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7)
-      '@openai/agents': 0.11.8(@aws-sdk/credential-provider-node@3.972.92)(@cfworker/json-schema@4.1.4)(@smithy/signature-v4@5.7.5)(bufferutil@4.1.0)(supports-color@10.2.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
+      '@openai/agents': 0.11.8(@aws-sdk/credential-provider-node@3.972.92)(@cfworker/json-schema@4.1.4)(@smithy/signature-v4@5.7.5)(bufferutil@4.1.0)(supports-color@10.2.2)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7)
       '@opentelemetry/api': 1.10.0
       '@supabase/storage-js': 2.118.0
       ai: 6.0.322(zod@4.6.7)
       basic-ftp: 6.2.6
       convex: 1.49.0(bufferutil@4.1.0)(react@19.3.1)
       google-auth-library: 10.9.1(supports-color@10.2.2)
-      openai: 6.49.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
+      openai: 6.49.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7)
       zod: 4.6.7
     transitivePeerDependencies:
       - '@cfworker/json-schema'
@@ -49805,7 +49793,7 @@ snapshots:
 
   glob@14.0.4:
     dependencies:
-      minimatch: 11.0.5
+      minimatch: 11.0.9
       minipass: 7.1.3
       path-scurry: 3.0.0
 
@@ -50555,9 +50543,9 @@ snapshots:
 
   imurmurhash@0.1.4: {}
 
-  imvectordb@0.0.6(encoding@0.1.14)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7):
+  imvectordb@0.0.6(encoding@0.1.14)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7):
     dependencies:
-      openai: 4.104.0(encoding@0.1.14)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
+      openai: 4.104.0(encoding@0.1.14)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7)
     transitivePeerDependencies:
       - encoding
       - ws
@@ -50808,9 +50796,9 @@ snapshots:
     dependencies:
       node-gyp-build: 4.8.4
 
-  isomorphic-ws@5.0.0(ws@8.22.0(bufferutil@4.1.0)):
+  isomorphic-ws@5.0.0(ws@8.23.0(bufferutil@4.1.0)):
     dependencies:
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.23.0(bufferutil@4.1.0)
 
   isstream@0.1.2: {}
 
@@ -51063,7 +51051,7 @@ snapshots:
       fast-xml-parser: 5.12.0
       file-type: 21.3.4(supports-color@10.2.2)
       ini: 6.0.0
-      minimatch: 11.0.5
+      minimatch: 11.0.9
       modern-tar: 0.7.7
       papaparse: 5.7.0
       quickjs-emscripten: 0.32.0
@@ -51173,15 +51161,15 @@ snapshots:
 
   kysely@0.29.8: {}
 
-  langsmith@0.11.7(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.300.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.1(@opentelemetry/api@1.10.0))(openai@7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.4)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)):
+  langsmith@0.11.7(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.300.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.1(@opentelemetry/api@1.10.0))(openai@7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.4)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7))(ws@8.23.0(bufferutil@4.1.0)):
     dependencies:
       p-queue: 6.6.2
     optionalDependencies:
       '@opentelemetry/api': 1.10.0
       '@opentelemetry/exporter-trace-otlp-proto': 0.300.0(@opentelemetry/api@1.10.0)
       '@opentelemetry/sdk-trace-base': 2.12.1(@opentelemetry/api@1.10.0)
-      openai: 7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.4)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
-      ws: 8.22.0(bufferutil@4.1.0)
+      openai: 7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.4)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7)
+      ws: 8.23.0(bufferutil@4.1.0)
 
   latest-version@7.0.0:
     dependencies:
@@ -52218,7 +52206,7 @@ snapshots:
       bent: 7.3.12
       https-proxy-agent: 7.0.6(supports-color@10.2.2)
       uuid: 11.1.1
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.23.0(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -52272,7 +52260,7 @@ snapshots:
       sharp: 0.35.5(@types/node@22.19.15)
       undici: 8.12.4
       workerd: 1.20261023.1
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.23.0(bufferutil@4.1.0)
       youch: 4.1.0-beta.10
     transitivePeerDependencies:
       - '@types/node'
@@ -52285,7 +52273,7 @@ snapshots:
       sharp: 0.35.5(@types/node@22.19.15)
       undici: 8.12.4
       workerd: 1.20261103.1
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.23.0(bufferutil@4.1.0)
       youch: 4.1.0-beta.10
     transitivePeerDependencies:
       - '@types/node'
@@ -52294,7 +52282,7 @@ snapshots:
 
   minimalistic-assert@1.0.1: {}
 
-  minimatch@11.0.5:
+  minimatch@11.0.9:
     dependencies:
       '@isaacs/nonrecursive-glob-match': 1.1.0
       brace-expansion: 5.0.12
@@ -52906,12 +52894,12 @@ snapshots:
   openai-realtime-api@1.0.8(bufferutil@4.1.0):
     dependencies:
       nanoid: 5.1.16
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.23.0(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  openai@4.104.0(encoding@0.1.14)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7):
+  openai@4.104.0(encoding@0.1.14)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7):
     dependencies:
       '@types/node': 22.19.15
       '@types/node-fetch': 2.6.13
@@ -52921,25 +52909,25 @@ snapshots:
       formdata-node: 4.4.1
       node-fetch: 2.7.0(encoding@0.1.14)
     optionalDependencies:
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.23.0(bufferutil@4.1.0)
       zod: 4.6.7
     transitivePeerDependencies:
       - encoding
 
-  openai@6.49.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7):
+  openai@6.49.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7):
     optionalDependencies:
       '@aws-sdk/credential-provider-node': 3.972.92
       '@smithy/signature-v4': 5.7.5
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.23.0(bufferutil@4.1.0)
       zod: 4.6.7
 
-  openai@7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.4)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7):
+  openai@7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.4)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7):
     optionalDependencies:
       '@aws-sdk/credential-provider-node': 3.972.92
       '@smithy/signature-v4': 5.7.5
       google-auth-library: 11.3.2(supports-color@10.2.2)
       undici: 8.12.4
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.23.0(bufferutil@4.1.0)
       zod: 4.6.7
 
   openapi-fetch@0.13.8:
@@ -54790,7 +54778,7 @@ snapshots:
 
   readdir-glob@3.0.0:
     dependencies:
-      minimatch: 11.0.5
+      minimatch: 11.0.9
 
   readdirp@3.6.0:
     dependencies:
@@ -56190,7 +56178,7 @@ snapshots:
       recast: 0.23.21
       semver: 7.8.6
       use-sync-external-store: 1.7.0(react@19.3.1)
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.23.0(bufferutil@4.1.0)
     optionalDependencies:
       '@types/react': 19.3.0
       prettier: 3.9.10
@@ -56212,7 +56200,7 @@ snapshots:
       esbuild-register: 3.6.0(esbuild@0.25.12)(supports-color@10.2.2)
       recast: 0.23.21
       semver: 7.8.6
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.23.0(bufferutil@4.1.0)
     optionalDependencies:
       prettier: 3.9.10
     transitivePeerDependencies:
@@ -57876,7 +57864,7 @@ snapshots:
       sockjs: 0.3.24
       spdy: 4.0.2(supports-color@10.2.2)
       webpack-dev-middleware: 7.4.6(webpack@5.112.2(@swc/core@1.16.21(@swc/helpers@0.5.23))(@swc/html@1.16.21)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.23))(csso@5.0.5)(esbuild@0.28.2)(html-minifier-terser@7.2.0)(lightningcss@1.33.0)(postcss@8.5.23)(uglify-js@3.19.3))
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.23.0(bufferutil@4.1.0)
     optionalDependencies:
       webpack: 5.112.2(@swc/core@1.16.21(@swc/helpers@0.5.23))(@swc/html@1.16.21)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.23))(csso@5.0.5)(esbuild@0.28.2)(html-minifier-terser@7.2.0)(lightningcss@1.33.0)(postcss@8.5.23)(uglify-js@3.19.3)
     transitivePeerDependencies:
@@ -58123,11 +58111,7 @@ snapshots:
     optionalDependencies:
       bufferutil: 4.1.0
 
-  ws@8.22.0(bufferutil@4.1.0):
-    optionalDependencies:
-      bufferutil: 4.1.0
-
-  ws@8.22.1(bufferutil@4.1.0):
+  ws@8.23.0(bufferutil@4.1.0):
     optionalDependencies:
       bufferutil: 4.1.0
 

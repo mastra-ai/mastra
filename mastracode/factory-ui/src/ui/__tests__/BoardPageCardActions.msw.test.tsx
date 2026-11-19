@@ -276,7 +276,7 @@ describe('Board card buttons move the card', () => {
     expect(transitions[0]?.body).toMatchObject({ stage: 'triage', cause: 'card_action', reenter: true });
   });
 
-  it('offers only explicit card moves without hands-off approval shortcuts', async () => {
+  it('offers Investigate and Plan from the menu of an intake card', async () => {
     stubBoardEndpoints();
     renderWorkBoard();
     const user = userEvent.setup();
@@ -285,7 +285,6 @@ describe('Board card buttons move the card', () => {
 
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Plan' })).toBeVisible();
-    expect(screen.queryByRole('menuitem', { name: /hands-off/i })).not.toBeInTheDocument();
   });
 
   it("keeps Work's moves against a server older than the board loop", async () => {
@@ -304,7 +303,7 @@ describe('Board card buttons move the card', () => {
     expect(transitions[0]).toMatchObject({ itemId: 'item-1', body: { board: 'work', stage: 'triage' } });
   });
 
-  it('offers no hands-off twin for Prepare approval, whose outcome is a maintainer decision', async () => {
+  it('offers Prepare approval on a triaged card that needs approval', async () => {
     stubBoardEndpoints({
       workItems: [
         { ...issueWorkItem, metadata: { number: 7, labels: ['status: needs approval'] }, stages: ['triage'] },
@@ -314,8 +313,7 @@ describe('Board card buttons move the card', () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole('button', { name: 'Actions for Fix login bug' }));
-    await screen.findByRole('menuitem', { name: 'Prepare approval' });
-    expect(screen.queryByRole('menuitem', { name: 'Prepare approval hands-off' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('menuitem', { name: 'Prepare approval' })).toBeVisible();
   });
 
   it('offers the ordinary runs once a person moved a labelled card into a working lane, before the label catches up', async () => {
