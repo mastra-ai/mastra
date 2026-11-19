@@ -198,13 +198,20 @@ describe('Prebuild test tiers', () => {
   });
 
   test('the E2E registry publishes whenever the E2E workflow runs', () => {
-    // e2e-npm-import is not tiered and needs the registry, so its publisher can't be tiered either.
+    // npm import is not tiered and needs the registry, so its publisher can't be tiered either.
+    // It runs as steps of the shared e2e-light job, which has no job-level condition.
     const workflow = parse(readFileSync(new URL('../workflows/e2e-tests.yml', import.meta.url), 'utf8'));
-    const consumers = Object.entries(workflow.jobs as Record<string, { needs?: string | string[] }>)
+    type Job = { needs?: string | string[]; if?: string; steps: { name?: string; if?: string }[] };
+    const jobs = workflow.jobs as Record<string, Job>;
+    const consumers = Object.entries(jobs)
       .filter(([, job]) => [job.needs ?? []].flat().includes('publish-e2e-registry'))
       .map(([name]) => name);
 
-    expect(consumers).toContain('e2e-npm-import');
+    expect(consumers).toContain('e2e-light');
+    expect(jobs['e2e-light'].if).toBeUndefined();
+    const npmImport = jobs['e2e-light'].steps.filter(step => step.name?.startsWith('E2E npm import'));
+    expect(npmImport).toHaveLength(2);
+    for (const step of npmImport) expect(step.if ?? '').not.toContain('skip_jobs');
     expect(workflow.jobs['publish-e2e-registry'].if).toBeUndefined();
   });
 
