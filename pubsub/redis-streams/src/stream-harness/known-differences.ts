@@ -262,7 +262,7 @@ const REUSED_RUN: Attribution = {
     `resolves its previous registry entry (agent/durable/durable-agent.ts:5763), replaying First answer. (${MAIN}).`,
 };
 const OBSERVER_DELETES_HISTORY: Attribution = {
-  ticket: 'COR-1541',
+  ticket: 'COR-1598',
   cause: 'durable-stream',
   evidence:
     'A remote durable observer arms its own 1s cleanup after finish and clears the shared topic ' +
