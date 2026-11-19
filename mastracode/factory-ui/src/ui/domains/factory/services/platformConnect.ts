@@ -13,25 +13,53 @@
 import Nango, { AuthError } from '@nangohq/frontend';
 import type { AuthOptions } from '@nangohq/frontend';
 
-export type PlatformConnectProviderId = 'jira' | 'incident-io' | 'gitlab' | 'vanta';
+export type PlatformConnectProviderId = 'jira' | 'incident-io' | 'gitlab' | 'gitlab-self-hosted' | 'vanta';
 
 export const MASTRA_PLATFORM_URL = 'https://projects.mastra.ai';
 
 /** How the provider authorizes: OAuth consent popup or an API-key form. */
 export type PlatformConnectAuthKind = 'oauth' | 'apiKey';
 
+/** A connection setting an API-key provider needs besides the key, such as a self-hosted instance's hostname. */
+export interface PlatformConnectParam {
+  key: string;
+  label: string;
+  placeholder: string;
+}
+
 export interface PlatformConnectProviderMeta {
   id: PlatformConnectProviderId;
   displayName: string;
   authKind: PlatformConnectAuthKind;
+  /** What an API-key provider calls its key. Defaults to "API key". */
+  credentialName?: string;
+  params?: readonly PlatformConnectParam[];
 }
 
 export const PLATFORM_CONNECT_PROVIDERS: Record<PlatformConnectProviderId, PlatformConnectProviderMeta> = {
   jira: { id: 'jira', displayName: 'Jira', authKind: 'oauth' },
   'incident-io': { id: 'incident-io', displayName: 'incident.io', authKind: 'apiKey' },
   gitlab: { id: 'gitlab', displayName: 'GitLab', authKind: 'oauth' },
+  'gitlab-self-hosted': {
+    id: 'gitlab-self-hosted',
+    displayName: 'self-hosted GitLab',
+    authKind: 'apiKey',
+    credentialName: 'access token',
+    params: [{ key: 'hostname', label: 'Instance hostname', placeholder: 'gitlab.example.com' }],
+  },
   vanta: { id: 'vanta', displayName: 'Vanta', authKind: 'oauth' },
 };
+
+/**
+ * The provider whose flow reconnects `connection`. A self-hosted GitLab
+ * connection is listed under GitLab but reconnects with its token form.
+ */
+export function reconnectProvider(
+  provider: PlatformConnectProviderId,
+  connection: { integrationId: string },
+): PlatformConnectProviderId {
+  return connection.integrationId === 'gitlab-self-hosted' ? 'gitlab-self-hosted' : provider;
+}
 
 export interface PlatformProviderConnection {
   id: string;
@@ -254,11 +282,13 @@ export class HeadlessAuthError extends Error {
 export async function runHeadlessAuth(input: {
   session: PlatformConnectSession;
   credentials?: Record<string, string>;
+  params?: Record<string, string>;
 }): Promise<void> {
   const nango = new Nango({ connectSessionToken: input.session.sessionToken });
   const options: AuthOptions = {};
   if (input.credentials) options.credentials = input.credentials;
   else options.detectClosedAuthWindow = true;
+  if (input.params) options.params = input.params;
   try {
     await nango.auth(input.session.integrationId, options);
   } catch (error) {
