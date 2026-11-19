@@ -356,6 +356,45 @@ test('a grouped container-store job fails only the store whose step failed', () 
   );
 });
 
+test('a grouped container-store job whose shared build failed fails every store in the group', () => {
+  // Every `Run <store> tests` step is listed, member or not; the build step's name carries the group.
+  const steps = [
+    { name: 'Build grouped storage packages (opensearch mssql mysql)', conclusion: 'failure' },
+    { name: 'Run opensearch tests', conclusion: 'skipped' },
+    { name: 'Run mssql tests', conclusion: 'skipped' },
+    { name: 'Run chroma tests', conclusion: 'skipped' },
+    { name: 'Run mysql tests', conclusion: 'skipped' },
+    { name: 'Run dynamodb tests', conclusion: 'skipped' },
+  ];
+  const all = ['job:store/mssql', 'job:store/mysql', 'job:store/opensearch'];
+  assert.deepEqual(
+    jobKeysFor('Prebuild', 'Combined Store Tests / test (containers 1)', () => '', steps),
+    {
+      ran: all,
+      failed: all,
+    },
+  );
+});
+
+test('a grouped container-store job killed at its time cap does not count cancelled stores as run', () => {
+  const steps = [
+    { name: 'Build grouped storage packages (opensearch mssql chroma mysql)', conclusion: 'success' },
+    { name: 'Run opensearch tests', conclusion: 'success' },
+    { name: 'Stop opensearch containers', conclusion: 'success' },
+    { name: 'Run mssql tests', conclusion: 'cancelled' },
+    { name: 'Stop mssql containers', conclusion: 'skipped' },
+    { name: 'Run chroma tests', conclusion: 'skipped' },
+    { name: 'Run mysql tests', conclusion: 'skipped' },
+  ];
+  assert.deepEqual(
+    jobKeysFor('Prebuild', 'Combined Store Tests / test (containers 1)', () => '', steps),
+    {
+      ran: ['job:store/opensearch'],
+      failed: [],
+    },
+  );
+});
+
 test('a folded job fails only the packages that started and never finished', () => {
   // Lines as pnpm -r prints them in the light-stores job (run 41359171549).
   const log = [

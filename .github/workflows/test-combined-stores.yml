@@ -170,7 +170,7 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
-      - name: Build grouped storage packages
+      - name: Build grouped storage packages (${{ join(matrix.group.stores, ' ') }})
         id: build
         env:
           GROUP_STORES: ${{ toJson(matrix.group.stores) }}

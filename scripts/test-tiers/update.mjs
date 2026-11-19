@@ -206,7 +206,8 @@ const NAMED_JOBS = {
  * script started (`stores/lance test$ …`) but never printed `Done` failed. Jobs that aren't
  * tiered as a whole (unit and package-E2E file lists, builds, gates) return nothing. `steps` (the
  * jobs API's) is only read for the grouped container-store jobs: a store ran when its
- * `Run <store> tests` step ran and failed when that step failed.
+ * `Run <store> tests` step ran and failed when that step failed; a cancelled step didn't run, and a
+ * failed group build fails every store its step name lists.
  * @returns {{ ran: string[], failed: string[] }}
  */
 export function jobKeysFor(workflow, name, log = () => '', steps = []) {
@@ -220,9 +221,18 @@ export function jobKeysFor(workflow, name, log = () => '', steps = []) {
   if (/^Combined Store Tests \/ test \(containers \d+\)$/.test(name)) {
     const ran = [];
     const failed = [];
+    // The build step is named `Build grouped storage packages (<store> …)`; when it fails, every
+    // store step skips, and each store in the group failed, as its own job used to.
+    const build = steps.find(step => /^Build grouped storage packages \(/.test(step.name));
+    if (build?.conclusion === 'failure') {
+      const stores = /\(([\w -]+)\)$/.exec(build.name)?.[1].split(' ').filter(Boolean) ?? [];
+      const keys = stores.map(store => `job:store/${store}`).sort();
+      return { ran: keys, failed: keys };
+    }
     for (const step of steps) {
       const store = /^Run ([\w-]+) tests$/.exec(step.name)?.[1];
-      if (!store || !step.conclusion || step.conclusion === 'skipped') continue;
+      // A cancelled step was killed by the job's time cap before it finished: it didn't run.
+      if (!store || !step.conclusion || step.conclusion === 'skipped' || step.conclusion === 'cancelled') continue;
       ran.push(`job:store/${store}`);
       if (step.conclusion === 'failure') failed.push(`job:store/${store}`);
     }
