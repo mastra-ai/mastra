@@ -1994,40 +1994,48 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       started.cleanup();
     });
 
-    it('recover() of a run this process is still executing rejects with RUN_ACTIVE_LOCALLY and leaves it running', async () => {
-      const storage = createStorage(backend);
-      const memory = new MockMemory({ storage });
-      const model = gatedModel('the live answer');
-      const durableAgent = buildAgent({ model: model.model, storage, memory });
-      const result = await durableAgent.stream('What is the answer?', {
-        memory: { thread: THREAD, resource: RESOURCE },
-      });
-      const { runId } = result;
-      const stream = collect(result.fullStream);
-      await model.entered;
-      await waitForCheckpoint(storage, runId);
+    it.each([false, true])(
+      'recover() of a locally executing run rejects and leaves it running (force=%s)',
+      async force => {
+        const storage = createStorage(backend);
+        const memory = new MockMemory({ storage });
+        const model = gatedModel('the live answer');
+        const durableAgent = buildAgent({ model: model.model, storage, memory });
+        const result = await durableAgent.stream('What is the answer?', {
+          memory: { thread: THREAD, resource: RESOURCE },
+        });
+        const { runId } = result;
+        const stream = collect(result.fullStream);
+        await model.entered;
+        await waitForCheckpoint(storage, runId);
 
-      const entry = globalRunRegistry.get(runId);
-      const fence = ExecutionFence.getLocalActive(runId)!;
-      const foreign = foreignOwnership(backend, storage, durableAgent.pubsub);
+        const entry = globalRunRegistry.get(runId);
+        const fence = ExecutionFence.getLocalActive(runId)!;
+        const foreign = foreignOwnership(backend, storage, durableAgent.pubsub);
 
-      await expect(durableAgent.recover(runId)).rejects.toMatchObject({ id: RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID });
-      expect(globalRunRegistry.get(runId)).toBe(entry);
-      expect(ExecutionFence.getLocalActive(runId)).toBe(fence);
-      expect(fence.isLost()).toBe(false);
-      expect(await foreign.owner(fence.agentId, runId)).toBe(fence.executionId);
+        // A rejected attempt must not leave a local recovery claim behind.
+        for (let attempt = 0; attempt < 2; attempt++) {
+          await expect(durableAgent.recover(runId, { force })).rejects.toMatchObject({
+            id: RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID,
+          });
+        }
+        expect(globalRunRegistry.get(runId)).toBe(entry);
+        expect(ExecutionFence.getLocalActive(runId)).toBe(fence);
+        expect(fence.isLost()).toBe(false);
+        expect(await foreign.owner(fence.agentId, runId)).toBe(fence.executionId);
 
-      // ---- The live execution finishes as if recover() had never been called.
-      model.release();
-      await vi.waitFor(() => expect(stream.chunks.some(chunk => chunk.type === 'finish')).toBe(true));
-      await fence.whenSettled;
-      expect(await fence.settle(async () => {})).toBe('owned');
-      await vi.waitFor(async () => expect(await assistantText(memory)).toContain('the live answer'));
-      expect(model.calls()).toBe(1);
+        // ---- The live execution finishes as if recover() had never been called.
+        model.release();
+        await vi.waitFor(() => expect(stream.chunks.some(chunk => chunk.type === 'finish')).toBe(true));
+        await fence.whenSettled;
+        expect(await fence.settle(async () => {})).toBe('owned');
+        await vi.waitFor(async () => expect(await assistantText(memory)).toContain('the live answer'));
+        expect(model.calls()).toBe(1);
 
-      await stream.stop();
-      result.cleanup();
-    });
+        await stream.stop();
+        result.cleanup();
+      },
+    );
 
     it('an execution whose lease vanished with no new owner reports the lease loss and keeps its snapshots', async () => {
       const storage = createStorage(backend);

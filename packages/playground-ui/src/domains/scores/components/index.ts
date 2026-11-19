@@ -4,4 +4,9 @@ export { TraceScoresTabView, type TraceScoresTabViewProps } from './trace-scores
 export { TraceScoresList, type TraceScoresListProps } from './trace-scores-list';
 export { TraceScoresListView, type TraceScoresListViewProps } from './trace-scores-list-view';
 export { ScoreDataPanel, type ScoreDataPanelProps } from './score-data-panel';
+export {
+  ScoreDataPanelView,
+  type ScoreDataPanelDatasetDialogArgs,
+  type ScoreDataPanelViewProps,
+} from './score-data-panel-view';
 export { ScoreAsItemDialog, type ScoreAsItemDialogProps } from './score-as-item-dialog';

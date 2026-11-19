@@ -15,13 +15,13 @@ import type { TraceColumnPreferences } from '../../../trace-list-columns';
 import { TracesExplorer, useTracesConfig, useTracesFilterBar, useTracesFilterBarFields } from '../index';
 import type {
   FeedbackOptions,
+  TracesExplorerFeatures,
   TracesExplorerLayoutProps,
   TracesExplorerPanelProps,
   TracesExplorerRootProps,
 } from '../index';
 import { DEFAULT_TRACES_FILTERS, DEFAULT_TRACES_SORT, EMPTY_TRACES_SELECTION } from '../traces-explorer-actions';
 import type { TracesExplorerState, TracesFilters, TracesSelection, TracesSort } from '../traces-explorer-actions';
-import type { TracesExplorerFeatures } from '../traces-explorer-context';
 import {
   emptyDatasets,
   emptyEntityNames,
@@ -54,6 +54,8 @@ import {
   weatherThreadLightTraces,
   weatherThreadTraceSpans,
 } from './fixtures/traces-explorer';
+import { StudioFilterBar, StudioList, StudioPanel, StudioTracesExplorer } from './studio-traces-explorer';
+import type { StudioTracesExplorerProps } from './studio-traces-explorer';
 import {
   OBSERVABILITY_LIST_POLL_INTERVAL_MS,
   OBSERVABILITY_LIST_REFETCH_INTERVAL_MS,
@@ -170,7 +172,7 @@ type HarnessProps = {
   onChange?: (next: TracesExplorerState) => void;
   initialSort?: TracesSort;
   onSortChange?: (next: TracesSort) => void;
-  traceHref?: TracesExplorerPanelProps['traceHref'];
+  traceHref?: StudioTracesExplorerProps['traceHref'];
   renderError?: TracesExplorerLayoutProps['renderError'];
   panelProps?: Partial<TracesExplorerPanelProps>;
 };
@@ -196,7 +198,7 @@ function Harness({
   rootSource,
   feedbackOptions,
   baselineFilters,
-  filterBar = <TracesExplorer.FilterBar />,
+  filterBar,
   onChange,
   initialSort = DEFAULT_TRACES_SORT,
   onSortChange,
@@ -210,7 +212,7 @@ function Harness({
   const [sort, setSort] = useState<TracesSort>(initialSort);
 
   return (
-    <TracesExplorer
+    <StudioTracesExplorer
       selection={selection}
       filters={filters}
       onChange={next => {
@@ -229,6 +231,7 @@ function Harness({
       rootSource={rootSource}
       feedbackOptions={feedbackOptions}
       initialFilters={baselineFilters}
+      traceHref={traceHref}
     >
       <TracesExplorer.Layout
         renderError={renderError}
@@ -240,15 +243,15 @@ function Harness({
         }
         actionRow={
           <div>
-            {filterBar}
+            {filterBar ?? <StudioFilterBar />}
             <TracesExplorer.ColumnsMenu />
           </div>
         }
       >
-        <TracesExplorer.List />
-        <TracesExplorer.Panel onOpenScore={() => {}} traceHref={traceHref} {...panelProps} />
+        <StudioList />
+        <StudioPanel {...panelProps} />
       </TracesExplorer.Layout>
-    </TracesExplorer>
+    </StudioTracesExplorer>
   );
 }
 
@@ -267,7 +270,13 @@ const settle = async (queryClient: { isFetching: () => number }) => {
 };
 
 const getFilterChips = () => [...document.querySelectorAll<HTMLElement>('[data-slot="filter-bar-chip"]')];
-const getTimeRange = () => screen.getByRole('group', { name: 'Time range', hidden: true });
+// By its slot, not its accessible name: while the trace drawer is open, its modal `aria-hidden` can land on
+// the group itself, which then has no accessible name.
+const getTimeRange = () => {
+  const group = document.querySelector<HTMLElement>('[data-slot="filter-bar-time-range"]');
+  if (!group) throw new Error('The time range chip is not rendered');
+  return group;
+};
 const traceRow = (input: string) => screen.getByRole('button', { name: new RegExp(input) });
 const traceDialog = () => screen.queryByRole('dialog', { name: 'Trace details' });
 
@@ -419,7 +428,7 @@ describe('TracesExplorer', () => {
 
   describe('when a trace is open', () => {
     const openTrace = async (
-      traceHref?: TracesExplorerPanelProps['traceHref'],
+      traceHref?: StudioTracesExplorerProps['traceHref'],
       navigate?: ComponentProps<typeof TestLinkProvider>['navigate'],
     ) => {
       setExplorerHandlers();
@@ -1463,8 +1472,8 @@ describe('TracesExplorer', () => {
       expect(within(dialog).getByRole('button', { name: 'Add to dataset' })).toBeTruthy();
     });
 
-    it('hides "Add to dataset" when the host turns it off', async () => {
-      const dialog = await openTracePanel({ withAddTraceToDataset: false });
+    it('hides "Add to dataset" when the host renders no dataset dialog', async () => {
+      const dialog = await openTracePanel({ renderDatasetDialog: undefined });
 
       expect(within(dialog).queryByRole('button', { name: 'Add to dataset' })).toBeNull();
       expect(within(dialog).getByRole('button', { name: 'Download trace JSON' })).toBeTruthy();
@@ -1700,7 +1709,7 @@ describe('TracesExplorer.Layout', () => {
   const renderLayout = () =>
     renderWithProviders(
       <TestLinkProvider>
-        <TracesExplorer
+        <StudioTracesExplorer
           selection={EMPTY_TRACES_SELECTION}
           filters={DEFAULT_TRACES_FILTERS}
           onChange={() => {}}
@@ -1713,13 +1722,13 @@ describe('TracesExplorer.Layout', () => {
             tabs={<nav aria-label="Views">Tabs</nav>}
             toolbar={
               <div role="toolbar" aria-label="Trace filters">
-                <TracesExplorer.FilterBar />
+                <StudioFilterBar />
               </div>
             }
           >
-            <TracesExplorer.List />
+            <StudioList />
           </TracesExplorer.Layout>
-        </TracesExplorer>
+        </StudioTracesExplorer>
       </TestLinkProvider>,
     );
 
