@@ -1,5 +1,6 @@
 import { execFile, execFileSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 
 export interface CommonBinary {
   name: string;
@@ -30,39 +31,23 @@ const COMMON_BINARIES = [
 ] as const;
 
 /**
- * The installation itself, not the shell shim in front of it. Version managers put a per-shell directory
- * first on PATH (`fnm` multishells, `nvm` versions, `asdf` shims), and the name of that directory changes on
- * every launch, while these paths are part of the system prompt: an unstable path here costs the whole
- * cached prompt at the start of every run after a restart.
+ * The directory the tool lives in, with the name `which` reported still on the end.
+ *
+ * Version managers put a per-shell directory first on PATH (`fnm` multishells, `asdf` shims), and that
+ * directory's name changes on every launch, while these paths are part of the system prompt: an unstable
+ * path here costs the whole cached prompt at the start of every run after a restart. Resolving the whole
+ * file instead would name the program behind a shim - `mise` points every tool at itself, BusyBox and
+ * OrbStack do the same for some tools, and a Homebrew link names `Cellar/<version>` - which either does not
+ * run the tool or changes on every upgrade. Resolving only the directory gives the stable installation and
+ * keeps a name that runs the tool.
  */
 function stablePath(path: string | null): string | null {
   if (!path) return path;
   try {
-    return realpathSync(path);
+    return join(realpathSync(dirname(path)), basename(path));
   } catch {
     return path;
   }
-}
-
-/**
- * Some version managers point every tool at one dispatcher binary (`mise` does: its shims are symlinks to
- * `mise` itself), and resolving would then name that binary for every tool, no longer saying where each one
- * is. When more than one name resolves to the same path, those names keep what `which` reported; the rest
- * are resolved as usual.
- *
- * Every name is looked at first: a directory that gives `node` and `npm` the same path is not a dispatcher,
- * since one installation legitimately answers both.
- */
-function withoutDispatcherCollapse(found: { name: string; reported: string | null }[]): CommonBinary[] {
-  const entries = found.map(entry => ({ ...entry, stable: stablePath(entry.reported) }));
-  const claimed = new Map<string, number>();
-  for (const entry of entries) {
-    if (entry.stable) claimed.set(entry.stable, (claimed.get(entry.stable) ?? 0) + 1);
-  }
-  return entries.map(entry => ({
-    name: entry.name,
-    path: entry.stable && (claimed.get(entry.stable) ?? 0) > 1 ? entry.reported : entry.stable,
-  }));
 }
 
 let cachedBinaries: CommonBinary[] | null = null;
@@ -94,7 +79,7 @@ function reportedBinaryAsync(name: string): Promise<string | null> {
 }
 
 export function detectCommonBinaries(): CommonBinary[] {
-  cachedBinaries ??= withoutDispatcherCollapse(COMMON_BINARIES.map(name => ({ name, reported: reportedBinary(name) })));
+  cachedBinaries ??= COMMON_BINARIES.map(name => ({ name, path: stablePath(reportedBinary(name)) }));
 
   return cachedBinaries;
 }
@@ -104,8 +89,8 @@ export async function detectCommonBinariesAsync(): Promise<CommonBinary[]> {
   if (inFlightPromise) return inFlightPromise;
 
   inFlightPromise = Promise.all(
-    COMMON_BINARIES.map(async name => ({ name, reported: await reportedBinaryAsync(name) })),
-  ).then(withoutDispatcherCollapse);
+    COMMON_BINARIES.map(async name => ({ name, path: stablePath(await reportedBinaryAsync(name)) })),
+  );
 
   try {
     cachedBinaries = await inFlightPromise;
