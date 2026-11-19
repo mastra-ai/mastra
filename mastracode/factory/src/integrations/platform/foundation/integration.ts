@@ -192,10 +192,12 @@ export abstract class PlatformConnectIntegration
 
   diagnostics(): Record<string, unknown> {
     const needsLinking = this.needsLinking;
+    const detached = this.binding.detached;
     return {
       configured: true,
       mode: 'platform',
       ...(needsLinking.length > 0 ? { needsLinking } : {}),
+      ...(detached.length > 0 ? { detached } : {}),
     };
   }
 }

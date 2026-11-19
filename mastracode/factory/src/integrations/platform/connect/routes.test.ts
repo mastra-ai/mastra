@@ -351,7 +351,7 @@ describe('platform connect routes', () => {
       method: 'POST',
     });
     expect(admin.status).toBe(200);
-    await expect(admin.json()).resolves.toEqual({ linked: ['conn-jira'], needsLinking: [] });
+    await expect(admin.json()).resolves.toEqual({ linked: ['conn-jira'], needsLinking: [], detached: [] });
     expect(linked).toEqual(new Set(['conn-jira']));
 
     const signedOut = await buildApp(null, fetchImpl).request('/web/integrations/platform/jira/link-connections', {
@@ -381,12 +381,18 @@ describe('platform connect routes', () => {
       connectionIds: ['conn-jira'],
     });
 
-    const admin = await buildApp(org1(), fetchImpl, { linkStore }).request(
-      '/web/integrations/platform/jira/link-connections',
-      { method: 'POST' },
-    );
+    const app = buildApp(org1(), fetchImpl, { linkStore });
 
-    await expect(admin.json()).resolves.toEqual({ linked: ['conn-jira'], needsLinking: [] });
+    // Boot leaves it detached, and the connections listing says so apart from needsLinking.
+    await vi.waitFor(async () => {
+      const listing = await app.request('/web/integrations/platform/jira/connections');
+      await expect(listing.json()).resolves.toEqual({ connections: [], detached: ['conn-jira'] });
+    });
+    expect(linked).toEqual(new Set());
+
+    const admin = await app.request('/web/integrations/platform/jira/link-connections', { method: 'POST' });
+
+    await expect(admin.json()).resolves.toEqual({ linked: ['conn-jira'], needsLinking: [], detached: [] });
     expect(linked).toEqual(new Set(['conn-jira']));
   });
 

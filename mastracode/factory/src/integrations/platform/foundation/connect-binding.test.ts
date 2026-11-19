@@ -213,7 +213,7 @@ describe('PlatformConnectBinding.linkOrgConnections', () => {
     const platform = await orgPlatform();
     const jira = binding(platform, { filter: connection => connection.id === 'conn-unlinked' });
 
-    expect(await jira.linkOrgConnections()).toEqual({ linked: ['conn-unlinked'], needsLinking: [] });
+    expect(await jira.linkOrgConnections()).toEqual({ linked: ['conn-unlinked'], needsLinking: [], detached: [] });
     expect(platform.count('POST', '/v2/projects/proj_factory/connections/conn-reauth')).toBe(0);
     expect(await jira.unlinkedOrgConnections(await jira.listConnections({ fresh: true }))).toEqual([]);
   });
@@ -225,11 +225,12 @@ describe('PlatformConnectBinding.linkOrgConnections', () => {
     await expect(jira.linkOrgConnections()).resolves.toEqual({
       linked: ['conn-unlinked', 'conn-reauth'],
       needsLinking: [],
+      detached: [],
     });
     expect([...platform.linked].sort()).toEqual(['conn-linked', 'conn-reauth', 'conn-unlinked']);
 
     const posts = platform.requests.filter(request => request.method === 'POST').length;
-    await expect(jira.linkOrgConnections()).resolves.toEqual({ linked: [], needsLinking: [] });
+    await expect(jira.linkOrgConnections()).resolves.toEqual({ linked: [], needsLinking: [], detached: [] });
     expect(platform.requests.filter(request => request.method === 'POST')).toHaveLength(posts);
   });
 
@@ -372,6 +373,8 @@ describe('PlatformConnectBinding boot linking across restarts', () => {
     expect(linkPosts(platform, 'conn-linked')).toBe(0);
     await expect(restarted.listConnections()).resolves.toEqual([]);
     expect(restarted.needsLinking).toEqual([]);
+    // Reported apart from needsLinking, so a sync that waits on them can say why.
+    expect(restarted.detached).toEqual(['conn-linked', 'conn-unlinked']);
     await expect(store.settings.get('__platform_connect_links__', 'project:proj_factory')).resolves.toEqual({
       version: 1,
       connectionIds: ['conn-linked', 'conn-unlinked'],
@@ -416,18 +419,39 @@ describe('PlatformConnectBinding boot linking across restarts', () => {
     await expect(restarted.linkOrgConnections({ relinkDetached: true })).resolves.toEqual({
       linked: ['conn-unlinked'],
       needsLinking: [],
+      detached: [],
     });
   });
 
-  it('links as before when storage cannot say what the project had', async () => {
+  it('links nothing, and forgets nothing, when storage cannot say what the project had', async () => {
     const platform = await orgPlatform();
     const store = await linkStore();
     await boot(platform, store);
     platform.linked.delete('conn-unlinked');
     vi.spyOn(store.settings, 'get').mockRejectedValueOnce(new Error('storage down'));
 
-    await boot(platform, store);
+    const unsure = await boot(platform, store);
 
-    expect(platform.linked.has('conn-unlinked')).toBe(true);
+    expect(platform.linked.has('conn-unlinked')).toBe(false);
+    expect(linkPosts(platform, 'conn-unlinked')).toBe(1);
+    await expect(unsure.linkOrgConnections()).resolves.toMatchObject({ linked: [], detached: ['conn-unlinked'] });
+    // The next boot, reading fine, still knows the project had it.
+    await boot(platform, store);
+    expect(platform.linked.has('conn-unlinked')).toBe(false);
+  });
+
+  it('clears a detached connection from the report once it is linked again', async () => {
+    const platform = await orgPlatform();
+    const store = await linkStore();
+    await boot(platform, store);
+    platform.linked.delete('conn-unlinked');
+    const restarted = await boot(platform, store);
+    expect(restarted.detached).toEqual(['conn-unlinked']);
+
+    await expect(restarted.linkOrgConnections({ relinkDetached: true })).resolves.toMatchObject({
+      linked: ['conn-unlinked'],
+      detached: [],
+    });
+    expect(restarted.detached).toEqual([]);
   });
 });

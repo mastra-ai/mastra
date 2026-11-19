@@ -308,7 +308,12 @@ export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOp
               ...(connection.connectedAt ? { connectedAt: connection.connectedAt } : {}),
             }));
           const needsLinking = provider.binding.needsLinking;
-          return c.json({ connections, ...(needsLinking.length > 0 ? { needsLinking } : {}) });
+          const detached = provider.binding.detached;
+          return c.json({
+            connections,
+            ...(needsLinking.length > 0 ? { needsLinking } : {}),
+            ...(detached.length > 0 ? { detached } : {}),
+          });
         } catch (err) {
           return platformError(c, err);
         }
