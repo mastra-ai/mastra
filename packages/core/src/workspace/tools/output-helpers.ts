@@ -1,7 +1,7 @@
 import { estimateTokenCount } from 'tokenx';
 
 import { isValidationError } from '../../tools/validation';
-import { sliceByTokensSafe } from '../../utils/slice-by-tokens';
+import { sliceByTokensSafe, sliceSafe } from '../../utils/slice-by-tokens';
 
 /** Default number of lines to return (tail). */
 export const DEFAULT_TAIL_LINES = 200;
@@ -104,7 +104,7 @@ function splitTail(output: string, tail: number | null | undefined): TailSplit {
  * tokenx is synchronous and allocates per word, so running it over a multi-MB
  * output blocks the event loop for seconds. Outputs up to this many chars per
  * token of budget are counted and cut exactly as before; longer ones never reach
- * tokenx whole (see `countTokensOver` and `tokenWindow`).
+ * tokenx whole (see `countTokensOver` and `sliceEdge`).
  */
 const WINDOW_CHARS_PER_TOKEN = 32;
 
@@ -200,18 +200,66 @@ function countTokensOver(output: string, limit: number): number | undefined {
 }
 
 /**
- * The part of `output` that token slicing needs to keep `budget` tokens from one
- * end. Outputs that fit the overall `limit`'s size cap are used whole, as before;
- * longer ones give a prefix (`'head'`) or suffix (`'tail'`) that grows until it
- * holds twice the budget or reaches the cap.
+ * `budget` tokens from one end of `output`, as `sliceByTokensSafe(output, 0, budget)`
+ * (`'head'`) or `sliceByTokensSafe(output, -budget)` (`'tail'`) would give them.
+ * Outputs within the overall `limit`'s size cap take exactly that path. Longer ones
+ * hand tokenx only a window at that end, measured as tokenx sees it: whitespace runs
+ * are collapsed (see `countTokensOver`), so padding can't crowd real text out of
+ * the window. The cut is mapped back to the original text, whitespace and all.
  */
-function tokenWindow(output: string, budget: number, limit: number, side: 'head' | 'tail'): string {
-  if (output.length <= Math.max(limit, 1) * WINDOW_CHARS_PER_TOKEN) return output;
-  const cap = Math.max(budget, 1) * WINDOW_CHARS_PER_TOKEN;
-  for (let size = Math.max(budget, 1) * 8; ; size = Math.min(size * 2, cap)) {
-    const window = side === 'head' ? output.slice(0, size) : output.slice(-size);
-    if (size >= cap || estimateTokenCount(window) > budget * 2) return window;
+function sliceEdge(output: string, budget: number, limit: number, side: 'head' | 'tail'): string {
+  if (output.length <= Math.max(limit, 1) * WINDOW_CHARS_PER_TOKEN) {
+    return side === 'head' ? sliceByTokensSafe(output, 0, budget) : sliceByTokensSafe(output, -budget);
   }
+
+  // Grow the window from the kept end until its collapsed size reaches the cap:
+  // tokenx counts at least 1 token per 10 collapsed chars, so it holds over 3x the budget.
+  const target = Math.max(budget, 1) * WINDOW_CHARS_PER_TOKEN;
+  let size = 0;
+  let inWhitespace = false;
+  let edge = side === 'head' ? 0 : output.length;
+  while (side === 'head' ? edge < output.length : edge > 0) {
+    const code = output.charCodeAt(side === 'head' ? edge : edge - 1);
+    const whitespace = code < 128 ? CHAR_CLASS[code] === WS : isWhitespace(code);
+    const cost = whitespace ? (inWhitespace ? 0 : 2) : 1;
+    if (size + cost > target) break;
+    size += cost;
+    inWhitespace = whitespace;
+    edge += side === 'head' ? 1 : -1;
+  }
+  const window = side === 'head' ? output.slice(0, edge) : output.slice(edge);
+
+  // Collapse whitespace runs, remembering where each one sits in both strings.
+  const runs: { collapsedStart: number; collapsedEnd: number; start: number; end: number }[] = [];
+  let collapsed = '';
+  let last = 0;
+  for (const match of window.matchAll(WHITESPACE_RUN_RE)) {
+    collapsed += window.slice(last, match.index);
+    const replacement = STRUCTURED_WHITESPACE_RE.test(match[0]) ? '\n ' : ' ';
+    runs.push({
+      collapsedStart: collapsed.length,
+      collapsedEnd: collapsed.length + replacement.length,
+      start: match.index,
+      end: match.index + match[0].length,
+    });
+    collapsed += replacement;
+    last = match.index + match[0].length;
+  }
+  collapsed += window.slice(last);
+
+  // tokenx keeps or drops a 0- or 1-token whitespace run whole, so a cut lands on a run's edge or between other chars.
+  const toWindowIndex = (index: number): number => {
+    let shift = 0;
+    for (const run of runs) {
+      if (index < run.collapsedStart) break;
+      if (index <= run.collapsedEnd) return index === run.collapsedEnd ? run.end : run.start;
+      shift = run.end - run.collapsedEnd;
+    }
+    return index + shift;
+  };
+
+  if (side === 'head') return sliceSafe(window, 0, toWindowIndex(sliceByTokensSafe(collapsed, 0, budget).length));
+  return sliceSafe(window, toWindowIndex(collapsed.length - sliceByTokensSafe(collapsed, -budget).length));
 }
 
 /**
@@ -235,10 +283,7 @@ export async function applyTokenLimit(
   const totalTokens = countTokensOver(output, limit);
   if (totalTokens === undefined) return output;
 
-  const kept =
-    from === 'start'
-      ? sliceByTokensSafe(tokenWindow(output, limit, limit, 'tail'), -limit)
-      : sliceByTokensSafe(tokenWindow(output, limit, limit, 'head'), 0, limit);
+  const kept = from === 'start' ? sliceEdge(output, limit, limit, 'tail') : sliceEdge(output, limit, limit, 'head');
 
   const position = from === 'start' ? 'last' : 'first';
   return from === 'start'
@@ -281,8 +326,8 @@ function sandwich(output: string, limit: number, headRatio: number, firstLine: n
   const tailBudget = limit - headBudget;
 
   // `head` is a prefix and `tail` a suffix of `output` (the surrogate repair keeps lengths).
-  let head = headBudget > 0 ? sliceByTokensSafe(tokenWindow(output, headBudget, limit, 'head'), 0, headBudget) : '';
-  let tail = tailBudget > 0 ? sliceByTokensSafe(tokenWindow(output, tailBudget, limit, 'tail'), -tailBudget) : '';
+  let head = headBudget > 0 ? sliceEdge(output, headBudget, limit, 'head') : '';
+  let tail = tailBudget > 0 ? sliceEdge(output, tailBudget, limit, 'tail') : '';
   const headEnd = head.length;
   let tailStart = output.length - tail.length;
   // The notice gets its own line, so a line break (`\n` or `\r\n`) at either cut is redundant.

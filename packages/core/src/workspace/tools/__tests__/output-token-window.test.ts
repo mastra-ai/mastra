@@ -209,6 +209,71 @@ describe('token limits on huge output (#30951)', () => {
     expect(maxScanned()).toBeLessThanOrEqual(LIMIT * 32);
   });
 
+  it('cuts match tokenx slicing the whole output across mixed text and whitespace', async () => {
+    let seed = 7;
+    const rnd = (n: number) => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) % n;
+    const pieces = ['error', 'at', 'src/index.ts:42:7', '{"a":1}', '12345', '...', '漢字', '𝐀𝐁', 'ж'];
+    const gaps = [' ', '\n', '\n    ', '\t', '\u00a0', '\u3000', ' '.repeat(3_000), '\n' + ' '.repeat(5_000)];
+    for (let round = 0; round < 12; round++) {
+      const parts: string[] = [];
+      let size = 0;
+      while (size < 300_000) {
+        const part = pieces[rnd(pieces.length)]! + gaps[rnd(gaps.length)]!;
+        parts.push(part);
+        size += part.length;
+      }
+      const output = parts.join('');
+      const result = await applyTokenLimit(output, LIMIT, 'start');
+      expect(result.slice(result.indexOf('\n') + 1)).toBe(
+        sliceByTokens(output, -LIMIT).replace(/[\uD800-\uDFFF]/gu, '\uFFFD'),
+      );
+      const head = await applyTokenLimit(output, LIMIT, 'end');
+      expect(head.slice(0, head.lastIndexOf('\n'))).toBe(
+        sliceByTokens(output, 0, LIMIT).replace(/[\uD800-\uDFFF]/gu, '\uFFFD'),
+      );
+    }
+  });
+
+  it('execute_command keeps the final diagnostic behind trailing whitespace padding', async () => {
+    const stdout = 'x '.repeat(2_500) + '\nBUILD FAILED' + ' '.repeat(65_000);
+    const workspace = new Workspace({
+      sandbox: {
+        id: 'remote-like',
+        name: 'remote-like',
+        provider: 'remote-like',
+        status: 'running' as const,
+        executeCommand: async () => ({ success: false, exitCode: 1, stdout, stderr: '', executionTimeMs: 1 }),
+      },
+    });
+    const context = { workspace, writer: { custom: vi.fn() } } as unknown as ToolExecutionContext;
+    scanned.lengths = [];
+    const result = String(
+      await executeCommandTool.execute!({ command: 'make', args: [], timeout: null, cwd: null }, context),
+    );
+    expect(result).toContain('BUILD FAILED');
+    expect(result).toContain('[...output truncated');
+    expect(maxScanned()).toBeLessThanOrEqual(LIMIT * 32);
+  });
+
+  it.each(['start', 'end'] as const)(
+    'whitespace padding at the kept end does not crowd out the text behind it (from=%s)',
+    async from => {
+      const padding = ' '.repeat(200_000);
+      const output =
+        from === 'start' ? 'x '.repeat(5_000) + 'FINAL ERROR' + padding : padding + 'FIRST ERROR ' + 'x '.repeat(5_000);
+      scanned.lengths = [];
+      const result = await applyTokenLimit(output, LIMIT, from);
+      expect(maxScanned()).toBeLessThanOrEqual(LIMIT * 32);
+      const kept =
+        from === 'start' ? result.slice(result.indexOf('\n') + 1) : result.slice(0, result.lastIndexOf('\n'));
+      expect(kept).toContain(from === 'start' ? 'FINAL ERROR' : 'FIRST ERROR');
+      if (from === 'start') expect(output.endsWith(kept)).toBe(true);
+      else expect(output.startsWith(kept)).toBe(true);
+      // The cut through the dense text matches tokenx slicing the whole output.
+      expect(kept).toBe(from === 'start' ? sliceByTokens(output, -LIMIT) : sliceByTokens(output, 0, LIMIT));
+    },
+  );
+
   it('execute_command with a remote sandbox returning huge stdout does not stall the event loop', async () => {
     const stdout = sourceMapGrepOutput(8 * MB);
     const workspace = new Workspace({
