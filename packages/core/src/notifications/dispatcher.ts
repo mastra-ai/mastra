@@ -390,7 +390,11 @@ export async function dispatchDueNotifications({
     const actedBefore = acted();
     const pageSize = left + limit - actedBefore;
     const page = await storage.listDueNotifications({ now, limit: pageSize, ...(resourceId ? { resourceId } : {}) });
-    const due = page.filter(record => !seen.has(key(record)));
+    // `pageSize` reaches past the records this pass left due, so the page can hold
+    // more unread records than the budget that is left. Hand `dispatchRecords` no
+    // more than that budget, and mark only those read: `limit` bounds the records a
+    // pass delivers or fails, not the ones it leaves for the next pass.
+    const due = page.filter(record => !seen.has(key(record))).slice(0, limit - actedBefore);
     for (const record of due) seen.add(key(record));
     const departed = await dispatchRecords({ mastra, storage, now, due, result });
     // Only records that left the due list stop counting toward `left`; a record

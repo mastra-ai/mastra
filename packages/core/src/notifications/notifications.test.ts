@@ -787,6 +787,62 @@ describe('notification inbox', () => {
     });
   });
 
+  it('acts on no more than the limit when a failed record moves behind unread ones with the same due time', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const sendSignal = vi.fn((signal, target: { threadId: string }) => ({
+      accepted: Promise.resolve(
+        target.threadId === 'blocked-thread'
+          ? { action: 'blocked', reason: 'thread-blocked', runId: 'run-blocked' }
+          : { action: 'deliver', runId: 'run-1' },
+      ),
+      persisted: Promise.resolve(),
+      signal,
+    }));
+    // Another process's dispatcher delivers 'held-thread', so this one holds it.
+    const resolveNotificationDeliveryDecision = vi.fn(async ({ record }: { record: { threadId: string } }) => ({
+      action: 'deliver' as const,
+      hold: record.threadId === 'held-thread',
+    }));
+    const mastra = {
+      getAgentById: vi.fn(async () => ({ sendSignal, resolveNotificationDeliveryDecision })),
+    } as any;
+    const base = {
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      source: 'github',
+      kind: 'ci',
+      priority: 'high',
+    } as const;
+    // All four share one due time, so the due list broke the tie on `updatedAt`.
+    // Pin `createdAt` to make that order deterministic, then let the blocked record's
+    // failure write — which bumps `updatedAt` — push it behind the unread records.
+    // The pass must still act on no more than `limit` records.
+    const createdAt = new Date(now.getTime() - 60_000);
+    const records: Array<[string, string]> = [
+      ['blocked', 'blocked-thread'],
+      ['held', 'held-thread'],
+      ['c', 'c-thread'],
+      ['d', 'd-thread'],
+    ];
+    for (const [id, threadId] of records) {
+      await storage.createNotification({
+        ...base,
+        id,
+        threadId,
+        priority: 'high',
+        summary: id,
+        deliverAt: now,
+        createdAt,
+      });
+    }
+
+    const result = await dispatchDueNotifications({ mastra, storage, now, limit: 2 });
+
+    expect(result.failed.map(entry => entry.record.id)).toEqual(['blocked']);
+    expect(result.failed.length + result.delivered.length).toBeLessThanOrEqual(2);
+  });
+
   it('leaves a record dismissed during routing untouched instead of recording a failed attempt', async () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');
@@ -865,6 +921,15 @@ describe('notification inbox', () => {
         deliverAt: new Date(now.getTime() - 20_000),
       });
     }
+    // A later-due record the policy permits, so the pass only reaches it once its
+    // accounting pages past the records it left due.
+    await storage.createNotification({
+      ...base,
+      id: 'later',
+      threadId: 'later-thread',
+      summary: 'later',
+      deliverAt: new Date(now.getTime() - 10_000),
+    });
 
     // The loop must stop once a page holds only records it already read. Bound the
     // reads so a loop that re-reads the same page fails here instead of hanging.
@@ -876,8 +941,10 @@ describe('notification inbox', () => {
       return realListDue(input);
     };
 
-    await expect(dispatchDueNotifications({ mastra, storage, now, limit: 10 })).resolves.toBeDefined();
+    const result = await dispatchDueNotifications({ mastra, storage, now, limit: 10 });
+
     expect(pages).toBeLessThanOrEqual(10);
+    expect(result.delivered.map(record => record.id)).toContain('later');
   });
 
   it('starts a deferred delivery with the scopes it was sent with, queueing it when the active run holds others', async () => {
