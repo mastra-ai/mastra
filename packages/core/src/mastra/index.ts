@@ -1351,7 +1351,7 @@ export class Mastra<
                   return isProcessLocalScheduledRunId(rId);
                 };
                 if (isOwnedHere()) {
-                  if (topic === 'workflows' && !isOwnedHere(true)) {
+                  if (topic === 'workflows' && !isOwnedHere(true) && self.#workflowEventsReachOneWorker()) {
                     return Promise.resolve(self.getStorage()?.getStore('workflows')).then(store =>
                       target.publish(topic, event, { localOnly: !store?.supportsWorkflowStepGuards() }),
                     );
@@ -4352,7 +4352,8 @@ export class Mastra<
    * run-scoped registration always qualifies; an unscoped one does unless it
    * was registered `distributed`. A distributed workflow's `workflows` events
    * stay local on stores without atomic occurrence guards. Guarded stores
-   * allow workers to publish reclaimable continuations through the broker.
+   * allow workers to publish reclaimable continuations through the broker
+   * when it hands each event to one worker (`#workflowEventsReachOneWorker`).
    * Its `workflows-finish` events always cross, since
    * the process waiting for the result may not be the one that ran it.
    */
@@ -4361,6 +4362,17 @@ export class Mastra<
     if (this.#internalMastraWorkflows[`${id}:${runId}`]) return true;
     if (!this.#distributedInternalWorkflowIds.has(id)) return true;
     return topic === 'workflows' && !guarded && this.__hasLocalWorkflowExecution();
+  }
+
+  /**
+   * Whether a `workflows` event published to the broker is handled by one
+   * worker. Pull transports are read by the `OrchestrationWorker` in a
+   * consumer group. A push-only transport is subscribed without a group
+   * (`#wirePushWorkflowSubscription`), so every process with workers gets
+   * every event, and each of them would run the step.
+   */
+  #workflowEventsReachOneWorker(): boolean {
+    return (this.#pubsub.supportedModes ?? ['pull']).includes('pull');
   }
 
   /**

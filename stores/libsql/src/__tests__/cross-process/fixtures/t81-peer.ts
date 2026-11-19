@@ -2,14 +2,17 @@ import { createDurableAgent, createEventedAgent, getRunRegistryEntry } from '@ma
 import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
 
-import { LibSQLStore } from '../../../storage';
 import { runPeer } from '../peer-runtime';
 import { bootWorkers } from '../process-workers';
 import { createStepAgent, gate } from '../step-agent';
 import type { StepToolEvent } from '../step-agent';
+import { openXprocStore } from '../xproc-store';
+import type { XprocStore } from '../xproc-store';
 
 export interface T81PeerArgs {
   engine: 'durable' | 'evented';
+  /** Defaults to the env's LibSQL file. */
+  store?: XprocStore;
   agentId: string;
   runId: string;
   threadId: string;
@@ -25,7 +28,11 @@ export interface T81PeerResult {
 
 runPeer<T81PeerArgs>(async peer => {
   const { engine, agentId, runId, threadId, resourceId } = peer.args;
-  const storage = new LibSQLStore({ id: `t81-original-${process.pid}`, url: peer.dbUrl });
+  const storage = await openXprocStore(
+    peer.args.store ?? { kind: 'libsql' },
+    `t81-original-${process.pid}`,
+    peer.dbUrl,
+  );
   const release = gate();
   const committed = gate();
   const toolEvents: StepToolEvent[] = [];
