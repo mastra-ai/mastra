@@ -1127,8 +1127,10 @@ function writtenBody(args: PageInput, page: KnowledgePage, maxTokens: number, ca
   if (args.body !== undefined && estimateTokenCount(stored) > maxTokens) {
     throw new Error(
       `This page's body is ${stored.length} characters, more than one ${read} returns, and a body write without a range replaces all of it. ` +
-        'Write back only the lines you read, with the range that read returned and its expectedVersion; ' +
-        'read other parts with from, section or match and write each back with its own range.',
+        (canRead
+          ? 'Write back only the lines you read, with the range that read returned and its expectedVersion; ' +
+            'read other parts with from, section or match and write each back with its own range.'
+          : 'Without a read there is no range to write it back with, so leave this page unchanged.'),
     );
   }
   return args.body;

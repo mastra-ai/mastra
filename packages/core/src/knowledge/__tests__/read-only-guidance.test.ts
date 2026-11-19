@@ -109,10 +109,69 @@ describe('Knowledge guidance for an agent without read tools', () => {
     const { system, registered, named } = await probe('pinned-only', false);
     expect(registered).toEqual(['knowledge_pin']);
     expect(system).toContain(
-      'use and cite the body as it is. This pinned page is an excerpt. Use it as context, but do not treat it as the full page or use it to replace the page body.\n',
+      'use and cite the body as it is. An entry whose text ends in the truncation marker is an excerpt: use it as context, but do not treat it as the full page or use it to replace the page body.\n',
     );
     expect(system).not.toMatch(EDIT_GUIDANCE);
     expect(named).toEqual(['knowledge_pin']);
+  });
+
+  it('makes the pinned-only excerpt guidance conditional on the truncation marker', async () => {
+    const shortStore = new InMemoryStore({ id: 'pinned-only-short' });
+    const writer = new Knowledge({
+      storage: shortStore,
+      scopes: knowledgeMemoryScopes(),
+      tools: true,
+      pinnedContext: true,
+    });
+    const requestContext = new RequestContext();
+    setRunAgentScopes(requestContext, ['org:acme']);
+    const context = { requestContext, agent: { agentId: 'seed', resourceId: 'u-1', threadId: 't-1' } } as never;
+    const seeded = writer.createTools();
+    await seeded.knowledge_page!.execute!(
+      { op: 'write', scope: 'org:acme', name: 'Tone', body: 'Be brief.' } as never,
+      context,
+    );
+    await seeded.knowledge_pin!.execute!(
+      { op: 'pin', page: 'Tone', kind: 'page', audience: ['org:acme'] } as never,
+      context,
+    );
+    let prompt: any[] | undefined;
+    const agent = new Agent({
+      id: 'pinned-only-short',
+      name: 'pinned-only-short',
+      instructions: 'You answer questions.',
+      model: new MockLanguageModelV2({
+        doGenerate: async args => {
+          prompt ??= args.prompt as any[];
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            content: [{ type: 'text' as const, text: 'Hi.' }],
+            warnings: [],
+          };
+        },
+      }),
+      memory: new MockMemory(),
+      knowledge: new Knowledge({
+        storage: shortStore,
+        scopes: knowledgeMemoryScopes(),
+        tools: false,
+        pinnedContext: true,
+      }),
+      scopes: ['org:acme'],
+    });
+    await agent.generate('Hi', { memory: { thread: 'thread-1', resource: 'user-1' } });
+    const shortText = JSON.stringify(prompt);
+    expect(shortText).toContain('Be brief.');
+    expect(shortText).not.toContain(PIN_EXCERPT_MARKER);
+    expect(shortText).not.toContain('This pinned page is an excerpt');
+    expect(shortText).toContain('An entry whose text ends in the truncation marker is an excerpt');
+
+    const cut = await probe('pinned-only-cut', false, 'page');
+    expect(cut.promptText).toContain(PIN_EXCERPT_MARKER);
+    expect(cut.system).not.toContain('This pinned page is an excerpt');
+    expect(cut.system).toContain('An entry whose text ends in the truncation marker is an excerpt');
   });
 
   it('delivers cut-off page, cut-off listing and overflow pins without naming read tools when read is off', async () => {
@@ -215,6 +274,39 @@ describe('Knowledge guidance for an agent without write tools', () => {
       withWrite.replace(' To edit, read that part first: this view has no range to write back.', ''),
     );
     expect(readOnly).not.toMatch(EDIT_GUIDANCE);
+  });
+
+  it('gives a write-only agent a long-body refusal that names no way to read', async () => {
+    const storage = new InMemoryStore();
+    const writer = new Knowledge({ storage, scopes: knowledgeMemoryScopes(), tools: true });
+    await writer.upsertPage({
+      scope: 'org:acme',
+      path: 'long',
+      name: 'Long',
+      body: 'Lorem ipsum dolor sit amet. '.repeat(5_000),
+    });
+    const refusal = async (read: boolean) => {
+      const requestContext = new RequestContext();
+      setRunAgentScopes(requestContext, ['org:acme']);
+      const knowledge = new Knowledge({ storage, scopes: knowledgeMemoryScopes(), tools: { read, write: true } });
+      const page = knowledge.createTools().knowledge_page!;
+      const result = page.execute!(
+        { op: 'write', page: 'org:acme#long', body: 'New.' } as never,
+        {
+          requestContext,
+          agent: { agentId: 'a' },
+        } as never,
+      ) as Promise<unknown>;
+      return result.then(
+        value => JSON.stringify(value),
+        (error: Error) => error.message,
+      );
+    };
+    expect(await refusal(true)).toContain('read other parts with from, section or match');
+    const writeOnly = await refusal(false);
+    expect(writeOnly).toContain('more than one read returns');
+    expect(writeOnly).not.toMatch(/from, section or match|knowledge_read|read other parts/);
+    expect(writeOnly).toContain('leave this page unchanged');
   });
 
   it('sends a read-only agent with pinned context no edit guidance in its prompt', async () => {

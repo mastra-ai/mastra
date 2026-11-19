@@ -123,7 +123,7 @@ export interface PinnedStateProcessorDeps {
   principalsKey(context: KnowledgeRunContext): string;
   /** The pins the run receives. */
   readPins(context: KnowledgeRunContext): Promise<PinEntry[]>;
-  /** Whether the agent has `knowledge_search` and `knowledge_read`; when `false` the guidance names no read tool. Defaults to `true`. */
+  /** Whether the agent has `knowledge_search`, `knowledge_read` and `knowledge_list`; when `false` the guidance, the overflow suffix and pin descriptions name no read tool. Defaults to `true`. */
   read?: boolean;
   /** Whether the agent has `knowledge_page`; when `false` the guidance leaves out how to edit a pin. Defaults to `true`. */
   write?: boolean;
@@ -144,7 +144,7 @@ export class PinnedStateProcessor implements Processor<typeof PINNED_KNOWLEDGE_S
     if (this.deps.read === false) {
       return write
         ? ' To edit it, write from that body and pass that ref and version to knowledge_page as page and expectedVersion. A write replaces the whole body, so never write one built from an entry whose text ends in the truncation marker.'
-        : ' This pinned page is an excerpt. Use it as context, but do not treat it as the full page or use it to replace the page body.';
+        : ' An entry whose text ends in the truncation marker is an excerpt: use it as context, but do not treat it as the full page or use it to replace the page body.';
     }
     return ` Do not knowledge_search or knowledge_read a pinned page to confirm it.${write ? ' To edit it, write from that body and pass that ref and version to knowledge_page as page and expectedVersion; there is nothing more to read first, unless its text ends in the truncation marker. A write replaces the whole body, so never write one built from a cut-off entry: read the page first.' : ''} Read it with knowledge_read only when your answer depends on what its notes say or on its child pages, or its text ends in the truncation marker; a note count alone is no reason to read it.`;
   }
