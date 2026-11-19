@@ -19,7 +19,7 @@
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { InMemoryServerCache } from '../../../cache/inmemory';
 import { CachingPubSub } from '../../../events/caching-pubsub';
@@ -221,11 +221,14 @@ describe('DurableAgent.observe() closeOnSuspend (#29692)', () => {
 
     // A reader replaying the run from its start must not stop at a suspension
     // the run has moved past: it is no longer where the run is parked.
-    const observed = await durableAgent.observe(runId, { closeOnSuspend: true });
+    const onSuspended = vi.fn();
+    const observed = await durableAgent.observe(runId, { closeOnSuspend: true, onSuspended });
     const { outcome, chunks } = await collectWithin(observed.fullStream, 2_000);
 
     expect(outcome).toBe('done');
     expect(chunks.some(chunk => chunk.type === 'text-delta' && chunk.payload?.text === 'approved and done')).toBe(true);
+    // The past suspension is still delivered, as it is to a default observer; it just does not close the stream.
+    expect(onSuspended).toHaveBeenCalledTimes(1);
     observed.detach();
   }, 30_000);
 

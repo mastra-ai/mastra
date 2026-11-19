@@ -369,6 +369,11 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   rereadMinGeneration?: () => Promise<number | undefined>;
   /** Reject events in uncheckpointed tails superseded before this reader attached. */
   keepReplayEvent?: (event: AgentStreamEvent) => boolean | Promise<boolean>;
+  /**
+   * With `closeOnSuspend`, whether this SUSPENDED event ends the stream. A
+   * suspension that does not still runs `onSuspended` and the stream stays open.
+   */
+  closesOnSuspend?: (event: AgentStreamEvent) => boolean;
   /** Refresh takeover ranges after replay attachment and before delivering cached events. */
   refreshReplayFilter?: () => Promise<unknown>;
   /**
@@ -510,6 +515,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     minGeneration,
     rereadMinGeneration,
     keepReplayEvent,
+    closesOnSuspend,
     refreshReplayFilter,
     idleTimeoutMs,
     isAlive,
@@ -1031,7 +1037,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           // keep streaming chunks (the watchdog stays armed; a suspended-but-live
           // run reads as attachable via isAlive). `generate()`/`resumeGenerate()`
           // opt into closing so `getFullOutput()` can resolve.
-          if (closeOnSuspend) {
+          if (closeOnSuspend && (closesOnSuspend?.(streamEvent) ?? true)) {
             // Mark terminal BEFORE awaiting onSuspended: handleEvent re-armed the
             // watchdog at the top, and a slow callback (> idleTimeoutMs) would
             // otherwise let it fire and emit a spurious idle error on an

@@ -5543,28 +5543,35 @@ export class DurableAgent<
    * The floor only adds protection, so a failed read must not fail the reconnect;
    * the reader reads the claim again before an event can end its stream.
    *
-   * A reader that closes on suspension (`closeOnSuspend`) additionally drops
-   * suspensions the run has already moved past, so a replay from the start of a
-   * run cannot end the stream at an approval that was given long ago.
+   * A reader that closes on suspension (`closeOnSuspend`) does not close on a
+   * suspension the run has already moved past, so a replay from the start of a
+   * run cannot end the stream at an approval that was given long ago. The event
+   * is still delivered, so `onSuspended` fires as it does without the option.
    */
   async #readReplayFloor(
     runId: string,
     offset: number | undefined,
     closeOnSuspend = false,
   ): Promise<
-    Pick<DurableStreamAdapterOptions, 'minGeneration' | 'rereadMinGeneration' | 'keepReplayEvent'> & {
+    Pick<
+      DurableStreamAdapterOptions,
+      'minGeneration' | 'rereadMinGeneration' | 'keepReplayEvent' | 'closesOnSuspend'
+    > & {
       refreshReplayFilter?: () => Promise<unknown>;
     }
   > {
     try {
       const history = (await this.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)) as AgentStreamEvent[];
+      // Suspensions the run has moved past stay in the stream; they only stop closing it.
+      const pastSuspensions = new WeakSet<AgentStreamEvent>();
+      const closesOnSuspend = closeOnSuspend ? (event: AgentStreamEvent) => !pastSuspensions.has(event) : undefined;
       const buildFilter = (entries: AgentStreamEvent[]): ((event: AgentStreamEvent) => boolean) => {
         const superseded = createSupersededEventFilter(entries);
         if (!closeOnSuspend) return superseded;
         const currentSuspension = createCurrentSuspensionFilter(entries);
         return event => {
-          const keep = currentSuspension(event);
-          return superseded(event) && keep;
+          if (!currentSuspension(event)) pastSuspensions.add(event);
+          return superseded(event);
         };
       };
       const initialFilter = buildFilter(history);
@@ -5584,7 +5591,7 @@ export class DurableAgent<
         if (currentFilter) return currentFilter(event);
         return refreshReplayFilter().then(filter => filter(event));
       };
-      if (!offset) return { keepReplayEvent, refreshReplayFilter };
+      if (!offset) return { keepReplayEvent, closesOnSuspend, refreshReplayFilter };
       const skipped = history.slice(0, offset);
       if (skipped.length === offset) {
         let floor: number | undefined;
@@ -5592,9 +5599,14 @@ export class DurableAgent<
           const generation = event.generation;
           if (typeof generation === 'number' && (floor === undefined || generation > floor)) floor = generation;
         }
-        return { minGeneration: floor, keepReplayEvent, refreshReplayFilter };
+        return { minGeneration: floor, keepReplayEvent, closesOnSuspend, refreshReplayFilter };
       }
-      return { minGeneration: await readRunGeneration(this.#mastra, runId), keepReplayEvent, refreshReplayFilter };
+      return {
+        minGeneration: await readRunGeneration(this.#mastra, runId),
+        keepReplayEvent,
+        closesOnSuspend,
+        refreshReplayFilter,
+      };
     } catch (error) {
       this.logger.warn(`[DurableAgent] Couldn't read the claim of run ${runId}; observing it without a floor`, {
         error,
