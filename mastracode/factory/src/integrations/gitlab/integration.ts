@@ -24,6 +24,12 @@ import type { IntegrationStorageHandle } from '../../storage/domains/integration
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import {
+  addReconcileSummary,
+  emptyIntakeRefreshSummary,
+  scopeIntegrationContextToProject,
+} from '../intake-refresh.js';
+import type { IntakeRefreshScope, IntakeRefreshSummary } from '../intake-refresh.js';
 import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
 import { buildGitLabAgentTools } from './agent-tools.js';
 import {
@@ -369,7 +375,11 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
     return undefined;
   }
 
+  /** The context `workers()` was given, which a board refresh runs with. */
+  protected workerContext: IntegrationContext | undefined;
+
   workers(ctx: IntegrationContext): MastraWorker[] {
+    this.workerContext = ctx;
     const reconcile = attachGitLabReconciler(this, ctx);
     if (!reconcile) return [];
     const intervalMs = gitlabReconciliationInterval();
@@ -381,6 +391,18 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
       }),
     ];
   }
+
+  /**
+   * Runs the merge request, issue and discovery sweeps for one Factory project, now.
+   * Each refresh lists afresh: what an earlier one settled may since have lost its card.
+   */
+  async refreshIntake(scope: IntakeRefreshScope): Promise<IntakeRefreshSummary | null> {
+    if (!this.workerContext) return null;
+    const scoped = await scopeIntegrationContextToProject(this.workerContext, scope);
+    const reconcile = scoped && attachGitLabReconciler(this, scoped.context);
+    return reconcile ? addReconcileSummary(emptyIntakeRefreshSummary(), await reconcile()) : null;
+  }
+
   routes(ctx: IntegrationContext): ApiRoute[] {
     const ingestFactoryEvent = attachGitLabRules(this, ctx);
     this.#ingestFactoryEvent = ingestFactoryEvent;

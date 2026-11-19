@@ -4,6 +4,8 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Intake, IntakeSource } from '../../../capabilities/intake.js';
 import { loose } from '../../../routes/route.js';
 import type { IntegrationContext } from '../../base.js';
+import { addReconcileSummary, emptyIntakeRefreshSummary } from '../../intake-refresh.js';
+import type { IntakeRefreshSummary } from '../../intake-refresh.js';
 import type { IssueReconciler } from '../../issue-reconciler.js';
 import { attachVantaRules } from '../../vanta/rules.js';
 import {
@@ -139,12 +141,26 @@ export class PlatformVantaIntegration extends PlatformConnectIntegration {
   }
 
   protected override reconcile(ctx: IntegrationContext): IssueReconciler | null {
+    return this.#sync(ctx, ctx);
+  }
+
+  /** A refresh syncs only the scoped project, but still attributes connections against every project. */
+  protected override async refreshProject(
+    scoped: IntegrationContext,
+    full: IntegrationContext,
+  ): Promise<IntakeRefreshSummary | null> {
+    const sync = this.#sync(scoped, full);
+    return sync ? addReconcileSummary(emptyIntakeRefreshSummary(), await sync()) : null;
+  }
+
+  /** Syncs `ctx`'s projects; `owners` lists every project, to attribute resource-scoped connections. */
+  #sync(ctx: IntegrationContext, owners: IntegrationContext): IssueReconciler | null {
     const ingest = attachVantaRules(ctx);
     if (!ingest) return null;
     const { projects, intake } = ctx.storage;
     return createVantaSync({
       connected: async () => (await this.activeConnections()).length > 0,
-      listVulnerabilities: async orgId => this.listVulnerabilitiesForOrg(orgId, await projects.listAll()),
+      listVulnerabilities: async orgId => this.listVulnerabilitiesForOrg(orgId, await owners.storage.projects.listAll()),
       listProjects: () => projects.listAll(),
       intakeEnabled: async orgId =>
         vantaVulnerabilitiesSelected((await intake.getConfig({ orgId, integrationIds: [this.id] }))[this.id]),

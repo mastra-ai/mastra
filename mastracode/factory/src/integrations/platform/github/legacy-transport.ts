@@ -51,17 +51,6 @@ export type LegacyInstallationRepository = {
   pushedAt?: string | null;
 };
 
-/** Where a repository's legacy event log is read from. */
-export type LegacyGithubEventCursor = { afterEventId: string } | { afterTimestamp: number };
-
-/** One legacy GitHub App webhook in a repository's platform event log. Its id is a Redis stream id. */
-export type LegacyGithubEventLogEntry = {
-  id: string;
-  deliveryId: string;
-  event: string;
-  payload: unknown;
-};
-
 /**
  * Today's platform GitHub routes (`/v1/server/github*`), unchanged: every
  * request, header and response is what Platform GitHub sent and received
@@ -103,21 +92,6 @@ export class LegacyGithubTransport implements GithubTransport {
       `${LEGACY_API_PREFIX}/github-app/installations/${installationId}/repositories${query}`,
     );
     return result.repositories;
-  }
-
-  /**
-   * One page of a repository's legacy GitHub App webhooks, oldest first, after
-   * an event id or, for a repository not read before, after a time.
-   */
-  async listRepositoryEvents(
-    repositoryId: number,
-    cursor: LegacyGithubEventCursor,
-    limit: number,
-  ): Promise<{ events: LegacyGithubEventLogEntry[]; nextCursor: string | null }> {
-    const query = new URLSearchParams({ limit: String(limit) });
-    if ('afterEventId' in cursor) query.set('afterEventId', cursor.afterEventId);
-    else query.set('afterTimestamp', String(cursor.afterTimestamp));
-    return this.#client.request('GET', `${LEGACY_API_PREFIX}/github-app/repositories/${repositoryId}/events?${query}`);
   }
 
   /** A token for at most ten named repositories of one installation. */

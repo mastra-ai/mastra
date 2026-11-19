@@ -405,8 +405,6 @@ describe('GitHub transport parity', () => {
         ![
           'listInstallations',
           'listInstallationRepositories',
-          // Legacy-only: switched orgs' events come through the Connect event poller.
-          'listRepositoryEvents',
           'mintRepositoryToken',
           'installUrl',
           'authenticateUrl',

@@ -13,7 +13,6 @@ import type {
   ResolvedIntakeDispatch,
 } from '../../../capabilities/intake.js';
 import type { IntegrationContext } from '../../base.js';
-import { DEFAULT_ISSUE_RECONCILE_INTERVAL_MS } from '../../issue-reconcile-worker.js';
 import type { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
 import type { IssueReconcileSummary, IssueReconciler } from '../../issue-reconciler.js';
 import { DEFAULT_VANTA_SYNC_INTERVAL_MS } from '../../vanta/sync.js';
@@ -22,7 +21,11 @@ import { PlatformJiraIntegration } from '../jira/integration.js';
 import { PlatformVantaIntegration } from '../vanta/integration.js';
 import type { PlatformConnection } from './connect-binding.js';
 import { PlatformIntakeCapability } from './intake.js';
-import { DEFAULT_PLATFORM_RECONCILE_INTERVAL_MS, PlatformConnectIntegration } from './integration.js';
+import {
+  DEFAULT_PLATFORM_RECONCILE_INTERVAL_MS,
+  PLATFORM_DISCOVERY_MIN_GAP_MS,
+  PlatformConnectIntegration,
+} from './integration.js';
 import type { PlatformConnectIntegrationOptions } from './integration.js';
 import { problem, startFakePlatform } from './test-utils.js';
 import type { FakePlatform } from './test-utils.js';
@@ -110,16 +113,40 @@ describe('PlatformConnectIntegration reconcile worker', () => {
     expect(integration.reconciler).toHaveBeenCalledTimes(2);
   });
 
+  it('reconciles at most once a minute for events naming items with no card, running the last one late', async () => {
+    vi.useFakeTimers();
+    const integration = new TestIntegration();
+    await startWorker(integration);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(integration.reconciler).toHaveBeenCalledTimes(1);
+
+    integration.requestDiscovery();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(integration.reconciler).toHaveBeenCalledTimes(2);
+
+    // A burst inside the minute costs one more reconcile, at its end.
+    integration.requestDiscovery();
+    integration.requestDiscovery();
+    await vi.advanceTimersByTimeAsync(PLATFORM_DISCOVERY_MIN_GAP_MS - 1);
+    expect(integration.reconciler).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    await vi.waitFor(() => expect(integration.reconciler).toHaveBeenCalledTimes(3));
+
+    await vi.advanceTimersByTimeAsync(PLATFORM_DISCOVERY_MIN_GAP_MS);
+    expect(integration.reconciler).toHaveBeenCalledTimes(3);
+  });
+
   it('has no worker when the integration has nothing to reconcile', () => {
     expect(new TestIntegration({ reconciles: false }).workers(CTX)).toEqual([]);
   });
 
   it('honors the integrations’ own defaults and their operator overrides', () => {
+    // Jira and incident.io get their changes as events, so they only reconcile hourly.
     expect(new PlatformJiraIntegration({ connect: OFFLINE }).reconcileIntervalMs).toBe(
-      DEFAULT_ISSUE_RECONCILE_INTERVAL_MS,
+      DEFAULT_PLATFORM_RECONCILE_INTERVAL_MS,
     );
     expect(new PlatformIncidentioIntegration({ connect: OFFLINE }).reconcileIntervalMs).toBe(
-      DEFAULT_ISSUE_RECONCILE_INTERVAL_MS,
+      DEFAULT_PLATFORM_RECONCILE_INTERVAL_MS,
     );
     expect(new PlatformVantaIntegration({ connect: OFFLINE }).reconcileIntervalMs).toBe(DEFAULT_VANTA_SYNC_INTERVAL_MS);
 

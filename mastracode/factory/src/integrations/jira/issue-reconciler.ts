@@ -3,8 +3,8 @@ import { toBoardSource } from '../../boards/project-boards.js';
 import type { Intake, IntakeIssue } from '../../capabilities/intake.js';
 import type { IntegrationContext } from '../base.js';
 import { withIntakeDiscovery } from '../intake-discovery.js';
-import { createIssueReconciler } from '../issue-reconciler.js';
-import type { IssueReconciler } from '../issue-reconciler.js';
+import { createIssueReconcileOne, createIssueReconciler } from '../issue-reconciler.js';
+import type { IssueReconcileOne, IssueReconciler, IssueReconcilerOptions } from '../issue-reconciler.js';
 import { scopeJiraSourcesToProject } from './binding-scope.js';
 import type { JiraEventRules } from './default-rules.js';
 import type { JiraIntakeScope } from './intake-jql.js';
@@ -38,15 +38,10 @@ type ListActiveIssues = (
   scopes: JiraIntakeScope[],
 ) => Promise<{ issues: Array<IntakeIssue & { externalId?: string; site?: string }>; nextCursor: string | null }>;
 
-/**
- * One Jira sweep: refresh carded issues (metadata, closes), then list what
- * every project's board shows so issues nobody has carded yet get their card.
- * Jira sends Factory no events, so this is the only first-sight path.
- */
-export function attachJiraIssueReconciler(
-  jira: { intake: Intake; rules: JiraEventRules; listActiveIssues: ListActiveIssues },
+function reconcilerOptions(
+  jira: { intake: Intake; rules: JiraEventRules },
   context: IntegrationContext,
-): JiraIssueReconciler | undefined {
+): { options: IssueReconcilerOptions; rules: JiraRules } | undefined {
   if (!context.runtime || !jira.intake.resolveIntakeDispatch) return undefined;
   const boards = context.runtime.boards;
 
@@ -58,7 +53,7 @@ export function attachJiraIssueReconciler(
     jiraRules: jira.rules,
   });
 
-  const reconcile = createIssueReconciler({
+  const options: IssueReconcilerOptions = {
     integrationId: 'jira',
     intake: jira.intake,
     projects: context.storage.projects,
@@ -90,9 +85,22 @@ export function attachJiraIssueReconciler(
         issues: [issueToIngress(item.externalSource?.externalId ?? issue.id, issue)],
       });
     },
-  });
+  };
+  return { options, rules };
+}
 
-  return withIntakeDiscovery(reconcile, {
+/**
+ * One Jira sweep: refresh carded issues (metadata, closes), then list what
+ * every project's board shows so issues no event carded yet get their card.
+ */
+export function attachJiraIssueReconciler(
+  jira: { intake: Intake; rules: JiraEventRules; listActiveIssues: ListActiveIssues },
+  context: IntegrationContext,
+): JiraIssueReconciler | undefined {
+  const resolved = reconcilerOptions(jira, context);
+  if (!resolved) return undefined;
+  const { options, rules } = resolved;
+  return withIntakeDiscovery(createIssueReconciler(options), {
     integrationId: 'jira',
     intake: context.storage.intake,
     projects: context.storage.projects,
@@ -117,4 +125,13 @@ export function attachJiraIssueReconciler(
     },
     ingest: input => rules.ingest(input),
   });
+}
+
+/** Reconciles just the cards an event names, through the same path as the full sweep. */
+export function attachJiraIssueReconcileOne(
+  jira: { intake: Intake; rules: JiraEventRules },
+  context: IntegrationContext,
+): IssueReconcileOne | undefined {
+  const resolved = reconcilerOptions(jira, context);
+  return resolved ? createIssueReconcileOne(resolved.options) : undefined;
 }

@@ -175,6 +175,59 @@ describe('PlatformJiraIntegration discovery', () => {
     });
   });
 
+  it("refreshes one Factory project's Jira cards now, leaving the org's other projects alone", async () => {
+    const seeded = await createFactoryStorageForTests();
+    const refreshed = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Refreshed' } });
+    const other = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Other' } });
+    const reference = encodeIssueReference({ connectionId: 'a1b_acme', issueId: 'ENG-42', projectId: '1' });
+    for (const project of [refreshed, other]) {
+      await seeded.workItems.upsert({
+        orgId: project.orgId,
+        userId: project.createdBy,
+        factoryProjectId: project.id,
+        input: {
+          externalSource: {
+            integrationId: 'jira',
+            type: 'issue',
+            externalId: reference,
+            url: 'https://acme.atlassian.net/browse/ENG-42',
+          },
+          title: 'Stale Jira issue',
+          stages: ['planning'],
+          sessions: {},
+          metadata: { stateType: 'started', labels: ['stale'] },
+        },
+      });
+    }
+    const fetchMock = stubRoutes([
+      ['GET', `a1b_acme/proxy/ex/jira/${ACME_CLOUD_ID}/rest/api/3/issue/ENG-42?`, () => json(issue())],
+      [
+        'GET',
+        `a1b_acme/proxy/ex/jira/${ACME_CLOUD_ID}/rest/api/3/issue/ENG-42/comment`,
+        () => json({ comments: [], startAt: 0, maxResults: 50, total: 0 }),
+      ],
+      ['GET', '/v2/connections', () => json({ connections: [] })],
+    ]);
+    const jira = integration();
+    const scope = { orgId: 'org-1', factoryProjectId: refreshed.id };
+    await expect(jira.refreshIntake(scope)).resolves.toBeNull();
+
+    jira.workers({
+      storage: { projects: seeded.projects, intake: seeded.intake, generic: seeded.integrations },
+      runtime: { configVersion: 'test-v1', workItems: seeded.workItems, boards: createBoardRegistry() },
+    } as never);
+
+    await expect(jira.refreshIntake(scope)).resolves.toMatchObject({ checked: 1, updated: 1, failed: 0 });
+    const staleness = async (factoryProjectId: string) => {
+      const [item] = await seeded.workItems.list({ orgId: 'org-1', factoryProjectId });
+      return item?.workItem.metadata?.labels;
+    };
+    await expect(staleness(refreshed.id)).resolves.toEqual(['bug']);
+    await expect(staleness(other.id)).resolves.toEqual(['stale']);
+    await expect(jira.refreshIntake({ orgId: 'org-2', factoryProjectId: refreshed.id })).resolves.toBeNull();
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/issue/ENG-42?'))).toHaveLength(1);
+  });
+
   it('constructs without a connection ID and logs initialization without connection details', async () => {
     const infoLog = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     const seed = await createFactoryStorageForTests();

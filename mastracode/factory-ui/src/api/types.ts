@@ -26,6 +26,7 @@ export type IntakeOrderResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeO
 export type IntakeNotRoutedResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeNotRoutedList.responseSchema>;
 export type IntakeDecisionInfo = IntakeNotRoutedResponse['notRouted'][number];
 export type IntakeRouteAgainResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeRouteAgain.responseSchema>;
+export type IntakeRefreshResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeRefresh.responseSchema>;
 export type IntakeSkippedResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeSkippedList.responseSchema>;
 export type IntakeRouteInput = z.input<typeof FACTORY_ROUTE_CONTRACTS.intakeRouteCreate.bodySchema>;
 export type IntakeRoutePatch = z.input<typeof FACTORY_ROUTE_CONTRACTS.intakeRouteUpdate.bodySchema>;

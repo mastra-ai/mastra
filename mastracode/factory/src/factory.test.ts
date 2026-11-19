@@ -3230,39 +3230,53 @@ describe('MastraFactory.prepare integrations', () => {
     expect(args).not.toHaveProperty('workers');
   });
 
-  it('runs one Platform Connect event poller, routing to the Platform integrations that read event logs', async () => {
+  it('runs one Platform events worker, routing to the Platform integrations that take events', async () => {
     vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
     vi.stubEnv('MASTRA_PROJECT_ID', 'proj_factory');
     onTestFinished(() => vi.unstubAllEnvs());
-    const args = await new MastraFactory({ secretEncryption, storage: fakeStorage() }).prepare();
+    const factory = new MastraFactory({ secretEncryption, storage: fakeStorage() });
+    const args = await factory.prepare();
 
     const names = (args.workers ?? []).map(worker => worker.name);
-    expect(names.filter(name => name === 'platform-connect-event-poller')).toHaveLength(1);
+    expect(names.filter(name => name === 'platform-events')).toHaveLength(1);
     expect(names).not.toContain('platform-gitlab-events');
-    // Linear's events come through the shared poller; no Linear poller of its own.
+    // Linear's and GitHub's events come through the shared worker; no poller of their own.
     expect(names.filter(name => name.startsWith('platform-linear'))).toEqual([]);
-    // Switched orgs' factory-github events share it too; legacy GitHub App events keep their own poller.
-    expect(names.filter(name => name === 'platform-github-events')).toHaveLength(1);
-    const poller = args.workers!.find(worker => worker.name === 'platform-connect-event-poller') as unknown as {
+    expect(names).not.toContain('platform-github-events');
+    const events = args.workers!.find(worker => worker.name === 'platform-events') as unknown as {
       diagnostics(): { integrations: string[] };
     };
-    expect(poller.diagnostics().integrations.sort()).toEqual(['github', 'gitlab', 'linear']);
+    expect(events.diagnostics().integrations.sort()).toEqual(['github', 'gitlab', 'incidentio', 'jira', 'linear']);
   });
 
-  it('runs no Platform Connect event poller when no installed integration reads event logs', async () => {
+  it('runs no Platform events worker, and says why, when the deployment has no project id', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    vi.stubEnv('MASTRA_PROJECT_ID', '');
+    onTestFinished(() => vi.unstubAllEnvs());
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    const args = await new MastraFactory({ secretEncryption, storage: fakeStorage() }).prepare();
+
+    expect((args.workers ?? []).map(worker => worker.name)).not.toContain('platform-events');
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('MASTRA_PROJECT_ID is missing, so Platform integrations receive no events'),
+    );
+  });
+
+  it('opens no Platform events stream when no installed integration takes events', async () => {
     vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
     vi.stubEnv('MASTRA_PROJECT_ID', 'proj_factory');
     onTestFinished(() => vi.unstubAllEnvs());
-    // Explicit integrations fill every Platform slot but Vanta, which has no events.
-    const args = await new MastraFactory({
+    // Explicit integrations fill every Platform slot but Vanta, which has no event source.
+    const factory = new MastraFactory({
       secretEncryption,
       storage: fakeStorage(),
       integrations: ['github', 'incidentio', 'jira', 'gitlab', 'linear'].map(id => fakeIntegration({ id })),
-    }).prepare();
+    });
+    const args = await factory.prepare();
 
-    const names = (args.workers ?? []).map(worker => worker.name);
-    expect(names).not.toContain('platform-connect-event-poller');
-    expect(names).toContain('vanta-issue-reconcile');
+    expect((args.workers ?? []).map(worker => worker.name)).not.toContain('platform-events');
+    expect((args.workers ?? []).map(worker => worker.name)).toContain('vanta-issue-reconcile');
   });
 
   it('omits the workers option when no integration contributes workers', async () => {
