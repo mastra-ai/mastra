@@ -159,6 +159,44 @@ function formatSeconds(seconds: number): string {
   return rest ? `${minutes}m ${rest}s` : `${minutes}m`;
 }
 
+type OutputSink = (type: 'data-sandbox-stdout' | 'data-sandbox-stderr', data: string) => void;
+
+interface ExitWait {
+  exited: ReturnType<ProcessHandle['wait']>;
+  sinks: Set<OutputSink>;
+  abort: AbortController;
+}
+
+/**
+ * One wait per process, shared by every read of it. A handle keeps a wait's callbacks until the
+ * process exits, so a wait per read would leave one more set behind each time a read ran out.
+ */
+const exitWaits = new WeakMap<ProcessHandle, ExitWait>();
+
+function exitWaitFor(handle: ProcessHandle): ExitWait {
+  const existing = exitWaits.get(handle);
+  if (existing) return existing;
+  const sinks = new Set<OutputSink>();
+  const abort = new AbortController();
+  const exited = handle.wait({
+    abortSignal: abort.signal,
+    onStdout: data => {
+      for (const sink of sinks) sink('data-sandbox-stdout', data);
+    },
+    onStderr: data => {
+      for (const sink of sinks) sink('data-sandbox-stderr', data);
+    },
+  });
+  const wait = { exited, sinks, abort };
+  exitWaits.set(handle, wait);
+  // Settled either way, the wait is over; a failure is reported to whichever read is waiting.
+  const forget = () => {
+    if (exitWaits.get(handle) === wait) exitWaits.delete(handle);
+  };
+  exited.then(forget, forget);
+  return wait;
+}
+
 /**
  * Wait for a process to exit, for at most `ms`. Returns undefined when the wait ran out
  * first; the process is left running. Aborting `abortSignal` during the wait kills the process.
@@ -167,36 +205,25 @@ async function waitForExit(
   handle: ProcessHandle,
   ms: number,
   abortSignal: AbortSignal | undefined,
-  onOutput: (type: 'data-sandbox-stdout' | 'data-sandbox-stderr', data: string) => void,
+  onOutput: OutputSink,
 ) {
-  let waiting = true;
+  const { exited, sinks, abort } = exitWaitFor(handle);
   let timer: Parameters<typeof clearTimeout>[0];
-  // The handle keeps this wait until the process exits. Forward the run's abort only while
-  // the tool is waiting, so an abort after the wait ran out leaves the process alone.
-  const whileWaiting = new AbortController();
-  const onAbort = () => whileWaiting.abort(abortSignal?.reason);
+  // Forward the run's abort only while this read is waiting, so an abort after the wait ran
+  // out leaves the process alone.
+  const onAbort = () => abort.abort(abortSignal?.reason);
   if (abortSignal?.aborted) onAbort();
   else abortSignal?.addEventListener('abort', onAbort, { once: true });
+  sinks.add(onOutput);
 
-  const exited = handle.wait({
-    abortSignal: whileWaiting.signal,
-    onStdout: data => {
-      if (waiting) onOutput('data-sandbox-stdout', data);
-    },
-    onStderr: data => {
-      if (waiting) onOutput('data-sandbox-stderr', data);
-    },
-  });
   const ranOut = new Promise<undefined>(resolve => {
     timer = setTimeout(resolve, ms);
   });
   try {
     return await Promise.race([exited, ranOut]);
   } finally {
-    waiting = false;
     clearTimeout(timer);
+    sinks.delete(onOutput);
     abortSignal?.removeEventListener('abort', onAbort);
-    // The wait stays attached to the handle; its eventual result or failure is nobody's to read.
-    exited.catch(() => {});
   }
 }

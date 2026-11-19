@@ -938,6 +938,40 @@ describe('background processes killed by an aborted run', () => {
     }
   });
 
+  it('keeps a single wait on the process however many reads run out', async () => {
+    const { start, read, cleanup } = await setup();
+    try {
+      const { pid, handle } = await start('sleep 30');
+      const wait = vi.spyOn(handle, 'wait');
+
+      await read(pid, { waitSeconds: 1 });
+      await read(pid, { waitSeconds: 1 });
+      await read(pid, { waitSeconds: 1 });
+
+      expect(wait).toHaveBeenCalledTimes(1);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('stops the process when a later read is aborted while it waits', async () => {
+    const { start, read, cleanup } = await setup();
+    try {
+      const { pid, handle } = await start('echo started; sleep 30');
+      await vi.waitFor(() => expect(handle.stdout).toContain('started'));
+      await read(pid, { waitSeconds: 1 });
+
+      const controller = new AbortController();
+      const reading = read(pid, { waitSeconds: 30, abortSignal: controller.signal });
+      controller.abort();
+
+      expect(await reading).toContain('Exit code:');
+      expect(handle.killedByAbort).toBe(true);
+    } finally {
+      await cleanup();
+    }
+  });
+
   it('explains the exit of an aborted process that printed nothing', async () => {
     const { start, read, cleanup } = await setup();
     try {
