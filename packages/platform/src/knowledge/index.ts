@@ -171,14 +171,14 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
       if (name === 'KnowledgePageDepthError') {
         const error = new KnowledgePageDepthError('');
         error.message = message;
-        throw error;
+        throw Object.assign(error, { status: response.status });
       }
       if (name === 'KnowledgeMoveTooLargeError') {
         const pageId = typeof body.pageId === 'string' ? body.pageId : '';
         const pages = typeof body.pages === 'number' ? body.pages : 0;
         const error = new KnowledgeMoveTooLargeError(pageId, pages);
         error.message = message;
-        throw error;
+        throw Object.assign(error, { status: response.status });
       }
       throw Object.assign(new Error(message), { status: response.status });
     }

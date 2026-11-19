@@ -136,6 +136,23 @@ it('rebuilds the fields of a key conflict and an oversized move from the service
   });
 });
 
+it.each([
+  { name: 'KnowledgePageDepthError', type: KnowledgePageDepthError },
+  { name: 'KnowledgeMoveTooLargeError', type: KnowledgeMoveTooLargeError },
+])('keeps the 400 status on $name, as the plain Error it replaced did', async ({ name, type }) => {
+  const storage = await storageAnswering(400, { name, detail: 'specific knowledge failure' });
+  const error = await storage.listPages({ read: 'all' }).catch((e: unknown) => e);
+  expect(error).toBeInstanceOf(type);
+  expect(error).toMatchObject({ message: 'specific knowledge failure', status: 400 });
+});
+
+it('fills placeholders when an older service sends a move-size error without its fields', async () => {
+  const storage = await storageAnswering(400, { name: 'KnowledgeMoveTooLargeError', detail: 'too many pages' });
+  const error = await storage.listPages({ read: 'all' }).catch((e: unknown) => e);
+  expect(error).toBeInstanceOf(KnowledgeMoveTooLargeError);
+  expect(error).toMatchObject({ message: 'too many pages', status: 400, pageId: '', pages: 0 });
+});
+
 it('reads no scope declarations from a service without the getScopeDeclarations operation', async () => {
   const storage = await storageAnswering(404, { title: 'Not Found', detail: 'Knowledge operation not found' });
   await expect(storage.getScopeDeclarations()).resolves.toEqual({});
