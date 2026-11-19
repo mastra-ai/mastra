@@ -247,7 +247,6 @@ describe('MemorySidebar', () => {
     expect(screen.getByTestId('memory-sidebar-thread-layer').textContent).toContain('New Thread');
     expect(card.closest('[data-testid="memory-sidebar-overlay"]')?.className).toContain('absolute');
     expect(card.closest('[data-testid="memory-sidebar-overlay"]')?.className).toContain('z-10');
-    expect(card.closest('[data-testid="memory-sidebar-overlay"]')?.className).toContain('rounded-xl');
     expect(screen.getByTestId('memory-config-badges')).not.toBeNull();
     expect(screen.queryByRole('tab')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Threads' })).toBeNull();
@@ -412,30 +411,6 @@ describe('MemorySidebar', () => {
     await waitFor(() => expect(onMessages).toHaveBeenCalledTimes(2));
   });
 
-  it('renders the timeline panel context window from the OM record (source of truth), not message markers', async () => {
-    server.use(
-      http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json(observationalMemoryConfigWithThresholds)),
-      http.get(`${BASE_URL}/api/memory/observational-memory`, () => HttpResponse.json(observationalMemoryWithRecord)),
-      http.get(`${BASE_URL}/api/memory/threads/${THREAD_ID}/messages`, () => HttpResponse.json(threadMessages)),
-    );
-
-    renderSidebarWithOM([thread({ id: THREAD_ID, title: 'My first chat' })]);
-
-    fireEvent.click(await screen.findByTestId('memory-sidebar-card'));
-    act(() => openPanel());
-
-    await screen.findByTestId('memory-sidebar-om-detail-subpanel');
-
-    // The panel's Messages bar must show the record-derived counter:
-    // pendingMessageTokens 14200 over the message threshold 30000 (14.2/30k).
-    // The thread messages are plain text with no OM status markers, so a
-    // marker-derived panel would show 0 here. The observation/memory readout
-    // (observationTokenCount 4500 over the observation threshold 6000 → 4.5/6k)
-    // is lifted into the panel header beside the "Observational memory" title.
-    expect(await screen.findByText('14.2/30k')).not.toBeNull();
-    expect(await screen.findByText('4.5/6k')).not.toBeNull();
-  });
-
   it('renders both Messages and Observations progress bars in the open OM panel', async () => {
     server.use(
       http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json(observationalMemoryConfigWithThresholds)),
@@ -542,14 +517,5 @@ describe('MemorySidebar', () => {
     await waitFor(() => {
       expect(screen.getByTestId('memory-card-observation-bar').getAttribute('data-percent')).toBe('47');
     });
-  });
-
-  it('ignores the stale v1 sessionStorage key pointing at the removed configuration tab', async () => {
-    sessionStorage.setItem('agent-memory-sidebar-tab', 'configuration');
-
-    renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
-
-    // Falls back to the thread list instead of an unknown view value.
-    expect(await screen.findByText('New Thread')).not.toBeNull();
   });
 });

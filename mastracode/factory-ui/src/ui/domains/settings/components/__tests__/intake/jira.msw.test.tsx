@@ -177,7 +177,6 @@ describe('IntakeSection jira', () => {
       labels: null,
     });
     expect(await screen.findByLabelText('Issues from ENG: Engineering for Acme Web')).toHaveTextContent('All issues');
-    expect(screen.queryByText(/Choose a board/)).toBeNull();
   });
 
   it('routes the labelled issues of a project another factory already takes to a second factory', async () => {
@@ -208,30 +207,6 @@ describe('IntakeSection jira', () => {
     );
     expect(screen.getByText('payments')).toBeInTheDocument();
     expect(screen.getByLabelText('Issues from ENG: Engineering for Acme Web')).toHaveTextContent('All other issues');
-    expect(
-      screen.getByText('Labelled factories take matching issues first, in the order they were added.'),
-    ).toBeInTheDocument();
-  });
-
-  it('calls the all-issues filter "All other issues" once another factory takes labelled issues', async () => {
-    seedFactories();
-    useJiraHandlers({
-      config: { ...baseConfig(), jira: { enabled: true, sourceIds: ['10001'] } },
-      bindings: [
-        jiraBinding({}),
-        jiraBinding({
-          factoryProjectId: FACTORY_B,
-          labels: ['payments', 'billing'],
-          createdAt: '2026-10-02T00:00:00.000Z',
-        }),
-      ],
-    });
-
-    renderIntakeSection();
-
-    expect(await screen.findByLabelText('Issues from ENG: Engineering for Acme Web')).toHaveTextContent(
-      'All other issues',
-    );
     expect(
       screen.getByText('Labelled factories take matching issues first, in the order they were added.'),
     ).toBeInTheDocument();

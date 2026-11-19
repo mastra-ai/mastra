@@ -5,6 +5,7 @@ import { discordScenario } from './discord.js';
 import { elevenlabsScenario } from './elevenlabs.js';
 import { firefliesScenario } from './fireflies.js';
 import { githubScenario } from './github.js';
+import { gitlabScenario } from './gitlab.js';
 import { googleAnalyticsScenario } from './google-analytics.js';
 import { googleCalendarScenario } from './google-calendar.js';
 import { googleDocsScenario } from './google-docs.js';
@@ -45,6 +46,7 @@ export const scenarios: Scenario[] = [
   elevenlabsScenario,
   firefliesScenario,
   githubScenario,
+  gitlabScenario,
   googleAnalyticsScenario,
   googleCalendarScenario,
   googleDocsScenario,

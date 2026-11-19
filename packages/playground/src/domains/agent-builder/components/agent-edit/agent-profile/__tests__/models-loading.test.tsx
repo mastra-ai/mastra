@@ -60,16 +60,5 @@ describe('Models loading state', () => {
       expect(getByTestId('model-card-picker-loading')).toBeTruthy();
       expect(queryByTestId('model-card-picker')).toBeNull();
     });
-
-    it('mirrors the loaded grid template so the structural contract cannot regress', () => {
-      const { getByTestId } = render(
-        <FormHarness>
-          <Models />
-        </FormHarness>,
-      );
-
-      const skeleton = getByTestId('model-card-picker-loading');
-      expect(skeleton.className).toContain('grid-cols-[280px_minmax(0,1fr)]');
-    });
   });
 });

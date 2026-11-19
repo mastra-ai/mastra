@@ -19,9 +19,40 @@ let terminalReleased = false;
 let released = false;
 // Hold publication after a step result, before the loop advances to its next step.
 class PausingPubSub extends RedisStreamsPubSub {
+  #wrappedCallbacks = new WeakMap<
+    Parameters<RedisStreamsPubSub['subscribe']>[1],
+    Parameters<RedisStreamsPubSub['subscribe']>[1]
+  >();
+
   override async subscribe(...args: Parameters<RedisStreamsPubSub['subscribe']>) {
     if (process.env.PUBLISHER_NO_WORKERS === '1' && args[0] === 'workflows') return;
-    await super.subscribe(...args);
+    const [topic, callback, ...options] = args;
+    if (topic !== 'workflows') return super.subscribe(...args);
+    let wrapped = this.#wrappedCallbacks.get(callback);
+    if (!wrapped) {
+      wrapped = async (event, ack, nack, extend) => {
+        await callback(
+          event,
+          async () => {
+            await ack?.();
+            if (event.type === 'workflow.end' && event.runId === runId) {
+              console.info('publisher-worker-settled');
+            }
+          },
+          nack,
+          extend,
+        );
+      };
+      this.#wrappedCallbacks.set(callback, wrapped);
+    }
+    await super.subscribe(topic, wrapped, ...options);
+  }
+
+  override async unsubscribe(topic: string, callback: Parameters<RedisStreamsPubSub['unsubscribe']>[1]) {
+    await super.unsubscribe(
+      topic,
+      topic === 'workflows' ? (this.#wrappedCallbacks.get(callback) ?? callback) : callback,
+    );
   }
 
   override async publish(...args: Parameters<RedisStreamsPubSub['publish']>) {

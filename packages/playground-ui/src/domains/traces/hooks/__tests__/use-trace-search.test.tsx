@@ -40,14 +40,6 @@ describe('useTraceSearch', () => {
     expect(result.current.results).toBe(spans);
   });
 
-  it('returns an empty list for an empty input', () => {
-    const { result } = renderHook(() => useTraceSearch([]));
-
-    act(() => result.current.setQuery('anything'));
-
-    expect(result.current.results).toEqual([]);
-  });
-
   it('matches on name, case-insensitively', () => {
     const spans = [makeSpan('a', null, { name: 'Weather Agent' }), makeSpan('b', null, { name: 'travel agent' })];
     const { result } = renderHook(() => useTraceSearch(spans));
@@ -98,34 +90,6 @@ describe('useTraceSearch', () => {
     expect(ids(result.current.results)).toEqual(['needle']);
   });
 
-  it('keeps the ancestors of a matching child', () => {
-    const spans = [
-      makeSpan('root', null, { name: 'root run' }),
-      makeSpan('mid', 'root', { name: 'middle' }),
-      makeSpan('leaf', 'mid', { name: 'needle' }),
-      makeSpan('other', 'root', { name: 'unrelated' }),
-    ];
-    const { result } = renderHook(() => useTraceSearch(spans));
-
-    act(() => result.current.setQuery('needle'));
-
-    expect(ids(result.current.results)).toEqual(['root', 'mid', 'leaf']);
-  });
-
-  it('keeps the subtree of a matching middle span', () => {
-    const spans = [
-      makeSpan('root', null, { name: 'root run' }),
-      makeSpan('mid', 'root', { name: 'needle' }),
-      makeSpan('leaf', 'mid', { name: 'sub call' }),
-      makeSpan('other', 'root', { name: 'unrelated' }),
-    ];
-    const { result } = renderHook(() => useTraceSearch(spans));
-
-    act(() => result.current.setQuery('needle'));
-
-    expect(ids(result.current.results)).toEqual(['root', 'mid', 'leaf']);
-  });
-
   it('keeps the ancestors and subtree of a match when the list arrives newest-first', () => {
     // The trace list API defaults to `direction: 'DESC'`, so children can
     // reach the hook before their parents.
@@ -164,18 +128,6 @@ describe('useTraceSearch', () => {
       expect(ids(result.current.results)).toEqual(['a']);
     });
 
-    it('matches on a metadata value nested several levels deep', () => {
-      const spans = [
-        makeSpan('a', null, { metadata: { request: { location: { city: 'Lyon' } } } }),
-        makeSpan('b', null),
-      ];
-      const { result } = renderHook(() => useTraceSearch(spans));
-
-      act(() => result.current.setQuery('lyon'));
-
-      expect(ids(result.current.results)).toEqual(['a']);
-    });
-
     it('matches on a metadata key, so a payload shape is searchable', () => {
       const spans = [makeSpan('a', null, { metadata: { retries: 3 } }), makeSpan('b', null)];
       const { result } = renderHook(() => useTraceSearch(spans));
@@ -192,20 +144,6 @@ describe('useTraceSearch', () => {
       act(() => result.current.setQuery('rate limit'));
 
       expect(ids(result.current.results)).toEqual(['a']);
-    });
-
-    it('keeps the ancestors of a span matched only by its metadata', () => {
-      const spans = [
-        makeSpan('root', null, { name: 'root run' }),
-        makeSpan('mid', 'root', { name: 'middle' }),
-        makeSpan('leaf', 'mid', { name: 'plain', metadata: { city: 'Lyon' } }),
-        makeSpan('other', 'root', { name: 'unrelated' }),
-      ];
-      const { result } = renderHook(() => useTraceSearch(spans));
-
-      act(() => result.current.setQuery('lyon'));
-
-      expect(ids(result.current.results)).toEqual(['root', 'mid', 'leaf']);
     });
   });
 

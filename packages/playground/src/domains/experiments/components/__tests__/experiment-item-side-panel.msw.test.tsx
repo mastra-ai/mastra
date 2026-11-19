@@ -95,7 +95,7 @@ function renderExperimentPage(initialPath: string) {
           <StudioFrame>
             <OpenItemButton />
           </StudioFrame>
-          <ExperimentItemSidePanel withQueryTrace={false} withFeedback={false} />
+          <ExperimentItemSidePanel withFeedback={false} />
           <LocationProbe />
         </ExperimentItemPanelProvider>
       </RouteSidePanelProvider>

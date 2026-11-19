@@ -16,7 +16,7 @@ The `@mastra/auth-firebase` package provides authentication for Mastra using Fir
 
 ## Prerequisites
 
-This example uses Firebase Authentication. Make sure to:
+This example uses Firebase Authentication. Ensure you have:
 
 1. Create a Firebase project in the [Firebase Console](https://console.firebase.google.com/)
 1. Enable Authentication and configure your preferred sign-in methods (Google, Email/Password, etc.)
@@ -89,11 +89,11 @@ The `MastraAuthFirebase` class can be configured through constructor options or 
 
 :::note
 
-When constructor options aren't provided, the class automatically reads these environment variables. As a result, you can call `new MastraAuthFirebase()` without any arguments if your environment variables are properly configured.
+When constructor options aren't provided, the class automatically reads these environment variables. As a result, you can call `new MastraAuthFirebase()` without any arguments if your environment variables are configured correctly.
 
 :::
 
-### User Authorization
+### User authorization
 
 By default, `MastraAuthFirebase` uses Firestore to manage user access. It expects a `user_access` collection with documents keyed by user UIDs. The presence of a document in this collection determines whether a user is authorized.
 

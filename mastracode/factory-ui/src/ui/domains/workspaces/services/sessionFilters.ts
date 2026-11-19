@@ -1,5 +1,6 @@
 import {
   SESSION_ROW_ALL_OWNERS,
+  SESSION_ROW_ALL_SOURCES,
   SESSION_ROW_MY_SESSIONS,
   SESSION_ROW_STATUSES,
   sessionRowOwnerKey,
@@ -7,6 +8,7 @@ import {
 import type { SESSION_ROW_UPDATED_WITHIN } from '@mastra/factory/session/session-row-query';
 import type { DropdownMenuRadioOption } from '@mastra/playground-ui/components/DropdownMenu';
 
+import type { SessionGroupHeading } from './sessionGroups';
 import { SESSION_STATUS_LABELS } from './sessionRows';
 import type { SessionActivityStatus, SessionOwner } from './sessionRows';
 
@@ -27,12 +29,15 @@ export const SESSION_UPDATED_OPTIONS: readonly DropdownMenuRadioOption<SessionUp
 
 export interface SessionFiltersState {
   owner: string;
+  /** `all`, or where a session starts: `board:<board id>`, `user` or `slack`. */
+  source: string;
   status: SessionStatusFilter;
   updated: SessionUpdatedFilter;
 }
 
 export const EMPTY_SESSION_FILTERS: SessionFiltersState = {
   owner: SESSION_ROW_ALL_OWNERS,
+  source: SESSION_ROW_ALL_SOURCES,
   status: 'all',
   updated: 'all',
 };
@@ -40,6 +45,7 @@ export const EMPTY_SESSION_FILTERS: SessionFiltersState = {
 export function activeSessionFilterCount(filters: SessionFiltersState): number {
   return (
     Number(filters.owner !== EMPTY_SESSION_FILTERS.owner) +
+    Number(filters.source !== EMPTY_SESSION_FILTERS.source) +
     Number(filters.status !== EMPTY_SESSION_FILTERS.status) +
     Number(filters.updated !== EMPTY_SESSION_FILTERS.updated)
   );
@@ -55,4 +61,12 @@ export function sessionOwnerOptions(
     label: name,
   }));
   return [{ value: SESSION_ROW_ALL_OWNERS, label: 'All owners' }, ...viewerOption, ...namedOptions];
+}
+
+/** Every source the board grouping would list, so a source filter and a Board group always agree. */
+export function sessionSourceOptions(sources: readonly SessionGroupHeading[]): DropdownMenuRadioOption<string>[] {
+  return [
+    { value: SESSION_ROW_ALL_SOURCES, label: 'All sources' },
+    ...sources.map(({ key, label }) => ({ value: key, label })),
+  ];
 }

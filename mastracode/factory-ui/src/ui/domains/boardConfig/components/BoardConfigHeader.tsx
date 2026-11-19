@@ -1,15 +1,22 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import type { ReactNode } from 'react';
+import { useNavigate } from 'react-router';
 
 import type { StoredBoardResponse, StoredPhaseInfo } from '../../../../api/types';
+import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
+import { useDeleteBoardMutation, useResetBoardMutation } from '../../../../hooks/useBoardEditor';
+import { boardPath, orderedBoards } from '../../factory/boardCatalog';
 import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
 import { useBoardDraft } from '../BoardDraftProvider';
 import { kindLocked, rawRuleKey, withKind } from '../boardDraft';
 import type { PhaseKind } from '../boardDraft';
+import { BoardDeleteButton } from './BoardDeleteButton';
+import { BoardResetButton } from './BoardResetButton';
 import { InlineText } from './InlineText';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
@@ -45,7 +52,7 @@ function Explained({ label, meaning, children }: { label: string; meaning: strin
 }
 
 /**
- * The open page's own fields, edited in place: the board's name and revision on General, or the phase's
+ * The open page's own fields, edited in place: the board's name and revision on Overview, or the phase's
  * name, kind and description on a phase page.
  */
 export function BoardConfigHeader({
@@ -60,8 +67,20 @@ export function BoardConfigHeader({
   response: StoredBoardResponse;
 }) {
   const { board, canEdit } = response;
-  const { draft, locked, setDraft, setRawRule } = useBoardDraft(factoryId, boardId, board);
+  const { draft, locked, setDraft, setRawRule, discard } = useBoardDraft(factoryId, boardId, board);
+  const catalog = useBoardCatalog(factoryId);
+  const navigate = useNavigate();
   const readOnly = !canEdit || !board.editable || locked;
+  const reset = useResetBoardMutation(factoryId, boardId);
+  const remove = useDeleteBoardMutation(factoryId, boardId, () => {
+    discard();
+    // The deleted board is gone from the catalog by now; Work, or the first board left, shows next.
+    const next = orderedBoards(catalog.data ?? []).find(other => other.id !== boardId);
+    void navigate(next ? boardPath(factoryId, next.id) : `/factories/${factoryId}`, { replace: true });
+  });
+  const manageable = !phaseKey && canEdit && board.editable;
+  const resettable = manageable && board.source !== 'stored';
+  const deletable = manageable && board.source !== 'builtin';
   const phase = phaseKey ? draft.phases.find(candidate => candidate.key === phaseKey) : undefined;
   if (phaseKey && !phase) return null;
 
@@ -87,74 +106,93 @@ export function BoardConfigHeader({
   const kindEditable = phase !== undefined && !readOnly && !kindLocked(draft.phases, phase.key, board.codeBehaviour);
 
   return (
-    <PageHeader>
-      {/* The icon sits in the title row, so the icon, the description and the sections below share one left edge. */}
-      <PageHeader.Title className="gap-2.5">
-        {phase && <BoardStageIcon stage={phase.key} kind={phaseIconKind(boardId, phase.kind)} decorative />}
-        <InlineText
-          value={name}
-          label={phase ? 'Phase name' : 'Board name'}
-          required
-          readOnly={readOnly}
-          variant="heading"
-          tone="ink"
-          onChange={next => (phase ? setPhase({ name: next }) : setDraft(current => ({ ...current, name: next })))}
-        />
-      </PageHeader.Title>
-      {(phase || board.revision != null) && (
-        <PageHeader.Meta beside>
-          {phase && kindEditable ? (
-            <Select
-              value={phase.kind}
-              onValueChange={value => {
-                const kind = KIND_ORDER.find(candidate => candidate === value);
-                if (kind) setKind(kind);
-              }}
-            >
-              <SelectTrigger size="sm" aria-label="Phase kind">
-                {KINDS[phase.kind].label}
-              </SelectTrigger>
-              <SelectContent>
-                {KIND_ORDER.map(kind => (
-                  <SelectItem key={kind} value={kind}>
-                    {KINDS[kind].label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : phase ? (
-            <Explained label={KINDS[phase.kind].label} meaning={KINDS[phase.kind].meaning}>
-              <Badge>{KINDS[phase.kind].label}</Badge>
-            </Explained>
-          ) : (
-            <Explained
-              label={`Revision ${board.revision}`}
-              meaning="Goes up each time the board is saved. If someone else saves first, you're asked to reload before saving."
-            >
-              Revision {board.revision}
-            </Explained>
-          )}
-        </PageHeader.Meta>
-      )}
-      {(description || !readOnly) && (
-        <PageHeader.Description>
+    <>
+      <PageHeader>
+        {/* The icon sits in the title row, so the icon, the description and the sections below share one left edge. */}
+        <PageHeader.Title className="gap-2.5">
+          {phase && <BoardStageIcon stage={phase.key} kind={phaseIconKind(boardId, phase.kind)} decorative />}
           <InlineText
-            value={description}
-            label={phase ? 'Phase description' : 'Board description'}
-            placeholder="Add a description"
-            multiline
+            value={name}
+            label={phase ? 'Phase name' : 'Board name'}
+            required
             readOnly={readOnly}
-            variant="caption"
-            tone="muted"
-            className="zoom-safe-text w-full"
-            onChange={next =>
-              phase
-                ? setPhase({ description: next || null })
-                : setDraft(current => ({ ...current, description: next || null }))
-            }
+            variant="heading"
+            tone="ink"
+            onChange={next => (phase ? setPhase({ name: next }) : setDraft(current => ({ ...current, name: next })))}
           />
-        </PageHeader.Description>
+        </PageHeader.Title>
+        {phase && (
+          <PageHeader.Meta beside>
+            {kindEditable ? (
+              <Select
+                value={phase.kind}
+                onValueChange={value => {
+                  const kind = KIND_ORDER.find(candidate => candidate === value);
+                  if (kind) setKind(kind);
+                }}
+              >
+                <SelectTrigger size="sm" aria-label="Phase kind">
+                  {KINDS[phase.kind].label}
+                </SelectTrigger>
+                <SelectContent>
+                  {KIND_ORDER.map(kind => (
+                    <SelectItem key={kind} value={kind}>
+                      {KINDS[kind].label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Explained label={KINDS[phase.kind].label} meaning={KINDS[phase.kind].meaning}>
+                <Badge>{KINDS[phase.kind].label}</Badge>
+              </Explained>
+            )}
+          </PageHeader.Meta>
+        )}
+        {(description || !readOnly) && (
+          <PageHeader.Description>
+            <InlineText
+              value={description}
+              label={phase ? 'Phase description' : 'Board description'}
+              placeholder="Add a description"
+              multiline
+              readOnly={readOnly}
+              variant="caption"
+              tone="muted"
+              className="zoom-safe-text w-full"
+              onChange={next =>
+                phase
+                  ? setPhase({ description: next || null })
+                  : setDraft(current => ({ ...current, description: next || null }))
+              }
+            />
+          </PageHeader.Description>
+        )}
+        {(resettable || deletable) && (
+          <PageHeader.Action className="gap-1">
+            {resettable && (
+              <BoardResetButton name={board.name} pending={locked} onReset={() => reset.mutate(board.revision ?? 0)} />
+            )}
+            {deletable && (
+              <BoardDeleteButton
+                name={board.name}
+                pending={locked}
+                onDelete={() => remove.mutate(board.revision ?? 0)}
+              />
+            )}
+          </PageHeader.Action>
+        )}
+      </PageHeader>
+      {reset.error && (
+        <Notice variant="destructive" role="alert" className="mt-4">
+          <Notice.Message>The board was not reset. {reset.error.reasons}</Notice.Message>
+        </Notice>
       )}
-    </PageHeader>
+      {remove.error && (
+        <Notice variant="destructive" role="alert" className="mt-4">
+          <Notice.Message>The board was not deleted. {remove.error.reasons}</Notice.Message>
+        </Notice>
+      )}
+    </>
   );
 }

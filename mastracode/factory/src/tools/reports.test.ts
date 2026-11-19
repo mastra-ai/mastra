@@ -488,6 +488,45 @@ describe('createStageChangeNotifier', () => {
     }
   });
 
+  it('names both boards when the card changed board, even into a same-named phase', async () => {
+    const env = reporting();
+    const notify = createStageChangeNotifier({
+      workItems: {
+        listWorkItemSubscribers: vi.fn(async () => [subscriber('item-7', 'session-1')]),
+        getForProject: vi.fn(
+          async () =>
+            ({
+              id: 'item-7',
+              title: 'Item',
+              workItem: createProviderWorkItemForTests({
+                id: 'item-7',
+                title: 'Item',
+                source: { integrationId: 'github', type: 'issue', externalId: '7' },
+                metadata: { number: 7 },
+              }),
+              metadata: {},
+            }) as never,
+        ),
+      },
+      reporting: async () => env.reporting,
+    });
+    await notify({
+      orgId: 'org-1',
+      factoryProjectId: 'project-1',
+      workItemId: 'item-7',
+      fromStage: 'triage',
+      toStage: 'triage',
+      fromBoard: 'work',
+      toBoard: 'preview',
+    });
+
+    expect(env.deliveries).toHaveLength(1);
+    expect(env.deliveries[0]!.notification).toMatchObject({
+      summary: '#7 moved from triage on the work board to triage on the preview board.',
+      attributes: { 'work-item': '#7', 'from-board': 'work', 'to-board': 'preview' },
+    });
+  });
+
   it('does nothing for an item nobody follows', async () => {
     const reportingFn = vi.fn();
     const notify = createStageChangeNotifier({

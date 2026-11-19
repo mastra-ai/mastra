@@ -82,7 +82,7 @@ describe('Mastra Connect tools settings', () => {
     expect(screen.getByText('Linear')).toBeInTheDocument();
     expect(screen.getAllByText('Needs reconnecting')).toHaveLength(1);
     await waitFor(() =>
-      expect(screen.getByRole('link', { name: 'Manage in Mastra Platform' })).toHaveAttribute(
+      expect(screen.getByRole('link', { name: 'Manage in Platform' })).toHaveAttribute(
         'href',
         'https://projects.mastra.ai/orgs/org_1/projects/proj_1/settings/connect',
       ),
@@ -93,9 +93,9 @@ describe('Mastra Connect tools settings', () => {
     serveConnections([]);
     renderWithProviders(<ConnectToolsSection />);
 
-    expect(await screen.findByText(/No connections are attached to this Factory's project yet/)).toBeInTheDocument();
+    expect(await screen.findByText('No connections')).toBeInTheDocument();
     // Signed out of an organization, Platform's `/org/*` route picks the user's current one.
-    expect(screen.getByRole('link', { name: 'Manage in Mastra Platform' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Manage in Platform' })).toHaveAttribute(
       'href',
       'https://projects.mastra.ai/org/projects/proj_1/settings/connect',
     );
@@ -120,7 +120,7 @@ describe('Mastra Connect tools settings', () => {
 
     expect(await screen.findByText('PostHog')).toBeInTheDocument();
     expect(screen.getByText(/This Factory sets its session tools in code/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Manage in Mastra Platform' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Manage in Platform' })).toBeInTheDocument();
     expect(screen.queryByText(/Mastra Connect tools are off/)).not.toBeInTheDocument();
   });
 

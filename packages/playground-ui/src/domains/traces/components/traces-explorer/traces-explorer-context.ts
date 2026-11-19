@@ -7,7 +7,7 @@ import { hasTraceUsageColumn, isTraceUsageColumn } from '../../trace-list-column
 import type { TraceColumnPreferences } from '../../trace-list-columns';
 import type { SpanTab, TraceDatePreset } from '../../types';
 import type { FeedbackOptions } from '../feedback-options';
-import type { TraceSpanView } from '../trace-data-panel-view';
+import type { TraceSpanView } from '../trace-panel';
 import type { TracesFilters, TracesSelection, TracesSort } from './traces-explorer-actions';
 
 export type TracesExplorerScope = { entityId: string; entityType?: EntityType };

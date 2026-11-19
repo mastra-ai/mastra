@@ -322,7 +322,7 @@ jobs:
 
       - name: Publish packages - dry run
         if: ${{ inputs.dry_run }}
-        run: pnpm publish -r --dry-run --access public --no-git-checks
+        run: node .github/scripts/publish-packages.mjs --dry-run
 
       - name: Add tags
         if: ${{ !inputs.dry_run }}
@@ -524,7 +524,7 @@ jobs:
           if [[ "$DRY_RUN" == 'true' ]]; then
             args+=(--dry-run)
           fi
-          pnpm --filter-prod '@mastra/playground-ui...' --filter-prod '@mastra/observability...' --filter-prod '@mastra/mcp-apps-components...' publish -r --no-git-checks --tag "$FINAL_TAG" --access public "${args[@]}"
+          node .github/scripts/publish-packages.mjs --tag "$FINAL_TAG" --pnpm-filter-prod '@mastra/playground-ui...' --pnpm-filter-prod '@mastra/observability...' --pnpm-filter-prod '@mastra/mcp-apps-components...' "${args[@]}"
 
   # ===========================================
   # SNAPSHOT: Manual trigger only (non-main branches)
@@ -627,14 +627,32 @@ jobs:
           );
           const files = execSync('git ls-files "*/package.json"').toString().trim().split('\n');
           let changedCount = 0;
+          // Snapshot versions (0.0.0-<tag>-<date>) satisfy no semver range, so
+          // every @mastra/* workspace dep is pinned to workspace:*. A peer is
+          // only rewritten when the package also installs it (dependencies or
+          // devDependencies): pnpm can't resolve workspace:* for an optional
+          // peer that isn't installed, and that failure stops the publish.
+          const sections = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'];
           for (const file of files) {
             const content = fs.readFileSync(file, 'utf8');
-            let updated = content.replace(/"workspace:\^"/g, '"workspace:*"');
-            // Only rewrite @mastra/* deps that are actual workspace packages;
-            // some (e.g. @mastra/docusaurus-plugin-*) are published from other repos.
-            updated = updated.replace(/"(@mastra\/[^"]*)":\s*"[^"]*"/g, (match, name) =>
-              workspacePackages.has(name) ? `"${name}": "workspace:*"` : match,
-            );
+            const pkg = JSON.parse(content);
+            const installed = new Set([
+              ...Object.keys(pkg.dependencies ?? {}),
+              ...Object.keys(pkg.devDependencies ?? {}),
+            ]);
+            for (const section of sections) {
+              const deps = pkg[section];
+              if (!deps) continue;
+              for (const [name, range] of Object.entries(deps)) {
+                if (range === 'workspace:^') deps[name] = 'workspace:*';
+                // Only @mastra/* deps that are actual workspace packages; some
+                // (e.g. @mastra/docusaurus-plugin-*) are published from other repos.
+                if (!name.startsWith('@mastra/') || !workspacePackages.has(name)) continue;
+                if (section === 'peerDependencies' && !installed.has(name)) continue;
+                deps[name] = 'workspace:*';
+              }
+            }
+            const updated = JSON.stringify(pkg, null, 2) + '\n';
             if (updated !== content) {
               console.log(`Updating ${file}`);
               fs.writeFileSync(file, updated);

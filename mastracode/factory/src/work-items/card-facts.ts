@@ -1,13 +1,13 @@
 import { hasPullRequest } from '../boards/semantics.js';
 import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { Card } from '../storage/domains/work-items/base.js';
-import { workItemBranchSource } from '../work-item-branch.js';
-import type { WorkItemBranchSource } from '../work-item-branch.js';
+import { workItemBoardSource } from '../work-item-branch.js';
 import { metadataLabels } from './card-labels.js';
 import { factoryParticipantId, providerPeople } from './card-people.js';
 import type { BoardRelations, ProviderPerson, ProviderPersonRole } from './card-people.js';
-import { cardSearchText } from './card-search-text.js';
+import { cardSearch } from './card-search.js';
 import type { SourceFacts } from './card-source-filters.js';
+import type { SearchableCard } from './search-terms.js';
 
 /** What a board view's search and filters read of a card. */
 export interface CardFacts extends SourceFacts {
@@ -19,8 +19,8 @@ export interface CardFacts extends SourceFacts {
   relations: BoardRelations;
   /** The Factory users who created the card, moved it or started a session on it. */
   humanActorIds: readonly string[];
-  /** Lowercased, so a search lowercases only its own words. */
-  text: string;
+  /** What a search reads of the card, lowercased, so a search lowercases only its own words. */
+  search: SearchableCard;
 }
 
 // A card object never changes: `listShared` gives a changed card a new object.
@@ -59,9 +59,7 @@ function humanActorIds(card: Card): string[] {
 export function cardFacts(card: Card): CardFacts {
   let facts = factsByCard.get(card);
   if (facts) return facts;
-  // A Slack thread is its own source on the board, not a card filed by hand.
-  const source: WorkItemBranchSource =
-    card.externalSource?.integrationId === 'slack' ? 'slack-thread' : workItemBranchSource(card.externalSource);
+  const source = workItemBoardSource(card.externalSource);
   const metadata = sourceMetadata(card);
   const people = providerPeople({ source, metadata });
   const actorIds = humanActorIds(card);
@@ -81,7 +79,7 @@ export function cardFacts(card: Card): CardFacts {
       'review-requested': new Set(people['review-requested'].map(person => person.id)),
     },
     humanActorIds: actorIds,
-    text: cardSearchText(card),
+    search: cardSearch(card),
   };
   factsByCard.set(card, facts);
   return facts;

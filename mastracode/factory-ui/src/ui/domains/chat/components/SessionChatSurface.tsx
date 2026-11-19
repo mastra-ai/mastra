@@ -16,12 +16,15 @@ import { ChatMessageBoundary } from '../context/ChatSessionProvider';
 import { useChatMessagePreparation } from '../context/useChatMessagePreparation';
 import { useChatTranscript } from '../context/useChatTranscript';
 
+import './chat-enter.css';
+
 const PREVIOUS_TURN_PEEK_PX = 64;
 const activityTail: TranscriptTail = stretchLive => <ActivityLine stretchLive={stretchLive} />;
 
 interface SessionChatSurfaceProps {
   secondaryBar?: ReactNode;
   emptyState: ReactNode;
+  openingSession?: boolean;
   composerLabel: string;
   /** Leads the status row above the composer. */
   composerStatus?: ReactNode;
@@ -31,12 +34,14 @@ interface SessionChatSurfaceProps {
 export function SessionChatSurface({
   secondaryBar,
   emptyState,
+  openingSession = false,
   composerLabel,
   composerStatus,
   contentOverlay,
 }: SessionChatSurfaceProps) {
   const { busy, loadMore, transcript } = useChatTranscript();
-  const { historyInitializing, preparing } = useChatMessagePreparation();
+  const { preparing: threadPreparing } = useChatMessagePreparation();
+  const preparing = threadPreparing || openingSession;
   const canLoadMore = loadMore.hasMore && !loadMore.isLoading;
   const conversationStarted = transcript.entries.some(entry => entry.kind !== 'notice');
 
@@ -64,7 +69,7 @@ export function SessionChatSurface({
               // A sibling selector, not `:has()`: under `:has()` every new message would restyle the whole transcript.
               className="relative gap-0 pt-[calc(var(--chat-header-room,0px)+1.5rem)] [[data-slot=chat-shell-bar]:not(:empty)~[data-slot=message-scroller]_&]:pt-6"
             >
-              <SessionPreparationOverlay historyInitializing={historyInitializing} preparing={preparing} />
+              <SessionPreparationOverlay preparing={preparing} />
               <ChatShell.Transcript className="flex-1">
                 <TranscriptAnnotations />
                 <ChatMessageBoundary showPreparation={false}>

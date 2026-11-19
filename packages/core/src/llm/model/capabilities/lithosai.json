@@ -1,0 +1,37 @@
+{
+  "attachment": [
+    "deepseek-ai/DeepSeek-V4.1-Flash",
+    "deepseek-ai/DeepSeek-V4.1-Flash-fast",
+    "deepseek-ai/DeepSeek-V4.1-Flash-ultra"
+  ],
+  "temperature": [
+    "deepseek-ai/DeepSeek-V4.1-Flash",
+    "deepseek-ai/DeepSeek-V4.1-Flash-fast",
+    "deepseek-ai/DeepSeek-V4.1-Flash-ultra"
+  ],
+  "structuredOutput": [
+    "deepseek-ai/DeepSeek-V4.1-Flash",
+    "deepseek-ai/DeepSeek-V4.1-Flash-fast",
+    "deepseek-ai/DeepSeek-V4.1-Flash-ultra"
+  ],
+  "reasoning": {
+    "deepseek-ai/DeepSeek-V4.1-Flash-fast": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4.1-Flash-ultra": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4.1-Flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ]
+  }
+}

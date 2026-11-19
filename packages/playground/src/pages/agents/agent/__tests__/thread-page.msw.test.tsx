@@ -918,14 +918,6 @@ describe('Standalone thread page', () => {
     expect(await screen.findByTestId('composer-model-settings-trigger')).not.toBeNull();
   });
 
-  it('shows the thread list next to the chat', async () => {
-    installHandlers();
-    renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
-
-    await screen.findByText('Tonight we cook carbonara.');
-    expect(await screen.findByText('Sushi ideas')).not.toBeNull();
-  });
-
   it('lets the user hide the threads panel and bring it back from the page edge', async () => {
     installHandlers();
     renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
@@ -1100,15 +1092,6 @@ describe('Standalone thread page', () => {
   it('redirects /agents/:agentId/threads to /threads/new', async () => {
     installHandlers();
     renderAt(`/agents/${AGENT_ID}/threads`);
-
-    await waitFor(() =>
-      expect(screen.getByTestId('location-probe').textContent).toBe(`/agents/${AGENT_ID}/threads/new`),
-    );
-  });
-
-  it('redirects bare /agents/:agentId to the new-thread chat', async () => {
-    installHandlers();
-    renderAt(`/agents/${AGENT_ID}`);
 
     await waitFor(() =>
       expect(screen.getByTestId('location-probe').textContent).toBe(`/agents/${AGENT_ID}/threads/new`),

@@ -31,10 +31,10 @@ import {
   SCOPES,
   TEST_NOW,
   expectSame,
+  expectSameMarkup,
   expectSameView,
   expectSameViewFromCache,
   find,
-  normalise,
   recordRequests,
   serveBreakdown,
   settle,
@@ -280,7 +280,7 @@ describe.each(Object.entries(SCOPES))('the Metrics page from METRICS_DASHBOARD a
     expect(pages.defined.sent.toSorted()).toEqual(pages.composed.sent.toSorted());
     for (const id of pages.composed.ids) {
       const [card, widget] = pair(pages, id);
-      expect(normalise(widget.root.innerHTML), id).toBe(normalise(card.root.innerHTML));
+      expectSameMarkup(card.root, widget.root, id);
     }
   });
 

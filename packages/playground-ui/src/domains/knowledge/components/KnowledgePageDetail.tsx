@@ -28,6 +28,7 @@ import { Metadata } from '@/ds/components/Metadata';
 import { RelativeTimestamp } from '@/ds/components/RelativeTimestamp';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Txt } from '@/ds/components/Txt';
+import { IconArrowLeft } from '@/ds/icons/central/IconArrowLeft';
 import { IconArrowRight } from '@/ds/icons/central/IconArrowRight';
 import { IconPin } from '@/ds/icons/central/IconPin';
 
@@ -124,6 +125,9 @@ function BodySpan({ node, ...props }: ComponentProps<'span'> & ExtraProps) {
 
 const BODY_REMARK_PLUGINS = [remarkKnowledgeLinks];
 
+type LinkedPage = { page: KnowledgePagePayload; count: number };
+export type PageLinkLists = { in: LinkedPage[]; out: LinkedPage[] };
+
 function linkedPages(page: KnowledgePagePayload, index: KnowledgePageRefIndex) {
   const counts = new Map<string, { page: KnowledgePagePayload; count: number }>();
   for (const ref of page.body ? bodyLinkRefs(page.body) : []) {
@@ -155,14 +159,16 @@ const BODY_COMPONENTS: Components = { span: BodySpan };
 export function KnowledgeDetailSection({
   label,
   count,
+  className,
   children,
 }: {
   label: string;
   count?: number;
+  className?: string;
   children: ReactNode;
 }) {
   return (
-    <section aria-label={label} className="flex flex-col gap-2">
+    <section aria-label={label} className={className ? `flex flex-col gap-2 ${className}` : 'flex flex-col gap-2'}>
       <Txt as="h3" variant="label" tone="ink" className="flex items-center gap-1.5">
         {label}
         {count ? (
@@ -313,11 +319,13 @@ export function KnowledgePageDetail({
   notesMore,
   childPages,
   activity,
+  links,
   onOpenPage,
   compact = false,
 }: {
   compact?: boolean;
   onOpenPage?: () => void;
+  links?: PageLinkLists;
   page: KnowledgePagePayload;
   notes: KnowledgeNotePayload[];
   pin?: KnowledgePinPayload;
@@ -360,7 +368,10 @@ export function KnowledgePageDetail({
   const bodyLinks = useMemo(() => ({ index: refIndex, onPageClick }), [refIndex, onPageClick]);
   const bodyRef = useRef<HTMLDivElement>(null);
   const headings = useMemo(() => (page.body ? bodyHeadings(page.body) : []), [page.body]);
-  const linksTo = useMemo(() => linkedPages(page, refIndex), [page, refIndex]);
+  const bodyLinkTargets = useMemo(() => linkedPages(page, refIndex), [page, refIndex]);
+  const linksTo = links?.out ?? bodyLinkTargets;
+  const linkedFrom = links?.in ?? [];
+  const linksIn = links ? links.in.length : mentionedBy.length;
 
   const body = (
     <BodyLinks.Provider value={bodyLinks}>
@@ -407,8 +418,11 @@ export function KnowledgePageDetail({
   );
   const peekNotes = mentioning.length > 0 ? mentioning : latest ? [latest] : [];
   const connections =
-    linksTo.length > 0 || mentionedBy.length > 0 ? (
-      <KnowledgeDetailSection label="Connections" count={linksTo.length + mentionedBy.length}>
+    linksTo.length > 0 || linkedFrom.length > 0 || mentionedBy.length > 0 ? (
+      <KnowledgeDetailSection
+        label="Connections"
+        count={linksTo.length + Math.max(linkedFrom.length, mentionedBy.length)}
+      >
         <div className="flex flex-col gap-4">
           {linksTo.length > 0 ? (
             <section aria-label="Links to" className="flex flex-col gap-1.5">
@@ -424,7 +438,33 @@ export function KnowledgePageDetail({
                       className="min-w-0 truncate text-left text-body-sm text-foreground hover:underline"
                       onClick={() => onPageClick(target)}
                     >
-                      {target.name}
+                      {scopeTitle(target)}
+                    </button>
+                    {count > 1 ? (
+                      <Txt as="span" variant="caption" tone="muted" className="tabular-nums">
+                        ×{count}
+                      </Txt>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+          {linkedFrom.length > 0 ? (
+            <section aria-label="Linked from" className="flex flex-col gap-1.5">
+              <Txt as="h4" variant="caption" tone="muted">
+                Linked from
+              </Txt>
+              <ul className="flex flex-col gap-1">
+                {linkedFrom.map(({ page: source, count }) => (
+                  <li key={source.id} className="flex min-w-0 items-center gap-2">
+                    <IconArrowLeft aria-hidden className="size-icon-xs shrink-0 text-muted-foreground" />
+                    <button
+                      type="button"
+                      className="min-w-0 truncate text-left text-body-sm text-foreground hover:underline"
+                      onClick={() => onPageClick(source)}
+                    >
+                      {scopeTitle(source)}
                     </button>
                     {count > 1 ? (
                       <Txt as="span" variant="caption" tone="muted" className="tabular-nums">
@@ -497,7 +537,7 @@ export function KnowledgePageDetail({
             </div>
           )}
           {page.description ? (
-            <Txt variant="body" tone="muted">
+            <Txt variant="body" tone="muted" className={`wrap-anywhere ${compact ? 'line-clamp-3' : 'line-clamp-6'}`}>
               {page.description}
             </Txt>
           ) : null}
@@ -513,7 +553,7 @@ export function KnowledgePageDetail({
             {compact ? (
               <Txt as="span" variant="caption" tone="muted" data-testid="knowledge-page-version">
                 <Metadata>
-                  {page.isScope ? null : <Metadata.Item>In {scope ? scopeTitle(scope) : page.scopeId}</Metadata.Item>}
+                  {page.isScope || !scope ? null : <Metadata.Item>In {scopeTitle(scope)}</Metadata.Item>}
                   <Metadata.Item>v{page.version}</Metadata.Item>
                   <Metadata.Item>
                     Updated{' '}
@@ -530,18 +570,19 @@ export function KnowledgePageDetail({
       </header>
 
       {compact ? (
-        <div className="flex flex-col gap-6 p-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-6 p-4">
           <dl
             aria-label="Links and notes"
             className="grid grid-cols-3 divide-x divide-border rounded-lg border border-border"
           >
-            <PeekCount label="Links in" value={mentionedBy.length} />
+            <PeekCount label="Links in" value={linksIn} />
             <PeekCount label="Links out" value={linksTo.length} />
             <PeekCount label="Notes" value={notesMore ? `${notes.length}+` : notes.length} />
           </dl>
-          <KnowledgeDetailSection label="Preview">
+          {/* The preview takes the panel's free height: a long body scrolls inside it, down to 12rem. */}
+          <KnowledgeDetailSection label="Preview" className="min-h-48 flex-1">
             {page.body ? (
-              <ScrollArea maxHeight="12rem">
+              <ScrollArea className="min-h-0">
                 <div data-testid="knowledge-page-body">{body}</div>
               </ScrollArea>
             ) : (
@@ -593,7 +634,7 @@ export function KnowledgePageDetail({
                           shown?.[index]?.scrollIntoView({ block: 'start', behavior: 'smooth' });
                         }}
                       >
-                        {heading.text}
+                        <span className="line-clamp-2 wrap-anywhere">{heading.text}</span>
                       </button>
                     </li>
                   ))}

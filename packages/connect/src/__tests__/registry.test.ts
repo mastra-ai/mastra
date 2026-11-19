@@ -16,6 +16,7 @@ describe('shipped provider registry', () => {
       'elevenlabs',
       'fireflies',
       'github',
+      'gitlab',
       'google-analytics',
       'google-calendar',
       'google-docs',
