@@ -8,6 +8,7 @@ import { SpanFeedbackTab } from '../span-feedback-tab';
 import { TraceFeedbackTab } from '../trace-feedback-tab';
 import { TraceSpanPanel } from '../trace-span-panel';
 import type { TraceSpanPanelProps } from '../trace-span-panel';
+import { TraceThreadPanel } from '../trace-thread-panel';
 import { useTraceUsageColumns, useTracesConfig, useTracesList, useTracesSelection } from './traces-explorer-context';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
 import { ScoreDataPanel, TraceScoresList } from '@/domains/scores';
@@ -44,6 +45,8 @@ export function TracesExplorerPanel({
   const [datasetDialogTarget, setDatasetDialogTarget] = useState<DatasetDialogTarget | null>(null);
   // Keyed by trace id so selecting another trace (row click, prev/next) falls back to the trace panel.
   const [fullThreadTraceId, setFullThreadTraceId] = useState<string | null>(null);
+  // The last thread opened: kept while its drawer animates out.
+  const [fullThreadId, setFullThreadId] = useState('');
 
   // Tab badge counts; the tab bodies re-use these first-page queries through React Query's cache.
   const { data: traceFeedbackData } = useTraceFeedback({
@@ -115,12 +118,10 @@ export function TracesExplorerPanel({
           setFullThreadTraceId(null);
           closeTrace();
         }}
-        isFullThreadOpen={isFullThreadOpen}
-        withQueryTrace={withQueryTrace}
-        withFeedback={withFeedback}
-        feedbackOptions={feedbackOptions}
-        onOpenScore={onOpenScore}
-        onFullThreadOpenChange={open => setFullThreadTraceId(open ? (traceId ?? null) : null)}
+        onOpenFullThread={threadId => {
+          setFullThreadId(threadId);
+          setFullThreadTraceId(traceId ?? null);
+        }}
         onSpanSelect={id => selectSpan(id ?? null)}
         onSaveAsDatasetItem={withAddTraceToDataset ? setDatasetDialogTarget : undefined}
         initialSpanId={spanId}
@@ -154,6 +155,17 @@ export function TracesExplorerPanel({
         }
         headerActionsSlot={traceId && headerActionsSlot ? headerActionsSlot({ traceId, spans }) : undefined}
         traceHref={traceId && traceHref ? traceHref(traceId) : undefined}
+      />
+      {/* Rendered after the trace panel: DataPanel stacking follows DOM order. */}
+      <TraceThreadPanel
+        open={isFullThreadOpen}
+        depth={2}
+        threadId={fullThreadId}
+        onOpenScore={onOpenScore}
+        withQueryTrace={withQueryTrace}
+        withFeedback={withFeedback}
+        feedbackOptions={feedbackOptions}
+        onClose={() => setFullThreadTraceId(null)}
       />
       <ScoreDataPanel depth={depth} score={featuredScore} onClose={() => selectScore(null)} />
       {withAddTraceToDataset && (

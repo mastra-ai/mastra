@@ -38,6 +38,7 @@ import { IconArrowUp } from '@mastra/playground-ui/icons/central/IconArrowUp';
 import { IconMicrophone } from '@mastra/playground-ui/icons/central/IconMicrophone';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { useSpeechRecognition } from '@mastra/react';
+import { useMcpAppTools } from '@mastra/react/hooks/mcps';
 import { useReadAloud } from '@mastra/react/hooks/voice';
 
 import type { MessageFactoryPart } from '@mastra/react/ui';
@@ -151,6 +152,10 @@ const ThreadContent = ({
     onError: error => toast.error(error instanceof Error ? error.message : 'Voice generation failed.'),
   });
 
+  // The agent's MCP app tools: the rows group and draw their calls as apps. A request per MCP server,
+  // so only once there are messages to draw.
+  const { data: mcpAppTools } = useMcpAppTools({ queryOptions: { enabled: messages.length > 0 } });
+
   const { hasSession, viewMode } = useBrowserSession();
   const showThumbnailInChat = hasSession && (viewMode === 'collapsed' || viewMode === 'expanded');
 
@@ -262,6 +267,7 @@ const ThreadContent = ({
                                 isSpeaking={isSpeaking}
                                 onReadAloud={readAloud}
                                 onStopSpeaking={stopSpeaking}
+                                mcpAppTools={mcpAppTools}
                               />
                             </MessageScrollerItem>
                           ))}
