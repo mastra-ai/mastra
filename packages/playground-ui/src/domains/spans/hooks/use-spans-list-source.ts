@@ -4,6 +4,7 @@ import type { SpanQueryArgs, SpanRow } from '@mastra/react/hooks/traces';
 import { useMemo } from 'react';
 import { useListAnchor, useListHeadPoll, windowEndingAt } from '@/domains/observability/hooks/use-list-head-poll';
 import { observabilityListQueryOptions } from '@/domains/observability/hooks/use-observability-list-filters';
+import { PROGRESSIVE_CHUNK_MS } from '@/domains/observability/lib/progressive-search';
 import { OBSERVABILITY_LIST_HEAD_LIMIT } from '@/domains/observability/list-polling';
 import { mergeHeadRows } from '@/domains/observability/merge-head-rows';
 
@@ -67,9 +68,16 @@ export function useSpansListSource({
       // span is caught once it ends if it started inside the polled window. A preset window slides with
       // each poll, so a span that ran longer than the whole window is missed: the price of staying under
       // the server's cap on the window length.
+      // A progressive word search chunks only startedAt sorts, so an endedAt head poll is sent as a
+      // plain search of the newest chunk: the server refuses a plain word search over 7 days.
+      const { progressive, ...headQuery } = query;
+      const window = windowEndingAt(query.timeRange, to, fixedStart);
+      const from = progressive
+        ? new Date(Math.max(Date.parse(window.from), Date.parse(window.to) - PROGRESSIVE_CHUNK_MS)).toISOString()
+        : window.from;
       const result = await client.querySpans({
-        ...query,
-        timeRange: { ...query.timeRange, ...windowEndingAt(query.timeRange, to, fixedStart) },
+        ...headQuery,
+        timeRange: { ...query.timeRange, ...window, from },
         orderBy: [{ field: 'endedAt', direction: 'desc' }],
         page: { limit: OBSERVABILITY_LIST_HEAD_LIMIT },
       });

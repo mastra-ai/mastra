@@ -4,6 +4,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { serializeTraceColumnPreferences } from '../../../trace-list-columns';
 import { TracesExplorer } from '../index';
 import { DEFAULT_TRACES_FILTERS, DEFAULT_TRACES_SORT, EMPTY_TRACES_SELECTION } from '../traces-explorer-actions';
 import type { TracesFilters, TracesSort } from '../traces-explorer-actions';
@@ -155,6 +156,25 @@ describe('TracesExplorer progressive word search', () => {
   useFixedChartSize(1200, 800);
 
   describe('when the server searches in chunks', () => {
+    it('lists a time-to-first-chunk sort without progressive, since the server chunks only start-time sorts', async () => {
+      localStorage.setItem(
+        `mastra:traces:columns:${TEST_BASE_URL}:/api`,
+        serializeTraceColumnPreferences({
+          visibleColumns: ['input', 'timeToFirstChunk'],
+          customColumns: [],
+          metadataKeys: [],
+        }),
+      );
+      const { queries } = setHandlers();
+      renderExplorer();
+      await waitFor(() => expect(queries[0]).toMatchObject({ progressive: true }));
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Time to first chunk, not sorted, sort ascending' }));
+
+      await waitFor(() => expect(queries.at(-1)?.orderBy?.[0]?.field).toBe('timeToFirstChunkMs'));
+      expect(queries.at(-1)).not.toHaveProperty('progressive');
+    });
+
     it('charts the range one chunk at a time and follows the chart in the status line', async () => {
       const gate = chunkGate();
       const { queries, aggregates } = setHandlers({ gate });
