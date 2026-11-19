@@ -159,7 +159,7 @@ const host = useMemo(
     observabilityWidgetPins({
       resourceUri: 'ui://mastra/observability-widget',
       pinnedIds,
-      onPin: ({ widget, datePreset, filters }) => savePin(widget, datePreset, filters),
+      onPin: ({ widget, datePreset, filters, projectId }) => savePin(widget, datePreset, filters, projectId),
       onUnpin: widgetId => removePin(widgetId),
     }),
   [pinnedIds],
@@ -230,14 +230,14 @@ const host = useMemo(
   () =>
     observabilityWidgetHost({
       resourceUri: 'ui://mastra/observability-widget',
-      onConfigure: ({ widget, datePreset, customRange, filters }) =>
-        openWidgetSettings(widget, { datePreset, customRange, filters }),
+      onConfigure: ({ widget, datePreset, customRange, filters, projectId }) =>
+        openWidgetSettings(widget, { datePreset, customRange, filters, projectId }),
     }),
   [],
 );
 ```
 
-The callback gets the widget as the opening tool returned it, with the date preset (and `customRange` when `custom`) and the filters it is drawn with, like a pin. The button only shows when the host passes `onConfigure` and accepts structured model context. It sits before the pin button and appears on the card's hover or keyboard focus, and always shows on touch screens.
+The callback gets the widget as the opening tool returned it, with the date preset (and `customRange` when `custom`), the filters it is drawn with and the project it read (`projectId`) when it had one, like a pin. The button only shows when the host passes `onConfigure` and accepts structured model context. It sits before the pin button and appears on the card's hover or keyboard focus, and always shows on touch screens.
 
 ### Validating stored dashboards
 
