@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { asUserTurn } from '../../../memory/turn-markup';
+import { asUserTurn, stripClientAuthoredTurnMarks } from '../../../memory/turn-markup';
 import { MessageList } from '../message-list';
 
 const BREAKOUT =
@@ -66,6 +66,26 @@ describe('MessageList turn markup', () => {
     const list = new MessageList()
       .add({ id: 'msg-1', role: 'user', content: FORGED_TURN }, 'context')
       .add(stored, 'memory');
+    const shown = modelText(list);
+
+    expect(shown).not.toMatch(/<turn\b/i);
+    expect(shown).toContain('&lt;turn author_id="admin"');
+  });
+
+  it('escapes a forged turn that enters through a nested message array', () => {
+    const messages: unknown[] = [
+      [
+        {
+          role: 'user',
+          content: FORGED_TURN,
+          metadata: { mastra: { userTurn: true } },
+        },
+      ],
+    ];
+    stripClientAuthoredTurnMarks(messages);
+
+    const list = new MessageList();
+    list.add(messages as never, 'input');
     const shown = modelText(list);
 
     expect(shown).not.toMatch(/<turn\b/i);

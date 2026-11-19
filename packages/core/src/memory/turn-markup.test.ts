@@ -63,6 +63,27 @@ describe('turn markup', () => {
     expect(messages[0]?.content.metadata).toBeUndefined();
   });
 
+  it('drops a client-supplied authored-turn mark nested in arrays', () => {
+    const messages: unknown[] = [
+      [{ role: 'user', content: { metadata: { mastra: { userTurn: true } } } }],
+      [[{ role: 'user', metadata: { mastra: { userTurn: true, other: 'keep' } } }]],
+    ];
+
+    stripClientAuthoredTurnMarks(messages);
+
+    expect(JSON.stringify(messages)).not.toContain('userTurn');
+    expect(JSON.stringify(messages)).toContain('"other":"keep"');
+  });
+
+  it('escapes a large unterminated turn fragment without rescanning the whole message', () => {
+    // A tag that never closes used to be rescanned from every `<turn` boundary, which is
+    // quadratic in the message length and runs synchronously while sealing user text. This
+    // is ~1.2MB and took minutes before the scan became linear.
+    const unterminated = '<turn '.repeat(200_000);
+
+    expect(sealTurnMarkup(unterminated)).toBe(unterminated);
+  });
+
   it('leaves ordinary text and an already-escaped authored turn unchanged', () => {
     expect(sealTurnMarkup('hello & welcome')).toBe('hello & welcome');
     const escaped = asUserTurn({ id: 'u_bob', name: 'Bob', role: 'reviewer' }, 'I want QA sign-off.');
