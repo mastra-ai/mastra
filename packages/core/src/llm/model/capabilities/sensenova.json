@@ -16,12 +16,6 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "sensenova-6.8-flash-lite": [
       {
         "type": "effort",
@@ -32,6 +26,12 @@
       {
         "type": "effort",
         "values": ["none", "high"]
+      }
+    ],
+    "kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "deepseek-v4-pro": [
