@@ -35,7 +35,7 @@ import {
   RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID,
 } from './execution-fence';
 import { withExecutionStreamProducer } from './execution-stream-publisher';
-import { createSupersededEventFilter, emitAbortEvent } from './stream-adapter';
+import { createSupersededEventFilter, emitAbortEvent, newestLogIndex } from './stream-adapter';
 import type { AgentStreamEvent, DurableAgenticWorkflowInput, DurableToolCallInput } from './types';
 import { createDurableAgenticWorkflow } from './workflows/create-durable-agentic-workflow';
 import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
@@ -95,10 +95,15 @@ export class DurableExecutionEngine {
     pubsub: PubSub,
     runId: string,
     offset: number | undefined,
-  ): Promise<{ minGeneration?: number; keepReplayEvent: (event: AgentStreamEvent) => boolean }> {
+  ): Promise<{
+    minGeneration?: number;
+    keepReplayEvent: (event: AgentStreamEvent) => boolean;
+    attachedAtLogIndex: number | undefined;
+  }> {
     const history = (await pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)) as AgentStreamEvent[];
     const keepReplayEvent = createSupersededEventFilter(history);
-    if (!offset) return { keepReplayEvent };
+    const attachedAtLogIndex = newestLogIndex(history);
+    if (!offset) return { keepReplayEvent, attachedAtLogIndex };
     const skipped = history.slice(0, offset);
     if (skipped.length === offset) {
       let floor: number | undefined;
@@ -106,9 +111,9 @@ export class DurableExecutionEngine {
         const generation = event.generation;
         if (typeof generation === 'number' && (floor === undefined || generation > floor)) floor = generation;
       }
-      return { minGeneration: floor, keepReplayEvent };
+      return { minGeneration: floor, keepReplayEvent, attachedAtLogIndex };
     }
-    return { minGeneration: await readRunGeneration(this.mastra, runId), keepReplayEvent };
+    return { minGeneration: await readRunGeneration(this.mastra, runId), keepReplayEvent, attachedAtLogIndex };
   }
 
   async loadSuspendedIteration(

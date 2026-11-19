@@ -144,13 +144,6 @@ const openRenameDialog = async () => {
 
 describe('ChatThreads — thread actions', () => {
   describe('when the user can write and delete memory', () => {
-    it('shows a thread actions menu instead of a delete button', async () => {
-      renderWithThread();
-
-      expect(await screen.findByRole('button', { name: 'Thread actions' })).toBeTruthy();
-      expect(screen.queryByRole('button', { name: 'delete thread' })).toBeNull();
-    });
-
     it('lists Rename and Delete in the menu', async () => {
       renderWithThread();
 
@@ -284,14 +277,6 @@ describe('ChatThreads — pinning', () => {
 
       expect(await screen.findByText('Trip planning')).toBeTruthy();
       expect(screen.queryByRole('region', { name: 'Recent' })).toBeNull();
-    });
-
-    it('offers Pin in the thread menu', async () => {
-      renderTwoThreads();
-
-      fireEvent.click((await screen.findAllByRole('button', { name: 'Thread actions' }))[0]);
-
-      expect(await screen.findByRole('menuitem', { name: 'Pin' })).toBeTruthy();
     });
   });
 

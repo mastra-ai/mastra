@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 import { EditorView } from '@codemirror/view';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { SpanRecord } from '../../../types';
 
@@ -24,12 +23,10 @@ import {
   modelGenerationSpan,
   modelStepSpan,
   toolCallSpan,
-  traceWithoutToolCalls,
   unknownPartSpan,
   workflowStepSpan,
 } from './fixtures/span-payloads';
-import { server } from '@/test/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
+import { renderWithProviders } from '@/test/render';
 
 // jsdom does not provide PointerEvent, which Base UI switches dispatch.
 beforeAll(() => vi.stubGlobal('PointerEvent', MouseEvent));
@@ -228,12 +225,6 @@ describe('Span details view', () => {
 });
 
 describe('SpanDataPanelView integration', () => {
-  beforeEach(() => {
-    server.use(
-      http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(traceWithoutToolCalls)),
-    );
-  });
-
   const renderPanel = (span: SpanRecord) =>
     renderWithProviders(<SpanDataPanelView traceId="trace-1" spanId={span.spanId} span={span} />);
   const openTab = (name: string) => fireEvent.click(screen.getByRole('tab', { name: new RegExp(`^${name}`, 'i') }));

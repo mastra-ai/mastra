@@ -1216,6 +1216,13 @@ export class DurableAgent<
    * `idleTimeoutMs` (no `isAlive`) only detaches this observer, so pass
    * `isAlive` if you rely on the timeout to reclaim a crashed run's state. Both
    * options are opt-in; omit them for the current unbounded behavior.
+   *
+   * By default the observed stream stays open when the run suspends (e.g. for
+   * tool approval) so a later resume can continue on the same reader. Pass
+   * `closeOnSuspend: true` to end the stream at the suspension boundary so
+   * `fullStream`/`text`/`getFullOutput()` resolve instead of hanging; closing
+   * stays observer-scoped, keeping the run's registry entry and replay history
+   * so it can still be resumed with `resume()`/`resumeStream()`.
    */
   declare observe: (
     runId: string,
@@ -1232,6 +1239,18 @@ export class DurableAgent<
       offset?: number;
       idleTimeoutMs?: number;
       isAlive?: () => boolean | Promise<boolean>;
+      /**
+       * Whether this observer's stream closes when the observed run suspends
+       * (e.g. for tool approval). Defaults to `false`: the stream stays open
+       * across suspension so a later resume can continue on this same reader.
+       *
+       * Set to `true` so `fullStream`, `text`, and `getFullOutput()` resolve at
+       * the suspension boundary instead of hanging. Closing stays
+       * observer-scoped — the run's registry entry and replay history are
+       * preserved. Resume the run with `resumeStream()`/`resume()`, which always
+       * return a fresh stream.
+       */
+      closeOnSuspend?: boolean;
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
       experimentalTransform?: MastraStreamTransformOptions<TOutput>;
       onStepFinish?: (result: DurableAgentStepFinishResult) => void | Promise<void>;

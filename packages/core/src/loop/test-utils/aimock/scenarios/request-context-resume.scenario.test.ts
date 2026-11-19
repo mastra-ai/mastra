@@ -111,7 +111,7 @@ describeForAllEngines('AIMock loop scenario: request context on approval resume'
     });
 
     // Inngest forwards this lookup to plain Agent, which reads requestContext rather than
-    // the durable snapshot's context.input.requestContextEntries (also fails before extraction).
+    // the durable snapshot's context.input.requestContextEntries; this is an existing limitation.
     const itReadsSuspendedContext = engine === 'inngest' ? it.fails : it;
     itReadsSuspendedContext(
       'exposes the saved caller context for approval routing before applying new context',

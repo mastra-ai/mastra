@@ -30,6 +30,7 @@ import type {
   PullRequest,
   PullRequestComment,
   PublishCommitCheckInput,
+  ResolveReviewThreadInput,
   PullRequestRef,
   RepositoriesAccess,
   RepositoryAccess,
@@ -636,6 +637,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     createReviewComment: input => this.#createReviewComment(input),
     updateReviewComment: input => this.#updateReviewComment(input),
     deleteReviewComment: input => this.#deleteReviewComment(input),
+    resolveReviewThread: input => this.#resolveReviewThread(input),
     listRequestedReviewers: input => this.#requestedReviewers('GET', input),
     requestReviewers: input => this.#requestedReviewers('POST', input),
     removeRequestedReviewers: input => this.#requestedReviewers('DELETE', input),
@@ -1812,6 +1814,15 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       'DELETE',
       repositoryPath(input.sourceId, `pulls/comments/${requirePositiveId(input.commentId, 'review comment')}`),
       { ...actingUser(input.actingUserId) },
+    );
+  }
+
+  async #resolveReviewThread(input: ResolveReviewThreadInput) {
+    requireGithubConnection(input.connection);
+    await this.#client.request<void>(
+      'PUT',
+      repositoryPath(input.sourceId, `pulls/comments/${requirePositiveId(input.commentId, 'review comment')}/thread`),
+      { body: { resolved: input.resolved }, ...actingUser(input.actingUserId) },
     );
   }
 

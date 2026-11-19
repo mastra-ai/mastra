@@ -611,18 +611,6 @@ describe('PropertyFilterCreator — moving through the property list', () => {
     expect(focusedRow()).toContain('Primitive ID');
   });
 
-  it('jumps to either end', () => {
-    render(<PropertyFilterCreator fields={MULTI_FIELDS} tokens={[]} onTokensChange={vi.fn()} />);
-    openMenu();
-    const menu = screen.getByRole('menu');
-
-    fireEvent.keyDown(menu, { key: 'End' });
-    expect(focusedRow()).toContain('Tags');
-
-    fireEvent.keyDown(menu, { key: 'Home' });
-    expect(focusedRow()).toContain('Primitive ID');
-  });
-
   it('jumps to either end of a longer list', () => {
     render(<PropertyFilterCreator fields={FIELDS} tokens={[]} onTokensChange={vi.fn()} />);
     openMenu();

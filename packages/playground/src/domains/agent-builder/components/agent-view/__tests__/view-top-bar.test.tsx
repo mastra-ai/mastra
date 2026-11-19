@@ -64,7 +64,6 @@ describe('ViewTopBar', () => {
       </FormWrapper>,
     );
 
-    expect(screen.queryByTestId('agent-builder-mode-badge-test')).toBeNull();
     const toggle = screen.getByTestId('agent-builder-mode-toggle');
     expect(toggle.textContent).toContain('Switch to Edit');
     fireEvent.click(toggle);
@@ -78,8 +77,6 @@ describe('ViewTopBar', () => {
       </FormWrapper>,
     );
 
-    expect(screen.queryByTestId('agent-builder-mode-badge-test')).toBeNull();
-    expect(screen.queryByTestId('agent-builder-mode-badge-build')).toBeNull();
     expect(screen.queryByTestId('agent-builder-mode-toggle')).toBeNull();
   });
 

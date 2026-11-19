@@ -6,12 +6,12 @@
         "type": "toggle"
       }
     ],
-    "jad-go": [
+    "jad-code": [
       {
         "type": "toggle"
       }
     ],
-    "jad-code": [
+    "jad-go": [
       {
         "type": "toggle"
       }

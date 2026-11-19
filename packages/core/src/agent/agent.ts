@@ -218,6 +218,7 @@ import type {
 } from './agent.types';
 import type { DelegationRefInput, DelegationRefRegistry } from './delegation-refs';
 import { createDelegationRefRegistry, resolveDelegationRefs } from './delegation-refs';
+import { releaseRemoteAbortListener } from './durable/abort-transport';
 import {
   AgentStreamEventTypes,
   DurableStepIds,
@@ -320,6 +321,7 @@ import {
   resolveVersionContext,
   recoverySkip,
   TRANSIENT_RECOVERY_RETRY_DELAY_MS,
+  applyReservedMemoryContextKeys,
 } from './helpers';
 import { buildMcpServerGuidance } from './mcp-guidance';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
@@ -414,12 +416,7 @@ import type {
   ModelWithRetries,
   ZodSchema,
 } from './types';
-import {
-  applyReservedMemoryContextKeys,
-  isSupportedLanguageModel,
-  resolveThreadIdFromArgs,
-  supportedLanguageModelSpecifications,
-} from './utils';
+import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 import type { AgentCapabilities } from './workflows/prepare-stream/schema';
 /** Whether a failed owned recovery should terminate observers of the run. */
@@ -11039,13 +11036,18 @@ export class Agent<
     if (agentThreadStreamRuntime.abortRun(runId, this.getPubSub())) {
       this.#abortLocalController(runId);
       void this.requestRemoteAbort(runId);
-      if (await engine.cancelParkedRun(runId)) await engine.announceCanceledRun(runId, pubsub);
+      if (await engine.cancelParkedRun(runId)) {
+        await engine.announceCanceledRun(runId, pubsub);
+        await releaseRemoteAbortListener(runId, this.#mastra);
+      }
       return true;
     }
     try {
       const canceled = await engine.cancelParkedRun(runId);
       if (canceled) await engine.announceCanceledRun(runId, pubsub);
-      return (await requestAcknowledgedAbort(pubsub, runId)) || canceled;
+      const acknowledged = await requestAcknowledgedAbort(pubsub, runId);
+      if (canceled) await releaseRemoteAbortListener(runId, this.#mastra);
+      return acknowledged || canceled;
     } finally {
       this.#abortLocalController(runId);
     }
@@ -13656,6 +13658,8 @@ export class Agent<
       // The observable deadline must not wait for snapshot I/O.
       if (error) await reportError(error);
       if (finished) await this.deleteRunSnapshots(runId);
+      // Final runs no longer need abort listeners; suspended runs keep theirs for resume.
+      if (finished) await releaseRemoteAbortListener(runId, this.#mastra);
       // The claim is held until the save lands (bounded), so it is not rejected as a stale write.
       if (deadlineSave) await settledOrElapsed(deadlineSave, DEADLINE_SAVE_CLAIM_HOLD_MS);
     };
@@ -14050,6 +14054,7 @@ export class Agent<
           const finished = !!result?.status && result.status !== 'suspended';
           await executionFence.settle(async () => {
             if (finished) await this.deleteRunSnapshots(runId);
+            if (finished) await releaseRemoteAbortListener(runId, this.#mastra);
           });
           if (result?.status === 'failed') {
             throw this.executionEngine.workflowFailureError((result as any).error, 'Workflow recover failed');
@@ -15967,6 +15972,8 @@ export class Agent<
        * https://mastra.ai/reference/agents/durable-agent#observerunid-options.
        */
       offset?: number;
+      /** Close this observer at suspension, keeping the run resumable. Defaults to false. */
+      closeOnSuspend?: boolean;
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
       onStepFinish?: (result: DurableAgentStepFinishResult) => void | Promise<void>;
       onFinish?: MastraOnFinishCallback<TOutput>;
@@ -16002,18 +16009,24 @@ export class Agent<
   async #readReplayFloor(
     runId: string,
     offset: number | undefined,
+    closeOnSuspend = false,
   ): Promise<
-    Pick<DurableStreamAdapterOptions, 'minGeneration' | 'rereadMinGeneration' | 'keepReplayEvent'> & {
+    Pick<
+      DurableStreamAdapterOptions,
+      'minGeneration' | 'rereadMinGeneration' | 'keepReplayEvent' | 'attachedAtLogIndex'
+    > & {
       refreshReplayFilter?: () => Promise<unknown>;
     }
   > {
     const pubsub = this.#executionStreamBus.forRun(this.__usesSharedRunLog()).pubsub;
     try {
-      const { keepReplayEvent: initialFilter, ...floor } = await this.executionEngine.readReplayFloor(
-        pubsub,
-        runId,
-        offset,
-      );
+      const {
+        keepReplayEvent: initialFilter,
+        attachedAtLogIndex: initialAttachedAt,
+        ...floor
+      } = await this.executionEngine.readReplayFloor(pubsub, runId, offset);
+      let attachedAt = initialAttachedAt;
+      const attachedAtLogIndex = closeOnSuspend ? () => attachedAt : undefined;
       let refreshedFilter: Promise<typeof initialFilter> | undefined;
       let currentFilter: typeof initialFilter | undefined;
       // Subscription can replay a newer claim than the snapshot above. Refresh
@@ -16021,7 +16034,10 @@ export class Agent<
       const refreshReplayFilter = () => {
         refreshedFilter ??= this.executionEngine
           .readReplayFloor(pubsub, runId, undefined)
-          .then(evidence => (currentFilter = evidence.keepReplayEvent))
+          .then(evidence => {
+            attachedAt = evidence.attachedAtLogIndex;
+            return (currentFilter = evidence.keepReplayEvent);
+          })
           .catch(() => (currentFilter = initialFilter));
         return refreshedFilter;
       };
@@ -16030,7 +16046,7 @@ export class Agent<
         if (currentFilter) return currentFilter(event);
         return refreshReplayFilter().then(filter => filter(event));
       };
-      return { ...floor, keepReplayEvent, refreshReplayFilter };
+      return { ...floor, attachedAtLogIndex, keepReplayEvent, refreshReplayFilter };
     } catch (error) {
       this.logger.warn(`[DurableAgent] Couldn't read the claim of run ${runId}; observing it without a floor`, {
         error,
@@ -16266,6 +16282,7 @@ export class Agent<
       offset?: number;
       idleTimeoutMs?: number;
       isAlive?: () => boolean | Promise<boolean>;
+      closeOnSuspend?: boolean;
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
       experimentalTransform?: MastraStreamTransformOptions<TOutput>;
       onStepFinish?: (result: DurableAgentStepFinishResult) => void | Promise<void>;
@@ -16539,7 +16556,7 @@ export class Agent<
       await options?.onChunk?.(chunk);
     };
 
-    const replayFloor = await this.#readReplayFloor(runId, options?.offset);
+    const replayFloor = await this.#readReplayFloor(runId, options?.offset, options?.closeOnSuspend);
 
     const stream = createDurableAgentStream<TOutput>({
       pubsub: pubsub,
@@ -16557,6 +16574,7 @@ export class Agent<
       ...replayFloor,
       idleTimeoutMs: options?.idleTimeoutMs,
       isAlive: options?.isAlive,
+      closeOnSuspend: options?.closeOnSuspend,
       onChunk: handleObservedChunk,
       experimentalTransform: options?.experimentalTransform,
       onStepFinish: options?.onStepFinish,

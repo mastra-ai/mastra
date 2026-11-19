@@ -21,19 +21,17 @@ function snippet(url: string, protectedServer: boolean, value: string): string {
 }
 
 describe('buildConnectSnippets', () => {
-  describe('when the endpoint URL contains shell metacharacters', () => {
-    it.each(HOSTILE_URLS)('single-quotes the URL in the Claude Code command: %s', url => {
-      const quoted = `'${url.replaceAll("'", `'\\''`)}'`;
-      expect(snippet(url, false, 'claude-code')).toBe(`claude mcp add --transport http mastra ${quoted}`);
-    });
-
-    it.each(HOSTILE_URLS)('single-quotes the URL in the Inspector command: %s', url => {
-      const quoted = `'${url.replaceAll("'", `'\\''`)}'`;
+  describe('when the server is not protected', () => {
+    it('builds the Claude Code and Inspector commands without an auth header', () => {
+      const url = 'http://localhost:4111/api/mcp';
+      expect(snippet(url, false, 'claude-code')).toBe(`claude mcp add --transport http mastra '${url}'`);
       expect(snippet(url, false, 'inspector')).toBe(
-        `npx @modelcontextprotocol/inspector --cli ${quoted} --transport http --method tools/list`,
+        `npx @modelcontextprotocol/inspector --cli '${url}' --transport http --method tools/list`,
       );
     });
+  });
 
+  describe('when the endpoint URL contains shell metacharacters', () => {
     it.each(HOSTILE_URLS)('keeps the URL unchanged in the Cursor and VS Code JSON: %s', url => {
       expect(JSON.parse(snippet(url, true, 'cursor')).mcpServers.mastra.url).toBe(url);
       expect(JSON.parse(snippet(url, true, 'vscode')).servers.mastra.url).toBe(url);

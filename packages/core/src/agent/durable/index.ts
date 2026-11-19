@@ -83,7 +83,7 @@ export {
   type DurableAgentStreamOptions,
   type DurableAgentStreamResult,
 } from './durable-agent';
-export { applyReservedMemoryContextKeys } from '../utils';
+export { applyReservedMemoryContextKeys } from '../helpers';
 
 // EventedAgent class (extends DurableAgent with fire-and-forget execution)
 export { EventedAgent, isEventedAgentClass, type EventedAgentConfig } from './evented-agent';

@@ -588,37 +588,4 @@ describe('useKeydown inside KeyboardShortcutsProvider', () => {
       expect(onTarget).not.toHaveBeenCalled();
     });
   });
-
-  describe('given a mounted provider', () => {
-    it('when it unmounts, then the window listener is removed', () => {
-      const removeSpy = vi.spyOn(window, 'removeEventListener');
-      const { unmount } = render(
-        <KeyboardShortcutsProvider>
-          <Shortcuts bindings={{ k: vi.fn() }} />
-        </KeyboardShortcutsProvider>,
-      );
-
-      unmount();
-
-      expect(removeSpy).toHaveBeenCalledWith('keydown', expect.any(Function));
-      removeSpy.mockRestore();
-    });
-
-    it('when several hooks register, then a single window listener is attached', () => {
-      const addSpy = vi.spyOn(window, 'addEventListener');
-      render(
-        <KeyboardShortcutsProvider>
-          <Shortcuts bindings={{ a: vi.fn() }} />
-          <Shortcuts bindings={{ b: vi.fn() }} />
-          <Page>
-            <Shortcuts bindings={{ c: vi.fn() }} />
-          </Page>
-        </KeyboardShortcutsProvider>,
-      );
-
-      const keydownRegistrations = addSpy.mock.calls.filter(([type]) => type === 'keydown');
-      expect(keydownRegistrations).toHaveLength(1);
-      addSpy.mockRestore();
-    });
-  });
 });

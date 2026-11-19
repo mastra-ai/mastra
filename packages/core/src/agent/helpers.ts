@@ -1,9 +1,15 @@
 import type { VersionOverrides } from '../mastra/types';
-import { MASTRA_VERSIONS_KEY, mergeVersionOverrides } from '../request-context';
+import {
+  MASTRA_VERSIONS_KEY,
+  mergeVersionOverrides,
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_THREAD_ID_KEY,
+} from '../request-context';
 import type { RequestContext } from '../request-context';
 import { RECOVER_ALREADY_IN_PROGRESS_ERROR_ID } from './durable/constants';
 import type { DurableAgentRecoveredRun } from './durable/durable-agent';
 import { RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID, RUN_ACTIVE_ERROR_ID } from './durable/execution-fence';
+import { resolveThreadIdFromArgs } from './utils';
 
 export function resolveVersionContext(
   requestContext: RequestContext,
@@ -81,4 +87,23 @@ export function recoverySkip(error: unknown): Pick<DurableAgentRecoveredRun, 're
         ? { reason: 'transient-error', retryAt: Date.now() + TRANSIENT_RECOVERY_RETRY_DELAY_MS }
         : undefined;
   }
+}
+
+/**
+ * Reserved request-context keys win over `memory` options, matching the base Agent: server
+ * middleware sets them from the authenticated identity so a request body cannot route memory
+ * to another user's thread or resource.
+ */
+export function applyReservedMemoryContextKeys<T extends { requestContext?: RequestContext; memory?: any }>(
+  options: T | undefined,
+): T | undefined {
+  const requestContext = options?.requestContext;
+  if (!options || !requestContext) return options;
+  const threadId = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+  const resourceId = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+  if (!threadId && !resourceId) return options;
+  const memory = { ...(options.memory ?? {}) };
+  if (threadId) memory.thread = resolveThreadIdFromArgs({ memory, overrideId: threadId });
+  if (resourceId) memory.resource = resourceId;
+  return { ...options, memory };
 }

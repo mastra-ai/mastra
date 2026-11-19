@@ -16,10 +16,10 @@
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "ossington-4-1": [
+    "rosedale-1": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
+        "values": ["minimal", "low", "medium", "high"]
       }
     ],
     "open-qwen-3.8-flash-next": [
@@ -28,10 +28,10 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "rosedale-1": [
+    "ossington-4-1": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
+        "values": ["none", "minimal", "low", "medium", "high"]
       }
     ]
   }

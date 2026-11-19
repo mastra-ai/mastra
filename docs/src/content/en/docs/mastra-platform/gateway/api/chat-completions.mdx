@@ -1,0 +1,147 @@
+---
+title: "Chat Completions | Gateway"
+description: "Send OpenAI-compatible chat completion requests, with streaming and tools, to any Gateway model."
+---
+
+# Chat Completions
+
+```text
+POST https://gateway-api.mastra.ai/v1/chat/completions
+```
+
+Compatible with the OpenAI Chat Completions API. Works with every chat model in the catalog, including non-OpenAI providers.
+
+## Request
+
+```bash
+curl https://gateway-api.mastra.ai/v1/chat/completions \
+  -H "Authorization: Bearer $MASTRA_GATEWAY_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "__GATEWAY_ANTHROPIC_MODEL_HAIKU__",
+    "messages": [
+      { "role": "system", "content": "Answer in one sentence." },
+      { "role": "user", "content": "What is a gateway?" }
+    ],
+    "max_tokens": 100
+  }'
+```
+
+Common fields:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'model',
+    type: 'string',
+    description: 'A `provider/model` ID from [`/v1/models`](/docs/mastra-platform/gateway/api/models).',
+  },
+  {
+    name: 'messages',
+    type: 'Message[]',
+    description: 'System, developer, user, assistant, and tool messages.',
+  },
+  {
+    name: 'stream',
+    type: 'boolean',
+    isOptional: true,
+    description: 'Stream server-sent events. Set `stream_options.include_usage` to receive a final usage chunk.',
+  },
+  {
+    name: 'tools',
+    type: 'Tool[]',
+    isOptional: true,
+    description: 'Function tools, plus Gateway tools such as [web search](/docs/mastra-platform/gateway/web-search).',
+  },
+  {
+    name: 'tool_choice',
+    type: "'auto' | 'none' | 'required' | object",
+    isOptional: true,
+    description: 'Controls which tool the model calls.',
+  },
+  {
+    name: 'response_format',
+    type: 'object',
+    isOptional: true,
+    description: 'Text, JSON object, or JSON schema output.',
+  },
+  {
+    name: 'max_tokens',
+    type: 'number',
+    isOptional: true,
+    description: 'Maximum tokens to generate.',
+  },
+  {
+    name: 'max_completion_tokens',
+    type: 'number',
+    isOptional: true,
+    description: 'Maximum completion tokens, including reasoning tokens.',
+  },
+  {
+    name: 'temperature',
+    type: 'number',
+    isOptional: true,
+    description: 'Sampling temperature.',
+  },
+  {
+    name: 'top_p',
+    type: 'number',
+    isOptional: true,
+    description: 'Nucleus sampling probability.',
+  },
+  {
+    name: 'stop',
+    type: 'string | string[]',
+    isOptional: true,
+    description: 'Sequences that stop generation.',
+  },
+  {
+    name: 'seed',
+    type: 'number',
+    isOptional: true,
+    description: 'Seed for best-effort deterministic sampling.',
+  },
+  {
+    name: 'web_search_options',
+    type: 'object',
+    isOptional: true,
+    description: 'Search context size and approximate user location for web search.',
+  },
+]}
+/>
+
+Gateway validates the request before routing. Unknown top-level fields are ignored. A body that doesn't match the schema returns `422`.
+
+## Streaming
+
+```typescript
+import OpenAI from 'openai'
+
+const client = new OpenAI({
+  apiKey: process.env.MASTRA_GATEWAY_API_KEY,
+  baseURL: 'https://gateway-api.mastra.ai/v1',
+})
+
+const stream = await client.chat.completions.create({
+  model: '__GATEWAY_OPENAI_MODEL__',
+  messages: [{ role: 'user', content: 'Count to five.' }],
+  stream: true,
+  stream_options: { include_usage: true },
+})
+
+for await (const chunk of stream) {
+  process.stdout.write(chunk.choices[0]?.delta?.content ?? '')
+}
+```
+
+Gateway fails over only before the first chunk is sent. After streaming starts, an upstream error ends the stream. See [Models and routing](/docs/mastra-platform/gateway/models-and-routing#failover).
+
+## Response headers
+
+| Header | Description |
+| - | - |
+| `x-request-id` | Unique request ID. Matches the entry in your usage logs. |
+| `x-gateway-provider` | The provider that served the request. |
+| `x-gateway-project` | The project the key belongs to. Sent for project keys only. |
+
+See [Usage, pricing, and limits](/docs/mastra-platform/gateway/usage-and-limits#errors) for error codes.
