@@ -7,7 +7,7 @@ description: "Browse engy model IDs, capabilities, context windows, and pricing.
 
 # <img src="https://models.dev/logos/engy.svg" alt="engy logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />engy
 
-Access 9 engy models through Mastra's model router. Authentication is handled automatically using the `ENGY_API_KEY` environment variable.
+Access 10 engy models through Mastra's model router. Authentication is handled automatically using the `ENGY_API_KEY` environment variable.
 
 Learn more in the [engy documentation](https://engy.ai/pricing).
 
@@ -121,13 +121,25 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "model": "engy/kimi-k3",
     "imageInput": true,
     "audioInput": false,
-    "videoInput": true,
+    "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1113088,
     "maxOutput": 65536,
     "inputCost": 1.95,
     "outputCost": 9.75
+  },
+  {
+    "model": "engy/kimi-k3.1-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1113088,
+    "maxOutput": 65536,
+    "inputCost": 1.4,
+    "outputCost": 7
   },
   {
     "model": "engy/qwen3.6-35b-a3b",
@@ -143,7 +155,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "engy/qwen3.8-27b",
-    "imageInput": true,
+    "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,

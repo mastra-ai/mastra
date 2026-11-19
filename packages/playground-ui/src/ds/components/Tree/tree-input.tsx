@@ -76,7 +76,7 @@ export const TreeInput = React.forwardRef<HTMLLIElement, TreeInputProps>(
         )}
         style={{ paddingLeft: depth * 12 + 18 }}
       >
-        <span className="flex shrink-0 items-center [&>svg]:size-3.5">
+        <span className="flex shrink-0 items-center [&>svg]:size-icon-sm">
           <Icon className="text-muted-foreground" />
         </span>
         <input

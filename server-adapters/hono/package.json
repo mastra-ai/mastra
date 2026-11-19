@@ -1,6 +1,6 @@
 {
   "name": "@mastra/hono",
-  "version": "1.7.26-alpha.3",
+  "version": "1.7.27",
   "description": "Mastra Hono adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -30,7 +30,7 @@
     "@hono/node-ws": "^1.3.1",
     "@mastra/server": "workspace:*",
     "fetch-to-node": "^2.1.0",
-    "ws": "^8.22.0"
+    "ws": "^8.23.0"
   },
   "devDependencies": {
     "@ai-sdk/openai": "^2.0.139",
@@ -45,9 +45,11 @@
     "@mastra/duckdb": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/mcp": "workspace:*",
+    "@mastra/mcp-apps-components": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/observability": "workspace:*",
     "@mastra/server-adapters-test-suite": "workspace:*",
+    "@modelcontextprotocol/client": "2.4.0",
     "@types/node": "22.19.15",
     "@types/ws": "^8.18.2",
     "hono": "^4.13.13",
@@ -57,7 +59,7 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.83.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.85.1-0 <2.0.0-0",
     "hono": "^4.13.5"
   },
   "engines": {

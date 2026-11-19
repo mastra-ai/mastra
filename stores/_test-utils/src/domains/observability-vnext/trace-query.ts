@@ -11,29 +11,31 @@ import {
   parseTraceQueryRequest,
   planThreadQuery,
   planTraceQuery,
-  type NormalizedQueryThreadsInput,
-  type NormalizedTraceQueryRequest,
-  type TraceAggregateDimension,
-  type QueryThreadsInput,
-  type QueryThreadsResult,
-  type TraceQueryGroupResponse,
-  type TraceQueryPaginatedTraceResponse,
-  type TraceQueryPredicate,
-  type TraceQueryRequest,
-  type TraceQueryResponse,
-  type TraceQueryScalarPredicate,
-  type TraceQueryTrace,
-  type TraceQueryTraceResponse,
-  type SpanAggregateDimension,
-  type TrustedThreadPredicate,
-  type TrustedThreadQueryPlan,
-  type TraceQuerySortValue,
-  type TrustedTraceQueryKeysetTracesPlan,
-  type TrustedTraceQueryPlan,
-  type TrustedTraceQueryPredicate,
-  type TrustedTraceQueryScalarPredicate,
-  type TraceQueryTenantScope,
-  type ObservabilityStorageFeature,
+} from '@mastra/core/storage';
+import type {
+  NormalizedQueryThreadsInput,
+  NormalizedTraceQueryRequest,
+  TraceAggregateDimension,
+  QueryThreadsInput,
+  QueryThreadsResult,
+  TraceQueryGroupResponse,
+  TraceQueryPaginatedTraceResponse,
+  TraceQueryPredicate,
+  TraceQueryRequest,
+  TraceQueryResponse,
+  TraceQueryScalarPredicate,
+  TraceQueryTrace,
+  TraceQueryTraceResponse,
+  SpanAggregateDimension,
+  TrustedThreadPredicate,
+  TrustedThreadQueryPlan,
+  TraceQuerySortValue,
+  TrustedTraceQueryKeysetTracesPlan,
+  TrustedTraceQueryPlan,
+  TrustedTraceQueryPredicate,
+  TrustedTraceQueryScalarPredicate,
+  TraceQueryTenantScope,
+  ObservabilityStorageFeature,
 } from '@mastra/core/storage';
 
 export interface RawTraceQuerySpan {
@@ -3261,6 +3263,7 @@ function evaluateScalarPredicate(
       : predicate.args.some(arg => evaluateScalarPredicate(arg, record));
   }
   if (predicate.type === 'not') return !evaluateScalarPredicate(predicate.arg, record);
+  if (predicate.type === 'tokens') throw new Error('Token search requires store-specific conformance tests');
   const value = record[predicate.field as keyof typeof record] as unknown;
   if (predicate.type === 'collection') {
     // Missing and empty collections are indistinguishable: both mean "no members".

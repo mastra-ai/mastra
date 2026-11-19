@@ -22,9 +22,8 @@ import type {
   ErrorProcessorOrWorkflow,
 } from '../../processors';
 import type { ProcessorState } from '../../processors/runner';
-import { RequestContext, MASTRA_SCOPES_KEY, MASTRA_VERSIONS_KEY, mergeVersionOverrides } from '../../request-context';
+import { RequestContext, MASTRA_SCOPES_KEY, MASTRA_VERSIONS_KEY } from '../../request-context';
 import type { VersionOverrides } from '../../request-context';
-import { getRequestContextInputValues } from '../../request-context/input-source';
 import { asJsonSchema } from '../../stream/base/schema';
 import { normalizeToolPayloadTransformPolicy } from '../../tools/payload-transform';
 import type { CoreTool, ToolHooks, ToolPayloadTransformPolicy } from '../../tools/types';
@@ -33,11 +32,13 @@ import { boundedStringify, deepMerge } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
 import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
+import { resolveVersionContext } from '../helpers';
 import { assertThreadOwnedByResource } from '../memory-thread-ownership';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { modelSpanAttributes } from '../model-span-attributes';
 import { snapshotRequestContextEntries } from '../request-context-snapshot';
+import { validateAgentRequestContext } from '../request-context-validation';
 import { SaveQueueManager } from '../save-queue';
 import { applyResolvedAgentScopes, incomingAgentScopes, resolveAgentScopes } from '../scopes';
 import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from '../signals';
@@ -69,6 +70,11 @@ import {
 } from './utils/serialize-state';
 import { generateDurableThreadTitle } from './workflows/finalize-run';
 import { isJsonSafe } from './workflows/shared/schemas';
+
+/** Marks `prepare()` options whose scopes the caller applies itself (a resume rebuilt from storage). */
+export const SCOPES_ALREADY_APPLIED = Symbol('mastra.durable.scopesAlreadyApplied');
+/** Carries the persisted spans a resume rebuilt from storage reattaches to into `prepare()`. */
+export const RESUMED_SPAN_DATA = Symbol('mastra.durable.resumedSpanData');
 
 /**
  * Mirror of Agent#convertInstructionsToString — used for the AGENT_RUN span
@@ -293,29 +299,12 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // 2a. Validate the request context against the agent's requestContextSchema,
   // mirroring Agent.stream()/generate(). Without this, schema violations are
   // silently ignored on the durable path.
-  if (typedAgent.requestContextSchema) {
-    const contextValues = getRequestContextInputValues(requestContext);
-    const validation = await typedAgent.requestContextSchema['~standard'].validate(contextValues);
-
-    if (validation.issues) {
-      const errorMessages = validation.issues
-        .map(e => {
-          const pathStr = e.path?.map((p: any) => (typeof p === 'object' ? p.key : p)).join('.');
-          return `- ${pathStr}: ${e.message}`;
-        })
-        .join('\n');
-      throw new MastraError({
-        id: 'AGENT_REQUEST_CONTEXT_VALIDATION_FAILED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: `Request context validation failed for agent '${publicAgentId}':\n${errorMessages}`,
-        details: {
-          agentId: publicAgentId,
-          agentName: publicAgentName,
-        },
-      });
-    }
-  }
+  await validateAgentRequestContext({
+    requestContextSchema: typedAgent.requestContextSchema,
+    requestContext,
+    agentId: publicAgentId,
+    agentName: publicAgentName,
+  });
 
   // 2a. Merge the wrapped agent's defaultOptions under the per-request options,
   // mirroring the non-durable Agent.stream()/generate() paths. Without this the
@@ -365,13 +354,12 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 3. Merge version overrides (Mastra defaults < requestContext < call-site)
   const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
-  let mergedVersions = mergeVersionOverrides(mastra?.getVersionOverrides?.(), requestVersions);
-  if ((execOptions as any)?.versions) {
-    mergedVersions = mergeVersionOverrides(mergedVersions, (execOptions as any).versions);
-  }
-  if (mergedVersions) {
-    requestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
-  }
+  resolveVersionContext(
+    requestContext,
+    requestVersions,
+    mastra?.getVersionOverrides?.(),
+    (execOptions as any)?.versions,
+  );
 
   // Resolve and validate the complete model selection before durable preparation
   // can persist a thread or run user-defined processors, tools, or hooks.

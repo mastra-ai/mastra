@@ -274,7 +274,7 @@ function DiffCard({
     <div data-slot="prompt-diff" className="min-w-0 overflow-clip rounded-md border border-border bg-card">
       <header className="flex min-w-0 flex-col gap-0.5 border-b border-border px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
-          <span aria-hidden className="flex shrink-0 text-muted-foreground [&_svg]:size-4">
+          <span aria-hidden className="flex shrink-0 text-muted-foreground [&_svg]:size-icon-md">
             {icon}
           </span>
           <Txt as="h4" variant="label" tone="ink" className="truncate">

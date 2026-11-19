@@ -1,4 +1,4 @@
-import type { RuleGroup } from '../rules/rule-group.js';
+import type { RuleCondition, RuleGroup } from '../rules/rule-group.js';
 import { CARD_RULE_FIELDS } from '../rules/rule-group.js';
 import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '../rules/types.js';
 
@@ -150,9 +150,13 @@ export function combineUpdates(events: readonly BoardEventFacts[]): BoardEventFa
   });
   if (!combined) return undefined;
   const identified = first.pullRequest !== undefined ? { ...combined, pullRequest: first.pullRequest } : combined;
-  // The folded change stands for every pull request in it, so it is trusted only when each one is.
-  if (events.some(event => event.pullRequestTrusted === undefined)) return identified;
-  return { ...identified, pullRequestTrusted: events.every(event => event.pullRequestTrusted === true) };
+  // The folded change stands for every pull request and every actor in it, so each trust tag
+  // survives only when every event carries it, and holds only when each one holds.
+  const folded = events.some(event => event.actorTrusted === undefined)
+    ? identified
+    : { ...identified, actorTrusted: events.every(event => event.actorTrusted === true) };
+  if (events.some(event => event.pullRequestTrusted === undefined)) return folded;
+  return { ...folded, pullRequestTrusted: events.every(event => event.pullRequestTrusted === true) };
 }
 
 /**
@@ -165,6 +169,53 @@ export type PullRequestEvent = Extract<StatusEvent, `pull_request.${string}`>;
 
 export function isPullRequestEvent(type: StatusEvent): type is PullRequestEvent {
   return type.startsWith('pull_request.');
+}
+
+/** Merging or closing settles a pull request whoever its author is, so those events always move the card. */
+export const SETTLING_PULL_REQUEST_EVENTS: ReadonlySet<string> = new Set([
+  'pull_request.merged',
+  'pull_request.closed',
+]);
+
+/** Whether any condition in the group, however nested, asks about the field. */
+export function testsField(group: RuleGroup | null, field: string): boolean {
+  return (
+    group?.conditions.some(member => ('field' in member ? member.field === field : testsField(member, field))) ?? false
+  );
+}
+
+/** Whether the one condition only lets a trusted author's pull request through. */
+function requiresTrust(condition: RuleCondition): boolean {
+  if (condition.field !== 'pullRequest.trusted') return false;
+  return (
+    (condition.operator === 'equals' && condition.value === true) ||
+    (condition.operator === 'not_equals' && condition.value === false)
+  );
+}
+
+/**
+ * Whether every way the group can match demands a trusted pull request author: one of an AND's
+ * conditions requires it, or every branch of an OR does. Presence alone is not enough — an OR
+ * that names `pullRequest.trusted` in one branch still matches an outside author through another.
+ */
+export function requiresTrustedPullRequest(group: RuleGroup | null): boolean {
+  if (!group) return false;
+  const requires = (member: RuleGroup | RuleCondition): boolean =>
+    'field' in member ? requiresTrust(member) : requiresTrustedPullRequest(member);
+  if (group.operator === 'OR') return group.conditions.length > 0 && group.conditions.every(requires);
+  return group.conditions.some(requires);
+}
+
+/**
+ * Whether a rule's card moves would also act for outside authors' pull requests: it listens on a
+ * pull request event that doesn't settle one, and its conditions don't demand a trusted author on
+ * every path a card can match through.
+ */
+export function matchesOutsiderPullRequests(on: readonly string[], when: RuleGroup | null): boolean {
+  return (
+    on.some(event => event.startsWith('pull_request.') && !SETTLING_PULL_REQUEST_EVENTS.has(event)) &&
+    !requiresTrustedPullRequest(when)
+  );
 }
 
 /**
@@ -207,6 +258,13 @@ export interface BoardEventFacts {
   pullRequest?: string;
   /** On a pull request event: whether that pull request's author has write access (or is Factory). */
   pullRequestTrusted?: boolean;
+  /**
+   * On a pull request event: whether the person who caused the event has write access (or is
+   * Factory). A maintainer acting on an outside author's pull request vouches for the work they
+   * trigger, so run approval reads this, never the author's trust. Unset means unknown — a polled
+   * or system delivery — which counts as untrusted.
+   */
+  actorTrusted?: boolean;
   /**
    * On the `pull_request.opened` a pull request linking to the card of the issue it closes brings:
    * that card as it was before the pull request joined it (see `closedIssueRuleFacts`).

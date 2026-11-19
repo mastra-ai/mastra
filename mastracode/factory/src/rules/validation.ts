@@ -109,7 +109,7 @@ function boardEvent(value: unknown, label: string): BoardEventFacts {
   if (!isPlainObject(value)) throw new FactoryRuleValidationError(`${label} event must be an object.`);
   assertExactKeys(
     value,
-    ['type', 'reason', 'labels', 'assignees', 'pullRequest', 'pullRequestTrusted', 'closedIssue'],
+    ['type', 'reason', 'labels', 'assignees', 'pullRequest', 'pullRequestTrusted', 'actorTrusted', 'closedIssue'],
     `${label} event`,
   );
   const type = enumValue(value.type, STATUS_EVENTS, `${label} event type`);
@@ -123,6 +123,9 @@ function boardEvent(value: unknown, label: string): BoardEventFacts {
   if (value.pullRequestTrusted !== undefined && typeof value.pullRequestTrusted !== 'boolean') {
     throw new FactoryRuleValidationError(`${label} event pullRequestTrusted must be a boolean.`);
   }
+  if (value.actorTrusted !== undefined && typeof value.actorTrusted !== 'boolean') {
+    throw new FactoryRuleValidationError(`${label} event actorTrusted must be a boolean.`);
+  }
   if (value.pullRequest !== undefined && (typeof value.pullRequest !== 'string' || value.pullRequest.length === 0)) {
     throw new FactoryRuleValidationError(`${label} event pullRequest must be a non-empty string.`);
   }
@@ -133,6 +136,7 @@ function boardEvent(value: unknown, label: string): BoardEventFacts {
     ...(assignees ? { assignees } : {}),
     ...(typeof value.pullRequest === 'string' ? { pullRequest: value.pullRequest } : {}),
     ...(typeof value.pullRequestTrusted === 'boolean' ? { pullRequestTrusted: value.pullRequestTrusted } : {}),
+    ...(typeof value.actorTrusted === 'boolean' ? { actorTrusted: value.actorTrusted } : {}),
     ...(value.closedIssue !== undefined ? { closedIssue: closedIssueFacts(value.closedIssue, label) } : {}),
   };
 }
@@ -453,6 +457,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
           'precedingMessage',
           'cancelInFlight',
           'startsAfterOwnMove',
+          'untrustedPullRequestEvent',
           'resume',
           'goal',
         ],
@@ -475,6 +480,9 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
       }
       if (value.startsAfterOwnMove !== undefined && typeof value.startsAfterOwnMove !== 'boolean') {
         throw new FactoryRuleValidationError('Factory skill startsAfterOwnMove must be a boolean.');
+      }
+      if (value.untrustedPullRequestEvent !== undefined && typeof value.untrustedPullRequestEvent !== 'boolean') {
+        throw new FactoryRuleValidationError('Factory skill untrustedPullRequestEvent must be a boolean.');
       }
       if (value.resume !== undefined && typeof value.resume !== 'boolean') {
         throw new FactoryRuleValidationError('Factory skill resume must be a boolean.');
@@ -499,13 +507,23 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         ...(precedingMessage ? { precedingMessage } : {}),
         ...(value.cancelInFlight === true ? { cancelInFlight: true } : {}),
         ...(value.startsAfterOwnMove === true ? { startsAfterOwnMove: true } : {}),
+        ...(value.untrustedPullRequestEvent === true ? { untrustedPullRequestEvent: true } : {}),
         ...(goal ? { goal } : {}),
       };
     }
     case 'sendMessage': {
       assertExactKeys(
         value,
-        ['type', 'idempotencyKey', 'role', 'message', 'priority', 'idleBehavior', 'prepareBinding'],
+        [
+          'type',
+          'idempotencyKey',
+          'role',
+          'message',
+          'priority',
+          'idleBehavior',
+          'prepareBinding',
+          'untrustedPullRequestEvent',
+        ],
         'Factory send message decision',
       );
       const priority =
@@ -518,6 +536,9 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
           : enumValue(value.idleBehavior, ['persist', 'wake'] as const, 'Factory message idle behavior');
       if (value.prepareBinding !== undefined && typeof value.prepareBinding !== 'boolean') {
         throw new FactoryRuleValidationError('Factory message prepareBinding must be a boolean.');
+      }
+      if (value.untrustedPullRequestEvent !== undefined && typeof value.untrustedPullRequestEvent !== 'boolean') {
+        throw new FactoryRuleValidationError('Factory message untrustedPullRequestEvent must be a boolean.');
       }
       if (value.prepareBinding === true && value.role === undefined) {
         throw new FactoryRuleValidationError('Factory message prepareBinding requires a role.');
@@ -534,6 +555,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         ...(priority ? { priority } : {}),
         ...(idleBehavior ? { idleBehavior } : {}),
         ...(value.prepareBinding === true ? { prepareBinding: true } : {}),
+        ...(value.untrustedPullRequestEvent === true ? { untrustedPullRequestEvent: true } : {}),
       };
     }
     case 'notify': {

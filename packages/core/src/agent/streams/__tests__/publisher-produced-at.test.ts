@@ -218,6 +218,57 @@ describe('agent stream publisher', () => {
 });
 
 describe('agent stream publisher cleanup', () => {
+  it.each(['before drain', 'after drain', 'authorized'] as const)(
+    'preserves record recovery unless cleanup is authorized (%s)',
+    async stage => {
+      class RecoveringCache extends InMemoryServerCache {
+        private failNextWrite = true;
+        override async set(...args: Parameters<InMemoryServerCache['set']>) {
+          if (this.failNextWrite) {
+            this.failNextWrite = false;
+            throw new Error('Cache temporarily unavailable');
+          }
+          return super.set(...args);
+        }
+      }
+      const runId = `cleanup-retry-${stage}`;
+      const cache = new RecoveringCache();
+      const source = new EventEmitterPubSub();
+      const coordinator = createAgentStreamPublisherCoordinator(runId);
+      let checks = 0;
+      const owner = coordinator.attachOwner({
+        pubsub: source,
+        publisherId: 'execution',
+        record: { cache, agentId: 'cleanup-agent' },
+        cleanupTimeoutMs: 0,
+        listenForAbort: false,
+        assertCleanupOwnership: async () => {
+          checks++;
+          if ((stage === 'before drain' && checks === 1) || (stage === 'after drain' && checks === 2)) {
+            throw new Error('Cleanup ownership temporarily unavailable');
+          }
+        },
+      });
+      coordinator.attachEventProducer({ pubsub: source, publisherId: 'execution', assertOwnership: async () => {} });
+      try {
+        await owner.ready;
+        expect(await readAgentRunRecord(cache, 'cleanup-agent', runId)).toBeUndefined();
+        await owner.cleanup();
+        if (stage === 'authorized') {
+          await new Promise(resolve => setTimeout(resolve, 1200));
+          expect(await readAgentRunRecord(cache, 'cleanup-agent', runId)).toBeUndefined();
+        } else {
+          await expect
+            .poll(() => readAgentRunRecord(cache, 'cleanup-agent', runId), { timeout: 2000 })
+            .toMatchObject({ publisherId: 'execution', status: 'running' });
+        }
+      } finally {
+        await coordinator.detach();
+        await source.close();
+      }
+    },
+  );
+
   it.each(['execution', 'previous-execution'])(
     'does not recreate replay history from in-flight producer %s after cleanup begins',
     async publisherId => {

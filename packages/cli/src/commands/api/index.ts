@@ -746,6 +746,10 @@ export function registerApiCommand(program: CommanderCommand): void {
       },
     ],
   });
+  addAction(factoryWorkItem, 'session-repository', FACTORY_API_ROUTE_CATALOG.workItemSessionRepository, {
+    description: "Show which repository a card's session starts in, or why none can",
+    routePlacement: 'origin',
+  });
   addAction(factoryWorkItem, 'working-pull-request', FACTORY_API_ROUTE_CATALOG.workItemWorkingPullRequest, {
     description: "Make one of a card's linked pull requests the one its sessions work on",
     input: 'required',
@@ -869,9 +873,21 @@ export function registerApiCommand(program: CommanderCommand): void {
 
   const factorySkill = factory
     .command('skill')
-    .description("Edit a Factory project's skills; organization admins only");
+    .description("Create and edit a Factory project's skills; organization admins only");
+  addAction(factorySkill, 'create', FACTORY_API_ROUTE_CATALOG.skillCreate, {
+    description: 'Create a skill for one Factory project; the frontmatter name must match the skill name',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Create a release-notes skill for one project',
+        command: `mastra api factory skill create <project-id> '{"name":"release-notes","content":"---\\nname: release-notes\\ndescription: Write release notes for a merged change\\n---\\n\\n# Release notes\\n"}'`,
+      },
+    ],
+  });
   addAction(factorySkill, 'update', FACTORY_API_ROUTE_CATALOG.skillOverrideSave, {
-    description: 'Save an edited SKILL.md for one Factory project; the frontmatter name must match the skill name',
+    description:
+      'Save a SKILL.md for one Factory project: an edit of an app skill, or a skill the project created; the frontmatter name must match the skill name',
     input: 'required',
     routePlacement: 'origin',
     examples: [
@@ -882,7 +898,8 @@ export function registerApiCommand(program: CommanderCommand): void {
     ],
   });
   addAction(factorySkill, 'revert', FACTORY_API_ROUTE_CATALOG.skillOverrideRevert, {
-    description: "Revert a Factory project's edit so the skill uses its original SKILL.md",
+    description:
+      "Revert a Factory project's edit so the skill uses its original SKILL.md, or delete a skill the project created",
     routePlacement: 'origin',
   });
 

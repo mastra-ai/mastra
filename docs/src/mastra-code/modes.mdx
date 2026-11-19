@@ -1,6 +1,6 @@
 ---
 title: 'Modes'
-description: "Learn how Mastra Code's three operating modes — Build, Plan, and Explore — shape the agent's behavior, tool access, and response style."
+description: "Learn how Mastra Code's three operating modes, Build, Plan, and Explore, shape the agent's behavior, tool access, and response style."
 packages:
   - 'mastracode'
 ---
@@ -13,7 +13,7 @@ Switch modes with the `/mode` slash command.
 
 ## Build mode
 
-Build mode is the default. The agent has full access to all tools — reading, writing, editing files, and running shell commands.
+Build mode is the default. The agent has full access to all tools: reading, writing, editing files, and running shell commands.
 
 Use Build mode when you want the agent to make changes to your codebase: implementing features, fixing bugs, refactoring code, or running tests.
 
@@ -51,11 +51,11 @@ To store approved-plan archives in a different directory, set the `MASTRA_PLANS_
 export MASTRA_PLANS_DIR=.mastracode/plans
 ```
 
-Plan persistence is best-effort — a write failure does not block or affect the approval flow.
+Plan persistence is best-effort. A write failure doesn't block or affect the approval flow.
 
 ## Plan mode
 
-Plan mode is read-only for project files. The agent can explore the codebase but can't modify project files or run side-effect commands. The only files it can write are the markdown plan files it submits with `submit_plan`.
+Plan mode is read-only for project files. The agent can explore the codebase but can't modify project files or run side-effect commands. It can write only the markdown plan files it submits with `submit_plan`.
 
 Use Plan mode when you want to analyze architecture, design an approach, or create a detailed implementation plan before writing code.
 
@@ -72,7 +72,7 @@ Use Plan mode when you want to analyze architecture, design an approach, or crea
 - `task_write`, `task_update`, `task_complete`, and `task_check`: Track plan work
 - `list-workflows` and `get-workflow`: Inspect saved workflows
 
-Plan mode has no `execute_command` tool, so the agent cannot run shell commands even when they would only read state. Writing is limited to Markdown files directly inside the project's plan directory.
+Plan mode has no `execute_command` tool, so the agent can't run shell commands even when they would only read state. Writing is limited to Markdown files directly inside the project's plan directory.
 
 ### Plan submission
 
@@ -91,9 +91,9 @@ Use Explore mode for questions like "find all usages of X" or "how does module Y
 
 ### Rules
 
-- The agent has read-only access. It cannot modify files or run shell commands.
-- It searches broadly, then reads the relevant files to answer the question.
-- It can inspect saved workflows with `list-workflows` and `get-workflow`, but cannot create, run, or delete them.
+- The agent has read-only access. It can't modify files or run shell commands.
+- It searches across the codebase, then reads the relevant files to answer the question.
+- It can inspect saved workflows with `list-workflows` and `get-workflow`, but can't create, run, or delete them.
 - It answers directly in the conversation rather than handing work back to another agent.
 
 The built-in mode keeps the id `fast` for compatibility. `/mode` displays it as Explore.
@@ -130,7 +130,7 @@ In Build mode, the agent can spawn subagents to parallelize work. Subagents run 
 | **Plan** | Read-only | "Create an implementation plan for X", "Analyze the architecture of Y" |
 | **Execute** | Read + write | "Implement feature X", "Fix bug Y", "Refactor module Z" |
 
-The parent agent spawns subagents only when multiple tasks can run in parallel. For a single task, the agent handles it directly. Subagent outputs are treated as untrusted — the parent agent verifies results before moving on.
+The parent agent spawns subagents only when multiple tasks can run in parallel. For a single task, the agent handles it directly. Subagent outputs are treated as untrusted. The parent agent verifies results before moving on.
 
 ## Thinking level
 

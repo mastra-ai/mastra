@@ -5,7 +5,7 @@
  * requires the host's registries, storage, and event workers). Before the
  * evented engine was re-enabled, such an agent silently streamed on the
  * default in-process engine — released behavior we preserve, now with a
- * warning instead of silence (see DurableAgent.resolveWorkflowEngine).
+ * warning instead of silence (see DurableExecutionEngine.resolveWorkflowEngine).
  */
 
 import { createTextStreamModel } from '@internal/test-utils';

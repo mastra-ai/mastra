@@ -15,8 +15,6 @@ import {
 } from '@/domains/observability/lib/histogram-buckets';
 
 export type SpansExplorerHistogramProps = {
-  /** Applied list search; aggregates do not yet support text search (OBS-936). */
-  textSearch?: string;
   /** The span list's resolved time range. */
   timeRange: SpanQueryArgs['timeRange'];
   /** The span list's filter predicate, from `buildSpanQueryWhere`. */
@@ -29,7 +27,7 @@ export type SpansExplorerHistogramProps = {
  * Span and error counts over the span list's time range and filters.
  * Renders nothing when the server can't aggregate spans or the window is wider than it aggregates.
  */
-export function SpansExplorerHistogram({ timeRange, where, textSearch, onZoom }: SpansExplorerHistogramProps) {
+export function SpansExplorerHistogram({ timeRange, where, onZoom }: SpansExplorerHistogramProps) {
   const aggregateAvailable = useSpanAggregateAvailable();
 
   const request = useMemo<AggregateSpansArgs>(
@@ -44,7 +42,7 @@ export function SpansExplorerHistogram({ timeRange, where, textSearch, onZoom }:
     [timeRange, where],
   );
 
-  const hidden = !!textSearch || !aggregateAvailable.enabled || exceedsAggregateWindow(timeRange);
+  const hidden = !aggregateAvailable.enabled || exceedsAggregateWindow(timeRange);
 
   const { data, isLoading, isError, isPlaceholderData } = useSpanAggregate({
     request,

@@ -7,7 +7,7 @@ description: "Browse SCX.ai model IDs, capabilities, context windows, and pricin
 
 # <img src="https://models.dev/logos/scx-ai.svg" alt="SCX.ai logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />SCX.ai
 
-Access 4 SCX.ai models through Mastra's model router. Authentication is handled automatically using the `SCX_API_KEY` environment variable.
+Access 14 SCX.ai models through Mastra's model router. Authentication is handled automatically using the `SCX_API_KEY` environment variable.
 
 Learn more in the [SCX.ai documentation](https://platform.scx.ai/docs).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "scx-ai/GLM-5.2"
+  model: "scx-ai/DeepSeek-V4-flash"
 });
 
 // Generate a response
@@ -46,6 +46,54 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
+    "model": "scx-ai/DeepSeek-V4-flash",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": 0.138,
+    "outputCost": 0.275
+  },
+  {
+    "model": "scx-ai/DeepSeek-V4-pro",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": 1.65,
+    "outputCost": 3.301
+  },
+  {
+    "model": "scx-ai/DeepSeek-V4.1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
+    "model": "scx-ai/DeepSeek-V4.1-flash-1017",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
     "model": "scx-ai/GLM-5.2",
     "imageInput": false,
     "audioInput": false,
@@ -54,8 +102,44 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 131072,
-    "inputCost": 0.55,
-    "outputCost": 1.784
+    "inputCost": 0.61,
+    "outputCost": 1.98
+  },
+  {
+    "model": "scx-ai/GLM-5.2-Fast",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 1.99,
+    "outputCost": 6.16
+  },
+  {
+    "model": "scx-ai/GLM-5.3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.98,
+    "outputCost": 3.08
+  },
+  {
+    "model": "scx-ai/GLM-5.3-Flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.13,
+    "outputCost": 0.4
   },
   {
     "model": "scx-ai/gpt-oss-120b",
@@ -68,6 +152,42 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.17,
     "outputCost": 0.55
+  },
+  {
+    "model": "scx-ai/Kimi-K2.7-Code",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.80451,
+    "outputCost": 3.34179
+  },
+  {
+    "model": "scx-ai/Kimi-K3",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 2.827,
+    "outputCost": 14.133
+  },
+  {
+    "model": "scx-ai/Kimi-K3.1-Pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 2,
+    "outputCost": 10
   },
   {
     "model": "scx-ai/MiniMax-M2.7",
@@ -90,8 +210,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 131072,
-    "inputCost": 1.815,
-    "outputCost": 5.4461
+    "inputCost": 1.65,
+    "outputCost": 4.99
   }
 ]}
 />
@@ -110,7 +230,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.scx.ai/v1",
-    id: "scx-ai/GLM-5.2",
+    id: "scx-ai/DeepSeek-V4-flash",
     apiKey: process.env.SCX_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -131,7 +251,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "scx-ai/gpt-oss-120b"
-      : "scx-ai/GLM-5.2";
+      : "scx-ai/DeepSeek-V4-flash";
   }
 });
 ```

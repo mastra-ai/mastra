@@ -363,7 +363,7 @@ When the tool runs inside a [subagent](/docs/agents/human-in-the-loop#identify-w
 
 When your agent has [memory](/docs/memory/overview) configured, Mastra loads conversation history from storage on the server. Send only the new message from the client instead of the full conversation history.
 
-Sending the full history is redundant and can cause message-ordering bugs because client-side timestamps can conflict with the timestamps stored in your database. Mastra filters echoed history before loading stored messages and keeps the stored copy as the base when message IDs match, so the stored timestamps, provider metadata, and reasoning are preserved and only new tool results are layered on top.
+Sending the full history is redundant and can cause message-ordering bugs because client-side timestamps can conflict with the timestamps stored in your database. Mastra filters echoed history before loading stored messages and keeps the stored copy as the base when message IDs match. The stored timestamps, provider metadata, and reasoning are preserved, and only new tool results are layered on top.
 
 ```typescript
 import { useChat } from '@ai-sdk/react'
@@ -717,7 +717,7 @@ When using `workflowRoute()` or `handleWorkflowStream()`, Mastra emits `data-wor
   </TabItem>
 
   <TabItem value="frontend" label="Frontend">
-    Check for `data-workflow` parts to render workflow status snapshots. If you need the full payload for the step that just changed, also read `data-workflow-step` parts.
+    Check for `data-workflow` parts to render workflow status snapshots. If you need the full payload for the step that changed last, also read `data-workflow-step` parts.
 
     ```typescript title="src/components/workflow-chat.tsx" {3,5,6,48-50} oxfmt:false
     import { useChat } from '@ai-sdk/react'
@@ -1548,7 +1548,7 @@ Key points:
 - Read `data-tool-agent-step` when you need the full payload for the nested step that finished
 - `AgentDataPart` and `AgentStepDataPart` include the same `ancestry`, `depth`, and optional `parentAgentId` fields
 - The `AgentDataPart` has `id` (on the part) and `data.text` (the current nested-agent text snapshot)
-- A tool that throws inside the nested agent is reported in `data.toolErrors`, each entry `{ toolCallId, toolName, args?, errorText, providerExecuted? }`. `errorText` is a JSON-safe string, so the failure survives serialization to the client instead of arriving as `{}`
+- A tool that throws inside the nested agent is reported in `data.toolErrors`, each entry `{ toolCallId, toolName, args?, errorText, providerExecuted? }`. `errorText` is a JSON-safe string, which means the failure survives serialization to the client instead of arriving as `{}`
 - `toolErrors` resets at each nested step boundary, like `toolCalls` and `toolResults`. For a finished step, read it from `data-tool-agent-step` (`data.step.toolErrors`) or from `data.steps[]` on the final snapshot
 - The tool still returns its own output after the stream completes
 

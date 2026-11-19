@@ -13,6 +13,8 @@ type ListArgs<T extends object> = Simplify<
   }
 >;
 
+export type { TracePageRequest, GetTracePageArgs, TracePageResponse, TracePageNode } from './trace-page-types';
+
 export type TraceRecord = Response<'GET /observability/traces/:traceId'>;
 export type GetTraceLightResponse = Response<'GET /observability/traces/:traceId/light'>;
 export type GetSpanResponse = Response<'GET /observability/traces/:traceId/spans/:spanId'>;

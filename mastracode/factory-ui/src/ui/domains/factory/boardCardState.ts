@@ -17,7 +17,7 @@ export type BoardCardOwner =
   | { kind: 'free' }
   | { kind: 'you'; progressLabel: string }
   | { kind: 'automation'; progressLabel: string }
-  | { kind: 'session'; status: SessionRowStatus };
+  | { kind: 'session' };
 
 export interface BoardCardState {
   status: BoardCardStatus;
@@ -39,13 +39,16 @@ export interface BoardCardStateInput {
   queuePosition?: number;
   /** Why the server refused the last move. */
   transitionReason?: string;
-  /** What the run registry and workspace records say about the card's bound sessions. */
+  /** The card's marker: the status its row in the sidebar shows. */
   sessionStatus?: SessionRowStatus;
+  /** One of the card's sessions is coming up, running, or parked on a person. */
+  sessionHolds?: boolean;
   /** Triage left the card in Intake for a person to decide on. */
   held?: boolean;
 }
 
 const FREE: BoardCardOwner = { kind: 'free' };
+const SESSION: BoardCardOwner = { kind: 'session' };
 
 /**
  * One pass over the card's inputs, freshest intent first: your own in-flight
@@ -71,11 +74,9 @@ export function boardCardState(input: BoardCardStateInput): BoardCardState {
         : undefined;
   const refusedMove: BoardCardStatus | undefined =
     transitionReason === undefined ? undefined : { kind: 'error', label: transitionReason };
-  const sessionOwner: BoardCardOwner | undefined =
-    sessionStatus === undefined ? undefined : { kind: 'session', status: sessionStatus };
   return {
     status: refusedMove ?? automation?.status ?? statusWhenNothingInFlight(input),
-    owner: sessionOwner ?? automation?.owner ?? FREE,
+    owner: input.sessionHolds ? SESSION : (automation?.owner ?? FREE),
     wick: sessionStatus,
   };
 }
@@ -158,20 +159,6 @@ function statusWhenNothingInFlight(input: BoardCardStateInput): BoardCardStatus 
     return { kind: 'waiting', label: input.proposal.label, decisionId: input.proposal.decisionId };
   }
   return { kind: 'idle' };
-}
-
-/**
- * The sidebar's reading of a card's `waiting` and `error` kinds: a run parked
- * for approval, or an effect that failed for good. A retry the server still
- * owns is not a person's turn, and neither is a proposal that an effect in
- * flight already outranks on the card.
- */
-export function itemAwaitsPerson(
-  proposal: FactoryDecisionSummary | undefined,
-  effect: FactoryDecisionSummary | undefined,
-): boolean {
-  if (effect) return effect.status === 'failed';
-  return proposal !== undefined;
 }
 
 /** The system a linked card is synced with, named the way that system names the thing. */

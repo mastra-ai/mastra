@@ -1,12 +1,12 @@
 ---
 title: "Vercel | Deploy"
-description: "Deploy a Mastra server as Vercel serverless functions with @mastra/deployer-vercel, generated Build Output API files, Studio, and overrides."
+description: "Deploy a Mastra server as Vercel serverless functions with the Vercel deployer, generated Build Output API files, Studio, and overrides."
 ---
 
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
-# Vercel Deployer
+# Vercel deployer
 
 Use `@mastra/deployer-vercel` to deploy your Mastra server as serverless functions on Vercel. The deployer bundles your code and generates a `.vercel/output` directory conforming to Vercel's [Build Output API](https://vercel.com/docs/build-output-api/v3), ready to deploy with no additional configuration.
 
@@ -49,7 +49,7 @@ export const mastra = new Mastra({
   <StepItem>
     Push your project to a remote Git provider (e.g. GitHub) and connect your repository to Vercel.
 
-    By default, Vercel runs `npm run build`, which triggers `mastra build`. If you don't have a build script, add `"build": "mastra build"` to your `package.json`.
+    By default, Vercel runs `npm run build`, which triggers `mastra build`. When your `package.json` has no build script, add `"build": "mastra build"`.
 
     :::note
 
@@ -59,7 +59,7 @@ export const mastra = new Mastra({
   </StepItem>
 
   <StepItem>
-    Once you're ready, click **Deploy** and wait for the first deployment to complete.
+    Once you're ready, select **Deploy** and wait for the first deployment to complete.
   </StepItem>
 
   <StepItem>
@@ -98,7 +98,7 @@ After deploying, Studio is available at the root URL (`https://<your-project>.ve
 Studio serves its own pages from the CDN, and every other path goes to your server, so routes you add with [`registerApiRoute()`](/docs/server/custom-api-routes) stay reachable at their own paths. Avoid giving a custom route a path that Studio already uses (for example `/agents` or `/workflows`), since Studio claims those first.
 
 :::warning
-Once Studio is connected to your Mastra server, it has full access to your agents, workflows, and tools. Be sure to secure it properly in production (e.g. behind authentication, VPN, etc.) to prevent unauthorized access.
+Once Studio is connected to your Mastra server, it has full access to your agents, workflows, and tools. Be sure to secure it in production (e.g. behind authentication, VPN, etc.) to prevent unauthorized access.
 :::
 
 ## Optional overrides

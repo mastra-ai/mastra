@@ -2,9 +2,11 @@ import { createOpenAI } from '@ai-sdk/openai-v5';
 import { it, expect, vi } from 'vitest';
 import { Agent } from '../../../../agent';
 import { MockMemory } from '../../../../memory/mock';
+import { SpanType } from '../../../../observability';
 import type { InputProcessor } from '../../../../processors';
 import { RequestContext } from '../../../../request-context';
 import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import { captureOutcomeEvents } from '../outcome-test-utils';
 import { SCENARIO_MODEL_ID } from '../types';
 
 /**
@@ -395,6 +397,36 @@ describeForAllEngines('AIMock loop scenario: thread title generation', engine =>
 
     expect(await output.text).toBe('Try the ridge trail.');
     expect(await waitForTitle(memory, 'title-om-disabled')).toBe('Weekend Hike');
+  });
+
+  it('traces the title model call under the agent run, with the input and output the run hides', async () => {
+    const llm = getMock();
+    const { observability, ended } = captureOutcomeEvents();
+    const memory = new MockMemory({ options: { generateTitle: { instructions: TITLE_INSTRUCTIONS } } });
+
+    await runLoopScenario({
+      engine,
+      llm,
+      observability,
+      prompt: 'Plan a surprise party',
+      memory,
+      threadId: 'title-traced',
+      resourceId: 'user-1',
+      tracingOptions: { hideInput: true, hideOutput: true },
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat', predicate: isTitleRequest(TITLE_INSTRUCTIONS) }, { content: 'Party Plan' });
+        llm.on({ endpoint: 'chat' }, { content: 'Book the venue first.' });
+      },
+    });
+
+    expect(await waitForTitle(memory, 'title-traced')).toBe('Party Plan');
+    // The agent's own model call and the title model call.
+    await vi.waitFor(() => expect(ended(SpanType.MODEL_GENERATION)).toHaveLength(2));
+    const [agentRun] = ended(SpanType.AGENT_RUN);
+    expect(ended(SpanType.MODEL_GENERATION).map(span => [span.parentSpanId, span.input, span.output])).toEqual([
+      [agentRun!.id, undefined, undefined],
+      [agentRun!.id, undefined, undefined],
+    ]);
   });
 
   it('keeps existing thread metadata when saving the title', async () => {

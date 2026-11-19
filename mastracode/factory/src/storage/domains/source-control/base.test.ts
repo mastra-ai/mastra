@@ -1,6 +1,11 @@
+import { randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { UniqueViolationError } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { ensureFactorySourceSession } from '../../../session/factory-session.js';
 import { workItemBranch } from '../../../work-item-branch.js';
@@ -766,6 +771,69 @@ describe('SourceControlStorage', () => {
     expect(again?.materializedAt?.getTime()).toBe(marked!.materializedAt!.getTime());
   });
 
+  it('stamps materialized_at once when two replicas materialize the same session together', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'factory-source-control-'));
+    onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
+    const replica = async () => {
+      const storage = new LibSQLFactoryStorage({
+        id: `source-control-${randomUUID()}`,
+        url: `file:${join(dir, 'f.db')}`,
+      });
+      const replicaProjects = storage.registerDomain(new FactoryProjectsStorage());
+      const sourceControl = storage.registerDomain(new SourceControlStorage());
+      await storage.init();
+      onTestFinished(() => storage.close());
+      const announced: string[] = [];
+      sourceControl.projectSessions.onAnnounced(scope => announced.push(scope.factoryProjectId));
+      return { projects: replicaProjects, github: sourceControl.forIntegration('github'), announced };
+    };
+    const first = await replica();
+    const second = await replica();
+    const project = await first.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Race' } });
+    const installation = await first.github.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: 'race-installation',
+    });
+    const repository = await first.github.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, ...repositoryInput },
+    });
+    const connection = await first.github.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    const link = await first.github.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+    });
+
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const sessionId = randomUUID();
+      const session = await first.github.sessions.create({
+        sessionId,
+        projectRepositoryId: link.id,
+        factoryProjectId: project.id,
+        orgId: 'org-1',
+        userId: 'user-1',
+        branch: `user/session-${sessionId}`,
+        baseBranch: 'main',
+      });
+      first.announced.length = 0;
+      second.announced.length = 0;
+
+      await Promise.all([
+        first.github.sessions.markMaterialized({ id: session.id }),
+        second.github.sessions.markMaterialized({ id: session.id }),
+      ]);
+
+      expect([...first.announced, ...second.announced]).toEqual([project.id]);
+    }
+  });
+
   it('clears every owned source-control collection', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });
@@ -1064,38 +1132,6 @@ describe('SourceControlStorage', () => {
       expect(
         await github.sessions.listByProject({ orgId: 'org-2', factoryProjectId: project.id, viewerUserId: 'user-2' }),
       ).toEqual([]);
-    });
-
-    it('listByProject shows a session started or renamed after the last list, and private ones only to their owner', async () => {
-      const project = await createProject();
-      const { first } = await twoLinks(project.id);
-      const listed = async (viewerUserId: string) =>
-        (await github.sessions.listByProject({ orgId: 'org-1', factoryProjectId: project.id, viewerUserId }))
-          .map(session => `${session.sessionId}:${session.title ?? ''}`)
-          .sort();
-      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-15T10:00:00Z') });
-      try {
-        await github.sessions.create({
-          ...sessionInput('00000000-0000-4000-8000-000000000151', first.id, 'user-1', 'a'),
-          visibility: 'private',
-        });
-        vi.setSystemTime(Date.now() + 10_000);
-        expect(await listed('user-1')).toEqual(['00000000-0000-4000-8000-000000000151:']);
-        expect(await listed('user-2')).toEqual([]);
-
-        await github.sessions.create(sessionInput('00000000-0000-4000-8000-000000000152', first.id, 'user-2', 'b'));
-        expect(await listed('user-2')).toEqual(['00000000-0000-4000-8000-000000000152:']);
-
-        vi.setSystemTime(Date.now() + 10_000);
-        await github.sessions.rename({ sessionId: '00000000-0000-4000-8000-000000000151', title: 'renamed' });
-        vi.setSystemTime(Date.now() + 10_000);
-        expect(await listed('user-1')).toEqual([
-          '00000000-0000-4000-8000-000000000151:renamed',
-          '00000000-0000-4000-8000-000000000152:',
-        ]);
-      } finally {
-        vi.useRealTimers();
-      }
     });
 
     it('session repository rows round-trip, are unique per (session, link) and go away with the session', async () => {

@@ -7,7 +7,7 @@ description: "Browse Kenari model IDs, capabilities, context windows, and pricin
 
 # <img src="https://models.dev/logos/kenari.svg" alt="Kenari logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Kenari
 
-Access 64 Kenari models through Mastra's model router. Authentication is handled automatically using the `KENARI_API_KEY` environment variable.
+Access 82 Kenari models through Mastra's model router. Authentication is handled automatically using the `KENARI_API_KEY` environment variable.
 
 Learn more in the [Kenari documentation](https://kenari.id/docs).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "kenari/claude-fable-5"
+  model: "kenari/beam-1-0:free"
 });
 
 // Generate a response
@@ -46,6 +46,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
+    "model": "kenari/beam-1-0:free",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "kenari/claude-fable-5",
     "imageInput": true,
     "audioInput": false,
@@ -55,7 +67,19 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 1000000,
     "maxOutput": 128000,
     "inputCost": 12,
-    "outputCost": 57.14285714
+    "outputCost": 57.14
+  },
+  {
+    "model": "kenari/claude-haiku-5-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 0.1714,
+    "outputCost": 0.8571
   },
   {
     "model": "kenari/claude-opus-4-7",
@@ -66,8 +90,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 128000,
-    "inputCost": 5.71428571,
-    "outputCost": 29.71428571
+    "inputCost": 5.71,
+    "outputCost": 29.71
   },
   {
     "model": "kenari/claude-opus-4-8",
@@ -78,8 +102,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 128000,
-    "inputCost": 5.71428571,
-    "outputCost": 29.71428571
+    "inputCost": 5.71,
+    "outputCost": 29.71
   },
   {
     "model": "kenari/claude-opus-5",
@@ -90,8 +114,20 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 128000,
-    "inputCost": 5.71428571,
-    "outputCost": 28.57142857
+    "inputCost": 5.71,
+    "outputCost": 28.57
+  },
+  {
+    "model": "kenari/claude-opus-5-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 4.57,
+    "outputCost": 22.86
   },
   {
     "model": "kenari/claude-sonnet-4-6",
@@ -103,7 +139,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 1000000,
     "maxOutput": 64000,
     "inputCost": 3.6,
-    "outputCost": 17.71428571
+    "outputCost": 17.71
   },
   {
     "model": "kenari/claude-sonnet-5",
@@ -114,8 +150,20 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 128000,
-    "inputCost": 1.42857143,
-    "outputCost": 7.14285714
+    "inputCost": 1.43,
+    "outputCost": 7.14
+  },
+  {
+    "model": "kenari/claude-sonnet-5-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 2.29,
+    "outputCost": 11.43
   },
   {
     "model": "kenari/deepseek-v4-1-flash",
@@ -126,8 +174,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 0.15714286,
-    "outputCost": 0.31428571
+    "inputCost": 0.1857,
+    "outputCost": 0.3429
   },
   {
     "model": "kenari/deepseek-v4-flash",
@@ -138,8 +186,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 0.15714286,
-    "outputCost": 0.31428571
+    "inputCost": 0.1857,
+    "outputCost": 0.3429
   },
   {
     "model": "kenari/deepseek-v4-pro",
@@ -150,8 +198,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 0.57142857,
-    "outputCost": 1.14285714
+    "inputCost": 0.5714,
+    "outputCost": 1.14
   },
   {
     "model": "kenari/gemini-3-1-flash-lite",
@@ -162,20 +210,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 65536,
-    "inputCost": 0.28571429,
-    "outputCost": 1.71428571
-  },
-  {
-    "model": "kenari/gemini-3-1-flash-tts",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 8192,
-    "maxOutput": 16384,
-    "inputCost": null,
-    "outputCost": null
+    "inputCost": 0.2857,
+    "outputCost": 1.71
   },
   {
     "model": "kenari/gemini-3-1-pro",
@@ -187,19 +223,43 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 1048576,
     "maxOutput": 65536,
     "inputCost": 1.2,
-    "outputCost": 7.14285714
+    "outputCost": 7.14
   },
   {
-    "model": "kenari/gemma-4-31b-it",
+    "model": "kenari/gemini-3-8-flash",
     "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
+    "audioInput": true,
+    "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 262144,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.3429,
+    "outputCost": 1.71
+  },
+  {
+    "model": "kenari/gemini-3-8-flash-lite-tts",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 16384,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "kenari/glm-4-6v-flash:free",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
     "maxOutput": 32768,
-    "inputCost": 0.10285714,
-    "outputCost": 0.40571429
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "kenari/glm-4-7-flash:free",
@@ -222,8 +282,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 131072,
-    "inputCost": 0.28571429,
-    "outputCost": 3.42857143
+    "inputCost": 0.2857,
+    "outputCost": 3.43
   },
   {
     "model": "kenari/glm-5-3",
@@ -234,8 +294,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 131072,
-    "inputCost": 0.28571429,
-    "outputCost": 3.42857143
+    "inputCost": 0.2857,
+    "outputCost": 3.43
   },
   {
     "model": "kenari/glm-5-3-flash",
@@ -246,20 +306,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 131072,
-    "inputCost": 0.11428571,
-    "outputCost": 0.34285714
-  },
-  {
-    "model": "kenari/gpt-5-5",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1050000,
-    "maxOutput": 128000,
-    "inputCost": 5.71428571,
-    "outputCost": 36
+    "inputCost": 0.1143,
+    "outputCost": 0.3429
   },
   {
     "model": "kenari/gpt-5-6-luna",
@@ -271,7 +319,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 1050000,
     "maxOutput": 128000,
     "inputCost": 0.2,
-    "outputCost": 1.14285714
+    "outputCost": 1.14
   },
   {
     "model": "kenari/gpt-5-6-sol",
@@ -282,8 +330,92 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1050000,
     "maxOutput": 128000,
-    "inputCost": 2.97142857,
-    "outputCost": 17.71428571
+    "inputCost": 2.97,
+    "outputCost": 17.71
+  },
+  {
+    "model": "kenari/gpt-6-1-sol",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 2.29,
+    "outputCost": 11.43
+  },
+  {
+    "model": "kenari/gpt-6-1-terra",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 1.14,
+    "outputCost": 5.71
+  },
+  {
+    "model": "kenari/gpt-6-2-astra",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 9.14,
+    "outputCost": 45.71
+  },
+  {
+    "model": "kenari/gpt-6-2-sol",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 920000,
+    "maxOutput": 128000,
+    "inputCost": 2.29,
+    "outputCost": 11.43
+  },
+  {
+    "model": "kenari/gpt-6-astra",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 11.43,
+    "outputCost": 57.14
+  },
+  {
+    "model": "kenari/gpt-6-luna",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 0.1,
+    "outputCost": 0.4857
+  },
+  {
+    "model": "kenari/gpt-6-sol",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 2.29,
+    "outputCost": 11.43
   },
   {
     "model": "kenari/gpt-image-2",
@@ -298,6 +430,54 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
+    "model": "kenari/gpt-image-2-5-flare",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": null,
+    "maxOutput": null,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "kenari/gpt-image-2-5-sunburst",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": null,
+    "maxOutput": null,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "kenari/gpt-image-2-6-flare",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": null,
+    "maxOutput": null,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "kenari/gpt-image-2-6-sunburst",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": null,
+    "maxOutput": null,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "kenari/gpt-oss-120b",
     "imageInput": false,
     "audioInput": false,
@@ -305,7 +485,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 131072,
-    "maxOutput": 32768,
+    "maxOutput": 131072,
     "inputCost": 0.036,
     "outputCost": 0.2
   },
@@ -317,9 +497,21 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 131072,
-    "maxOutput": 32768,
+    "maxOutput": 131072,
     "inputCost": 0.036,
-    "outputCost": 0.15428571
+    "outputCost": 0.1543
+  },
+  {
+    "model": "kenari/gpt-transcribe",
+    "imageInput": false,
+    "audioInput": true,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": null,
+    "maxOutput": null,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "kenari/grok-4-5",
@@ -330,8 +522,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 500000,
     "maxOutput": 500000,
-    "inputCost": 2.28571429,
-    "outputCost": 6.85714286
+    "inputCost": 2.29,
+    "outputCost": 6.86
   },
   {
     "model": "kenari/grok-4-6",
@@ -342,8 +534,20 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 500000,
     "maxOutput": 500000,
-    "inputCost": 2.28571429,
-    "outputCost": 6.85714286
+    "inputCost": 2.29,
+    "outputCost": 6.86
+  },
+  {
+    "model": "kenari/grok-4-7",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 500000,
+    "maxOutput": 500000,
+    "inputCost": 2.29,
+    "outputCost": 6.86
   },
   {
     "model": "kenari/grok-imagine-image",
@@ -370,26 +574,62 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
+    "model": "kenari/grok-imagine-image-quality",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 16000,
+    "maxOutput": null,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "kenari/hy3",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 256000,
+    "contextWindow": 196608,
     "maxOutput": 128000,
-    "inputCost": 0.15428571,
-    "outputCost": 0.62857143
+    "inputCost": 0.1543,
+    "outputCost": 0.6286
   },
   {
-    "model": "kenari/hy3:free",
-    "imageInput": false,
+    "model": "kenari/hy4",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 256000,
-    "maxOutput": 128000,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.3429,
+    "outputCost": 1.2
+  },
+  {
+    "model": "kenari/hy4-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.07142857,
+    "outputCost": 0.28571429
+  },
+  {
+    "model": "kenari/hy4-flash:free",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
     "inputCost": null,
     "outputCost": null
   },
@@ -425,9 +665,45 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 131072,
-    "inputCost": 0.85714286,
-    "outputCost": 8.57142857
+    "maxOutput": 1048576,
+    "inputCost": 1.09,
+    "outputCost": 10.86
+  },
+  {
+    "model": "kenari/kimi-k3-1-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 0.8,
+    "outputCost": 8
+  },
+  {
+    "model": "kenari/longcat-2-5:free",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 262144,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "kenari/lyria-3-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 65536,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "kenari/minimax-m2-7",
@@ -464,6 +740,102 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 512000,
     "inputCost": 0.36,
     "outputCost": 1.42857143
+  },
+  {
+    "model": "kenari/minimax-m3-1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 512000,
+    "inputCost": 0.1829,
+    "outputCost": 0.7429
+  },
+  {
+    "model": "kenari/muse-ember-1-0",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 524288,
+    "inputCost": 0.1714,
+    "outputCost": 0.8571
+  },
+  {
+    "model": "kenari/muse-glimmer-30b:free",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "kenari/muse-spark-1-2",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 1.14,
+    "outputCost": 4.57
+  },
+  {
+    "model": "kenari/muse-spark-1-2-contributor",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.1143,
+    "outputCost": 0.2286
+  },
+  {
+    "model": "kenari/muse-spark-1-3",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 1.14,
+    "outputCost": 4.57
+  },
+  {
+    "model": "kenari/muse-spark-1-3-contributor",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.1143,
+    "outputCost": 0.2286
+  },
+  {
+    "model": "kenari/muse-wonder-1-0",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1007997,
+    "maxOutput": 131072,
+    "inputCost": 4,
+    "outputCost": 20
   },
   {
     "model": "kenari/nano-banana-2",
@@ -510,20 +882,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": 0.09714286,
+    "inputCost": 0.0971,
     "outputCost": 0.48
-  },
-  {
-    "model": "kenari/nemotron-3-super-120b-a12b:free",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 262144,
-    "inputCost": null,
-    "outputCost": null
   },
   {
     "model": "kenari/nemotron-3-ultra-550b-a55b",
@@ -534,8 +894,32 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 128000,
-    "inputCost": 0.68571429,
-    "outputCost": 4.28571429
+    "inputCost": 0.6857,
+    "outputCost": 4.29
+  },
+  {
+    "model": "kenari/nemotron-3-ultra-550b-a55b:free",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "kenari/particle-1:free",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "kenari/qwen3-7-plus",
@@ -551,15 +935,27 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "kenari/qwen3-8-max",
-    "imageInput": true,
+    "imageInput": false,
     "audioInput": false,
-    "videoInput": true,
+    "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 131072,
     "inputCost": 2.4,
-    "outputCost": 6.85714286
+    "outputCost": 6.86
+  },
+  {
+    "model": "kenari/solar-mini4:free",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 524288,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "kenari/step-3-7-flash",
@@ -571,7 +967,31 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 256000,
     "maxOutput": 256000,
     "inputCost": 0.24,
-    "outputCost": 1.37142857
+    "outputCost": 1.37
+  },
+  {
+    "model": "kenari/step-5-preview",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 1000000,
+    "inputCost": 1.14,
+    "outputCost": 2.86
+  },
+  {
+    "model": "kenari/whisper-1",
+    "imageInput": false,
+    "audioInput": true,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": null,
+    "maxOutput": null,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "kenari/whisper-large-v3-turbo",
@@ -602,7 +1022,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://kenari.id/v1",
-    id: "kenari/claude-fable-5",
+    id: "kenari/beam-1-0:free",
     apiKey: process.env.KENARI_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -623,7 +1043,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "kenari/whisper-large-v3-turbo"
-      : "kenari/claude-fable-5";
+      : "kenari/beam-1-0:free";
   }
 });
 ```

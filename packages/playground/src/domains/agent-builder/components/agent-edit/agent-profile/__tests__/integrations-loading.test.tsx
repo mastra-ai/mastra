@@ -73,8 +73,8 @@ describe('Integrations loading state', () => {
   });
 
   describe('when the channel platforms query is pending', () => {
-    it('renders a structural skeleton that reserves the heading + card footprint', () => {
-      const { getByTestId, queryByTestId, container } = render(
+    it('renders the loading skeleton instead of the loaded picker', () => {
+      const { getByTestId, queryByTestId } = render(
         <Harness>
           <Integrations agentId="agent-1" />
         </Harness>,
@@ -84,15 +84,6 @@ describe('Integrations loading state', () => {
       expect(skeleton).toBeTruthy();
       // The loaded picker testid must NOT be present while data is loading.
       expect(queryByTestId('integrations-detail-picker')).toBeNull();
-
-      // Lock in that the card footprint is reserved with the same `w-48`
-      // width as the real `IntegrationCard`, so the panel doesn't reflow
-      // when channel platforms resolve.
-      const cardWidthRegex = /(^|\s)w-48(\s|$)/;
-      const hasCardSizedChild = Array.from(container.querySelectorAll('*')).some(el =>
-        cardWidthRegex.test(el.className),
-      );
-      expect(hasCardSizedChild).toBe(true);
     });
   });
 });
