@@ -56,11 +56,17 @@ function isContentChunk(chunk: unknown): boolean {
   );
 }
 
+const normalizedNonErrorThrows = new WeakSet<object>();
+
 /**
  * Whether a failed model call will be retried. Used by both `onFailedAttempt` and
  * `shouldRetry` so a terminal error never waits out a provider delay it will not use.
  */
 function isRetryableModelError(error: unknown): boolean {
+  // Non-Error throws are normalized only to keep their fields; p-retry never retried them.
+  if (normalizedNonErrorThrows.has(error as object)) {
+    return false;
+  }
   // A step budget covers the whole attempt, so burning what is left of it on retries
   // against the same model would only delay the fallback to the next one.
   if (isMastraTimeoutError(error)) {
@@ -495,7 +501,10 @@ export function execute<OUTPUT = undefined>({
                 abortSignal?.throwIfAborted();
                 // p-retry rejects non-Error values as a TypeError containing String(error),
                 // discarding provider status and response fields needed downstream.
-                throw getErrorFromUnknown(error, { supportSerialization: false });
+                if (error instanceof Error) throw error;
+                const normalized = getErrorFromUnknown(error, { supportSerialization: false });
+                normalizedNonErrorThrows.add(normalized);
+                throw normalized;
               }
             },
             {

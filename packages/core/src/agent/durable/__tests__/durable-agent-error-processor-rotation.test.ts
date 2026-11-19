@@ -74,6 +74,25 @@ describe('durable agent API-error retry', () => {
     }
   });
 
+  it('does not retry a structured model failure', async () => {
+    let calls = 0;
+    const model = new MockLanguageModelV2({
+      doStream: async () => {
+        calls++;
+        throw { statusCode: 403, message: 'model access denied' };
+      },
+    });
+    const agent = new Agent({
+      id: 'structured-model-error-no-retry',
+      name: 'structured-model-error-no-retry',
+      instructions: 'You are helpful.',
+      model: model as LanguageModelV2,
+    });
+    const result = await agent.stream('hello', { modelSettings: { maxRetries: 2 } });
+    await result.consumeStream();
+    expect(calls).toBe(1);
+  });
+
   it('reports the API-error retry to the other processor hooks like Agent does', async () => {
     const run = async (durable: boolean) => {
       const seen: Record<string, number[]> = { inputStep: [], llmRequest: [], outputStep: [] };
