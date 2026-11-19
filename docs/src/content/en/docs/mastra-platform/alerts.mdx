@@ -252,7 +252,7 @@ Open a destination from the **Destinations** tab to see its deliveries and the a
 
 - Turn off the switch next to its name to pause it. Alerts skip a paused destination until you turn it back on.
 - Select **Send test**, or select **Edit** to change its name or settings.
-- Select **More actions** > **Rotate secret** to replace a webhook's signing secret. The new secret takes effect immediately, so update your endpoint first.
+- To rotate a webhook's signing secret, select **More actions** > **Rotate secret**, then confirm. Mastra starts signing requests with the new secret immediately. Copy it from the dialog before selecting **Done**, update your endpoint, then select **Send test** to verify the change.
 - Select **More actions** > **Remove** to delete the destination.
 
 On the organization's **Destinations** tab, **Slack workspaces** lists each connected workspace and how many destinations use it. To disconnect a workspace, select **Disconnect**. Remove the destinations that use it first.
@@ -275,7 +275,7 @@ The **Activity** tab shows each time an alert opened or closed, from the last 24
 
 ## Receive webhook notifications
 
-A webhook [alert destination](#add-a-destination) receives an HTTP `POST` request with a JSON body each time an alert sends a notification. Mastra shows the destination's signing secret once, after you create it.
+A webhook [alert destination](#add-a-destination) receives an HTTP `POST` request with a JSON body each time an alert sends a notification. Mastra shows the signing secret once after you create the destination and once after each rotation.
 
 ### Webhook payload
 
@@ -422,7 +422,7 @@ To verify a request:
   </TabItem>
 </Tabs>
 
-Return a `401` status for a request that fails verification. After you rotate a destination's secret, requests are signed with the new secret immediately.
+Return a `401` status for a request that fails verification.
 
 ### Retries and duplicates
 
