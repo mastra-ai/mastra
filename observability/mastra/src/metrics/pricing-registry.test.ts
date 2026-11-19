@@ -24,6 +24,24 @@ describe('PricingRegistry bundled snapshot', () => {
     expect(pickModelsDevCosts(costs)).toEqual(costs);
     expect(modelsDevToPricingModels(costs).size).toBeGreaterThanOrEqual(MIN_PRICED_MODELS);
   });
+
+  // A bundled app, such as a Cloudflare Worker, has no package files on disk.
+  it('prices a model when the package files are not on disk', async () => {
+    const costs = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, 'pricing-data.json'), 'utf-8'));
+    const [model] = Object.keys(costs.openai.models);
+    vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+      throw new Error('ENOENT');
+    });
+
+    try {
+      vi.resetModules();
+      const { PricingRegistry: Registry } = await import('./pricing-registry');
+
+      expect(Registry.getGlobal().get({ provider: 'openai', model: model! })?.id).toBe(`openai/${model}`);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
 });
 
 describe('PricingRegistry.getGlobal refresh', () => {
