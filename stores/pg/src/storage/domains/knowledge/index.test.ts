@@ -1,4 +1,5 @@
 import {
+  createKnowledgeImportersStorageTests,
   createKnowledgeLegacyUpgradeTests,
   createKnowledgePageStoreTests,
   createKnowledgeTransactionTests,
@@ -255,4 +256,81 @@ createKnowledgeLegacyUpgradeTests({
   knowledgeTables: legacyKnowledgeTables,
   otherTableRows: async () =>
     Number((await pool.query(`SELECT COUNT(*) AS n FROM ${legacyTable('existing_domain')}`)).rows[0].n),
+});
+
+const IMPORTERS_SCHEMA = 'knowledge_importers_test';
+const IMPORTERS_OTHER_SCHEMA = 'knowledge_importers_other_test';
+const IMPORTERS_UNPROVISIONED_SCHEMA = 'knowledge_importers_unprovisioned_test';
+createKnowledgeImportersStorageTests(async () => {
+  for (const schema of [IMPORTERS_SCHEMA, IMPORTERS_OTHER_SCHEMA, IMPORTERS_UNPROVISIONED_SCHEMA]) {
+    await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+    await pool.query(`CREATE SCHEMA "${schema}"`);
+  }
+  const provision = async (schemaName: string) => {
+    const store = new KnowledgePG({ pool, schemaName });
+    await store.init();
+    await store.importers!.init();
+    return store;
+  };
+  const store = await provision(IMPORTERS_SCHEMA);
+  const otherNamespace = await provision(IMPORTERS_OTHER_SCHEMA);
+  // Its own pool, so the reader never borrows the writer's connection.
+  const readerPool = new Pool({ connectionString });
+  return {
+    store,
+    reader: new KnowledgePG({ pool: readerPool, schemaName: IMPORTERS_SCHEMA }),
+    otherNamespace,
+    unprovisioned: {
+      store: new KnowledgePG({ pool, schemaName: IMPORTERS_UNPROVISIONED_SCHEMA }),
+      importerTablesExist: async () =>
+        Number(
+          (
+            await pool.query(
+              `SELECT count(*) AS n FROM information_schema.tables WHERE table_schema = $1 AND table_name LIKE 'mastra\\_knowledge\\_importer\\_%'`,
+              [IMPORTERS_UNPROVISIONED_SCHEMA],
+            )
+          ).rows[0].n,
+        ) === 7,
+    },
+    concurrentTransactions: true,
+    cleanup: async () => {
+      for (const schema of [IMPORTERS_SCHEMA, IMPORTERS_OTHER_SCHEMA, IMPORTERS_UNPROVISIONED_SCHEMA]) {
+        await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+      }
+      await readerPool.end();
+    },
+  };
+});
+
+const GATE_SCHEMA = 'knowledge_tx_gate_test';
+describe('KnowledgePG transaction: a failure caught outside a savepoint', () => {
+  it('rejects the transaction instead of reporting a commit PostgreSQL turned into a rollback', async () => {
+    await pool.query(`DROP SCHEMA IF EXISTS "${GATE_SCHEMA}" CASCADE`);
+    await pool.query(`CREATE SCHEMA "${GATE_SCHEMA}"`);
+    try {
+      const store = new KnowledgePG({ pool, schemaName: GATE_SCHEMA });
+      await store.init();
+      const who = { author: 'importer:test' };
+      const { scope } = await store.materializeScope({
+        address: 'org:acme',
+        declaration: 'org:$orgId',
+        name: 'Acme',
+        provenance: who,
+      });
+      const outcome = store.transaction(async tx => {
+        await tx.createPage({ parentId: scope.id, name: 'Written first', provenance: who });
+        // A statement on the transaction itself, not in a savepoint: PostgreSQL aborts the transaction.
+        await pgKnowledgeTransactionClient(tx)
+          .query('SELECT 1 / 0')
+          .catch(() => undefined);
+        // The next store call drains that failure before its savepoint; the caller swallows it too.
+        await tx.createPage({ parentId: scope.id, name: 'Written after', provenance: who }).catch(() => undefined);
+        return 'looks fine';
+      });
+      await expect(outcome).rejects.toThrow();
+      expect(await store.getPageByPath({ scopeId: scope.id, path: ['Written first'], read: 'all' })).toBeNull();
+    } finally {
+      await pool.query(`DROP SCHEMA IF EXISTS "${GATE_SCHEMA}" CASCADE`);
+    }
+  });
 });

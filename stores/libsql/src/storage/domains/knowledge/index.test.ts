@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import * as knowledgeCompat from '@internal/core/knowledge-compat';
 import { KNOWLEDGE_PAGES_TABLE_NAMES } from '@internal/core/knowledge-compat';
 import {
+  createKnowledgeImportersStorageTests,
   createKnowledgeLegacyUpgradeTests,
   createKnowledgeSchemaResetTests,
   createKnowledgePageStoreTests,
@@ -264,4 +265,39 @@ createKnowledgeLegacyUpgradeTests({
   knowledgeTables: knowledgeTableNames,
   otherTableRows: async () =>
     Number((await legacyClient.execute('SELECT COUNT(*) AS n FROM existing_domain')).rows[0]!.n),
+});
+
+createKnowledgeImportersStorageTests(async () => {
+  // File databases, so the reader is a real second connection.
+  const dir = mkdtempSync(join(tmpdir(), 'knowledge-importers-'));
+  const url = `file:${join(dir, 'knowledge.db')}`;
+  const writer = createClient({ url });
+  const readerClient = createClient({ url });
+  const store = new KnowledgeLibSQL({ client: writer });
+  await store.init();
+  await store.importers!.init();
+  const unprovisionedClient = createClient({ url: `file:${join(dir, 'unprovisioned.db')}` });
+  return {
+    store,
+    reader: new KnowledgeLibSQL({ client: readerClient }),
+    unprovisioned: {
+      store: new KnowledgeLibSQL({ client: unprovisionedClient }),
+      importerTablesExist: async () =>
+        Number(
+          (
+            await unprovisionedClient.execute(
+              "SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name LIKE 'mastra\\_knowledge\\_importer\\_%' ESCAPE '\\'",
+            )
+          ).rows[0]!.n,
+        ) === 7,
+    },
+    // One client's write transactions are serialized, which is what the lock tests observe.
+    concurrentTransactions: true,
+    cleanup: async () => {
+      writer.close();
+      readerClient.close();
+      unprovisionedClient.close();
+      rmSync(dir, { recursive: true, force: true });
+    },
+  };
 });

@@ -8,6 +8,7 @@ import { TransactionClient } from '../../client';
 import type { TxClient } from '../../client';
 import type { DbClient, PgDomainConfig } from '../../db';
 import { resolvePgConfig } from '../../db';
+import { PgKnowledgeImporters, pgKnowledgeImportersDDL } from './importers';
 import { PgKnowledgePages, pgKnowledgePagesDDL } from './pages';
 import { inspectPgKnowledgePagesSchema, initPgKnowledgePagesSchema, resetPgKnowledgePagesSchema } from './pages-schema';
 
@@ -146,12 +147,19 @@ export class KnowledgePG extends KnowledgeStorage {
   readonly #client: DbClient;
   readonly #schemaName?: string;
   readonly #pages: PgKnowledgePages;
+  readonly #importers?: PgKnowledgeImporters;
+
+  /** The importer tables' DDL, for provisioning them ahead of time when storage init is disabled. */
+  static getImportersExportDDL(schemaName?: string): string[] {
+    return pgKnowledgeImportersDDL(schemaName).map(statement => `${statement};`);
+  }
 
   constructor(config: PgDomainConfig) {
     super({ storageIsolationKey: config.storageIsolationKey ?? getPgKnowledgeIsolationKey(config) });
     const { client, schemaName } = resolvePgConfig(config);
     this.#client = client;
     this.#schemaName = schemaName;
+    if (coreFeatures.has('knowledge-importers')) this.#importers = new PgKnowledgeImporters({ client, schemaName });
     this.#pages = new PgKnowledgePages({
       client,
       schemaName,
@@ -174,6 +182,11 @@ export class KnowledgePG extends KnowledgeStorage {
       supportsPinKinds: true,
       supportsTransactions: true,
     } as const;
+  }
+
+  /** Same client and schema as the pages: on a transaction view, the view's transaction. */
+  override get importers(): PgKnowledgeImporters | undefined {
+    return this.#importers;
   }
 
   async init(): Promise<void> {

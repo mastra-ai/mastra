@@ -93,6 +93,45 @@ describe('InMemoryKnowledgeStorage.transaction', () => {
   });
 });
 
+describe('InMemoryKnowledgeStorage.transaction: known limits', () => {
+  // One process, no second connection: a write made on the store itself (not the view) while a
+  // transaction is open shares that transaction's state. It is visible at once and is undone if the
+  // transaction rolls back. Real stores isolate it; only in-memory tests may rely on this.
+  it('does not isolate a write made outside the view while a transaction is open', async () => {
+    const { store, scopeId, keys } = await setup();
+    let release!: () => void;
+    const held = new Promise<void>(resolve => (release = resolve));
+    let opened!: () => void;
+    const open = new Promise<void>(resolve => (opened = resolve));
+    const failing = store.transaction(async tx => {
+      await tx.createPage({ parentId: scopeId, key: 'inside', name: 'Inside', provenance: who });
+      opened();
+      await held;
+      throw new Error('roll back');
+    });
+    await open;
+    expect(await keys()).toEqual(['inside']);
+    await store.createPage({ parentId: scopeId, key: 'outside', name: 'Outside', provenance: who });
+    release();
+    await expect(failing).rejects.toThrow('roll back');
+    expect(await keys()).toEqual([]);
+  });
+
+  it('rolls importer rows back with the pages', async () => {
+    const { store, scopeId, keys } = await setup();
+    await store.importers.registerBinding({ id: 'b1', importer: 'notion', target: 'org:acme#notion' });
+    await expect(
+      store.transaction(async tx => {
+        await tx.createPage({ parentId: scopeId, key: 'alpha', name: 'Alpha', provenance: who });
+        await tx.importers!.setState('b1', { cursor: 'c1' });
+        throw new Error('crash');
+      }),
+    ).rejects.toThrow('crash');
+    expect(await keys()).toEqual([]);
+    expect(await store.importers.getState('b1')).toEqual({});
+  });
+});
+
 describe('KnowledgeStorage.transaction on an adapter without it', () => {
   it('refuses rather than run the operation without a transaction', async () => {
     // Like a MySQL or MongoDB Knowledge store today.

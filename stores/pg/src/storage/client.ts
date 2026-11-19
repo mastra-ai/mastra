@@ -179,7 +179,7 @@ export class PoolAdapter implements DbClient {
         const result = await callback(txClient);
         // Drain before COMMIT so fire-and-forget / batch tails can't race it.
         await txClient.drain();
-        await client.query('COMMIT');
+        assertCommitted(await client.query('COMMIT'));
         return result;
       } catch (error) {
         // Drain before ROLLBACK: Promise.all in batch() rejects on the first
@@ -203,6 +203,22 @@ export class PoolAdapter implements DbClient {
       client.release(destroyClient || undefined);
     }
   }
+}
+
+/**
+ * PostgreSQL answers COMMIT on an aborted transaction (a statement failed outside any savepoint, and
+ * the caller caught it) with a ROLLBACK, not an error. Treat that as the failure it is, so the
+ * caller never sees a commit that didn't happen.
+ */
+export class TransactionRolledBackError extends Error {
+  constructor() {
+    super('The transaction was rolled back at COMMIT: a statement in it failed earlier and the failure was caught.');
+    this.name = 'TransactionRolledBackError';
+  }
+}
+
+function assertCommitted(result: QueryResult | undefined): void {
+  if (result?.command === 'ROLLBACK') throw new TransactionRolledBackError();
 }
 
 /**
@@ -476,7 +492,7 @@ export class PinnedClientAdapter implements DbClient {
       try {
         const result = await callback(txClient);
         await txClient.drain();
-        await this.pinnedClient.query('COMMIT');
+        assertCommitted(await this.pinnedClient.query('COMMIT'));
         return result;
       } catch (error) {
         await txClient.drain().catch(() => undefined);

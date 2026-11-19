@@ -9,6 +9,7 @@ import {
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
   TABLE_KNOWLEDGE_PAGES_STATE,
 } from '@internal/core/knowledge-compat';
+import { coreFeatures } from '@mastra/core/features';
 import { KnowledgeSchemaResetRequiredError, KnowledgeStorage } from '@mastra/core/storage';
 import type { KnowledgePageStore } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
@@ -20,6 +21,7 @@ import type {
   SqliteTransaction as Transaction,
 } from '../../db/client';
 import { withClientWriteLock } from '../../db/write-lock';
+import { KNOWLEDGE_IMPORTER_DDL, LibSQLKnowledgeImporters } from './importers';
 import { KNOWLEDGE_PAGE_DDL, KNOWLEDGE_PAGE_TABLES, LibSQLKnowledgePages, upgradeKnowledgePinKinds } from './pages';
 
 interface Executor {
@@ -84,7 +86,13 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   readonly #db: LibSQLDB;
   readonly #pages: LibSQLKnowledgePages;
   readonly #inTransaction?: Transaction;
+  readonly #importers?: LibSQLKnowledgeImporters;
   #savepoints = 0;
+
+  /** The importer tables' DDL, for provisioning them ahead of time when storage init is disabled. */
+  static getImportersExportDDL(): string[] {
+    return KNOWLEDGE_IMPORTER_DDL.map(statement => `${statement};`);
+  }
 
   constructor(config: LibSQLDomainConfig & { [IN_TRANSACTION]?: Transaction }) {
     const client = resolveClient(config);
@@ -102,6 +110,17 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       read: this.#inTransaction ?? this.#client,
       transaction: operation => this.#transaction(operation),
     });
+    if (coreFeatures.has('knowledge-importers')) {
+      this.#importers = new LibSQLKnowledgeImporters({
+        read: this.#inTransaction ?? this.#client,
+        transaction: operation => this.#transaction(operation),
+      });
+    }
+  }
+
+  /** Same database as the pages: on a transaction view, the view's write transaction. */
+  override get importers(): LibSQLKnowledgeImporters | undefined {
+    return this.#importers;
   }
 
   override getCapabilities() {

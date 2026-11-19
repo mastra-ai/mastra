@@ -1,10 +1,16 @@
 import type { InMemoryDB } from '../inmemory-db';
 import { KNOWLEDGE_STORAGE_CONTRACT_VERSION, KNOWLEDGE_STORAGE_SCHEMA_VERSION, KnowledgeStorage } from './base';
+import { InMemoryKnowledgeImportersStorage } from './importers-inmemory';
 import type { KnowledgePageStore } from './pages';
 import { InMemoryKnowledgePageStore } from './pages-inmemory';
 
 export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   readonly #pageStore = new InMemoryKnowledgePageStore();
+  readonly #importers = new InMemoryKnowledgeImportersStorage();
+
+  override get importers(): InMemoryKnowledgeImportersStorage {
+    return this.#importers;
+  }
 
   // Schema-4 page store.
   override materializeScope(
@@ -181,7 +187,9 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   /**
    * In memory there is no second connection: transactions run one at a time and roll back by
-   * restoring a snapshot, and a read on this store while one runs sees its writes. Each store call
+   * restoring a snapshot of pages and importer rows, and a read on this store (or a write from
+   * outside the transaction) while one runs sees and shares its state: an outside write made during
+   * a transaction that rolls back is rolled back with it. Each store call
    * on the view, and each nested `transaction`, undoes its own writes when it fails.
    */
   override transaction<T>(operation: (tx: KnowledgeStorage) => Promise<T>): Promise<T> {
@@ -192,10 +200,12 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   async #savepoint<T>(operation: () => Promise<T>): Promise<T> {
     const before = this.#pageStore.snapshot();
+    const importersBefore = this.#importers.snapshot();
     try {
       return await operation();
     } catch (error) {
       this.#pageStore.restore(before);
+      this.#importers.restore(importersBefore);
       throw error;
     }
   }

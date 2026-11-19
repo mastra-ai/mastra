@@ -1,0 +1,261 @@
+import type {
+  KnowledgeImporterBindingRecord,
+  KnowledgeImporterFlushRecord,
+  KnowledgeImporterNodeRecord,
+  KnowledgeImporterPage,
+  KnowledgeImporterRunChangeRecord,
+  KnowledgeImporterRunRecord,
+  KnowledgeImporterRunStartResult,
+  KnowledgeImporterRunStatus,
+  KnowledgeImporterWriterGuard,
+} from './importers';
+import {
+  KnowledgeImporterBindingConflictError,
+  KnowledgeImporterRunStateError,
+  KnowledgeImportersStorage,
+} from './importers';
+
+interface State {
+  bindings: Map<string, KnowledgeImporterBindingRecord>;
+  nodes: Map<string, KnowledgeImporterNodeRecord>;
+  state: Map<string, Map<string, string>>;
+  runs: Map<string, KnowledgeImporterRunRecord>;
+  flushes: Map<string, KnowledgeImporterFlushRecord>;
+  changes: Map<string, { order: number; change: KnowledgeImporterRunChangeRecord }>;
+  guard: KnowledgeImporterWriterGuard;
+  order: number;
+}
+
+const empty = (): State => ({
+  bindings: new Map(),
+  nodes: new Map(),
+  state: new Map(),
+  runs: new Map(),
+  flushes: new Map(),
+  changes: new Map(),
+  guard: { activePath: 'new', generation: 1, firstWriteAt: null },
+  order: 0,
+});
+
+const key = (...parts: (string | number)[]) => JSON.stringify(parts);
+const byteOrder = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+function addCounts(into: Record<string, number>, add: Record<string, number>): Record<string, number> {
+  const out = { ...into };
+  for (const [name, value] of Object.entries(add)) out[name] = (out[name] ?? 0) + value;
+  return out;
+}
+
+/**
+ * In-memory importer bookkeeping. One process, no locks: the owning store runs transactions one at
+ * a time and rolls them back by restoring {@link snapshot}.
+ */
+export class InMemoryKnowledgeImportersStorage extends KnowledgeImportersStorage {
+  #s = empty();
+
+  snapshot(): State {
+    return structuredClone(this.#s);
+  }
+  restore(state: State): void {
+    this.#s = state;
+  }
+
+  async init(): Promise<void> {}
+  async dangerouslyClearAll(): Promise<void> {
+    this.#s = empty();
+  }
+
+  async registerBinding(input: { id: string; importer: string; target: string }) {
+    const existing = this.#s.bindings.get(input.id);
+    if (existing) {
+      if (existing.importer !== input.importer || existing.target !== input.target) {
+        throw new KnowledgeImporterBindingConflictError(input.id);
+      }
+      return { status: 'unchanged' as const, binding: { ...existing } };
+    }
+    const binding = { ...input, createdAt: new Date() };
+    this.#s.bindings.set(input.id, binding);
+    return { status: 'created' as const, binding: { ...binding } };
+  }
+  async getBinding(id: string) {
+    const binding = this.#s.bindings.get(id);
+    return binding ? { ...binding } : null;
+  }
+  async listBindings() {
+    return [...this.#s.bindings.values()].sort((a, b) => byteOrder(a.id, b.id)).map(b => ({ ...b }));
+  }
+
+  async startRun(input: {
+    bindingId: string;
+    runId: string;
+    generation: number;
+    fireKey?: string;
+    deadlineAt?: Date;
+  }): Promise<KnowledgeImporterRunStartResult> {
+    const runs = [...this.#s.runs.values()].filter(r => r.bindingId === input.bindingId);
+    if (input.fireKey) {
+      const fired = runs.find(r => r.fireKey === input.fireKey);
+      if (fired) return { status: 'duplicate', run: structuredClone(fired) };
+    }
+    const running = runs.some(r => r.status === 'running');
+    const now = new Date();
+    const run: KnowledgeImporterRunRecord = {
+      id: input.runId,
+      bindingId: input.bindingId,
+      generation: input.generation,
+      status: running ? 'skipped' : 'running',
+      fireKey: input.fireKey ?? null,
+      deadlineAt: input.deadlineAt ?? null,
+      cancelRequestedAt: null,
+      lastSeq: 0,
+      finish: null,
+      counts: {},
+      startedAt: now,
+      completedAt: running ? now : null,
+    };
+    this.#s.runs.set(run.id, run);
+    return { status: running ? 'skipped' : 'started', run: structuredClone(run) };
+  }
+  async getRun(runId: string) {
+    const run = this.#s.runs.get(runId);
+    return run ? structuredClone(run) : null;
+  }
+  async listRuns(bindingId: string, options: { limit?: number } = {}) {
+    return [...this.#s.runs.values()]
+      .filter(r => r.bindingId === bindingId)
+      .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())
+      .slice(0, options.limit ?? 50)
+      .map(r => structuredClone(r));
+  }
+  async requestCancel(runId: string) {
+    const run = this.#s.runs.get(runId);
+    if (!run || run.status !== 'running') return null;
+    run.cancelRequestedAt ??= new Date();
+    return structuredClone(run);
+  }
+
+  #activeRun(runId: string, generation: number): KnowledgeImporterRunRecord {
+    const run = this.#s.runs.get(runId);
+    if (!run) throw new KnowledgeImporterRunStateError(runId, 'not_found');
+    if (run.status !== 'running') throw new KnowledgeImporterRunStateError(runId, 'not_running');
+    if (run.generation !== generation) throw new KnowledgeImporterRunStateError(runId, 'generation');
+    if (this.#s.guard.generation !== generation) throw new KnowledgeImporterRunStateError(runId, 'stale_guard');
+    return run;
+  }
+
+  async getFlush(runId: string, generation: number, seq: number) {
+    const flush = this.#s.flushes.get(key(runId, generation, seq));
+    return flush ? structuredClone(flush) : null;
+  }
+  async recordFlush(input: KnowledgeImporterFlushRecord & { counts: Record<string, number> }) {
+    const run = this.#activeRun(input.runId, input.generation);
+    if (run.lastSeq !== input.seq - 1) throw new KnowledgeImporterRunStateError(input.runId, 'seq');
+    const { counts, ...flush } = input;
+    this.#s.flushes.set(key(input.runId, input.generation, input.seq), structuredClone(flush));
+    run.lastSeq = input.seq;
+    run.counts = addCounts(run.counts, counts);
+  }
+  async finishRun(input: {
+    runId: string;
+    generation: number;
+    lastSeq: number;
+    status: Exclude<KnowledgeImporterRunStatus, 'running' | 'skipped'>;
+    finish: unknown;
+  }) {
+    const run = this.#activeRun(input.runId, input.generation);
+    if (run.lastSeq !== input.lastSeq) throw new KnowledgeImporterRunStateError(input.runId, 'seq');
+    run.status = input.status;
+    run.finish = structuredClone(input.finish);
+    run.completedAt = new Date();
+    return structuredClone(run);
+  }
+
+  async getNode(bindingId: string, sourceId: string) {
+    const node = this.#s.nodes.get(key(bindingId, sourceId));
+    return node ? structuredClone(node) : null;
+  }
+  async getNodeByPage(pageId: string) {
+    const node = [...this.#s.nodes.values()].find(n => n.pageId === pageId);
+    return node ? structuredClone(node) : null;
+  }
+  async saveNode(node: Omit<KnowledgeImporterNodeRecord, 'updatedAt'>) {
+    const owner = [...this.#s.nodes.values()].find(n => n.pageId === node.pageId);
+    if (owner && (owner.bindingId !== node.bindingId || owner.sourceId !== node.sourceId)) {
+      throw new Error(`Knowledge page ${node.pageId} is already mapped to another imported node`);
+    }
+    this.#s.nodes.set(key(node.bindingId, node.sourceId), structuredClone({ ...node, updatedAt: new Date() }));
+  }
+  async deleteNode(bindingId: string, sourceId: string) {
+    this.#s.nodes.delete(key(bindingId, sourceId));
+  }
+  async listNodes(
+    bindingId: string,
+    options: { after?: string; limit?: number } = {},
+  ): Promise<KnowledgeImporterPage<KnowledgeImporterNodeRecord>> {
+    const limit = options.limit ?? 500;
+    const nodes = [...this.#s.nodes.values()]
+      .filter(n => n.bindingId === bindingId && (options.after === undefined || n.sourceId > options.after))
+      .sort((a, b) => byteOrder(a.sourceId, b.sourceId));
+    const items = nodes.slice(0, limit).map(n => structuredClone(n));
+    return { items, next: nodes.length > limit ? items[items.length - 1]!.sourceId : null };
+  }
+  async findNodeByAlias(bindingId: string, alias: string) {
+    const node = [...this.#s.nodes.values()].find(n => n.bindingId === bindingId && n.aliases.includes(alias));
+    return node ? structuredClone(node) : null;
+  }
+
+  async getState(bindingId: string) {
+    const out: Record<string, string> = {};
+    for (const [name, value] of this.#s.state.get(bindingId) ?? []) {
+      Object.defineProperty(out, name, { value, enumerable: true, writable: true, configurable: true });
+    }
+    return out;
+  }
+  async setState(bindingId: string, state: Record<string, string>) {
+    const stored = this.#s.state.get(bindingId) ?? new Map<string, string>();
+    for (const name of Object.keys(state)) stored.set(name, state[name]!);
+    this.#s.state.set(bindingId, stored);
+  }
+
+  async recordRunChange(change: KnowledgeImporterRunChangeRecord) {
+    const id = key(change.runId, change.sourceId);
+    const order = this.#s.changes.get(id)?.order ?? ++this.#s.order;
+    this.#s.changes.set(id, { order, change: structuredClone(change) });
+  }
+  async listRunChanges(
+    runId: string,
+    options: { after?: string; limit?: number } = {},
+  ): Promise<KnowledgeImporterPage<KnowledgeImporterRunChangeRecord>> {
+    const limit = options.limit ?? 500;
+    const after = options.after === undefined ? 0 : Number(options.after);
+    const rows = [...this.#s.changes.values()]
+      .filter(c => c.change.runId === runId && c.order > after)
+      .sort((a, b) => a.order - b.order);
+    const page = rows.slice(0, limit);
+    return {
+      items: page.map(c => structuredClone(c.change)),
+      next: rows.length > limit ? String(page[page.length - 1]!.order) : null,
+    };
+  }
+
+  async readWriterGuard() {
+    return { ...this.#s.guard };
+  }
+  async lockWriterGuard(_mode: 'share' | 'update') {
+    return { ...this.#s.guard };
+  }
+  async markFirstWrite() {
+    if (this.#s.guard.firstWriteAt) return false;
+    this.#s.guard.firstWriteAt = new Date();
+    return true;
+  }
+  async advanceWriterGuard(input: { activePath: string; generation: number }) {
+    if (input.generation <= this.#s.guard.generation) {
+      throw new Error(
+        `Knowledge importer writer generation must move forward (${this.#s.guard.generation} -> ${input.generation})`,
+      );
+    }
+    this.#s.guard = { activePath: input.activePath, generation: input.generation, firstWriteAt: null };
+    return { ...this.#s.guard };
+  }
+}

@@ -1,5 +1,6 @@
 import type { KnowledgeScopeDeclarations } from '../../../knowledge/declarations';
 import { StorageDomain } from '../base';
+import type { KnowledgeImportersStorage } from './importers';
 import type { KnowledgePageStore } from './pages';
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
@@ -196,6 +197,16 @@ export abstract class KnowledgeStorage extends StorageDomain implements Knowledg
    */
   transaction<T>(_operation: (tx: KnowledgeStorage) => Promise<T>): Promise<T> {
     return Promise.reject(new KnowledgeUnsupportedCapabilityError('transactions'));
+  }
+
+  /**
+   * Importer bookkeeping on the same database and namespace as the pages, or undefined when the
+   * adapter has none. On a {@link transaction} view it belongs to that transaction.
+   *
+   * @experimental
+   */
+  get importers(): KnowledgeImportersStorage | undefined {
+    return undefined;
   }
 
   async inspectSchema(): Promise<KnowledgeSchemaInspection> {
