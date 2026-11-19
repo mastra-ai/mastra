@@ -217,21 +217,10 @@ export class PlatformMemoryClient {
     });
   }
 
-  getContext(threadId: string, resourceId: string, opts: { workingMemory?: 'readonly' | 'tool' | 'off' } = {}) {
+  getContext(threadId: string, resourceId: string) {
     return this.request<MemoryContext>('GET', `/threads/${encodeURIComponent(threadId)}/context`, {
-      query: { resourceId, ...(opts.workingMemory ? { workingMemory: opts.workingMemory } : {}) },
-    });
-  }
-
-  async getWorkingMemory(resourceId: string): Promise<string | null> {
-    const res = await this.request<{ workingMemory: string | null }>('GET', '/working-memory', {
       query: { resourceId },
     });
-    return res.workingMemory;
-  }
-
-  async updateWorkingMemory(resourceId: string, workingMemory: string): Promise<void> {
-    await this.request('PUT', '/working-memory', { body: { resourceId, workingMemory } });
   }
 
   /** Omit resourceId to search the instance's most recently active threads. */
@@ -297,11 +286,10 @@ export class PlatformMemoryClient {
     return res.deleted;
   }
 
-  /** Everything stored for one resource (user): working memory and threads. */
+  /** Threads stored for one resource (user). */
   getResource(resourceId: string, query: { page?: number; perPage?: number } = {}) {
     return this.request<{
       resourceId: string;
-      workingMemory: string | null;
       threads: MemoryThread[];
       totalThreads: number;
       hasMore: boolean;
@@ -316,7 +304,7 @@ export class PlatformMemoryClient {
     }>('GET', '/resources', { query });
   }
 
-  /** Deletes every thread, message, observation and the working memory for a resource. */
+  /** Deletes every thread, message and observation for a resource. */
   async deleteResource(resourceId: string): Promise<number> {
     const res = await this.request<{ deletedThreads: number }>(
       'DELETE',
