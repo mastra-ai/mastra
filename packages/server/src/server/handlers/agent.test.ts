@@ -1329,5 +1329,106 @@ describe('Agent Handlers', () => {
         }
       }
     });
+
+    it('uses a Mastra gateway model when only MASTRA_GATEWAY_API_KEY is set', async () => {
+      vi.stubEnv('OPENAI_API_KEY', '');
+      vi.stubEnv('MASTRA_GATEWAY_API_KEY', 'test-gateway-key');
+      onTestFinished(() => vi.unstubAllEnvs());
+      const mastra = makeMastraMock({
+        agents: { 'gateway-agent': makeMockAgent({ name: 'gateway-agent', model: 'mastra/openai/gpt-5-mini' }) },
+      });
+      const generateSpy = vi
+        .spyOn(Agent.prototype, 'generate')
+        .mockResolvedValue({ object: { explanation: 'Clearer.', new_prompt: 'Be clear.' } } as any);
+      onTestFinished(() => generateSpy.mockRestore());
+
+      const result = await ENHANCE_INSTRUCTIONS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'gateway-agent',
+        instructions: 'Be helpful.',
+      });
+
+      expect(result).toEqual({ explanation: 'Clearer.', new_prompt: 'Be clear.' });
+      expect(generateSpy).toHaveBeenCalledOnce();
+    });
+
+    it('skips a gateway model without credentials and uses a later connected model', async () => {
+      vi.stubEnv('OPENAI_API_KEY', '');
+      vi.stubEnv('NETLIFY_TOKEN', '');
+      vi.stubEnv('NETLIFY_SITE_ID', '');
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'test-google-key');
+      onTestFinished(() => vi.unstubAllEnvs());
+      const mastra = makeMastraMock({
+        agents: {
+          'fallback-agent': makeMockAgent({
+            name: 'fallback-agent',
+            model: [{ model: 'netlify/openai/gpt-4o' }, { model: 'google/gemini-2.5-flash' }],
+          }),
+        },
+      });
+      const generateSpy = vi
+        .spyOn(Agent.prototype, 'generate')
+        .mockResolvedValue({ object: { explanation: 'Clearer.', new_prompt: 'Be clear.' } } as any);
+      onTestFinished(() => generateSpy.mockRestore());
+
+      await ENHANCE_INSTRUCTIONS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'fallback-agent',
+        instructions: 'Be helpful.',
+      });
+
+      const enhancer = generateSpy.mock.contexts[0] as Agent;
+      const chosen = (await enhancer.getModel()) as { provider: string; modelId: string };
+      expect(chosen.provider).toBe('google');
+      expect(chosen.modelId).toBe('gemini-2.5-flash');
+    });
+
+    it('does not treat a lab provider key as the credential for a gateway model', async () => {
+      vi.stubEnv('OPENAI_API_KEY', 'test-openai-key');
+      vi.stubEnv('NETLIFY_TOKEN', '');
+      vi.stubEnv('NETLIFY_SITE_ID', '');
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'test-google-key');
+      onTestFinished(() => vi.unstubAllEnvs());
+      const mastra = makeMastraMock({
+        agents: {
+          'fallback-agent': makeMockAgent({
+            name: 'fallback-agent',
+            model: [{ model: 'netlify/openai/gpt-4o' }, { model: 'google/gemini-2.5-flash' }],
+          }),
+        },
+      });
+      const generateSpy = vi
+        .spyOn(Agent.prototype, 'generate')
+        .mockResolvedValue({ object: { explanation: 'Clearer.', new_prompt: 'Be clear.' } } as any);
+      onTestFinished(() => generateSpy.mockRestore());
+
+      await ENHANCE_INSTRUCTIONS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'fallback-agent',
+        instructions: 'Be helpful.',
+      });
+
+      const enhancer = generateSpy.mock.contexts[0] as Agent;
+      const chosen = (await enhancer.getModel()) as { provider: string; modelId: string };
+      expect(chosen.provider).toBe('google');
+      expect(chosen.modelId).toBe('gemini-2.5-flash');
+    });
+
+    it('returns 400 for a Mastra gateway model when no gateway key is set', async () => {
+      vi.stubEnv('OPENAI_API_KEY', '');
+      vi.stubEnv('MASTRA_GATEWAY_API_KEY', '');
+      onTestFinished(() => vi.unstubAllEnvs());
+      const mastra = makeMastraMock({
+        agents: { 'gateway-agent': makeMockAgent({ name: 'gateway-agent', model: 'mastra/openai/gpt-5-mini' }) },
+      });
+
+      await expect(
+        ENHANCE_INSTRUCTIONS_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          agentId: 'gateway-agent',
+          instructions: 'Be helpful.',
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+    });
   });
 });

@@ -2093,6 +2093,18 @@ export async function buildProvidersList(mastra: Context['mastra']): Promise<Pro
       }
     } catch (error) {
       console.warn(`Failed to fetch providers from gateway "${gateway.id}":`, error);
+      // Keep the Mastra gateway listed when its catalog cannot be loaded (for example a revoked
+      // key or an outage), so Studio shows the provider with no models instead of hiding it.
+      if (gateway.id === 'mastra' && !('mastra' in allProviders)) {
+        const registered: ProviderConfig | undefined = PROVIDER_REGISTRY['mastra' as keyof typeof PROVIDER_REGISTRY];
+        allProviders['mastra'] = {
+          name: registered?.name ?? 'Gateway',
+          apiKeyEnvVar: registered?.apiKeyEnvVar ?? 'MASTRA_GATEWAY_API_KEY',
+          gateway: 'mastra',
+          docUrl: registered?.docUrl,
+          models: [],
+        };
+      }
     }
   }
 
@@ -4374,6 +4386,26 @@ Return your response as JSON with exactly these two fields:
 
 Remember: A good system prompt should be specific enough to guide behavior but flexible enough to handle edge cases. Focus on creating prompts that are clear, actionable, and aligned with the intended use case.`;
 
+/**
+ * Whether a model can be called with the credentials this deployment has.
+ *
+ * A model routed through a gateway other than models.dev (for example `mastra/openai/...` or
+ * `netlify/openai/...`) is called with that gateway's credential, never the lab provider's key,
+ * so only the gateway's credential decides. Resolving the router's provider id resolves that
+ * credential and gives undefined when it is missing. Direct models use the provider's own key.
+ */
+async function isModelConnected(model: Awaited<ReturnType<Agent['getModel']>>): Promise<boolean> {
+  const router = model as { gatewayId?: unknown; resolveApiProviderId?: () => Promise<string | undefined> };
+  if (
+    typeof router.gatewayId === 'string' &&
+    router.gatewayId !== 'models.dev' &&
+    typeof router.resolveApiProviderId === 'function'
+  ) {
+    return (await router.resolveApiProviderId()) !== undefined;
+  }
+  return isProviderConnected(model.provider);
+}
+
 // Helper to find the first model with a connected provider
 async function findConnectedModel(agent: Agent): Promise<Awaited<ReturnType<Agent['getModel']>> | null> {
   const modelList = await agent.getModelList();
@@ -4383,7 +4415,7 @@ async function findConnectedModel(agent: Agent): Promise<Awaited<ReturnType<Agen
     for (const modelConfig of modelList) {
       if (modelConfig.enabled !== false) {
         const model = modelConfig.model;
-        if (isProviderConnected(model.provider)) {
+        if (await isModelConnected(model)) {
           return model;
         }
       }
@@ -4393,7 +4425,7 @@ async function findConnectedModel(agent: Agent): Promise<Awaited<ReturnType<Agen
 
   // No model list, check the default model
   const defaultModel = await agent.getModel();
-  if (isProviderConnected(defaultModel.provider)) {
+  if (await isModelConnected(defaultModel)) {
     return defaultModel;
   }
   return null;

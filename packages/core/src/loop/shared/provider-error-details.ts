@@ -42,6 +42,23 @@ export function readRequestId(headers: unknown): string | undefined {
   return undefined;
 }
 
+/**
+ * The origin (scheme, host and port) of a request URL. The path, query string and any
+ * credentials in the URL are never kept. Anything that is not an absolute http or https URL
+ * gives undefined.
+ */
+export function readRequestOrigin(url: unknown): string | undefined {
+  if (typeof url !== 'string' || !url.trim()) return undefined;
+  let parsed: URL;
+  try {
+    parsed = new URL(url.trim());
+  } catch {
+    return undefined;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return undefined;
+  return parsed.origin;
+}
+
 export function readRequestedModel(requestBody: unknown): string | undefined {
   if (!requestBody || typeof requestBody !== 'object') return undefined;
   const model = readField(requestBody, 'model');
