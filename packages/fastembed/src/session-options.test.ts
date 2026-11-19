@@ -19,6 +19,8 @@ const models = {
 
 let modelDir: string;
 beforeEach(() => {
+  // Automatic sizing must not pick up a count from the shell running the tests.
+  vi.stubEnv('MASTRA_FASTEMBED_THREADS', undefined);
   modelDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fastembed-session-options-'));
   fs.mkdirSync(path.join(modelDir, 'onnx'));
   fs.writeFileSync(path.join(modelDir, 'model.onnx'), models.dense);
