@@ -758,6 +758,7 @@ export const optionalPeerRoute = registerApiRoute('/optional-peer', {
 import { camelCase } from 'lodash';
 import { getDaysInMonth, isLeapYear } from 'date-fns';
 import { greet } from '@inner/raw-ts';
+import cjsInterop from '@inner/cjs-interop';
 import { basename, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { toPath } from 'unicorn-magic';
@@ -770,6 +771,7 @@ export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependenc
     externalFile: basename(toPath(pathToFileURL(join(process.cwd(), 'optimized-entry.txt')))),
     leapYear: isLeapYear(new Date('2028-02-10T12:00:00Z')),
     workspaceGreeting: greet('workspace'),
+    cjsRequiresEsm: cjsInterop.describeInterop('module'),
   }),
 });
 `,
@@ -949,6 +951,7 @@ export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependenc
         externalFile: 'optimized-entry.txt',
         leapYear: true,
         workspaceGreeting: 'hello workspace c',
+        cjsRequiresEsm: 'cjs requires esm module',
       });
     });
 
