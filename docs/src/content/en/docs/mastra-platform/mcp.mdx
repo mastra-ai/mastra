@@ -12,7 +12,7 @@ The Mastra platform MCP server lets an AI assistant read your organization's [Ob
 
 ## Connect your MCP client
 
-Before you start, make sure you have a Mastra platform account and belong to the organization whose data you want to query.
+Before you start, ensure that you have a Mastra platform account and belong to the organization whose data you want to query.
 
 <Tabs>
   <TabItem value="claude-code" label="Claude Code">
@@ -42,7 +42,7 @@ Before you start, make sure you have a Mastra platform account and belong to the
   </TabItem>
 
   <TabItem value="json" label="Other clients">
-    1. Add the server to your client's MCP configuration file:
+    1. Add the server to your client's MCP configuration file. This example uses the `mcpServers` format that many clients accept. Some clients use a different format, such as VS Code, which expects a `servers` object in `.vscode/mcp.json`. Check your client's documentation for its file location and format.
 
        ```json title="mcp.json"
        {
@@ -61,14 +61,14 @@ Before you start, make sure you have a Mastra platform account and belong to the
 
 When you authenticate, your browser opens the Mastra sign-in page. Sign in and select an organization. The connection then acts as you in that organization and can read only the data you can read. If you leave the organization or someone removes you from it, the connection loses access on its next request.
 
-To check the connection, ask the assistant "Which Mastra organization am I connected to?" It calls `whoami` and replies with your organization and user.
+To check the connection, ask the assistant "Which Mastra organization does this connection use?" It calls `whoami` and replies with your organization and user.
 
 ## Ask questions
 
 Ask in plain language. The assistant picks the tools and fills in their parameters. For example:
 
 - "How many traces failed in the last 24 hours, grouped by agent?"
-- "Show me the slowest tool calls this week and what they returned."
+- "Which tool calls were slowest this week, and what did they return?"
 - "Chart token cost per model over the last 7 days and add it to the Metrics dashboard."
 
 ## Query one project
