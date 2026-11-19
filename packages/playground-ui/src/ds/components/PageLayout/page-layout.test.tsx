@@ -110,4 +110,20 @@ describe('PageLayout', () => {
       expect(screen.getByRole('main').textContent).toBe('Body');
     });
   });
+
+  describe('grid', () => {
+    it('places children on the page grid, full width unless they ask for columns', () => {
+      render(
+        <PageLayout>
+          <PageLayout.Grid>
+            <section>Summary</section>
+          </PageLayout.Grid>
+        </PageLayout>,
+      );
+
+      const grid = screen.getByText('Summary').closest('[data-slot="page-layout-grid"]');
+      expect(grid).not.toBeNull();
+      expect(screen.getByRole('main').contains(grid)).toBe(true);
+    });
+  });
 });

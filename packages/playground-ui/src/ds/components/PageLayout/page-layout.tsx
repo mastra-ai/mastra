@@ -27,8 +27,8 @@ export function PageLayout({ children, breadcrumbs, headerActions, actionRow, he
         </Header>
       )}
       {actionRow && (
-        <div data-slot="page-layout-action-row" className="flex shrink-0 flex-col gap-2 px-4 pt-4">
-          {actionRow}
+        <div data-slot="page-layout-action-row" className="shrink-0 px-4 pt-4">
+          <div className="mx-auto flex w-full max-w-(--breakpoint-2xl) flex-col gap-2">{actionRow}</div>
         </div>
       )}
       <main className="flex min-h-0 flex-1 flex-col">
@@ -36,7 +36,7 @@ export function PageLayout({ children, breadcrumbs, headerActions, actionRow, he
           <ScrollAreaViewport
             className="p-4 has-[>*>[data-slot=page-layout-workspace]]:p-0"
             contentClassName={cn(
-              'has-[>[data-slot=page-layout-workspace]]:grid has-[>[data-slot=page-layout-workspace]]:h-full has-[>[data-slot=page-layout-workspace]]:min-h-0 has-[>[data-slot=page-layout-workspace]]:grid-cols-1',
+              'mx-auto w-full max-w-(--breakpoint-2xl) has-[>[data-slot=page-layout-workspace]]:grid has-[>[data-slot=page-layout-workspace]]:h-full has-[>[data-slot=page-layout-workspace]]:min-h-0 has-[>[data-slot=page-layout-workspace]]:max-w-none has-[>[data-slot=page-layout-workspace]]:grid-cols-1',
               header
                 ? 'flex h-full min-h-min flex-col has-[>[data-slot=page-layout-workspace]]:grid-rows-[auto_minmax(0,1fr)] [&:has(>[data-slot=page-layout-workspace])>[data-slot=page-layout-header]]:p-4 [&>:last-child:is([data-slot=empty-state-fill],[data-slot=spinner-fill],.h-full,:has(>[data-slot=empty-state-fill]),:has(>[data-slot=spinner-fill]))]:grow [&>:last-child:is([data-slot=empty-state-fill],[data-slot=spinner-fill],.h-full,:has(>[data-slot=empty-state-fill]),:has(>[data-slot=spinner-fill]))]:basis-0'
                 : 'h-full min-h-min has-[>[data-slot=page-layout-workspace]]:grid-rows-1',
@@ -59,4 +59,13 @@ function PageLayoutWorkspace({ children }: { children: ReactNode }) {
   );
 }
 
+function PageLayoutGrid({ children }: { children: ReactNode }) {
+  return (
+    <div data-slot="page-layout-grid" className="@container min-w-0">
+      <div className="grid grid-cols-1 gap-6 @4xl:grid-cols-12 [:where(&)>*]:col-span-full">{children}</div>
+    </div>
+  );
+}
+
 PageLayout.Workspace = PageLayoutWorkspace;
+PageLayout.Grid = PageLayoutGrid;

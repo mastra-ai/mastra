@@ -1,4 +1,4 @@
-import { copyRuleExclusions, copyRules } from '@mastra/playground-ui/oxlint';
+import { copyRuleExclusions, copyRules, pageRules } from '@mastra/playground-ui/oxlint';
 import { defineConfig } from 'oxlint';
 import rootConfig from '../../oxlint.config.ts';
 
@@ -25,6 +25,14 @@ export default defineConfig({
       rules: copyRules,
     },
     copyRuleExclusions,
+    {
+      files: ['src/ui/pages/**/*.tsx'],
+      rules: pageRules,
+    },
+    {
+      files: ['src/ui/pages/SignInPage.tsx'],
+      rules: { 'playground-ui/no-page-width': 'off' },
+    },
     {
       files: ['**/*.{ts,tsx}'],
       rules: { 'typescript/no-floating-promises': 'off', 'typescript/no-misused-promises': 'off' },

@@ -320,6 +320,12 @@ function placeholderText(context) {
   };
 }
 
+const PAGE_WIDTH_MESSAGE =
+  'Take the page width from PageLayout, FormLayout or SettingsLayout instead of a centred max-w-* column of its own.';
+
+const centredPageColumn = classStrings('^(?=.*(^|\\s)mx-auto(\\s|$))(?=.*(^|\\s)max-w-)');
+const noPageWidth = selectorRule(() => centredPageColumn.map(selector => ({ selector, message: PAGE_WIDTH_MESSAGE })));
+
 const plugin = {
   meta: { name: 'playground-ui' },
   rules: {
@@ -332,12 +338,17 @@ const plugin = {
     'placeholder-text': { meta: { type: 'suggestion', schema: false }, create: placeholderText },
     'no-text-separators': noTextSeparators,
     'no-text-layout-spacing': noTextLayoutSpacing,
+    'no-page-width': { meta: { type: 'suggestion', schema: false }, create: noPageWidth },
   },
 };
 
 export const copyRules = {
   'playground-ui/no-text-separators': 'error',
   'playground-ui/no-text-layout-spacing': 'error',
+};
+
+export const pageRules = {
+  'playground-ui/no-page-width': 'error',
 };
 
 export const copyRuleExclusions = {

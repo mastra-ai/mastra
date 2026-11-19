@@ -12,7 +12,6 @@ import { useApiConfig } from '../../api/config';
 import { useBoardCatalog } from '../../hooks/useBoardCatalog';
 import { storedBoardQueryOptions, useCreateBoardMutation } from '../../hooks/useBoardEditor';
 import { useIntakeRoutesQuery } from '../../hooks/useIntakeRoutes';
-import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
 import { boardConfigPath } from '../domains/boardConfig/boardConfigPaths';
 import { draftOf, keyFromName, keyProblem, starterBoard } from '../domains/boardConfig/boardDraft';
 import type { BoardDraft } from '../domains/boardConfig/boardDraft';
@@ -44,7 +43,6 @@ export function NewBoardPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const id = useId();
-  const slots = useSidebarHeaderSlots();
 
   // The key follows the name until it is typed by hand.
   const key = typedKey ?? keyFromName(name);
@@ -85,7 +83,6 @@ export function NewBoardPage() {
 
   return (
     <FormLayout
-      breadcrumbs={slots.breadcrumbs}
       backHref={`/factories/${factory.id}`}
       backLabel={factory.name}
       title="New board"

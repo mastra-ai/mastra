@@ -81,23 +81,4 @@ describe('FormLayout', () => {
     expect(aside.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole('complementary')).toBeNull();
   });
-
-  it("shows the app's bar only when the app passes something for it", () => {
-    render(
-      <FormLayout
-        backHref="/alerts"
-        backLabel="Alerts"
-        title="New alert"
-        breadcrumbs={<button type="button">Open sidebar</button>}
-      >
-        <section>Conditions</section>
-      </FormLayout>,
-    );
-
-    const trigger = screen.getByRole('button', { name: 'Open sidebar' });
-    const main = screen.getByRole('main');
-    expect(main.contains(trigger)).toBe(false);
-    expect(trigger.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(main.contains(screen.getByRole('link', { name: 'Back to Alerts' }))).toBe(true);
-  });
 });

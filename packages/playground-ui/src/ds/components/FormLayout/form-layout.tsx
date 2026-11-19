@@ -7,7 +7,6 @@ import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
 export interface FormLayoutProps {
-  breadcrumbs?: ReactNode;
   backHref: string;
   backLabel: string;
   title: ReactNode;
@@ -31,7 +30,6 @@ export interface FormLayoutProps {
  * Pass the app's router link as `LinkComponent` so the back link navigates without a reload. It renders an `<a>` otherwise.
  */
 export function FormLayout({
-  breadcrumbs,
   backHref,
   backLabel,
   title,
@@ -41,7 +39,7 @@ export function FormLayout({
   children,
 }: FormLayoutProps) {
   return (
-    <PageLayout breadcrumbs={breadcrumbs}>
+    <PageLayout>
       <div className="@container grid min-h-full">
         <div
           data-slot="form-layout"

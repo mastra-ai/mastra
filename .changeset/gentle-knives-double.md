@@ -6,7 +6,7 @@ Simplified page frames to three choices, one per kind of page: `PageLayout` for 
 
 **PageLayout**
 
-Removed the `variant` and `mask` props. Every page uses the full width with the standard gutter. A body that is one entity's workspace (panels, editor, graph, board or chat that scroll on their own) goes in `PageLayout.Workspace`, which takes the remaining height edge to edge, as `variant="fit"` did.
+Removed the `variant` and `mask` props. Every page uses the full width with the standard gutter, up to 1536px on very wide screens. A body that is one entity's workspace (panels, editor, graph, board or chat that scroll on their own) goes in `PageLayout.Workspace`, which takes the remaining height edge to edge, as `variant="fit"` did.
 
 ```tsx
 // Before
@@ -23,6 +23,15 @@ Removed the `variant` and `mask` props. Every page uses the full width with the 
 ```
 
 Pages that used `variant="narrow"` drop the prop, or move to `FormLayout` or `SettingsLayout` when that is what they are.
+
+Added `PageLayout.Grid`, a 12-column grid for laying out cards and panels. Children span the full width until they set a span, and stack on narrow pages:
+
+```tsx
+<PageLayout.Grid>
+  <section className="@4xl:col-span-8">{details}</section>
+  <aside className="@4xl:col-span-4">{properties}</aside>
+</PageLayout.Grid>
+```
 
 **SettingsLayout**
 
@@ -42,4 +51,12 @@ Pages that used `variant="narrow"` drop the prop, or move to `FormLayout` or `Se
 
 **FormLayout**
 
-Added `aside`, for a live preview beside the form when the column is wide enough (above the fields otherwise), and `breadcrumbs`, for apps whose only way to reopen a hidden sidebar lives in the page's bar.
+Added `aside`, for a live preview beside the form when the column is wide enough (above the fields otherwise). A form page has a back link and a title, and no breadcrumbs.
+
+**Lint**
+
+Added the `playground-ui/no-page-width` rule and a `pageRules` preset. Turn it on for page files so a page can't center a `max-w-*` column of its own:
+
+```ts
+overrides: [{ files: ['src/pages/**/*.tsx'], rules: pageRules }]
+```

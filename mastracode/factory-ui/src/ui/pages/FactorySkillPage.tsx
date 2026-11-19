@@ -6,7 +6,6 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Link, useNavigate, useParams } from 'react-router';
 
 import { useFactorySkillsQuery } from '../../hooks/useFactorySkills';
-import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
 import { boardSkillPath, boardSkillsPath } from '../domains/boardConfig/boardConfigPaths';
 import { NewSkillEditor } from '../domains/boardConfig/components/skills/NewSkillEditor';
 import { SkillEditor } from '../domains/boardConfig/components/skills/SkillEditor';
@@ -20,16 +19,9 @@ export function FactorySkillPage() {
   const boardId = useBoardConfigRoute()?.boardId ?? '';
   const { skillName } = useParams<{ skillName: string }>();
   const skillsPath = boardSkillsPath(factory.id, boardId);
-  const slots = useSidebarHeaderSlots();
 
   return (
-    <FormLayout
-      breadcrumbs={slots.breadcrumbs}
-      backHref={skillsPath}
-      backLabel="Skills"
-      title={skillName ?? 'New skill'}
-      LinkComponent={HrefLink}
-    >
+    <FormLayout backHref={skillsPath} backLabel="Skills" title={skillName ?? 'New skill'} LinkComponent={HrefLink}>
       <SkillPageBody factoryId={factory.id} boardId={boardId} skillName={skillName} />
     </FormLayout>
   );

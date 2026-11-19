@@ -211,6 +211,31 @@ export const Workspace: Story = {
   },
 };
 
+export const Grid: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageLayout breadcrumbs={crumbs} header={pageHeader}>
+        <PageLayout.Grid>
+          <section className="rounded-xl bg-card p-4 @4xl:col-span-8">Details</section>
+          <aside className="rounded-xl bg-card p-4 @4xl:col-span-4">Properties</aside>
+          <section className="rounded-xl bg-card p-4">Activity</section>
+        </PageLayout.Grid>
+      </PageLayout>
+    </StoryFrame>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const details = canvas.getByText('Details').getBoundingClientRect();
+    const properties = canvas.getByText('Properties').getBoundingClientRect();
+    const activity = canvas.getByText('Activity').getBoundingClientRect();
+    const gridWidth = canvas.getByText('Details').closest('[data-slot="page-layout-grid"]')?.clientWidth ?? 0;
+    const sideBySide = gridWidth >= 896;
+
+    await expect(sideBySide ? properties.top === details.top : properties.top > details.top).toBe(true);
+    await expect(activity.width).toBeGreaterThanOrEqual(details.width);
+  },
+};
+
 export const FullPage: Story = {
   render: () => (
     <StoryFrame>

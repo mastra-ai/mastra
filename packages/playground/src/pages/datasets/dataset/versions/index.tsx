@@ -112,7 +112,7 @@ function DatasetCompareVersionsPage() {
       <PageLayout.Workspace>
         <h1 className="sr-only">Versions</h1>
         <div className="h-full overflow-hidden px-[3vw] pb-4">
-          <div className="mx-auto grid h-full max-w-[140rem] grid-rows-[auto_1fr] gap-4">
+          <div className="grid h-full grid-rows-[auto_1fr] gap-4">
             <MainHeader>
               <MainHeader.Column>
                 <MainHeader.Title>

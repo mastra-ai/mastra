@@ -5,16 +5,15 @@ import type { ReactNode } from 'react';
 import { ChatHeaderSidebarTrigger } from './ChatHeaderSidebarTrigger';
 
 /**
- * Page header slots for when the sidebar is out of view (on mobile and while the desktop sidebar is collapsed):
- * the sidebar trigger goes in front of the breadcrumbs.
+ * Page header slots for while the desktop sidebar is collapsed: the sidebar trigger goes in front of the breadcrumbs.
+ * On mobile the app's header holds the trigger.
  */
 export function useSidebarHeaderSlots({
   breadcrumbs,
   triggerClassName,
 }: { breadcrumbs?: ReactNode; triggerClassName?: string } = {}): Pick<PageLayoutProps, 'breadcrumbs'> {
   const { isMobile, desktopState } = useSidebar();
-  const collapsed = !isMobile && desktopState === 'collapsed';
-  const showTrigger = isMobile || collapsed;
+  const showTrigger = !isMobile && desktopState === 'collapsed';
 
   return {
     breadcrumbs:
