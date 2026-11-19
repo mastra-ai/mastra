@@ -4,6 +4,8 @@ import type { FactoryReviewStatusEvent, FactoryReviewStatusReporter } from '../.
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import type { Card } from '../../storage/domains/work-items/base.js';
 import { resolveRepository } from './acceptance-labels.js';
+import { reviewStatusCheck, supersededCheck } from './review-status-check.js';
+import type { ReviewStatusCheck } from './review-status-check.js';
 import type { ReviewStatusState, ReviewStatusStats } from './review-status-comment.js';
 import { publishReviewStatus } from './review-status.js';
 
@@ -29,6 +31,20 @@ export function reviewStatusAnimationFromEnv(env: Record<string, string | undefi
 }
 
 const COMMIT_SHA = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+const FINAL_PHASES = new Set(['completed', 'failed', 'cancelled']);
+const CHECKS_REFUSED_FOR_MS = 60 * 60 * 1000;
+
+/**
+ * Whether GitHub refused the check because the app may not publish checks. A
+ * rate limit is also a 403 on GitHub, so a 403 counts only with GitHub's
+ * permission wording.
+ */
+function isChecksPermissionError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const text = `${error.message} ${(error as { detail?: unknown }).detail ?? ''}`.toLowerCase();
+  if (text.includes('checks: write')) return true;
+  return (error as { status?: unknown }).status === 403 && text.includes('resource not accessible by integration');
+}
 
 export interface GithubReviewStatusReporterDeps {
   github: {
@@ -39,6 +55,7 @@ export interface GithubReviewStatusReporterDeps {
   workItems: { get(input: { orgId: string; id: string }): Promise<Card | null> };
   /** How the comment names the reviewer, e.g. "Shipyard". */
   reviewerName: string;
+  now?: () => number;
   gifUrl: string;
   gifDarkUrl?: string;
 }
@@ -56,6 +73,12 @@ function commitSha(value: unknown): string | undefined {
  */
 export function createGithubReviewStatusReporter(deps: GithubReviewStatusReporterDeps): FactoryReviewStatusReporter {
   const isFactoryAuthor = (login: string | null | undefined) => deps.github.isFactoryCommentAuthor(login);
+  // An installation that may not publish checks is left alone for a while,
+  // rather than refused and logged on every step of every review.
+  const refusedUntil = new Map<number, number>();
+  const now = deps.now ?? Date.now;
+  const checksRefused = (installationId: number) => (refusedUntil.get(installationId) ?? 0) > now();
+  const refuseChecks = (installationId: number) => refusedUntil.set(installationId, now() + CHECKS_REFUSED_FOR_MS);
   return async event => {
     try {
       const item = await deps.workItems.get({ orgId: event.orgId, id: event.workItemId });
@@ -69,7 +92,7 @@ export function createGithubReviewStatusReporter(deps: GithubReviewStatusReporte
       const target = await resolveRepository(deps.sourceControl, event.orgId, event.factoryProjectId, repositoryId);
       if (!target) return;
       const ref: PullRequestRef = {
-        connection: { type: 'app-installation', installationId: target.installationId },
+        connection: { type: 'app-installation', installationId: target.installationId, orgId: event.orgId },
         sourceId: target.slug,
         pullRequestId: String(number),
       };
@@ -84,7 +107,7 @@ export function createGithubReviewStatusReporter(deps: GithubReviewStatusReporte
         ...(head ? { head } : {}),
       };
       const final = event.phase === 'completed' || event.phase === 'failed' || event.phase === 'cancelled';
-      await publishReviewStatus(
+      const published = await publishReviewStatus(
         deps.github.versionControl,
         ref,
         {
@@ -96,9 +119,52 @@ export function createGithubReviewStatusReporter(deps: GithubReviewStatusReporte
           ...(event.reason ? { reason: event.reason } : {}),
           ...(event.replayed ? { continuesRun: true } : {}),
           ...(final ? { stats: recorded => readStats(item, event, recorded) } : {}),
+          // A finished run reports on the commit it reviewed, else where its
+          // check already is; a run in flight on the commit it started on, else
+          // the current head.
+          checkHead: ({ state: recorded, stats, previous }) =>
+            (final ? (stats?.reviewedHeadSha ?? previous?.checkHead) : undefined) ??
+            recorded.head ??
+            commitSha(item.metadata?.pullRequestHeadSha),
         },
         isFactoryAuthor,
       );
+      // The check follows the comment: a step the comment refused as stale or
+      // skipped never replaces a newer run's check.
+      if (published.action !== 'created' && published.action !== 'updated') return;
+      const publishCheck = deps.github.versionControl.publishCommitCheck;
+      if (!publishCheck) return;
+      const checkTarget = { connection: ref.connection, sourceId: ref.sourceId };
+      const publish = async (headSha: string, check: ReviewStatusCheck) => {
+        // An installation that refused checks is skipped while a review is in
+        // flight; a check that ends one is still tried, so none is left open.
+        if (check.status === 'in-progress' && checksRefused(target.installationId)) return;
+        try {
+          await publishCheck.call(deps.github.versionControl, { ...checkTarget, headSha, ...check });
+        } catch (error) {
+          if (isChecksPermissionError(error)) refuseChecks(target.installationId);
+          console.warn(`[factory] could not publish the review check for work item ${event.workItemId}:`, error);
+        }
+      };
+      const checkHead = published.state.checkHead;
+      if (checkHead) {
+        await publish(
+          checkHead,
+          reviewStatusCheck({
+            reviewerName: deps.reviewerName,
+            state: published.state,
+            ...(published.stats ? { stats: published.stats } : {}),
+            ...(event.reason ? { reason: event.reason } : {}),
+            commentUrl: published.url,
+          }),
+        );
+      }
+      // A check still open on another commit (this run moved, or the run this
+      // one replaced never ended) is closed, so none stays in progress.
+      const previous = published.previous;
+      if (previous?.checkHead && previous.checkHead !== checkHead && !FINAL_PHASES.has(previous.phase)) {
+        await publish(previous.checkHead, supersededCheck(deps.reviewerName, previous.run === published.state.run));
+      }
     } catch (error) {
       console.warn(`[factory] could not update the review status for work item ${event.workItemId}:`, error);
     }

@@ -13,7 +13,14 @@
 import Nango, { AuthError } from '@nangohq/frontend';
 import type { AuthOptions } from '@nangohq/frontend';
 
-export type PlatformConnectProviderId = 'jira' | 'incident-io' | 'gitlab' | 'vanta' | 'linear';
+export type PlatformConnectProviderId =
+  | 'jira'
+  | 'incident-io'
+  | 'gitlab'
+  | 'vanta'
+  | 'linear'
+  | 'factory-github'
+  | 'factory-reviews-github';
 
 export const MASTRA_PLATFORM_URL = 'https://projects.mastra.ai';
 
@@ -32,6 +39,12 @@ export const PLATFORM_CONNECT_PROVIDERS: Record<PlatformConnectProviderId, Platf
   gitlab: { id: 'gitlab', displayName: 'GitLab', authKind: 'oauth' },
   vanta: { id: 'vanta', displayName: 'Vanta', authKind: 'oauth' },
   linear: { id: 'linear', displayName: 'Linear', authKind: 'oauth' },
+  'factory-github': { id: 'factory-github', displayName: 'Mastra Factory GitHub app', authKind: 'oauth' },
+  'factory-reviews-github': {
+    id: 'factory-reviews-github',
+    displayName: 'Mastra Factory Reviews GitHub app',
+    authKind: 'oauth',
+  },
 };
 
 export interface PlatformProviderConnection {

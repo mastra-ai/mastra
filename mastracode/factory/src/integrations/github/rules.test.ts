@@ -764,6 +764,27 @@ describe('GithubRules', () => {
     expect(decisions[0]?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', source: 'github-issue' });
   });
 
+  it('ingests an event only into the projects of the orgs it was delivered for', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, intake, project } = await setup('write');
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      intake,
+      storage: workItems,
+      boards: createTriageWorkRegistry(),
+      configVersion: 'factory-config-v1',
+    });
+
+    // Another org's copy of the event, through an app org-1 shares the installation of.
+    await expect(service.ingest(issueOpened(), { orgIds: ['org-2'] })).resolves.toEqual({ status: 'ignored' });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toHaveLength(0);
+
+    await expect(service.ingest(issueOpened(), { orgIds: ['org-1'] })).resolves.toEqual({ status: 'committed' });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toHaveLength(1);
+  });
+
   it('moves an issue-backed work card to done when its issue closes as completed', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, intake, project } = await setup('write');
     await createLinkedIssue(workItems, project.id);
@@ -6469,6 +6490,7 @@ describe('createGithubPullRequestReconciler', () => {
       // Only pull requests opened since the link are asked for: the link-time import owns the backlog.
       expect(listOpenPullRequests).toHaveBeenCalledWith({
         installationId: 7,
+        orgId: 'org-1',
         repository: 'acme/repo',
         createdSince: context.projectRepository.createdAt.getTime(),
       });

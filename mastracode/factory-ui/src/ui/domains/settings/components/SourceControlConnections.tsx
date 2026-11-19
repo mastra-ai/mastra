@@ -2,6 +2,7 @@ import { SettingsContainer, SettingsSkeleton } from '@mastra/playground-ui/new/s
 
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
+import { GithubAppsSwitchRows } from './GithubAppsSwitch';
 import { GithubConnectButton, GithubManageButton } from './GithubConnectionControls';
 import { IntegrationItem } from './IntegrationItem';
 import {
@@ -20,6 +21,7 @@ export function SourceControlConnections() {
     <SettingsSubsection scope="org" title="Source control">
       <SettingsContainer>
         <GithubConnectionRow />
+        <GithubAppsSwitchRows />
         <GitLabConnectionRows />
       </SettingsContainer>
     </SettingsSubsection>
@@ -65,7 +67,7 @@ function GithubConnectionRow() {
           .join(', ') || undefined
       }
     >
-      <GithubManageButton />
+      {status.mode === 'connect' ? <PlatformManageLink provider="factory-github" /> : <GithubManageButton />}
     </IntegrationItem>
   );
 }

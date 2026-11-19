@@ -323,6 +323,72 @@ describe('SourceControlStorage', () => {
     ['LibSQL', () => github],
     ['the in-memory handle', () => new SourceControlStorageInMemory('github')],
   ])(
+    'repoints an installation on %s, keeping its repositories and project links attached',
+    async (_backend, handleFor) => {
+      const handle = handleFor();
+      const changed = vi.fn();
+      handle.onLinkedRepositoriesChanged(changed);
+      const project = await createProject();
+      const installation = await createInstallation(handle, { externalId: '100' });
+      const other = await createInstallation(handle, { externalId: '200' });
+      const connection = await handle.connections.create({
+        orgId: 'org-1',
+        factoryProjectId: project.id,
+        installationId: installation.id,
+        createdByUserId: 'user-1',
+      });
+      const repository = await handle.repositories.upsert({
+        orgId: 'org-1',
+        input: { ...repositoryInput, installationId: installation.id, externalId: '42' },
+      });
+      await handle.projectRepositories.link({
+        orgId: 'org-1',
+        connectionId: connection.id,
+        repositoryId: repository.id,
+        ...projectRepositoryInput,
+      });
+      changed.mockClear();
+
+      const repointed = await handle.installations.repoint({
+        orgId: 'org-1',
+        id: installation.id,
+        externalId: '300',
+        providerMetadata: { app: 'factory-github' },
+      });
+
+      expect(repointed).toMatchObject({
+        id: installation.id,
+        externalId: '300',
+        providerMetadata: { app: 'factory-github' },
+      });
+      expect(changed).toHaveBeenCalled();
+      expect(await handle.installations.findByExternalId({ orgId: 'org-1', externalId: '100' })).toBeNull();
+      expect(await handle.repositories.findByExternalId({ orgId: 'org-1', externalId: '42' })).toMatchObject({
+        id: repository.id,
+        installationId: installation.id,
+      });
+      expect(await handle.projectRepositories.listConfiguredExternalKeys()).toEqual([
+        { installationExternalId: '300', repositoryExternalId: '42' },
+      ]);
+      expect(
+        await handle.projectRepositories.listByExternalRepository({
+          installationExternalId: '300',
+          repositoryExternalId: '42',
+        }),
+      ).toHaveLength(1);
+      await expect(
+        handle.installations.repoint({ orgId: 'org-1', id: installation.id, externalId: other.externalId }),
+      ).rejects.toBeInstanceOf(UniqueViolationError);
+      await expect(
+        handle.installations.repoint({ orgId: 'org-2', id: installation.id, externalId: '400' }),
+      ).rejects.toThrow(/not found/);
+    },
+  );
+
+  it.each<[string, () => SourceControlStorageHandle]>([
+    ['LibSQL', () => github],
+    ['the in-memory handle', () => new SourceControlStorageInMemory('github')],
+  ])(
     'lists the requested Factories with their linked repositories on %s, without uninstalled apps or other orgs',
     async (_backend, handleFor) => {
       const handle = handleFor();

@@ -124,7 +124,11 @@ export interface RepoListOptions {
 }
 
 /** Repositories whose full name contains `query`, most recently pushed first, at most `limit`. */
-export function narrowRepos(repos: RepoSummary[], query = '', limit?: number): RepoSummary[] {
+export function narrowRepos<T extends Pick<RepoSummary, 'fullName' | 'pushedAt'>>(
+  repos: T[],
+  query = '',
+  limit?: number,
+): T[] {
   const needle = query.trim().toLowerCase();
   return repos
     .filter(repo => repo.fullName.toLowerCase().includes(needle))

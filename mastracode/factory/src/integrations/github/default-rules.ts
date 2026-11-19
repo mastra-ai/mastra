@@ -374,6 +374,7 @@ function dismissStaleFactoryReviews(context: FactoryGithubRuleContext) {
     type: 'dismissStaleReviews',
     idempotencyKey: `${context.ingress.id}:dismiss-stale-reviews`,
     installationId: repository.installationId,
+    orgId: context.tenant.orgId,
     repository: repository.fullName,
     pullRequestNumber: pullRequest.number,
     approvingReviewId: String(review.id),

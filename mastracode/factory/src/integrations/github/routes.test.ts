@@ -1789,7 +1789,7 @@ describe('pr route', () => {
     expect(await res.json()).toMatchObject({ url: 'https://github.com/octo/hello/pull/1' });
     expect(createPullRequest).toHaveBeenCalledOnce();
     expect(createPullRequest).toHaveBeenCalledWith({
-      connection: { type: 'app-installation', installationId: 7 },
+      connection: { type: 'app-installation', installationId: 7, orgId: 'org1' },
       sourceId: 'octo/hello',
       baseBranch: 'main',
       headBranch: 'feat/x',

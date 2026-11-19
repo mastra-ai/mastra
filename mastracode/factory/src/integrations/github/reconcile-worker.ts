@@ -9,6 +9,7 @@ import type {
   ExternalRepositoryProjectTarget,
   SourceControlRepository,
 } from '../../storage/domains/source-control/base.js';
+import type { DependabotSync } from '../dependabot/sync.js';
 import type { GithubIssueReconciler } from './issue-reconciler.js';
 import type { GithubPullRequestDiscovery, GithubPullRequestReconciler, ReconcileRepository } from './rules.js';
 
@@ -18,7 +19,13 @@ export const DEFAULT_GITHUB_RECONCILE_INTERVAL_MS = 60 * 60_000;
 // so it runs at the issue sweep's cadence: a lost `opened` webhook surfaces in minutes.
 export const DEFAULT_GITHUB_PR_DISCOVERY_INTERVAL_MS = 5 * 60_000;
 const MIN_LEASE_TTL_MS = 30_000;
-const LEASE_KEY = 'github:pull-request-reconcile';
+const DEFAULT_NAME = 'github-pull-request-reconcile';
+const DEFAULT_LEASE_KEY = 'github:pull-request-reconcile';
+/** Bursts of requested runs (e.g. Dependabot alert events) collapse into one sweep. */
+const DEFAULT_REQUEST_DEBOUNCE_MS = 5_000;
+
+/** A sweep `requestRun` can ask for. */
+export type GithubReconcileSweep = 'pull-requests' | 'issues' | 'discovery' | 'dependabot';
 
 /** Storage slice the sweep needs to turn configured repositories into targets. */
 export interface GithubReconcileRepositorySource {
@@ -35,14 +42,25 @@ export interface GithubReconcileRepositorySource {
 }
 
 export interface GithubReconcileWorkerConfig {
+  /** Worker name. Defaults to `github-pull-request-reconcile`. */
+  name?: string;
+  /** Lease shared by replicas. Two integrations in one deployment must not share one. */
+  leaseKey?: string;
   reconcile?: GithubPullRequestReconciler;
   reconcileIssues?: GithubIssueReconciler;
   discover?: GithubPullRequestDiscovery;
+  syncDependabot?: DependabotSync;
+  /** Runs before a pull request or issue sweep, with the targets it will sweep (e.g. to refresh renamed slugs). */
+  beforeSweep?: (targets: ReconcileRepository[]) => Promise<void>;
   sourceControl: GithubReconcileRepositorySource;
   intervalMs?: number;
   issueIntervalMs?: number;
   /** Defaults to five minutes, or the pull request interval when that is shorter. */
   discoveryIntervalMs?: number;
+  /** Defaults to the pull request interval. */
+  dependabotIntervalMs?: number;
+  /** How long `requestRun` waits for more requests before sweeping. */
+  requestDebounceMs?: number;
   now?: () => number;
 }
 
@@ -52,15 +70,20 @@ export interface GithubReconcileWorkerConfig {
  * a lease so replicas never sweep the same configured repositories together.
  */
 export class GithubReconcileWorker extends MastraWorker {
-  readonly name = 'github-pull-request-reconcile';
+  readonly name: string;
 
+  readonly #leaseKey: string;
   readonly #reconcile: GithubPullRequestReconciler | undefined;
   readonly #reconcileIssues: GithubIssueReconciler | undefined;
   readonly #discover: GithubPullRequestDiscovery | undefined;
+  readonly #syncDependabot: DependabotSync | undefined;
+  readonly #beforeSweep: ((targets: ReconcileRepository[]) => Promise<void>) | undefined;
   readonly #sourceControl: GithubReconcileRepositorySource;
   readonly #intervalMs: number;
   readonly #issueIntervalMs: number;
   readonly #discoveryIntervalMs: number;
+  readonly #dependabotIntervalMs: number;
+  readonly #requestDebounceMs: number;
   readonly #leaseTtlMs: number;
   readonly #leaseOwner = globalThis.crypto.randomUUID();
   readonly #now: () => number;
@@ -72,15 +95,21 @@ export class GithubReconcileWorker extends MastraWorker {
   #nextPullRequestReconcileAt = 0;
   #nextIssueReconcileAt = 0;
   #nextDiscoveryAt = 0;
+  #nextDependabotAt = 0;
+  #requestTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(config: GithubReconcileWorkerConfig) {
     super();
-    if (!config.reconcile && !config.reconcileIssues && !config.discover) {
+    if (!config.reconcile && !config.reconcileIssues && !config.discover && !config.syncDependabot) {
       throw new Error('GitHub reconcile worker requires a pull request or issue reconciler.');
     }
+    this.name = config.name ?? DEFAULT_NAME;
+    this.#leaseKey = config.leaseKey ?? DEFAULT_LEASE_KEY;
     this.#reconcile = config.reconcile;
     this.#reconcileIssues = config.reconcileIssues;
     this.#discover = config.discover;
+    this.#syncDependabot = config.syncDependabot;
+    this.#beforeSweep = config.beforeSweep;
     this.#sourceControl = config.sourceControl;
     this.#intervalMs = config.intervalMs ?? DEFAULT_GITHUB_RECONCILE_INTERVAL_MS;
     this.#issueIntervalMs = config.issueIntervalMs ?? this.#intervalMs;
@@ -95,9 +124,14 @@ export class GithubReconcileWorker extends MastraWorker {
     if (!Number.isFinite(this.#discoveryIntervalMs) || this.#discoveryIntervalMs <= 0) {
       throw new Error('GitHub pull request discovery interval must be a positive number.');
     }
+    this.#dependabotIntervalMs = config.dependabotIntervalMs ?? this.#intervalMs;
+    if (!Number.isFinite(this.#dependabotIntervalMs) || this.#dependabotIntervalMs <= 0) {
+      throw new Error('GitHub Dependabot sync interval must be a positive number.');
+    }
+    this.#requestDebounceMs = config.requestDebounceMs ?? DEFAULT_REQUEST_DEBOUNCE_MS;
     this.#leaseTtlMs = Math.max(
       MIN_LEASE_TTL_MS,
-      Math.min(this.#intervalMs, this.#issueIntervalMs, this.#discoveryIntervalMs) * 3,
+      Math.min(this.#intervalMs, this.#issueIntervalMs, this.#discoveryIntervalMs, this.#dependabotIntervalMs) * 3,
     );
     this.#now = config.now ?? Date.now;
   }
@@ -115,6 +149,7 @@ export class GithubReconcileWorker extends MastraWorker {
       pullRequestIntervalMs: this.#reconcile ? this.#intervalMs : undefined,
       issueIntervalMs: this.#reconcileIssues ? this.#issueIntervalMs : undefined,
       pullRequestDiscoveryIntervalMs: this.#discover ? this.#discoveryIntervalMs : undefined,
+      dependabotIntervalMs: this.#syncDependabot ? this.#dependabotIntervalMs : undefined,
     });
     // Sweep on boot: a restart is exactly when webhooks were most likely missed.
     if (this.#reconcile) recordSweepWorkerStarted('github', 'merge_close');
@@ -127,7 +162,31 @@ export class GithubReconcileWorker extends MastraWorker {
     this.#running = false;
     if (this.#timer) clearTimeout(this.#timer);
     this.#timer = undefined;
+    if (this.#requestTimer) clearTimeout(this.#requestTimer);
+    this.#requestTimer = undefined;
     await this.#inFlight;
+  }
+
+  /**
+   * Makes the named sweeps (every configured one by default) due now and
+   * sweeps after a short debounce, so a burst of requests runs one sweep.
+   */
+  requestRun(sweeps?: readonly GithubReconcileSweep[]): void {
+    const due = new Set(sweeps ?? ['pull-requests', 'issues', 'discovery', 'dependabot']);
+    const now = this.#now();
+    if (due.has('pull-requests')) this.#nextPullRequestReconcileAt = Math.min(this.#nextPullRequestReconcileAt, now);
+    if (due.has('issues')) this.#nextIssueReconcileAt = Math.min(this.#nextIssueReconcileAt, now);
+    if (due.has('discovery')) this.#nextDiscoveryAt = Math.min(this.#nextDiscoveryAt, now);
+    if (due.has('dependabot')) this.#nextDependabotAt = Math.min(this.#nextDependabotAt, now);
+    if (!this.#running || this.#inFlight || this.#requestTimer) return;
+    this.#requestTimer = setTimeout(() => {
+      this.#requestTimer = undefined;
+      if (!this.#running || this.#inFlight) return;
+      if (this.#timer) clearTimeout(this.#timer);
+      this.#timer = undefined;
+      this.#run();
+    }, this.#requestDebounceMs);
+    this.#requestTimer.unref?.();
   }
 
   get isRunning(): boolean {
@@ -138,13 +197,16 @@ export class GithubReconcileWorker extends MastraWorker {
     if (!this.#running) return;
     this.#timer = setTimeout(() => {
       this.#timer = undefined;
-      const run = this.#tick().finally(() => {
-        this.#inFlight = undefined;
-        this.#schedule(this.#nextDelay());
-      });
-      this.#inFlight = run;
+      this.#run();
     }, delayMs);
     this.#timer.unref?.();
+  }
+
+  #run(): void {
+    this.#inFlight = this.#tick().finally(() => {
+      this.#inFlight = undefined;
+      this.#schedule(this.#nextDelay());
+    });
   }
 
   #nextDelay(): number {
@@ -153,6 +215,7 @@ export class GithubReconcileWorker extends MastraWorker {
       this.#reconcile ? this.#nextPullRequestReconcileAt : undefined,
       this.#reconcileIssues ? this.#nextIssueReconcileAt : undefined,
       this.#discover ? this.#nextDiscoveryAt : undefined,
+      this.#syncDependabot ? this.#nextDependabotAt : undefined,
     ].filter((at): at is number => at !== undefined);
     return Math.max(0, Math.min(...due) - now);
   }
@@ -162,15 +225,17 @@ export class GithubReconcileWorker extends MastraWorker {
     const reconcilePullRequests = Boolean(this.#reconcile && now >= this.#nextPullRequestReconcileAt);
     const reconcileIssues = Boolean(this.#reconcileIssues && now >= this.#nextIssueReconcileAt);
     const discoverPullRequests = Boolean(this.#discover && now >= this.#nextDiscoveryAt);
-    if (!reconcilePullRequests && !reconcileIssues && !discoverPullRequests) return;
+    const syncDependabot = Boolean(this.#syncDependabot && now >= this.#nextDependabotAt);
+    if (!reconcilePullRequests && !reconcileIssues && !discoverPullRequests && !syncDependabot) return;
     if (reconcilePullRequests) this.#nextPullRequestReconcileAt = now + this.#intervalMs;
     if (reconcileIssues) this.#nextIssueReconcileAt = now + this.#issueIntervalMs;
     if (discoverPullRequests) this.#nextDiscoveryAt = now + this.#discoveryIntervalMs;
+    if (syncDependabot) this.#nextDependabotAt = now + this.#dependabotIntervalMs;
 
     // Replicas share one sweep: the ingress dedupes duplicate writes, but the
     // reads still burn the installation's rate limit.
     const lease = await this.#leaseProvider
-      .acquireLease(LEASE_KEY, this.#leaseOwner, this.#leaseTtlMs)
+      .acquireLease(this.#leaseKey, this.#leaseOwner, this.#leaseTtlMs)
       .catch(() => ({ acquired: false }));
     if (!lease.acquired) return;
 
@@ -178,7 +243,7 @@ export class GithubReconcileWorker extends MastraWorker {
     const renewalTimer = setInterval(
       () => {
         void this.#leaseProvider
-          .renewLease(LEASE_KEY, this.#leaseOwner, this.#leaseTtlMs)
+          .renewLease(this.#leaseKey, this.#leaseOwner, this.#leaseTtlMs)
           .then(renewed => {
             if (!renewed) {
               hasLease = false;
@@ -207,7 +272,32 @@ export class GithubReconcileWorker extends MastraWorker {
         return;
       }
 
-      if (reconcilePullRequests && this.#reconcile) {
+      if ((reconcilePullRequests || reconcileIssues) && this.#beforeSweep) {
+        await this.#beforeSweep(targets).catch(error => {
+          this.deps?.logger.warn('GitHub reconcile pre-sweep hook failed', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+      }
+
+      if (syncDependabot && this.#syncDependabot) {
+        const startedAt = Date.now();
+        try {
+          const { errors, ...counts } = await this.#syncDependabot(targets);
+          const context = { ...counts, candidateRepositories: targets.length, durationMs: Date.now() - startedAt };
+          if (counts.failed > 0) {
+            this.deps?.logger.warn('GitHub Dependabot sync completed with failures', { ...context, errors });
+          } else {
+            this.deps?.logger.info('GitHub Dependabot sync completed', context);
+          }
+        } catch (error) {
+          this.deps?.logger.warn('GitHub Dependabot sync failed', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      if (reconcilePullRequests && this.#reconcile && hasLease) {
         const startedAt = Date.now();
         try {
           const { errors, ...counts } = await this.#reconcile(targets);
@@ -285,7 +375,7 @@ export class GithubReconcileWorker extends MastraWorker {
     } finally {
       clearInterval(renewalTimer);
       if (hasLease) {
-        await this.#leaseProvider.releaseLease(LEASE_KEY, this.#leaseOwner).catch(() => undefined);
+        await this.#leaseProvider.releaseLease(this.#leaseKey, this.#leaseOwner).catch(() => undefined);
       }
     }
   }

@@ -396,6 +396,128 @@ describe('GithubReconcileWorker', () => {
     expect(renewLease.mock.calls.length - renewalsAfterFirstSweep).toBeLessThanOrEqual(reconcile.mock.calls.length);
   });
 
+  it('takes its lease under a configured key so two integrations in one deployment never share one', async () => {
+    const acquireLease = vi.fn(async () => ({ acquired: true }));
+    const releaseLease = vi.fn(async () => undefined);
+    const worker = new GithubReconcileWorker({
+      name: 'platform-github-reconcile',
+      leaseKey: 'platform-github:reconcile',
+      reconcile: vi.fn(async () => EMPTY_SUMMARY),
+      sourceControl: repositorySource(),
+      intervalMs: 60_000,
+    });
+    await worker.init(workerDeps({ acquireLease, releaseLease }));
+
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await worker.stop();
+
+    expect(worker.name).toBe('platform-github-reconcile');
+    expect(acquireLease).toHaveBeenCalledWith('platform-github:reconcile', expect.any(String), expect.any(Number));
+    expect(releaseLease).toHaveBeenCalledWith('platform-github:reconcile', expect.any(String));
+  });
+
+  it('syncs Dependabot alerts on its own cadence with the same targets', async () => {
+    const reconcile = vi.fn(async () => EMPTY_SUMMARY);
+    const syncDependabot = vi.fn(async () => ({ repositories: 1, alerts: 0, failed: 0, errors: [] }));
+    const worker = new GithubReconcileWorker({
+      reconcile,
+      syncDependabot,
+      sourceControl: repositorySource(),
+      intervalMs: 60 * 60_000,
+      dependabotIntervalMs: 15 * 60_000,
+    });
+    await worker.init(workerDeps());
+
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(15 * 60_000);
+    await worker.stop();
+
+    expect(syncDependabot).toHaveBeenCalledTimes(2);
+    expect(reconcile).toHaveBeenCalledTimes(1);
+    expect(syncDependabot.mock.calls[0]![0]).toEqual(reconcile.mock.calls[0]![0]);
+  });
+
+  it('runs a Dependabot-only worker', async () => {
+    const syncDependabot = vi.fn(async () => ({ repositories: 1, alerts: 0, failed: 0, errors: [] }));
+    const worker = new GithubReconcileWorker({ syncDependabot, sourceControl: repositorySource() });
+    await worker.init(workerDeps());
+
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await worker.stop();
+
+    expect(syncDependabot).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs the pre-sweep hook before pull request and issue sweeps, and keeps sweeping when it fails', async () => {
+    const order: string[] = [];
+    const beforeSweep = vi.fn(async () => {
+      order.push('before');
+      throw new Error('rename lookup failed');
+    });
+    const reconcile = vi.fn(async () => {
+      order.push('reconcile');
+      return EMPTY_SUMMARY;
+    });
+    const worker = new GithubReconcileWorker({
+      reconcile,
+      beforeSweep,
+      sourceControl: repositorySource(),
+      intervalMs: 60_000,
+    });
+    await worker.init(workerDeps());
+
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await worker.stop();
+
+    expect(order).toEqual(['before', 'reconcile']);
+    expect(beforeSweep.mock.calls[0]![0]).toEqual(reconcile.mock.calls[0]![0]);
+  });
+
+  it('collapses a burst of requested runs into one debounced sweep of only the requested kinds', async () => {
+    const reconcile = vi.fn(async () => EMPTY_SUMMARY);
+    const syncDependabot = vi.fn(async () => ({ repositories: 1, alerts: 0, failed: 0, errors: [] }));
+    const worker = new GithubReconcileWorker({
+      reconcile,
+      syncDependabot,
+      sourceControl: repositorySource(),
+      intervalMs: 60 * 60_000,
+      requestDebounceMs: 5_000,
+    });
+    await worker.init(workerDeps());
+
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(syncDependabot).toHaveBeenCalledTimes(1);
+    expect(reconcile).toHaveBeenCalledTimes(1);
+
+    for (let i = 0; i < 5; i++) worker.requestRun(['dependabot']);
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(syncDependabot).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await worker.stop();
+
+    expect(syncDependabot).toHaveBeenCalledTimes(2);
+    expect(reconcile).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores requested runs once stopped', async () => {
+    const syncDependabot = vi.fn(async () => ({ repositories: 1, alerts: 0, failed: 0, errors: [] }));
+    const worker = new GithubReconcileWorker({ syncDependabot, sourceControl: repositorySource() });
+    await worker.init(workerDeps());
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await worker.stop();
+
+    worker.requestRun();
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(syncDependabot).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects a non-positive interval', () => {
     expect(
       () =>

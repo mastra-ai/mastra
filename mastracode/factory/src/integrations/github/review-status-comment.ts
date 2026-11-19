@@ -29,6 +29,8 @@ export interface ReviewStatusState {
   startedAt?: string;
   /** The pull request head when the run started. */
   head?: string;
+  /** The commit this run's check in the Checks tab is on. */
+  checkHead?: string;
 }
 
 export interface ReviewStatusStats {
@@ -102,6 +104,7 @@ export function parseReviewStatusState(body: string | null | undefined): ReviewS
     phase: value.phase,
     ...(isTimestamp(value.startedAt) ? { startedAt: value.startedAt } : {}),
     ...(typeof value.head === 'string' && COMMIT_SHA.test(value.head) ? { head: value.head } : {}),
+    ...(typeof value.checkHead === 'string' && COMMIT_SHA.test(value.checkHead) ? { checkHead: value.checkHead } : {}),
   };
 }
 
