@@ -1213,12 +1213,17 @@ export class ExecutionFence implements RunFenceScope {
    * storage, the run is first claimed past this execution, so storage rejects
    * writes that were already on their way. Settles as `superseded`.
    *
+   * With `releaseWhen`, the claim is released only once it resolves, for work
+   * the abort leaves running, so recovery can't run it beside that work. Until
+   * then the claim is held unrenewed and expires if the process dies first.
+   *
    * A no-op once the execution has settled or lost the run.
    */
-  async abandon(): Promise<void> {
+  async abandon({ releaseWhen }: { releaseWhen?: Promise<void> } = {}): Promise<void> {
     if (this.#settlement || this.#lossError) return;
     this.#markLost(new DurableExecutionFenceError(EXECUTION_ABANDONED_ERROR_ID, this.#details()));
-    await this.#abandonClaim();
+    if (releaseWhen) void releaseWhen.then(() => this.#abandonClaim());
+    else await this.#abandonClaim();
     await this.settle(async () => {});
   }
 

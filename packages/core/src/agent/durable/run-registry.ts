@@ -256,6 +256,33 @@ export function isDurableAgentExecutionDetached(mastra: Mastra, runId: string): 
  * without writing and releases its run, so recovery can take it right away.
  * Executions that already settled are left alone.
  */
+const toolCallsInFlight = new WeakMap<
+  RunRegistryEntry,
+  { count: number; settled: Promise<void>; resolve: () => void }
+>();
+
+/** Count a tool call as running on this execution until the returned function is called. */
+export function startToolCall(entry: RunRegistryEntry | undefined): () => void {
+  if (!entry) return () => {};
+  let calls = toolCallsInFlight.get(entry);
+  if (!calls) {
+    let resolve!: () => void;
+    const settled = new Promise<void>(r => (resolve = r));
+    calls = { count: 0, settled, resolve };
+    toolCallsInFlight.set(entry, calls);
+  }
+  const running = calls;
+  running.count++;
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    if (--running.count > 0) return;
+    toolCallsInFlight.delete(entry);
+    running.resolve();
+  };
+}
+
 export async function abandonDurableAgentExecutions(mastra: Mastra): Promise<void> {
   await stopDurableExecutionParticipants(mastra);
   await Promise.allSettled(
@@ -263,7 +290,9 @@ export async function abandonDurableAgentExecutions(mastra: Mastra): Promise<voi
       if (entry.mastra !== mastra || !entry.executionFence) return;
       // A broker does not prove that this is the only executing process.
       if (detachesOnShutdown(mastra, entry)) entry.executionFence.detach();
-      else await entry.executionFence.abandon();
+      // A tool call can ignore the abort and keep running, so the run stays claimed until every running call
+      // settles. Recovery then can't run a call beside the one still running here.
+      else await entry.executionFence.abandon({ releaseWhen: toolCallsInFlight.get(entry)?.settled });
     }),
   );
 }
