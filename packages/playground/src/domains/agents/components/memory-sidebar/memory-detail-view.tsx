@@ -1,4 +1,4 @@
-import { MemoryStudioPanel } from '@mastra/playground-ui/domains/memory/components/memory-studio-panel';
+import { MemoryDetailPanel } from '@mastra/playground-ui/domains/memory/components/memory-detail-panel';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import {
   useMemoryThreadMessages,
@@ -100,21 +100,19 @@ export function MemoryDetailView({ agentId, threadId }: MemoryDetailViewProps) {
   });
 
   return (
-    <div data-testid="memory-sidebar-om-detail-subpanel" className="h-full min-h-0 min-w-0 overflow-hidden bg-card">
-      <MemoryStudioPanel
-        messages={messagesData?.messages ?? []}
-        omRecords={omData?.history ?? []}
-        isLoading={isOMLoading || isMessagesLoading}
-        onClose={closePanel}
-        selectedTimestamp={selectedTimestamp}
-        onSelectTimestamp={setSelectedTimestamp}
-        contextWindow={{
-          messageTokens: windowTokens.messageTokens,
-          messageThreshold: windowTokens.messageThreshold,
-          memoryTokens: windowTokens.observationTokens,
-          memoryThreshold: windowTokens.observationThreshold,
-        }}
-      />
-    </div>
+    <MemoryDetailPanel
+      messages={messagesData?.messages ?? []}
+      omRecords={omData?.history ?? []}
+      isLoading={isOMLoading || isMessagesLoading}
+      onClose={closePanel}
+      selectedTimestamp={selectedTimestamp}
+      onSelectTimestamp={setSelectedTimestamp}
+      contextWindow={{
+        messageTokens: windowTokens.messageTokens,
+        messageThreshold: windowTokens.messageThreshold,
+        memoryTokens: windowTokens.observationTokens,
+        memoryThreshold: windowTokens.observationThreshold,
+      }}
+    />
   );
 }
