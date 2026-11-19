@@ -259,14 +259,18 @@ export function isTerminalHttpError(error: unknown): boolean {
 }
 
 /**
- * Whether an error is the server's trace query execution timeout (504 with code
- * `TRACE_QUERY_EXECUTION_TIMEOUT`). Re-sending the same query hits the same
- * timeout budget, so retrying only repeats an expensive database query.
- * Plain 504s from proxies or gateways do not carry this code and stay retryable.
+ * Whether an error is the server's trace query execution timeout: a 504 with code
+ * `TRACE_QUERY_EXECUTION_TIMEOUT`, or a word search that took too long (name
+ * `search_too_expensive`). Re-sending the same query hits the same timeout budget,
+ * so retrying only repeats an expensive database query. Plain 504s from proxies or
+ * gateways carry neither and stay retryable.
  */
 export function isTraceQueryTimeoutError(error: unknown): boolean {
   const { status, body } = (error ?? {}) as { status?: unknown; body?: unknown };
-  return status === 504 && (body as { code?: unknown } | null | undefined)?.code === 'TRACE_QUERY_EXECUTION_TIMEOUT';
+  const problem = body as { code?: unknown; name?: unknown } | null | undefined;
+  return (
+    status === 504 && (problem?.code === 'TRACE_QUERY_EXECUTION_TIMEOUT' || problem?.name === 'search_too_expensive')
+  );
 }
 
 /**

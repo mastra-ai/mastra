@@ -572,6 +572,33 @@ describe('Observability Methods', () => {
 
       expect(global.fetch).toHaveBeenCalledTimes(1);
     });
+
+    it('should not retry a word search that took too long', async () => {
+      vi.mocked(global.fetch).mockImplementation(
+        async () =>
+          new Response(JSON.stringify({ name: 'search_too_expensive', title: 'Search took too long', status: 504 }), {
+            status: 504,
+          }),
+      );
+      const retryingClient = new MastraClient({ ...clientOptions, retries: 2, backoffMs: 0 });
+
+      await expect(
+        retryingClient.queryTraces({ timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' } }),
+      ).rejects.toMatchObject({ status: 504, body: { name: 'search_too_expensive' } });
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('should still retry a 504 that is not a query timeout', async () => {
+      vi.mocked(global.fetch).mockImplementation(async () => new Response('Gateway Timeout', { status: 504 }));
+      const retryingClient = new MastraClient({ ...clientOptions, retries: 2, backoffMs: 0 });
+
+      await expect(
+        retryingClient.queryTraces({ timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' } }),
+      ).rejects.toMatchObject({ status: 504 });
+
+      expect(global.fetch).toHaveBeenCalledTimes(3);
+    });
   });
 
   describe('aggregateTraces()', () => {
@@ -927,6 +954,26 @@ describe('Observability Methods', () => {
           headers: expect.objectContaining({ ...clientOptions.headers, 'content-type': 'application/json' }),
           body: JSON.stringify(request),
         }),
+      );
+    });
+
+    it('posts progressive search fields and passes the abort signal through', async () => {
+      mockSuccessfulResponse({
+        spans: [],
+        page: { next: null },
+        searchedRange: { from: '2026-08-25T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+        continuation: 'chunk-2',
+      });
+      const controller = new AbortController();
+      const progressiveRequest = { ...request, progressive: true as const, continuation: 'chunk-1' };
+
+      const result = await client.querySpans(progressiveRequest, { signal: controller.signal });
+
+      expect(result.searchedRange).toEqual({ from: '2026-08-25T00:00:00Z', to: '2026-09-01T00:00:00Z' });
+      expect(result.continuation).toBe('chunk-2');
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/spans/query`,
+        expect.objectContaining({ body: JSON.stringify(progressiveRequest), signal: controller.signal }),
       );
     });
 

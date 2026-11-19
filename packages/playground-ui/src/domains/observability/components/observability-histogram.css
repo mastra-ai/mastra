@@ -1,0 +1,5 @@
+/* Hatching reads as not searched yet, rather than as zero. */
+.observability-histogram-pending {
+  background-image: repeating-linear-gradient(-45deg, currentcolor 0 1px, transparent 1px 5px);
+  opacity: 0.5;
+}

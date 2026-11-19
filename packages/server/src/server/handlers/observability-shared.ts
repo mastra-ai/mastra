@@ -716,6 +716,7 @@ export type ObservabilityStorageCapabilities = {
   traceQueryOutcomeFields: boolean;
   spanAggregate: boolean;
   spanAggregateTokenSearch: boolean;
+  progressiveTokenSearch: boolean;
   spanAggregateModelDimensions: boolean;
   aggregateTimeToFirstMeasures: boolean;
   /** Days of traces the store keeps. Omitted when the store does not report a limit. */
@@ -758,6 +759,7 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   spanQueryTokenSearch: false,
   spanAggregate: false,
   spanAggregateTokenSearch: false,
+  progressiveTokenSearch: false,
   spanQueryDurationSort: false,
   spanQueryModelProviderSort: false,
   spanQueryContextFields: false,
@@ -872,6 +874,7 @@ export function getObservabilityStorageCapabilities(
     // OSS Server never opts into indexed token search.
     spanAggregateTokenSearch: false,
     spanQueryTokenSearch: false,
+    progressiveTokenSearch: false,
     spanQueryDurationSort:
       spanQuery &&
       coreStorage.SPAN_QUERY_ORDER_FIELDS?.includes('durationMs') === true &&

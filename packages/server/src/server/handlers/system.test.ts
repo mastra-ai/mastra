@@ -22,6 +22,7 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   traceQueryTokenSearch: false,
   spanQueryTokenSearch: false,
   spanAggregateTokenSearch: false,
+  progressiveTokenSearch: false,
   traceAggregateTokenSearch: false,
   traceQueryRootDuration: false,
   traceQueryContextIds: false,

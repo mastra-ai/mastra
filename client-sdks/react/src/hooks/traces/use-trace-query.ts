@@ -3,10 +3,11 @@ import type { QueryTracesKeysetInput, TraceQueryKeysetTraceResponse } from '@mas
 import type { ListTracesArgs as StorageListTracesArgs } from '@mastra/core/storage';
 import { keepPreviousData, skipToken, useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { InfiniteData } from '@tanstack/react-query';
-import { useEffect } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
 import type { MastraInfiniteQueryOptions, MastraQueryOptions } from '../shared/query-options';
 import { useInView } from '../shared/use-in-view';
+import { useProgressiveList } from '../shared/use-progressive-list';
+import type { ProgressiveListState } from '../shared/use-progressive-list';
 
 export const TRACE_QUERY_PER_PAGE = 25;
 /** Max traces per delta request; the server caps `limit` at 100. */
@@ -19,7 +20,11 @@ type LegacyTraceListFilters = StorageListTracesArgs['filters'];
 type ListTracesLightResponse = Awaited<ReturnType<MastraClient['listTracesLight']>>;
 type LightSpanRecord = ListTracesLightResponse['spans'][number];
 
-export type TraceQueryArgs = Omit<QueryTracesKeysetInput, 'page' | 'pagination'>;
+/**
+ * Set `progressive: true` with a word search when the server reports `progressiveTokenSearch`: each page
+ * then searches one chunk of the range, in sort order, and the list pages by `continuation`.
+ */
+export type TraceQueryArgs = Omit<QueryTracesKeysetInput, 'page' | 'pagination' | 'continuation'>;
 
 export interface UseTraceQueryArgs {
   query: TraceQueryArgs | undefined;
@@ -41,7 +46,7 @@ export interface UseTraceQueryArgs {
   };
 }
 
-export interface UseTraceQueryReturn {
+export interface UseTraceQueryReturn extends ProgressiveListState {
   data: TraceQueryTrace[] | undefined;
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
@@ -52,13 +57,16 @@ export interface UseTraceQueryReturn {
   isFetching: boolean;
   isRefetching: boolean;
   fetchStatus: 'idle' | 'fetching' | 'paused';
+  /** The list could not load. For a progressive search, a failed later chunk is `chunkError` instead. */
   isError: boolean;
   error: Error | null;
   refetch: () => void;
   setEndOfListElement: (node: HTMLDivElement | null) => void;
 }
 
+/** A progressive search pages by `continuation` (present only in its responses); other lists by `page.next`. */
 export function getTraceQueryNextPageParam(lastPage: TraceQueryKeysetTraceResponse | undefined): string | undefined {
+  if (lastPage?.continuation !== undefined) return lastPage.continuation ?? undefined;
   return lastPage?.page.next ?? undefined;
 }
 
@@ -220,6 +228,8 @@ export function useTraceQuery({
 }: UseTraceQueryArgs): UseTraceQueryReturn {
   const client = useMastraClient();
   const { inView, setRef: setEndOfListElement } = useInView();
+  const progressive = withQueryTrace && query?.progressive === true;
+  const queryKey = traceQueryKey(query, limit);
   const queryResult = useInfiniteQuery<
     TraceQueryKeysetTraceResponse,
     Error,
@@ -227,12 +237,17 @@ export function useTraceQuery({
     readonly unknown[],
     string | undefined
   >({
-    queryKey: traceQueryKey(query, limit),
+    queryKey,
     queryFn: query
-      ? async ({ pageParam }) => {
+      ? async ({ pageParam, signal }) => {
           // Capability failures must reach the fallback without the SDK retrying 501 responses.
           const queryClient = new MastraClient({ ...client.options, retries: 0 });
-          const response = await queryClient.queryTraces({ ...query, page: { limit, after: pageParam ?? null } });
+          const response = await queryClient.queryTraces(
+            progressive
+              ? { ...query, page: { limit }, ...(pageParam ? { continuation: pageParam } : {}) }
+              : { ...query, page: { limit, after: pageParam ?? null } },
+            { signal },
+          );
           if ('traces' in response && 'page' in response) return response;
           throw new Error('Expected a cursor-paginated trace query response');
         }
@@ -281,24 +296,31 @@ export function useTraceQuery({
     isFetchNextPageError,
   } = result;
 
-  useEffect(() => {
-    if (enabled && inView && hasNextPage && !isFetching && !isFetchNextPageError) {
-      void fetchNextPage();
-    }
-  }, [enabled, inView, hasNextPage, isFetching, isFetchNextPageError, fetchNextPage]);
+  const progressiveList = useProgressiveList({
+    queryKey,
+    progressive,
+    enabled,
+    inView,
+    hasNextPage,
+    isFetching,
+    isFetchNextPageError,
+    fetchNextPage,
+    error,
+  });
 
   return {
+    ...progressiveList,
     data,
     hasNextPage,
     isFetchingNextPage,
-    fetchNextPage,
     isLoading,
     isPlaceholderData,
     isFetching,
     isRefetching,
     fetchStatus,
-    isError,
-    error,
+    isError: progressive ? isError && !isFetchNextPageError : isError,
+    // A failed later chunk is `chunkError`; the rows before it are still the list.
+    error: progressive && isFetchNextPageError ? null : error,
     refetch,
     setEndOfListElement,
   };
