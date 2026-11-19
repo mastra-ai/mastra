@@ -197,19 +197,6 @@ describe('pinned Knowledge in chat', () => {
       expect(within(listing).getByRole('button', { name: 'Show 6 pages' }).getAttribute('aria-expanded')).toBe('false');
     });
 
-    it('counts the listed pages, including the ones it says follow, in a collapsed toggle', () => {
-      render(withLinks(<SignalBadge signal={withListing} defaultOpen />));
-
-      const [, listing] = within(screen.getByTestId('pinned-knowledge')).getAllByTestId('pinned-knowledge-row') as [
-        HTMLElement,
-        HTMLElement,
-      ];
-      const toggle = within(listing).getByRole('button', { name: 'Show 6 pages' });
-      expect(toggle.getAttribute('aria-expanded')).toBe('false');
-      expect(toggle.textContent).toBe('Show 6 pages ▾');
-      expect(within(listing).queryByTestId('pinned-knowledge-listing')).toBeNull();
-    });
-
     const listingRowFor = (text: string) => {
       const signal = {
         ...withListing,

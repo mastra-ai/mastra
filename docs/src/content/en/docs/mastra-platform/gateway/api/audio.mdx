@@ -1,0 +1,70 @@
+---
+title: "Audio | Gateway"
+description: "Generate speech and transcribe audio through Gateway with the OpenAI Audio API."
+---
+
+# Audio
+
+```text
+POST https://gateway-api.mastra.ai/v1/audio/speech
+POST https://gateway-api.mastra.ai/v1/audio/transcriptions
+```
+
+Compatible with the OpenAI Audio API. List speech and transcription models with [`/v1/models`](/docs/mastra-platform/gateway/api/models). Each model's `endpoints` includes `speech` or `transcription`.
+
+## Speech
+
+```bash
+curl https://gateway-api.mastra.ai/v1/audio/speech \
+  -H "Authorization: Bearer $MASTRA_GATEWAY_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "elevenlabs/eleven-flash-v2.5",
+    "input": "Hello from Gateway.",
+    "voice": "YOUR_VOICE_ID"
+  }' \
+  --output speech.mp3
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'model',
+    type: 'string',
+    description: 'A speech model from [`/v1/models`](/docs/mastra-platform/gateway/api/models).',
+  },
+  {
+    name: 'input',
+    type: 'string',
+    description: 'Text to speak, 1 to 4,096 characters.',
+  },
+  {
+    name: 'voice',
+    type: 'string',
+    description: 'A voice supported by the model.',
+  },
+  {
+    name: 'response_format',
+    type: "'mp3' | 'pcm'",
+    isOptional: true,
+    defaultValue: 'mp3',
+    description: 'Audio format. `pcm` is available only on models that support it.',
+  },
+]}
+/>
+
+A speech request stays on one voice and model, so it doesn't fail over to a different model.
+
+## Transcriptions
+
+Send one audio file as multipart form data:
+
+```bash
+curl https://gateway-api.mastra.ai/v1/audio/transcriptions \
+  -H "Authorization: Bearer $MASTRA_GATEWAY_API_KEY" \
+  -F model="deepgram/nova-3" \
+  -F file="@meeting.mp3"
+```
+
+- Files can be up to 8 MiB in MP3, MP4, M4A, WAV, WebM, OGG, or FLAC format.
+- The response is a JSON transcript. `response_format` must be `json` if set.

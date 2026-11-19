@@ -8,7 +8,7 @@ import { spawn } from 'node:child_process';
 import 'playwright-chromium';
 import { webSearchTool } from '../tools/web-search';
 
-const agentModel = process.env.AGENT_MODEL?.trim() || 'mastra/openai/gpt-5-mini';
+const agentModel = process.env.AGENT_MODEL?.trim() || 'mastra/openai/gpt-6.1-terra';
 
 const require = createRequire(import.meta.url);
 let installDepsPromise: Promise<void> | undefined;

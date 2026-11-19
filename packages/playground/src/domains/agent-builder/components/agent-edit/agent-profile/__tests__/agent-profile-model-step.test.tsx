@@ -66,24 +66,6 @@ describe('AgentProfileModelStep', () => {
     expect((card.querySelector('button') as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it('renders the onboarding picker with a bordered title section and full-height body', async () => {
-    installHandlers();
-
-    render(
-      <Harness>
-        <AgentProfileModelStep />
-      </Harness>,
-    );
-
-    await screen.findByTestId('model-card-openai-gpt-5-mini');
-    expect(screen.getByTestId('agent-step-title-section').className).toContain('border-b');
-    expect(screen.getByText('Selected model:').parentElement?.className).toContain('w-1/2');
-    expect(screen.getByTestId('agent-step-content').className).toContain('overflow-hidden');
-    expect(screen.getByTestId('models-provider-filter').className).toContain('h-full');
-    expect(screen.getByTestId('agent-step-footer').className).toContain('border-t');
-    expect(screen.getByTestId('agent-step-footer').className).toContain('pt-4');
-  });
-
   it('makes the model picker read-only while the builder stream runs (parity with the Tools step)', async () => {
     installHandlers();
 

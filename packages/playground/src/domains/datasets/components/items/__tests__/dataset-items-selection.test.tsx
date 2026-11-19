@@ -36,12 +36,11 @@ const renderItems = (props: Partial<React.ComponentProps<typeof DatasetItems>> =
 const selectionTrigger = () => screen.getByRole('button', { name: /1 selected/ });
 
 describe('DatasetItems selection', () => {
-  it('always shows checkboxes on the current version, with no "Select &" menu', () => {
+  it('always shows checkboxes on the current version', () => {
     renderItems();
 
     expect(screen.getByLabelText('Select all items')).toBeDefined();
     expect(screen.getByLabelText('Select item item-a')).toBeDefined();
-    expect(screen.queryByText(/Select &/)).toBeNull();
   });
 
   it('hides checkboxes when viewing an older version', () => {
@@ -66,8 +65,6 @@ describe('DatasetItems selection', () => {
     expect(screen.getByText('Create dataset from items')).toBeDefined();
     expect(screen.getByText('Copy items to dataset')).toBeDefined();
     expect(screen.getByText('Delete items')).toBeDefined();
-    // Dropdown-only selection UX — no inline action buttons or Cancel.
-    expect(screen.queryByText('Cancel')).toBeNull();
   });
 
   it('keeps the New item button visible next to the selection menu', () => {

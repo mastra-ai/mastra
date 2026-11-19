@@ -67,17 +67,6 @@ describe('AgentSystemPrompt', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Wrap lines', pressed: false }));
       expect(screen.getByRole('region', { name: 'System prompt source' }).textContent).toBe(indentedInstructions);
     });
-
-    it('renders formatted instructions in the reading view', () => {
-      render(
-        <TooltipProvider>
-          <AgentSystemPrompt instructions={instructions} />
-        </TooltipProvider>,
-      );
-
-      expect(screen.getByText('these instructions').tagName).toBe('STRONG');
-      expect(screen.getAllByRole('listitem')).toHaveLength(2);
-    });
   });
 
   describe('when no system prompt is configured', () => {

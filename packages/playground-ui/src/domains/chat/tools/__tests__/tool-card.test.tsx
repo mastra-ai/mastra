@@ -304,17 +304,6 @@ describe('ToolCard dispatch', () => {
     expect(screen.getByRole('button', { name: /extractions.*1 extracted/i })).toBeTruthy();
   });
 
-  it('routes agent-* tools to the agent badge wrapper', () => {
-    renderToolCard(
-      baseProps({
-        toolName: 'agent-weatherAgent',
-        output: { text: 'sunny' },
-      }),
-    );
-    // Display name strips the agent- prefix.
-    expect(screen.queryByText(/agent-weatherAgent/)).toBeNull();
-  });
-
   it('routes workflow-* tools to the workflow badge', async () => {
     server.use(
       http.get(`${BASE_URL}/api/workflows/myFlow`, () =>

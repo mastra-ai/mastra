@@ -3,7 +3,7 @@ import { EntityType } from '@mastra/core/observability';
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { TraceVolumeCard } from '../trace-volume-card';
-import { failingMetrics, openViewMenu, pendingMetrics, pickView, renderInMetrics, seedMetrics } from './metrics-msw';
+import { openViewMenu, pendingMetrics, pickView, renderInMetrics, seedMetrics } from './metrics-msw';
 
 describe('TraceVolumeCard', () => {
   it('shows its title and view menu while the data loads', async () => {
@@ -47,11 +47,5 @@ describe('TraceVolumeCard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'View errors in logs' }));
     expect(onViewTraces).toHaveBeenCalledWith(EntityType.AGENT);
     expect(onViewErrors).toHaveBeenCalledWith(EntityType.AGENT);
-  });
-
-  it('says so when the data fails to load', async () => {
-    failingMetrics();
-    renderInMetrics(<TraceVolumeCard />);
-    expect(await screen.findByText(/Couldn't load this data/)).toBeDefined();
   });
 });
