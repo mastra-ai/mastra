@@ -1,4 +1,5 @@
 import { execFile, execFileSync } from 'node:child_process';
+import { realpathSync } from 'node:fs';
 
 export interface CommonBinary {
   name: string;
@@ -28,6 +29,21 @@ const COMMON_BINARIES = [
   'cargo',
 ] as const;
 
+/**
+ * The installation itself, not the shell shim in front of it. Version managers put a per-shell directory
+ * first on PATH (`fnm` multishells, `nvm` versions, `asdf` shims), and the name of that directory changes on
+ * every launch, while these paths are part of the system prompt: an unstable path here costs the whole
+ * cached prompt at the start of every run after a restart.
+ */
+function stablePath(path: string | null): string | null {
+  if (!path) return path;
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
+}
+
 let cachedBinaries: CommonBinary[] | null = null;
 let inFlightPromise: Promise<CommonBinary[]> | null = null;
 
@@ -35,7 +51,7 @@ function resolveBinary(name: string): string | null {
   const command = process.platform === 'win32' ? 'where' : 'which';
   try {
     const output = execFileSync(command, [name], { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
-    return output.split(/\r?\n/)[0] || null;
+    return stablePath(output.split(/\r?\n/)[0] || null);
   } catch {
     return null;
   }
@@ -49,7 +65,7 @@ function resolveBinaryAsync(name: string): Promise<string | null> {
         resolve(null);
         return;
       }
-      resolve(stdout.trim().split(/\r?\n/)[0] || null);
+      resolve(stablePath(stdout.trim().split(/\r?\n/)[0] || null));
     });
   });
 }
