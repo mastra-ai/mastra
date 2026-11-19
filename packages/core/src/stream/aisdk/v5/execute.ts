@@ -4,6 +4,7 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import type { IdGenerator, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import { prepareJsonSchemaForOpenAIStrictMode } from '@mastra/schema-compat';
 import type { StructuredOutputOptions } from '../../../agent/types';
+import { getErrorFromUnknown } from '../../../error';
 import { hasFreeFormObject } from '../../../llm/model/free-form-object';
 import { validateModelTimeoutSettings } from '../../../llm/model/model-settings';
 import type { ModelMethodType } from '../../../llm/model/model.loop.types';
@@ -492,7 +493,9 @@ export function execute<OUTPUT = undefined>({
                 cleanupFirstChunkTimeout();
                 onRequestFailed?.();
                 abortSignal?.throwIfAborted();
-                throw error;
+                // p-retry rejects non-Error values as a TypeError containing String(error),
+                // discarding provider status and response fields needed downstream.
+                throw getErrorFromUnknown(error, { supportSerialization: false });
               }
             },
             {

@@ -17,7 +17,7 @@ import type {
   Session,
 } from '@mastra/core/agent-controller';
 import { createCodingAgent } from '@mastra/core/coding-agent';
-import { classifyProviderError } from '@mastra/core/error';
+import { classifyProviderError, getErrorFromUnknown } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
 import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge';
 import { PROVIDER_REGISTRY, findGatewayForModel, getGatewayId } from '@mastra/core/llm';
@@ -256,7 +256,7 @@ function emitTransientRetry(
   const controllerContext = requestContext?.get('controller') as AgentControllerRequestContext | undefined;
   controllerContext?.emitEvent?.({
     type: 'error',
-    error: error instanceof Error ? error : new Error(String(error)),
+    error: getErrorFromUnknown(error, { supportSerialization: false }),
     retryable: true,
     retryDelay: delayMs,
     retryAttempt: retryCount + 1,
