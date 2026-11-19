@@ -2049,7 +2049,10 @@ export class Workflow<
   #nestedRun?: {
     /** The parent run's storage version, which a new nested run takes. */
     storageVersion: 1 | 2;
-    /** Set when execute() starts the nested run rather than resuming or restarting it. */
+    /**
+     * Set when execute() may start the nested run: on a start, and on a restart, which starts it
+     * when none is stored. Unset on a resume.
+     */
     start?: { input: TInput; state: TState; inheritedState?: StateBase };
   };
   public committed: boolean = false;
@@ -3443,7 +3446,7 @@ export class Workflow<
         // so it must carry the parent's state alongside the input.
         value: nestedRunStart?.state ?? {},
         // @ts-expect-error - context type mismatch
-        context: nestedRunStart?.input ? { input: nestedRunStart.input } : {},
+        context: nestedRunStart ? { input: nestedRunStart.input } : {},
         activePaths: [],
         activeStepsPath: {},
         serializedStepGraph: this.serializedStepGraph,
@@ -3623,9 +3626,10 @@ export class Workflow<
     const nestedPubsub = useSharedPubsub ? pubsub : undefined;
     // A started nested run works on its own copy of the parent's state and hands back its changes
     // on top of the parent's state then, so changes the parent's other steps make meanwhile are kept.
+    // A restart prepares the same, because it starts the nested run when it finds none stored.
     let startState = state;
     let startedFrom: Record<string, unknown> | undefined;
-    if (!restart && !isResume) {
+    if (!isResume) {
       startedFrom = toJsonState(state);
       // State that isn't JSON is shared and handed back whole, as before.
       if (startedFrom) startState = copyState(state);
@@ -3636,7 +3640,7 @@ export class Workflow<
     // Nothing may await between this and createRun(), which takes it synchronously.
     this.#nestedRun = {
       storageVersion: parentState ? 2 : 1,
-      start: !restart && !isResume ? { input: inputData, state: startState, inheritedState } : undefined,
+      start: !isResume ? { input: inputData, state: startState, inheritedState } : undefined,
     };
     const run = isResume
       ? await this.createRun({ runId: resume.runId, resourceId, pubsub: nestedPubsub, parentWorkflow })
@@ -3707,6 +3711,10 @@ export class Workflow<
         } else if (restart && nestedStatus === 'suspended') {
           restartNested = false;
           resumeNested = true;
+        } else if (restart && !isResume && (!nestedSnapshot || nestedStatus === 'pending')) {
+          // The parent saves this step as running before the nested run saves anything, so a crash
+          // or a failed write in between leaves no nested run, or one that never started. Start it.
+          restartNested = false;
         }
       }
 
