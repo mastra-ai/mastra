@@ -342,8 +342,12 @@ export async function listThreadsForResource({
 export const SEARCH_NOT_CONFIGURED_MESSAGE =
   'Search is not configured. Enable it with `retrieval: { vector: true }` and configure a vector store and an embedder, or a vector store that generates embeddings itself, on your Memory instance.';
 
-/** How long recall waits for a search (embedding the query plus the vector lookup) before it stops waiting. */
-const SEARCH_TIMEOUT_MS = 10_000;
+/**
+ * How long recall waits for a search (embedding the query plus the vector lookup) before it stops waiting.
+ * Embedding retries 3 times after 2 s, 4 s and 8 s, so a rate-limited search can still succeed after ~15-23 s.
+ * Healthy hosted embedders answer in well under a second, so only a provider that hangs waits this long.
+ */
+const SEARCH_TIMEOUT_MS = 30_000;
 
 type SearchArgs = Omit<Parameters<NonNullable<RecallMemory['searchMessages']>>[0], 'abortSignal'>;
 

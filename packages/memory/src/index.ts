@@ -132,7 +132,7 @@ type RetrievalOptions = {
   /**
    * How long recall search waits, in milliseconds, for the query to be embedded and the vector store to answer.
    * A slower search is cancelled and the agent is told to browse messages instead.
-   * @default 10000
+   * @default 30000
    */
   searchTimeoutMs?: number;
 };

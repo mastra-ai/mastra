@@ -25,10 +25,18 @@ function embed(text: string) {
 // An OpenAI-compatible embeddings endpoint: the edge between Memory and a hosted provider.
 let mode: 'ok' | 'slow' | 'fail' | 'hang' = 'ok';
 let abortedRequests = 0;
+// Requests left to answer with 429 before the provider recovers.
+let rateLimitedRequests = 0;
 const server = createServer(async (request, response) => {
   const chunks = [];
   for await (const chunk of request) chunks.push(chunk);
   const body = JSON.parse(Buffer.concat(chunks).toString()) as { model: string; input: string[] };
+  if (rateLimitedRequests > 0) {
+    rateLimitedRequests--;
+    response.writeHead(429, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify({ error: { message: 'Rate limit reached for requests', type: 'requests' } }));
+    return;
+  }
   if (mode === 'hang') {
     response.on('close', () => abortedRequests++);
     return;
@@ -63,6 +71,7 @@ beforeAll(async () => {
 beforeEach(() => {
   mode = 'ok';
   abortedRequests = 0;
+  rateLimitedRequests = 0;
   vector = new LibSQLVector({ id: 'hosted-embedder', url: ':memory:' });
   storage = new InMemoryStore({ id: 'hosted-embedder' });
 });
@@ -192,6 +201,20 @@ describe('recall search with a hosted embedder (#30736)', () => {
     expect(result.results).toMatch(/^Search is unavailable right now/);
     await expect.poll(() => abortedRequests).toBe(1);
   });
+
+  it('lets a rate-limited search succeed on its last retry within the default limit', async () => {
+    // Embedding retries 3 times, waiting 2 s, 4 s and 8 s. A search that only succeeds on the last retry
+    // takes over 14 s, so the default limit has to outlast it or recall gives up on a search that would work.
+    const memory = openMemory();
+    const thread = await seedObservedThread(memory);
+    rateLimitedRequests = 3;
+
+    const result = await recall(memory, thread.id);
+
+    expect(rateLimitedRequests).toBe(0);
+    expect(result.count).toBe(1);
+    expect(result.results).toContain('observation group: indent@');
+  }, 45_000);
 
   it('waits as long as retrieval.searchTimeoutMs allows', async () => {
     // A provider that always takes 1.5 s, like a local model on a slow machine.
