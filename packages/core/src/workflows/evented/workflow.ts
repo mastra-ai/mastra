@@ -26,6 +26,7 @@ import {
   createObservabilityContext,
   getOrCreateSpan,
   getRootExportSpan,
+  getWorkflowResumeTracingContext,
   resolveObservabilityContext,
 } from '../../observability';
 import type { ObservabilityContext, TracingContext, TracingPolicy } from '../../observability';
@@ -2064,30 +2065,6 @@ export class EventedRun<
       state: initialStateToUse as Record<string, any>,
     });
 
-    // Always persist the initial run record regardless of shouldPersistSnapshot.
-    // The evented engine relies on this record for parallel branch result
-    // aggregation (aggregateBranchResults reads stepResults via storage).
-    const initialRunSnapshot: WorkflowRunState = {
-      runId: this.runId,
-      serializedStepGraph: this.serializedStepGraph,
-      status: 'running',
-      value: {},
-      context: inputDataToUse != null ? ({ input: inputDataToUse } as any) : ({} as any),
-      requestContext: withoutAuthToken(requestContext.toJSON()),
-      activePaths: [],
-      activeStepsPath: {},
-      suspendedPaths: {},
-      resumeLabels: {},
-      waitingPaths: {},
-      timestamp: Date.now(),
-    };
-    await this.runStorage.writeSnapshot(
-      this.executionEngine.options?.pruneSnapshot && this.storageVersion === 1
-        ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'running' })
-        : initialRunSnapshot,
-      this.resourceId,
-    );
-
     if (!this.mastra?.pubsub) {
       throw new Error('Mastra instance with pubsub is required for workflow execution');
     }
@@ -2117,8 +2094,36 @@ export class EventedRun<
       this.mastra?.__registerRunTracingContext(this.runId, { currentSpan: workflowSpan });
     }
 
+    // Always persist the initial run record regardless of shouldPersistSnapshot.
+    // The evented engine relies on this record for parallel branch result
+    // aggregation (aggregateBranchResults reads stepResults via storage).
+    // It also carries the resume tracing context from the start: a worker in
+    // another process that suspends this run has no live span to save it from.
+    const initialRunSnapshot: WorkflowRunState = {
+      runId: this.runId,
+      serializedStepGraph: this.serializedStepGraph,
+      status: 'running',
+      value: {},
+      context: inputDataToUse != null ? ({ input: inputDataToUse } as any) : ({} as any),
+      requestContext: withoutAuthToken(requestContext.toJSON()),
+      activePaths: [],
+      activeStepsPath: {},
+      suspendedPaths: {},
+      resumeLabels: {},
+      waitingPaths: {},
+      tracingContext:
+        this.executionEngine.options.resumeTracingContext ?? getWorkflowResumeTracingContext(workflowSpan),
+      timestamp: Date.now(),
+    };
+
     let result: WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>;
     try {
+      await this.runStorage.writeSnapshot(
+        this.executionEngine.options?.pruneSnapshot && this.storageVersion === 1
+          ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'running' })
+          : initialRunSnapshot,
+        this.resourceId,
+      );
       result = await this.executionEngine.execute<
         TState,
         TInput,
@@ -2247,22 +2252,57 @@ export class EventedRun<
 
     // Dispatch-only callers do not own execution spans; the worker may run in
     // another process, so no local span or tracing registry entry is created here.
-    await this.mastra.pubsub.publish('workflows', {
-      type: 'workflow.start',
+    // execute() still waits for the worker's finish event in the background so the
+    // workflow's onFinish/onError callbacks run, as they do for start(). (#29391)
+    let markDispatched!: () => void;
+    let isDispatched = false;
+    const dispatched = new Promise<void>(resolve => {
+      markDispatched = () => {
+        isDispatched = true;
+        resolve();
+      };
+    });
+    const execution = this.executionEngine.execute<
+      TState,
+      TInput,
+      WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>
+    >({
+      workflowId: this.workflowId,
       runId: this.runId,
-      data: {
-        workflowId: this.workflowId,
-        runId: this.runId,
-        prevResult: { status: 'success', output: inputDataToUse },
-        requestContext: requestContext.toJSON(),
-        actor,
-        initialState: initialStateToUse,
-        perStep,
-        ...(this.storageVersion === 2 && { storageVersion: 2 }),
-      },
+      resourceId: this.resourceId,
+      graph: this.executionGraph,
+      serializedStepGraph: this.serializedStepGraph,
+      input: inputDataToUse,
+      initialState: initialStateToUse,
+      pubsub: this.mastra.pubsub,
+      retryConfig: this.retryConfig,
+      requestContext,
+      actor,
+      abortController: this.abortController,
+      perStep,
+      storageVersion: this.storageVersion,
+      onDispatched: markDispatched,
     });
 
-    // Return immediately without waiting for completion
+    // execute() only tracks the wait for the finish event. Nobody awaits this run's
+    // callbacks, so track the whole execution now, before the dispatch wait, so
+    // shutdown() drains them before it closes storage and pubsub. Failures before
+    // dispatch reject the caller below, so only later ones are logged here.
+    // `background` always fulfills, even if the logger throws, so shutdown's drain never
+    // sees a rejection from it and the release chain cannot raise an unhandled rejection.
+    const background = execution.catch(error => {
+      if (!isDispatched) return;
+      try {
+        this.mastra?.getLogger()?.error(`[Workflow ${this.workflowId}] Background execution failed:`, error);
+      } catch {
+        // A failing logger must not fail the run's tracking or shutdown.
+      }
+    });
+    const releaseTracking = this.mastra.__trackEventedRun(background);
+    void background.then(releaseTracking);
+
+    // Surface subscribe/publish failures, but don't wait for the workflow to finish.
+    await Promise.race([dispatched, execution]);
     return { runId: this.runId };
   }
 
@@ -2739,6 +2779,22 @@ export class EventedRun<
         });
       }
       parentClaimed = true;
+    }
+
+    // A worker in another process that suspends this segment has no live span to save, so
+    // save the resumed root's context now; its next resume then continues this segment.
+    // A failed or late save only costs that next resume its link, so this resume does not wait
+    // for it: the engine must listen for the run's end before another caller can cancel the run.
+    const resumeTracingContext =
+      this.executionEngine.options.resumeTracingContext ?? getWorkflowResumeTracingContext(workflowSpan);
+    if (resumeTracingContext) {
+      void this.runStorage
+        .updateHeader({ status: 'running', expectedStatus: 'running', tracingContext: resumeTracingContext })
+        .catch(error => {
+          this.mastra
+            ?.getLogger()
+            ?.warn(`[Workflow ${this.workflowId}] Failed to save resume tracing context for run ${this.runId}`, error);
+        });
     }
 
     // Extract state from snapshot - could be in context.__state or in value

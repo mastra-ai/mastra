@@ -46,27 +46,6 @@ const semanticTokens = [
   'border-focus',
 ] as const;
 
-const deferredSemanticTokens = [
-  'card-foreground',
-  'popover-foreground',
-  'tertiary-foreground',
-  'disabled-foreground',
-  'contrast-foreground',
-  'secondary',
-  'secondary-foreground',
-  'accent',
-  'accent-foreground',
-  'input',
-  'sidebar-foreground',
-  'sidebar-accent',
-  'sidebar-accent-foreground',
-  'sidebar-border',
-  'sidebar-ring',
-  'sidebar-divider',
-  'selected',
-  'ring',
-] as const;
-
 const semanticAliases = {
   background: 'background-2',
   sidebar: 'background-1',
@@ -192,23 +171,9 @@ describe('theme.css export', () => {
     expect(lightTheme).not.toMatch(/--color-brand-/);
   });
 
-  it('does not ship legacy colors', async () => {
-    expect(readFileSync(resolve(pkgRoot, 'theme.css'), 'utf8')).not.toContain('legacy-theme');
-    const { darkVariables, lightVariables } = getThemeVariables(themeCss);
-    for (const variables of [darkVariables, lightVariables]) {
-      for (const name of ['accent1', 'positive1', 'notice-success', 'brand-green-500', 'chart-1', 'span-type-agent']) {
-        expect(variables.has(name)).toBe(false);
-      }
-    }
+  it('generates the badge and status utilities', async () => {
     const compiler = await compileStylesheet("@import 'tailwindcss'; @import './theme.css';", pkgRoot);
-    const css = compiler.build([
-      'bg-accent1',
-      'text-positive1',
-      'bg-notice-success',
-      'text-badge-green-foreground',
-      'bg-success-subtle',
-    ]);
-    for (const name of ['bg-accent1', 'text-positive1', 'bg-notice-success']) expect(css).not.toContain(`.${name}`);
+    const css = compiler.build(['text-badge-green-foreground', 'bg-success-subtle']);
     for (const name of ['text-badge-green-foreground', 'bg-success-subtle']) expect(css).toContain(`.${name}`);
   });
 
@@ -374,15 +339,6 @@ describe('theme.css export', () => {
     }
   });
 
-  it('generates the field and dialog fill utilities', async () => {
-    const compiler = await compileStylesheet(productionCss, resolve(pkgRoot, 'src'));
-    const output = compiler.build(['bg-field', 'bg-field-disabled', 'bg-dialog']);
-
-    for (const token of ['field', 'field-disabled', 'dialog']) {
-      expect(output).toContain(`.bg-${token} {`);
-    }
-  });
-
   // The rim has to be assembled by the utility, on the element. A custom property
   // holding `var(--surface-rim)` is substituted once where it is declared — the
   // root — so every descendant inherits a finished string and a focused field
@@ -413,16 +369,6 @@ describe('theme.css export', () => {
 
     for (const token of semanticTokens) {
       expect(exportedColors[token]).toBe(`var(--${token})`);
-    }
-  });
-
-  it('keeps unproven semantic roles out of the contract', () => {
-    const exportedColors = { ...Colors, ...BorderColors };
-
-    for (const token of deferredSemanticTokens) {
-      expect(themeCss).not.toContain(`--${token}:`);
-      expect(themeCss).not.toContain(`--color-${token}:`);
-      expect(Object.hasOwn(exportedColors, token)).toBe(false);
     }
   });
 

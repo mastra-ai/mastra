@@ -386,6 +386,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       entityType: cached.entityType,
       entityId: cached.entityId,
       entityName: cached.entityName,
+      tags: cached.tags,
       tracingPolicy: cached.isInternal ? { internal: InternalSpans.ALL } : undefined,
       traceState: this.rebuildTraceState(cached),
     });
@@ -394,6 +395,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     if (span instanceof BaseSpan) {
       span.restoreEntityLineage(cached);
       span.restoreErrorCount(cached);
+      span.requestContext = cached.requestContext;
     }
 
     // Rebuilding an existing completed segment must not reopen its outcome.
@@ -744,8 +746,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     const configuredKeys = this.config.requestContextKeys ?? [];
     const additionalKeys = tracingOptions?.requestContextKeys ?? [];
 
-    // Merge: configured + additional
-    const allKeys = [...configuredKeys, ...additionalKeys];
+    // Merge: configured + additional. A resume passes the saved trace state's keys back in, which
+    // already hold the configured ones.
+    const allKeys = [...new Set([...configuredKeys, ...additionalKeys])];
 
     const hideInput = tracingOptions?.hideInput;
     const hideOutput = tracingOptions?.hideOutput;

@@ -23,6 +23,7 @@ import { Input } from '@/ds/components/Input';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/ds/components/InputGroup';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { SearchInput } from '@/ds/components/SearchInput';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { Switch } from '@/ds/components/Switch';
 import { Txt } from '@/ds/components/Txt';
 import { SettingsContainer, SettingsFieldsetRow, SettingsRow } from '@/ds/new/settings';
@@ -586,6 +587,61 @@ export const AddCredits: Story = {
     },
   },
   render: () => <AddCreditsDialog />,
+};
+
+export const SettingsRowsInDialog: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Settings rows in a default-size dialog: text fields sit beside their label like the select does, and only controls too wide for the row wrap under the label.',
+      },
+    },
+  },
+  render: () => (
+    <Dialog>
+      <DialogTrigger render={<Button>New destination</Button>} />
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>New destination</DialogTitle>
+        </DialogHeader>
+        <DialogBody>
+          <SettingsContainer>
+            <SettingsRow label="Type">
+              <Select defaultValue="email">
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="email">Email</SelectItem>
+                  <SelectItem value="webhook">Webhook</SelectItem>
+                </SelectContent>
+              </Select>
+            </SettingsRow>
+            <SettingsRow label="Name">
+              <Input placeholder="e.g. On-call team" />
+            </SettingsRow>
+            <SettingsRow label="Webhook URL" description="Receives a POST for each alert.">
+              <Input placeholder="https://hooks.example.com/alerts" />
+            </SettingsRow>
+          </SettingsContainer>
+        </DialogBody>
+        <DialogFooter>
+          <DialogCancel>Cancel</DialogCancel>
+          <DialogAction onConfirm={() => {}}>Add destination</DialogAction>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  ),
+  play: async ({ canvas, userEvent, canvasElement }) => {
+    const page = within(canvasElement.ownerDocument.body);
+    await userEvent.click(canvas.getByRole('button', { name: 'New destination' }));
+    const name = await waitFor(() => page.getByRole('textbox', { name: 'Name' }));
+    // From `sm` up (below it the dialog is a drawer and rows stack), the field stays beside its label.
+    if (!canvasElement.ownerDocument.defaultView?.matchMedia('(min-width: 40rem)').matches) return;
+    const label = page.getByText('Name', { selector: 'label' });
+    await expect(name.getBoundingClientRect().left).toBeGreaterThan(label.getBoundingClientRect().right);
+  },
 };
 
 export const ResizeWhileOpen: Story = {

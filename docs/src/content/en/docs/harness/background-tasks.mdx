@@ -20,7 +20,7 @@ Use background tasks when a tool call may take long enough that the user shouldn
 - Tool calls that hit slow external services, queues, or large data jobs.
 - Workflows triggered from a tool call that may take minutes to complete.
 
-For tool calls that return quickly, foreground execution using `agent.stream()` and `agent.generate()` is simpler.
+For tool calls that return fast, foreground execution using `agent.stream()` and `agent.generate()` is simpler.
 
 :::note
 
@@ -356,6 +356,12 @@ await mastra.backgroundTaskManager?.resume(taskId, {
 ```
 
 On the resumed run, `context.agent.suspendPayload` holds the `data` the tool suspended with. Use it to tell which request an answer belongs to without encoding that in `resumeData`.
+
+### Suspend after a durable agent's run finished
+
+On a [durable agent](/docs/harness/durable-agents), a background tool can call `suspend()` after the agent has replied and its run has finished. The task is marked `suspended` and resumes as usual when the storage adapter supports [run fencing](/docs/harness/durable-agents#run-ownership), for example `InMemoryStore`, `@mastra/libsql`, or `@mastra/pg`. These adapters record each claim on the run, so Mastra can check that no other execution claimed the run in the meantime.
+
+The task still fails with a storage adapter that lacks run fencing, because run ownership is then only a PubSub lease, and a released lease can't show whether another execution claimed and finished the run since. On an agent from `createEventedAgent()`, the task also fails when an approval for another tool call resumed the run in the same turn, because the resume's claim counts as another execution.
 
 ### Answer a suspended task from a client
 

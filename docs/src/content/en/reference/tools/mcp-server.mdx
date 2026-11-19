@@ -66,7 +66,7 @@ MCP tool input and output schemas are advertised as JSON Schema 2020-12 with the
 
 A tool with an `outputSchema` can return any JSON value, including an object, array, string, number, boolean, or `null`. The value is sent as `structuredContent` without wrapping it in an object. The server validates successful structured output against the tool's output schema before returning it.
 
-### Configuration Properties
+### Configuration properties
 
 The constructor accepts an `MCPServerConfig` object with the following properties:
 
@@ -370,9 +370,9 @@ A powerful feature of `MCPServer` is its ability to automatically expose your Ma
 
 - **Name collisions.** If an explicit tool defined in the `tools` configuration has the same name as an agent-derived tool (e.g., a tool with the name `ask_myAgentKey` alongside an agent keyed as `myAgentKey`), the _explicitly defined tool will take precedence_. The agent won't be converted into a tool in this conflicting case, and a warning will be logged.
 
-This makes it straightforward to allow MCP clients to interact with your agents using natural language queries, like any other tool.
+This lets MCP clients interact with your agents using natural language queries, like any other tool.
 
-### Agent-to-Tool Conversion
+### Agent-to-tool conversion
 
 When you provide agents in the `agents` configuration property, `MCPServer` will automatically create a corresponding tool for each agent. The tool will be `ask_<agentIdentifier>`, where `<agentIdentifier>` is the key you used in the `agents` object.
 
@@ -781,7 +781,7 @@ tools(): Readonly<Record<string, ConvertedTool>>
 
 ## Resource handling
 
-### What are MCP Resources?
+### What are MCP resources?
 
 MCP resources expose server data that clients can read and use as context for LLM interactions. Examples include:
 
@@ -803,7 +803,7 @@ To read a resource, clients make a `resources/read` request with the URI. Server
 
 For more detailed information, refer to the [official MCP documentation on Resources](https://modelcontextprotocol.io/docs/concepts/resources).
 
-### `MCPServerResources` Type
+### `MCPServerResources` type
 
 The `resources` option takes an object of type `MCPServerResources`. This type defines the callbacks your server will use to handle resource requests:
 
@@ -890,7 +890,7 @@ const serverWithResources = new MCPServer({
 })
 ```
 
-### Notifying Clients of Resource Changes
+### Notifying clients of resource changes
 
 If the available resources or their content change, your server can notify clients that are listening for the specific resource.
 
@@ -926,13 +926,13 @@ await serverWithResources.resources.notifyListChanged()
 
 ## Prompt handling
 
-### What are MCP Prompts?
+### What are MCP prompts?
 
 Prompts are reusable templates or workflows that MCP servers expose to clients. They can accept arguments and include resource context. They standardize LLM interactions.
 
 Prompts are identified by a unique name and can be runtime-defined or static.
 
-### `MCPServerPrompts` Type
+### `MCPServerPrompts` type
 
 The `prompts` option takes an object of type `MCPServerPrompts`. This type defines the callbacks your server will use to handle prompt requests:
 
@@ -997,7 +997,7 @@ const serverWithPrompts = new MCPServer({
 })
 ```
 
-### Notifying Clients of Prompt Changes
+### Notifying clients of prompt changes
 
 If the available prompts change, your server can notify listening clients.
 
@@ -1009,7 +1009,7 @@ Call this method when the list of available prompts has changed (e.g., a prompt 
 await serverWithPrompts.prompts.notifyListChanged();
 ```
 
-### Best practices for Prompt Handling
+### Best practices for prompt handling
 
 - Use clear, descriptive prompt names and descriptions.
 - Validate all required arguments in `getPromptMessages`.
@@ -1214,7 +1214,7 @@ The middleware automatically:
 - Returns `401 Unauthorized` with proper `WWW-Authenticate` headers when authentication is required
 - Validates bearer tokens using your provided validator
 
-### Token Validation
+### Token validation
 
 For production, use proper token validation:
 
@@ -1255,7 +1255,7 @@ const customMiddleware = createOAuthMiddleware({
 
 Return `subject` from your validator when you can. The server binds `input_required` continuations to it, so users sharing one OAuth client never share a continuation.
 
-### OAuth Middleware Options
+### OAuth middleware options
 
 <PropertiesTable
   content={[
@@ -1384,7 +1384,7 @@ const server = new MCPServer({
 })
 ```
 
-### Setting Up Authentication Middleware
+### Setting up authentication middleware
 
 To pass data to your tools, populate `req.auth` on the Node.js request object in your HTTP server middleware before calling `server.startHTTP()`.
 
@@ -1443,7 +1443,7 @@ app.all('/mcp', async (req, res) => {
 
 Set `extra.sub` (or `extra.subject`) to the user's identifier. The server uses it to bind `input_required` continuations to that user.
 
-### Accessing Auth Data in Tools
+### Accessing auth data in tools
 
 The `req.auth` object is available as `context.mcp.extra.authInfo` in your tool's execute function:
 
@@ -1497,7 +1497,7 @@ execute: async (inputData, context) => {
 }
 ```
 
-### The `extra` Object
+### The `extra` object
 
 The full `context.mcp.extra` object contains:
 
@@ -1509,7 +1509,7 @@ The full `context.mcp.extra` object contains:
 | `_meta` | Request metadata sent by the client: W3C trace fields, the `io.modelcontextprotocol/logLevel` log-level opt-in, and `progressToken` |
 | `sendNotification`, `sendRequest` | Deprecated. The protocol has no server-initiated requests, so both throw with a message naming the replacement: `context.mcp.log()`, `context.mcp.progress()`, or `context.suspend()`. |
 
-### Complete Example
+### Complete example
 
 Install [`jose`](https://github.com/panva/jose) to verify JSON Web Tokens (JWTs) against your identity provider's JSON Web Key Set (JWKS):
 
@@ -1759,7 +1759,7 @@ const server = new MCPServer({
 
 A client that doesn't declare the extension sees the server as if it had no apps. The server hides its `ui://` resources, app links on tools and tool results, app-only tools, and the MCP Apps capability from that client.
 
-The declaration is read on every request. Clients on the 2026-07-28 protocol send it with each request. Clients on older protocol versions declare it once, at `initialize`. Over stateless HTTP, the server answers that `initialize` with an `Mcp-Session-Id`, and the client sends it back on every later request. That id only marks the client as one that renders apps: the server keeps no record of it, and it grants no access. Clients that don't declare the extension get no session id, and their stateless traffic stays the same.
+The declaration is read on every request. Clients on the 2026-07-28 protocol send it with each request. Clients on older protocol versions declare it once, at `initialize`. Over stateless HTTP, the server answers that `initialize` with an `Mcp-Session-Id`, and the client sends it back on every later request. That id only marks the client as one that renders apps: the server keeps no record of it, and it grants no access. A client that doesn't declare the extension gets no session id, and the rest of its stateless traffic is unchanged.
 
 ## Events (experimental)
 

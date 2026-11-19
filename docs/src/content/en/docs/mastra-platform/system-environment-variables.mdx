@@ -26,7 +26,7 @@ Injected on every deploy.
 | `MASTRA_ENVIRONMENT_NAME` | Name of the environment, such as `production` |
 | `MASTRA_ENVIRONMENT_SLUG` | Routing slug of the environment |
 | `MASTRA_PLATFORM_REGION` | Region the environment runs in, `US` or `EU` |
-| `MASTRA_PLATFORM_ACCESS_TOKEN` | Token the deploy uses to call platform APIs, including observability |
+| `MASTRA_PLATFORM_ACCESS_TOKEN` | Token the deploy uses to call platform APIs, such as observability and [workspaces](/docs/mastra-platform/workspaces). Set unless [observability](/docs/mastra-platform/observability/overview) is turned off for the project. When it's off, store an access token as `MASTRA_PLATFORM_SECRET_KEY` instead |
 | `MASTRA_PLATFORM_BUCKET_NAME` | Bucket backing the environment's [workspace](/docs/mastra-platform/workspaces). Set when workspaces are enabled |
 | `MASTRA_WORKERS` | Set to `false` on the main service when the project declares workers, so they run only in their own service |
 
@@ -49,7 +49,7 @@ Values are resolved at deploy time and never stored in your project. An environm
 
 A deploy resolves variables in this order, last one wins:
 
-1. Variables you stored on the environment being deployed. Other environments' variables are never read. Projects still on the [legacy pipeline](/docs/mastra-platform/deploy#migrating-from-server-and-studio-deploys) use the variables stored on the project instead.
+1. Variables you stored on the environment being deployed. Other environments' variables are never read. Projects still on the [legacy pipeline](/docs/mastra-platform/deploy/overview#migrating-from-server-and-studio-deploys) use the variables stored on the project instead.
 1. Managed database variables for that environment.
 1. Platform variables.
 
@@ -67,6 +67,6 @@ Managed values aren't written to the file. They appear as name-only comments.
 
 ## Related
 
-- [Environments](/docs/mastra-platform/environments)
-- [Deploy](/docs/mastra-platform/deploy)
+- [Environments](/docs/mastra-platform/deploy/environments)
+- [Deploy](/docs/mastra-platform/deploy/overview)
 - [Hosted databases](/docs/mastra-platform/database)

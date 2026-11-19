@@ -16,6 +16,7 @@ export function InlineText({
   placeholder,
   required = false,
   multiline = false,
+  autoFocus = false,
   readOnly,
   variant,
   tone,
@@ -27,6 +28,7 @@ export function InlineText({
   placeholder?: string;
   required?: boolean;
   multiline?: boolean;
+  autoFocus?: boolean;
   readOnly: boolean;
   variant: TextStyleProps['variant'];
   tone: TextStyleProps['tone'];
@@ -46,6 +48,7 @@ export function InlineText({
       value={value}
       placeholder={placeholder}
       rows={multiline ? 1 : undefined}
+      autoFocus={autoFocus}
       {...passwordManagerOptOutProps}
       onFocus={() => {
         atFocus.current = value;

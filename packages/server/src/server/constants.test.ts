@@ -37,8 +37,17 @@ describe('isReservedRequestContextKey', () => {
     expect(requestContext.get('locale')).toBe('en');
   });
 
+  it('reserves the durable segment spans so a request body cannot choose the spans a run ends', () => {
+    const requestContext = new RequestContext();
+    mergeBodyRequestContext(requestContext, {
+      mastra__durableSegments: { 'run-1': { agentSpanData: { id: 'spoofed', traceId: 'spoofed' } } },
+    });
+
+    expect(requestContext.get('mastra__durableSegments')).toBeUndefined();
+  });
+
   it('reserves every key in the shared reserved-key list', () => {
-    expect(RESERVED_REQUEST_CONTEXT_KEYS).toHaveLength(14);
+    expect(RESERVED_REQUEST_CONTEXT_KEYS).toHaveLength(15);
     expect(new Set(RESERVED_REQUEST_CONTEXT_KEYS).size).toBe(RESERVED_REQUEST_CONTEXT_KEYS.length);
     expect(RESERVED_REQUEST_CONTEXT_KEYS).toEqual(
       expect.arrayContaining([

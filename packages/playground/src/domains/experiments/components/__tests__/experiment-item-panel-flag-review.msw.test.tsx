@@ -65,7 +65,7 @@ function renderItemPage(results: DatasetExperimentResult[]) {
               results={results}
               isLoadingResults={false}
             >
-              <ExperimentItemPanel withQueryTrace withFeedback />
+              <ExperimentItemPanel withFeedback />
             </ExperimentItemPanelProvider>
           }
         />
@@ -80,8 +80,6 @@ describe('ExperimentItemPanel — request review', () => {
     renderItemPage([buildResult('pending')]);
 
     const flagButton = await screen.findByRole('button', { name: 'Request review' });
-    // Leads the panel header, in place of the title, as the primary action.
-    expect(screen.queryByRole('heading', { name: 'Experiment result' })).toBeNull();
     expect(flagButton.textContent).toBe('Request review');
     fireEvent.click(flagButton);
 

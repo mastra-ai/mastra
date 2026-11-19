@@ -2,9 +2,12 @@ extends: existence
 message: "Remove '%s' if it's not important to the meaning of the statement."
 link: https://docs.microsoft.com/en-us/style-guide/word-choice/use-simple-words-concise-sentences
 ignorecase: true
-level: warning
+level: error
 action:
   name: remove
+# Technical qualifiers (`separately`, `silently`, `lazily`, `gracefully`,
+# `partially`, `strictly`, `deliberately`, `freely`, `safely`) are omitted: they
+# describe how a system behaves, not emphasis.
 tokens:
   - abnormally
   - absentmindedly
@@ -47,7 +50,6 @@ tokens:
   - deceivingly
   - deeply
   - defiantly
-  - deliberately
   - delightfully
   - diligently
   - dimly
@@ -72,7 +74,6 @@ tokens:
   - fortunately
   - frankly
   - frantically
-  - freely
   - frenetically
   - frightfully
   - furiously
@@ -81,7 +82,6 @@ tokens:
   - gently
   - gladly
   - gleefully
-  - gracefully
   - gratefully
   - greatly
   - greedily
@@ -114,7 +114,6 @@ tokens:
   - knavishly
   - knowingly
   - knowledgeably
-  - lazily
   - lightly
   - limply
   - lively
@@ -146,7 +145,6 @@ tokens:
   - optimistically
   - overconfidently
   - painfully
-  - partially
   - patiently
   - perfectly
   - playfully
@@ -184,21 +182,18 @@ tokens:
   - rigidly
   - roughly
   - rudely
-  - safely
   - scarcely
   - scarily
   - searchingly
   - sedately
   - seemingly
   - selfishly
-  - separately
   - seriously
   - shakily
   - sharply
   - sheepishly
   - shrilly
   - shyly
-  - silently
   - sleepily
   - slowly
   - smoothly
@@ -208,7 +203,6 @@ tokens:
   - speedily
   - stealthily
   - sternly
-  - strictly
   - suddenly
   - supposedly
   - surprisingly

@@ -65,7 +65,7 @@ async function linkedFactory(mergeRequests: () => Response, mode: 'direct' | 'pl
 
   const fetchImpl = vi.fn<typeof fetch>(async input => {
     const requested = new URL(String(input));
-    if (requested.origin === PLATFORM_URL && requested.pathname === '/v2/connections') {
+    if (requested.origin === PLATFORM_URL && requested.pathname === '/v2/projects/proj_factory/connections') {
       return json({
         connections: [{ id: PLATFORM_CONNECTION, integrationId: 'gitlab', status: 'active', accountLabel: 'acme' }],
       });
@@ -114,7 +114,14 @@ async function linkedFactory(mergeRequests: () => Response, mode: 'direct' | 'pl
   if (mode === 'platform') vi.stubGlobal('fetch', fetchImpl);
   const gitlab =
     mode === 'platform'
-      ? new PlatformGitLabIntegration({ clientConfig: { baseUrl: PLATFORM_URL, accessToken: 'platform-token' } })
+      ? new PlatformGitLabIntegration({
+          connect: {
+            baseUrl: PLATFORM_URL,
+            projectId: 'proj_factory',
+            accessToken: 'platform-token',
+            fetch: fetchImpl,
+          },
+        })
       : new GitLabIntegration({
           accessToken: 'test-token',
           accessTokenType: 'personal',
@@ -230,7 +237,10 @@ describe('GitLab sweep discovery', () => {
       expect(commits).not.toHaveBeenCalled();
       expect(await filed()).toEqual(afterFirstSweep);
 
-      mergeRequests = [pushed('def', '2030-01-03T00:00:00Z'), { ...openMergeRequest, id: 9006, iid: 6, title: 'Later MR' }];
+      mergeRequests = [
+        pushed('def', '2030-01-03T00:00:00Z'),
+        { ...openMergeRequest, id: 9006, iid: 6, title: 'Later MR' },
+      ];
       await sweep();
       expect(memberLookups() - lookupsBefore).toBeGreaterThan(2 * mergeRequestCardRefreshLookups);
       expect((await filed()).map(decision => decision.title)).toContain('Later MR');

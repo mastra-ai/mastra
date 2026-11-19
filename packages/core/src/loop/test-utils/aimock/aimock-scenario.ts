@@ -523,6 +523,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     ...(prepareStep ? { prepareStep } : {}),
     ...(transform ? { transform } : {}),
     ...(requestContext ? { requestContext } : {}),
+    ...(opts.tracingOptions ? { tracingOptions: opts.tracingOptions } : {}),
     ...(delegation ? { delegation } : {}),
     ...(hooks ? { hooks } : {}),
     ...(onIterationComplete ? { onIterationComplete } : {}),

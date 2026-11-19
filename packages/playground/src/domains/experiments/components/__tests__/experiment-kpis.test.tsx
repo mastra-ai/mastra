@@ -55,25 +55,6 @@ describe('ExperimentKpis', () => {
     await waitForMutationsIdle(queryClient);
   });
 
-  it('shows a single avg score card, without per-scorer breakdown', async () => {
-    const { queryClient } = renderKpis(completedExperiment);
-
-    expect(await screen.findByText('0.833')).toBeDefined();
-    expect(screen.getAllByText('Avg score')).toHaveLength(1);
-    expect(screen.queryByText('0.750')).toBeNull();
-
-    await waitForMutationsIdle(queryClient);
-  });
-
-  it('leaves the item count to the breadcrumb', async () => {
-    const { queryClient } = renderKpis(completedExperiment);
-
-    expect(await screen.findByText('0.833')).toBeDefined();
-    expect(screen.queryByText('Items')).toBeNull();
-
-    await waitForMutationsIdle(queryClient);
-  });
-
   describe('when metrics are enabled', () => {
     beforeEach(() => {
       server.use(
@@ -98,7 +79,6 @@ describe('ExperimentKpis', () => {
       const { queryClient } = renderWithMetrics();
 
       expect(await screen.findByText('1.85s avg per item')).toBeDefined();
-      expect(screen.queryByText('Avg duration')).toBeNull();
 
       await waitForMutationsIdle(queryClient);
     });

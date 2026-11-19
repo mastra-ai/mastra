@@ -399,7 +399,7 @@ describe('tracing when a tool call suspends', () => {
     ]);
   });
 
-  it('leaves provider cost to the resumed leg when a retry before the suspension left the leg without usage', async () => {
+  it('keeps usage and provider cost on the suspended leg when its request was retried before the suspension', async () => {
     const exporter = new TestExporter();
     let calls = 0;
     const model = new MockLanguageModelV2({
@@ -477,11 +477,14 @@ describe('tracing when a tool call suspends', () => {
       .filter(event => event.exportedSpan.type === SpanType.MODEL_GENERATION)
       .map(event => event.exportedSpan.attributes);
     expect(generations).toHaveLength(2);
-    // The retried attempt reported no usage, so the suspended leg records no tokens and the
-    // resumed leg records the tokens of both model calls. Its cost must cover both calls too.
-    expect(generations[0]?.usage?.inputTokens).toBeUndefined();
-    expect(generations[1]?.usage).toMatchObject({ inputTokens: 107, outputTokens: 23 });
-    expect(generationCosts(exporter)).toEqual([undefined, undefined]);
+    // The rejected request is re-attempted within the suspended leg's step, so that leg reports
+    // the usage and cost of the request that completed it (COR-1554).
+    expect(generations[0]?.usage).toMatchObject({ inputTokens: 100, outputTokens: 20 });
+    expect(generations[1]?.usage).toMatchObject({ inputTokens: 7, outputTokens: 3 });
+    expect(generationCosts(exporter)).toEqual([
+      { estimatedCost: 0.5, reportedStepCount: 1 },
+      { estimatedCost: 2, reportedStepCount: 1 },
+    ]);
   });
 
   it('keeps provider cost on the suspended leg when it records only some token counts', async () => {
