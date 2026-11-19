@@ -41,8 +41,7 @@ import { getSandboxTemplateBuildEnvs, serializeSandboxTemplate } from './templat
 export type PlatformSandboxNetworkIsolation = 'ISOLATED' | 'PRIVATE';
 
 export type PlatformSandboxTemplate =
-  | SandboxTemplateBuilder
-  | (() => SandboxTemplateBuilder | undefined | Promise<SandboxTemplateBuilder | undefined>);
+  SandboxTemplateBuilder | (() => SandboxTemplateBuilder | undefined | Promise<SandboxTemplateBuilder | undefined>);
 
 /**
  * In-process `sandboxId → instanceUrl` map that lets
@@ -106,6 +105,12 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
    * the same either way. Fixed when the sandbox is created.
    */
   publicPorts?: boolean;
+  /**
+   * Where a user enables the credential vault, quoted when a vault-mode create
+   * is refused because the acting user has not enabled it. Defaults to the
+   * platform API from `MASTRA_SHARED_API_URL`.
+   */
+  vaultEnableUrl?: string;
   env?: Record<string, string>;
   timeout?: number;
   instructions?: InstructionsOption;
@@ -217,6 +222,43 @@ const CREATE_RETRY_BASE_DELAY_MS = 2_000;
 const VAULT_READ_MAX_ATTEMPTS = 4;
 /** Base delay between vault-mode read retries; multiplied by the attempt number. */
 const VAULT_READ_RETRY_BASE_DELAY_MS = 1_000;
+
+function defaultVaultEnableUrl(): string {
+  const api = (process.env.MASTRA_SHARED_API_URL?.trim() || 'https://platform.mastra.ai/v1').replace(/\/$/, '');
+  return `${api}/auth/vault/enable`;
+}
+
+/**
+ * Turns the platform's refusal of a vault-mode create into an error that says
+ * what the user can do about it. A vault sandbox acts for one user: the
+ * session owner, who must have enabled the vault in the organization and
+ * still be a member. Rule-dispatched and owner-less runs have no such user.
+ */
+function vaultCreateRefusal(error: unknown, enableUrl: string): SandboxError | undefined {
+  if (!(error instanceof PlatformApiError)) return undefined;
+  const refusal = (message: string, code: string) =>
+    new SandboxError(message, code, { provider: 'platform', status: error.status, cause: error });
+  switch (error.code) {
+    case 'vault_not_enabled':
+      return refusal(
+        `This project uses the credential vault, and the session owner has not enabled it for this organization. Enable vault at ${enableUrl}, then start the session again.`,
+        'SANDBOX_VAULT_NOT_ENABLED',
+      );
+    case 'vault_user_not_member':
+      return refusal(
+        "This project uses the credential vault, and the session owner is no longer a member of this organization, so the sandbox can't act for them.",
+        'SANDBOX_VAULT_USER_NOT_MEMBER',
+      );
+    case 'vault_user_not_allowed':
+    case 'acting_user_required':
+      return refusal(
+        'This project uses the credential vault, which needs a session owned by a person who enabled it. Rule-dispatched and owner-less sessions cannot start a vault sandbox.',
+        'SANDBOX_VAULT_USER_REQUIRED',
+      );
+    default:
+      return undefined;
+  }
+}
 
 /**
  * Observability handle for a template that was requested but is still being
@@ -710,6 +752,7 @@ export class PlatformSandbox extends MastraSandbox {
   private readonly _networkIsolation?: PlatformSandboxNetworkIsolation;
   private readonly _publicPorts?: boolean;
   private readonly _env: Record<string, string>;
+  private readonly _vaultEnableUrl: string;
   private readonly _timeout?: number;
   private readonly _instructionsOverride?: InstructionsOption;
   private _createdAt: Date | null = null;
@@ -816,6 +859,7 @@ export class PlatformSandbox extends MastraSandbox {
     this._networkIsolation = options.networkIsolation;
     this._publicPorts = options.publicPorts;
     this._env = options.env ?? {};
+    this._vaultEnableUrl = options.vaultEnableUrl ?? defaultVaultEnableUrl();
     this._timeout = options.timeout;
     this._instructionsOverride = options.instructions;
     this._webSocketFactory = options.webSocketFactory;
@@ -999,7 +1043,8 @@ export class PlatformSandbox extends MastraSandbox {
         break;
       } catch (error) {
         const transient = error instanceof PlatformApiError && error.status >= 500;
-        if (!transient || attempt >= CREATE_MAX_ATTEMPTS) throw error;
+        if (!transient) throw vaultCreateRefusal(error, this._vaultEnableUrl) ?? error;
+        if (attempt >= CREATE_MAX_ATTEMPTS) throw error;
         await new Promise(resolve => setTimeout(resolve, CREATE_RETRY_BASE_DELAY_MS * attempt));
       }
     }
