@@ -3,6 +3,7 @@ import { EntityType } from '@mastra/core/observability';
 import { Fragment, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useTraceListNavigation } from '../../hooks/use-trace-list-navigation';
+import type { FeedbackOptions } from '../feedback-options';
 import type { TraceNavigation } from '../trace-navigation';
 import type { TracePanelMessagesProps, TracePanelScoreDialogProps, TracePanelSpan } from '../trace-panel';
 import { TraceSpanPanelView } from '../trace-span-panel-view';
@@ -19,7 +20,13 @@ export type TracesExplorerPanelThreadArgs = {
   depth: 2;
   /** Back to the trace panel underneath. */
   onClose: () => void;
+  /** The root's `feedbackOptions`, for the feedback views inside the thread. */
+  feedbackOptions?: FeedbackOptions;
 };
+
+/** What a feedback view needs: its trace (and span), and the root's `feedbackOptions`. */
+export type TracesExplorerPanelFeedbackArgs = { traceId: string; feedbackOptions?: FeedbackOptions };
+export type TracesExplorerPanelSpanFeedbackArgs = TracesExplorerPanelFeedbackArgs & { spanId: string };
 
 export type TracesExplorerPanelDatasetDialogArgs = {
   traceId?: string;
@@ -48,9 +55,9 @@ export type TracesExplorerPanelProps = {
   /** Replaces the open span's Output tab (e.g. a part that loads the live tool cards when it opens). */
   spanOutput?: ReactNode;
   /** The trace's feedback, in the side column's Feedback view. Shown only when feedback is on. */
-  renderFeedback?: (args: { traceId: string }) => ReactNode;
+  renderFeedback?: (args: TracesExplorerPanelFeedbackArgs) => ReactNode;
   /** The open span's feedback, in its Feedback tab. Shown only when feedback is on. */
-  renderSpanFeedback?: (args: { traceId: string; spanId: string }) => ReactNode;
+  renderSpanFeedback?: (args: TracesExplorerPanelSpanFeedbackArgs) => ReactNode;
   /** The root span's scores, in the side column's Scores view. Selecting one opens it in the score drawer. */
   renderScores?: (args: { traceId: string; rootSpanId: string; onScoreSelect: (scoreId: string) => void }) => ReactNode;
   /** The trace's full thread, stacked above the trace panel. Without it, the panel offers no full thread. */
@@ -85,7 +92,7 @@ export function TracesExplorerPanel({
   renderDatasetDialog,
   headerActionsSlot,
 }: TracesExplorerPanelProps) {
-  const { withFeedback } = useTracesConfig();
+  const { withFeedback, feedbackOptions } = useTracesConfig();
   const { rows } = useTracesList();
   const { selection, selectTrace, closeTrace, selectSpan, setSpanTab, setSpanView, selectScore, highlightSpans } =
     useTracesSelection();
@@ -168,7 +175,7 @@ export function TracesExplorerPanel({
         feedbackTabBadge={withFeedback ? trace?.feedbackCount : undefined}
         feedbackTabSlot={
           withFeedback && renderFeedback
-            ? ({ traceId: tid }) => <Fragment key={tid}>{renderFeedback({ traceId: tid })}</Fragment>
+            ? ({ traceId: tid }) => <Fragment key={tid}>{renderFeedback({ traceId: tid, feedbackOptions })}</Fragment>
             : undefined
         }
         scoresTabBadge={trace?.scores?.total}
@@ -187,7 +194,9 @@ export function TracesExplorerPanel({
           withFeedback && renderSpanFeedback
             ? ({ traceId: tid, spanId: sid }) =>
                 tid && sid ? (
-                  <Fragment key={`${tid}:${sid}`}>{renderSpanFeedback({ traceId: tid, spanId: sid })}</Fragment>
+                  <Fragment key={`${tid}:${sid}`}>
+                    {renderSpanFeedback({ traceId: tid, spanId: sid, feedbackOptions })}
+                  </Fragment>
                 ) : null
             : undefined
         }
@@ -199,6 +208,7 @@ export function TracesExplorerPanel({
         threadId: fullThreadId,
         depth: 2,
         onClose: () => setFullThreadTraceId(null),
+        feedbackOptions,
       })}
       <ScoreDataPanel depth={depth} score={featuredScore} onClose={() => selectScore(null)} />
       {renderDatasetDialog?.({

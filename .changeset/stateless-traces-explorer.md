@@ -48,19 +48,26 @@ import { TracesExplorer } from '@mastra/playground-ui/domains/traces/components/
 
 - `TracesExplorer` now requires `capabilities`, `traces`, `columns` and `onColumnsChange`, and takes `discovery`. It no longer reads the store's capabilities, lists traces, discovers fields or stores the column selection itself.
 - `TracesExplorer.FilterBar` takes its suggestions as `suggestions`, `TracesExplorer.Histogram` its counts as `data`, and `TracesExplorer.List` its usage as `usage`. `useTracesFilterBarFields()` takes the suggestions as its argument.
-- `TracesExplorer.Panel` takes the open trace as `trace` and its links as `navigation` callbacks. Its views that load their own data come in through `renderMessages`, `spanInput`, `spanOutput`, `renderFeedback`, `renderSpanFeedback`, `renderScores`, `renderThread` and `renderDatasetDialog`. `traceHref` is replaced by `navigation.onOpenTrace`, `withAddTraceToDataset` by `renderDatasetDialog`, and `onOpenScore` and `renderCreateDatasetDialog` move into your `renderThread` and `renderDatasetDialog`.
+- `TracesExplorer.Panel` takes the open trace as `trace` and its links as `navigation` callbacks. Its views that load their own data come in through `renderMessages`, `spanInput`, `spanOutput`, `renderFeedback`, `renderSpanFeedback`, `renderScores`, `renderThread` and `renderDatasetDialog`. `traceHref` is replaced by `navigation.onOpenTrace`, `withAddTraceToDataset` by `renderDatasetDialog`, and `onOpenScore` and `renderCreateDatasetDialog` move into your `renderThread` and `renderDatasetDialog`. The root's `feedbackOptions` reach your `renderFeedback`, `renderSpanFeedback` and `renderThread` in their arguments.
 - `TracesExplorerErrorRenderArgs['refetch']` now calls your `traces.onRetry`.
 - `useTracesDiscovery` is removed: use `useTracesDiscoveryQuery` and pass its result as `discovery`.
 - `ObservabilityPageLayout` takes the views to offer as `views` instead of `features`. Pass the result of `useObservabilityViews({ current, features })`.
 
 ```tsx
 // Before
-<TracesExplorer metricsSupport={metrics} selection={selection} filters={filters} onChange={setState} sort={sort} onSortChange={setSort}>
+<TracesExplorer
+  metricsSupport={metrics}
+  selection={selection}
+  filters={filters}
+  onChange={setState}
+  sort={sort}
+  onSortChange={setSort}
+>
   <TracesExplorer.Body toolbar={<TracesExplorer.FilterBar />} chart={<TracesExplorer.Histogram />}>
     <TracesExplorer.List />
     <TracesExplorer.Panel onOpenScore={openScore} traceHref={traceId => `/traces/${traceId}`} />
   </TracesExplorer.Body>
-</TracesExplorer>
+</TracesExplorer>;
 
 // After (Studio)
 const capabilities = useObservabilityCapabilities();
@@ -85,7 +92,7 @@ const discovery = useTracesDiscoveryQuery({ filters, capabilities });
     <MyList />
     <MyPanel />
   </TracesExplorer.Body>
-</TracesExplorer>
+</TracesExplorer>;
 ```
 
 Each `My*` part calls its data hook (`useTracesFilterSuggestionsQuery`, `useTracesHistogramQuery`, `useTracesUsageQuery`, `useOpenTraceQuery`) and passes the result to its explorer part. Rendered inside the body, a part loads its records only once the body shows it, as before.

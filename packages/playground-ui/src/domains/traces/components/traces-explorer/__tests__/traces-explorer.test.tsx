@@ -14,6 +14,7 @@ import type {
   TracesExplorerHistogram,
   TracesExplorerOpenTrace,
   TracesExplorerPanelProps,
+  TracesExplorerRootProps,
   TracesExplorerState,
   TracesExplorerTraces,
   TracesSort,
@@ -82,6 +83,8 @@ const appNavigation = (): Required<TraceNavigation> => ({
 type AppProps = {
   data?: AppData;
   initialTraceId?: string;
+  initialSpanId?: string;
+  feedbackOptions?: TracesExplorerRootProps['feedbackOptions'];
   onChange?: (next: TracesExplorerState) => void;
   onSortChange?: (next: TracesSort) => void;
   onColumnsChange?: (next: TraceColumnPreferences) => void;
@@ -89,9 +92,18 @@ type AppProps = {
 };
 
 /** The app: plain React state for what the explorer reports, its own data for what it draws. */
-function AppTracesPage({ data = appData(), initialTraceId, onChange, onSortChange, onColumnsChange, panel }: AppProps) {
+function AppTracesPage({
+  data = appData(),
+  initialTraceId,
+  initialSpanId,
+  feedbackOptions,
+  onChange,
+  onSortChange,
+  onColumnsChange,
+  panel,
+}: AppProps) {
   const [state, setState] = useState<TracesExplorerState>({
-    selection: { ...EMPTY_TRACES_SELECTION, traceId: initialTraceId },
+    selection: { ...EMPTY_TRACES_SELECTION, traceId: initialTraceId, spanId: initialSpanId },
     filters: DEFAULT_TRACES_FILTERS,
   });
   const [sort, setSort] = useState(DEFAULT_TRACES_SORT);
@@ -121,6 +133,7 @@ function AppTracesPage({ data = appData(), initialTraceId, onChange, onSortChang
       discovery={data.discovery}
       metricsSupport={METRICS}
       features={FEATURES}
+      feedbackOptions={feedbackOptions}
     >
       <TracesExplorer.Body
         toolbar={
@@ -497,6 +510,58 @@ describe('The traces page in an app other than Studio', () => {
       await screen.findByRole('dialog', { name: 'Trace details' });
 
       expect(screen.queryByRole('button', { name: 'Open full thread' })).toBeNull();
+    });
+  });
+  describe('when the app restricts what feedback readers can do', () => {
+    const FEEDBACK_OPTIONS = {
+      contextMode: 'resolve',
+      feedbackUserId: null,
+      allowDelete: false,
+      allowReview: false,
+    } as const;
+    const openSpan = (panel: Partial<TracesExplorerPanelProps>) => {
+      const data = appData();
+      const [root] = travelTrace.spans;
+      render(
+        <AppTracesPage
+          initialTraceId={TRACE_THREAD_ITEM_ID}
+          initialSpanId={root?.spanId}
+          feedbackOptions={FEEDBACK_OPTIONS}
+          data={{ ...data, openTrace: { ...data.openTrace, selectedSpan: { span: root, isLoading: false } } }}
+          panel={panel}
+        />,
+      );
+    };
+
+    it("hands the options to the trace's feedback view", async () => {
+      const renderFeedback = vi.fn<NonNullable<TracesExplorerPanelProps['renderFeedback']>>(() => null);
+      openSpan({ renderFeedback });
+      await screen.findByRole('dialog', { name: 'Trace details' });
+
+      expect(renderFeedback).toHaveBeenLastCalledWith({
+        traceId: TRACE_THREAD_ITEM_ID,
+        feedbackOptions: FEEDBACK_OPTIONS,
+      });
+    });
+
+    it("hands the options to the open span's feedback view", async () => {
+      const renderSpanFeedback = vi.fn<NonNullable<TracesExplorerPanelProps['renderSpanFeedback']>>(() => null);
+      openSpan({ renderSpanFeedback });
+      await screen.findByRole('dialog', { name: 'Trace details' });
+
+      expect(renderSpanFeedback).toHaveBeenLastCalledWith({
+        traceId: TRACE_THREAD_ITEM_ID,
+        spanId: 'agent-root',
+        feedbackOptions: FEEDBACK_OPTIONS,
+      });
+    });
+
+    it('hands the options to the full thread', async () => {
+      const renderThread = vi.fn<NonNullable<TracesExplorerPanelProps['renderThread']>>(() => null);
+      openSpan({ renderThread });
+      await screen.findByRole('dialog', { name: 'Trace details' });
+
+      expect(renderThread).toHaveBeenLastCalledWith(expect.objectContaining({ feedbackOptions: FEEDBACK_OPTIONS }));
     });
   });
 });

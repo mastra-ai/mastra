@@ -43,7 +43,9 @@ export type { TracesExplorerHistogramProps } from './traces-explorer-histogram';
 export type { TracesExplorerListProps } from './traces-explorer-list';
 export type {
   TracesExplorerPanelDatasetDialogArgs,
+  TracesExplorerPanelFeedbackArgs,
   TracesExplorerPanelProps,
+  TracesExplorerPanelSpanFeedbackArgs,
   TracesExplorerPanelThreadArgs,
 } from './traces-explorer-panel';
 export type { TracesExplorerSavedViewsProps } from './traces-explorer-saved-views';

@@ -69,7 +69,10 @@ export type TracesExplorerRootProps = {
   features?: TracesExplorerFeatures;
   /** Host-selected root projection. Hosts should offer aggregated roots only when the server advertises support. */
   rootSource?: TracesRootSource;
-  /** Write context and action support for feedback in trace, span and thread panels. */
+  /**
+   * Write context and action support for feedback in trace, span and thread panels. The panel hands it to
+   * its feedback and thread views (`renderFeedback`, `renderSpanFeedback`, `renderThread`).
+   */
   feedbackOptions?: FeedbackOptions;
   /** The host's default filters. Filters matching them don't count as applied (e.g. in empty states). */
   initialFilters?: TracesFilters;

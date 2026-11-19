@@ -12,7 +12,6 @@ import { useTracesHistogramQuery } from '../../../hooks/use-traces-histogram-que
 import { useTracesListQuery } from '../../../hooks/use-traces-list-query';
 import { useTracesUsageQuery } from '../../../hooks/use-traces-usage-query';
 import type { TraceColumnPreferences } from '../../../trace-list-columns';
-import type { FeedbackOptions } from '../../feedback-options';
 import { LiveSpanInput, LiveSpanOutput, LiveTraceMessages } from '../../live-parts';
 import { SpanFeedbackTab } from '../../span-feedback-tab';
 import { TraceFeedbackTab } from '../../trace-feedback-tab';
@@ -50,7 +49,6 @@ type StudioInputs = {
   rootSource?: TracesRootSource;
   columns: TraceColumnPreferences;
   metricsSupport: TracesMetricsSupport;
-  feedbackOptions?: FeedbackOptions;
   traceHref?: (traceId: string) => string;
   traces: TracesExplorerTraces;
 };
@@ -111,7 +109,6 @@ export function StudioTracesExplorer({
     rootSource,
     columns: columns.preferences,
     metricsSupport,
-    feedbackOptions,
     traceHref,
     traces,
   };
@@ -169,8 +166,7 @@ export function StudioList() {
 
 /** `TracesExplorer.Panel` with Studio's records, adapters and navigation; `props` override them. */
 export function StudioPanel(props: Partial<TracesExplorerPanelProps>) {
-  const { selection, capabilities, features, columns, metricsSupport, feedbackOptions, traceHref, traces } =
-    useStudioInputs();
+  const { selection, capabilities, features, columns, metricsSupport, traceHref, traces } = useStudioInputs();
   const support = resolveTracesSupport(capabilities, features);
   const trace = useOpenTraceQuery({ selection, traces, capabilities, features, columns, metricsSupport });
   const studioNavigation = useStudioTraceNavigation();
@@ -191,10 +187,8 @@ export function StudioPanel(props: Partial<TracesExplorerPanelProps>) {
       renderMessages={messages => <LiveTraceMessages {...messages} />}
       spanInput={<LiveSpanInput />}
       spanOutput={<LiveSpanOutput />}
-      renderFeedback={({ traceId }) => <TraceFeedbackTab traceId={traceId} feedbackOptions={feedbackOptions} />}
-      renderSpanFeedback={({ traceId, spanId }) => (
-        <SpanFeedbackTab traceId={traceId} spanId={spanId} feedbackOptions={feedbackOptions} />
-      )}
+      renderFeedback={feedback => <TraceFeedbackTab {...feedback} />}
+      renderSpanFeedback={feedback => <SpanFeedbackTab {...feedback} />}
       renderScores={({ traceId, rootSpanId, onScoreSelect }) => (
         <TraceScoresList traceId={traceId} spanId={rootSpanId} onScoreSelect={onScoreSelect} />
       )}
@@ -203,7 +197,6 @@ export function StudioPanel(props: Partial<TracesExplorerPanelProps>) {
           {...thread}
           withQueryTrace={support.withQueryTrace}
           withFeedback={support.withFeedback}
-          feedbackOptions={feedbackOptions}
           onOpenScore={() => {}}
         />
       )}

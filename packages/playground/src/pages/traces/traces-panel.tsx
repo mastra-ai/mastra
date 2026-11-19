@@ -75,8 +75,8 @@ export const TracesPanel = memo(function TracesPanel({
       renderMessages={messages => <LiveTraceMessages {...messages} />}
       spanInput={<LiveSpanInput />}
       spanOutput={<LiveSpanOutput />}
-      renderFeedback={({ traceId }) => <TraceFeedbackTab traceId={traceId} />}
-      renderSpanFeedback={({ traceId, spanId }) => <SpanFeedbackTab traceId={traceId} spanId={spanId} />}
+      renderFeedback={feedback => <TraceFeedbackTab {...feedback} />}
+      renderSpanFeedback={feedback => <SpanFeedbackTab {...feedback} />}
       renderScores={({ traceId, rootSpanId, onScoreSelect }) => (
         <TraceScoresList traceId={traceId} spanId={rootSpanId} onScoreSelect={onScoreSelect} />
       )}
