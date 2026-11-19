@@ -1,0 +1,52 @@
+---
+title: "Rerank | Gateway"
+description: "Rank documents by relevance to a query with Gateway's rerank endpoint."
+---
+
+# Rerank
+
+```text
+POST https://gateway-api.mastra.ai/v1/rerank
+```
+
+Orders documents by relevance to a query. Use it after retrieval to pick the best context for a prompt.
+
+```bash
+curl https://gateway-api.mastra.ai/v1/rerank \
+  -H "Authorization: Bearer $MASTRA_GATEWAY_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "cohere/rerank-v5-fast",
+    "query": "capital of France",
+    "documents": ["Berlin is in Germany.", "Paris is the capital of France."],
+    "top_n": 1
+  }'
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'model',
+    type: 'string',
+    description: 'A rerank model from [`/v1/models`](/docs/mastra-platform/gateway/api/models).',
+  },
+  {
+    name: 'query',
+    type: 'string',
+    description: 'The search query.',
+  },
+  {
+    name: 'documents',
+    type: 'string[]',
+    description: '1 to 1,000 non-empty strings.',
+  },
+  {
+    name: 'top_n',
+    type: 'number',
+    isOptional: true,
+    description: "Number of results to return. Can't exceed the number of documents.",
+  },
+]}
+/>
+
+The response contains `results`, each with the `index` of a document in your request and its `relevance_score`, ordered from most to least relevant.
