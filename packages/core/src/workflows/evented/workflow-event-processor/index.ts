@@ -1714,11 +1714,9 @@ export class WorkflowEventProcessor extends EventProcessor {
         },
         step,
         prevResult,
-        // A restarted child re-drives the stored occurrence, so it completes under that
-        // occurrence too; otherwise the leaf stays 'running' and the next iteration is stale.
-        !parentWorkflow.timeTravel && !parentWorkflow.resumeSteps?.length
-          ? loopStepResults[getEntryId(step.step)]?.metadata?.startedBy
-          : undefined,
+        // A restarted or resumed child re-drives the stored occurrence, so it completes under
+        // that occurrence too; otherwise the leaf stays 'running' and the next iteration is stale.
+        !parentWorkflow.timeTravel ? loopStepResults[getEntryId(step.step)]?.metadata?.startedBy : undefined,
       );
       return;
     }
