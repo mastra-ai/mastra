@@ -39873,9 +39873,9 @@
     },
     "packages/mcp-apps-components/src/__tests__/trace-apps.test.ts": {
       "tier": "in",
-      "since": "2026-11-18",
-      "last_failure": null,
-      "reason": "new"
+      "since": "2026-11-19",
+      "last_failure": "2026-11-19",
+      "reason": "versioning-fail"
     },
     "packages/mcp-apps-components/src/__tests__/trace-viewer.test.tsx": {
       "tier": "in",
