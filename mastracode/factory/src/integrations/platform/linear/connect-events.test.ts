@@ -64,12 +64,18 @@ function delivery(
 const projectA = { id: 'project-a', orgId: 'org-a' };
 const projectB = { id: 'project-b', orgId: 'org-b' };
 
-/** Stub deps: `tracked` maps `${orgId}:${projectId}` to the Linear source keys that project has a card for. */
-function stubDeps(tracked: Record<string, string[]> = { 'org-a:project-a': ['linear:ENG-42'] }) {
+/**
+ * Stub deps: `tracked` maps `${orgId}:${projectId}` to the Linear source keys that project has a card for.
+ * `conn-workspace-1` belongs to org A (scoped to project A) unless `resourceId` says otherwise.
+ */
+function stubDeps(
+  tracked: Record<string, string[]> = { 'org-a:project-a': ['linear:ENG-42'] },
+  { resourceId = 'project-a' }: { resourceId?: string | null } = {},
+) {
   const ingested: LinearRulesIngress[] = [];
   const deps = {
     connectionWorkspace: vi.fn(async (connectionId: string) =>
-      connectionId === 'conn-workspace-1' ? { linearWorkspaceId: 'workspace-1' } : null,
+      connectionId === 'conn-workspace-1' ? { linearWorkspaceId: 'workspace-1', resourceId } : null,
     ),
     projects: { listAll: vi.fn(async () => [projectA, projectB]) },
     workItems: {
@@ -161,6 +167,59 @@ describe('handleLinearConnectEvent', () => {
     await handleLinearConnectEvent(delivery(issueWebhook()), deps);
 
     expect(ingested.map(input => `${input.orgId}:${input.factoryProjectId}`)).toEqual(['org-a:project-a']);
+  });
+
+  it("never updates another org's card that only knows the issue's identifier", async () => {
+    // Org A owns the connection and has no card; org B's identifier-only ENG-42 is another workspace's issue.
+    const { deps, ingested } = stubDeps({ 'org-b:project-b': ['linear:ENG-42'] });
+
+    await expect(handleLinearConnectEvent(delivery(issueWebhook()), deps)).resolves.toBe('dispatched');
+
+    expect(ingested).toEqual([]);
+    expect(deps.workItems.listShared).not.toHaveBeenCalledWith(expect.objectContaining({ orgId: 'org-b' }));
+  });
+
+  it("matches an org-level connection's identifier-only cards when the deployment has one org", async () => {
+    const { deps, ingested } = stubDeps({ 'org-a:project-a': ['linear:ENG-42'] }, { resourceId: null });
+    deps.projects.listAll.mockResolvedValue([projectA, { id: 'project-a2', orgId: 'org-a' }]);
+
+    await handleLinearConnectEvent(delivery(issueWebhook()), deps);
+
+    expect(ingested.map(input => `${input.orgId}:${input.factoryProjectId}`)).toEqual(['org-a:project-a']);
+  });
+
+  it('updates only cards that know the issue id when an org-level connection serves several orgs', async () => {
+    // Which org owns the connection can't be told, so an identifier alone never matches.
+    const { deps, ingested } = stubDeps({}, { resourceId: null });
+    deps.workItems.listShared.mockImplementation(async ({ orgId }) =>
+      orgId === 'org-a'
+        ? [
+            {
+              id: 'card-a',
+              externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42' },
+              workItem: { metadata: {} },
+            },
+          ]
+        : [
+            {
+              id: 'card-b',
+              externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42' },
+              workItem: { metadata: { linearIssueId: 'issue-1' } },
+            },
+          ],
+    );
+
+    await handleLinearConnectEvent(delivery(issueWebhook()), deps);
+
+    expect(ingested.map(input => `${input.orgId}:${input.factoryProjectId}`)).toEqual(['org-b:project-b']);
+  });
+
+  it('skips an event whose connection is scoped to a Factory project this deployment lacks', async () => {
+    const { deps, ingested } = stubDeps(undefined, { resourceId: 'project-gone' });
+
+    await expect(handleLinearConnectEvent(delivery(issueWebhook()), deps)).resolves.toBe('unknown_connection');
+
+    expect(ingested).toEqual([]);
   });
 
   it('dispatches nothing when no project tracks the issue', async () => {
@@ -271,7 +330,9 @@ describe('handleLinearConnectEvent', () => {
   });
 
   it('throws when a project cannot take the update, so the worker retries, and still updates the others', async () => {
-    const { deps, ingested } = stubDeps({ 'org-a:project-a': ['linear:ENG-42'], 'org-b:project-b': ['linear:ENG-42'] });
+    // Two of org A's projects track the issue (another org's identifier-only card is never matched).
+    const { deps, ingested } = stubDeps({ 'org-a:project-a': ['linear:ENG-42'], 'org-a:project-a2': ['linear:ENG-42'] });
+    deps.projects.listAll.mockResolvedValue([projectA, { id: 'project-a2', orgId: 'org-a' }]);
     deps.ingest.mockImplementationOnce(async () => {
       throw new Error('storage unavailable');
     });
@@ -279,7 +340,7 @@ describe('handleLinearConnectEvent', () => {
     await expect(handleLinearConnectEvent(delivery(issueWebhook()), deps)).rejects.toThrow(
       'Linear issue ENG-42 could not be applied to project-a: storage unavailable',
     );
-    expect(ingested.map(input => input.factoryProjectId)).toEqual(['project-b']);
+    expect(ingested.map(input => input.factoryProjectId)).toEqual(['project-a2']);
     // Not remembered: the retry runs it again.
     expect(deps.recentKeys.size).toBe(0);
 
