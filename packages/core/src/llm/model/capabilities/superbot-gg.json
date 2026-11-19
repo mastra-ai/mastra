@@ -1,0 +1,18 @@
+{
+  "attachment": ["superbot", "superbot-fast"],
+  "temperature": ["superbot", "superbot-fast"],
+  "reasoning": {
+    "superbot-fast": [
+      {
+        "type": "effort",
+        "values": ["none", "low"]
+      }
+    ],
+    "superbot": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ]
+  }
+}

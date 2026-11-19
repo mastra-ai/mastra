@@ -1064,9 +1064,10 @@ describe('Processor Tracing Tests', () => {
      * Expected span structure:
      * - test-agent AGENT_RUN (root)
      *   - MODEL_GENERATION
-     *     - MODEL_STEP (step 0, the rejected call)
+     *     - MODEL_STEP (step 0: the rejected call and its retry)
      *       - request error processor: retry-once PROCESSOR_RUN
-     *     - MODEL_STEP (step 1, the retried call)
+     *
+     * The retry re-attempts the request within the same step (COR-1554).
      */
     it('should nest request error processor spans under the model step whose call failed', async () => {
       let calls = 0;
@@ -1120,7 +1121,7 @@ describe('Processor Tracing Tests', () => {
       }
 
       const modelStepSpans = testExporter.getModelStepSpans();
-      expect(modelStepSpans.length).toBe(2);
+      expect(modelStepSpans.length).toBe(1);
       const failedStepSpan = modelStepSpans.find(s => (s.attributes as any)?.stepIndex === 0);
       expect(failedStepSpan).toBeDefined();
 

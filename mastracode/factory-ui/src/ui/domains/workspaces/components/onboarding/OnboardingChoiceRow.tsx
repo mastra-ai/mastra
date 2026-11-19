@@ -45,7 +45,7 @@ export function OnboardingChoiceRow({
         aria-describedby={meta ? metaId : undefined}
         className="sr-only"
       />
-      <span className="text-muted-foreground flex size-5 shrink-0 items-center justify-center [&_svg]:size-4">
+      <span className="text-muted-foreground [&_svg]:size-icon-md flex size-5 shrink-0 items-center justify-center">
         {icon}
       </span>
       <span className="flex min-w-0 flex-1 flex-col">

@@ -214,7 +214,7 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
   }
 
   /** Await in-flight routed handler promises, draining until empty. */
-  private async drainPendingHandlers(): Promise<void> {
+  async drainPendingHandlers(): Promise<void> {
     let iterations = 0;
     while (this.pendingHandlers.size > 0) {
       await Promise.allSettled([...this.pendingHandlers]);

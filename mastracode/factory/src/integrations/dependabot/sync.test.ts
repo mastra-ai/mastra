@@ -136,6 +136,6 @@ describe('boardEventFor', () => {
 
   it('reopens the card an open alert already has, so a reopened dismissal returns to the board', () => {
     expect(boardEventFor({ event: 'alertObserved', alert, item })).toEqual({ type: 'work_item.reopened' });
-    expect(boardEventFor({ event: 'alertObserved', alert })).toEqual({ type: 'work_item.created' });
+    expect(boardEventFor({ event: 'alertObserved', alert })).toEqual({ type: 'work_item.opened' });
   });
 });

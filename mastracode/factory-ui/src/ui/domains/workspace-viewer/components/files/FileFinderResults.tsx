@@ -112,7 +112,7 @@ export function FileFinderResults({ workspacePath, finder, changes }: FileFinder
                 }}
                 onClick={() => finder.open(path)}
               >
-                <span aria-hidden className="flex shrink-0 items-center [&>svg]:size-3.5">
+                <span aria-hidden className="[&>svg]:size-icon-sm flex shrink-0 items-center">
                   {getFileIcon(path)}
                 </span>
                 <span className="text-muted-foreground max-w-full shrink-0 truncate">

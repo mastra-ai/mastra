@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 
-import { scopeTitle } from '../lib/pageAddress';
+import { scopeSource, scopeTitle } from '../lib/pageAddress';
 import { buildPageTree, childCountLabel, pageAncestorIds, visiblePageRows } from '../lib/pageTree';
 import { prefersMotion } from '../lib/useLeavingNodes';
 import type { KnowledgePagePayload } from '../pageTypes';
@@ -247,7 +247,7 @@ export function KnowledgePageTree({
                 <button
                   type="button"
                   tabIndex={-1}
-                  aria-label={row.expanded ? `Collapse ${row.page.name}` : `Expand ${row.page.name}`}
+                  aria-label={row.expanded ? `Collapse ${scopeTitle(row.page)}` : `Expand ${scopeTitle(row.page)}`}
                   className="flex size-3 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground"
                   onClick={event => {
                     event.stopPropagation();
@@ -259,10 +259,10 @@ export function KnowledgePageTree({
               ) : (
                 <span className="size-3 shrink-0" aria-hidden />
               )}
-              <span className="flex shrink-0 items-center text-muted-foreground [&>svg]:size-3.5" aria-hidden>
-                {row.page.isScope && scopeTitle(row.page) !== row.page.name ? (
+              <span className="flex shrink-0 items-center text-muted-foreground [&>svg]:size-icon-sm" aria-hidden>
+                {scopeSource(row.page)?.icon ? (
                   <KnowledgeSourceIcon page={row.page} />
-                ) : row.hasChildren ? (
+                ) : row.page.isScope || row.hasChildren ? (
                   <IconFolder1 />
                 ) : (
                   <IconFileText />
@@ -283,7 +283,7 @@ export function KnowledgePageTree({
               {pinned.has(row.page.id) ? (
                 <IconPin className="size-icon-xs shrink-0 text-badge-amber-indicator" aria-label="Pinned" />
               ) : null}
-              {row.page.isScope && row.page.address && row.page.address !== row.page.name ? (
+              {row.page.isScope && row.page.address && row.page.address !== scopeTitle(row.page) ? (
                 <span
                   data-testid="knowledge-tree-address"
                   className="max-w-1/2 min-w-0 truncate text-caption text-muted-foreground"

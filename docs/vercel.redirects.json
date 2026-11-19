@@ -42,7 +42,7 @@
     },
     {
       "source": "/docs/observability/tracing/exporters/cloud",
-      "destination": "/docs/mastra-platform/observability",
+      "destination": "/docs/mastra-platform/observability/overview",
       "permanent": true
     },
     {
@@ -2012,7 +2012,7 @@
     },
     {
       "source": "/docs/observability/integrations/exporters/mastra-platform",
-      "destination": "/docs/mastra-platform/observability",
+      "destination": "/docs/mastra-platform/observability/overview",
       "permanent": true
     },
     {
@@ -2363,6 +2363,46 @@
     {
       "source": "/docs/deployment/cloud-providers/vercel",
       "destination": "/integrations/deploy/vercel",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/deploy",
+      "destination": "/docs/mastra-platform/deploy/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/observability",
+      "destination": "/docs/mastra-platform/observability/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/trace-intelligence",
+      "destination": "/docs/mastra-platform/observability/trace-intelligence",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/server",
+      "destination": "/docs/mastra-platform/deploy/server",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/studio",
+      "destination": "/docs/mastra-platform/deploy/studio",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/github",
+      "destination": "/docs/mastra-platform/deploy/github",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/environments",
+      "destination": "/docs/mastra-platform/deploy/environments",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/regions",
+      "destination": "/docs/mastra-platform/deploy/regions",
       "permanent": true
     }
   ]

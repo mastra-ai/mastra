@@ -22,10 +22,22 @@ export type StoredPhaseInfo = StoredBoardInfo['phases'][number];
 export type ReplaceBoardBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.boardReplace.bodySchema>;
 export type IntakeRouteListResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeRouteList.responseSchema>;
 export type IntakeRouteInfo = IntakeRouteListResponse['intakeRoutes'][number];
+export type IntakeOrderResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeOrderGet.responseSchema>;
+export type IntakeNotRoutedResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeNotRoutedList.responseSchema>;
+export type IntakeDecisionInfo = IntakeNotRoutedResponse['notRouted'][number];
+export type IntakeRouteAgainResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeRouteAgain.responseSchema>;
+export type IntakeSkippedResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeSkippedList.responseSchema>;
 export type IntakeRouteInput = z.input<typeof FACTORY_ROUTE_CONTRACTS.intakeRouteCreate.bodySchema>;
 export type IntakeRoutePatch = z.input<typeof FACTORY_ROUTE_CONTRACTS.intakeRouteUpdate.bodySchema>;
+export type IntakeDryRunBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.intakeDryRun.bodySchema>;
+export type IntakeDryRunResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeDryRun.responseSchema>;
+export type IntakeTestBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.intakeTest.bodySchema>;
+export type IntakeTestResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeTest.responseSchema>;
 export type CreateBoardBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.boardCreate.bodySchema>;
 export type WorkItemStarters = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemStarters.responseSchema>;
+export type WorkItemSessionRepository = z.infer<
+  typeof FACTORY_ROUTE_CONTRACTS.workItemSessionRepository.responseSchema
+>;
 export type WorkItemActivity = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemActivity.responseSchema>;
 export type WorkItemListResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema>;
 export type BoardPhasesResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.boardPhases.responseSchema>;
@@ -62,6 +74,7 @@ export interface SessionRowsRequest {
   owner: string;
   status?: SessionRowsQuery['status'];
   updated?: SessionRowsQuery['updated'];
+  source?: SessionRowsQuery['source'];
   children: boolean;
   pin: readonly string[];
   open?: string;
@@ -145,8 +158,11 @@ export interface FactorySkillInfo {
   description: string;
   /** SKILL.md body with the frontmatter removed. */
   content: string;
-  /** Shipped with Factory, the app's `factory-skills/` folder, or `MastraFactory({ skills })`. Absent from older servers. */
-  origin?: 'bundled' | 'folder' | 'code';
+  /**
+   * Shipped with Factory, the app's `factory-skills/` folder, `MastraFactory({ skills })`, or `project` for a skill
+   * this Factory created. Absent from older servers.
+   */
+  origin?: 'bundled' | 'folder' | 'code' | 'project';
   /** True for a skill Factory ships, including when the app overrides it. Absent from older servers. */
   builtIn?: boolean;
   /** Set when the SKILL.md fails runtime parsing/validation; the agent will not be able to load the skill. */
@@ -157,6 +173,8 @@ export interface FactorySkillInfo {
   edited?: { updatedBy: string; updatedAt: string };
   /** True when the original SKILL.md changed since the project's edit was made. */
   originalChanged?: boolean;
+  /** Set for a skill this Factory created (`origin: 'project'`): who saved it last, and when. */
+  created?: { updatedBy: string; updatedAt: string };
 }
 
 export interface FactorySkillsResponse {
@@ -193,6 +211,8 @@ export interface SaveCustomProviderBody {
   models: string[];
   /** When editing, the id of the provider being replaced. */
   previousId?: string;
+  /** Where to save it: the caller's own providers (the default) or their organization's. */
+  scope?: CustomProviderInfo['scope'];
 }
 
 export interface UpdateOMModelBody {

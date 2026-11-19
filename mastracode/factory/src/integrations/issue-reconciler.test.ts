@@ -54,10 +54,15 @@ async function githubSetup(
     rules?: GithubRuleOverrides;
     board?: string;
     boards?: BoardRegistry;
+    githubSources?: string[];
   } = {},
 ) {
   const seeded = await createFactoryStorageForTests();
   const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
+  await seeded.intake.saveConfig({
+    orgId: project.orgId,
+    config: { github: { enabled: true, sourceIds: input.githubSources ?? [repository.fullName] } },
+  });
   const sourceControl = seeded.sourceControl.forIntegration('github');
   const installation = await sourceControl.installations.upsert({
     orgId: project.orgId,
@@ -112,6 +117,7 @@ async function githubSetup(
       integrationStorage: seeded.integrations.forIntegration('github'),
       projects: seeded.projects,
       storage: seeded.workItems,
+      intake: seeded.intake,
       configVersion: 'factory-config-v1',
       boards: input.boards ?? createTriageWorkRegistry(),
     },
@@ -410,6 +416,40 @@ describe('issue reconcilers', () => {
     // A repeat sweep dedupes at the ingress by the stable delivery id.
     await setup.reconciler([repository]);
     expect(await setup.workItems.listDeferredDecisions('org-1', setup.project.id)).toHaveLength(1);
+  });
+
+  it('does not look for missed issues on a linked repository that is not selected for intake', async () => {
+    const listOpenIssues = vi
+      .fn()
+      .mockResolvedValue([
+        {
+          ...githubState({ url: 'https://github.com/acme/repo/issues/39' }),
+          number: 39,
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+    const setup = await githubSetup({
+      fetchIssue: vi.fn().mockResolvedValue(githubState({ labels: [] })),
+      listOpenIssues,
+      metadata: { labels: [] },
+      githubSources: ['acme/other'],
+    });
+
+    await expect(setup.reconciler([repository])).resolves.toMatchObject({ created: 0, failed: 0 });
+    expect(listOpenIssues).not.toHaveBeenCalled();
+    expect(await setup.workItems.listDeferredDecisions('org-1', setup.project.id)).toEqual([]);
+  });
+
+  it('still reconciles the cards already filed when the intake selection cannot be read', async () => {
+    const listOpenIssues = vi.fn().mockResolvedValue([]);
+    const setup = await githubSetup({
+      fetchIssue: vi.fn().mockResolvedValue(githubState({ state: 'closed', stateReason: 'not_planned' })),
+      listOpenIssues,
+    });
+    vi.spyOn(setup.intake, 'getConfig').mockRejectedValue(new Error('intake down'));
+
+    await expect(setup.reconciler([repository])).resolves.toMatchObject({ checked: 1, closed: 1, failed: 1 });
+    expect(listOpenIssues).not.toHaveBeenCalled();
   });
 
   it('replays a stable GitHub close through rules ingress without a direct metadata write', async () => {

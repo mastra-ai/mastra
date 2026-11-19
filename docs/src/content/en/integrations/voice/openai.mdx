@@ -319,7 +319,7 @@ voice.connect()
 ]}
 />
 
-#### Voice Activity Detection (VAD) Configuration
+#### Voice activity detection (VAD) configuration
 
 <PropertiesTable
   content={[
@@ -581,7 +581,7 @@ The OpenAIRealtimeVoice class emits the following events:
 ]}
 />
 
-#### OpenAI Realtime Events
+#### OpenAI Realtime events
 
 Every server event received from the OpenAI Realtime API is also emitted with the `openAIRealtime:` prefix, using the [OpenAI server event type](https://platform.openai.com/docs/api-reference/realtime-server-events) as the suffix. The callback receives the complete event payload.
 
@@ -591,7 +591,7 @@ voice.on('openAIRealtime:rate_limits.updated', event => {
 })
 ```
 
-#### Socket Events
+#### Socket events
 
 <PropertiesTable
   content={[
@@ -629,5 +629,5 @@ The following voice options are available:
 - Server-side Voice Activity Detection (VAD) provides better accuracy for speech detection
 - All audio data is processed as Int16Array format
 - The voice instance must be connected with `connect()` before using other methods
-- Always call `close()` when done to properly clean up resources
+- Always call `close()` when done to clean up resources
 - Memory management is handled by OpenAI Realtime API

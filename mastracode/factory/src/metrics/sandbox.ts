@@ -58,13 +58,13 @@ const pendingStarts = new WeakMap<object, { startedAt: number; provider: string 
 
 // Every start in flight, from the first `_start` call until the onStart hook finishes or the start
 // fails. A `Map` (entries always removed when the start settles) so a collector can list them.
-interface SessionStart {
+interface SandboxStart {
   startedAt: number;
   kind: 'first' | 'resume';
   // Whether a caller other than the eager start has had its wait recorded.
   waitRecorded: boolean;
 }
-const sessionStarts = new Map<object, SessionStart>();
+const sandboxStarts = new Map<object, SandboxStart>();
 
 // Sandboxes whose next `_start` call is the eager start, which nobody waits on.
 const eagerStarts = new WeakSet<object>();
@@ -83,10 +83,10 @@ export function markEagerSandboxStart(sandbox: object): void {
  * Times every real start of `sandbox`:
  * - the provider's part (lease and boot, up to the onStart hook), so a slow or failing provider is
  *   told apart from slow or failing repository setup;
- * - the whole start, up to the end of the onStart hook (`mastra_factory_session_ready_ms`), with
+ * - the whole start, up to the end of the onStart hook (`mastra_factory_sandbox_ready_ms`), with
  *   failures included. `kind` is `first` for a session's first sandbox and `resume` for later starts;
  * - how long the first caller other than the eager start waited for it
- *   (`mastra_factory_session_sandbox_wait_ms`): the start-up time someone actually waits through.
+ *   (`mastra_factory_sandbox_wait_ms`): the start-up time someone actually waits through.
  * Patches `_start` in place: `start()`, `ensureRunning()` and the lazy start before the first command
  * all go through it. `hadSandbox` says whether the session already had a sandbox before this instance.
  */
@@ -108,12 +108,12 @@ export function instrumentSandboxStart(sandbox: object, provider: string, hadSan
     const eager = eagerStarts.delete(sandbox);
     if (target.status === 'running') return original.apply(sandbox, args);
     const callStartedAt = performance.now();
-    let start = sessionStarts.get(sandbox);
+    let start = sandboxStarts.get(sandbox);
     const real = !start;
     if (!start) {
       start = { startedAt: callStartedAt, kind: started ? 'resume' : 'first', waitRecorded: false };
       started = true;
-      sessionStarts.set(sandbox, start);
+      sandboxStarts.set(sandbox, start);
       pendingStarts.set(sandbox, { startedAt: callStartedAt, provider });
     }
     const waits = !eager && !start.waitRecorded;
@@ -121,13 +121,13 @@ export function instrumentSandboxStart(sandbox: object, provider: string, hadSan
     const done = (outcome: 'ok' | 'error') => {
       const now = performance.now();
       if (waits) {
-        factoryMetrics().observe('sandbox', 'mastra_factory_session_sandbox_wait_ms', now - callStartedAt, {
+        factoryMetrics().observe('sandbox', 'mastra_factory_sandbox_wait_ms', now - callStartedAt, {
           kind: start.kind,
           outcome,
         });
       }
       if (real) {
-        factoryMetrics().observe('sandbox', 'mastra_factory_session_ready_ms', now - start.startedAt, {
+        factoryMetrics().observe('sandbox', 'mastra_factory_sandbox_ready_ms', now - start.startedAt, {
           kind: start.kind,
           outcome,
         });
@@ -151,7 +151,7 @@ export function instrumentSandboxStart(sandbox: object, provider: string, hadSan
     } finally {
       if (real) {
         pendingStarts.delete(sandbox);
-        sessionStarts.delete(sandbox);
+        sandboxStarts.delete(sandbox);
       }
     }
   };
@@ -172,14 +172,14 @@ export function recordSandboxAcquired(sandbox: object, outcome: string | undefin
  * Starts in flight and the age of the oldest, sent every interval (0 when none), so a start that hangs
  * shows while it's happening instead of only when it ends. Also shows the group is on while idle.
  */
-export function sessionStartsCollector(): MetricsCollector {
+export function sandboxStartsCollector(): MetricsCollector {
   return {
     collect(sink) {
       const now = performance.now();
       let oldest = 0;
-      for (const start of sessionStarts.values()) oldest = Math.max(oldest, now - start.startedAt);
-      sink.emit('mastra_factory_sessions_starting', sessionStarts.size);
-      sink.emit('mastra_factory_session_start_oldest_age_ms', oldest);
+      for (const start of sandboxStarts.values()) oldest = Math.max(oldest, now - start.startedAt);
+      sink.emit('mastra_factory_sandboxes_starting', sandboxStarts.size);
+      sink.emit('mastra_factory_sandbox_start_oldest_age_ms', oldest);
     },
   };
 }

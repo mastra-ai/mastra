@@ -22,8 +22,8 @@ function intakeRouteTo(boardKey: string, overrides: Partial<IntakeRoute> = {}): 
     enabled: true,
     position: 0,
     when: null,
-    target: { boardKey, phaseKey: null, joinClosedIssue: false },
-    on: ['work_item.created'],
+    target: { boardKey, phaseKey: null, joinClosedIssue: false, moveToBoardKey: null },
+    on: ['work_item.opened'],
     revision: 1,
     createdBy: 'user-1',
     createdAt: '2026-11-01T00:00:00.000Z',
@@ -79,9 +79,7 @@ function renderBoard(
       HttpResponse.json({ enabled: Boolean(linear), connected: Boolean(linear), workspace: null }),
     ),
     http.get('*/web/factory/projects/:factoryId/sessions', () => HttpResponse.json({ sessions: [] })),
-    http.get('*/web/factory/projects/:id/work-items', () =>
-      HttpResponse.json({ workItems, runningSessionIds: [], parkedSessionIds: [] }),
-    ),
+    http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems })),
   );
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/fp-1/${board}`] });
   const { client } = renderWithProviders(<RouterProvider router={router} />);
@@ -137,20 +135,24 @@ describe('custom-only board routing', () => {
     ['its only route moves existing cards on a later event', [intakeRouteTo('release', { on: ['work_item.closed'] })]],
     [
       'its only route joins pull requests to existing cards',
-      [intakeRouteTo('release', { target: { boardKey: 'release', phaseKey: null, joinClosedIssue: true } })],
+      [
+        intakeRouteTo('release', {
+          target: { boardKey: 'release', phaseKey: null, joinClosedIssue: true, moveToBoardKey: null },
+        }),
+      ],
     ],
-  ])('asks for an intake route, not a source, while a source is connected but %s', async (_case, intakeRoutes) => {
+  ])('asks for an intake rule, not a source, while a source is connected but %s', async (_case, intakeRoutes) => {
     const { client } = renderBoard(undefined, undefined, undefined, undefined, null, intakeRoutes);
     await waitForMutationsIdle(client);
 
     const queued = await screen.findByTestId('board-column-queued');
-    expect(await within(queued).findByText('No intake route sends cards here')).toBeVisible();
+    expect(await within(queued).findByText('No rule files new issues here')).toBeVisible();
     expect(within(queued).queryByText('Intake is clear')).not.toBeInTheDocument();
     expect(within(queued).queryByText(/No intake sources/)).not.toBeInTheDocument();
     expect(within(queued).queryByRole('link', { name: 'Connect issue source' })).not.toBeInTheDocument();
-    expect(within(queued).getByRole('link', { name: 'Add intake route' })).toHaveAttribute(
+    expect(within(queued).getByRole('link', { name: 'Add intake rule' })).toHaveAttribute(
       'href',
-      '/factories/fp-1/settings/intake#new-cards',
+      '/factories/fp-1/boards/release/rules',
     );
   });
 

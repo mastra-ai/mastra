@@ -193,6 +193,29 @@ title: Index links
 <Card href="/docs/server/auth#card" />`,
   },
   {
+    path: 'src/content/en/docs/component-props.mdx',
+    content: `---
+title: Component props
+---
+<IntegrationGrid section="Deploy" blocklist={['/docs/auth/overview', '/docs/auth/overview-extra']} />`,
+  },
+  {
+    path: 'src/content/en/integrations/sidebars.js',
+    content: `const sidebars = {
+  integrationsSidebar: [
+    { type: 'link', label: 'Auth', href: '/docs/auth/overview' },
+    { type: 'link', label: 'Auth section', href: "/docs/auth/overview#section" },
+  ],
+}
+export default sidebars`,
+  },
+  {
+    path: 'src/components/auth-link.tsx',
+    content: `export const AUTH_ROUTE = '/docs/auth/overview'
+export const OTHER_ROUTE = '/docs/auth/overview-extra'
+export const TEMPLATE_ROUTE = \`/docs/auth/overview\``,
+  },
+  {
     path: 'src/learn/content/auth.mdx',
     content: `# Learn auth
 
@@ -389,6 +412,22 @@ describe('move-doc Mastra integration tests', () => {
     expect(learnContent).toContain('[Auth website](https://mastra.ai/docs/authentication/guide)')
   })
 
+  test('rewrites quoted routes in MDX props, sidebars, and JS/TS sources', async () => {
+    await moveDocuments('/docs/auth/overview', '/docs/authentication/guide', { verbose: false })
+
+    const props = await tempSetup.readFile('src/content/en/docs/component-props.mdx')
+    expect(props).toContain("blocklist={['/docs/authentication/guide', '/docs/auth/overview-extra']}")
+
+    const sidebar = await tempSetup.readFile('src/content/en/integrations/sidebars.js')
+    expect(sidebar).toContain("href: '/docs/authentication/guide'")
+    expect(sidebar).toContain('href: "/docs/authentication/guide#section"')
+
+    const component = await tempSetup.readFile('src/components/auth-link.tsx')
+    expect(component).toContain("AUTH_ROUTE = '/docs/authentication/guide'")
+    expect(component).toContain("OTHER_ROUTE = '/docs/auth/overview-extra'")
+    expect(component).toContain('TEMPLATE_ROUTE = `/docs/authentication/guide`')
+  })
+
   test('rewrites public directory aliases when an index document moves', async () => {
     await updateMdxLinks(['/docs/server/auth/index'], '/docs/auth/overview', { verbose: false })
 
@@ -436,6 +475,23 @@ describe('move-doc Mastra integration tests', () => {
       permanent: true,
     })
     expect(redirects.some((redirect: { source: string }) => redirect.source.includes(':sdk'))).toBe(false)
+  })
+
+  test('keeps unrelated temporary redirects temporary', async () => {
+    await tempSetup.writeFile(
+      'vercel.redirects.json',
+      JSON.stringify({
+        redirects: [{ source: '/docs/temporary', destination: '/docs/elsewhere', permanent: false }],
+      }),
+    )
+    await tempSetup.writeFile('src/content/en/docs/old-page.mdx', '---\ntitle: Old\n---\n# Old')
+
+    const result = await moveDocuments('/docs/old-page', '/docs/new-page', { verbose: false })
+
+    expect(result.success).toBe(true)
+    const redirects = JSON.parse(await tempSetup.readFile('vercel.redirects.json')).redirects
+    expect(redirects).toContainEqual({ source: '/docs/temporary', destination: '/docs/elsewhere', permanent: false })
+    expect(redirects).toContainEqual({ source: '/docs/old-page', destination: '/docs/new-page', permanent: true })
   })
 
   test('updates static redirect source and destination when glob redirect covers them', async () => {

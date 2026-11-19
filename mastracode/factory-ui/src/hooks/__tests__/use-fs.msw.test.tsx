@@ -296,6 +296,16 @@ describe('normalizePlanPath', () => {
     expect(normalizePlanPath('/leadrvision/.artifacts/plans/issue.md', ROOT)).toBe('.artifacts/plans/issue.md');
   });
 
+  it('normalizes a workspace-root-relative absolute path from sandbox file tools', () => {
+    expect(
+      normalizePlanPath('/mastra/.artifacts/plans/issue.md', '/workspace/mastra/.artifacts', 'mastra/.artifacts'),
+    ).toBe('mastra/.artifacts/plans/issue.md');
+    expect(normalizePlanPath('/.artifacts/plans/issue.md', '/workspace/.artifacts')).toBe('.artifacts/plans/issue.md');
+    expect(
+      normalizePlanPath('/other/.artifacts/plans/issue.md', '/workspace/mastra/.artifacts', 'mastra/.artifacts'),
+    ).toBeUndefined();
+  });
+
   it('tolerates a trailing slash on the root', () => {
     expect(normalizePlanPath('/leadrvision/.artifacts/plans/issue.md', `${ROOT}/`)).toBe('.artifacts/plans/issue.md');
   });

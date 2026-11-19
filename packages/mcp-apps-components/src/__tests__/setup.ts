@@ -8,6 +8,13 @@ if (typeof globalThis.window !== 'undefined') {
   // The ext-apps postMessage transport logs every message it parses with console.debug.
   vi.spyOn(console, 'debug').mockImplementation(() => {});
 
+  // jsdom doesn't lay out, so it has no `scrollIntoView`; the trace timeline scrolls the picked span into view.
+  Element.prototype.scrollIntoView ??= () => {};
+  // Nor text measurement, which the span payload's code editor asks for.
+  Range.prototype.getClientRects ??= () =>
+    ({ length: 0, item: () => null, [Symbol.iterator]: [][Symbol.iterator] }) as DOMRectList;
+  Range.prototype.getBoundingClientRect ??= () => new DOMRect();
+
   // The ext-apps App reports its size to the host through a ResizeObserver.
   if (typeof globalThis.ResizeObserver === 'undefined') {
     globalThis.ResizeObserver = class {
@@ -16,6 +23,32 @@ if (typeof globalThis.window !== 'undefined') {
       disconnect() {}
     };
   }
-  // Base UI's ScrollArea, in the table widget, calls getAnimations; jsdom has no Web Animations API.
+  // Studio's trace list loads its next page when the list's end scrolls into view.
+  if (typeof globalThis.IntersectionObserver === 'undefined') {
+    globalThis.IntersectionObserver = class {
+      root = null;
+      rootMargin = '';
+      thresholds = [];
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+      takeRecords() {
+        return [];
+      }
+    } as unknown as typeof IntersectionObserver;
+  }
+  // Base UI's scroll areas wait for animations to finish; jsdom doesn't animate.
   Element.prototype.getAnimations ??= () => [];
+  // Studio's dialogs ask whether the screen is mobile-sized.
+  window.matchMedia ??= (query: string) =>
+    ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }) as MediaQueryList;
 }

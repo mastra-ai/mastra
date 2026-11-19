@@ -51,6 +51,8 @@ Choose authentication, storage, and sandboxes independently. Model providers and
 
 The server requires `DATABASE_URL`, a PostgreSQL database with pgvector. Deployments to Mastra platform receive it from the project's attached database.
 
+Slack is bundled but disabled unless you set Slack credentials. For webhook mode, set `SLACK_APP_SIGNING_SECRET`, `SLACK_APP_BOT_TOKEN`, `SLACK_APP_CLIENT_ID`, and `SLACK_APP_CLIENT_SECRET`. For Socket Mode, use `SLACK_APP_TOKEN` instead of `SLACK_APP_SIGNING_SECRET`; the other three variables are still needed. A bot token alone cannot receive events or link Slack users, and an incomplete configuration fails at startup rather than silently disabling Slack. Set `MASTRACODE_PUBLIC_URL` to your HTTPS Factory origin for account-linking callbacks; for local development, set `MASTRACODE_CHANNELS_PUBLIC_URL` to an HTTPS tunnel origin instead. See [Slack configuration](https://factory.mastra.ai/configure/slack) for app setup and callback URLs.
+
 With `MASTRA_PLATFORM_SECRET_KEY` (or `MASTRA_PLATFORM_ACCESS_TOKEN`) set, `npm run dev` runs agent commands in local sandboxes on your machine, and deployments use Mastra platform sandboxes, which also need `MASTRA_PROJECT_ID` and `MASTRA_ENVIRONMENT_ID`. To pick a sandbox yourself, pass `sandbox` to `MastraFactory` in `src/mastra/index.ts`, for example `new LocalFactorySandbox()` from `@mastra/factory`.
 
 ## Deploy

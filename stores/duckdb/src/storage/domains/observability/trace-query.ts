@@ -197,6 +197,8 @@ function compileScalarPredicate<TField extends string>(
   registry: Partial<FieldRegistry<TField>>,
   allowMetadata = false,
 ): SqlFragment {
+  if (predicate.type === 'tokens')
+    throw new coreStorage.TraceQueryUnsupportedError('Indexed token search is not supported by this store');
   if (predicate.type === 'boolean') {
     const values: unknown[] = [];
     const parts = predicate.args.map(arg => {
@@ -439,7 +441,7 @@ const ROOT_PUSHDOWN_FIELDS = new Set<string>([
 ]);
 
 function isRootPushdownPredicate(predicate: TrustedTraceQueryPredicate): boolean {
-  if (predicate.type === 'relation') return false;
+  if (predicate.type === 'relation' || predicate.type === 'tokens') return false;
   if (predicate.type === 'boolean') return predicate.args.every(isRootPushdownPredicate);
   if (predicate.type === 'not') return isRootPushdownPredicate(predicate.arg);
   return ROOT_PUSHDOWN_FIELDS.has(predicate.field);

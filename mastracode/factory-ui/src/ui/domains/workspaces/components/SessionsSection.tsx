@@ -4,6 +4,7 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Sidebar, useMaybeSidebarState } from '@mastra/playground-ui/components/Sidebar';
 import { IconCircleDashed } from '@mastra/playground-ui/icons/central/IconCircleDashed';
 import { IconClock } from '@mastra/playground-ui/icons/central/IconClock';
+import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
 import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
@@ -38,6 +39,7 @@ import {
   SESSION_STATUS_MENU_OPTIONS,
   SESSION_UPDATED_MENU_OPTIONS,
   sessionOwnerMenuOptions,
+  sessionSourceMenuOptions,
 } from './sessionPropertyOptions';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { IconArrowsUpDown } from '@mastra/playground-ui/icons/central/IconArrowsUpDown';
@@ -92,12 +94,13 @@ export function SessionsSection() {
   const { baseUrl, sessionId: chatSessionId, sessionEnabled } = useChatSessionContext();
 
   const owners = sessionOwners(response?.owners ?? [], viewer);
-  const defaultHeadings = sessionGroupHeadings(view.groupBy, {
+  const groupContext = {
     catalog: catalog.data,
     boardIds: response?.boards ?? [],
     owners,
     viewerUserId: viewer?.userId,
-  });
+  };
+  const defaultHeadings = sessionGroupHeadings(view.groupBy, groupContext);
   const menuGroups = orderGroupHeadings(defaultHeadings, groupOrderKeys);
   const groups: SessionGroup[] = factoryId
     ? menuGroups.flatMap(heading => {
@@ -169,6 +172,13 @@ export function SessionsSection() {
                 options={sessionOwnerMenuOptions(owners, viewer?.userId)}
                 value={filters.owner}
                 onValueChange={owner => changeFilters({ owner })}
+              />
+              <DropdownMenu.RadioSub
+                label="Source"
+                icon={<IconKanbanView aria-hidden />}
+                options={sessionSourceMenuOptions(sessionGroupHeadings('board', groupContext))}
+                value={filters.source}
+                onValueChange={source => changeFilters({ source })}
               />
               <DropdownMenu.RadioSub
                 label="Status"

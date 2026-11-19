@@ -6,12 +6,16 @@ import { useApiConfig } from '../../../../api/config';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import type { PlatformProviderConnection } from '../../factory/services/platformConnect';
 import { useIntakeSelection } from '../hooks/useIntakeSelection';
-import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
+import { IntakeProviderCard, toggleSource } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
 import { RoutedSourcePicker } from './IntakeSourceRouting';
-import { connectionName, PlatformConnectButton, PlatformConnectionActions } from './PlatformProviderConnections';
+import {
+  AddPlatformAccountButton,
+  connectionName,
+  PlatformConnectButton,
+  PlatformConnectionActions,
+} from './PlatformProviderConnections';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
-import { IntakeSyncControl } from './common/IntakeSyncControl';
 
 export interface VantaStatus {
   enabled: boolean;
@@ -97,20 +101,13 @@ export function VantaIntakeSection({
       connection={
         !unavailable &&
         (listed ? (
-          <PlatformConnectionActions provider="vanta" connections={connections} />
+          <>
+            {connections.length > 0 && <AddPlatformAccountButton provider="vanta" />}
+            <PlatformConnectionActions provider="vanta" connections={connections} />
+          </>
         ) : (
           <PlatformConnectButton provider="vanta" />
         ))
-      }
-      syncControl={
-        <IntakeSyncControl
-          label="Sync vulnerabilities"
-          accessibleLabel="Sync Vanta vulnerabilities"
-          description="Active Vanta vulnerabilities become security-labeled cards."
-          checked={vanta.enabled}
-          disabled={!connected}
-          onCheckedChange={enabled => selection.update(current => ({ ...current, enabled }))}
-        />
       }
       action={
         (unavailable || sourcesQuery.isError) && (
@@ -129,7 +126,7 @@ export function VantaIntakeSection({
         )
       }
     >
-      {vanta.enabled && (connected || Boolean(vanta.sourceIds?.length)) && (
+      {(connected || Boolean(vanta.sourceIds?.length)) && (
         <RoutedSourcePicker
           integrationId="vanta"
           routingLabel="Vanta"
@@ -145,9 +142,7 @@ export function VantaIntakeSection({
           loading={ready && sourcesQuery.isPending}
           error={sourcesQuery.isError ? "Couldn't load Vanta sources." : undefined}
           onRetry={() => void sourcesQuery.refetch()}
-          onToggleItem={id =>
-            selection.update(current => ({ ...current, sourceIds: toggleSourceId(current.sourceIds, id) }))
-          }
+          onToggleItem={id => selection.update(current => toggleSource(current, id))}
         />
       )}
     </IntakeProviderCard>

@@ -22,7 +22,7 @@ import type {
 } from '../types';
 import { cleanStepResult, hydrateSerializedStepErrors } from '../utils';
 import type { ParentWorkflow, WorkflowEventProcessor } from './workflow-event-processor';
-import { getStepId } from './workflow-event-processor/utils';
+import { endedPaused, getStepId } from './workflow-event-processor/utils';
 
 export class EventedExecutionEngine extends ExecutionEngine {
   protected eventProcessor: WorkflowEventProcessor;
@@ -140,6 +140,12 @@ export class EventedExecutionEngine extends ExecutionEngine {
     perStep?: boolean;
     storageVersion?: 1 | 2;
     workflowSpan?: Span<SpanType.WORKFLOW_RUN>;
+    /**
+     * Called once the start/resume event is published. `Run.startAsync()` returns at this point
+     * and leaves the returned promise to settle in the background, so lifecycle callbacks still
+     * run when the worker reports the finish.
+     */
+    onDispatched?: () => void;
   }): Promise<TOutput> {
     const { workflowSpan, ...executeParams } = params;
     if (workflowSpan) {
@@ -371,6 +377,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
       releaseTracking();
       throw err;
     }
+    params.onDispatched?.();
 
     // Wait for workflow to complete
     let resultData: any;
@@ -443,7 +450,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
         steps,
         state: finalState,
       };
-    } else if (resultData.prevResult.status === 'paused' || params.perStep) {
+    } else if (endedPaused(resultData, params.perStep)) {
       callbackArg = {
         status: 'paused',
         steps,
@@ -510,7 +517,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           steps: callbackArg.steps,
         } as TOutput;
       }
-    } else if (resultData.prevResult.status === 'paused' || params.perStep) {
+    } else if (endedPaused(resultData, params.perStep)) {
       result = {
         status: 'paused',
         steps: callbackArg.steps,

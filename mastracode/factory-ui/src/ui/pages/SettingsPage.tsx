@@ -36,7 +36,7 @@ export function SettingsPage() {
   }
 
   if (!isSettingsSection(section)) {
-    return <Navigate to="../preferences" replace state={location.state} />;
+    return <Navigate to="../account" replace state={location.state} />;
   }
   return (
     <SettingsPageLayout

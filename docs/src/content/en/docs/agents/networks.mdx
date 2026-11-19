@@ -176,7 +176,7 @@ for await (const chunk of resumedStream) {
 
 ### Automatic resumption
 
-Set `autoResumeSuspendedTools` to `true` so the network resumes suspended primitives based on the user's next message. This creates a conversational flow where users provide the required information naturally.
+Set `autoResumeSuspendedTools` to `true` so the network resumes suspended primitives based on the user's next message. This creates a conversational flow where users provide the required information in conversation.
 
 ```typescript
 const stream = await routingAgent.network('Delete the old records', {

@@ -53,7 +53,13 @@ import { z } from 'zod';
 
 import { RESUME_CLAIM_DISPATCH_LEASE_MS } from '../durable-event-payload';
 import { init } from '../index';
-import { agentLoopTermination, executionFailureTermination, generationUsage } from '../observability-compat';
+import {
+  agentLoopTermination,
+  executionFailureTermination,
+  generationUsage,
+  liveSegmentSpan,
+  segmentSpanData,
+} from '../observability-compat';
 import { InngestPubSub } from '../pubsub';
 import type { InngestFlowControlConfig } from '../types';
 import type { InngestWorkflow } from '../workflow';
@@ -722,12 +728,21 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
           // the timeout failure rather than a normal loop finish.
           const deadlineTermination =
             deadlineError && !tripwire ? executionFailureTermination(deadlineError) : undefined;
-          const completionClock = registry?.resumeModelSpanData
+          // The pair this execution reports under: the run's first, or the one its resume carried.
+          const { agentSpanData, modelSpanData, carried } = segmentSpanData(
+            requestContext,
+            state.runId,
+            state,
+            registry,
+          );
+          // The loop state's clocks belong to the run's first pair, so a carried pair gets its own or none.
+          const firstPairClocks = carried ? undefined : state;
+          const completionClock = registry?.resumeModelSpan
             ? registry.resumeCompletionStartTime
-            : state.completionStartTime;
-          const timeToFirstTokenMs = registry?.resumeModelSpanData
+            : firstPairClocks?.completionStartTime;
+          const timeToFirstTokenMs = registry?.resumeModelSpan
             ? registry.resumeTimeToFirstTokenMs
-            : state.timeToFirstTokenMs;
+            : firstPairClocks?.timeToFirstTokenMs;
           const clocks = {
             ...(completionClock ? { completionStartTime: new Date(completionClock) } : {}),
             ...(timeToFirstTokenMs !== undefined ? { timeToFirstTokenMs } : {}),
@@ -755,13 +770,10 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
                   tripwire: tripwire ?? state.lastStepResult?.tripwire,
                   maxSteps: state.options?.maxSteps ?? maxSteps,
                 });
-          if (state.modelSpanData) {
+          if (modelSpanData) {
             const modelSpan =
-              registry?.resumeModelSpan ??
-              registry?.modelSpan ??
-              (observability?.rebuildSpan(state.modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>) as
-                | AIModelGenerationSpan
-                | undefined);
+              liveSegmentSpan(modelSpanData, registry?.resumeModelSpan, registry?.modelSpan) ??
+              (observability?.rebuildSpan(modelSpanData) as AIModelGenerationSpan | undefined);
             const toolCalls = state.accumulatedSteps.flatMap(step =>
               ((step.toolCalls ?? []) as DurableToolCallInput[]).map(tc => ({
                 toolCallId: tc.toolCallId,
@@ -785,11 +797,10 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
           }
 
           // End AGENT_RUN span with final output
-          if (state.agentSpanData) {
+          if (agentSpanData) {
             const agentSpan =
-              registry?.resumeAgentSpan ??
-              registry?.agentSpan ??
-              observability?.rebuildSpan(state.agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
+              liveSegmentSpan(agentSpanData, registry?.resumeAgentSpan, registry?.agentSpan) ??
+              observability?.rebuildSpan(agentSpanData);
             agentSpan?.end({
               ...termination,
               output: { text: finalText },
@@ -821,15 +832,10 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
           // This step's span is internal and has no live parent, so a score read from it
           // would name a span that is never stored.
           const registry = getRunRegistryEntry(initData.runId, mastra);
-          const agentSpanData = registry?.resumeAgentSpanData ?? initData.agentSpanData;
+          const { agentSpanData } = segmentSpanData(requestContext, initData.runId, initData, registry);
           const agentSpan =
-            registry?.resumeAgentSpan ??
-            registry?.agentSpan ??
-            (agentSpanData
-              ? mastra?.observability
-                  ?.getSelectedInstance({})
-                  ?.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>)
-              : undefined);
+            liveSegmentSpan(agentSpanData, registry?.resumeAgentSpan, registry?.agentSpan) ??
+            (agentSpanData ? mastra?.observability?.getSelectedInstance({})?.rebuildSpan(agentSpanData) : undefined);
           void executeDurableAgentScorers({
             initData,
             finalOutput: inputData,

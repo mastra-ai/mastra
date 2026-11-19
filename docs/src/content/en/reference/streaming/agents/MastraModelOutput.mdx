@@ -407,7 +407,7 @@ These properties resolve to final values after the stream completes:
 
 ## Usage examples
 
-### Basic Text Streaming
+### Basic text streaming
 
 ```typescript
 const stream = await agent.stream('Write a haiku')
@@ -422,7 +422,7 @@ const fullText = await stream.text
 console.log(fullText)
 ```
 
-### Structured Output Streaming
+### Structured output streaming
 
 ```typescript
 const stream = await agent.stream('Generate user data', {
@@ -445,7 +445,7 @@ const user = await stream.object
 console.log('Final:', user) // { name: "John", age: 30, email: "john@example.com" }
 ```
 
-### Tool Calls and Results
+### Tool calls and results
 
 ```typescript
 const stream = await agent.stream("What's the weather in NYC?", {
@@ -460,7 +460,7 @@ console.log('Tools called:', toolCalls)
 console.log('Results:', toolResults)
 ```
 
-### Complete Output Access
+### Complete output access
 
 ```typescript
 const stream = await agent.stream('Analyze this data')
@@ -474,7 +474,7 @@ console.log({
 })
 ```
 
-### Full Stream Processing
+### Full stream processing
 
 ```typescript
 const stream = await agent.stream('Complex task')

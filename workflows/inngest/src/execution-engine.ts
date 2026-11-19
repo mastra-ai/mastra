@@ -403,6 +403,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         entityType: options.entityType as EntityType | undefined,
         traceId: parentSpan?.traceId ?? executionContext.tracingIds?.traceId,
         parentSpanId,
+        samplingDecision: executionContext.tracingIds?.sampled,
       });
 
       // Return serializable form
@@ -493,6 +494,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         ...options,
         traceId: parentSpan?.traceId ?? executionContext.tracingIds?.traceId,
         parentSpanId,
+        samplingDecision: executionContext.tracingIds?.sampled,
         tracingPolicy: this.options?.tracingPolicy,
       });
 
@@ -693,6 +695,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             nestedWorkflowOutputMode: NESTED_WORKFLOW_OUTPUT_MODE.COMPACT,
             perStep,
             tracingOptions: nestedTracingContext,
+            parentSampled: executionContext.tracingIds?.sampled,
             actor,
           },
         })) as any;
@@ -726,6 +729,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             nestedWorkflowOutputMode: NESTED_WORKFLOW_OUTPUT_MODE.COMPACT,
             perStep,
             tracingOptions: nestedTracingContext,
+            parentSampled: executionContext.tracingIds?.sampled,
             actor,
           },
         })) as any;
@@ -752,6 +756,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             nestedWorkflowOutputMode: NESTED_WORKFLOW_OUTPUT_MODE.COMPACT,
             perStep,
             tracingOptions: nestedTracingContext,
+            parentSampled: executionContext.tracingIds?.sampled,
             actor,
           },
         })) as any;

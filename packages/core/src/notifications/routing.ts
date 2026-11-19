@@ -15,6 +15,8 @@ export type NotificationRoutingRequirement = {
   requireClaimedOwner?: boolean;
   /** Scopes for the run this notification starts. */
   scopes?: string[];
+  /** The send asked an idle thread to persist, never wake: a delayed delivery keeps that. */
+  idleBehavior?: 'persist';
 };
 
 export function readNotificationRoutingRequirement(
@@ -26,8 +28,9 @@ export function readNotificationRoutingRequirement(
   const read: NotificationRoutingRequirement = {
     ...(requirement.requireClaimedOwner === true ? { requireClaimedOwner: true } : {}),
     ...(Array.isArray(requirement.scopes) && requirement.scopes.length ? { scopes: requirement.scopes } : {}),
+    ...(requirement.idleBehavior === 'persist' ? { idleBehavior: 'persist' as const } : {}),
   };
-  return read.requireClaimedOwner || read.scopes ? read : undefined;
+  return read.requireClaimedOwner || read.scopes || read.idleBehavior ? read : undefined;
 }
 
 /**
@@ -43,8 +46,9 @@ export function applyNotificationRoutingRequirement(
   const stored: NotificationRoutingRequirement = {
     ...(requirement.requireClaimedOwner ? { requireClaimedOwner: true } : {}),
     ...(requirement.scopes?.length ? { scopes: requirement.scopes } : {}),
+    ...(requirement.idleBehavior === 'persist' ? { idleBehavior: 'persist' as const } : {}),
   };
-  if (!stored.requireClaimedOwner && !stored.scopes) return callerMetadata;
+  if (!stored.requireClaimedOwner && !stored.scopes && !stored.idleBehavior) return callerMetadata;
   return { ...callerMetadata, [NOTIFICATION_ROUTING_METADATA_KEY]: stored };
 }
 

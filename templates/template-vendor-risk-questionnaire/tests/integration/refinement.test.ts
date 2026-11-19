@@ -69,9 +69,9 @@ describe('Configured evidence and registered runtime', () => {
     await mkdir(runtime);
     const configured = demoProfile(corpus);
     await writeFile(resolve(runtime, 'profile.json'), JSON.stringify(configured));
-    vi.stubEnv('VRQ_MODEL', 'openai/gpt-5-mini');
+    vi.stubEnv('VRQ_MODEL', 'openai/gpt-6.1-terra');
     const profile = await loadEvidenceProfile(runtime);
-    expect(profile.policy.model).toBe('openai/gpt-5-mini');
+    expect(profile.policy.model).toBe('openai/gpt-6.1-terra');
     expect(JSON.parse(await readFile(resolve(runtime, 'profile.json'), 'utf8'))).toEqual(configured);
     const evidence = await buildEvidenceSnapshot({
       runId: 'configured-run',

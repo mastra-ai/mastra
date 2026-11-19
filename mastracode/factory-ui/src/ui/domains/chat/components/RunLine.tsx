@@ -46,7 +46,7 @@ export function RunLine({ state, live, onSettled }: { state: LineState; live: bo
       >
         <Activity foldable={false} status={status} appearance="inline">
           <ActivityHeader>
-            <ActivityIcon className="[&_svg]:size-4">
+            <ActivityIcon className="[&_svg]:size-icon-md">
               <AgentIndicator state={pose} />
             </ActivityIcon>
             <ActivityLabel className="text-subheading">{label}</ActivityLabel>
