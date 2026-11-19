@@ -22,7 +22,8 @@ export type {
 } from './traces-explorer-support';
 export { CHECKING_USAGE_REASON, UNSUPPORTED_USAGE_REASON } from './traces-explorer-support';
 
-export type TracesConfigContextValue = TracesSupport & {
+/** The resolved support flags the parts read. Delta polling is the list query's concern, so only the host's hook reads it. */
+export type TracesConfigContextValue = Omit<TracesSupport, 'withDeltaPolling'> & {
   listId: string;
   rootSource?: TracesRootSource;
   scopedFieldIds: ReadonlySet<string>;

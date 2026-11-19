@@ -52,6 +52,7 @@ import { TracesExplorer } from '@mastra/playground-ui/domains/traces/components/
 - `TracesExplorer.Panel` takes the open trace as `trace` and its links as `navigation` callbacks. Its views that load their own data come in through `renderMessages`, `spanInput`, `spanOutput`, `renderFeedback`, `renderSpanFeedback`, `renderScores`, `renderThread` and `renderDatasetDialog`. `traceHref` is replaced by `navigation.onOpenTrace`, `withAddTraceToDataset` by `renderDatasetDialog`, and `onOpenScore` and `renderCreateDatasetDialog` move into your `renderThread` and `renderDatasetDialog`. The root's `feedbackOptions` reach your `renderFeedback`, `renderSpanFeedback` and `renderThread` in their arguments.
 - `TracesExplorerErrorRenderArgs['refetch']` now calls your `traces.onRetry`.
 - `useTracesDiscovery` is removed: use `useTracesDiscoveryQuery` and pass its result as `discovery`.
+- `useTracesConfig()` no longer returns `withDeltaPolling`: no part reads it, since only the list query polls. Read it from `resolveTracesSupport(capabilities, features)`.
 - `ObservabilityPageLayout` takes the views to offer as `views` instead of `features`. Pass the result of `useObservabilityViews({ current, features })`.
 
 ```tsx
