@@ -198,7 +198,7 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
 
     const handleInsetClick = (event: React.MouseEvent<HTMLTableRowElement>) => {
       // The click handed to the row target bubbles back here; the original click already ran onClick.
-      if (isForwardedRowClick(event)) return;
+      if (isForwardedRowClick()) return;
       forwardRowClick(event);
       onClick?.();
     };
