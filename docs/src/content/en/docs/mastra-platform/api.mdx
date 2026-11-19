@@ -317,7 +317,7 @@ The following example shows a failed deploy:
 | `summary` | One-line description of the event |
 | `source` | Always `mastra` |
 | `data` | Event-specific details. Fields vary by event type |
-| `links` | Related links, each with `href` and `text`. Can be empty |
+| `links` | Related links, each with `href` and `text`. Can be empty. For an open observability alert, includes a link to close it in Mastra platform |
 
 ### Alert event types
 
@@ -332,7 +332,7 @@ The `type` field has one of these values:
 | `service.error_rate` | **Elevated error rate** | `requests`, `errors5xx`, `ratePct`, `windowMinutes`, `environmentSlug`, `error` |
 | `service.resource_usage` | **Resource usage threshold crossed** | `projectName`, `policyName`, `metric`, `unit`, `usage`, `limit`, `thresholdKind`, `thresholdValue`, `windowMinutes`, `error` |
 | `billing.usage_threshold` | **Usage threshold crossed** | `featureId`, `featureLabel`, `thresholdDisplay`, `error` |
-| `observability.rule` | An [observability alert](/docs/mastra-platform/observability/alerts) fires or recovers | `ruleId`, `ruleName`, `ruleUrl`, `value`, `threshold`, `summary`, `groups`, `firingCount` |
+| `observability.rule` | An [observability alert](/docs/mastra-platform/observability/alerts) opens or closes | `ruleId`, `ruleName`, `ruleUrl`, `value`, `threshold`, `summary`, `groups`, `firingCount`, and `closedBy` when someone closed the alert by hand |
 
 Crash, out-of-memory, and unreachable events for the same service share a fingerprint, so one outage produces one incident. Usage threshold incidents don't send a `resolved` notification.
 
