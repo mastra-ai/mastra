@@ -528,14 +528,34 @@ export class PgKnowledgePages implements KnowledgePageStore {
   }
 
   /**
-   * Locks every descendant of `rootId` and returns their ids once the set stops changing. One
+   * Locks the live descendants of `rootId` and returns their ids once the set stops changing. One
    * recursive locking read decides membership from its own snapshot, so a child committed while it
-   * waited for a lock is missed; a fresh read after locking sees it. Once every member is locked, a
-   * new child can't be added under one (`createPage` locks its parent) until this transaction ends.
+   * waited for a lock is missed; a fresh read after locking sees it. Once every live member is
+   * locked, a new child can't be added under one (`createPage` locks its parent) until this
+   * transaction ends. Each read stops at `cap` rows, and a subtree that reaches it is refused before
+   * any of it is locked.
+   *
+   * Deleted pages aren't locked: they get no children and nothing writes them except a move or
+   * merge of a live ancestor, which holds that ancestor's lock. They still move with their parent.
    */
-  async #lockStableSubtree(db: Queryable, rootId: string): Promise<string[]> {
-    const read = async () =>
-      (await this.#rows(db, `${this.#subtree('$1')} SELECT "id" FROM sub`, [rootId])).map(row => String(row.id));
+  async #lockStableSubtree(db: Queryable, rootId: string, cap: number): Promise<string[]> {
+    const core = await loadPagesCore();
+    const read = async () => {
+      const ids = (
+        await this.#rows(
+          db,
+          `WITH RECURSIVE sub("id") AS (
+             SELECT c."id" FROM ${this.#pages} c WHERE c."parentId" = $1 AND NOT c."isScope" AND c."deletedAt" IS NULL
+             UNION ALL
+             SELECT c."id" FROM ${this.#pages} c JOIN sub ON c."parentId" = sub."id" WHERE NOT c."isScope" AND c."deletedAt" IS NULL
+           ) SELECT "id" FROM sub LIMIT $2`,
+          [rootId, cap],
+        )
+      ).map(row => String(row.id));
+      // With the root, `cap` descendants already make one page too many.
+      if (ids.length >= cap) throw new core.KnowledgeMoveTooLargeError(rootId, ids.length + 1);
+      return ids;
+    };
     const locked = new Set<string>();
     let members = await read();
     for (let round = 0; round < MOVE_LOCK_ROUNDS; round++) {
@@ -1092,7 +1112,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
         throw new Error(`Knowledge page ${input.id} can't move under itself or its own subtree`);
       }
       const parent = await this.#requireLivePage(tx, input.parentId);
-      const subtree = await this.#lockStableSubtree(tx, input.id);
+      const live = await this.#lockStableSubtree(tx, input.id, core.MAX_KNOWLEDGE_MOVE_PAGES);
       const stats = await this.#subtreeStats(tx, input.id);
       if (stats.live + 1 > core.MAX_KNOWLEDGE_MOVE_PAGES) {
         throw new core.KnowledgeMoveTooLargeError(input.id, stats.live + 1);
@@ -1108,10 +1128,15 @@ export class PgKnowledgePages implements KnowledgePageStore {
       const now = new Date();
       try {
         await tx.query(`UPDATE ${this.#pages} SET "scopeId" = $2, "depth" = "depth" + $3 WHERE "id" = ANY($1)`, [
-          subtree,
+          live,
           newScopeId,
           delta,
         ]);
+        // Deleted pages under the subtree follow it, as on the other stores.
+        await tx.query(
+          `${this.#subtree('$1')} UPDATE ${this.#pages} SET "scopeId" = $2, "depth" = "depth" + $3 WHERE "id" IN (SELECT "id" FROM sub) AND "deletedAt" IS NOT NULL`,
+          [input.id, newScopeId, delta],
+        );
         const rows = await this.#rows(
           tx,
           `UPDATE ${this.#pages} SET "parentId" = $2, "scopeId" = $3, "depth" = $4, "position" = $5, "version" = "version" + 1, "updatedAt" = $6, "updatedBy" = $7::jsonb WHERE "id" = $1 RETURNING *`,

@@ -76,10 +76,13 @@ export interface DbClient {
 /** @experimental */
 export interface TxOptions {
   /**
-   * Absolute time (epoch ms) by which the transaction's work must be done. Getting a connection,
-   * every statement and every lock wait share it: each statement runs with `statement_timeout` and
-   * `lock_timeout` set to the time left, nothing is sent once it has passed, and it's checked again
-   * before COMMIT. COMMIT itself, once sent, isn't bounded.
+   * Absolute time (epoch ms) by which the transaction's work must be done. It is checked before
+   * BEGIN (after waiting for a pool connection, or for the pinned client's queue), before each
+   * statement and again after setting that statement's timeouts, and before COMMIT. Each statement
+   * runs with `statement_timeout` and `lock_timeout` set to the time left, so the server ends it
+   * there. Not bounded: BEGIN, the `SET LOCAL` round trips, ROLLBACK, and COMMIT once sent. A
+   * deadline therefore stops new work in time but can be overrun by those round trips; an expired
+   * `pool.connect()` is abandoned and its late connection released.
    */
   deadlineAt?: number;
 }
@@ -309,6 +312,8 @@ export class TransactionClient implements TxClient {
     const left = remainingMs(this.deadlineAt);
     if (left <= 0) throw new TransactionDeadlineError();
     await this.client.query(`SET LOCAL statement_timeout = ${left}; SET LOCAL lock_timeout = ${left}`);
+    // Setting the timeouts is itself a round trip; don't send the statement if it used up the rest.
+    this.assertWithinDeadline();
     try {
       return await this.client.query(query, values);
     } catch (error) {
@@ -560,6 +565,10 @@ export class PinnedClientAdapter implements DbClient {
     // Enqueue the entire BEGIN/work/COMMIT block so concurrent callers
     // can't interleave statements inside someone else's transaction.
     return this.#enqueue(async () => {
+      // The queue wait counts against the deadline, like a pool wait does for PoolAdapter.
+      if (options?.deadlineAt !== undefined && remainingMs(options.deadlineAt) <= 0) {
+        throw new TransactionDeadlineError();
+      }
       try {
         await this.pinnedClient.query('BEGIN');
       } catch (error) {

@@ -1,4 +1,4 @@
-import { KnowledgeNotFoundError } from '@mastra/core/storage';
+import { KnowledgeMoveTooLargeError, KnowledgeNotFoundError, MAX_KNOWLEDGE_MOVE_PAGES } from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -140,5 +140,53 @@ describe('PG structure fence (r347 O3 §A‴)', () => {
       [page.id],
     );
     expect(Number(children.rows[0].n)).toBe(0);
+  });
+
+  it('refuses an oversized move before locking its subtree', async () => {
+    const { from, to } = await scopes();
+    const root = await store.createPage({ parentId: from.id, name: 'Big', provenance });
+    const values: string[] = [];
+    const params: unknown[] = [];
+    for (let i = 0; i < MAX_KNOWLEDGE_MOVE_PAGES; i++) {
+      const p = params.length;
+      values.push(
+        `($${p + 1}, $${p + 2}, $${p + 3}, false, $${p + 4}, $${p + 4}, $${p + 4}, 2, 1, $${p + 5}::jsonb, $${p + 5}::jsonb, now(), now())`,
+      );
+      params.push(`big-${n}-${i}`, from.id, root.id, `p${String(i).padStart(4, '0')}`, JSON.stringify(provenance));
+    }
+    await pool.query(
+      `INSERT INTO "${schemaName}".mastra_knowledge_pages ("id", "scopeId", "parentId", "isScope", "position", "name", "canonicalName", "depth", "version", "createdBy", "updatedBy", "createdAt", "updatedAt") VALUES ${values.join(', ')}`,
+      params,
+    );
+    // Another session holds one descendant. A move that locked the subtree before checking the cap
+    // would wait here; a bounded one refuses without touching it.
+    const locker = await creatorPool.connect();
+    await locker.query('BEGIN');
+    await locker.query(`SELECT 1 FROM "${schemaName}".mastra_knowledge_pages WHERE "id" = $1 FOR UPDATE`, [
+      `big-${n}-${MAX_KNOWLEDGE_MOVE_PAGES - 1}`,
+    ]);
+    try {
+      const outcome = await Promise.race([
+        store.movePage({ id: root.id, expectedVersion: root.version, parentId: to.id, provenance }).then(
+          () => 'moved',
+          (e: unknown) => e,
+        ),
+        new Promise(resolve => setTimeout(() => resolve('blocked'), 3000)),
+      ]);
+      expect(outcome).toBeInstanceOf(KnowledgeMoveTooLargeError);
+    } finally {
+      await locker.query('ROLLBACK');
+      locker.release();
+    }
+    expect(await rowOf(root.id)).toMatchObject({ scopeId: from.id });
+  }, 30_000);
+
+  it('moves deleted pages with their parent, as the other stores do', async () => {
+    const { from, to } = await scopes();
+    const root = await store.createPage({ parentId: from.id, name: 'Root', provenance });
+    const gone = await store.createPage({ parentId: root.id, name: 'Gone', provenance });
+    await store.deletePage({ id: gone.id, expectedVersion: gone.version, deletedBy: 'agent:test' });
+    await store.movePage({ id: root.id, expectedVersion: root.version, parentId: to.id, provenance });
+    expect(await rowOf(gone.id)).toMatchObject({ scopeId: to.id, depth: 2 });
   });
 });

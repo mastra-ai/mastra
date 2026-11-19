@@ -32,10 +32,12 @@ export interface KnowledgeStorageCapabilities {
 export interface KnowledgeTransactionOptions {
   /**
    * Absolute time (epoch ms) by which the transaction's work must be done, on adapters with
-   * `enforcesTransactionDeadline`: getting a connection, every statement and every lock wait share
-   * it, and it's checked again before COMMIT. Past it the transaction rolls back and fails with
-   * {@link KnowledgeTransactionDeadlineError}. COMMIT, once sent, isn't bounded. Ignored by a view's
-   * nested `transaction`, which shares the outer deadline.
+   * `enforcesTransactionDeadline`: waiting for a connection, every statement and every lock wait
+   * share it, and no new work starts once it has passed. Past it the transaction rolls back and
+   * fails with {@link KnowledgeTransactionDeadlineError}. It bounds when work starts and how long
+   * statements run, not every round trip: BEGIN, ROLLBACK and a COMMIT already sent can overrun
+   * it, so leave a margin. Ignored by a view's nested `transaction`, which shares the outer
+   * deadline.
    */
   deadlineAt?: number;
 }

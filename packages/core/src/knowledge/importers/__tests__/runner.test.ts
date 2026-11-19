@@ -36,8 +36,12 @@ class RecordingHost implements KnowledgeImporterHost {
   async startRun() {
     return { status: 'started' as const, runId: 'run-1', generation: 1, state: { ...this.state }, lastSeq: 0, binding };
   }
+  /** Flush attempts that never answer: a hung host. */
+  hangFlushes = false;
+
   async flush(flush: KnowledgeImporterFlush): Promise<KnowledgeImporterFlushReceipt> {
     this.attempts.push(flush);
+    if (this.hangFlushes) return new Promise(() => {});
     expect(flush.digest).toBe(await knowledgeImporterFlushDigest(flush));
     const failure = this.failures.shift();
     if (failure && !failure.afterCommit) throw failure.error;
@@ -327,5 +331,87 @@ describe('runKnowledgeImport', () => {
     const result = await runKnowledgeImport({ definitions: [importer(async () => {})], host, bindingId: 'b1' });
     expect(result).toEqual({ status: 'skipped', runId: 'run-2' });
     expect(host.finish).toBeUndefined();
+  });
+
+  describe('stop wakes the runner (O3 part 1 review)', () => {
+    const never = () => new Promise<void>(() => {});
+
+    it('returns on cancel while sync ignores its abort signal', async () => {
+      const host = new RecordingHost();
+      const startedAt = Date.now();
+      const result = await runKnowledgeImport({
+        definitions: [
+          importer(async ctx => {
+            await ctx.items.upsert(item(1));
+            await ctx.state.set('cursor', 'c1');
+            host.cancel = true;
+            await never();
+          }),
+        ],
+        host,
+        bindingId: 'b1',
+        heartbeatMs: 5,
+        budgetMs: 60_000,
+        graceMs: 60_000,
+      });
+      expect(Date.now() - startedAt).toBeLessThan(1000);
+      expect(result).toMatchObject({ outcome: 'canceled', lastSeq: 1 });
+    }, 3000);
+
+    it("doesn't wait past the hard deadline for a flush the host never answers", async () => {
+      const host = new RecordingHost();
+      host.hangFlushes = true;
+      const startedAt = Date.now();
+      const result = await runKnowledgeImport({
+        definitions: [importer(async ctx => ctx.items.upsert(item(1)))],
+        host,
+        bindingId: 'b1',
+        bufferSize: 1,
+        budgetMs: 50,
+        graceMs: 50,
+        hostCallTimeoutMs: 60_000,
+      });
+      expect(Date.now() - startedAt).toBeLessThan(1000);
+      // The flush may still commit: the finish names the seq the host holds (here none landed).
+      expect(host.attempts).toHaveLength(1);
+      expect(result).toMatchObject({ outcome: 'failed', lastSeq: 0, error: { code: 'stopped' } });
+    }, 3000);
+
+    it('bounds one host call: a flush that never answers is treated as unacknowledged and resent', async () => {
+      const host = new RecordingHost();
+      host.hangFlushes = true;
+      const result = await runKnowledgeImport({
+        definitions: [importer(async ctx => ctx.items.upsert(item(1)))],
+        host,
+        bindingId: 'b1',
+        hostCallTimeoutMs: 20,
+        maxRetries: 2,
+        retryDelayMs: () => 1,
+      });
+      expect(host.attempts.map(a => [a.seq, a.digest])).toEqual(
+        Array.from({ length: 3 }, () => [1, host.attempts[0]!.digest]),
+      );
+      expect(result).toMatchObject({ outcome: 'failed', lastSeq: 0, error: { code: 'importer_error' } });
+    }, 3000);
+
+    it('sends no flush retry after stop', async () => {
+      const host = new RecordingHost();
+      host.failures = [{ error: new KnowledgeImporterHostError('down', 503) }];
+      const result = await runKnowledgeImport({
+        definitions: [
+          importer(async ctx => {
+            host.cancel = true;
+            await ctx.items.upsert(item(1));
+          }),
+        ],
+        host,
+        bindingId: 'b1',
+        bufferSize: 1,
+        heartbeatMs: 5,
+        retryDelayMs: () => 200,
+      });
+      expect(host.attempts).toHaveLength(1);
+      expect(result).toMatchObject({ outcome: 'canceled', lastSeq: 0 });
+    }, 3000);
   });
 });

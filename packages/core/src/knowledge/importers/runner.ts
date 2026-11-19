@@ -36,6 +36,11 @@ export interface RunKnowledgeImportOptions {
   heartbeatMs?: number;
   /** Resends of one flush or finish after a 5xx or network error. Default 8. */
   maxRetries?: number;
+  /**
+   * How long one call to the host may take before it counts as a lost ack (retryable: it may have
+   * committed). Default 60 seconds.
+   */
+  hostCallTimeoutMs?: number;
   retryDelayMs?: (attempt: number) => number;
   /** The source fetch handed to the importer. Default the platform fetch. */
   fetch?: (input: string | URL, init?: RequestInit) => Promise<Response>;
@@ -51,6 +56,22 @@ export type RunKnowledgeImportResult =
    * liveness check ends it; nothing more is written for it.
    */
   | { status: 'unfinished'; runId: string; lastSeq: number };
+
+const never = new Promise<never>(() => {});
+const delay = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+
+/** `promise`, or `onTimeout()` thrown after `ms`. */
+async function within<T>(promise: Promise<T>, ms: number, onTimeout: () => Error): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => (timer = setTimeout(() => reject(onTimeout()), ms))),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 const isRetryable = (error: unknown) =>
   error instanceof KnowledgeImporterHostError && (error.status === undefined || error.status >= 500);
@@ -88,6 +109,7 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     bufferSize = 200,
     heartbeatMs = 30_000,
     maxRetries = 8,
+    hostCallTimeoutMs = 60_000,
     retryDelayMs = (attempt: number) => Math.min(250 * 2 ** attempt, 10_000),
   } = options;
 
@@ -104,18 +126,29 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
   let stop: RunStop | undefined;
   let hostFailure: KnowledgeImporterRunError | undefined;
   const controller = new AbortController();
+  let wake!: () => void;
+  /** Settles when the run stops for any reason, so nothing waits on a sync or a backoff past it. */
+  const stopped = new Promise<void>(resolve => (wake = resolve));
   const halt = (reason: RunStop['reason']) => {
     stop ??= new RunStop(reason);
     controller.abort(stop);
+    wake();
   };
 
-  async function withRetries<T>(send: () => Promise<T>): Promise<T> {
+  /**
+   * Sends with resends after a retryable failure. A call that takes longer than `hostCallTimeoutMs`
+   * counts as a lost ack. Once the run has stopped, a mutation (a flush) is not resent: its
+   * outcome stays unknown and the finish settles it. The finish itself is still resent.
+   */
+  async function withRetries<T>(send: () => Promise<T>, kind: 'mutation' | 'finish'): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       try {
-        return await send();
+        return await within(send(), hostCallTimeoutMs, () => new KnowledgeImporterHostError('host call timed out'));
       } catch (error) {
         if (!isRetryable(error) || attempt >= maxRetries) throw error;
-        await new Promise(resolve => setTimeout(resolve, retryDelayMs(attempt)));
+        if (kind === 'mutation' && stop) throw error;
+        await Promise.race([delay(retryDelayMs(attempt)), kind === 'mutation' ? stopped : never]);
+        if (kind === 'mutation' && stop) throw error;
       }
     }
   }
@@ -132,7 +165,7 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
       const request = { runId, generation, seq, digest: await knowledgeImporterFlushDigest(body), ...body };
       unsettledSeq = seq;
       try {
-        await withRetries(() => host.flush(request));
+        await withRetries(() => host.flush(request), 'mutation');
       } catch (error) {
         // A refusal (409) or a 4xx means nothing was applied; a retryable failure may have committed.
         if (!isRetryable(error)) unsettledSeq = undefined;
@@ -155,7 +188,7 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
   };
 
   const finish = (request: Omit<KnowledgeImporterFinishRequest, 'runId' | 'generation' | 'lastSeq'>) =>
-    finishRun(host, { runId, generation, ...request }, lastSeq, unsettledSeq, withRetries);
+    finishRun(host, { runId, generation, ...request }, lastSeq, unsettledSeq, send => withRetries(send, 'finish'));
 
   const importer = started.binding && options.definitions.find(d => d.id === started.binding!.importer);
   if (!importer) return finish({ outcome: 'failed', backlog: false, error: { code: 'importer_missing_from_deploy' } });
@@ -206,20 +239,16 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
       () => {},
     );
   }, heartbeatMs);
-  let deadlineReached!: () => void;
-  const deadline = new Promise<void>(resolve => (deadlineReached = resolve));
-  const hardStop = setTimeout(() => {
-    halt('stopped');
-    deadlineReached();
-  }, budgetMs + graceMs);
+  const hardDeadlineAt = startedAt + budgetMs + graceMs;
+  const hardStop = setTimeout(() => halt('stopped'), budgetMs + graceMs);
 
   let failure: KnowledgeImporterRunError | undefined;
   try {
     for (let pass = 0; pass < maxPasses; pass++) {
       backlog = false;
       try {
-        // A sync that ignores the signal is left behind at the hard deadline; its writes are refused.
-        await Promise.race([importer.sync(ctx), deadline]);
+        // A sync that ignores the signal is left behind when the run stops; its writes are refused.
+        await Promise.race([importer.sync(ctx), stopped]);
         if (!stop) await flush();
       } catch (error) {
         if (stop) break;
@@ -232,9 +261,11 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     }
   } finally {
     clearInterval(heartbeat);
-    clearTimeout(hardStop);
   }
-  await flushing;
+  // Wait for a flush in flight, but not past the hard deadline: if it is still unanswered then, its
+  // seq stays unsettled and the finish names whichever seq the host holds.
+  await Promise.race([flushing, stopped.then(() => delay(Math.max(0, hardDeadlineAt - Date.now())))]);
+  clearTimeout(hardStop);
 
   if (stop?.reason === 'canceled') return finish({ outcome: 'canceled', backlog: false });
   if (stop?.reason === 'stopped') return finish({ outcome: 'failed', backlog: false, error: { code: 'stopped' } });
