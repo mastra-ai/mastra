@@ -35317,8 +35317,8 @@
     },
     "job:store/libsql": {
       "tier": "in",
-      "since": "2026-11-18",
-      "last_failure": "2026-11-18",
+      "since": "2026-11-19",
+      "last_failure": "2026-11-19",
       "reason": "versioning-fail",
       "pr_failures": {
         "131249332487": {
