@@ -206,6 +206,19 @@ export class PgKnowledgeImporters implements KnowledgeImportersStorage {
     });
   }
 
+  /**
+   * Part of the Knowledge store's reset, inside its transaction: empties the importer tables, if
+   * they were ever created, and moves the generation forward so nothing from before can write.
+   * Creates nothing. Writers must be stopped first.
+   */
+  async clearOnReset(): Promise<void> {
+    const provisioned = await this.#client.oneOrNone(`SELECT to_regclass($1) AS t`, [this.#t.guard]);
+    if (!provisioned?.t) return;
+    const t = this.#t;
+    await this.#client.query(`TRUNCATE ${t.changes}, ${t.flushes}, ${t.runs}, ${t.state}, ${t.nodes}, ${t.bindings}`);
+    await this.#client.query(`UPDATE ${t.guard} SET generation = generation + 1, first_write_at = NULL`);
+  }
+
   async registerBinding(input: { id: string; importer: string; target: string }) {
     return this.#client.tx(async tx => {
       const inserted = await tx.oneOrNone(
@@ -277,14 +290,18 @@ export class PgKnowledgeImporters implements KnowledgeImportersStorage {
     return row ? toRun(row) : null;
   }
 
-  /** Locks the run, and the guard shared, then checks the run can still write at `generation`. */
+  /**
+   * Locks the guard shared, then the run, and checks the run can still write at `generation`. Always
+   * guard before run: a first-write flush already holds the guard FOR UPDATE when it gets here, and a
+   * standalone finish that took the run first would wait on the guard while the flush waits on the run.
+   */
   async #activeRun(tx: Queryable, runId: string, generation: number): Promise<KnowledgeImporterRunRecord> {
+    const guard = toGuard(await tx.one(`SELECT * FROM ${this.#t.guard} FOR SHARE`));
     const row = await tx.oneOrNone(`SELECT * FROM ${this.#t.runs} WHERE id = $1 FOR UPDATE`, [runId]);
     if (!row) throw await runStateError(runId, 'not_found');
     const run = toRun(row);
     if (run.status !== 'running') throw await runStateError(runId, 'not_running');
     if (run.generation !== generation) throw await runStateError(runId, 'generation');
-    const guard = toGuard(await tx.one(`SELECT * FROM ${this.#t.guard} FOR SHARE`));
     if (guard.generation !== generation) throw await runStateError(runId, 'stale_guard');
     return run;
   }

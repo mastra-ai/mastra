@@ -181,13 +181,18 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
 
   override async dangerouslyReset(): Promise<void> {
     await withClientWriteLock(this.#client, async () => {
+      // Pages and importer rows go together, in one batch: no node map outlives its pages.
+      const importerStatements = this.#importers ? await LibSQLKnowledgeImporters.resetStatements(this.#client) : [];
       await this.#client.batch(
-        [...KNOWLEDGE_RESETTABLE_TABLE_NAMES, KNOWLEDGE_PAGE_TABLES.pinAudiences, KNOWLEDGE_PAGE_TABLES.links].map(
-          table => ({
-            sql: `DROP TABLE IF EXISTS "${table}"`,
-            args: [],
-          }),
-        ),
+        [
+          ...importerStatements.map(sql => ({ sql, args: [] })),
+          ...[...KNOWLEDGE_RESETTABLE_TABLE_NAMES, KNOWLEDGE_PAGE_TABLES.pinAudiences, KNOWLEDGE_PAGE_TABLES.links].map(
+            table => ({
+              sql: `DROP TABLE IF EXISTS "${table}"`,
+              args: [],
+            }),
+          ),
+        ],
         'write',
       );
     });

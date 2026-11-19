@@ -65,6 +65,13 @@ export class InMemoryKnowledgeImportersStorage extends KnowledgeImportersStorage
     this.#s = empty();
   }
 
+  /** Part of the Knowledge store's reset: empties everything and moves the generation forward. */
+  clearOnReset(): void {
+    const { activePath, generation } = this.#s.guard;
+    this.#s = empty();
+    this.#s.guard = { activePath, generation: generation + 1, firstWriteAt: null };
+  }
+
   async registerBinding(input: { id: string; importer: string; target: string }) {
     const existing = this.#s.bindings.get(input.id);
     if (existing) {

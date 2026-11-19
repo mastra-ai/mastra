@@ -240,6 +240,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   override async dangerouslyReset(): Promise<void> {
     await this.dangerouslyClearAll();
+    this.#importers.clearOnReset();
   }
 
   async dangerouslyClearAll(): Promise<void> {

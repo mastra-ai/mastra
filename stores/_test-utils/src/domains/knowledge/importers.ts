@@ -19,6 +19,8 @@ export interface KnowledgeImportersFixture {
   unprovisioned?: { store: KnowledgeStorage; importerTablesExist(): Promise<boolean> };
   /** Concurrent transactions run on separate connections, so row locks are observable. */
   concurrentTransactions: boolean;
+  /** How many sessions are waiting on a lock right now, so a race can wait for a waiter. */
+  lockWaiters?(): Promise<number>;
   cleanup(): Promise<void>;
 }
 
@@ -256,6 +258,74 @@ export function createKnowledgeImportersStorageTests(createFixture: () => Promis
         await advancing;
         expect(await importers.getRun(runId)).toMatchObject({ lastSeq: 1 });
         expect((await importers.readWriterGuard()).generation).toBe(2);
+      });
+      // A first-write flush holds the guard FOR UPDATE and then touches the run; a standalone finish
+      // must take the guard before the run too, or each waits on the other's lock.
+      it('settles a first-write flush and a concurrent finish of the same run without deadlock', async ctx => {
+        if (!fixture.concurrentTransactions || !fixture.lockWaiters) ctx.skip();
+        await start();
+        let releaseFlush!: () => void;
+        const held = new Promise<void>(r => (releaseFlush = r));
+        let flushLocked!: () => void;
+        const locked = new Promise<void>(r => (flushLocked = r));
+        const flushing = fixture.store.transaction(async tx => {
+          await importersOf(tx).lockWriterGuard('update');
+          await importersOf(tx).markFirstWrite();
+          flushLocked();
+          await held;
+          await importersOf(tx).recordFlush({ runId, generation: 1, seq: 1, digest: 'd1', receipt: {}, counts });
+        });
+        await locked;
+        const finishing = importers.finishRun({ runId, generation: 1, lastSeq: 1, status: 'succeeded', finish: {} });
+        const settled = Promise.allSettled([finishing]);
+        for (let i = 0; i < 200 && (await fixture.lockWaiters!()) < 1; i++) await new Promise(r => setTimeout(r, 10));
+        expect(await fixture.lockWaiters!()).toBeGreaterThanOrEqual(1);
+        releaseFlush();
+        await flushing;
+        const [finish] = await settled;
+        expect(finish.status).toBe('fulfilled');
+        expect(await importers.getRun(runId)).toMatchObject({ lastSeq: 1, status: 'succeeded' });
+      });
+    });
+
+    describe('reset', () => {
+      it('clears importer rows with the pages and moves the generation forward', async () => {
+        const { scope } = await fixture.store.materializeScope({
+          address: 'org:acme',
+          declaration: 'org:$orgId',
+          name: 'Acme',
+          provenance: who,
+        });
+        const page = await fixture.store.createPage({ parentId: scope.id, key: 'a', name: 'A', provenance: who });
+        await start();
+        await importers.recordFlush({ runId, generation: 1, seq: 1, digest: 'd1', receipt: {}, counts });
+        await importers.saveNode(node('a', page.id));
+        await importers.setState('b1', { cursor: 'c1' });
+        await importers.markFirstWrite();
+        const other = fixture.otherNamespace ? importersOf(fixture.otherNamespace) : undefined;
+        await other?.dangerouslyClearAll();
+        await other?.registerBinding({ id: 'b1', importer: 'notion', target: 'org:acme#notion' });
+        await other?.setState('b1', { cursor: 'other' });
+
+        await fixture.store.dangerouslyReset();
+
+        expect(await importers.listBindings()).toEqual([]);
+        expect(await importers.getRun(runId)).toBeNull();
+        expect(await importers.getFlush(runId, 1, 1)).toBeNull();
+        expect(await importers.getNode('b1', 'a')).toBeNull();
+        expect(await importers.getNodeByPage(page.id)).toBeNull();
+        expect(await importers.getState('b1')).toEqual({});
+        expect(await importers.readWriterGuard()).toEqual({ activePath: 'new', generation: 2, firstWriteAt: null });
+        if (other) {
+          expect(await other.listBindings()).toHaveLength(1);
+          expect(await other.getState('b1')).toEqual({ cursor: 'other' });
+        }
+      });
+
+      it('resets a store whose importer tables were never created, without creating them', async ctx => {
+        if (!fixture.unprovisioned) ctx.skip();
+        await fixture.unprovisioned!.store.dangerouslyReset();
+        expect(await fixture.unprovisioned!.importerTablesExist()).toBe(false);
       });
     });
 

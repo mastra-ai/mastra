@@ -211,8 +211,13 @@ export class KnowledgePG extends KnowledgeStorage {
     return inspectPgKnowledgePagesSchema(this.#client, this.#schemaName);
   }
 
+  /** Pages and importer rows go together, in one transaction: no node map outlives its pages. */
   override async dangerouslyReset(): Promise<void> {
-    await resetPgKnowledgePagesSchema(this.#client, this.#schemaName);
+    await this.#client.tx(async tx => {
+      const client = new TransactionDbClient(tx);
+      if (this.#importers) await new PgKnowledgeImporters({ client, schemaName: this.#schemaName }).clearOnReset();
+      await resetPgKnowledgePagesSchema(client, this.#schemaName);
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {

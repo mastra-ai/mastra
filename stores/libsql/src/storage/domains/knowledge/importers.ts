@@ -191,6 +191,22 @@ export class LibSQLKnowledgeImporters implements KnowledgeImportersStorage {
     });
   }
 
+  /**
+   * Statements for the Knowledge store's reset batch: empty the importer tables, if they were ever
+   * created, and move the generation forward so nothing from before can write. Creates nothing.
+   */
+  static async resetStatements(read: Executor): Promise<string[]> {
+    const provisioned = await read.execute({
+      sql: `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`,
+      args: [T.guard],
+    });
+    if (provisioned.rows.length === 0) return [];
+    return [
+      ...[T.changes, T.flushes, T.runs, T.state, T.nodes, T.bindings].map(table => `DELETE FROM "${table}"`),
+      `UPDATE "${T.guard}" SET generation = generation + 1, firstWriteAt = NULL`,
+    ];
+  }
+
   async registerBinding(input: { id: string; importer: string; target: string }) {
     return this.#transaction(async tx => {
       const existing = (await tx.execute({ sql: `SELECT * FROM "${T.bindings}" WHERE id = ?`, args: [input.id] }))
