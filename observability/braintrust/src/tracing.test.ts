@@ -1879,6 +1879,29 @@ describe('BraintrustExporter', () => {
       expect(mockSpan.end).toHaveBeenCalledWith({ endTime: span.endTime.getTime() / 1000 });
     });
 
+    it('should end a span at its end time when spanFilter dropped its end', async () => {
+      const span = createMockSpan({
+        id: 'filtered-span',
+        name: 'test',
+        type: SpanType.GENERIC,
+        isRoot: true,
+        attributes: {},
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: span,
+      });
+
+      const endTime = new Date('2024-01-15T10:00:01.000Z');
+      await exporter.onSpanFilteredEvent({ type: 'span_filtered', traceId: span.traceId, spanId: span.id, endTime });
+      // The span is closed, so shutdown has nothing to abort.
+      await exporter.shutdown();
+
+      expect(mockSpan.end).toHaveBeenCalledExactlyOnceWith({ endTime: endTime.getTime() / 1000 });
+      expect(mockSpan.log).not.toHaveBeenCalledWith(expect.objectContaining({ error: expect.anything() }));
+    });
+
     it('should handle spans with error information', async () => {
       const errorSpan = createMockSpan({
         id: 'error-span',

@@ -1167,6 +1167,31 @@ describe('TestLangSmithExporter', () => {
   });
 
   describe('Shutdown', () => {
+    it('should end a RunTree at its end time when spanFilter dropped its end', async () => {
+      const span = createMockSpan({
+        id: 'filtered-span',
+        name: 'test',
+        type: SpanType.TOOL_CALL,
+        isRoot: true,
+        attributes: {},
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: span,
+      });
+
+      const endTime = new Date('2024-01-15T10:00:01.000Z');
+      await exporter.onSpanFilteredEvent({ type: 'span_filtered', traceId: span.traceId, spanId: span.id, endTime });
+      // The run is closed, so shutdown has nothing to abort.
+      await exporter.shutdown();
+
+      // `end(outputs, error, endTime)`: no outputs and no error, only the end time.
+      expect(mockRunTree.end).toHaveBeenCalledExactlyOnceWith(undefined, undefined, endTime.getTime());
+      expect(mockRunTree.patchRun).toHaveBeenCalledTimes(1);
+      expect(mockRunTree.error).toBeUndefined();
+    });
+
     it('should end all RunTrees and clear traceMap', async () => {
       // Create some spans
       const rootSpan = createMockSpan({

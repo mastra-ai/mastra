@@ -831,6 +831,26 @@ describe('SentryExporter', () => {
       expect(mockSpan.end).toHaveBeenCalledWith(endTime.getTime());
     });
 
+    it('should end a span at its end time when spanFilter dropped its end', async () => {
+      const span = createMockSpan({
+        id: 'filtered-span',
+        name: 'test',
+        type: SpanType.GENERIC,
+        isRoot: true,
+        attributes: {},
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: span,
+      });
+
+      const endTime = new Date('2024-01-15T10:00:01.000Z');
+      await exporter.onSpanFilteredEvent({ type: 'span_filtered', traceId: span.traceId, spanId: span.id, endTime });
+
+      expect(mockSpan.end).toHaveBeenCalledExactlyOnceWith(endTime.getTime());
+    });
+
     it('should handle errors and capture exception with the original stack trace', async () => {
       const span = createMockSpan({
         id: 'error-span',
