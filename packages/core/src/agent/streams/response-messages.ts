@@ -151,11 +151,28 @@ export function withRebuiltResponseMessages<T extends Parameters<typeof applyRes
   replay: ResponseMessagesReplay,
   payload: T,
 ): Omit<T, '_durableResponseMessagesDiff'> & { _durableResponseMessages?: ResponseMessage[] } {
+  return rebuildResponseMessages(replay, payload).payload;
+}
+
+/**
+ * Like {@link withRebuiltResponseMessages}, also returning the rebuilt list, or undefined
+ * when the reader couldn't rebuild it (the payload then reports an empty list).
+ */
+export function rebuildResponseMessages<T extends Parameters<typeof applyResponseMessages>[1]>(
+  replay: ResponseMessagesReplay,
+  payload: T,
+): {
+  payload: Omit<T, '_durableResponseMessagesDiff'> & { _durableResponseMessages?: ResponseMessage[] };
+  messages: ResponseMessage[] | undefined;
+} {
   const { _durableResponseMessagesDiff, ...rest } = payload;
   // A reader that can't rebuild the list (it missed an earlier part) reports none for this step
   // rather than a list that may not match it.
   const messages = applyResponseMessages(replay, payload);
-  return _durableResponseMessagesDiff || messages ? { ...rest, _durableResponseMessages: messages ?? [] } : rest;
+  return {
+    payload: _durableResponseMessagesDiff || messages ? { ...rest, _durableResponseMessages: messages ?? [] } : rest,
+    messages,
+  };
 }
 
 /**

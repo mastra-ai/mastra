@@ -25,7 +25,7 @@ import type {
 import type { Agent } from '../agent';
 import type { AgentExecutionOptionsBase } from '../agent.types';
 import { MessageList } from '../message-list';
-import { replayResponseMessages, withRebuiltResponseMessages } from '../streams/response-messages';
+import { rebuildResponseMessages, replayResponseMessages } from '../streams/response-messages';
 import type { ResponseMessagesReplay } from '../streams/response-messages';
 import type { AgentStreamStepFinishPayload } from '../streams/wire';
 import type { StructuredOutputOptions } from '../types';
@@ -439,6 +439,13 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
    * resolve step content from messages added during the workflow execution.
    */
   messageList?: MessageList;
+  /**
+   * Whether no execution in this process keeps `messageList` in sync with the run, e.g. a
+   * cold `observe()` or a caller whose steps run on workers in another process. Then each
+   * step-finish replaces the list's response messages with the run's list from the stream.
+   * Checked at every step-finish, since local workers may start after the stream is created.
+   */
+  messageListFollowsStream?: () => boolean;
 }
 
 /**
@@ -519,6 +526,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     experimentalTransform,
     hideSignals,
     messageList: externalMessageList,
+    messageListFollowsStream,
     replayResponseMessagesBeforeOffset,
   } = options;
 
@@ -541,6 +549,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       threadId,
       resourceId,
     });
+  // Nothing else writes to a list created here.
+  const listFollowsStream = externalMessageList ? messageListFollowsStream : () => true;
 
   // Match the plain Agent (model.loop.ts), which stamps the run id onto every step payload.
   const onStepFinishWithRunId = onStepFinish
@@ -849,10 +859,16 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           }
           if (chunk.type === 'step-finish' && chunk.payload) {
             // The event is shared with other readers and the replay cache: rewrite a copy.
-            const payload = withRebuiltResponseMessages(
+            const { payload, messages: responseMessages } = rebuildResponseMessages(
               responseMessagesReplay,
               chunk.payload as unknown as AgentStreamStepFinishPayload,
             );
+            // Without a rebuilt list (a missed diff) the list keeps what it has until a later
+            // step-finish brings one; a guess could drop or duplicate messages.
+            if (responseMessages && listFollowsStream?.()) {
+              messageList.clear.response.db();
+              messageList.add(responseMessages, 'response');
+            }
             const metadata = payload.metadata;
             // A JSON-serializing pubsub delivers the response timestamp as an ISO string.
             if (typeof metadata?.timestamp === 'string') {
