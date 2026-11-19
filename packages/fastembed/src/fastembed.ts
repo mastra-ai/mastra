@@ -67,8 +67,9 @@ export interface InitOptionsBase {
   showDownloadProgress?: boolean;
   /**
    * Threads ONNX Runtime uses to run this model. Each model has its own pool, so models loaded side by side add up.
-   * Defaults to the `MASTRA_FASTEMBED_THREADS` environment variable, then to the CPUs this process may use
-   * (`os.availableParallelism()`). Set it lower to leave CPU for the rest of the process, or when the CPU limit isn't
+   * Defaults to the `MASTRA_FASTEMBED_THREADS` environment variable. Without either, a process under a CPU limit gets
+   * one thread per CPU it may use (`os.availableParallelism()`), and otherwise ONNX Runtime's default applies (one
+   * thread per physical core). Set it lower to leave CPU for the rest of the process, or when the CPU limit isn't
    * visible to the process (e.g. a Kubernetes CPU request without a limit).
    */
   threads?: number;

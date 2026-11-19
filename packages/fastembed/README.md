@@ -30,7 +30,7 @@ FastEmbed models embed at most 512 tokens per input (roughly 2,000 to 2,500 char
 
 ### CPU usage
 
-FastEmbed runs each model with one thread per CPU the process may use, including a container's CPU limit. Each loaded model has its own threads, so models loaded side by side add up. To leave CPU for the rest of the process, or when the limit isn't visible to the process (for example a Kubernetes CPU request without a limit), set the thread count per model with the `MASTRA_FASTEMBED_THREADS` environment variable:
+Under a CPU limit, such as a container's CPU quota, FastEmbed runs each model with one thread per CPU the process may use. Without a limit, ONNX Runtime picks the count itself (one thread per physical core). Each loaded model has its own threads, so models loaded side by side add up. To leave CPU for the rest of the process, or when the limit isn't visible to the process (for example a Kubernetes CPU request without a limit), set the thread count per model with the `MASTRA_FASTEMBED_THREADS` environment variable:
 
 ```bash
 MASTRA_FASTEMBED_THREADS=2
