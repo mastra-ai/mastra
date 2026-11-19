@@ -7,7 +7,7 @@ description: "Browse Hugging Face model IDs, capabilities, context windows, and 
 
 # <img src="https://models.dev/logos/huggingface.svg" alt="Hugging Face logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Hugging Face
 
-Access 87 Hugging Face models through Mastra's model router. Authentication is handled automatically using the `HF_TOKEN` environment variable.
+Access 92 Hugging Face models through Mastra's model router. Authentication is handled automatically using the `HF_TOKEN` environment variable.
 
 Learn more in the [Hugging Face documentation](https://huggingface.co).
 
@@ -202,6 +202,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.2
   },
   {
+    "model": "huggingface/google/gemma-2-27b-it",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 2048,
+    "inputCost": 0.65,
+    "outputCost": 0.65
+  },
+  {
     "model": "huggingface/google/gemma-3-12b-it",
     "imageInput": true,
     "audioInput": false,
@@ -262,6 +274,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.4
   },
   {
+    "model": "huggingface/meta-llama/Llama-3.1-70B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 4096,
+    "inputCost": 0.72,
+    "outputCost": 0.72
+  },
+  {
     "model": "huggingface/meta-llama/Llama-3.1-8B-Instruct",
     "imageInput": false,
     "audioInput": false,
@@ -272,6 +296,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 4096,
     "inputCost": 0.06,
     "outputCost": 0.06
+  },
+  {
+    "model": "huggingface/meta-llama/Llama-3.2-1B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 60000,
+    "maxOutput": 32000,
+    "inputCost": 0.027,
+    "outputCost": 0.201
+  },
+  {
+    "model": "huggingface/meta-llama/Llama-3.2-3B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 80000,
+    "maxOutput": 80000,
+    "inputCost": 0.0509,
+    "outputCost": 0.335
   },
   {
     "model": "huggingface/meta-llama/Llama-3.3-70B-Instruct",
@@ -560,6 +608,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 16384,
     "inputCost": 0.12,
     "outputCost": 0.5
+  },
+  {
+    "model": "huggingface/Qwen/Qwen3-30B-A3B-Instruct-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 16384,
+    "inputCost": 0.09,
+    "outputCost": 0.3
   },
   {
     "model": "huggingface/Qwen/Qwen3-32B",

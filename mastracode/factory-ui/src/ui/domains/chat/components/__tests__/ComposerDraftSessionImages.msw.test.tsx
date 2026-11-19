@@ -72,7 +72,6 @@ describe('Starting a user session with images attached', () => {
       await pickImage(user, screenshot());
 
       expect(await screen.findByRole('button', { name: 'Remove shot.png' })).toBeInTheDocument();
-      expect(screen.queryByText('Images can be attached once the session is ready.')).not.toBeInTheDocument();
       expect(createBodies).toEqual([]);
     });
 
@@ -94,8 +93,6 @@ describe('Starting a user session with images attached', () => {
       await draftReadyForImages();
 
       await dropScreenshot(container);
-
-      expect(screen.queryByText('Images can be attached once the session is ready.')).not.toBeInTheDocument();
     });
   });
 

@@ -136,77 +136,7 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "meituan-longcat/LongCat-2.0": [
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "zai-org/GLM-5": [
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "zai-org/GLM-5.1": [
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "zai-org/GLM-5.2": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "zai-org/GLM-5V-Turbo": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "zai-org/GLM-5.3-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zai-org/GLM-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "nex-agi/Nex-N2-Pro": [
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "moonshotai/Kimi-K2.5": [
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
     "moonshotai/Kimi-K3": [
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "moonshotai/Kimi-K2.6": [
       {
         "type": "budget_tokens",
         "min": 128,
@@ -220,10 +150,21 @@
         "max": 32768
       }
     ],
-    "deepseek-ai/DeepSeek-V3.1": [
+    "moonshotai/Kimi-K2.6": [
       {
-        "type": "toggle"
-      },
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "moonshotai/Kimi-K2.5": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Pro-0813": [
       {
         "type": "budget_tokens",
         "min": 128,
@@ -237,7 +178,31 @@
         "max": 32768
       }
     ],
-    "deepseek-ai/DeepSeek-V3.2-Exp": [
+    "deepseek-ai/DeepSeek-V4-Flash-0731": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "deepseek-ai/DeepSeek-V3.2": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "deepseek-ai/DeepSeek-V3.1": [
       {
         "type": "toggle"
       },
@@ -257,21 +222,7 @@
         "max": 32768
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp": [
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
     "deepseek-ai/DeepSeek-V4-Flash": [
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Flash-0731": [
       {
         "type": "budget_tokens",
         "min": 128,
@@ -285,7 +236,7 @@
         "max": 32768
       }
     ],
-    "deepseek-ai/DeepSeek-V3.2": [
+    "deepseek-ai/DeepSeek-V3.2-Exp": [
       {
         "type": "toggle"
       },
@@ -295,14 +246,7 @@
         "max": 32768
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Pro-0813": [
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "tencent/Hy3": [
+    "meituan-longcat/LongCat-2.0": [
       {
         "type": "budget_tokens",
         "min": 128,
@@ -319,6 +263,13 @@
         "max": 32768
       }
     ],
+    "tencent/Hy3": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
     "openai/gpt-oss-120b": [
       {
         "type": "budget_tokens",
@@ -326,31 +277,42 @@
         "max": 32768
       }
     ],
-    "Qwen/Qwen3-32B": [
+    "zai-org/GLM-5.2": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.1": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "zai-org/GLM-5": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "zai-org/GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-5V-Turbo": [
       {
         "type": "toggle"
       },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Qwen/Qwen3.8-2.4T-A95B": [
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Qwen/Qwen3-VL-30B-A3B-Thinking": [
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Qwen/Qwen3-VL-32B-Thinking": [
       {
         "type": "budget_tokens",
         "min": 128,
@@ -371,6 +333,44 @@
       {
         "type": "toggle"
       },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3-VL-30B-A3B-Thinking": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3-32B": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3-VL-32B-Thinking": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3.8-2.4T-A95B": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "nex-agi/Nex-N2-Pro": [
       {
         "type": "budget_tokens",
         "min": 128,

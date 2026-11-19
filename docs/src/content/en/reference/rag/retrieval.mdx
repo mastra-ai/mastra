@@ -681,7 +681,35 @@ const relevanceProvider = new CohereRelevanceScorer('rerank-v3.5')
 const relevanceProvider = new ZeroEntropyRelevanceScorer('zerank-1')
 ```
 
-Voyage AI provides dedicated reranking models: `rerank-2.5` and `rerank-2.5-lite` both allow up to 32,000 tokens for the query and any single document combined, and up to 600,000 tokens across a request. `VoyageRelevanceScorer` reads `VOYAGE_API_KEY` from the environment, or accepts an `apiKey` in its config.
+Voyage AI provides dedicated reranking models. `rerank-2.5` is the default. `rerank-3` and `rerank-3-lite` are out of Preview in the Voyage AI API. `rerank-2.5`, `rerank-2.5-lite`, `rerank-3` and `rerank-3-lite` all allow up to 8,000 tokens for the query, up to 32,000 tokens for the query and any single document combined, and up to 600,000 tokens across a request. The request total counts the query once per document: query tokens × number of documents + tokens in all documents. By default, a query or document longer than its limit is truncated. Keep each request within the 600,000-token total yourself. `VoyageRelevanceScorer` reads `VOYAGE_API_KEY` from the environment, or accepts an `apiKey` in its config.
+
+`createVoyageReranker()` creates a `VoyageRelevanceScorer` from a model name or a config object. `voyageReranker()` is an alias for it. The `voyage` export also has preconfigured scorers, which read `VOYAGE_API_KEY` and use the default endpoint:
+
+- `voyage.reranker` and `voyage.reranker25`: `rerank-2.5`
+- `voyage.reranker25lite`: `rerank-2.5-lite`
+- `voyage.reranker2`: `rerank-2`
+- `voyage.reranker2lite`: `rerank-2-lite`
+
+```ts
+import { voyage, createVoyageReranker } from '@mastra/voyageai'
+
+const liteProvider = createVoyageReranker('rerank-2.5-lite')
+const defaultProvider = voyage.reranker
+```
+
+The scorer sends requests to the Voyage AI platform endpoint, `https://api.voyageai.com/v1`, by default. A model API key created in MongoDB Atlas only works with the Atlas Embedding and Reranking API, so set `baseUrl` to `https://ai.mongodb.com/v1` when you use one. A key scoped to a geography needs that geography's endpoint, such as `https://eu.ai.mongodb.com/v1`. Geography endpoints don't serve every model: of the Atlas endpoints, only `https://ai.mongodb.com/v1` serves `rerank-2` and `rerank-2-lite`, so use `rerank-2.5` or `rerank-2.5-lite` with a scoped key. See MongoDB's [model lifecycle page](https://www.mongodb.com/docs/voyageai/models/lifecycle/) for which endpoints serve each model.
+
+```ts
+import { createVoyageReranker } from '@mastra/voyageai'
+
+const relevanceProvider = createVoyageReranker({
+  model: 'rerank-2.5',
+  apiKey: process.env.VOYAGE_API_KEY,
+  baseUrl: 'https://ai.mongodb.com/v1',
+})
+```
+
+Use `createVoyageReranker()` or `VoyageRelevanceScorer` to set `apiKey`, `baseUrl`, or `truncation`. `truncation` defaults to `true`, which shortens inputs that exceed the model's context length instead of failing the request.
 
 The re-ranked results combine vector similarity with semantic understanding to improve retrieval quality.
 

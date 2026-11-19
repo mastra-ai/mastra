@@ -203,7 +203,7 @@ describe('buildComparisonRows', () => {
       const [baseline, contender] = usageRows()[0].sides;
 
       expect(baseline.tokenDelta).toBeUndefined();
-      expect(contender.tokenDelta).toBe(260 - 150);
+      expect(contender.tokenDelta).toBe(110);
     });
   });
 

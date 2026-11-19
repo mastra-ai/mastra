@@ -5,6 +5,7 @@ import { v4 as randomUUID } from '@lukeed/uuid';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { IMastraLogger } from '../../logger';
+import { messageDeclaresAuthoredTurn, sealUserTurnMessage } from '../../memory/turn-markup';
 import type { AnySpan } from '../../observability/types';
 import { resolveCurrentSpan } from '../../observability/utils';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../tools/payload-transform';
@@ -163,6 +164,14 @@ function withoutStaleToolStates(stored: MastraDBMessage, live: MastraDBMessage):
  * arguments and metadata stay as stored. A provider-executed call can only take an approval
  * answer, since the provider, not the client, produces its outcome.
  */
+function userTurnText(message: MastraDBMessage): string {
+  const parts = message.content.parts
+    .map(part => (part.type === 'text' ? part.text : ''))
+    .filter(Boolean)
+    .join('\n');
+  return typeof message.content.content === 'string' ? `${message.content.content}\n${parts}` : parts;
+}
+
 function clientToolOutcomes(stored: MastraDBMessage, live: MastraDBMessage): MastraDBMessage {
   const storedCalls = new Map<string, MastraToolInvocationPart>();
   for (const part of stored.content.parts) {
@@ -726,11 +735,11 @@ export class MessageList {
 
   private getMessagesForModelPrompt(): MastraDBMessage[] {
     return this.messages.flatMap(message => {
-      if ((message.role as string) !== 'signal') {
-        return [message];
+      if ((message.role as string) === 'signal') {
+        return this.convertSignalForModelPrompt(message);
       }
-
-      return this.convertSignalForModelPrompt(message);
+      // Stored text stays as written. Turn tags are escaped only on the copy the model reads.
+      return [sealUserTurnMessage(message)];
     });
   }
 
@@ -746,17 +755,20 @@ export class MessageList {
       metadata: { createdAt },
     };
 
+    // Signals never carry an authored turn, so every turn tag in their text is escaped.
     return [
-      convertInputToMastraDBMessage(promptMessage as MessageInput, 'input', {
-        memoryInfo: this.memoryInfo,
-        newMessageId: () => message.id,
-        generateCreatedAt: (_messageSource, start) => {
-          if (start instanceof Date) return start;
-          if (typeof start === 'string' || typeof start === 'number') return new Date(start);
-          return createdAt;
-        },
-        dbMessages: this.messages,
-      }),
+      sealUserTurnMessage(
+        convertInputToMastraDBMessage(promptMessage as MessageInput, 'input', {
+          memoryInfo: this.memoryInfo,
+          newMessageId: () => message.id,
+          generateCreatedAt: (_messageSource, start) => {
+            if (start instanceof Date) return start;
+            if (typeof start === 'string' || typeof start === 'number') return new Date(start);
+            return createdAt;
+          },
+          dbMessages: this.messages,
+        }),
+      ),
     ];
   }
 
@@ -2690,6 +2702,17 @@ export class MessageList {
     }
 
     const messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
+    if (messageDeclaresAuthoredTurn(message) && messageV2.role === 'user' && !messageDeclaresAuthoredTurn(messageV2)) {
+      const metadata = messageV2.content.metadata ?? {};
+      const mastra =
+        typeof metadata.mastra === 'object' && metadata.mastra !== null
+          ? metadata.mastra
+          : ({} as Record<string, unknown>);
+      messageV2.content = {
+        ...messageV2.content,
+        metadata: { ...metadata, mastra: { ...mastra, userTurn: true } },
+      };
+    }
     const signalMetadata =
       messageV2.role === 'signal'
         ? (messageV2.content.metadata?.signal as { acceptedAt?: string; createdAt?: string } | undefined)
@@ -2740,6 +2763,10 @@ export class MessageList {
       if (replacementTargetSource === 'input') {
         MessageMerger.merge(messageV2, clientToolOutcomes(messageV2, replacementTarget));
       } else if (messageV2.role === 'user' && replacementTarget.role === 'user') {
+        // The authored-turn mark belongs to the text it was set on, so the stored mark only
+        // carries over when the live message keeps the same text.
+        const keepStoredTurnMark =
+          messageDeclaresAuthoredTurn(replacementTarget) || userTurnText(messageV2) === userTurnText(replacementTarget);
         messageV2.content = {
           ...messageV2.content,
           ...replacementTarget.content,
@@ -2748,6 +2775,11 @@ export class MessageList {
             ...(replacementTarget.content.metadata ?? {}),
           },
         };
+        const mergedMastra = messageV2.content.metadata?.mastra;
+        if (!keepStoredTurnMark && mergedMastra && typeof mergedMastra === 'object' && 'userTurn' in mergedMastra) {
+          const { userTurn: _userTurn, ...mastra } = mergedMastra as Record<string, unknown>;
+          messageV2.content.metadata = { ...messageV2.content.metadata, mastra };
+        }
       } else {
         for (const incomingPart of replacementTarget.content.parts) {
           if (incomingPart.type !== 'text') continue;

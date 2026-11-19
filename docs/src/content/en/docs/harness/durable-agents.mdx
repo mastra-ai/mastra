@@ -468,6 +468,7 @@ If the snapshot upsert dominates writes, reduce checkpoint size or frequency fir
 A durable or evented agent can run the same tool call more than once. A tool call is one request from the model to run a tool. A repeat happens in these situations:
 
 - The process stops while the tool runs, or after the tool returns but before Mastra saves its result. When the run is [recovered](#crash-recovery), the tool runs again.
+- The server shuts down gracefully while the tool runs, and the tool is still running when the [drain timeout](/docs/deployment/mastra-server#graceful-shutdown-and-rolling-deploys) ends. Mastra discards the tool's result, and recovery runs the tool again. A tool whose result Mastra saves within the drain timeout keeps it.
 - With Postgres storage and Redis Streams PubSub, an evented worker stops before it publishes the tool's result. Another worker [reclaims the step](/reference/pubsub/redis-streams#evented-agent-worker-takeover) and runs the tool again.
 - Recovery takes over a run while the previous execution is still running the tool, for example with [`recover()` and `force: true`](#manual-recovery). Both executions can run the tool concurrently. See [stop work after ownership loss](#stop-work-after-ownership-loss).
 

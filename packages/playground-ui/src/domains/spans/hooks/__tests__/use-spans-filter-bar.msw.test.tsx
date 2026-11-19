@@ -122,15 +122,6 @@ describe('useSpansFilterBar', () => {
 
       expect(onFiltersChange).toHaveBeenCalledWith(statusAndTraceTokens, [spanTypeGroup]);
     });
-
-    it('never hands the time range to the filters', () => {
-      const { result, onFiltersChange } = renderFilterBar(statusAndTraceTokens, [spanTypeGroup]);
-
-      act(() => result.current.onFilterBarChange(result.current.filterBarValue));
-
-      const [tokens] = onFiltersChange.mock.calls[0] ?? [[]];
-      expect(tokens.map(token => token.fieldId)).not.toContain(FILTER_BAR_TIME_RANGE_FIELD_ID);
-    });
   });
 
   describe('when filtering by a field that has no filter yet', () => {

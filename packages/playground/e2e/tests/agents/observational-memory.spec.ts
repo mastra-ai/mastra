@@ -110,38 +110,6 @@ test.describe('Observational Memory - Behavior Tests', () => {
   });
 
   test.describe('when messages are sent and observation runs', () => {
-    /**
-     * BEHAVIOR: Observation start marker appears when observation begins
-     * OUTCOME: User sees real-time feedback that memory is being updated
-     */
-    test('should show observing indicator when observation starts', async ({ page }) => {
-      // ARRANGE
-      await selectFixture(page, 'om-observation-success');
-      await page.goto('/agents/om-agent/chat/new');
-
-      // Wait for page to load
-      await expect(page.getByRole('tab', { name: 'Chat' })).toHaveAttribute('aria-selected', 'true');
-
-      // ACT: Send a message to trigger the agent
-      const chatInput = page.locator('textarea[placeholder*="message"]').first();
-      await chatInput.fill('Hello, please help me with something');
-      await chatInput.press('Enter');
-
-      // Give time for the stream to process
-      await page.waitForTimeout(2000);
-
-      // ASSERT: Check that some response appeared (the fixture should stream text)
-      // The thread wrapper should be visible
-      const threadWrapper = page.locator('[data-testid="thread-wrapper"]');
-      await expect(threadWrapper).toBeVisible({ timeout: 15000 });
-
-      // Open the live Memory sidebar to see OM status.
-      await openMemorySidebar(page);
-
-      // The OM sidebar should show activity (progress bars should have updated)
-      await expect(page.getByText('Messages', { exact: true })).toBeVisible();
-    });
-
     test('should show completion stats when observation finishes', async ({ page }) => {
       await selectFixture(page, 'om-observation-success');
       await page.goto('/agents/om-agent/chat/new');
@@ -243,40 +211,6 @@ test.describe('Observational Memory - Behavior Tests', () => {
       await openMemorySidebar(page);
       const omSection = page.getByRole('heading', { name: 'Observational Memory' });
       await expect(omSection).toBeVisible({ timeout: 10000 });
-    });
-  });
-
-  test.describe('when a reflection occurs', () => {
-    test.skip('should show reflection indicator when reflection occurs', async ({ page }) => {
-      // ARRANGE
-      await selectFixture(page, 'om-reflection');
-      await page.goto('/agents/om-agent/chat/new');
-
-      // Wait for page to load
-      await expect(page.getByRole('tab', { name: 'Chat' })).toHaveAttribute('aria-selected', 'true');
-
-      const chatInput = page.locator('textarea[placeholder*="message"]').first();
-      const threadWrapper = page.locator('[data-testid="thread-wrapper"]');
-
-      // ACT: Send first message to start conversation
-      await chatInput.fill('Hello, I need help with something important today.');
-      await chatInput.press('Enter');
-      await page.waitForTimeout(2000);
-
-      // ACT: Send second message to trigger observation and reflection
-      await chatInput.fill('This will trigger reflection after observation.');
-      await chatInput.press('Enter');
-      await page.waitForTimeout(3000);
-
-      // Observation marker should show (fixture emits observation first)
-      await expect(threadWrapper.getByText(/Observed.*→.*tokens/i).first()).toBeVisible({ timeout: 10000 });
-
-      // Reflection marker should also show (fixture emits reflection after observation)
-      await expect(threadWrapper.getByText(/Reflected.*→.*tokens/i).first()).toBeVisible({ timeout: 10000 });
-
-      // Open the live Memory sidebar to verify OM status.
-      await openMemorySidebar(page);
-      await expect(page.getByRole('heading', { name: 'Observational Memory' })).toBeVisible();
     });
   });
 

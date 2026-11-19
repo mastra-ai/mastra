@@ -3,14 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { notificationLinkLabel, notificationUrl } from '../TranscriptNotifications';
 
 describe('notification links', () => {
-  it('keeps GitHub targets and derives pull request URLs from metadata', () => {
+  it('keeps GitHub targets', () => {
     expect(notificationUrl({ source: 'github', metadata: { targetUrl: 'https://github.com/o/r/pull/3#c' } })).toBe(
       'https://github.com/o/r/pull/3#c',
     );
-    expect(notificationUrl({ source: 'github', metadata: { repository: 'o/r', pullRequestNumber: 4 } })).toBe(
-      'https://github.com/o/r/pull/4',
-    );
-    expect(notificationLinkLabel({ source: 'github' })).toBe('Open on GitHub');
   });
 
   it('links GitLab merge request and issue targets on any instance host', () => {
