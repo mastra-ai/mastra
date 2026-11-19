@@ -148,7 +148,7 @@ export const SeveralControls: Story = {
 };
 
 /**
- * Controls too wide to sit beside their label (keeping the label at least 16rem) wrap under it, still on the right
+ * Controls too wide to sit beside their label (keeping the label at least 12rem) wrap under it, still on the right
  * edge: here an inline edit with its field and actions. Narrower controls in the same card stay beside their label.
  */
 export const WideControl: Story = {
