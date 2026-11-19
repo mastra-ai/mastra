@@ -1,5 +1,5 @@
 ---
-'@mastra/core': minor
+'@mastra/core': patch
 ---
 
 Fixed agents getting stuck waiting on a background command that never exits. The `get_process_output` workspace tool now waits for a set time instead of waiting forever.
