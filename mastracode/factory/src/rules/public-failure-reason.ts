@@ -73,7 +73,7 @@ export const FACTORY_ERROR_NAMES: ReadonlySet<string> = new Set([
   'LinearReauthRequiredError',
   'MastraGatewayError',
   'MaterializeError',
-  'PlatformApiError',
+  'PlatformConnectionNotConnectedError',
   'PullRequestClosedError',
   'RealtimeSessionError',
   'ReviewBoardInUseError',

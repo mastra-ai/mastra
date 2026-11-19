@@ -3,7 +3,7 @@ import type { GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
 import { Profiler, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { ReactNode, ComponentProps } from 'react';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   TRACE_DATE_PRESET_PARAM,
@@ -51,6 +51,8 @@ import {
   weatherTraceSpans,
   weatherTraceUsage,
   workflowTracesPage,
+  weatherThreadLightTraces,
+  weatherThreadTraceSpans,
 } from './fixtures/traces-explorer';
 import {
   OBSERVABILITY_LIST_POLL_INTERVAL_MS,
@@ -250,9 +252,9 @@ function Harness({
   );
 }
 
-const renderExplorer = (props: HarnessProps = {}) =>
+const renderExplorer = (props: HarnessProps = {}, navigate?: ComponentProps<typeof TestLinkProvider>['navigate']) =>
   renderWithProviders(
-    <TestLinkProvider>
+    <TestLinkProvider navigate={navigate}>
       <Harness {...props} />
     </TestLinkProvider>,
   );
@@ -416,30 +418,37 @@ describe('TracesExplorer', () => {
   });
 
   describe('when a trace is open', () => {
-    const openTrace = async (traceHref?: TracesExplorerPanelProps['traceHref']) => {
+    const openTrace = async (
+      traceHref?: TracesExplorerPanelProps['traceHref'],
+      navigate?: ComponentProps<typeof TestLinkProvider>['navigate'],
+    ) => {
       setExplorerHandlers();
-      const { queryClient } = renderExplorer({
-        initialSelection: { ...EMPTY_TRACES_SELECTION, traceId: 'trace-weather' },
-        traceHref,
-      });
+      const { queryClient } = renderExplorer(
+        {
+          initialSelection: { ...EMPTY_TRACES_SELECTION, traceId: 'trace-weather' },
+          traceHref,
+        },
+        navigate,
+      );
       await settle(queryClient);
       const dialog = await screen.findByRole('dialog', { name: 'Trace details' });
       await within(dialog).findByRole('button', { name: 'Download trace JSON' });
       return dialog;
     };
 
-    it('links to the host trace page of the selected trace', async () => {
-      const dialog = await openTrace(traceId => `/observe/traces/${traceId}`);
+    it('opens the host trace page of the selected trace', async () => {
+      const navigate = vi.fn();
+      const dialog = await openTrace(traceId => `/observe/traces/${traceId}`, navigate);
 
-      expect(within(dialog).getByRole('link', { name: 'Open trace page' }).getAttribute('href')).toBe(
-        '/observe/traces/trace-weather',
-      );
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Open trace page' }));
+
+      expect(navigate).toHaveBeenCalledWith('/observe/traces/trace-weather');
     });
 
-    it('offers no trace page link without traceHref', async () => {
+    it('offers no trace page without traceHref', async () => {
       const dialog = await openTrace();
 
-      expect(within(dialog).queryByRole('link', { name: 'Open trace page' })).toBeNull();
+      expect(within(dialog).queryByRole('button', { name: 'Open trace page' })).toBeNull();
     });
   });
 
@@ -494,6 +503,50 @@ describe('TracesExplorer', () => {
       fireEvent.click(traceRow('What is the weather in Paris'));
 
       expect(await screen.findByRole('dialog', { name: 'Trace details' })).toBeTruthy();
+    });
+  });
+
+  describe('when the reader opens the full thread of an agent trace', () => {
+    const openFullThread = async () => {
+      setExplorerHandlers();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () => HttpResponse.json(weatherThreadLightTraces)),
+        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () =>
+          HttpResponse.json(weatherThreadTraceSpans),
+        ),
+      );
+      const utils = renderExplorer();
+      await settle(utils.queryClient);
+
+      fireEvent.click(traceRow('What is the weather in Paris'));
+      fireEvent.click(await screen.findByRole('button', { name: 'Open full thread' }));
+      const threadDialog = await screen.findByRole('dialog', { name: 'Thread weather-thread' });
+      return { ...utils, threadDialog };
+    };
+
+    it('stacks the thread in its own drawer above the trace drawer', async () => {
+      const { threadDialog } = await openFullThread();
+
+      expect(threadDialog.getAttribute('data-depth')).toBe('2');
+      expect(screen.getByRole('dialog', { name: 'Trace details', hidden: true })).toBeTruthy();
+    });
+
+    it('closes only the thread with "Back to trace"', async () => {
+      await openFullThread();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Back to trace' }));
+
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Thread weather-thread' })).toBeNull());
+      expect(screen.getByRole('dialog', { name: 'Trace details' })).toBeTruthy();
+    });
+
+    it('closes only the thread on Escape', async () => {
+      const { threadDialog } = await openFullThread();
+
+      fireEvent.keyDown(threadDialog, { key: 'Escape' });
+
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Thread weather-thread' })).toBeNull());
+      expect(screen.getByRole('dialog', { name: 'Trace details' })).toBeTruthy();
     });
   });
 

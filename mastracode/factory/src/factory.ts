@@ -42,6 +42,7 @@ import type { InlineSkill } from '@mastra/core/skills';
 import type { FactoryStorage, FactoryStorageOps } from '@mastra/core/storage';
 import { readObjective, resolveGoalStore, writeObjective } from '@mastra/core/tools';
 import type { MastraVector } from '@mastra/core/vector';
+import type { MastraWorker } from '@mastra/core/worker';
 import { describeFactorySandbox, isFactorySandbox } from '@mastra/core/workspace';
 import type { FactorySandbox, FactorySandboxDescription, WorkspaceSandbox } from '@mastra/core/workspace';
 import {
@@ -95,11 +96,11 @@ import { isFactoryGithubLogin, trustedCollaborator } from './integrations/github
 import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.js';
 import type { GitLabIntegrationBase } from './integrations/gitlab/integration.js';
 import { KeptCards } from './integrations/kept-cards.js';
-import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
 import {
   buildConnectToolListRoute,
   buildConnectToolsRoute,
   buildPlatformConnectRoutes,
+  isPlatformConnectProviderSource,
 } from './integrations/platform/connect/routes.js';
 import type { ConnectToolsSetupMissing, ConnectToolsSource } from './integrations/platform/connect/routes.js';
 import {
@@ -107,6 +108,12 @@ import {
   projectConnectTools,
   resolveToolsInTime,
 } from './integrations/platform/connect/session-tools.js';
+import {
+  PLATFORM_CONNECT_EVENT_POLLER_STORAGE_ID,
+  PlatformConnectEventPoller,
+} from './integrations/platform/foundation/connect-event-poller.js';
+import { isPlatformConnectEventSource } from './integrations/platform/foundation/connect-events.js';
+import { createPlatformConnectClient } from './integrations/platform/platform-connect.js';
 import { logIntegrationSummary } from './integrations/startup-summary.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
 import { SELECT_VANTA_VULNERABILITIES_MIGRATION, vantaOrgsSyncingWithoutSource } from './integrations/vanta/sync.js';
@@ -1884,7 +1891,7 @@ export class MastraFactory {
     const connectToolsList: ConnectToolsSource | { missing: ConnectToolsSetupMissing } =
       'projectId' in connectSetup
         ? {
-            client: new PlatformApiClient(platformApiClientConfigFromEnv()),
+            client: createPlatformConnectClient(),
             projectId: connectSetup.projectId,
             toolsSource: connectToolsSource,
             resolveTools:
@@ -2224,7 +2231,13 @@ export class MastraFactory {
               }
             }
             if (integration.agentTools) {
-              mergeTools(integration.id, await integration.agentTools({ requestContext }));
+              try {
+                mergeTools(integration.id, await integration.agentTools({ requestContext }));
+              } catch (error) {
+                console.warn(
+                  `[factory] ${integration.id} tools are unavailable for this run: ${error instanceof Error ? error.message : String(error)}`,
+                );
+              }
             }
             if (integration.sessionTools) {
               mergeTools(integration.id, integration.sessionTools({ requestContext }));
@@ -2472,7 +2485,9 @@ export class MastraFactory {
           ...(hasPlatformCredentials()
             ? buildPlatformConnectRoutes({
                 auth: routeAuth,
-                client: new PlatformApiClient(platformApiClientConfigFromEnv()),
+                providers: integrations.flatMap(integration =>
+                  isPlatformConnectProviderSource(integration) ? integration.platformConnectProviders() : [],
+                ),
               })
             : []),
           buildConnectToolsRoute(routeAuth, connectToolsList),
@@ -2704,36 +2719,54 @@ export class MastraFactory {
     // workers and `finalize()`'s `startWorkers()` starts them alongside the
     // built-ins. Never passed for the disabled/not-ready case — a worker for
     // an unavailable integration must not run.
-    const integrationWorkers = integrationRegistrations
-      .filter(({ integration, ready }) => ready && integration.workers)
-      .flatMap(({ integration }) =>
-        integration.workers!(
-          buildIntegrationContext(
-            {
-              controller: prepared.base.controller,
-              publicOrigin,
-              auth: routeAuth,
-              stateSigner,
-              sandbox: sandboxConfig,
-              factoryStorage: storage,
-              integrationStorage,
-              sourceControlStorage,
-              integrations: integrationRegistrations,
-              configVersion,
-              boardRegistry: this.#projectBoards ?? this.#boards,
-              ...(this.#keptCards ? { keptCards: this.#keptCards } : {}),
-              // Only with the boards domain ready, as intake routes are.
-              ...(this.#projectBoards ? { notRouted: storedBoardsStorage } : {}),
-              factoryReady,
-              domains,
-              // The Platform GitHub lane only receives pushes through its polling worker.
-              ...(this.#environmentBuilds ? { onRepositoryPush: this.#environmentBuilds.onRepositoryPush } : {}),
-              ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
-            },
-            integration.id,
-          ),
+    const readyContexts = integrationRegistrations
+      .filter(({ ready }) => ready)
+      .map(({ integration }) => ({
+        integration,
+        context: buildIntegrationContext(
+          {
+            controller: prepared.base.controller,
+            publicOrigin,
+            auth: routeAuth,
+            stateSigner,
+            sandbox: sandboxConfig,
+            factoryStorage: storage,
+            integrationStorage,
+            sourceControlStorage,
+            integrations: integrationRegistrations,
+            configVersion,
+            boardRegistry: this.#projectBoards ?? this.#boards,
+            ...(this.#keptCards ? { keptCards: this.#keptCards } : {}),
+            // Only with the boards domain ready, as intake routes are.
+            ...(this.#projectBoards ? { notRouted: storedBoardsStorage } : {}),
+            factoryReady,
+            domains,
+            // The Platform GitHub lane only receives pushes through its polling worker.
+            ...(this.#environmentBuilds ? { onRepositoryPush: this.#environmentBuilds.onRepositoryPush } : {}),
+            ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
+          },
+          integration.id,
         ),
+      }));
+    const integrationWorkers: MastraWorker[] = readyContexts.flatMap(({ integration, context }) =>
+      integration.workers ? integration.workers(context) : [],
+    );
+    // One event poller per deployment reads the platform event log of every
+    // Platform integration's connections and routes each event to its
+    // integration. Integrations without an event route add nothing.
+    const eventRoutes = readyContexts.flatMap(({ integration, context }) => {
+      if (!isPlatformConnectEventSource(integration)) return [];
+      const route = integration.connectEventRoute(context);
+      return route ? [route] : [];
+    });
+    if (eventRoutes.length > 0) {
+      integrationWorkers.push(
+        new PlatformConnectEventPoller({
+          storage: integrationStorage.forIntegration(PLATFORM_CONNECT_EVENT_POLLER_STORAGE_ID),
+          routes: eventRoutes,
+        }),
       );
+    }
 
     return {
       ...prepared.mastraArgs,
