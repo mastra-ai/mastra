@@ -1402,7 +1402,7 @@ describe('MastraFactory.prepare', () => {
       mountApiRoutes(app as never, routes);
 
       const features = await (await app.request('/web/config/features')).json();
-      const mountsMcp = routes.some(route => route.path === '/web/factory/projects/:projectId/mcp');
+      const mountsMcp = routes.some(route => route.path === '/mcp');
       expect({ features: features.mcp, mountsMcp }).toEqual({ features: serves, mountsMcp: serves });
     }
   });
@@ -2609,7 +2609,7 @@ describe('MastraFactory.prepare', () => {
       authStorage: {},
     });
     const app = await createHonoServer(new Mastra({ server: { ...server, apiRoutes } }), { tools: {} });
-    const url = 'http://localhost/web/factory/projects/fp-1/mcp';
+    const url = 'http://localhost/mcp';
     const origin = 'https://inspector.example.com';
 
     const preflight = await app.request(url, {
@@ -2636,12 +2636,12 @@ describe('MastraFactory.prepare', () => {
     const challenge = anonymous.headers
       .get('WWW-Authenticate')
       ?.match(/^Bearer resource_metadata="(https?:\/\/[^/"]+)(\/\.well-known\/oauth-protected-resource\/[^"]+)"$/);
-    expect(challenge?.[2]).toBe('/.well-known/oauth-protected-resource/web/factory/projects/fp-1/mcp');
+    expect(challenge?.[2]).toBe('/.well-known/oauth-protected-resource/mcp');
 
     const metadata = await app.request(`http://localhost${challenge![2]}`, { headers: { Origin: origin } });
     expect(metadata.status).toBe(200);
     expect(await metadata.json()).toMatchObject({
-      resource: `${challenge![1]}/web/factory/projects/fp-1/mcp`,
+      resource: `${challenge![1]}/mcp`,
       authorization_servers: ['https://auth.example.com'],
     });
   });

@@ -5,6 +5,8 @@ import type { AddressInfo } from 'node:net';
 import { MCPClient } from '@mastra/mcp';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import type { CryptoKey, JWTPayload } from 'jose';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../boards/index.js';
@@ -15,13 +17,17 @@ import { createSourceControlSessionLookup } from '../session/factory-session.js'
 import { AuditDomain } from '../storage/domains/audit/domain.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryToolDependencies } from '../tools/index.js';
+import { createWorkosMcpCallerResolver } from './caller.js';
+import type { McpCallerResolver } from './caller.js';
 import { ACTIVITY_SETTLE_MS } from './events.js';
 import {
   buildFactoryMcpRoutes,
   connectorSessionId,
+  factoryMcpResource,
   PLATFORM_MCP_AUTHORIZATION_SERVER,
   resolveMcpAuthorizationServers,
 } from './routes.js';
+import { createMcpTokenVerifier } from './token.js';
 
 describe('resolveMcpAuthorizationServers', () => {
   it('prefers config, then env, then Platform AuthKit', () => {
@@ -56,11 +62,9 @@ describe('resolveMcpAuthorizationServers', () => {
 
 const PUBLIC_ORIGIN = 'https://factory.example.com';
 
-/**
- * Bearer token → tenant. Platform's `/auth/verify` is the real boundary and
- * can't run here; everything behind it (projects, work items, sessions,
- * subscriptions, audit) is real Factory storage.
- */
+const RESOURCE = factoryMcpResource(PUBLIC_ORIGIN);
+
+/** Who each test token was issued to; tests name tokens, `bearer()` turns them into signed JWTs. */
 const USERS: Record<string, { orgId?: string; userId: string }> = {
   'token-alice': { orgId: 'org-1', userId: 'alice' },
   'token-bob': { orgId: 'org-1', userId: 'bob' },
@@ -68,24 +72,64 @@ const USERS: Record<string, { orgId?: string; userId: string }> = {
   'token-no-org': { userId: 'drifter' },
 };
 
-function tokenAuth(): RouteAuth {
-  const tenants = new WeakMap<Context, { orgId?: string; userId: string }>();
-  return {
-    enabled: () => true,
-    ensureUser: async c => {
-      const token = c.req.header('Authorization')?.replace(/^Bearer /, '');
-      const user = token ? USERS[token] : undefined;
-      if (user) tenants.set(c, user);
-      return user;
-    },
-    tenant: c => tenants.get(c),
-    isOrganizationAdmin: async () => false,
-  };
+/**
+ * An OAuth authorization server over real HTTP: RFC 8414 metadata and a JWKS,
+ * signing RS256 access tokens the way AuthKit does with Resource Indicators on.
+ */
+async function startAuthorizationServer() {
+  const { publicKey, privateKey } = await generateKeyPair('RS256');
+  const jwk = { ...(await exportJWK(publicKey)), kid: 'key-1', alg: 'RS256', use: 'sig' };
+  let issuer = '';
+  const server = createServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url === '/.well-known/oauth-authorization-server') {
+      res.end(JSON.stringify({ issuer, jwks_uri: `${issuer}/oauth2/jwks` }));
+    } else if (req.url === '/oauth2/jwks') {
+      res.end(JSON.stringify({ keys: [jwk] }));
+    } else {
+      res.writeHead(404).end('{}');
+    }
+  });
+  servers.push(server);
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  issuer = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  return { issuer, sign: (claims: JWTPayload, options: SignOptions = {}) => sign(privateKey, issuer, claims, options) };
 }
 
-async function setup() {
+interface SignOptions {
+  issuer?: string;
+  audience?: string | null;
+  expiresIn?: string;
+}
+
+function sign(key: CryptoKey, issuer: string, claims: JWTPayload, options: SignOptions): Promise<string> {
+  const jwt = new SignJWT(claims)
+    .setProtectedHeader({ alg: 'RS256', kid: 'key-1' })
+    .setIssuer(options.issuer ?? issuer)
+    .setIssuedAt()
+    .setExpirationTime(options.expiresIn ?? '1h');
+  const audience = options.audience === undefined ? RESOURCE : options.audience;
+  if (audience !== null) jwt.setAudience(audience);
+  return jwt.sign(key);
+}
+
+/** Signed tokens for the `USERS` names, filled per test by `setup()`. */
+const signedTokens = new Map<string, string>();
+const bearer = (token: string) => signedTokens.get(token) ?? token;
+
+async function setup(options: { resolveCaller?: McpCallerResolver } = {}) {
   const seed = await createFactoryStorageForTests();
-  const auth = tokenAuth();
+  const authServer = await startAuthorizationServer();
+  for (const [name, user] of Object.entries(USERS)) {
+    signedTokens.set(name, await authServer.sign({ sub: user.userId, ...(user.orgId ? { org_id: user.orgId } : {}) }));
+  }
+  // The MCP endpoint checks its own tokens; the audit domain's route auth is never consulted here.
+  const auth: RouteAuth = {
+    enabled: () => true,
+    ensureUser: async () => undefined,
+    tenant: () => undefined,
+    isOrganizationAdmin: async () => false,
+  };
   const boards = createBoardRegistry();
   const sourceControl = seed.sourceControl.forIntegration('github');
   const auditDomain = new AuditDomain({ auth, audit: seed.audit, projects: seed.projects });
@@ -122,9 +166,13 @@ async function setup() {
 
   const app = new Hono();
   const routes = buildFactoryMcpRoutes({
-    auth,
+    verifyAccessToken: createMcpTokenVerifier({
+      authorizationServers: [authServer.issuer],
+      resource: RESOURCE,
+      ...(options.resolveCaller ? { resolveCaller: options.resolveCaller } : {}),
+    }),
     publicOrigin: PUBLIC_ORIGIN,
-    authorizationServers: ['https://auth.example.com'],
+    authorizationServers: [authServer.issuer],
     projects: seed.projects,
     // No repository is linked, so the connector session has no row to file.
     sourceControls: [sourceControl],
@@ -171,7 +219,7 @@ async function setup() {
       });
     }
   };
-  return { ...seed, project, item, base, url: mcpUrl(base, project.id), createSessions };
+  return { ...seed, project, item, base, authServer, url: mcpUrl(base), createSessions };
 }
 
 const servers: Server[] = [];
@@ -210,14 +258,14 @@ function client(url: string, token: string): MCPClient {
   const mcp = new MCPClient({
     id: `factory-mcp-test-${Math.random()}`,
     servers: {
-      factory: { url: new URL(url), requestInit: { headers: { Authorization: `Bearer ${token}` } } },
+      factory: { url: new URL(url), requestInit: { headers: { Authorization: `Bearer ${bearer(token)}` } } },
     },
   });
   clients.push(mcp);
   return mcp;
 }
 
-const mcpUrl = (base: string, project: string) => `${base}/web/factory/projects/${project}/mcp`;
+const mcpUrl = (base: string) => `${base}/mcp`;
 
 const PROTOCOL_VERSION = '2026-07-28';
 
@@ -242,7 +290,7 @@ async function claudeRequest(
       'Mcp-Protocol-Version': PROTOCOL_VERSION,
       'Mcp-Method': method,
       ...(name ? { 'Mcp-Name': name } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(token ? { Authorization: `Bearer ${bearer(token)}` } : {}),
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -277,28 +325,132 @@ function toolText(result: { content: Array<{ type: string; text: string }> }): a
   return JSON.parse(result.content.find(part => part.type === 'text')!.text);
 }
 
+/**
+ * WorkOS user management as the resolver calls it: users by id, and each
+ * user's active memberships. `members` is mutable so a test can remove someone.
+ */
+function workosDirectory(members: Record<string, string[]>) {
+  const people: Record<string, { firstName: string; lastName: string; email: string }> = {
+    alice: { firstName: 'Alice', lastName: 'Liddell', email: 'alice@example.com' },
+    bob: { firstName: 'Bob', lastName: 'Builder', email: 'bob@example.com' },
+  };
+  const userManagement = {
+    getUser: async (userId: string) => {
+      const person = people[userId];
+      if (!person) throw Object.assign(new Error('User not found'), { status: 404 });
+      return { id: userId, profilePictureUrl: null, ...person };
+    },
+    listOrganizationMemberships: async ({ userId, organizationId }: { userId: string; organizationId: string }) => ({
+      data: (members[userId] ?? []).filter(orgId => orgId === organizationId).map(orgId => ({ organizationId: orgId })),
+    }),
+  };
+  return createWorkosMcpCallerResolver(
+    userManagement as unknown as Parameters<typeof createWorkosMcpCallerResolver>[0],
+  );
+}
+
 describe('Factory MCP server', () => {
-  it('Claude’s connector is sent to sign in', async () => {
-    const { base, project, url } = await setup();
+  it('Claude’s connector is sent to sign in for this endpoint', async () => {
+    const { base, url, authServer } = await setup();
 
     const response = await claudeRequest(url, 'server/discover');
 
     expect(response.status).toBe(401);
     const challenge = response.headers.get('WWW-Authenticate') ?? '';
     const metadataUrl = /resource_metadata="([^"]+)"/.exec(challenge)?.[1];
-    expect(metadataUrl).toBe(
-      `${PUBLIC_ORIGIN}/.well-known/oauth-protected-resource/web/factory/projects/${project.id}/mcp`,
-    );
+    expect(metadataUrl).toBe(`${PUBLIC_ORIGIN}/.well-known/oauth-protected-resource/mcp`);
 
     // The connector follows the pointer; this server answers it under its local address.
+    // `resource` is what the connector asks the authorization server to bind its token to.
     const metadata = await fetch(`${base}${new URL(metadataUrl!).pathname}`);
     expect(metadata.status).toBe(200);
     expect(await metadata.json()).toEqual({
-      resource: `${PUBLIC_ORIGIN}/web/factory/projects/${project.id}/mcp`,
-      authorization_servers: ['https://auth.example.com'],
+      resource: `${PUBLIC_ORIGIN}/mcp`,
+      authorization_servers: [authServer.issuer],
       bearer_methods_supported: ['header'],
       resource_name: 'Mastra Factory',
     });
+  });
+
+  it('refuses tokens not issued for this endpoint', async () => {
+    const { url, authServer } = await setup();
+    const claims = { sub: 'alice', org_id: 'org-1' };
+    const refused = {
+      // A Platform login: no audience, valid everywhere Platform accepts a login.
+      'Platform login': await authServer.sign(claims, { audience: null }),
+      // Issued for Platform's own MCP server.
+      'Platform MCP token': await authServer.sign(claims, { audience: 'https://platform.mastra.ai/v1/mcp' }),
+      // Issued for another Factory.
+      'other Factory token': await authServer.sign(claims, { audience: 'https://other.factory.mastra.cloud/mcp' }),
+      // Signed with this server's key but naming an issuer the Factory doesn't trust.
+      'unknown issuer': await authServer.sign(claims, { issuer: 'https://attacker.example.com' }),
+      expired: await authServer.sign(claims, { expiresIn: '-1m' }),
+      'not a JWT': 'token-alice-but-opaque',
+    };
+    // A key the authorization server never published, under its issuer.
+    const stranger = await startAuthorizationServer();
+    const forged = await stranger.sign(claims, { issuer: authServer.issuer });
+
+    for (const [label, token] of Object.entries({ ...refused, 'forged signature': forged })) {
+      const response = await claudeRequest(url, 'tools/list', {}, token);
+      expect(response.status, label).toBe(401);
+      expect(response.headers.get('WWW-Authenticate'), label).toContain('error="invalid_token"');
+    }
+
+    const accepted = await claudeRequest(url, 'tools/list', {}, await authServer.sign(claims));
+    expect(accepted.status).toBe(200);
+  });
+
+  it('asks an organization with several projects to pick one', async () => {
+    const { url, projects } = await setup();
+    await projects.create({ orgId: 'org-1', userId: 'alice', input: { name: 'Second' } });
+
+    const response = await claudeRequest(url, 'tools/list', {}, 'token-alice');
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({ error: 'multiple_projects' });
+  });
+
+  it('someone removed from the organization loses access at once, though their token has not expired', async () => {
+    const members: Record<string, string[]> = { alice: ['org-1'] };
+    const { url } = await setup({ resolveCaller: workosDirectory(members) });
+
+    expect((await claudeRequest(url, 'server/discover', {}, 'token-alice')).status).toBe(200);
+
+    members.alice = [];
+    const response = await claudeRequest(url, 'server/discover', {}, 'token-alice');
+    expect(response.status).toBe(401);
+    expect(response.headers.get('WWW-Authenticate')).toContain('error="invalid_token"');
+  });
+
+  it('a user who no longer exists is refused', async () => {
+    const { url } = await setup({ resolveCaller: workosDirectory({}) });
+    // `mallory` isn't in the directory at all.
+    expect((await claudeRequest(url, 'server/discover', {}, 'token-mallory')).status).toBe(401);
+  });
+
+  it('the audit trail names who made a change from Claude', async () => {
+    const { url, item, project, audit } = await setup({ resolveCaller: workosDirectory({ alice: ['org-1'] }) });
+
+    const call = await claudeRequest(
+      url,
+      'tools/call',
+      { name: 'factory_update_work_item', arguments: { workItem: item.id, title: 'Fix the sign-in page' } },
+      'token-alice',
+    );
+    expect(call.body?.result.isError).not.toBe(true);
+
+    const { events } = await audit.list({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      actions: ['factory.work_item.updated'],
+    });
+    expect(events).toEqual([
+      expect.objectContaining({
+        actorId: 'alice',
+        metadata: expect.objectContaining({ __actorProfile: { name: 'Alice Liddell' } }),
+      }),
+    ]);
   });
 
   it('Claude’s connector discovers the Factory and lists its tools', async () => {
@@ -419,7 +571,7 @@ describe('Factory MCP server', () => {
       fetch(url, {
         method: 'POST',
         headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(token ? { Authorization: `Bearer ${bearer(token)}` } : {}),
           'Content-Type': 'application/json',
           Accept: 'application/json, text/event-stream',
         },
@@ -449,7 +601,7 @@ describe('Factory MCP server', () => {
         factory: {
           url: new URL(url),
           protocolVersion: 'legacy',
-          requestInit: { headers: { Authorization: 'Bearer token-alice' } },
+          requestInit: { headers: { Authorization: `Bearer ${bearer('token-alice')}` } },
         },
       },
     });
@@ -465,7 +617,7 @@ describe('Factory MCP server', () => {
     ]);
   });
 
-  it('denies a user from another organization', async () => {
+  it('finds no project for a user from an organization without a Factory project', async () => {
     const { url } = await setup();
     const response = await claudeRequest(url, 'tools/list', {}, 'token-mallory');
     expect(response.status).toBe(404);
@@ -661,7 +813,7 @@ describe('Factory activity over MCP events', () => {
   it('activity from another org’s Factory never shows up', async () => {
     const { url, base, item, projects } = await setup();
     const globex = await projects.create({ orgId: 'org-2', userId: 'mallory', input: { name: 'Globex' } });
-    const globexUrl = mcpUrl(base, globex.id);
+    const globexUrl = mcpUrl(base);
 
     const start = await poll(globexUrl, 'token-mallory', null);
     tick(1000);
