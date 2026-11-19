@@ -45,9 +45,6 @@ describe('LiveKitRecordingReview', () => {
             selectedSpanId={null}
             onSpanSelect={() => {}}
             onClose={() => {}}
-            withQueryTrace={false}
-            withFeedback={false}
-            onOpenScore={() => {}}
           />
         </TestLinkProvider>,
         { router: true },

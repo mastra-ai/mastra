@@ -18,7 +18,8 @@ import type { IntakeOrderResponse, IntakeRouteInfo } from '../../../../api/types
 import { useIntakeOrderQuery, useSaveIntakeOrder } from '../../../../hooks/useIntakeOrder';
 import { useIntakeRoutesQuery } from '../../../../hooks/useIntakeRoutes';
 import { boardRulesPath, INTAKE_ORDER_ANCHOR } from '../../boardConfig/boardConfigPaths';
-import { newItemRules } from '../../boardRules/ruleLanes';
+import { newItemRules, ruleCount } from '../../boardRules/ruleLanes';
+import { NotRoutedStep } from './NotRoutedStep';
 import { SettingsSubsection } from './SettingsSubsection';
 import { useRowDrag } from './useRowDrag';
 
@@ -36,14 +37,19 @@ export function IntakeOrderSection({ factoryId }: { factoryId: string }) {
       id={INTAKE_ORDER_ANCHOR}
       scope="factory"
       title="Intake order"
-      description="A new issue or pull request is offered to each board in this order. The first board whose rules take it keeps it; no board taking it leaves it Not routed."
+      description="A new issue or pull request is offered to each board in this order. The first board whose rules take it keeps it."
     >
       {query.isPending ? (
         <SettingsContainer>
           <SettingsSkeleton label="Loading intake order" variant="item" rows={3} />
         </SettingsContainer>
       ) : query.isError ? (
-        <Notice variant="destructive">The intake order didn’t load.</Notice>
+        <div className="flex flex-col gap-3">
+          <Notice variant="destructive">The intake order didn’t load.</Notice>
+          <div className="border-border rounded-xl border">
+            <NotRoutedStep factoryId={factoryId} />
+          </div>
+        </div>
       ) : (
         // Keyed so an unsaved order never carries over to another project.
         <OrderEditor key={factoryId} factoryId={factoryId} order={query.data} />
@@ -90,67 +96,83 @@ function OrderEditor({ factoryId, order }: { factoryId: string; order: IntakeOrd
     <div className="flex flex-col gap-3">
       <OrderStatus order={order} changed={changed} />
       {routes.isError && <Notice variant="warning">Rule counts didn’t load.</Notice>}
-      <SettingsContainer role="list" aria-label="Intake order">
-        {shown.map((boardKey, index) => {
-          const dragging = drag.drag?.from === index;
-          const name = names.get(boardKey) ?? boardKey;
-          return (
-            <SettingsItem
-              key={boardKey}
-              role="listitem"
-              data-drop={drag.dropAt(index)}
-              style={dragging ? { transform: `translateY(${drag.drag?.offset ?? 0}px)` } : undefined}
-              onPointerDown={movable ? pointer => drag.onPointerDown(pointer, index) : undefined}
-              onKeyDown={movable ? key => drag.onKeyDown(key, index) : undefined}
-              className={cn(DROP_LINE, dragging && 'z-10 opacity-90')}
-              media={
-                <SettingsItemIcon>
-                  <Txt as="span" variant="caption" className="tabular-nums">
-                    {index + 1}
-                  </Txt>
-                </SettingsItemIcon>
-              }
-              title={name}
-              description={<RuleSummary routes={routes.data?.intakeRoutes} boardKey={boardKey} />}
-            >
-              <div className="flex items-center gap-1">
-                {sortable && (
-                  <>
-                    <span
-                      data-grip
-                      aria-hidden
-                      className="text-icon3 hidden cursor-grab touch-none pointer-fine:inline-flex"
+      <div className="border-border flex flex-col rounded-xl border">
+        <SettingsContainer role="list" aria-label="Intake order">
+          {shown.map((boardKey, index) => {
+            const dragging = drag.drag?.from === index;
+            const name = names.get(boardKey) ?? boardKey;
+            return (
+              <SettingsItem
+                key={boardKey}
+                role="listitem"
+                data-drop={drag.dropAt(index)}
+                style={dragging ? { transform: `translateY(${drag.drag?.offset ?? 0}px)` } : undefined}
+                onPointerDown={movable ? pointer => drag.onPointerDown(pointer, index) : undefined}
+                onKeyDown={movable ? key => drag.onKeyDown(key, index) : undefined}
+                className={cn('group/row', DROP_LINE, dragging && 'z-10 opacity-90')}
+                media={
+                  <SettingsItemIcon>
+                    <Txt
+                      as="span"
+                      variant="caption"
+                      className={cn(
+                        'tabular-nums',
+                        sortable && 'pointer-fine:group-hover/row:hidden',
+                        dragging && 'hidden',
+                      )}
                     >
-                      <GripVertical className="size-icon-md" />
-                    </span>
-                    <Button
-                      size="icon-sm"
-                      variant="ghost"
-                      tooltip="Check earlier"
-                      disabled={!movable || index === 0}
-                      onClick={() => move(index, index - 1)}
-                    >
-                      <ArrowUp />
-                    </Button>
-                    <Button
-                      size="icon-sm"
-                      variant="ghost"
-                      tooltip="Check later"
-                      disabled={!movable || index === shown.length - 1}
-                      onClick={() => move(index, index + 1)}
-                    >
-                      <ArrowDown />
-                    </Button>
-                  </>
-                )}
-                <Button size="sm" variant="ghost" render={<Link to={boardRulesPath(factoryId, boardKey)} />}>
-                  Edit rules
-                </Button>
-              </div>
-            </SettingsItem>
-          );
-        })}
-      </SettingsContainer>
+                      {index + 1}
+                    </Txt>
+                    {sortable && (
+                      <span
+                        data-grip
+                        aria-hidden
+                        className={cn(
+                          'text-icon3 hidden cursor-grab touch-none pointer-fine:group-hover/row:inline-flex',
+                          dragging && 'inline-flex',
+                        )}
+                      >
+                        <GripVertical className="size-icon-md" />
+                      </span>
+                    )}
+                  </SettingsItemIcon>
+                }
+                title={name}
+                description={<RuleSummary routes={routes.data?.intakeRoutes} boardKey={boardKey} />}
+              >
+                <div className="flex items-center gap-1 transition-opacity pointer-fine:opacity-0 pointer-fine:group-focus-within/row:opacity-100 pointer-fine:group-hover/row:opacity-100">
+                  {sortable && (
+                    <>
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        tooltip="Check earlier"
+                        disabled={!movable || index === 0}
+                        onClick={() => move(index, index - 1)}
+                      >
+                        <ArrowUp />
+                      </Button>
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        tooltip="Check later"
+                        disabled={!movable || index === shown.length - 1}
+                        onClick={() => move(index, index + 1)}
+                      >
+                        <ArrowDown />
+                      </Button>
+                    </>
+                  )}
+                  <Button size="sm" variant="ghost" render={<Link to={boardRulesPath(factoryId, boardKey)} />}>
+                    Edit rules
+                  </Button>
+                </div>
+              </SettingsItem>
+            );
+          })}
+        </SettingsContainer>
+        <NotRoutedStep factoryId={factoryId} />
+      </div>
       {order.canEdit && changed && (
         <div className="flex justify-end gap-2">
           <Button size="sm" variant="ghost" onClick={() => setDraft(undefined)} disabled={save.isPending}>
@@ -165,13 +187,17 @@ function OrderEditor({ factoryId, order }: { factoryId: string; order: IntakeOrd
   );
 }
 
-/** How many rules a board has for new items, and whether the last one takes everything left. */
+/** How many rules a board has for new issues and pull requests, and whether the last one takes everything left. */
 function RuleSummary({ routes, boardKey }: { routes: IntakeRouteInfo[] | undefined; boardKey: string }) {
   if (!routes) return null;
   const { count, catchesAll } = newItemRules(routes.filter(route => route.target.boardKey === boardKey));
   return (
     <span className="flex flex-wrap items-center gap-2">
-      <span>{count === 0 ? 'No rules for new items' : count === 1 ? '1 rule' : `${count} rules`}</span>
+      <span>
+        {count === 0
+          ? 'No rules for new issues and pull requests'
+          : `${ruleCount(count)} for new issues and pull requests`}
+      </span>
       {catchesAll && <Badge>Ends in catch-all</Badge>}
     </span>
   );

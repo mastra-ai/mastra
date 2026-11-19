@@ -31,7 +31,7 @@ The easiest way to generate one is using [jwt.io](https://www.jwt.io/):
 1. Select **JWT Encoder**.
 1. Scroll down to the **Sign JWT: Secret** section.
 1. Enter your secret (for example: `supersecretdevkeythatishs256safe!`).
-1. Click **Generate example** to create a valid JWT.
+1. Select **Generate example** to create a valid JWT.
 1. Copy the generated token and set it as `MASTRA_JWT_TOKEN` in your `.env` file.
 
 ## Usage example
@@ -53,7 +53,7 @@ export const mastra = new Mastra({
 
 Visit [MastraJwtAuth](/reference/auth/jwt) for all available configuration options.
 
-Inside [Studio](/docs/studio/overview), go to **Settings** and under **Headers** select the **"Add Header"** button. Enter `Authorization` as the header name and `Bearer <your-jwt>` as the value.
+Inside [Studio](/docs/studio/overview), go to **Settings** and under **Headers** select **Add Header**. Enter `Authorization` as the header name and `Bearer <your-jwt>` as the value.
 
 ## Configuring `MastraClient`
 

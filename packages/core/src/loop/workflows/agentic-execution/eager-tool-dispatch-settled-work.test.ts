@@ -221,11 +221,16 @@ describe('eager tool dispatch — result reuse and caller cancellation', () => {
       },
     });
 
-    const stream = await createAgent(model, executions, { retry: true, settled }).stream('go', {
-      // Retry steps do not count against maxSteps, so a stop condition that counts
-      // every step is what ends the run before the replacement attempt.
-      stopWhen: ({ steps }) => steps.length >= 1,
+    // The caller cancels while the retry is being decided, so the replacement attempt never runs.
+    const abortController = new AbortController();
+    const stream = await createAgent(model, executions, {
+      retry: true,
+      settled,
+      onAPIError: () => abortController.abort(),
+    }).stream('go', {
+      maxSteps: 3,
       eagerToolExecution: true,
+      abortSignal: abortController.signal,
     });
     await drain(stream);
 
@@ -246,11 +251,16 @@ describe('eager tool dispatch — result reuse and caller cancellation', () => {
         }),
     });
 
-    const stream = await createAgent(model, executions, { retry: true, settled }).stream('go', {
-      // Retry steps do not count against maxSteps, so a stop condition that counts
-      // every step is what ends the run before the replacement attempt.
-      stopWhen: ({ steps }) => steps.length >= 1,
+    // The caller cancels while the retry is being decided, so the replacement attempt never runs.
+    const abortController = new AbortController();
+    const stream = await createAgent(model, executions, {
+      retry: true,
+      settled,
+      onAPIError: () => abortController.abort(),
+    }).stream('go', {
+      maxSteps: 3,
       eagerToolExecution: true,
+      abortSignal: abortController.signal,
       transform: {
         targets: ['transcript'],
         transformToolPayload: ctx => `[redacted ${ctx.phase}]`,

@@ -1,0 +1,117 @@
+---
+title: "Videos | Gateway"
+description: "Generate videos through Gateway as asynchronous jobs."
+---
+
+# Videos
+
+```text
+POST https://gateway-api.mastra.ai/v1/videos
+GET  https://gateway-api.mastra.ai/v1/videos
+GET  https://gateway-api.mastra.ai/v1/videos/{id}
+GET  https://gateway-api.mastra.ai/v1/videos/{id}/content
+```
+
+Video generation runs as a job. Create a job, poll it until it finishes, then download the video. Replace `google/veo-3.1` with any video model from [`/v1/models`](/docs/mastra-platform/gateway/api/models).
+
+## Create a job
+
+```bash
+curl https://gateway-api.mastra.ai/v1/videos \
+  -H "Authorization: Bearer $MASTRA_GATEWAY_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "google/veo-3.1",
+    "prompt": "A lighthouse at dusk, waves crashing, slow aerial pan",
+    "duration": 8,
+    "resolution": "720p",
+    "aspect_ratio": "16:9"
+  }'
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'model',
+    type: 'string',
+    description: 'A video model ID.',
+  },
+  {
+    name: 'prompt',
+    type: 'string',
+    description: '1 to 32,000 characters.',
+  },
+  {
+    name: 'duration',
+    type: 'number',
+    description: 'Length in whole seconds, 1 to 120.',
+  },
+  {
+    name: 'resolution',
+    type: "'360p' | '480p' | '720p' | '768p' | '1080p' | '1K' | '2K' | '4K'",
+    isOptional: true,
+    description: 'Output resolution.',
+  },
+  {
+    name: 'aspect_ratio',
+    type: "'16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '3:2' | '2:3' | '21:9' | '9:21'",
+    isOptional: true,
+    description: 'Output aspect ratio.',
+  },
+  {
+    name: 'generate_audio',
+    type: 'boolean',
+    isOptional: true,
+    description: '`true` to generate an audio track.',
+  },
+  {
+    name: 'seed',
+    type: 'number',
+    isOptional: true,
+    description: 'Integer, 0 to 2,147,483,647.',
+  },
+]}
+/>
+
+Each job produces one video. Unknown fields return `422`. Each model supports its own set of durations, resolutions, and aspect ratios. If no route serves the combination you ask for, the request is refused before any credit is held.
+
+The response returns `202` with the job:
+
+```json
+{
+  "id": "...",
+  "object": "video",
+  "model": "google/veo-3.1",
+  "status": "pending",
+  "created_at": 1763460000
+}
+```
+
+## Check a job
+
+```bash
+curl https://gateway-api.mastra.ai/v1/videos/$VIDEO_ID \
+  -H "Authorization: Bearer $MASTRA_GATEWAY_API_KEY"
+```
+
+`status` is one of `pending`, `in_progress`, `completed`, `failed`, or `expired`. A failed job includes an `error` code. A completed job includes `expires_at`, the Unix time after which the video can no longer be downloaded.
+
+Status and download requests count against the key's [rate limits](/docs/mastra-platform/gateway/usage-and-limits).
+
+## Download the video
+
+When `status` is `completed`, fetch the content:
+
+```bash
+curl https://gateway-api.mastra.ai/v1/videos/$VIDEO_ID/content \
+  -H "Authorization: Bearer $MASTRA_GATEWAY_API_KEY" \
+  -o lighthouse.mp4
+```
+
+## List jobs
+
+`GET /v1/videos` lists your jobs, so you can recover a job ID if the create response was lost. It accepts `limit` (1 to 100, default 20) and `after`, the ID of the last job on the previous page.
+
+## Billing
+
+Gateway holds credit for the requested duration when the job is created, then settles on the provider's reported cost. A job that produces no video isn't charged.

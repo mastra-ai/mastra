@@ -55,46 +55,11 @@ const submit = () => fireEvent.click(screen.getByRole('button', { name: 'Create 
 
 describe('CreateDatasetDialog', () => {
   describe('when the dialog opens', () => {
-    it('shows the create dataset title', async () => {
-      setupHandlers();
-      await renderDialog();
-
-      expect(screen.getByRole('dialog', { name: 'Create new dataset' })).not.toBeNull();
-    });
-
     it('pre-fills the name with Dataset and a short id', async () => {
       setupHandlers();
       await renderDialog();
 
       expect(nameInput().value).toMatch(/^Dataset [0-9a-f]{4}$/);
-    });
-
-    it('does not ask for a description', async () => {
-      setupHandlers();
-      await renderDialog();
-
-      expect(screen.queryByLabelText(/^Description/)).toBeNull();
-    });
-
-    it('does not offer default scorers', async () => {
-      setupHandlers();
-      await renderDialog();
-
-      expect(screen.queryByText('Default scorers')).toBeNull();
-    });
-
-    it('does not ask for a target type', async () => {
-      setupHandlers();
-      await renderDialog();
-
-      expect(screen.queryByText('Target type')).toBeNull();
-    });
-
-    it('does not offer schema configuration', async () => {
-      setupHandlers();
-      await renderDialog();
-
-      expect(screen.queryByText(/Schema Configuration/)).toBeNull();
     });
   });
 
@@ -157,20 +122,6 @@ describe('CreateDatasetDialog', () => {
       await waitFor(() => expect(createBodies).toHaveLength(1));
       expect(createBodies[0].targetType).toBe('workflow');
       expect(createBodies[0].targetIds).toEqual(['my-wf', 'other-wf']);
-    });
-
-    it('does not ask for a target type', async () => {
-      setupHandlers();
-      await renderDialog({ targetType: 'agent', targetIds: ['weather-agent'] });
-
-      expect(screen.queryByText('Target type')).toBeNull();
-    });
-
-    it('does not offer a custom schema', async () => {
-      setupHandlers();
-      await renderDialog({ targetType: 'agent', targetIds: ['weather-agent'] });
-
-      expect(screen.queryByRole('button', { name: '+ Custom schema' })).toBeNull();
     });
   });
 

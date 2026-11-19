@@ -20,6 +20,7 @@ import { TOOL_ABORT_GRACE_MS, TOOL_SETTLE_MARGIN_MS } from '../shared/tool-abort
 import { createTimeoutAbortSignal, isMastraTimeoutError, settledOrElapsed } from '../timeout';
 import type { LoopRun } from '../types';
 import { AGENTIC_EXECUTION_WORKFLOW_ID } from './agentic-execution';
+import { REQUIRE_TOOL_APPROVAL_FALLBACK_KEY } from './agentic-execution/tool-approval-verdict';
 import { createAgenticLoopWorkflow } from './agentic-loop';
 
 export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
@@ -466,15 +467,18 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         if (typeof requireToolApproval === 'function') {
           // Store the function so the tool-call-step can evaluate it per call. RequestContext.toJSON()
-          // strips non-serializable values, so this never reaches the persisted suspend snapshot — that
-          // is fine because approval is only decided at call time, before any suspend/resume.
+          // strips non-serializable values, so the function never reaches the persisted snapshot; the
+          // stand-in does, so calls that start after a resume without the function still need approval.
           requestContext.set('__mastra_requireToolApproval', requireToolApproval);
+          requestContext.set(REQUIRE_TOOL_APPROVAL_FALLBACK_KEY, true);
         } else if (requireToolApproval) {
           requestContext.set('__mastra_requireToolApproval', true);
+          requestContext.delete(REQUIRE_TOOL_APPROVAL_FALLBACK_KEY);
         } else {
           // Clear any value left over from a prior call so a reused RequestContext can't leak a
           // stale function/`true` into a call where approval is no longer required.
           requestContext.delete('__mastra_requireToolApproval');
+          requestContext.delete(REQUIRE_TOOL_APPROVAL_FALLBACK_KEY);
         }
 
         if (rest.goal) {

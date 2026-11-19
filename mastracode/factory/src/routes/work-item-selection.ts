@@ -1,12 +1,12 @@
 import type { Card } from '../storage/domains/work-items/base.js';
-import { cardSearchText } from '../work-items/card-search-text.js';
-import { hasEveryWord, searchWords } from '../work-items/search-words.js';
+import { cardSearch } from '../work-items/card-search.js';
+import { matchesSearch, searchTerms } from '../work-items/search-terms.js';
+import type { SearchableCard } from '../work-items/search-terms.js';
 import { sourceExternalId } from '../work-items/source-external-id.js';
 
 interface UnstartedCard {
   card: Card;
-  /** Lowercased, so a search lowercases only its own words. */
-  text: string;
+  search: SearchableCard;
 }
 
 // One list per board version: `listShared` returns the same array until a card changes.
@@ -19,19 +19,19 @@ function unstarted(board: readonly Card[]): UnstartedCard[] {
       .filter(card => Object.keys(card.sessions).length === 0)
       // Cards updated at the same instant keep the board's order, newest created first.
       .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
-      .map(card => ({ card, text: cardSearchText(card) }));
+      .map(card => ({ card, search: cardSearch(card) }));
     unstartedByBoard.set(board, cards);
   }
   return cards;
 }
 
 /**
- * The cards holding no session whose text has every word of `query`, most recently updated first:
- * the first `limit` of them, and how many there are in all.
+ * The cards holding no session that answer every word of `query` (see `searchTerms`), most recently
+ * updated first: the first `limit` of them, and how many there are in all.
  */
 export function unstartedCards(board: readonly Card[], query: string, limit: number): { cards: Card[]; total: number } {
-  const words = searchWords(query);
-  const matches = unstarted(board).filter(({ text }) => hasEveryWord(text, words));
+  const terms = searchTerms(query);
+  const matches = unstarted(board).filter(({ search }) => matchesSearch(search, terms));
   return { cards: matches.slice(0, limit).map(({ card }) => card), total: matches.length };
 }
 

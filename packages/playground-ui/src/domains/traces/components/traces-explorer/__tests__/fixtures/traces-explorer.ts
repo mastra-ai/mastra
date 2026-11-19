@@ -266,3 +266,24 @@ export const emptyDatasets: Awaited<ReturnType<MastraClient['listDatasets']>> = 
   datasets: [],
   pagination: { total: 0, page: 0, perPage: 100, hasMore: false },
 };
+
+const [weatherRoot] = weatherTraceSpans.spans;
+
+/** The weather trace as one turn of the `weather-thread` memory thread. */
+export const weatherThreadTraceSpans: GetTraceResponse = {
+  ...weatherTraceSpans,
+  spans: weatherTraceSpans.spans.map(span =>
+    span.parentSpanId == null ? { ...span, threadId: 'weather-thread' } : span,
+  ),
+};
+
+/** The traces of `weather-thread`: the weather turn and an earlier one, so the thread holds more than this trace. */
+export const weatherThreadLightTraces: Awaited<ReturnType<MastraClient['listTracesLight']>> = {
+  spans: weatherRoot
+    ? [
+        { ...weatherRoot, threadId: 'weather-thread' },
+        { ...weatherRoot, traceId: 'trace-earlier', spanId: 'span-earlier', threadId: 'weather-thread' },
+      ]
+    : [],
+  pagination: { total: 2, page: 0, perPage: 25, hasMore: false },
+};

@@ -7,7 +7,7 @@ import type { SerializedError } from '../error';
 import { getErrorFromUnknown } from '../error/utils.js';
 import type { PubSub } from '../events/pubsub';
 import type { ObservabilityContext, Span, SpanType, TracingPolicy, SpanOutcomeFields } from '../observability';
-import { createObservabilityContext, getResumeTracingContext } from '../observability';
+import { createObservabilityContext, getWorkflowResumeTracingContext } from '../observability';
 import { withSpanErrorAttempt } from '../observability/context-storage';
 import { getSpanErrorOrigin, setSpanErrorOrigin } from '../observability/error-count';
 import { MASTRA_AUTH_TOKEN_KEY } from '../request-context';
@@ -583,8 +583,17 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             },
             errorInstance,
           );
-          this.logger?.trackException(mastraError);
-          this.logger?.error(`Error executing step ${stepId}: ` + errorInstance?.stack);
+          // A processor tripwire is an intentional block, not a failure: log it quietly without a stack
+          if (e instanceof TripWire) {
+            this.logger?.debug(`Step ${stepId} stopped by tripwire`, {
+              stepId,
+              processorId: e.processorId,
+              reason: e.message,
+            });
+          } else {
+            this.logger?.trackException(mastraError);
+            this.logger?.error(`Error executing step ${stepId}: ` + errorInstance?.stack);
+          }
 
           params.stepSpan?.error({
             ...workflowTermination(
@@ -909,10 +918,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     /** @internal */
     inheritedState?: StateBase;
     /** Trace IDs for creating child spans in durable execution */
-    tracingIds?: {
-      traceId: string;
-      workflowSpanId: string;
-    };
+    tracingIds?: ExecutionContext['tracingIds'];
   }): Promise<TOutput> {
     const {
       workflowId,
@@ -1352,10 +1358,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           // never stored, and the resumed span's exported children would inherit it and
           // land as orphans. Undefined when nothing in the chain is exportable, which
           // correctly makes those children trace roots instead. An unsampled run saves
-          // nothing: its no-op span has no real trace for a resume to join.
+          // only that decision, so its resume stays unrecorded instead of sampling again.
           let persistTracingContext: WorkflowStateTracingContext = {};
           if (result.status === 'suspended') {
-            persistTracingContext = this.options.resumeTracingContext ?? getResumeTracingContext(workflowSpan) ?? {};
+            persistTracingContext =
+              this.options.resumeTracingContext ?? getWorkflowResumeTracingContext(workflowSpan) ?? {};
           }
 
           await this.persistStepUpdate({

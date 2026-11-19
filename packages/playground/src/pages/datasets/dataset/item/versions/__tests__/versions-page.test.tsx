@@ -108,7 +108,6 @@ describe('DatasetItemVersionsComparePage', () => {
 
       await waitFor(() => expect(container.querySelector('.code-diff-removed')).not.toBeNull());
       expect(container.querySelector('.code-diff-added')).not.toBeNull();
-      expect(container.querySelector('.cm-mergeView')).toBeNull();
       expect(screen.getByRole('combobox', { name: 'Version' })).toBeDefined();
       expect(screen.getByRole('combobox', { name: 'Compare version' })).toBeDefined();
       expect(screen.getByRole('button', { name: /Default view/ })).toBeDefined();

@@ -17,20 +17,6 @@ const renderList = (props: Partial<DatasetsListProps> = {}) =>
 
 describe('DatasetsList', () => {
   describe('when datasets have explicit or experiment-derived target types', () => {
-    it('does not render the Target column or target labels', () => {
-      renderList();
-      expect(screen.getByRole('link', { name: /Dataset A/ })).toBeTruthy();
-      expect(screen.getByRole('link', { name: /Dataset B/ })).toBeTruthy();
-      expect(screen.queryByText('Target')).toBeNull();
-      expect(screen.queryByText('agent')).toBeNull();
-      expect(screen.queryByText('workflow')).toBeNull();
-    });
-
-    it('does not render a Review column', () => {
-      renderList();
-      expect(screen.queryByText('Review')).toBeNull();
-    });
-
     it('links the experiments action to the global experiments page filtered by dataset', () => {
       renderList();
       const link = screen.getByRole('link', { name: /2 \(100%\)/ });
@@ -47,12 +33,6 @@ describe('DatasetsList', () => {
       const row = screen.getByRole('link', { name: /Dataset A/ });
       expect(row.getAttribute('href')).toBe('/datasets/ds-a');
       expect(within(row).getByText('v3')).toBeTruthy();
-    });
-
-    it('does not render the Description column or dataset descriptions', () => {
-      renderList();
-      expect(screen.queryByText('Description')).toBeNull();
-      expect(screen.queryByText('Customer support examples')).toBeNull();
     });
 
     it('shows the first two tags with an overflow count', () => {

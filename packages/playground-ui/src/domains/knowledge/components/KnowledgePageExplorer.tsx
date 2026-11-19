@@ -20,6 +20,7 @@ import type {
   KnowledgeScopeGrantPayload,
 } from '../pageTypes';
 import { KnowledgeDetailSection, KnowledgeNoteItem, KnowledgePageDetail } from './KnowledgePageDetail';
+import type { PageLinkLists } from './KnowledgePageDetail';
 import { KnowledgePageGraph } from './KnowledgePageGraph';
 import { KNOWLEDGE_TREE_ROOT, KnowledgePageTree } from './KnowledgePageTree';
 import { KnowledgeSourceIcon } from './KnowledgeSourceIcon';
@@ -684,6 +685,8 @@ function SelectedPage({
 }) {
   const detail = source.usePage(pageId);
   const activity = (source.useActivity ?? noActivity)(pageId);
+  const pageLinks = (source.usePageLinks ?? noLinkQuery<KnowledgeExplorerPageLinks>)(pageId).data;
+  const links = useMemo(() => (pageLinks ? linkLists(pageId, pageLinks) : undefined), [pageId, pageLinks]);
   const [moreNotes, setMoreNotes] = useState<{ pageId: string } | null>(null);
   const known = useMemo(
     () => (detail.data ? withPages(pagesById, [...detail.data.ancestors, ...detail.data.related]) : pagesById),
@@ -716,6 +719,7 @@ function SelectedPage({
       highlightMentionOf={highlightMentionOf}
       ancestors={detail.data.ancestors}
       mentionedBy={detail.data.mentionedBy}
+      links={links}
       activity={activity.data?.events}
       childPages={
         source.useTreeLevels ? (
@@ -733,6 +737,45 @@ function SelectedPage({
       }
     />
   );
+}
+
+const SNIPPET_LEAD = 30;
+
+function aroundMatch(text: string, query: string) {
+  const at = query.trim() ? text.toLowerCase().indexOf(query.trim().toLowerCase()) : -1;
+  if (at <= SNIPPET_LEAD) return text;
+  const start = text.lastIndexOf(' ', at - SNIPPET_LEAD) + 1;
+  return `…${text.slice(start)}`;
+}
+
+function Highlighted({ text, query }: { text: string; query: string }) {
+  const needle = query.trim().toLowerCase();
+  const at = needle ? text.toLowerCase().indexOf(needle) : -1;
+  if (at < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, at)}
+      <mark className="rounded-sm bg-badge-blue-subtle text-foreground">{text.slice(at, at + needle.length)}</mark>
+      {text.slice(at + needle.length)}
+    </>
+  );
+}
+
+function linkLists(pageId: string, { edges, pages }: KnowledgeExplorerPageLinks): PageLinkLists {
+  const byId = new Map(pages.map(page => [page.id, page]));
+  const side = (end: 'fromPageId' | 'toPageId', other: 'fromPageId' | 'toPageId') => {
+    const counts = new Map<string, number>();
+    for (const edge of edges) {
+      if (edge[end] === pageId && edge[other] !== pageId) {
+        counts.set(edge[other], (counts.get(edge[other]) ?? 0) + edge.count);
+      }
+    }
+    return [...counts].flatMap(([id, count]) => {
+      const page = byId.get(id);
+      return page ? [{ page, count }] : [];
+    });
+  };
+  return { out: side('fromPageId', 'toPageId'), in: side('toPageId', 'fromPageId') };
 }
 
 function SearchBox({ source, onSelect }: { source: KnowledgeExplorerSource; onSelect: (pageId: string) => void }) {
@@ -767,7 +810,16 @@ function SearchBox({ source, onSelect }: { source: KnowledgeExplorerSource; onSe
                       setQuery('');
                     }}
                   >
-                    <div className="line-clamp-2">{page.name}</div>
+                    <span className="flex min-w-0 flex-col gap-0.5">
+                      <span className="line-clamp-2 wrap-anywhere">
+                        <Highlighted text={page.name} query={query} />
+                      </span>
+                      {page.description ? (
+                        <Txt as="span" variant="caption" tone="muted" className="line-clamp-1 wrap-anywhere">
+                          <Highlighted text={aroundMatch(page.description, query)} query={query} />
+                        </Txt>
+                      ) : null}
+                    </span>
                   </button>
                 </li>
               ))}

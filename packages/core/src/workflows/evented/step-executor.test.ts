@@ -9,6 +9,7 @@ import {
   EXECUTION_UNVERIFIED_ERROR_ID,
   setExecutionClaim,
 } from '../../agent/durable/execution-fence';
+import { TripWire } from '../../agent/trip-wire';
 import type { ActorSignal } from '../../auth/ee';
 import { InMemoryServerCache } from '../../cache/inmemory';
 import { MastraError } from '../../error';
@@ -300,6 +301,73 @@ describe('StepExecutor', () => {
     // Verify stack is not in JSON output
     const serialized = JSON.stringify(failedResult.error);
     expect(serialized).not.toContain('stack');
+  });
+
+  it('logs a step error at ERROR with its stack', async () => {
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() };
+    stepExecutor.__setLogger(logger as any);
+    const boom = new Error('boom');
+    const failingStep = createStep({
+      id: 'failing-step',
+      execute: async () => {
+        throw boom;
+      },
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+    });
+
+    await stepExecutor.execute({
+      workflowId: 'test-workflow',
+      entry: { type: 'step', step: failingStep },
+      runId: 'test-run',
+      input: {},
+      stepResults: {},
+      state: {},
+      requestContext,
+    });
+
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining(`Error executing step failing-step: ${boom.stack}`),
+    );
+    expect(logger.trackException).toHaveBeenCalledTimes(1);
+  });
+
+  it('logs a processor tripwire at debug without a stack and still returns the tripwire', async () => {
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() };
+    stepExecutor.__setLogger(logger as any);
+    const blockingStep = createStep({
+      id: 'blocking-step',
+      execute: async () => {
+        throw new TripWire('blocked on purpose', { retry: false }, 'always-block');
+      },
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+    });
+
+    const result = await stepExecutor.execute({
+      workflowId: 'test-workflow',
+      entry: { type: 'step', step: blockingStep },
+      runId: 'test-run',
+      input: {},
+      stepResults: {},
+      state: {},
+      requestContext,
+    });
+
+    expect(result.status).toBe('failed');
+    expect((result as any).tripwire).toEqual({
+      reason: 'blocked on purpose',
+      retry: false,
+      metadata: undefined,
+      processorId: 'always-block',
+    });
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(logger.trackException).not.toHaveBeenCalled();
+    expect(logger.debug).toHaveBeenCalledWith('Step blocking-step stopped by tripwire', {
+      stepId: 'blocking-step',
+      processorId: 'always-block',
+      reason: 'blocked on purpose',
+    });
   });
 
   it('should save MastraError message without stack trace when step fails', async () => {

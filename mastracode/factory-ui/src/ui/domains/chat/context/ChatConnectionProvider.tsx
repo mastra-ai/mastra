@@ -12,7 +12,7 @@ export function ChatConnectionProvider({
   onEvent,
 }: {
   children: ReactNode;
-  onEvent: (event: AgentControllerEvent) => void;
+  onEvent: (event: AgentControllerEvent, opensStream: boolean) => void;
 }) {
   const { sessionId, resourceId, threadTags, sessionThreadId, factorySessionState, resourceReady, baseUrl } =
     useChatSessionContext();

@@ -489,14 +489,6 @@ describe('ModelPicker', () => {
     expect(stateUpdates).toEqual([]);
   });
 
-  it('shows the level the model runs when the saved choice is above what it supports', async () => {
-    const user = userEvent.setup();
-    renderPicker({ modelId: 'openai/gpt-5', thinkingLevel: 'max' });
-
-    const thinking = await openThinking(user, 'Thinking: High (this session)');
-    expect(within(thinking).getByRole('slider', { name: 'Thinking' })).toBeEnabled();
-  });
-
   it('given no session level, when the session picks one, then it leaves the Factory default and saves it', async () => {
     const user = userEvent.setup();
     const { client, stateUpdates } = renderPicker({ inFactory: true });

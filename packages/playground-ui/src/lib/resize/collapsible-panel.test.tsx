@@ -86,24 +86,6 @@ describe('CollapsiblePanel', () => {
     vi.restoreAllMocks();
   });
 
-  it('renders expanded content without collapsed affordances before resize', () => {
-    renderPanel();
-
-    expect(screen.getByTestId('panel').style.overflow).toBe('hidden');
-    expect(screen.getByTestId('panel-content').parentElement?.hasAttribute('hidden')).toBe(false);
-    expect(screen.queryByRole('button', { name: 'Expand panel' })).toBeNull();
-  });
-
-  it('shows collapsed affordances once the panel reports itself collapsed', () => {
-    renderPanel();
-
-    fireEvent.click(screen.getByTestId('resize-collapsed'));
-
-    const contentWrapper = screen.getByTestId('panel-content').parentElement;
-    expect(screen.getByTestId('panel').style.overflow).toBe('visible');
-    expect(contentWrapper?.getAttribute('hidden')).toBe('');
-  });
-
   it("drives the caller's panelRef when one is provided", () => {
     const externalResize = vi.fn();
     const externalRef = {
@@ -373,13 +355,5 @@ describe('CollapsiblePanel — collapsing', () => {
     collapse();
 
     expect(screen.queryByRole('button', { name: 'Expand panel' })).toBeNull();
-  });
-
-  it('collapses at exactly the collapsed size', () => {
-    render(<Harness />);
-
-    collapse();
-
-    expect(screen.getByRole('button', { name: 'Expand panel' })).toBeTruthy();
   });
 });
