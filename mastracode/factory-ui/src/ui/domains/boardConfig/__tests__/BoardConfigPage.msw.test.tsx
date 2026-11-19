@@ -384,6 +384,8 @@ describe('Board configuration', () => {
 
     await user.click(configNav().getByRole('link', { name: 'Triage' }));
     expect(await screen.findByRole('textbox', { name: 'Phase name' })).toHaveValue('Triage');
+    expect(screen.getByText('Fix Planning to save.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
     expect(screen.queryByLabelText('Triage: start only when JSON')).not.toBeInTheDocument();
     await user.click(screen.getAllByRole('button', { name: 'Edit as JSON' })[0]);
     expect(screen.getByLabelText('Triage: start only when JSON')).toHaveValue(JSON.stringify(bugs, null, 2));

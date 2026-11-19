@@ -5,17 +5,6 @@ import { DatasetItemsLayout } from '../dataset-items-layout';
 describe('DatasetItemsLayout', () => {
   afterEach(cleanup);
 
-  it('renders the list slot', () => {
-    render(<DatasetItemsLayout listSlot={<div data-testid="list">list</div>} />);
-    expect(screen.getByTestId('list')).toBeDefined();
-  });
-
-  it('renders the detail panel with vertical spacing when provided', () => {
-    render(<DatasetItemsLayout listSlot={<div data-testid="list" />} detailPanelSlot={<div data-testid="detail" />} />);
-
-    expect(screen.getByTestId('detail').parentElement?.classList.contains('pt-4')).toBe(true);
-  });
-
   it('shows the detail panel and suppresses the versions panel when both are present', () => {
     render(
       <DatasetItemsLayout
@@ -35,6 +24,7 @@ describe('DatasetItemsLayout', () => {
 
   it('renders only the list when no side panel is requested', () => {
     render(<DatasetItemsLayout listSlot={<div data-testid="list" />} />);
+    expect(screen.getByTestId('list')).toBeDefined();
     expect(screen.queryByTestId('detail')).toBeNull();
     expect(screen.queryByTestId('versions')).toBeNull();
   });

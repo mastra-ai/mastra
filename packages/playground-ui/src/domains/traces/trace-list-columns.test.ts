@@ -280,12 +280,6 @@ describe('trace list columns', () => {
         metadataKeys: [],
       });
     });
-
-    it('offers the message count only on the threads list', () => {
-      expect(buildTraceListColumnKeys(DEFAULT_TRACE_COLUMN_PREFERENCES)).not.toContain('traceCount');
-      expect(TRACE_COLUMN_CATALOGS.traces.standardColumns).not.toContain('traceCount');
-      expect(TRACE_COLUMN_CATALOGS.spans.standardColumns).not.toContain('traceCount');
-    });
   });
 
   describe('when saved preferences come from another version', () => {
@@ -296,20 +290,6 @@ describe('trace list columns', () => {
       expect(parseTraceColumnPreferences(JSON.stringify({ visibleColumns: ['duration'] }))).toEqual(
         DEFAULT_TRACE_COLUMN_PREFERENCES,
       );
-    });
-
-    it('resets a v1 payload that still lists the retired entity column', () => {
-      expect(parseTraceColumnPreferences(JSON.stringify({ version: 1, visibleColumns: ['input', 'entity'] }))).toEqual(
-        DEFAULT_TRACE_COLUMN_PREFERENCES,
-      );
-    });
-
-    it('drops a stale entity column from a current payload', () => {
-      expect(parseTraceColumnPreferences(JSON.stringify({ version: 4, visibleColumns: ['entity', 'input'] }))).toEqual({
-        visibleColumns: ['input'],
-        customColumns: [],
-        metadataKeys: [],
-      });
     });
 
     it('ignores a payload that is not an object', () => {

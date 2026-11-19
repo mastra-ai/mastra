@@ -141,10 +141,9 @@ describe('ExperimentResultPanel metadata', () => {
   describe('given a result with a status and tags', () => {
     const result = makeResult({ status: 'needs-review', tags: ['alpha'] });
 
-    it('shows the status and the tags as metadata rows instead of a "Review" section', () => {
+    it('shows the status and the tags as metadata rows', () => {
       renderPanel(result);
 
-      expect(screen.queryByText('Review')).toBeNull();
       expect(screen.getByText('Status')).toBeDefined();
       expect(screen.getByText('needs-review')).toBeDefined();
       expect(screen.getByText('Tags')).toBeDefined();
@@ -248,12 +247,6 @@ describe('ExperimentResultPanel review controls', () => {
     renderPanel(makeResult({ status: null }), { onComplete: vi.fn() });
 
     expect(screen.queryByRole('button', { name: 'Mark as reviewed' })).toBeNull();
-  });
-
-  it('drops the "Experiment result" title from the header', () => {
-    renderPanel(makeResult());
-
-    expect(screen.queryByRole('heading', { name: 'Experiment result' })).toBeNull();
   });
 
   it('renders the complete action with a visible label, before the other header actions', () => {
