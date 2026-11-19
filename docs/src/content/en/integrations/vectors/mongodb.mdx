@@ -308,7 +308,7 @@ Searches for similar vectors with optional metadata filtering.
 
 BYO `filterFields` are now declared exactly as written. Earlier versions prefixed bare declarations with `metadata.`. If your BYO documents store values under `metadata` and you use the default `metadataMode: 'field'`, declare the full paths, such as `filterFields: ['metadata.category']`. Keep the query filter as `{ category: 'billing' }`.
 
-For root-level BYO fields, use `filterFields: ['category']` with `metadataMode: 'document'`. If you rebuild an index with root-level declarations but still query nested metadata, filtering falls back to the bounded pre-filter instead of running inside `$vectorSearch`. To change an existing search index's field declarations, update its definition in MongoDB rather than registering it again.
+For root-level BYO fields, use `filterFields: ['category']` with `metadataMode: 'document'`. If you rebuild an index with root-level declarations but still query nested metadata, filtering falls back to the bounded pre-filter instead of running inside `$vectorSearch`. To change an existing search index's field declarations, update its definition in MongoDB rather than registering it again. After the updated index reaches `READY`, create a new `MongoDBVector` instance and use it for subsequent queries so it loads the updated declarations instead of cached paths. Otherwise, large nested-metadata queries can continue to hit `TOO_MANY_CANDIDATES` even after you add the required filter paths.
 
 #### Filters that can't run inside `$vectorSearch`
 
