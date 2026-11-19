@@ -17,6 +17,8 @@ import { createSourceControlSessionLookup } from '../session/factory-session.js'
 import { AuditDomain } from '../storage/domains/audit/domain.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryToolDependencies } from '../tools/index.js';
+import { createWorkosMcpCallerResolver } from './caller.js';
+import type { McpCallerResolver } from './caller.js';
 import { ACTIVITY_SETTLE_MS } from './events.js';
 import {
   buildFactoryMcpRoutes,
@@ -115,7 +117,7 @@ function sign(key: CryptoKey, issuer: string, claims: JWTPayload, options: SignO
 const signedTokens = new Map<string, string>();
 const bearer = (token: string) => signedTokens.get(token) ?? token;
 
-async function setup() {
+async function setup(options: { resolveCaller?: McpCallerResolver } = {}) {
   const seed = await createFactoryStorageForTests();
   const authServer = await startAuthorizationServer();
   for (const [name, user] of Object.entries(USERS)) {
@@ -164,7 +166,11 @@ async function setup() {
 
   const app = new Hono();
   const routes = buildFactoryMcpRoutes({
-    verifyAccessToken: createMcpTokenVerifier({ authorizationServers: [authServer.issuer], resource: RESOURCE }),
+    verifyAccessToken: createMcpTokenVerifier({
+      authorizationServers: [authServer.issuer],
+      resource: RESOURCE,
+      ...(options.resolveCaller ? { resolveCaller: options.resolveCaller } : {}),
+    }),
     publicOrigin: PUBLIC_ORIGIN,
     authorizationServers: [authServer.issuer],
     projects: seed.projects,
@@ -319,6 +325,30 @@ function toolText(result: { content: Array<{ type: string; text: string }> }): a
   return JSON.parse(result.content.find(part => part.type === 'text')!.text);
 }
 
+/**
+ * WorkOS user management as the resolver calls it: users by id, and each
+ * user's active memberships. `members` is mutable so a test can remove someone.
+ */
+function workosDirectory(members: Record<string, string[]>) {
+  const people: Record<string, { firstName: string; lastName: string; email: string }> = {
+    alice: { firstName: 'Alice', lastName: 'Liddell', email: 'alice@example.com' },
+    bob: { firstName: 'Bob', lastName: 'Builder', email: 'bob@example.com' },
+  };
+  const userManagement = {
+    getUser: async (userId: string) => {
+      const person = people[userId];
+      if (!person) throw Object.assign(new Error('User not found'), { status: 404 });
+      return { id: userId, profilePictureUrl: null, ...person };
+    },
+    listOrganizationMemberships: async ({ userId, organizationId }: { userId: string; organizationId: string }) => ({
+      data: (members[userId] ?? []).filter(orgId => orgId === organizationId).map(orgId => ({ organizationId: orgId })),
+    }),
+  };
+  return createWorkosMcpCallerResolver(
+    userManagement as unknown as Parameters<typeof createWorkosMcpCallerResolver>[0],
+  );
+}
+
 describe('Factory MCP server', () => {
   it('Claude’s connector is sent to sign in for this endpoint', async () => {
     const { base, url, authServer } = await setup();
@@ -379,6 +409,48 @@ describe('Factory MCP server', () => {
 
     expect(response.status).toBe(409);
     expect(response.body).toMatchObject({ error: 'multiple_projects' });
+  });
+
+  it('someone removed from the organization loses access at once, though their token has not expired', async () => {
+    const members: Record<string, string[]> = { alice: ['org-1'] };
+    const { url } = await setup({ resolveCaller: workosDirectory(members) });
+
+    expect((await claudeRequest(url, 'server/discover', {}, 'token-alice')).status).toBe(200);
+
+    members.alice = [];
+    const response = await claudeRequest(url, 'server/discover', {}, 'token-alice');
+    expect(response.status).toBe(401);
+    expect(response.headers.get('WWW-Authenticate')).toContain('error="invalid_token"');
+  });
+
+  it('a user who no longer exists is refused', async () => {
+    const { url } = await setup({ resolveCaller: workosDirectory({}) });
+    // `mallory` isn't in the directory at all.
+    expect((await claudeRequest(url, 'server/discover', {}, 'token-mallory')).status).toBe(401);
+  });
+
+  it('the audit trail names who made a change from Claude', async () => {
+    const { url, item, project, audit } = await setup({ resolveCaller: workosDirectory({ alice: ['org-1'] }) });
+
+    const call = await claudeRequest(
+      url,
+      'tools/call',
+      { name: 'factory_update_work_item', arguments: { workItem: item.id, title: 'Fix the sign-in page' } },
+      'token-alice',
+    );
+    expect(call.body?.result.isError).not.toBe(true);
+
+    const { events } = await audit.list({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      actions: ['factory.work_item.updated'],
+    });
+    expect(events).toEqual([
+      expect.objectContaining({
+        actorId: 'alice',
+        metadata: expect.objectContaining({ __actorProfile: { name: 'Alice Liddell' } }),
+      }),
+    ]);
   });
 
   it('Claude’s connector discovers the Factory and lists its tools', async () => {

@@ -1,10 +1,13 @@
 import { createRemoteJWKSet, decodeJwt, errors, jwtVerify } from 'jose';
 import type { JWTVerifyGetKey } from 'jose';
+import type { McpCallerResolver } from './caller.js';
 
 /** The person an MCP access token was issued to, in the org they chose when signing in. */
 export interface McpCaller {
   userId: string;
   orgId?: string;
+  /** Name and picture for audit entries, when the caller was looked up. */
+  profile?: { name?: string; email?: string; avatarUrl?: string };
 }
 
 export type McpTokenVerifier = (token: string) => Promise<McpCaller | null>;
@@ -17,12 +20,16 @@ export type McpTokenVerifier = (token: string) => Promise<McpCaller | null>;
  * or phished MCP token can't reach the rest of the user's account.
  *
  * Signing keys come from each server's `jwks_uri` (RFC 8414 metadata).
+ * With `resolveCaller`, a token naming an org is also checked against current
+ * membership on every request.
  * Returns `null` for a token that isn't valid here; throws when the signing
- * keys can't be fetched, so an outage isn't mistaken for a bad sign-in.
+ * keys or the caller can't be fetched, so an outage isn't mistaken for a bad
+ * sign-in.
  */
 export function createMcpTokenVerifier(options: {
   authorizationServers: string[];
   resource: string;
+  resolveCaller?: McpCallerResolver;
 }): McpTokenVerifier {
   const issuers = new Set(options.authorizationServers.map(trimSlash));
   const keySets = new Map<string, Promise<JWTVerifyGetKey>>();
@@ -44,7 +51,7 @@ export function createMcpTokenVerifier(options: {
     return keys;
   };
 
-  return async token => {
+  const verify = async (token: string): Promise<McpCaller | null> => {
     let issuer: string;
     try {
       const { iss } = decodeJwt(token);
@@ -72,6 +79,12 @@ export function createMcpTokenVerifier(options: {
       }
       throw error;
     }
+  };
+
+  return async token => {
+    const claimed = await verify(token);
+    if (!claimed?.orgId || !options.resolveCaller) return claimed;
+    return options.resolveCaller({ userId: claimed.userId, orgId: claimed.orgId });
   };
 }
 

@@ -52,6 +52,8 @@ import {
   getFactoryAuthOrgId,
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
+  getWorkOSProvider,
+  isWorkOSAuth,
 } from './auth.js';
 import { publishBoardChange, subscribeBoardChanges } from './board-changes.js';
 import { BoardWriteError, BoardWrites } from './boards/board-writes.js';
@@ -110,6 +112,7 @@ import { logIntegrationSummary } from './integrations/startup-summary.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
 import { SELECT_VANTA_VULNERABILITIES_MIGRATION, vantaOrgsSyncingWithoutSource } from './integrations/vanta/sync.js';
 import { shareLinkedRepositoryChanges } from './linked-repositories-changed.js';
+import { createWorkosMcpCallerResolver } from './mcp/caller.js';
 import { buildFactoryMcpRoutes, factoryMcpResource, resolveMcpAuthorizationServers } from './mcp/routes.js';
 import type { FactoryMcpConfig } from './mcp/routes.js';
 import { createMcpTokenVerifier } from './mcp/token.js';
@@ -2290,6 +2293,13 @@ export class MastraFactory {
                 verifyAccessToken: createMcpTokenVerifier({
                   authorizationServers: mcpAuthorizationServers,
                   resource: factoryMcpResource(publicOrigin),
+                  ...(isWorkOSAuth(auth)
+                    ? {
+                        resolveCaller: createWorkosMcpCallerResolver(
+                          getWorkOSProvider(auth).getWorkOS().userManagement,
+                        ),
+                      }
+                    : {}),
                 }),
                 publicOrigin,
                 authorizationServers: mcpAuthorizationServers,

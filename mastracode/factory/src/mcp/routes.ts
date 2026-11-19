@@ -11,6 +11,7 @@ import { z } from 'zod';
 
 import { PLATFORM_AUTH_PROVIDER } from '../platform-auth-host.js';
 import { ensureFactorySourceSession, FactorySourceSessionResolutionError } from '../session/factory-session.js';
+import { auditActorProfile } from '../storage/domains/audit/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import { FACTORY_TOOL_ANNOTATIONS } from '../tools/annotations.js';
@@ -243,6 +244,7 @@ async function handleMcp(deps: FactoryMcpRoutesDeps, c: Context): Promise<Respon
     userId: tenant.userId,
     factoryProjectId,
   });
+  const actorProfile = auditActorProfile(tenant.profile);
   const scope: FactoryToolScope = {
     orgId: tenant.orgId,
     factoryProjectId,
@@ -254,6 +256,7 @@ async function handleMcp(deps: FactoryMcpRoutesDeps, c: Context): Promise<Respon
     kind: 'user',
     // A signed-in person is driving the client: the same reach as a web UI turn.
     interactive: true,
+    ...(actorProfile ? { actorProfile } : {}),
   };
 
   const server = new MCPServer({
