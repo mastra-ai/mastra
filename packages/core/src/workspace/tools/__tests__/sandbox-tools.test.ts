@@ -513,7 +513,7 @@ describe('get_process_output tool', () => {
         );
         const pid = String(started).match(/PID: (.+)\)/)![1]!;
 
-        const result = await getProcessOutputTool.execute!({ pid, wait: true }, { workspace } as any);
+        const result = await getProcessOutputTool.execute!({ pid, waitSeconds: 30 }, { workspace } as any);
 
         expect(result).toBe(
           'started\n\n\nThe command exited, but a process it started is still running and holding its output open. Call kill_process to stop it.\nExit code: 0',
@@ -740,8 +740,8 @@ describe('get_process_output tool', () => {
     });
   });
 
-  describe('wait param', () => {
-    it('blocks until process exits when wait: true', async () => {
+  describe('waitSeconds param', () => {
+    it('waits for the process to exit when waitSeconds is set', async () => {
       const handle = createMockHandle({
         pid: '15',
         stdout: 'final output\n',
@@ -758,13 +758,13 @@ describe('get_process_output tool', () => {
         },
       });
       const ctx = createContext(sandbox);
-      const result = await getProcessOutputTool.execute({ pid: '15', wait: true }, ctx);
+      const result = await getProcessOutputTool.execute({ pid: '15', waitSeconds: 30 }, ctx);
       expect(handle.wait).toHaveBeenCalled();
       expect(result).toContain('final output');
       expect(result).toContain('Exit code: 0');
     });
 
-    it('returns output for exited process when wait: true', async () => {
+    it('returns output for exited process when waitSeconds is set', async () => {
       const handle = createMockHandle({
         pid: '16',
         stdout: 'build complete\nDone in 2.3s\n',
@@ -777,7 +777,7 @@ describe('get_process_output tool', () => {
         },
       });
       const ctx = createContext(sandbox);
-      const result = await getProcessOutputTool.execute({ pid: '16', wait: true }, ctx);
+      const result = await getProcessOutputTool.execute({ pid: '16', waitSeconds: 30 }, ctx);
       expect(result).toContain('build complete');
       expect(result).toContain('Done in 2.3s');
     });
@@ -829,8 +829,11 @@ describe('background processes killed by an aborted run', () => {
       const handle = await spawn.mock.results.at(-1)!.value;
       return { pid, handle };
     };
-    const read = (pid: string, opts: { wait?: boolean; abortSignal?: AbortSignal } = {}) =>
-      getProcessOutputTool.execute!({ pid, wait: opts.wait }, { workspace, abortSignal: opts.abortSignal } as any);
+    const read = (pid: string, opts: { waitSeconds?: number; abortSignal?: AbortSignal } = {}) =>
+      getProcessOutputTool.execute!({ pid, waitSeconds: opts.waitSeconds }, {
+        workspace,
+        abortSignal: opts.abortSignal,
+      } as any);
     const cleanup = async () => {
       await workspace.destroy();
       await fs.rm(dir, { recursive: true, force: true });
@@ -861,10 +864,109 @@ describe('background processes killed by an aborted run', () => {
       await vi.waitFor(() => expect(handle.stdout).toContain('started'));
 
       const controller = new AbortController();
-      const reading = read(pid, { wait: true, abortSignal: controller.signal });
+      const reading = read(pid, { waitSeconds: 30, abortSignal: controller.signal });
       controller.abort();
 
       expect(await reading).toBe(`started\n\n\n${abortNote}\nExit code: ${handle.exitCode}`);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('returns the output so far and says it is still running when the wait runs out', async () => {
+    const { start, read, cleanup } = await setup();
+    try {
+      const { pid, handle } = await start('echo started; sleep 30');
+      await vi.waitFor(() => expect(handle.stdout).toContain('started'));
+
+      const startedAt = Date.now();
+      const result = await read(pid, { waitSeconds: 1 });
+
+      expect(result).toBe(
+        'started\n\n\nStill running after waiting 1s. Call get_process_output again to keep waiting, or kill_process to stop it.',
+      );
+      expect(Date.now() - startedAt).toBeLessThan(5_000);
+      expect(handle.exitCode).toBeUndefined();
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('says a quiet process is still running when the wait runs out', async () => {
+    const { start, read, cleanup } = await setup();
+    try {
+      const { pid } = await start('sleep 30');
+
+      expect(await read(pid, { waitSeconds: 1 })).toBe(
+        '(no output yet)\n\nStill running after waiting 1s. Call get_process_output again to keep waiting, or kill_process to stop it.',
+      );
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('returns as soon as the process exits, before the wait runs out', async () => {
+    const { start, read, cleanup } = await setup();
+    try {
+      const { pid } = await start('echo started; sleep 1; echo finished');
+
+      const startedAt = Date.now();
+      const result = await read(pid, { waitSeconds: 30 });
+
+      expect(result).toBe('started\nfinished\n\n\nExit code: 0');
+      expect(Date.now() - startedAt).toBeLessThan(15_000);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('leaves the process running when the run is aborted after the wait ran out', async () => {
+    const { start, read, cleanup } = await setup();
+    try {
+      const { pid, handle } = await start('echo started; sleep 30');
+      await vi.waitFor(() => expect(handle.stdout).toContain('started'));
+
+      const controller = new AbortController();
+      await read(pid, { waitSeconds: 1, abortSignal: controller.signal });
+      controller.abort();
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      expect(handle.exitCode).toBeUndefined();
+      expect(await read(pid)).toBe('started\n');
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('keeps a single wait on the process however many reads run out', async () => {
+    const { start, read, cleanup } = await setup();
+    try {
+      const { pid, handle } = await start('sleep 30');
+      const wait = vi.spyOn(handle, 'wait');
+
+      await read(pid, { waitSeconds: 1 });
+      await read(pid, { waitSeconds: 1 });
+      await read(pid, { waitSeconds: 1 });
+
+      expect(wait).toHaveBeenCalledTimes(1);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('stops the process when a later read is aborted while it waits', async () => {
+    const { start, read, cleanup } = await setup();
+    try {
+      const { pid, handle } = await start('echo started; sleep 30');
+      await vi.waitFor(() => expect(handle.stdout).toContain('started'));
+      await read(pid, { waitSeconds: 1 });
+
+      const controller = new AbortController();
+      const reading = read(pid, { waitSeconds: 30, abortSignal: controller.signal });
+      controller.abort();
+
+      expect(await reading).toContain('Exit code:');
+      expect(handle.killedByAbort).toBe(true);
     } finally {
       await cleanup();
     }

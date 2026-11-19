@@ -1,4 +1,7 @@
-import { ComposerAttachMenu } from '@mastra/playground-ui/components/Composer';
+import { useState } from 'react';
+import type { FormEvent } from 'react';
+import { useComposerAttachments } from './composer-attachments';
+import { ComposerAttachMenu } from '@/ds/components/Composer';
 import {
   Dialog,
   DialogAction,
@@ -8,14 +11,11 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from '@mastra/playground-ui/components/Dialog';
-import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
-import { Form } from '@mastra/playground-ui/components/Form';
-import { Input } from '@mastra/playground-ui/components/Input';
-import { IconChainLink3 } from '@mastra/playground-ui/icons/central/IconChainLink3';
-import { useState } from 'react';
-import type { FormEvent } from 'react';
-import { useComposerAttachments } from './composer-attachments';
+} from '@/ds/components/Dialog';
+import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
+import { Form } from '@/ds/components/Form';
+import { Input } from '@/ds/components/Input';
+import { IconChainLink3 } from '@/ds/icons/central/IconChainLink3';
 
 /**
  * "+" composer action: attach from the camera, photo library or files, or add a public URL.

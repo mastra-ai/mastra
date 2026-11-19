@@ -1,5 +1,5 @@
-import { TaskList } from '@mastra/playground-ui/components/ai/task-list';
-import { useChatTasks } from '@mastra/playground-ui/domains/chat/context/chat-context';
+import { useChatTasks } from '@/domains/chat/context/chat-context';
+import { TaskList } from '@/ds/components/ai/task-list';
 
 export const TaskPanel = () => {
   const tasks = useChatTasks();

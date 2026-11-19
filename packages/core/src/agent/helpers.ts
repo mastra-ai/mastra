@@ -35,8 +35,9 @@ export function resolveRunId(runId: string | undefined, generateId?: () => strin
 }
 
 export function successfulAgentOutput<T extends { error?: unknown }>(output: T): T {
-  if (output.error) {
-    throw output.error;
+  const error = output.error;
+  if (error) {
+    throw error;
   }
   return output;
 }
