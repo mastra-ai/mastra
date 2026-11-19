@@ -964,6 +964,16 @@ export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependenc
       expect(output).not.toMatch(/['"]lodash\/kebabCase(\.js)?['"]/);
     });
 
+    it('should not leak virtual dependency entry ids into the output', async () => {
+      const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+      const bundleFiles = await glob('**/*.mjs', { cwd: outputDir, ignore: ['node_modules/**'] });
+      const output = (await Promise.all(bundleFiles.map(file => readFile(join(outputDir, file), 'utf-8')))).join('\n');
+
+      expect(bundleFiles.length).toBeGreaterThan(0);
+      expect(output).not.toContain('\0virtual:');
+      expect(output).not.toContain('#virtual-');
+    });
+
     it('should keep deprecated externals out of optimized dependency bundles', async () => {
       const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
       const outputFiles = await readdir(outputDir);
