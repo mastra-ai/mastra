@@ -1527,12 +1527,17 @@ export function createDurableToolCallStep() {
         };
       }
 
-      // Rebuild the forwarded model_step span and pass it as the tool's tracing context so
-      // the TOOL_CALL span nests under the LLM call (matches the non-durable path).
+      // The TOOL_CALL span nests under the forwarded model_step (matches the non-durable path). A
+      // resumed execution did not open the step that suspended, so its tool call nests under its
+      // own generation instead, as the non-durable resume does.
+      const toolSegment = segmentSpanData(requestContext, runId, initData, registryEntry);
+      const toolParentData =
+        typedInput.stepSpanData && segmentOwnsStep(toolSegment, typedInput.stepSpanData)
+          ? (typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>)
+          : toolSegment.modelSpanData;
       const stepSpan =
-        typedInput.stepSpanData && observability
-          ? observability.rebuildSpan(typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>)
-          : undefined;
+        liveSegmentSpan(toolParentData, registryEntry?.resumeModelSpan) ??
+        (toolParentData && observability ? observability.rebuildSpan(toolParentData) : undefined);
       const toolTracingContext = stepSpan ? { currentSpan: stepSpan } : undefined;
 
       // Track whether the tool's suspend callback was invoked so we can skip

@@ -2,6 +2,7 @@ import type { Scenario } from '../scenario.js';
 import { anthropicScenario } from './anthropic.js';
 import { clerkScenario } from './clerk.js';
 import { discordScenario } from './discord.js';
+import { elevenlabsScenario } from './elevenlabs.js';
 import { firefliesScenario } from './fireflies.js';
 import { githubScenario } from './github.js';
 import { gitlabScenario } from './gitlab.js';
@@ -42,6 +43,7 @@ export const scenarios: Scenario[] = [
   anthropicScenario,
   clerkScenario,
   discordScenario,
+  elevenlabsScenario,
   firefliesScenario,
   githubScenario,
   gitlabScenario,

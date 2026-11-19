@@ -909,6 +909,10 @@ describe('MongoDBVector filterFields (#18587)', () => {
     const makeCursor = (docs: any[]) => ({
       toArray: async () => docs,
       map: (cb: (d: any) => any) => ({ toArray: async () => docs.map(cb) }),
+      async *[Symbol.asyncIterator]() {
+        yield* docs;
+      },
+      close: async () => {},
     });
 
     it('passes the metadata filter straight to $vectorSearch when every field is declared', async () => {
@@ -983,6 +987,10 @@ describe('MongoDBVector filterFields (#18587)', () => {
     const makeCursor = (docs: any[]) => ({
       toArray: async () => docs,
       map: (cb: (d: any) => any) => ({ toArray: async () => docs.map(cb) }),
+      async *[Symbol.asyncIterator]() {
+        yield* docs;
+      },
+      close: async () => {},
     });
     const stubHybrid = (v: MongoDBVector, target: { isByo: boolean }, declared: string[]) => {
       const aggregate = vi.fn().mockReturnValue(makeCursor([{ _id: 'a' }]));
@@ -1888,6 +1896,10 @@ describe('MongoDBVector filterFields (#18587)', () => {
       const makeCursor = (docs: any[]) => ({
         toArray: async () => docs,
         map: (cb: (d: any) => any) => ({ toArray: async () => docs.map(cb) }),
+        async *[Symbol.asyncIterator]() {
+          yield* docs;
+        },
+        close: async () => {},
       });
       const aggregate = vi.fn().mockReturnValue(makeCursor([{ _id: 'b' }]));
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ aggregate });
@@ -2842,6 +2854,10 @@ describe('MongoDBVector autoEmbed', () => {
         .mockReturnValueOnce({
           map: () => ({ toArray: async () => ['doc-1'] }),
           toArray: async () => [{ _id: 'doc-1' }],
+          async *[Symbol.asyncIterator]() {
+            yield { _id: 'doc-1' };
+          },
+          close: async () => {},
         })
         .mockReturnValueOnce({ toArray: async () => [] });
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ aggregate });
@@ -2903,6 +2919,10 @@ describe('MongoDBVector autoEmbed', () => {
         .mockReturnValueOnce({
           map: () => ({ toArray: async () => ['doc-1'] }),
           toArray: async () => [{ _id: 'doc-1' }],
+          async *[Symbol.asyncIterator]() {
+            yield { _id: 'doc-1' };
+          },
+          close: async () => {},
         })
         .mockReturnValueOnce({ toArray: async () => [] });
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ aggregate });
@@ -2934,6 +2954,10 @@ describe('MongoDBVector autoEmbed', () => {
         .mockReturnValueOnce({
           map: () => ({ toArray: async () => ['doc-1'] }),
           toArray: async () => [{ _id: 'doc-1' }],
+          async *[Symbol.asyncIterator]() {
+            yield { _id: 'doc-1' };
+          },
+          close: async () => {},
         })
         .mockReturnValueOnce({ toArray: async () => [] });
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ aggregate });
@@ -2966,6 +2990,10 @@ describe('MongoDBVector autoEmbed', () => {
         .mockReturnValueOnce({
           map: () => ({ toArray: async () => ['doc-1'] }),
           toArray: async () => [{ _id: 'doc-1' }],
+          async *[Symbol.asyncIterator]() {
+            yield { _id: 'doc-1' };
+          },
+          close: async () => {},
         })
         .mockReturnValueOnce({ toArray: async () => [] });
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ aggregate });
@@ -3584,6 +3612,31 @@ describe('MongoDBVector SDAP hardening', () => {
     expect(Object.keys(updated!.metadata)).toEqual(['__proto__', 'category']);
   });
 
+  it('matches an own __proto__ metadata key written by upsert', async () => {
+    await v.upsert({
+      indexName: managedIdx,
+      vectors: [[1, 0, 0, 0]],
+      ids: ['proto-match'],
+      metadata: [JSON.parse('{"__proto__":"match"}')],
+    });
+    await waitForSync(v, managedIdx, async () => {
+      const rows = await v.query({ indexName: managedIdx, queryVector: [1, 0, 0, 0], topK: 10 });
+      return rows.some(row => row.id === 'proto-match');
+    });
+
+    for (const filter of [JSON.parse('{"__proto__":"match"}'), { $and: [JSON.parse('{"__proto__":"match"}')] }]) {
+      const rows = await v.query({ indexName: managedIdx, queryVector: [1, 0, 0, 0], filter });
+      expect(rows.map(row => row.id)).toEqual(['proto-match']);
+    }
+    const rootMatches = await v.query({
+      indexName: managedIdx,
+      queryVector: [1, 0, 0, 0],
+      filter: JSON.parse('{"__proto__":"match"}'),
+      metadataMode: 'document',
+    });
+    expect(rootMatches).toEqual([]);
+  });
+
   it('a __proto__ filter key never widens a query to every document (PENGINT-279)', async () => {
     // No document has a `__proto__` field, so the filter must match nothing. Before the fix the
     // key was dropped, the filter became {} and the query returned every document.
@@ -3654,11 +3707,14 @@ describe('MongoDBVector index ownership', () => {
   });
 
   afterAll(async () => {
-    for (const name of [col, managed, failing]) {
-      await dropCollectionWithSearchIndexes(v['db'], name).catch(() => {});
+    try {
+      for (const name of [col, managed, failing]) {
+        await dropCollectionWithSearchIndexes(v['db'], name).catch(() => {});
+      }
+      await registry().deleteMany({ _id: { $in: ['own_byo', managed, failing] as any[] } });
+    } finally {
+      await v.disconnect();
     }
-    await registry().deleteMany({ _id: { $in: ['own_byo', managed, failing] as any[] } });
-    await v.disconnect();
   });
 
   it("keeps a caller's existing vector index when a BYO registration on it is deleted", async () => {
@@ -3857,6 +3913,55 @@ describe('MongoDBVector pre-filter bounds', () => {
     // One aggregate, the $vectorSearch itself, carrying the filter: no candidate _id pass.
     expect(commands).toHaveLength(1);
     expect(commands[0].pipeline[0].$vectorSearch.filter).toEqual({ lane: 'fraud' });
+  });
+
+  it('bounds candidate BSON bytes for query and both hybrid query forms', async () => {
+    const statics = MongoDBVector as any;
+    const budget = statics.MAX_PREFILTER_ID_BYTES;
+    const longIds = ['c', 'd'].map(prefix => prefix + 'x'.repeat(4096));
+    await v['db']
+      .collection(col)
+      .insertMany(longIds.map(_id => ({ _id, embedding: [1, 0, 0, 0], amount: 9000, note: 'refund' })) as any[]);
+    statics.MAX_PREFILTER_ID_BYTES = 8192;
+    try {
+      const filter = { amount: 9000 };
+      const errors = [
+        await v.query({ indexName: idx, queryVector: [1, 0, 0, 0], filter, metadataMode: 'document' }).catch(e => e),
+        await v
+          .hybridQuery({
+            indexName: idx,
+            queryVector: [1, 0, 0, 0],
+            query: 'refund',
+            paths: ['note'],
+            filter,
+            metadataMode: 'document',
+          })
+          .catch(e => e),
+        await v
+          .hybridQuery({
+            indexName: idx,
+            filter,
+            vector: { queryVector: [1, 0, 0, 0] },
+            text: { query: 'refund', paths: ['note'] },
+          })
+          .catch(e => e),
+      ];
+      for (const [i, error] of errors.entries()) {
+        expect(error.id).toMatch(i === 0 ? /QUERY.*TOO_MANY_CANDIDATES/ : /HYBRID_QUERY.*TOO_MANY_CANDIDATES/);
+        expect(error.category).toBe('USER');
+        expect(error.details).toMatchObject({ maxCandidateBytes: 8192 });
+      }
+      const rows = await v.query({
+        indexName: idx,
+        queryVector: [1, 0, 0, 0],
+        filter: { amount: 100 },
+        metadataMode: 'document',
+      });
+      expect(rows.map(row => row.id)).toEqual(['a']);
+    } finally {
+      statics.MAX_PREFILTER_ID_BYTES = budget;
+      await v['db'].collection(col).deleteMany({ _id: { $in: longIds } } as any);
+    }
   });
 
   it('fails with a USER error instead of loading an oversized candidate list', async () => {
@@ -4150,16 +4255,28 @@ async function seedByo(store: MongoDBVector, indexName: string, { autoEmbed = fa
 }
 
 /**
- * Index readiness doesn't mean every document is searchable yet. The vector branch alone can
- * return all three articles, so also poll the full-text index until it finds the keyword match.
+ * Index readiness doesn't mean every document is searchable yet. Poll each branch independently
+ * so a full-text hit cannot hide a missing vector result in the fused union.
  */
 async function waitUntilSearchable(store: MongoDBVector, indexName: string, vector: any, path: string) {
   await waitForSync(
     store,
     indexName,
-    async () =>
-      (await store.hybridQuery({ indexName, vector, text: { query: 'password', paths: [path] } })).length === 3 &&
-      ids(await store.textQuery({ indexName, query: 'password', paths: [path] })).includes('password-reset'),
+    async () => {
+      const vectorIds = ids(
+        await store.query({
+          indexName,
+          queryVector: vector.queryVector,
+          queryText: vector.query,
+          model: vector.model,
+          topK: 3,
+        }),
+      );
+      return (
+        ARTICLE_IDS.every(id => vectorIds.includes(id)) &&
+        ids(await store.textQuery({ indexName, query: 'password', paths: [path] })).includes('password-reset')
+      );
+    },
     300000,
     2000,
   );

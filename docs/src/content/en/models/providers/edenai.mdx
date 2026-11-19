@@ -7,7 +7,7 @@ description: "Browse Eden AI model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/edenai.svg" alt="Eden AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Eden AI
 
-Access 399 Eden AI models through Mastra's model router. Authentication is handled automatically using the `EDENAI_API_KEY` environment variable.
+Access 402 Eden AI models through Mastra's model router. Authentication is handled automatically using the `EDENAI_API_KEY` environment variable.
 
 Learn more in the [Eden AI documentation](https://docs.edenai.co).
 
@@ -682,6 +682,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.44
   },
   {
+    "model": "edenai/azure/gpt-4.1-nano@us",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1047576,
+    "maxOutput": 32768,
+    "inputCost": 0.11,
+    "outputCost": 0.44
+  },
+  {
     "model": "edenai/azure/gpt-5.1-codex",
     "imageInput": true,
     "audioInput": false,
@@ -920,6 +932,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 8000,
     "inputCost": 2.5,
     "outputCost": 10
+  },
+  {
+    "model": "edenai/cohere/command-a-translate-08-2025",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 8992,
+    "maxOutput": 8000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "edenai/cohere/command-a-vision-07-2025",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 8000,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "edenai/cohere/command-r-08-2024",

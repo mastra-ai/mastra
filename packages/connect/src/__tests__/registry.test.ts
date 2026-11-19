@@ -13,6 +13,7 @@ describe('shipped provider registry', () => {
       'anthropic',
       'clerk',
       'discord',
+      'elevenlabs',
       'fireflies',
       'github',
       'gitlab',
