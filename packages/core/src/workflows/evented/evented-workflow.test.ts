@@ -10,13 +10,14 @@ import { EventEmitter } from 'node:events';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
-import { Agent, MessageList } from '../../agent';
+import { Agent } from '../../agent';
 import type { FGACheckParams } from '../../auth/ee';
 import { MastraNonRetryableError } from '../../error';
 import type { Event } from '../../events';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import type { Processor } from '../../processors';
+import { PROCESSOR_ABORT_SIGNAL } from '../../processors/abort-signal-scope';
 import { ProcessorStepSchema } from '../../processors/step-schema';
 import { RequestContext } from '../../request-context';
 import { MockStore } from '../../storage/mock';
@@ -517,51 +518,90 @@ describe('Workflow (Evented Engine Specific)', () => {
     }
   });
 
-  it('passes the abort signal to every processor in a chain (#29208)', async () => {
-    const received: Array<AbortSignal | undefined> = [];
-    const recorder = (id: string): Processor => ({
-      id,
-      processInputStep: async ({ messageList, abortSignal }) => {
-        received.push(abortSignal);
-        return messageList;
-      },
-    });
-    const workflow = createWorkflow({
-      id: 'evented-processor-abort-signal-chain',
-      inputSchema: ProcessorStepSchema,
-      outputSchema: ProcessorStepSchema,
-      type: 'processor',
-      options: { validateInputs: false },
-    })
-      .then(createStep(recorder('first')))
-      .then(createStep(recorder('second')))
-      .commit();
-
-    const mastra = new Mastra({
-      workflows: { 'evented-processor-abort-signal-chain': workflow },
-      storage: testStorage,
-      pubsub: new EventEmitterPubSub(),
-    });
-    await mastra.startWorkers();
-
-    try {
-      const controller = new AbortController();
-      const run = await workflow.createRun();
-      const result = await run.start({
-        inputData: {
-          phase: 'inputStep',
-          messages: [],
-          messageList: new MessageList(),
-          stepNumber: 0,
-          abortSignal: controller.signal,
-        } as any,
-      });
-
-      expect(result.status).toBe('success');
-      expect(received).toEqual([controller.signal, controller.signal]);
-    } finally {
-      await mastra.stopWorkers();
+  describe('processor chain abort signal over a serializing pubsub (#29208)', () => {
+    // Real brokers JSON round-trip events, which turns an AbortSignal into `{}`.
+    // The outputStream phase is used because a MessageList does not survive that round trip either.
+    class SerializingPubSub extends EventEmitterPubSub {
+      async publish(topic: string, event: any) {
+        return super.publish(topic, JSON.parse(JSON.stringify(event)));
+      }
     }
+
+    const setup = (id: string, onSecond?: () => Promise<void>) => {
+      const received: Array<AbortSignal | undefined> = [];
+      const recorder = (stepId: string, wait?: () => Promise<void>): Processor => ({
+        id: stepId,
+        processOutputStream: async ({ part, abortSignal }) => {
+          received.push(abortSignal);
+          await wait?.();
+          return part;
+        },
+      });
+      const workflow = createWorkflow({
+        id,
+        inputSchema: ProcessorStepSchema,
+        outputSchema: ProcessorStepSchema,
+        type: 'processor',
+        options: { validateInputs: false },
+      })
+        .then(createStep(recorder('first')))
+        .then(createStep(recorder('second', onSecond)))
+        .commit();
+      const mastra = new Mastra({
+        workflows: { [id]: workflow },
+        storage: testStorage,
+        pubsub: new SerializingPubSub(),
+      });
+      return { received, workflow, mastra };
+    };
+    const inputData = (signal?: AbortSignal) =>
+      ({
+        phase: 'outputStream',
+        part: { type: 'text-delta', payload: { id: '1', text: 'hi' } },
+        streamParts: [],
+        abortSignal: signal,
+      }) as any;
+
+    it("passes the caller's live signal to every processor", async () => {
+      const { received, workflow, mastra } = setup('evented-processor-abort-signal-chain');
+      await mastra.startWorkers();
+      try {
+        const controller = new AbortController();
+        const run = await workflow.createRun();
+        mastra.__createRunScope(run.runId).set(PROCESSOR_ABORT_SIGNAL, controller.signal);
+        const result = await run.start({ inputData: inputData(controller.signal) });
+
+        expect(result.status).toBe('success');
+        expect(received).toEqual([controller.signal, controller.signal]);
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+
+    it('gives the next processor a signal that aborts when the run is cancelled', async () => {
+      let secondStarted!: () => void;
+      const started = new Promise<void>(resolve => (secondStarted = resolve));
+      let secondSignal: AbortSignal | undefined;
+      const { received, workflow, mastra } = setup('evented-processor-abort-signal-cancel', async () => {
+        secondSignal = received[1];
+        secondStarted();
+        await new Promise<void>(resolve => secondSignal!.addEventListener('abort', () => resolve(), { once: true }));
+      });
+      await mastra.startWorkers();
+      try {
+        const run = await workflow.createRun();
+        const result = run.start({ inputData: inputData(new AbortController().signal) });
+        await started;
+
+        expect(secondSignal).toBeInstanceOf(AbortSignal);
+        expect(secondSignal!.aborted).toBe(false);
+        await run.cancel();
+        expect(secondSignal!.aborted).toBe(true);
+        await result;
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
   });
 
   // Note: Streaming Legacy tests removed - they duplicated Streaming tests.
