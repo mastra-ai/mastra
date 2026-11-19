@@ -2632,6 +2632,9 @@ Notes:
       dimension = embedResult.dimension;
       queries.push(...embedResult.embeddings.map(queryVector => ({ queryVector })));
     }
+    // An embedder can ignore the signal and answer late. Nobody waits for this search any more, so don't start
+    // more work for it.
+    abortSignal?.throwIfAborted();
     const { indexName } = await this.createObservationEmbeddingIndex(dimension).catch(
       failedAt('Opening the vector index'),
     );
@@ -2657,6 +2660,7 @@ Notes:
       observedAt?: Date;
     }> = [];
 
+    abortSignal?.throwIfAborted();
     await Promise.all(
       queries.map(async params => {
         // `queryText` is accepted only by self-embedding stores, so it is not on the shared

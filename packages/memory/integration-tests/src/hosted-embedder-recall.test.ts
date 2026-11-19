@@ -221,6 +221,51 @@ describe('recall search with a hosted embedder (#30736)', () => {
   });
 });
 
+describe('recall search with an embedder that ignores cancellation', () => {
+  it('does not open the index or query the vector store for a search recall gave up on', async () => {
+    let answered = false;
+    const lateEmbedder = {
+      specificationVersion: 'v2' as const,
+      provider: 'late',
+      modelId: 'late-embedder',
+      maxEmbeddingsPerCall: 256,
+      supportsParallelCalls: true,
+      // Ignores abortSignal and answers after recall stopped waiting.
+      doEmbed: ({ values }: { values: string[] }) =>
+        new Promise<{ embeddings: number[][] }>(resolve =>
+          setTimeout(() => {
+            answered = true;
+            resolve({ embeddings: values.map(embed) });
+          }, 300),
+        ),
+    };
+    const memory = new Memory({
+      storage,
+      vector,
+      embedder: lateEmbedder,
+      embeddingDimension: DIMENSIONS,
+      options: {
+        lastMessages: 10,
+        observationalMemory: {
+          model: 'openai/gpt-4o-mini',
+          scope: 'thread',
+          retrieval: { vector: true, scope: 'thread', searchTimeoutMs: 100 },
+        },
+      },
+    });
+    const thread = await memory.createThread({ resourceId: 'resource' });
+    const createIndex = vi.spyOn(vector, 'createIndex');
+    const query = vi.spyOn(vector, 'query');
+
+    expect((await recall(memory, thread.id)).results).toMatch(/^Search is unavailable right now/);
+
+    await expect.poll(() => answered).toBe(true);
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(createIndex).not.toHaveBeenCalled();
+    expect(query).not.toHaveBeenCalled();
+  });
+});
+
 describe('recall search with the local fastembed embedder', () => {
   it('keeps embedding after recall gave up on the first, slow embed', async () => {
     // Like the code-sdk fastembed worker: the first call downloads the model, and an abort cancels it.
