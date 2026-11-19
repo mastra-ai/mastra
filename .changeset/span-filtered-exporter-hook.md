@@ -11,5 +11,3 @@ class MyExporter extends BaseExporter {
   }
 }
 ```
-
-The `spanFilter` docs now explain that the filter runs when a span starts and again when it ends.

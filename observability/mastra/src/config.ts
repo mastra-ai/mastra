@@ -107,11 +107,9 @@ export interface ObservabilityInstanceConfig {
    * for fine-grained filtering by type, attributes, entity, metadata, or any
    * combination.
    *
-   * The filter runs on each event of a span (start, update, end) with the span
-   * data at that moment. To drop a span and keep its children attached to the
-   * trace, decide from data the span has when it starts: type, name, entity,
-   * input, and the attributes and metadata set at creation. A filter that
-   * reads end-time data keeps the span's start and drops only its end.
+   * The filter runs on each event of a span (start, update, end). To drop a
+   * span and keep its children attached to the trace, return the same answer
+   * for every event, for example by filtering on the span type or entity.
    *
    * @example
    * ```typescript
