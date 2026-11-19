@@ -110,6 +110,32 @@ async function storageAnswering(status: number, body: unknown) {
   }).getStorage();
 }
 
+it('rebuilds the fields of a key conflict and an oversized move from the service body', async () => {
+  const conflict = await storageAnswering(409, {
+    name: 'KnowledgePageKeyConflictError',
+    detail: 'Knowledge page key "guides" already exists under page scope-1.',
+    key: 'guides',
+    parentId: 'scope-1',
+  });
+  await expect(conflict.listPages({ read: 'all' })).rejects.toMatchObject({
+    name: 'KnowledgePageKeyConflictError',
+    key: 'guides',
+    parentId: 'scope-1',
+    message: 'Knowledge page key "guides" already exists under page scope-1.',
+  });
+  const move = await storageAnswering(400, {
+    name: 'KnowledgeMoveTooLargeError',
+    detail: 'Moving page page-1 would move 5000 pages',
+    pageId: 'page-1',
+    pages: 5000,
+  });
+  await expect(move.listPages({ read: 'all' })).rejects.toMatchObject({
+    name: 'KnowledgeMoveTooLargeError',
+    pageId: 'page-1',
+    pages: 5000,
+  });
+});
+
 it('reads no scope declarations from a service without the getScopeDeclarations operation', async () => {
   const storage = await storageAnswering(404, { title: 'Not Found', detail: 'Knowledge operation not found' });
   await expect(storage.getScopeDeclarations()).resolves.toEqual({});
