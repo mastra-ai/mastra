@@ -163,6 +163,27 @@ describe('SpansExplorerBody progressive word search', () => {
       expect(queries.at(-1)).not.toHaveProperty('progressive');
     });
 
+    it('keeps the status line and Stop under a time-to-first-chunk sort, since the chart still searches in chunks', async () => {
+      const gate = chunkGate();
+      const { queries, aggregates } = renderAt({ gate });
+      await waitFor(() => expect(status()).toBe('Searched the last 7 of 30 days…'));
+
+      const columns = await screen.findByRole<HTMLButtonElement>('button', { name: 'Columns' });
+      await waitFor(() => expect(columns.disabled).toBe(false));
+      fireEvent.click(columns);
+      fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Time to first chunk' }));
+      fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+      fireEvent.click(await screen.findByRole('button', { name: 'Time to first chunk, not sorted, sort ascending' }));
+      await waitFor(() => expect(queries.at(-1)?.orderBy?.[0]?.field).toBe('timeToFirstChunkMs'));
+      expect(queries.at(-1)).not.toHaveProperty('progressive');
+
+      expect(status()).toBe('Searched the last 7 of 30 days…');
+      fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+      gate.next();
+      await waitFor(() => expect(status()).toBe('Stopped after the last 14 of 30 days.'));
+      expect(aggregates.map(body => body.continuation)).toEqual([undefined, '1']);
+    });
+
     it('charts the 30 days one chunk at a time, newest first, then says it searched them all', async () => {
       const gate = chunkGate();
       const { queries, aggregates, maxInFlight } = renderAt({ gate });

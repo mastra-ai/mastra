@@ -7,6 +7,7 @@ type Range = { from: string; to: string };
 /**
  * The status line of a progressive word search. It follows the histogram, the only sequence that covers the whole
  * range, or the list when there is no histogram. Stop and Continue apply to both, so neither keeps searching alone.
+ * The histogram can chunk while the list does not (a sort other than start time), so it shows whenever either does.
  */
 export function searchProgressProps({
   progressive,
@@ -20,7 +21,7 @@ export function searchProgressProps({
   histogram: SearchProgressControl | undefined;
   list: ProgressiveListState & { fetchNextPage: () => void };
 }): SearchProgressProps | undefined {
-  if (!progressive) return undefined;
+  if (!progressive && !histogram) return undefined;
   const onStop = () => {
     histogram?.stop();
     list.stop();
@@ -31,7 +32,7 @@ export function searchProgressProps({
   };
   if (histogram) {
     const { chunkError: _chunkError, stop: _stop, resume: _resume, ...state } = histogram;
-    return { ...state, failed: state.failed || list.chunkError !== null, onStop, onContinue };
+    return { ...state, failed: state.failed || (progressive && list.chunkError !== null), onStop, onContinue };
   }
   return {
     requestedRange,
