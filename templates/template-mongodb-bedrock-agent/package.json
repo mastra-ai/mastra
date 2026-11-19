@@ -49,7 +49,7 @@
       "glob": "14.0.4"
     },
     "readdir-glob": {
-      "minimatch": "11.0.5"
+      "minimatch": "11.0.9"
     }
   }
 }
