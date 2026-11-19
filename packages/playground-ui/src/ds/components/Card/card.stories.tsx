@@ -220,6 +220,50 @@ export const Illustrated: Story = {
   ),
 };
 
+export const IllustratedStates: Story = {
+  render: () => (
+    <ul className="grid w-[min(44rem,calc(100vw-2rem))] gap-3 sm:grid-cols-2">
+      <li className="min-w-0">
+        <CardLink
+          href="#flat-current"
+          elevation="flat"
+          aria-current="true"
+          onClick={event => event.preventDefault()}
+          className="block h-full"
+        >
+          <CardContent className="flex flex-col gap-3">
+            <CardIllustration>
+              <DailySpend />
+            </CardIllustration>
+            <span className="flex flex-col gap-0.5">
+              <CardTitle>Flat and current</CardTitle>
+              <CardDescription>A flat card has no rim, so the current one gets an outline.</CardDescription>
+            </span>
+          </CardContent>
+        </CardLink>
+      </li>
+      <li className="min-w-0">
+        <CardLink
+          href="#aria-disabled"
+          aria-disabled="true"
+          onClick={event => event.preventDefault()}
+          className="block h-full"
+        >
+          <CardContent className="flex flex-col gap-3">
+            <CardIllustration>
+              <DailySpend />
+            </CardIllustration>
+            <span className="flex flex-col gap-0.5">
+              <CardTitle>Marked aria-disabled</CardTitle>
+              <CardDescription>No hover wash and no motion in the drawing.</CardDescription>
+            </span>
+          </CardContent>
+        </CardLink>
+      </li>
+    </ul>
+  ),
+};
+
 export const IllustrationTones: Story = {
   render: () => (
     <ul className="grid w-[min(44rem,calc(100vw-2rem))] gap-3 sm:grid-cols-2">

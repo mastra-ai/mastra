@@ -9,12 +9,12 @@ import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
 const emphasisOnHover = cn(
-  'motion-safe:not-disabled:hover:[&_[data-emphasis=grow-y]]:scale-y-125',
-  'motion-safe:not-disabled:hover:[&_[data-emphasis=grow-x]]:scale-x-125',
-  'motion-safe:not-disabled:hover:[&_[data-emphasis=pop]]:scale-110',
-  'motion-safe:focus-visible:[&_[data-emphasis=grow-y]]:scale-y-125',
-  'motion-safe:focus-visible:[&_[data-emphasis=grow-x]]:scale-x-125',
-  'motion-safe:focus-visible:[&_[data-emphasis=pop]]:scale-110',
+  'motion-safe:not-disabled:not-aria-disabled:hover:[&_[data-emphasis=grow-y]]:scale-y-125',
+  'motion-safe:not-disabled:not-aria-disabled:hover:[&_[data-emphasis=grow-x]]:scale-x-125',
+  'motion-safe:not-disabled:not-aria-disabled:hover:[&_[data-emphasis=pop]]:scale-110',
+  'motion-safe:not-disabled:not-aria-disabled:focus-visible:[&_[data-emphasis=grow-y]]:scale-y-125',
+  'motion-safe:not-disabled:not-aria-disabled:focus-visible:[&_[data-emphasis=grow-x]]:scale-x-125',
+  'motion-safe:not-disabled:not-aria-disabled:focus-visible:[&_[data-emphasis=pop]]:scale-110',
 );
 
 const cardVariants = cva(
@@ -35,7 +35,16 @@ const cardVariants = cva(
         false: '',
       },
     },
-    compoundVariants: [{ elevation: 'flat', interactive: true, class: focusRingInset }],
+    compoundVariants: [
+      {
+        elevation: 'flat',
+        interactive: true,
+        class: cn(
+          focusRingInset,
+          'aria-[current=true]:outline-1 aria-[current=true]:-outline-offset-1 aria-[current=true]:outline-border-focus aria-[current=true]:outline-solid',
+        ),
+      },
+    ],
     defaultVariants: {
       elevation: 'raised',
       interactive: false,
@@ -146,6 +155,7 @@ export type CardIllustrationProps = React.ComponentProps<'div'> & {
 export function CardIllustration({ className, tone = 'destructive', ...props }: CardIllustrationProps) {
   return (
     <div
+      {...props}
       aria-hidden
       className={cn(
         illustrationPlateStyle,
@@ -153,7 +163,6 @@ export function CardIllustration({ className, tone = 'destructive', ...props }: 
         'h-20 overflow-hidden [&_[data-emphasis=grow-x]]:origin-left [&_[data-emphasis=grow-y]]:origin-bottom [&_[data-emphasis]]:transition-transform [&_[data-emphasis]]:duration-normal [&_[data-emphasis]]:ease-out-custom',
         className,
       )}
-      {...props}
     />
   );
 }

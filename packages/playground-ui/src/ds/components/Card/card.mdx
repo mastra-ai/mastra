@@ -46,7 +46,7 @@ import {
 </ul>
 ```
 
-`Card` owns the surface, the plate, and the states. The drawing is yours: keep it in the feature it explains, the way Platform keeps its alert template drawings in `AlertTemplateVisual.tsx`.
+`Card` owns the surface, the plate, and the states. The drawing is yours: keep it in the feature it explains, next to the cards that show it.
 
 Every plate in a set is the same size, so the eye compares the drawings and not their boxes. Draw each one in the same fixed box, and use the same box for every card in the set, so the drawings share their left and right edges.
 
@@ -74,7 +74,7 @@ Tag one part per drawing: the mark that breaks the rule, such as the spend past 
 
 Tag the value, never its track: in a bar drawn as a fill inside a track, the fill grows and the track stays put.
 
-A bar that jumps up, or an item that slides sideways, moves in a direction the drawing doesn't measure. `Card` owns the motion, so a drawing never adds its own transition, transform, or animation. Nothing moves with reduced motion, on touch screens, or on cards that can't be clicked.
+A bar that jumps up, or an item that slides sideways, moves in a direction the drawing doesn't measure. `Card` owns the motion, so a drawing never adds its own transition, transform, or animation. Nothing moves with reduced motion, on touch screens, or on cards that can't be clicked, including links and buttons marked `aria-disabled`.
 
 ## Drawing rules
 

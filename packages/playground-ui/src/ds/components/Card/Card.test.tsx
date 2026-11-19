@@ -70,6 +70,20 @@ describe('Card', () => {
 
       expect(screen.getByRole('link', { name: 'Daily cost budget', current: true })).toBeTruthy();
     });
+
+    it('keeps the drawing hidden even when a caller tries to expose it', () => {
+      render(
+        <CardLink href="/alerts/new?template=budget">
+          <CardIllustration aria-hidden={false}>
+            <span>$150</span>
+          </CardIllustration>
+          Daily cost budget
+        </CardLink>,
+      );
+
+      expect(screen.getByRole('link', { name: 'Daily cost budget' })).toBeTruthy();
+      expect(screen.getByText('$150').closest('[aria-hidden="true"]')).not.toBeNull();
+    });
   });
 
   describe('when an interactive card uses its default renderer', () => {
