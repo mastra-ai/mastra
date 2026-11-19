@@ -383,6 +383,7 @@ function bodyView(
     from?: KnowledgeLinePosition;
     more: string[];
     maxTokens: number;
+    canEdit: boolean;
   },
 ): {
   body?: string;
@@ -472,7 +473,7 @@ function bodyView(
       : undefined;
     if (skeleton !== undefined) {
       more.push(
-        `body: the page is ${lines.count} lines, too long to show whole, so \`lines\` shows every heading and the first lines under it; ⋯ marks lines left out and … a line cut short. Read the part you need with section (a heading) or from (a line number), then answer. To edit, read that part first: this view has no range to write back.`,
+        `body: the page is ${lines.count} lines, too long to show whole, so \`lines\` shows every heading and the first lines under it; ⋯ marks lines left out and … a line cut short. Read the part you need with section (a heading) or from (a line number), then answer.${input.canEdit ? ' To edit, read that part first: this view has no range to write back.' : ''}`,
       );
       return { lines: skeleton, lineCount: lines.count };
     }
@@ -642,6 +643,7 @@ function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
           from,
           more,
           maxTokens: maxTokensOf(host),
+          canEdit,
         });
         return {
           page: { ...pageSummary(page, await pageRefs(run, [page])), version: page.version, ...view },
@@ -721,7 +723,7 @@ function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
       ]);
       const ownRef = addresses.refs.get(page.id) ?? page.id;
       const more: string[] = [];
-      const view = bodyView(page.body ?? '', { context: matchContext, more, maxTokens: maxTokensOf(host) });
+      const view = bodyView(page.body ?? '', { context: matchContext, more, maxTokens: maxTokensOf(host), canEdit });
       const noteList = await noteSummaries(run, notes.notes, mentionCache);
       const mentionList = (await noteSummaries(run, mentioning.notes, mentionCache)).map((note, i) => ({
         ...note,

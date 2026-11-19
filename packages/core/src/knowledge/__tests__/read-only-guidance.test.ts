@@ -2,13 +2,15 @@ import { createHash } from 'node:crypto';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { Agent } from '../../agent';
+import { setRunAgentScopes } from '../../agent/scopes';
 import { MockMemory } from '../../memory/mock';
+import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import { knowledgeMemoryScopes } from '../declarations';
 import { Knowledge } from '../index';
 import { PinnedStateProcessor } from '../pinned-state-processor';
 
-const EDIT_GUIDANCE = /edit one straight|To edit|knowledge_page|knowledge_note|expectedVersion/;
+const EDIT_GUIDANCE = /\bedit|write back|knowledge_page|knowledge_note|expectedVersion/i;
 const sha = (text: string) => createHash('sha256').update(text).digest('hex');
 
 const scopes = { 'team:$id': {} };
@@ -49,9 +51,37 @@ describe('Knowledge guidance for an agent without write tools', () => {
     const preamble = '916ebf0f1ebead5a7eda8a76cafae9f44afacf47cad0af8dadf012befb950326';
     expect(sha(pinnedGuidance(new PinnedStateProcessor(deps)))).toBe(preamble);
     expect(sha(pinnedGuidance(new PinnedStateProcessor({ ...deps, write: true })))).toBe(preamble);
-    expect(knowledge.createTools().knowledge_read!.description).toContain(
-      'To edit part of a long body, pass the `range` a read gave you to knowledge_page.',
+    expect(sha(knowledge.createTools().knowledge_read!.description!)).toBe(
+      '692561e732c23e2a1af8cb11ce765ec39c795b30503dbe0e3c7e37ece6f582ba',
     );
+  });
+
+  it('leaves the edit hint out of a long page read only when write tools are off', async () => {
+    const knowledge = new Knowledge({ storage: new InMemoryStore(), scopes: knowledgeMemoryScopes(), tools: true });
+    const lines: string[] = [];
+    for (let i = 0; i < 12; i++) lines.push(`## Part ${i}`, '', 'Lorem ipsum dolor sit amet. '.repeat(400), '');
+    await knowledge.upsertPage({ scope: 'org:acme', path: 'long', name: 'Long', body: lines.join('\n') });
+    const firstMore = async (write: boolean) => {
+      const requestContext = new RequestContext();
+      setRunAgentScopes(requestContext, ['org:acme']);
+      const read = knowledge.createTools({ write }).knowledge_read!;
+      const result = (await read.execute!(
+        { page: 'org:acme#long' } as never,
+        {
+          requestContext,
+          agent: { agentId: 'a' },
+        } as never,
+      )) as any;
+      return result.more[0] as string;
+    };
+    const withWrite = await firstMore(true);
+    expect(withWrite).toMatch(/shows every heading and the first lines under it/);
+    expect(withWrite).toContain('To edit, read that part first: this view has no range to write back.');
+    const readOnly = await firstMore(false);
+    expect(readOnly).toBe(
+      withWrite.replace(' To edit, read that part first: this view has no range to write back.', ''),
+    );
+    expect(readOnly).not.toMatch(EDIT_GUIDANCE);
   });
 
   it('sends a read-only agent with pinned context no edit guidance in its prompt', async () => {
