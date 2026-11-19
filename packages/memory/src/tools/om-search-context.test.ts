@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
+import type { IMastraLogger } from '@mastra/core/logger';
 import { InMemoryStore } from '@mastra/core/storage';
 import { estimateTokenCount } from 'tokenx';
 import { describe, expect, it, vi } from 'vitest';
@@ -266,6 +267,7 @@ describe('execution-time recall search context', () => {
       resourceId,
       topK: 50,
       filter: { threadId, observedAfter: new Date('2024-01-01'), observedBefore: new Date('2024-02-01') },
+      abortSignal: expect.any(AbortSignal),
     });
   });
 
@@ -525,5 +527,74 @@ describe('query-relevant search excerpts', () => {
     expect(excerpts(full.results)[0]).toBe(group.text);
     const result = await searchFor('state overload', [resultMessage(full)]);
     expect(result.results).toContain('Excerpt already in current context');
+  });
+});
+
+describe('recall search when the search itself fails', () => {
+  const logger = () => ({ error: vi.fn() }) as unknown as IMastraLogger & { error: ReturnType<typeof vi.fn> };
+
+  it('suggests browsing and logs the error, keeping it out of the result', async () => {
+    const { memory } = setup([]);
+    memory.searchMessages = vi.fn(async () => {
+      throw new Error('Incorrect API key provided: sk-…1234');
+    });
+    const log = logger();
+
+    const result = await searchMessagesForResource({ memory, resourceId, query: 'topic', logger: log });
+
+    expect(result).toEqual({
+      results:
+        'Search is unavailable right now. Browse instead: use mode="messages" to page through messages, and mode="threads" to find other threads.',
+      count: 0,
+    });
+    expect(log.error).toHaveBeenCalledWith(expect.stringContaining('Incorrect API key provided'));
+  });
+
+  it('keeps the first results when only the deeper search fails', async () => {
+    const source = [message('start'), message('end', 1)];
+    const known = hit('known', 'summary', 'start:end');
+    const { memory } = setup([known], source);
+    memory.searchMessages = vi.fn(async ({ topK }) => {
+      if (topK === 10) return { results: [known] };
+      throw new Error('vector store timed out');
+    });
+    const log = logger();
+
+    const result = await searchMessagesForResource({
+      memory,
+      resourceId,
+      query: 'topic',
+      currentMessages: source,
+      logger: log,
+    });
+
+    expect(vi.mocked(memory.searchMessages!)).toHaveBeenCalledTimes(2);
+    expect(result.count).toBe(1);
+    expect(result.results).toContain('Source range overlaps current context');
+    expect(log.error).toHaveBeenCalledWith('[recall] Deeper search failed (vector store timed out).');
+  });
+
+  it('stops with the run instead of suggesting browsing when the run is aborted', async () => {
+    const { memory } = setup([]);
+    let searchSignal: AbortSignal | undefined;
+    memory.searchMessages = vi.fn(({ abortSignal }) => {
+      searchSignal = abortSignal;
+      return new Promise<never>(() => {});
+    });
+    const run = new AbortController();
+    const log = logger();
+
+    const searching = searchMessagesForResource({
+      memory,
+      resourceId,
+      query: 'topic',
+      abortSignal: run.signal,
+      logger: log,
+    });
+    run.abort(new Error('run stopped'));
+
+    await expect(searching).rejects.toThrow('run stopped');
+    expect(searchSignal?.aborted).toBe(true);
+    expect(log.error).not.toHaveBeenCalled();
   });
 });
