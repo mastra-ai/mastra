@@ -76,6 +76,7 @@
  */
 
 import { expect, vi } from 'vitest';
+import type { ObservabilityEntrypoint } from '../../../observability';
 import type { WorkflowRunState } from '../../../workflows/types';
 import type { Agent } from '../../agent';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
@@ -225,7 +226,7 @@ export type ScenarioOptions<K extends RestartKind> = {
    */
   storageVersion?: 1 | 2;
   /** Observability for each graph's Mastra, so a test can read the spans both processes emit. */
-  observability?: (generation: number) => unknown;
+  observability?: (generation: number) => ObservabilityEntrypoint;
 };
 
 export type Graph = {
