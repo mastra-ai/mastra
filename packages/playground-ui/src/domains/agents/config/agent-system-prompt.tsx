@@ -1,17 +1,17 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { Code } from '@mastra/playground-ui/components/Code';
-import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
-import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
-import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
-import { IconLinebreak } from '@mastra/playground-ui/icons/central/IconLinebreak';
-import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { AgentMetadataSection } from '../agent-metadata/agent-metadata-section';
+import { Button } from '../../../ds/components/Button';
+import { Code } from '../../../ds/components/Code';
+import { CopyButton } from '../../../ds/components/CopyButton';
+import { MarkdownRenderer } from '../../../ds/components/MarkdownRenderer';
+import { Tab, TabContent, TabList, Tabs } from '../../../ds/components/Tabs';
+import { Txt } from '../../../ds/components/Txt';
+import { IconFileText } from '../../../ds/icons/central/IconFileText';
+import { IconLinebreak } from '../../../ds/icons/central/IconLinebreak';
+import { focusRing } from '../../../ds/primitives/transitions';
+import { cn } from '../../../utils/cn';
+import { AgentMetadataSection } from './agent-metadata-section';
 import { normalizePromptIndentation } from './normalize-prompt-indentation';
-import { cn } from '@/lib/utils';
 
 const promptTabClassName =
   'h-control-sm px-1 underline-offset-4 data-[active]:underline pointer-coarse:min-h-11 pointer-coarse:min-w-11';

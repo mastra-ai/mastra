@@ -1,11 +1,11 @@
 import type { CoreUserMessage } from '@mastra/core/llm';
-import { classifyAttachment } from '@mastra/playground-ui/domains/chat/attachments/attachment-kind';
-import type { ComposerAttachmentKind } from '@mastra/playground-ui/domains/chat/attachments/attachment-kind';
-import { fileToBase64, getFileContentType, isRemoteUrl } from '@mastra/playground-ui/utils/file';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
+import { classifyAttachment } from '@/domains/chat/attachments/attachment-kind';
+import type { ComposerAttachmentKind } from '@/domains/chat/attachments/attachment-kind';
+import { fileToBase64, getFileContentType, isRemoteUrl } from '@/utils/file';
 
-export type { ComposerAttachmentKind } from '@mastra/playground-ui/domains/chat/attachments/attachment-kind';
+export type { ComposerAttachmentKind } from '@/domains/chat/attachments/attachment-kind';
 
 export interface ComposerAttachment {
   id: string;
@@ -218,6 +218,7 @@ export const ComposerAttachmentsProvider = ({
   return <ComposerAttachmentsContext.Provider value={value}>{children}</ComposerAttachmentsContext.Provider>;
 };
 
+// oxlint-disable-next-line react/only-export-components -- context hook intentionally co-located with its provider
 // eslint-disable-next-line react-refresh/only-export-components -- context hook intentionally co-located with its provider
 export const useComposerAttachments = (): ComposerAttachmentsContextValue => {
   const ctx = useContext(ComposerAttachmentsContext);

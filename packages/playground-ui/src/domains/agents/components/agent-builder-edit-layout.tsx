@@ -1,5 +1,5 @@
-import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
+import { cn } from '@/utils/cn';
 
 export interface AgentBuilderEditLayoutProps {
   topBar: ReactNode;
@@ -43,20 +43,20 @@ export const AgentBuilderEditLayout = ({
       {topBar}
       <div
         className={cn(
-          'flex min-h-0 min-w-0 flex-1 flex-col pt-4 pb-4 md:pb-10',
+          'flex min-h-0 min-w-0 flex-1 flex-col py-4 md:pb-10',
           !isCentered && 'lg:grid lg:grid-cols-[1fr_2fr] lg:grid-rows-1',
         )}
       >
         <div
           className={cn(
-            'h-full w-full min-w-0 overflow-hidden px-4 md:px-10',
+            'size-full min-w-0 overflow-hidden px-4 md:px-10',
             isCentered && 'lg:mx-auto lg:max-w-[80ch]',
             applyMobileChatHide && 'hidden lg:block',
           )}
           data-testid="agent-builder-panel-chat"
           style={{ viewTransitionName: 'agent-builder-chat-panel' }}
         >
-          <div className="grid h-full min-h-0 w-full min-w-0 grid-rows-[1fr_auto] overflow-hidden md:mx-auto md:max-w-[80ch]">
+          <div className="grid size-full min-h-0 min-w-0 grid-rows-[1fr_auto] overflow-hidden md:mx-auto md:max-w-[80ch]">
             <div className="h-full min-h-0 min-w-0 overflow-hidden">{chat}</div>
             {chatFooter ? (
               <div data-testid="agent-builder-chat-footer" className="w-full pt-3 lg:hidden">
@@ -76,7 +76,7 @@ export const AgentBuilderEditLayout = ({
             data-testid="agent-builder-panel-profile"
             style={{ viewTransitionName: 'agent-builder-profile-panel' }}
           >
-            <div className="h-full min-h-0 w-full min-w-0 overflow-hidden">{profile}</div>
+            <div className="size-full min-h-0 min-w-0 overflow-hidden">{profile}</div>
           </div>
         )}
       </div>

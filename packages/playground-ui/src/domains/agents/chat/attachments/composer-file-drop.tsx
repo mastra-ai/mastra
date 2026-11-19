@@ -1,7 +1,7 @@
-import { FileDropBackdrop } from '@mastra/playground-ui/components/FileDropBackdrop';
 import type { ReactNode } from 'react';
-
 import { useComposerAttachments } from './composer-attachments';
+
+import { FileDropBackdrop } from '@/ds/components/FileDropBackdrop';
 
 /** Lets files dragged anywhere over the page be dropped into the composer's attachments. */
 export const ComposerFileDrop = ({ disabled, children }: { disabled?: boolean; children: ReactNode }) => {

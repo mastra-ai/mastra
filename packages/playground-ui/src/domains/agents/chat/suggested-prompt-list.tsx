@@ -1,7 +1,7 @@
-import { Button } from '@mastra/playground-ui/components/Button';
+import { useAgentChatFeatures } from './features';
 
-import { useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
-import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { useChatRunning, useChatSend } from '@/domains/chat/context/chat-context';
+import { Button } from '@/ds/components/Button';
 
 interface SuggestedPromptListProps {
   prompts: string[];
@@ -14,12 +14,12 @@ const STAGGER_STEP_MS = 60;
 export const SuggestedPromptList = ({ prompts }: SuggestedPromptListProps) => {
   const send = useChatSend();
   const { isRunning, canSendWhileStreaming } = useChatRunning();
-  const { canExecute } = usePermissions();
+  const { canExecute } = useAgentChatFeatures();
 
   if (prompts.length === 0) return null;
 
   const sendBlocked = isRunning && !canSendWhileStreaming;
-  const isDisabled = sendBlocked || !canExecute('agents');
+  const isDisabled = sendBlocked || canExecute === false;
 
   return (
     <ul className="flex w-full flex-col gap-1 px-3" data-testid="suggested-prompt-list">

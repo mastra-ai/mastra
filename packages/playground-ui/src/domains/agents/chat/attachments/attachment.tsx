@@ -1,19 +1,14 @@
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import {
-  ImageEntry,
-  TxtEntry,
-  PdfEntry,
-  FileChipEntry,
-} from '@mastra/playground-ui/domains/chat/attachments/attachment-preview-dialog';
-import { ComposerAttachment as ComposerAttachmentPreview } from '@mastra/playground-ui/domains/chat/attachments/composer-attachment';
-import { ComposerAttachmentList } from '@mastra/playground-ui/domains/chat/attachments/composer-attachment-list';
-import type { AttachmentPreviewProps } from '@mastra/playground-ui/domains/chat/attachments/use-attachment-preview';
-import { fileToBase64, isBrowserFetchableUrl } from '@mastra/playground-ui/utils/file';
 import { useEffect, useState } from 'react';
-
-import { useLoadBrowserFile } from '../hooks/use-load-browser-file';
+import { useLoadBrowserFile } from '../use-load-browser-file';
 import { useComposerAttachments } from './composer-attachments';
 import type { ComposerAttachment } from './composer-attachments';
+import { ImageEntry, TxtEntry, PdfEntry, FileChipEntry } from '@/domains/chat/attachments/attachment-preview-dialog';
+import { ComposerAttachment as ComposerAttachmentPreview } from '@/domains/chat/attachments/composer-attachment';
+import { ComposerAttachmentList } from '@/domains/chat/attachments/composer-attachment-list';
+
+import type { AttachmentPreviewProps } from '@/domains/chat/attachments/use-attachment-preview';
+import { Spinner } from '@/ds/components/Spinner';
+import { fileToBase64, isBrowserFetchableUrl } from '@/utils/file';
 
 const ComposerTxtAttachment = ({ file, ...previewProps }: { file: File } & AttachmentPreviewProps) => {
   const { isLoading, text } = useLoadBrowserFile(file);
@@ -46,7 +41,7 @@ const ComposerPdfAttachment = ({
   }, [attachment]);
 
   return (
-    <div className="flex h-full w-full items-center justify-center">
+    <div className="flex size-full items-center justify-center">
       {state.isLoading ? (
         <Spinner />
       ) : (
