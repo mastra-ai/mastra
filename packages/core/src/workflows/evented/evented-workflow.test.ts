@@ -592,7 +592,9 @@ describe('Workflow (Evented Engine Specific)', () => {
         );
 
         expect(result.blocked).toBe(false);
-        expect(received).toEqual([controller.signal, controller.signal]);
+        expect(received).toHaveLength(2);
+        expect(received[0]).toBe(controller.signal);
+        expect(received[1]).toBe(controller.signal);
       } finally {
         await mastra.stopWorkers();
       }
