@@ -3,10 +3,12 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { getSpanTimingLayout } from '../../utils/span-timing';
 import { formatHierarchicalSpans } from '../format-hierarchical-spans';
 import { TraceSpanTimeline } from '../trace-span-timeline';
 import type { TraceStreamingTimings } from '../trace-span-timeline';
-import { nestedSpanFixture } from './fixtures/trace-data-panel-view';
+import { nestedSpanFixture } from './fixtures/trace-spans';
+import { formatDuration } from '@/utils/duration';
 
 const scrollIntoView = vi.fn();
 Element.prototype.scrollIntoView = scrollIntoView;
@@ -118,16 +120,23 @@ describe('TraceSpanTimeline', () => {
 
   it('positions each bar on the shared trace axis', () => {
     render(<Harness initialExpanded={['root']} />);
+    const root = hierarchicalSpans[0];
+    const child = root?.spans?.[0];
+    if (!root || !child) throw new Error('fixture must have a root with one child');
+    const layout = getSpanTimingLayout(child, root.latency, root.startTime);
+    expect(layout).toEqual({ startShiftMs: 250, leftPercent: 25, widthPercent: 50 });
 
-    // The child runs from 250ms to 750ms of the 1s root.
     const [rootBar, childBar] = screen.getAllByTestId('span-timeline-bar');
     expect([rootBar?.style.left, rootBar?.style.width]).toEqual(['0%', '100%']);
-    expect([childBar?.style.left, childBar?.style.width]).toEqual(['25%', '50%']);
+    expect([childBar?.style.left, childBar?.style.width]).toEqual([
+      `${layout.leftPercent}%`,
+      `${layout.widthPercent}%`,
+    ]);
 
     // The duration is printed right where the bar ends.
-    const childRow = screen.getByLabelText('View details for span weather tool');
-    const duration = within(childRow).getByText('500ms');
-    expect(duration.style.left).toBe('75%');
+    const childRow = screen.getByLabelText(`View details for span ${child.name}`);
+    const duration = within(childRow).getByText(formatDuration(child.latency));
+    expect(duration.style.left).toBe(`${layout.leftPercent + layout.widthPercent}%`);
   });
 
   it('scrolls the reveal span into view once its parent expands', () => {

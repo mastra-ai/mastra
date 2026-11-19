@@ -1,5 +1,6 @@
 import { useId } from 'react';
 import type { ReactNode } from 'react';
+import { settingsRowLabelClassName } from './settings-row-label';
 import { Field, FieldDescription, FieldError, FieldLabel, Fieldset, FieldsetLegend } from '@/ds/components/Field';
 import type { FieldProps, FieldsetProps } from '@/ds/components/Field';
 import { IconLock } from '@/ds/icons/central/IconLock';
@@ -95,11 +96,7 @@ export function SettingsRow({
       {...props}
     >
       <div className={cn(headingClassName, !controlBelow && sideHeadingClassName)}>
-        <FieldLabel
-          {...(htmlFor ? { htmlFor } : {})}
-          required={required}
-          className={cn(tone === 'destructive' && 'text-destructive-foreground')}
-        >
+        <FieldLabel {...(htmlFor ? { htmlFor } : {})} required={required} className={settingsRowLabelClassName(tone)}>
           {label}
         </FieldLabel>
         {description != null && (
@@ -161,7 +158,7 @@ export function SettingsFieldsetRow({
       {...props}
     >
       <div className={cn(headingClassName, !controlBelow && sideHeadingClassName)}>
-        <FieldsetLegend>{label}</FieldsetLegend>
+        <FieldsetLegend className={settingsRowLabelClassName()}>{label}</FieldsetLegend>
         {description != null && (
           <div id={descriptionId} className="flex flex-col gap-0.5 text-caption text-pretty text-muted-foreground">
             {description}

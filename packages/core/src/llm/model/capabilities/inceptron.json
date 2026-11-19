@@ -1,7 +1,8 @@
 {
-  "attachment": ["moonshotai/Kimi-K2.6", "moonshotai/Kimi-K2.7-Code"],
+  "attachment": ["deepseek-ai/DeepSeek-V4.1-Flash-1017", "moonshotai/Kimi-K2.6", "moonshotai/Kimi-K2.7-Code"],
   "temperature": [
     "deepseek-ai/DeepSeek-V4-Flash-0731",
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017",
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
     "zai-org/GLM-5.3",
@@ -9,19 +10,20 @@
   ],
   "structuredOutput": [
     "deepseek-ai/DeepSeek-V4-Flash-0731",
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017",
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
     "zai-org/GLM-5.3",
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "zai-org/GLM-5.3": [
+    "zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "zai-org/GLM-5.3-Flash": [
+    "zai-org/GLM-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -31,6 +33,12 @@
       {
         "type": "effort",
         "values": ["high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "xhigh", "max"]
       }
     ]
   }

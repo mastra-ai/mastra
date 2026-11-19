@@ -1,5 +1,5 @@
-import type { PlatformApiClient} from '../platform/api-client.js';
-import { PlatformApiError } from '../platform/api-client.js';
+import type { ConnectClient } from '@mastra/connect';
+import { MastraConnectError } from '@mastra/connect';
 
 export const GITLAB_PROJECTS_PAGE_SIZE = 100;
 export const GITLAB_ISSUES_PAGE_SIZE = 30;
@@ -179,7 +179,8 @@ export interface GitLabApiClientConfig {
 }
 
 export interface PlatformGitLabApiClientConfig {
-  client: PlatformApiClient;
+  /** Reaches GitLab through the connection proxy: a `ConnectClient`, or a Platform integration's binding. */
+  client: Pick<ConnectClient, 'proxy'>;
   connectionId: string;
 }
 
@@ -638,11 +639,20 @@ export class GitLabApiClient {
     });
 
     if (this.#platform) {
-      const proxyPath = `/v2/connections/${encodeURIComponent(this.#platform.connectionId)}/proxy${apiPath}${suffix}`;
       try {
-        return await this.#platform.client.request<T>(method, proxyPath, options.body);
+        const data = await this.#platform.client.proxy(this.#platform.connectionId, {
+          method,
+          path: `${apiPath}${suffix}`,
+          body: options.body,
+        });
+        return (data ?? undefined) as T;
       } catch (error) {
-        if (error instanceof PlatformApiError) throw new GitLabApiError(error.message, error.status);
+        if (error instanceof MastraConnectError && error.status !== undefined) {
+          throw new GitLabApiError(error.detail ?? error.message, error.status);
+        }
+        // A binding reports a connection that needs reconnecting as an error with an HTTP status.
+        const status = (error as { status?: unknown } | null)?.status;
+        if (error instanceof Error && typeof status === 'number') throw new GitLabApiError(error.message, status);
         throw new GitLabApiError(error instanceof Error ? error.message : String(error), null);
       }
     }
