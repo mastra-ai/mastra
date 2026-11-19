@@ -12843,7 +12843,7 @@ export class Agent<
    * Accepted input of stream()/generate() executions. A total deadline that
    * settles the execution saves the turn from it as a terminal write.
    */
-  protected runInputs = new WeakMap<ExecutionFence, DurableAgenticWorkflowInput>();
+  #runInputs = new WeakMap<ExecutionFence, DurableAgenticWorkflowInput>();
 
   /**
    * Registry entries of recovered executions whose memory is fenced but which are not registered yet,
@@ -12856,10 +12856,7 @@ export class Agent<
    * authorize replay of its history. Lives until {@link clearPubsubTopic}. A
    * failed write only leaves other replicas refusing to replay the run.
    */
-  protected async attachStreamPublisher(
-    runId: string,
-    owner: { resourceId?: string; threadId?: string },
-  ): Promise<void> {
+  private async attachStreamPublisher(runId: string, owner: { resourceId?: string; threadId?: string }): Promise<void> {
     const claim = getRunRegistryEntry(runId, this.#mastra)?.executionFence?.claim;
     const publisher = getExecutionStreamOwner({
       runId,
@@ -12873,16 +12870,16 @@ export class Agent<
     });
   }
 
-  protected unverifiedReaderFences = new WeakSet<ExecutionFence>();
+  #unverifiedReaderFences = new WeakSet<ExecutionFence>();
 
-  protected scheduleReaderCleanup(executionFence: ExecutionFence, cleanup: () => void) {
-    if (this.unverifiedReaderFences.has(executionFence)) return;
+  private scheduleReaderCleanup(executionFence: ExecutionFence, cleanup: () => void) {
+    if (this.#unverifiedReaderFences.has(executionFence)) return;
     return this.#executionStreamBus.scheduleCleanup(() => {
-      if (!this.unverifiedReaderFences.has(executionFence)) cleanup();
+      if (!this.#unverifiedReaderFences.has(executionFence)) cleanup();
     });
   }
 
-  protected owningReaderTerminal(runId: string, executionFence: ExecutionFence) {
+  private owningReaderTerminal(runId: string, executionFence: ExecutionFence) {
     const publisher = getExecutionStreamOwner({
       runId,
       agentId: this.id,
@@ -12900,7 +12897,7 @@ export class Agent<
       } catch (error) {
         if (!(error instanceof DurableExecutionFenceError) || error.id !== EXECUTION_UNVERIFIED_ERROR_ID) throw error;
         // The local reader still finishes, but cannot mutate shared lifecycle state.
-        this.unverifiedReaderFences.add(executionFence);
+        this.#unverifiedReaderFences.add(executionFence);
         this.logger.warn(`[DurableAgent:${this.id}] run ${runId}: terminal ownership could not be verified`, { error });
       }
     };
@@ -12924,7 +12921,7 @@ export class Agent<
    * The transcript as of the crash. The loop snapshot's input only has the one the run
    * started with; later steps keep it in the nested execution workflow's state.
    */
-  protected async loadLatestMessageListState(
+  private async loadLatestMessageListState(
     workflowsStore: WorkflowsStorage,
     runId: string,
     fallbackSnapshot: WorkflowRunState,
@@ -12946,7 +12943,7 @@ export class Agent<
    * rejects the call and leaves the run as it was. Failing in a step instead,
    * after a resumed tool already ran, would end the run.
    */
-  protected async loadRecalledMessages(runId: string, snapshot?: WorkflowRunState, requestContext?: RequestContext) {
+  private async loadRecalledMessages(runId: string, snapshot?: WorkflowRunState, requestContext?: RequestContext) {
     if (!snapshot) {
       const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
       snapshot = workflowsStore
@@ -13483,7 +13480,7 @@ export class Agent<
     };
     this.installAbortWithTotalTimeout(registryEntry as unknown as RunRegistryEntry, abortController, executionFence);
     // The recovered run's deadline saves the turn as of the crash, until its first step snapshots it.
-    this.runInputs.set(executionFence, {
+    this.#runInputs.set(executionFence, {
       ...workflowInput,
       messageListState:
         (latestMessageListState as DurableAgenticWorkflowInput['messageListState'] | undefined) ??
@@ -13530,11 +13527,7 @@ export class Agent<
    * memory writes fail the same way. Warns about a memory store that can't
    * fence when the run is being recovered, or when recovery is automatic.
    */
-  protected async coverMemory(
-    fence: ExecutionFence,
-    requestContext: RequestContext,
-    recovering = false,
-  ): Promise<void> {
+  private async coverMemory(fence: ExecutionFence, requestContext: RequestContext, recovering = false): Promise<void> {
     if (fence.generation === undefined) return;
     let store: MemoryStorage | undefined;
     try {
@@ -13623,7 +13616,7 @@ export class Agent<
     // snapshots (and owner records) so `resume()` / `recoverActiveRuns()` can
     // find them.
     const finished = totalTimeout || (status !== undefined && status !== 'suspended');
-    const runInput = totalTimeout && fence ? this.runInputs.get(fence) : undefined;
+    const runInput = totalTimeout && fence ? this.#runInputs.get(fence) : undefined;
     // Captured before the error below lets the caller clean the run up.
     const runInputEntry =
       runInput && (getRunRegistryEntry(runId, this.#mastra) ?? (fence && this.#recoveredEntries.get(fence)));
@@ -13637,7 +13630,7 @@ export class Agent<
         // steps that completed in time (or just the accepted request). Saves made under the claim the
         // deadline replaced are rejected; this one writes under the replacement. Saves upsert by ID.
         // Like the finish step, memory is saved before the caller sees the run end.
-        this.runInputs.delete(fence!);
+        this.#runInputs.delete(fence!);
         deadlineSave = (async () => {
           // A tool the deadline aborted still gets its grace window to return; wait (bounded) so its step can be saved.
           await settledOrElapsed(
@@ -13682,7 +13675,7 @@ export class Agent<
     }
   }
 
-  protected async redeliverDeadlineError(entry: RunRegistryEntry, fence: ExecutionFence): Promise<boolean> {
+  private async redeliverDeadlineError(entry: RunRegistryEntry, fence: ExecutionFence): Promise<boolean> {
     if (!fence.deadlineError) return false;
     if (!entry.deadlineErrorRedelivered) {
       entry.deadlineErrorRedelivered = true;
@@ -13702,7 +13695,7 @@ export class Agent<
    * each session gets a fresh timer. The timer is torn down via the entry's
    * `cleanup` slot, which every settle path invokes through the run registry.
    */
-  protected installAbortWithTotalTimeout(
+  private installAbortWithTotalTimeout(
     entry: RunRegistryEntry,
     abortController: AbortController,
     executionFence: ExecutionFence,
@@ -13955,7 +13948,10 @@ export class Agent<
         globalRunRegistry.delete(runId);
         // The topic stays when the run's latest execution here (this one or a
         // later resume()) lost the run: whoever took it over writes to it.
-        if (!this.unverifiedReaderFences.has(executionFence) && (registryEntry.executionFence?.ownsRunTopics() ?? true))
+        if (
+          !this.#unverifiedReaderFences.has(executionFence) &&
+          (registryEntry.executionFence?.ownsRunTopics() ?? true)
+        )
           this.clearPubsubTopic(runId, registryEntry);
       }
     };
@@ -14155,7 +14151,7 @@ export class Agent<
    * events topic after this clear — is covered by the WEP's own cleanup,
    * which reschedules deletion on that run's terminal end.
    */
-  protected clearPubsubTopic(runId: string, entry = getRunRegistryEntry(runId, this.#mastra)): void {
+  private clearPubsubTopic(runId: string, entry = getRunRegistryEntry(runId, this.#mastra)): void {
     const publisher = getExecutionStreamOwner({
       runId,
       agentId: this.id,
@@ -14557,7 +14553,7 @@ export class Agent<
     // Set after preparation so request-context schema validation never sees it.
     setExecutionClaim(requestContext, runId, executionFence.claim);
     registryEntry.executionFence = executionFence;
-    this.runInputs.set(executionFence, workflowInput);
+    this.#runInputs.set(executionFence, workflowInput);
 
     // 1b. Install the abort controller for this run. The controller is owned
     // by this DurableAgent instance; the result's abort() method flips it,
@@ -14599,7 +14595,7 @@ export class Agent<
       if (getRunRegistryEntry(runId, this.#mastra) === globalRegistryEntry) {
         globalRunRegistry.delete(runId);
         if (
-          !this.unverifiedReaderFences.has(executionFence) &&
+          !this.#unverifiedReaderFences.has(executionFence) &&
           (globalRegistryEntry.executionFence?.ownsRunTopics() ?? true)
         )
           this.clearPubsubTopic(runId, globalRegistryEntry);
@@ -15353,7 +15349,7 @@ export class Agent<
       entry.timeoutTotalMs = resumeTotalMs;
     }
     // The resumed segment's deadline saves the turn from the run's persisted input, as a first segment does.
-    if (persistedInput) this.runInputs.set(executionFence, persistedInput);
+    if (persistedInput) this.#runInputs.set(executionFence, persistedInput);
     this.installAbortWithTotalTimeout(entry, abortController, executionFence);
     const globalEntryForAbort = getRunRegistryEntry(runId, this.#mastra);
     if (globalEntryForAbort) {
@@ -15386,7 +15382,7 @@ export class Agent<
           if (getRunRegistryEntry(runId, this.#mastra) === globalEntryForAbort) {
             globalRunRegistry.delete(runId);
             if (
-              !this.unverifiedReaderFences.has(executionFence) &&
+              !this.#unverifiedReaderFences.has(executionFence) &&
               !lostResumeRace &&
               (globalEntryForAbort?.executionFence ?? executionFence).ownsRunTopics()
             ) {
@@ -16238,7 +16234,7 @@ export class Agent<
         streamCleanup?.();
         if (
           observedFence &&
-          (this.unverifiedReaderFences.has(observedFence) ||
+          (this.#unverifiedReaderFences.has(observedFence) ||
             !observedFence.ownsRunTopics() ||
             getRunRegistryEntry(runId, this.#mastra)?.executionFence !== observedFence ||
             (localEntry &&
