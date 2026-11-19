@@ -4422,6 +4422,12 @@ export class AgentThreadStreamRuntime {
     return this.#getState(pubsub).threadRunsById.has(runId);
   }
 
+  /** The resource and thread a `runId`-only signal or message target resolves to in this process. */
+  getThreadRunTarget(runId: string, pubsub?: PubSub): { resourceId?: string; threadId: string } | undefined {
+    const record = this.#getState(pubsub).threadRunsById.get(runId);
+    return record ? { resourceId: record.resourceId, threadId: record.threadId } : undefined;
+  }
+
   /** Whether the run's original stream is still live and carries its resumed segments. */
   hasRunContinuation(runId: string, pubsub?: PubSub): boolean {
     return this.#getState(pubsub).threadRunsById.get(runId)?.continuation?.canContinue() === true;

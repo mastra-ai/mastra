@@ -4699,6 +4699,144 @@ describe('Agent Routes Authorization', () => {
       ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
     });
 
+    describe('runId targets on a live run owned by another resource', () => {
+      const ownerResourceId = 'run-owner-b';
+      const ownerThreadId = 'run-owner-b-thread';
+      let releaseModel: () => void;
+      let prompts: string[];
+      let liveAgent: Agent;
+      let liveMastra: Mastra;
+      let run: { runId: string; cleanup?: () => void; consumeStream?: () => Promise<void> };
+
+      beforeEach(async () => {
+        prompts = [];
+        const modelGate = new Promise<void>(resolve => {
+          releaseModel = resolve;
+        });
+        const model = {
+          specificationVersion: 'v2' as const,
+          provider: 'test',
+          modelId: 'gated-model',
+          supportedUrls: {},
+          doStream: async ({ prompt }: any) => {
+            prompts.push(JSON.stringify(prompt));
+            return {
+              stream: new ReadableStream({
+                async start(controller) {
+                  controller.enqueue({ type: 'stream-start', warnings: [] });
+                  await modelGate;
+                  controller.enqueue({ type: 'text-start', id: 't' });
+                  controller.enqueue({ type: 'text-delta', id: 't', delta: 'done' });
+                  controller.enqueue({ type: 'text-end', id: 't' });
+                  controller.enqueue({
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: { inputTokens: 1, outputTokens: 1 },
+                  });
+                  controller.close();
+                },
+              }),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            };
+          },
+        };
+        const liveStorage = new InMemoryStore();
+        const liveMemory = new MockMemory({ storage: liveStorage });
+        liveAgent = new Agent({
+          id: 'live-agent',
+          name: 'live-agent',
+          instructions: 'test',
+          model: model as any,
+          memory: liveMemory,
+        });
+        liveMastra = new Mastra({ agents: { 'live-agent': liveAgent }, storage: liveStorage, logger: false });
+        await liveMemory.createThread({ threadId: ownerThreadId, resourceId: ownerResourceId, title: 'Owner B' });
+        await liveMemory.createThread({ threadId: 'attacker-a-thread', resourceId: 'attacker-a', title: 'Attacker A' });
+
+        run = (await liveAgent.stream('owner prompt', {
+          memory: { thread: ownerThreadId, resource: ownerResourceId },
+        })) as any;
+        await vi.waitFor(() => expect(liveAgent.getThreadRunTarget(run.runId)).toBeDefined());
+      });
+
+      afterEach(async () => {
+        releaseModel();
+        await run.consumeStream?.().catch(() => {});
+        run.cleanup?.();
+      });
+
+      const attackerCalls = (runId: string, threadId?: string) => {
+        const base = {
+          mastra: liveMastra,
+          agentId: 'live-agent',
+          requestContext: createContextWithReservedKeys({ resourceId: 'attacker-a' }),
+          runId,
+          ...(threadId ? { threadId } : {}),
+        };
+        return [
+          () =>
+            SEND_AGENT_SIGNAL_ROUTE.handler({ ...base, signal: { type: 'user-message', contents: 'injected' } } as any),
+          () => SEND_AGENT_MESSAGE_ROUTE.handler({ ...base, message: 'injected' } as any),
+          () => QUEUE_AGENT_MESSAGE_ROUTE.handler({ ...base, message: 'injected' } as any),
+          () =>
+            (QUEUE_AGENT_SIGNAL_ROUTE.handler as any)({
+              ...base,
+              signal: { type: 'reactive', tagName: 'note', contents: 'injected' },
+            }),
+        ];
+      };
+
+      it('rejects every send and queue route without delivering or queueing the input', async () => {
+        const spies = (['sendSignal', 'sendMessage', 'queueMessage', 'queueSignal'] as const).map(method =>
+          vi.spyOn(liveAgent, method),
+        );
+
+        for (const call of [...attackerCalls(run.runId), ...attackerCalls(run.runId, 'attacker-a-thread')]) {
+          await expect(call()).rejects.toThrow(
+            new HTTPException(403, { message: 'Access denied: run belongs to a different resource' }),
+          );
+        }
+        for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+
+        releaseModel();
+        await run.consumeStream?.();
+        expect(prompts.join('\n')).not.toContain('injected');
+      });
+
+      it('answers an unknown runId the same way as another resource’s run', async () => {
+        for (const call of attackerCalls('no-such-run')) {
+          await expect(call()).rejects.toThrow(
+            new HTTPException(403, { message: 'Access denied: run belongs to a different resource' }),
+          );
+        }
+      });
+
+      it('still accepts a runId-only signal from the run’s owner', async () => {
+        await expect(
+          SEND_AGENT_SIGNAL_ROUTE.handler({
+            mastra: liveMastra,
+            agentId: 'live-agent',
+            requestContext: createContextWithReservedKeys({ resourceId: ownerResourceId }),
+            runId: run.runId,
+            signal: { type: 'user-message', contents: 'owner follow-up' },
+          } as any),
+        ).resolves.toMatchObject({ accepted: true, runId: run.runId });
+      });
+
+      it('leaves privileged callers without a context resource unrestricted', async () => {
+        await expect(
+          SEND_AGENT_SIGNAL_ROUTE.handler({
+            mastra: liveMastra,
+            agentId: 'live-agent',
+            requestContext: new RequestContext(),
+            runId: run.runId,
+            signal: { type: 'user-message', contents: 'service follow-up' },
+          } as any),
+        ).resolves.toMatchObject({ accepted: true, runId: run.runId });
+      });
+    });
+
     it('should reject sending a signal to a thread owned by a different resource', async () => {
       await mockMemory.createThread({
         threadId: 'signal-thread-owned-by-b',
