@@ -8,7 +8,12 @@ import type { IssueReconciler } from '../../issue-reconciler.js';
 import type { PlatformConnectProviderRegistration, PlatformConnectProviderSource } from '../connect/routes.js';
 import type { PlatformConnectOption } from '../platform-connect.js';
 import { PlatformConnectBinding } from './connect-binding.js';
-import type { LinkOrgConnectionsResult, NeedsLinkingEntry, PlatformConnection } from './connect-binding.js';
+import type {
+  LinkOrgConnectionsOptions,
+  LinkOrgConnectionsResult,
+  NeedsLinkingEntry,
+  PlatformConnection,
+} from './connect-binding.js';
 
 /** Reconciles run hourly unless an integration says otherwise. */
 export const DEFAULT_PLATFORM_RECONCILE_INTERVAL_MS = 60 * 60_000;
@@ -109,8 +114,8 @@ export abstract class PlatformConnectIntegration implements FactoryIntegration, 
     return this.binding.proxy(connectionId, request);
   }
 
-  linkOrgConnections(): Promise<LinkOrgConnectionsResult> {
-    return this.binding.linkOrgConnections();
+  linkOrgConnections(options?: LinkOrgConnectionsOptions): Promise<LinkOrgConnectionsResult> {
+    return this.binding.linkOrgConnections(options);
   }
 
   get needsLinking(): NeedsLinkingEntry[] {
@@ -138,10 +143,10 @@ export abstract class PlatformConnectIntegration implements FactoryIntegration, 
   /**
    * Starts boot linking (non-blocking) and returns the reconcile worker, when
    * the integration reconciles. Linking that adds a connection triggers one
-   * extra reconcile.
+   * extra reconcile. The integration's storage remembers what was linked.
    */
   workers(ctx: IntegrationContext): MastraWorker[] {
-    void this.binding.ensureBootLinked();
+    void this.binding.ensureBootLinked(ctx.storage.generic);
     const reconcile = this.reconcile(ctx);
     if (!reconcile) return [];
     const worker = new IssueReconcileWorker({
