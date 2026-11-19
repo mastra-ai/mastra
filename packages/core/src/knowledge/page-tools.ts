@@ -507,7 +507,7 @@ function bodyView(
   };
 }
 
-function readTool(host: KnowledgePageToolHost) {
+function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
   return createTool({
     id: 'knowledge_read',
     description:
@@ -515,7 +515,8 @@ function readTool(host: KnowledgePageToolHost) {
       `When a page's notes, or the notes mentioning it, come to more than ${KNOWLEDGE_READ_INLINE_TOKENS.toLocaleString('en-US')} tokens, a whole read leaves them out and counts them in \`more\`; read them on their own with \`notes\` or \`mentionedIn\`. ` +
       `A body returns at most ${maxTokensOf(host).toLocaleString('en-US')} tokens at a time. A body that fits comes whole as \`body\`; a longer one comes as numbered \`lines\` (\`12│text\`) with the \`range\` they cover, and \`more\` says where to read on; a first read of a long page shows every heading with its line number and the first lines under it, so you can pick the part to read. ` +
       'For a long page, ask for its `outline` of headings with their line numbers, read one `section`, or `match` terms to see only the lines that contain them, with `context` lines around each. ' +
-      'Those part reads return just that part of the body. To edit part of a long body, pass the `range` a read gave you to knowledge_page.',
+      'Those part reads return just that part of the body.' +
+      (canEdit ? ' To edit part of a long body, pass the `range` a read gave you to knowledge_page.' : ''),
     inputSchema: {
       type: 'object',
       properties: {
@@ -1506,7 +1507,7 @@ export function buildKnowledgePageTools(
   if (groups.read) {
     tools.knowledge_list = listTool(host);
     tools.knowledge_search = searchTool(host);
-    tools.knowledge_read = readTool(host);
+    tools.knowledge_read = readTool(host, groups.write);
   }
   if (groups.write) {
     tools.knowledge_page = pageTool(host);
