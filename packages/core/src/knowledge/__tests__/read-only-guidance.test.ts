@@ -22,6 +22,78 @@ function pinnedGuidance(processor: PinnedStateProcessor): string {
 
 const deps = { principalsKey: () => '', readPins: async () => [] };
 
+const TOOL_NAME = /\bknowledge_[a-z]+\b/g;
+
+/** Runs one turn and returns the tools the model was handed and every tool name its prompt mentions. */
+async function probe(id: string, tools: { read?: boolean; write?: boolean } | false) {
+  let seen: { prompt: any[]; tools: any[] } | undefined;
+  const agent = new Agent({
+    id,
+    name: id,
+    instructions: 'You answer questions.',
+    model: new MockLanguageModelV2({
+      doGenerate: async ({ prompt, tools }) => {
+        seen ??= { prompt: prompt as any[], tools: tools ?? [] };
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          content: [{ type: 'text' as const, text: 'Hi.' }],
+          warnings: [],
+        };
+      },
+    }),
+    memory: new MockMemory(),
+    knowledge: new Knowledge({
+      storage: new InMemoryStore({ id }),
+      scopes: knowledgeMemoryScopes(),
+      tools,
+      pinnedContext: true,
+    }),
+    scopes: ['org:acme'],
+  });
+  await agent.generate('Hi', { memory: { thread: 'thread-1', resource: 'user-1' } });
+  const system = seen!.prompt
+    .filter(message => message.role === 'system')
+    .map(message => message.content)
+    .join('\n');
+  const registered = seen!.tools.map(tool => tool.name).sort();
+  const promptText = [system, ...seen!.tools.map(tool => JSON.stringify(tool))].join('\n');
+  const named = [...new Set(promptText.match(TOOL_NAME) ?? [])].sort();
+  return { system, registered, named };
+}
+
+describe('Knowledge guidance for an agent without read tools', () => {
+  it('gives a write-only agent pinned guidance that names only the tools it has', async () => {
+    const { system, registered, named } = await probe('write-only', { write: true });
+    expect(registered).toEqual(['knowledge_note', 'knowledge_page', 'knowledge_pin']);
+    expect(system).toContain('To edit it, write from that body and pass that ref and version to knowledge_page');
+    expect(system).not.toMatch(/knowledge_read|knowledge_search|knowledge_list/);
+    expect(named.filter(name => !registered.includes(name))).toEqual([]);
+  });
+
+  it('gives a pinned-only agent excerpt guidance and names only knowledge_pin', async () => {
+    const { system, registered, named } = await probe('pinned-only', false);
+    expect(registered).toEqual(['knowledge_pin']);
+    expect(system).toContain(
+      'This pinned page is an excerpt. Use it as context, but do not treat it as the full page or use it to replace the page body.',
+    );
+    expect(system).not.toMatch(EDIT_GUIDANCE);
+    expect(named).toEqual(['knowledge_pin']);
+  });
+
+  it('names knowledge_read and knowledge_search in pinned guidance only when read is on', () => {
+    for (const write of [true, false]) {
+      expect(pinnedGuidance(new PinnedStateProcessor({ ...deps, read: false, write }))).not.toMatch(
+        /knowledge_read|knowledge_search/,
+      );
+      expect(pinnedGuidance(new PinnedStateProcessor({ ...deps, read: true, write }))).toContain(
+        'Do not knowledge_search or knowledge_read a pinned page to confirm it.',
+      );
+    }
+  });
+});
+
 describe('Knowledge guidance for an agent without write tools', () => {
   it('leaves edit guidance out of the instructions when only read tools are handed out', () => {
     const knowledge = new Knowledge({ scopes, tools: { read: true } });
@@ -51,8 +123,19 @@ describe('Knowledge guidance for an agent without write tools', () => {
     const preamble = '916ebf0f1ebead5a7eda8a76cafae9f44afacf47cad0af8dadf012befb950326';
     expect(sha(pinnedGuidance(new PinnedStateProcessor(deps)))).toBe(preamble);
     expect(sha(pinnedGuidance(new PinnedStateProcessor({ ...deps, write: true })))).toBe(preamble);
-    expect(sha(knowledge.createTools().knowledge_read!.description!)).toBe(
+    expect(sha(pinnedGuidance(new PinnedStateProcessor({ ...deps, read: true, write: true })))).toBe(preamble);
+    const tools = knowledge.createTools();
+    expect(sha(tools.knowledge_read!.description!)).toBe(
       '692561e732c23e2a1af8cb11ce765ec39c795b30503dbe0e3c7e37ece6f582ba',
+    );
+    expect(sha(tools.knowledge_page!.description!)).toBe(
+      '3967b4fb4cce10cccbb67254ab53cdeee32d558095fb359e9265052879c66a9f',
+    );
+    expect(sha(JSON.stringify((tools.knowledge_page as any).inputSchema))).toBe(
+      'c84acb585d2dd6fccc638eb9af4723e166ebae3530a2d6f35b2c8a0d6538dd0f',
+    );
+    expect(sha(tools.knowledge_pin!.description!)).toBe(
+      '42c38c1b671ed6aab2f2f3ba7671235a3c9c64865f7ef7f7fec4591d8c6ba881',
     );
   });
 

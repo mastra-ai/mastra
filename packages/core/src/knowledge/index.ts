@@ -355,9 +355,10 @@ export class Knowledge extends MastraBase {
     return this.#pins !== false;
   }
 
-  /** Whether `createTools()` and `getInstructions()` include the write tools by default. @internal */
-  get __writeEnabled(): boolean {
-    return this.#groups().write;
+  /** Which tool groups `createTools()` and `getInstructions()` include by default. @internal */
+  get __toolGroups(): { read: boolean; write: boolean } {
+    const { read, write } = this.#groups();
+    return { read, write };
   }
 
   /** The run's principals as a stable key; throws when the run has none or holds an undeclared scope. @internal */

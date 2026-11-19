@@ -2142,7 +2142,7 @@ export class Agent<
         new PinnedStateProcessor({
           principalsKey: context => knowledge.__principalsKey(context),
           readPins: context => knowledge.__deliveredPins(context),
-          write: knowledge.__writeEnabled,
+          ...knowledge.__toolGroups,
         }),
       );
     }
