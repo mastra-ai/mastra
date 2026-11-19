@@ -44,8 +44,30 @@ describe('Gateway memory client in v2 deployments', () => {
   it('does not build a v1 memory client when a registered gateway config is v2 despite a v1 env key', () => {
     vi.stubEnv('MASTRA_GATEWAY_VERSION', '');
     vi.stubEnv('MASTRA_GATEWAY_API_KEY', 'msk_v1-key');
-    const mastra = { listGateways: () => ({ mastra: { id: 'mastra', isV2: () => true } }) };
+    const mastra = {
+      listGateways: () => ({ mastra: { id: 'mastra', isV2: () => true, config: { apiKey: 'mskv2_org-key' } } }),
+    };
     expect(getGatewayClient(mastra)).toBeNull();
+  });
+
+  // `@mastra/core` 1.83 and 1.84 answer v2 for any key when MASTRA_GATEWAY_VERSION=v2 is set.
+  it('uses v1 for a project env key when an older registered gateway answers v2', () => {
+    vi.stubEnv('MASTRA_GATEWAY_VERSION', 'v2');
+    vi.stubEnv('MASTRA_GATEWAY_API_KEY', 'msk_0123456789abcdef0123456789abcdef');
+    const mastra = { listGateways: () => ({ mastra: { id: 'mastra', isV2: () => true } }) };
+    expect(isGatewayV2(mastra)).toBe(false);
+    expect(getGatewayClient(mastra)).not.toBeNull();
+  });
+
+  it('uses v1 for a project config key when an older registered gateway answers v2', () => {
+    vi.stubEnv('MASTRA_GATEWAY_VERSION', 'v2');
+    vi.stubEnv('MASTRA_GATEWAY_API_KEY', '');
+    const mastra = {
+      listGateways: () => ({
+        mastra: { id: 'mastra', isV2: () => true, config: { apiKey: 'msk_0123456789abcdef0123456789abcdef' } },
+      }),
+    };
+    expect(isGatewayV2(mastra)).toBe(false);
   });
 
   it('agrees with a registered gateway whose v1 config key wins over MASTRA_GATEWAY_VERSION', () => {

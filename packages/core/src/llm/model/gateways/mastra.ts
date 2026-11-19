@@ -236,7 +236,10 @@ interface V2CatalogEntry {
   fetchedAt?: number;
   retryAt?: number;
   pending?: Promise<string[]>;
-  /** A failure with no list to fall back on, rethrown until `failedUntil` without a new request. */
+  /**
+   * The last failure, rethrown until `failedUntil` without a new request when there is no list to
+   * fall back on, or the list passes the stale window before the retry wait ends.
+   */
   failure?: unknown;
   failedUntil?: number;
 }
@@ -278,7 +281,8 @@ function pruneV2Catalogs(cache: Map<string, V2CatalogEntry>, now: number): void 
  * Returns the cached v2 catalogue for `cacheKey`, fetching it when it is missing or older than
  * the TTL. Concurrent callers share one request. When a refresh fails with a timeout, a network
  * error or a server error, the last good catalogue is returned for a bounded time, and the next
- * attempt waits a short while. Without a catalogue to fall back on, the error is thrown, and the
+ * attempt waits a short while, also when the catalogue becomes too old to return during that wait:
+ * the error is then thrown. Without a catalogue to fall back on, the error is thrown, and the
  * same error is thrown again without a new request for that short while, so callers during an
  * outage do not each wait for the request timeout. A rejected key (401 or 403) drops the cached
  * catalogue and is never remembered, so every call asks the gateway again.
@@ -326,6 +330,10 @@ function loadCachedV2Catalog(
           models: previous.models,
           fetchedAt: previous.fetchedAt,
           retryAt: settledAt + V2_CATALOG_RETRY_AFTER_ERROR_MS,
+          // The list may pass the stale window before the retry wait ends. The failure is then
+          // thrown for the rest of the wait, without a new request.
+          failure: error,
+          failedUntil: settledAt + V2_CATALOG_RETRY_AFTER_ERROR_MS,
         });
         return previous.models;
       }
