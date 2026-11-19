@@ -721,7 +721,7 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
           // Same shape as the core durable agent: `text` and the run's `toolCalls` are the output,
           // usage goes to the attributes through the tracker so consumers find it where every
           // other model span puts it.
-          const observability = mastra?.observability?.getSelectedInstance({});
+          const observability = mastra?.observability?.getSelectedInstance({ requestContext });
           // Resumed segments carry their own clocks beside their fresh spans.
           const registry = getRunRegistryEntry(state.runId, mastra);
           // A tripwire keeps its own classification; otherwise a deadline-stopped run ends its spans as
