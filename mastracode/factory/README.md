@@ -781,7 +781,7 @@ const factory = new MastraFactory({
 - **Whose key it is.** The embedder runs on the operator's key, outside tenant credential resolution. Accounts never use the server's provider keys, but a server `MASTRA_GATEWAY_API_KEY` also lets every account without its own gateway key run `mastra/` chat models on your credits. Use a provider id to keep the embedding key out of chat.
 - **Checked at startup.** `new MastraFactory()` throws when `embedder` is set without `vector`, or when a router string's provider key is missing.
 - **Thread text leaves the host.** A hosted embedder sends thread text to that provider. Tenants that need a different provider need their own deployment and vector store.
-- **Switching models.** Vector indexes are named by dimension, so a model with a different dimension starts an empty index, and recall doesn't find content observed before the switch. Earlier content isn't re-embedded. Don't switch between two models with the same dimension on one vector store: their vectors would share an index and can't be compared.
+- **Switching models.** Vector indexes are named by dimension, so a model with a different dimension starts an empty index, and recall doesn't find content observed before the switch. Earlier content isn't re-embedded. Don't switch between two models with the same dimension on one vector store, including from the default fastembed to a 384-dimension model: their vectors would share an index, can't be compared, and recall would return wrong results without an error.
 
 ### The `factory-work-item` signal
 

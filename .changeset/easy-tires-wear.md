@@ -15,4 +15,4 @@ new MastraFactory({
 
 One embedder serves every account on the deployment, on the operator's key.
 
-Vector indexes are named by dimension, so after switching to a model with a different dimension, recall only finds content observed after the switch.
+Vector indexes are named by dimension, so after switching to a model with a different dimension, recall only finds content observed after the switch. Don't switch between two models with the same dimension on one vector store, including from the default fastembed to a 384-dimension model: their vectors would share an index, can't be compared, and recall would return wrong results without an error.

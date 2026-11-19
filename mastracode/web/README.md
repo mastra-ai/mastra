@@ -182,7 +182,7 @@ Other providers work the same way, for example `google/gemini-embedding-001` wit
 
 A server `MASTRA_GATEWAY_API_KEY` also lets every account run `mastra/` chat models on your gateway credits, when the account hasn't connected its own gateway key. To keep the embedding key out of chat, use a provider id instead: accounts never use the server's provider keys.
 
-Vector indexes are named by dimension, so a model with a different dimension starts with an empty index: recall doesn't find content observed before the switch. Earlier content isn't re-embedded.
+Vector indexes are named by dimension, so a model with a different dimension starts with an empty index: recall doesn't find content observed before the switch. Earlier content isn't re-embedded. Don't switch between two models with the same dimension on one vector store, including from the default fastembed to a 384-dimension model: their vectors would share an index, can't be compared, and recall would return wrong results without an error.
 
 ### Amazon Bedrock
 
