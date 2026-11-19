@@ -123,7 +123,7 @@ export interface PinnedStateProcessorDeps {
   principalsKey(context: KnowledgeRunContext): string;
   /** The pins the run receives. */
   readPins(context: KnowledgeRunContext): Promise<PinEntry[]>;
-  /** Whether the agent has `knowledge_search` and `knowledge_read`; when `false` the guidance names neither. Defaults to `true`. */
+  /** Whether the agent has `knowledge_search` and `knowledge_read`; when `false` the guidance names no read tool. Defaults to `true`. */
   read?: boolean;
   /** Whether the agent has `knowledge_page`; when `false` the guidance leaves out how to edit a pin. Defaults to `true`. */
   write?: boolean;

@@ -371,7 +371,7 @@ export class Knowledge extends MastraBase {
     const budget = this.#pins || resolvePins(true);
     if (!budget) return [];
     const run = await KnowledgeRun.start(this.#runtime, await this.getStorage(), context);
-    return knowledgeDeliveredPins(run, budget);
+    return knowledgeDeliveredPins(run, budget, this.#groups().read);
   }
 
   /** @internal */

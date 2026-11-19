@@ -8,6 +8,7 @@ import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import { knowledgeMemoryScopes } from '../declarations';
 import { Knowledge } from '../index';
+import { PIN_EXCERPT_MARKER, PIN_TRUNCATION_MARKER } from '../pinned';
 import { PinnedStateProcessor } from '../pinned-state-processor';
 
 const EDIT_GUIDANCE = /\bedit|write back|knowledge_page|knowledge_note|expectedVersion/i;
@@ -25,7 +26,9 @@ const deps = { principalsKey: () => '', readPins: async () => [] };
 const TOOL_NAME = /\bknowledge_[a-z]+\b/g;
 
 /** Runs one turn and returns the tools the model was handed and every tool name its prompt mentions. */
-async function probe(id: string, tools: { read?: boolean; write?: boolean } | false) {
+async function probe(id: string, tools: { read?: boolean; write?: boolean } | false, pins?: PinCase) {
+  const storage = new InMemoryStore({ id });
+  if (pins) await seedPins(storage, pins);
   let seen: { prompt: any[]; tools: any[] } | undefined;
   const agent = new Agent({
     id,
@@ -45,10 +48,10 @@ async function probe(id: string, tools: { read?: boolean; write?: boolean } | fa
     }),
     memory: new MockMemory(),
     knowledge: new Knowledge({
-      storage: new InMemoryStore({ id }),
+      storage,
       scopes: knowledgeMemoryScopes(),
       tools,
-      pinnedContext: true,
+      pinnedContext: pins === 'overflow' ? { maxPins: 1 } : pins ? { maxTokens: 150 } : true,
     }),
     scopes: ['org:acme'],
   });
@@ -58,9 +61,39 @@ async function probe(id: string, tools: { read?: boolean; write?: boolean } | fa
     .map(message => message.content)
     .join('\n');
   const registered = seen!.tools.map(tool => tool.name).sort();
-  const promptText = [system, ...seen!.tools.map(tool => JSON.stringify(tool))].join('\n');
+  const promptText = [JSON.stringify(seen!.prompt), ...seen!.tools.map(tool => JSON.stringify(tool))].join('\n');
   const named = [...new Set(promptText.match(TOOL_NAME) ?? [])].sort();
-  return { system, registered, named };
+  return { system, promptText, registered, named };
+}
+
+type PinCase = 'page' | 'listing' | 'overflow';
+
+/** Pins that each make a pin entry point at a read tool when read is on: a cut-off page, a cut-off listing, or more pins than fit. */
+async function seedPins(storage: InMemoryStore, pins: PinCase) {
+  const writer = new Knowledge({ storage, scopes: knowledgeMemoryScopes(), tools: true, pinnedContext: true });
+  const tools = writer.createTools();
+  const requestContext = new RequestContext();
+  setRunAgentScopes(requestContext, ['org:acme']);
+  const context = { requestContext, agent: { agentId: 'seed', resourceId: 'u-1', threadId: 't-1' } };
+  const call = (tool: string, input: Record<string, unknown>) =>
+    tools[tool]!.execute!(input as never, context as never) as Promise<any>;
+  const page = (name: string, body?: string, parent?: string) =>
+    call('knowledge_page', { op: 'write', scope: 'org:acme', name, body, parent });
+  const pin = (name: string, kind = 'page') =>
+    call('knowledge_pin', { op: 'pin', page: name, kind, audience: ['org:acme'] });
+  if (pins === 'page') {
+    await page('Style', 'word '.repeat(2_000));
+    await pin('Style');
+  } else if (pins === 'listing') {
+    await page('Docs', 'Index.');
+    for (let i = 0; i < 60; i++) await page(`Document number ${i}`, undefined, 'Docs');
+    await pin('Docs', 'list');
+  } else {
+    for (const name of ['Extra A', 'Extra B']) {
+      await page(name, 'Short.');
+      await pin(name);
+    }
+  }
 }
 
 describe('Knowledge guidance for an agent without read tools', () => {
@@ -76,10 +109,27 @@ describe('Knowledge guidance for an agent without read tools', () => {
     const { system, registered, named } = await probe('pinned-only', false);
     expect(registered).toEqual(['knowledge_pin']);
     expect(system).toContain(
-      'This pinned page is an excerpt. Use it as context, but do not treat it as the full page or use it to replace the page body.',
+      'use and cite the body as it is. This pinned page is an excerpt. Use it as context, but do not treat it as the full page or use it to replace the page body.\n',
     );
     expect(system).not.toMatch(EDIT_GUIDANCE);
     expect(named).toEqual(['knowledge_pin']);
+  });
+
+  it('delivers cut-off page, cut-off listing and overflow pins without naming read tools when read is off', async () => {
+    const without = { page: PIN_EXCERPT_MARKER, listing: '…and more', overflow: 'Also pinned: Extra A' } as const;
+    const withRead = {
+      page: PIN_TRUNCATION_MARKER,
+      listing: '; knowledge_list from:',
+      overflow: 'Also pinned (open with knowledge_read): Extra A',
+    } as const;
+    for (const pins of ['page', 'listing', 'overflow'] as const) {
+      for (const tools of [{ write: true }, false] as const) {
+        const { promptText, registered, named } = await probe(`${pins}-${tools ? 'write' : 'none'}`, tools, pins);
+        expect(promptText).toContain(without[pins]);
+        expect(named.filter(name => !registered.includes(name))).toEqual([]);
+      }
+      expect((await probe(`${pins}-read`, { read: true }, pins)).promptText).toContain(withRead[pins]);
+    }
   });
 
   it('names knowledge_read and knowledge_search in pinned guidance only when read is on', () => {
