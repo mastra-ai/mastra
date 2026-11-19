@@ -600,6 +600,105 @@ export function describeFinishedOccurrenceCases({
       20_000,
     );
 
+    // Technical: A saved a's failure and stopped before publishing `workflow.fail`, with b still
+    // running. A failed branch never reaches the entry's aggregation, so b's completion can't end
+    // the run: the restart's delivery for a has to continue from the saved failure and fail it.
+    // Dropping it because b was unsettled left the run `running` for good.
+    it.each(['parallel', 'conditional'] as const)(
+      '%s: fails a run restarted after one branch failed while the other was still running',
+      async kind => {
+        const executions: string[] = [];
+        const bStarted = deferred<void>();
+        const build = (replica: string) => {
+          const report: Report = async id => void executions.push(`${replica}:${id}`);
+          const a = createStep({
+            id: 'a',
+            inputSchema: Num,
+            outputSchema: Num,
+            execute: async () => {
+              await report('a');
+              throw new Error('a broke');
+            },
+          });
+          const b = createStep({
+            id: 'b',
+            inputSchema: Num,
+            outputSchema: Num,
+            execute: async ({ inputData }) => {
+              await report('b');
+              if (replica === 'A') {
+                bStarted.resolve();
+                await new Promise<never>(() => {});
+              }
+              return inputData;
+            },
+          });
+          const workflow = createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: z.any() });
+          const entry =
+            kind === 'parallel'
+              ? workflow.parallel([a, b])
+              : workflow.branch([
+                  [async () => true, a],
+                  [async () => true, b],
+                ]);
+          return entry
+            .then(
+              createStep({
+                id: 'c',
+                inputSchema: z.any(),
+                outputSchema: Num,
+                execute: async () => {
+                  await report('c');
+                  return { n: 1 };
+                },
+              }),
+            )
+            .commit();
+        };
+
+        // A runs a only once b is running, and stops right after saving a's failure.
+        const startA = deferred<void>();
+        const aSaved = deferred<void>();
+        const a = await startReplica(
+          build('A'),
+          event =>
+            event.type === 'workflow.step.run' && samePath(event, [0, 0]) && !event.data.restart
+              ? startA.promise
+              : undefined,
+          ({ stepId, result }) => {
+            if (stepId !== 'a' || result.status !== 'failed') {
+              return undefined;
+            }
+
+            aSaved.resolve();
+            return new Promise<never>(() => {});
+          },
+        );
+        const run = await a.workflow.createRun({ runId: uniqueRunId() });
+        startInBackground(run, { n: 1 });
+        await bStarted.promise;
+        startA.resolve();
+        await aSaved.promise;
+        await crash(a);
+        expect((await storedRun(run.runId))?.status).toBe('running');
+
+        const b = await startReplica(build('B'));
+        void (await b.workflow.createRun({ runId: run.runId }))
+          .restart()
+          .catch(error => console.error('A restart left running by the test rejected', error));
+
+        await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('failed');
+        expect((await storedRun(run.runId))?.error?.message).toBe('a broke');
+        // The restart runs b again, which A never finished. Step guards don't treat a saved failure
+        // as final (a retry may follow it), so there the restart runs a again too and it fails again.
+        const guards = (await getStorage().getStore('workflows'))!.supportsWorkflowStepGuards();
+        const ran = ['A:b', 'A:a', 'B:b', ...(guards ? ['B:a'] : [])].sort();
+        await expect.poll(() => [...executions].sort()).toEqual(ran);
+        expect((await storedRun(run.runId))?.status).toBe('failed');
+      },
+      20_000,
+    );
+
     /** The first entries `crashAfterSavingFirst` runs before `second`: a step, or a loop whose last iteration ends it. */
     const firstEntries = {
       step: {

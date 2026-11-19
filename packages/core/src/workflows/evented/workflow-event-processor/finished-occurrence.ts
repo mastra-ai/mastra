@@ -79,9 +79,11 @@ function isFinal(record: StoredRecord | undefined, step: LeafEntry, stepGuards: 
  * A top-level step shows that through the run's active path. A branch
  * continues only when a restart dispatched it, since the restart is then what
  * recovers the run, only while the run's active path is still inside the
- * branch's parallel or conditional entry, and only when the restart read every
- * sibling branch (`siblings`) as settled (see `BRANCH_SETTLED_STATUSES`). Any
- * other finished delivery is dropped.
+ * branch's parallel or conditional entry, and, for a result the entry's
+ * aggregation counts, only when the restart read every sibling branch
+ * (`siblings`) as settled (see `BRANCH_SETTLED_STATUSES`). A failed branch
+ * skips the aggregation and fails the run, so it continues whatever its
+ * siblings' state. Any other finished delivery is dropped.
  *
  * `stepGuards` tells whether the store has workflow step guards. Records they
  * stamped are left to the guards on the deliveries the guards arbitrate
@@ -168,12 +170,14 @@ export function finishedOccurrence({
   // conditional entry, and only a restart (the run's recovery) continues from a branch.
   // A sibling the restart read as unsettled aggregates the entry itself when it settles, and it
   // then sees this branch's saved result, so continuing here as well would aggregate it twice.
+  // A failure never reaches the aggregation, so a failed branch continues to fail the run.
   const notMovedOn =
     executionPath.length === 1
       ? samePath(snapshot.activePaths, executionPath)
       : restartTarget &&
         snapshot.activePaths?.[0] === executionPath[0] &&
-        (siblings ?? []).every(id => BRANCH_SETTLED_STATUSES.has(restart?.stepResults?.[id]?.status as string));
+        (!BRANCH_SETTLED_STATUSES.has(stored.status!) ||
+          (siblings ?? []).every(id => BRANCH_SETTLED_STATUSES.has(restart?.stepResults?.[id]?.status as string)));
 
   return notMovedOn ? { continueFrom: stored as StepResult<any, any, any, any> } : 'drop';
 }
