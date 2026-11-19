@@ -20,23 +20,26 @@ import { InternalMastraMCPClient, getMcpCallToolContent, getMcpCallToolMeta } fr
 import { MALFORMED_INPUT_SCHEMAS, VALID_INPUT_SCHEMAS } from './input-schema-test-cases.js';
 import type { MastraMCPServerDefinition } from './types.js';
 
-// exit-hook keeps its callbacks in a module-level Set and installs its own process
-// listeners exactly once behind an internal flag, so process.listenerCount('exit') is
-// identical whether one client holds an exit hook or none do. Counting registrations
-// here is the only way to observe that a client actually released its exit hook. The
-// wrapper delegates to the real implementation, so behaviour is unchanged.
-const exitHooks = vi.hoisted(() => ({ live: 0 }));
+// process-hooks keeps its hooks in a module-level Set and installs the process listeners exactly
+// once behind an internal flag, so process.listenerCount('exit') is identical whether one client
+// holds a hook or none do. Counting registrations here is the only way to observe that a client
+// actually released its hook. The wrapper delegates to the real implementation, so the real
+// listeners are still installed and removed.
+const processHooks = vi.hoisted(() => ({ live: 0 }));
 
-vi.mock('exit-hook', async importOriginal => {
-  const actual = await importOriginal<typeof import('exit-hook')>();
+vi.mock('./process-hooks', async importOriginal => {
+  const actual = await importOriginal<typeof import('./process-hooks')>();
   return {
     ...actual,
-    asyncExitHook: (...args: Parameters<typeof actual.asyncExitHook>) => {
-      const unsubscribe = actual.asyncExitHook(...args);
-      exitHooks.live++;
+    addProcessHook: (...args: Parameters<typeof actual.addProcessHook>) => {
+      const release = actual.addProcessHook(...args);
+      processHooks.live++;
+      let released = false;
       return () => {
-        exitHooks.live--;
-        unsubscribe();
+        if (released) return;
+        released = true;
+        processHooks.live--;
+        release();
       };
     },
   };
@@ -2713,20 +2716,20 @@ describe('MastraMCPClient - Resource Cleanup Tests', () => {
     it('should not leak SIGTERM/SIGHUP listeners or the exit hook when connect() fails', async () => {
       const initialSigTerm = process.listenerCount('SIGTERM');
       const initialSigHup = process.listenerCount('SIGHUP');
-      const initialExitHooks = exitHooks.live;
+      const initialProcessHooks = processHooks.live;
 
       const client = makeFailingClient('failed-connect-client');
       await expect(client.connect()).rejects.toThrow();
 
       expect(process.listenerCount('SIGTERM')).toBe(initialSigTerm);
       expect(process.listenerCount('SIGHUP')).toBe(initialSigHup);
-      expect(exitHooks.live).toBe(initialExitHooks);
+      expect(processHooks.live).toBe(initialProcessHooks);
     });
 
     it('should not accumulate listeners across repeated failed connects', async () => {
       const initialSigTerm = process.listenerCount('SIGTERM');
       const initialSigHup = process.listenerCount('SIGHUP');
-      const initialExitHooks = exitHooks.live;
+      const initialProcessHooks = processHooks.live;
 
       // Above Node's default max of 10, so a leak also trips MaxListenersExceededWarning.
       for (let i = 0; i < 12; i++) {
@@ -2737,19 +2740,19 @@ describe('MastraMCPClient - Resource Cleanup Tests', () => {
 
       expect(process.listenerCount('SIGTERM')).toBe(initialSigTerm);
       expect(process.listenerCount('SIGHUP')).toBe(initialSigHup);
-      expect(exitHooks.live).toBe(initialExitHooks);
+      expect(processHooks.live).toBe(initialProcessHooks);
     });
 
     it('should release listeners and the exit hook on disconnect() after a failed connect', async () => {
       const initialSigTerm = process.listenerCount('SIGTERM');
-      const initialExitHooks = exitHooks.live;
+      const initialProcessHooks = processHooks.live;
 
       const client = makeFailingClient('failed-connect-then-disconnect');
       await client.connect().catch(() => {});
       await client.disconnect();
 
       expect(process.listenerCount('SIGTERM')).toBe(initialSigTerm);
-      expect(exitHooks.live).toBe(initialExitHooks);
+      expect(processHooks.live).toBe(initialProcessHooks);
     });
 
     describe('stdio transport', () => {
@@ -2764,19 +2767,19 @@ describe('MastraMCPClient - Resource Cleanup Tests', () => {
       it('should not leak listeners or the exit hook when a stdio connect() fails', async () => {
         const initialSigTerm = process.listenerCount('SIGTERM');
         const initialSigHup = process.listenerCount('SIGHUP');
-        const initialExitHooks = exitHooks.live;
+        const initialProcessHooks = processHooks.live;
 
         const client = makeFailingStdioClient('failed-stdio-connect');
         await expect(client.connect()).rejects.toThrow();
 
         expect(process.listenerCount('SIGTERM')).toBe(initialSigTerm);
         expect(process.listenerCount('SIGHUP')).toBe(initialSigHup);
-        expect(exitHooks.live).toBe(initialExitHooks);
+        expect(processHooks.live).toBe(initialProcessHooks);
       });
 
       it('should not accumulate listeners across repeated failed stdio connects', async () => {
         const initialSigTerm = process.listenerCount('SIGTERM');
-        const initialExitHooks = exitHooks.live;
+        const initialProcessHooks = processHooks.live;
 
         // Above Node's default max of 10, and with no disconnect() to paper over the
         // failure path: a failed connect must clean up on its own.
@@ -2787,7 +2790,7 @@ describe('MastraMCPClient - Resource Cleanup Tests', () => {
         }
 
         expect(process.listenerCount('SIGTERM')).toBe(initialSigTerm);
-        expect(exitHooks.live).toBe(initialExitHooks);
+        expect(processHooks.live).toBe(initialProcessHooks);
       });
     });
   });

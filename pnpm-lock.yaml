@@ -5403,9 +5403,6 @@ importers:
       '@modelcontextprotocol/server':
         specifier: 2.4.0
         version: 2.4.0
-      exit-hook:
-        specifier: ^5.1.0
-        version: 5.1.0
       fast-deep-equal:
         specifier: ^3.1.3
         version: 3.1.3

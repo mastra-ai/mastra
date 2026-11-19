@@ -121,7 +121,7 @@ export interface MCPClientOptions<TServers extends MCPClientServers<TServers> = 
   /**
    * Install process exit and signal hooks that disconnect servers and end the process (default: true).
    * Set to false when the host handles shutdown, and call disconnect() from its shutdown handler.
-   * Set this on every client: exit-hook's global signal listeners persist after disconnect().
+   * Set this on every client: a client that holds these hooks still ends the process on a signal.
    */
   registerProcessHooks?: boolean;
   /**

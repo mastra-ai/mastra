@@ -33,7 +33,6 @@ import type {
   jsonSchemaValidator,
 } from '@modelcontextprotocol/client';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/client/stdio';
-import { asyncExitHook, gracefulExit } from 'exit-hook';
 import { z } from 'zod/v4';
 import {
   EVENTS_METHODS,
@@ -69,6 +68,7 @@ import { EventStreamRouter } from './events/stream-router';
 import { EventSubscription } from './events/subscription';
 import type { EventsPort, EventsWebhookSetup, MCPEventSubscribeOptions, MCPEventSubscription } from './events/types';
 import { getInputSchemaError, loadInputSchemaMetaValidator } from './input-schema-meta-schema';
+import { addProcessHook } from './process-hooks';
 import { interceptTaskResults, takeTaskHandle } from './tasks/intercept';
 import { resolveTasksOptions } from './tasks/options';
 import { TaskRequester } from './tasks/requester';
@@ -510,9 +510,11 @@ export class InternalMastraMCPClient extends MastraBase {
    * which belong to the connection rather than to the handler that produced them.
    */
   private replyContextStore = new AsyncLocalStorage<RequestContext | null>();
-  private exitHookUnsubscribe?: () => void;
-  private sigTermHandler?: () => void;
-  private sigHupHandler?: () => void;
+  /**
+   * Releases this client's process hook. While it is set, the client is one of the clients whose
+   * process listeners are installed; releasing it removes them once no other client holds one.
+   */
+  private releaseProcessHook?: () => void;
   private serverInstructions?: string;
   private serverImplementation?: MCPServerImplementation;
   /** The verdict of the last successful probe, reused so reconnects skip it. */
@@ -1117,7 +1119,7 @@ export class InternalMastraMCPClient extends MastraBase {
     // Registered before the connection settles so an exit during a connect attempt still
     // tears down anything the transport already started (a spawned stdio child, say).
     // The failure path inside the promise removes them again. Hosts that own shutdown must
-    // skip even the first registration: exit-hook's global signal listeners outlive unsubscribe.
+    // skip even the first registration: a registered hook ends the process on a signal.
     if (this.processHooks) {
       this.registerProcessHooks();
     }
@@ -1126,65 +1128,36 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   /**
-   * Installs the process-exit and signal handlers that tear this client down when the
-   * host process goes away. Idempotent, so repeated connects add at most one of each.
+   * Installs the process-exit and signal handlers that tear this client down when the host
+   * process goes away. Idempotent, so repeated connects add at most one hook.
    */
   private registerProcessHooks() {
-    if (!this.exitHookUnsubscribe) {
-      this.exitHookUnsubscribe = asyncExitHook(
-        async () => {
-          this.log('debug', `Disconnecting MCP server during exit`);
-          await this.disconnect();
-        },
-        { wait: 5000 },
-      );
-    }
-
-    if (!this.sigTermHandler) {
-      this.sigTermHandler = () => gracefulExit();
-      process.on('SIGTERM', this.sigTermHandler);
-    }
-
-    if (!this.sigHupHandler) {
-      this.sigHupHandler = () => gracefulExit();
-      process.on('SIGHUP', this.sigHupHandler);
-    }
+    this.releaseProcessHook ??= addProcessHook(
+      async () => {
+        this.log('debug', `Disconnecting MCP server during exit`);
+        await this.disconnect();
+      },
+      { wait: 5000 },
+    );
   }
 
   /**
-   * Removes whatever {@link registerProcessHooks} installed. Keyed on the handlers this
-   * client actually registered rather than on connection state, so a client that never
-   * reached a transport still releases its process listeners.
+   * Removes whatever {@link registerProcessHooks} installed. Keyed on the hook this client
+   * actually registered rather than on connection state, so a client that never reached a
+   * transport still releases its process listeners.
    *
-   * Each release is attempted on its own: a host that refuses one `process.off` call must not
-   * keep the other listeners installed, and must not make this throw at its callers (#30820).
-   * A handler whose listener could not be removed stays tracked, so a later connect registers
-   * no duplicate of it.
+   * A refused release is reported, never thrown at the callers of this method (#30820), and the
+   * hook stays tracked so a later connect registers no duplicate of it.
    */
   private unregisterProcessHooks() {
-    if (this.exitHookUnsubscribe) {
-      try {
-        this.exitHookUnsubscribe();
-        this.exitHookUnsubscribe = undefined;
-      } catch (error) {
-        this.reportHookReleaseFailure('process exit hook', error);
-      }
+    if (!this.releaseProcessHook) {
+      return;
     }
-    if (this.sigTermHandler) {
-      try {
-        process.off('SIGTERM', this.sigTermHandler);
-        this.sigTermHandler = undefined;
-      } catch (error) {
-        this.reportHookReleaseFailure('SIGTERM handler', error);
-      }
-    }
-    if (this.sigHupHandler) {
-      try {
-        process.off('SIGHUP', this.sigHupHandler);
-        this.sigHupHandler = undefined;
-      } catch (error) {
-        this.reportHookReleaseFailure('SIGHUP handler', error);
-      }
+    try {
+      this.releaseProcessHook();
+      this.releaseProcessHook = undefined;
+    } catch (error) {
+      this.reportHookReleaseFailure('process hooks', error);
     }
   }
 

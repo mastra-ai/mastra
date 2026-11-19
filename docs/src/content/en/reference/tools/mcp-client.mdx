@@ -2043,7 +2043,7 @@ process.once('SIGTERM', async () => {
 })
 ```
 
-Set the option on every `MCPClient` in the process before connecting. Once any client registers the default hooks, the global `SIGINT` and `SIGTERM` listeners remain until the process exits, even after `disconnect()`.
+Set the option on every `MCPClient` in the process before connecting. While any client holds the default hooks, a `SIGINT`, `SIGTERM`, or `SIGHUP` ends the process; `disconnect()` releases them, so once every client has disconnected those signals reach your own handlers again.
 
 With hooks disabled, your application is responsible for closing MCP connections. In a Mastra server, coordinate `disconnect()` with your server's shutdown lifecycle so in-flight requests can finish using the client.
 
