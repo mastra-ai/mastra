@@ -1,12 +1,11 @@
-import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const roots: string[] = [];
 
-/** A version-manager style shim: its own directory, first on PATH, holding a link named after the tool. */
+/** A version-manager shim: its own directory, first on PATH, holding a link named after the tool. */
 function shim(target: string, name = 'node'): string {
   const root = mkdtempSync(join(tmpdir(), 'mastracode-binaries-'));
   roots.push(root);
@@ -16,12 +15,20 @@ function shim(target: string, name = 'node'): string {
   return bin;
 }
 
+function pathWith(bin: string): string {
+  // Our own installation and the system directories, so the tools beyond `node` still resolve.
+  return [bin, dirname(process.execPath), '/usr/bin', '/bin'].join(delimiter);
+}
+
 async function detectOn(path: string) {
   vi.stubEnv('PATH', path);
   vi.resetModules();
-  const { detectCommonBinariesAsync } = await import('../binaries.ts');
+  const { detectCommonBinariesAsync } = await import('../binaries.js');
   return detectCommonBinariesAsync();
 }
+
+const nodePath = (binaries: Awaited<ReturnType<typeof detectOn>>) =>
+  binaries.find(binary => binary.name === 'node')?.path;
 
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
@@ -31,23 +38,28 @@ afterEach(() => {
 
 describe('common binary paths', () => {
   it('names the installation, not the shell shim, so two launches agree', async () => {
-    const target = realpathSync(execFileSync('/usr/bin/which', ['node'], { encoding: 'utf8' }).trim());
-    const first = await detectOn(`${shim(target)}:/usr/bin:/bin`);
-    const second = await detectOn(`${shim(target)}:/usr/bin:/bin`);
-    const path = (binaries: Awaited<ReturnType<typeof detectOn>>) =>
-      binaries.find(binary => binary.name === 'node')?.path;
-    expect(path(first)).toBe(target);
-    expect(path(second)).toBe(target);
+    const installation = realpathSync(process.execPath);
+    const first = await detectOn(pathWith(shim(installation)));
+    const second = await detectOn(pathWith(shim(installation)));
+    expect(nodePath(first)).toBe(installation);
+    expect(nodePath(second)).toBe(installation);
   });
 
   it('follows a chain of links to the installation', async () => {
-    const target = realpathSync(execFileSync('/usr/bin/which', ['node'], { encoding: 'utf8' }).trim());
-    const bin = shim(target);
+    const installation = realpathSync(process.execPath);
+    const bin = shim(installation);
     const middle = join(bin, '..', 'node-current');
-    symlinkSync(target, middle);
+    symlinkSync(installation, middle);
     rmSync(join(bin, 'node'));
     symlinkSync(middle, join(bin, 'node'));
-    const binaries = await detectOn(`${bin}:/usr/bin:/bin`);
-    expect(binaries.find(binary => binary.name === 'node')?.path).toBe(target);
+    expect(nodePath(await detectOn(pathWith(bin)))).toBe(installation);
+  });
+
+  it('resolves the same way through the synchronous entry point', () => {
+    vi.stubEnv('PATH', pathWith(shim(realpathSync(process.execPath))));
+    vi.resetModules();
+    return import('../binaries.js').then(({ detectCommonBinaries }) => {
+      expect(nodePath(detectCommonBinaries())).toBe(realpathSync(process.execPath));
+    });
   });
 });
