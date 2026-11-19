@@ -1089,20 +1089,27 @@ export class InternalMastraMCPClient extends MastraBase {
         this.clientConnectionOnClose = connectionOnClose;
         this.client.onclose = connectionOnClose;
       } catch (e) {
+        // Deliver the connect failure first: the cleanup below can fail in a host that
+        // refuses it, and it must not leave the caller's connect() pending forever with the
+        // connect error lost to an unhandled rejection (#30820).
+        reject(e);
         // A newer attempt that abandoned this one already owns the connection state
         // and the process hooks, so leave both to it.
         if (this.isConnected === attempt) {
-          // A connect that never reached a transport leaves nothing for disconnect() to
-          // tear down, so the process hooks must not outlive the failed attempt. A live
-          // transport means an earlier connection still owns them.
+          // Drop the rejected attempt before the release, because the release can fail and a
+          // host logger can throw while it is reported. A cached rejected attempt would answer
+          // the next connect() with the old rejection instead of a fresh connection (#30820).
+          this.isConnected = null;
+          // A connect that never reached a transport leaves nothing for disconnect() to tear
+          // down, so the process hooks must not outlive the failed attempt. A live transport
+          // means an earlier connection still owns them. The release reports a refusal itself
+          // and never throws, so it cannot undo the rejection above.
           if (!this.transport) {
             this.unregisterProcessHooks();
           }
-          this.isConnected = null;
         }
         // A failed connect invalidates the cached verdict so a legacy verdict cannot stick.
         this.priorDiscovery = undefined;
-        reject(e);
       }
     });
     this.isConnected = attempt;
@@ -1148,19 +1155,51 @@ export class InternalMastraMCPClient extends MastraBase {
    * Removes whatever {@link registerProcessHooks} installed. Keyed on the handlers this
    * client actually registered rather than on connection state, so a client that never
    * reached a transport still releases its process listeners.
+   *
+   * Each release is attempted on its own: a host that refuses one `process.off` call must not
+   * keep the other listeners installed, and must not make this throw at its callers (#30820).
+   * A handler whose listener could not be removed stays tracked, so a later connect registers
+   * no duplicate of it.
    */
   private unregisterProcessHooks() {
     if (this.exitHookUnsubscribe) {
-      this.exitHookUnsubscribe();
-      this.exitHookUnsubscribe = undefined;
+      try {
+        this.exitHookUnsubscribe();
+        this.exitHookUnsubscribe = undefined;
+      } catch (error) {
+        this.reportHookReleaseFailure('process exit hook', error);
+      }
     }
     if (this.sigTermHandler) {
-      process.off('SIGTERM', this.sigTermHandler);
-      this.sigTermHandler = undefined;
+      try {
+        process.off('SIGTERM', this.sigTermHandler);
+        this.sigTermHandler = undefined;
+      } catch (error) {
+        this.reportHookReleaseFailure('SIGTERM handler', error);
+      }
     }
     if (this.sigHupHandler) {
-      process.off('SIGHUP', this.sigHupHandler);
-      this.sigHupHandler = undefined;
+      try {
+        process.off('SIGHUP', this.sigHupHandler);
+        this.sigHupHandler = undefined;
+      } catch (error) {
+        this.reportHookReleaseFailure('SIGHUP handler', error);
+      }
+    }
+  }
+
+  /**
+   * Reports a process hook that could not be released. The report is guarded because the host
+   * supplies the logger: a logger that throws while receiving this message must not turn a
+   * failed release into a thrown one (#30820).
+   */
+  private reportHookReleaseFailure(hook: string, error: unknown) {
+    try {
+      this.log('error', `Failed to release the MCP client process hooks (${hook})`, {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } catch {
+      // The host logger is the thing that failed, so there is nowhere left to report it.
     }
   }
 
