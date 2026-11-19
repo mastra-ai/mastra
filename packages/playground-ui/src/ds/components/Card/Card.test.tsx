@@ -72,6 +72,36 @@ describe('Card', () => {
     });
   });
 
+  describe('when an illustration picks a tone', () => {
+    it('defaults the accent to the destructive indicator', () => {
+      const { container } = render(
+        <CardIllustration>
+          <span>$150</span>
+        </CardIllustration>,
+      );
+
+      const plate = container.firstElementChild;
+
+      expect(plate?.classList.contains('[--illustration-accent:var(--destructive-indicator)]')).toBe(true);
+    });
+
+    it.each([
+      ['warning', '[--illustration-accent:var(--warning-indicator)]'],
+      ['info', '[--illustration-accent:var(--info-indicator)]'],
+      ['success', '[--illustration-accent:var(--success-indicator)]'],
+    ] as const)('paints a %s illustration with the matching indicator', (tone, accentClass) => {
+      const { container } = render(
+        <CardIllustration tone={tone}>
+          <span>$150</span>
+        </CardIllustration>,
+      );
+
+      const plate = container.firstElementChild;
+
+      expect(plate?.classList.contains(accentClass)).toBe(true);
+    });
+  });
+
   describe('when an interactive card uses its default renderer', () => {
     it('renders with native button semantics', () => {
       render(<Card interactive>Run agent</Card>);

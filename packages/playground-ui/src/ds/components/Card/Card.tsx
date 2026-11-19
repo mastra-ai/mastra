@@ -146,6 +146,7 @@ export type CardIllustrationProps = React.ComponentProps<'div'> & {
 export function CardIllustration({ className, tone = 'destructive', ...props }: CardIllustrationProps) {
   return (
     <div
+      {...props}
       aria-hidden
       className={cn(
         illustrationPlateStyle,
@@ -153,7 +154,6 @@ export function CardIllustration({ className, tone = 'destructive', ...props }: 
         'h-20 overflow-hidden [&_[data-emphasis=grow-x]]:origin-left [&_[data-emphasis=grow-y]]:origin-bottom [&_[data-emphasis]]:transition-transform [&_[data-emphasis]]:duration-normal [&_[data-emphasis]]:ease-out-custom',
         className,
       )}
-      {...props}
     />
   );
 }
