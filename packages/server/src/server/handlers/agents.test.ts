@@ -4794,7 +4794,7 @@ describe('Agent Routes Authorization', () => {
 
         for (const call of [...attackerCalls(run.runId), ...attackerCalls(run.runId, 'attacker-a-thread')]) {
           await expect(call()).rejects.toThrow(
-            new HTTPException(403, { message: 'Access denied: run belongs to a different resource' }),
+            new HTTPException(403, { message: 'Access denied: workflow run belongs to a different resource' }),
           );
         }
         for (const spy of spies) expect(spy).not.toHaveBeenCalled();
@@ -4807,7 +4807,7 @@ describe('Agent Routes Authorization', () => {
       it('answers an unknown runId the same way as another resource’s run', async () => {
         for (const call of attackerCalls('no-such-run')) {
           await expect(call()).rejects.toThrow(
-            new HTTPException(403, { message: 'Access denied: run belongs to a different resource' }),
+            new HTTPException(403, { message: 'Access denied: workflow run belongs to a different resource' }),
           );
         }
       });
@@ -4822,6 +4822,81 @@ describe('Agent Routes Authorization', () => {
             signal: { type: 'user-message', contents: 'owner follow-up' },
           } as any),
         ).resolves.toMatchObject({ accepted: true, runId: run.runId });
+      });
+
+      const withMapper = (fga: boolean) =>
+        vi.spyOn(liveMastra, 'getServer').mockReturnValue({
+          auth: { mapUserToResourceId: (user: { id: string }) => user.id },
+          ...(fga ? { fga: {} } : {}),
+        } as any);
+
+      it('rejects another resource’s run when a resource mapper is configured', async () => {
+        withMapper(false);
+        for (const call of attackerCalls(run.runId)) {
+          await expect(call()).rejects.toMatchObject({ status: 403 });
+        }
+      });
+
+      it('rejects an unscoped caller without FGA when a resource mapper is configured', async () => {
+        withMapper(false);
+        const spies = (['sendSignal', 'sendMessage', 'queueMessage', 'queueSignal'] as const).map(method =>
+          vi.spyOn(liveAgent, method),
+        );
+        const unscoped = {
+          mastra: liveMastra,
+          agentId: 'live-agent',
+          requestContext: new RequestContext(),
+          runId: run.runId,
+        };
+        await expect(
+          SEND_AGENT_SIGNAL_ROUTE.handler({
+            ...unscoped,
+            signal: { type: 'user-message', contents: 'injected' },
+          } as any),
+        ).rejects.toMatchObject({ status: 403 });
+        await expect(
+          SEND_AGENT_MESSAGE_ROUTE.handler({ ...unscoped, message: 'injected' } as any),
+        ).rejects.toMatchObject({
+          status: 403,
+        });
+        for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+
+        releaseModel();
+        await run.consumeStream?.();
+        expect(prompts.join('\n')).not.toContain('injected');
+      });
+
+      it('accepts an unscoped caller with FGA when a resource mapper is configured', async () => {
+        withMapper(true);
+        await expect(
+          SEND_AGENT_SIGNAL_ROUTE.handler({
+            mastra: liveMastra,
+            agentId: 'live-agent',
+            requestContext: new RequestContext(),
+            runId: run.runId,
+            signal: { type: 'user-message', contents: 'service follow-up' },
+          } as any),
+        ).resolves.toMatchObject({ accepted: true, runId: run.runId });
+      });
+
+      it('sends an untracked runId with the caller’s own threadId only to the caller’s thread', async () => {
+        const sendSignal = vi.spyOn(liveAgent, 'sendSignal').mockReturnValue({
+          accepted: Promise.resolve({ action: 'persist' }),
+        } as any);
+        await expect(
+          SEND_AGENT_SIGNAL_ROUTE.handler({
+            mastra: liveMastra,
+            agentId: 'live-agent',
+            requestContext: createContextWithReservedKeys({ resourceId: 'attacker-a' }),
+            runId: 'untracked-run',
+            threadId: 'attacker-a-thread',
+            signal: { type: 'user-message', contents: 'own thread' },
+          } as any),
+        ).resolves.toMatchObject({ accepted: true });
+        expect(sendSignal).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({ runId: 'untracked-run', resourceId: 'attacker-a', threadId: 'attacker-a-thread' }),
+        );
       });
 
       it('leaves privileged callers without a context resource unrestricted', async () => {

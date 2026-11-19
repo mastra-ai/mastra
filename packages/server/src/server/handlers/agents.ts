@@ -2279,6 +2279,36 @@ const sendAgentSignalResponseSchema: z.ZodType<{ accepted: true; runId: string; 
 });
 
 /**
+ * A `runId` target sends input to the thread that run is on, not the caller's, so the caller
+ * must be allowed to act on that run under `validateRunOwnership`: with
+ * `mapUserToResourceId`, a resource-scoped caller may only name its own runs and an unscoped
+ * caller needs an FGA provider. A `runId` this process doesn't track can only reach the
+ * caller's own thread, which `threadId` names and the thread check covers. Without a
+ * `threadId`, a scoped caller gets the same denial whether or not the run exists, so the route
+ * doesn't confirm live run ids.
+ */
+async function validateSignalRunOwnership(
+  mastra: any,
+  agent: Agent,
+  runId: string,
+  threadId: string | undefined,
+  requestContext: RequestContext,
+): Promise<void> {
+  const contextResourceId = getContextResourceId(requestContext);
+  // Cores older than `getThreadRunTarget` only expose blocking runs.
+  const runtimeAgent = agent as Partial<Pick<Agent, 'getThreadRunTarget' | 'listActiveThreadRuns'>>;
+  const runTarget =
+    typeof runtimeAgent.getThreadRunTarget === 'function'
+      ? runtimeAgent.getThreadRunTarget(runId)
+      : runtimeAgent.listActiveThreadRuns?.().find(run => run.runId === runId);
+  if (runTarget) {
+    await validateRunOwnership(runTarget, contextResourceId, mastra, requestContext);
+  } else if (contextResourceId && !threadId) {
+    throw new HTTPException(403, { message: 'Access denied: workflow run belongs to a different resource' });
+  }
+}
+
+/**
  * Maps a rejected `result.accepted` (signal/message routing) to an HTTP error.
  *
  * `accepted` only rejects on a setup/misconfig failure surfaced before the run
@@ -2288,34 +2318,6 @@ const sendAgentSignalResponseSchema: z.ZodType<{ accepted: true; runId: string; 
  * status). Run/generation errors never reject `accepted`; they surface on the
  * `wake` output stream instead.
  */
-/**
- * A `runId` target sends input to the thread that run is on, not the caller's, so a
- * resource-scoped caller may only name its own runs. A `runId` this process doesn't track
- * can only reach the caller's own thread, which `threadId` names and the thread check covers;
- * without one the runtime would reject the target anyway, so the same denial is returned
- * whether or not the run exists. Callers without a context resource are privileged, as in
- * `validateRunOwnership`.
- */
-function validateSignalRunOwnership(
-  agent: Agent,
-  runId: string,
-  threadId: string | undefined,
-  requestContext: RequestContext,
-): void {
-  const contextResourceId = getContextResourceId(requestContext);
-  if (!contextResourceId) return;
-
-  // Cores older than `getThreadRunTarget` only expose blocking runs.
-  const runtimeAgent = agent as Partial<Pick<Agent, 'getThreadRunTarget' | 'listActiveThreadRuns'>>;
-  const runTarget =
-    typeof runtimeAgent.getThreadRunTarget === 'function'
-      ? runtimeAgent.getThreadRunTarget(runId)
-      : runtimeAgent.listActiveThreadRuns?.().find(run => run.runId === runId);
-  if (runTarget ? runTarget.resourceId !== contextResourceId : !threadId) {
-    throw new HTTPException(403, { message: 'Access denied: run belongs to a different resource' });
-  }
-}
-
 function handleSignalRoutingError(error: unknown, defaultMessage: string): never {
   if (
     error instanceof MastraError &&
@@ -2408,7 +2410,7 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
       const agentSignal = signal as AgentSignalInput;
 
       if (runId) {
-        validateSignalRunOwnership(agent, runId, effectiveThreadId, serverRequestContext);
+        await validateSignalRunOwnership(mastra, agent, runId, effectiveThreadId, serverRequestContext);
         const result = await agent.sendSignal(agentSignal, {
           runId,
           ...(effectiveResourceId ? { resourceId: effectiveResourceId } : {}),
@@ -2511,7 +2513,7 @@ async function handleAgentMessageRoute({
   }
 
   if (runId) {
-    validateSignalRunOwnership(agent, runId, effectiveThreadId, serverRequestContext);
+    await validateSignalRunOwnership(mastra, agent, runId, effectiveThreadId, serverRequestContext);
     const result = await invoke(agent, {
       runId,
       ...(effectiveResourceId ? { resourceId: effectiveResourceId } : {}),
