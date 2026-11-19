@@ -116,6 +116,7 @@ import {
   resolveCurrentSpan,
   resolveObservabilityContext,
   getResumeTracingContext,
+  getWorkflowResumeTracingContext,
 } from '../observability';
 import type {
   ErrorProcessorOrWorkflow,
@@ -315,6 +316,7 @@ import {
   clearObjective,
 } from './goal';
 import {
+  convertInstructionsToString,
   drainAgentOutput,
   successfulAgentOutput,
   resolveRunId,
@@ -3721,7 +3723,7 @@ export class Agent<
     voice?.addTools(wrappedTools as TTools);
 
     const instructions = await this.getInstructions({ requestContext: resolvedRequestContext });
-    voice?.addInstructions(this.#convertInstructionsToString(instructions));
+    voice?.addInstructions(convertInstructionsToString(instructions));
     return voice;
   }
 
@@ -3790,34 +3792,6 @@ export class Agent<
     }
 
     return buildMcpServerGuidance(tools);
-  }
-
-  /**
-   * Helper function to convert agent instructions to string for backward compatibility
-   * Used for legacy methods that expect string instructions (e.g., voice)
-   * @internal
-   */
-  #convertInstructionsToString(instructions: AgentInstructions): string {
-    if (typeof instructions === 'string') {
-      return instructions;
-    }
-
-    if (Array.isArray(instructions)) {
-      // Handle array of messages (strings or objects)
-      return instructions
-        .map(msg => {
-          if (typeof msg === 'string') {
-            return msg;
-          }
-          // Safely extract content from message objects
-          return typeof msg.content === 'string' ? msg.content : '';
-        })
-        .filter(content => content) // Remove empty strings
-        .join('\n\n');
-    }
-
-    // Handle single message object - safely extract content
-    return typeof instructions.content === 'string' ? instructions.content : '';
   }
 
   /**
@@ -3918,7 +3892,7 @@ export class Agent<
         getMostRecentUserMessage: this.getMostRecentUserMessage.bind(this),
         genTitle: this.genTitle.bind(this),
         resolveTitleGenerationConfig: this.resolveTitleGenerationConfig.bind(this),
-        convertInstructionsToString: this.#convertInstructionsToString.bind(this),
+        convertInstructionsToString,
         tracingPolicy: this.#options?.tracingPolicy,
         resolvedVersionId: this.toRawConfig()?.resolvedVersionId as string | undefined,
         _agentNetworkAppend: this._agentNetworkAppend,
@@ -6712,7 +6686,7 @@ export class Agent<
                 requestContext: subAgentRequestContext,
               });
               if (agentOwnInstructions) {
-                const ownStr = this.#convertInstructionsToString(agentOwnInstructions);
+                const ownStr = convertInstructionsToString(agentOwnInstructions);
                 if (ownStr) {
                   effectiveInstructions = `${ownStr}\n\n${effectiveInstructions}`;
                 }
@@ -9629,7 +9603,7 @@ export class Agent<
       input: spanInput,
       attributes: {
         conversationId: threadFromArgs?.id,
-        instructions: this.#convertInstructionsToString(instructions),
+        instructions: convertInstructionsToString(instructions),
         ...modelSpanAttributes(resolvedModel),
         ...(startingSignal ? { signal: startingSignal } : {}),
         // @deprecated — use entityVersionId (top-level span context field) instead.
@@ -13918,8 +13892,8 @@ export class Agent<
         workflowsStore,
         runId,
         claimedSnapshot,
-        this.#executionStreamBus.forRun(this.__usesSharedRunLog()).pubsub,
-        this.logger,
+        () => this.#executionStreamBus.forRun(this.__usesSharedRunLog()).pubsub,
+        () => this.logger,
       );
       await emitOwnershipClaimedEvent(
         this.#executionStreamBus.forRun(this.__usesSharedRunLog()).pubsub,
@@ -15221,6 +15195,10 @@ export class Agent<
       resumeScopesSnapshot,
     )) as DurableAgentResumeOptions<TOutput>;
     validateModelTimeoutSettings(resolvedOptions.modelSettings?.timeout);
+    // The first call's trace settings hold unless this resume call sets its own. The agent's
+    // defaults are already part of them, so they must not win here.
+    const { hideInput, hideOutput, requestContextKeys } = options?.tracingOptions ?? {};
+    const resumeTracingOptions = { ...resolvedOptions.tracingOptions, hideInput, hideOutput, requestContextKeys };
     // Scoped runs execute on a run-scoped copy of the request context.
     resumeRequestContext = (resolvedOptions.requestContext as typeof resumeRequestContext) ?? resumeRequestContext;
 
@@ -15243,7 +15221,10 @@ export class Agent<
         getDefaultOptions: () => ({}),
         getMemory: (args?: any) => this.getMemory(args),
         resume: (innerRunId: string, innerResumeData: unknown, innerOptions?: DurableAgentResumeOptions<TOutput>) =>
-          this.resume(innerRunId, innerResumeData, innerOptions),
+          this.resume(innerRunId, innerResumeData, {
+            ...innerOptions,
+            tracingOptions: resumeTracingOptions,
+          } as DurableAgentResumeOptions<TOutput>),
         stream: this.stream.bind(this),
       } as unknown as DurableAgent<any, any, TOutput>;
       return runResumeDurableStreamUntilIdle<TOutput>(
@@ -15336,6 +15317,7 @@ export class Agent<
     let resumedText: { priorText: string; stepText: string } | undefined;
     let resumeOffset: number | 'latest';
     let persistedInput: DurableAgenticWorkflowInput | undefined;
+    let suspendedToolCallIds: string[] = [];
     try {
       // A concurrent resume of the same suspension may have claimed and run it while this one
       // waited for the execution claim. Report that as a lost race, not a generic failure.
@@ -15379,6 +15361,7 @@ export class Agent<
         runId,
       );
       persistedInput = current?.context?.input as DurableAgenticWorkflowInput | undefined;
+      suspendedToolCallIds = Object.keys(current?.resumeLabels ?? {});
       // A parked run that lost its thread lease must hold it again before the segment runs. Later
       // registration fails open, so take it here: a successor that now holds the thread refuses this
       // resume instead of running beside it, and the run stays parked.
@@ -15481,6 +15464,7 @@ export class Agent<
         const rawConfig = typeof (ag as any).toRawConfig === 'function' ? (ag as any).toRawConfig() : undefined;
         const resolvedVersionId = rawConfig?.resolvedVersionId as string | undefined;
         const agentTracingPolicy = typeof ag.getTracingPolicy === 'function' ? ag.getTracingPolicy() : undefined;
+        const suspendedToolCallId = resolvedOptions.toolCallId ?? suspendedToolCallIds[0];
         const resumeAgentSpan = getOrCreateSpan({
           type: SpanType.AGENT_RUN,
           outcome: null,
@@ -15488,17 +15472,22 @@ export class Agent<
           entityType: EntityType.AGENT,
           entityId: ag.id,
           entityName: ag.name,
-          attributes: modelSpanAttributes(resumeModel),
+          input: buildResumeSpanInput(resumeData, {
+            toolCallId: suspendedToolCallId,
+            toolName: initialToolCalls.find(call => call.payload.toolCallId === suspendedToolCallId)?.payload.toolName,
+          }),
+          attributes: { conversationId: memoryInfo?.threadId, ...modelSpanAttributes(resumeModel) },
           metadata: {
             runId,
+            resourceId: memoryInfo?.resourceId,
+            threadId: memoryInfo?.threadId,
             resumed: true,
             ...(origSpanId ? { resumedFromSpanId: origSpanId } : {}),
             ...(resolvedVersionId ? { entityVersionId: resolvedVersionId } : {}),
           },
-          resumeFrom: getResumeTracingContext(entry.agentSpan),
+          resumeFrom: getWorkflowResumeTracingContext(entry.agentSpan),
           tracingPolicy: agentTracingPolicy,
-          tracingOptions: { traceId: origTraceId, ...entry.agentSpan?.traceState },
-          traceState: entry.agentSpan?.traceState,
+          tracingOptions: { ...resumeTracingOptions, traceId: origTraceId },
           samplingDecision: entry.agentSpan?.isValid,
           requestContext: resolvedOptions.requestContext,
           mastra: this.#mastra,

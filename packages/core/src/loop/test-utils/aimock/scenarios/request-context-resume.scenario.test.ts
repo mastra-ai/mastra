@@ -9,7 +9,7 @@
  */
 
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { describe, it, expect } from 'vitest';
+import { beforeAll, describe, it, expect } from 'vitest';
 import { z } from 'zod/v4';
 import type { MastraDBMessage } from '../../../../agent/message-list';
 import type { MastraMemory } from '../../../../memory';
@@ -110,19 +110,15 @@ describeForAllEngines('AIMock loop scenario: request context on approval resume'
       expect(requests[1]!.body!.messages.at(-1)).toMatchObject({ role: 'tool', content: JSON.stringify({ ok: true }) });
     });
 
-    // Inngest forwards this lookup to plain Agent, which reads requestContext rather than
-    // the durable snapshot's context.input.requestContextEntries; this is an existing limitation.
-    const itReadsSuspendedContext = engine === 'inngest' ? it.fails : it;
-    itReadsSuspendedContext(
-      'exposes the saved caller context for approval routing before applying new context',
-      async () => {
+    describe('saved caller context for approval routing', () => {
+      let savedCaller: unknown;
+
+      beforeAll(async () => {
         const seen: unknown[] = [];
         const shared = await createSharedAgent(getMock(), { engine, tools: { whoami: whoamiTool(seen) } });
         const run = await suspendOnApproval(shared, 'whoami', { requestContext: contextWith('who', 'first') });
         try {
-          expect(await shared.agent.__getSuspendedRunRequestContextValue({ runId: run.runId, key: 'who' })).toBe(
-            'first',
-          );
+          savedCaller = await shared.agent.__getSuspendedRunRequestContextValue({ runId: run.runId, key: 'who' });
           expect(
             await shared.agent.__getSuspendedRunRequestContextValue({ runId: run.runId, key: 'missing-context-key' }),
           ).toBeUndefined();
@@ -130,8 +126,15 @@ describeForAllEngines('AIMock loop scenario: request context on approval resume'
           await drainText(await shared.agent.approveToolCall({ ...run, requestContext: contextWith('who', 'second') }));
         }
         expect(seen).toEqual(['second']);
-      },
-    );
+      });
+
+      // Inngest forwards this lookup to plain Agent, which reads requestContext rather than
+      // the durable snapshot's context.input.requestContextEntries; this is an existing limitation.
+      const itReadsSuspendedContext = engine === 'inngest' ? it.fails : it;
+      itReadsSuspendedContext('exposes the saved caller before applying new context', () => {
+        expect(savedCaller).toBe('first');
+      });
+    });
 
     it('is the replacement an input processor put in place of the configured tool', async () => {
       const seen: unknown[] = [];

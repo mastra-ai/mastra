@@ -158,42 +158,6 @@ export class DurableExecutionEngine {
     return { toolCalls, resumedText: { priorText, stepText } };
   }
 
-  async loadUncheckpointedStepIndex(
-    workflowsStore: WorkflowsStorage,
-    runId: string,
-    parentSnapshot: WorkflowRunState,
-  ): Promise<number | undefined> {
-    const nestedRunId = parentSnapshot.context?.[DurableStepIds.AGENTIC_EXECUTION]?.metadata?.nestedRunId;
-    const nested = await workflowsStore.getWorkflowRunById({
-      runId: typeof nestedRunId === 'string' ? nestedRunId : runId,
-      workflowName: DurableStepIds.AGENTIC_EXECUTION,
-    });
-    const snapshot = typeof nested?.snapshot === 'string' ? JSON.parse(nested.snapshot) : nested?.snapshot;
-    if (!snapshot || snapshot.context?.[DurableStepIds.LLM_EXECUTION]?.status === 'success') return;
-    const stepIndex = snapshot.context?.input?.iterationCount;
-    return typeof stepIndex === 'number' ? stepIndex : undefined;
-  }
-
-  /** Locate the start of the model step that recovery will re-execute, if it was published. */
-  async supersededFrom(pubsub: PubSub, runId: string, stepIndex: number): Promise<number | undefined> {
-    const history = (await pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)) as AgentStreamEvent[];
-    const starts = history.filter(
-      event =>
-        (event.type === AgentStreamEventTypes.ITERATION_START || event.type === AgentStreamEventTypes.STEP_START) &&
-        event.stepIndex === stepIndex,
-    );
-    const latestGeneration = starts.reduce<number | undefined>(
-      (latest, event) =>
-        typeof event.generation === 'number' ? Math.max(latest ?? event.generation, event.generation) : latest,
-      undefined,
-    );
-    return (
-      starts.find(
-        event => event.type === AgentStreamEventTypes.ITERATION_START && event.generation === latestGeneration,
-      ) ?? starts.find(event => event.generation === latestGeneration)
-    )?.index;
-  }
-
   /** Capture the history boundary so a resumed reader skips its prior segment. */
   async getPubsubOffset(pubsub: PubSub, runId: string): Promise<number | 'latest'> {
     const historyPubsub = pubsub as PubSub & {
@@ -787,16 +751,38 @@ export class DurableExecutionEngine {
   async recoverySupersededFrom(
     workflowsStore: WorkflowsStorage,
     runId: string,
-    snapshot: WorkflowRunState,
-    pubsub: PubSub,
-    logger: IMastraLogger,
+    parentSnapshot: WorkflowRunState,
+    getPubsub: () => PubSub,
+    getLogger: () => IMastraLogger,
   ): Promise<number | undefined> {
     try {
-      const stepIndex = await this.loadUncheckpointedStepIndex(workflowsStore, runId, snapshot);
-      return stepIndex === undefined ? undefined : await this.supersededFrom(pubsub, runId, stepIndex);
+      const nestedRunId = parentSnapshot.context?.[DurableStepIds.AGENTIC_EXECUTION]?.metadata?.nestedRunId;
+      const nested = await workflowsStore.getWorkflowRunById({
+        runId: typeof nestedRunId === 'string' ? nestedRunId : runId,
+        workflowName: DurableStepIds.AGENTIC_EXECUTION,
+      });
+      const snapshot = typeof nested?.snapshot === 'string' ? JSON.parse(nested.snapshot) : nested?.snapshot;
+      if (!snapshot || snapshot.context?.[DurableStepIds.LLM_EXECUTION]?.status === 'success') return;
+      const stepIndex = snapshot.context?.input?.iterationCount;
+      if (typeof stepIndex !== 'number') return;
+      const history = (await getPubsub().getHistory(AGENT_STREAM_TOPIC(runId), 0)) as AgentStreamEvent[];
+      const starts = history.filter(
+        event =>
+          (event.type === AgentStreamEventTypes.ITERATION_START || event.type === AgentStreamEventTypes.STEP_START) &&
+          event.stepIndex === stepIndex,
+      );
+      const latestGeneration = starts.reduce<number | undefined>(
+        (latest, event) =>
+          typeof event.generation === 'number' ? Math.max(latest ?? event.generation, event.generation) : latest,
+        undefined,
+      );
+      return (
+        starts.find(
+          event => event.type === AgentStreamEventTypes.ITERATION_START && event.generation === latestGeneration,
+        ) ?? starts.find(event => event.generation === latestGeneration)
+      )?.index;
     } catch (error) {
-      logger.warn(`[DurableAgent] recover(${runId}) couldn't locate the uncheckpointed stream tail`, { error });
-      return undefined;
+      getLogger().warn(`[DurableAgent] recover(${runId}) couldn't locate the uncheckpointed stream tail`, { error });
     }
   }
 

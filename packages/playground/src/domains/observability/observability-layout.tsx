@@ -1,5 +1,6 @@
 import { ObservabilityPageLayout, observabilityViewCrumbLabel } from '@mastra/playground-ui/domains/observability';
 import type { ObservabilityView } from '@mastra/playground-ui/domains/observability';
+import { useObservabilityViews } from '@mastra/playground-ui/domains/observability/hooks/use-observability-views';
 import type { ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -18,11 +19,14 @@ function viewFromPathname(pathname: string): ObservabilityView {
 export function ObservabilityLayout({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  const current = viewFromPathname(pathname);
+  // The store's capabilities decide which views Studio offers.
+  const views = useObservabilityViews({ current, features: STUDIO_TRACES_FEATURES });
 
   return (
     <ObservabilityPageLayout
-      current={viewFromPathname(pathname)}
-      features={STUDIO_TRACES_FEATURES}
+      current={current}
+      views={views}
       onViewChange={view => navigate(`/${view}`)}
       breadcrumbs={state => {
         const label = observabilityViewCrumbLabel(state);
