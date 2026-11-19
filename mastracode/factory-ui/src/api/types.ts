@@ -136,6 +136,8 @@ export interface ProvidersResponse {
   providers: ProviderInfo[];
   /** Tenant mode: whether the caller may write org-wide keys. Absent locally. */
   orgKeyAdmin?: boolean;
+  /** Origin of the Mastra Gateway this server sends model calls to. Absent from servers that predate it. */
+  mastraGatewayOrigin?: string;
 }
 
 export interface CustomProvidersResponse {

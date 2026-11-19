@@ -4,6 +4,7 @@ import { providerRequestId } from '@mastra/core/error';
 import type { RequestContext } from '@mastra/core/request-context';
 import { Actions, Card, CardText, LinkButton } from 'chat';
 
+import { mastraGatewayBaseUrl } from '../../routes/mastra-gateway.js';
 import { readFactorySessionScope } from '../../rules/binding-context.js';
 import type { RunErrorRecovery } from '../../run-error.js';
 import { describeRunError } from '../../run-error.js';
@@ -12,7 +13,7 @@ import { modelSettingsLink } from './channel-reply-processor.js';
 import { sessionLinkFromRequest } from './channel-session-link-processor.js';
 
 export function slackRunErrorCard(error: Error, { requestContext }: ChannelErrorContext) {
-  const { title, message, recoveries, model } = describeRunError(error);
+  const { title, message, recoveries, model } = describeRunError(error, { gatewayBaseUrl: mastraGatewayBaseUrl() });
   const requestId = providerRequestId(error);
   const facts = [model && `Model: ${model}`, requestId && `Request id: ${requestId}`].filter(Boolean).join(' · ');
   const credential = model && recoveries.includes('credentials') ? credentialLine(requestContext, model) : undefined;

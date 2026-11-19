@@ -44,7 +44,13 @@ import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { THINKING_LEVELS } from './contracts.js';
 import { customEndpointUrlProblem } from './custom-endpoint-url.js';
 import { customProviderOwner } from './custom-provider-source.js';
-import { createGatewayKey, getGatewayCredits, MASTRA_SIGN_IN_REQUIRED, MastraGatewayError } from './mastra-gateway.js';
+import {
+  createGatewayKey,
+  getGatewayCredits,
+  MASTRA_SIGN_IN_REQUIRED,
+  MastraGatewayError,
+  mastraGatewayBaseUrl,
+} from './mastra-gateway.js';
 import {
   credentialLabel,
   getAuthProviderId,
@@ -203,6 +209,15 @@ async function listCatalogModels(
     releaseDate: gateway?.modelReleaseDates?.[modelName],
   }));
   return [...models, ...gatewayModels];
+}
+
+function originOf(url: string): string | undefined {
+  try {
+    const origin = new URL(url).origin;
+    return origin === 'null' ? undefined : origin;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -1197,6 +1212,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             // keys, so the settings UI can gate the "Everyone in org" option.
             const tenant = auth.tenant(loose(c));
             const orgKeyAdmin = tenant ? await auth.isOrganizationAdmin(loose(c), tenantOrgId(tenant)) : undefined;
+            const gatewayOrigin = originOf(mastraGatewayBaseUrl());
             const customProviders = options.customProviders;
             const listCustomProviders = customProviders
               ? async () => {
@@ -1215,6 +1231,8 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 connectWithMastraAccount,
               }),
               ...(orgKeyAdmin !== undefined ? { orgKeyAdmin } : {}),
+              // Lets the web UI recognize a saved run error from this server's gateway, wherever it is hosted.
+              ...(gatewayOrigin ? { mastraGatewayOrigin: gatewayOrigin } : {}),
             });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
