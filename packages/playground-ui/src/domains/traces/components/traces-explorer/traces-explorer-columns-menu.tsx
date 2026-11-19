@@ -9,9 +9,8 @@ import {
 } from '../../trace-list-columns';
 import type { TraceColumnCatalog } from '../../trace-list-columns';
 import { TraceColumnsMenu } from '../trace-columns-menu';
-import { useTracesColumns, useTracesConfig } from './traces-explorer-context';
+import { useTraceUsageColumns, useTracesColumns, useTracesConfig } from './traces-explorer-context';
 import type { TracesExplorerDiscovery } from './traces-explorer-data';
-import { CHECKING_USAGE_REASON, UNSUPPORTED_USAGE_REASON } from './traces-explorer-support';
 
 const CATALOG = TRACE_COLUMN_CATALOGS.traces;
 const NO_KEYS: readonly string[] = [];
@@ -39,14 +38,14 @@ const metadataKeysOf = (fields: TracesExplorerDiscovery['fields']) => {
 
 /** The "Columns" picker of the traces list, offering the metadata keys discovered in the explorer's window. */
 export function TracesExplorerColumnsMenu() {
-  const { preferences, setPreferences } = useTracesColumns();
+  const { preferences, setPreferences, resetColumns } = useTracesColumns();
+  const { usageDisabledReason } = useTraceUsageColumns();
   const {
     withQueryTrace,
     withDiscovery,
     withTimeToFirstChunk,
     withTimeToFirstToken,
     isCapabilitiesLoading,
-    metricsSupport,
     discovery,
   } = useTracesConfig();
 
@@ -55,12 +54,6 @@ export function TracesExplorerColumnsMenu() {
     () => (withDiscovery ? metadataKeysOf(discovery.fields) : NO_KEYS),
     [withDiscovery, discovery.fields],
   );
-
-  const usageDisabledReason = metricsSupport.isLoading
-    ? CHECKING_USAGE_REASON
-    : metricsSupport.supported
-      ? undefined
-      : UNSUPPORTED_USAGE_REASON;
 
   return (
     <TraceColumnsMenu
@@ -75,7 +68,7 @@ export function TracesExplorerColumnsMenu() {
       onRemoveCustomColumn={column => setPreferences(removeTraceCustomColumn(preferences, column))}
       onAddMetadataColumn={key => setPreferences(addTraceMetadataColumn(preferences, key))}
       onRemoveMetadataColumn={key => setPreferences(removeTraceMetadataColumn(preferences, key))}
-      onReset={() => setPreferences(CATALOG.defaults)}
+      onReset={resetColumns}
     />
   );
 }
