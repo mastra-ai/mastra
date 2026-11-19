@@ -204,6 +204,10 @@ export const baseIterationStateSchema = z.object({
   // Identifies states whose usage accumulator preserves unknown counters. Older
   // states have no marker and may contain partial totals presented as complete.
   usageAggregationVersion: z.literal(1).optional(),
+  // Run-total usage that MODEL_GENERATION spans ended by a suspension already recorded; the
+  // segment that finishes the run reports the rest. Absent on runs that started before this
+  // field existed, whose final step reports the whole run as before.
+  generationReportedUsage: accumulatedUsageSchema.optional(),
   // Last step result for continuation check
   lastStepResult: z.any().optional(),
   // Step-finish waits here until the loop's continuation policy resolves.

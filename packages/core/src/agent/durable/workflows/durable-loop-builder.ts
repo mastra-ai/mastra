@@ -13,7 +13,7 @@ import type { StepResultReads } from '../../../loop/workflows/prune-snapshot';
 import type { Mastra } from '../../../mastra';
 import { InternalSpans } from '../../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../observability';
-import { calculateObservedUsage, isUsageIncomplete } from '../../../observability/usage';
+import { calculateObservedUsage, isUsageIncomplete, subtractReportedUsage } from '../../../observability/usage';
 import { currentRunGeneration } from '../../../storage/run-fencing';
 import { ChunkFrom } from '../../../stream/types';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
@@ -1095,6 +1095,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                 totalTokens: 0,
               },
               usageAggregationVersion: 1,
+              generationReportedUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
               lastStepResult: undefined,
             };
             return iterationState;
@@ -1291,7 +1292,10 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                       responseId: state.lastResponse?.id,
                       responseModel: state.lastResponse?.modelId,
                     },
-                    usage: usageIncomplete ? calculateObservedUsage(steps) : state.accumulatedUsage,
+                    usage: subtractReportedUsage(
+                      usageIncomplete ? calculateObservedUsage(steps) : state.accumulatedUsage,
+                      state.generationReportedUsage,
+                    ),
                   });
                 }
                 if (agentSpanData) {

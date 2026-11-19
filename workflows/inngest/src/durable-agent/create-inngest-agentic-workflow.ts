@@ -454,6 +454,7 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
               outputTokens: 0,
               totalTokens: 0,
             },
+            generationReportedUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
             lastStepResult: undefined,
             agentSpanData,
             modelSpanData,
@@ -781,7 +782,11 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
                 args: tc.args,
               })),
             );
-            const { usageIncomplete, usage } = generationUsage(state.accumulatedUsage, state.accumulatedSteps);
+            const { usageIncomplete, usage } = generationUsage(
+              state.accumulatedUsage,
+              state.accumulatedSteps,
+              state.generationReportedUsage,
+            );
             modelSpan?.createTracker()?.endGeneration({
               ...termination,
               output: { text: finalText, ...(toolCalls.length ? { toolCalls } : {}) },

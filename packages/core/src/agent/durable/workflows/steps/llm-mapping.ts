@@ -74,6 +74,7 @@ const durableLLMMappingOutputSchema = z.object({
   completionStartTime: z.coerce.date().optional(),
   timeToFirstTokenMs: z.number().optional(),
   response: responseRecordSchema.optional(),
+  stepEndedBySuspension: z.boolean().optional(),
 });
 
 /**
@@ -225,6 +226,7 @@ export function createDurableLLMMappingStep() {
             >['rebuildSpan']
           >
         | undefined;
+      let stepEndedBySuspension = false;
       if (llmOutput.stepSpanData) {
         try {
           const initData = getInitData() as DurableAgenticWorkflowInput;
@@ -232,6 +234,8 @@ export function createDurableLLMMappingStep() {
           if (segmentOwnsStep(segment, llmOutput.stepSpanData)) {
             const observability = mastra?.observability?.getSelectedInstance({ requestContext });
             stepSpan = observability?.rebuildSpan(llmOutput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>);
+          } else {
+            stepEndedBySuspension = true;
           }
         } catch {
           // Span bookkeeping must never break the merge step.
@@ -516,6 +520,7 @@ export function createDurableLLMMappingStep() {
         delegationBailed,
         tracingDelegationFailure,
         tracingTermination: llmOutput.tracingTermination,
+        ...(stepEndedBySuspension ? { stepEndedBySuspension } : {}),
         ...(deadlineTimeout ? { deadlineTimeout } : {}),
         ...(runAborted ? { runAborted } : {}),
         deferredStepFinishChunk,

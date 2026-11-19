@@ -624,6 +624,8 @@ export interface DurableAgenticExecutionOutput {
   tracingTermination?: SpanTermination;
   /** Failure behind this iteration's delegation bail, see DurableToolCallOutput */
   tracingDelegationFailure?: SpanTermination;
+  /** This iteration's MODEL_STEP was ended, usage included, by an earlier segment's suspension */
+  stepEndedBySuspension?: boolean;
 }
 
 /**
@@ -891,6 +893,8 @@ export interface RunRegistryEntry {
   resumeCompletionStartTime?: Date;
   /** Time to first token of the resumed segment's spans, kept the same way. */
   resumeTimeToFirstTokenMs?: number;
+  /** The AGENT_RUN a suspension ended here, so a tool call suspending beside it ends nothing twice. */
+  suspendedAgentSpanId?: string;
   /**
    * Loop stop-condition predicate(s). Non-serializable (a closure), so the
    * durable workflow reads this from the in-process registry rather than from

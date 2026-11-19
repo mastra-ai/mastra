@@ -214,6 +214,15 @@ export function createBaseIterationStateUpdate(
         ],
     accumulatedUsage: newUsage,
     usageAggregationVersion: signalPreempted ? currentState.usageAggregationVersion : 1,
+    // The suspension that ended this step reported the run total so far on its MODEL_GENERATION.
+    // A count the provider left unknown was not reported, so its earlier value stands.
+    generationReportedUsage:
+      currentState.generationReportedUsage && executionOutput.stepEndedBySuspension
+        ? {
+            ...currentState.generationReportedUsage,
+            ...Object.fromEntries(Object.entries(newUsage).filter(([, count]) => count !== undefined)),
+          }
+        : currentState.generationReportedUsage,
     lastStepResult,
     deferredStepFinishChunk: executionOutput.deferredStepFinishChunk,
     backgroundTaskPending: executionOutput.backgroundTaskPending,
