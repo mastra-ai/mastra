@@ -2,4 +2,4 @@
 '@mastra/code-sdk': patch
 ---
 
-Fixed the environment section of the system prompt changing on every launch when a version manager's per-shell directory is in use (fnm's multishell directories are the common case). Each tool is now named by the directory it is installed in, keeping the tool's own name, instead of the per-shell directory in front of it, so that part of the prompt no longer changes between restarts and can be served from the provider's prompt cache instead of being sent again.
+Kept detected tool paths stable across launches by resolving per-shell `PATH` directory symlinks, such as fnm's multishell directories, without changing the names of the tools. That part of the system prompt no longer changes between restarts, so it can be served from the provider's prompt cache instead of being sent again.

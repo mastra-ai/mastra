@@ -34,8 +34,8 @@ const COMMON_BINARIES = [
  * The directory the tool lives in, with the name `which` reported still on the end.
  *
  * Version managers can put a directory first on PATH whose name changes on every shell (`fnm` builds one per
- * shell, `fnm_multishells/<pid>_<epoch-ms>`), and these paths are part of the system prompt: an unstable
- * path here costs the whole cached prompt at the start of every run after a restart. Resolving the whole
+ * shell, `fnm_multishells/<pid>_<epoch-ms>`). These paths are part of the system prompt, so a directory that
+ * changes from launch to launch changes that text even when the tools have not. Resolving the whole
  * file instead would name the program behind a shim - `mise` points every tool at itself, BusyBox and
  * OrbStack do the same for some tools, and a Homebrew link names `Cellar/<version>` - which either does not
  * run the tool or changes on every upgrade. Resolving only the directory gives the stable installation and
