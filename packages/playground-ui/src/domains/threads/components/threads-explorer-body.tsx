@@ -66,7 +66,7 @@ export function ThreadsExplorerBody({
   }, [timeRange, sort, tokens, groups, withTimeToFirstChunk, withTimeToFirstToken]);
 
   const { threads, hasNextPage, isFetchingNextPage, setEndOfListElement, isLoading, isError, error } =
-    useThreadsListSource({ query, rolling: filters.rolling });
+    useThreadsListSource({ query, rolling: filters.rolling, fixedStart: filters.datePreset === 'custom' });
 
   const rows = useMemo(() => (threads ?? []).map(threadToListRow), [threads]);
   const selectedRow = rows.find(row => row.threadId === selectedThreadId);
