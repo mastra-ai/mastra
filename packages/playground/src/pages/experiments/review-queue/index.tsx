@@ -4,10 +4,10 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
+import { IconArrowUpRight } from '@mastra/playground-ui/icons/central/IconArrowUpRight';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useExperimentsForDatasetFilter } from '@mastra/react/hooks/experiments';
-import { ArrowUpRight } from 'lucide-react';
 import { useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { isDatasetTargetType } from '@/domains/datasets/components/target-type-options';
@@ -124,7 +124,7 @@ function ReviewQueuePage() {
       )}
       toolbarEnd={
         selectedId ? (
-          <Button render={<Link href={paths.experimentLink(selectedId)} />} icon={<ArrowUpRight />}>
+          <Button render={<Link href={paths.experimentLink(selectedId)} />} icon={<IconArrowUpRight />}>
             See experiment
           </Button>
         ) : undefined

@@ -1,0 +1,11 @@
+{
+  "temperature": ["deepseek-ai/DeepSeek-V4-Flash-0731"],
+  "structuredOutput": ["deepseek-ai/DeepSeek-V4-Flash-0731"],
+  "reasoning": {
+    "deepseek-ai/DeepSeek-V4-Flash-0731": [
+      {
+        "type": "toggle"
+      }
+    ]
+  }
+}

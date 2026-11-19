@@ -32,8 +32,8 @@ export function useAgentControllerTranscript({
   }, []);
 
   const onEvent = useCallback(
-    (event: AgentControllerEvent) => {
-      dispatch({ type: 'event', event, viewerId });
+    (event: AgentControllerEvent, opensStream: boolean) => {
+      dispatch({ type: 'event', event, viewerId, opensStream });
     },
     [viewerId],
   );

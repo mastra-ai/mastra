@@ -21,7 +21,6 @@ export function environmentRepository(
     teardownCommand: null,
     lastBuildStatus: 'unbuilt',
     lastBuildError: null,
-    lastBuiltAt: null,
     ...overrides,
   };
 }

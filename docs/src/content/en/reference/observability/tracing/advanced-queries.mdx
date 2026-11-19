@@ -29,7 +29,7 @@ CLI commands take filters and request options together as one JSON argument and 
 
 The endpoints use the same authentication as other observability routes and require the `observability:read` permission. Every request requires a time range.
 
-These API time-range limits are separate from data retention. For hosted traces, your Platform plan's retention period applies. See [Query observability data on Mastra Platform](/docs/mastra-platform/observability#query-observability-data) for retention, project credentials, and regional endpoints.
+These API time-range limits are separate from data retention. For hosted traces, your Platform plan's retention period applies. See [Query observability data on Mastra Platform](/docs/mastra-platform/observability/overview#query-observability-data) for retention, project credentials, and regional endpoints.
 
 ## Check capabilities
 
@@ -39,6 +39,8 @@ The configured observability store must support each API. Call `getObservability
 | - | - | - |
 | `traceQuery` | `trace-query` | `queryTraces()` |
 | `spanQuery` | `span-query` | `querySpans()` |
+| `spanQueryDurationSort` | `span-query-duration-sort` | `orderBy` on `durationMs` in `querySpans()` |
+| `spanQueryModelProviderSort` | `span-query-model-provider-sort` | `orderBy` on `model` or `provider` in `querySpans()` |
 | `spanQueryContextFields` | `span-query-context-fields` | Additional identity, context, and parent/root entity predicates in span queries and aggregates |
 | `spanQueryModelFields` | `span-query-model-fields` | `model` and `provider` predicates in span queries and aggregates |
 | `traceAggregate` | `trace-aggregate` | `aggregateTraces()` |
@@ -641,6 +643,37 @@ Cursor pagination is deterministic, but it isn't a database snapshot. Traces or 
 
 PostgreSQL and ClickHouse stop trace queries after 15 seconds by default and return `504` when the database timeout is exceeded. Set `observability.traceQueryTimeoutMs` on `PostgresStoreVNext`, or `observability.traceQuery.timeoutMs` on `ClickhouseStoreVNext`, to an integer from 1 through 300,000 milliseconds to change the timeout. DuckDB doesn't currently provide query-scoped timeout or cancellation through its driver wrapper, so this `504` guarantee doesn't apply to DuckDB.
 
+PostgreSQL enforces the timeout with `statement_timeout`, which can't stop a query while PostgreSQL compiles it with [JIT](https://www.postgresql.org/docs/current/jit.html). On small or low-resource databases, JIT compilation for a complex trace query can run well past the timeout and hold a pooled connection until it finishes, so later requests can fail while waiting for a connection. If trace queries run longer than `traceQueryTimeoutMs`, turn off JIT for the observability connections and compare:
+
+```typescript title="src/mastra/storage.ts"
+import { Pool } from 'pg'
+import { PostgresStoreVNext } from '@mastra/pg'
+
+const observabilityPool = new Pool({
+  connectionString: process.env.OBSERVABILITY_DATABASE_URL,
+  options: '-c jit=off',
+})
+
+// The store only handles errors on pools it creates, so handle them here.
+// The pool listener covers idle clients. The client listener covers checked-out ones.
+observabilityPool.on('error', err => {
+  console.error('Observability pool error', err)
+})
+observabilityPool.on('connect', client => {
+  client.on('error', err => {
+    console.error('Observability client error', err)
+  })
+})
+
+const storage = new PostgresStoreVNext({
+  id: 'pg-storage',
+  connectionString: process.env.DATABASE_URL,
+  observability: { pool: observabilityPool },
+})
+```
+
+You can also turn off JIT for the whole database with `ALTER DATABASE <name> SET jit = off`, or raise `jit_above_cost` so only more expensive queries use it.
+
 | Status | Meaning |
 | - | - |
 | `400` | Malformed JSON or malformed cursor. |
@@ -676,7 +709,7 @@ const result = await mastraClient.querySpans({
 console.log(result.spans)
 ```
 
-Pages default to 100 rows and allow at most 1,000. The response is `{ spans, page: { next } }`, without a total count. Ordering accepts exactly one of `startedAt`, `endedAt`, `timeToFirstChunkMs`, or `timeToFirstTokenMs`, ascending or descending, and defaults to descending start time. Spans without a value for the `timeToFirstChunkMs` or `timeToFirstTokenMs` sort field sort last in both directions.
+Pages default to 100 rows and allow at most 1,000. The response is `{ spans, page: { next } }`, without a total count. Ordering accepts exactly one of `startedAt`, `endedAt`, `durationMs`, `timeToFirstChunkMs`, `timeToFirstTokenMs`, `model`, or `provider`, ascending or descending, and defaults to descending start time. Missing sort values appear last in both directions. Model and provider sorting is case-sensitive.
 
 | Fields | Operators |
 | - | - |

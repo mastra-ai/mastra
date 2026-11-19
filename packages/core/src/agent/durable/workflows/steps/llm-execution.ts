@@ -14,6 +14,7 @@ import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
 import { ConsoleLogger } from '../../../../logger';
 import { LOCAL_MODEL_REQUEST_KEY, STEP_MODEL_MESSAGES_KEY } from '../../../../loop/run-scope-keys';
 import { applyAutoResumeSystemMessage } from '../../../../loop/shared/auto-resume-system-message';
+import { backgroundOutcomesInPrompt, snapshotBackgroundOutcomes } from '../../../../loop/shared/background-outcomes';
 import { buildLlmPromptArgs } from '../../../../loop/shared/build-llm-prompt-args';
 import { composeStepInput } from '../../../../loop/shared/compose-step-input';
 import { agentLoopTermination, executionFailureTermination } from '../../../../loop/shared/execution-outcome';
@@ -79,15 +80,21 @@ import { startRunStep } from '../../../run-lease-fence';
 import { createSignal } from '../../../signals';
 import { TripWire } from '../../../trip-wire';
 import { isSupportedLanguageModel } from '../../../utils';
-import { ensureRemoteAbortListener } from '../../abort-transport';
+import { ensureRemoteAbortListener, readRunDeadline } from '../../abort-transport';
 import { DurableStepIds } from '../../constants';
 import { ExecutionFence, getExecutionOwnershipGuard } from '../../execution-fence';
 import { endRunSpansWithError, getRunRegistryEntry, markRunActive } from '../../run-registry';
-import { createStepStartChunk, emitChunkEvent, publishStepStartChunk } from '../../stream-adapter';
+import { segmentSpanData } from '../../segment-spans';
+import {
+  createStepStartChunk,
+  emitChunkEvent,
+  emitIterationStartEvent,
+  publishStepStartChunk,
+} from '../../stream-adapter';
 import type { DurableAgenticWorkflowInput, DurableLLMStepOutput, DurableToolCallInput } from '../../types';
 import { resolveRuntimeDependencies, resolveModelFromListEntry } from '../../utils/resolve-runtime';
 import { createRunMessageList } from '../../utils/run-message-list';
-import { readAccumulatedSteps } from '../shared/accumulated-steps';
+import { loadAccumulatedSteps } from '../shared/accumulated-steps';
 import { carriedSpanClocks } from '../shared/iteration-state';
 import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
 import { baseIterationStateSchema, durableOptionsSchema, responseRecordSchema } from '../shared/schemas';
@@ -302,6 +309,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       const { agentId, messageId, options: execOptions } = typedInput;
       const runId = typedInput.runId;
       const logger = mastra?.getLogger?.();
+      if (pubsub) await emitIterationStartEvent(pubsub, runId, inputData.stepIndex ?? 0);
 
       // 1. Resolve runtime dependencies (tools from Mastra)
       const resolved = await resolveRuntimeDependencies({
@@ -370,7 +378,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // so it is logged rather than thrown.
       if (pubsub) {
         try {
-          await ensureRemoteAbortListener(pubsub, runId, mastra);
+          await ensureRemoteAbortListener(pubsub, runId, mastra, readRunDeadline(requestContext));
         } catch (error) {
           ownership?.throwIfLost();
           logger?.warn?.('Failed to subscribe to cross-process abort requests', {
@@ -664,7 +672,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // Processor retries are read from the step history: each rejected step is recorded with
       // finishReason 'retry' and the tripwire that rejected it. Only consecutive retries count.
       // API-error retries happen inside this step and add to the same count, as in Agent.
-      const previousSteps = readAccumulatedSteps(params.state, inputData);
+      const previousSteps = await loadAccumulatedSteps(params, inputData);
       let processorRetryCount = 0;
       for (let i = previousSteps.length - 1; i >= 0 && previousSteps[i]?.finishReason === 'retry'; i--) {
         processorRetryCount++;
@@ -712,6 +720,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       }
       // Mirror Agent: later iterations continue the same assistant message behind a step-start
       // boundary, so sequential tool steps aren't replayed as parallel calls (#26332).
+      // What a total deadline that cuts this step off saves: the list as it enters the step. That is the
+      // completed steps plus what was added between steps (completion-check feedback, signals).
+      const deadlineEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
+      if (deadlineEntry?.timeoutTotalMs) {
+        deadlineEntry.completedStepsState = JSON.parse(JSON.stringify(messageList.serialize()));
+      }
       const iterationBoundary = previousSteps.length > 0 ? messageList.openStepBoundary().boundary : undefined;
       let terminalAttemptContext:
         | {
@@ -831,17 +845,17 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // and passed through each iteration. This ensures all steps are children of the same span.
             const observability = mastra?.observability?.getSelectedInstance({ requestContext });
 
-            // modelSpanData is threaded through the iteration state (seeded in preparation.ts);
-            // after a resume the registry override points steps at the resumed generation.
-            const inputModelSpanData = (getRunRegistryEntry(runId, mastra as Mastra | undefined)?.resumeModelSpanData ??
-              inputData.modelSpanData) as ExportedSpan<SpanType.MODEL_GENERATION> | undefined;
+            // The run's first pair is threaded through the iteration state (seeded in preparation.ts);
+            // a resume or recovery carries its own pair on the request context.
+            const resumeRegistry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
+            const segment = segmentSpanData(requestContext, runId, inputData, resumeRegistry);
+            const inputModelSpanData = segment.modelSpanData;
             // Rebuilt spans come from the run-start snapshot, so re-apply the carried
             // first-chunk clocks before the tracker sees them; otherwise a later
             // step would overwrite them mid-run. The loop state carries the originals'
             // clocks; a resumed segment has fresh spans, so its clocks live on the
             // registry beside them.
-            const resumeRegistry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
-            const carriedClocks = carriedSpanClocks(resumeRegistry, inputData);
+            const carriedClocks = carriedSpanClocks(resumeRegistry, inputData, segment.carried);
             const withCarriedClocks = <T extends ExportedSpan<SpanType.MODEL_GENERATION | SpanType.AGENT_RUN>>(
               data: T,
             ): T => {
@@ -852,11 +866,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             recordClocks = () => {
               const completionStartTime = modelSpanTracker?.getCompletionStartTime?.();
               const timeToFirstTokenMs = modelSpanTracker?.getTimeToFirstTokenMs?.();
-              if (
-                resumeRegistry?.resumeModelSpanData &&
-                completionStartTime &&
-                !resumeRegistry.resumeCompletionStartTime
-              ) {
+              if (resumeRegistry?.resumeModelSpan && completionStartTime && !resumeRegistry.resumeCompletionStartTime) {
                 resumeRegistry.resumeCompletionStartTime = completionStartTime;
                 resumeRegistry.resumeTimeToFirstTokenMs = timeToFirstTokenMs;
               }
@@ -868,8 +878,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
             // On remote engines (Inngest) the step's tracingContext span is not part of the
             // exported trace, so parent client-tool spans on the rebuilt AGENT_RUN span instead.
-            const inputAgentSpanData = (getRunRegistryEntry(runId, mastra as Mastra | undefined)?.resumeAgentSpanData ??
-              inputData.agentSpanData) as ExportedSpan<SpanType.AGENT_RUN> | undefined;
+            const inputAgentSpanData = segment.agentSpanData;
             const agentRunSpan = inputAgentSpanData
               ? (observability?.rebuildSpan(withCarriedClocks(inputAgentSpanData)) as AnySpan | undefined)
               : undefined;
@@ -1199,7 +1208,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 : currentModel.specificationVersion === 'v3'
                   ? messageList.get.all.aiV6.llmPrompt
                   : messageList.get.all.aiV5.llmPrompt;
+            // `skipBgTaskWait` marks an `untilIdle` inner run, the only reader of these outcomes. Taken
+            // before the prompt is built so an outcome that lands meanwhile is never counted as sent.
+            const backgroundOutcomes = typedInput.options?.skipBgTaskWait
+              ? snapshotBackgroundOutcomes(messageList)
+              : undefined;
             let inputMessages = (await llmPromptForModel(messageListPromptArgs)) as LanguageModelV2Prompt;
+            const builtPrompt = inputMessages;
             // Identify OM's prompt message by its source ID and position before request
             // processors run. Equal text in real user messages is not synthetic context.
             const dbMessages = messageList.get.all.db();
@@ -1354,6 +1369,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               registryEntry.runScope ??= createRunScope();
               registryEntry.runScope.set(STEP_MODEL_MESSAGES_KEY, delegationMessages);
             }
+            // A cached reply may come from a different prompt under a custom cache key, so it never
+            // counts as having answered a background result.
+            const backgroundResultTaskIds =
+              backgroundOutcomes && !cachedResponse
+                ? backgroundOutcomesInPrompt(backgroundOutcomes, builtPrompt, inputMessages)
+                : [];
 
             // Enable defer mode - step-finish won't auto-close the step span
             // This allows us to export the step span and close it later after tool execution
@@ -1598,6 +1619,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // including empty reasoning spans that carry providerMetadata
             // (e.g. OpenAI itemId) required by subsequent turns (#19365).
             const collectedChunks: CollectedChunk[] = [];
+            // What a total deadline saves of this attempt if it cuts the step off: the text as published.
+            if (registryEntry?.timeoutTotalMs) registryEntry.streamedStepText = [];
 
             // Materialize collected chunks into the messageList via the same
             // helper the regular Agent uses, preserving reasoning spans
@@ -1896,6 +1919,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     modelId: currentModel.modelId,
                     provider: currentModel.provider,
                     warnings,
+                    ...(backgroundResultTaskIds.length > 0 ? { backgroundResultTaskIds } : {}),
                   });
                   if (effectiveOutputProcessors.length > 0 && registryEntry?.processorStates) {
                     try {
@@ -1916,7 +1940,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                           }
                           try {
                             if (chunk.type === 'step-start') {
-                              await publishStepStartChunk(pubsub, runId, chunk, true);
+                              await publishStepStartChunk(pubsub, runId, chunk, true, inputData.stepIndex ?? 0);
                             } else {
                               await emitChunkEvent(pubsub, runId, chunk, true);
                             }
@@ -1947,7 +1971,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       break;
                     }
                   } else {
-                    await publishStepStartChunk(pubsub, runId, stepStartChunk);
+                    await publishStepStartChunk(pubsub, runId, stepStartChunk, undefined, inputData.stepIndex ?? 0);
                   }
                 }
 
@@ -2269,6 +2293,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     payload: 'payload' in persistedChunk ? persistedChunk.payload : undefined,
                     metadata: (clientChunk as { metadata?: Record<string, unknown> }).metadata,
                   });
+                  // The step's text is transcript, not internal state: build it from the same
+                  // chunk memory stores so a redacted reply is never returned unredacted.
+                  if (persistedChunk.type === 'text-delta') {
+                    const text = (persistedChunk.payload as TextDeltaPayload).text;
+                    textDeltas.push(text);
+                    registryEntry?.streamedStepText?.push(text);
+                  }
                 }
 
                 if (STEP_CONTENT_CHUNK_TYPES.has(rawChunk.type)) {
@@ -2279,12 +2310,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 // internal state (tool args, finish reason, usage, metadata) is
                 // never affected by display-layer transforms.
                 switch (rawChunk.type) {
-                  case 'text-delta': {
-                    const payload = rawChunk.payload as TextDeltaPayload;
-                    textDeltas.push(payload.text);
-                    break;
-                  }
-
                   case 'tool-call-input-streaming-start': {
                     const tool = toolInputStartToolDef || resolveToolDef(rawChunk.payload.toolName);
                     if (tool && 'onInputStart' in tool) {
@@ -2563,6 +2588,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     payload: 'payload' in r.part ? r.part.payload : undefined,
                     metadata: (r.part as { metadata?: Record<string, unknown> }).metadata,
                   });
+                  if (r.part.type === 'text-delta') textDeltas.push(r.part.payload.text);
                 }
               }
               throwIfInterrupted();
@@ -2936,6 +2962,14 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 processOutputStepTripwire = error;
               }
             }
+            // The step processors ran over the streamed text and it is in the list; a deadline no longer cuts it off.
+            // Publish the accepted step first, in the same tick, so a deadline before the mapping step's snapshot
+            // still saves it (and never both the snapshot and the cut-off text). A rejected response is rolled
+            // back below, so the step-start snapshot stays.
+            if (registryEntry?.timeoutTotalMs && !processOutputStepTripwire) {
+              registryEntry.completedStepsState = JSON.parse(JSON.stringify(messageList.serialize()));
+            }
+            if (registryEntry) registryEntry.streamedStepText = undefined;
 
             const retryRequested = processOutputStepTripwire?.options?.retry === true;
             const canRetry =

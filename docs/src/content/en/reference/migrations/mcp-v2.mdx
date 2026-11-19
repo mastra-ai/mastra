@@ -163,7 +163,7 @@ On a legacy-negotiated connection the shared verbs work (`tools/list`, `tools/ca
   },
 ```
 
-### OAuth clients are pre-registered or use a Client ID Metadata Document
+### OAuth clients are pre-registered or use a client ID metadata document
 
 `MCPOAuthClientProvider` no longer registers clients dynamically. Pass either `clientInformation` for a client you registered with the authorization server, or `clientMetadataUrl` (SEP-991) so the server fetches your client metadata from an HTTPS URL. Constructing the provider with neither throws, and no request is ever sent to a `registration_endpoint`.
 

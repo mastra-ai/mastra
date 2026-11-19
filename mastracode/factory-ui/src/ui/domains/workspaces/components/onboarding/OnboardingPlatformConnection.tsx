@@ -28,7 +28,6 @@ export function OnboardingPlatformConnection({ provider }: { provider: 'jira' | 
       active.length === 1 ? `Connected to ${active[0]?.accountLabel ?? name}.` : `${active.length} accounts connected.`;
     return (
       <OnboardingConnectionRow
-        compact
         icon={<Icon />}
         name={name}
         description={description}
@@ -43,10 +42,10 @@ export function OnboardingPlatformConnection({ provider }: { provider: 'jira' | 
   if (query.isError) {
     return (
       <OnboardingConnectionRow
-        compact
         icon={<Icon />}
         name={name}
         description={`Couldn't load ${name} connections.`}
+        tone="error"
         action={
           <Button variant="ghost" size="sm" aria-label={`Retry ${name}`} onClick={() => void query.refetch()}>
             Retry
@@ -60,10 +59,10 @@ export function OnboardingPlatformConnection({ provider }: { provider: 'jira' | 
   const description = reconnect ? 'Reconnect to restore access.' : purpose;
   return (
     <OnboardingConnectionRow
-      compact
       icon={<Icon />}
       name={name}
       description={description}
+      tone={reconnect ? 'warning' : 'muted'}
       action={
         <ProviderConnectControl
           provider={provider}

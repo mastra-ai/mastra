@@ -14,6 +14,8 @@ export interface StreamDisconnectTestConfig {
   ) => Promise<{ url: string; close: () => Promise<void> }>;
   /** Set when `startServer` supports `compress`, to run the compressed-response cases. */
   supportsCompression?: boolean;
+  /** Set when a `datastream-response` upstream error still drops the connection, to pin that case as failing. */
+  datastreamUpstreamErrorDropsConnection?: boolean;
 }
 
 type ResponseType = 'stream' | 'datastream-response';
@@ -47,6 +49,7 @@ export function createStreamDisconnectTestSuite(config: StreamDisconnectTestConf
       paceMs = 10,
       holdUntilDisconnect = false,
       compress = false,
+      errorAfter,
     }: {
       responseType: ResponseType;
       chunks?: number;
@@ -54,6 +57,8 @@ export function createStreamDisconnectTestSuite(config: StreamDisconnectTestConf
       paceMs?: number;
       holdUntilDisconnect?: boolean;
       compress?: boolean;
+      /** Errors the upstream once it has produced this many chunks. */
+      errorAfter?: number;
     }) {
       const state = { pulls: 0, canceled: false };
       let handlerEntered!: () => void;
@@ -89,10 +94,18 @@ export function createStreamDisconnectTestSuite(config: StreamDisconnectTestConf
                 return controller.close();
               }
 
-              state.pulls++;
+              const failing = errorAfter !== undefined && state.pulls >= errorAfter;
+
+              if (!failing) {
+                state.pulls++;
+              }
 
               if (paceMs) {
                 await sleep(paceMs);
+              }
+
+              if (failing) {
+                return controller.error(new Error('upstream failed'));
               }
 
               controller.enqueue(
@@ -198,6 +211,22 @@ export function createStreamDisconnectTestSuite(config: StreamDisconnectTestConf
         expect(text.match(/"n":\d+|chunk-\d+/g)).toHaveLength(20);
         expect(state.canceled, 'upstream cancel()').toBe(false);
       });
+
+      // An observed run whose replay ends in a rejecting error must still deliver the frames before it (#29667).
+      // The error reaches the adapter either right after the last chunk or while the response is already streaming.
+      const dropsConnection = responseType === 'datastream-response' && config.datastreamUpstreamErrorDropsConnection;
+      (dropsConnection ? it.fails : it).each([0, 20])(
+        'delivers the chunks sent before an upstream error and ends the response cleanly (error after %ims)',
+        async paceMs => {
+          const { url } = await setup({ responseType, chunks: 100, errorAfter: 3, paceMs });
+
+          const response = await post(url);
+          const text = await response.text();
+
+          expect(response.status).toBe(200);
+          expect(text.match(/"n":\d+|chunk-\d+/g)).toHaveLength(3);
+        },
+      );
 
       it('pauses reading the upstream while a connected client is not reading, and cancels it once the client leaves', async () => {
         // 400 chunks of 64 KiB is far more than the socket buffers on both ends can hold.

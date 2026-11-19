@@ -17,6 +17,19 @@ export interface UserConnectAuthField {
   label?: string | null;
   description?: string | null;
   placeholder?: string | null;
+  defaultValue?: string | null;
+  /** Value format to validate against; unknown formats are ignored. */
+  format?: string | null;
+  pattern?: string | null;
+  /** When set, the value must be one of these options (rendered as a select). */
+  options?: readonly string[] | null;
+  prefix?: string | null;
+  suffix?: string | null;
+  documentationUrl?: string | null;
+  /** Warnings to show when the field holds a given value, keyed by value. */
+  warnings?: Readonly<Record<string, string>> | null;
+  /** Only show (and submit) the field while another field equals a value. */
+  visibleWhen?: { field: string; equals: string } | null;
   secret?: boolean | null;
   required?: boolean | null;
   order?: number | null;

@@ -13,7 +13,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
-import { SpanType, getTimeToFirstChunkMs } from '@mastra/core/observability';
+import { SpanType, TracingEventType, getTimeToFirstChunkMs } from '@mastra/core/observability';
 import type { Processor, ProcessOutputStreamArgs } from '@mastra/core/processors';
 import { MockStore } from '@mastra/core/storage';
 import type { ChunkType } from '@mastra/core/stream';
@@ -424,6 +424,48 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
     }
   });
 
+  it('DurableAgent resume: the MODEL_STEP that suspended keeps only its suspension end', async () => {
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'use the tool',
+      model: toolThenTextModel('get_weather', { city: 'Paris' }, 'It is 21C in Paris.') as any,
+      tools: {
+        get_weather: createTool({
+          id: 'get_weather',
+          description: 'Get the weather',
+          inputSchema: z.object({ city: z.string() }),
+          requireApproval: true,
+          execute: async ({ city }) => ({ forecast: `Sunny in ${city}` }),
+        }),
+      },
+    });
+    const { wrapped } = buildMastra(testExporter, agent, 'durable');
+    const res = await wrapped.stream('weather in paris?');
+    for await (const chunk of res.fullStream) {
+      if (chunk.type === 'tool-call-approval') break;
+    }
+    const resumed = await wrapped.approveToolCall({ runId: res.runId });
+    for await (const _chunk of resumed.fullStream) {
+      // Drain the resumed segment.
+    }
+    await settle(testExporter);
+
+    // The suspension ended the step under the first generation; the resumed segment, whose
+    // own generation is new, must not end it again when the approved tool completes.
+    const [firstGeneration] = byStart(testExporter.getSpansByType(SpanType.MODEL_GENERATION));
+    const endsOf = (spanId: string) =>
+      testExporter
+        .getBySpanId(spanId)
+        .events.filter(event => event.type === TracingEventType.SPAN_ENDED)
+        .map(event => event.exportedSpan.outcome);
+    const steps = byStart(testExporter.getSpansByType(SpanType.MODEL_STEP));
+    expect(steps).toHaveLength(2);
+    expect(parentOf(steps[0])).toBe(idOf(firstGeneration));
+    expect(endsOf(idOf(steps[0]))).toEqual(['suspend']);
+    expect(endsOf(idOf(steps[1]))).toEqual(['success']);
+  });
+
   it('DurableAgent simple run: generation and AGENT_RUN carry the inference clock', async () => {
     const agent = new Agent({ id: 'a', name: 'a', instructions: 'x', model: textModel('Hello') as any });
     const { wrapped } = buildMastra(testExporter, agent, 'durable');
@@ -540,8 +582,11 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
     await settle(testExporter);
 
     const inferences = byStart(testExporter.getSpansByType('model_inference' as any)) as any[];
-    expect(inferences.map(span => span.attributes?.finishReason)).toEqual(['retry', 'stop']);
+    expect(inferences).toHaveLength(2);
     const [failed, streamed] = inferences;
+    // The retry re-attempts the request within the same step, so the failed request ends with its error.
+    expect(failed.errorInfo?.message).toBe('provider unavailable');
+    expect(streamed.attributes?.finishReason).toBe('stop');
     expect(failed.timeToFirstTokenMs).toBeUndefined();
     expect(streamed.timeToFirstTokenMs).toBeLessThan(failAfterMs);
     const agentRun = testExporter.getSpansByType('agent_run' as any)[0] as any;
@@ -727,6 +772,129 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
           outputDetails: { text: 10 },
         });
       }
+    },
+  );
+
+  // Issue #29818: MODEL_INFERENCE ended at the raw provider `finish` without output, so
+  // exporters that send it as the model call (OTel/Langfuse, Datadog, PostHog) showed a
+  // prompt with no response. It must carry the processed response, while its timing
+  // still stops at the provider finish and excludes the tool that runs afterwards.
+  it.each(['plain', 'durable', 'evented'] as const)(
+    '%s agent: each model call span carries its processed response, timed without the tool',
+    async variant => {
+      class RedactProcessor implements Processor {
+        readonly id = 'redact';
+        readonly name = 'Redact';
+        async processOutputStream({ part }: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined> {
+          if (part.type === 'text-delta') {
+            return { ...part, payload: { ...part.payload, text: part.payload.text.replace('42', '[REDACTED]') } };
+          }
+          return part;
+        }
+      }
+      const slowLookup = createTool({
+        id: 'lookup',
+        description: 'Look something up',
+        inputSchema: z.object({ q: z.string() }),
+        execute: async () => {
+          await new Promise(r => setTimeout(r, 50));
+          return { value: 42 };
+        },
+      });
+      const agent = new Agent({
+        id: 'a',
+        name: 'a',
+        instructions: 'x',
+        model: toolThenTextModel('lookup', { q: 'answer' }, 'The answer is 42.') as any,
+        tools: { lookup: slowLookup },
+        outputProcessors: [new RedactProcessor()],
+      });
+      const { wrapped } = buildMastra(testExporter, agent, variant);
+      if (variant === 'plain') {
+        await (await wrapped.stream('What is the answer?')).consumeStream();
+        await settle(testExporter);
+      } else {
+        await runToCompletion(wrapped, 'What is the answer?', testExporter);
+      }
+
+      const inferences = byStart(testExporter.getSpansByType('model_inference' as any)) as any[];
+      expect(inferences).toHaveLength(2);
+      expect(inferences[0].output).toMatchObject({
+        text: '',
+        toolCalls: [{ toolCallId: 'call-1', toolName: 'lookup', args: { q: 'answer' } }],
+      });
+      expect(inferences[1].output).toMatchObject({ text: 'The answer is [REDACTED].', toolCalls: [] });
+      expect(JSON.stringify(inferences.map(i => i.output))).not.toContain('42');
+      expect(inferences[0].attributes).toMatchObject({ finishReason: 'tool-calls', usage: { inputTokens: 10 } });
+
+      const [toolCall] = testExporter.getSpansByType('tool_call' as any) as any[];
+      expect(+new Date(inferences[0].endTime)).toBeLessThanOrEqual(startOf(toolCall));
+      expect(testExporter.getIncompleteSpans()).toHaveLength(0);
+    },
+  );
+
+  // Issue #29779: core 1.82 records the model call from the raw provider stream, whose
+  // `finish` chunk carries no model id. The serving model arrives earlier in
+  // `response-metadata`, so the inference span must keep it instead of falling back to
+  // the requested model (wrong under gateway failover, and lost in PostHog generations).
+  it.each(['plain', 'durable', 'evented'] as const)(
+    '%s agent: each model call span reports the model that actually served the request',
+    async variant => {
+      const agent = new Agent({
+        id: 'a',
+        name: 'a',
+        instructions: 'x',
+        model: namedTextModel('test-provider', 'requested-model', 'Hello') as any,
+      });
+      const { wrapped } = buildMastra(testExporter, agent, variant);
+      if (variant === 'plain') {
+        await (await wrapped.stream('hi')).consumeStream();
+        await settle(testExporter);
+      } else {
+        await runToCompletion(wrapped, 'hi', testExporter);
+      }
+
+      const [inference] = byStart(testExporter.getSpansByType('model_inference' as any)) as any[];
+      expect(inference.attributes).toMatchObject({ model: 'requested-model', responseModel: 'mock-model-id' });
+    },
+  );
+
+  // A processor that drops `step-finish` must not leave the model call span open:
+  // MODEL_INFERENCE waits for the processed step-finish, so the run's finish settles it.
+  it.each(['plain', 'durable', 'evented'] as const)(
+    '%s agent: every model call span ends when an output processor drops step-finish',
+    async variant => {
+      class DropStepFinishProcessor implements Processor {
+        readonly id = 'drop-step-finish';
+        readonly name = 'Drop step-finish';
+        async processOutputStream({ part }: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined> {
+          return part.type === 'step-finish' ? null : part;
+        }
+      }
+      const agent = new Agent({
+        id: 'a',
+        name: 'a',
+        instructions: 'use the tool',
+        model: toolThenTextModel('get_weather', { city: 'Paris' }, 'It is 21C in Paris.') as any,
+        tools: { get_weather: weatherTool },
+        outputProcessors: [new DropStepFinishProcessor()],
+      });
+      const { wrapped } = buildMastra(testExporter, agent, variant);
+      if (variant === 'plain') {
+        await (await wrapped.stream('weather in paris?')).consumeStream();
+        await settle(testExporter);
+      } else {
+        await runToCompletion(wrapped, 'weather in paris?', testExporter);
+      }
+
+      const inferences = testExporter.getSpansByType('model_inference' as any) as any[];
+      expect(inferences).toHaveLength(2);
+      for (const inference of inferences) {
+        expect(inference.endTime).toBeDefined();
+        expect(inference.attributes?.usage).toBeDefined();
+      }
+      const openInferences = testExporter.getIncompleteSpans().filter((s: any) => s.span?.type === 'model_inference');
+      expect(openInferences).toHaveLength(0);
     },
   );
 });

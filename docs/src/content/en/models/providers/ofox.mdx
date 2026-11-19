@@ -7,7 +7,7 @@ description: "Browse Ofox model IDs, capabilities, context windows, and pricing.
 
 # <img src="https://models.dev/logos/ofox.svg" alt="Ofox logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Ofox
 
-Access 150 Ofox models through Mastra's model router. Authentication is handled automatically using the `OFOX_API_KEY` environment variable.
+Access 156 Ofox models through Mastra's model router. Authentication is handled automatically using the `OFOX_API_KEY` environment variable.
 
 Learn more in the [Ofox documentation](https://ofox.ai/docs).
 
@@ -68,6 +68,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 10,
     "outputCost": 50
+  },
+  {
+    "model": "ofox/anthropic/claude-fable-5.2",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 8,
+    "outputCost": 40
   },
   {
     "model": "ofox/anthropic/claude-haiku-4.5",
@@ -742,6 +754,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 10
   },
   {
+    "model": "ofox/google/gemini-4-carbon",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
+    "model": "ofox/google/gemini-4-hydrogen",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 1.5,
+    "outputCost": 7.5
+  },
+  {
     "model": "ofox/minimax/m2-her",
     "imageInput": false,
     "audioInput": false,
@@ -893,7 +929,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 131072,
+    "maxOutput": 1048576,
     "inputCost": 3,
     "outputCost": 15
   },
@@ -905,7 +941,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 131072,
+    "maxOutput": 1048576,
     "inputCost": 2,
     "outputCost": 11
   },
@@ -1222,6 +1258,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 5
   },
   {
+    "model": "ofox/openai/gpt-6.2-astra",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 8,
+    "outputCost": 40
+  },
+  {
+    "model": "ofox/openai/gpt-6.2-sol",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
     "model": "ofox/qwen/qwen-flash",
     "imageInput": false,
     "audioInput": false,
@@ -1522,6 +1582,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 5.14
   },
   {
+    "model": "ofox/qwen/qwen4-max",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 262144,
+    "inputCost": 1.5,
+    "outputCost": 4.5
+  },
+  {
     "model": "ofox/volcengine/doubao-seed-2.0-code",
     "imageInput": true,
     "audioInput": false,
@@ -1576,7 +1648,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 256000,
+    "contextWindow": 1024000,
     "maxOutput": 256000,
     "inputCost": 0.7072,
     "outputCost": 3.536
@@ -1612,7 +1684,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 256000,
+    "contextWindow": 1024000,
     "maxOutput": 256000,
     "inputCost": 0.884,
     "outputCost": 4.42

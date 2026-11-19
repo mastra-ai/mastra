@@ -1,7 +1,7 @@
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
@@ -110,10 +110,11 @@ export default function PromptBlocks() {
         <ActionRow>
           <ActionRow.Start>
             <div className="max-w-120 flex-1">
-              <ListSearch
-                onSearch={handleSearchChange}
-                label="Filter prompts"
-                placeholder="Filter by name or description"
+              <SearchInput
+                {...listSearchProps}
+                onValueChange={handleSearchChange}
+                label="Search prompts"
+                placeholder="Search by name or description"
               />
             </div>
           </ActionRow.Start>

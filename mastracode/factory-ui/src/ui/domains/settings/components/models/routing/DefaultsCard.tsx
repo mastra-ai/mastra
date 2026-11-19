@@ -1,9 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Card, CardContent } from '@mastra/playground-ui/components/Card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useState } from 'react';
 import type { ReactNode, Ref } from 'react';
@@ -28,7 +28,7 @@ export function DefaultsCard({
 }: {
   defaults: ModelDefaults;
   inUse: boolean;
-  anchorRef: Ref<HTMLElement>;
+  anchorRef?: Ref<HTMLElement>;
   model: ReactNode;
   providers: ReactNode;
 }) {
@@ -37,8 +37,8 @@ export function DefaultsCard({
   const [expanded, setExpanded] = useState(openedByLink);
 
   return (
-    <Card as="section" id={anchor} aria-label={MODEL_DEFAULTS_LABELS[defaults]} className="scroll-mt-4">
-      <CardContent>
+    <SettingsContainer>
+      <section id={anchor} aria-label={MODEL_DEFAULTS_LABELS[defaults]} className="scroll-mt-4">
         <Collapsible open={inUse || expanded} onOpenChange={setExpanded}>
           <header ref={anchorRef} className="flex items-center gap-3">
             <div className={cn('flex min-w-0 flex-1 items-center gap-3', !inUse && 'opacity-60')}>
@@ -79,7 +79,7 @@ export function DefaultsCard({
             </div>
           </CollapsibleContent>
         </Collapsible>
-      </CardContent>
-    </Card>
+      </section>
+    </SettingsContainer>
   );
 }

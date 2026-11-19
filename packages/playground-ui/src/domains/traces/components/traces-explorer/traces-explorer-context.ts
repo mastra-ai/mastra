@@ -1,5 +1,5 @@
 import type { EntityType } from '@mastra/core/observability';
-import type { TraceQueryDiscoveryTimeRange } from '@mastra/react/hooks/traces';
+import type { TraceQueryArgs, TraceQueryDiscoveryTimeRange } from '@mastra/react/hooks/traces';
 import { createContext, useContext } from 'react';
 import type { useTraceColumnPreferences } from '../../hooks/use-trace-column-preferences';
 import type { useTracesListSource } from '../../hooks/use-traces-list-source';
@@ -29,9 +29,11 @@ export type TracesExplorerFeatures = {
 
 export type TracesConfigContextValue = {
   listId: string;
+  rootSource?: TraceQueryArgs['rootSource'];
   scopedFieldIds: ReadonlySet<string>;
   hiddenFieldIds: readonly string[];
   withQueryTrace: boolean;
+  withTokenSearch: boolean;
   withFeedback: boolean;
   feedbackOptions?: FeedbackOptions;
   /** The span query API is on, so the host can offer a spans view next to the traces list. */
@@ -74,6 +76,7 @@ export type TracesFiltersActions = {
 export type TracesFiltersContextValue = TracesFiltersActions & {
   /** The host's filters with the entries this server can't query dropped. */
   filters: TracesFilters;
+  hasTokenSearch: boolean;
   dateFrom?: Date;
   dateTo?: Date;
   filtersApplied: boolean;

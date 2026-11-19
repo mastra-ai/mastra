@@ -13,7 +13,7 @@
 import Nango, { AuthError } from '@nangohq/frontend';
 import type { AuthOptions } from '@nangohq/frontend';
 
-export type PlatformConnectProviderId = 'jira' | 'incident-io' | 'gitlab';
+export type PlatformConnectProviderId = 'jira' | 'incident-io' | 'gitlab' | 'vanta';
 
 export const MASTRA_PLATFORM_URL = 'https://projects.mastra.ai';
 
@@ -30,6 +30,7 @@ export const PLATFORM_CONNECT_PROVIDERS: Record<PlatformConnectProviderId, Platf
   jira: { id: 'jira', displayName: 'Jira', authKind: 'oauth' },
   'incident-io': { id: 'incident-io', displayName: 'incident.io', authKind: 'apiKey' },
   gitlab: { id: 'gitlab', displayName: 'GitLab', authKind: 'oauth' },
+  vanta: { id: 'vanta', displayName: 'Vanta', authKind: 'oauth' },
 };
 
 export interface PlatformProviderConnection {
@@ -65,9 +66,11 @@ async function requestJson<T>(baseUrl: string, path: string, init?: RequestInit)
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
     let code: string | undefined;
+    let reason: string | undefined;
     try {
-      const body = (await res.json()) as { error?: string; message?: string };
+      const body = (await res.json()) as { error?: string; reason?: string; message?: string };
       code = body.error;
+      reason = body.reason;
       if (body.message) message = body.message;
       else if (body.error) message = body.error;
     } catch {
@@ -75,6 +78,7 @@ async function requestJson<T>(baseUrl: string, path: string, init?: RequestInit)
     }
     const err = new Error(message);
     (err as { code?: string }).code = code;
+    (err as { reason?: string }).reason = reason;
     (err as { status?: number }).status = res.status;
     throw err;
   }
@@ -125,16 +129,86 @@ export interface ConnectToolConnection {
   status: string;
 }
 
-export function isConnectToolsOffError(error: unknown): boolean {
-  return error instanceof Error && 'code' in error && error.code === 'connect_tools_off';
+/** The one piece of setup a Factory lacks to list its project's connections. */
+export type ConnectToolsSetupMissing = 'no_credentials' | 'no_project_id';
+
+/**
+ * Why the server can't list Connect tools: the missing setup piece, `unknown` from servers that predate the reason,
+ * or `undefined` when the error isn't the "off" answer at all.
+ */
+export function connectToolsOffReason(error: unknown): ConnectToolsSetupMissing | 'unknown' | undefined {
+  if (!(error instanceof Error) || !('code' in error) || error.code !== 'connect_tools_off') return undefined;
+  const reason = 'reason' in error ? error.reason : undefined;
+  return reason === 'no_credentials' || reason === 'no_project_id' ? reason : 'unknown';
 }
 
-export async function listConnectTools(baseUrl: string): Promise<ConnectToolConnection[]> {
-  const { connections } = await requestJson<{ connections: ConnectToolConnection[] }>(
-    baseUrl,
-    '/web/integrations/platform/connect-tools',
-  );
-  return connections;
+export interface ConnectTools {
+  /** The Platform project whose connections sessions get as tools. */
+  projectId: string;
+  /**
+   * `default`: sessions get Factory's own Connect tools. `custom`: the Factory's `tools` option sets session tools.
+   * Servers that predate this field omit it.
+   */
+  toolsSource?: 'default' | 'custom';
+  connections: ConnectToolConnection[];
+}
+
+export async function listConnectTools(baseUrl: string): Promise<ConnectTools> {
+  return requestJson<ConnectTools>(baseUrl, '/web/integrations/platform/connect-tools');
+}
+
+/** One tool a session gets from the Connect tools source, or one Factory leaves out by default. */
+export interface ConnectToolInfo {
+  name: string;
+  description: string | null;
+  /** The tool pauses the run until someone approves each call. */
+  requiresApproval: boolean;
+  /** Factory leaves this default Connect tool out of sessions: its name says it deletes or archives. */
+  excluded?: 'destructive';
+}
+
+export interface ConnectToolList {
+  toolsSource: 'default' | 'custom';
+  tools: ConnectToolInfo[];
+}
+
+export async function listConnectToolList(baseUrl: string): Promise<ConnectToolList> {
+  return requestJson<ConnectToolList>(baseUrl, '/web/integrations/platform/connect-tools/tools');
+}
+
+export interface ConnectToolGroups {
+  /** Tools by the integration id their name starts with (`posthog_get_insight` → `posthog`). */
+  byIntegration: Map<string, ConnectToolInfo[]>;
+  /** Tools from no listed connection, such as MCP or custom tools a `tools` option adds. */
+  other: ConnectToolInfo[];
+}
+
+/** Connect names each tool `<integrationId>_<tool>`, so a tool belongs to the connection its name starts with. */
+export function groupConnectTools(tools: ConnectToolInfo[], integrationIds: string[]): ConnectToolGroups {
+  // Longest id first, so an id that starts another id can't take its tools.
+  const ids = [...new Set(integrationIds)].sort((a, b) => b.length - a.length);
+  const byIntegration = new Map<string, ConnectToolInfo[]>();
+  const other: ConnectToolInfo[] = [];
+  for (const tool of tools) {
+    const id = ids.find(candidate => tool.name.startsWith(`${candidate}_`));
+    if (!id) {
+      other.push(tool);
+      continue;
+    }
+    const group = byIntegration.get(id) ?? [];
+    group.push(tool);
+    byIntegration.set(id, group);
+  }
+  return { byIntegration, other };
+}
+
+/**
+ * The Connect settings page of the Platform project. Without the organization id, Platform's `/org/*` route fills in
+ * the user's current organization.
+ */
+export function platformProjectConnectUrl(projectId: string, organizationId?: string): string {
+  const org = organizationId ? `orgs/${encodeURIComponent(organizationId)}` : 'org';
+  return `${MASTRA_PLATFORM_URL}/${org}/projects/${encodeURIComponent(projectId)}/settings/connect`;
 }
 
 /** Mint a Nango connect session for a new provider connection. */

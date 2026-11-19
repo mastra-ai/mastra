@@ -188,7 +188,10 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
     thinkingLevel: (state?.thinkingLevel ?? globalSettings.preferences.thinkingLevel) as string,
     currentModelId: ctx.state.session.model.get() ?? '',
     escapeAsCancel: ctx.state.editor.escapeEnabled,
-    mouse: { dialogs: globalSettings.preferences.mouseDialogs, input: globalSettings.preferences.mouseInput },
+    mouse: {
+      dialogs: globalSettings.preferences.mouseDialogs ?? false,
+      input: globalSettings.preferences.mouseInput ?? false,
+    },
     previewLines: globalSettings.preferences.previewLines,
     storageBackend: globalSettings.storage.backend,
     pgConnectionString: globalSettings.storage.pg?.connectionString ?? '',

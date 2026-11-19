@@ -1,8 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Activity, BarChart3, Database, Gauge, GitBranch, ListChecks, ScrollText } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import { Field, FieldError, FieldLabel } from '../Field';
 import { Combobox } from './combobox';
+import { IconBranch } from '@/ds/icons/central/IconBranch';
+import { IconChart6 } from '@/ds/icons/central/IconChart6';
+import { IconChecklist } from '@/ds/icons/central/IconChecklist';
+import { IconElectrocardiogram } from '@/ds/icons/central/IconElectrocardiogram';
+import { IconGauge } from '@/ds/icons/central/IconGauge';
+import { IconScript } from '@/ds/icons/central/IconScript';
+import { IconServer1 } from '@/ds/icons/central/IconServer1';
 
 const meta: Meta<typeof Combobox> = {
   title: 'Composite/Combobox',
@@ -60,49 +66,49 @@ const capabilityOptions = [
     label: 'Logs',
     value: 'logs',
     description: 'Inspect application output',
-    start: <ScrollText className={iconClassName} />,
+    start: <IconScript className={iconClassName} />,
     end: <span className={badgeClassName}>Live</span>,
   },
   {
     label: 'Traces',
     value: 'traces',
     description: 'Follow request spans',
-    start: <GitBranch className={iconClassName} />,
+    start: <IconBranch className={iconClassName} />,
     end: <span className={badgeClassName}>8 services</span>,
   },
   {
     label: 'Metrics',
     value: 'metrics',
     description: 'Monitor service health',
-    start: <Gauge className={iconClassName} />,
+    start: <IconGauge className={iconClassName} />,
     end: <span className={badgeClassName}>42 charts</span>,
   },
   {
     label: 'Datasets',
     value: 'datasets',
     description: 'Review evaluation data',
-    start: <Database className={iconClassName} />,
+    start: <IconServer1 className={iconClassName} />,
     end: <span className={badgeClassName}>12 sets</span>,
   },
   {
     label: 'Workflows',
     value: 'workflows',
     description: 'Run multi-step processes',
-    start: <ListChecks className={iconClassName} />,
+    start: <IconChecklist className={iconClassName} />,
     end: <span className={badgeClassName}>6 active</span>,
   },
   {
     label: 'Scorers',
     value: 'scorers',
     description: 'Evaluate generated output',
-    start: <BarChart3 className={iconClassName} />,
+    start: <IconChart6 className={iconClassName} />,
     end: <span className={badgeClassName}>Quality</span>,
   },
   {
     label: 'Signals',
     value: 'signals',
     description: 'Watch runtime activity',
-    start: <Activity className={iconClassName} />,
+    start: <IconElectrocardiogram className={iconClassName} />,
     end: <span className={badgeClassName}>Beta</span>,
   },
 ];
@@ -206,19 +212,19 @@ export const IconOnlyValue: Story = {
       {
         label: 'Database',
         value: 'database',
-        start: <Database className={iconClassName} />,
+        start: <IconServer1 className={iconClassName} />,
         displayLabel: <span className="sr-only">Database</span>,
       },
       {
         label: 'Metrics',
         value: 'metrics',
-        start: <Gauge className={iconClassName} />,
+        start: <IconGauge className={iconClassName} />,
         displayLabel: <span className="sr-only">Metrics</span>,
       },
       {
         label: 'Branches',
         value: 'branches',
-        start: <GitBranch className={iconClassName} />,
+        start: <IconBranch className={iconClassName} />,
         displayLabel: <span className="sr-only">Branches</span>,
       },
     ],

@@ -55,6 +55,9 @@ describeForAllEngines('AIMock loop scenario: throwing stopWhen', engine => {
     expect(streamError).toMatchObject({ message: 'stopWhen exploded' });
     expect(toolCalls).toBe(1);
     expect(requests).toHaveLength(1);
+    // Same contract as parity-stop-when (COR-1430), which cannot run Inngest: the stream
+    // rejects instead of delivering an error chunk.
     expect(chunks!.some(chunk => chunk.type === 'finish')).toBe(false);
+    expect(chunks!.some(chunk => chunk.type === 'error')).toBe(false);
   });
 });

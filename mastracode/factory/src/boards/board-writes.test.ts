@@ -5,12 +5,14 @@ import { join } from 'node:path';
 
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage } from '@mastra/pg';
-import { describe, expect, it, onTestFinished } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import { projectSkillNamesOf } from '../skills/catalog.js';
 import type { EmitAuditInput } from '../storage/domains/audit/domain.js';
 import { StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { StoredPhaseInput } from '../storage/domains/boards/base.js';
 import { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import { SkillOverridesStorage } from '../storage/domains/skill-overrides/base.js';
 import { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { BoardWriteError, BoardWrites } from './board-writes.js';
 import type { BoardWriter } from './board-writes.js';
@@ -57,19 +59,106 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board writes on
     const projects = factoryStorage.registerDomain(new FactoryProjectsStorage());
     const workItems = factoryStorage.registerDomain(new WorkItemsStorage());
     const storage = factoryStorage.registerDomain(new StoredBoardsStorage());
+    const skillOverrides = factoryStorage.registerDomain(new SkillOverridesStorage());
     await factoryStorage.init();
     onTestFinished(() => factoryStorage.close());
 
     const orgId = `org-${randomUUID()}`;
     const project = await projects.create({ orgId, userId: 'admin', input: { name: 'Acme' } });
     const scope = { orgId, factoryProjectId: project.id };
-    const boards = new ProjectBoardCache({ codeRegistry: createBoardRegistry(), storage, projects, warn: () => {} });
+    const boards = new ProjectBoardCache({
+      codeRegistry: createBoardRegistry(),
+      storage,
+      projects,
+      projectSkills: projectSkillNamesOf(skillOverrides),
+      recheckMs: 0,
+      warn: () => {},
+    });
     const audits: EmitAuditInput[] = [];
     const writer: BoardWriter = { id: 'admin', audit: async input => void audits.push(input) };
     const writes = new BoardWrites({ storage, boards, workItems });
     const served = async (key: string) => (await boards.describe(scope)).registry.get(key);
-    return { storage, workItems, scope, boards, writes, writer, audits, served };
+    return { storage, workItems, skillOverrides, scope, boards, writes, writer, audits, served };
   }
+
+  it("runs a skill the project created, and flags the phase once it's deleted", async () => {
+    const { writes, writer, scope, boards, skillOverrides } = await setup();
+    const notes = {
+      key: 'notes',
+      name: 'Release notes',
+      phases: [
+        { key: 'queued', name: 'Queued', kind: 'resting', nextPhases: ['writing'] },
+        {
+          key: 'writing',
+          name: 'Writing',
+          kind: 'working',
+          runner: { context: 'writer', skill: 'release-notes' },
+          nextPhases: ['done'],
+        },
+        { key: 'done', name: 'Done', kind: 'terminal' },
+      ],
+    } satisfies { key: string; name: string; phases: StoredPhaseInput[] };
+    const skill = { orgId: scope.orgId, projectId: scope.factoryProjectId, skillName: 'release-notes' };
+
+    expect(await refusal(() => writes.create(scope, notes, writer))).toMatchObject({
+      status: 422,
+      code: 'unknown_skill',
+    });
+
+    await skillOverrides.create({
+      ...skill,
+      content: '---\nname: release-notes\ndescription: Write release notes\n---\n\n# Notes\n',
+      updatedBy: 'admin',
+    });
+    await writes.create(scope, notes, writer);
+    expect((await boards.describe(scope)).details.get('notes')?.problems).toEqual([]);
+
+    // Another project has no such skill.
+    const other = { orgId: scope.orgId, factoryProjectId: randomUUID() };
+    expect(await boards.projectSkillNames(other)).toEqual(new Set());
+
+    await skillOverrides.delete(skill);
+    expect((await boards.describe(scope)).details.get('notes')?.problems).toEqual([
+      expect.stringContaining("runs skill 'release-notes', but no such skill exists"),
+    ]);
+  });
+
+  it("fails a write with the storage error, not unknown_skill, when the project's skills can't be read", async () => {
+    const { writes, writer, scope, skillOverrides, storage } = await setup();
+    vi.spyOn(skillOverrides, 'list').mockRejectedValueOnce(new Error('connection reset'));
+    await expect(writes.create(scope, bugs, writer)).rejects.toThrow('connection reset');
+    expect(await storage.get(scope, 'bugs')).toBeNull();
+  });
+
+  it("flags a created skill as missing only while the project's skills can't be read", async () => {
+    const { writes, writer, scope, boards, skillOverrides } = await setup();
+    const project = { orgId: scope.orgId, projectId: scope.factoryProjectId };
+    const create = (skillName: string) =>
+      skillOverrides.create({
+        ...project,
+        skillName,
+        content: `---\nname: ${skillName}\ndescription: A skill\n---\n\n# ${skillName}\n`,
+        updatedBy: 'admin',
+      });
+    await create('release-notes');
+    const runsNotes = {
+      ...bugs,
+      phases: bugs.phases.map(phase =>
+        phase.key === 'fixing' ? { ...phase, runner: { context: 'work', skill: 'release-notes' } } : phase,
+      ),
+    };
+    await writes.create(scope, runsNotes, writer);
+    const problems = async () => (await boards.describe(scope)).details.get('bugs')?.problems;
+    expect(await problems()).toEqual([]);
+
+    // Another save moves the revision; the names read after it fails once.
+    await create('changelog');
+    vi.spyOn(skillOverrides, 'list').mockRejectedValueOnce(new Error('connection reset'));
+    expect(await problems()).toEqual([expect.stringContaining("runs skill 'release-notes', but no such skill exists")]);
+
+    // The revision hasn't moved since, but the next load reads the names again.
+    expect(await problems()).toEqual([]);
+  });
 
   it('creates a board, serves it at once, and records who did it', async () => {
     const { writes, writer, scope, audits, served } = await setup();
@@ -167,14 +256,14 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board writes on
           {
             ...work,
             phases: work.phases.map(phase =>
-              phase.key === 'triage' ? { ...phase, runner: { ...phase.runner, context: 'work' } } : phase,
+              // Runner fields are plain stored fields now; a terminal phase code moves cards to is still locked.
+              phase.key === 'done' ? { ...phase, kind: 'resting' as const } : phase,
             ),
           },
           { expectedRevision: 1, writer },
         ),
       ),
       await refusal(() => writes.create(scope, { ...bugs, key: 'work' }, writer)),
-      await refusal(() => writes.replace(scope, 'review', definition, { expectedRevision: 1, writer })),
       await refusal(() => writes.reset(scope, 'bugs', { expectedRevision: 1, writer })),
       await refusal(() =>
         writes.replace(
@@ -201,7 +290,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board writes on
       [422, 'unknown_skill'],
       [422, 'code_behaviour'],
       [409, 'code_board'],
-      [409, 'code_board'],
       [409, 'not_code_board'],
       [409, 'phase_in_use'],
       [409, 'board_in_use'],
@@ -209,11 +297,32 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board writes on
       [404, 'board_not_found'],
       [409, 'board_exists'],
     ]);
-    expect(refusals[2]!.body.conflicts).toEqual([
-      'Phase "triage" runs its code handlers in the "triage" context; keep runner.context.',
-    ]);
+    expect(refusals[2]!.body.conflicts).toEqual(['Phase "done" must stay terminal; its code behaviour depends on it.']);
     expect(await storage.readVersion(scope)).toBe(version);
     expect(audits.map(audit => audit.action)).toEqual(['factory.board.created']);
+  });
+
+  it('writes a board under the key `review` like any other key', async () => {
+    const { writes, writer, scope, storage, served } = await setup();
+    await served('work');
+    const { key: _key, ...definition } = bugs;
+    const review = { ...bugs, key: 'review' };
+
+    expect(writes.validate(review).key).toBe('review');
+    expect(await writes.upsert(scope, review, writer)).toBe('inserted');
+    expect((await served('review'))!.name).toBe('Bugs');
+    expect((await refusal(() => writes.create(scope, review, writer))).body).toEqual({
+      error: 'board_exists',
+      message: 'Board "review" already exists in this project.',
+    });
+    await writes.replace(scope, 'review', { ...definition, name: 'Reviews' }, { expectedRevision: 1, writer });
+    expect((await served('review'))!.name).toBe('Reviews');
+    expect((await refusal(() => writes.reset(scope, 'review', { expectedRevision: 2, writer }))).code).toBe(
+      'not_code_board',
+    );
+    await writes.remove(scope, 'review', { expectedRevision: 2, writer });
+    expect(await storage.get(scope, 'review')).toBeNull();
+    expect(await served('review')).toBeUndefined();
   });
 
   it('deletes a board no card sits on', async () => {

@@ -32,7 +32,16 @@
         "type": "toggle"
       }
     ],
-    "z-ai/glm-5": [
+    "moonshotai/kimi-k3": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "moonshotai/kimi-k2.6": [
       {
         "type": "toggle"
       }
@@ -41,6 +50,11 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "z-ai/glm-5": [
+      {
+        "type": "toggle"
       }
     ],
     "z-ai/glm-5.2": [
@@ -60,23 +74,18 @@
         "type": "toggle"
       }
     ],
-    "moonshotai/kimi-k3": [
+    "deepseek/deepseek-v3.1": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "deepseek/deepseek-v4-flash": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "moonshotai/kimi-k2.6": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek/deepseek-v3.1": [
-      {
-        "type": "toggle"
       }
     ],
     "deepseek/deepseek-v3.2": [
@@ -91,15 +100,6 @@
       {
         "type": "effort",
         "values": ["high", "max"]
-      }
-    ],
-    "deepseek/deepseek-v4-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ]
   }

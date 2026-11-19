@@ -12,6 +12,7 @@ import type { TraceQueryRelatedScope } from '../../trace-query-filters';
 import { getSelectedEntityOption } from './traces-explorer-actions';
 import { useTracesConfig, useTracesFilters } from './traces-explorer-context';
 import { useTracesDiscovery } from './use-traces-discovery';
+import { withTokenSearchFields } from '@/domains/observability/lib/token-search-predicate';
 import { isFilterBarGroup } from '@/ds/components/FilterBar';
 import type { FilterBarExpression, FilterBarField, FilterBarItem } from '@/ds/components/FilterBar';
 import {
@@ -26,6 +27,7 @@ const NO_SUGGESTIONS: string[] = [];
 export function useTracesFilterBarFields(): FilterBarField[] {
   const {
     hiddenFieldIds,
+    withTokenSearch,
     withQueryTrace,
     withRootDuration,
     withTimeToFirstChunk,
@@ -46,22 +48,26 @@ export function useTracesFilterBarFields(): FilterBarField[] {
   return useMemo(
     () => [
       FILTER_BAR_TIME_RANGE_FIELD,
-      ...createTraceFilterBarFields({
-        availableRootEntityNames: rootEntityNames,
-        availableEnvironments: environments,
-        hiddenFieldIds,
-        metadataFields,
-        canonicalTraceFields: canonicalFields,
-        valueSuggestions: withQueryTrace
-          ? (relatedScope: TraceQueryRelatedScope | 'trace', path: string) =>
-              createTraceQueryValuesResolver(client, discoveryTimeRange, relatedScope, path)
-          : undefined,
-        withQueryTrace,
-        withRootDuration,
-        withTimeToFirstChunk,
-        withTimeToFirstToken,
-        withOutcomeFields,
-      }),
+      ...withTokenSearchFields(
+        createTraceFilterBarFields({
+          availableRootEntityNames: rootEntityNames,
+          availableEnvironments: environments,
+          hiddenFieldIds,
+          metadataFields,
+          canonicalTraceFields: canonicalFields,
+          valueSuggestions: withQueryTrace
+            ? (relatedScope: TraceQueryRelatedScope | 'trace', path: string) =>
+                createTraceQueryValuesResolver(client, discoveryTimeRange, relatedScope, path)
+            : undefined,
+          withQueryTrace,
+          withRootDuration,
+          withTimeToFirstChunk,
+          withTimeToFirstToken,
+          withOutcomeFields,
+        }),
+        withTokenSearch,
+        'spans.',
+      ),
     ],
     [
       rootEntityNames,
@@ -69,6 +75,7 @@ export function useTracesFilterBarFields(): FilterBarField[] {
       hiddenFieldIds,
       metadataFields,
       canonicalFields,
+      withTokenSearch,
       withQueryTrace,
       withRootDuration,
       withTimeToFirstChunk,

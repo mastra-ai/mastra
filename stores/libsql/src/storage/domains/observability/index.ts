@@ -48,11 +48,28 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
   };
 
   #db: LibSQLDB;
+  #persistenceLocation: 'local' | 'remote' | undefined;
+
+  override get persistenceLocation(): 'local' | 'remote' | undefined {
+    return this.#persistenceLocation;
+  }
 
   constructor(config: LibSQLDomainConfig) {
     super();
     const client = resolveClient(config);
-    this.#db = new LibSQLDB({ client, maxRetries: config.maxRetries, initialBackoffMs: config.initialBackoffMs });
+    // Embedded replicas still write a local file even when a sync URL is set.
+    this.#persistenceLocation =
+      config.embeddedReplica || client.protocol === 'file'
+        ? 'local'
+        : ['http', 'https', 'ws', 'wss'].includes(client.protocol)
+          ? 'remote'
+          : undefined;
+    this.#db = new LibSQLDB({
+      client,
+      maxRetries: config.maxRetries,
+      initialBackoffMs: config.initialBackoffMs,
+      getLogger: () => this.logger,
+    });
   }
 
   async init(): Promise<void> {

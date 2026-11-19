@@ -1,5 +1,7 @@
+import { phaseMayStartRun } from '@mastra/factory/boards/busy-card';
+import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
+
 import type { InstalledPhaseInfo } from '../../../api/types';
-import type { SessionRowStatus } from '../workspaces/services/sessionStatus';
 import type { FactoryDecisionSummary } from './services/decisions';
 
 /** A card has one status row, so every announcement it could make resolves to one of these. */
@@ -15,7 +17,7 @@ export type BoardCardOwner =
   | { kind: 'free' }
   | { kind: 'you'; progressLabel: string }
   | { kind: 'automation'; progressLabel: string }
-  | { kind: 'session'; status: SessionRowStatus };
+  | { kind: 'session' };
 
 export interface BoardCardState {
   status: BoardCardStatus;
@@ -27,21 +29,26 @@ export interface BoardCardStateInput {
   /** Run a rule parked on this card, held until someone releases it. */
   proposal?: { label: string; decisionId: string };
   /** Destination of an in-flight stage move. */
-  moving?: { stage: string; label: string };
+  moving?: { stage: string; label: string; completes?: boolean };
   /** Status text for the window between the click and the session mutation. */
   preparing?: string;
   retryRequested?: boolean;
   /** Rule effect the server is still working through, or gave up on. */
   decision?: FactoryDecisionSummary;
+  /** The effect's place in the run queue while it waits for a run slot. */
+  queuePosition?: number;
   /** Why the server refused the last move. */
   transitionReason?: string;
-  /** What the run registry and workspace records say about the card's bound sessions. */
+  /** The card's marker: the status its row in the sidebar shows. */
   sessionStatus?: SessionRowStatus;
+  /** One of the card's sessions is coming up, running, or parked on a person. */
+  sessionHolds?: boolean;
   /** Triage left the card in Intake for a person to decide on. */
   held?: boolean;
 }
 
 const FREE: BoardCardOwner = { kind: 'free' };
+const SESSION: BoardCardOwner = { kind: 'session' };
 
 /**
  * One pass over the card's inputs, freshest intent first: your own in-flight
@@ -59,19 +66,22 @@ export function boardCardState(input: BoardCardStateInput): BoardCardState {
       wick: sessionStatus,
     };
   }
-  const automation = decision === undefined ? undefined : automationOnCard(decision, sessionStatus);
+  const automation =
+    decision !== undefined
+      ? automationOnCard(decision, sessionStatus, input.queuePosition)
+      : input.queuePosition !== undefined
+        ? queuedOnCard(input.queuePosition)
+        : undefined;
   const refusedMove: BoardCardStatus | undefined =
     transitionReason === undefined ? undefined : { kind: 'error', label: transitionReason };
-  const sessionOwner: BoardCardOwner | undefined =
-    sessionStatus === undefined ? undefined : { kind: 'session', status: sessionStatus };
   return {
     status: refusedMove ?? automation?.status ?? statusWhenNothingInFlight(input),
-    owner: sessionOwner ?? automation?.owner ?? FREE,
+    owner: input.sessionHolds ? SESSION : (automation?.owner ?? FREE),
     wick: sessionStatus,
   };
 }
 
-export const BUSY_CARD_MOVE_REFUSAL = "Another run can't start while this card is busy.";
+export { BUSY_CARD_MOVE_REFUSAL } from '@mastra/factory/boards/busy-card';
 
 export function canStartRun(ownerKind: BoardCardOwner['kind']): boolean {
   return ownerKind === 'free';
@@ -85,10 +95,6 @@ export function canMoveTo(
   return canStartRun(ownerKind) || !phaseMayStartRun(phaseKind);
 }
 
-function phaseMayStartRun(phaseKind: InstalledPhaseInfo['kind'] | undefined): boolean {
-  return phaseKind !== 'resting' && phaseKind !== 'terminal';
-}
-
 function sessionIsLive(sessionStatus: SessionRowStatus | undefined): boolean {
   return sessionStatus === 'initializing' || sessionStatus === 'working';
 }
@@ -96,7 +102,7 @@ function sessionIsLive(sessionStatus: SessionRowStatus | undefined): boolean {
 function yourRequest(input: BoardCardStateInput): { statusLabel: string; progressLabel: string } | undefined {
   const { moving } = input;
   if (moving) {
-    const statusLabel = moving.stage === 'done' ? 'Marking done…' : `Moving to ${moving.label}…`;
+    const statusLabel = moving.completes ? `Marking ${moving.label.toLowerCase()}…` : `Moving to ${moving.label}…`;
     return { statusLabel, progressLabel: 'Moving…' };
   }
   if (input.preparing !== undefined) return { statusLabel: input.preparing, progressLabel: 'Starting…' };
@@ -107,6 +113,7 @@ function yourRequest(input: BoardCardStateInput): { statusLabel: string; progres
 function automationOnCard(
   decision: FactoryDecisionSummary,
   sessionStatus: SessionRowStatus | undefined,
+  queuePosition: number | undefined,
 ): { status?: BoardCardStatus; owner: BoardCardOwner } {
   const copy = automationCopy(decision);
   const detail = decision.lastError ?? undefined;
@@ -128,9 +135,17 @@ function automationOnCard(
       owner: { kind: 'automation', progressLabel: 'Retrying…' },
     };
   }
+  if (queuePosition !== undefined) return queuedOnCard(queuePosition);
   const owner: BoardCardOwner = { kind: 'automation', progressLabel: copy.progressLabel };
   if (runAnnouncedByWick(decision, sessionStatus)) return { owner };
   return { status: { kind: 'busy', label: copy.busy }, owner };
+}
+
+function queuedOnCard(position: number): { status: BoardCardStatus; owner: BoardCardOwner } {
+  return {
+    status: { kind: 'busy', label: `Queued (#${position})` },
+    owner: { kind: 'automation', progressLabel: 'Queued' },
+  };
 }
 
 function statusWhenNothingInFlight(input: BoardCardStateInput): BoardCardStatus {
@@ -138,26 +153,12 @@ function statusWhenNothingInFlight(input: BoardCardStateInput): BoardCardStatus 
   // A held card's live question is the maintainer's decision, even when a run
   // has been suggested for it: the card cannot start that run until it is accepted.
   if (input.held) {
-    return { kind: 'held', label: 'Triaged and waiting for you' };
+    return { kind: 'held', label: 'Held for your go-ahead' };
   }
   if (input.proposal) {
     return { kind: 'waiting', label: input.proposal.label, decisionId: input.proposal.decisionId };
   }
   return { kind: 'idle' };
-}
-
-/**
- * The sidebar's reading of a card's `waiting` and `error` kinds: a run parked
- * for approval, or an effect that failed for good. A retry the server still
- * owns is not a person's turn, and neither is a proposal that an effect in
- * flight already outranks on the card.
- */
-export function itemAwaitsPerson(
-  proposal: FactoryDecisionSummary | undefined,
-  effect: FactoryDecisionSummary | undefined,
-): boolean {
-  if (effect) return effect.status === 'failed';
-  return proposal !== undefined;
 }
 
 /** The system a linked card is synced with, named the way that system names the thing. */

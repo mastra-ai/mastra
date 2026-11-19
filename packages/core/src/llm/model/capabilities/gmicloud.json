@@ -20,6 +20,7 @@
     "deepseek-ai/DeepSeek-V4-Flash",
     "deepseek-ai/DeepSeek-V4-Pro",
     "moonshotai/Kimi-K2.6",
+    "openai/gpt-5.5",
     "zai-org/GLM-5-FP8",
     "zai-org/GLM-5.1-FP8",
     "zai-org/GLM-5.2-FP8"
@@ -35,15 +36,17 @@
     "zai-org/GLM-5.2-FP8"
   ],
   "reasoning": {
-    "zai-org/GLM-5.2-FP8": [
+    "anthropic/claude-opus-4.6": [
       {
-        "type": "effort",
-        "values": ["high", "max"]
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 127999
       }
     ],
-    "MiniMaxAI/MiniMax-M3": [
+    "anthropic/claude-opus-4.8": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "anthropic/claude-sonnet-4.6": [
@@ -59,17 +62,14 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "anthropic/claude-opus-4.6": [
+    "Qwen/Qwen3.8-Max": [
       {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 127999
+        "type": "toggle"
       }
     ],
-    "anthropic/claude-opus-4.8": [
+    "Qwen/Qwen3.8-Flash": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "type": "toggle"
       }
     ],
     "openai/gpt-5.5": [
@@ -78,12 +78,13 @@
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
-    "Qwen/Qwen3.8-Max": [
+    "zai-org/GLM-5.2-FP8": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["high", "max"]
       }
     ],
-    "Qwen/Qwen3.8-Flash": [
+    "MiniMaxAI/MiniMax-M3": [
       {
         "type": "toggle"
       }

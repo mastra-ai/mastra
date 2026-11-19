@@ -1,5 +1,6 @@
-import { ExternalLinkIcon, Link2Icon } from 'lucide-react';
 import { dataKeysAndValuesValueStyles } from './shared';
+import { IconChainLink3 } from '@/ds/icons/central/IconChainLink3';
+import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -24,7 +25,7 @@ export function DataKeysAndValuesValueLink({ className, children, href, as }: Da
   const linkClassName = cn(
     'flex items-center gap-2 truncate hover:text-foreground',
     controlStateColorTransition,
-    '[&:hover>svg]:opacity-100 [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:opacity-70',
+    '[&:hover>svg]:opacity-100 [&>svg]:size-icon-md [&>svg]:shrink-0 [&>svg]:opacity-70',
   );
 
   if (isExternal) {
@@ -32,7 +33,7 @@ export function DataKeysAndValuesValueLink({ className, children, href, as }: Da
       <dd className={cn(dataKeysAndValuesValueStyles, className)}>
         <a href={href} target="_blank" rel="noopener noreferrer" className={linkClassName}>
           <span>{children}</span>
-          <ExternalLinkIcon />
+          <IconSquareArrowTopRight />
         </a>
       </dd>
     );
@@ -42,7 +43,7 @@ export function DataKeysAndValuesValueLink({ className, children, href, as }: Da
     <dd className={cn(dataKeysAndValuesValueStyles, className)}>
       <Component {...navigationProps} className={linkClassName}>
         <span>{children}</span>
-        <Link2Icon />
+        <IconChainLink3 />
       </Component>
     </dd>
   );

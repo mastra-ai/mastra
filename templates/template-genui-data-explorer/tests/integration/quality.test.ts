@@ -344,7 +344,7 @@ it("live_benchmark_protocol_is_bounded_separate_and_not_retried", async () => {
     expect(budget.concurrency).toBe(1);
     expect(budget.paidRetries).toBe(0);
     expect(budget.calls).toBe(192);
-    const bounded = new BenchmarkModel({ providerId: "openai", modelId: "gpt-4.1-mini" }, budget);
+    const bounded = new BenchmarkModel({ providerId: "openai", modelId: "gpt-6-luna" }, budget);
     expect(() =>
       bounded.doGenerate({
         prompt: [{ role: "user", content: [{ type: "text", text: "x".repeat(65537) }] }],

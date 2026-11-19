@@ -72,7 +72,7 @@ describe('SidebarSettingsLink', () => {
     expect(within(link).getByRole('img', { name: 'Dev' })).toHaveAttribute('src', avatarUrl);
     await user.click(link);
 
-    expect(currentPath()).toHaveTextContent('/factories/fp-1/settings/preferences');
+    expect(currentPath()).toHaveTextContent('/factories/fp-1/settings/account');
     expect(screen.getByRole('link', { name: 'Settings for Dev' })).toHaveAttribute('aria-current', 'page');
   });
 
@@ -123,7 +123,7 @@ describe('SidebarSettingsLink', () => {
     link.focus();
     await user.keyboard('{Enter}');
 
-    expect(currentPath()).toHaveTextContent('/factories/fp-1/settings/preferences');
+    expect(currentPath()).toHaveTextContent('/factories/fp-1/settings/account');
   });
 
   it.each([404, 401, 500])('keeps settings available without a signed-in account (HTTP %s)', async status => {
@@ -133,6 +133,6 @@ describe('SidebarSettingsLink', () => {
 
     await user.click(await screen.findByRole('link', { name: 'Settings' }));
 
-    expect(currentPath()).toHaveTextContent('/factories/fp-1/settings/preferences');
+    expect(currentPath()).toHaveTextContent('/factories/fp-1/settings/account');
   });
 });

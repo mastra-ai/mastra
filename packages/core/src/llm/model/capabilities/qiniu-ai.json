@@ -169,12 +169,12 @@
     "z-ai/glm-5"
   ],
   "reasoning": {
-    "doubao-seed-2.0-lite": [
+    "doubao-seed-1.6-flash": [
       {
         "type": "toggle"
       }
     ],
-    "qwen3.5-397b-a17b": [
+    "glm-4.5-air": [
       {
         "type": "toggle"
       }
@@ -184,27 +184,27 @@
         "type": "toggle"
       }
     ],
-    "qwen-turbo": [
+    "qwen3-32b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "doubao-seed-1.6": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "doubao-seed-2.0-code": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3.5-397b-a17b": [
       {
         "type": "toggle"
       }
     ],
     "doubao-seed-2.0-pro": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "doubao-seed-2.0-mini": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "doubao-seed-1.6-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-4.5-air": [
       {
         "type": "toggle"
       }
@@ -219,17 +219,17 @@
         "type": "toggle"
       }
     ],
-    "qwen3-32b": [
+    "doubao-seed-2.0-lite": [
       {
         "type": "toggle"
       }
     ],
-    "doubao-seed-2.0-code": [
+    "doubao-seed-2.0-mini": [
       {
         "type": "toggle"
       }
     ],
-    "doubao-seed-1.6": [
+    "qwen-turbo": [
       {
         "type": "toggle"
       }
@@ -239,12 +239,12 @@
         "type": "toggle"
       }
     ],
-    "z-ai/glm-4.7": [
+    "z-ai/glm-4.6": [
       {
         "type": "toggle"
       }
     ],
-    "z-ai/glm-4.6": [
+    "z-ai/glm-4.7": [
       {
         "type": "toggle"
       }
