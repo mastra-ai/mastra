@@ -23,6 +23,7 @@ import { emptyBreakdownFixture } from '../../metrics/components/__tests__/fixtur
 import { aggregateCapabilities } from '../../metrics/components/__tests__/fixtures/trace-aggregate';
 import { serveCapabilities } from '../../metrics/components/__tests__/metrics-msw';
 import type { MetricsScope } from '../../metrics/hooks/use-metrics';
+import { shortViewLabels } from '../lib/view-labels';
 import { METRICS_DASHBOARD } from '../metrics-dashboard';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL } from '@/test/render';
@@ -108,6 +109,25 @@ export function recordRequests() {
 /** React's `useId` values and Recharts' chart ids differ between two trees; they say nothing about the markup. */
 export const normalise = (html: string) => html.replace(/_r_[0-9a-z]+_|:r[0-9a-z]+:|recharts\d+-clip/g, 'ID');
 
+/** A card's markup without its top bar and view tabs: what a widget whose views are tabs shares with a card whose views are a title menu. */
+function bodyMarkup(root: HTMLElement) {
+  const clone = root.cloneNode(true);
+  if (!(clone instanceof HTMLElement)) throw new Error('Expected an element');
+  clone.querySelector('[class*="group/metrics-card"]')?.firstElementChild?.remove();
+  clone.querySelector('[data-slot="tabs"]')?.remove();
+  return clone.innerHTML;
+}
+
+/**
+ * Same markup. A widget that lists its views as tabs (the Breakdown) titles itself apart from the card's
+ * title menu, so then only the bodies are compared.
+ */
+export function expectSameMarkup(card: HTMLElement, widget: HTMLElement, message?: string) {
+  const tabs = widget.querySelector('[data-slot="tabs"]') !== null;
+  const markup = (root: HTMLElement) => normalise(tabs ? bodyMarkup(root) : root.innerHTML);
+  expect(markup(widget), message).toBe(markup(card));
+}
+
 /** Waits until nothing is in flight and the request count has stopped growing. */
 export async function settle(recorder: ReturnType<typeof recordRequests>) {
   let last = -1;
@@ -135,11 +155,26 @@ export function find(container: HTMLElement, selector: string): HTMLElement {
 export function expectSame(card: Rendered, widget: Rendered) {
   expect(widget.root).not.toBeNull();
   expect(widget.sent.toSorted()).toEqual(card.sent.toSorted());
-  expect(normalise(widget.root.innerHTML)).toBe(normalise(card.root.innerHTML));
+  expectSameMarkup(card.root, widget.root);
 }
 
-/** Picks a view from the card's title menu. The menu portals out, but only one is open at a time. */
+/**
+ * Picks a view: a tab, for a card that lists its views under its title (named by its short name,
+ * "Breakdown by agent" → "Agents"), else from the card's title menu. The menu portals out, but only
+ * one is open at a time.
+ */
 export function pickIn(root: HTMLElement, view: string) {
+  if (within(root).queryAllByRole('tab', { hidden: true }).length) {
+    const [name] = shortViewLabels([view, 'Breakdown by view']);
+    const tab = within(root).queryByRole('tab', { name });
+    if (tab) fireEvent.click(tab);
+    else {
+      // Folded into the "+N" menu.
+      fireEvent.click(within(root).getByRole('button', { name: /more tabs$/ }));
+      fireEvent.click(screen.getByRole('menuitem', { name }));
+    }
+    return;
+  }
   const trigger = within(root)
     .getAllByRole('button')
     .find(b => b.getAttribute('aria-haspopup') === 'menu');
@@ -179,7 +214,7 @@ export async function expectSameViewFromCache(card: Rendered, widget: Rendered, 
   await pickInBoth(card, widget, view);
   expect(card.sent.length).toBeGreaterThan(0);
   expect(widget.sent).toEqual([]);
-  expect(normalise(widget.root.innerHTML)).toBe(normalise(card.root.innerHTML));
+  expectSameMarkup(card.root, widget.root);
 }
 
 export const API = `${TEST_BASE_URL}/api/observability`;

@@ -3,7 +3,6 @@ import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
-import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
 import { LogDataPanel } from '@mastra/playground-ui/domains/logs/components/log-data-panel';
 import { LogsErrorContent } from '@mastra/playground-ui/domains/logs/components/logs-error-content';
 import { LogsListView } from '@mastra/playground-ui/domains/logs/components/logs-list-view';
@@ -23,20 +22,16 @@ import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { useLogs } from '@mastra/react/hooks/logs';
 import { useEntityNames, useEnvironments, useServiceNames, useTags, useTraceSpans } from '@mastra/react/hooks/traces';
 import { useCallback, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
-import { traceScoreLink } from '@/lib/app-routing';
 
 const crumbs = [navCrumb('/logs')];
 
 export default function LogsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
   const url = useLogsUrlState(searchParams, setSearchParams);
-  // Servers without the trace-query API list threads through `listTracesLight` and don't expose feedback.
-  const traceQuery = useTraceQueryAvailable();
   const { sort, onSortChange } = useUrlSort({
     searchParams,
     setSearchParams,
@@ -228,9 +223,6 @@ export default function LogsPage() {
         selectedSpanId={url.featuredSpanId ?? null}
         onSpanSelect={handleSpanSelect}
         onClose={handleTraceClose}
-        withQueryTrace={traceQuery.enabled}
-        withFeedback={traceQuery.enabled}
-        onOpenScore={(traceId, scoreId) => navigate(traceScoreLink(traceId, scoreId))}
       />
     </PageLayout>
   );

@@ -61,27 +61,6 @@ describe('AgentBuilderTitle', () => {
     expect(screen.queryByText('Support agent')).toBeNull();
   });
 
-  it('does not render a mode badge', () => {
-    render(
-      <FormWrapper>
-        <AgentBuilderTitle />
-      </FormWrapper>,
-    );
-
-    expect(screen.queryByTestId('agent-builder-mode-badge-build')).toBeNull();
-    expect(screen.queryByTestId('agent-builder-mode-badge-test')).toBeNull();
-  });
-
-  it('does not render the mode-toggle button (now rendered by the top bar)', () => {
-    render(
-      <FormWrapper>
-        <AgentBuilderTitle />
-      </FormWrapper>,
-    );
-
-    expect(screen.queryByTestId('agent-builder-mode-toggle')).toBeNull();
-  });
-
   it('falls back to "Untitled" when the name is whitespace', () => {
     render(
       <FormWrapper defaults={{ name: '   ' }}>

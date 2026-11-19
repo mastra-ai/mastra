@@ -3,7 +3,7 @@ import type { GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
 import { Profiler, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { ReactNode, ComponentProps } from 'react';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   TRACE_DATE_PRESET_PARAM,
@@ -15,13 +15,13 @@ import type { TraceColumnPreferences } from '../../../trace-list-columns';
 import { TracesExplorer, useTracesConfig, useTracesFilterBar, useTracesFilterBarFields } from '../index';
 import type {
   FeedbackOptions,
+  TracesExplorerFeatures,
   TracesExplorerLayoutProps,
   TracesExplorerPanelProps,
   TracesExplorerRootProps,
 } from '../index';
 import { DEFAULT_TRACES_FILTERS, DEFAULT_TRACES_SORT, EMPTY_TRACES_SELECTION } from '../traces-explorer-actions';
 import type { TracesExplorerState, TracesFilters, TracesSelection, TracesSort } from '../traces-explorer-actions';
-import type { TracesExplorerFeatures } from '../traces-explorer-context';
 import {
   emptyDatasets,
   emptyEntityNames,
@@ -51,7 +51,11 @@ import {
   weatherTraceSpans,
   weatherTraceUsage,
   workflowTracesPage,
+  weatherThreadLightTraces,
+  weatherThreadTraceSpans,
 } from './fixtures/traces-explorer';
+import { StudioFilterBar, StudioList, StudioPanel, StudioTracesExplorer } from './studio-traces-explorer';
+import type { StudioTracesExplorerProps } from './studio-traces-explorer';
 import {
   OBSERVABILITY_LIST_POLL_INTERVAL_MS,
   OBSERVABILITY_LIST_REFETCH_INTERVAL_MS,
@@ -168,7 +172,7 @@ type HarnessProps = {
   onChange?: (next: TracesExplorerState) => void;
   initialSort?: TracesSort;
   onSortChange?: (next: TracesSort) => void;
-  traceHref?: TracesExplorerPanelProps['traceHref'];
+  traceHref?: StudioTracesExplorerProps['traceHref'];
   renderError?: TracesExplorerLayoutProps['renderError'];
   panelProps?: Partial<TracesExplorerPanelProps>;
 };
@@ -194,7 +198,7 @@ function Harness({
   rootSource,
   feedbackOptions,
   baselineFilters,
-  filterBar = <TracesExplorer.FilterBar />,
+  filterBar,
   onChange,
   initialSort = DEFAULT_TRACES_SORT,
   onSortChange,
@@ -208,7 +212,7 @@ function Harness({
   const [sort, setSort] = useState<TracesSort>(initialSort);
 
   return (
-    <TracesExplorer
+    <StudioTracesExplorer
       selection={selection}
       filters={filters}
       onChange={next => {
@@ -227,6 +231,7 @@ function Harness({
       rootSource={rootSource}
       feedbackOptions={feedbackOptions}
       initialFilters={baselineFilters}
+      traceHref={traceHref}
     >
       <TracesExplorer.Layout
         renderError={renderError}
@@ -238,21 +243,21 @@ function Harness({
         }
         actionRow={
           <div>
-            {filterBar}
+            {filterBar ?? <StudioFilterBar />}
             <TracesExplorer.ColumnsMenu />
           </div>
         }
       >
-        <TracesExplorer.List />
-        <TracesExplorer.Panel onOpenScore={() => {}} traceHref={traceHref} {...panelProps} />
+        <StudioList />
+        <StudioPanel {...panelProps} />
       </TracesExplorer.Layout>
-    </TracesExplorer>
+    </StudioTracesExplorer>
   );
 }
 
-const renderExplorer = (props: HarnessProps = {}) =>
+const renderExplorer = (props: HarnessProps = {}, navigate?: ComponentProps<typeof TestLinkProvider>['navigate']) =>
   renderWithProviders(
-    <TestLinkProvider>
+    <TestLinkProvider navigate={navigate}>
       <Harness {...props} />
     </TestLinkProvider>,
   );
@@ -265,7 +270,13 @@ const settle = async (queryClient: { isFetching: () => number }) => {
 };
 
 const getFilterChips = () => [...document.querySelectorAll<HTMLElement>('[data-slot="filter-bar-chip"]')];
-const getTimeRange = () => screen.getByRole('group', { name: 'Time range', hidden: true });
+// By its slot, not its accessible name: while the trace drawer is open, its modal `aria-hidden` can land on
+// the group itself, which then has no accessible name.
+const getTimeRange = () => {
+  const group = document.querySelector<HTMLElement>('[data-slot="filter-bar-time-range"]');
+  if (!group) throw new Error('The time range chip is not rendered');
+  return group;
+};
 const traceRow = (input: string) => screen.getByRole('button', { name: new RegExp(input) });
 const traceDialog = () => screen.queryByRole('dialog', { name: 'Trace details' });
 
@@ -416,30 +427,37 @@ describe('TracesExplorer', () => {
   });
 
   describe('when a trace is open', () => {
-    const openTrace = async (traceHref?: TracesExplorerPanelProps['traceHref']) => {
+    const openTrace = async (
+      traceHref?: StudioTracesExplorerProps['traceHref'],
+      navigate?: ComponentProps<typeof TestLinkProvider>['navigate'],
+    ) => {
       setExplorerHandlers();
-      const { queryClient } = renderExplorer({
-        initialSelection: { ...EMPTY_TRACES_SELECTION, traceId: 'trace-weather' },
-        traceHref,
-      });
+      const { queryClient } = renderExplorer(
+        {
+          initialSelection: { ...EMPTY_TRACES_SELECTION, traceId: 'trace-weather' },
+          traceHref,
+        },
+        navigate,
+      );
       await settle(queryClient);
       const dialog = await screen.findByRole('dialog', { name: 'Trace details' });
       await within(dialog).findByRole('button', { name: 'Download trace JSON' });
       return dialog;
     };
 
-    it('links to the host trace page of the selected trace', async () => {
-      const dialog = await openTrace(traceId => `/observe/traces/${traceId}`);
+    it('opens the host trace page of the selected trace', async () => {
+      const navigate = vi.fn();
+      const dialog = await openTrace(traceId => `/observe/traces/${traceId}`, navigate);
 
-      expect(within(dialog).getByRole('link', { name: 'Open trace page' }).getAttribute('href')).toBe(
-        '/observe/traces/trace-weather',
-      );
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Open trace page' }));
+
+      expect(navigate).toHaveBeenCalledWith('/observe/traces/trace-weather');
     });
 
-    it('offers no trace page link without traceHref', async () => {
+    it('offers no trace page without traceHref', async () => {
       const dialog = await openTrace();
 
-      expect(within(dialog).queryByRole('link', { name: 'Open trace page' })).toBeNull();
+      expect(within(dialog).queryByRole('button', { name: 'Open trace page' })).toBeNull();
     });
   });
 
@@ -494,6 +512,50 @@ describe('TracesExplorer', () => {
       fireEvent.click(traceRow('What is the weather in Paris'));
 
       expect(await screen.findByRole('dialog', { name: 'Trace details' })).toBeTruthy();
+    });
+  });
+
+  describe('when the reader opens the full thread of an agent trace', () => {
+    const openFullThread = async () => {
+      setExplorerHandlers();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () => HttpResponse.json(weatherThreadLightTraces)),
+        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () =>
+          HttpResponse.json(weatherThreadTraceSpans),
+        ),
+      );
+      const utils = renderExplorer();
+      await settle(utils.queryClient);
+
+      fireEvent.click(traceRow('What is the weather in Paris'));
+      fireEvent.click(await screen.findByRole('button', { name: 'Open full thread' }));
+      const threadDialog = await screen.findByRole('dialog', { name: 'Thread weather-thread' });
+      return { ...utils, threadDialog };
+    };
+
+    it('stacks the thread in its own drawer above the trace drawer', async () => {
+      const { threadDialog } = await openFullThread();
+
+      expect(threadDialog.getAttribute('data-depth')).toBe('2');
+      expect(screen.getByRole('dialog', { name: 'Trace details', hidden: true })).toBeTruthy();
+    });
+
+    it('closes only the thread with "Back to trace"', async () => {
+      await openFullThread();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Back to trace' }));
+
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Thread weather-thread' })).toBeNull());
+      expect(screen.getByRole('dialog', { name: 'Trace details' })).toBeTruthy();
+    });
+
+    it('closes only the thread on Escape', async () => {
+      const { threadDialog } = await openFullThread();
+
+      fireEvent.keyDown(threadDialog, { key: 'Escape' });
+
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Thread weather-thread' })).toBeNull());
+      expect(screen.getByRole('dialog', { name: 'Trace details' })).toBeTruthy();
     });
   });
 
@@ -1410,8 +1472,8 @@ describe('TracesExplorer', () => {
       expect(within(dialog).getByRole('button', { name: 'Add to dataset' })).toBeTruthy();
     });
 
-    it('hides "Add to dataset" when the host turns it off', async () => {
-      const dialog = await openTracePanel({ withAddTraceToDataset: false });
+    it('hides "Add to dataset" when the host renders no dataset dialog', async () => {
+      const dialog = await openTracePanel({ renderDatasetDialog: undefined });
 
       expect(within(dialog).queryByRole('button', { name: 'Add to dataset' })).toBeNull();
       expect(within(dialog).getByRole('button', { name: 'Download trace JSON' })).toBeTruthy();
@@ -1647,7 +1709,7 @@ describe('TracesExplorer.Layout', () => {
   const renderLayout = () =>
     renderWithProviders(
       <TestLinkProvider>
-        <TracesExplorer
+        <StudioTracesExplorer
           selection={EMPTY_TRACES_SELECTION}
           filters={DEFAULT_TRACES_FILTERS}
           onChange={() => {}}
@@ -1660,13 +1722,13 @@ describe('TracesExplorer.Layout', () => {
             tabs={<nav aria-label="Views">Tabs</nav>}
             toolbar={
               <div role="toolbar" aria-label="Trace filters">
-                <TracesExplorer.FilterBar />
+                <StudioFilterBar />
               </div>
             }
           >
-            <TracesExplorer.List />
+            <StudioList />
           </TracesExplorer.Layout>
-        </TracesExplorer>
+        </StudioTracesExplorer>
       </TestLinkProvider>,
     );
 

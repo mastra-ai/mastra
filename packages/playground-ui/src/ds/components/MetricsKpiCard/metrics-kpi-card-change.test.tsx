@@ -39,13 +39,6 @@ describe('MetricsKpiCardChange caption', () => {
     expect(html).toContain('class="sr-only">+5.0% vs prior period (10)<');
   });
 
-  it('names the comparison window it is given', () => {
-    const html = renderToStaticMarkup(
-      <MetricsKpiCardChange changePct={-12.5} comparison="vs previous 7d" prevValue="693" />,
-    );
-    expect(html).toContain('-13% vs previous 7d (693)');
-  });
-
   it('shows the caption inline when asked', () => {
     const html = renderToStaticMarkup(<MetricsKpiCardChange changePct={5} caption />);
     expect(html).not.toContain('class="sr-only">vs prior period');

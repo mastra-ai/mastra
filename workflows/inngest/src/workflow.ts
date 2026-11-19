@@ -646,6 +646,7 @@ export class InngestWorkflow<
           this.options,
           parentStream,
           inngestRunId,
+          workflowSpanData,
         );
 
         let result: WorkflowResult<TState, TInput, TOutput, TSteps>;

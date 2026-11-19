@@ -3,8 +3,9 @@ import type { GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
 import { fireEvent, screen } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
+import { useObservabilityViews } from '../../hooks/use-observability-views';
 import { ObservabilityPageLayout } from '../observability-page-layout';
-import type { ObservabilityBreadcrumbsState } from '../observability-page-layout';
+import type { ObservabilityBreadcrumbsState, ObservabilityPageLayoutProps } from '../observability-page-layout';
 import { noThreadRowsCapabilities, threadQueryCapabilities } from '@/domains/threads/__tests__/fixtures/threads';
 import type { ObservabilityView } from '@/domains/traces/components/traces-spans-switch';
 import { server } from '@/test/msw-server';
@@ -15,20 +16,21 @@ const CAPABILITIES_URL = `${TEST_BASE_URL}/api/observability/capabilities`;
 const setCapabilities = (capabilities: GetObservabilityCapabilitiesResponse) =>
   server.use(http.get(CAPABILITIES_URL, () => HttpResponse.json(capabilities)));
 
+/** Studio's composition: the views come from the store's capabilities, through the Mastra client. */
+function StudioObservabilityLayout(props: Omit<ObservabilityPageLayoutProps, 'views'>) {
+  const views = useObservabilityViews({ current: props.current, features: { spanQuery: true, threadQuery: true } });
+  return <ObservabilityPageLayout {...props} views={views} />;
+}
+
 const renderLayout = (current: ObservabilityView) => {
   const onViewChange = vi.fn<(view: ObservabilityView) => void>();
   const breadcrumbs = vi.fn((state: ObservabilityBreadcrumbsState) => (
     <nav aria-label="Breadcrumb">{state.current}</nav>
   ));
   renderWithProviders(
-    <ObservabilityPageLayout
-      current={current}
-      features={{ spanQuery: true, threadQuery: true }}
-      onViewChange={onViewChange}
-      breadcrumbs={breadcrumbs}
-    >
+    <StudioObservabilityLayout current={current} onViewChange={onViewChange} breadcrumbs={breadcrumbs}>
       <p>Page body</p>
-    </ObservabilityPageLayout>,
+    </StudioObservabilityLayout>,
   );
   return { onViewChange, breadcrumbs };
 };

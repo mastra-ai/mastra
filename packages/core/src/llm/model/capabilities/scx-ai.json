@@ -35,7 +35,25 @@
     "gpt-oss-120b"
   ],
   "reasoning": {
-    "DeepSeek-V4-pro": [
+    "Kimi-K3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "GLM-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "Kimi-K3.1-Pro": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "DeepSeek-V4.1-flash": [
       {
         "type": "toggle"
       },
@@ -44,7 +62,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "DeepSeek-V4.1-flash": [
+    "DeepSeek-V4.1-flash-1017": [
       {
         "type": "toggle"
       },
@@ -59,55 +77,10 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "Qwen3.8-Max": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "DeepSeek-V4.1-flash-1017": [
+    "DeepSeek-V4-pro": [
       {
         "type": "toggle"
       },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "GLM-5.2-Fast": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "Kimi-K3.1-Pro": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "DeepSeek-V4-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "Kimi-K3": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "GLM-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "GLM-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -119,10 +92,37 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "DeepSeek-V4-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "GLM-5.3-Flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "Qwen3.8-Max": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "GLM-5.2-Fast": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
       }
     ]
   }

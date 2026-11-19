@@ -10,6 +10,8 @@ describe('triage agent and workflow boundaries', () => {
   it('registers a tool-free fixed-model response planner', async () => {
     expect(Object.keys(await responsePlanner.getToolsForExecution({}))).toEqual([]);
     expect(responsePlanner.getModel()).resolves.toMatchObject({
+      // Pinned to the response planner's own default, which the recorded eval
+      // dataset hash freezes; it only holds while MASTRA_MODEL is unset.
       modelId: 'gpt-4o-mini',
     });
   });

@@ -102,7 +102,6 @@ function ReviewQueuePage() {
 
   return (
     <DatasetReview
-      withQueryTrace={traceQuery.enabled}
       withFeedback={traceQuery.enabled}
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       datasetId={selected?.datasetId ?? undefined}

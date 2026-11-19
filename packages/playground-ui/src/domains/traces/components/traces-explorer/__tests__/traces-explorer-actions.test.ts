@@ -342,7 +342,7 @@ describe('resolveTracesDateWindow', () => {
       vi.setSystemTime(new Date('2026-06-10T12:00:00.000Z'));
 
       expect(resolveTracesDateWindow('last-3d', new Date(0), new Date(1))).toEqual({
-        dateFrom: new Date(Date.now() - 72 * 3600_000),
+        dateFrom: new Date('2026-06-07T12:00:00.000Z'),
         dateTo: undefined,
       });
     });

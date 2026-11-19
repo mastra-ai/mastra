@@ -6,9 +6,9 @@ import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TracesExplorer } from '../index';
+import type { TracesExplorerFeatures } from '../index';
 import { DEFAULT_TRACES_FILTERS, DEFAULT_TRACES_SORT, EMPTY_TRACES_SELECTION } from '../traces-explorer-actions';
 import type { TracesFilters, TracesSort } from '../traces-explorer-actions';
-import type { TracesExplorerFeatures } from '../traces-explorer-context';
 import {
   emptyDatasets,
   emptyEntityNames,
@@ -25,6 +25,7 @@ import {
   twoTracesPage,
   weatherTraceUsage,
 } from './fixtures/traces-explorer';
+import { StudioFilterBar, StudioHistogram, StudioList, StudioTracesExplorer } from './studio-traces-explorer';
 import { useFixedChartSize } from '@/test/chart-size';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
@@ -108,7 +109,7 @@ function Harness({
       <button type="button" onClick={() => setFilters(current => ({ ...current, tokens: FAILED_ONLY }))}>
         Only failed traces
       </button>
-      <TracesExplorer
+      <StudioTracesExplorer
         selection={selection}
         filters={filters}
         onChange={next => {
@@ -121,11 +122,11 @@ function Harness({
         features={features}
         rootSource={rootSource}
       >
-        <TracesExplorer.FilterBar />
-        <TracesExplorer.Body chart={<TracesExplorer.Histogram />}>
-          <TracesExplorer.List />
+        <StudioFilterBar />
+        <TracesExplorer.Body chart={<StudioHistogram />}>
+          <StudioList />
         </TracesExplorer.Body>
-      </TracesExplorer>
+      </StudioTracesExplorer>
     </>
   );
 }

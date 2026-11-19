@@ -82,24 +82,9 @@ describe('findRecordIdAtOrBefore', () => {
     expect(findRecordIdAtOrBefore(records, cursor)).toBe('b');
   });
 
-  it('sorts ascending before matching, so descending input still yields the latest match', () => {
-    const descending = [
-      record('c', '2026-06-01T10:20:00.000Z'),
-      record('b', '2026-06-01T10:10:00.000Z'),
-      record('a', '2026-06-01T10:00:00.000Z'),
-    ];
-    const cursor = new Date('2026-06-01T10:15:00.000Z').getTime();
-
-    expect(findRecordIdAtOrBefore(descending, cursor)).toBe('b');
-  });
-
   it('returns the last record when the cursor is after all records', () => {
     const cursor = new Date('2026-06-01T11:00:00.000Z').getTime();
     expect(findRecordIdAtOrBefore(records, cursor)).toBe('c');
-  });
-
-  it('returns null when cursor is null', () => {
-    expect(findRecordIdAtOrBefore(records, null)).toBeNull();
   });
 
   it('returns null for a null cursor even when a record sits on the epoch', () => {

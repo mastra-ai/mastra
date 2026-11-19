@@ -1065,6 +1065,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     // The pair travels in the resume event and in every step the worker memoizes, so it leaves the
     // system prompt on the run's first span, as the core resume does.
     const { instructions: _instructions, ...attributes } = (previous.attributes ?? {}) as Record<string, unknown>;
+    const { threadId, resourceId } = (previous.metadata ?? {}) as { threadId?: string; resourceId?: string };
     try {
       // An unsampled run saved a no-op span, which yields no lineage: its resume stays unsampled.
       const resumeFrom = getResumeTracingContext(previous);
@@ -1081,6 +1082,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         attributes,
         metadata: {
           runId,
+          resourceId,
+          threadId,
           resumed: true,
           ...(resumeFrom ? { resumedFromSpanId: previous.id } : {}),
           ...(typeof resolvedVersionId === 'string' ? { entityVersionId: resolvedVersionId } : {}),
