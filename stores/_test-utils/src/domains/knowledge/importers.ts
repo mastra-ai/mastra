@@ -19,8 +19,11 @@ export interface KnowledgeImportersFixture {
   unprovisioned?: { store: KnowledgeStorage; importerTablesExist(): Promise<boolean> };
   /** Concurrent transactions run on separate connections, so row locks are observable. */
   concurrentTransactions: boolean;
-  /** How many sessions are waiting on a lock right now, so a race can wait for a waiter. */
-  lockWaiters?(): Promise<number>;
+  /**
+   * Lock observation for races: the database session of a transaction view, and how many sessions
+   * are blocked waiting on that session's locks. Left out where locks can't be observed.
+   */
+  locks?: { sessionOf(tx: KnowledgeStorage): Promise<number>; blockedBy(session: number): Promise<number> };
   cleanup(): Promise<void>;
 }
 
@@ -262,28 +265,41 @@ export function createKnowledgeImportersStorageTests(createFixture: () => Promis
       // A first-write flush holds the guard FOR UPDATE and then touches the run; a standalone finish
       // must take the guard before the run too, or each waits on the other's lock.
       it('settles a first-write flush and a concurrent finish of the same run without deadlock', async ctx => {
-        if (!fixture.concurrentTransactions || !fixture.lockWaiters) ctx.skip();
+        const locks = fixture.locks;
+        if (!fixture.concurrentTransactions || !locks) ctx.skip();
         await start();
         let releaseFlush!: () => void;
         const held = new Promise<void>(r => (releaseFlush = r));
-        let flushLocked!: () => void;
-        const locked = new Promise<void>(r => (flushLocked = r));
+        let flushSession!: (session: number) => void;
+        const locked = new Promise<number>(r => (flushSession = r));
         const flushing = fixture.store.transaction(async tx => {
           await importersOf(tx).lockWriterGuard('update');
           await importersOf(tx).markFirstWrite();
-          flushLocked();
+          flushSession(await locks!.sessionOf(tx));
           await held;
           await importersOf(tx).recordFlush({ runId, generation: 1, seq: 1, digest: 'd1', receipt: {}, counts });
         });
-        await locked;
-        const finishing = importers.finishRun({ runId, generation: 1, lastSeq: 1, status: 'succeeded', finish: {} });
-        const settled = Promise.allSettled([finishing]);
-        for (let i = 0; i < 200 && (await fixture.lockWaiters!()) < 1; i++) await new Promise(r => setTimeout(r, 10));
-        expect(await fixture.lockWaiters!()).toBeGreaterThanOrEqual(1);
-        releaseFlush();
-        await flushing;
-        const [finish] = await settled;
-        expect(finish.status).toBe('fulfilled');
+        let finishing: Promise<unknown> | undefined;
+        try {
+          // If the flush fails before it holds the guard, stop here rather than wait forever.
+          const session = await Promise.race([
+            locked,
+            flushing.then(() => Promise.reject(new Error('flush ended early'))),
+          ]);
+          finishing = importers.finishRun({ runId, generation: 1, lastSeq: 1, status: 'succeeded', finish: {} });
+          // Wait until the finish is blocked by this flush's session, not by anything else on the database.
+          let blocked = 0;
+          for (let i = 0; i < 300 && blocked < 1; i++) {
+            blocked = await locks!.blockedBy(session);
+            if (blocked < 1) await new Promise(r => setTimeout(r, 10));
+          }
+          expect(blocked).toBe(1);
+        } finally {
+          releaseFlush();
+          const [flush, finish] = await Promise.allSettled([flushing, finishing ?? Promise.resolve()]);
+          expect(flush.status).toBe('fulfilled');
+          expect(finish.status).toBe('fulfilled');
+        }
         expect(await importers.getRun(runId)).toMatchObject({ lastSeq: 1, status: 'succeeded' });
       });
     });

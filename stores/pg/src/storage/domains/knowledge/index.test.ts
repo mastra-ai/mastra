@@ -280,14 +280,17 @@ createKnowledgeImportersStorageTests(async () => {
     store,
     reader: new KnowledgePG({ pool: readerPool, schemaName: IMPORTERS_SCHEMA }),
     otherNamespace,
-    lockWaiters: async () =>
-      Number(
-        (
-          await readerPool.query(
-            `SELECT count(*) AS n FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND datname = current_database()`,
-          )
-        ).rows[0].n,
-      ),
+    locks: {
+      sessionOf: async tx => Number((await pgKnowledgeTransactionClient(tx).one('SELECT pg_backend_pid() AS pid')).pid),
+      blockedBy: async session =>
+        Number(
+          (
+            await readerPool.query(`SELECT count(*) AS n FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid))`, [
+              session,
+            ])
+          ).rows[0].n,
+        ),
+    },
     unprovisioned: {
       store: new KnowledgePG({ pool, schemaName: IMPORTERS_UNPROVISIONED_SCHEMA }),
       importerTablesExist: async () =>
