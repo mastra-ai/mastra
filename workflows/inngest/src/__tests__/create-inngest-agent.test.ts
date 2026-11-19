@@ -2604,6 +2604,13 @@ describe('InngestAgent observability tracing', () => {
         name: opts?.name,
         input: opts?.input,
         parent,
+        // `MastraModelOutput` reads the trace id off `getRootExportSpan`, which
+        // needs these on the span; without them a real observability setup would
+        // still report no trace id on the output.
+        isValid: true,
+        get externalTraceId() {
+          return span.traceId;
+        },
         end: vi.fn(),
         error: vi.fn(),
         update: vi.fn(),
@@ -2779,6 +2786,31 @@ describe('InngestAgent observability tracing', () => {
       id: agentRun.id,
       traceId: agentRun.traceId,
     });
+  });
+
+  it('reports the run trace id and span id on the stream result (#30871)', async () => {
+    // `result.traceId` is the documented way to link a score, feedback entry or
+    // log line to a run's trace. The Inngest stream was built without the run's
+    // AGENT_RUN span, so neither the output nor the result carried the ids.
+    const durableAgent = makeTracedAgent('tracing-result-ids');
+    const recording = createRecordingObservability();
+    (durableAgent as any).__setMastra(recording.mastra);
+    const sendSpy = vi.spyOn(inngest as any, 'send').mockResolvedValue(undefined as any);
+
+    const result = await durableAgent.stream([{ role: 'user', content: 'hi' }]);
+    try {
+      const agentRun = recording.spansOfType('agent_run')[0];
+      expect(agentRun).toBeDefined();
+      expect(result.output.traceId).toBe(agentRun.traceId);
+      expect(result.output.spanId).toBe(agentRun.id);
+      // The wrapper result surfaces the same ids so callers do not have to reach
+      // through `output` (regular Agent's stream result is the output itself).
+      expect(result.traceId).toBe(agentRun.traceId);
+      expect(result.spanId).toBe(agentRun.id);
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
   });
 });
 

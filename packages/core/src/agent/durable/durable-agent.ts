@@ -550,6 +550,13 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
   threadId?: string;
   /** Resource ID if using memory */
   resourceId?: string;
+  /**
+   * Trace id of this run's agent span, so a score, feedback entry or log line
+   * can be linked back to the run's trace. `undefined` when the run is untraced.
+   */
+  readonly traceId?: string;
+  /** Span id of this run's agent span. `undefined` when the run is untraced. */
+  readonly spanId?: string;
   /** Cleanup function to call when done (unsubscribes from pubsub) */
   cleanup: () => void;
   /**
@@ -3486,6 +3493,14 @@ export class DurableAgent<
       runId,
       threadId,
       resourceId,
+      // Surface the run's trace so callers can link scores, feedback and logs to
+      // it without reaching through `output`.
+      get traceId() {
+        return output.traceId;
+      },
+      get spanId() {
+        return output.spanId;
+      },
       cleanup,
       abort,
     };
@@ -4336,6 +4351,12 @@ export class DurableAgent<
       runId,
       threadId: memoryInfo?.threadId,
       resourceId: memoryInfo?.resourceId,
+      get traceId() {
+        return output.traceId;
+      },
+      get spanId() {
+        return output.spanId;
+      },
       cleanup,
       abort,
     };
@@ -4732,6 +4753,14 @@ export class DurableAgent<
       runId,
       threadId,
       resourceId,
+      // Surface the run's trace so callers can link scores, feedback and logs to
+      // it without reaching through `output`.
+      get traceId() {
+        return output.traceId;
+      },
+      get spanId() {
+        return output.spanId;
+      },
       cleanup,
       abort,
     };
@@ -6156,6 +6185,12 @@ export class DurableAgent<
       runId,
       threadId: memoryInfo?.threadId,
       resourceId: memoryInfo?.resourceId,
+      get traceId() {
+        return output.traceId;
+      },
+      get spanId() {
+        return output.spanId;
+      },
       cleanup,
       detach,
       abort,

@@ -719,4 +719,34 @@ describe('DurableAgent observability tracing', () => {
       spy.mockRestore();
     }
   }, 30000);
+
+  it('exposes the run trace id and span id on the stream result (#30871)', async () => {
+    const { spy, agentSpans } = await spyOnSpans();
+
+    try {
+      const baseAgent = new Agent({
+        id: 'trace-agent-result-ids',
+        name: 'Trace Agent (result ids)',
+        instructions: 'You are a test assistant',
+        model: createTextStreamModel('Hello') as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      registerWithMockObservability(durableAgent as unknown as Agent);
+
+      const result = await durableAgent.stream('Hi');
+      await result.output.consumeStream();
+
+      expect(agentSpans.length).toBe(1);
+      // The documented way to link a score, feedback entry or log line to a run's
+      // trace; the durable result used to report neither id.
+      expect(result.traceId).toBe(agentSpans[0].traceId);
+      expect(result.spanId).toBe(agentSpans[0].id);
+      expect(result.output.traceId).toBe(agentSpans[0].traceId);
+      expect(result.output.spanId).toBe(agentSpans[0].id);
+
+      result.cleanup();
+    } finally {
+      spy.mockRestore();
+    }
+  }, 30000);
 });

@@ -455,6 +455,13 @@ export interface InngestAgentStreamResult<OUTPUT = undefined> {
   threadId?: string;
   /** Resource ID if using memory */
   resourceId?: string;
+  /**
+   * Trace id of the run's agent span, so a score, feedback entry or log line can
+   * be linked back to the run's trace. `undefined` when the run is untraced.
+   */
+  readonly traceId?: string;
+  /** Span id of the run's agent span. `undefined` when the run is untraced. */
+  readonly spanId?: string;
   /** Cleanup function */
   cleanup: () => void;
   /**
@@ -1628,6 +1635,12 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         outputProcessors: registryEntry.outputProcessors,
         processorStates: registryEntry.processorStates,
         requestContext: registryEntry.requestContext,
+        // The run's AGENT_RUN span (opened at preparation) is the tracing root.
+        // Handing it to the stream is what makes `output.traceId`/`spanId` real
+        // and lets the output stamp engine-generated chunks (start, step-start,
+        // tool-result, finish) with the run's trace id — the same span core's
+        // durable agent passes.
+        tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
         onChunk: chunk => {
           // A parked segment is resumable; its observer's signal must not abort the next segment.
           if (chunk.type === 'tool-call-approval' || chunk.type === 'tool-call-suspended') stopForwardingAbort?.();
@@ -1761,6 +1774,14 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         // Also expose fullStream directly for server compatibility
         get fullStream() {
           return output.fullStream;
+        },
+        // Surface the run's trace so callers can link scores, feedback and logs
+        // to it without reaching through `output`.
+        get traceId() {
+          return output.traceId;
+        },
+        get spanId() {
+          return output.spanId;
         },
         // Internal: stream-only cleanup for generate()/resumeGenerate() to
         // release the subscription on suspend without dropping the registry.
@@ -2134,6 +2155,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // SUSPENDED event seen before any chunk belongs to the earlier segment
       // and must not close (or be reported by) this stream.
       let resumedChunkSeen = false;
+      // The span this resumed segment opened (or the run's original AGENT_RUN
+      // span) is the tracing root. Handing it to the stream keeps the segment on
+      // the run's trace and gives its output a `traceId`/`spanId` — matching the
+      // segment span core's durable resume passes.
+      const resumedSpan = existingEntry.resumeAgentSpan ?? existingEntry.agentSpan;
       // Re-subscribe to the stream
       const {
         output,
@@ -2161,6 +2187,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         outputProcessors: existingEntry.outputProcessors,
         processorStates: existingEntry.processorStates,
         requestContext: callbackOptions.requestContext,
+        tracingContext: resumedSpan ? { currentSpan: resumedSpan } : undefined,
         onChunk: chunk => {
           resumedChunkSeen = true;
           if (chunk.type === 'tool-call-approval' || chunk.type === 'tool-call-suspended') {
@@ -2358,6 +2385,12 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         runId,
         threadId: resumeOptions?.threadId,
         resourceId: resumeOptions?.resourceId,
+        get traceId() {
+          return output.traceId;
+        },
+        get spanId() {
+          return output.spanId;
+        },
         cleanup,
         abort,
         // Internal: stream-only cleanup for resumeGenerate() to release the
@@ -2403,6 +2436,12 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     },
 
     async observe(runId, observeOptions) {
+      // The registry entry only exists while this process still holds the run.
+      // When it does, reuse the live AGENT_RUN span — the segment span a resume
+      // opened, else the run's own — as the tracing root, so the observer's
+      // output carries the run's `traceId`/`spanId` (as core's observe does).
+      const observedEntry = getRunRegistryEntry(runId, mastra);
+      const observedSpan = observedEntry?.resumeAgentSpan ?? observedEntry?.agentSpan;
       // Create the stream subscription with offset support
       const stream = createDurableAgentStream<TOutput>({
         pubsub: getPubsub(),
@@ -2417,9 +2456,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         replayResponseMessagesBeforeOffset: true,
         idleTimeoutMs: observeOptions?.idleTimeoutMs,
         isAlive: observeOptions?.isAlive,
-        structuredOutput: getRunRegistryEntry(runId, mastra)?.structuredOutput as
-          | StructuredOutputOptions<TOutput>
-          | undefined,
+        structuredOutput: observedEntry?.structuredOutput as StructuredOutputOptions<TOutput> | undefined,
+        tracingContext: observedSpan ? { currentSpan: observedSpan } : undefined,
         onChunk: observeOptions?.onChunk,
         onStepFinish: observeOptions?.onStepFinish,
         onFinish: observeOptions?.onFinish,
@@ -2497,6 +2535,12 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         cleanup: streamCleanup,
         detach,
         abort,
+        get traceId() {
+          return output.traceId;
+        },
+        get spanId() {
+          return output.spanId;
+        },
       };
     },
 
