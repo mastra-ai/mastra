@@ -398,6 +398,9 @@ function isUniqueViolation(error: unknown): boolean {
  * current home scopes), so a move or merge, which rewrites `scopeId` on the moved pages in the same
  * transaction, can never leave a stale denormalized copy.
  */
+/** Rounds of lock-and-reread before a move whose subtree keeps changing is refused. */
+const MOVE_LOCK_ROUNDS = 3;
+
 export class PgKnowledgePages implements KnowledgePageStore {
   readonly #client: DbClient;
   readonly #schemaName?: string;
@@ -522,6 +525,30 @@ export class PgKnowledgePages implements KnowledgePageStore {
       UNION ALL
       SELECT c."id" FROM ${this.#pages} c JOIN sub ON c."parentId" = sub."id" WHERE NOT c."isScope"
     )`;
+  }
+
+  /**
+   * Locks every descendant of `rootId` and returns their ids once the set stops changing. One
+   * recursive locking read decides membership from its own snapshot, so a child committed while it
+   * waited for a lock is missed; a fresh read after locking sees it. Once every member is locked, a
+   * new child can't be added under one (`createPage` locks its parent) until this transaction ends.
+   */
+  async #lockStableSubtree(db: Queryable, rootId: string): Promise<string[]> {
+    const read = async () =>
+      (await this.#rows(db, `${this.#subtree('$1')} SELECT "id" FROM sub`, [rootId])).map(row => String(row.id));
+    const locked = new Set<string>();
+    let members = await read();
+    for (let round = 0; round < MOVE_LOCK_ROUNDS; round++) {
+      const fresh = members.filter(id => !locked.has(id));
+      if (fresh.length) {
+        await db.query(`SELECT "id" FROM ${this.#pages} WHERE "id" = ANY($1) ORDER BY "id" FOR UPDATE`, [fresh]);
+        for (const id of fresh) locked.add(id);
+      }
+      const again = await read();
+      if (again.length === locked.size && again.every(id => locked.has(id))) return again;
+      members = again;
+    }
+    throw new KnowledgeConflictError(rootId);
   }
 
   /** Live descendants, capped, and the deepest live level. */
@@ -1065,6 +1092,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
         throw new Error(`Knowledge page ${input.id} can't move under itself or its own subtree`);
       }
       const parent = await this.#requireLivePage(tx, input.parentId);
+      const subtree = await this.#lockStableSubtree(tx, input.id);
       const stats = await this.#subtreeStats(tx, input.id);
       if (stats.live + 1 > core.MAX_KNOWLEDGE_MOVE_PAGES) {
         throw new core.KnowledgeMoveTooLargeError(input.id, stats.live + 1);
@@ -1079,10 +1107,11 @@ export class PgKnowledgePages implements KnowledgePageStore {
       const position = input.position ?? core.knowledgePositionBetween(await this.#lastPosition(tx, parent.id));
       const now = new Date();
       try {
-        await tx.query(
-          `${this.#subtree('$1')} UPDATE ${this.#pages} SET "scopeId" = $2, "depth" = "depth" + $3 WHERE "id" IN (SELECT "id" FROM sub)`,
-          [input.id, newScopeId, delta],
-        );
+        await tx.query(`UPDATE ${this.#pages} SET "scopeId" = $2, "depth" = "depth" + $3 WHERE "id" = ANY($1)`, [
+          subtree,
+          newScopeId,
+          delta,
+        ]);
         const rows = await this.#rows(
           tx,
           `UPDATE ${this.#pages} SET "parentId" = $2, "scopeId" = $3, "depth" = $4, "position" = $5, "version" = "version" + 1, "updatedAt" = $6, "updatedBy" = $7::jsonb WHERE "id" = $1 RETURNING *`,
@@ -1704,17 +1733,15 @@ export class PgKnowledgePages implements KnowledgePageStore {
        WHERE ${where.join(' AND ')} ORDER BY a."createdAt" DESC, a."id" DESC LIMIT ${limit + 1}`,
       params.values,
     );
-    const events = rows.slice(0, limit).map(
-      (row): KnowledgePageActivityEvent => ({
-        id: String(row.id),
-        action: String(row.action) as KnowledgePageActivityAction,
-        scopeId: String(row.scopeId),
-        pageId: String(row.pageId),
-        ...(row.noteId == null ? {} : { noteId: String(row.noteId) }),
-        provenance: parseJson<KnowledgeProvenance>(row.provenance),
-        createdAt: new Date(row.createdAt as string | Date),
-      }),
-    );
+    const events = rows.slice(0, limit).map((row): KnowledgePageActivityEvent => ({
+      id: String(row.id),
+      action: String(row.action) as KnowledgePageActivityAction,
+      scopeId: String(row.scopeId),
+      pageId: String(row.pageId),
+      ...(row.noteId == null ? {} : { noteId: String(row.noteId) }),
+      provenance: parseJson<KnowledgeProvenance>(row.provenance),
+      createdAt: new Date(row.createdAt as string | Date),
+    }));
     const last = events[events.length - 1];
     return {
       events,
