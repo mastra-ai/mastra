@@ -61,8 +61,8 @@ Errors use the OpenAI shape, `{ "error": { "type", "code", "message" } }`. [`/v1
 | `403` | `no_eligible_route`, `byok_connection_inactive` | Key or policy doesn't allow the request. |
 | `404` | `model_not_found` | Unknown model ID. |
 | `409` | | A request with the same ID is already in progress. |
-| `413` | `request_body_too_large` | Body over 16 MiB, or input over the model's context window. |
-| `422` | `unsupported_or_invalid_request`, `output_limit_exceeded` | The body isn't valid for this endpoint, uses an unsupported field, or asks for more output than allowed. Unknown fields are rejected. |
+| `413` | `request_body_too_large`, `context_too_large` | Body over 16 MiB, or input over the model's context window. |
+| `422` | `unsupported_or_invalid_request`, `output_limit_exceeded` | The body isn't valid for this endpoint, uses an unsupported field, or asks for more output than allowed. |
 | `429` | `rate_limit_exceeded`, `provider_rate_limited` | A Gateway or provider rate limit was hit, or spend capacity is held by in-flight requests. `provider_rate_limited` means every eligible provider route is rate limiting. Retry after `retry-after`. |
 | `502` | | The provider failed after the request may have been sent. |
 | `503` | `exhausted` | No route could serve the request. |

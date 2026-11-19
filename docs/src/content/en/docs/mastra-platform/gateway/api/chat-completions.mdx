@@ -39,7 +39,7 @@ Common fields:
 | `max_tokens`, `max_completion_tokens`, `temperature`, `top_p`, `stop`, `seed` | Standard sampling controls. |
 | `web_search_options` | Search context size and approximate user location for web search. |
 
-Gateway validates the request before routing. Unknown fields return `400`.
+Gateway validates the request before routing. Unknown top-level fields are ignored. A body that doesn't match the schema returns `422`.
 
 ## Streaming
 

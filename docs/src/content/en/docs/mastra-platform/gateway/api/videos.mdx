@@ -39,7 +39,7 @@ curl https://gateway-api.mastra.ai/v1/videos \
 | `generate_audio` | No | `true` to generate an audio track. |
 | `seed` | No | Integer, 0 to 2,147,483,647. |
 
-Each job produces one video. Unknown fields return `400`. Each model supports its own set of durations, resolutions, and aspect ratios. If no route serves the combination you ask for, the request is refused before any credit is held.
+Each job produces one video. Unknown fields return `422`. Each model supports its own set of durations, resolutions, and aspect ratios. If no route serves the combination you ask for, the request is refused before any credit is held.
 
 The response returns `202` with the job:
 

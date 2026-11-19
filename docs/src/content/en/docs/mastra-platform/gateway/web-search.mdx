@@ -20,17 +20,18 @@ curl https://gateway-api.mastra.ai/v1/chat/completions \
 
 ## Requirements
 
-The model needs a route that supports tool calls. Gateway rejects a request with `mastra:web_search` when it also:
+The model needs a route that supports tool calls. Gateway rejects a request with `mastra:web_search` with `422 web_search_request_conflict` when it also:
 
 - Sets `tool_choice` to anything other than `auto`.
 - Enables `parallel_tool_calls`.
 - Asks for more than one completion (`n` greater than 1).
 - Asks for audio output.
 - Defines its own function named `web_search`.
+- Sets `web_search_options`.
 
 ## Options
 
-Set `web_search_options` at the request level:
+`web_search_options` uses the provider's built-in search instead of `mastra:web_search`. Send it without the `mastra:web_search` tool. Gateway routes the request only to models with built-in search:
 
 | Field | Description |
 | - | - |
