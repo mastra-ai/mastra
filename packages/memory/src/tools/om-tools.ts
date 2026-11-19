@@ -364,7 +364,19 @@ function searchWithTimeout(memory: RecallMemory, args: SearchArgs, timeoutMs: nu
       reject(runSignal?.aborted ? runSignal.reason : new Error(`search did not finish within ${timeoutMs}ms`));
     if (abortSignal.aborted) return onAbort();
     abortSignal.addEventListener('abort', onAbort, { once: true });
-    memory.searchMessages!({ ...args, abortSignal }).then(resolve, reject);
+    // A search that answers first doesn't need the listener any more, so drop it rather than keep the
+    // settled search reachable from the signal until the timeout fires.
+    const done = () => abortSignal.removeEventListener('abort', onAbort);
+    memory.searchMessages!({ ...args, abortSignal }).then(
+      result => {
+        done();
+        resolve(result);
+      },
+      error => {
+        done();
+        reject(error);
+      },
+    );
   });
 }
 
