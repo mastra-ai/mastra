@@ -234,6 +234,51 @@ describe('storage v2 pruneSnapshot', () => {
     },
   );
 
+  it('keeps showing shouldPersistSnapshot evicted results as stubs when the run prunes', async () => {
+    // Technical: the last write hydrates evicted results so the prune hook sees them in full. The
+    // predicate's documented view (successful steps without `output`) must not change with it:
+    // a predicate that skips large snapshots would otherwise skip the terminal write, leaving a
+    // finished run stored as `running`, which a boot restart sweep would re-drive.
+    const views: { workflowStatus: string; big?: Record<string, unknown> }[] = [];
+    const prune = vi.fn(({ snapshot }) => ({
+      ...snapshot,
+      context: { ...snapshot.context, big: { ...snapshot.context.big, output: { text: 'pruned' } } },
+    }));
+    const step = (id: string) =>
+      createStep({ id, inputSchema: z.any(), outputSchema: z.any(), execute: async () => ({ text: BIG }) });
+    const workflow = createWorkflow({
+      id: 'pruned',
+      inputSchema: z.object({}),
+      outputSchema: z.any(),
+      options: {
+        storageVersion: 2,
+        pruneSnapshot: prune,
+        shouldPersistSnapshot: ({ stepResults, workflowStatus }) => {
+          // The live object is mutated later, so record a copy of what this call saw.
+          views.push({ workflowStatus, big: stepResults.big && { ...stepResults.big } });
+          return true;
+        },
+      },
+    })
+      .then(step('big'))
+      .then(step('between'))
+      .then(gateStep())
+      .commit();
+    await host('default', workflow, async storage => {
+      const run = await workflow.createRun();
+      expect((await run.start({ inputData: {} })).status).toBe('suspended');
+      const resumed = await (await workflow.createRun({ runId: run.runId })).resume({ step: 'gate', resumeData: true });
+      expect(resumed.status).toBe('success');
+
+      const terminal = views.findLast(view => view.workflowStatus === 'success')!;
+      expect(terminal.big).toMatchObject({ status: 'success' });
+      expect(terminal.big).not.toHaveProperty('output');
+      // The hook and the store still see and keep the full, then pruned, results.
+      expect(prune.mock.calls[0]![0].snapshot.context.big).toMatchObject({ output: { text: BIG } });
+      expect(await storedBig(storage, run.runId)).toMatchObject({ status: 'success', output: { text: 'pruned' } });
+    });
+  });
+
   it.each(['default', 'evented'] as const)('prunes a failed %s run', async engine => {
     const fail = createStep({
       id: 'fail',

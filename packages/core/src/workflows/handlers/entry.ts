@@ -192,6 +192,12 @@ export interface PersistStepUpdateParams {
    * prunes it (see `DefaultExecutionEngine.prunesLastWrite`).
    */
   lastWrite?: boolean;
+  /**
+   * Storage v2: the step results as the persistence predicate must see them (evicted results as
+   * stubs), captured by the engine before it hydrated `stepResults` for the last write's prune.
+   * Unset, the predicate sees `stepResults`.
+   */
+  predicateStepResults?: Record<string, StepResult<any, any, any, any>>;
 }
 
 // Every status but `canceled`, so only a persisted cancellation rejects the write.
@@ -248,12 +254,19 @@ export async function persistStepUpdate(
   const evaluateBeforeDurableOperation =
     engine.options?.evaluatePersistencePredicateBeforeDurableOperation && !runPersistenceOverride;
 
-  if (evaluateBeforeDurableOperation && !persistencePredicate?.({ stepResults, workflowStatus })) {
+  const predicateStepResults = params.predicateStepResults ?? stepResults;
+  if (
+    evaluateBeforeDurableOperation &&
+    !persistencePredicate?.({ stepResults: predicateStepResults, workflowStatus })
+  ) {
     return;
   }
 
   const write = async () => {
-    if (!evaluateBeforeDurableOperation && !persistencePredicate?.({ stepResults, workflowStatus })) {
+    if (
+      !evaluateBeforeDurableOperation &&
+      !persistencePredicate?.({ stepResults: predicateStepResults, workflowStatus })
+    ) {
       return;
     }
 

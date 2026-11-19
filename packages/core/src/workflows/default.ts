@@ -1361,8 +1361,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             }
           }
 
-          // The result keeps the unpruned step results, as on storage v1.
-          if (this.prunesLastWrite(journal, lastOutput.result.status)) await journal.hydrate(stepResults);
+          // The result keeps the unpruned step results, as on storage v1. The persistence
+          // predicate keeps the stub view it is documented to see, from before the hydration.
+          let predicateStepResults: Record<string, StepResult<any, any, any, any>> | undefined;
+          if (this.prunesLastWrite(journal, lastOutput.result.status)) {
+            predicateStepResults = { ...lastOutput.stepResults };
+            await journal.hydrate(stepResults);
+          }
           let result = (await this.#fmtResult(
             journal,
             params.pubsub,
@@ -1400,6 +1405,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             tracingContext: persistTracingContext,
             phase: 'terminal',
             lastWrite: true,
+            predicateStepResults,
           });
 
           if (this.writeRejectedByCancellation(runId, result.status)) {
@@ -1519,8 +1525,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       }
 
       // after all steps are successful, return result
-      // The result keeps the unpruned step results, as on storage v1.
-      if (this.prunesLastWrite(journal, lastOutput.result.status)) await journal.hydrate(stepResults);
+      // The result keeps the unpruned step results, as on storage v1. The persistence
+      // predicate keeps the stub view it is documented to see, from before the hydration.
+      let predicateStepResults: Record<string, StepResult<any, any, any, any>> | undefined;
+      if (this.prunesLastWrite(journal, lastOutput.result.status)) {
+        predicateStepResults = { ...lastOutput.stepResults };
+        await journal.hydrate(stepResults);
+      }
       let result = (await this.#fmtResult(
         journal,
         params.pubsub,
@@ -1543,6 +1554,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         requestContext: currentRequestContext,
         phase: 'workflow-end',
         lastWrite: true,
+        predicateStepResults,
       });
 
       if (this.writeRejectedByCancellation(runId, result.status)) {
