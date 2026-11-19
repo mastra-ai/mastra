@@ -1070,14 +1070,6 @@ export class DurableAgent<
   // Protected methods for subclass overrides
   // ===========================================================================
 
-  /**
-   * Get the run registry for use by subclasses.
-   * @internal
-   */
-  protected get runRegistryInternal(): ExtendedRunRegistry {
-    return this.executionRunRegistry;
-  }
-
   /** Whether new runs opt into journal storage. @internal */
   protected get storesRunsInJournal(): boolean {
     return this.#storageVersion === 2;
@@ -1090,7 +1082,7 @@ export class DurableAgent<
    */
   #warnIfStorageVersionUnsupported(): void {
     if (this.#storageVersion !== 2) return;
-    // Read `stores` directly, as resolveWorkflowEngine() does: getWorkflow() is synchronous.
+    // Read `stores` directly: getWorkflow() is synchronous.
     const storage = this.#mastra?.getStorage();
     const workflowsStore = storage?.stores?.workflows;
     if (workflowsStore && !workflowsStore.supportsRunJournal()) {
@@ -1099,87 +1091,6 @@ export class DurableAgent<
           `doesn't support yet; storing new runs as version 1.`,
       );
     }
-  }
-
-  /**
-   * Resolve the engine this agent's workflow instance actually runs on.
-   *
-   * An evented agent without a Mastra host cannot execute evented runs — the
-   * evented engine's `createRun` requires the host's registries, storage, and
-   * event workers. Before the evented engine was re-enabled, a hostless
-   * EventedAgent silently streamed on the default in-process engine; that is
-   * released behavior, so we preserve it here as a fallback (with a warning)
-   * instead of throwing.
-   *
-   * The same applies to a host whose storage cannot apply concurrent workflow
-   * updates atomically. The evented engine advances a run from concurrent
-   * workers, so `createRun()` refuses to start on such a store. Letting that
-   * throw would turn a working durable agent into a hard failure on upgrade
-   * for stores like Redis, so durable agents degrade to the in-process engine
-   * the same way a hostless one does. A workflow that opts into the evented
-   * engine directly (by declaring a `schedule`) still gets the error, because
-   * there is no other engine it could have meant.
-   *
-   * The result is memoized: `getWorkflow()` caches the created workflow, so
-   * an agent that first streamed hostless keeps its default-engine workflow
-   * even if it is registered on a Mastra instance afterwards — identical to
-   * the previously shipped behavior. The cache is deliberately not
-   * invalidated.
-   *
-   * @internal
-   */
-  protected resolveWorkflowEngine(): 'default' | 'evented' {
-    return this.executionEngine.resolveWorkflowEngine(this.workflowEngine, this.logger);
-  }
-
-  /**
-   * Evented-engine runs execute via pubsub events consumed by in-process
-   * workers — without them `run.start()`/`resume()`/`restart()` never
-   * resolve (they wait on the `workflows-finish` topic). No-op on the
-   * default engine; idempotent on Mastra's side.
-   * @internal
-   */
-  protected async ensureEngineWorkersStarted(): Promise<void> {
-    return this.executionEngine.ensureEngineWorkersStarted(this.workflowEngine, this.logger);
-  }
-
-  /**
-   * Create the durable workflow for this agent.
-   *
-   * Retained for direct calls and subclass super calls. Run execution creates
-   * workflows through the execution engine, not through overrides of this method.
-   *
-   * @internal
-   */
-  protected createWorkflow(): ReturnType<typeof createDurableAgenticWorkflow> {
-    return this.executionEngine.createWorkflow({
-      maxSteps: this.#maxSteps,
-      workflowEngine: this.workflowEngine,
-      storesRunsInJournal: this.storesRunsInJournal,
-      shouldPersistSnapshot: this.userShouldPersistSnapshot,
-      logger: this.logger,
-      guardrailLogger: this.guardrailLogger,
-    });
-  }
-
-  /**
-   * Resolve the effective snapshot-persistence policy for this agent's
-   * workflows: the user-supplied predicate when set, otherwise the
-   * recovery-aware default. Engine variants own this policy during execution;
-   * overriding this compatibility method does not change running workflows.
-   *
-   * @internal
-   */
-  protected resolveShouldPersistSnapshot(): ShouldPersistSnapshotFn {
-    return this.executionEngine.resolveShouldPersistSnapshot(this.userShouldPersistSnapshot);
-  }
-
-  protected workflowFailureError(workflowError: unknown, fallbackMessage: string): Error {
-    return this.executionEngine.workflowFailureError(workflowError, fallbackMessage);
-  }
-
-  protected workflowExecutionError(workflowError: unknown, fallbackMessage: string): Error {
-    return this.executionEngine.workflowExecutionError(workflowError, fallbackMessage);
   }
 
   // ===========================================================================
@@ -1349,21 +1260,6 @@ export class DurableAgent<
         guardrailLogger: this.guardrailLogger,
       })
     );
-  }
-
-  /**
-   * One-time guardrail warnings for user-supplied `shouldPersistSnapshot`
-   * policies. Probes the predicate with an empty `stepResults`, so predicates
-   * that read `stepResults` may probe inaccurately — the warnings are
-   * best-effort and never block execution.
-   *
-   * Engine variants own their warnings during workflow creation. This method
-   * remains available for direct calls and subclass super calls.
-   *
-   * @internal
-   */
-  protected warnOnRiskyPersistencePolicy(): void {
-    this.executionEngine.warnOnRiskyPersistencePolicy(this.userShouldPersistSnapshot, this.guardrailLogger);
   }
 
   /**
