@@ -1,4 +1,4 @@
-import { buildDeferredStepFinishChunk, expandDurableSteps } from '@internal/core/durable';
+import { buildDeferredStepFinishChunk, durableStopConditionSteps } from '@internal/core/durable';
 import {
   createDurableBackgroundTaskCheckStep,
   createDurableGoalStep,
@@ -19,12 +19,15 @@ import {
   durableAgenticOutputSchema,
   baseIterationStateSchema,
   createBaseIterationStateUpdate,
+  diffResponseMessages,
+  AGENT_STREAM_TOPIC,
   resolveDurableToolCallConcurrency,
   executeDurableAgentScorers,
   getRunRegistryEntry,
   loadRunStoredMessages,
   takeRunScorerInstances,
   pruneAgentLoopSnapshot,
+  readRunDeadline,
 } from '@mastra/core/agent/durable';
 import type {
   DurableAgenticExecutionOutput,
@@ -32,10 +35,13 @@ import type {
   DurableLLMStepOutput,
   DurableToolCallOutput,
   DurableToolCallInput,
+  ResponseMessagesCursor,
 } from '@mastra/core/agent/durable';
 import { MessageList } from '@mastra/core/agent/message-list';
+import type { RequestContext } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
+import { isMastraTimeoutError, MastraTimeoutError } from '@mastra/core/loop';
 import type { Mastra } from '@mastra/core/mastra';
 import { InternalSpans } from '@mastra/core/observability';
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '@mastra/core/observability';
@@ -48,7 +54,13 @@ import { z } from 'zod';
 
 import { RESUME_CLAIM_DISPATCH_LEASE_MS } from '../durable-event-payload';
 import { init } from '../index';
-import { agentLoopTermination, generationUsage } from '../observability-compat';
+import {
+  agentLoopTermination,
+  executionFailureTermination,
+  generationUsage,
+  liveSegmentSpan,
+  segmentSpanData,
+} from '../observability-compat';
 import { InngestPubSub } from '../pubsub';
 import type { InngestFlowControlConfig } from '../types';
 import type { InngestWorkflow } from '../workflow';
@@ -180,6 +192,25 @@ export const setLoopStatus = (
     runId,
     opts: { status, expectedStatus },
   });
+
+/**
+ * The agent span this execution reports under: live in this process, else rebuilt. A loop step's own
+ * span is internal with no live parent, so spans and scores made in the step take this one instead.
+ */
+function segmentAgentSpan(
+  requestContext: RequestContext,
+  state: Parameters<typeof segmentSpanData>[2] & { runId: string },
+  registry: ReturnType<typeof getRunRegistryEntry>,
+  mastra: Mastra | undefined,
+) {
+  const { agentSpanData } = segmentSpanData(requestContext, state.runId, state, registry);
+  return (
+    liveSegmentSpan(agentSpanData, registry?.resumeAgentSpan, registry?.agentSpan) ??
+    (agentSpanData
+      ? mastra?.observability?.getSelectedInstance({ requestContext })?.rebuildSpan(agentSpanData)
+      : undefined)
+  );
+}
 
 /**
  * Ends a resumed segment Inngest failed or cancelled, which never reaches the finalize step that
@@ -458,7 +489,7 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
         const state = inputData as IterationState;
         const tracingRegistry = getRunRegistryEntry(state.runId, mastra);
         const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
-        const { step } = engine as { step: BaseContext<Inngest>['step'] };
+        const { step, inngestRunId } = engine as { step: BaseContext<Inngest>['step']; inngestRunId?: string };
 
         const emitStepFinish = async (isContinued: boolean) => {
           if (state.lastStepResult) {
@@ -468,18 +499,48 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
           state.deferredStepFinishChunk = undefined;
           if (deferredChunk && pubsub) {
             // Carry the step's response messages so `onStepFinish(event).response.messages` and
-            // `output.steps[i].response.messages` match the regular loop (#26780), as core does.
-            try {
-              const list = new MessageList({}).deserialize(state.messageListState);
-              deferredChunk.payload._durableResponseMessages = list.get.response.aiV5.model();
-            } catch (error) {
-              mastra?.getLogger?.()?.warn?.(`[InngestDurableAgent] Could not rebuild step-finish messages: ${error}`);
-            }
-            await step.run(`emit-step-finish-${state.runId}-${state.iterationCount}`, async () => {
-              await emitChunkEvent(pubsub, state.runId, deferredChunk);
-            });
+            // `output.steps[i].response.messages` match the regular loop (#26780), as core does:
+            // only the part that changed since the previous step-finish, which readers rebuild. The
+            // diff is built inside the memoized step, so replays reuse it rather than recompute it,
+            // and the cursor it returns travels with the iteration state. Each Inngest function run
+            // (the first one, and each resume) starts with the whole list.
+            const previousCursor = state.responseMessagesCursor;
+            const nextCursor: ResponseMessagesCursor | null = await step.run(
+              `emit-step-finish-${state.runId}-${state.iterationCount}`,
+              async () => {
+                let cursor: ResponseMessagesCursor | null = null;
+                try {
+                  const list = new MessageList({}).deserialize(state.messageListState);
+                  const producer = `inngest:${state.runId}:${inngestRunId ?? ''}`;
+                  let sent: ResponseMessagesCursor | { producer: string } =
+                    previousCursor?.producer === producer ? previousCursor : { producer };
+                  // A reader that attaches mid-run on a bus that keeps no history can only place whole lists.
+                  if ('fingerprints' in sent && !pubsub.__replaysTopic(AGENT_STREAM_TOPIC(state.runId))) {
+                    sent = { ...sent, fingerprints: [] };
+                  }
+                  const result = diffResponseMessages(sent, list.get.response.aiV5.model());
+                  deferredChunk.payload._durableResponseMessagesDiff = result.diff;
+                  cursor = result.cursor;
+                } catch (error) {
+                  mastra
+                    ?.getLogger?.()
+                    ?.warn?.(`[InngestDurableAgent] Could not rebuild step-finish messages: ${error}`);
+                }
+                await emitChunkEvent(pubsub, state.runId, deferredChunk);
+                return cursor;
+              },
+            );
+            if (nextCursor) state.responseMessagesCursor = nextCursor;
           }
         };
+
+        // A tool the total deadline or abort() stopped ends the run. The flag travels on iteration state
+        // because this predicate can run on a worker that never received the abort request.
+        if (state.deadlineTimeout || state.runAborted) {
+          if (tracingRegistry) tracingRegistry.tracingStopCause = 'model_finished';
+          await emitStepFinish(false);
+          return false;
+        }
 
         // bail() from a delegation hook is a hard stop. The flag travels on
         // serialized iteration state (set by the tool-call step, aggregated by
@@ -523,8 +584,8 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
             return false;
           }
           // Hand stopWhen the full step content stream.steps reports, not the
-          // compacted snapshot records (tool-result outputs restored).
-          const steps = expandDurableSteps(state.accumulatedSteps) as any;
+          // compacted snapshot records, with AI SDK tool-result parts as toolResults.
+          const steps = durableStopConditionSteps(state.accumulatedSteps) as any;
           const conditions = await Promise.all(
             (Array.isArray(stopWhen) ? stopWhen : [stopWhen]).map(async condition => {
               try {
@@ -558,9 +619,28 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
           const state = inputData as IterationState;
           const tracingRegistry = getRunRegistryEntry(state.runId, mastra);
           const initData = params.getInitData() as DurableAgenticWorkflowInput;
+          const agentSpan = segmentAgentSpan(requestContext, state, tracingRegistry, mastra);
 
           // Access pubsub via symbol to emit finish event
           const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
+
+          // A run its total deadline aborted ends as the deadline error, not an abort. The abort
+          // reaches this worker either through the caller's composed signal (same process) or as a
+          // timeout abort request over pubsub (another worker). A worker that saw neither still has the
+          // deadline carried on request context: past it, the caller has already reported the timeout.
+          // A run the caller aborted first stays an abort: the caller's deadline stopped with it.
+          const resolveDeadlineError = () => {
+            const abortReason = tracingRegistry?.abortSignal?.aborted ? tracingRegistry.abortSignal.reason : undefined;
+            const carriedDeadline = readRunDeadline(requestContext);
+            return isMastraTimeoutError(abortReason) && abortReason.timeoutType === 'total'
+              ? abortReason
+              : state.deadlineTimeout
+                ? new MastraTimeoutError(state.deadlineTimeout)
+                : !state.runAborted && carriedDeadline && Date.now() >= carriedDeadline.at
+                  ? new MastraTimeoutError({ timeoutType: 'total', timeoutMs: carriedDeadline.timeoutMs })
+                  : undefined;
+          };
+          const sideEffectsDeadlineError = resolveDeadlineError();
 
           // Extract final text from last step
           const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
@@ -578,13 +658,17 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
             messageListState: state.messageListState,
             mastra,
             requestContext,
-            tracingContext,
+            tracingContext: agentSpan ? { currentSpan: agentSpan } : tracingContext,
             logger: mastra?.getLogger?.(),
             messageId: state.messageId,
             outputResult: {
               text: finalText ?? '',
               usage: state.accumulatedUsage,
-              finishReason: state.lastStepResult?.reason ?? 'unknown',
+              finishReason: sideEffectsDeadlineError
+                ? 'error'
+                : state.runAborted
+                  ? 'abort'
+                  : (state.lastStepResult?.reason ?? 'unknown'),
               steps: state.accumulatedSteps,
             },
           });
@@ -627,16 +711,24 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
             }
           }
 
+          // The deadline can expire while the side effects or the title generation run; the caller
+          // has then already reported the timeout, so the run must end as it here too.
+          const deadlineError = sideEffectsDeadlineError ?? resolveDeadlineError();
+
           const finalOutput = {
             messageListState: finishResult.messageListState,
             messageId: state.messageId,
             stepResult: tripwire
               ? { ...(state.lastStepResult ?? { warnings: [] }), reason: 'tripwire' as const, isContinued: false }
-              : state.lastStepResult || {
-                  reason: 'stop',
-                  warnings: [],
-                  isContinued: false,
-                },
+              : deadlineError
+                ? { ...(state.lastStepResult ?? { warnings: [] }), reason: 'error' as const, isContinued: false }
+                : state.runAborted
+                  ? { ...(state.lastStepResult ?? { warnings: [] }), reason: 'abort' as const, isContinued: false }
+                  : state.lastStepResult || {
+                      reason: 'stop',
+                      warnings: [],
+                      isContinued: false,
+                    },
             output: {
               text: finalText,
               usage: state.accumulatedUsage,
@@ -650,15 +742,28 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
           // Same shape as the core durable agent: `text` and the run's `toolCalls` are the output,
           // usage goes to the attributes through the tracker so consumers find it where every
           // other model span puts it.
-          const observability = mastra?.observability?.getSelectedInstance({});
+          const observability = mastra?.observability?.getSelectedInstance({ requestContext });
           // Resumed segments carry their own clocks beside their fresh spans.
           const registry = getRunRegistryEntry(state.runId, mastra);
-          const completionClock = registry?.resumeModelSpanData
+          // A tripwire keeps its own classification; otherwise a deadline-stopped run ends its spans as
+          // the timeout failure rather than a normal loop finish.
+          const deadlineTermination =
+            deadlineError && !tripwire ? executionFailureTermination(deadlineError) : undefined;
+          // The pair this execution reports under: the run's first, or the one its resume carried.
+          const { agentSpanData, modelSpanData, carried } = segmentSpanData(
+            requestContext,
+            state.runId,
+            state,
+            registry,
+          );
+          // The loop state's clocks belong to the run's first pair, so a carried pair gets its own or none.
+          const firstPairClocks = carried ? undefined : state;
+          const completionClock = registry?.resumeModelSpan
             ? registry.resumeCompletionStartTime
-            : state.completionStartTime;
-          const timeToFirstTokenMs = registry?.resumeModelSpanData
+            : firstPairClocks?.completionStartTime;
+          const timeToFirstTokenMs = registry?.resumeModelSpan
             ? registry.resumeTimeToFirstTokenMs
-            : state.timeToFirstTokenMs;
+            : firstPairClocks?.timeToFirstTokenMs;
           const clocks = {
             ...(completionClock ? { completionStartTime: new Date(completionClock) } : {}),
             ...(timeToFirstTokenMs !== undefined ? { timeToFirstTokenMs } : {}),
@@ -675,8 +780,9 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
                 `[InngestDurableAgent] Run ${state.runId} has no recorded stop cause; its span outcome is unknown`,
               );
           }
-          const termination =
-            ['tripwire', 'error'].includes(finishReason ?? '') && recordedTermination
+          const termination = deadlineTermination
+            ? deadlineTermination
+            : ['tripwire', 'error'].includes(finishReason ?? '') && recordedTermination
               ? recordedTermination
               : agentLoopTermination({
                   stopCause,
@@ -685,13 +791,10 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
                   tripwire: tripwire ?? state.lastStepResult?.tripwire,
                   maxSteps: state.options?.maxSteps ?? maxSteps,
                 });
-          if (state.modelSpanData) {
+          if (modelSpanData) {
             const modelSpan =
-              registry?.resumeModelSpan ??
-              registry?.modelSpan ??
-              (observability?.rebuildSpan(state.modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>) as
-                | AIModelGenerationSpan
-                | undefined);
+              liveSegmentSpan(modelSpanData, registry?.resumeModelSpan, registry?.modelSpan) ??
+              (observability?.rebuildSpan(modelSpanData) as AIModelGenerationSpan | undefined);
             const toolCalls = state.accumulatedSteps.flatMap(step =>
               ((step.toolCalls ?? []) as DurableToolCallInput[]).map(tc => ({
                 toolCallId: tc.toolCallId,
@@ -715,11 +818,10 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
           }
 
           // End AGENT_RUN span with final output
-          if (state.agentSpanData) {
+          if (agentSpanData) {
             const agentSpan =
-              registry?.resumeAgentSpan ??
-              registry?.agentSpan ??
-              observability?.rebuildSpan(state.agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
+              liveSegmentSpan(agentSpanData, registry?.resumeAgentSpan, registry?.agentSpan) ??
+              observability?.rebuildSpan(agentSpanData);
             agentSpan?.end({
               ...termination,
               output: { text: finalText },
@@ -727,8 +829,11 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
             });
           }
 
-          // Emit finish event via pubsub
-          if (pubsub) {
+          // Memory is saved above, so the deadline error goes out after the turn is stored. The caller's
+          // process reports the same error at the deadline; its stream keeps one of them.
+          if (pubsub && deadlineError) {
+            await emitErrorEvent(pubsub, state.runId, deadlineError);
+          } else if (pubsub) {
             await emitFinishEvent(pubsub, state.runId, {
               output: finalOutput.output,
               stepResult: finalOutput.stepResult,
@@ -745,12 +850,19 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
         async params => {
           const { inputData, getInitData, mastra, requestContext, tracingContext } = params;
           const initData = getInitData() as DurableAgenticWorkflowInput;
+          // A score read from this step's own span would name a span that is never stored.
+          const agentSpan = segmentAgentSpan(
+            requestContext,
+            initData,
+            getRunRegistryEntry(initData.runId, mastra),
+            mastra,
+          );
           void executeDurableAgentScorers({
             initData,
             finalOutput: inputData,
             mastra,
             requestContext,
-            tracingContext,
+            tracingContext: agentSpan ? { currentSpan: agentSpan } : tracingContext,
             loadStoredMessages: loadRunStoredMessages(params),
             // Call-time and defaultOptions scorers are parked in-process by instance; name
             // resolution alone misses any scorer Mastra never registered (#27579).

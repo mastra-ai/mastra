@@ -1,17 +1,4 @@
-import {
-  ArrowLeft,
-  ArrowRight,
-  FileText,
-  Folder,
-  Hash,
-  Link2,
-  ListTree,
-  Network,
-  PanelLeftClose,
-  PanelLeftOpen,
-  SquareArrowOutUpRight,
-  X,
-} from 'lucide-react';
+import { Network } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { flushSync } from 'react-dom';
@@ -33,6 +20,7 @@ import type {
   KnowledgeScopeGrantPayload,
 } from '../pageTypes';
 import { KnowledgeDetailSection, KnowledgeNoteItem, KnowledgePageDetail } from './KnowledgePageDetail';
+import type { PageLinkLists } from './KnowledgePageDetail';
 import { KnowledgePageGraph } from './KnowledgePageGraph';
 import { KNOWLEDGE_TREE_ROOT, KnowledgePageTree } from './KnowledgePageTree';
 import { KnowledgeSourceIcon } from './KnowledgeSourceIcon';
@@ -49,9 +37,20 @@ import { Skeleton, SkeletonText } from '@/ds/components/Skeleton';
 import { Tab, TabList, Tabs } from '@/ds/components/Tabs';
 import { Tree } from '@/ds/components/Tree';
 import { Txt } from '@/ds/components/Txt';
+import { IconArrowLeft } from '@/ds/icons/central/IconArrowLeft';
+import { IconArrowRight } from '@/ds/icons/central/IconArrowRight';
+import { IconChainLink3 } from '@/ds/icons/central/IconChainLink3';
+import { IconCodeTree } from '@/ds/icons/central/IconCodeTree';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconFileText } from '@/ds/icons/central/IconFileText';
+import { IconFolder1 } from '@/ds/icons/central/IconFolder1';
+import { IconHashtag } from '@/ds/icons/central/IconHashtag';
+import { IconSidebarLeftArrow } from '@/ds/icons/central/IconSidebarLeftArrow';
+import { IconSidebarWideLeftArrow } from '@/ds/icons/central/IconSidebarWideLeftArrow';
+import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
 import { Icon } from '@/ds/icons/Icon';
 import { menuItemButtonClass } from '@/ds/primitives/menu-item';
-import { frameSurfaceStyle, overlaySurfaceStyle, raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { overlaySurfaceStyle, raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { cn } from '@/lib/utils';
 
@@ -477,7 +476,7 @@ function ChildPageItems({
     ) : (
       <Tree.File key={child.id} id={child.id}>
         <Tree.Icon className="text-muted-foreground">
-          <FileText />
+          <IconFileText />
         </Tree.Icon>
         <ChildPageLabel page={child} />
       </Tree.File>
@@ -515,12 +514,12 @@ function ChildPageFolder({
             aria-label={`Open ${page.name}`}
             onClick={() => onOpen(page.id)}
           >
-            <ArrowRight />
+            <IconArrowRight />
           </Button>
         }
       >
         <Tree.Icon className="text-muted-foreground">
-          <Folder />
+          <IconFolder1 />
         </Tree.Icon>
         <ChildPageLabel page={page} />
         {page.childCount ? (
@@ -635,7 +634,7 @@ function MentionPopup({
           className="rounded p-0.5 text-muted-foreground hover:bg-fill hover:text-foreground"
           onClick={onClose}
         >
-          <X size={14} aria-hidden />
+          <IconCrossMedium className="size-icon-sm" aria-hidden />
         </button>
       </div>
       <div className="min-h-0 overflow-y-auto">
@@ -674,6 +673,7 @@ function SelectedPage({
   onSelect,
   highlightMentionOf,
   compact,
+  onOpenPage,
 }: {
   source: KnowledgeExplorerSource;
   pageId: string;
@@ -681,9 +681,12 @@ function SelectedPage({
   onSelect: (pageId: string) => void;
   highlightMentionOf?: string;
   compact?: boolean;
+  onOpenPage?: () => void;
 }) {
   const detail = source.usePage(pageId);
   const activity = (source.useActivity ?? noActivity)(pageId);
+  const pageLinks = (source.usePageLinks ?? noLinkQuery<KnowledgeExplorerPageLinks>)(pageId).data;
+  const links = useMemo(() => (pageLinks ? linkLists(pageId, pageLinks) : undefined), [pageId, pageLinks]);
   const [moreNotes, setMoreNotes] = useState<{ pageId: string } | null>(null);
   const known = useMemo(
     () => (detail.data ? withPages(pagesById, [...detail.data.ancestors, ...detail.data.related]) : pagesById),
@@ -707,6 +710,7 @@ function SelectedPage({
   return (
     <KnowledgePageDetail
       compact={compact}
+      onOpenPage={onOpenPage}
       page={detail.data.page}
       notes={detail.data.notes}
       pin={detail.data.pin ?? undefined}
@@ -715,6 +719,7 @@ function SelectedPage({
       highlightMentionOf={highlightMentionOf}
       ancestors={detail.data.ancestors}
       mentionedBy={detail.data.mentionedBy}
+      links={links}
       activity={activity.data?.events}
       childPages={
         source.useTreeLevels ? (
@@ -732,6 +737,45 @@ function SelectedPage({
       }
     />
   );
+}
+
+const SNIPPET_LEAD = 30;
+
+function aroundMatch(text: string, query: string) {
+  const at = query.trim() ? text.toLowerCase().indexOf(query.trim().toLowerCase()) : -1;
+  if (at <= SNIPPET_LEAD) return text;
+  const start = text.lastIndexOf(' ', at - SNIPPET_LEAD) + 1;
+  return `…${text.slice(start)}`;
+}
+
+function Highlighted({ text, query }: { text: string; query: string }) {
+  const needle = query.trim().toLowerCase();
+  const at = needle ? text.toLowerCase().indexOf(needle) : -1;
+  if (at < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, at)}
+      <mark className="rounded-sm bg-badge-blue-subtle text-foreground">{text.slice(at, at + needle.length)}</mark>
+      {text.slice(at + needle.length)}
+    </>
+  );
+}
+
+function linkLists(pageId: string, { edges, pages }: KnowledgeExplorerPageLinks): PageLinkLists {
+  const byId = new Map(pages.map(page => [page.id, page]));
+  const side = (end: 'fromPageId' | 'toPageId', other: 'fromPageId' | 'toPageId') => {
+    const counts = new Map<string, number>();
+    for (const edge of edges) {
+      if (edge[end] === pageId && edge[other] !== pageId) {
+        counts.set(edge[other], (counts.get(edge[other]) ?? 0) + edge.count);
+      }
+    }
+    return [...counts].flatMap(([id, count]) => {
+      const page = byId.get(id);
+      return page ? [{ page, count }] : [];
+    });
+  };
+  return { out: side('fromPageId', 'toPageId'), in: side('toPageId', 'fromPageId') };
 }
 
 function SearchBox({ source, onSelect }: { source: KnowledgeExplorerSource; onSelect: (pageId: string) => void }) {
@@ -766,7 +810,16 @@ function SearchBox({ source, onSelect }: { source: KnowledgeExplorerSource; onSe
                       setQuery('');
                     }}
                   >
-                    <div className="line-clamp-2">{page.name}</div>
+                    <span className="flex min-w-0 flex-col gap-0.5">
+                      <span className="line-clamp-2 wrap-anywhere">
+                        <Highlighted text={page.name} query={query} />
+                      </span>
+                      {page.description ? (
+                        <Txt as="span" variant="caption" tone="muted" className="line-clamp-1 wrap-anywhere">
+                          <Highlighted text={aroundMatch(page.description, query)} query={query} />
+                        </Txt>
+                      ) : null}
+                    </span>
                   </button>
                 </li>
               ))}
@@ -1204,12 +1257,13 @@ export function KnowledgePageExplorer({
   const focusedInGraph = view === 'graph' ? pagesById.get(selectedPageId ?? drawn.hub ?? '') : undefined;
   const children = focusedInGraph ? drawn.hiddenChildren.get(focusedInGraph.id) : undefined;
   const views: Array<{ value: KnowledgeExplorerView; label: string; icon: ReactNode; narrowOnly?: boolean }> = [
-    { value: 'tree', label: 'Tree', icon: <ListTree />, narrowOnly: true },
+    { value: 'tree', label: 'Tree', icon: <IconCodeTree />, narrowOnly: true },
     { value: 'graph', label: 'Graph', icon: <Network />, narrowOnly: false },
-    { value: 'page', label: 'Page', icon: <FileText />, narrowOnly: false },
+    { value: 'page', label: 'Page', icon: <IconFileText />, narrowOnly: false },
   ];
 
   const tabValue = explorerTab(view, showPage);
+  const pageOverGraph = overlay && showPage;
   const drawerOpen = overlay && !showPage && !!selectedPageId && !isNotFound(selected.error);
   const drawerPageId = drawerOpen && selectedPageId ? selectedPageId : undefined;
   if (drawerPageId && drawerPageId !== drawerLastId) setDrawerLastId(drawerPageId);
@@ -1248,7 +1302,7 @@ export function KnowledgePageExplorer({
           ref={hidePagesButton}
           onClick={() => toggleTree(false)}
         >
-          <PanelLeftClose />
+          <IconSidebarWideLeftArrow />
         </Button>
       </DataPanel.HeaderActions>
     </DataPanel.Header>
@@ -1381,37 +1435,29 @@ export function KnowledgePageExplorer({
               ref={showPagesButton}
               onClick={() => toggleTree(true)}
             >
-              <PanelLeftOpen />
+              <IconSidebarLeftArrow />
             </Button>
           ) : null}
-          {showPage ? (
+          {showPage && !overlay ? (
             <section
               ref={focusPageTabOnMount}
               aria-label="Selected page"
-              className={`flex min-h-0 min-w-0 flex-1 flex-col ${overlay ? `bg-background p-2 pl-[calc(var(--knowledge-tree-inset)+0.5rem)] transition-[padding] duration-slow ease-out-custom motion-reduce:transition-none ${flush ? '' : 'rounded-xl border border-border'}` : 'overflow-hidden rounded-lg border border-border bg-card'}`}
+              className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card"
             >
-              <div
-                className={
-                  overlay
-                    ? `flex min-h-0 flex-1 flex-col overflow-hidden rounded-studio-frame ${frameSurfaceStyle}`
-                    : 'contents'
-                }
-              >
-                <SelectedPage
-                  source={source}
-                  pageId={selectedPageId}
-                  pagesById={pagesById}
-                  onSelect={openAnywhere}
-                  highlightMentionOf={highlightMentionOf}
-                />
-              </div>
+              <SelectedPage
+                source={source}
+                pageId={selectedPageId}
+                pagesById={pagesById}
+                onSelect={openAnywhere}
+                highlightMentionOf={highlightMentionOf}
+              />
             </section>
           ) : (
             <div
-              className={`relative min-h-0 min-w-0 flex-1 overflow-hidden bg-background lg:block lg:h-full ${flush ? '' : 'rounded-xl border border-border'} ${view === 'graph' ? 'block' : 'hidden'}`}
+              className={`relative min-h-0 min-w-0 flex-1 overflow-hidden bg-sidebar lg:block lg:h-full ${flush ? '' : 'rounded-xl border border-border'} ${view === 'graph' || pageOverGraph ? 'block' : 'hidden'}`}
               data-testid="knowledge-graph-container"
             >
-              {graphShown ? (
+              {graphShown && !pageOverGraph ? (
                 <div className="absolute top-3 right-3 z-10 -translate-x-(--knowledge-drawer-inset) transition-transform duration-slow ease-out-custom motion-reduce:transition-none">
                   <ButtonsGroup
                     orientation="vertical"
@@ -1428,7 +1474,7 @@ export function KnowledgePageExplorer({
                       disabled={!backTo}
                       onClick={goBack}
                     >
-                      <ArrowLeft />
+                      <IconArrowLeft />
                     </Button>
                     <Button
                       aria-label="All links"
@@ -1440,7 +1486,7 @@ export function KnowledgePageExplorer({
                       className={allLinks ? '[--control-icon:var(--foreground)]' : undefined}
                       onClick={() => setAllLinks(current => !current)}
                     >
-                      <Link2 />
+                      <IconChainLink3 />
                     </Button>
                     <Button
                       aria-label="Link counts"
@@ -1452,12 +1498,12 @@ export function KnowledgePageExplorer({
                       className={dotCounts ? '[--control-icon:var(--foreground)]' : undefined}
                       onClick={() => setDotCounts(current => !current)}
                     >
-                      <Hash />
+                      <IconHashtag />
                     </Button>
                   </ButtonsGroup>
                 </div>
               ) : null}
-              {graphShown ? (
+              {graphShown && !pageOverGraph ? (
                 <KnowledgePageGraph
                   pages={graphPages}
                   edges={linkEdges}
@@ -1527,7 +1573,7 @@ export function KnowledgePageExplorer({
                               openPage(drawerShownId);
                             }}
                           >
-                            <SquareArrowOutUpRight />
+                            <IconSquareArrowTopRight />
                           </Button>
                           <DataPanel.CloseButton
                             icon="x"
@@ -1548,11 +1594,49 @@ export function KnowledgePageExplorer({
                           onSelect={selectFromSearch}
                           highlightMentionOf={highlightMentionOf}
                           compact
+                          onOpenPage={() => {
+                            focusTabOnPageOpen.current = true;
+                            openPage(drawerShownId);
+                          }}
                         />
                       </div>
                     </DataPanel>
                   ) : null}
                 </div>
+              ) : null}
+
+              {pageOverGraph ? (
+                <section
+                  ref={focusPageTabOnMount}
+                  aria-label="Selected page"
+                  className="absolute inset-y-2 right-2 left-[calc(var(--knowledge-tree-inset)+0.5rem)] z-20 flex transition-[left] duration-slow ease-out-custom motion-reduce:transition-none"
+                >
+                  <DataPanel variant="inline" title="Page" className="shadow-overlay">
+                    <DataPanel.Header>
+                      <DataPanel.Heading>Page</DataPanel.Heading>
+                      <DataPanel.HeaderActions>
+                        <DataPanel.CloseButton
+                          icon="x"
+                          label="Close page"
+                          tooltip="Close"
+                          onClick={() => {
+                            focusViewTab();
+                            onViewChange('graph');
+                          }}
+                        />
+                      </DataPanel.HeaderActions>
+                    </DataPanel.Header>
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                      <SelectedPage
+                        source={source}
+                        pageId={selectedPageId}
+                        pagesById={pagesById}
+                        onSelect={openAnywhere}
+                        highlightMentionOf={highlightMentionOf}
+                      />
+                    </div>
+                  </DataPanel>
+                </section>
               ) : null}
 
               {mention && graphShown ? (

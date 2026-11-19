@@ -21,7 +21,7 @@ async function createEditorWithStore(agents?: Record<string, Agent>) {
 
 describe('EditorAgentNamespace.update', () => {
   it('creates a new draft version when SDK updates agent snapshot fields', async () => {
-    const { editor, agentsStore } = await createEditorWithStore();
+    const { editor, mastra, agentsStore } = await createEditorWithStore();
 
     await editor.agent.create({
       id: 'sdk-updatable-agent',
@@ -43,9 +43,13 @@ describe('EditorAgentNamespace.update', () => {
 
     const latest = await editor.agent.getById('sdk-updatable-agent', { status: 'draft' });
     expect(await Promise.resolve(latest?.getInstructions())).toBe('TWO');
+    const registered = mastra.getAgent('sdk-updatable-agent');
+    expect(latest).not.toBe(registered);
 
     const versionTwoAgent = await editor.agent.getById('sdk-updatable-agent', { versionNumber: 2 });
     expect(await Promise.resolve(versionTwoAgent?.getInstructions())).toBe('TWO');
+    expect(versionTwoAgent).not.toBe(registered);
+    expect(mastra.getAgent('sdk-updatable-agent')).toBe(registered);
 
     const versions = await agentsStore.listVersions({ agentId: 'sdk-updatable-agent' });
     expect(versions.versions).toHaveLength(2);
@@ -59,7 +63,7 @@ describe('EditorAgentNamespace.update', () => {
   });
 
   it('keeps SDK config updates in draft until they are published', async () => {
-    const { editor, agentsStore } = await createEditorWithStore();
+    const { editor, mastra, agentsStore } = await createEditorWithStore();
 
     await editor.agent.create({
       id: 'published-sdk-agent',
@@ -82,6 +86,11 @@ describe('EditorAgentNamespace.update', () => {
     expect(await Promise.resolve(defaultAgent?.getInstructions())).toBe('ONE');
     const draftAgent = await editor.agent.getById('published-sdk-agent', { status: 'draft' });
     expect(await Promise.resolve(draftAgent?.getInstructions())).toBe('TWO');
+    const versionAgent = await editor.agent.getById('published-sdk-agent', { versionId: versionOne!.id });
+    expect(await Promise.resolve(versionAgent?.getInstructions())).toBe('ONE');
+    expect(draftAgent).not.toBe(defaultAgent);
+    expect(versionAgent).not.toBe(defaultAgent);
+    expect(mastra.getAgent('published-sdk-agent')).toBe(defaultAgent);
 
     const versions = await agentsStore.listVersions({ agentId: 'published-sdk-agent' });
     const versionTwo = versions.versions.find(version => version.versionNumber === 2);

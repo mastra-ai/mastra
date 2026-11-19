@@ -115,17 +115,22 @@ describe('T4 background-tools redelivery', () => {
           workflowId: 'durable-agentic-execution',
           runId: workflowRunId,
           executionPath: [3, 0],
-          stepResults: {
-            'extract-tool-calls': {
-              output: [
-                {
-                  toolCallId: `${disposition}-1`,
-                  toolName: 'research',
-                  args,
+          // Storage v2 events don't carry step results: each dispatch loads them from the stored run.
+          ...(original.data?.storageVersion === 2
+            ? {}
+            : {
+                stepResults: {
+                  'extract-tool-calls': {
+                    output: [
+                      {
+                        toolCallId: `${disposition}-1`,
+                        toolName: 'research',
+                        args,
+                      },
+                    ],
+                  },
                 },
-              ],
-            },
-          },
+              }),
         });
         await redeliverAndDrain(driver, match, mode);
         expectRedeliveryParity(
@@ -141,7 +146,9 @@ describe('T4 background-tools redelivery', () => {
             backgroundTaskNotifications: 1,
             modelCalls: 2,
           },
-          mode === 'same-id' || disposition === 'awaited'
+          // Storage v2 replays load the step's inputs from the stored run, which is deleted once the run
+          // finishes, so the replayed step fails before it reaches the tool: only storage v1 shows the bug.
+          mode === 'same-id' || disposition === 'awaited' || original.data?.storageVersion === 2
             ? undefined
             : {
                 reason:

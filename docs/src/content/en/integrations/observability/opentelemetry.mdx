@@ -13,13 +13,13 @@ Mastra supports OpenTelemetry (OTEL) through an exporter for sending traces and 
 
 ## Exporter
 
-The OpenTelemetry exporter sends your traces and logs using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Datadog, New Relic, Sentry, SigNoz, MLflow, Latitude, Dash0, Traceloop, Laminar, telemetry.dev, Sazabi, and more.
+The OpenTelemetry exporter sends your traces and logs using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). Traces stay compatible with platforms such as Agnost AI, Dash0, Datadog, Laminar, Latitude, MLflow, New Relic, Sazabi, Sentry, SigNoz, telemetry.dev, and Traceloop.
 
 ### Installation
 
 Each provider requires specific protocol packages. Install the base exporter plus the protocol package for your provider:
 
-#### For HTTP/Protobuf providers (SigNoz, New Relic, Sentry, Laminar, MLflow, Latitude, telemetry.dev)
+#### For HTTP/Protobuf providers (Agnost AI, Laminar, Latitude, MLflow, New Relic, Sentry, SigNoz, telemetry.dev)
 
 ```bash npm2yarn
 npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-proto
@@ -31,7 +31,7 @@ npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-prot
 npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js
 ```
 
-#### For HTTP/JSON providers (Traceloop, Sazabi)
+#### For HTTP/JSON providers (Sazabi, Traceloop)
 
 ```bash npm2yarn
 npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-http
@@ -44,134 +44,43 @@ All providers support zero-config setup via environment variables. Set the appro
 | Provider | Environment Variables |
 | - | - |
 | Dash0 | `DASH0_API_KEY` (required), `DASH0_ENDPOINT` (required), `DASH0_DATASET` (optional) |
-| SigNoz | `SIGNOZ_API_KEY` (required), `SIGNOZ_REGION` (optional), `SIGNOZ_ENDPOINT` (optional) |
-| New Relic | `NEW_RELIC_LICENSE_KEY` (required), `NEW_RELIC_ENDPOINT` (optional) |
-| Traceloop | `TRACELOOP_API_KEY` (required), `TRACELOOP_DESTINATION_ID`, `TRACELOOP_ENDPOINT` (optional) |
 | Laminar | `LMNR_PROJECT_API_KEY` (required), `LAMINAR_ENDPOINT` (optional) |
+| New Relic | `NEW_RELIC_LICENSE_KEY` (required), `NEW_RELIC_ENDPOINT` (optional) |
+| SigNoz | `SIGNOZ_API_KEY` (required), `SIGNOZ_REGION` (optional), `SIGNOZ_ENDPOINT` (optional) |
+| Traceloop | `TRACELOOP_API_KEY` (required), `TRACELOOP_DESTINATION_ID`, `TRACELOOP_ENDPOINT` (optional) |
 
 ### Provider configurations
 
-#### Sentry
+#### Agnost AI
 
-[Sentry](https://sentry.io/) accepts OpenTelemetry traces and logs through its OTLP endpoints. In Sentry, open [**Project Settings** > **Client Keys (DSN)**](https://sentry.io/settings/projects/) and copy the OTLP traces endpoint and authentication header. Add both values to your environment:
-
-```bash title=".env"
-SENTRY_OTLP_ENDPOINT=https://o000000.ingest.sentry.io/api/0000000/integration/otlp/v1/traces
-SENTRY_OTLP_AUTH_HEADER="sentry sentry_key=..."
-```
-
-Use the `custom` provider with HTTP/Protobuf:
-
-```typescript title="src/mastra/index.ts"
-new OtelExporter({
-  provider: {
-    custom: {
-      endpoint: process.env.SENTRY_OTLP_ENDPOINT!,
-      protocol: 'http/protobuf',
-      headers: {
-        'x-sentry-auth': process.env.SENTRY_OTLP_AUTH_HEADER!,
-      },
-    },
-  },
-})
-```
-
-See [Sentry's OTLP documentation](https://docs.sentry.io/concepts/otlp/) for endpoint setup, supported signals, and current ingestion limits.
-
-Choose an exporter based on your setup:
-
-- `OtelExporter`: Sends vendor-neutral traces and logs over OTLP. Use it with an existing OpenTelemetry pipeline or when you want backend portability.
-- [`SentryExporter`](/integrations/observability/sentry): Uses the Sentry SDK to map Mastra span types to Sentry operations, add AI monitoring attributes, and capture span errors as Sentry issues.
-
-#### MLflow
-
-[MLflow](https://mlflow.org/docs/latest/genai/tracing/integrations/listing/mastra) supports native Mastra tracing through its OTLP endpoint at `/v1/traces`. Use the `custom` provider with HTTP/Protobuf and include the experiment header so traces are routed to the correct MLflow experiment:
-
-```typescript title="src/mastra/index.ts"
-new OtelExporter({
-  provider: {
-    custom: {
-      endpoint: `${process.env.MLFLOW_TRACKING_URI}/v1/traces`,
-      protocol: 'http/protobuf',
-      headers: {
-        'x-mlflow-experiment-id': process.env.MLFLOW_EXPERIMENT_ID,
-      },
-    },
-  },
-})
-```
-
-#### Latitude
-
-[Latitude](https://latitude.so) is an open-source LLM observability and evaluation platform that ingests OTLP traces. Use the `custom` provider with HTTP/Protobuf, pointing at Latitude's ingestion endpoint and authenticating with your API key and project slug:
-
-```typescript title="src/mastra/index.ts"
-new OtelExporter({
-  provider: {
-    custom: {
-      endpoint: 'https://ingest.latitude.so/v1/traces',
-      protocol: 'http/protobuf',
-      headers: {
-        Authorization: `Bearer ${process.env.LATITUDE_API_KEY}`,
-        'X-Latitude-Project': process.env.LATITUDE_PROJECT,
-      },
-    },
-  },
-})
-```
-
-Sign up at [console.latitude.so](https://console.latitude.so/login), or self-host and point the endpoint at your own ingestion host.
-
-#### telemetry.dev
-
-[telemetry.dev](https://telemetry.dev) ingests OTLP/HTTP protobuf traces and normalizes OpenTelemetry GenAI semantic conventions into model, provider, token, latency, and cost fields. Use the `custom` provider with your project API key:
+[Agnost AI](https://agnost.ai) ingests OTLP/HTTP protobuf traces and groups them into conversations and users for production agent monitoring. Use the `custom` provider with your organization ID:
 
 ```bash title=".env"
-TELEMETRY_DEV_API_KEY=td_live_...
+AGNOST_ORG_ID=your-org-id
 ```
 
 ```typescript title="src/mastra/index.ts"
 new OtelExporter({
   provider: {
     custom: {
-      endpoint: 'https://ingest.telemetry.dev/v1/traces',
+      endpoint: 'https://otel.agnost.ai/v1/traces',
       protocol: 'http/protobuf',
       headers: {
-        Authorization: `Bearer ${process.env.TELEMETRY_DEV_API_KEY}`,
+        'X-Agnost-Org-ID': process.env.AGNOST_ORG_ID!,
       },
     },
   },
+  signals: { logs: false },
 })
 ```
 
-#### Sazabi
-
-[Sazabi](https://sazabi.com) is an AI-native observability platform that ingests OTLP traces. In Sazabi, add a Mastra log source and copy its intake URL. The URL carries your project key, so no auth header is needed:
-
-```bash title=".env"
-SAZABI_INTAKE_URL=https://...
-```
-
-Use the `custom` provider with HTTP/JSON:
-
-```typescript title="src/mastra/index.ts"
-new OtelExporter({
-  provider: {
-    custom: {
-      endpoint: process.env.SAZABI_INTAKE_URL!,
-      protocol: 'http/json',
-    },
-  },
-})
-```
-
-See [Sazabi's Mastra guide](https://docs.sazabi.com/catalogs/log-sources/send-to-an-endpoint/mastra) for the full setup.
+Agnost AI reads `userId` and `conversationId` (or `threadId`) from `tracingOptions.metadata` to group traces by user and conversation. It stores traces only, so `signals: { logs: false }` skips the log export. See [Agnost AI's Mastra guide](https://docs.agnost.ai/mastra) for the full setup.
 
 #### Dash0
 
 [Dash0](https://www.dash0.com/) provides real-time observability with automatic insights.
 
-##### Zero-Config Setup
+##### Zero-config setup
 
 Set environment variables and use the exporter with an empty config:
 
@@ -201,7 +110,7 @@ export const mastra = new Mastra({
 })
 ```
 
-##### Explicit Configuration
+##### Explicit configuration
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -237,138 +146,6 @@ export const mastra = new Mastra({
 :::note
 
 Get your Dash0 endpoint from your dashboard. It should be in the format `ingress.{region}.aws.dash0.com:4317`.
-
-:::
-
-#### `SigNoz`
-
-[SigNoz](https://signoz.io/) is an open-source APM alternative with built-in Tracing support.
-
-##### Zero-Config Setup
-
-```bash title=".env"
-# Required
-SIGNOZ_API_KEY=your-api-key
-
-# Optional
-SIGNOZ_REGION=us  # 'us' | 'eu' | 'in'
-SIGNOZ_ENDPOINT=https://my-signoz.example.com  # For self-hosted
-```
-
-```typescript title="src/mastra/index.ts"
-new OtelExporter({ provider: { signoz: {} } })
-```
-
-##### Explicit Configuration
-
-```typescript title="src/mastra/index.ts"
-new OtelExporter({
-  provider: {
-    signoz: {
-      apiKey: process.env.SIGNOZ_API_KEY,
-      region: 'us', // 'us' | 'eu' | 'in'
-      // endpoint: 'https://my-signoz.example.com', // For self-hosted
-    },
-  },
-})
-```
-
-#### New Relic
-
-[New Relic](https://newrelic.com/) provides complete observability with AI monitoring capabilities.
-
-##### Zero-Config Setup
-
-```bash title=".env"
-# Required
-NEW_RELIC_LICENSE_KEY=your-license-key
-
-# Optional
-NEW_RELIC_ENDPOINT=https://otlp.eu01.nr-data.net  # For EU region
-```
-
-```typescript title="src/mastra/index.ts"
-new OtelExporter({ provider: { newrelic: {} } })
-```
-
-##### Explicit Configuration
-
-```typescript title="src/mastra/index.ts"
-new OtelExporter({
-  provider: {
-    newrelic: {
-      apiKey: process.env.NEW_RELIC_LICENSE_KEY,
-      // endpoint: 'https://otlp.eu01.nr-data.net', // For EU region
-    },
-  },
-})
-```
-
-#### Traceloop
-
-[Traceloop](https://www.traceloop.com/) specializes in LLM observability with automatic prompt tracking.
-
-##### Zero-Config Setup
-
-```bash title=".env"
-# Required
-TRACELOOP_API_KEY=your-api-key
-
-# Optional
-TRACELOOP_DESTINATION_ID=my-destination
-TRACELOOP_ENDPOINT=https://custom.traceloop.com
-```
-
-```typescript title="src/mastra/index.ts"
-new OtelExporter({ provider: { traceloop: {} } })
-```
-
-##### Explicit Configuration
-
-```typescript title="src/mastra/index.ts"
-new OtelExporter({
-  provider: {
-    traceloop: {
-      apiKey: process.env.TRACELOOP_API_KEY,
-      destinationId: 'my-destination', // Optional
-    },
-  },
-})
-```
-
-#### Laminar
-
-[Laminar](https://laminar.sh/) provides specialized LLM observability and analytics.
-
-##### Zero-Config Setup
-
-```bash title=".env"
-# Required
-LMNR_PROJECT_API_KEY=your-api-key
-
-# Optional
-LAMINAR_ENDPOINT=https://api.lmnr.ai/v1/traces
-```
-
-```typescript title="src/mastra/index.ts"
-new OtelExporter({ provider: { laminar: {} } })
-```
-
-##### Explicit Configuration
-
-```typescript title="src/mastra/index.ts"
-new OtelExporter({
-  provider: {
-    laminar: {
-      apiKey: process.env.LMNR_PROJECT_API_KEY,
-    },
-  },
-})
-```
-
-:::tip Laminar-Native Exporter
-
-For Laminar-specific features like native span paths, metadata, and tags rendering in the Laminar dashboard, consider using the dedicated [`@mastra/laminar`](/integrations/observability/laminar) exporter instead. It provides optimized integration with Laminar's platform.
 
 :::
 
@@ -440,7 +217,255 @@ For Datadog-specific features like automatic span type mapping, LLM span categor
 
 :::
 
-#### Custom/Generic OTEL Endpoints
+#### Laminar
+
+[Laminar](https://laminar.sh/) provides specialized LLM observability and analytics.
+
+##### Zero-config setup
+
+```bash title=".env"
+# Required
+LMNR_PROJECT_API_KEY=your-api-key
+
+# Optional
+LAMINAR_ENDPOINT=https://api.lmnr.ai/v1/traces
+```
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({ provider: { laminar: {} } })
+```
+
+##### Explicit configuration
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    laminar: {
+      apiKey: process.env.LMNR_PROJECT_API_KEY,
+    },
+  },
+})
+```
+
+:::tip Laminar-Native Exporter
+
+For Laminar-specific features like native span paths, metadata, and tags rendering in the Laminar dashboard, consider using the dedicated [`@mastra/laminar`](/integrations/observability/laminar) exporter instead. It provides optimized integration with Laminar's platform.
+
+:::
+
+#### Latitude
+
+[Latitude](https://latitude.so) is an open-source LLM observability and evaluation platform that ingests OTLP traces. Use the `custom` provider with HTTP/Protobuf, pointing at Latitude's ingestion endpoint and authenticating with your API key and project slug:
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    custom: {
+      endpoint: 'https://ingest.latitude.so/v1/traces',
+      protocol: 'http/protobuf',
+      headers: {
+        Authorization: `Bearer ${process.env.LATITUDE_API_KEY}`,
+        'X-Latitude-Project': process.env.LATITUDE_PROJECT,
+      },
+    },
+  },
+})
+```
+
+Sign up at [console.latitude.so](https://console.latitude.so/login), or self-host and point the endpoint at your own ingestion host.
+
+#### MLflow
+
+[MLflow](https://mlflow.org/docs/latest/genai/tracing/integrations/listing/mastra) supports native Mastra tracing through its OTLP endpoint at `/v1/traces`. Use the `custom` provider with HTTP/Protobuf and include the experiment header so traces are routed to the correct MLflow experiment:
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    custom: {
+      endpoint: `${process.env.MLFLOW_TRACKING_URI}/v1/traces`,
+      protocol: 'http/protobuf',
+      headers: {
+        'x-mlflow-experiment-id': process.env.MLFLOW_EXPERIMENT_ID,
+      },
+    },
+  },
+})
+```
+
+#### New Relic
+
+[New Relic](https://newrelic.com/) provides complete observability with AI monitoring capabilities.
+
+##### Zero-config setup
+
+```bash title=".env"
+# Required
+NEW_RELIC_LICENSE_KEY=your-license-key
+
+# Optional
+NEW_RELIC_ENDPOINT=https://otlp.eu01.nr-data.net  # For EU region
+```
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({ provider: { newrelic: {} } })
+```
+
+##### Explicit configuration
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    newrelic: {
+      apiKey: process.env.NEW_RELIC_LICENSE_KEY,
+      // endpoint: 'https://otlp.eu01.nr-data.net', // For EU region
+    },
+  },
+})
+```
+
+#### Sazabi
+
+[Sazabi](https://sazabi.com) is an AI-native observability platform that ingests OTLP traces. In Sazabi, add a Mastra log source and copy its intake URL. The URL carries your project key, so no auth header is needed:
+
+```bash title=".env"
+SAZABI_INTAKE_URL=https://...
+```
+
+Use the `custom` provider with HTTP/JSON:
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    custom: {
+      endpoint: process.env.SAZABI_INTAKE_URL!,
+      protocol: 'http/json',
+    },
+  },
+})
+```
+
+See [Sazabi's Mastra guide](https://docs.sazabi.com/catalogs/log-sources/send-to-an-endpoint/mastra) for the full setup.
+
+#### Sentry
+
+[Sentry](https://sentry.io/) accepts OpenTelemetry traces and logs through its OTLP endpoints. In Sentry, open [**Project Settings** > **Client Keys (DSN)**](https://sentry.io/settings/projects/) and copy the OTLP traces endpoint and authentication header. Add both values to your environment:
+
+```bash title=".env"
+SENTRY_OTLP_ENDPOINT=https://o000000.ingest.sentry.io/api/0000000/integration/otlp/v1/traces
+SENTRY_OTLP_AUTH_HEADER="sentry sentry_key=..."
+```
+
+Use the `custom` provider with HTTP/Protobuf:
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    custom: {
+      endpoint: process.env.SENTRY_OTLP_ENDPOINT!,
+      protocol: 'http/protobuf',
+      headers: {
+        'x-sentry-auth': process.env.SENTRY_OTLP_AUTH_HEADER!,
+      },
+    },
+  },
+})
+```
+
+See [Sentry's OTLP documentation](https://docs.sentry.io/concepts/otlp/) for endpoint setup, supported signals, and current ingestion limits.
+
+Choose an exporter based on your setup:
+
+- `OtelExporter`: Sends vendor-neutral traces and logs over OTLP. Use it with an existing OpenTelemetry pipeline or when you want backend portability.
+- [`SentryExporter`](/integrations/observability/sentry): Uses the Sentry SDK to map Mastra span types to Sentry operations, add AI monitoring attributes, and capture span errors as Sentry issues.
+
+#### SigNoz
+
+[SigNoz](https://signoz.io/) is an open-source APM alternative with built-in Tracing support.
+
+##### Zero-config setup
+
+```bash title=".env"
+# Required
+SIGNOZ_API_KEY=your-api-key
+
+# Optional
+SIGNOZ_REGION=us  # 'us' | 'eu' | 'in'
+SIGNOZ_ENDPOINT=https://my-signoz.example.com  # For self-hosted
+```
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({ provider: { signoz: {} } })
+```
+
+##### Explicit configuration
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    signoz: {
+      apiKey: process.env.SIGNOZ_API_KEY,
+      region: 'us', // 'us' | 'eu' | 'in'
+      // endpoint: 'https://my-signoz.example.com', // For self-hosted
+    },
+  },
+})
+```
+
+#### telemetry.dev
+
+[telemetry.dev](https://telemetry.dev) ingests OTLP/HTTP protobuf traces and normalizes OpenTelemetry GenAI semantic conventions into model, provider, token, latency, and cost fields. Use the `custom` provider with your project API key:
+
+```bash title=".env"
+TELEMETRY_DEV_API_KEY=td_live_...
+```
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    custom: {
+      endpoint: 'https://ingest.telemetry.dev/v1/traces',
+      protocol: 'http/protobuf',
+      headers: {
+        Authorization: `Bearer ${process.env.TELEMETRY_DEV_API_KEY}`,
+      },
+    },
+  },
+})
+```
+
+#### Traceloop
+
+[Traceloop](https://www.traceloop.com/) specializes in LLM observability with automatic prompt tracking.
+
+##### Zero-config setup
+
+```bash title=".env"
+# Required
+TRACELOOP_API_KEY=your-api-key
+
+# Optional
+TRACELOOP_DESTINATION_ID=my-destination
+TRACELOOP_ENDPOINT=https://custom.traceloop.com
+```
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({ provider: { traceloop: {} } })
+```
+
+##### Explicit configuration
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    traceloop: {
+      apiKey: process.env.TRACELOOP_API_KEY,
+      destinationId: 'my-destination', // Optional
+    },
+  },
+})
+```
+
+#### Custom or generic OTEL endpoints
 
 For other OTEL-compatible platforms or custom collectors:
 
@@ -494,13 +519,13 @@ If the matching log exporter package isn't installed, log export is silently dis
 
 ### Configuration options
 
-#### Complete Configuration
+#### Complete configuration
 
 ```typescript
 new OtelExporter({
   // Provider configuration (required)
   provider: {
-    // Use one of: dash0, signoz, newrelic, traceloop, laminar, custom
+    // Use one of: dash0, laminar, newrelic, signoz, traceloop, custom
   },
 
   // Per-signal toggles. Both default to true.
@@ -520,9 +545,11 @@ new OtelExporter({
 
 ### `OpenTelemetry` semantic conventions
 
-The exporter follows [OpenTelemetry Semantic Conventions for GenAI v1.38.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.38.0/docs/gen-ai), ensuring compatibility with observability platforms:
+The exporter follows [OpenTelemetry Semantic Conventions for GenAI v1.41.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.41.0/docs/gen-ai). Traces and logs exported over OTLP declare this version with the schema URL `https://opentelemetry.io/schemas/1.41.0`, so backends that read attributes by version read them correctly. Traces sent through a custom `exporter` declare no version, because that exporter can change the attributes.
 
-#### Span Naming
+The conventions cover the following span names and attributes:
+
+#### Span naming
 
 - **Model calls**: `chat {model}`
 - **Generation loop**: `model_generation {model}`, with one `agent_step {agent_id}` per turn
@@ -530,9 +557,9 @@ The exporter follows [OpenTelemetry Semantic Conventions for GenAI v1.38.0](http
 - **Agent Runs**: `invoke_agent {agent_id}`
 - **Workflow Runs**: `invoke_workflow {workflow_id}`
 
-Each agent turn calls the model once. The `chat` span is that call and is the only span that carries `gen_ai.request.model`, the messages, and `gen_ai.usage.*`, so backends that sum usage across spans count each call once. The `model_generation` span wraps the whole loop and `agent_step` wraps one turn (model call plus tool execution); neither carries usage.
+Each agent turn calls the model once. The `chat` span is that call and is the only span that carries `gen_ai.request.model`, the messages, and `gen_ai.usage.*`, so backends that sum usage across spans count each call once. The `model_generation` span wraps the whole loop and `agent_step` wraps one turn (model call plus tool execution). Neither carries usage.
 
-#### Key Attributes
+#### Key attributes
 
 - `gen_ai.operation.name` - Operation type (chat, tool.execute, etc.)
 - `gen_ai.provider.name` - AI provider (openai, anthropic, etc.)
@@ -552,21 +579,21 @@ Choose the right protocol package based on your provider:
 | - | - | - |
 | Dash0 | gRPC | `@opentelemetry/exporter-trace-otlp-grpc` |
 | Datadog | gRPC | `@opentelemetry/exporter-trace-otlp-grpc` |
-| SigNoz | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
-| New Relic | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
-| Traceloop | HTTP/JSON | `@opentelemetry/exporter-trace-otlp-http` |
 | Laminar | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
+| New Relic | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
+| SigNoz | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
+| Traceloop | HTTP/JSON | `@opentelemetry/exporter-trace-otlp-http` |
 | Custom | Varies | Depends on your collector |
 
 :::warning
 
-Make sure to install the correct protocol package for your provider. The exporter will provide a helpful error message if the wrong package is installed.
+Ensure you install the correct protocol package for your provider. The exporter will provide a helpful error message if the wrong package is installed.
 
 :::
 
 ### Troubleshooting
 
-#### Missing Dependency Error
+#### Missing dependency error
 
 If you see an error like:
 
@@ -578,7 +605,7 @@ To use HTTP/Protobuf export, install the required package:
 
 Install the suggested package for your provider.
 
-#### Common Issues
+#### Common issues
 
 1. **Wrong protocol package**: Verify you installed the correct exporter for your provider
 1. **Invalid endpoint**: Check endpoint format matches provider requirements
@@ -588,7 +615,7 @@ Install the suggested package for your provider.
 
 - [Tracing Overview](/docs/observability/tracing/overview)
 - [OpenTelemetry Bridge](#bridge)
-- [OpenTelemetry Semantic Conventions for GenAI v1.38.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.38.0/docs/gen-ai)
+- [OpenTelemetry Semantic Conventions for GenAI v1.41.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.41.0/docs/gen-ai)
 - [OTEL Exporter Reference](/reference/observability/tracing/exporters/otel)
 
 ## Bridge
@@ -652,7 +679,7 @@ Using the `OtelBridge` requires two steps:
 1. Configure OpenTelemetry instrumentation in your application
 1. Add the `OtelBridge` to your Mastra observability config
 
-#### Step 1: OpenTelemetry Instrumentation
+#### Step 1: OpenTelemetry instrumentation
 
 Create an instrumentation file that initializes OTEL. This must run before your application code:
 
@@ -681,7 +708,7 @@ sdk.start()
 export { sdk }
 ```
 
-#### Step 2: Mastra Configuration
+#### Step 2: Mastra configuration
 
 Add the `OtelBridge` to your Mastra observability config:
 
@@ -730,7 +757,7 @@ Logs that originate inside a Mastra span are emitted under that span's OTEL cont
 
 If you don't register a `LoggerProvider`, log emission is a silent no-op. Traces continue to work as configured.
 
-#### Running Your Application
+#### Running your application
 
 Use the `--import` flag to ensure instrumentation loads before your application:
 
@@ -740,11 +767,11 @@ tsx --import ./instrumentation.ts ./src/index.ts
 
 #### Flushing before exit
 
-Mastra's `flush()` and `shutdown()` ask the registered OTEL providers to flush, but a `BatchSpanProcessor` can still hold a batch it has already started exporting. In serverless or short-lived processes, also `await sdk.shutdown()` after Mastra's flush, so no spans are left in your OTEL SDK when the process exits. The provider's own `forceFlush()` is not enough: it does not wait for a batch the exporter is already sending.
+Mastra's `flush()` and `shutdown()` ask the registered OTEL providers to flush, but a `BatchSpanProcessor` can still hold a batch it has already started exporting. In serverless or short-lived processes, also `await sdk.shutdown()` after Mastra's flush, so no spans are left in your OTEL SDK when the process exits. The provider's own `forceFlush()` isn't enough: it doesn't wait for a batch the exporter is already sending.
 
 ### Semantic conventions
 
-The `OtelBridge` exports Mastra spans using [OpenTelemetry Semantic Conventions for GenAI v1.38.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.38.0/docs/gen-ai). This includes standardized span names (`chat {model}`, `execute_tool {tool_name}`, etc.) and attributes (`gen_ai.usage.input_tokens`, `gen_ai.request.model`, etc.).
+The `OtelBridge` exports Mastra spans using [OpenTelemetry Semantic Conventions for GenAI v1.41.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.41.0/docs/gen-ai). This includes standardized span names (`chat {model}`, `execute_tool {tool_name}`, etc.) and attributes (`gen_ai.usage.input_tokens`, `gen_ai.request.model`, etc.).
 
 For details on span naming and attributes, see the [OpenTelemetry Exporter semantic conventions](#opentelemetry-semantic-conventions).
 

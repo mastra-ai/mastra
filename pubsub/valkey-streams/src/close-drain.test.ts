@@ -65,6 +65,52 @@ describe('close() drains in-flight publishes', () => {
     expect(order).toEqual(['xAdd', 'quit']);
   });
 
+  it('releases a lease while close() flushes, and not once the writer has quit', async () => {
+    // A step that fails during shutdown releases its lease and nacks. The nack
+    // republishes through the writer that close() still holds open, so the release
+    // must go through too or the redelivered step finds its lease held.
+    const xAdd = deferred<void>();
+    const order: string[] = [];
+    const writer = {
+      isOpen: true,
+      on: vi.fn(),
+      connect: vi.fn(),
+      quit: vi.fn(async () => {
+        order.push('quit');
+        writer.isOpen = false;
+      }),
+      eval: vi.fn(async () => {
+        order.push('release');
+        return 1;
+      }),
+      multi: vi.fn(() => {
+        const tx = {
+          xAdd: () => tx,
+          pExpire: () => tx,
+          exec: vi.fn(async () => {
+            await xAdd.promise;
+            order.push('xAdd');
+            return ['1-0', 1];
+          }),
+        };
+        return tx;
+      }),
+    };
+    clients.create.mockReturnValue(writer);
+    const pubsub = new ValkeyStreamsPubSub();
+
+    const publish = pubsub.publish('workflows', { type: 'workflow.step.end', data: {}, runId: 'run-1' });
+    const close = pubsub.close();
+    await pubsub.releaseLease('workflow-step-run:run-1:event-1', 'owner-1');
+    xAdd.resolve();
+    await publish;
+    await close;
+    await pubsub.releaseLease('workflow-step-run:run-1:event-1', 'owner-1');
+
+    expect(order).toEqual(['release', 'xAdd', 'quit']);
+    expect(writer.connect).not.toHaveBeenCalled();
+  });
+
   it('rejects publishes issued after close()', async () => {
     const writer = { isOpen: false, on: vi.fn(), connect: vi.fn(), quit: vi.fn(), xAdd: vi.fn(), multi: vi.fn() };
     clients.create.mockReturnValue(writer);

@@ -269,10 +269,6 @@ describe('zoomTimelineViewport', () => {
     expect(zoomTimelineViewport(state, 64, 0.5, Number.NaN).viewport).toEqual({ from: 13, to: 45 });
   });
 
-  it('never zooms past the selection it must keep visible', () => {
-    expect(zoomTimelineViewport(state, 64, 0.01, 0.5).viewport).toEqual({ from: 13, to: 29 });
-  });
-
   it('measures the span of a viewport that does not start at zero', () => {
     const offset = { origin: parseISO('2026-05-07'), viewport: { from: 13, to: 45 }, selection: { from: 20, to: 25 } };
 

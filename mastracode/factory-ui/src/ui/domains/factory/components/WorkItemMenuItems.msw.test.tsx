@@ -30,7 +30,7 @@ const item: WorkItem = {
   metadata: {},
   triageType: null,
   acceptedAt: null,
-  commentCount: 0,
+  description: null,
   revision: 4,
   createdAt: '2026-09-08T12:00:00Z',
   updatedAt: '2026-09-08T12:00:00Z',
@@ -57,6 +57,7 @@ function renderMenu(
             owner={{ kind: 'free' }}
             {...props}
             onMove={onMove}
+            onMoveToBoard={vi.fn()}
             onRemove={vi.fn()}
             onApproveProposal={vi.fn()}
             onDismissProposal={vi.fn()}
@@ -144,7 +145,7 @@ describe('held card menu', () => {
   const choices = ['Accept and plan', 'Close', 'Dismiss suggested run', 'Remove'];
 
   it.each<[string, BoardCardOwner, boolean[]]>([
-    ['a parked session', { kind: 'session', status: 'ready' }, [true, false, false, false]],
+    ['a parked session', { kind: 'session' }, [true, false, false, false]],
     ['an automatic retry', { kind: 'automation', progressLabel: 'Retrying…' }, [true, false, false, false]],
     ['your own move', { kind: 'you', progressLabel: 'Moving…' }, [true, true, true, true]],
   ])('keeps Close, Dismiss and Remove open unless your own request is in flight: %s', async (_, owner, disabled) => {

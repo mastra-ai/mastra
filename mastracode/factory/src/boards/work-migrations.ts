@@ -8,7 +8,7 @@ import type {
 } from '../storage/domains/boards/base.js';
 import { REVIEW_CONTEXT } from './define-board.js';
 import type { FactoryPhaseTool } from './define-board.js';
-import { boardDefinitionOf } from './stored-board.js';
+import { workSeedWithTriage } from './work-seeds.js';
 import { OWN_CARD_HAND_OFF, workBoard } from './work.js';
 
 const MIGRATED_FIELDS = ['runner', 'exitTool', 'tools', 'autoStart', 'autoStartWhen', 'nextPhases'] as const;
@@ -68,12 +68,13 @@ const SELF_REVIEW_BUILD_OBJECTIVE =
   'answer from the repository.';
 
 /**
- * The Work seed this migration fills from: Work as it was while it had its self-review phase.
- * Only projects stored before then hold the old defaults it replaces, and their rows still have
- * that phase, so they get its runner rather than today's seed, which has no such phase.
+ * The Work seed this migration fills from: Work as it was while it had its self-review phase and
+ * Triage. Only projects stored before then hold the old defaults it replaces, and their rows still
+ * have those phases, so they get their runners (and keep their moves into Triage) rather than
+ * today's seed, which has neither.
  */
 export function workSeedWithSelfReview(): StoredBoardInput {
-  const seed = boardDefinitionOf(workBoard);
+  const seed = workSeedWithTriage();
   const phases = seed.phases.flatMap((phase): StoredPhaseInput[] => {
     if (phase.key !== 'execute') return [phase];
     const goal = phase.runner?.goal && { ...phase.runner.goal, objective: SELF_REVIEW_BUILD_OBJECTIVE };

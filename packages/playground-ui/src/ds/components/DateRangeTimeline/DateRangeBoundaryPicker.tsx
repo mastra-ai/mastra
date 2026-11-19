@@ -1,5 +1,4 @@
 import { format } from 'date-fns';
-import { CalendarDaysIcon } from 'lucide-react';
 import { useState } from 'react';
 import { parseDate } from './lib/date-range-timeline';
 import type { DateBoundary } from './lib/date-range-timeline';
@@ -7,6 +6,7 @@ import { Button } from '@/ds/components/Button/Button';
 import { DatePicker } from '@/ds/components/DateTimePicker';
 import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover/popover';
 import { Txt } from '@/ds/components/Txt/Txt';
+import { IconCalendarDays } from '@/ds/icons/central/IconCalendarDays';
 
 interface DateRangeBoundaryPickerProps {
   boundary: DateBoundary;
@@ -40,7 +40,7 @@ export function DateRangeBoundaryPicker({ boundary, value, min, max, onSelect }:
             aria-expanded={open}
             size="sm"
             className="h-11 w-full min-w-0 justify-start overflow-hidden px-3 sm:h-8"
-            icon={<CalendarDaysIcon aria-hidden="true" />}
+            icon={<IconCalendarDays aria-hidden="true" />}
           >
             <Txt as="span" variant="caption" tone="ink" className="truncate tabular-nums">
               {formattedDate}

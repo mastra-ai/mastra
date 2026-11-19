@@ -14,14 +14,14 @@ The `@mastra/auth-okta` package provides authentication and role-based access co
 
 ## Prerequisites
 
-This guide uses Okta authentication. Make sure to:
+This guide uses Okta authentication. Ensure you have:
 
 1. Create an Okta account at [okta.com](https://www.okta.com/)
 1. Set up an OAuth application in the Okta Admin Console (Web app, Authorization Code grant)
 1. Add your redirect URI to the application's sign-in redirect URIs
 1. Create an API token (required for RBAC)
 
-Make sure your environment variables are set.
+Ensure your environment variables are set.
 
 ```env title=".env"
 OKTA_DOMAIN=dev-123456.okta.com
@@ -251,7 +251,7 @@ Visit [Mastra Client SDK](/docs/server/mastra-client) for more configuration opt
 ## Troubleshooting
 
 - **401 on every request**: Verify your Okta domain, client ID, and client secret are correct. Check that the redirect URI in your Okta application matches `OKTA_REDIRECT_URI`.
-- **401 with `unexpected "aud" claim value` in the server logs**: The Bearer token's audience doesn't match the configured audience. This usually means you sent an access token while the audience is still the default client ID. Set `OKTA_AUDIENCE` to the audience of the authorization server that issued the token. See [Bearer token](#bearer-token).
+- **401 with `unexpected "aud" claim value` in the server logs**: The Bearer token's audience doesn't match the configured audience. A common cause is sending an access token while the audience is still the default client ID. Set `OKTA_AUDIENCE` to the audience of the authorization server that issued the token. See [Bearer token](#bearer-token).
 - **Cookies not sent cross-origin**: Set `credentials: "include"` in `MastraClient` and configure `server.cors` with your frontend origin and `credentials: true`.
 - **Session lost on restart**: Set `OKTA_COOKIE_PASSWORD` to a stable value (at least 32 characters). Without it, an auto-generated key is used that changes on each restart.
 - **RBAC returns empty permissions**: Verify `OKTA_API_TOKEN` is set and the token has permission to list user groups. Check that group names in `roleMapping` match your Okta group names exactly.

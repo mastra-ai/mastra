@@ -10,7 +10,7 @@ import type {
   PublicStructuredOutputOptions,
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
-import type { CoreMessage } from '@mastra/core/llm';
+import type { CoreMessage, WidenedMastraModelConfig } from '@mastra/core/llm';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraModelOutput, FullOutput } from '@mastra/core/stream';
 import { Memory } from '@mastra/memory';
@@ -86,7 +86,9 @@ export class AgentBuilder<TTools extends ToolsInput = ToolsInput, TOutput = unde
       inputProcessors: [
         // use the write to disk processor to debug the agent's context
         // new WriteToDiskProcessor({ prefix: 'before-filter' }),
-        new ToolSummaryProcessor({ summaryModel: config.summaryModel || config.model }),
+        new ToolSummaryProcessor({
+          summaryModel: (config.summaryModel as WidenedMastraModelConfig | undefined) || config.model,
+        }),
         // new WriteToDiskProcessor({ prefix: 'after-filter' }),
       ],
     };

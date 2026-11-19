@@ -3,11 +3,12 @@ import { validateFactoryRuleDecisions } from '../rules/validation.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { defineBoard } from './define-board.js';
 import type { BoardDefinition, BoardPhaseDefinition, BoardPhaseRunner } from './define-board.js';
-import { createBoardRegistry } from './registry.js';
+import { boardRegistryOf, createBoardRegistry } from './registry.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
 import { boardDefinitionOf, compileStoredBoard } from './stored-board.js';
 import type { BoardTransitionPolicy } from './transition-policy.js';
 import { workSeedWithSelfReview } from './work-migrations.js';
+import { workSeedWithTriage } from './work-seeds.js';
 import { workBoard } from './work.js';
 
 // Unit tests inject a registry directly to exercise Work-specific runtime policies.
@@ -45,6 +46,18 @@ export function autoStartingBoards(boards: BoardRegistry = createBoardRegistry()
       return [board.id, compileStoredBoard({ ...row, phases }, board)] as const;
     }),
   );
+}
+
+/**
+ * Work as every project stored before new projects' Work dropped Triage: today's seed plus Triage
+ * ({@link workSeedWithTriage}). Tests that exercise the Triage lane run against this board, which
+ * is what those projects compile.
+ */
+export const triageWorkBoard: InstalledBoard = compileStoredBoard(workSeedWithTriage(), workBoard);
+
+/** A registry holding only {@link triageWorkBoard}, plus any other boards given. */
+export function createTriageWorkRegistry(...boards: InstalledBoard[]): BoardRegistry {
+  return boardRegistryOf([triageWorkBoard, ...boards]);
 }
 
 /**
@@ -106,7 +119,6 @@ export async function commitDecisions(
     decisions: readonly unknown[];
     ingress?: string;
     actorId?: string;
-    configVersion?: string;
     causalChain?: Array<{ ingressId: string; decisionType: string }>;
   },
 ) {
@@ -122,8 +134,7 @@ export async function commitDecisions(
     expectedRevision: item.revision,
     destinationStage: input.stage,
     actorId: input.actorId ?? 'factory-rule-dispatcher',
-    ingress: { identity: ingress, triggerType: 'rule', transitionId: randomUUID() },
-    configVersion: input.configVersion ?? 'rules-v1',
+    ingress: { identity: ingress, transitionId: randomUUID() },
     causalChain: input.causalChain ?? [],
     evaluation: { outcome: 'accepted', decisions: decisions as unknown as Record<string, unknown>[] },
   });

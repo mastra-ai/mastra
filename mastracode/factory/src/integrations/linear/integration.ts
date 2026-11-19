@@ -41,9 +41,8 @@ import { buildLinearAgentTools } from './agent-tools.js';
 import type { LinearEventRules, LinearRuleOverrides } from './default-rules.js';
 import { resolveLinearRules } from './default-rules.js';
 import { attachLinearIssueReconciler } from './issue-reconciler.js';
-import { linearIssueReconciliationEnabled, linearIssueReconciliationInterval } from './reconciliation-config.js';
+import { linearIssueReconciliationInterval } from './reconciliation-config.js';
 import { buildLinearRoutes } from './routes.js';
-import { attachLinearRules } from './rules.js';
 import type { LinearConnectionRow, LinearStorageHandle, UpsertLinearConnectionInput } from './storage.js';
 
 const LINEAR_GRAPHQL_URL = 'https://api.linear.app/graphql';
@@ -1148,7 +1147,6 @@ export class LinearIntegration implements FactoryIntegration {
   // ── FactoryIntegration surface ───────────────────────────────────────────
 
   workers(ctx: IntegrationContext): MastraWorker[] {
-    if (!linearIssueReconciliationEnabled()) return [];
     const reconcile = attachLinearIssueReconciler(this, ctx);
     if (!reconcile) return [];
     const intervalMs = linearIssueReconciliationInterval();
@@ -1174,7 +1172,6 @@ export class LinearIntegration implements FactoryIntegration {
       baseUrl: ctx.baseUrl,
       intake: ctx.storage.intake,
       projects: ctx.storage.projects,
-      ingestFactoryIssues: attachLinearRules(this, ctx),
       workItems: ctx.runtime?.workItems,
       boards: ctx.runtime?.boards,
     });

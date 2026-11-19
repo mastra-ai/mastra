@@ -1,8 +1,7 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsItem, SettingsItemIcon } from '@mastra/playground-ui/new/settings';
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import type { ReactNode } from 'react';
-import type { IntakeConfig } from '../../factory/services/intake';
-import { SettingsSectionHeader } from './common/SettingsSectionHeader';
+import type { IntakeConfig, IntakeSelection } from '../../factory/services/intake';
 
 export interface IntakeSectionProps {
   config: IntakeConfig;
@@ -15,6 +14,16 @@ export function toggleSourceId(ids: string[] | null, id: string): string[] | nul
   return next.length ? next : null;
 }
 
+/** A provider syncs exactly the sources picked; `enabled` follows so older servers agree. */
+export function withSourceIds(selection: IntakeSelection, sourceIds: string[] | null): IntakeSelection {
+  const picked = sourceIds?.length ? sourceIds : null;
+  return { ...selection, sourceIds: picked, enabled: picked !== null };
+}
+
+export function toggleSource(selection: IntakeSelection, id: string): IntakeSelection {
+  return withSourceIds(selection, toggleSourceId(selection.sourceIds, id));
+}
+
 export function IntakeProviderCard({
   name,
   icon,
@@ -23,7 +32,6 @@ export function IntakeProviderCard({
   description,
   action,
   connection,
-  syncControl,
   children,
 }: {
   name: string;
@@ -33,63 +41,43 @@ export function IntakeProviderCard({
   description?: string;
   action?: ReactNode;
   connection?: ReactNode;
-  syncControl?: ReactNode;
   children?: ReactNode;
 }) {
-  const connectionAction = (
-    <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-3 sm:w-auto">
-      {listed && syncControl}
+  const hasActions = Boolean(action || connection);
+  const hasDetails = Boolean(account || description);
+  const summary = (
+    <SettingsItem
+      media={<SettingsItemIcon>{icon}</SettingsItemIcon>}
+      title={name}
+      description={hasDetails ? <IntakeProviderDetails account={account} description={description} /> : undefined}
+    >
+      {hasActions ? <IntakeProviderActions action={action} connection={connection} /> : undefined}
+    </SettingsItem>
+  );
+  if (!listed) return summary;
+  return (
+    <SettingsContainer role="region" aria-label={name}>
+      {summary}
+      {children}
+    </SettingsContainer>
+  );
+}
+
+function IntakeProviderDetails({ account, description }: { account?: string; description?: string }) {
+  return (
+    // Metadata items wrap, so long status lines aren't cut off.
+    <Metadata>
+      {account && <Metadata.Item>{account}</Metadata.Item>}
+      {description && <Metadata.Item>{description}</Metadata.Item>}
+    </Metadata>
+  );
+}
+
+function IntakeProviderActions({ action, connection }: { action?: ReactNode; connection?: ReactNode }) {
+  return (
+    <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
       {action}
       {connection}
     </div>
-  );
-  if (!listed) {
-    return (
-      <SettingsRow
-        label={
-          <span className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="size-4 shrink-0" aria-hidden>
-              {icon}
-            </span>
-            <span>{name}</span>
-            {account && (
-              <Txt as="span" variant="caption" tone="muted">
-                {account}
-              </Txt>
-            )}
-          </span>
-        }
-        description={description}
-      >
-        {connectionAction}
-      </SettingsRow>
-    );
-  }
-  return (
-    <section aria-label={name} className="flex min-w-0 flex-col gap-3">
-      <SettingsSectionHeader action={connectionAction}>
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="flex min-w-0 items-center gap-2">
-            <span className="size-4 shrink-0" aria-hidden>
-              {icon}
-            </span>
-            <Txt as="span" variant="label">
-              {name}
-            </Txt>
-          </span>
-          {account && (
-            <Txt variant="caption" tone="muted" className="wrap-anywhere">
-              {account}
-            </Txt>
-          )}
-          {description && (
-            <Txt variant="caption" tone="muted">
-              {description}
-            </Txt>
-          )}
-        </div>
-      </SettingsSectionHeader>
-      {children && <SettingsContainer>{children}</SettingsContainer>}
-    </section>
   );
 }

@@ -9,6 +9,8 @@ const SRC = fileURLToPath(new URL('..', import.meta.url));
 /** Work's seed and the readers of rows written before other boards existed. */
 const SEED_AND_LEGACY = new Set([
   'boards/work.ts',
+  // Work with Triage, as projects stored before new projects' Work dropped it.
+  'boards/work-seeds.ts',
   // The retired Review board, kept for projects that still use it.
   'boards/review.ts',
   'boards/work-routes.ts',

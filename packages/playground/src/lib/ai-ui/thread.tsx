@@ -34,13 +34,15 @@ import { SaveFullConversationAction } from '@mastra/playground-ui/domains/chat';
 import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { MessageRow } from '@mastra/playground-ui/domains/chat/messages/message-row';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { IconArrowUp } from '@mastra/playground-ui/icons/central/IconArrowUp';
+import { IconMicrophone } from '@mastra/playground-ui/icons/central/IconMicrophone';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { useSpeechRecognition } from '@mastra/react';
+import { useMcpAppTools } from '@mastra/react/hooks/mcps';
 import { useReadAloud } from '@mastra/react/hooks/voice';
-import type { MessageFactoryPart } from '@mastra/react/ui';
-import { ArrowUp, Mic } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
 
+import type { MessageFactoryPart } from '@mastra/react/ui';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { AttachFileMenu } from './attachments/attach-file-menu';
 import { ComposerAttachments as ChatComposerAttachments } from './attachments/attachment';
@@ -149,6 +151,10 @@ const ThreadContent = ({
   } = useReadAloud(agentId, requestContext, {
     onError: error => toast.error(error instanceof Error ? error.message : 'Voice generation failed.'),
   });
+
+  // The agent's MCP app tools: the rows group and draw their calls as apps. A request per MCP server,
+  // so only once there are messages to draw.
+  const { data: mcpAppTools } = useMcpAppTools({ queryOptions: { enabled: messages.length > 0 } });
 
   const { hasSession, viewMode } = useBrowserSession();
   const showThumbnailInChat = hasSession && (viewMode === 'collapsed' || viewMode === 'expanded');
@@ -261,6 +267,7 @@ const ThreadContent = ({
                                 isSpeaking={isSpeaking}
                                 onReadAloud={readAloud}
                                 onStopSpeaking={stopSpeaking}
+                                mcpAppTools={mcpAppTools}
                               />
                             </MessageScrollerItem>
                           ))}
@@ -525,7 +532,7 @@ const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript
       tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
       onClick={() => (isListening ? stop() : start(onTranscript))}
     >
-      {isListening ? <CircleStopIcon /> : <Mic />}
+      {isListening ? <CircleStopIcon /> : <IconMicrophone />}
     </Button>
   );
 };
@@ -625,7 +632,7 @@ const ComposerSendButton = ({
       tooltip={canExecute ? 'Send' : 'No permission to execute'}
       disabled={!canExecute || isEmpty || isAddingAttachments}
     >
-      <ArrowUp />
+      <IconArrowUp />
     </Button>
   );
 };

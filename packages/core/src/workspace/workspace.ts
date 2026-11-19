@@ -37,6 +37,7 @@
 import * as path from 'node:path';
 import type { MastraBrowser } from '../browser';
 import type { IMastraLogger } from '../logger';
+import type { DefinitionSource } from '../observability';
 import { RequestContext } from '../request-context';
 import type { MastraVector } from '../vector';
 
@@ -473,6 +474,8 @@ export interface RegisteredWorkspace {
   source: 'mastra' | 'agent';
   agentId?: string;
   agentName?: string;
+  /** Where the registering agent is defined, for agent workspaces. */
+  agentSource?: DefinitionSource;
 }
 
 // =============================================================================

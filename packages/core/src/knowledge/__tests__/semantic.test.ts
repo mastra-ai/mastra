@@ -1,8 +1,6 @@
 import { APICallError } from '@internal/ai-sdk-v5';
 import { estimateTokenCount } from 'tokenx';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { setRunAgentScopes } from '../../agent/scopes';
-import { RequestContext } from '../../request-context';
 import type { KnowledgeStorage } from '../../storage/domains/knowledge';
 import { InMemoryStore } from '../../storage/mock';
 import { MastraVector } from '../../vector';
@@ -22,6 +20,7 @@ import type {
 import { knowledgeMemoryScopes } from '../declarations';
 import { Knowledge } from '../index';
 import { KnowledgeSemanticIndex } from '../semantic';
+import { agentRunContext } from './agent-run-context';
 
 /** A real exact-cosine vector store held in memory; records every topK it is asked for. */
 class MemoryVector extends MastraVector {
@@ -162,12 +161,7 @@ describe('Knowledge semantic search', () => {
   const as = (held: string[]) => {
     const tools = knowledge.createTools();
     return async (tool: string, input: Record<string, unknown>): Promise<Result> => {
-      const requestContext = new RequestContext();
-      setRunAgentScopes(requestContext, held);
-      return (await tools[tool]!.execute!(
-        input as never,
-        { requestContext, agent: { agentId: 'a' } } as never,
-      )) as Result;
+      return (await tools[tool]!.execute!(input as never, agentRunContext('a', held) as never)) as Result;
     };
   };
   const acme = () => as(['org:acme', 'resource:u-acme']);

@@ -9,20 +9,21 @@ import type {
   StoredBoardScope,
   StoredBoardsStorage,
 } from '../storage/domains/boards/base.js';
-import { DEFAULT_INTAKE_ROUTE_ACTOR } from '../storage/domains/boards/base.js';
+import { DEFAULT_INTAKE_ROUTE_ACTOR, readStoredBoard } from '../storage/domains/boards/base.js';
 import type { RetiredAutomationSettings } from '../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { LEGACY_REVIEW_BOARD } from '../storage/domains/work-items/legacy-review.js';
-import { createBoardRegistry, defaultBoards } from './registry.js';
+import type { ReviewBoardInUse } from '../storage/domains/work-items/legacy-review.js';
+import { boardRegistryOf, createBoardRegistry, defaultBoards } from './registry.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
 import { reviewBoard } from './review.js';
 import { boardForWorkItem } from './semantics.js';
 import { boardDefinitionOf, compileStoredBoard, mergeCodeBehaviour } from './stored-board.js';
 import { BOARD_MIGRATIONS } from './work-migrations.js';
+import { workSeedWithTriage } from './work-seeds.js';
+import { workBoard } from './work.js';
 
 const DEFAULT_RECHECK_MS = 1000;
-/** A row under the retired Review board's key is never served: the key is the Review board's alone. */
-const RESERVED_REVIEW_ROW = `Stored board "${LEGACY_REVIEW_BOARD}" isn't served: the key is reserved for the retired Review board.`;
 const PRELOAD_CONCURRENCY = 8;
 /** The phases every release seeded the Review board with; only runners and tools changed between them. */
 const REVIEW_SEED_PHASES = boardDefinitionOf(reviewBoard).phases.map(({ key, name, kind }) => ({ key, name, kind }));
@@ -31,7 +32,7 @@ const REVIEW_SEED_PHASES = boardDefinitionOf(reviewBoard).phases.map(({ key, nam
  * Whether `row` is the Review board as Factory seeded it: written once by Factory, never
  * revised, and shaped like the seed. The actor alone is not proof, as any caller can pass it.
  */
-function isUntouchedReviewSeed(row: StoredBoardRecord): boolean {
+export function isUntouchedReviewSeed(row: StoredBoardRecord): boolean {
   if (row.revision !== 1 || row.createdBy !== DEFAULT_INTAKE_ROUTE_ACTOR) return false;
   if (row.updatedBy !== DEFAULT_INTAKE_ROUTE_ACTOR || row.name !== reviewBoard.name) return false;
   const phases = [...row.phases].sort((a, b) => a.position - b.position);
@@ -45,7 +46,29 @@ function isUntouchedReviewSeed(row: StoredBoardRecord): boolean {
     )
   );
 }
+
+/**
+ * Whether a project has a board of its own under `review`: a stored row other than the seed an
+ * earlier release left behind. Cards stored on it are its own; anywhere else they are the retired
+ * Review board's. An app that defines the board owns it in a project from when its row is stored
+ * there. Without stored boards (`stored: false`) the app's boards are served as they are.
+ */
+export function ownReviewBoard(codeRegistry: BoardRegistry, { stored = true } = {}): ReviewBoardInUse {
+  if (!stored) return async () => codeRegistry.has(LEGACY_REVIEW_BOARD);
+  return async (ops, scope) => {
+    const row = await readStoredBoard(ops, scope, LEGACY_REVIEW_BOARD);
+    return row !== null && !isUntouchedReviewSeed(row);
+  };
+}
+
 const SNAPSHOT_ATTEMPTS = 3;
+
+/**
+ * The creator Factory records on the Work board it stores in a project as the project is
+ * created: that board is today's Work, and reset gives it back. Any other Work row Factory stored
+ * is the one with Triage. Only Factory writes this id; a person's writes carry their user id.
+ */
+export const NEW_PROJECT_SEED_ACTOR = 'factory:new-project';
 
 /** Where a board in a project's catalog came from. */
 export type BoardSourceKind = 'builtin' | 'app' | 'stored';
@@ -100,8 +123,23 @@ interface CacheEntry {
   boards: ProjectBoards;
   version: string | null;
   reviewInUse: boolean;
+  /** The project's skill revision the boards' skill problems were checked at. */
+  skillsRevision: number;
   checkedAt: number;
 }
+
+/**
+ * The skills a project created (Settings › Skills), which its boards' runners may name besides the app's.
+ * `revision` moves whenever the project's skills change, so loads recheck the names only then.
+ */
+export interface ProjectSkillNames {
+  revision(scope: StoredBoardScope): Promise<number>;
+  names(scope: StoredBoardScope): Promise<ReadonlySet<string>>;
+}
+
+const NO_PROJECT_SKILLS: ReadonlySet<string> = new Set();
+/** Recorded when the project's skills couldn't be read; never a stored revision, so the next load rereads them. */
+const UNREAD_SKILLS_REVISION = -1;
 
 export interface ProjectBoardCacheOptions {
   /** The code boards, built-ins included when enabled. */
@@ -124,11 +162,18 @@ export interface ProjectBoardCacheOptions {
     ops: FactoryStorageOps,
   ) => Promise<ReadonlyMap<string, ReadonlySet<string>> | null>;
   codeSkills?: readonly InlineSkill[];
+  /** The skills each project created. Without it, runners may only name the app's skills. */
+  projectSkills?: ProjectSkillNames;
   /**
    * Whether the project still uses the retired Review board (an open card is stored on it). Such
    * a project is served Review alongside its boards; without this, no project is.
    */
   reviewBoardInUse?: (scope: StoredBoardScope) => Promise<boolean>;
+  /**
+   * Stores the Work placement of every card the retired Review board left on `review`, through
+   * `ops`. Run in the transaction that stores an app's board under that key in a project.
+   */
+  releaseReviewCards?: (ops: FactoryStorageOps, scope: StoredBoardScope) => Promise<void>;
   recheckMs?: number;
   now?: () => number;
   warn?: (message: string) => void;
@@ -185,17 +230,23 @@ export class ProjectBoardCache implements ProjectBoardSource {
   readonly #warned = new Set<string>();
   readonly #seeded = new Set<string>();
   readonly #codeSkills: readonly InlineSkill[];
+  readonly #projectSkills: ProjectSkillNames | undefined;
   readonly #seeds: ReadonlyMap<string, StoredBoardInput>;
+  /** Boards the app upserted for every project, which a project with no boards gets before Factory's. */
+  readonly #appBoards = new Map<string, StoredBoardInput>();
   readonly #reviewBoardInUse: ProjectBoardCacheOptions['reviewBoardInUse'];
+  readonly #releaseReviewCards: ProjectBoardCacheOptions['releaseReviewCards'];
   readonly #occupiedPhases: ProjectBoardCacheOptions['occupiedPhases'];
 
   constructor(options: ProjectBoardCacheOptions) {
     this.codeRegistry = options.codeRegistry;
     this.#storage = options.storage;
     this.#reviewBoardInUse = options.reviewBoardInUse;
+    this.#releaseReviewCards = options.releaseReviewCards;
     this.#occupiedPhases = options.occupiedPhases;
     this.#projects = options.projects;
     this.#codeSkills = options.codeSkills ?? [];
+    this.#projectSkills = options.projectSkills;
     this.#recheckMs = options.recheckMs ?? DEFAULT_RECHECK_MS;
     this.#now = options.now ?? Date.now;
     this.#warn = options.warn ?? (message => console.warn(`[factory] ${message}`));
@@ -212,14 +263,61 @@ export class ProjectBoardCache implements ProjectBoardSource {
     this.#seeds = new Map([...this.codeRegistry.values()].map(board => [board.id, boardDefinitionOf(board)]));
   }
 
-  /** The boards Factory stores in each project once, in order. */
+  /**
+   * The boards Factory stores once in a project it didn't create: Work as it was with Triage, so a
+   * project from an older release keeps the phases its cards know, then the app boards, in order.
+   */
   seeds(): StoredBoardInput[] {
-    return [...this.#seeds.values()];
+    return [...this.#seeds.values()].map(seed => (this.#isFactoryWork(seed.key) ? workSeedWithTriage() : seed));
   }
 
-  /** Factory's current definition for `key`, which reset restores; undefined when Factory has none. */
-  seedFor(key: string): StoredBoardInput | undefined {
-    return this.#seeds.get(key);
+  /**
+   * The definition reset restores for `key`; undefined when there is none. A board the app upserted
+   * for every project comes first, so reset never swaps an app's Work for Factory's. Factory's Work
+   * is today's Work for a project Factory created with it (`row` created by
+   * {@link NEW_PROJECT_SEED_ACTOR}), and Work with Triage for every other project.
+   */
+  seedFor(key: string, row?: Pick<StoredBoardRecord, 'createdBy'>): StoredBoardInput | undefined {
+    const app = this.#appBoards.get(key);
+    if (app) return app;
+    const seed = this.#seeds.get(key);
+    if (!seed || !this.#isFactoryWork(key) || row?.createdBy === NEW_PROJECT_SEED_ACTOR) return seed;
+    return workSeedWithTriage();
+  }
+
+  /**
+   * Stores Factory's boards in a project that was just created, with today's Work (no Triage).
+   * Only the project-creation route calls this; every other load stores {@link seeds}.
+   */
+  async seedNewProject(scope: StoredBoardScope): Promise<ProjectBoards> {
+    if (this.#seeds.size > 0 || this.#appBoards.size > 0) {
+      await this.#storage.seedBoards(scope, [...this.#seeds.values()], {
+        actor: NEW_PROJECT_SEED_ACTOR,
+        onlyIntoEmpty: this.#onlyIntoEmpty(),
+        intoEmpty: [...this.#appBoards.values()],
+      });
+    }
+    return this.describe(scope);
+  }
+
+  /**
+   * Remembers a board the app upserted for every project, so a project that has no boards yet (one
+   * created later, or one that never loaded) gets it on its first load before Factory's own boards;
+   * having it, the project then gets no Work from Factory. Kept for this process: an app upserts
+   * its boards at every startup.
+   */
+  rememberBoardForAllProjects(board: StoredBoardInput): void {
+    this.#appBoards.set(board.key, board);
+  }
+
+  /** Whether `key` is Factory's own Work board, rather than none or an app board under its key. */
+  #isFactoryWork(key: string): boolean {
+    return key === workBoard.id && this.codeRegistry.get(key) === workBoard;
+  }
+
+  /** Work is stored only into a project with no boards: one that has any keeps what it has. */
+  #onlyIntoEmpty(): string[] {
+    return this.#isFactoryWork(workBoard.id) ? [workBoard.id] : [];
   }
 
   async load(scope: StoredBoardScope): Promise<BoardRegistry> {
@@ -267,6 +365,39 @@ export class ProjectBoardCache implements ProjectBoardSource {
     return this.#codeSkills;
   }
 
+  /**
+   * The skills the project created, which its runners may name besides the app's. Throws when they can't be
+   * read, so a board write fails with the storage error instead of refusing a skill the project has.
+   */
+  async projectSkillNames(scope: StoredBoardScope): Promise<ReadonlySet<string>> {
+    return this.#projectSkills ? this.#projectSkills.names(scope) : NO_PROJECT_SKILLS;
+  }
+
+  /**
+   * The names for a load, or undefined when they can't be read: the load still serves the boards, flags their
+   * created skills as missing, and doesn't cache what it compiled without them.
+   */
+  async #readProjectSkillNames(scope: StoredBoardScope): Promise<ReadonlySet<string> | undefined> {
+    try {
+      return await this.projectSkillNames(scope);
+    } catch (error) {
+      this.#warnOnce(
+        `project-skills:${scopeKey(scope)}`,
+        `Could not read the skills project ${scope.factoryProjectId} created; boards that run them show them as missing: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return undefined;
+    }
+  }
+
+  async #projectSkillsRevision(scope: StoredBoardScope): Promise<number> {
+    if (!this.#projectSkills) return 0;
+    try {
+      return await this.#projectSkills.revision(scope);
+    } catch {
+      return UNREAD_SKILLS_REVISION;
+    }
+  }
+
   /** Makes the next load reread the project. The loaded boards keep serving sync reads until then. */
   invalidate(scope: StoredBoardScope): void {
     const key = scopeKey(scope);
@@ -299,14 +430,30 @@ export class ProjectBoardCache implements ProjectBoardSource {
     const current = this.#entries.get(key);
     const version = await this.#storage.readVersion(scope);
     const reviewInUse = (await this.#reviewBoardInUse?.(scope)) ?? false;
-    if (current && current.version === version && current.reviewInUse === reviewInUse) {
+    let skillsRevision = await this.#projectSkillsRevision(scope);
+    if (
+      current &&
+      current.version === version &&
+      current.reviewInUse === reviewInUse &&
+      current.skillsRevision === skillsRevision &&
+      skillsRevision !== UNREAD_SKILLS_REVISION
+    ) {
       if ((this.#generations.get(key) ?? 0) === generation) current.checkedAt = this.#now();
       return current.boards;
     }
     const snapshot = await this.#consistentSnapshot(scope);
-    const boards = this.#compile(scope, snapshot.boards, reviewInUse);
+    const projectSkills = await this.#readProjectSkillNames(scope);
+    // Compiled without the names, the boards flag their skills as missing: the next load reads them again.
+    if (projectSkills === undefined) skillsRevision = UNREAD_SKILLS_REVISION;
+    const boards = this.#compile(scope, snapshot.boards, reviewInUse, projectSkills ?? NO_PROJECT_SKILLS);
     if ((this.#generations.get(key) ?? 0) === generation) {
-      this.#entries.set(key, { boards, version: snapshot.version, reviewInUse, checkedAt: this.#now() });
+      this.#entries.set(key, {
+        boards,
+        version: snapshot.version,
+        reviewInUse,
+        skillsRevision,
+        checkedAt: this.#now(),
+      });
     }
     return boards;
   }
@@ -328,8 +475,28 @@ export class ProjectBoardCache implements ProjectBoardSource {
   async #seed(scope: StoredBoardScope, key: string): Promise<void> {
     if (this.#seeded.has(key)) return;
     try {
-      if (this.#seeds.size > 0) await this.#storage.seedBoards(scope, this.seeds());
-      await this.#migrate(scope);
+      // Read before seeding records Work's key: a project whose list lacked it has no Work of Factory's.
+      const seeded = await this.#storage.seededBoardKeys(scope);
+      const release = this.#releaseReviewCards;
+      const review = this.#seeds.get(LEGACY_REVIEW_BOARD);
+      if (this.#seeds.size > 0 || this.#appBoards.size > 0) {
+        await this.#storage.seedBoards(scope, this.seeds(), {
+          onlyIntoEmpty: this.#onlyIntoEmpty(),
+          intoEmpty: [...this.#appBoards.values()],
+          // An app's board under `review` starts without the cards the retired Review board left there.
+          before: async (ops, board) => {
+            if (board === LEGACY_REVIEW_BOARD) await release?.(ops, scope);
+          },
+        });
+      }
+      // The row an earlier release seeded for the retired board becomes the app's board.
+      if (review) {
+        await this.#storage.adoptSeed(scope, review, {
+          when: isUntouchedReviewSeed,
+          before: ops => release?.(ops, scope) ?? Promise.resolve(),
+        });
+      }
+      await this.#migrate(scope, seeded);
       this.#seeded.add(key);
     } catch (error) {
       this.#warnOnce(
@@ -340,14 +507,21 @@ export class ProjectBoardCache implements ProjectBoardSource {
   }
 
   /** Runs the board migrations of the boards Factory stores here that the project hasn't had yet. */
-  async #migrate(scope: StoredBoardScope): Promise<void> {
+  async #migrate(scope: StoredBoardScope, seededBefore: readonly string[] | null): Promise<void> {
     // A migration of one board rewrites Factory's own board; an app board under the same key keeps
-    // its settings. One that carries a project setting into every board rewrites them all.
+    // its settings. One that carries a project setting into every board rewrites them all. A board
+    // Factory never stored in the project (an app wrote the row first), or one the app upserts for
+    // every project, is an app's: its one-board migrations are recorded as applied without running.
     const migrations = BOARD_MIGRATIONS.filter(migration => {
       if (migration.boardKey === null) return true;
       const code = this.codeRegistry.get(migration.boardKey);
       return code !== undefined && defaultBoards.includes(code);
-    });
+    }).map(migration =>
+      migration.boardKey !== null &&
+      (this.#appBoards.has(migration.boardKey) || (seededBefore !== null && !seededBefore.includes(migration.boardKey)))
+        ? { ...migration, migrate: () => undefined }
+        : migration,
+    );
     const changed = await this.#storage.applyBoardMigrations(scope, migrations, ops =>
       this.#migrationContext(scope, ops),
     );
@@ -373,7 +547,12 @@ export class ProjectBoardCache implements ProjectBoardSource {
     };
   }
 
-  #compile(scope: StoredBoardScope, rows: readonly StoredBoardRecord[], reviewInUse: boolean): ProjectBoards {
+  #compile(
+    scope: StoredBoardScope,
+    rows: readonly StoredBoardRecord[],
+    reviewInUse: boolean,
+    projectSkills: ReadonlySet<string>,
+  ): ProjectBoards {
     const byKey = new Map(rows.map(row => [row.key, row]));
     const details = new Map(this.#codeDetails);
     const problems: string[] = [];
@@ -390,6 +569,11 @@ export class ProjectBoardCache implements ProjectBoardSource {
     // Work and app boards keep their code order, each served from its row.
     for (const code of this.codeRegistry.values()) {
       const row = byKey.get(code.id);
+      // Still the retired board's seed: the app's board is served once its row replaces it.
+      if (row && code.id === LEGACY_REVIEW_BOARD && isUntouchedReviewSeed(row)) {
+        details.delete(code.id);
+        continue;
+      }
       if (!row) {
         details.delete(code.id);
         // Stored once and deleted since, or not stored because storing failed.
@@ -410,28 +594,23 @@ export class ProjectBoardCache implements ProjectBoardSource {
       report(row, merged.problems);
       details.set(code.id, {
         ...details.get(code.id)!,
-        problems: [...merged.problems, ...this.#skillProblems(merged.board)],
+        problems: [...merged.problems, ...this.#skillProblems(merged.board, projectSkills)],
       });
       boards.push(merged.board);
     }
+    // A board of the project's own under the retired Review board's key is served like any other.
+    const reviewRow = byKey.get(LEGACY_REVIEW_BOARD);
+    const ownsReview = reviewRow !== undefined && !isUntouchedReviewSeed(reviewRow);
     // Served from code and never stored, so nobody edits a board on its way out.
-    if (reviewInUse) {
+    if (reviewInUse && !ownsReview) {
       boards.push(reviewBoard);
       details.set(reviewBoard.id, { source: 'builtin', editable: false, problems: [] });
     }
     for (const row of rows) {
       if (this.codeRegistry.has(row.key)) continue;
-      if (row.key === LEGACY_REVIEW_BOARD) {
-        // Factory seeded this row while Review was a built-in board and nobody edited it since:
-        // there is nothing in it to lose, so it is no problem. A person's edits are reported.
-        if (isUntouchedReviewSeed(row)) continue;
-        report(row, [
-          reviewInUse
-            ? `Stored board "${row.key}" is hidden by the code board with the same key.`
-            : RESERVED_REVIEW_ROW,
-        ]);
-        continue;
-      }
+      // Factory seeded this row while Review was a built-in board and nobody edited it since:
+      // it is not a board the project made, so it is not served.
+      if (row.key === LEGACY_REVIEW_BOARD && !ownsReview) continue;
       let board: InstalledBoard;
       try {
         board = compileStoredBoard(row);
@@ -442,20 +621,17 @@ export class ProjectBoardCache implements ProjectBoardSource {
         continue;
       }
       boards.push(board);
-      details.set(row.key, { source: 'stored', editable: true, problems: this.#skillProblems(board) });
+      details.set(row.key, { source: 'stored', editable: true, problems: this.#skillProblems(board, projectSkills) });
     }
     return {
-      registry: createBoardRegistry({ boards, includeDefaultBoards: false }),
+      registry: boardRegistryOf(boards),
       details,
       problems,
     };
   }
 
-  #skillProblems(board: InstalledBoard): string[] {
-    return findBoardSkillProblems(
-      createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
-      this.#codeSkills,
-    );
+  #skillProblems(board: InstalledBoard, projectSkills?: ReadonlySet<string>): string[] {
+    return findBoardSkillProblems(boardRegistryOf([board]), this.#codeSkills, undefined, projectSkills);
   }
 
   #warnOnce(key: string, message: string, debug = false): void {

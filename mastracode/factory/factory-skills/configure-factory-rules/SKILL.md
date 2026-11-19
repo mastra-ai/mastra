@@ -9,7 +9,7 @@ Help the user change Factory policy in the typed deployment configuration. Facto
 
 ## Find the configuration
 
-1. Search for `new MastraFactory`, its `boards` and `includeDefaultBoards` options, `defineBoard`, `configVersion`, and the installed `GithubIntegration`, `PlatformGithubIntegration`, `LinearIntegration`, or `PlatformLinearIntegration` constructors and their `rules` options.
+1. Search for `new MastraFactory`, its `boards` option, `factory.upsertBoard` calls, `defineBoard`, `configVersion`, and the installed `GithubIntegration`, `PlatformGithubIntegration`, `LinearIntegration`, or `PlatformLinearIntegration` constructors and their `rules` options.
 2. Read the existing rule configuration and its tests before editing.
 3. Import rule helpers and types from the same local Factory module used by the deployment.
 4. For custom-board handlers or phase semantics (`kind`, `role`), edit the installed `defineBoard()` definition. For tool-result rules, add `tools: { <toolName>: { onResult } }` to the installed `defineBoard()` definition of the board whose seat produces the result. For GitHub or Linear rules, configure the installed integration constructor directly.
@@ -18,9 +18,9 @@ Do not guess a file path. Factory deployments can assemble `MastraFactory` from 
 
 ## Preserve the public shape
 
-A phase starts its work only through its stored `runner` (`skill`, `context`, `instructions`, `goal`); `onEnter`, `onExit` and `outcomes` in `defineBoard()` are ignored with a warning. Work installs automatically with preferred defaults. Custom boards are installed through `boards`; `includeDefaultBoards: false` supports custom-only installations.
+A phase starts its work only through its stored `runner` (`skill`, `context`, `instructions`, `goal`); `onEnter`, `onExit` and `outcomes` in `defineBoard()` are ignored with a warning. Work installs automatically with preferred defaults. Custom boards are installed through `boards` or written into projects with `factory.upsertBoard()`. `includeDefaultBoards` is deprecated and ignored: Factory adds Work only to a project with no boards.
 
-Remove former global `rules.work` and `rules.review` configuration. There is no board override API. To customize Work, set `includeDefaultBoards: false` and install a same-ID board, preferably using the exported `workBoard` phases as the starting point. The Review board is retired: its pull requests live in Work's Review phase (`pr-review`), and `review` can't be used as a board ID. Keep the built-in phase names and roles unless the changed runtime and UI behavior is intentional. There is no global rules tree; `new MastraFactory({ rules })` throws. Set `configVersion` on `MastraFactory` for the audit label. Tool-result rules resolve only from the item's installed board: Work declares none, and custom boards inherit nothing.
+Remove former global `rules.work` and `rules.review` configuration. There is no board override API. To customize Work, write a board under the `work` key with `factory.upsertBoard(board, { projects: 'all' })` at every startup, preferably starting from the exported `workBoard` phases; projects created later get it instead of Factory's Work. The Review board is retired: its pull requests live in Work's Review phase (`pr-review`), and `review` can't be used as a board ID. Keep the built-in phase names and roles unless the changed runtime and UI behavior is intentional. There is no global rules tree; `new MastraFactory({ rules })` throws. Set `configVersion` on `MastraFactory` for the audit label. Tool-result rules resolve only from the item's installed board: Work declares none, and custom boards inherit nothing.
 
 By default, every integration arrival stays in its routed board's initial phase (Intake for Work) without starting or suggesting a run. This applies to GitHub, GitLab, Linear, Jira, and incident.io; explicit trusted GitHub review requests without an existing card go directly to Review (`pr-review`). Do not restore default arrival automation on the built-in boards.
 
@@ -72,7 +72,7 @@ To make a custom phase terminal or seat an agent in it, change its `kind`/`role`
 
 Use the custom-board execution example in the Factory README as the configuration pattern. Board and phase identifiers are case-sensitive, 1–128 letters, digits, underscores, or hyphens, beginning with a letter or digit, without surrounding whitespace. Lifecycle, tool-result, and integration decisions may target installed custom phases. Validate membership on the target board, never against a union of installed phase names.
 
-A `transition` decision stays on the item's assigned board. An `upsertLinkedWorkItem` decision may target another installed board; materialization enters that board's declared initial phase before the requested destination. Neither decision can reassign an existing card. Targets are checked before acceptance and before uncommitted deferred effects execute. Preserve committed replay and its original `configVersion` even if the installed configuration changes.
+A `transition` decision stays on the item's assigned board. An `upsertLinkedWorkItem` decision may target another installed board; materialization enters that board's declared initial phase before the requested destination. Neither decision can reassign an existing card. Targets are checked before acceptance and before uncommitted deferred effects execute. Committed replay returns its recorded result even if the installed configuration changes.
 
 Working roles identify bindings on the shared Code Agent, not separately configured agents. There is no per-role agent registration option. Declare `invokeSkill` decisions with the working role and a board-owned prompt (or an available skill); do not invent an `agents` configuration. For automatic session preparation, verify the deployment's GitHub integration, project connection and linked repository, sandbox, organization model credentials, and that the phase starts on its own (`autoStart`, optionally `autoStartWhen`); there is no project setting. Enter a working phase through the public transition route as an authorized human when approval is required.
 
@@ -96,7 +96,7 @@ Before changing a built-in handler:
 
 ## Version changes
 
-Set an explicit, deployment-owned `configVersion` on `MastraFactory`. Change it whenever rule behavior changes. It labels persisted evaluations and audit records (stored in the `rule_set_version` column); it must not be used as event identity or added to ingress deduplication keys.
+Set an explicit, deployment-owned `configVersion` on `MastraFactory`. Change it whenever rule behavior changes. It is recorded in transition audit event metadata and the session kickoff header; it must not be used as event identity or added to ingress deduplication keys.
 
 ## Safety rules
 

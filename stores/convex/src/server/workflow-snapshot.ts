@@ -107,6 +107,21 @@ export function mergeWorkflowStepResult({
       ...(hasPendingMarker ? {} : result),
       output: mergedOutput,
     };
+    // A failed foreach stays failed with its first failure. Siblings settling from a read taken
+    // before the failure landed would otherwise flip it back to running, and a later failure
+    // would replace the error (and the failed index) the run fails with.
+    if (existingResult.status === 'failed') {
+      const failedIndex = existingResult.metadata?.foreachFailedIndex;
+      snapshot.context[stepId] = {
+        ...snapshot.context[stepId],
+        status: 'failed',
+        error: existingResult.error,
+        endedAt: existingResult.endedAt,
+        ...(failedIndex !== undefined
+          ? { metadata: { ...snapshot.context[stepId].metadata, foreachFailedIndex: failedIndex } }
+          : {}),
+      };
+    }
   } else {
     snapshot.context[stepId] = result;
   }

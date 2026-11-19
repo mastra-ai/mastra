@@ -8,7 +8,7 @@ import { readFactorySessionScope } from '../../rules/binding-context.js';
 import type { RunErrorRecovery } from '../../run-error.js';
 import { describeRunError } from '../../run-error.js';
 import { runCredential } from '../../session/reply-credential-processor.js';
-import { modelSettingsLink } from './channel-reply-processor.js';
+import { memorySettingsLink, modelSettingsLink } from './channel-reply-processor.js';
 import { sessionLinkFromRequest } from './channel-session-link-processor.js';
 
 export function slackRunErrorCard(error: Error, { requestContext }: ChannelErrorContext) {
@@ -44,6 +44,7 @@ function credentialLine(requestContext: RequestContext | undefined, failedModel:
 function recoveryLinks(requestContext: RequestContext, recoveries: RunErrorRecovery[]) {
   const factoryProjectId = readFactorySessionScope(requestContext)?.factoryProjectId;
   const settingsUrl = factoryProjectId && modelSettingsLink(factoryProjectId);
+  const memoryUrl = factoryProjectId && memorySettingsLink(factoryProjectId);
   const sessionUrl = sessionLinkFromRequest(requestContext);
   const links = recoveries.flatMap(recovery => {
     switch (recovery) {
@@ -51,6 +52,8 @@ function recoveryLinks(requestContext: RequestContext, recoveries: RunErrorRecov
         return settingsUrl ? [{ url: settingsUrl, label: 'Review credentials' }] : [];
       case 'model':
         return sessionUrl ? [{ url: sessionUrl, label: 'Change model' }] : [];
+      case 'memory_model':
+        return memoryUrl ? [{ url: memoryUrl, label: 'Change memory model' }] : [];
       case 'credits':
         return [];
       // A reply in the thread continues the run; a mention in a new thread starts a new session.

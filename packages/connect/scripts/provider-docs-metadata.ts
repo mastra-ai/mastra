@@ -65,6 +65,7 @@ export interface ChannelConnectionDocs {
 /** Providers present in src/providers but not part of the documented release. */
 export const EXCLUDED_PROVIDERS: ReadonlySet<string> = new Set([
   'anthropic',
+  'gitlab',
   'google-analytics',
   'stripe',
   'twitter-v2',

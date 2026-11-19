@@ -9,8 +9,8 @@ Every finding requires changed-doc `file:line` evidence. Accuracy findings also 
 Verdicts:
 
 - `pass`: No material issue in the audited scope.
-- `warn`: A minor issue or verification limitation reduces confidence without making the page misleading or unusable.
-- `fail`: The page is materially inaccurate, incomplete, unsafe, structurally wrong, or not followable.
+- `warn`: A minor issue, including localized prose violations, or a verification limitation reduces confidence without making the page misleading or unusable.
+- `fail`: The page is materially inaccurate, incomplete, unsafe, structurally wrong, or not followable, or its prose fails the Prose quality dimension.
 
 Severity:
 
@@ -18,6 +18,8 @@ Severity:
 - `major`: Likely to mislead readers or cause a failed implementation.
 - `minor`: The page remains usable, but accuracy, clarity, completeness, or maintainability suffers.
 - `nit`: Small localized consistency issue with no material effect.
+
+A changed line that breaks `STYLEGUIDE.md` or the page guide is at least `minor`, never `nit`. Rate it `major` when the prose obscures what the reader must do, when a constraint or failure mode is hard to find, or when the same violation runs through the page.
 
 ## Required canonical-guidance coverage
 
@@ -60,7 +62,7 @@ Apply `REFERENCE.md` and compare the page's declared public surface with package
 
 Type: judgment against `mastra-docs`.
 
-Check information architecture, page shape, writing, links, components, diagrams, accessibility, and applicable authoring workflow. Cite the specific canonical guide rather than copying its rule into this rubric.
+Check information architecture, page shape, links, components, diagrams, accessibility, and applicable authoring workflow. Assess writing under Prose quality. Cite the specific canonical guide rather than copying its rule into this rubric.
 
 - `pass`: The page follows all applicable canonical guidance.
 - `warn`: A localized issue reduces clarity or maintainability.
@@ -70,7 +72,7 @@ Check information architecture, page shape, writing, links, components, diagrams
 
 Type: deterministic.
 
-Use `scripts/run-checks.sh` for audited-page formatting, Remark, Vale, and repository validation. It wraps `pnpm check --format json` and attributes findings to the page by file path. Report missing tools or ambiguous attribution as `warn`; report proven unrelated failures separately.
+Use `scripts/run-checks.sh` for audited-page formatting, Remark, Vale, and repository validation. It wraps `pnpm check --format json` and attributes findings to the page by file path. If `vale-target=fail` comes from `mastra/vale-unavailable`, run `pnpm vale:download` in `docs/` and rerun the script before reporting; don't report it as an environment limitation. Report other missing tools or ambiguous attribution as `warn`; report proven unrelated failures separately.
 
 - `pass`: No audited-target error.
 - `warn`: The audited page has warning-level findings, a check could not run, or repository validation attribution is ambiguous.
@@ -107,6 +109,16 @@ Derive the tasks promised by the page without asking the user to select them. Ch
 - `pass`: A reader can complete the promised task or understand the promised surface from the page and its explicit prerequisites.
 - `warn`: Minor friction remains, but the task is reasonably followable.
 - `fail`: Missing or incorrect instructions block the promised task or create an unsafe result.
+
+### 6. Prose quality
+
+Type: judgment against `STYLEGUIDE.md` and the applicable page guide.
+
+Review every changed passage against each section of `STYLEGUIDE.md`, starting with its plain-language principles. Review from the point of view of a rushed reader or one reading in a non-native language. Vale warnings on changed lines count as evidence. A clean Vale run doesn't mean this dimension passes. Technical accuracy doesn't excuse a prose finding.
+
+- `pass`: Every changed passage follows `STYLEGUIDE.md` and the page guide.
+- `warn`: Localized violations remain, but the reader can still find and act on the content.
+- `fail`: Violations obscure the task, a constraint, or a failure mode, or a violation pattern runs through the page.
 
 ## Finding quality
 

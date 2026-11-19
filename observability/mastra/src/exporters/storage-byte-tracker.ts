@@ -1,5 +1,4 @@
-import type { ObservabilityEvent } from '@mastra/core/observability';
-import type { BufferedEvent } from './event-buffer';
+import type { BufferableEvent, BufferedEvent } from './event-buffer';
 
 export interface StorageByteBatchingConfig {
   /** Serialized buffered-event byte threshold for flushing. Default: 8 MiB. Adapter encoding can add overhead. */
@@ -36,7 +35,7 @@ export class StorageByteTracker {
 
   constructor(readonly config: Required<StorageByteBatchingConfig>) {}
 
-  capture(event: ObservabilityEvent): BufferedEvent {
+  capture(event: BufferableEvent): BufferedEvent {
     // Preserve Dates and capture payloads at enqueue time. Serialization errors
     // propagate instead of silently discarding a record.
     const snapshot = { ...structuredClone(event), retryCount: 0 };

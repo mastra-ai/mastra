@@ -1,7 +1,10 @@
+import { IconClock } from '@mastra/playground-ui/icons/central/IconClock';
+import { IconCoins } from '@mastra/playground-ui/icons/central/IconCoins';
+import { IconGauge } from '@mastra/playground-ui/icons/central/IconGauge';
+import { IconHashtag } from '@mastra/playground-ui/icons/central/IconHashtag';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
 import type { ExperimentItemUsage } from '@mastra/react/hooks/experiments';
-import { ClockIcon, CoinsIcon, GaugeIcon, HashIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import {
   costDeltaFormatter,
@@ -55,7 +58,7 @@ export function itemMetrics({
     ? [
         {
           id: 'cost',
-          icon: <CoinsIcon />,
+          icon: <IconCoins />,
           label: 'Cost',
           value: formatCostValue(usage?.estimatedCost, costUnit),
           rawValue: usage?.estimatedCost,
@@ -70,7 +73,7 @@ export function itemMetrics({
     ? [
         {
           id: 'tokens',
-          icon: <HashIcon />,
+          icon: <IconHashtag />,
           label: 'Tokens',
           value: formatTokenCount(totalTokens(usage)),
           rawValue: totalTokens(usage),
@@ -87,7 +90,7 @@ export function itemMetrics({
       : [
           {
             id: 'duration',
-            icon: <ClockIcon />,
+            icon: <IconClock />,
             label: 'Duration',
             value: formatDuration(durationMs) ?? '-',
             rawValue: durationMs,
@@ -101,7 +104,7 @@ export function itemMetrics({
     ? [
         {
           id: 'avg-score',
-          icon: <GaugeIcon />,
+          icon: <IconGauge />,
           label: 'Avg score',
           value: formatScore(averageScore.value),
           rawValue: averageScore.value,

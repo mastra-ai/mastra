@@ -5,7 +5,7 @@
  * Tracks processes in-memory since there's no server to query.
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
 
 import type { ResultPromise, Options as ExecaOptions } from 'execa';
@@ -25,6 +25,50 @@ const TIMEOUT_KILL_GRACE_MS = 2_000;
 
 /** How long output may keep draining after the process exits before wait() settles without it. */
 const EXIT_OUTPUT_GRACE_MS = 2_000;
+
+const OOM_SCORE_ADJ_PATH = '/proc/self/oom_score_adj';
+
+/** `oom_score_adj` given to spawned commands unless `MASTRA_COMMAND_OOM_SCORE_ADJ` overrides it. */
+const DEFAULT_COMMAND_OOM_SCORE_ADJ = 500;
+
+/**
+ * The `oom_score_adj` to give spawned commands: `MASTRA_COMMAND_OOM_SCORE_ADJ` (1-1000), or the
+ * default when it is unset or not a number. `0`, `off` or `false` turns the adjustment off.
+ */
+function commandOomScoreAdj(): number | undefined {
+  const configured = process.env.MASTRA_COMMAND_OOM_SCORE_ADJ?.trim();
+  if (configured && /^(0+|off|false)$/i.test(configured)) return undefined;
+  if (configured && /^\d+$/.test(configured)) return Math.min(Number(configured), 1000);
+  return DEFAULT_COMMAND_OOM_SCORE_ADJ;
+}
+
+/**
+ * Prefix a shell command so that its shell raises its own `oom_score_adj` first (Linux only).
+ *
+ * The agent and the commands it runs share one memory limit in a container. When a command's
+ * processes use it all up, the kernel OOM killer kills the process with the highest score, and a
+ * Node agent holding a few hundred MB often outscores each of many smaller workers. Everything the
+ * shell starts inherits the raised score (also across `exec`), so the kernel kills the workload
+ * instead, and the agent sees `Killed` / exit 137 in the command result.
+ *
+ * Raising your own score needs no privilege. A failed write (no `/proc`, read-only `/proc`) is
+ * silent, and the prefix changes neither the command's output nor its exit status. It stays on
+ * the command's first line, so shell error line numbers are unchanged. It is skipped when the
+ * agent's own score is already at or above the target, since lowering a score needs privilege.
+ */
+function withRaisedOomScore(command: string): string {
+  if (process.platform !== 'linux') return command;
+  const target = commandOomScoreAdj();
+  if (target === undefined) return command;
+  let current: number;
+  try {
+    current = Number.parseInt(readFileSync(OOM_SCORE_ADJ_PATH, 'utf8'), 10);
+  } catch {
+    return command;
+  }
+  if (!(current < target)) return command;
+  return `{ echo ${target} >${OOM_SCORE_ADJ_PATH}; } 2>/dev/null; ${command}`;
+}
 
 /**
  * Find a POSIX shell on Windows for commands built with POSIX quoting.
@@ -351,7 +395,7 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
       : usesBash && invocation
         ? // Quote the program too: bash reads the backslashes in C:\tools\node.exe as escapes.
           { command: [invocation.command, ...invocation.args].map(shellQuote).join(' '), args: [] }
-        : this.sandbox.wrapCommandForIsolation(command);
+        : this.sandbox.wrapCommandForIsolation(withRaisedOomScore(command));
 
     // Base options shared across all platforms.
     //

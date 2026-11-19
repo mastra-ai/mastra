@@ -10,8 +10,8 @@ export type Views<Options> = readonly [ResolvedView<Options>, ...ResolvedView<Op
 
 /**
  * The open view of a widget, `wanted` when it has one (else the first), and the card title for it
- * (`title`, and `titleMenu` with several views, or an expand link with `expand`) to spread into
- * `ChartCard`; picking a view calls `onChoose`.
+ * (`title`, and `titleMenu` with several views unless the widget has somewhere to `expand` to) to
+ * spread into `ChartCard`; picking a view calls `onChoose`.
  */
 export function viewMenu<Options>(
   widget: DashboardWidget,

@@ -9,6 +9,7 @@ import {
   EXECUTION_UNVERIFIED_ERROR_ID,
   setExecutionClaim,
 } from '../../agent/durable/execution-fence';
+import { TripWire } from '../../agent/trip-wire';
 import type { ActorSignal } from '../../auth/ee';
 import { InMemoryServerCache } from '../../cache/inmemory';
 import { MastraError } from '../../error';
@@ -302,6 +303,73 @@ describe('StepExecutor', () => {
     expect(serialized).not.toContain('stack');
   });
 
+  it('logs a step error at ERROR with its stack', async () => {
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() };
+    stepExecutor.__setLogger(logger as any);
+    const boom = new Error('boom');
+    const failingStep = createStep({
+      id: 'failing-step',
+      execute: async () => {
+        throw boom;
+      },
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+    });
+
+    await stepExecutor.execute({
+      workflowId: 'test-workflow',
+      entry: { type: 'step', step: failingStep },
+      runId: 'test-run',
+      input: {},
+      stepResults: {},
+      state: {},
+      requestContext,
+    });
+
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining(`Error executing step failing-step: ${boom.stack}`),
+    );
+    expect(logger.trackException).toHaveBeenCalledTimes(1);
+  });
+
+  it('logs a processor tripwire at debug without a stack and still returns the tripwire', async () => {
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() };
+    stepExecutor.__setLogger(logger as any);
+    const blockingStep = createStep({
+      id: 'blocking-step',
+      execute: async () => {
+        throw new TripWire('blocked on purpose', { retry: false }, 'always-block');
+      },
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+    });
+
+    const result = await stepExecutor.execute({
+      workflowId: 'test-workflow',
+      entry: { type: 'step', step: blockingStep },
+      runId: 'test-run',
+      input: {},
+      stepResults: {},
+      state: {},
+      requestContext,
+    });
+
+    expect(result.status).toBe('failed');
+    expect((result as any).tripwire).toEqual({
+      reason: 'blocked on purpose',
+      retry: false,
+      metadata: undefined,
+      processorId: 'always-block',
+    });
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(logger.trackException).not.toHaveBeenCalled();
+    expect(logger.debug).toHaveBeenCalledWith('Step blocking-step stopped by tripwire', {
+      stepId: 'blocking-step',
+      processorId: 'always-block',
+      reason: 'blocked on purpose',
+    });
+  });
+
   it('should save MastraError message without stack trace when step fails', async () => {
     const errorMessage = 'Test MastraError: step execution failed.';
     const thrownError = new MastraError({
@@ -348,6 +416,44 @@ describe('StepExecutor', () => {
     // Verify stack is not in JSON output
     const serialized = JSON.stringify(failedResult.error);
     expect(serialized).not.toContain('stack');
+  });
+
+  describe('falsy resume data (#29390)', () => {
+    it.each([
+      ['false', false],
+      ['0', 0],
+      ['an empty string', ''],
+      ['null', null],
+    ])('records %s as the resume payload on the step result', async (_label, value) => {
+      let seen: unknown = 'not called';
+      const step = createStep({
+        id: 'approval',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ seen: z.any() }),
+        execute: async ({ resumeData }) => {
+          seen = resumeData;
+          return { seen: resumeData };
+        },
+      });
+
+      const result = await stepExecutor.execute({
+        workflowId: 'test-workflow',
+        entry: { type: 'step', step },
+        runId: 'test-run',
+        input: {},
+        stepResults: {
+          approval: { status: 'suspended', payload: {}, suspendPayload: {}, startedAt: 1, suspendedAt: 2 } as any,
+        },
+        state: {},
+        requestContext,
+        resumeData: value,
+      });
+
+      expect(seen).toBe(value);
+      expect(result.status).toBe('success');
+      expect((result as { resumePayload?: unknown }).resumePayload).toBe(value);
+      expect((result as { resumedAt?: unknown }).resumedAt).toEqual(expect.any(Number));
+    });
   });
 
   describe('abort signal propagation', () => {

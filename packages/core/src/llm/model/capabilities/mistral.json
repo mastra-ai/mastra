@@ -2,6 +2,7 @@
   "attachment": [
     "codestral-2508",
     "codestral-latest",
+    "deepseek-v4-1-flash-1017",
     "labs-devstral-small-2512",
     "labs-leanstral-1-5-1",
     "magistral-medium-latest",
@@ -88,37 +89,19 @@
     "zai-glm-5-3-flash"
   ],
   "reasoning": {
-    "mistral-small-2603": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "mistral-large-4": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "mistral-small-latest": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "mistral-large-4-0-8": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "zai-glm-5-3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "magistral-medium-latest": [
+    "zai-glm-5-2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "mistral-medium-2604": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -136,16 +119,28 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "glm-5-2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "mistral-medium-2604": [
+    "labs-leanstral-1-5-1": [
       {
         "type": "effort",
         "values": ["none", "high"]
+      }
+    ],
+    "mistral-large-4-0-8": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "mistral-small-2603": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "mistral-large-4": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "zai-glm-5-3": [
@@ -154,16 +149,28 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "labs-leanstral-1-5-1": [
+    "mistral-large-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "magistral-medium-latest": [
       {
         "type": "effort",
         "values": ["none", "high"]
       }
     ],
-    "zai-glm-5-2": [
+    "glm-5-2": [
       {
         "type": "effort",
         "values": ["none", "high", "max"]
+      }
+    ],
+    "mistral-small-latest": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ]
   }

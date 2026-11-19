@@ -1,0 +1,44 @@
+{
+  "attachment": [
+    "deepseek/deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4.1-flash-1017-thinking",
+    "z-ai/glm-5.3-flash"
+  ],
+  "temperature": [
+    "deepseek/deepseek-v4-pro-0813",
+    "deepseek/deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4.1-flash-1017-thinking",
+    "google/gemma-4-12b-it",
+    "meta-llama/llama-3.1-8b-instruct",
+    "mistralai/ministral-8b-2512",
+    "mistralai/mistral-nemo-instruct-2407",
+    "z-ai/glm-5.3",
+    "z-ai/glm-5.3-flash"
+  ],
+  "reasoning": {
+    "deepseek/deepseek-v4-pro-0813": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4.1-flash-1017-thinking": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "z-ai/glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "z-ai/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ]
+  }
+}

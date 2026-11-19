@@ -1,9 +1,12 @@
-import { CirclePause, HourglassIcon, Loader2, ShieldAlert } from 'lucide-react';
 import { workflowStatusTone, workflowStatusToneText } from '../workflow-status-tone';
 import { WorkflowCard } from './workflow-card';
 import { TripwireNotice } from '@/domains/chat/messages/tripwire-notice';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Txt } from '@/ds/components/Txt';
+import { IconHourglass } from '@/ds/icons/central/IconHourglass';
+import { IconLoadingCircle } from '@/ds/icons/central/IconLoadingCircle';
+import { IconPause } from '@/ds/icons/central/IconPause';
+import { IconShield2 } from '@/ds/icons/central/IconShield2';
 import { CheckIcon } from '@/ds/icons/CheckIcon';
 import { CrossIcon } from '@/ds/icons/CrossIcon';
 import { Icon } from '@/ds/icons/Icon';
@@ -34,10 +37,10 @@ export const WorkflowStatus = ({ stepId, status, result, tripwire }: WorkflowSta
           <Icon>
             {status === 'success' && <CheckIcon className={toneText} />}
             {status === 'failed' && <CrossIcon className={toneText} />}
-            {status === 'tripwire' && <ShieldAlert className="text-warning-foreground" />}
-            {status === 'suspended' && <CirclePause className={toneText} />}
-            {status === 'waiting' && <HourglassIcon className={toneText} />}
-            {status === 'running' && <Loader2 className={cn('animate-spin', toneText)} />}
+            {status === 'tripwire' && <IconShield2 className="text-warning-foreground" />}
+            {status === 'suspended' && <IconPause className={toneText} />}
+            {status === 'waiting' && <IconHourglass className={toneText} />}
+            {status === 'running' && <IconLoadingCircle className={cn('animate-spin', toneText)} />}
           </Icon>
           <Txt as="span" variant="heading" tone="ink">
             {stepId.charAt(0).toUpperCase() + stepId.slice(1)}

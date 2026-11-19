@@ -1,11 +1,11 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { Status } from '@mastra/playground-ui/components/StatusIndicators';
 import type { StatusPresentation } from '@mastra/playground-ui/components/StatusIndicators';
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Status } from '@mastra/playground-ui/components/StatusIndicators';
+import { SettingsItem, SettingsItemIcon } from '@mastra/playground-ui/new/settings';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
-import { Box, MoreHorizontal } from 'lucide-react';
+import { IconDotGrid1x3Horizontal } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Horizontal';
 
 import type { OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
 import {
@@ -13,9 +13,9 @@ import {
   useSignOutProviderOAuth,
   useStartProviderOAuth,
 } from '../../../../../../hooks/use-providers';
-import { ProviderBrandIcon } from '../../../../workspaces/components/ProviderBrandIcon';
 import { signInRequest } from '../../provider-credential';
 import type { CredentialScope, ProviderCredential } from '../../provider-credential';
+import { ConnectedRow, ProviderIcon } from './ProviderRows';
 
 export interface ProviderConnection {
   provider: ProviderInfo;
@@ -57,7 +57,10 @@ export function ConnectedProviderRow({
   disabled,
   onUpdateKey,
   onOAuthStarted,
+  variant = 'list',
 }: {
+  /** `list`: an `li` of a `ProviderRows` list. `settings`: a `SettingsItem` in a settings card. */
+  variant?: 'list' | 'settings';
   connection: ProviderConnection;
   requestScope: CredentialScope | undefined;
   disabled: boolean;
@@ -96,33 +99,42 @@ export function ConnectedProviderRow({
     );
   };
 
+  const canSignInAgain = signInExpired && provider.oauth?.supported === true && onOAuthStarted !== undefined;
+  const menu = credential ? (
+    <CredentialMenu
+      displayName={displayName}
+      credential={credential}
+      disabled={disabled || pending !== undefined}
+      onSignInAgain={canSignInAgain ? () => signInAgain(onOAuthStarted) : undefined}
+      onSignOut={signOut}
+      onUpdateKey={provider.connectWithMastraAccount ? undefined : onUpdateKey}
+      onRemoveKey={removeKey}
+    />
+  ) : undefined;
+
+  if (variant === 'settings') {
+    return (
+      <SettingsItem
+        media={
+          <SettingsItemIcon>
+            {/* The span keeps each brand icon's own optical size. */}
+            <span className="flex">
+              <ProviderIcon provider={provider.provider} />
+            </span>
+          </SettingsItemIcon>
+        }
+        title={displayName}
+        description={<Status presentation={pending ?? status} />}
+      >
+        {menu}
+      </SettingsItem>
+    );
+  }
+
   return (
-    <li className="flex min-h-10 items-center gap-2.5 py-1.5 pr-1.5 pl-3">
-      <ProviderBrandIcon provider={provider.provider} fallback={<Box className="text-muted-foreground size-4" />} />
-      <Txt as="span" variant="caption" className="min-w-0 flex-1 truncate">
-        {displayName}
-      </Txt>
-      <Txt as="span" variant="meta" tone="muted" className="shrink-0">
-        <Status presentation={pending ?? status} />
-      </Txt>
-      {credential ? (
-        <CredentialMenu
-          displayName={displayName}
-          credential={credential}
-          disabled={disabled || pending !== undefined}
-          onSignInAgain={
-            signInExpired && provider.oauth?.supported === true && onOAuthStarted
-              ? () => signInAgain(onOAuthStarted)
-              : undefined
-          }
-          onSignOut={signOut}
-          onUpdateKey={provider.connectWithMastraAccount ? undefined : onUpdateKey}
-          onRemoveKey={removeKey}
-        />
-      ) : (
-        <span aria-hidden="true" className="size-control-sm shrink-0" />
-      )}
-    </li>
+    <ConnectedRow icon={<ProviderIcon provider={provider.provider} />} title={displayName} status={pending ?? status}>
+      {menu}
+    </ConnectedRow>
   );
 }
 
@@ -148,7 +160,7 @@ function CredentialMenu({
       <DropdownMenu.Trigger
         render={
           <Button variant="ghost" size="icon-sm" aria-label={`${displayName} actions`} disabled={disabled}>
-            <MoreHorizontal />
+            <IconDotGrid1x3Horizontal />
           </Button>
         }
       />

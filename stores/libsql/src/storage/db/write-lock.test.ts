@@ -277,3 +277,101 @@ describe('LibSQL observational-memory write-lock regression', () => {
     expect(updated?.isObserving).toBe(true);
   });
 });
+
+describe('LibSQL background-task write-lock regression', () => {
+  let tmpDir: string;
+  let store: LibSQLStore;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'libsql-bg-lock-'));
+  });
+
+  afterEach(async () => {
+    await store?.close?.();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  // Reproduces the background-task shutdown path: the manager marks unsettled
+  // tasks failed (autocommit UPDATE) while the workflow engine deletes the
+  // finished run in an interactive write transaction on the same client. An
+  // unserialized UPDATE waits out the busy timeout behind the open transaction,
+  // fails with SQLITE_BUSY, and arms the pool reset, which then stalls or
+  // closes the transactions still in flight.
+  type TasksStore = NonNullable<LibSQLStore['stores']['backgroundTasks']>;
+  const taskWrites: {
+    name: string;
+    write: (tasks: TasksStore, id: string) => Promise<unknown>;
+    check: (tasks: TasksStore, id: string) => Promise<void>;
+  }[] = [
+    {
+      name: 'updateTask',
+      write: (tasks, id) =>
+        tasks.updateTask(id, { status: 'failed', completedAt: new Date() }, { expectedStatus: 'running' }),
+      check: async (tasks, id) => expect((await tasks.getTask(id))?.status).toBe('failed'),
+    },
+    {
+      name: 'deleteTask',
+      write: (tasks, id) => tasks.deleteTask(id),
+      check: async (tasks, id) => expect(await tasks.getTask(id)).toBeNull(),
+    },
+    {
+      name: 'deleteTasks',
+      write: (tasks, id) => tasks.deleteTasks({ runId: `run-${id}` }),
+      check: async (tasks, id) => expect(await tasks.getTask(id)).toBeNull(),
+    },
+  ];
+
+  it.each(taskWrites)('keeps $name writes that race interactive workflow transactions', async ({ write, check }) => {
+    store = new LibSQLStore({ id: 'bg-lock-regression', url: `file:${path.join(tmpDir, 'bg-race.db')}` });
+    const tasks = store.stores.backgroundTasks!;
+    const workflows = store.stores.workflows!;
+    await tasks.init();
+    await workflows.init();
+
+    const TASK_COUNT = 40;
+    const ids = Array.from({ length: TASK_COUNT }, (_, i) => `task-${i}`);
+    const workflowName = 'bg-race-workflow';
+    for (const id of ids) {
+      await tasks.createTask({
+        id,
+        status: 'running',
+        toolName: 'view',
+        toolCallId: `call-${id}`,
+        args: {},
+        agentId: 'agent-1',
+        runId: `run-${id}`,
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 30_000,
+        createdAt: new Date(),
+      });
+      await workflows.persistWorkflowSnapshot({
+        workflowName,
+        runId: `run-${id}`,
+        snapshot: {
+          context: {},
+          activePaths: [],
+          timestamp: Date.now(),
+          suspendedPaths: {},
+          serializedStepGraph: [],
+          status: 'running',
+          value: {},
+          runId: `run-${id}`,
+        } as any,
+      });
+    }
+
+    // Each run is deleted in its own interactive transaction while the task
+    // writes go out one after another, so they land inside open transactions.
+    const deletes = Promise.all(ids.map(id => workflows.deleteWorkflowRunById({ runId: `run-${id}`, workflowName })));
+    const writes = (async () => {
+      for (const id of ids) await write(tasks, id);
+    })();
+    await Promise.all([deletes, writes]);
+
+    for (const id of ids) {
+      await check(tasks, id);
+      expect(await workflows.getWorkflowRunById({ runId: `run-${id}`, workflowName })).toBeNull();
+    }
+  });
+});

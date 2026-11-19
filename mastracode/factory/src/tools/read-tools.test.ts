@@ -1,11 +1,10 @@
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { describe, expect, it, vi } from 'vitest';
+import { createTriageWorkRegistry } from '../boards/test-utils.js';
 
-import { createBoardRegistry } from '../boards/index.js';
 import { LiveSessions } from '../session/live-sessions.js';
 import type { LiveSession } from '../session/live-sessions.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
-import type { WorkItemCommentRow } from '../storage/domains/comments/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type {
   FactoryDeferredDecisionRecord,
@@ -48,7 +47,6 @@ function item(overrides: Partial<Card> & { id: string }): Card {
     triageType: null,
     autonomyArmedAt: null,
     acceptedAt: null,
-    commentCount: 0,
     revision: 1,
     createdBy: 'someone-else',
     createdAt: new Date(clock),
@@ -94,8 +92,6 @@ function decision(overrides: Partial<FactoryDeferredDecisionRecord> & { id: stri
     evaluationId: `evaluation-${overrides.id}`,
     workItemId: null,
     idempotencyKey: overrides.id,
-    effectOrdinal: 0,
-    effectHash: 'hash',
     causalChain: [],
     actor: null,
     decision: { type: 'invokeSkill', role: 'work' },
@@ -122,7 +118,6 @@ function setup({
   bindings = [],
   decisions = [],
   audit = [],
-  comments = [],
   subscriptions = [],
   sessions,
 }: {
@@ -130,7 +125,6 @@ function setup({
   bindings?: FactoryRunBindingRecord[];
   decisions?: FactoryDeferredDecisionRecord[];
   audit?: AuditEventRow[];
-  comments?: WorkItemCommentRow[];
   subscriptions?: WorkItemSubscription[];
   sessions?: FactoryReadToolDependencies['sessions'];
 }) {
@@ -160,9 +154,8 @@ function setup({
         subscriptions.filter(row => row.factoryProjectId === factoryProjectId && row.sessionId === sessionId),
       ),
     },
-    comments: { listRecent: vi.fn(async () => comments) },
     audit: { list: vi.fn(async () => ({ events: audit })) },
-    boards: createBoardRegistry(),
+    boards: createTriageWorkRegistry(),
     ...(sessions ? { sessions } : {}),
   };
   const tools = createFactoryReadTools(scope, deps) as Record<
@@ -253,16 +246,16 @@ describe('factory_list_work_items', () => {
     expect(result.items.find(row => row.id === 'a')?.number).toBe(12);
   });
 
-  it('links each card on its board when a public URL is configured', async () => {
+  it('links each card to the page that opens its session when a public URL is configured', async () => {
     vi.stubEnv('MASTRACODE_PUBLIC_URL', 'https://factory.example.com');
     try {
       const { run } = setup({ items: rows });
       const result = await run<{ items: Array<{ id: string; url: string | null }> }>('factory_list_work_items', {});
       expect(result.items.find(row => row.id === 'a')?.url).toBe(
-        'https://factory.example.com/factories/project-1/work?item=a',
+        'https://factory.example.com/factories/project-1/cards/a',
       );
       expect(result.items.find(row => row.id === 'c')?.url).toBe(
-        'https://factory.example.com/factories/project-1/boards/release?item=c',
+        'https://factory.example.com/factories/project-1/cards/c',
       );
     } finally {
       vi.unstubAllEnvs();
@@ -317,7 +310,6 @@ describe('factory_inspect_work_item', () => {
       decisions: [
         decision({ id: 'd1', workItemId: TARGET, lastError: 'e'.repeat(1000), failureCode: 'session_unavailable' }),
       ],
-      comments: [{ id: 'c1', kind: 'comment', body: 'b'.repeat(1000), author: { type: 'human', id: 'u' } } as never],
       audit: [
         {
           id: 'a1',
@@ -344,7 +336,6 @@ describe('factory_inspect_work_item', () => {
     });
     const decisions = byId.decisions as Array<{ error: string }>;
     expect(decisions[0]!.error).toHaveLength(MAX_ERROR);
-    expect((byId.feed as Array<{ body: string }>)[0]!.body).toHaveLength(MAX_TEXT);
   });
 
   it('shows whether each session is mid-run and when its thread last moved (#27742)', async () => {
@@ -465,39 +456,6 @@ describe('factory_list_attention', () => {
     expect(result.truncated).toBe(false);
   });
 
-  it('flags open cards filed by hand that name no repository while several are linked', async () => {
-    const linked = [
-      { id: 'link-1', repositoryId: 'repo-1', externalId: '2', slug: 'mastra-ai/mastra' },
-      { id: 'link-2', repositoryId: 'repo-2', externalId: '3', slug: 'mastra-ai/platform' },
-    ];
-    const sourceControl = {
-      integrationId: 'github',
-      connections: { list: async () => [{ id: 'connection-1', integrationId: 'github' }] },
-      projectRepositories: {
-        list: async () => linked.map(({ id, repositoryId }) => ({ id, repositoryId, inEnvironment: true })),
-      },
-      repositories: {
-        get: async ({ id }: { id: string }) => {
-          const link = linked.find(candidate => candidate.repositoryId === id);
-          return link ? { id, externalId: link.externalId, slug: link.slug } : null;
-        },
-      },
-    } as unknown as SourceControlStorageHandle;
-    const items = [
-      item({ id: 'unnamed', externalSource: null, metadata: { cardNumber: 1 } }),
-      item({ id: 'named', externalSource: null, metadata: { cardNumber: 2, repository: 'mastra-ai/mastra' } }),
-      item({ id: 'done', externalSource: null, stages: ['done'], metadata: { cardNumber: 3 } }),
-      item({ id: 'synced' }),
-    ];
-    const { run } = setup({ items, sessions: { getSourceControlBySessionId: async () => sourceControl } });
-    const result = await run<{
-      needsRepository: Array<{ workItemId: string; number: number | null }>;
-      linkedRepositories?: string[];
-    }>('factory_list_attention', {});
-    expect(result.needsRepository).toMatchObject([{ workItemId: 'unnamed', number: 1 }]);
-    expect(result.linkedRepositories).toEqual(['mastra-ai/mastra', 'mastra-ai/platform']);
-  });
-
   it('lists a run parked on a tool prompt while it is still in flight', async () => {
     let created: (session: LiveSession) => void = () => {};
     const liveSessions = new LiveSessions({
@@ -511,6 +469,7 @@ describe('factory_list_attention', () => {
     const pendingSuspensions = new Map<string, { toolName: string }>();
     created({
       identity: { getId: () => 'session-builder' },
+      thread: { getId: () => 'session-builder' },
       run: { isRunning: () => true },
       state: { get: () => ({ factoryOrgId: 'org-1', factoryProjectId: 'project-1' }) },
       displayState: { get: () => ({ pendingSuspensions }) },

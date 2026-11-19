@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ArrowUp } from 'lucide-react';
 import { useState } from 'react';
 
 import { ChatAnnotationsProvider, useChatAnnotations } from '../chat-annotations';
@@ -13,6 +12,7 @@ import { Composer, ComposerActions, ComposerBox, ComposerInput, ComposerRing } f
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Message } from '@/ds/components/Message';
 import { Txt } from '@/ds/components/Txt';
+import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
 
 const REPLY = `I'd lean toward **Open rows** for that DataList-without-a-container feel.
 
@@ -75,7 +75,7 @@ function AnnotatingChat() {
                       />
                       <ComposerActions className="justify-end">
                         <Button type="submit" size="icon-md" tooltip="Send" disabled={empty}>
-                          <ArrowUp />
+                          <IconArrowUp />
                         </Button>
                       </ComposerActions>
                     </ComposerBox>

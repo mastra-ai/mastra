@@ -1,7 +1,6 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { BookOpen, Check, ChevronDown, GripVertical, Plus, SlidersHorizontal, SquareKanban } from 'lucide-react';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useState } from 'react';
 import type { ComponentProps, KeyboardEvent, PointerEvent, ReactNode } from 'react';
@@ -11,56 +10,88 @@ import type { StoredBoardResponse } from '../../../../api/types';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useBoardQuery } from '../../../../hooks/useBoardEditor';
 import { useOverlays } from '../../../lib/overlays';
+import { SidebarLoadError } from '../../../ui/LoadErrorState';
 import { SidebarNavigationSkeleton } from '../../../ui/SidebarNavigationSkeleton';
 import { orderedBoards } from '../../factory/boardCatalog';
 import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
 import { useBoardDraft, useShownDraft } from '../BoardDraftProvider';
-import { boardConfigPath, boardSkillsPath, newBoardPath } from '../boardConfigPaths';
+import { boardIntakePath, boardRulesPath, boardConfigPath, boardSkillsPath, newBoardPath } from '../boardConfigPaths';
 import type { BoardConfigLocation } from '../boardConfigPaths';
 import { movePhase } from '../boardDraft';
 import { AddPhaseButton } from './AddPhaseButton';
+import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
+import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
+import { IconInboxEmpty } from '@mastra/playground-ui/icons/central/IconInboxEmpty';
+import { IconDotGrid2x3 } from '@mastra/playground-ui/icons/central/IconDotGrid2x3';
+import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
+import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
+import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
 
 /**
- * The factory's skills no phase runs, then the board switcher and the open board's pages: General, then one
- * page per phase, in board order. Skills sit above the switcher because they belong to no board.
+ * Two scopes. All boards: the skills no phase runs, and how new issues and pull requests are routed between boards. This board: the
+ * switcher naming it, its Overview and Rules pages, then one page per phase, in board order.
  */
-export function BoardConfigNavigation({ factoryId, boardId, phaseKey, skills }: BoardConfigLocation) {
+export function BoardConfigNavigation({ factoryId, boardId, phaseKey, skills, rules, intake }: BoardConfigLocation) {
   const query = useBoardQuery(factoryId, boardId);
 
   return (
-    <nav className="flex flex-col gap-2" aria-label="Board configuration">
-      <Sidebar.NavList>
-        <ConfigLink
-          to={boardSkillsPath(factoryId, boardId)}
-          isActive={skills === true}
-          icon={<BookOpen />}
-          label="Skills"
-        />
-      </Sidebar.NavList>
-      <BoardSwitcher factoryId={factoryId} boardId={boardId} />
-      <Sidebar.NavList>
-        <ConfigLink
-          to={boardConfigPath(factoryId, boardId)}
-          isActive={!phaseKey && !skills}
-          icon={<SlidersHorizontal />}
-          label="General"
-        />
-      </Sidebar.NavList>
-      <section className="flex flex-col gap-1" aria-label="Phases">
-        <Sidebar.NavHeader>Phases</Sidebar.NavHeader>
-        {query.isPending ? (
-          <SidebarNavigationSkeleton label="Loading phases" rows={4} />
-        ) : query.isError ? (
-          <p role="alert">Unable to load phases.</p>
-        ) : (
-          <PhaseList
-            factoryId={factoryId}
-            boardId={boardId}
-            phaseKey={phaseKey}
-            skills={skills}
-            response={query.data}
+    <nav className="flex flex-col gap-6" aria-label="Board configuration">
+      <section className="flex flex-col gap-1" aria-label="All boards">
+        <Sidebar.NavHeader>All boards</Sidebar.NavHeader>
+        <Sidebar.NavList>
+          <ConfigLink
+            to={boardSkillsPath(factoryId, boardId)}
+            isActive={skills === true}
+            icon={<IconBook />}
+            label="Skills"
           />
-        )}
+          <ConfigLink
+            to={boardIntakePath(factoryId, boardId)}
+            isActive={intake === true}
+            icon={<IconInboxEmpty />}
+            label="Routing"
+          />
+        </Sidebar.NavList>
+      </section>
+      <section className="flex flex-col gap-2" aria-label="This board">
+        <Sidebar.NavHeader>This board</Sidebar.NavHeader>
+        <BoardSwitcher factoryId={factoryId} boardId={boardId} />
+        <Sidebar.NavList>
+          <ConfigLink
+            to={boardConfigPath(factoryId, boardId)}
+            isActive={!phaseKey && !skills && !rules && !intake}
+            icon={<IconSettingsSliderHor />}
+            label="Overview"
+          />
+          <ConfigLink
+            to={boardRulesPath(factoryId, boardId)}
+            isActive={rules === true}
+            icon={<IconBranch />}
+            label="Rules"
+          />
+        </Sidebar.NavList>
+        <section className="flex flex-col gap-1 pt-2" aria-label="Phases">
+          <Sidebar.NavHeader>Phases</Sidebar.NavHeader>
+          {query.isPending ? (
+            <SidebarNavigationSkeleton label="Loading phases" rows={4} />
+          ) : query.isError ? (
+            <SidebarLoadError onRetry={() => void query.refetch()} retrying={query.isFetching}>
+              Couldn’t load phases
+            </SidebarLoadError>
+          ) : (
+            <PhaseList
+              factoryId={factoryId}
+              boardId={boardId}
+              phaseKey={phaseKey}
+              skills={skills}
+              rules={rules}
+              intake={intake}
+              response={query.data}
+            />
+          )}
+        </section>
       </section>
     </nav>
   );
@@ -85,11 +116,11 @@ function BoardSwitcher({ factoryId, boardId }: { factoryId: string; boardId: str
         size="sm"
         className="w-full min-w-0 justify-start gap-2"
       >
-        <SquareKanban aria-hidden />
+        <IconKanbanView aria-hidden />
         <Txt tone="ink" as="span" variant="body" className="min-w-0 flex-1 truncate text-left">
           {title}
         </Txt>
-        <ChevronDown aria-hidden size={14} className="text-muted-foreground shrink-0" />
+        <IconChevronDownMedium aria-hidden className="text-muted-foreground size-icon-sm shrink-0" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" className="w-64">
         {boards.map(other => (
@@ -97,16 +128,16 @@ function BoardSwitcher({ factoryId, boardId }: { factoryId: string; boardId: str
             key={other.id}
             render={<Link to={boardConfigPath(factoryId, other.id)} onClick={() => overlays.close('sidebar')} />}
           >
-            <SquareKanban />
+            <IconKanbanView />
             <span className="min-w-0 flex-1 truncate">{other.id === boardId ? title : other.title}</span>
-            {other.id === boardId && <Check aria-label="Open board" />}
+            {other.id === boardId && <IconCheckmark2Medium aria-label="Open board" />}
           </DropdownMenu.Item>
         ))}
         {response?.canEdit && (
           <>
             <DropdownMenu.Separator />
             <DropdownMenu.Item render={<Link to={newBoardPath(factoryId)} onClick={() => overlays.close('sidebar')} />}>
-              <Plus />
+              <IconPlusMedium />
               New board
             </DropdownMenu.Item>
           </>
@@ -126,6 +157,8 @@ function PhaseList({
   boardId,
   phaseKey,
   skills,
+  rules,
+  intake,
   response,
 }: BoardConfigLocation & {
   response: StoredBoardResponse;
@@ -133,8 +166,8 @@ function PhaseList({
   const { board, canEdit } = response;
   const { draft, locked, setDraft } = useBoardDraft(factoryId, boardId, board);
   const editable = canEdit === true && board.editable === true;
-  // The skills page has no save bar to keep a reorder made there.
-  const sortable = editable && !skills && !locked && draft.phases.length > 2;
+  // The skills, rules and intake pages have no save bar to keep a reorder made there.
+  const sortable = editable && !skills && !rules && !intake && !locked && draft.phases.length > 2;
   const [drag, setDrag] = useState<Drag>();
   const [announcement, setAnnouncement] = useState('');
 
@@ -277,9 +310,9 @@ function PhaseIcon({ movable, children }: { movable: boolean; children: ReactNod
       <span className="grid place-items-center group-focus-within/phase:invisible group-hover/phase:invisible pointer-coarse:invisible">
         {children}
       </span>
-      <GripVertical
+      <IconDotGrid2x3
         aria-hidden
-        className="text-muted-foreground invisible size-4 group-focus-within/phase:visible group-hover/phase:visible pointer-coarse:visible"
+        className="text-muted-foreground size-icon-md invisible group-focus-within/phase:visible group-hover/phase:visible pointer-coarse:visible"
       />
     </span>
   );

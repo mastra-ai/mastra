@@ -1,6 +1,6 @@
 import type { ActorSignal } from '@mastra/core/auth/ee';
 import type { TracingOptions } from '@mastra/core/observability';
-import { MASTRA_AUTH_TOKEN_KEY } from '@mastra/core/request-context';
+import { MASTRA_AUTH_TOKEN_KEY, withoutLiveRequestKeys } from '@mastra/core/request-context';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { RunFence } from '@mastra/core/storage';
 
@@ -73,13 +73,15 @@ export function serializeRequestContext(requestContext?: RequestContext<any>): R
 
 /**
  * Resume request-context rule: values persisted in the snapshot are the base,
- * and anything the caller supplies on this resume call overrides them.
+ * and anything the caller supplies on this resume call overrides them. The
+ * snapshot's bearer token and authenticated user, roles and permissions are
+ * dropped first, so they only ever come from the request doing the resuming.
  */
 export function mergeResumeRequestContext(
   snapshotRequestContext: Record<string, any> | undefined,
   requestContext?: RequestContext<any>,
 ): Record<string, any> {
-  return { ...(snapshotRequestContext ?? {}), ...serializeRequestContext(requestContext) };
+  return { ...withoutLiveRequestKeys(snapshotRequestContext), ...serializeRequestContext(requestContext) };
 }
 
 export function buildDurableTriggerEventData(

@@ -95,5 +95,12 @@ function BoardConfigView(location: BoardConfigLocation) {
 }
 
 function sameLocation(a: BoardConfigLocation, b: BoardConfigLocation | undefined) {
-  return a.factoryId === b?.factoryId && a.boardId === b.boardId && a.phaseKey === b.phaseKey && a.skills === b.skills;
+  return (
+    a.factoryId === b?.factoryId &&
+    a.boardId === b.boardId &&
+    a.phaseKey === b.phaseKey &&
+    a.skills === b.skills &&
+    a.rules === b.rules &&
+    a.intake === b.intake
+  );
 }

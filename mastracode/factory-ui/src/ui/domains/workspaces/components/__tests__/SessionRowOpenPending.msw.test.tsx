@@ -50,7 +50,6 @@ function stubFactoryWithRepository(sessions: FactoryUserSession[]) {
             repositories: [
               listedRepository(projectRepositoryId, 'octo/hello', {
                 branch: 'main',
-                sandboxWorkdir: '/workspace/hello',
               }),
             ],
           },
@@ -202,6 +201,7 @@ describe('Session row open', () => {
     expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual([
       'Open in new tab',
       'Pin session',
+      'Rename',
       'Regenerate title',
       'Make private',
       'Delete',

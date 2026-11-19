@@ -1,8 +1,13 @@
+import { DASHBOARD_SCOPES, DASHBOARD_WIDGET_KINDS } from '@mastra/core/storage/dashboards';
 import type { DashboardBuiltInWidgetKind, DashboardWidget, DashboardWidgetView } from '@mastra/core/storage/dashboards';
 import { kpisIssues, kpisOptionsSchema } from '@mastra/playground-ui/domains/dashboards/kinds/kpis/options';
 import { scoresIssues, scoresOptionsSchema } from '@mastra/playground-ui/domains/dashboards/kinds/scores/options';
 import { viewValue } from '@mastra/playground-ui/domains/dashboards/lib/chrome';
-import { tableIssues, tableOptionsSchema } from '@mastra/playground-ui/domains/dashboards/lib/table';
+import {
+  tableColumnOptionsSchema,
+  tableIssues,
+  tableOptionsSchema,
+} from '@mastra/playground-ui/domains/dashboards/lib/table';
 import { timeseriesIssues, timeseriesOptionsSchema } from '@mastra/playground-ui/domains/dashboards/lib/timeseries';
 import type { z } from 'zod/v4';
 
@@ -79,4 +84,57 @@ export function viewIssues(
     }
   }
   return issues;
+}
+
+const isBuiltInKind = (kind: string): kind is keyof typeof KIND_CHECKS => Object.hasOwn(KIND_CHECKS, kind);
+
+export const zodIssues = (error: z.ZodError, prefix: PropertyKey[]): WidgetIssue[] =>
+  error.issues.map(issue => ({ path: [...prefix, ...issue.path], message: issue.message }));
+
+/**
+ * What the renderer would reject in a widget core accepts, paths relative to the widget. Every
+ * view's options and columns are parsed; the kind's own checks then run at each scope the widget
+ * shows at, as the renderer runs them there, skipping views whose options or columns don't parse.
+ * All problems come back together. It also rejects columns on views that aren't tables, which the
+ * renderer ignores.
+ */
+export function widgetIssues(widget: DashboardWidget): WidgetIssue[] {
+  if (!isBuiltInKind(widget.kind)) {
+    return [
+      {
+        path: ['kind'],
+        message: `Unknown widget kind '${widget.kind}'; expected one of ${DASHBOARD_WIDGET_KINDS.join(', ')}`,
+      },
+    ];
+  }
+  const check = KIND_CHECKS[widget.kind];
+
+  const issues = new Map<string, WidgetIssue>();
+  const add = (found: WidgetIssue[]) => {
+    for (const issue of found) issues.set(`${JSON.stringify(issue.path)} ${issue.message}`, issue);
+  };
+  // The table's own checks would report a bad column again, at the view.
+  const badColumns = new Set<number>();
+  for (const [i, view] of widget.views.entries()) {
+    const options = check.optionsSchema.safeParse(view.options ?? {});
+    if (!options.success) add(zodIssues(options.error, ['views', i, 'options']));
+    if (!view.columns) continue;
+    // The renderer ignores columns on other kinds; rejected so a widget written as another kind isn't stored.
+    if (widget.kind !== 'table') {
+      add([{ path: ['views', i, 'columns'], message: 'Only table widgets have columns' }]);
+      continue;
+    }
+    for (const [m, column] of view.columns.entries()) {
+      const columnOptions = tableColumnOptionsSchema.safeParse(column.options ?? {});
+      if (!columnOptions.success) {
+        add(zodIssues(columnOptions.error, ['views', i, 'columns', m, 'options']));
+        badColumns.add(i);
+      }
+    }
+  }
+
+  for (const scope of DASHBOARD_SCOPES) {
+    if (inScope(widget, scope)) add(viewIssues(widget, check, scope, badColumns));
+  }
+  return [...issues.values()];
 }

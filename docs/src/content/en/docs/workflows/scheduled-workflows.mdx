@@ -1,8 +1,8 @@
 ---
-title: "Scheduled workflows | Workflows"
-description: "Run Mastra workflows on one or more cron schedules, inspect trigger history in Studio, and pause or resume scheduled execution at runtime."
+title: 'Scheduled workflows | Workflows'
+description: 'Run Mastra workflows on one or more cron schedules, inspect trigger history in Studio, and pause or resume scheduled execution at runtime.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # Scheduled workflows
@@ -77,12 +77,28 @@ const dailyReport = createWorkflow({
 
 Fields:
 
-- `cron` (required): a 5-, 6-, or 7-part cron expression. Validated at workflow construction time.
+- `cron`: a 5-, 6-, or 7-part cron expression. Validated at workflow construction time. Provide exactly one of `cron` or `runAt`.
+- `runAt` (optional): fire once at this time (epoch milliseconds or `Date`) instead of on a cron. After it fires, the schedule moves to `completed` and later deploys don't re-arm it unless you change `runAt`. A `runAt` that has already passed when the schedule is first registered is recorded as `completed` without firing.
+- `endAt` (optional): only with `cron`. Stop firing after this time. The schedule moves to `completed` once its next occurrence would fall after `endAt`.
 - `timezone` (optional): IANA timezone, for example `America/New_York`. Defaults to the host's local timezone. Set this explicitly in production so fire times don't depend on server locale.
 - `inputData` (optional): payload passed as the workflow's input on every fire.
 - `initialState` (optional): initial state for the run.
 - `requestContext` (optional): request context attached to the run.
 - `metadata` (optional): arbitrary metadata persisted alongside the schedule row.
+
+To run a workflow once at a fixed time, use `runAt`:
+
+```typescript title="src/mastra/workflows/launch-announcement.ts"
+const launchAnnouncement = createWorkflow({
+  id: 'launch-announcement',
+  schedule: {
+    // Set this to a stable future ISO timestamp in your deployment environment.
+    runAt: new Date(process.env.LAUNCH_ANNOUNCEMENT_AT!),
+    inputData: { userId: 'system' },
+  },
+  // ...
+})
+```
 
 ## Multiple schedules
 
@@ -150,8 +166,9 @@ In Studio, open the schedule detail page and select **Pause** or **Resume** in t
 
 A few rules to know:
 
-- Pause is durable. The status is written to the schedules table and survives process restarts and redeploys. The declarative-config upsert never overwrites a user-set status, even when you change `cron`, `timezone`, or other fields.
-- Resume recomputes `nextFireAt` from now. A schedule paused for a week doesn't fire seven backlogged runs the moment you resume it. It fires on the next regular cron tick.
+- Pause is durable. The status is written to the schedules table and survives process restarts and redeploys. The declarative-config upsert never overwrites a user-set status, even when you change `cron`, `timezone`, `runAt`, `endAt`, or other fields.
+- Resuming a cron schedule recomputes `nextFireAt` from now. A schedule paused for a week doesn't fire seven backlogged runs. It fires on the next regular cron tick.
+- Resuming a one-off keeps its configured `runAt`. If that time passed while the schedule was paused, it fires on the next scheduler tick.
 - Unpause with `resumeSchedule` or the **Resume** button in Studio. Editing the workflow's `schedule` config doesn't unpause a paused row.
 - Pause and resume are idempotent. Calling pause on an already-paused schedule is a no-op.
 - This operational override controls existing schedules. Author declarative schedules in code. Declarative schedules are created, deleted, and edited in code via the `schedule` field on `createWorkflow`. To create schedules imperatively at runtime instead, use the unified [`mastra.schedules`](/docs/harness/schedules) service with a `workflowId`.
@@ -162,9 +179,13 @@ The underlying HTTP routes are `POST /api/schedules/:scheduleId/pause` and `POST
 
 When you change the `schedule` config and redeploy, Mastra diffs the existing schedule row against the new config:
 
-- If `cron` or `timezone` changed, `nextFireAt` is recomputed. A cadence with no future occurrence completes the schedule. A recomputed cadence that can still fire reactivates a completed schedule.
+- If `cron`, `timezone`, or `endAt` changes on a recurring schedule, `nextFireAt` is recomputed. A cadence with no future occurrence completes the schedule. A recomputed cadence that can still fire reactivates a completed schedule.
+- If `runAt` changes on a one-off schedule, `nextFireAt` is updated to that time. A future `runAt` reactivates a completed one-off. A past `runAt` leaves it completed.
+- If an active one-off's unchanged `runAt` passed while the app was offline, it remains due and fires on the next scheduler tick. A one-off first registered with a past `runAt` is instead created as `completed` and doesn't fire.
 - If only `inputData`, `initialState`, or `metadata` changed, the row is patched in place and the next fire time is preserved.
-- User-set status (for example, paused via `client.pauseSchedule`) and fire history are never overwritten, unless the cadence change above requires a status update.
+- User-set status (for example, paused via `client.pauseSchedule`) and fire history are never overwritten, unless a timing change above requires a status update.
+
+The `completed` status means the schedule has no automatic fires remaining: its one-off fire was claimed, its recurring cadence was exhausted, or its configured timing was already exhausted during registration or reconciliation. It doesn't confirm that the workflow run completed successfully.
 
 Removing a schedule entry from a workflow's `schedule` array deletes its row on the next boot.
 

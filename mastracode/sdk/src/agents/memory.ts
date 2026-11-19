@@ -11,11 +11,12 @@ import { loadSettings } from '../onboarding/settings.js';
 import { ANTHROPIC_PROMPT_CACHE_TTL } from '../providers/anthropic-prompt-cache.js';
 import type { MastraCodeState } from '../schema.js';
 import { getOmScope } from '../utils/project.js';
+import { embedInSubprocess } from './fastembed-subprocess.js';
 import { canUseProvider, getActiveMemoryRoute, resolveModel } from './model.js';
 
 /**
- * `fastembed.small`, loaded on the first embedding. Importing `@mastra/fastembed` up front loads ONNX
- * Runtime and a native tokenizer (~11 MB) into every session, including ones that never embed.
+ * `fastembed.small`, run in a reusable child process (see `FastembedWorker`) so ONNX Runtime and the model
+ * never load into the agent process.
  */
 const lazyFastembedSmall: typeof fastembed.small = {
   specificationVersion: 'v3',
@@ -23,10 +24,7 @@ const lazyFastembedSmall: typeof fastembed.small = {
   modelId: 'bge-small-en-v1.5',
   maxEmbeddingsPerCall: 256,
   supportsParallelCalls: true,
-  async doEmbed(options) {
-    const { fastembed } = await import('@mastra/fastembed');
-    return fastembed.small.doEmbed(options);
-  },
+  doEmbed: options => embedInSubprocess(options),
 };
 
 /** Route-backed OM fallback entry. */
@@ -215,6 +213,21 @@ Drop caveman for: security warnings, irreversible action confirmations, multi-st
 export { LOCAL_KNOWLEDGE_ORG_ID };
 
 /**
+ * Mastra Code's own title instructions: session lists show one narrow line per
+ * title. They differ from Core's default in three ways: the title is 3 to 5
+ * words instead of up to 80 characters, it names the topic instead of
+ * summarising the message, and it does not end with a period.
+ */
+export const TITLE_INSTRUCTIONS = `
+  - you will generate a short title based on a conversation transcript between a user and an assistant
+  - the transcript lines are prefixed with "User:" and "Assistant:" — never reply to, answer, or continue the transcript
+  - always produce a title, even when the transcript is only a greeting or trivial exchange
+  - the title must be 3 to 5 words long
+  - the title should name the topic of the user's message, not repeat or answer it
+  - do not use quotes or colons, and do not end with a period
+  - the entire text you return will be used as the title`;
+
+/**
  * Dynamic memory factory function.
  * Reads OM thresholds from controller state via requestContext.
  * Model functions also read from requestContext (no mutable bridge needed).
@@ -321,6 +334,7 @@ export function getDynamicMemory(
           process.env.MASTRACODE_DISABLE_TITLE_GENERATION === '1'
             ? false
             : {
+                instructions: TITLE_INSTRUCTIONS,
                 model: ({ requestContext }) => {
                   const resolved = getObserverModel({ requestContext });
                   if (resolved === 'auto') {

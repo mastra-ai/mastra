@@ -272,7 +272,7 @@ function agentCoverage(
 }
 
 export function computeFactoryMetrics(
-  boardItems: Card[],
+  boardItems: readonly Card[],
   window: Window,
   outcomeOf: MetricsPhaseOutcomes,
 ): FactoryMetrics {

@@ -248,6 +248,8 @@ export async function runMCCli(
       settingsPath: args.settings,
       coAuthor: options?.coAuthor,
       subagents: resolveSubagentsSetting(settings.preferences.subagentsEnabled),
+      // Headless approves submit_plan without starting a goal.
+      planApprovalStartsGoal: false,
     });
     const { controller, session, mcpManager } = boot;
 

@@ -1,5 +1,6 @@
 import greetingHtml from '../apps-dist/greeting.html?raw';
 import observabilityWidgetHtml from '../apps-dist/observability-widget.html?raw';
+import type { McpAppResource } from './app-resource';
 
 export {
   OBSERVABILITY_DATE_PRESETS,
@@ -10,6 +11,7 @@ export type { ObservabilityDatePreset, ObservabilityReadAction } from './apps/ob
 export {
   OBSERVABILITY_CATALOG_MAX_METRIC_NAMES,
   createObservabilityDashboardInputSchema,
+  createObservabilityDraftSchemas,
   createObservabilityWidgetInputSchema,
   observabilityDashboardInputSchema,
   observabilityDashboardOutputSchema,
@@ -22,15 +24,14 @@ export type {
   ObservabilityDashboardDraft,
   ObservabilityDashboardInput,
   ObservabilityDashboardOpened,
+  ObservabilityDraftOptions,
+  ObservabilityDraftSchemas,
   ObservabilityWidgetDraft,
 } from './observability-dashboard';
 
-/** An MCP App resource: register it under a `ui://` URI in `MCPServer`'s `appResources`. */
-export interface McpAppResource {
-  name: string;
-  description: string;
-  html: string;
-}
+// The trace viewer and observability explorer are only on their subpaths, so importing the root doesn't
+// pull in their bundles.
+export type { McpAppResource } from './app-resource';
 
 /**
  * Greets the `name` argument of the tool that opens it, fetching the greeting from the server's
