@@ -32,6 +32,8 @@ export interface LinkOrgConnectionsResult {
   /** Connections that were not in the project listing and are now linked. */
   linked: string[];
   needsLinking: NeedsLinkingEntry[];
+  /** Org connections the project had and no longer lists: removed on purpose, so left unlinked. */
+  detached: string[];
 }
 
 /**
@@ -119,6 +121,7 @@ export class PlatformConnectBinding {
   #generation = 0;
   #bootLinking: Promise<void> | undefined;
   #needsLinking = new Map<string, NeedsLinkingEntry>();
+  #detached: string[] = [];
   #linkStore: PlatformConnectLinkStore | undefined;
 
   constructor(options: PlatformConnectBindingOptions) {
@@ -231,6 +234,14 @@ export class PlatformConnectBinding {
     return [...this.#needsLinking.values()];
   }
 
+  /**
+   * Org connections the project had and no longer lists, as of the last linking:
+   * someone removed them from the project, so linking leaves them alone.
+   */
+  get detached(): string[] {
+    return this.#detached;
+  }
+
   /** Runs `listener` whenever linking adds a connection to the project. */
   onConnectionsLinked(listener: () => void): () => void {
     this.#linkedListeners.add(listener);
@@ -281,6 +292,7 @@ export class PlatformConnectBinding {
     const linkedBefore = new Set((await this.connect.listConnections()).map(connection => connection.id));
     const remembered = await this.#rememberedLinks();
     const attempted: string[] = [];
+    const detached: string[] = [];
     for (const connection of candidates) {
       if (linkedBefore.has(connection.id)) {
         this.#needsLinking.delete(connection.id);
@@ -288,6 +300,7 @@ export class PlatformConnectBinding {
       }
       if (remembered.has(connection.id) && !options.relinkDetached) {
         this.#needsLinking.delete(connection.id);
+        detached.push(connection.id);
         continue;
       }
       try {
@@ -318,13 +331,14 @@ export class PlatformConnectBinding {
         }
       }
     }
+    this.#detached = detached.sort();
     if (linked.length > 0) {
       this.invalidateConnections();
       for (const listener of this.#linkedListeners) listener();
     }
     const seen = candidates.map(connection => connection.id).filter(id => linkedBefore.has(id) || linked.includes(id));
     await this.#rememberLinks(remembered, seen);
-    return { linked, needsLinking: this.needsLinking };
+    return { linked, needsLinking: this.needsLinking, detached: this.detached };
   }
 
   /**
@@ -341,19 +355,22 @@ export class PlatformConnectBinding {
       .map(connection => connection.id);
   }
 
-  /** Connections remembered as linked to this platform project; empty without a store. */
+  /**
+   * Connections remembered as linked to this platform project; empty without a store.
+   * A failed read throws: linking without it would attach connections someone
+   * removed, and saving afterwards would forget them.
+   */
   async #rememberedLinks(): Promise<Set<string>> {
     if (!this.#linkStore) return new Set();
+    let saved: RememberedLinks | null;
     try {
-      const saved = (await this.#linkStore.settings.get(LINKS_ORG_ID, this.#linkStoreKey())) as RememberedLinks | null;
-      return new Set(saved?.version === 1 && Array.isArray(saved.connectionIds) ? saved.connectionIds : []);
+      saved = (await this.#linkStore.settings.get(LINKS_ORG_ID, this.#linkStoreKey())) as RememberedLinks | null;
     } catch (error) {
-      logPlatformWarn('Could not read which connections the Factory project has had linked', {
-        integrationId: this.integrationId,
-        error: platformErrorMessage(error),
-      });
-      return new Set();
+      throw new Error(
+        `Could not read which connections the Factory project has had linked: ${platformErrorMessage(error)}`,
+      );
     }
+    return new Set(saved?.version === 1 && Array.isArray(saved.connectionIds) ? saved.connectionIds : []);
   }
 
   async #rememberLinks(remembered: Set<string>, connectionIds: readonly string[]): Promise<void> {

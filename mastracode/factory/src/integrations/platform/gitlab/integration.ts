@@ -233,6 +233,7 @@ export class PlatformGitLabIntegration
       pollingEnabled: this.#pollingEnabled,
       ...(this.#pollingIntervalMs === undefined ? {} : { pollingIntervalMs: this.#pollingIntervalMs }),
       ...(this.binding.needsLinking.length > 0 ? { needsLinking: this.binding.needsLinking } : {}),
+      ...(this.binding.detached.length > 0 ? { detached: this.binding.detached } : {}),
     };
   }
 
