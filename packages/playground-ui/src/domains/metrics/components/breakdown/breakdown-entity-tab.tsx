@@ -6,7 +6,7 @@ import { BREAKDOWN_GROUP_LIMIT, breakdownGroupBy, entitiesAggregateRequest, hasU
 import type { BreakdownEntityTab } from '../../lib/breakdown';
 import { previousScope } from '../../lib/breakdown-table';
 import { AGGREGATE_PRIORITY } from '../../lib/request-limiter';
-import type { BreakdownFrameProps } from './breakdown-frame';
+import type { BreakdownBodyProps } from './breakdown-frame';
 import { BreakdownTable } from './breakdown-table';
 
 // Model usage is attributed to the agent whose context made the call: workflows and tools have none.
@@ -16,14 +16,14 @@ const AGENT_FILTER: UsageTotalsOptions['filters'] = { entityType: 'agent' };
 export function BreakdownEntityTab({
   tab,
   scope,
-  ...frame
-}: BreakdownFrameProps & { tab: BreakdownEntityTab; scope: SpanAggregateScope }) {
-  const groupBy = breakdownGroupBy(tab, frame.byProject);
+  ...body
+}: BreakdownBodyProps & { tab: BreakdownEntityTab; scope: SpanAggregateScope }) {
+  const groupBy = breakdownGroupBy(tab, body.byProject);
   const usage = hasUsage(tab);
   const previous = previousScope(scope);
-  const aggregate = useMetricsSpanAggregate(entitiesAggregateRequest(tab, scope, frame.byProject));
+  const aggregate = useMetricsSpanAggregate(entitiesAggregateRequest(tab, scope, body.byProject));
   // The previous window is sent last, so the table never waits on it.
-  const previousAggregate = useMetricsSpanAggregate(entitiesAggregateRequest(tab, previous, frame.byProject), {
+  const previousAggregate = useMetricsSpanAggregate(entitiesAggregateRequest(tab, previous, body.byProject), {
     priority: AGGREGATE_PRIORITY.last,
   });
   const totals = useMetricsUsageTotals({ groupBy, filters: AGENT_FILTER, window: scope.window, enabled: usage });
@@ -35,7 +35,7 @@ export function BreakdownEntityTab({
   });
   return (
     <BreakdownTable
-      {...frame}
+      {...body}
       tab={tab}
       groupBy={groupBy}
       window={scope.window}

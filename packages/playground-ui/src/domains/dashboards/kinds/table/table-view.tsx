@@ -73,8 +73,9 @@ export function TableView(props: TableTabProps & { index: number; page: Dashboar
       : undefined;
 
   return (
-    <TableFrame {...props} isUpdating={aggregates.length ? aggregates.some(r => r.isRefetching) : undefined}>
-      <ChartArea>
+    <TableFrame {...props}>
+      {/* The rows dim themselves while they refetch, as the Breakdown card's do under its tabs. */}
+      <ChartArea isUpdating={aggregates.length ? aggregates.some(r => r.isRefetching) : undefined}>
         <MetricsTable
           aria-label={options.ariaLabel}
           columns={columns.map(c => tableColumn(c, page.window, comparedColumn, changeOf, projectLabel))}

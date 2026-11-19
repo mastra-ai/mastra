@@ -3,13 +3,13 @@ import { EntityType } from '@mastra/core/observability';
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { TraceVolumeCard } from '../trace-volume-card';
-import { failingMetrics, openViewMenu, pendingMetrics, pickView, renderInMetrics, seedMetrics } from './metrics-msw';
+import { failingMetrics, pendingMetrics, pickView, renderInMetrics, seedMetrics, viewTabs } from './metrics-msw';
 
 describe('TraceVolumeCard', () => {
-  it('shows its title and view menu while the data loads', async () => {
+  it('shows its title and view tabs while the data loads', async () => {
     pendingMetrics();
     renderInMetrics(<TraceVolumeCard />);
-    expect(await openViewMenu('Agent runs')).toEqual(['Agent runs', 'Workflow runs', 'Tool calls']);
+    expect(await viewTabs('Trace volume')).toEqual(['Agent runs', 'Workflow runs', 'Tool calls']);
   });
 
   it('totals only the open view', async () => {
@@ -17,7 +17,7 @@ describe('TraceVolumeCard', () => {
     renderInMetrics(<TraceVolumeCard />);
     // Chef Agent: 10 completed and 2 failed runs, in its row and the card total; no workflow ran.
     expect(await screen.findAllByText('12')).toHaveLength(2);
-    await pickView('Agent runs', 'Workflow runs');
+    await pickView('Trace volume', 'Workflow runs');
     expect(await screen.findByText('0')).toBeDefined();
     expect(screen.queryByText('12')).toBeNull();
   });

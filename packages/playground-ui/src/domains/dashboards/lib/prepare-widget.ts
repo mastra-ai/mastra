@@ -58,7 +58,7 @@ export function prepareWidget(
     const resolved = { ...view, columns: view.columns?.filter(c => inScope(c, scope)), options: options.data };
     const issue = kind.issues?.(resolved)[0];
     if (issue) return { ok: false, message: `views.${index}: ${issue}` };
-    // Each view at the scope is an option in the card's menu, picked by its value; two with one value would leave one unreachable.
+    // Each view at the scope is a tab on the card, picked by its value; two with one value would leave one unreachable.
     const value = viewValue(view.label, views.length);
     if (values.has(value))
       return { ok: false, message: `views.${index}: another view is already labelled '${view.label ?? value}'` };

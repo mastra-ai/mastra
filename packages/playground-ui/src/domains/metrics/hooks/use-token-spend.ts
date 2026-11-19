@@ -13,13 +13,14 @@ const TOKEN_METRICS: [string, ...string[]] = ['mastra_model_total_input_tokens',
 /** Threads are many: the API ranks them and returns the top ones (models are few). */
 const TOP_GROUPS = 100;
 
-/** Tokens and estimated cost per model or per thread, ranked by tokens. */
-export function useTokenSpend(dimension: SpendDimension) {
+/** Tokens and estimated cost per model or per thread, ranked by tokens. `enabled: false` holds the request, e.g. while its tab is closed. */
+export function useTokenSpend(dimension: SpendDimension, { enabled = true }: { enabled?: boolean } = {}) {
   const client = useMastraClient();
   const { filters, filterKey } = useMetricsFilters();
 
   return useQuery({
     queryKey: ['metrics', 'token-spend', dimension, filterKey],
+    enabled,
     placeholderData: keepPreviousData,
     queryFn: async (): Promise<SpendRow[]> => {
       const { groups } = await client.getMetricBreakdown({

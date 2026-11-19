@@ -33,7 +33,6 @@ import {
   expectSame,
   expectSameMarkup,
   expectSameView,
-  expectSameViewFromCache,
   find,
   recordRequests,
   serveBreakdown,
@@ -304,8 +303,8 @@ describe.each(Object.entries(SCOPES))('the Metrics page from METRICS_DASHBOARD a
     for (const [id, labels] of views) {
       for (const label of labels) await view(pages, id, label);
     }
-    // Failure rate reads Agent runs' answer: the card mounts its own chart, which refetches it.
-    await expectSameViewFromCache(...pair(pages, 'agent-runs'), 'Failure rate');
+    // Failure rate reads Agent runs' answer: neither asks again.
+    await expectSameView(...pair(pages, 'agent-runs'), 'Failure rate');
     // Every other card is untouched by the tabs above.
     for (const id of pages.composed.ids) {
       const [card, widget] = pair(pages, id);
@@ -335,7 +334,7 @@ describe.each(Object.entries(SCOPES))('the Metrics page from METRICS_DASHBOARD a
         await both('token-usage', clickBucket);
       }
       await both('agent-runs', clickBucket);
-      await expectSameViewFromCache(...pair(pages, 'agent-runs'), 'Failure rate');
+      await expectSameView(...pair(pages, 'agent-runs'), 'Failure rate');
       await both('agent-runs', button('View errors in logs'));
       await both('agent-runs', clickBucket);
       for (const name of ['Agent latency', 'Workflow latency', 'Tool latency']) {

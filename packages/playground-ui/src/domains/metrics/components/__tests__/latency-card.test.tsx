@@ -8,11 +8,11 @@ import { agentLatencyFixture, emptyPercentilesFixture } from './fixtures/metrics
 import {
   PERCENTILES_API,
   failingMetrics,
-  openViewMenu,
   pendingMetrics,
   pickView,
   renderInMetrics,
   seedMetrics,
+  viewTabs,
 } from './metrics-msw';
 import { server } from '@/test/msw-server';
 
@@ -33,10 +33,10 @@ function recordPercentiles() {
 
 describe('LatencyCard', () => {
   describe('when the data is loading', () => {
-    it('shows its title and view menu', async () => {
+    it('shows its title and view tabs', async () => {
       pendingMetrics();
       renderInMetrics(<LatencyCard />);
-      expect(await openViewMenu('Agent latency')).toEqual(['Agent latency', 'Workflow latency', 'Tool latency']);
+      expect(await viewTabs('Latency')).toEqual(['Agent latency', 'Workflow latency', 'Tool latency']);
       expect(screen.queryByText('4.50s')).toBeNull();
     });
   });
@@ -68,7 +68,7 @@ describe('LatencyCard', () => {
       const requests = recordPercentiles();
       renderInMetrics(<LatencyCard />);
       await screen.findByText('4.50s');
-      await pickView('Agent latency', 'Workflow latency');
+      await pickView('Latency', 'Workflow latency');
       await waitFor(() => expect(requests.map(r => r.name)).toContain('mastra_workflow_duration_ms'));
       expect(requests).toHaveLength(2);
     });
@@ -85,18 +85,18 @@ describe('LatencyCard', () => {
       const onViewTraces = vi.fn();
       renderInMetrics(<LatencyCard onViewTraces={onViewTraces} />);
       await screen.findByText('4.50s');
-      await pickView('Agent latency', 'Workflow latency');
+      await pickView('Latency', 'Workflow latency');
       fireEvent.click(screen.getByRole('button', { name: 'View in traces' }));
       expect(onViewTraces).toHaveBeenCalledWith(EntityType.WORKFLOW_RUN);
     });
   });
 
   describe('when the data fails to load', () => {
-    it('keeps the view menu and says so', async () => {
+    it('keeps the view tabs and says so', async () => {
       failingMetrics();
       renderInMetrics(<LatencyCard />);
       expect(await screen.findByText(/Couldn't load this data/)).toBeDefined();
-      expect(await openViewMenu('Agent latency')).toContain('Workflow latency');
+      expect(await viewTabs('Latency')).toContain('Workflow latency');
     });
   });
 });

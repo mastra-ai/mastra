@@ -242,23 +242,6 @@ async function expectSameView(card: Rendered, widget: Rendered, view: string) {
   expectSame(card, widget);
 }
 
-/**
- * As `expectSameView`, for a view reading the requests the open one already answered: the card
- * mounts the view's own chart, which refetches them; the widget keeps them and sends none.
- */
-async function expectSameViewFromCache(card: Rendered, widget: Rendered, view: string) {
-  for (const side of [card, widget]) {
-    const recorder = recordRequests();
-    pickIn(side.root, view);
-    await settle(recorder);
-    recorder.stop();
-    side.sent = recorder.sent;
-  }
-  expect(card.sent.length).toBeGreaterThan(0);
-  expect(widget.sent).toEqual([]);
-  expectSameMarkup(card.root, widget.root);
-}
-
 const noop = () => {};
 
 const API = `${TEST_BASE_URL}/api/observability`;
@@ -413,7 +396,10 @@ describe.each(Object.entries(SCOPES))('cards and their widgets at %s scope', (_n
     it('matches the Agent runs card on the Failure rate view', async () => {
       const cards = await cardsPage();
       const widgets = await widgetsPage();
-      await expectSameViewFromCache(rootOf(cards, 'agent-runs'), rootOf(widgets, 'agent-runs'), 'Failure rate');
+      const card = rootOf(cards, 'agent-runs');
+      await expectSameView(card, rootOf(widgets, 'agent-runs'), 'Failure rate');
+      // It reads Agent runs' answer: the card keeps it, as the widget does, and neither asks again.
+      expect(card.sent).toEqual([]);
     });
 
     it('totals tokens on the Token usage view', async () => {
@@ -689,7 +675,7 @@ describe('Charts drawn at real size', () => {
       const { cards, widgets } = await pages();
       const card = rootOf(cards, 'agent-runs');
       const widget = rootOf(widgets, 'agent-runs');
-      await expectSameViewFromCache(card, widget, 'Failure rate');
+      await expectSameView(card, widget, 'Failure rate');
       await expectSameDrawn(card, widget);
     });
   });

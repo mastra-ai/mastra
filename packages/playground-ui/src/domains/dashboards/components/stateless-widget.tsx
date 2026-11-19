@@ -28,7 +28,7 @@ export type StatelessWidgetProps = {
   /**
    * Makes the card's title editable in place, and is called with the trimmed new title when the
    * user changes it (Enter or blur; Escape reverts). The host stores it and passes the widget back
-   * with its new `title`. Only a plain title is editable, not one that picks between several views.
+   * with its new `title`. A card with several views keeps them as tabs under its editable title.
    * KPI groups have no title.
    */
   onTitleChange?: (title: string) => void;

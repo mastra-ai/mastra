@@ -11,6 +11,12 @@ export type ChartAreaProps = {
    * keeps the shared "No data in this range", so every empty chart reads the same.
    */
   emptyMessage?: string;
+  /**
+   * Previous data stays on screen, dimmed, while a new range or filter loads. For a body that loads
+   * apart from its card, e.g. a table tab under tabs that stay put; a card that loads its own data
+   * passes `isUpdating` to `ChartCard` instead.
+   */
+  isUpdating?: boolean;
   children: ReactNode;
 };
 
@@ -19,9 +25,21 @@ export type ChartAreaProps = {
  * its footprint but is hidden (its dates stay), under three rulers and one message; the card's
  * title already says what's missing.
  */
-export function ChartArea({ isEmpty = false, emptyMessage = 'No data in this range', children }: ChartAreaProps) {
+export function ChartArea({
+  isEmpty = false,
+  emptyMessage = 'No data in this range',
+  isUpdating,
+  children,
+}: ChartAreaProps) {
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col" data-chart-empty={isEmpty || undefined}>
+    <div
+      className={cn(
+        'relative flex min-h-0 flex-1 flex-col',
+        isUpdating !== undefined && 'transition-opacity duration-200',
+        isUpdating && 'opacity-50',
+      )}
+      data-chart-empty={isEmpty || undefined}
+    >
       <div
         className={cn('flex min-h-0 flex-1 flex-col', isEmpty && 'invisible [&_.recharts-xAxis-tick-labels]:visible')}
       >

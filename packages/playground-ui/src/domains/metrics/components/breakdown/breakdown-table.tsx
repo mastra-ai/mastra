@@ -22,8 +22,7 @@ import { BreakdownChangeCell } from './breakdown-change-cell';
 import { BreakdownChangeDescription } from './breakdown-change-description';
 import { BreakdownCostCell } from './breakdown-cost-cell';
 import { BreakdownFigure } from './breakdown-figure';
-import { BreakdownFrame } from './breakdown-frame';
-import type { BreakdownFrameProps } from './breakdown-frame';
+import type { BreakdownBodyProps } from './breakdown-frame';
 import { BreakdownRowName } from './breakdown-row-name';
 import { BreakdownText } from './breakdown-text';
 import { MetricsTable } from '@/ds/components/MetricsTable';
@@ -58,7 +57,7 @@ const EMPTY: Record<BreakdownTab, string> = {
   environments: 'No traces in this range.',
 };
 
-export type BreakdownTableProps = BreakdownFrameProps & {
+export type BreakdownTableProps = BreakdownBodyProps & {
   tab: BreakdownTab;
   groupBy: string[];
   window: { start: Date; end: Date };
@@ -89,7 +88,7 @@ export function BreakdownTable({
   previousUsage,
   previousSpans,
   limit,
-  ...frame
+  ...body
 }: BreakdownTableProps) {
   const scope = useMetricsScope();
   const [sort, setSort] = useState<MetricsTableSort>(DEFAULT_SORT);
@@ -101,17 +100,13 @@ export function BreakdownTable({
 
   const current = [aggregate, totals, spans].filter(q => q !== undefined);
   if (current.some(q => q.isError)) {
-    return (
-      <BreakdownFrame {...frame} tab={tab}>
-        <ChartCardError onRetry={() => current.forEach(q => q.isError && void q.refetch())} />
-      </BreakdownFrame>
-    );
+    return <ChartCardError onRetry={() => current.forEach(q => q.isError && void q.refetch())} />;
   }
 
   const isLoading = current.some(q => q.isLoading);
   const errors = hasErrors(tab);
   const usage = totals !== undefined;
-  const project = showsProject(tab, frame.byProject);
+  const project = showsProject(tab, body.byProject);
   const truncated = aggregate?.data?.truncated === true;
   const built = isLoading
     ? []
@@ -236,28 +231,26 @@ export function BreakdownTable({
   ];
 
   return (
-    <BreakdownFrame {...frame} tab={tab} isUpdating={aggregate?.isPlaceholderData}>
-      <ChartArea>
-        <MetricsTable
-          key={tab}
-          aria-label={`${NAME_HEADER[tab]} breakdown`}
-          columns={columns}
-          rows={rows}
-          getRowKey={row => row.key}
-          sort={sort}
-          defaultSort={DEFAULT_SORT}
-          onSortChange={onSortChange}
-          onRowClick={frame.onRowClick && (row => frame.onRowClick?.(drilldownFor(tab, row)))}
-          pageSize={PAGE_SIZE}
-          isLoading={isLoading}
-          empty={EMPTY[tab]}
-        />
-        {!isLoading && truncated && (
-          <Txt variant="caption" tone="muted" className="pt-2">
-            Showing the {formatCount(limit)} busiest; sorting covers only these.
-          </Txt>
-        )}
-      </ChartArea>
-    </BreakdownFrame>
+    <ChartArea isUpdating={aggregate?.isPlaceholderData}>
+      <MetricsTable
+        key={tab}
+        aria-label={`${NAME_HEADER[tab]} breakdown`}
+        columns={columns}
+        rows={rows}
+        getRowKey={row => row.key}
+        sort={sort}
+        defaultSort={DEFAULT_SORT}
+        onSortChange={onSortChange}
+        onRowClick={body.onRowClick && (row => body.onRowClick?.(drilldownFor(tab, row)))}
+        pageSize={PAGE_SIZE}
+        isLoading={isLoading}
+        empty={EMPTY[tab]}
+      />
+      {!isLoading && truncated && (
+        <Txt variant="caption" tone="muted" className="pt-2">
+          Showing the {formatCount(limit)} busiest; sorting covers only these.
+        </Txt>
+      )}
+    </ChartArea>
   );
 }

@@ -5,7 +5,7 @@ import type {
 } from '@mastra/client-js';
 import { planTraceAggregate, spanAggregateRequestSchema, traceAggregateRequestSchema } from '@mastra/core/storage';
 import type { NormalizedSpanAggregateRequest, NormalizedTraceAggregateRequest } from '@mastra/core/storage';
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { http, HttpResponse, delay } from 'msw';
 import type { ReactNode } from 'react';
 import { MetricsProvider } from '../../hooks/use-metrics';
@@ -221,15 +221,30 @@ export function renderInMetrics(ui: ReactNode, { scope }: { scope?: MetricsScope
   );
 }
 
-/** Opens a card's view menu from its title, which names the open view, and returns the views it offers. */
-export async function openViewMenu(current: string) {
-  fireEvent.click(screen.getByRole('button', { name: current }));
-  const views = await screen.findAllByRole('menuitemradio');
-  return views.map(view => view.textContent);
+/** The card titled `title`, once it shows. */
+export async function cardTitled(title: string) {
+  const heading = await screen.findByRole('heading', { name: title });
+  const card = heading.closest<HTMLElement>('[class*="group/metrics-card"]');
+  if (!card) throw new Error(`No card titled ${title}`);
+  return card;
 }
 
-/** Switches a card to another view from the menu on its title. */
-export async function pickView(current: string, next: string) {
-  fireEvent.click(screen.getByRole('button', { name: current }));
-  fireEvent.click(await screen.findByRole('menuitemradio', { name: next }));
+/** The views the card titled `title` offers as tabs under its title, in order. */
+export async function viewTabs(title: string) {
+  const card = await cardTitled(title);
+  return within(card)
+    .getAllByRole('tab')
+    .map(tab => tab.textContent);
+}
+
+/** The open view of the card titled `title`: its selected tab. */
+export async function selectedView(title: string) {
+  const card = await cardTitled(title);
+  return within(card).getByRole('tab', { selected: true }).textContent;
+}
+
+/** Switches the card titled `title` to another view from the tabs under its title. */
+export async function pickView(title: string, next: string) {
+  const card = await cardTitled(title);
+  fireEvent.click(within(card).getByRole('tab', { name: next }));
 }

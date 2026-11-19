@@ -15,16 +15,10 @@ import type { ShareBarRow } from '@/ds/components/ShareBar';
 
 type View = 'agents' | 'models' | 'threads';
 
-const TITLE: Record<View, string> = {
-  agents: 'Usage by agent',
-  models: 'Usage by model',
-  threads: 'Usage by thread',
-};
-
 const VIEWS = [
-  { value: 'agents', label: TITLE.agents },
-  { value: 'models', label: TITLE.models },
-  { value: 'threads', label: TITLE.threads },
+  { value: 'agents', label: 'Agents' },
+  { value: 'models', label: 'Models' },
+  { value: 'threads', label: 'Threads' },
 ] as const;
 type UsageRow = { key: string; cost: number; tokens: number; onClick?: () => void };
 
@@ -43,76 +37,46 @@ type ViewProps = UsageCardProps & { onViewChange: (view: View) => void };
 const KEEP = { placeholderData: keepPreviousData };
 const COLUMNS = [{ label: 'Tokens' }];
 
-/** Who is spending: agents, models or threads ranked by cost share, with tokens. Only the open tab loads. */
-export function UsageCard(props: UsageCardProps) {
+/**
+ * Who is spending: agents, models or threads ranked by cost share, with tokens. Only the open tab
+ * loads. Each view keeps its own query, so one never shows another's rows while it loads, and one
+ * card holds them all: switching keeps the card and its tabs, as the other cards' tabs do.
+ */
+export function UsageCard({ onViewTraces, onAgentClick, onModelClick, onThreadClick }: UsageCardProps) {
   const [view, setView] = useState<View>('agents');
-  if (view === 'models') return <ModelsUsage {...props} onViewChange={setView} />;
-  if (view === 'threads') return <ThreadsUsage {...props} onViewChange={setView} />;
-  return <AgentsUsage {...props} onViewChange={setView} />;
-}
-
-function AgentsUsage(props: ViewProps) {
-  const { onAgentClick } = props;
-  const {
-    data = [],
-    isLoading,
-    isPlaceholderData,
-    isError,
-  } = useTokenUsageByAgentMetrics({
+  const agents = useTokenUsageByAgentMetrics({
     ...useMetricsFilters(),
-    queryOptions: KEEP,
+    queryOptions: { ...KEEP, enabled: view === 'agents' },
   });
-  const rows = data.map(a => ({
-    key: a.name,
-    cost: a.cost ?? 0,
-    tokens: a.total,
-    onClick: onAgentClick && (() => onAgentClick(a.name)),
-  }));
+  const models = useTokenSpend('model', { enabled: view === 'models' });
+  const threads = useTokenSpend('threadId', { enabled: view === 'threads' });
+
+  const open = { agents, models, threads }[view];
+  const spend = view === 'models' ? models.data : threads.data;
+  const onSpendClick = view === 'models' ? onModelClick : onThreadClick;
+  const rows: UsageRow[] =
+    view === 'agents'
+      ? (agents.data ?? []).map(a => ({
+          key: a.name,
+          cost: a.cost ?? 0,
+          tokens: a.total,
+          onClick: onAgentClick && (() => onAgentClick(a.name)),
+        }))
+      : (spend ?? []).map(r => ({ ...r, onClick: onSpendClick && (() => onSpendClick(r.key)) }));
   return (
     <UsageFrame
-      view="agents"
-      {...props}
+      view={view}
+      onViewChange={setView}
+      onViewTraces={onViewTraces}
       rows={rows}
-      isLoading={isLoading}
-      isUpdating={isPlaceholderData}
-      isError={isError}
+      isLoading={open.isLoading}
+      isUpdating={open.isPlaceholderData}
+      isError={open.isError}
     />
   );
 }
 
-function ModelsUsage(props: ViewProps) {
-  const { onModelClick } = props;
-  const { data = [], isLoading, isPlaceholderData, isError } = useTokenSpend('model');
-  const rows = data.map(m => ({ ...m, onClick: onModelClick && (() => onModelClick(m.key)) }));
-  return (
-    <UsageFrame
-      view="models"
-      {...props}
-      rows={rows}
-      isLoading={isLoading}
-      isUpdating={isPlaceholderData}
-      isError={isError}
-    />
-  );
-}
-
-function ThreadsUsage(props: ViewProps) {
-  const { onThreadClick } = props;
-  const { data = [], isLoading, isPlaceholderData, isError } = useTokenSpend('threadId');
-  const rows = data.map(t => ({ ...t, onClick: onThreadClick && (() => onThreadClick(t.key)) }));
-  return (
-    <UsageFrame
-      view="threads"
-      {...props}
-      rows={rows}
-      isLoading={isLoading}
-      isUpdating={isPlaceholderData}
-      isError={isError}
-    />
-  );
-}
-
-/** The card itself: the view menu, the cost total and the ranked list, for whichever tab is open. */
+/** The card itself: the view tabs, the cost total and the ranked list, for whichever tab is open. */
 function UsageFrame({
   view,
   onViewChange,
@@ -133,8 +97,8 @@ function UsageFrame({
   }));
 
   const layout = {
-    title: TITLE[view],
-    titleMenu: { value: view, onValueChange: onViewChange, options: VIEWS },
+    title: 'Usage',
+    tabs: { value: view, onValueChange: onViewChange, options: VIEWS },
     actions: onViewTraces && <OpenInTracesButton onClick={onViewTraces} />,
   };
 
@@ -155,6 +119,7 @@ function UsageFrame({
     >
       <ChartArea>
         <ShareBar
+          key={view}
           rows={shareRows}
           columns={COLUMNS}
           valueLabel="Cost"

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChartCard } from './chart-card';
@@ -33,65 +34,62 @@ describe('ChartCard', () => {
     });
   });
 
-  describe('with a title menu', () => {
-    it('switches views from the title', async () => {
-      const onValueChange = vi.fn();
+  describe('with tabs', () => {
+    const renderTabs = (props: { onValueChange?: (view: string) => void; actions?: ReactNode } = {}) =>
       render(
         <ChartCard
           variant="compact"
-          title="Spend by model"
-          titleMenu={{ value: 'model', onValueChange, options: views }}
-        >
-          <div />
-        </ChartCard>,
-      );
-      fireEvent.click(screen.getByRole('button', { name: 'Spend by model' }));
-      fireEvent.click(await screen.findByRole('menuitemradio', { name: 'By provider' }));
-      expect(onValueChange).toHaveBeenCalledWith('provider');
-      // Picking a view closes the menu.
-      await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
-    });
-
-    it("keeps the title as the top bar's first item, sized to its text, while the menu is open", async () => {
-      render(
-        <ChartCard
-          variant="compact"
-          title="Spend by model"
+          title="Spend"
           total="$12"
-          titleMenu={{ value: 'model', onValueChange: vi.fn(), options: views }}
+          tabs={{ value: 'model', onValueChange: props.onValueChange ?? vi.fn(), options: views }}
+          actions={props.actions}
+          toolbar={<span data-testid="legend">Legend</span>}
         >
           <div />
         </ChartCard>,
       );
-      const trigger = screen.getByRole('button', { name: 'Spend by model' });
-      const topBar = trigger.parentElement?.parentElement;
-      // The top bar stretches its first item; that's the wrapper, so the button keeps its width.
-      expect(topBar?.firstElementChild).toBe(trigger.parentElement);
-      fireEvent.click(trigger);
-      await screen.findByRole('menuitemradio', { name: 'By provider' });
-      expect(topBar?.firstElementChild?.contains(trigger)).toBe(true);
-      expect(topBar?.lastElementChild?.textContent).toBe('$12');
+
+    it('keeps the title as the heading, with a tab per view under it', () => {
+      renderTabs();
+      expect(screen.getByRole('heading', { name: 'Spend' })).toBeTruthy();
+      expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['By model', 'By provider']);
+      expect(screen.getByRole('tab', { selected: true }).textContent).toBe('By model');
     });
 
-    it("leaves the card's actions clickable while the menu is open", async () => {
+    it('switches views from a tab', () => {
+      const onValueChange = vi.fn();
+      renderTabs({ onValueChange });
+      fireEvent.click(screen.getByRole('tab', { name: 'By provider' }));
+      expect(onValueChange).toHaveBeenCalledWith('provider');
+    });
+
+    it('has no view menu on the title', () => {
+      renderTabs();
+      expect(screen.queryByRole('button', { name: 'Spend' })).toBeNull();
+    });
+
+    // jsdom lays nothing out, so every card measures 0px wide: a tab that doesn't fit stays in the row.
+    it('folds no tab into a menu, however narrow the card', () => {
+      renderTabs();
+      expect(screen.getAllByRole('tab').every(tab => tab.getAttribute('aria-hidden') === null)).toBe(true);
+      expect(screen.queryByRole('button', { name: /more tabs$/ })).toBeNull();
+    });
+
+    it('puts the toolbar on the right of the tabs, in one row', () => {
+      renderTabs();
+      const tabs = document.querySelector('[data-slot="tabs"]');
+      expect(tabs?.nextElementSibling).toBe(screen.getByTestId('legend'));
+    });
+
+    it("leaves the card's actions clickable", () => {
       const onPin = vi.fn();
-      render(
-        <ChartCard
-          title="Spend by model"
-          titleMenu={{ value: 'model', onValueChange: vi.fn(), options: views }}
-          actions={
-            <button type="button" onClick={onPin}>
-              Pin
-            </button>
-          }
-        >
-          <div />
-        </ChartCard>,
-      );
-      fireEvent.click(screen.getByRole('button', { name: 'Spend by model' }));
-      await screen.findByRole('menuitemradio', { name: 'By provider' });
-      // A modal menu draws a full-screen backdrop that swallows clicks meant for the card's actions.
-      expect(document.querySelector('[role="presentation"][data-base-ui-inert]')).toBeNull();
+      renderTabs({
+        actions: (
+          <button type="button" onClick={onPin}>
+            Pin
+          </button>
+        ),
+      });
       fireEvent.click(screen.getByRole('button', { name: 'Pin' }));
       expect(onPin).toHaveBeenCalledOnce();
     });
@@ -103,7 +101,7 @@ describe('ChartCard', () => {
         <div />
       </ChartCard>,
     );
-    expect(container.querySelectorAll('[aria-hidden="true"].min-h-6')).toHaveLength(0);
+    expect(container.querySelectorAll('[aria-hidden="true"].min-h-7')).toHaveLength(0);
   });
 
   it('keeps an empty legend row when the toolbar is false (nothing to show yet)', () => {
@@ -114,7 +112,7 @@ describe('ChartCard', () => {
     );
     const body = screen.getByTestId('body').parentElement;
     expect(body?.previousElementSibling?.getAttribute('aria-hidden')).toBe('true');
-    expect(container.querySelectorAll('[aria-hidden="true"].min-h-6')).toHaveLength(1);
+    expect(container.querySelectorAll('[aria-hidden="true"].min-h-7')).toHaveLength(1);
   });
 
   describe('hero', () => {
@@ -240,10 +238,12 @@ describe('ChartCard', () => {
       expect(titleInput()).toHaveProperty('value', 'Spend by provider');
     });
 
-    it('is not editable with a title menu or a link', () => {
-      renderEditable({ titleMenu: { value: 'model', onValueChange: () => {}, options: views } });
-      expect(screen.queryByRole('textbox')).toBeNull();
-      cleanup();
+    it('stays editable with tabs under it', () => {
+      renderEditable({ tabs: { value: 'model', onValueChange: () => {}, options: views } });
+      expect(titleInput()).toHaveProperty('value', 'Spend by model');
+    });
+
+    it('is not editable with a link', () => {
       renderEditable({ href: '/query' });
       expect(screen.queryByRole('textbox')).toBeNull();
       expect(screen.getByRole('link', { name: 'Spend by model' })).toBeTruthy();

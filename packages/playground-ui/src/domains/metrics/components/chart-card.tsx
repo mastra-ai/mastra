@@ -1,10 +1,8 @@
 import type { ElementType, ReactNode } from 'react';
+import { ChartCardTabs } from './chart-card-tabs';
+import type { ChartCardTabsProps } from './chart-card-tabs';
 import { MetricsCard } from '@/ds/components/MetricsCard';
-import type {
-  MetricsCardDragHandleProps,
-  MetricsCardTitleMenuProps,
-  MetricsCardTotalPart,
-} from '@/ds/components/MetricsCard';
+import type { MetricsCardDragHandleProps, MetricsCardTotalPart } from '@/ds/components/MetricsCard';
 import { IconExpand45 } from '@/ds/icons/central/IconExpand45';
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import type { LinkComponentProps } from '@/lib/framework';
@@ -27,22 +25,23 @@ export type ChartCardProps<V extends string = string> = {
   title: string;
   /**
    * Makes the title a link, marked by an expand icon, to a fuller view of the chart (e.g. the
-   * chart in an explorer). Ignored with `titleMenu` and on `hero` cards.
+   * chart in an explorer). Ignored on `hero` cards.
    */
   href?: string;
   /** Renders `href` links, e.g. the app's router link; it gets anchor props. Default `a`. */
   LinkComponent?: ElementType<ChartCardLinkProps>;
   /**
-   * Makes the title a dropdown of the card's views (e.g. "Agent latency", "Tool latency"), in
-   * place of tabs. `title` is the picked view's label. Ignored on `hero` cards.
+   * The card's views (e.g. "Agent latency", "Tool latency") as tabs under `title`, which names the
+   * whole card ("Latency"). They lead the toolbar row, `toolbar` (a legend) on their right, and stay
+   * in every state. Ignored on `hero` cards.
    */
-  titleMenu?: Omit<MetricsCardTitleMenuProps<V>, 'title' | 'className'>;
+  tabs?: ChartCardTabsProps<V>;
   /** A grip left of the title that drags the card, e.g. while a dashboard is being arranged. Ignored on `hero` cards. */
   dragHandle?: MetricsCardDragHandleProps;
   /**
    * Makes a plain title editable in place: it reads as the title until hovered or focused. Enter or
    * blur commits the trimmed title, when it changed; Escape reverts. The caller stores it and passes
-   * it back as `title`. Ignored with `titleMenu` or `href`, and on `hero` cards.
+   * it back as `title`. Ignored with `href`, and on `hero` cards.
    */
   onTitleChange?: (title: string) => void;
   /**
@@ -85,7 +84,7 @@ export function ChartCard<V extends string = string>({
   title,
   href,
   LinkComponent,
-  titleMenu,
+  tabs,
   dragHandle,
   onTitleChange,
   total,
@@ -127,7 +126,6 @@ export function ChartCard<V extends string = string>({
             title={title}
             href={href}
             LinkComponent={LinkComponent}
-            titleMenu={titleMenu}
             dragHandle={dragHandle}
             onTitleChange={onTitleChange}
           />
@@ -136,10 +134,7 @@ export function ChartCard<V extends string = string>({
         {!hero && total !== undefined && <MetricsCard.Total value={total} isLoading={isLoading} className={fade} />}
       </MetricsCard.TopBar>
       <MetricsCard.Content className={cn('flex flex-col gap-4 overflow-visible', compact && 'min-h-0')}>
-        {/* A card with a toolbar keeps its row while the toolbar is empty (`false` or `null` while
-            loading, empty or on error), so its plot starts where its neighbours' do. A card that
-            passes no toolbar (a legend drawn by the chart itself) gets no row. */}
-        {toolbar || (chart && toolbar !== undefined && <div aria-hidden className="min-h-6" />)}
+        <ChartCardToolbar tabs={hero ? undefined : tabs} toolbar={toolbar} chart={chart} />
         <div
           className={cn(
             'relative flex min-h-0 min-w-0 flex-col',
@@ -155,6 +150,34 @@ export function ChartCard<V extends string = string>({
   );
 }
 
+/**
+ * The row under the top bar: the view tabs, then `toolbar` on their right. A card with a toolbar
+ * keeps its row while the toolbar is empty (`false` or `null` while loading, empty or on error), so
+ * its plot starts where its neighbours' do; a chart's row is as tall as the tabs, with or without
+ * them, for the same reason. A card that passes neither (a legend drawn by the chart itself) gets
+ * no row.
+ */
+function ChartCardToolbar<V extends string>({
+  tabs,
+  toolbar,
+  chart,
+}: Pick<ChartCardProps<V>, 'tabs' | 'toolbar'> & {
+  /** A fixed-height chart, lining up with its neighbours. */
+  chart: boolean;
+}) {
+  const row = tabs ? (
+    <MetricsCard.Toolbar>
+      <ChartCardTabs {...tabs} />
+      {toolbar || null}
+    </MetricsCard.Toolbar>
+  ) : (
+    toolbar
+  );
+  if (!chart) return row || null;
+  if (!row) return toolbar === undefined ? null : <div aria-hidden className="min-h-7" />;
+  return <div className="flex min-h-7 flex-col justify-center">{row}</div>;
+}
+
 /** The body's height: compact cards fill what the toolbar leaves; charts fill the card, at least 240px. */
 function bodyClass(variant: ChartCardProps['variant'], bodyHeight: ChartCardProps['bodyHeight']) {
   if (variant === 'compact') return 'flex-1';
@@ -167,7 +190,7 @@ function bodyClass(variant: ChartCardProps['variant'], bodyHeight: ChartCardProp
 function ChartCardHeading<V extends string>({
   dragHandle,
   ...title
-}: Pick<ChartCardProps<V>, 'title' | 'href' | 'LinkComponent' | 'titleMenu' | 'dragHandle' | 'onTitleChange'>) {
+}: Pick<ChartCardProps<V>, 'title' | 'href' | 'LinkComponent' | 'dragHandle' | 'onTitleChange'>) {
   if (!dragHandle) return <ChartCardTitle {...title} />;
   // One wrapper, so the top bar stretches it as its first child rather than the handle.
   return (
@@ -178,15 +201,13 @@ function ChartCardHeading<V extends string>({
   );
 }
 
-/** The title: a view menu, a link to a fuller view, editable, or plain. */
+/** The title: a link to a fuller view, editable, or plain. */
 function ChartCardTitle<V extends string>({
   title,
   href,
   LinkComponent,
-  titleMenu,
   onTitleChange,
-}: Pick<ChartCardProps<V>, 'title' | 'href' | 'LinkComponent' | 'titleMenu' | 'onTitleChange'>) {
-  if (titleMenu) return <MetricsCard.TitleMenu title={title} {...titleMenu} />;
+}: Pick<ChartCardProps<V>, 'title' | 'href' | 'LinkComponent' | 'onTitleChange'>) {
   if (href) {
     return (
       <h3 className="flex">

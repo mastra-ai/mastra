@@ -12,5 +12,3 @@
   </TabList>
 </Tabs>
 ```
-
-Dashboard tables with several views, such as the Metrics page's Breakdown, now list them as pill tabs under the title ("Agents", "Tools", …) instead of a dropdown in the title: every view that fits is one click away, the rest are in the "+N" menu, and switching is instant. The standalone `BreakdownCard` keeps its title menu.

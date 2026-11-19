@@ -1,5 +1,5 @@
 import type { AggregateTracesResponse, DashboardWidget } from '@mastra/client-js';
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { expect } from 'vitest';
 import {
@@ -109,23 +109,9 @@ export function recordRequests() {
 /** React's `useId` values and Recharts' chart ids differ between two trees; they say nothing about the markup. */
 export const normalise = (html: string) => html.replace(/_r_[0-9a-z]+_|:r[0-9a-z]+:|recharts\d+-clip/g, 'ID');
 
-/** A card's markup without its top bar and view tabs: what a widget whose views are tabs shares with a card whose views are a title menu. */
-function bodyMarkup(root: HTMLElement) {
-  const clone = root.cloneNode(true);
-  if (!(clone instanceof HTMLElement)) throw new Error('Expected an element');
-  clone.querySelector('[class*="group/metrics-card"]')?.firstElementChild?.remove();
-  clone.querySelector('[data-slot="tabs"]')?.remove();
-  return clone.innerHTML;
-}
-
-/**
- * Same markup. A widget that lists its views as tabs (the Breakdown) titles itself apart from the card's
- * title menu, so then only the bodies are compared.
- */
+/** Same markup: the title, the view tabs and the body. */
 export function expectSameMarkup(card: HTMLElement, widget: HTMLElement, message?: string) {
-  const tabs = widget.querySelector('[data-slot="tabs"]') !== null;
-  const markup = (root: HTMLElement) => normalise(tabs ? bodyMarkup(root) : root.innerHTML);
-  expect(markup(widget), message).toBe(markup(card));
+  expect(normalise(widget.innerHTML), message).toBe(normalise(card.innerHTML));
 }
 
 /** Waits until nothing is in flight and the request count has stopped growing. */
@@ -158,29 +144,10 @@ export function expectSame(card: Rendered, widget: Rendered) {
   expectSameMarkup(card.root, widget.root);
 }
 
-/**
- * Picks a view: a tab, for a card that lists its views under its title (named by its short name,
- * "Breakdown by agent" → "Agents"), else from the card's title menu. The menu portals out, but only
- * one is open at a time.
- */
+/** Picks a view from the tabs under the card's title, named by its short name ("Breakdown by agent" → "Agents"). */
 export function pickIn(root: HTMLElement, view: string) {
-  if (within(root).queryAllByRole('tab', { hidden: true }).length) {
-    const [name] = shortViewLabels([view, 'Breakdown by view']);
-    const tab = within(root).queryByRole('tab', { name });
-    if (tab) fireEvent.click(tab);
-    else {
-      // Folded into the "+N" menu.
-      fireEvent.click(within(root).getByRole('button', { name: /more tabs$/ }));
-      fireEvent.click(screen.getByRole('menuitem', { name }));
-    }
-    return;
-  }
-  const trigger = within(root)
-    .getAllByRole('button')
-    .find(b => b.getAttribute('aria-haspopup') === 'menu');
-  if (!trigger) throw new Error('No title menu');
-  fireEvent.click(trigger);
-  fireEvent.click(screen.getByRole('menuitemradio', { name: view }));
+  const [name] = shortViewLabels([view, 'Breakdown by view']);
+  fireEvent.click(within(root).getByRole('tab', { name }));
 }
 
 async function pickInBoth(card: Rendered, widget: Rendered, view: string) {
@@ -204,17 +171,6 @@ export async function expectSameView(card: Rendered, widget: Rendered, view: str
   if (empty === undefined) return expectSame(card, widget);
   expect(widget.sent.toSorted()).toEqual(card.sent.toSorted());
   for (const side of [card, widget]) expect(within(side.root).getByText(empty)).toBeTruthy();
-}
-
-/**
- * As `expectSameView`, for a view reading the requests the open one already answered: the card
- * mounts the view's own chart, which refetches them; the widget keeps them and sends none.
- */
-export async function expectSameViewFromCache(card: Rendered, widget: Rendered, view: string) {
-  await pickInBoth(card, widget, view);
-  expect(card.sent.length).toBeGreaterThan(0);
-  expect(widget.sent).toEqual([]);
-  expectSameMarkup(card.root, widget.root);
 }
 
 export const API = `${TEST_BASE_URL}/api/observability`;

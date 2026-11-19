@@ -426,9 +426,16 @@ describe('StatelessWidget on its own', () => {
       expect(onTitleChange).toHaveBeenCalledWith('Runs this week');
     });
 
-    it('keeps the view menu of a widget with several views', () => {
-      renderRenamable(metricsWidget('agent-runs'), vi.fn());
-      expect(screen.queryByRole('textbox', { name: 'Widget title' })).toBeNull();
+    it('reports the new title of a widget with several views, whose views are tabs under it', () => {
+      const onTitleChange = vi.fn();
+      renderRenamable(metricsWidget('agent-runs'), onTitleChange);
+
+      expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Agent runs', 'Failure rate']);
+      const title = screen.getByRole('textbox', { name: 'Widget title' });
+      title.focus();
+      fireEvent.change(title, { target: { value: 'Runs this week' } });
+      fireEvent.keyDown(title, { key: 'Enter' });
+      expect(onTitleChange).toHaveBeenCalledWith('Runs this week');
     });
 
     it('keeps the title of a widget that expands editable, and opens the expand page from its action', () => {
@@ -496,7 +503,7 @@ describe('a widget whose views read different sources', () => {
     it('shows the open metrics view in DashboardRenderer', async () => {
       serveCapabilities(olderServerCapabilities);
       const { root, sent } = await renderRenderer(mixedSourceWidget(), undefined);
-      expect(within(root).getByText('Agent runs')).toBeDefined();
+      expect(within(root).getByRole('tab', { name: 'Agent runs', selected: true })).toBeDefined();
       expect(sent.some(r => r.includes('/traces/aggregate'))).toBe(false);
     });
   });

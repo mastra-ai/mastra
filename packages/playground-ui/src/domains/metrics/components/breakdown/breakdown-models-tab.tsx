@@ -2,12 +2,12 @@ import { useMetricsFilters } from '../../hooks/use-metrics-filters';
 import { useMetricsUsageTotals } from '../../hooks/use-metrics-usage-totals';
 import { BREAKDOWN_GROUP_LIMIT, breakdownGroupBy } from '../../lib/breakdown';
 import { previousWindow } from '../../lib/time-window';
-import type { BreakdownFrameProps } from './breakdown-frame';
+import type { BreakdownBodyProps } from './breakdown-frame';
 import { BreakdownTable } from './breakdown-table';
 
 /** Spans, tokens and spend per model. Metrics only: model isn't a span aggregate dimension. */
-export function BreakdownModelsTab(frame: BreakdownFrameProps) {
-  const groupBy = breakdownGroupBy('models', frame.byProject);
+export function BreakdownModelsTab(body: BreakdownBodyProps) {
+  const groupBy = breakdownGroupBy('models', body.byProject);
   const { timestamp } = useMetricsFilters();
   const previous = previousWindow(timestamp);
   const totals = useMetricsUsageTotals({ groupBy, window: timestamp });
@@ -16,7 +16,7 @@ export function BreakdownModelsTab(frame: BreakdownFrameProps) {
   const previousSpans = useMetricsUsageTotals({ groupBy, window: previous, measure: 'modelSpans' });
   return (
     <BreakdownTable
-      {...frame}
+      {...body}
       tab="models"
       groupBy={groupBy}
       window={timestamp}

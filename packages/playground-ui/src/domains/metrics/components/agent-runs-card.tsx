@@ -1,17 +1,17 @@
-import { EntityType } from '@mastra/core/observability';
 import { useState } from 'react';
 import type { TimeRange } from '../drilldown';
 import { useMetricsActivity } from '../hooks/use-metrics-activity';
 import { useMetricsFilters } from '../hooks/use-metrics-filters';
+import { FAILURE_RATE_SERIES, failureRateTotal, runTotals } from '../lib/agent-runs';
 import { EDGE_BUCKET_AXIS } from '../lib/chart-axis';
 import { CHART_COLORS } from '../lib/chart-colors';
 import { formatCount } from '../lib/chart-format';
 import { bucketPlan, bucketWindow } from '../lib/metrics-buckets';
+import { OpenErrorsInLogsButton } from './card-action-buttons';
 import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
-import type { ChartCardProps } from './chart-card';
 import { ChartCardError } from './chart-card-error';
-import { FailureRateCard } from './failure-rate-card';
+import { FailureRateChart } from './failure-rate-card';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 import { MetricsLineChartLegend } from '@/ds/components/MetricsLineChart';
 import { MetricsStackedBarChart } from '@/ds/components/MetricsStackedBarChart';
@@ -29,8 +29,8 @@ const VIEWS = [
 ] as const satisfies readonly { value: View; label: string }[];
 
 /**
- * Completed and failed agent runs per bucket, or the share that failed; the title switches between
- * them. A column or point opens its agent traces.
+ * Completed and failed agent runs per bucket, or the share that failed; tabs under the title switch
+ * between them. A column or point opens its agent traces.
  */
 export type AgentRunsCardProps = {
   /** Called with the time range of the clicked column (Agent runs). */
@@ -41,32 +41,25 @@ export type AgentRunsCardProps = {
   onViewErrors?: () => void;
 };
 
+/**
+ * Both views chart the same buckets, so one card holds them: switching keeps the card, its tabs and
+ * its data, and swaps only the chart, as the Latency and Token usage cards do.
+ */
 export function AgentRunsCard({ onTimeRangeClick, onFailureTimeRangeClick, onViewErrors }: AgentRunsCardProps) {
   const [view, setView] = useState<View>('runs');
-  const titleMenu = { value: view, onValueChange: setView, options: VIEWS };
-  if (view === 'failure') {
-    return (
-      <FailureRateCard titleMenu={titleMenu} onViewErrors={onViewErrors} onTimeRangeClick={onFailureTimeRangeClick} />
-    );
-  }
-  return <AgentRunsChart titleMenu={titleMenu} onTimeRangeClick={onTimeRangeClick} />;
-}
-
-function AgentRunsChart({
-  onTimeRangeClick,
-  titleMenu,
-}: Pick<AgentRunsCardProps, 'onTimeRangeClick'> & { titleMenu: ChartCardProps<View>['titleMenu'] }) {
   const { data = [], isLoading, isError, isPlaceholderData } = useMetricsActivity();
   const { timestamp } = useMetricsFilters();
   const { stepHours } = bucketPlan(timestamp.start, timestamp.end);
-  const total = data.reduce((sum, b) => sum + b.completed + b.failed, 0);
+  const { runs } = runTotals(data);
+  const failure = view === 'failure';
 
   const layout = {
     title: 'Agent runs',
-    titleMenu,
+    tabs: { value: view, onValueChange: setView, options: VIEWS },
+    actions: failure && onViewErrors ? <OpenErrorsInLogsButton onClick={onViewErrors} /> : undefined,
     toolbar: (
       <MetricsCard.Toolbar>
-        <MetricsLineChartLegend series={SERIES} />
+        <MetricsLineChartLegend series={failure ? FAILURE_RATE_SERIES : SERIES} />
       </MetricsCard.Toolbar>
     ),
   };
@@ -80,19 +73,33 @@ function AgentRunsChart({
   }
 
   return (
-    <ChartCard {...layout} total={formatCount(total)} isLoading={isLoading} isUpdating={isPlaceholderData}>
-      <ChartArea isEmpty={!isLoading && total === 0}>
-        <MetricsStackedBarChart
-          data={data}
-          series={SERIES}
-          height="fill"
-          xLabels="edges"
-          showLegend={false}
-          valueFormatter={formatCount}
-          onBucketClick={onTimeRangeClick && (row => onTimeRangeClick(bucketWindow(Number(row.ts), stepHours)))}
-          isLoading={isLoading}
-          {...EDGE_BUCKET_AXIS}
-        />
+    <ChartCard
+      {...layout}
+      total={failure ? failureRateTotal(data) : formatCount(runs)}
+      isLoading={isLoading}
+      isUpdating={isPlaceholderData}
+    >
+      <ChartArea isEmpty={!isLoading && runs === 0}>
+        {failure ? (
+          <FailureRateChart
+            data={data}
+            stepHours={stepHours}
+            isLoading={isLoading}
+            onTimeRangeClick={onFailureTimeRangeClick}
+          />
+        ) : (
+          <MetricsStackedBarChart
+            data={data}
+            series={SERIES}
+            height="fill"
+            xLabels="edges"
+            showLegend={false}
+            valueFormatter={formatCount}
+            onBucketClick={onTimeRangeClick && (row => onTimeRangeClick(bucketWindow(Number(row.ts), stepHours)))}
+            isLoading={isLoading}
+            {...EDGE_BUCKET_AXIS}
+          />
+        )}
       </ChartArea>
     </ChartCard>
   );

@@ -9,14 +9,10 @@ export type TableTabProps = WidgetKindProps<TableOptions> & {
   heading: ViewHeading;
 };
 
-/** The table's card: the open view's title, as a menu of every view when there are several. */
-export function TableFrame({
-  heading,
-  isUpdating,
-  children,
-}: Pick<TableTabProps, 'heading'> & { isUpdating?: boolean; children: ReactNode }) {
+/** The table's card: the widget's title, with every view a tab under it when there are several. Its rows dim themselves while they refetch. */
+export function TableFrame({ heading, children }: Pick<TableTabProps, 'heading'> & { children: ReactNode }) {
   return (
-    <ChartCard {...heading} isUpdating={isUpdating} bodyHeight="fit">
+    <ChartCard {...heading} bodyHeight="fit">
       {children}
     </ChartCard>
   );

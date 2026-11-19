@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useLocation } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
@@ -67,6 +67,20 @@ function observeRequests() {
 function LocationProbe() {
   const location = useLocation();
   return <output data-testid="location">{`${location.pathname}${location.search}`}</output>;
+}
+
+/** The metrics card a title heads. */
+function cardTitled(heading: HTMLElement) {
+  const card = heading.closest<HTMLElement>('[class*="group/metrics-card"]');
+  if (!card) throw new Error(`No card titled ${heading.textContent}`);
+  return card;
+}
+
+/** A card's view tabs, in order. */
+function tabNames(card: HTMLElement) {
+  return within(card)
+    .getAllByRole('tab')
+    .map(tab => tab.textContent);
 }
 
 function renderPage(path = '/metrics') {
@@ -172,7 +186,7 @@ describe('Metrics storage support', () => {
       await act(() => queryClient.invalidateQueries({ queryKey: ['observability-capabilities'] }));
 
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(screen.getByRole('button', { name: 'Token usage' })).toBeTruthy();
+      expect(screen.getByRole('heading', { name: 'Token usage' })).toBeTruthy();
       expect(onMetrics).toHaveBeenCalled();
     });
   });
@@ -209,7 +223,7 @@ describe('Metrics storage support', () => {
       expect(screen.queryByRole('status', { name: 'Loading storage capabilities' })).toBeNull();
       expect(onMetrics).toHaveBeenCalled();
       expect(onDiscovery).toHaveBeenCalled();
-      expect(screen.getByRole('button', { name: 'Token usage' })).toBeTruthy();
+      expect(screen.getByRole('heading', { name: 'Token usage' })).toBeTruthy();
     });
   });
 
@@ -257,10 +271,9 @@ describe('Metrics storage support', () => {
 
       renderPage('/metrics?period=7d');
 
-      fireEvent.click(await screen.findByRole('button', { name: 'Breakdown by agent' }));
-      expect(await screen.findByRole('menuitemradio', { name: 'Breakdown by model' })).toBeTruthy();
-      expect(screen.getByRole('menuitemradio', { name: 'Breakdown by thread' })).toBeTruthy();
-      expect(screen.queryByRole('button', { name: /^Usage/ })).toBeNull();
+      const breakdown = cardTitled(await screen.findByRole('heading', { name: 'Breakdown' }));
+      expect(tabNames(breakdown)).toEqual(expect.arrayContaining(['Models', 'Threads']));
+      expect(screen.queryByRole('heading', { name: 'Usage' })).toBeNull();
     });
 
     it('replaces Trace volume with Breakdown, whose rows open the traces an agent ran in, nested or not', async () => {
@@ -274,8 +287,8 @@ describe('Metrics storage support', () => {
       renderPage('/metrics?period=7d');
 
       fireEvent.click(await screen.findByTitle('Explore Subagent'));
-      expect(screen.queryByRole('button', { name: 'Workflow runs' })).toBeNull();
-      expect(screen.getAllByRole('button', { name: 'Agent runs' })).toHaveLength(1);
+      expect(screen.queryByRole('heading', { name: 'Trace volume' })).toBeNull();
+      expect(screen.getAllByRole('heading', { name: 'Agent runs' })).toHaveLength(1);
       await waitFor(() => expect(screen.getByTestId('location').textContent).toMatch(/^\/traces\?/));
       const url = new URL(screen.getByTestId('location').textContent ?? '', 'http://localhost');
       expect(JSON.parse(url.searchParams.get('filterGroup') ?? '{}')).toMatchObject({
@@ -310,7 +323,7 @@ describe('Metrics storage support', () => {
       renderPage('/metrics?period=7d');
 
       await screen.findAllByRole('button', { name: 'View in traces' });
-      expect(await screen.findByRole('button', { name: 'Usage by agent' })).toBeTruthy();
+      expect(await screen.findByRole('heading', { name: 'Usage' })).toBeTruthy();
     });
 
     it('keeps Trace volume and shows no Breakdown', async () => {
@@ -321,12 +334,9 @@ describe('Metrics storage support', () => {
 
       renderPage('/metrics?period=7d');
 
-      // Agent runs and Trace volume both open on agent runs; Trace volume's menu also offers tool calls.
-      const [, traceVolume] = await screen.findAllByRole('button', { name: 'Agent runs' });
-      if (!traceVolume) throw new Error('No Trace volume card');
-      fireEvent.click(traceVolume);
-      expect(await screen.findByRole('menuitemradio', { name: 'Tool calls' })).toBeTruthy();
-      expect(screen.queryByRole('button', { name: /^Breakdown/ })).toBeNull();
+      const traceVolume = cardTitled(await screen.findByRole('heading', { name: 'Trace volume' }));
+      expect(tabNames(traceVolume)).toEqual(['Agent runs', 'Workflow runs', 'Tool calls']);
+      expect(screen.queryByRole('heading', { name: 'Breakdown' })).toBeNull();
     });
   });
 });

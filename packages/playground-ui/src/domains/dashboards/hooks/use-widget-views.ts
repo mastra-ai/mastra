@@ -9,9 +9,9 @@ import type { DashboardExpand, ResolvedView } from '../widget-kind';
 export type Views<Options> = readonly [ResolvedView<Options>, ...ResolvedView<Options>[]];
 
 /**
- * The open view of a widget, `wanted` when it has one (else the first), and the card title for it
- * (`title`, and `titleMenu` with several views unless the widget has somewhere to `expand` to) to
- * spread into `ChartCard`; picking a view calls `onChoose`.
+ * The open view of a widget, `wanted` when it has one (else the first), and the card heading for it
+ * (`title`, and `tabs` with several views unless the widget has somewhere to `expand` to) to spread
+ * into `ChartCard`; picking a tab calls `onChoose`.
  */
 export function viewMenu<Options>(
   widget: DashboardWidget,

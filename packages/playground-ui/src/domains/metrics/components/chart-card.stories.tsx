@@ -93,13 +93,13 @@ function SpendCard() {
   return (
     <ChartCard
       variant="compact"
-      title={view === 'model' ? 'Spend by model' : 'Spend by provider'}
-      titleMenu={{
+      title="Spend"
+      tabs={{
         value: view,
         onValueChange: setView,
         options: [
-          { value: 'model', label: 'Spend by model' },
-          { value: 'provider', label: 'Spend by provider' },
+          { value: 'model', label: 'By model' },
+          { value: 'provider', label: 'By provider' },
         ],
       }}
       total="$27.40"
@@ -125,7 +125,7 @@ function SpendCard() {
 
 /**
  * `variant="compact"`, for a grid of small cards: title and total on one line, one card height,
- * the chart filling what the legend leaves. The title can switch views (`titleMenu`). The charts
+ * the chart filling what the legend leaves. Tabs under the title can switch views (`tabs`). The charts
  * use `lineStyle="thin"` and `dots="hover"`.
  */
 export const Compact: Story = {

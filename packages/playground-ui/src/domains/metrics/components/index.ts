@@ -9,6 +9,7 @@ export {
 } from './card-action-buttons';
 export { ChartArea, type ChartAreaProps } from './chart-area';
 export { ChartCard, type ChartCardProps } from './chart-card';
+export { ChartCardTabs, type ChartCardTabOption, type ChartCardTabsProps } from './chart-card-tabs';
 export { ChartCardError } from './chart-card-error';
 export { AggregateLimiterProvider } from '../hooks/aggregate-limiter-provider';
 export { KpiCard, type KpiCardProps } from './kpi-card';

@@ -28,16 +28,10 @@ const SERIES: MetricsLineChartSeries[] = [
   { dataKey: 'p99', label: 'P99', color: CHART_COLORS.violet },
 ];
 
-const TITLE: Record<LatencyEntity, string> = {
-  agents: 'Agent latency',
-  workflows: 'Workflow latency',
-  tools: 'Tool latency',
-};
-
 const VIEWS = [
-  { value: 'agents', label: TITLE.agents },
-  { value: 'workflows', label: TITLE.workflows },
-  { value: 'tools', label: TITLE.tools },
+  { value: 'agents', label: 'Agent latency' },
+  { value: 'workflows', label: 'Workflow latency' },
+  { value: 'tools', label: 'Tool latency' },
 ] as const;
 
 /** P50, P95 and P99 durations of agent runs, workflow runs or tool calls; a point opens its traces. */
@@ -57,8 +51,8 @@ export function LatencyCard({ onViewTraces, onTimeRangeClick }: LatencyCardProps
   const peak = Math.max(0, ...data.map(b => b.p95 ?? 0));
 
   const layout = {
-    title: TITLE[entity],
-    titleMenu: { value: entity, onValueChange: setEntity, options: VIEWS },
+    title: 'Latency',
+    tabs: { value: entity, onValueChange: setEntity, options: VIEWS },
     actions: onViewTraces && <OpenInTracesButton onClick={() => onViewTraces(ROOT_ENTITY[entity])} />,
     toolbar: (
       <MetricsCard.Toolbar>

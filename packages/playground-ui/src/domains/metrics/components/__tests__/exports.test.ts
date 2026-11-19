@@ -14,6 +14,8 @@ const componentFiles = import.meta.glob<Record<string, unknown>>(
 const INTERNAL = new Set<string>([
   // The capability and filter gate every trace aggregate card wraps itself in; consumers use the cards.
   'TraceAggregateCard',
+  // The chart `FailureRateCard` and the Agent runs card's Failure rate tab share; consumers use the cards.
+  'FailureRateChart',
 ]);
 
 const exported = new Map<unknown, string>(Object.entries(entry).map(([name, value]) => [value, name]));

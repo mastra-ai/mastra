@@ -2,29 +2,37 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { UsageCard } from '../usage-card';
-import { failingMetrics, openViewMenu, pendingMetrics, pickView, renderInMetrics, seedMetrics } from './metrics-msw';
+import { failingMetrics, pendingMetrics, pickView, renderInMetrics, seedMetrics, viewTabs } from './metrics-msw';
 
 describe('UsageCard', () => {
-  it('shows its title and view menu while the data loads', async () => {
+  it('shows its title and view tabs while the data loads', async () => {
     pendingMetrics();
     renderInMetrics(<UsageCard />);
-    expect(await openViewMenu('Usage by agent')).toEqual(['Usage by agent', 'Usage by model', 'Usage by thread']);
+    expect(await viewTabs('Usage')).toEqual(['Agents', 'Models', 'Threads']);
   });
 
   it('reports the clicked thread', async () => {
     seedMetrics();
     const onThreadClick = vi.fn();
     renderInMetrics(<UsageCard onThreadClick={onThreadClick} />);
-    await screen.findByRole('button', { name: 'Usage by agent' });
-    await pickView('Usage by agent', 'Usage by thread');
+    await pickView('Usage', 'Threads');
     fireEvent.click(await screen.findByRole('button', { name: /thread-big/ }));
     expect(onThreadClick).toHaveBeenCalledWith('thread-big');
   });
 
-  it('keeps the view menu when the data fails to load', async () => {
+  it('keeps its tabs while switching views, as the other cards do', async () => {
+    seedMetrics();
+    renderInMetrics(<UsageCard />);
+    const tabs = await screen.findByRole('tablist');
+    await pickView('Usage', 'Threads');
+    expect(await screen.findByText('thread-big')).toBeDefined();
+    expect(screen.getByRole('tablist')).toBe(tabs);
+  });
+
+  it('keeps the view tabs when the data fails to load', async () => {
     failingMetrics();
     renderInMetrics(<UsageCard />);
     expect(await screen.findByText(/Couldn't load this data/)).toBeDefined();
-    expect(await openViewMenu('Usage by agent')).toContain('Usage by model');
+    expect(await viewTabs('Usage')).toContain('Models');
   });
 });

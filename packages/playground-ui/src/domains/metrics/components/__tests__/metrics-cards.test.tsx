@@ -61,7 +61,7 @@ describe('Metrics cards', () => {
 
     it('says when a latency view has no runs', async () => {
       expect(await screen.findByText('4.50s')).toBeDefined();
-      await pickView('Agent latency', 'Workflow latency');
+      await pickView('Latency', 'Workflow latency');
       expect(await screen.findByText('No data in this range')).toBeDefined();
     });
 
@@ -72,7 +72,7 @@ describe('Metrics cards', () => {
 
     it('ranks threads by what they spent and reports which one was clicked', async () => {
       await screen.findByRole('button', { name: /Chef Agent/ });
-      await pickView('Usage by agent', 'Usage by thread');
+      await pickView('Usage', 'Threads');
       fireEvent.click(await screen.findByRole('button', { name: /thread-big/ }));
       expect(onThreadClick).toHaveBeenCalledWith('thread-big');
       expect(screen.getByText('$1.25')).toBeDefined();

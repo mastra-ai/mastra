@@ -2,13 +2,21 @@
 import { screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { AgentRunsCard } from '../agent-runs-card';
-import { emptyMetrics, failingMetrics, pendingMetrics, pickView, renderInMetrics, seedMetrics } from './metrics-msw';
+import {
+  emptyMetrics,
+  failingMetrics,
+  pendingMetrics,
+  pickView,
+  renderInMetrics,
+  seedMetrics,
+  selectedView,
+} from './metrics-msw';
 
 describe('AgentRunsCard', () => {
   it('shows its title while the data loads', () => {
     pendingMetrics();
     renderInMetrics(<AgentRunsCard />);
-    expect(screen.getByText('Agent runs')).toBeDefined();
+    expect(screen.getByRole('heading', { name: 'Agent runs' })).toBeDefined();
     expect(screen.queryByText('10')).toBeNull();
   });
 
@@ -18,14 +26,24 @@ describe('AgentRunsCard', () => {
     expect(await screen.findByText('10')).toBeDefined();
   });
 
-  it('switches to the share of runs that failed from its title', async () => {
+  it('switches to the share of runs that failed from its tabs', async () => {
     seedMetrics();
     renderInMetrics(<AgentRunsCard />);
     expect(await screen.findByText('10')).toBeDefined();
     await pickView('Agent runs', 'Failure rate');
     // 2 of 10 runs, one `error` and one `failed`.
     expect(await screen.findByText('20.0%')).toBeDefined();
-    expect(screen.getByRole('button', { name: 'Failure rate' })).toBeDefined();
+    expect(await selectedView('Agent runs')).toBe('Failure rate');
+  });
+
+  it('keeps its tabs while switching views, as the other cards do', async () => {
+    seedMetrics();
+    renderInMetrics(<AgentRunsCard />);
+    expect(await screen.findByText('10')).toBeDefined();
+    const tabs = screen.getByRole('tablist');
+    await pickView('Agent runs', 'Failure rate');
+    expect(await screen.findByText('20.0%')).toBeDefined();
+    expect(screen.getByRole('tablist')).toBe(tabs);
   });
 
   it('says when the range has no runs', async () => {
