@@ -126,9 +126,9 @@ class AliasDeployer extends Deployer {
           });
           const missingTargetOutput = `${missingTargetResult.stdout}\n${missingTargetResult.stderr}`;
           expect(missingTargetResult.exitCode, missingTargetOutput).not.toBe(0);
-          expect(missingTargetOutput).toContain(
-            'Could not resolve deployer alias `ajv/dist/2020.js` to `./src/missing-ajv-2020-shim.mjs`',
-          );
+          expect(missingTargetOutput).toContain('Could not resolve deployer alias `ajv/dist/2020.js`');
+          // The deployer reports the target as an absolute path, so only match its file name.
+          expect(missingTargetOutput).toContain('missing-ajv-2020-shim.mjs');
         } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
         }
