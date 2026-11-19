@@ -107,6 +107,26 @@ function setCappedHandlers() {
 }
 
 describe('useSpansListSource', () => {
+  describe('during a progressive word search over 30 days', () => {
+    it('polls the newest 7 days without progressive, so the server (which chunks only startedAt) keeps answering', async () => {
+      const { headBodies } = setCappedHandlers();
+      const now = Date.now();
+      const query: SpanQueryArgs = {
+        ...rollingQuery,
+        timeRange: { from: new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString(), to: new Date(now).toISOString() },
+        progressive: true,
+      };
+      const { result } = renderSource({ query, rolling: true });
+      await waitFor(() => expect(spanIds(result.current.spans)).toEqual(['span-1', 'span-2']));
+
+      await nextTick();
+
+      await waitFor(() => expect(spanIds(result.current.spans)).toEqual(['span-9', 'span-1', 'span-2']));
+      expect(headBodies[0]).not.toHaveProperty('progressive');
+      expect(windowLength(headBodies[0])).toBe(SEVEN_DAYS_MS);
+    });
+  });
+
   describe('when the window is rolling and a span ends while the list is open', () => {
     it('shows the new span at the top after one poll, without reloading the list', async () => {
       const { listBodies, headBodies } = setHandlers([spanHeadPage]);

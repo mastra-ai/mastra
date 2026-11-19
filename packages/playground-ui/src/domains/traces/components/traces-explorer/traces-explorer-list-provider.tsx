@@ -73,7 +73,12 @@ export const TracesListProvider = memo(function TracesListProvider({
         now,
       });
       // A word search over more than 7 days loads one chunk of the range at a time, when the server can.
-      const progressive = withProgressiveSearch && hasWordSearch(query.where) && searchesInChunks(query.timeRange);
+      // The server chunks only start-time sorts.
+      const progressive =
+        withProgressiveSearch &&
+        sort.field === 'startedAt' &&
+        hasWordSearch(query.where) &&
+        searchesInChunks(query.timeRange);
       return {
         ...query,
         ...(rootSource === 'aggregated' ? { rootSource } : {}),

@@ -148,6 +148,21 @@ describe('SpansExplorerBody progressive word search', () => {
   afterEach(() => window.localStorage.clear());
 
   describe('when the server searches in chunks', () => {
+    it('lists a time-to-first-chunk sort without progressive, since the server chunks only start-time sorts', async () => {
+      const { queries } = renderAt();
+      await waitFor(() => expect(queries[0]).toMatchObject({ progressive: true }));
+
+      const columns = await screen.findByRole<HTMLButtonElement>('button', { name: 'Columns' });
+      await waitFor(() => expect(columns.disabled).toBe(false));
+      fireEvent.click(columns);
+      fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Time to first chunk' }));
+      fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+      fireEvent.click(await screen.findByRole('button', { name: 'Time to first chunk, not sorted, sort ascending' }));
+
+      await waitFor(() => expect(queries.at(-1)?.orderBy?.[0]?.field).toBe('timeToFirstChunkMs'));
+      expect(queries.at(-1)).not.toHaveProperty('progressive');
+    });
+
     it('charts the 30 days one chunk at a time, newest first, then says it searched them all', async () => {
       const gate = chunkGate();
       const { queries, aggregates, maxInFlight } = renderAt({ gate });
