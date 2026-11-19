@@ -19,25 +19,25 @@ Before you start, ensure that you have a Mastra platform account and belong to t
     1. Add the server:
 
        ```bash
-       claude mcp add --transport http mastra-platform https://platform.mastra.ai/v1/mcp
+       claude mcp add --transport http mastra https://platform.mastra.ai/v1/mcp
        ```
 
     1. Start Claude Code and run `/mcp`.
 
-    1. Select **mastra-platform**, then select the option to authenticate.
+    1. Select **mastra**, then select the option to authenticate.
   </TabItem>
 
   <TabItem value="codex" label="Codex">
     1. Add the server:
 
        ```bash
-       codex mcp add mastra-platform --url https://platform.mastra.ai/v1/mcp
+       codex mcp add mastra --url https://platform.mastra.ai/v1/mcp
        ```
 
     1. Sign in:
 
        ```bash
-       codex mcp login mastra-platform
+       codex mcp login mastra
        ```
   </TabItem>
 
@@ -47,7 +47,7 @@ Before you start, ensure that you have a Mastra platform account and belong to t
        ```json title="mcp.json"
        {
          "mcpServers": {
-           "mastra-platform": {
+           "mastra": {
              "type": "http",
              "url": "https://platform.mastra.ai/v1/mcp"
            }
@@ -55,7 +55,7 @@ Before you start, ensure that you have a Mastra platform account and belong to t
        }
        ```
 
-    1. Restart the client and follow its prompt to authenticate the **mastra-platform** server.
+    1. Restart the client and follow its prompt to authenticate the **mastra** server.
   </TabItem>
 </Tabs>
 
