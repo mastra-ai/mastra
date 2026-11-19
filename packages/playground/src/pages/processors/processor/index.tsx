@@ -55,11 +55,13 @@ export function Processor() {
   }
 
   return (
-    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-      <h1 className="sr-only">{processorId}</h1>
-      <div className="h-full w-full overflow-y-hidden">
-        <ProcessorPanel processorId={processorId!} />
-      </div>
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout.Workspace>
+        <h1 className="sr-only">{processorId}</h1>
+        <div className="h-full w-full overflow-y-hidden">
+          <ProcessorPanel processorId={processorId!} />
+        </div>
+      </PageLayout.Workspace>
     </PageLayout>
   );
 }

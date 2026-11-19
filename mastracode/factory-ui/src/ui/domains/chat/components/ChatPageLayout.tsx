@@ -69,7 +69,9 @@ export function ChatPageLayout({
           </div>
         </div>
       ) : null}
-      <PageLayout variant="fit">{children}</PageLayout>
+      <PageLayout>
+        <PageLayout.Workspace>{children}</PageLayout.Workspace>
+      </PageLayout>
     </div>
   );
 }

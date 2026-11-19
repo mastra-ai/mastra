@@ -1,4 +1,3 @@
-import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { ThemeToggle } from '@mastra/playground-ui/components/ThemeToggle';
 import {
   SettingsContainer,
@@ -11,19 +10,17 @@ import { StudioConnectionSettings } from '@/domains/configuration/components/stu
 
 export const StudioSettingsPage = () => {
   return (
-    <PageLayout>
-      <SettingsLayout title="Settings">
-        <SettingsGroup>
-          <SettingsTitle info="Stored in this browser.">General</SettingsTitle>
-          <SettingsContainer>
-            <SettingsRow label="Theme" description="Color scheme for the interface.">
-              <ThemeToggle />
-            </SettingsRow>
-          </SettingsContainer>
-        </SettingsGroup>
+    <SettingsLayout title="Settings">
+      <SettingsGroup>
+        <SettingsTitle info="Stored in this browser.">General</SettingsTitle>
+        <SettingsContainer>
+          <SettingsRow label="Theme" description="Color scheme for the interface.">
+            <ThemeToggle />
+          </SettingsRow>
+        </SettingsContainer>
+      </SettingsGroup>
 
-        <StudioConnectionSettings />
-      </SettingsLayout>
-    </PageLayout>
+      <StudioConnectionSettings />
+    </SettingsLayout>
   );
 };

@@ -60,8 +60,8 @@ export function RulesPage() {
   const factory = useActiveFactory();
   const slots = useSidebarHeaderSlots();
   return (
-    <PageLayout variant="fit" {...slots}>
-      <div className="flex min-h-0 flex-col p-4">
+    <PageLayout {...slots}>
+      <div className="flex h-full min-h-0 flex-col">
         <RulesContent factoryProjectId={factory.id} />
       </div>
     </PageLayout>

@@ -318,7 +318,6 @@ export default function Workspace() {
 
   return (
     <PageLayout
-      variant="fit"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={
         <div className="flex items-center gap-2">
@@ -341,90 +340,96 @@ export default function Workspace() {
         </div>
       }
     >
-      <h1 className="sr-only">Workspaces</h1>
-      <div className="flex min-h-0 flex-col">
-        {hasFilesystem && effectiveWorkspaceId && (
-          <WorkspaceNotices
-            workspaceId={effectiveWorkspaceId}
-            showInitWarning={canSearchFiles && !isLoadingInfo && workspaceInfo?.status !== 'ready'}
-            skills={hasSkills && skillsData ? skills : undefined}
-          />
-        )}
-        {hasFilesystem && effectiveWorkspaceId && (
-          <div className="min-h-0 flex-1">
-            <WorkspaceTreeView
-              key={effectiveWorkspaceId}
+      <PageLayout.Workspace>
+        <h1 className="sr-only">Workspaces</h1>
+        <div className="flex min-h-0 flex-col">
+          {hasFilesystem && effectiveWorkspaceId && (
+            <WorkspaceNotices
               workspaceId={effectiveWorkspaceId}
-              activeFilePath={selectedFile}
-              onActiveFileChange={setSelectedFile}
-              readOnlyPaths={readOnlyPaths}
-              skillCount={hasSkills && skillsData ? skills.length : undefined}
-              searchFiles={canSearchFiles}
-              searchSkills={canSearchSkills}
-              onCreateDirectory={
-                canWrite
-                  ? async path => {
-                      try {
-                        await createDirectory.mutateAsync({ path, recursive: true, workspaceId: effectiveWorkspaceId });
-                      } catch (error) {
-                        toast.error(`Failed to create ${path}: ${errorMessage(error)}`);
-                        throw error;
+              showInitWarning={canSearchFiles && !isLoadingInfo && workspaceInfo?.status !== 'ready'}
+              skills={hasSkills && skillsData ? skills : undefined}
+            />
+          )}
+          {hasFilesystem && effectiveWorkspaceId && (
+            <div className="min-h-0 flex-1">
+              <WorkspaceTreeView
+                key={effectiveWorkspaceId}
+                workspaceId={effectiveWorkspaceId}
+                activeFilePath={selectedFile}
+                onActiveFileChange={setSelectedFile}
+                readOnlyPaths={readOnlyPaths}
+                skillCount={hasSkills && skillsData ? skills.length : undefined}
+                searchFiles={canSearchFiles}
+                searchSkills={canSearchSkills}
+                onCreateDirectory={
+                  canWrite
+                    ? async path => {
+                        try {
+                          await createDirectory.mutateAsync({
+                            path,
+                            recursive: true,
+                            workspaceId: effectiveWorkspaceId,
+                          });
+                        } catch (error) {
+                          toast.error(`Failed to create ${path}: ${errorMessage(error)}`);
+                          throw error;
+                        }
                       }
-                    }
-                  : undefined
-              }
-              asideActions={
-                canManageSkills && skills.some(s => s.path?.includes('.agents/skills/')) ? (
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    tooltip="Update skills"
-                    disabled={updateSkills.isPending}
-                    onClick={() => void handleUpdateSkills()}
-                  >
-                    <IconArrowRotateClockwise className={updateSkills.isPending ? 'animate-spin' : undefined} />
-                  </Button>
-                ) : undefined
-              }
-              addSkill={
-                canManageSkills
-                  ? {
-                      onInstall: handleInstallSkill,
-                      // Precise IDs for skills with source info (owner/repo/name); names as fallback.
-                      installedSkillIds: skills
-                        .filter(s => s.skillsShSource)
-                        .map(s => `${s.skillsShSource!.owner}/${s.skillsShSource!.repo}/${s.name}`),
-                      installedSkillNames: skills.filter(s => !s.skillsShSource).map(s => s.name),
-                      writableMounts,
-                      installedSkillPaths: Object.fromEntries(skills.filter(s => s.path).map(s => [s.name, s.path])),
-                    }
-                  : undefined
-              }
-              onDelete={canRemove ? handleDelete : undefined}
-            />
-          </div>
-        )}
+                    : undefined
+                }
+                asideActions={
+                  canManageSkills && skills.some(s => s.path?.includes('.agents/skills/')) ? (
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      tooltip="Update skills"
+                      disabled={updateSkills.isPending}
+                      onClick={() => void handleUpdateSkills()}
+                    >
+                      <IconArrowRotateClockwise className={updateSkills.isPending ? 'animate-spin' : undefined} />
+                    </Button>
+                  ) : undefined
+                }
+                addSkill={
+                  canManageSkills
+                    ? {
+                        onInstall: handleInstallSkill,
+                        // Precise IDs for skills with source info (owner/repo/name); names as fallback.
+                        installedSkillIds: skills
+                          .filter(s => s.skillsShSource)
+                          .map(s => `${s.skillsShSource!.owner}/${s.skillsShSource!.repo}/${s.name}`),
+                        installedSkillNames: skills.filter(s => !s.skillsShSource).map(s => s.name),
+                        writableMounts,
+                        installedSkillPaths: Object.fromEntries(skills.filter(s => s.path).map(s => [s.name, s.path])),
+                      }
+                    : undefined
+                }
+                onDelete={canRemove ? handleDelete : undefined}
+              />
+            </div>
+          )}
 
-        {hasDynamicFilesystem && !isLoadingInfo && (
-          <div className="min-h-0 flex-1">
-            <EmptyState
-              variant="fill"
-              titleSlot="Filesystem resolved per request"
-              descriptionSlot="This workspace creates its filesystem when an agent runs, so its files can't be browsed here."
-            />
-          </div>
-        )}
+          {hasDynamicFilesystem && !isLoadingInfo && (
+            <div className="min-h-0 flex-1">
+              <EmptyState
+                variant="fill"
+                titleSlot="Filesystem resolved per request"
+                descriptionSlot="This workspace creates its filesystem when an agent runs, so its files can't be browsed here."
+              />
+            </div>
+          )}
 
-        {!hasFilesystem && !hasDynamicFilesystem && !isLoadingInfo && (
-          <div className="min-h-0 flex-1">
-            <EmptyState
-              variant="fill"
-              titleSlot="No filesystem or skills configured"
-              descriptionSlot="Add a filesystem or skills to this workspace to browse its files here."
-            />
-          </div>
-        )}
-      </div>
+          {!hasFilesystem && !hasDynamicFilesystem && !isLoadingInfo && (
+            <div className="min-h-0 flex-1">
+              <EmptyState
+                variant="fill"
+                titleSlot="No filesystem or skills configured"
+                descriptionSlot="Add a filesystem or skills to this workspace to browse its files here."
+              />
+            </div>
+          )}
+        </div>
+      </PageLayout.Workspace>
     </PageLayout>
   );
 }

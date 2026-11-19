@@ -22,6 +22,7 @@ import { ThemeProvider } from '@/ds/components/ThemeProvider';
 import { ThemeToggle } from '@/ds/components/ThemeToggle';
 import { IconBranch } from '@/ds/icons/central/IconBranch';
 import { IconStudioDisplay } from '@/ds/icons/central/IconStudioDisplay';
+import { MainCard } from '@/ds/new/layout/app-shell';
 
 const meta = {
   title: 'New/Settings',
@@ -66,86 +67,90 @@ function JoinPolicySelect() {
 export const Page: Story = {
   args: { title: 'General', children: null },
   render: args => (
-    <SettingsLayout title={args.title}>
-      <SettingsGroup>
-        <SettingsTitle>Organization</SettingsTitle>
-        <SettingsContainer>
-          <SettingsRow label="Organization name" description="Shown across Mastra and in invitations.">
-            <Input defaultValue="Mastra" />
-          </SettingsRow>
-          <SettingsRow
-            label="Email domain access"
-            description="What happens when someone with an @mastra.ai email signs up."
-          >
-            <JoinPolicySelect />
-          </SettingsRow>
-          <SettingsRow label="Theme" description="Color scheme for the interface.">
-            <ThemeToggle />
-          </SettingsRow>
-          <SettingsRow label="Notifications" description="Notify when a run finishes.">
-            <Switch aria-label="Notifications" defaultChecked />
-          </SettingsRow>
-        </SettingsContainer>
-      </SettingsGroup>
+    <div className="flex h-152 bg-sidebar p-2">
+      <MainCard>
+        <SettingsLayout title={args.title}>
+          <SettingsGroup>
+            <SettingsTitle>Organization</SettingsTitle>
+            <SettingsContainer>
+              <SettingsRow label="Organization name" description="Shown across Mastra and in invitations.">
+                <Input defaultValue="Mastra" />
+              </SettingsRow>
+              <SettingsRow
+                label="Email domain access"
+                description="What happens when someone with an @mastra.ai email signs up."
+              >
+                <JoinPolicySelect />
+              </SettingsRow>
+              <SettingsRow label="Theme" description="Color scheme for the interface.">
+                <ThemeToggle />
+              </SettingsRow>
+              <SettingsRow label="Notifications" description="Notify when a run finishes.">
+                <Switch aria-label="Notifications" defaultChecked />
+              </SettingsRow>
+            </SettingsContainer>
+          </SettingsGroup>
 
-      <SettingsGroup>
-        <SettingsTitle>Accounts</SettingsTitle>
-        <SettingsContainer>
-          <SettingsListHeader action={<Button size="sm">Add account</Button>}>3 accounts</SettingsListHeader>
-          <SettingsItem
-            media={
-              <SettingsItemIcon>
-                <IconBranch />
-              </SettingsItemIcon>
-            }
-            title="mastra-ai"
-            description="GitHub · Connected 3 weeks ago"
-          >
-            <Badge variant="green" size="sm">
-              Active
-            </Badge>
-          </SettingsItem>
-          <SettingsItem media={<Avatar name="Ana Lopez" size="md" />} title="Ana Lopez" description="ana@mastra.ai">
-            <Badge size="sm">Member</Badge>
-          </SettingsItem>
-          <SettingsItem
-            media={
-              <SettingsItemIcon>
-                <IconStudioDisplay />
-              </SettingsItemIcon>
-            }
-            title="Chrome on macOS"
-            description="Berlin · Signed in 2 weeks ago"
-          >
-            <Button size="sm" variant="ghost">
-              Revoke
-            </Button>
-          </SettingsItem>
-        </SettingsContainer>
-      </SettingsGroup>
+          <SettingsGroup>
+            <SettingsTitle>Accounts</SettingsTitle>
+            <SettingsContainer>
+              <SettingsListHeader action={<Button size="sm">Add account</Button>}>3 accounts</SettingsListHeader>
+              <SettingsItem
+                media={
+                  <SettingsItemIcon>
+                    <IconBranch />
+                  </SettingsItemIcon>
+                }
+                title="mastra-ai"
+                description="GitHub · Connected 3 weeks ago"
+              >
+                <Badge variant="green" size="sm">
+                  Active
+                </Badge>
+              </SettingsItem>
+              <SettingsItem media={<Avatar name="Ana Lopez" size="md" />} title="Ana Lopez" description="ana@mastra.ai">
+                <Badge size="sm">Member</Badge>
+              </SettingsItem>
+              <SettingsItem
+                media={
+                  <SettingsItemIcon>
+                    <IconStudioDisplay />
+                  </SettingsItemIcon>
+                }
+                title="Chrome on macOS"
+                description="Berlin · Signed in 2 weeks ago"
+              >
+                <Button size="sm" variant="ghost">
+                  Revoke
+                </Button>
+              </SettingsItem>
+            </SettingsContainer>
+          </SettingsGroup>
 
-      <SettingsGroup>
-        <SettingsTitle>Join links</SettingsTitle>
-        <SettingsContainer>
-          <SettingsEmptyRow action={<Button size="sm">Create join link</Button>}>No join links</SettingsEmptyRow>
-        </SettingsContainer>
-      </SettingsGroup>
+          <SettingsGroup>
+            <SettingsTitle>Join links</SettingsTitle>
+            <SettingsContainer>
+              <SettingsEmptyRow action={<Button size="sm">Create join link</Button>}>No join links</SettingsEmptyRow>
+            </SettingsContainer>
+          </SettingsGroup>
 
-      <SettingsGroup>
-        <SettingsTitle>Danger zone</SettingsTitle>
-        <SettingsContainer>
-          <SettingsRow
-            tone="destructive"
-            label="Delete this project"
-            description="You can restore it for up to 48 hours."
-          >
-            <Button size="sm" variant="destructive">
-              Delete project
-            </Button>
-          </SettingsRow>
-        </SettingsContainer>
-      </SettingsGroup>
-    </SettingsLayout>
+          <SettingsGroup>
+            <SettingsTitle>Danger zone</SettingsTitle>
+            <SettingsContainer>
+              <SettingsRow
+                tone="destructive"
+                label="Delete this project"
+                description="You can restore it for up to 48 hours."
+              >
+                <Button size="sm" variant="destructive">
+                  Delete project
+                </Button>
+              </SettingsRow>
+            </SettingsContainer>
+          </SettingsGroup>
+        </SettingsLayout>
+      </MainCard>
+    </div>
   ),
 };
 

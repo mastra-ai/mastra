@@ -92,21 +92,22 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
 
         <AgentConfigPanel agentId={agentId!} disabled={activeTab === 'versions'}>
           <PageLayout
-            variant="fit"
             breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
             headerActions={<AgentDetailHeaderActions agentId={agentId!} showConfig={activeTab !== 'versions'} />}
           >
-            <h1 className="sr-only">{agentId}</h1>
-            <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)]">
-              <AgentPageTabs
-                agentId={agentId!}
-                activeTab={activeTab}
-                threadId={threadId}
-                showPlayground={showPlayground}
-                showObservability={showObservability}
-              />
-              {children}
-            </div>
+            <PageLayout.Workspace>
+              <h1 className="sr-only">{agentId}</h1>
+              <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)]">
+                <AgentPageTabs
+                  agentId={agentId!}
+                  activeTab={activeTab}
+                  threadId={threadId}
+                  showPlayground={showPlayground}
+                  showObservability={showObservability}
+                />
+                {children}
+              </div>
+            </PageLayout.Workspace>
           </PageLayout>
         </AgentConfigPanel>
       </KeyboardScope>

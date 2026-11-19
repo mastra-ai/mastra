@@ -81,28 +81,6 @@ export const Container: Story = {
   ),
 };
 
-const longResources = Array.from({ length: 24 }, (_, index) => `Resource ${index + 1}`);
-
-export const EdgeFade: Story = {
-  render: () => (
-    <StoryFrame>
-      <PageLayout breadcrumbs={crumbs} headerActions={headerActions} header={pageHeader} mask={{ y: true }}>
-        <ul className="mt-6 grid gap-2">
-          {longResources.map(resource => (
-            <li key={resource} className="rounded border border-border px-3 py-2">
-              {resource}
-            </li>
-          ))}
-        </ul>
-      </PageLayout>
-    </StoryFrame>
-  ),
-  play: async ({ canvasElement }) => {
-    const body = within(canvasElement).getByText('Resource 1').closest<HTMLElement>('[style*="overflow"]');
-    await expect(body?.className).toContain('mask-b-from');
-  },
-};
-
 function ComparisonHeader({
   eyebrow,
   spacing,
@@ -206,26 +184,31 @@ export const TopBarSpacingComparison: Story = {
   },
 };
 
-export const Narrow: Story = {
+export const Workspace: Story = {
   render: () => (
     <StoryFrame>
-      <PageLayout variant="narrow" breadcrumbs={crumbs} headerActions={headerActions} header={pageHeader}>
-        <div className="mt-6">{resourceList}</div>
+      <PageLayout breadcrumbs={crumbs} headerActions={headerActions}>
+        <PageLayout.Workspace>
+          <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_16rem]">
+            <ul className="grid content-start gap-2 overflow-y-auto border-r border-border p-4">
+              {Array.from({ length: 40 }, (_, index) => (
+                <li key={index} className="rounded border border-border px-3 py-2">
+                  Message {index + 1}
+                </li>
+              ))}
+            </ul>
+            <div className="p-4 text-placeholder">Side panel</div>
+          </div>
+        </PageLayout.Workspace>
       </PageLayout>
     </StoryFrame>
   ),
-};
-
-export const Fit: Story = {
-  render: () => (
-    <StoryFrame>
-      <PageLayout variant="fit" breadcrumbs={crumbs} headerActions={headerActions} header={pageHeader}>
-        <div className="mt-6 flex items-center justify-center border border-border text-placeholder">
-          Full-height panel (graph, table…)
-        </div>
-      </PageLayout>
-    </StoryFrame>
-  ),
+  play: async ({ canvasElement }) => {
+    const list = within(canvasElement).getByText('Message 1').closest('ul');
+    const body = list?.closest<HTMLElement>('[style*="overflow"]');
+    await expect(list && list.scrollHeight > list.clientHeight).toBe(true);
+    await expect(body && body.scrollHeight <= body.clientHeight).toBe(true);
+  },
 };
 
 export const FullPage: Story = {
@@ -254,7 +237,7 @@ export const FullPage: Story = {
 export const WithoutBreadcrumbsAndHeaderActions: Story = {
   render: () => (
     <StoryFrame>
-      <PageLayout variant="narrow" header={pageHeader}>
+      <PageLayout header={pageHeader}>
         <div className="mt-6">{resourceList}</div>
       </PageLayout>
     </StoryFrame>
@@ -271,4 +254,27 @@ export const Empty: Story = {
       </PageLayout>
     </StoryFrame>
   ),
+};
+
+export const HeaderWithSectionsAndEmptyState: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageLayout breadcrumbs={crumbs} header={pageHeader}>
+        <section className="mt-6">{resourceList}</section>
+        <EmptyState
+          variant="fill"
+          titleSlot="No activity yet"
+          descriptionSlot="Runs show up here once a resource is used."
+        />
+      </PageLayout>
+    </StoryFrame>
+  ),
+  play: async ({ canvasElement }) => {
+    const list = within(canvasElement).getByText('Research agent').closest('section');
+    const fill = canvasElement.querySelector<HTMLElement>('[data-slot="empty-state-fill"]');
+    const body = fill?.closest<HTMLElement>('[style*="overflow"]');
+    if (!list || !fill || !body) throw new Error('Missing the page parts');
+    await expect(fill.getBoundingClientRect().top).toBeCloseTo(list.getBoundingClientRect().bottom, 0);
+    await expect(body.scrollHeight).toBeLessThanOrEqual(body.clientHeight);
+  },
 };

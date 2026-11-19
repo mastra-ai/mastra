@@ -63,4 +63,41 @@ describe('FormLayout', () => {
     expect(back.hasAttribute('data-router-link')).toBe(true);
     expect(back.getAttribute('href')).toBe('/projects');
   });
+
+  it('puts the aside after the title and before the form, so small screens show it above the fields', () => {
+    render(
+      <FormLayout backHref="/alerts" backLabel="Alerts" title="New alert" aside={<p>Backtest</p>}>
+        <label>
+          Name
+          <input />
+        </label>
+      </FormLayout>,
+    );
+
+    const title = screen.getByRole('heading', { level: 1 });
+    const aside = screen.getByText('Backtest');
+    const field = screen.getByRole('textbox', { name: 'Name' });
+    expect(title.compareDocumentPosition(aside) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(aside.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole('complementary')).toBeNull();
+  });
+
+  it("shows the app's bar only when the app passes something for it", () => {
+    render(
+      <FormLayout
+        backHref="/alerts"
+        backLabel="Alerts"
+        title="New alert"
+        breadcrumbs={<button type="button">Open sidebar</button>}
+      >
+        <section>Conditions</section>
+      </FormLayout>,
+    );
+
+    const trigger = screen.getByRole('button', { name: 'Open sidebar' });
+    const main = screen.getByRole('main');
+    expect(main.contains(trigger)).toBe(false);
+    expect(trigger.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(main.contains(screen.getByRole('link', { name: 'Back to Alerts' }))).toBe(true);
+  });
 });

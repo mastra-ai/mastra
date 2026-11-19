@@ -18,27 +18,29 @@ export function SignalsEntityDetailPage() {
   if (!entityType || !entityId) return null;
 
   return (
-    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-      <h1 className="sr-only">{entityId}</h1>
-      <TraceIntelligenceProvider cacheScope="oss-studio" LinkComponent={Link}>
-        <TraceIntelligenceEntityDetail
-          entityId={entityId}
-          entityType={entityType}
-          dateFrom={url.selectedDateFrom}
-          dateTo={url.selectedDateTo}
-          dateRangePicker={
-            <DateTimeRangePicker
-              preset={url.datePreset}
-              onPresetChange={url.handleDatePresetChange}
-              dateFrom={url.selectedDateFrom}
-              dateTo={url.selectedDateTo}
-              onDateChange={url.handleDateChange}
-              presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
-              size="sm"
-            />
-          }
-        />
-      </TraceIntelligenceProvider>
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout.Workspace>
+        <h1 className="sr-only">{entityId}</h1>
+        <TraceIntelligenceProvider cacheScope="oss-studio" LinkComponent={Link}>
+          <TraceIntelligenceEntityDetail
+            entityId={entityId}
+            entityType={entityType}
+            dateFrom={url.selectedDateFrom}
+            dateTo={url.selectedDateTo}
+            dateRangePicker={
+              <DateTimeRangePicker
+                preset={url.datePreset}
+                onPresetChange={url.handleDatePresetChange}
+                dateFrom={url.selectedDateFrom}
+                dateTo={url.selectedDateTo}
+                onDateChange={url.handleDateChange}
+                presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
+                size="sm"
+              />
+            }
+          />
+        </TraceIntelligenceProvider>
+      </PageLayout.Workspace>
     </PageLayout>
   );
 }

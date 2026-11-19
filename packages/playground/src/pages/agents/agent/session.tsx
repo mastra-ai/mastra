@@ -115,26 +115,28 @@ function AgentSession() {
             <ThreadInputProvider>
               <ObservationalMemoryProvider>
                 <ActivatedSkillsProvider>
-                  <PageLayout variant="fit">
-                    <h1 className="sr-only">{agentId}</h1>
-                    <SessionHeader />
-                    <div className="relative grid h-full min-h-0">
-                      <AgentChat
-                        key={actualThreadId}
-                        agentId={agentId!}
-                        agentName={agent?.name}
-                        modelVersion={agent?.modelVersion}
-                        supportsMemory={agent?.supportsMemory}
-                        threadId={actualThreadId}
-                        memory={hasMemory}
-                        refreshThreadList={handleRefreshThreadList}
-                        modelList={agent?.modelList}
-                        messageId={messageId}
-                        isNewThread={isNewThread}
-                        hideModelSwitcher
-                        runOptionsSlot={<AgentRunActions agentId={agentId!} />}
-                      />
-                    </div>
+                  <PageLayout>
+                    <PageLayout.Workspace>
+                      <h1 className="sr-only">{agentId}</h1>
+                      <SessionHeader />
+                      <div className="relative grid h-full min-h-0">
+                        <AgentChat
+                          key={actualThreadId}
+                          agentId={agentId!}
+                          agentName={agent?.name}
+                          modelVersion={agent?.modelVersion}
+                          supportsMemory={agent?.supportsMemory}
+                          threadId={actualThreadId}
+                          memory={hasMemory}
+                          refreshThreadList={handleRefreshThreadList}
+                          modelList={agent?.modelList}
+                          messageId={messageId}
+                          isNewThread={isNewThread}
+                          hideModelSwitcher
+                          runOptionsSlot={<AgentRunActions agentId={agentId!} />}
+                        />
+                      </div>
+                    </PageLayout.Workspace>
                   </PageLayout>
                 </ActivatedSkillsProvider>
               </ObservationalMemoryProvider>
@@ -149,11 +151,13 @@ function AgentSession() {
 export default AgentSession;
 
 const AgentSessionLoadingSkeleton = () => (
-  <PageLayout variant="fit">
-    <h1 className="sr-only">Agent session</h1>
-    <SessionHeader />
-    <div className="relative grid h-full overflow-y-auto pt-4" data-testid="agent-session-skeleton" aria-busy="true">
-      <AgentChatLoadingSkeleton />
-    </div>
+  <PageLayout>
+    <PageLayout.Workspace>
+      <h1 className="sr-only">Agent session</h1>
+      <SessionHeader />
+      <div className="relative grid h-full overflow-y-auto pt-4" data-testid="agent-session-skeleton" aria-busy="true">
+        <AgentChatLoadingSkeleton />
+      </div>
+    </PageLayout.Workspace>
   </PageLayout>
 );

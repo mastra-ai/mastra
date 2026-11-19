@@ -45,4 +45,16 @@ describe('SettingsLayout', () => {
     expect(output).not.toContain('Ignored');
     expect(output.match(/<h1/g)).toHaveLength(1);
   });
+
+  it('owns the page frame, with the breadcrumb bar when given breadcrumbs', () => {
+    const output = renderToStaticMarkup(
+      <SettingsLayout breadcrumbs={<nav aria-label="Breadcrumb">Settings</nav>} title="Members">
+        <section>Sections</section>
+      </SettingsLayout>,
+    );
+
+    expect(output).toContain('data-slot="page-layout"');
+    expect(output.indexOf('aria-label="Breadcrumb"')).toBeLessThan(output.indexOf('<main'));
+    expect(output.indexOf('data-slot="settings-layout"')).toBeGreaterThan(output.indexOf('<main'));
+  });
 });

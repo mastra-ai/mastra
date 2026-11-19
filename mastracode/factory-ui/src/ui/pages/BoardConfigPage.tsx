@@ -2,7 +2,7 @@ import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
-import { SettingsContainer, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsLayout, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Link } from 'react-router';
 
@@ -61,52 +61,57 @@ export function BoardConfigPage() {
       ) : undefined,
   });
 
-  const header =
+  const configHeader =
     query.isSuccess && (!phaseKey || shownPhase) ? (
-      <div className={cn(SETTINGS_COLUMN, phaseKey ? 'pb-8' : 'pb-3')}>
-        <BoardConfigHeader
-          key={`${boardId}:${query.data.board.revision ?? 'code'}`}
-          factoryId={factory.id}
-          boardId={boardId}
-          phaseKey={phaseKey}
-          response={query.data}
-        />
-      </div>
+      <BoardConfigHeader
+        key={`${boardId}:${query.data.board.revision ?? 'code'}`}
+        factoryId={factory.id}
+        boardId={boardId}
+        phaseKey={phaseKey}
+        response={query.data}
+      />
     ) : undefined;
 
+  const body = query.isPending ? (
+    <SettingsContainer>
+      <SettingsSkeleton label="Loading board" rows={3} />
+    </SettingsContainer>
+  ) : query.isError && query.error instanceof BoardRequestError && query.error.code === 'board_not_found' ? (
+    <EmptyState variant="fill" titleSlot={<span role="alert">Board unavailable: this board is not installed.</span>} />
+  ) : query.isError ? (
+    <LoadErrorState
+      title="Couldn’t load this board"
+      error={query.error}
+      onRetry={() => void query.refetch()}
+      retrying={query.isFetching}
+    />
+  ) : (
+    <BoardConfigEditor
+      key={`${boardId}:${query.data.board.revision ?? 'code'}`}
+      factory={factory}
+      boardId={boardId}
+      phaseKey={phaseKey}
+      response={query.data}
+      skills={skills.data?.skills}
+      skillsEditable={skills.data?.canEdit ?? false}
+      sidebarHidden={sidebarHidden}
+      onReload={() => void query.refetch()}
+    />
+  );
+
+  if (phaseKey) {
+    return (
+      <SettingsLayout header={configHeader} {...slots}>
+        {body}
+      </SettingsLayout>
+    );
+  }
+
   return (
-    <PageLayout variant={phaseKey ? 'narrow' : 'fit'} header={header} {...slots}>
-      <div className={phaseKey || !query.isSuccess ? cn(SETTINGS_COLUMN, !phaseKey && 'px-4') : OVERVIEW_SURFACE}>
-        {query.isPending ? (
-          <SettingsContainer>
-            <SettingsSkeleton label="Loading board" rows={3} />
-          </SettingsContainer>
-        ) : query.isError && query.error instanceof BoardRequestError && query.error.code === 'board_not_found' ? (
-          <EmptyState
-            variant="fill"
-            titleSlot={<span role="alert">Board unavailable: this board is not installed.</span>}
-          />
-        ) : query.isError ? (
-          <LoadErrorState
-            title="Couldn’t load this board"
-            error={query.error}
-            onRetry={() => void query.refetch()}
-            retrying={query.isFetching}
-          />
-        ) : (
-          <BoardConfigEditor
-            key={`${boardId}:${query.data.board.revision ?? 'code'}`}
-            factory={factory}
-            boardId={boardId}
-            phaseKey={phaseKey}
-            response={query.data}
-            skills={skills.data?.skills}
-            skillsEditable={skills.data?.canEdit ?? false}
-            sidebarHidden={sidebarHidden}
-            onReload={() => void query.refetch()}
-          />
-        )}
-      </div>
+    <PageLayout header={configHeader && <div className={cn(SETTINGS_COLUMN, 'pb-3')}>{configHeader}</div>} {...slots}>
+      <PageLayout.Workspace>
+        <div className={query.isSuccess ? OVERVIEW_SURFACE : cn(SETTINGS_COLUMN, 'px-4')}>{body}</div>
+      </PageLayout.Workspace>
     </PageLayout>
   );
 }

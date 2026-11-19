@@ -1,5 +1,4 @@
 import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
-import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { SettingsLayout } from '@mastra/playground-ui/new/settings';
 import { useEffect, useId } from 'react';
@@ -79,8 +78,8 @@ export function SettingsPageLayout({
   });
 
   return (
-    <PageLayout {...slots}>
-      <SettingsLayout header={header}>{children}</SettingsLayout>
-    </PageLayout>
+    <SettingsLayout {...slots} header={header}>
+      {children}
+    </SettingsLayout>
   );
 }

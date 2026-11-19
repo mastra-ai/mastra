@@ -1,71 +1,37 @@
-import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { FormLayout } from '@mastra/playground-ui/components/FormLayout';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { Link, NavigationType, useLocation, useNavigate, useNavigationType, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 
-import { useBoardQuery } from '../../hooks/useBoardEditor';
 import { useFactorySkillsQuery } from '../../hooks/useFactorySkills';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
-import { boardConfigPath, boardSkillPath, boardSkillsPath } from '../domains/boardConfig/boardConfigPaths';
+import { boardSkillPath, boardSkillsPath } from '../domains/boardConfig/boardConfigPaths';
 import { NewSkillEditor } from '../domains/boardConfig/components/skills/NewSkillEditor';
 import { SkillEditor } from '../domains/boardConfig/components/skills/SkillEditor';
 import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfigRoute';
-import { SETTINGS_COLUMN } from '../domains/boardConfig/settingsColumn';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
+import { HrefLink } from '../ui/HrefLink';
 import { LoadErrorState } from '../ui/LoadErrorState';
 
 export function FactorySkillPage() {
   const factory = useActiveFactory();
   const boardId = useBoardConfigRoute()?.boardId ?? '';
   const { skillName } = useParams<{ skillName: string }>();
-  const navigate = useNavigate();
-  const navigationType = useNavigationType();
-  const { key: historyKey } = useLocation();
-  const openedInApp = historyKey !== 'default' && navigationType !== NavigationType.Replace;
-  const { isMobile, desktopState } = useSidebar();
-  const sidebarHidden = isMobile || desktopState === 'collapsed';
-  const board = useBoardQuery(factory.id, boardId).data?.board;
   const skillsPath = boardSkillsPath(factory.id, boardId);
-
-  const goBack = () => {
-    if (openedInApp) void navigate(-1);
-    else void navigate(skillsPath);
-  };
-
-  const slots = useSidebarHeaderSlots({
-    breadcrumbs:
-      sidebarHidden && board ? (
-        <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden">
-          <Crumb as={Link} to={boardConfigPath(factory.id, boardId)}>
-            {board.name}
-          </Crumb>
-          <Crumb as={Link} to={skillsPath}>
-            Skills
-          </Crumb>
-          <Crumb as="span" isCurrent>
-            {skillName ?? 'New skill'}
-          </Crumb>
-        </Breadcrumb>
-      ) : undefined,
-  });
+  const slots = useSidebarHeaderSlots();
 
   return (
-    <PageLayout {...slots}>
-      <div className="sticky top-0 z-10 w-fit p-2">
-        <Button variant="default" size="sm" icon={<IconArrowLeft />} onClick={goBack}>
-          Back
-        </Button>
-      </div>
-      <div className={cn(SETTINGS_COLUMN, 'flex flex-col pt-4')}>
-        <SkillPageBody factoryId={factory.id} boardId={boardId} skillName={skillName} />
-      </div>
-    </PageLayout>
+    <FormLayout
+      breadcrumbs={slots.breadcrumbs}
+      backHref={skillsPath}
+      backLabel="Skills"
+      title={skillName ?? 'New skill'}
+      LinkComponent={HrefLink}
+    >
+      <SkillPageBody factoryId={factory.id} boardId={boardId} skillName={skillName} />
+    </FormLayout>
   );
 }
 

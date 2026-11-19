@@ -10,9 +10,11 @@ function CmsScorersCreatePage() {
   const { navigate, paths } = useLinkComponent();
 
   return (
-    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-      <h1 className="sr-only">Create scorer</h1>
-      <ScorerCreateContent onSuccess={scorer => navigate(paths.scorerLink(scorer.id))} />
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout.Workspace>
+        <h1 className="sr-only">Create scorer</h1>
+        <ScorerCreateContent onSuccess={scorer => navigate(paths.scorerLink(scorer.id))} />
+      </PageLayout.Workspace>
     </PageLayout>
   );
 }

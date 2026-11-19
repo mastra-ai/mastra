@@ -22,7 +22,7 @@ const meta = {
         component: [
           'The frame for any create or edit form page, such as New alert, New project or Edit destination. It is `PageLayout` with no breadcrumb bar, holding a centered 640px column (the `SettingsLayout` width) under a back link and the page title.',
           'The back link, the title, each `SettingsTitle` and the field labels share one left edge, and sections sit 28px apart. The back link is the only way out, so there is no breadcrumb to show the same thing twice. Pass the app router link as `LinkComponent`.',
-          'Use `SettingsLayout` in a `PageLayout` with breadcrumbs for a settings page that someone browses to and changes in place. Use `PageLayout variant="narrow"` with a `PageHeader` for a one-column page to read, such as an overview, a feed or a detail page.',
+          'Use `SettingsLayout` for a settings page that someone browses to and changes in place. Use `PageLayout` for every other page: lists, dashboards, detail pages and explorers.',
         ].join('\n\n'),
       },
     },
@@ -135,6 +135,29 @@ export const LongText: Story = {
   render: args => (
     <StoryFrame>
       <FormLayout {...args}>
+        <AlertSections />
+      </FormLayout>
+    </StoryFrame>
+  ),
+};
+
+/** A live preview beside the form on wide screens, and above the fields on small ones. */
+export const WithAside: Story = {
+  render: args => (
+    <StoryFrame>
+      <FormLayout
+        {...args}
+        aside={
+          <SettingsGroup>
+            <SettingsTitle>Preview</SettingsTitle>
+            <SettingsContainer>
+              <SettingsRow label="Would have fired" description="Three times in the last 7 days.">
+                <Button size="sm">Refresh</Button>
+              </SettingsRow>
+            </SettingsContainer>
+          </SettingsGroup>
+        }
+      >
         <AlertSections />
       </FormLayout>
     </StoryFrame>

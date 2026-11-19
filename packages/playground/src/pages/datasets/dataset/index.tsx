@@ -182,15 +182,17 @@ function DatasetPage() {
   return (
     <DatasetItemPanelProvider datasetId={datasetId} items={unfilteredItems} isLoadingItems={isUnfilteredLoading}>
       <div className="h-full">
-        <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={headerActions}>
-          <h1 className="sr-only">{datasetId}</h1>
-          <div>
-            <DatasetItemsView
-              datasetId={datasetId}
-              onAddItemClick={() => setAddItemDialogOpen(true)}
-              toolbarActionsSlot={showTagsEditor ? <DatasetTagsEditor datasetId={datasetId} /> : undefined}
-            />
-          </div>
+        <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={headerActions}>
+          <PageLayout.Workspace>
+            <h1 className="sr-only">{datasetId}</h1>
+            <div>
+              <DatasetItemsView
+                datasetId={datasetId}
+                onAddItemClick={() => setAddItemDialogOpen(true)}
+                toolbarActionsSlot={showTagsEditor ? <DatasetTagsEditor datasetId={datasetId} /> : undefined}
+              />
+            </div>
+          </PageLayout.Workspace>
         </PageLayout>
 
         {/* Selected item of the `items/:itemId` child route, in the route side panel. */}

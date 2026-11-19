@@ -66,38 +66,40 @@ export default function Templates() {
   const isFiltered = searchTerm || selectedTag !== 'all' || selectedProvider !== 'all';
 
   return (
-    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-      <h1 className="sr-only">Templates</h1>
-      <Header>
-        <HeaderTitle>
-          <Icon>
-            <IconPackage />
-          </Icon>
-          Templates
-        </HeaderTitle>
-      </Header>
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout.Workspace>
+        <h1 className="sr-only">Templates</h1>
+        <Header>
+          <HeaderTitle>
+            <Icon>
+              <IconPackage />
+            </Icon>
+            Templates
+          </HeaderTitle>
+        </Header>
 
-      <div className={cn('z-10 h-full w-full overflow-y-auto px-5 pb-12')}>
-        <TemplatesTools
-          selectedTag={selectedTag}
-          onTagChange={value => handleFilterChange(value, 'tag')}
-          tagOptions={tagOptions}
-          selectedProvider={selectedProvider}
-          onProviderChange={value => handleFilterChange(value, 'provider')}
-          providerOptions={providerOptions}
-          searchTerm={searchTerm}
-          onSearchChange={handleSearch}
-          onReset={isFiltered ? handleReset : undefined}
-          className="max-w-[80rem]"
-          isLoading={isLoading}
-        />
-        <TemplatesList
-          templates={filteredTemplates}
-          linkComponent={Link}
-          className="mx-auto max-w-[80rem]"
-          isLoading={isLoading}
-        />
-      </div>
+        <div className={cn('z-10 h-full w-full overflow-y-auto px-5 pb-12')}>
+          <TemplatesTools
+            selectedTag={selectedTag}
+            onTagChange={value => handleFilterChange(value, 'tag')}
+            tagOptions={tagOptions}
+            selectedProvider={selectedProvider}
+            onProviderChange={value => handleFilterChange(value, 'provider')}
+            providerOptions={providerOptions}
+            searchTerm={searchTerm}
+            onSearchChange={handleSearch}
+            onReset={isFiltered ? handleReset : undefined}
+            className="max-w-[80rem]"
+            isLoading={isLoading}
+          />
+          <TemplatesList
+            templates={filteredTemplates}
+            linkComponent={Link}
+            className="mx-auto max-w-[80rem]"
+            isLoading={isLoading}
+          />
+        </div>
+      </PageLayout.Workspace>
     </PageLayout>
   );
 }

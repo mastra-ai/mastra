@@ -1,15 +1,13 @@
 import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
-import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
-import { cn } from '@mastra/playground-ui/utils/cn';
+import { SettingsLayout } from '@mastra/playground-ui/new/settings';
 import { Link } from 'react-router';
 
 import { useBoardQuery } from '../../hooks/useBoardEditor';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
 import { boardConfigPath } from '../domains/boardConfig/boardConfigPaths';
 import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfigRoute';
-import { SETTINGS_COLUMN } from '../domains/boardConfig/settingsColumn';
 import { IntakeOrderSection } from '../domains/settings/components/IntakeOrderSection';
 import { settingsSectionPath } from '../domains/settings/settingsSections';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
@@ -37,29 +35,24 @@ export function BoardIntakePage() {
   });
 
   return (
-    <PageLayout
-      variant="narrow"
+    <SettingsLayout
       header={
-        <div className={cn(SETTINGS_COLUMN, 'pb-8')}>
-          <PageHeader>
-            <PageHeader.Title>Routing</PageHeader.Title>
-            <PageHeader.Description>
-              <span>
-                The order boards are offered new issues and pull requests. What comes in is chosen in{' '}
-                <Link to={settingsSectionPath(factory.id, 'intake')} className="underline">
-                  Settings → Work Intake
-                </Link>
-                .
-              </span>
-            </PageHeader.Description>
-          </PageHeader>
-        </div>
+        <PageHeader>
+          <PageHeader.Title>Routing</PageHeader.Title>
+          <PageHeader.Description>
+            <span>
+              The order boards are offered new issues and pull requests. What comes in is chosen in{' '}
+              <Link to={settingsSectionPath(factory.id, 'intake')} className="underline">
+                Settings → Work Intake
+              </Link>
+              .
+            </span>
+          </PageHeader.Description>
+        </PageHeader>
       }
       {...slots}
     >
-      <div className={cn(SETTINGS_COLUMN, 'flex flex-col gap-8')}>
-        <IntakeOrderSection factoryId={factory.id} />
-      </div>
-    </PageLayout>
+      <IntakeOrderSection factoryId={factory.id} />
+    </SettingsLayout>
   );
 }

@@ -259,22 +259,26 @@ function CmsPromptBlocksEditPage() {
 
   if (isLoading) {
     return (
-      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <h1 className="sr-only">{blockId}</h1>
-        <AgentEditLayout leftSlot={<Spinner fill size="lg" />}>
-          <Spinner fill size="lg" />
-        </AgentEditLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <PageLayout.Workspace>
+          <h1 className="sr-only">{blockId}</h1>
+          <AgentEditLayout leftSlot={<Spinner fill size="lg" />}>
+            <Spinner fill size="lg" />
+          </AgentEditLayout>
+        </PageLayout.Workspace>
       </PageLayout>
     );
   }
 
   if (!block || !blockId) {
     return (
-      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <h1 className="sr-only">{blockId}</h1>
-        <AgentEditLayout leftSlot={<EmptyState variant="fill" titleSlot="Prompt block not found" />}>
-          <EmptyState variant="fill" titleSlot="Prompt block not found" />
-        </AgentEditLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <PageLayout.Workspace>
+          <h1 className="sr-only">{blockId}</h1>
+          <AgentEditLayout leftSlot={<EmptyState variant="fill" titleSlot="Prompt block not found" />}>
+            <EmptyState variant="fill" titleSlot="Prompt block not found" />
+          </AgentEditLayout>
+        </PageLayout.Workspace>
       </PageLayout>
     );
   }
@@ -293,17 +297,19 @@ function CmsPromptBlocksEditPage() {
   );
 
   return (
-    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
-      <h1 className="sr-only">{blockId}</h1>
-      <CmsPromptBlocksEditForm
-        block={block}
-        blockId={blockId}
-        selectedVersionId={selectedVersionId}
-        hasDraft={hasDraft}
-        latestVersionId={latestVersion?.id}
-        activeVersionId={activeVersionId}
-        onClearVersion={handleClearVersion}
-      />
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
+      <PageLayout.Workspace>
+        <h1 className="sr-only">{blockId}</h1>
+        <CmsPromptBlocksEditForm
+          block={block}
+          blockId={blockId}
+          selectedVersionId={selectedVersionId}
+          hasDraft={hasDraft}
+          latestVersionId={latestVersion?.id}
+          activeVersionId={activeVersionId}
+          onClearVersion={handleClearVersion}
+        />
+      </PageLayout.Workspace>
     </PageLayout>
   );
 }
