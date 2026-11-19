@@ -2,15 +2,7 @@ import { cn } from '@site/src/lib/utils'
 import { Card, CardHeader, CardContent, CardTitle } from '../ui/card'
 import Link from '@docusaurus/Link'
 
-export const CardGrid = ({
-  children,
-  columns = 2,
-  className,
-}: {
-  children: React.ReactNode
-  columns?: 2 | 3 | 4
-  className?: string
-}) => {
+export const CardGrid = ({ children, columns = 2 }: { children: React.ReactNode; columns?: 2 | 3 | 4 }) => {
   const gridCols = {
     2: 'lg:grid-cols-2',
     3: 'lg:grid-cols-3',
@@ -18,7 +10,7 @@ export const CardGrid = ({
   }[columns]
 
   return (
-    <div data-slot="card-grid" className={cn('grid grid-cols-1 gap-4 md:grid-cols-2', gridCols, className)}>
+    <div data-slot="card-grid" className={`grid grid-cols-1 md:grid-cols-2 ${gridCols} mb-6 gap-4`}>
       {children}
     </div>
   )
@@ -30,7 +22,6 @@ export const CardGridItem = ({
   href,
   logo,
   preserveLogoColor = false,
-  centerLogo = false,
   children,
 }: {
   title: string
@@ -38,7 +29,6 @@ export const CardGridItem = ({
   href: string
   logo?: string | React.ReactNode
   preserveLogoColor?: boolean
-  centerLogo?: boolean
   children?: React.ReactNode
 }) => {
   const hasContent = !!(children || description)
@@ -60,11 +50,11 @@ export const CardGridItem = ({
               />
             ) : (
               <div
-                className={cn(
-                  'h-8 w-8',
-                  !preserveLogoColor && 'text-black dark:text-white',
-                  centerLogo && 'inline-flex items-center justify-center',
-                )}
+                className={
+                  preserveLogoColor
+                    ? 'inline-flex h-8 w-8 items-center justify-center'
+                    : 'inline-flex h-8 w-8 items-center justify-center text-black dark:text-white'
+                }
               >
                 {logo}
               </div>
