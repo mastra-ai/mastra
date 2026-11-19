@@ -20,7 +20,7 @@ import { createCodingAgent } from '@mastra/core/coding-agent';
 import { classifyProviderError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
 import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge';
-import { PROVIDER_REGISTRY, findGatewayForModel, getGatewayId } from '@mastra/core/llm';
+import { ModelRouterEmbeddingModel, PROVIDER_REGISTRY, findGatewayForModel, getGatewayId } from '@mastra/core/llm';
 import type { MastraModelGatewayInterface, ProviderConfig } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { defaultNotificationDeliveryDecision, readNotificationRoutingRequirement } from '@mastra/core/notifications';
@@ -707,6 +707,13 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const googleVertexGateway = createGoogleVertexGateway();
   const githubCopilotGateway = createGitHubCopilotGateway();
 
+  // Built now, once stored provider keys are in env and before any storage or pubsub is opened, so a
+  // missing key fails here without leaving resources behind.
+  const embedder =
+    config?.memory === undefined && typeof config?.embedder === 'string'
+      ? new ModelRouterEmbeddingModel(config.embedder)
+      : config?.embedder;
+
   // Project detection
   const project = detectProject(cwd);
 
@@ -922,7 +929,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     config?.memory === undefined
       ? getDynamicMemory(storage, vector, config?.settingsPath, {
           disableSettingsOmSeed: config?.disableSettingsOmSeed,
-          embedder: config?.embedder,
+          embedder,
           embedderOptions: config?.embedderOptions,
         })
       : undefined;
