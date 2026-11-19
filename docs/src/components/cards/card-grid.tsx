@@ -1,20 +1,28 @@
-import { cn } from '@site/src/lib/utils'
-import { Card, CardHeader, CardContent, CardTitle } from '../ui/card'
-import Link from '@docusaurus/Link'
+import { cn } from '@site/src/lib/utils';
+import { Card, CardHeader, CardContent, CardTitle } from '../ui/card';
+import Link from '@docusaurus/Link';
 
-export const CardGrid = ({ children, columns = 2 }: { children: React.ReactNode; columns?: 2 | 3 | 4 }) => {
+export const CardGrid = ({
+  children,
+  columns = 2,
+  className,
+}: {
+  children: React.ReactNode;
+  columns?: 2 | 3 | 4;
+  className?: string;
+}) => {
   const gridCols = {
     2: 'lg:grid-cols-2',
     3: 'lg:grid-cols-3',
     4: 'lg:grid-cols-4',
-  }[columns]
+  }[columns];
 
   return (
-    <div data-slot="card-grid" className={`grid grid-cols-1 md:grid-cols-2 ${gridCols} mb-6 gap-4`}>
+    <div data-slot="card-grid" className={cn('grid grid-cols-1 gap-4 md:grid-cols-2', gridCols, className)}>
       {children}
     </div>
-  )
-}
+  );
+};
 
 export const CardGridItem = ({
   title,
@@ -24,14 +32,14 @@ export const CardGridItem = ({
   preserveLogoColor = false,
   children,
 }: {
-  title: string
-  description?: string
-  href: string
-  logo?: string | React.ReactNode
-  preserveLogoColor?: boolean
-  children?: React.ReactNode
+  title: string;
+  description?: string;
+  href: string;
+  logo?: string | React.ReactNode;
+  preserveLogoColor?: boolean;
+  children?: React.ReactNode;
 }) => {
-  const hasContent = !!(children || description)
+  const hasContent = !!(children || description);
 
   return (
     <Link to={href} className="block h-full w-full no-underline!">
@@ -64,5 +72,5 @@ export const CardGridItem = ({
         {hasContent ? <CardContent className="text-sm">{children || description}</CardContent> : null}
       </Card>
     </Link>
-  )
-}
+  );
+};
