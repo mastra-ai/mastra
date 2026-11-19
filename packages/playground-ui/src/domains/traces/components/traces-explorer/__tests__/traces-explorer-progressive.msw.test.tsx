@@ -175,6 +175,31 @@ describe('TracesExplorer progressive word search', () => {
       expect(queries.at(-1)).not.toHaveProperty('progressive');
     });
 
+    it('keeps the status line and Stop under a time-to-first-chunk sort, since the chart still searches in chunks', async () => {
+      const gate = chunkGate();
+      localStorage.setItem(
+        `mastra:traces:columns:${TEST_BASE_URL}:/api`,
+        serializeTraceColumnPreferences({
+          visibleColumns: ['input', 'timeToFirstChunk'],
+          customColumns: [],
+          metadataKeys: [],
+        }),
+      );
+      const { queries, aggregates } = setHandlers({ gate });
+      renderExplorer();
+      await waitFor(() => expect(status()).toBe('Searched the last 7 of 30 days…'));
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Time to first chunk, not sorted, sort ascending' }));
+      await waitFor(() => expect(queries.at(-1)?.orderBy?.[0]?.field).toBe('timeToFirstChunkMs'));
+      expect(queries.at(-1)).not.toHaveProperty('progressive');
+
+      expect(status()).toBe('Searched the last 7 of 30 days…');
+      fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+      gate.next();
+      await waitFor(() => expect(status()).toBe('Stopped after the last 14 of 30 days.'));
+      expect(aggregates.map(body => body.continuation)).toEqual([undefined, '1']);
+    });
+
     it('charts the range one chunk at a time and follows the chart in the status line', async () => {
       const gate = chunkGate();
       const { queries, aggregates } = setHandlers({ gate });

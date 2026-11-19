@@ -5,8 +5,8 @@ import { searchProgressProps } from '@/domains/observability/hooks/search-progre
 
 /**
  * One line under the filter bar while a word search over more than 7 days loads in chunks: how much of the range
- * is searched, with Stop and Continue. Follows `Histogram` when it is mounted, else the list. Renders nothing
- * otherwise.
+ * is searched, with Stop and Continue. Follows `Histogram` when it is mounted (it chunks under any sort), else the
+ * list. Renders nothing otherwise.
  */
 export function TracesExplorerSearchProgress() {
   const list = useTracesList();
