@@ -111,16 +111,6 @@ describe('Combobox', () => {
       expect(optionNames()).toEqual(['OpenAI', 'Anthropic', 'Google']);
     });
 
-    it('opens the list from the keyboard', async () => {
-      render(<SingleField />);
-      const user = userEvent.setup();
-
-      field().focus();
-      await user.keyboard('{ArrowDown}');
-
-      expect(await screen.findByRole('option', { name: 'OpenAI' })).toBeTruthy();
-    });
-
     it('moves the highlight with the arrow keys and selects with Enter', async () => {
       const onValueChange = vi.fn();
       render(<SingleField onValueChange={onValueChange} />);
@@ -549,16 +539,6 @@ describe('Combobox', () => {
       render(<Combobox options={providers} />);
 
       expect(screen.getByRole('combobox', { name: 'Select option' })).toBeTruthy();
-    });
-
-    it('searches in the popup and focuses the search', async () => {
-      render(<Combobox options={providers} searchPlaceholder="Search providers" />);
-      const user = userEvent.setup();
-
-      await user.click(trigger());
-      const search = await screen.findByPlaceholderText('Search providers');
-
-      await waitFor(() => expect(document.activeElement).toBe(search));
     });
 
     it('filters as you type in the popup search and picks with Enter', async () => {

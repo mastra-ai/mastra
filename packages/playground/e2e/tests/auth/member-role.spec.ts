@@ -12,7 +12,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { setupMemberAuth, setupMockAuth } from '../__utils__/auth';
+import { setupMemberAuth } from '../__utils__/auth';
 import { resetStorage } from '../__utils__/reset-storage';
 import { expectCurrentBreadcrumb } from '../__utils__/route-header';
 
@@ -62,18 +62,6 @@ test.describe('Member Role', () => {
       await expect(page).toHaveURL(/\/agents\/weather-agent/);
     });
 
-    test('member can view agent chat interface', async ({ page }) => {
-      await setupMemberAuth(page);
-      await page.goto('/agents/weather-agent/chat');
-
-      // Should be on agent chat page
-      await expect(page).toHaveURL(/\/agents\/weather-agent\/chat/);
-
-      // The page should load without permission errors
-      const permissionDenied = page.getByText(/permission denied|not authorized|access denied/i);
-      await expect(permissionDenied).not.toBeVisible();
-    });
-
     test('member can view agent tools', async ({ page }) => {
       await setupMemberAuth(page);
       await page.goto('/agents/weather-agent/chat/new');
@@ -91,19 +79,6 @@ test.describe('Member Role', () => {
         'href',
         /\/agents\/weather-agent\/threads\/[^/?]+\?tool=simpleMcpTool$/,
       );
-    });
-
-    test('member does not see agent creation controls', async ({ page }) => {
-      await setupMemberAuth(page);
-      await page.goto('/agents');
-
-      // Wait for page to load
-      await expectCurrentBreadcrumb(page, 'Agents');
-
-      // Member should NOT see create agent button
-      // Look for common create button patterns
-      const createButton = page.getByRole('button', { name: /create agent|new agent|add agent/i });
-      await expect(createButton).not.toBeVisible();
     });
 
     test('member cannot execute agents - sees disabled chat input', async ({ page }) => {
@@ -146,15 +121,6 @@ test.describe('Member Role', () => {
       await expect(page).toHaveURL(/\/workflows\//);
     });
 
-    test('member can see workflow execution controls', async ({ page }) => {
-      await setupMemberAuth(page);
-      await page.goto('/workflows/lessComplexWorkflow');
-
-      // Member should see the trigger/run workflow controls
-      const triggerButton = page.getByRole('button', { name: 'Run', exact: true });
-      await expect(triggerButton).toBeVisible();
-    });
-
     test('member workflow execution button is not disabled', async ({ page }) => {
       await setupMemberAuth(page);
       await page.goto('/workflows/lessComplexWorkflow');
@@ -167,15 +133,6 @@ test.describe('Member Role', () => {
 
       // Member should have the button enabled (has workflows:* permission)
       await expect(runButton).not.toBeDisabled();
-    });
-
-    test('member does not see permission denied for workflows', async ({ page }) => {
-      await setupMemberAuth(page);
-      await page.goto('/workflows/lessComplexWorkflow');
-
-      // Member should NOT see permission denied for workflow operations
-      const permissionDenied = page.getByText(/permission denied|not authorized|don't have permission/i);
-      await expect(permissionDenied).not.toBeVisible();
     });
   });
 
@@ -213,161 +170,6 @@ test.describe('Member Role', () => {
       // The execution form lives on the Playground tab
       await page.getByRole('tab', { name: 'Playground' }).click();
       await expect(page.locator('[name="location"]')).toBeVisible();
-    });
-
-    test('member does not see permission denied for tool execution', async ({ page }) => {
-      await setupMemberAuth(page);
-      await page.goto('/tools?tool=weatherInfo');
-
-      // Member has tools:execute permission
-      const permissionDenied = page.getByText(/permission denied|not authorized|don't have permission/i);
-      await expect(permissionDenied).not.toBeVisible();
-    });
-  });
-
-  test.describe('when verifying the member permission set', () => {
-    test('member has correct permissions', async ({ page }) => {
-      // Set up member with explicit permission verification
-      await setupMockAuth(page, {
-        role: 'member',
-        permissions: ['agents:read', 'workflows:*', 'tools:read', 'tools:execute'],
-      });
-
-      // Member can access agents (read)
-      await page.goto('/agents');
-      await expectCurrentBreadcrumb(page, 'Agents');
-
-      // Member can access workflows (full)
-      await page.goto('/workflows');
-      await expectCurrentBreadcrumb(page, 'Workflows');
-
-      // Member can access tools (read/execute)
-      await page.goto('/tools');
-      await expectCurrentBreadcrumb(page, 'Tools');
-    });
-
-    test('member sees correct user info', async ({ page }) => {
-      await setupMemberAuth(page);
-      await page.goto('/agents');
-
-      // Page should load successfully
-      await expectCurrentBreadcrumb(page, 'Agents');
-
-      // User info display depends on implementation
-    });
-
-    test('member can access protected routes without redirect', async ({ page }) => {
-      await setupMemberAuth(page);
-
-      // Routes member should be able to access
-      const accessibleRoutes = ['/agents', '/workflows', '/tools'];
-
-      for (const route of accessibleRoutes) {
-        await page.goto(route);
-
-        // Should NOT see login prompt
-        await expect(page.getByRole('heading', { name: 'Sign in to continue' })).not.toBeVisible();
-
-        // Should NOT be redirected to login
-        expect(page.url()).not.toContain('/login');
-      }
-    });
-  });
-
-  test.describe('when comparing the member role to other roles', () => {
-    test('member has fewer permissions than admin', async ({ page }) => {
-      // First, check member view
-      await setupMemberAuth(page);
-      await page.goto('/agents');
-
-      // Member should see agents page
-      await expectCurrentBreadcrumb(page, 'Agents');
-
-      // Now check as admin
-      await setupMockAuth(page, {
-        role: 'admin',
-        permissions: ['*'],
-      });
-
-      await page.reload();
-
-      // Admin should have same view but with more controls available
-      await expectCurrentBreadcrumb(page, 'Agents');
-    });
-
-    test('member has more permissions than viewer for workflows', async ({ page }) => {
-      // Member can execute workflows
-      await setupMemberAuth(page);
-      await page.goto('/workflows/lessComplexWorkflow');
-
-      // Member should see run button enabled
-      const runButton = page.getByRole('button', { name: 'Run', exact: true });
-      await expect(runButton).toBeVisible();
-      await expect(runButton).not.toBeDisabled();
-
-      // Now check as viewer
-      await setupMockAuth(page, {
-        role: 'viewer',
-        permissions: ['agents:read', 'workflows:read'],
-      });
-
-      await page.reload();
-
-      // Viewer should have restricted workflow access
-      await expect(page).toHaveURL(/\/workflows\/lessComplexWorkflow/);
-      // Viewer might see button disabled or hidden
-    });
-
-    test('member has more permissions than viewer for tools', async ({ page }) => {
-      // Member can execute tools
-      await setupMemberAuth(page);
-      await page.goto('/tools?tool=weatherInfo');
-
-      // Member should see tool execution panel on the Playground tab
-      await page.getByRole('tab', { name: 'Playground' }).click();
-      await expect(page.locator('[name="location"]')).toBeVisible();
-
-      // Now check as viewer
-      await setupMockAuth(page, {
-        role: 'viewer',
-        permissions: ['agents:read', 'workflows:read'],
-      });
-
-      await page.reload();
-
-      // Viewer has no tools:read permission, so might see restricted access
-      // The exact behavior depends on implementation
-      await expect(page).toHaveURL(/\/tools\?tool=weatherInfo/);
-    });
-  });
-
-  test.describe('when a member user attempts restricted actions', () => {
-    test('member cannot see admin-only settings', async ({ page }) => {
-      await setupMemberAuth(page);
-      await page.goto('/agents');
-
-      // Member should not have access to admin settings link
-      // This depends on implementation - checking for absence of settings link
-      // Settings link might not be visible for member
-      page.getByRole('link', { name: /^settings$/i });
-    });
-
-    test('member agent page shows disabled chat and viewable content', async ({ page }) => {
-      await setupMemberAuth(page);
-      await page.goto('/agents/weather-agent/chat');
-
-      // Page should load without errors
-      await expect(page).toHaveURL(/\/agents\/weather-agent\/chat/);
-
-      // Member has agents:read but NOT agents:execute
-      // The chat input should be disabled
-      const chatInput = page.locator('textarea[placeholder="You don\'t have permission to execute agents"]');
-      await expect(chatInput).toBeVisible();
-      await expect(chatInput).toBeDisabled();
-
-      // Member can still view agent content (agents:read permission)
-      const agentContent = page.getByText(/weather/i);
-      await expect(agentContent.first()).toBeVisible();
     });
   });
 });

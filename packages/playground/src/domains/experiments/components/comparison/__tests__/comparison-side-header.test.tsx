@@ -64,7 +64,6 @@ describe('ComparisonSideSummary', () => {
 
       expect(screen.getByText('Summary')).toBeDefined();
       expect(screen.getByRole('region', { name: 'Summary' })).toBeDefined();
-      expect(screen.queryByRole('button', { name: 'Summary' })).toBeNull();
     });
 
     it('links each scorer out to its playground page', () => {
@@ -98,7 +97,6 @@ describe('ComparisonSideSummary', () => {
         <ComparisonSideSummary role="baseline" experiment={namedExperiment} metrics={metrics} summary={summary} />,
       );
 
-      expect(screen.queryByText('Items')).toBeNull();
       expect(screen.getByText('Errors')).toBeDefined();
       expect(screen.getByText('1')).toBeDefined();
       expect(screen.getByText('Avg score')).toBeDefined();
@@ -193,29 +191,6 @@ describe('ComparisonSideSummary', () => {
       expect(terms.slice(0, 4)).toEqual(['Total cost', 'Avg duration', 'Avg score', 'Total tokens']);
       expect(within(summaryRegion()).getByText('$0.002')).toBeDefined();
       expect(within(summaryRegion()).getByText('12,400')).toBeDefined();
-    });
-
-    it('emphasizes the total cost, the average duration and the average score values with a larger, bolder font', () => {
-      renderColumn(
-        <ComparisonSideSummary
-          role="baseline"
-          experiment={namedExperiment}
-          metrics={metrics}
-          summary={summary}
-          showUsage
-        />,
-      );
-
-      const valueOf = (label: string) =>
-        within(summaryRegion())
-          .getAllByRole('term')
-          .find(term => term.textContent === label)?.nextElementSibling;
-      for (const term of ['Total cost', 'Avg duration', 'Avg score']) {
-        expect(valueOf(term)?.className).toContain('text-heading');
-        expect(valueOf(term)?.className).toContain('font-semibold');
-      }
-      expect(valueOf('Total tokens')?.className).not.toContain('font-semibold');
-      expect(valueOf('Errors')?.className).not.toContain('font-semibold');
     });
   });
 

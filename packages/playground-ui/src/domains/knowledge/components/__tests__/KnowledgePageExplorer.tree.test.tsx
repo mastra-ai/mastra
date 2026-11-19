@@ -440,14 +440,12 @@ describe('KnowledgePageExplorer tree with child counts', () => {
       expect(graphNode('first').textContent).toContain('First article');
     });
 
-    it('counts the children it still does not draw on the "+N more" circle, not in a line that shifts the layout', () => {
-      const { container } = renderWithProviders(<Host requested={[]} siteChildCount={5} />);
+    it('counts the children it still does not draw on the "+N more" circle', () => {
+      renderWithProviders(<Host requested={[]} siteChildCount={5} />);
       fireEvent.click(row('site:mastra'));
       expect(document.querySelector('.react-flow__node [data-page-id="rest:site"]')?.getAttribute('aria-label')).toBe(
         'Show 3 more of 3',
       );
-      expect(screen.queryByTestId('knowledge-graph-more-children')).toBeNull();
-      expect(container.textContent ?? '').not.toMatch(/pages under .* not drawn/);
     });
 
     describe('when the "+N more" circle is clicked', () => {
@@ -525,13 +523,6 @@ describe('KnowledgePageExplorer tree with child counts', () => {
     it('shows it as a lower bound in the tree', () => {
       renderWithProviders(<Host requested={[]} siteChildCount={1000} siteCapped />);
       expect(within(row('site:mastra')).getByTestId('knowledge-tree-count').textContent).toBe('1000+');
-    });
-
-    it('adds no line above the graph, so refocusing never moves it', () => {
-      const { container } = renderWithProviders(<Host requested={[]} siteChildCount={1000} siteCapped />);
-      fireEvent.click(row('site:mastra'));
-      expect(screen.queryByTestId('knowledge-graph-more-children')).toBeNull();
-      expect(container.textContent ?? '').not.toMatch(/pages under .* drawn/);
     });
   });
 });

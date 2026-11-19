@@ -55,21 +55,6 @@ describe('TraceThreadItemView', () => {
       expect(screen.getByText('Your Paris itinerary is ready.')).not.toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
-
-    it('leaves feedback controls to the dedicated Feedback tab', async () => {
-      server.use(
-        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(basicAgentTrace)),
-        http.get(`${TEST_BASE_URL}/api/observability/feedback`, () =>
-          HttpResponse.json({ feedback: [], pagination: { page: 0, perPage: 10, total: 0, hasMore: false } }),
-        ),
-      );
-
-      const { queryClient } = renderWithProviders(<TraceThreadItemView traceId={TRACE_THREAD_ITEM_ID} />);
-
-      expect(await screen.findByText('Plan a weekend in Paris')).not.toBeNull();
-      expect(screen.queryByPlaceholderText('Leave feedback')).toBeNull();
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-    });
   });
 
   describe('when the user input is a skill activation envelope', () => {

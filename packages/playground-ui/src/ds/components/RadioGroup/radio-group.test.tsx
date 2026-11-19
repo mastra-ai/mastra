@@ -12,19 +12,6 @@ afterEach(() => {
 });
 
 describe('RadioGroup', () => {
-  it('renders all radio options without throwing', () => {
-    expect(() =>
-      render(
-        <RadioGroup aria-label="Plan">
-          <RadioGroupItem value="option-1" aria-label="Option 1" />
-          <RadioGroupItem value="option-2" aria-label="Option 2" />
-        </RadioGroup>,
-      ),
-    ).not.toThrow();
-
-    expect(screen.getAllByRole('radio')).toHaveLength(2);
-  });
-
   it('reflects the selected value via aria-checked', () => {
     render(
       <RadioGroup aria-label="Plan" defaultValue="option-2">

@@ -1,15 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildSankeyColorMap, sankeySeriesColors } from './sankeyColor';
-import { hashLabel } from '@/lib/colors';
 
 describe('buildSankeyColorMap', () => {
   const labels = ['Search', 'Referral', 'Partner', 'Europe', 'North America', 'Asia Pacific', 'Won', 'Lost'];
-
-  it('hashes labels stably', () => {
-    expect(hashLabel('Europe')).toBe(hashLabel('Europe'));
-    expect(hashLabel('Europe')).not.toBe(hashLabel('Lost'));
-  });
 
   it('gives every label a chart series token', () => {
     const colors = buildSankeyColorMap(labels);

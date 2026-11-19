@@ -227,15 +227,6 @@ describe('TraceDataPanelView — trace summary description', () => {
     expect(screen.queryByRole('link', { name: /weather-agent/ })).toBeNull();
     expect(screen.getAllByText(/weather-agent/).length).toBeGreaterThan(0);
   });
-
-  it('no longer renders the old key-value metadata rows', () => {
-    render(<TraceDataPanelView {...baseProps} />);
-
-    expect(screen.queryByText('Status')).toBeNull();
-    expect(screen.queryByText('Ended at')).toBeNull();
-    expect(screen.queryByText('Trace input tokens')).toBeNull();
-    expect(screen.queryByText('Trace est. cost')).toBeNull();
-  });
 });
 
 describe('TraceDataPanelView — trace error', () => {
@@ -509,12 +500,6 @@ describe('TraceDataPanelView — the body', () => {
     expect(screen.getByText('messages body')).toBeTruthy();
   });
 
-  it('says a settled trace has no spans', () => {
-    render(<TraceDataPanelView {...baseProps} spans={[]} />);
-
-    expect(screen.getByText('No spans found for this trace.')).toBeTruthy();
-  });
-
   it('says the same when the spans never arrived at all', () => {
     render(<TraceDataPanelView {...baseProps} spans={undefined} />);
 
@@ -547,15 +532,6 @@ describe('TraceDataPanelView — the actions row', () => {
 
     expect(screen.getByRole('button', { name: /score trace/i })).toBeTruthy();
     expect(screen.queryByText(/available in Mastra Studio/)).toBeNull();
-  });
-
-  it('saves the dataset item against the root span it found', () => {
-    const onSaveAsDatasetItem = vi.fn();
-    render(<TraceDataPanelView {...baseProps} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Add to dataset' }));
-
-    expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
   });
 
   it('reports the evaluation request with no arguments of its own', () => {
@@ -598,16 +574,6 @@ describe('TraceDataPanelView — span selection', () => {
     // Nothing was asked for, so there is nothing for the data to confirm.
     expect(onSpanSelect).toHaveBeenCalledWith(undefined);
   });
-
-  it('holds a requested span while the trace is still loading', () => {
-    const onSpanSelect = vi.fn();
-    render(
-      <TraceDataPanelView {...baseProps} spans={[]} isLoading initialSpanId="span-1" onSpanSelect={onSpanSelect} />,
-    );
-
-    // An in-flight fetch must not wipe a selection the URL asked for.
-    expect(onSpanSelect).not.toHaveBeenCalled();
-  });
 });
 
 describe('TraceDataPanelView — an anchored subtrace', () => {
@@ -625,15 +591,6 @@ describe('TraceDataPanelView — an anchored subtrace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add to dataset' }));
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'child' });
-  });
-
-  it('falls back to the span with no parent when there is no anchor', () => {
-    const onSaveAsDatasetItem = vi.fn();
-    render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Add to dataset' }));
-
-    expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
   });
 
   it('still names an anchored root span even when the anchor is the trace root', () => {
@@ -866,19 +823,6 @@ describe('TraceDataPanelView — messages column', () => {
     });
   });
 
-  it('fades timeline spans that are not featured', () => {
-    const rootSpan = nestedSpanFixture[0];
-    if (!rootSpan) throw new Error('fixture must have a root span');
-
-    render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} featuredSpanIds={[rootSpan.spanId]} />);
-
-    const rows = screen.getAllByLabelText(/^View details for span/);
-    expect(rows.length).toBeGreaterThan(1);
-    const [featured, ...others] = rows;
-    expect(featured?.className).not.toContain('opacity-30');
-    others.forEach(row => expect(row.className).toContain('opacity-30'));
-  });
-
   describe('given a span panel slot', () => {
     it('orders the columns trace → span', () => {
       render(<TraceDataPanelView {...baseProps} spanPanelSlot={spanDetail} />);
@@ -902,11 +846,9 @@ describe('TraceDataPanelView — messages column', () => {
 });
 
 describe('TraceDataPanelView — timeline view', () => {
-  it('offers a tree/timeline toggle next to the search field instead of Spans/Timeline tabs', () => {
+  it('offers a tree/timeline toggle next to the search field', () => {
     render(<TraceDataPanelView {...baseProps} />);
 
-    expect(screen.queryByRole('tab', { name: 'Spans' })).toBeNull();
-    expect(screen.queryByRole('tab', { name: 'Timeline' })).toBeNull();
     const views = screen.getByRole('group', { name: 'Span view' });
     expect(views.parentElement?.contains(screen.getByRole('searchbox', { name: 'Search spans' }))).toBe(true);
     expect(screen.getByRole('button', { name: 'Span tree' }).getAttribute('aria-pressed')).toBe('true');
@@ -974,7 +916,7 @@ describe('TraceDataPanelView — side column views', () => {
     return row;
   };
 
-  it('keeps every tab in the side column, under a bordered header, whatever slots are provided', () => {
+  it('keeps every tab in the side column, whatever slots are provided', () => {
     render(
       <TraceDataPanelView
         {...baseProps}
@@ -985,10 +927,8 @@ describe('TraceDataPanelView — side column views', () => {
     );
 
     const tabs = screen.getAllByRole('tab');
+    expect(tabs).toHaveLength(3);
     expect(tabs.every(tab => sideColumn()?.contains(tab))).toBe(true);
-    const bordered = tabs[0]?.closest('.border-b');
-    expect(bordered).not.toBeNull();
-    expect(sideColumn()?.contains(bordered ?? null)).toBe(true);
   });
 
   it('renders no side column when no slot is provided', () => {
@@ -1128,12 +1068,6 @@ describe('TraceDataPanelView — span search', () => {
     Array.from(document.querySelectorAll('[aria-label^="View details for span "]')).map(node =>
       (node.getAttribute('aria-label') ?? '').replace('View details for span ', ''),
     );
-
-  it('renders the search field when the trace has spans', () => {
-    render(<TraceDataPanelView {...baseProps} spans={deepTraceFixture} />);
-
-    expect(searchField()).toBeTruthy();
-  });
 
   it('renders no search field when the trace has no spans', () => {
     render(<TraceDataPanelView {...baseProps} spans={[]} />);

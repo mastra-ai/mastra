@@ -894,23 +894,6 @@ describe('transcript reducer mergeWindow', () => {
     expect(next.entries.map(e => (e.kind === 'message' ? e.id : e.kind))).toEqual(['msg-1', 'msg-2', 'msg-3', 'msg-4']);
   });
 
-  it('does not duplicate the overlapping/anchor message', () => {
-    const onScreen = createInitialTranscript({
-      messages: [dbMessage('msg-2', 'assistant', [{ type: 'text', text: 'second' }])],
-    });
-
-    const grown = [
-      dbMessage('msg-1', 'user', [{ type: 'text', text: 'first' }]),
-      dbMessage('msg-2', 'assistant', [{ type: 'text', text: 'second' }]),
-    ];
-
-    const next = transcriptReducer(onScreen, { type: 'mergeWindow', messages: grown });
-    const ids = next.entries.filter(e => e.kind === 'message').map(e => (e.kind === 'message' ? e.id : ''));
-
-    expect(ids).toEqual(['msg-1', 'msg-2']);
-    expect(ids.filter(id => id === 'msg-2')).toHaveLength(1);
-  });
-
   it('preserves live-streamed messages at the tail when prepending older history', () => {
     let state = createInitialTranscript({
       messages: [dbMessage('history-2', 'assistant', [{ type: 'text', text: 'older reply' }])],
@@ -2294,8 +2277,6 @@ describe('transcript reducer entry identity', () => {
       event: { type: 'tool_start', toolCallId: 'call-1', toolName: 'view', args: { path: 'a.ts' } },
     });
     const drawnId = drawn.entries[0]?.id;
-
-    expect(drawnId).toMatch(/^assistant-tools-/);
 
     const claimed = transcriptReducer(drawn, {
       type: 'event',

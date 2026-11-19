@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render as renderUI, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render as renderUI, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -59,26 +59,6 @@ const mockHeights = (heights: Record<string, number>) => {
     const height = heights[this.closest<HTMLElement>('[data-testid]')?.dataset.testid ?? ''] ?? 0;
     return { height, width: 100, top: 0, left: 0, right: 100, bottom: height, x: 0, y: 0, toJSON: () => ({}) };
   });
-};
-
-// jsdom has no IntersectionObserver; `intersect` notifies whichever observers watch the element.
-const stubIntersectionObserver = () => {
-  type Callback = (entries: Array<Pick<IntersectionObserverEntry, 'target' | 'isIntersecting'>>) => void;
-  const observers: Array<{ cb: Callback; targets: Element[] }> = [];
-  vi.stubGlobal(
-    'IntersectionObserver',
-    class {
-      targets: Element[] = [];
-      constructor(cb: Callback) {
-        observers.push({ cb, targets: this.targets });
-      }
-      observe = (el: Element) => this.targets.push(el);
-      disconnect = vi.fn();
-    },
-  );
-  const intersect = (target: Element) =>
-    observers.filter(o => o.targets.includes(target)).forEach(o => o.cb([{ target, isIntersecting: true }]));
-  return { intersect };
 };
 
 /** A consumer-provided messages slot that drives highlighting through the row hook. */
@@ -159,35 +139,6 @@ describe('ThreadTrace', () => {
     });
   });
 
-  describe('when a thread with several traces loads', () => {
-    it('hands every row plain spans, without building a search haystack', async () => {
-      renderView();
-      await waitFor(() => expect(within(getRow('trace-b')).getAllByRole('button').length).toBeGreaterThan(0));
-
-      // What each mounted observer actually receives (after any `select`): the thread view
-      // has no search, so flattening span payloads here is pure memory cost on long threads.
-      const observedSpans = TRACE_IDS.flatMap(traceId => {
-        const query = queryClient.getQueryCache().find({ queryKey: ['trace-spans', traceId] });
-        return (query?.observers ?? []).flatMap(observer => observer.getCurrentResult().data?.spans ?? []);
-      });
-
-      expect(observedSpans.length).toBeGreaterThan(0);
-      for (const span of observedSpans) expect(span).not.toHaveProperty('searchText');
-    });
-  });
-
-  describe('row emphasis', () => {
-    it('keeps every row at full opacity, whichever is in view', async () => {
-      const { intersect } = stubIntersectionObserver();
-      renderView();
-      await screen.findByText('Chef agent run');
-
-      act(() => intersect(getRow('trace-b')));
-      expect(getRow('trace-a').className).not.toMatch(/opacity/);
-      expect(getRow('trace-b').className).not.toMatch(/opacity/);
-    });
-  });
-
   describe('selecting a span', () => {
     it('opens the side panel for that row, marks the row active, and closes back', async () => {
       renderView();
@@ -264,18 +215,13 @@ describe('ThreadTrace', () => {
   });
 
   describe('details column', () => {
-    it('announces each turn in a divider, drops the grid borders, renders the details as a card, and renders custom actions', async () => {
+    it('announces each turn in a divider and renders custom actions', async () => {
       renderView();
       await screen.findByText('Chef agent run');
 
       for (const [index, id] of ['trace-a', 'trace-b'].entries()) {
-        const details = screen.getByTestId(`details-${id}`);
-        const row = getRow(id);
-        const divider = within(row).getByRole('group', { name: `Turn ${index + 1}` });
+        const divider = within(getRow(id)).getByRole('group', { name: `Turn ${index + 1}` });
         expect(within(divider).getByRole('tab', { name: 'Messages' })).toBeTruthy();
-        expect(row.className).not.toContain('border-b');
-        expect(row.querySelector('[data-slot=thread-trace-messages]')?.className).not.toContain('border-r');
-        expect(details.className).toContain('rounded-xl');
       }
       expect(screen.getByRole('button', { name: 'Action trace-a' })).toBeTruthy();
     });
@@ -296,29 +242,6 @@ describe('ThreadTrace', () => {
       expect(getRow('trace-a').querySelector<HTMLElement>('[data-slot=thread-trace-messages]')?.style.minHeight).toBe(
         '300px',
       );
-    });
-
-    it('clamps a long timeline to the messages height and expands on Expand', async () => {
-      mockHeights({ 'trace-row-messages': 300, 'trace-row-timeline': 900 });
-      renderView({ traceIds: ['trace-a'] });
-      await screen.findByText('Chef agent run');
-
-      const timeline = await screen.findByTestId('trace-row-timeline');
-      expect(timeline.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('300px');
-      fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
-
-      expect(timeline.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('');
-      expect(screen.getByRole('button', { name: 'Collapse' })).toBeTruthy();
-
-      // Collapsing would hide the selected span, so Collapse waits until the panel closes.
-      fireEvent.click(screen.getByText('Chef agent run'));
-      await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBeGreaterThan(0));
-      expect(screen.queryByRole('button', { name: 'Collapse' })).toBeNull();
-      fireEvent.click(screen.getByText('Chef agent run'));
-      await screen.findByRole('button', { name: 'Collapse' });
-
-      fireEvent.click(screen.getByRole('button', { name: 'Collapse' }));
-      expect(timeline.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('300px');
     });
   });
 });

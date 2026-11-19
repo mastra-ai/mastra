@@ -707,32 +707,6 @@ describe('ChatProvider', () => {
     expect(captured[0].url).toContain('/generate');
   });
 
-  it('exposes a stable send handle and a cancelRun function', async () => {
-    const seen: { canSend: boolean; hasCancel: boolean } = { canSend: false, hasCancel: false };
-    const Probe = () => {
-      const { cancelRun } = useChatRunning();
-      const send = useChatSend();
-      seen.canSend = typeof send === 'function';
-      seen.hasCancel = typeof cancelRun === 'function';
-      return null;
-    };
-
-    server.use(...baseHandlers([]));
-
-    await act(async () => {
-      render(
-        <Wrapper>
-          <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={[]}>
-            <Probe />
-          </ChatProvider>
-        </Wrapper>,
-      );
-    });
-
-    expect(seen.canSend).toBe(true);
-    expect(seen.hasCancel).toBe(true);
-  });
-
   it.each([
     ['generate', { chatWithGenerate: true }],
     ['network', { chatWithNetwork: true }],

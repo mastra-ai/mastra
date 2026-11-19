@@ -33,15 +33,6 @@ export function extractStaticModel(model: StoredAgent['model'] | undefined): Age
   return undefined;
 }
 
-/**
- * `true` when the stored agent's model is configured conditionally (in code).
- * The form shows a read-only banner for these — v1 does not support editing
- * conditional models in the playground UI.
- */
-export function isConditionalStoredModel(model: StoredAgent['model'] | undefined): boolean {
-  return Array.isArray(model);
-}
-
 export function storedAgentToFormValues(storedAgent: StoredAgent | null | undefined): AgentBuilderEditFormValues {
   const avatarUrl =
     storedAgent?.metadata && typeof storedAgent.metadata === 'object' && 'avatarUrl' in storedAgent.metadata

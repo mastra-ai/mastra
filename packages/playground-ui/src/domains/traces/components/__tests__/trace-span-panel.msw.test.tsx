@@ -120,7 +120,6 @@ describe('TraceSpanPanel', () => {
       const { queryClient } = renderPanel({ showPartialThread: true });
 
       expect(await screen.findByTestId('messages-panel')).not.toBeNull();
-      expect(screen.queryByRole('tab', { name: 'Spans' })).toBeNull();
       expect(await screen.findByText('Will it rain?')).not.toBeNull();
       expect(screen.getByText('No rain is expected.')).not.toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
@@ -276,14 +275,18 @@ describe('TraceSpanPanel', () => {
         spans: panelTraceSpans.spans.map(span => (span.parentSpanId == null ? { ...span, threadId: null } : span)),
       });
 
-      expect(screen.queryByRole('heading', { name: 'Messages' })).toBeNull();
+      expect(screen.getByText('Root agent run')).not.toBeNull();
+      expect(screen.queryByTestId('messages-panel')).toBeNull();
+      expect(screen.queryByRole('tab', { name: /Messages/ })).toBeNull();
     });
 
     it('when viewing a branch, then the Messages column is absent', () => {
       installHandlers();
       renderPanel({ showPartialThread: true, anchorSpanId: 'root01' });
 
-      expect(screen.queryByRole('heading', { name: 'Messages' })).toBeNull();
+      expect(screen.getByText('Root agent run')).not.toBeNull();
+      expect(screen.queryByTestId('messages-panel')).toBeNull();
+      expect(screen.queryByRole('tab', { name: /Messages/ })).toBeNull();
     });
   });
 
@@ -395,7 +398,7 @@ describe('TraceSpanPanel', () => {
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
   });
 
-  it('given an agent root span, then the trace summary shows the entity linked to its agent page, start time, duration, and a Spans tab', async () => {
+  it('given an agent root span, then the trace summary shows the entity linked to its agent page, start time and duration', async () => {
     installHandlers();
     const { queryClient } = renderPanel();
 
@@ -406,14 +409,9 @@ describe('TraceSpanPanel', () => {
     const entityLink = screen.getByRole('link', { name: /Weather Agent/ });
     expect(entityLink.getAttribute('href')).toBe('/agents/weather-agent');
 
-    // Start time + duration are shown; the old key-value rows are gone.
     expect(screen.getByLabelText(/^Started at /)).not.toBeNull();
     // ("1s" also appears as the root span's duration in the tree, so allow multiple matches.)
     expect(screen.getAllByText('1s').length).toBeGreaterThan(0);
-    expect(screen.queryByText('Status')).toBeNull();
-    expect(screen.queryByText('Ended at')).toBeNull();
-    // Tab labels ("Spans") only render when score/feedback slots are provided;
-    // that rendering is covered by the playground-ui unit tests.
   });
 
   it('given a workflow root span, then the entity links to its workflow graph', async () => {
