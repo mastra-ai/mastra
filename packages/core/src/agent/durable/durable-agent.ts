@@ -144,7 +144,6 @@ import type {
   DurableAgentStepFinishResult,
   AgentSuspendedEventData,
   DurableAgenticWorkflowInput,
-  DurableToolCallInput,
   RegistryModelListEntry,
   RunRegistryEntry,
   SerializableModelListEntry,
@@ -155,7 +154,6 @@ import { normalizeResumeGenerateArgs } from './utils/resume-generate-args';
 import type { createDurableAgenticWorkflow } from './workflows';
 import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
 import { deadlineMessageListState, runDurableDeadlineOutputPass } from './workflows/finalize-run';
-import { readAccumulatedSteps } from './workflows/shared/accumulated-steps';
 import {
   hydrateMessageListState,
   latestMessageListState,
@@ -1132,20 +1130,7 @@ export class DurableAgent<
     runId: string,
     fallbackSnapshot: WorkflowRunState,
   ): Promise<Awaited<ReturnType<typeof hydrateMessageListState>> | undefined> {
-    let latest: unknown;
-    try {
-      // Evented iterations have their own run id; the parent records the active one.
-      const nestedRunId = fallbackSnapshot.context?.[DurableStepIds.AGENTIC_EXECUTION]?.metadata?.nestedRunId;
-      const nested = await workflowsStore.getWorkflowRunById({
-        runId: typeof nestedRunId === 'string' ? nestedRunId : runId,
-        workflowName: DurableStepIds.AGENTIC_EXECUTION,
-      });
-      const snapshot = typeof nested?.snapshot === 'string' ? JSON.parse(nested.snapshot) : nested?.snapshot;
-      latest = snapshot && latestMessageListState(snapshot);
-    } catch {
-      // Fall back to the supplied snapshot.
-    }
-    latest ??= latestMessageListState(fallbackSnapshot);
+    const latest = await this.executionEngine.loadLatestMessageListState(workflowsStore, runId, fallbackSnapshot);
     if (!latest) return undefined;
     // Messages memory already stores are kept as refs; restore them so callers
     // see the full rows (e.g. ToolSearch results). #loadRecalledMessages has
@@ -1259,40 +1244,8 @@ export class DurableAgent<
     runId: string,
   ): Promise<{ toolCalls: ToolCallChunk[]; resumedText?: { priorText: string; stepText: string } }> {
     const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-    const outerRun = await workflowsStore?.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
-    if (!outerRun) return { toolCalls: [] };
-    const outerSnapshot: WorkflowRunState =
-      typeof outerRun.snapshot === 'string' ? JSON.parse(outerRun.snapshot) : outerRun.snapshot;
-    const iteration = outerSnapshot.context?.[DurableStepIds.AGENTIC_EXECUTION];
-    const nestedRunId = iteration?.metadata?.nestedRunId ?? runId;
-    const persisted = await workflowsStore?.getWorkflowRunById({
-      runId: nestedRunId,
-      workflowName: DurableStepIds.AGENTIC_EXECUTION,
-    });
-    if (!persisted) return { toolCalls: [] };
-
-    const snapshot =
-      typeof persisted.snapshot === 'string'
-        ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
-        : persisted.snapshot;
-    const llmStep = snapshot.context?.[DurableStepIds.LLM_EXECUTION];
-    if (llmStep?.status !== 'success') return { toolCalls: [] };
-    // The step records hold completed iterations (in workflow state, or in the
-    // nested input on runs that never seeded them); the LLM output holds the
-    // current iteration, which has not reached the accumulator yet.
-    const accumulatedSteps: Array<{ text?: string; toolCalls?: DurableToolCallInput[]; finishReason?: string }> =
-      readAccumulatedSteps(snapshot.value, snapshot.context.input);
-    const toolCalls: DurableToolCallInput[] = [
-      ...accumulatedSteps.flatMap(step => step.toolCalls ?? []),
-      ...(llmStep.output.toolCalls ?? []),
-    ];
-    // The text streamed before the suspension belongs to the resumed run's text, as on the
-    // plain Agent, which restores it from its own snapshot (#27504).
-    const stepText: string = llmStep.output.text ?? '';
-    const priorText = accumulatedSteps
-      .filter(step => step.finishReason !== 'retry')
-      .map(step => step.text ?? '')
-      .join('');
+    const { toolCalls, resumedText } = await this.executionEngine.loadSuspendedIteration(workflowsStore, runId);
+    if (!resumedText) return { toolCalls: [] };
 
     const toolCallChunks: ToolCallChunk[] = toolCalls.map(toolCall => ({
       type: 'tool-call',
@@ -1307,7 +1260,7 @@ export class DurableAgent<
         output: toolCall.output,
       },
     }));
-    return { toolCalls: toolCallChunks, resumedText: { priorText, stepText } };
+    return { toolCalls: toolCallChunks, resumedText };
   }
 
   /**

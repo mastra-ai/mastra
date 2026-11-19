@@ -11,8 +11,10 @@ import { ExecutionFence, fencePubSub, resolveLeaseProvider, supportsRunFencing }
 import type { UntrackedRunLiveness } from './execution-fence';
 import { withExecutionStreamProducer } from './execution-stream-publisher';
 import { emitAbortEvent } from './stream-adapter';
-import type { DurableAgenticWorkflowInput } from './types';
+import type { DurableAgenticWorkflowInput, DurableToolCallInput } from './types';
 import { createDurableAgenticWorkflow } from './workflows/create-durable-agentic-workflow';
+import { readAccumulatedSteps } from './workflows/shared/accumulated-steps';
+import { latestMessageListState } from './workflows/shared/message-list-state';
 
 export type DurableWorkflow = ReturnType<typeof createDurableAgenticWorkflow>;
 type DurableRun = Awaited<ReturnType<DurableWorkflow['createRun']>>;
@@ -46,6 +48,74 @@ export class DurableExecutionEngine {
   }
   get workflow(): DurableWorkflow | null {
     return this.#workflow;
+  }
+
+  /**
+   * The transcript as of the crash. The loop snapshot's input only has the one the run
+   * started with; later steps keep it in the nested execution workflow's state.
+   */
+  async loadLatestMessageListState(
+    workflowsStore: WorkflowsStorage,
+    runId: string,
+    fallbackSnapshot: WorkflowRunState,
+  ): Promise<unknown> {
+    let latest: unknown;
+    try {
+      // Evented iterations have their own run id; the parent records the active one.
+      const nestedRunId = fallbackSnapshot.context?.[DurableStepIds.AGENTIC_EXECUTION]?.metadata?.nestedRunId;
+      const nested = await workflowsStore.getWorkflowRunById({
+        runId: typeof nestedRunId === 'string' ? nestedRunId : runId,
+        workflowName: DurableStepIds.AGENTIC_EXECUTION,
+      });
+      const snapshot = typeof nested?.snapshot === 'string' ? JSON.parse(nested.snapshot) : nested?.snapshot;
+      latest = snapshot && latestMessageListState(snapshot);
+    } catch {
+      // Fall back to the supplied snapshot.
+    }
+    latest ??= latestMessageListState(fallbackSnapshot);
+    return latest;
+  }
+
+  async loadSuspendedIteration(
+    workflowsStore: WorkflowsStorage | undefined,
+    runId: string,
+  ): Promise<{ toolCalls: DurableToolCallInput[]; resumedText?: { priorText: string; stepText: string } }> {
+    const outerRun = await workflowsStore?.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
+    if (!outerRun) return { toolCalls: [] };
+    const outerSnapshot: WorkflowRunState =
+      typeof outerRun.snapshot === 'string' ? JSON.parse(outerRun.snapshot) : outerRun.snapshot;
+    const iteration = outerSnapshot.context?.[DurableStepIds.AGENTIC_EXECUTION];
+    const nestedRunId = iteration?.metadata?.nestedRunId ?? runId;
+    const persisted = await workflowsStore?.getWorkflowRunById({
+      runId: nestedRunId,
+      workflowName: DurableStepIds.AGENTIC_EXECUTION,
+    });
+    if (!persisted) return { toolCalls: [] };
+
+    const snapshot =
+      typeof persisted.snapshot === 'string'
+        ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
+        : persisted.snapshot;
+    const llmStep = snapshot.context?.[DurableStepIds.LLM_EXECUTION];
+    if (llmStep?.status !== 'success') return { toolCalls: [] };
+    // The step records hold completed iterations (in workflow state, or in the
+    // nested input on runs that never seeded them); the LLM output holds the
+    // current iteration, which has not reached the accumulator yet.
+    const accumulatedSteps: Array<{ text?: string; toolCalls?: DurableToolCallInput[]; finishReason?: string }> =
+      readAccumulatedSteps(snapshot.value, snapshot.context.input);
+    const toolCalls: DurableToolCallInput[] = [
+      ...accumulatedSteps.flatMap(step => step.toolCalls ?? []),
+      ...(llmStep.output.toolCalls ?? []),
+    ];
+    // The text streamed before the suspension belongs to the resumed run's text, as on the
+    // plain Agent, which restores it from its own snapshot (#27504).
+    const stepText: string = llmStep.output.text ?? '';
+    const priorText = accumulatedSteps
+      .filter(step => step.finishReason !== 'retry')
+      .map(step => step.text ?? '')
+      .join('');
+
+    return { toolCalls, resumedText: { priorText, stepText } };
   }
 
   raceFenceLoss<T>(operation: Promise<T>, executionFence: ExecutionFence): Promise<T> {
