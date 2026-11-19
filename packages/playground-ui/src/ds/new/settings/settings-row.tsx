@@ -29,14 +29,14 @@ const rowClassName = 'min-w-0 gap-3';
 /**
  * Side by side: label left, control right. The label stays at the top, so a control that grows (an error or preview
  * line under a field) doesn't pull it down. When the control is too wide to sit beside the label (keeping the label at
- * least 16rem), it wraps onto its own line under the label, starting at the left edge. A control below its label fills
- * the row instead.
+ * least 12rem, so a text field still fits beside it in a default-size dialog), it wraps onto its own line under the
+ * label, starting at the left edge. A control below its label fills the row instead.
  */
 const sideRowClassName = 'sm:flex-wrap sm:items-start sm:justify-between sm:gap-x-6 sm:gap-y-3';
 const headingClassName = 'flex min-w-0 flex-col gap-px';
 /** Beside its control, the label column is as tall as a label with a one-line description, so rows with and without one match. */
 const sideHeadingClassName =
-  'sm:flex-[1_1_16rem] sm:min-h-[calc(var(--text-label)*1.5+1px+var(--text-caption)*1.5)] sm:justify-center';
+  'sm:flex-[1_1_12rem] sm:min-h-[calc(var(--text-label)*1.5+1px+var(--text-caption)*1.5)] sm:justify-center';
 /**
  * The controls. With a text input they take at least 13.75rem; selects and other field triggers hug their value
  * (`--field-width: auto`, see `fieldTriggerWidthStyle`) up to that same width; switches and buttons keep their size,
