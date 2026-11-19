@@ -270,7 +270,13 @@ const settle = async (queryClient: { isFetching: () => number }) => {
 };
 
 const getFilterChips = () => [...document.querySelectorAll<HTMLElement>('[data-slot="filter-bar-chip"]')];
-const getTimeRange = () => screen.getByRole('group', { name: 'Time range', hidden: true });
+// By its slot, not its accessible name: while the trace drawer is open, its modal `aria-hidden` can land on
+// the group itself, which then has no accessible name.
+const getTimeRange = () => {
+  const group = document.querySelector<HTMLElement>('[data-slot="filter-bar-time-range"]');
+  if (!group) throw new Error('The time range chip is not rendered');
+  return group;
+};
 const traceRow = (input: string) => screen.getByRole('button', { name: new RegExp(input) });
 const traceDialog = () => screen.queryByRole('dialog', { name: 'Trace details' });
 
