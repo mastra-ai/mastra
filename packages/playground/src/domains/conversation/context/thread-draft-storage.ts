@@ -1,7 +1,7 @@
+import type { ComposerAttachment } from '@mastra/playground-ui/domains/agents/chat/attachments/composer-attachments';
 import { openDB } from 'idb';
 import type { DBSchema, IDBPObjectStore } from 'idb';
 import { z } from 'zod';
-import type { ComposerAttachment } from '@/lib/ai-ui/attachments/composer-attachments';
 
 export interface ThreadDraft {
   text: string;
