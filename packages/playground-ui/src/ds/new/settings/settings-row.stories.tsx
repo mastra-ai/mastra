@@ -184,9 +184,32 @@ export const ViewOnly: Story = {
   ),
 };
 
+/** A disabled row keeps its label color; only the control looks disabled. */
+export const Disabled: Story = {
+  render: () => (
+    <SettingsRow label="Start on its own" description="Moves the item on when its checks pass." disabled>
+      <Switch aria-label="Start on its own" defaultChecked />
+    </SettingsRow>
+  ),
+};
+
 export const Destructive: Story = {
   render: () => (
     <SettingsRow label="Leave organization" description="Remove your access to this organization." tone="destructive">
+      <Button variant="destructive-ghost">Leave</Button>
+    </SettingsRow>
+  ),
+};
+
+/** A disabled destructive row keeps its red label. */
+export const DestructiveDisabled: Story = {
+  render: () => (
+    <SettingsRow
+      label="Leave organization"
+      description="Remove your access to this organization."
+      tone="destructive"
+      disabled
+    >
       <Button variant="destructive-ghost">Leave</Button>
     </SettingsRow>
   ),

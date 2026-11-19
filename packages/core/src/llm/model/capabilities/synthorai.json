@@ -34,22 +34,16 @@
     "kimi-k3"
   ],
   "reasoning": {
+    "kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "claude-opus-5-5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "gpt-6-sol": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "gpt-6-luna": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "deepseek-v4.1-flash": [
@@ -61,10 +55,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "claude-opus-5": [
+    "glm-5.3": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "gpt-6-luna": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "deepseek-v4-pro": [
@@ -76,28 +76,31 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "gpt-6.1-sol": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
     "gemini-3.1-pro-preview": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "glm-5.3": [
+    "claude-haiku-5-5": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "kimi-k3": [
+    "gpt-6-sol": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "claude-opus-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "claude-sonnet-5-5": [
@@ -106,10 +109,7 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "claude-haiku-5-5": [
-      {
-        "type": "toggle"
-      },
+    "gpt-6.1-sol": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]

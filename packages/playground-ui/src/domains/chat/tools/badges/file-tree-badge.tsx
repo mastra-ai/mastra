@@ -84,7 +84,8 @@ export const FileTreeBadge = ({
             )}
             {workspace?.filesystem && (
               <WorkspaceLink
-                href={workspace.id ? `/workspaces/${workspace.id}?path=${encodeURIComponent(path)}` : '/workspaces'}
+                workspaceId={workspace.id}
+                path={path}
                 icon={<IconStorage className="size-icon-xs shrink-0" aria-hidden />}
               >
                 {workspace.name || workspace.filesystem.name}

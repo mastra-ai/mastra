@@ -1,14 +1,32 @@
 // @vitest-environment jsdom
+import { MastraClient } from '@mastra/client-js';
+import { useQuery } from '@tanstack/react-query';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { renderWithProviders } from '../../../../test/render';
+import { server } from '../../../../test/msw-server';
+import { renderWithProviders, TEST_BASE_URL } from '../../../../test/render';
 import { bodyHeadings } from '../../lib/bodyHeadings';
 import type { KnowledgeNotePayload, KnowledgePagePayload } from '../../pageTypes';
 import { KnowledgePageDetail } from '../KnowledgePageDetail';
 import { KnowledgePageTree } from '../KnowledgePageTree';
+import { emptyScopeGraph, labeledScopeGraph, scopeLabelsGraph } from './fixtures/scope-labels';
+
+const client = new MastraClient({ baseUrl: TEST_BASE_URL });
+
+function RouteTree() {
+  const { data } = useQuery({ queryKey: ['scope-labels'], queryFn: () => client.getKnowledge('company').graph() });
+  return (
+    <KnowledgePageTree
+      pages={data?.pages ?? []}
+      initiallyExpanded={scopeLabelsGraph.pages.map(page => page.id)}
+      onSelect={() => {}}
+    />
+  );
+}
 
 function page(id: string, parentId: string | null, position: string, extra: Partial<KnowledgePagePayload> = {}) {
   return {
@@ -102,6 +120,37 @@ describe('KnowledgePageTree', () => {
 });
 
 describe('KnowledgePageTree scope rows and pins', () => {
+  it('renders declared labels and accessible expansion names from real route payloads', async () => {
+    server.use(http.get(`${TEST_BASE_URL}/api/knowledge/company/graph`, () => HttpResponse.json(scopeLabelsGraph)));
+    renderWithProviders(<RouteTree />);
+    expect(await screen.findByRole('treeitem', { name: /Acme/ })).toBeTruthy();
+    expect(screen.getByRole('treeitem', { name: /Roadmap/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Collapse Acme' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Collapse Roadmap' })).toBeTruthy();
+    expect(screen.getByText('org:org-1')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Collapse Acme' }));
+    expect(screen.queryByRole('treeitem', { name: /Roadmap/ })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Expand Acme' }));
+    expect(screen.getByRole('treeitem', { name: /Roadmap/ })).toBeTruthy();
+  });
+
+  it('renders API scope labels without losing the canonical address', async () => {
+    server.use(http.get(`${TEST_BASE_URL}/api/knowledge/company/graph`, () => HttpResponse.json(labeledScopeGraph)));
+    renderWithProviders(<RouteTree />);
+    const row = await screen.findByRole('treeitem', { name: /Acme/ });
+    expect(row.textContent).toBe('Acmeorg:acme');
+  });
+
+  it('gives an empty scope a folder icon without making it expandable', async () => {
+    server.use(http.get(`${TEST_BASE_URL}/api/knowledge/company/graph`, () => HttpResponse.json(emptyScopeGraph)));
+    renderWithProviders(<RouteTree />);
+    const row = await screen.findByRole('treeitem', { name: /empty/ });
+    expect(row.querySelector('[data-central-icon="IconFolder1"]')).toBeTruthy();
+    expect(row.querySelector('[data-central-icon="IconFileText"]')).toBeNull();
+    expect(row.hasAttribute('aria-expanded')).toBe(false);
+    expect(within(row).queryByRole('button')).toBeNull();
+  });
+
   it('names a scope that only has its address by its kind', () => {
     const named = page('org', null, 'a0', { name: 'org:acme', address: 'org:acme' });
     renderWithProviders(<KnowledgePageTree pages={[named]} onSelect={() => {}} />);

@@ -7,7 +7,7 @@ description: "Browse Ofox model IDs, capabilities, context windows, and pricing.
 
 # <img src="https://models.dev/logos/ofox.svg" alt="Ofox logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Ofox
 
-Access 154 Ofox models through Mastra's model router. Authentication is handled automatically using the `OFOX_API_KEY` environment variable.
+Access 156 Ofox models through Mastra's model router. Authentication is handled automatically using the `OFOX_API_KEY` environment variable.
 
 Learn more in the [Ofox documentation](https://ofox.ai/docs).
 
@@ -1256,6 +1256,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 1,
     "outputCost": 5
+  },
+  {
+    "model": "ofox/openai/gpt-6.2-astra",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 8,
+    "outputCost": 40
+  },
+  {
+    "model": "ofox/openai/gpt-6.2-sol",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 2,
+    "outputCost": 10
   },
   {
     "model": "ofox/qwen/qwen-flash",
