@@ -102,13 +102,22 @@ function splitTail(output: string, tail: number | null | undefined): TailSplit {
 
 /**
  * tokenx is synchronous and allocates per word, so running it over a multi-MB
- * output blocks the event loop for seconds. Outputs longer than this many chars
- * per kept token are first cut to a window around the kept end, and only that
- * window is counted exactly. tokenx never counts more than 6 non-space chars as
- * one token, so a window this size normally holds the whole budget; the cap only
- * bites on text that is mostly whitespace, which tokenx counts as free.
+ * output blocks the event loop for seconds. Outputs up to this many chars per
+ * token of budget are counted and cut exactly as before; longer ones never reach
+ * tokenx whole (see `countTokensOver` and `tokenWindow`).
  */
 const WINDOW_CHARS_PER_TOKEN = 32;
+
+/**
+ * tokenx never gives a non-whitespace segment fewer than one token per this many
+ * UTF-16 chars: 6 by default, and up to 4 code points (8 chars when astral) for
+ * its language rules. So text with more non-whitespace chars than
+ * `limit * MAX_CHARS_PER_TOKEN` is over `limit`.
+ */
+const MAX_CHARS_PER_TOKEN = 8;
+
+const WHITESPACE_RUN_RE = /\s+/g;
+const STRUCTURED_WHITESPACE_RE = /\n\s/;
 
 // Char classes for approximateTokenCount, mirroring tokenx's segment split.
 const WS = 0;
@@ -120,71 +129,89 @@ for (const c of ' \t\n\r\v\f') CHAR_CLASS[c.charCodeAt(0)] = WS;
 for (const c of '.,!?;(){}[]<>:/\\|@#$%^&*+=`~_"-') CHAR_CLASS[c.charCodeAt(0)] = PUNCT;
 for (let c = 48; c <= 57; c++) CHAR_CLASS[c] = DIGIT;
 
+/** Same set as the regex `\s`, which is what tokenx splits words on. */
+function isWhitespace(code: number): boolean {
+  return (
+    code === 0xa0 ||
+    code === 0x1680 ||
+    (code >= 0x2000 && code <= 0x200a) ||
+    code === 0x2028 ||
+    code === 0x2029 ||
+    code === 0x202f ||
+    code === 0x205f ||
+    code === 0x3000 ||
+    code === 0xfeff
+  );
+}
+
 function runTokens(kind: number, length: number, onlyDigits: boolean): number {
   if (kind === WS) return 0;
+  if (length <= 3) return 1;
   if (kind === PUNCT) return Math.ceil(length / 2);
-  if (onlyDigits) return Math.ceil(length / 3);
-  return length <= 3 ? 1 : Math.ceil(length / 6);
+  return onlyDigits ? Math.ceil(length / 3) : Math.ceil(length / 6);
 }
 
 /**
- * Cheap word-based token estimate: one pass over char codes, no allocations.
- * Follows tokenx's rules for ASCII text, so it lands close to the exact count
- * for command output; it is only used for the "of ~N tokens" total.
+ * One pass over char codes with no allocations: an approximate token count
+ * (tokenx's rules for ASCII text, used only for the "of ~N tokens" total) and
+ * the number of non-whitespace chars.
  */
-function approximateTokenCount(text: string): number {
-  let tokens = 0;
+function scanTokens(text: string): { approx: number; nonWhitespace: number } {
+  let approx = 0;
+  let nonWhitespace = 0;
   let kind = -1;
   let length = 0;
   let onlyDigits = true;
   for (let i = 0; i < text.length; i++) {
     const code = text.charCodeAt(i);
-    const cls = code < 128 ? CHAR_CLASS[code]! : WORD;
+    const cls = code < 128 ? CHAR_CLASS[code]! : isWhitespace(code) ? WS : WORD;
     const runKind = cls === DIGIT ? WORD : cls;
     if (runKind !== kind) {
-      if (length) tokens += runTokens(kind, length, onlyDigits);
+      if (length) approx += runTokens(kind, length, onlyDigits);
       kind = runKind;
       length = 0;
       onlyDigits = true;
     }
     length++;
+    if (cls !== WS) nonWhitespace++;
     if (cls !== DIGIT) onlyDigits = false;
   }
-  if (length) tokens += runTokens(kind, length, onlyDigits);
-  return tokens;
+  if (length) approx += runTokens(kind, length, onlyDigits);
+  return { approx, nonWhitespace };
 }
 
 /**
- * The part of `output` that token counting and slicing need to look at to keep
- * `limit` tokens from one end: the whole output when it is small, otherwise a
- * prefix (`'head'`) or suffix (`'tail'`) that grows until it holds more than
- * `limit` tokens or reaches the size cap.
- */
-function tokenWindow(output: string, limit: number, side: 'head' | 'tail'): string {
-  const cap = Math.max(limit, 1) * WINDOW_CHARS_PER_TOKEN;
-  if (output.length <= cap) return output;
-  for (let size = Math.max(limit, 1) * 8; ; size = Math.min(size * 2, cap)) {
-    const window = side === 'head' ? output.slice(0, size) : output.slice(-size);
-    if (size >= cap || estimateTokenCount(window) > limit) return window;
-  }
-}
-
-/**
- * Exact token count when it is cheap, else the word-based approximation.
- * Returns `undefined` when the output fits `limit`, so callers return it as is.
+ * Exact token count of `output` when it may fit `limit`, else an approximation.
+ * Returns `undefined` when the output fits, so callers return it as is.
  */
 function countTokensOver(output: string, limit: number): number | undefined {
   if (output.length <= Math.max(limit, 1) * WINDOW_CHARS_PER_TOKEN) {
     const exact = estimateTokenCount(output);
     return exact <= limit ? undefined : exact;
   }
-  const approx = approximateTokenCount(output);
-  // Few approximate tokens means few tokenx segments, so the exact check is cheap.
-  if (approx <= limit) {
-    const exact = estimateTokenCount(output);
-    return exact <= limit ? undefined : exact;
+  const { approx, nonWhitespace } = scanTokens(output);
+  if (nonWhitespace > limit * MAX_CHARS_PER_TOKEN) return approx;
+  // Little non-whitespace text in a long output: tokenx counts each whitespace run
+  // as 0 tokens, or 1 when it holds a newline followed by more whitespace, so
+  // collapsing every run to ' ' or '\n ' keeps the count and shrinks the input.
+  const collapsed = output.replace(WHITESPACE_RUN_RE, run => (STRUCTURED_WHITESPACE_RE.test(run) ? '\n ' : ' '));
+  const exact = estimateTokenCount(collapsed);
+  return exact <= limit ? undefined : exact;
+}
+
+/**
+ * The part of `output` that token slicing needs to keep `budget` tokens from one
+ * end. Outputs that fit the overall `limit`'s size cap are used whole, as before;
+ * longer ones give a prefix (`'head'`) or suffix (`'tail'`) that grows until it
+ * holds twice the budget or reaches the cap.
+ */
+function tokenWindow(output: string, budget: number, limit: number, side: 'head' | 'tail'): string {
+  if (output.length <= Math.max(limit, 1) * WINDOW_CHARS_PER_TOKEN) return output;
+  const cap = Math.max(budget, 1) * WINDOW_CHARS_PER_TOKEN;
+  for (let size = Math.max(budget, 1) * 8; ; size = Math.min(size * 2, cap)) {
+    const window = side === 'head' ? output.slice(0, size) : output.slice(-size);
+    if (size >= cap || estimateTokenCount(window) > budget * 2) return window;
   }
-  return approx;
 }
 
 /**
@@ -210,8 +237,8 @@ export async function applyTokenLimit(
 
   const kept =
     from === 'start'
-      ? sliceByTokensSafe(tokenWindow(output, limit, 'tail'), -limit)
-      : sliceByTokensSafe(tokenWindow(output, limit, 'head'), 0, limit);
+      ? sliceByTokensSafe(tokenWindow(output, limit, limit, 'tail'), -limit)
+      : sliceByTokensSafe(tokenWindow(output, limit, limit, 'head'), 0, limit);
 
   const position = from === 'start' ? 'last' : 'first';
   return from === 'start'
@@ -254,8 +281,8 @@ function sandwich(output: string, limit: number, headRatio: number, firstLine: n
   const tailBudget = limit - headBudget;
 
   // `head` is a prefix and `tail` a suffix of `output` (the surrogate repair keeps lengths).
-  let head = headBudget > 0 ? sliceByTokensSafe(tokenWindow(output, headBudget, 'head'), 0, headBudget) : '';
-  let tail = tailBudget > 0 ? sliceByTokensSafe(tokenWindow(output, tailBudget, 'tail'), -tailBudget) : '';
+  let head = headBudget > 0 ? sliceByTokensSafe(tokenWindow(output, headBudget, limit, 'head'), 0, headBudget) : '';
+  let tail = tailBudget > 0 ? sliceByTokensSafe(tokenWindow(output, tailBudget, limit, 'tail'), -tailBudget) : '';
   const headEnd = head.length;
   let tailStart = output.length - tail.length;
   // The notice gets its own line, so a line break (`\n` or `\r\n`) at either cut is redundant.

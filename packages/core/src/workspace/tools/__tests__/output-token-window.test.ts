@@ -1,4 +1,4 @@
-import { estimateTokenCount } from 'tokenx';
+import { estimateTokenCount, sliceByTokens } from 'tokenx';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ToolExecutionContext } from '../../../tools/types';
@@ -135,6 +135,57 @@ describe('token limits on huge output (#30951)', () => {
   it('a huge output that is mostly whitespace and fits the limit is returned whole', async () => {
     const output = 'start ' + ' '.repeat(2 * MB) + ' end';
     expect(await applyTokenLimit(output, LIMIT, 'start')).toBe(output);
+  });
+
+  it.each([
+    ['no-break spaces', '\u00a0'],
+    ['ideographic spaces', '\u3000'],
+    ['em spaces and line separators', '\u2003\u2028'],
+  ])('under-budget output padded with Unicode whitespace (%s) is returned whole', async (_label, pad) => {
+    const output = pad.repeat(65_000) + 'hello';
+    expect(estimateTokenCount(output)).toBeLessThanOrEqual(LIMIT);
+    expect(await applyTokenLimit(output, LIMIT, 'start')).toBe(output);
+    expect(await applyTokenLimitSandwich(output, LIMIT)).toBe(output);
+  });
+
+  it('a long sparse output that fits is confirmed without handing tokenx the whole string', async () => {
+    const output = ('word' + ' '.repeat(1_000) + '\n  ').repeat(900);
+    const exact = estimateTokenCount(output);
+    expect(exact).toBeLessThanOrEqual(LIMIT);
+    scanned.lengths = [];
+    expect(await applyTokenLimit(output, LIMIT, 'start')).toBe(output);
+    expect(maxScanned()).toBeLessThanOrEqual(LIMIT * 32);
+  });
+
+  it('dense astral-plane text that tokenx counts cheaply but still fits is returned whole', async () => {
+    // tokenx counts this one segment as ceil(code points / 4) tokens: ~8 UTF-16 chars per token.
+    const output = ' '.repeat(50_000) + 'ж' + '𝐀'.repeat(7_000);
+    expect(estimateTokenCount(output)).toBeLessThanOrEqual(LIMIT);
+    expect(await applyTokenLimit(output, LIMIT, 'start')).toBe(output);
+  });
+
+  it('a long sparse output just over the limit reports the exact total', async () => {
+    // Each repeat is 2 tokens: the word, plus the newline-and-indent whitespace run.
+    const output = ('word' + ' '.repeat(1_000) + '\n  ').repeat(1_100);
+    const exact = estimateTokenCount(output);
+    expect(exact).toBeGreaterThan(LIMIT);
+    scanned.lengths = [];
+    const result = await applyTokenLimit(output, LIMIT, 'start');
+    expect(maxScanned()).toBeLessThanOrEqual(LIMIT * 32);
+    expect(result.startsWith(`[output truncated: showing last ~${LIMIT} of ~${exact} tokens]`)).toBe(true);
+  });
+
+  it('output within the size cap is cut exactly as before', async () => {
+    const output = logOutput(60_000);
+    expect(output.length).toBeLessThanOrEqual(LIMIT * 32);
+    const result = await applyTokenLimitSandwich(output, LIMIT);
+    const [head, , tail] = result.split(/\n(\[\.\.\.output truncated[^\n]*)\n/);
+    expect(sliceByTokens(output, 0, 200).startsWith(head!)).toBe(true);
+    expect(sliceByTokens(output, -1_800).endsWith(tail!)).toBe(true);
+    expect(sliceByTokens(output, -1_800).length - tail!.length).toBeLessThanOrEqual(2);
+    expect(await applyTokenLimit(output, LIMIT, 'start')).toBe(
+      `[output truncated: showing last ~${LIMIT} of ~${estimateTokenCount(output)} tokens]\n${sliceByTokens(output, -LIMIT)}`,
+    );
   });
 
   it.each([
