@@ -8,7 +8,7 @@ import type { TableVariant } from './table-context';
 import { TablePagination } from './table-pagination';
 import { TableRowButton } from './table-row-button';
 import { TableRowLink } from './table-row-link';
-import { forwardRowClick } from './table-row-target';
+import { forwardRowClick, isForwardedRowClick } from './table-row-target';
 import { TableSortButton } from './table-sort-button';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { focusRingInset } from '@/ds/primitives/transitions';
@@ -197,6 +197,8 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
     }, [isActive]);
 
     const handleInsetClick = (event: React.MouseEvent<HTMLTableRowElement>) => {
+      // The click handed to the row target bubbles back here; the original click already ran onClick.
+      if (isForwardedRowClick(event)) return;
       forwardRowClick(event);
       onClick?.();
     };
@@ -230,7 +232,6 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
         data-slot={insetSlot(variant, 'table-row')}
         style={style}
         onClick={variant === 'inset' ? handleInsetClick : onClick}
-        onAuxClick={variant === 'inset' ? forwardRowClick : undefined}
         ref={internalRef}
         tabIndex={onClick ? 0 : undefined}
         onKeyDown={handleKeyDown}

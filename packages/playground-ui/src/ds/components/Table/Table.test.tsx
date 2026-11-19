@@ -109,26 +109,49 @@ describe('Table', () => {
     expect(onFollow).toHaveBeenCalledTimes(1);
   });
 
-  it('passes modifier keys and the middle button through to the row link, so it opens in a new tab', () => {
-    const seen: Array<Pick<MouseEvent, 'button' | 'metaKey' | 'ctrlKey' | 'shiftKey'>> = [];
+  it('leaves modified and middle clicks outside the link alone, since a forwarded one opens no tab', () => {
+    const onFollow = vi.fn((event: MouseEvent) => event.preventDefault());
     render(<CreditTable />);
     const link = screen.getByRole('link', { name: 'Credit grant' });
-    link.addEventListener('click', event => {
-      event.preventDefault();
-      seen.push({ button: event.button, metaKey: event.metaKey, ctrlKey: event.ctrlKey, shiftKey: event.shiftKey });
-    });
+    link.addEventListener('click', onFollow);
     const cell = secondCell(link);
 
     fireEvent.click(cell, { metaKey: true });
     fireEvent.click(cell, { ctrlKey: true });
+    fireEvent.click(cell, { shiftKey: true });
+    fireEvent.click(cell, { altKey: true });
     fireEvent(cell, new MouseEvent('auxclick', { bubbles: true, cancelable: true, button: 1 }));
-    fireEvent(cell, new MouseEvent('auxclick', { bubbles: true, cancelable: true, button: 2 }));
+    expect(onFollow).not.toHaveBeenCalled();
 
-    expect(seen).toEqual([
-      { button: 0, metaKey: true, ctrlKey: false, shiftKey: false },
-      { button: 0, metaKey: false, ctrlKey: true, shiftKey: false },
-      { button: 1, metaKey: false, ctrlKey: false, shiftKey: false },
-    ]);
+    fireEvent.click(cell);
+    expect(onFollow).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls a row onClick once and follows the row link once when a row has both', () => {
+    const onRow = vi.fn();
+    const onFollow = vi.fn((event: MouseEvent) => event.preventDefault());
+    render(
+      <Table variant="inset" aria-label="Credits">
+        <Table.Body>
+          <Table.Row onClick={onRow}>
+            <Table.Cell>
+              <Table.RowLink href="/credits/1">Credit grant</Table.RowLink>
+            </Table.Cell>
+            <Table.Cell>$10</Table.Cell>
+          </Table.Row>
+        </Table.Body>
+      </Table>,
+    );
+    const link = screen.getByRole('link', { name: 'Credit grant' });
+    link.addEventListener('click', onFollow);
+
+    fireEvent.click(secondCell(link));
+    expect(onRow).toHaveBeenCalledTimes(1);
+    expect(onFollow).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(link);
+    expect(onRow).toHaveBeenCalledTimes(2);
+    expect(onFollow).toHaveBeenCalledTimes(2);
   });
 
   it('leaves clicks on the link itself, other controls, portaled content and text selections alone', () => {

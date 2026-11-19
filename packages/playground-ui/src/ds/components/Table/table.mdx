@@ -141,7 +141,7 @@ Renders `a`, or the element you pass to `render`.
 
 - Takes every `a` prop, including `href`.
 - `render` swaps in a router link: `render={<Link to="/projects/1" />}`.
-- A click anywhere else in its row follows it; Cmd-click and middle-click open a new tab.
+- A click anywhere else in its row follows it. Cmd-click and middle-click open a new tab from the link itself.
 
 ### `Table.Pagination`
 
@@ -249,7 +249,7 @@ Avoid `rowSpan` for grouping. Merged cells are hard to scan and read out of orde
 
 ### Rows that link
 
-Put a `Table.RowLink` in the cell that names the row. It is a real link: Tab reaches it, Enter follows it, and Cmd-click opens it in a new tab. A click anywhere else in the row follows it too, with Cmd-click and middle-click opening a new tab, and the row highlights on hover and keyboard focus. Buttons, links, menus, inputs, and other focusable controls in the same row keep their own clicks, and selecting text in the row does not follow the link, with no extra code.
+Put a `Table.RowLink` in the cell that names the row. It is a real link: Tab reaches it, Enter follows it, and Cmd-click opens it in a new tab. A click anywhere else in the row follows it too, and the row highlights on hover and keyboard focus. Buttons, links, menus, inputs, and other focusable controls in the same row keep their own clicks, and selecting text in the row does not follow the link, with no extra code. Cmd-click, Ctrl-click, Shift-click and middle-click open a new tab from the link itself only: browsers open no tab for a click handed on by a script, so those clicks elsewhere in the row do nothing.
 
 <Canvas of={TableStories.InsetLinkedRows} />
 
