@@ -1,99 +1,31 @@
 import type { MastraServerCache } from '../../cache/base';
-import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
-import { withAck } from '../../events/acking-callback';
 import type { PubSub } from '../../events/pubsub';
-import { validateModelTimeoutSettings } from '../../llm/model/model-settings';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { IMastraLogger } from '../../logger';
-import { LOCAL_MODEL_REQUEST_KEY } from '../../loop/run-scope-keys';
-import { withDefaultToolCallConcurrencyLimit } from '../../loop/workflows/agentic-execution/tool-call-concurrency';
 import type { Mastra } from '../../mastra';
-import { createRunScope } from '../../mastra/run-scope';
-import {
-  createObservabilityContext,
-  getOrCreateSpan,
-  getResumeTracingContext,
-  SpanType,
-  EntityType,
-} from '../../observability';
-import {
-  MASTRA_RESOURCE_ID_KEY,
-  MASTRA_SCOPES_KEY,
-  MASTRA_THREAD_ID_KEY,
-  RequestContext,
-  withoutLiveRequestKeys,
-} from '../../request-context';
 import type { DeclaredAgentSchedule } from '../../schedules/define';
-import type { WorkflowsStorage } from '../../storage';
 import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
-import type {
-  ChunkType,
-  MastraOnFinishCallback,
-  MastraStreamTransformOptions,
-  ToolCallChunk,
-} from '../../stream/types';
-import { ChunkFrom } from '../../stream/types';
-import type { CoreTool } from '../../tools/types';
+import type { ChunkType, MastraOnFinishCallback, MastraStreamTransformOptions } from '../../stream/types';
 import type { DynamicArgument } from '../../types';
-import { deepMerge, rebindProcessorTools } from '../../utils';
-import type { ShouldPersistSnapshotFn, WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
+import type { ShouldPersistSnapshotFn, WorkflowRunStatus } from '../../workflows/types';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
-import { beginGoalActivity, stopGoalActivity } from '../goal';
-import { resolveRunId } from '../helpers';
 import type { MessageListInput } from '../message-list';
-import { MessageList } from '../message-list';
-import { modelSpanAttributes } from '../model-span-attributes';
-import type { AgentScopesSnapshot } from '../scopes';
-import { applyResolvedAgentScopes, incomingAgentScopes, resolveAgentScopes, restoreRunAgentScopes } from '../scopes';
 import type { AgentStreamBus } from '../streams/bus';
-import type { ResponseMessagesReplay } from '../streams/response-messages';
-import { replayResponseMessages, withRebuiltResponseMessages } from '../streams/response-messages';
 import type { AgentRunRecord } from '../streams/run-records';
 import { durableReplayOwnerKey, readAgentRunRecord, readDurableReplayOwner } from '../streams/run-records';
 import type { AgentStreamsConfig } from '../streams/types';
-import type { AgentStreamStepFinishPayload } from '../streams/wire';
-import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentDurableOption, ToolsInput } from '../types';
-import { isDurableAgentLike } from '../types';
-import { resolveThreadIdFromArgs } from '../utils';
 
-import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from './constants';
-import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './durable-stream-until-idle';
 import { DurableExecutionEngine } from './execution-engine';
-import type { UntrackedRunLiveness, ExecutionFence } from './execution-fence';
-import {
-  executionLeaseKey,
-  fencePubSub,
-  readRunGeneration,
-  resolveLeaseProvider,
-  setExecutionClaim,
-  supportsRunFencing,
-} from './execution-fence';
-import { detachFullStreamOnEnd } from './observe-full-stream';
-import { persistDurableRunInput } from './persist-run-input';
-import type { PreparationResult } from './preparation';
-import { prepareForDurableExecution, SCOPES_ALREADY_APPLIED, RESUMED_SPAN_DATA } from './preparation';
-import { createRunAbortController } from './run-abort';
-import { createRunCleanup } from './run-cleanup';
 import type { ExtendedRunRegistry } from './run-registry';
-import { deleteRunRegistryEntry, getRunRegistryEntry, globalRunRegistry, markResumeInFlight } from './run-registry';
-import type { DurableAgentStreamOptions as DurableStreamAdapterOptions } from './stream-adapter';
-import { createDurableAgentStream, createRunGenerationFilter, emitChunkEvent, emitAbortEvent } from './stream-adapter';
-import { toLiveStructuredOutputSchema } from './structured-output-null-transform';
 import type {
   AgentAbortEventData,
-  AgentChunkEventData,
   AgentStreamEvent,
   DurableAgentStepFinishResult,
   AgentSuspendedEventData,
-  DurableAgenticWorkflowInput,
-  RunRegistryEntry,
 } from './types';
 import type { createDurableAgenticWorkflow } from './workflows';
-import { hydrateMessageListState, latestMessageListState } from './workflows/shared/message-list-state';
-
-const OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS = 5_000;
 
 /**
  * Options for DurableAgent.stream()
@@ -568,8 +500,6 @@ export class DurableAgent<
   readonly #streamConfig: AgentStreamsConfig;
   #wrapperStreamBus?: AgentStreamBus;
 
-  /** Registry for per-run non-serializable state */
-
   /** Maximum steps for the agentic loop */
   readonly #maxSteps?: number;
 
@@ -627,38 +557,6 @@ export class DurableAgent<
 
     // Keep processor access on the wrapped agent, but dispatch through this wrapper.
     this.#wrappedAgent.getChannels()?.__setDispatchAgent(this);
-  }
-
-  /** @internal Read one request-context value captured in a suspended durable run snapshot. */
-  override async __getSuspendedRunRequestContextValue({
-    runId,
-    key,
-  }: {
-    runId: string;
-    key: string;
-  }): Promise<unknown> {
-    if (!this.#mastra) {
-      throw new MastraError({
-        id: 'DURABLE_AGENT_RECOVER_NO_MASTRA',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: `DurableAgent "${this.name}" __getSuspendedRunRequestContextValue() requires the agent to be registered on a Mastra instance.`,
-        details: { agentName: this.name, runId },
-      });
-    }
-
-    const workflowsStore = await this.#mastra.getStorage()?.getStore('workflows');
-    if (!workflowsStore) {
-      throw new MastraError({
-        id: 'DURABLE_AGENT_RECOVER_NO_STORAGE',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: `DurableAgent "${this.name}" __getSuspendedRunRequestContextValue() requires persistent storage to load the run snapshot.`,
-        details: { agentName: this.name, runId },
-      });
-    }
-
-    return this.executionEngine.loadSuspendedRequestContextValue(workflowsStore, runId, this.id, key);
   }
 
   // ===========================================================================
@@ -1355,142 +1253,6 @@ export class DurableAgent<
   };
 
   /**
-   * A replay from an offset can start past the marker of the execution that
-   * took the run over, and would then accept what the lost execution still
-   * publishes, its finish included. Start the reader with the floor it would
-   * have reached by reading the skipped events: the highest generation among
-   * them. Ordinary suspend/resume segments then still replay, since each
-   * segment's events precede the next claim. When the transport keeps no
-   * history to read, follow the run's current claim instead.
-   * Runs fenced by a pubsub lease have no generation and are unaffected.
-   * The floor only adds protection, so a failed read must not fail the reconnect;
-   * the reader reads the claim again before an event can end its stream.
-   */
-  async #readReplayFloor(
-    runId: string,
-    offset: number | undefined,
-  ): Promise<
-    Pick<DurableStreamAdapterOptions, 'minGeneration' | 'rereadMinGeneration' | 'keepReplayEvent'> & {
-      refreshReplayFilter?: () => Promise<unknown>;
-    }
-  > {
-    try {
-      const { keepReplayEvent: initialFilter, ...floor } = await this.executionEngine.readReplayFloor(
-        this.pubsub,
-        runId,
-        offset,
-      );
-      let refreshedFilter: Promise<typeof initialFilter> | undefined;
-      let currentFilter: typeof initialFilter | undefined;
-      // Subscription can replay a newer claim than the snapshot above. Refresh
-      // before the first replayed event; live events and later deliveries stay synchronous.
-      const refreshReplayFilter = () => {
-        refreshedFilter ??= this.executionEngine
-          .readReplayFloor(this.pubsub, runId, undefined)
-          .then(evidence => (currentFilter = evidence.keepReplayEvent))
-          .catch(() => (currentFilter = initialFilter));
-        return refreshedFilter;
-      };
-      const keepReplayEvent = (event: AgentStreamEvent): boolean | Promise<boolean> => {
-        if (event.index === undefined) return (currentFilter ?? initialFilter)(event);
-        if (currentFilter) return currentFilter(event);
-        return refreshReplayFilter().then(filter => filter(event));
-      };
-      return { ...floor, keepReplayEvent, refreshReplayFilter };
-    } catch (error) {
-      this.logger.warn(`[DurableAgent] Couldn't read the claim of run ${runId}; observing it without a floor`, {
-        error,
-      });
-      return { rereadMinGeneration: () => readRunGeneration(this.#mastra, runId) };
-    }
-  }
-
-  /** Reconcile only after subscribing, so a completion racing attachment is not lost. */
-  async #isObservationComplete(runId: string): Promise<boolean> {
-    try {
-      const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-      // Read twice before concluding absence/completion. In particular a newer
-      // claim must win over terminal replay from the execution it superseded.
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const history = await this.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0);
-        // A newer segment's nonterminal history keeps the observer attached even
-        // when ownership reads fail or an older segment ended with suspension.
-        const historyGeneration = history.reduce<number | undefined>(
-          (floor, event) =>
-            event.generation === undefined ? floor : Math.max(floor ?? event.generation, event.generation),
-          undefined,
-        );
-        const latest = history.findLast(
-          event =>
-            event.generation === undefined || historyGeneration === undefined || event.generation >= historyGeneration,
-        );
-        if (latest) {
-          const type = latest.type === AgentStreamEventTypes.CHUNK ? latest.data?.type : latest.type;
-          if (type !== 'finish' && type !== 'error' && type !== 'abort') return false;
-        }
-        const ownership =
-          workflowsStore && (await supportsRunFencing(workflowsStore))
-            ? await workflowsStore.getRunOwnership({ runId })
-            : undefined;
-        const minGeneration = history.reduce<number | undefined>(
-          (floor, event) =>
-            event.generation === undefined ? floor : Math.max(floor ?? event.generation, event.generation),
-          ownership?.generation,
-        );
-        const keepGeneration = createRunGenerationFilter({ minGeneration });
-        let hasHistory = false;
-        let terminal = false;
-        for (const event of history) {
-          if (!(await keepGeneration(event as unknown as AgentStreamEvent))) continue;
-          hasHistory = true;
-          const type = event.type === AgentStreamEventTypes.CHUNK ? event.data?.type : event.type;
-          if (type === 'finish' || type === 'error' || type === 'abort') terminal = true;
-        }
-        if (!terminal) {
-          if (hasHistory || ownership?.live) return false;
-          if (getRunRegistryEntry(runId, this.#mastra) || this.executionRunRegistry.get(runId)) return false;
-          if (await resolveLeaseProvider(this.pubsub).getLeaseOwner(executionLeaseKey(this.id, runId))) {
-            return false;
-          }
-          if (workflowsStore) {
-            for (const workflowName of [DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION]) {
-              const record = await workflowsStore.getWorkflowRunById({ runId, workflowName });
-              if (!record) continue;
-              const snapshot =
-                typeof record.snapshot === 'string'
-                  ? (JSON.parse(record.snapshot) as WorkflowRunState)
-                  : record.snapshot;
-              const input = snapshot?.context?.input as DurableAgenticWorkflowInput | undefined;
-              if (input?.__workflowKind === 'durable-agent' && input.agentId !== this.id) {
-                throw new MastraError({
-                  id: 'DURABLE_AGENT_OBSERVE_AGENT_MISMATCH',
-                  domain: ErrorDomain.AGENT,
-                  category: ErrorCategory.USER,
-                  text: `DurableAgent "${this.name}" observe(${runId}): persisted run belongs to agent "${input.agentId}", not "${this.id}".`,
-                  details: { agentName: this.name, runId, ownerAgentId: input.agentId },
-                });
-              }
-              // A failed cleanup can leave terminal snapshots behind. Unknown
-              // statuses stay observable, including suspension without a lease.
-              if (
-                !snapshot ||
-                !['success', 'failed', 'tripwire', 'canceled', 'bailed', 'skipped'].includes(snapshot.status)
-              ) {
-                return false;
-              }
-            }
-          }
-        }
-      }
-      return true;
-    } catch (error) {
-      if (error instanceof MastraError && error.id === 'DURABLE_AGENT_OBSERVE_AGENT_MISMATCH') throw error;
-      // Unavailable lifecycle evidence cannot prove that the producer is gone.
-      return false;
-    }
-  }
-
-  /**
    * Subscribe to a run's raw AgentStreamEvents, filtering out events from
    * executions that lost ownership and takeover markers. Callers must map
    * these events to the public frame contract produced by stream-adapter.ts's
@@ -1500,119 +1262,12 @@ export class DurableAgent<
    *
    * @internal
    */
-  async __subscribeToRunStream(
+  __subscribeToRunStream(
     runId: string,
     options: { offset?: number; onComplete?: () => void },
     onEvent: (event: AgentStreamEvent) => void,
   ): Promise<() => Promise<void>> {
-    const replayFloor = await this.#readReplayFloor(runId, options.offset);
-    const keepGeneration = createRunGenerationFilter(replayFloor);
-    const topic = AGENT_STREAM_TOPIC(runId);
-    let subscribed = true;
-    let activityVersion = 0;
-    let bufferingReplay = true;
-    const bufferedEvents: Array<() => Promise<void>> = [];
-
-    // Step-finish events carry only the response messages that changed; rebuild the full list so
-    // the frames match what the run's own stream reports. A reader starting at an offset first
-    // rebuilds it from the events it skips.
-    let responseMessages: ResponseMessagesReplay = { messages: [] };
-    const offset = options.offset;
-    if (offset !== undefined && offset > 0 && this.pubsub.supportsOffsets) {
-      try {
-        const skipped = (await this.pubsub.getHistory(topic, 0)).filter(
-          event => typeof event.index === 'number' && event.index < offset,
-        );
-        responseMessages = replayResponseMessages(skipped);
-      } catch (error) {
-        this.logger.warn(`[DurableAgent] Couldn't read run ${runId}'s history before offset ${offset}`, { error });
-      }
-    }
-
-    const deliver = (event: AgentStreamEvent) => {
-      activityVersion++;
-      if (
-        !subscribed ||
-        event.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED ||
-        event.type === AgentStreamEventTypes.ITERATION_START
-      )
-        return;
-      const chunk = event.type === AgentStreamEventTypes.CHUNK ? (event.data as AgentChunkEventData) : undefined;
-      if (chunk?.type === 'step-finish' && chunk.payload) {
-        event = {
-          ...event,
-          data: {
-            ...chunk,
-            payload: withRebuiltResponseMessages(
-              responseMessages,
-              chunk.payload as unknown as AgentStreamStepFinishPayload,
-            ),
-          },
-        };
-      }
-      // Keep `index`: the observe route forwards it on each frame so clients can resume at index + 1.
-      onEvent(event);
-    };
-    const filterEvent = (streamEvent: AgentStreamEvent) => {
-      const filterGeneration = () => {
-        const keep = keepGeneration(streamEvent);
-        if (typeof keep === 'boolean') {
-          if (keep) deliver(streamEvent);
-          return;
-        }
-        return keep.then(kept => {
-          if (kept) deliver(streamEvent);
-        });
-      };
-      const keepReplay = replayFloor.keepReplayEvent?.(streamEvent);
-      if (keepReplay === undefined || keepReplay === true) return filterGeneration();
-      if (keepReplay === false) return;
-      return keepReplay.then(keep => {
-        if (keep) return filterGeneration();
-      });
-    };
-    // Replayed frames are held until attachment finishes and the claim history
-    // is refreshed; a claim can arrive partway through replay. Acknowledge only
-    // after filtering and delivery, including frames that are dropped.
-    const acknowledge = withAck(event => filterEvent(event as AgentStreamEvent));
-    const callback: ReturnType<typeof withAck> = (event, ...args) => {
-      if (!subscribed) return args[0]?.() ?? Promise.resolve();
-      activityVersion++;
-      if (bufferingReplay) {
-        bufferedEvents.push(async () => {
-          await acknowledge(event, ...args);
-        });
-        return Promise.resolve();
-      }
-      return acknowledge(event, ...args);
-    };
-    const unsubscribe = async () => {
-      if (!subscribed) return;
-      subscribed = false;
-      await this.pubsub.unsubscribe(topic, callback);
-    };
-
-    try {
-      await (options.offset !== undefined
-        ? this.pubsub.subscribeFromOffset(topic, options.offset, callback)
-        : this.pubsub.subscribeWithReplay(topic, callback));
-      await replayFloor.refreshReplayFilter?.();
-      // Index cursor keeps the drain linear; live frames can still append while draining.
-      for (let i = 0; i < bufferedEvents.length; i++) {
-        await bufferedEvents[i]!();
-      }
-      bufferedEvents.length = 0;
-      bufferingReplay = false;
-
-      const reconciledVersion = activityVersion;
-      if (options.onComplete && (await this.#isObservationComplete(runId)) && activityVersion === reconciledVersion) {
-        options.onComplete();
-      }
-      return unsubscribe;
-    } catch (error) {
-      await unsubscribe();
-      throw error;
-    }
+    return this.subscribeToDurableRunStream(runId, options, onEvent);
   }
 
   /**
@@ -1651,7 +1306,7 @@ export class DurableAgent<
    * `isAlive` if you rely on the timeout to reclaim a crashed run's state. Both
    * options are opt-in; omit them for the current unbounded behavior.
    */
-  async observe(
+  declare observe: (
     runId: string,
     options?: {
       /**
@@ -1674,382 +1329,7 @@ export class DurableAgent<
       onAbort?: (data: AgentAbortEventData) => void | Promise<void>;
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
     },
-  ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string; detach: () => void }> {
-    let memoryInfo = this.executionRunRegistry.getMemoryInfo(runId);
-
-    let terminalCompleted = false;
-    let abortPending = false;
-    let cleanupRequested = false;
-    let streamCleanup: (() => void) | undefined;
-
-    const localEntry = this.executionRunRegistry.get(runId);
-    const observedEntry = localEntry ?? getRunRegistryEntry(runId, this.#mastra);
-    const observedFence = observedEntry?.executionFence;
-    const runCleanup = createRunCleanup({
-      scheduleTimer: cleanup =>
-        observedFence
-          ? this.scheduleReaderCleanup(observedFence, cleanup)
-          : this.__getStreamBus().scheduleCleanup(cleanup),
-      release: () => {
-        streamCleanup?.();
-        if (
-          observedFence &&
-          (this.unverifiedReaderFences.has(observedFence) ||
-            !observedFence.ownsRunTopics() ||
-            getRunRegistryEntry(runId, this.#mastra)?.executionFence !== observedFence ||
-            (localEntry &&
-              (this.executionRunRegistry.get(runId) !== localEntry || localEntry.executionFence !== observedFence)))
-        ) {
-          return;
-        }
-        this.executionRunRegistry.cleanup(runId);
-        deleteRunRegistryEntry(runId, this.#mastra);
-        this.clearPubsubTopic(runId, observedEntry);
-      },
-    });
-    const performCleanup = runCleanup.run;
-    const scheduleAutoCleanup = runCleanup.schedule;
-
-    const completeTerminalLifecycle = () => {
-      terminalCompleted = true;
-      abortPending = false;
-      if (cleanupRequested) {
-        performCleanup();
-      } else {
-        scheduleAutoCleanup();
-      }
-    };
-
-    const observedAgentSpan = observedEntry?.resumeAgentSpan ?? observedEntry?.agentSpan;
-    let structuredOutput = observedEntry?.structuredOutput;
-    let outputProcessors = observedEntry?.outputProcessors;
-    const processorStates = observedEntry?.processorStates;
-    let streamAgent: Agent<any, any, any, any> = observedEntry?.agent ?? this.#wrappedAgent;
-    let returnScorerData = observedEntry?.returnScorerData;
-    let requestContext = observedEntry?.requestContext;
-    let messageList = observedEntry?.messageList ?? this.executionRunRegistry.getMessageList(runId);
-    // Worker entries can carry runtime dependencies without the caller's live transcript.
-    const liveEntry = messageList ? observedEntry : undefined;
-    if (liveEntry?.agentId !== undefined && liveEntry.agentId !== this.id) {
-      throw new MastraError({
-        id: 'DURABLE_AGENT_OBSERVE_AGENT_MISMATCH',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: `DurableAgent "${this.name}" observe(${runId}): live run belongs to agent "${liveEntry.agentId}", not "${this.id}".`,
-        details: { agentName: this.name, runId, ownerAgentId: liveEntry.agentId },
-      });
-    }
-    let workflowInput: DurableAgenticWorkflowInput | undefined;
-    let loopSnapshot: WorkflowRunState | undefined;
-    let workflowInputSnapshot: WorkflowRunState | undefined;
-    const workflowsStore = !liveEntry ? await this.#mastra?.getStorage()?.getStore('workflows') : undefined;
-
-    if (!structuredOutput || !liveEntry) {
-      const snapshotStore = workflowsStore ?? (await this.#mastra?.getStorage()?.getStore('workflows'));
-
-      for (const workflowName of [DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION]) {
-        const persisted = await snapshotStore?.getWorkflowRunById({ runId, workflowName });
-        if (!persisted) continue;
-
-        const snapshot =
-          typeof persisted.snapshot === 'string'
-            ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
-            : persisted.snapshot;
-        if (workflowName === DurableStepIds.AGENTIC_LOOP) loopSnapshot = snapshot;
-        const persistedInput = snapshot?.context?.input as DurableAgenticWorkflowInput | undefined;
-        if (persistedInput?.__workflowKind !== 'durable-agent') continue;
-
-        workflowInput = persistedInput;
-        workflowInputSnapshot = snapshot;
-        break;
-      }
-    }
-
-    if (!liveEntry && workflowInput && workflowInput.agentId !== this.id) {
-      throw new MastraError({
-        id: 'DURABLE_AGENT_OBSERVE_AGENT_MISMATCH',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: `DurableAgent "${this.name}" observe(${runId}): persisted run belongs to agent "${workflowInput.agentId}", not "${this.id}".`,
-        details: { agentName: this.name, runId, ownerAgentId: workflowInput.agentId },
-      });
-    }
-
-    if (!structuredOutput && workflowInput) {
-      const persistedStructuredOutput = workflowInput.options?.structuredOutput;
-      if (persistedStructuredOutput?.schema) {
-        const { errorStrategy, fallbackValue, ...rest } = persistedStructuredOutput;
-        const schema = toLiveStructuredOutputSchema<{}>(
-          persistedStructuredOutput.schema,
-          persistedStructuredOutput.nullToUndefined,
-        );
-        // A non-JSON-safe fallbackValue is not persisted; keep the default strategy then.
-        structuredOutput =
-          errorStrategy === 'fallback'
-            ? fallbackValue === undefined
-              ? { ...rest, schema }
-              : { ...rest, schema, errorStrategy, fallbackValue: fallbackValue as {} }
-            : { ...rest, schema, errorStrategy };
-      }
-    }
-
-    if (!liveEntry && workflowInput) {
-      requestContext = workflowInput.requestContextEntries
-        ? new RequestContext(Object.entries(workflowInput.requestContextEntries))
-        : new RequestContext();
-
-      const messageListMemoryInfo = (
-        workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
-      )?.memoryInfo;
-      const threadId = workflowInput.state?.threadId ?? messageListMemoryInfo?.threadId;
-      const resourceId = workflowInput.state?.resourceId ?? messageListMemoryInfo?.resourceId;
-      memoryInfo = threadId && resourceId ? { threadId, resourceId } : undefined;
-
-      if (threadId && resourceId) {
-        requestContext.set('MastraMemory', {
-          thread: { id: threadId },
-          resourceId,
-          memoryConfig: workflowInput.state?.memoryConfig,
-        });
-      } else {
-        requestContext.delete('MastraMemory');
-      }
-
-      messageList = new MessageList({ threadId, resourceId });
-      try {
-        const snapshot = workflowInputSnapshot ?? loopSnapshot;
-        const storedState = workflowInput.messageListState ?? (snapshot ? latestMessageListState(snapshot) : undefined);
-        if (storedState) {
-          const initialState = await hydrateMessageListState(
-            { getInitData: () => workflowInput!, mastra: this.#mastra },
-            storedState,
-          );
-          messageList.deserialize(initialState);
-        }
-
-        if (workflowsStore && snapshot) {
-          const inputMessages = messageList.get.input.db();
-          const latestState = await this.loadLatestMessageListState(workflowsStore, runId, snapshot);
-          if (latestState) {
-            messageList.deserialize(latestState);
-            if (messageList.get.input.db().length === 0 && inputMessages.length > 0) {
-              messageList.add(inputMessages, 'input');
-            }
-          }
-        }
-      } catch (error) {
-        this.#mastra
-          ?.getLogger?.()
-          ?.warn?.(`[DurableAgent] observe(${runId}) messageList deserialize skipped: ${error}`);
-      }
-
-      let processorAgent: Agent<any, any, TOutput> = this.#wrappedAgent as Agent<any, any, TOutput>;
-      const pinnedVersionId = workflowInput.agentVersionId;
-      if (pinnedVersionId && this.#mastra && !this.__isStoredVersionApplied()) {
-        const currentVersionId = this.toRawConfig()?.resolvedVersionId;
-        if (pinnedVersionId !== currentVersionId) {
-          try {
-            processorAgent = (await this.#mastra.resolveVersionedAgent(this as unknown as Agent, {
-              versionId: pinnedVersionId,
-            })) as unknown as Agent<any, any, TOutput>;
-          } catch (error) {
-            this.#mastra
-              .getLogger?.()
-              ?.warn?.(
-                `[DurableAgent] Failed to resolve pinned agent version for durable observe, using current definition: ${error}`,
-              );
-          }
-        }
-      }
-
-      // Hooks get the agent the output processors come from, not an entry's agent
-      // (which is the current version). A pinned version is a DurableAgent fork; unwrap it.
-      streamAgent =
-        isDurableAgentLike(processorAgent) && processorAgent.agent !== processorAgent
-          ? processorAgent.agent
-          : processorAgent;
-      try {
-        outputProcessors = (await processorAgent.listOutputProcessors(requestContext)) ?? [];
-      } catch (error) {
-        outputProcessors = [];
-        this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] observe(${runId}) processor resolution failed: ${error}`);
-      }
-      returnScorerData = workflowInput.options?.returnScorerData;
-    }
-
-    const refreshObservedMessageList = async (isExpired: () => boolean) => {
-      const targetMessageList = messageList;
-      const snapshot = workflowInputSnapshot ?? loopSnapshot;
-      if (!workflowsStore || !snapshot || !targetMessageList) return;
-
-      try {
-        const inputMessages = targetMessageList.get.input.db();
-        const latestState = await this.loadLatestMessageListState(workflowsStore, runId, snapshot);
-        if (latestState && !isExpired()) {
-          targetMessageList.deserialize(latestState);
-          if (targetMessageList.get.input.db().length === 0 && inputMessages.length > 0) {
-            targetMessageList.add(inputMessages, 'input');
-          }
-        }
-      } catch (error) {
-        this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] observe(${runId}) messageList refresh failed: ${error}`);
-      }
-    };
-
-    const refreshObservedMessageListWithTimeout = async () => {
-      const refreshTimeoutMs = Math.min(
-        options?.idleTimeoutMs && options.idleTimeoutMs > 0
-          ? options.idleTimeoutMs
-          : OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS,
-        OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS,
-      );
-      let expired = false;
-      let timeout: ReturnType<typeof setTimeout> | undefined;
-      const timedOut = new Promise<boolean>(resolve => {
-        timeout = setTimeout(() => {
-          expired = true;
-          resolve(true);
-        }, refreshTimeoutMs);
-      });
-
-      try {
-        const didTimeOut = await Promise.race([refreshObservedMessageList(() => expired).then(() => false), timedOut]);
-        if (didTimeOut) {
-          this.#mastra
-            ?.getLogger?.()
-            ?.warn?.(`[DurableAgent] observe(${runId}) messageList refresh timed out after ${refreshTimeoutMs}ms`);
-        }
-      } finally {
-        if (timeout) clearTimeout(timeout);
-      }
-    };
-
-    let observedResponseText = '';
-    const handleObservedChunk = async (chunk: ChunkType<TOutput>) => {
-      if (chunk.type === 'text-delta' && typeof chunk.payload.text === 'string') {
-        observedResponseText += chunk.payload.text;
-      }
-      if (chunk.type === 'step-finish') {
-        await refreshObservedMessageListWithTimeout();
-        if (messageList && messageList.get.response.db().length === 0 && observedResponseText) {
-          messageList.add({ role: 'assistant', content: observedResponseText }, 'response');
-        }
-      }
-      await options?.onChunk?.(chunk);
-    };
-
-    const replayFloor = await this.#readReplayFloor(runId, options?.offset);
-
-    const stream = createDurableAgentStream<TOutput>({
-      pubsub: this.pubsub,
-      runId,
-      messageId: crypto.randomUUID(),
-      model: {
-        modelId: undefined,
-        provider: undefined,
-        version: 'v3',
-      },
-      threadId: memoryInfo?.threadId,
-      resourceId: memoryInfo?.resourceId,
-      offset: options?.offset,
-      replayResponseMessagesBeforeOffset: true,
-      ...replayFloor,
-      idleTimeoutMs: options?.idleTimeoutMs,
-      isAlive: options?.isAlive,
-      onChunk: handleObservedChunk,
-      experimentalTransform: options?.experimentalTransform,
-      onStepFinish: options?.onStepFinish,
-      onFinish: options?.onFinish,
-      onStreamFinished: completeTerminalLifecycle,
-      onError: async ({ error, runDead }) => {
-        try {
-          await options?.onError?.({ error });
-        } finally {
-          // A bare idle timeout (runDead === false) only means this observer
-          // stopped hearing from the run — it may still be alive elsewhere, so
-          // don't tear down its registry entry or replay history.
-          if (runDead !== false) completeTerminalLifecycle();
-        }
-      },
-      onAbort: async data => {
-        try {
-          await options?.onAbort?.(data);
-        } finally {
-          completeTerminalLifecycle();
-        }
-      },
-      onSuspended: options?.onSuspended,
-      structuredOutput: structuredOutput as any,
-      agent: streamAgent,
-      outputProcessors,
-      processorStates,
-      returnScorerData,
-      requestContext,
-      tracingContext: observedAgentSpan ? { currentSpan: observedAgentSpan } : undefined,
-      messageList,
-    });
-    const { output, ready, detach } = stream;
-    streamCleanup = stream.cleanup;
-
-    // This output belongs to this observer alone, so a consumer that stops
-    // reading fullStream (break/return/throw out of `for await`) should detach
-    // the observer. MastraModelOutput fans out to several readers and only drops
-    // the cancelled reader's listeners, so the cancel never reaches the pubsub
-    // subscription — pass it through here.
-    detachFullStreamOnEnd(output, detach);
-
-    // Wait for subscription to be ready
-    try {
-      await ready;
-      await replayFloor.refreshReplayFilter?.();
-      await stream.waitForEventDelivery();
-      const reconciledVersion = stream.activityVersion;
-      if ((await this.#isObservationComplete(runId)) && stream.activityVersion === reconciledVersion) detach();
-    } catch (error) {
-      detach();
-      throw error;
-    }
-
-    const cleanup = () => {
-      if (abortPending) {
-        cleanupRequested = true;
-        scheduleAutoCleanup();
-        return;
-      }
-      performCleanup();
-    };
-
-    // observe() doesn't own the run's lifecycle, but the returned `abort` can
-    // still stop it. Flip the in-process controller if one happens to be
-    // installed here, then cancel the workflow run so the abort also reaches
-    // the process actually executing it — the common case for observe(), which
-    // exists precisely to watch runs this process did not start.
-    const abort = async (reason?: unknown) => {
-      abortPending = !terminalCompleted;
-      const controller = (getRunRegistryEntry(runId, this.#mastra) ?? this.executionRunRegistry.get(runId))
-        ?.abortController;
-      if (controller && !controller.signal.aborted) {
-        controller.abort(reason);
-      }
-      await this.requestRemoteAbort(runId);
-      // A run parked on a suspension has no steps left to stop; release it so
-      // it is no longer listed as suspended, as the stream abort does.
-      if (agentThreadStreamRuntime.isRunParked(runId, this.getPubSub())) super.abortRunStream(runId);
-    };
-
-    return {
-      output,
-      get fullStream() {
-        return output.fullStream as ReadableStream<any>;
-      },
-      runId,
-      threadId: memoryInfo?.threadId,
-      resourceId: memoryInfo?.resourceId,
-      cleanup,
-      detach,
-      abort,
-    };
-  }
+  ) => Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string; detach: () => void }>;
 
   /**
    * Get the workflow instance for direct execution.
@@ -2093,16 +1373,10 @@ export class DurableAgent<
    * Mirrors the regular Agent's streamUntilIdle but adapted for durable execution.
    */
   // @ts-expect-error - Intentionally different return type for durable execution
-  override async streamUntilIdle<OUTPUT = TOutput>(
+  declare streamUntilIdle: <OUTPUT = TOutput>(
     messages: MessageListInput,
     streamOptions?: DurableAgentStreamOptions<OUTPUT> & { maxIdleMs?: number },
-  ): Promise<DurableAgentStreamResult<OUTPUT>> {
-    const { maxIdleMs, ...options } = streamOptions ?? {};
-    return this.stream(messages, {
-      ...options,
-      untilIdle: maxIdleMs === undefined ? true : { maxIdleMs },
-    } as DurableAgentStreamOptions<TOutput>) as unknown as Promise<DurableAgentStreamResult<OUTPUT>>;
-  }
+  ) => Promise<DurableAgentStreamResult<OUTPUT>>;
 
   /**
    * Get the durable workflows required by this agent.
