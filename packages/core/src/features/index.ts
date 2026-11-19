@@ -58,4 +58,8 @@ export const coreFeatures = new Set<string>([
   // (`getWorkflowResumeTracingContext`), and its resume repeats that decision
   // instead of sampling again.
   'workflow-resume-sampling',
+  // A resumed or recovered durable run carries the span pair it reports under
+  // on the request context (`carrySegmentSpans`), and every durable step ends
+  // that pair instead of the run's first one (`segmentSpanData`).
+  'durable-segment-spans',
 ]);

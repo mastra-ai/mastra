@@ -60,6 +60,8 @@ export interface SuspensionPrompt {
   toolName: string;
   args: unknown;
   suspendPayload: unknown;
+  /** The run the call is parked on, when the server names it. */
+  runId?: string;
 }
 
 export interface NotificationEntry {
@@ -375,7 +377,20 @@ function applyEvent(
         toolName: event.toolName,
         args: event.args,
         suspendPayload: event.suspendPayload,
+        ...(event.runId ? { runId: event.runId } : {}),
       });
+    case 'tool_suspension_cancelled':
+      // The server retracted the prompt (its run ended or can no longer be resumed). A prompt
+      // parked on another run under the same call id stays.
+      return {
+        ...state,
+        entries: state.entries.filter(
+          e =>
+            e.kind !== 'suspension' ||
+            e.toolCallId !== event.toolCallId ||
+            (event.runId !== undefined && e.runId !== undefined && e.runId !== event.runId),
+        ),
+      };
 
     case 'mode_changed':
     case 'model_changed':

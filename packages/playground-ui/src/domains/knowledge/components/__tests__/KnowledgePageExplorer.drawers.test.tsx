@@ -35,7 +35,11 @@ const onboarding = page('onboarding', 'org', {
   name: 'Customer onboarding',
   description: 'Taking a new workspace from trial to production.',
 });
-const billing = page('billing', 'org', { name: 'Billing and refunds', position: 'a1' });
+const billing = page('billing', 'org', {
+  name: 'Billing and refunds',
+  position: 'a1',
+  body: Array.from({ length: 40 }, (_, line) => `Refund rule ${line + 1}.`).join('\n\n'),
+});
 const pages = [org, onboarding, billing];
 
 const ok = <T,>(data: T): KnowledgeExplorerQueryState<T> => ({ data, isPending: false, isError: false, error: null });
@@ -116,6 +120,22 @@ describe('KnowledgePageExplorer drawers', () => {
     expect(screen.getByTestId('knowledge-graph-container').contains(drawer)).toBe(true);
     expect(within(drawer).getByRole('heading', { name: 'Customer onboarding' })).toBeTruthy();
     expect(screen.getByTestId('view').textContent).toBe('graph');
+  });
+
+  // jsdom has no layout, so this pins the flex sizing contract; browser screenshots on the PR show the rendered heights.
+  it('makes the drawer preview a growing flex item with no fixed height cap', () => {
+    renderWithProviders(<Host initial="billing" />);
+    const preview = within(pageDrawer()).getByRole('region', { name: 'Preview' });
+    // Grows into the panel's spare height (short bodies) and shrinks to it (long bodies), never below 12rem.
+    expect(preview.className.split(' ')).toEqual(expect.arrayContaining(['flex-1', 'min-h-48']));
+    const inlineMaxHeights = [...preview.querySelectorAll<HTMLElement>('[style]')]
+      .map(element => element.style.maxHeight)
+      .filter(Boolean);
+    expect(inlineMaxHeights).toEqual([]);
+    // The body scrolls inside a shrinkable container rather than being cropped.
+    const body = within(preview).getByTestId('knowledge-page-body');
+    expect(body.closest('.min-h-0')).not.toBeNull();
+    expect(within(preview).getByText('Refund rule 40.')).toBeTruthy();
   });
 
   it('shows no page drawer while nothing is selected', () => {

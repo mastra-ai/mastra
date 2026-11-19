@@ -1,5 +1,11 @@
 # @mastra/auth-studio
 
+## 1.4.1
+
+### Patch Changes
+
+- Fixed connecting the Mastra Gateway from a local Factory, which failed with "Your Mastra role cannot create gateway keys for this organization" even for organization admins. Requests made to Mastra platform on behalf of the signed-in user now include the origin of the browser request. ([#30742](https://github.com/mastra-ai/mastra/pull/30742))
+
 ## 1.4.1-alpha.0
 
 ### Patch Changes

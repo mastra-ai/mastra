@@ -2371,6 +2371,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/mastra-platform/gateway",
+      "destination": "/docs/mastra-platform/gateway/overview",
+      "permanent": true
+    },
+    {
       "source": "/docs/mastra-platform/observability",
       "destination": "/docs/mastra-platform/observability/overview",
       "permanent": true

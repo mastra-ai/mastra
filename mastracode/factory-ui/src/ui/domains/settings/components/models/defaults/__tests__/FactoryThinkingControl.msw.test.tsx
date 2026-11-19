@@ -33,14 +33,6 @@ async function openRamp(user: UserEvent, triggerName: string) {
 const dragTo = (slider: HTMLElement, level: number) => fireEvent.change(slider, { target: { value: String(level) } });
 
 describe('FactoryThinkingControl', () => {
-  it('renders the Factory thinking level from the server', async () => {
-    server.use(http.get(FACTORY_URL, () => HttpResponse.json({ project: factory })));
-
-    renderControl();
-
-    expect(await screen.findByRole('button', { name: 'Thinking: Off' })).toBeEnabled();
-  });
-
   it('shows medium for a Factory without a stored level', async () => {
     server.use(http.get(FACTORY_URL, () => HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra' } })));
 

@@ -140,7 +140,7 @@ curl -sS "https://observability.mastra.ai/api/observability/feedback?page=0&perP
   -H "X-Mastra-Project-Id: $MASTRA_PROJECT_ID" | jq
 ```
 
-Use an organization-scoped Platform access token. Gateway inference keys such as `mk_*` keys aren't accepted. Queries remain constrained to the token's organization even when you supply a project ID.
+Use an organization-scoped Platform access token. Gateway inference keys such as `msk-gateway-` keys aren't accepted. Queries remain constrained to the token's organization even when you supply a project ID.
 
 ### Endpoints
 
@@ -212,7 +212,7 @@ curl -sS "https://observability.mastra.ai/api/observability/discovery/metric-nam
   -H "X-Mastra-Project-Id: $MASTRA_PROJECT_ID" | jq
 ```
 
-Use an organization-scoped Platform access token. Gateway inference keys such as `mk_*` keys aren't accepted. Queries remain constrained to the token's organization even when you supply a project ID.
+Use an organization-scoped Platform access token. Gateway inference keys such as `msk-gateway-` keys aren't accepted. Queries remain constrained to the token's organization even when you supply a project ID.
 
 ### Endpoints
 
@@ -275,7 +275,7 @@ mastra api --url https://observability.eu.mastra.ai metric aggregate '<json>'
 
 ## Alert webhooks
 
-A webhook [alert destination](/docs/mastra-platform/observability/alerts#add-a-destination) receives an HTTP `POST` request with a JSON body each time an alert sends a notification. Mastra shows the destination's signing secret once, after you create it.
+A webhook [alert destination](/docs/mastra-platform/observability/alerts#add-a-destination) receives an HTTP `POST` request with a JSON body each time an alert sends a notification. Mastra shows the signing secret once after you create the destination and once after each rotation.
 
 ### Payload
 
@@ -460,4 +460,4 @@ PagerDuty and incident.io destinations receive the same event, mapped to each se
 
 ## Gateway proxy endpoints
 
-Visit the [Gateway documentation](https://gateway.mastra.ai/docs) for more details.
+Visit the [Gateway documentation](/docs/mastra-platform/gateway/overview) for more details.

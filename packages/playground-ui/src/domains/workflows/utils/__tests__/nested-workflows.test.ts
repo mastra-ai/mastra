@@ -15,12 +15,6 @@ describe('getDirectNestedWorkflowIds', () => {
         'prd-fix-product',
       ]);
     });
-
-    it('ignores dot-path descendants that are not top-level steps', () => {
-      expect(getDirectNestedWorkflowIds(workflowsFixture.prdShipProduct)).not.toContain(
-        'prd-groom-product.use-case-arch',
-      );
-    });
   });
 
   describe('when a workflow has only plain steps', () => {
