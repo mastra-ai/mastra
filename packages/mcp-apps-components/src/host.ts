@@ -46,7 +46,7 @@ export type ObservabilityWidgetPins = {
   pinnedIds: readonly string[];
   /**
    * The user pinned `pin.widget` over `pin.datePreset` (and `pin.customRange` when `custom`), under
-   * `pin.filters` and for `pin.projectId` when it has them.
+   * `pin.filters` and for `pin.project` when it has them.
    */
   onPin: (pin: Omit<ObservabilityWidgetPin, 'pinned'>, app: McpAppRef) => void;
   /** The user unpinned the widget with this id. */
@@ -62,7 +62,7 @@ export type ObservabilityWidgetHostOptions = Omit<ObservabilityWidgetView, 'cust
   pins?: ObservabilityWidgetPins;
   /**
    * The user clicked the settings button of `configure.widget`, drawn over `configure.datePreset` (and
-   * `configure.customRange` when `custom`) under `configure.filters` and for `configure.projectId` when
+   * `configure.customRange` when `custom`) under `configure.filters` and for `configure.project` when
    * it has them. Left out, the widgets show no settings button.
    */
   onConfigure?: (configure: ObservabilityWidgetConfigure, app: McpAppRef) => void;
@@ -78,7 +78,7 @@ function readDrawnWidget(value: unknown): ObservabilityWidgetConfigure | undefin
   if (!isRecord(value) || typeof value.datePreset !== 'string') return undefined;
   if (!isRecord(value.widget) || typeof value.widget.id !== 'string') return undefined;
   if (value.filters !== undefined && !Array.isArray(value.filters)) return undefined;
-  if (value.projectId !== undefined && typeof value.projectId !== 'string') return undefined;
+  if (value.project !== undefined && typeof value.project !== 'string') return undefined;
   const range = isRecord(value.customRange) ? value.customRange : undefined;
   const customRange: ObservabilityWidgetDateRange | undefined = range && {
     ...(typeof range.from === 'string' ? { from: range.from } : {}),
@@ -89,7 +89,7 @@ function readDrawnWidget(value: unknown): ObservabilityWidgetConfigure | undefin
     datePreset: value.datePreset,
     ...(customRange ? { customRange } : {}),
     ...(value.filters ? { filters: value.filters } : {}),
-    ...(value.projectId ? { projectId: value.projectId } : {}),
+    ...(value.project ? { project: value.project } : {}),
   };
 }
 
@@ -104,7 +104,7 @@ const toIso = (date: Date | string | undefined) => (date instanceof Date ? date.
 
 /**
  * What the host passes down to the observability widget app: the host page's `datePreset` (with its
- * `customRange` when `custom`) and `filters`, drawn instead of the dashboard's own, and the `projectId` sent with every
+ * `customRange` when `custom`) and `filters`, drawn instead of the dashboard's own, and the `project` sent with every
  * `queryObservability` call, over any the opening tool returned. The app redraws when any of them changes.
  *
  * ```tsx
@@ -115,9 +115,9 @@ const toIso = (date: Date | string | undefined) => (date instanceof Date ? date.
  *       datePreset,
  *       customRange,
  *       filters,
- *       projectId,
+ *       project,
  *     }),
- *   [datePreset, customRange, filters, projectId],
+ *   [datePreset, customRange, filters, project],
  * );
  * <McpAppHostProvider value={host}>{chat}</McpAppHostProvider>
  * ```
@@ -132,7 +132,7 @@ export function observabilityWidgetHost({
   datePreset,
   customRange,
   filters,
-  projectId,
+  project,
   pins,
   onConfigure,
 }: ObservabilityWidgetHostOptions): McpAppHostValue {
@@ -145,7 +145,7 @@ export function observabilityWidgetHost({
       ? { customRange: { ...(from ? { from } : {}), ...(to ? { to } : {}) } }
       : {}),
     ...(filters ? { filters } : {}),
-    ...(projectId ? { projectId } : {}),
+    ...(project ? { project } : {}),
   };
   return {
     hostContext: app =>

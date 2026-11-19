@@ -64,10 +64,10 @@ export type ObservabilityWidgetView = {
   /** Replaces the dashboard's `defaults.filters`; only top-level chips filter, as on the Metrics page. */
   filters?: FilterNode[];
   /**
-   * Sent with every `queryObservability` call, so the server reads that project's data. Wins over a
-   * `projectId` in the opening tool's result.
+   * A project id or slug, sent with every `queryObservability` call so the server reads that project's
+   * data. Wins over a `project` in the opening tool's result.
    */
-  projectId?: string;
+  project?: string;
 };
 
 /** What the app sends under `OBSERVABILITY_WIDGET_PIN_CONTEXT_KEY`: the state the user asked for. */
@@ -81,7 +81,7 @@ export type ObservabilityWidgetPin = {
   /** The filters the widget was drawn under (the host's, else the dashboard's `defaults.filters`), when any. */
   filters?: unknown[];
   /** The project the widget read (the host's, else the tool result's), when it had one. */
-  projectId?: string;
+  project?: string;
 };
 
 /** What the app sends under `OBSERVABILITY_WIDGET_CONFIGURE_CONTEXT_KEY`: the widget as the user sees it. */
