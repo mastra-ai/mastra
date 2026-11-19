@@ -370,16 +370,67 @@ describe('ElevenLabs audio tools through the platform proxy', () => {
     expect(Buffer.from(await files[1]!.arrayBuffer())).toEqual(second);
   });
 
-  it('holds voice cloning for approval with the requireApproval setting the docs recommend', async () => {
-    const resolved = await tools({
-      providers: { elevenlabs: { requireApproval: ['elevenlabs_clone_voice'] } },
-      projectId: 'proj_test',
-      client: { accessToken: 'test-platform-token', baseUrl },
-    })();
+  it('stops an agent before uploading a voice clone with the requireApproval setting the docs recommend', async () => {
+    const runCloneRequest = async (requireApproval: string[] | undefined) => {
+      requests = [];
+      const steps: Chunk[][] = [
+        [
+          {
+            type: 'tool-call',
+            toolCallId: 'call-clone',
+            toolName: 'elevenlabs_clone_voice',
+            input: JSON.stringify({ name: 'Narrator', samples: [audioBytes.toString('base64')] }),
+            providerExecuted: false,
+          },
+          { type: 'finish', finishReason: 'tool-calls', usage },
+        ],
+        [
+          { type: 'text-start', id: 't' },
+          { type: 'text-delta', id: 't', delta: 'Cloned.' },
+          { type: 'text-end', id: 't' },
+          { type: 'finish', finishReason: 'stop', usage },
+        ],
+      ];
+      let call = 0;
+      const model = new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            ...(steps[call++] ?? []),
+          ]) as never,
+        }),
+      });
+      const agent = new Agent({
+        id: 'clone-agent',
+        name: 'Clone Agent',
+        instructions: 'You manage voices.',
+        model,
+        tools: await tools({
+          providers: { elevenlabs: requireApproval ? { requireApproval } : {} },
+          projectId: 'proj_test',
+          client: { accessToken: 'test-platform-token', baseUrl },
+        })(),
+      });
+      new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
 
-    const approval = (key: string) => (resolved[key] as { requireApproval?: boolean } | undefined)?.requireApproval;
-    expect(approval('elevenlabs_clone_voice')).toBe(true);
-    expect(approval('elevenlabs_text_to_speech')).toBeFalsy();
+      const stream = await agent.stream('Clone this sample as Narrator.');
+      const types: string[] = [];
+      for await (const chunk of stream.fullStream) types.push((chunk as { type: string }).type);
+      return { types, uploads: proxied().filter(request => request.path.endsWith('/v1/voices/add')) };
+    };
+
+    // With the documented setting, the run pauses for approval and nothing reaches ElevenLabs.
+    const held = await runCloneRequest(['elevenlabs_clone_voice']);
+    expect(held.types).toContain('tool-call-approval');
+    expect(held.types).not.toContain('tool-result');
+    expect(held.uploads).toHaveLength(0);
+
+    // Without it, the same model turn uploads the sample straight away.
+    const direct = await runCloneRequest(undefined);
+    expect(direct.types).not.toContain('tool-call-approval');
+    expect(direct.uploads).toHaveLength(1);
   });
 
   it('composes a song from an edited plan, passing the plan through unchanged', async () => {

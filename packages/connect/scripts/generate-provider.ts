@@ -1338,27 +1338,7 @@ function applyProviderActionOverrides(action: ExtractedAction): ExtractedAction 
   if (action.candidate.localId === 'microsoft-excel' && action.candidate.actionSlug === 'delete-workbook') {
     return bypassSharedLockOnDelete(action);
   }
-  if (action.candidate.providerId === 'elevenlabs' && action.candidate.actionSlug === 'get-user') {
-    return omitElevenlabsApiKey(action);
-  }
   return action;
-}
-
-// GET /v1/user echoes the account's API key in `xi_api_key`. Connect keeps credentials on the platform, so drop the
-// field from the parse schema: zod strips unknown keys, so the key never reaches the agent. `xi_api_key_preview`
-// (a masked hint) stays.
-function omitElevenlabsApiKey(action: ExtractedAction): ExtractedAction {
-  const moduleStatements = action.moduleStatements.map(statement =>
-    statement.includes('xi_api_key:')
-      ? replaceOnce(statement, /\n\s*xi_api_key: z\.[^\n]*,/, '', action, 'xi_api_key field')
-      : statement,
-  );
-  if (moduleStatements.every((statement, i) => statement === action.moduleStatements[i])) {
-    throw new Error(
-      `Unable to remove xi_api_key from ${action.candidate.providerId}/${action.candidate.actionSlug}; the upstream template shape changed.`,
-    );
-  }
-  return { ...action, moduleStatements };
 }
 
 // The Excel workbook tools write through sessionless workbook API calls, which leave a shared lock on the
@@ -1433,6 +1413,10 @@ function modelOutputOverride(action: ExtractedAction): { importStatement: string
  * a credential and must not see one.
  */
 const OUTPUT_SECRET_FIELDS: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
+  // GET /v1/user echoes the account's raw API key; the masked xi_api_key_preview stays.
+  elevenlabs: {
+    'get-user': ['xi_api_key'],
+  },
   // GitLab returns the project's runner registration token to maintainers.
   gitlab: {
     'create-project': ['runners_token'],
