@@ -2,9 +2,9 @@
 '@mastra/playground-ui': minor
 ---
 
-The trace side panel and the thread side panel are now compound components. You build them from parts, give each part the data you loaded yourself, and decide what goes where. An app with its own transport (for example an MCP server app) can rebuild them, leave parts out, swap one part for its own, or add its own elements. No part fetches: the spans, the open span, the full trace, scorers, scores, feedback and the thread's turns come in as props typed with the `@mastra/client-js` response types, and actions go out through callbacks.
+The trace side panel and the thread side panel are now compound components. You build them from parts, give each part the data you loaded yourself, and decide what goes where. An app with its own transport (for example an MCP server app) can rebuild them, leave parts out, swap one part for its own, or add its own elements. No part fetches, except the `Live*` parts Studio composes them with (see `Added`): the spans, the open span, the full trace, scorers, scores, feedback and the thread's turns come in as props typed with the `@mastra/client-js` response types, and actions go out through callbacks.
 
-Every part renders with no provider at all (no Mastra client, no React Query, no Studio router), so the panels work the same inside an app that has none of them. The turn messages and a span's tool calls are drawn from what the trace recorded: a sub-agent's answer comes from its call's output, a workflow's from its input and result.
+Every part except those `Live*` ones renders with no provider at all (no Mastra client, no React Query, no Studio router), so the panels work the same inside an app that has none of them. The turn messages and a span's tool calls are drawn from what the trace recorded: a sub-agent's answer comes from its call's output, a workflow's from its input and result.
 
 Layout parts take named slots (`header`, `body`, `side`, `main`, `span`, `messages`, `feedback`…), so a slot you leave empty renders nothing, and an element you pass renders exactly there.
 
@@ -129,7 +129,65 @@ Navigation in the panels goes through `navigation` instead of hrefs: `TracePanel
 </TracePanel>
 ```
 
+In Studio, those links are now buttons that navigate through the router: they go to the same pages, but a middle-click or Cmd/Ctrl-click no longer opens them in a new tab.
+
 Without a `LinkComponentProvider`, links now render as plain anchors instead of nothing.
+
+**Breaking:** `ThreadTrace` places its parts through slots instead of children. `ThreadTrace.List`, `ThreadTrace.Divider`, `ThreadTrace.RowBody`, `ThreadTrace.Messages`, `ThreadTrace.TabList`, `ThreadTrace.Tab`, `ThreadTrace.TabContent`, `ThreadTrace.Details`, `ThreadTrace.DetailsHeader`, `ThreadTrace.DetailsActions` and `ThreadTrace.SpanPanel` were removed, with their prop types (`ThreadTraceListProps`, `ThreadTraceDividerProps`, `ThreadTraceRowBodyProps`, `ThreadTraceMessagesProps`, `ThreadTraceTabListProps`, `ThreadTraceTabProps`, `ThreadTraceTabContentProps`, `ThreadTraceDetailsProps`, `ThreadTraceDetailsHeaderProps`, `ThreadTraceDetailsActionsProps` and `ThreadTraceSpanPanelProps`). Render the rows as the root's children and fill each `ThreadTrace.Row` slot (`label`, `link`, `messages`, `feedback`, `scores`, `spans`, `detailsHeader`); the row draws the divider, the tabs and the details card itself.
+
+```tsx
+// Before
+<ThreadTrace traceIds={ids}>
+  <ThreadTrace.List>
+    {ids.map((traceId, i) => (
+      <ThreadTrace.Row key={traceId} traceId={traceId}>
+        <ThreadTrace.Divider label={`Turn ${i + 1}`}>
+          <ThreadTrace.TabList>
+            <ThreadTrace.Tab value="messages">Messages</ThreadTrace.Tab>
+          </ThreadTrace.TabList>
+        </ThreadTrace.Divider>
+        <ThreadTrace.RowBody>
+          <ThreadTrace.Messages>
+            <ThreadTrace.TabContent value="messages">…</ThreadTrace.TabContent>
+          </ThreadTrace.Messages>
+          <ThreadTrace.Details>
+            <ThreadTrace.Spans />
+          </ThreadTrace.Details>
+        </ThreadTrace.RowBody>
+      </ThreadTrace.Row>
+    ))}
+  </ThreadTrace.List>
+  <ThreadTrace.SpanPanel />
+</ThreadTrace>
+
+// After
+<ThreadTrace traceIds={ids} spanDetail={<ThreadTrace.SpanDetail span={selectedSpan} />}>
+  {turns.map((turn, i) => (
+    <ThreadTrace.Row
+      key={turn.traceId}
+      traceId={turn.traceId}
+      label={`Turn ${i + 1}`}
+      messages={<ThreadTrace.TurnMessages spans={turn.spans} />}
+      spans={<ThreadTrace.Spans spans={turn.spans} />}
+    />
+  ))}
+</ThreadTrace>
+```
+
+**Breaking:** `ThreadTrace.Spans` no longer loads the turn's spans: `spans` is required (and `isLoading` optional). `ThreadTrace.SpanPanel` no longer loads the open span either: pass the span you loaded to `ThreadTrace.SpanDetail` in the root's `spanDetail` slot, which shows beside the turns while a span is selected.
+
+```tsx
+// Before
+<ThreadTrace.Spans />
+<ThreadTrace.SpanPanel />
+
+// After
+<ThreadTrace spanDetail={<ThreadTrace.SpanDetail span={selectedSpan} />} …>
+  <ThreadTrace.Row spans={<ThreadTrace.Spans spans={turn.spans} isLoading={turn.isLoading} />} … />
+</ThreadTrace>
+```
+
+`useTraceSearch` returns `payloadOnlyMatchIds` as a `ReadonlySet<string>` instead of a `Set<string>`: read it, copy it to change it.
 
 These components used to load part of their data themselves; pass it in now:
 

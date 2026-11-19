@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { SpanType } from '@mastra/core/observability';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -100,6 +101,21 @@ describe('SpanDetailPanel', () => {
       await waitFor(() => expect(requests).toContain(`/api/observability/traces/${traceOf}`));
 
       expect(requests).not.toContain('/api/mcp/v0/servers');
+    });
+
+    it('loads the MCP app tools once the Output tab of a span that called a tool opens', async () => {
+      const requests = await renderWithTabData({
+        spanType: SpanType.MODEL_GENERATION,
+        output: {
+          text: 'Checking the weather.',
+          toolCalls: [{ toolCallId: 'call-weather', toolName: 'weatherInfo', args: { city: 'Paris' } }],
+        },
+      });
+      expect(requests).not.toContain('/api/mcp/v0/servers');
+
+      fireEvent.click(screen.getByRole('tab', { name: /^Output/ }));
+
+      await waitFor(() => expect(requests).toContain('/api/mcp/v0/servers'));
     });
   });
 
