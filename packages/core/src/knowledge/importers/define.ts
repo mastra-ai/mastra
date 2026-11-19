@@ -129,9 +129,16 @@ export class KnowledgeImporterSourceError extends Error {
   }
 }
 
-/** The host (a proxy or relay) failed the request, not the source. Never a sign an item is gone. @experimental */
+/**
+ * The host failed, not the source: a fetch proxy or relay, or a remote host's flush, heartbeat or
+ * finish. Never a sign an item is gone. `status` is the HTTP status when there was a response;
+ * absent for a network error. @experimental
+ */
 export class KnowledgeImporterHostError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly status?: number,
+  ) {
     super(message);
     this.name = 'KnowledgeImporterHostError';
   }

@@ -3,6 +3,7 @@ export type { KnowledgeImporterManifest } from './manifest';
 export type {
   KnowledgeImporterHost,
   KnowledgeImporterHostConflictCode,
+  KnowledgeImporterRunBinding,
   KnowledgeImporterRunStart,
   KnowledgeImporterStartRunOptions,
   NormalizedKnowledgeImporterFinish,
@@ -13,6 +14,7 @@ export {
   canonicalJson,
   knowledgeImporterFlushDigest,
   normalizeKnowledgeImporterFinish,
+  parseKnowledgeImporterFlushBody,
 } from './host';
 export type {
   KnowledgeImporterContext,
