@@ -119,7 +119,7 @@ Mastra calls `spanFilter` for each event of a span: when the span starts, on eac
 
 ### Drop a span from its start
 
-A filter that only reads data the span has when it starts returns the same answer for every event. That data is the type, name, entity, input, and the attributes and metadata set at creation. No exporter receives the span. Its children attach to the nearest ancestor that was exported, which keeps the trace tree connected.
+A filter that returns the same answer for every event of a span drops the whole span. A filter on the span's type or entity always does this, because they never change. A filter on the name, input, attributes, or metadata does this only when no update changes that data after the span starts. No exporter receives the span. Its children attach to the nearest ancestor that was exported, which keeps the trace tree connected.
 
 ### Drop a span at its end
 
