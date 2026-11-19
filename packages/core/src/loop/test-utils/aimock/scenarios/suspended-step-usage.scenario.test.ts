@@ -231,6 +231,43 @@ describeForAllEngines('AIMock loop scenario: token usage when a tool call suspen
     });
   }
 
+  // Technical: tool calls without an approval or a suspend schema run at the same time, on workers
+  // that share no memory when the engine is distributed, and each one that suspends ends the
+  // suspended part's spans.
+  it('two tool calls that suspend side by side count each model call once', async () => {
+    const llm = getMock();
+    llm.on(
+      { endpoint: 'chat', sequenceIndex: 0 },
+      { toolCalls: ['call-a', 'call-b'].map(id => ({ id, name: 'ask', arguments: {} })), usage: wire(SUSPENDED) },
+    );
+    llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'done', usage: wire(RESUMED) });
+    const { observability, ended } = capture();
+    const created = await createSharedAgent(llm, {
+      engine,
+      observability,
+      instructions: 'use the tool',
+      tools: { ask: askTool },
+    });
+    const agent = created.agent as any;
+
+    const first: RunHandle = await agent.stream('go');
+    await drain(first);
+    await drain(await agent.resumeStream({ answer: 'blue' }, { runId: first.runId, toolCallId: 'call-a' }));
+    const resumed = await drain(
+      await agent.resumeStream({ answer: 'blue' }, { runId: first.runId, toolCallId: 'call-b' }),
+    );
+    expect(await resumed.text).toBe('done');
+
+    const recorded = () =>
+      ended(SpanType.MODEL_GENERATION)
+        .map(span => spanTokens(span.attributes?.usage))
+        .reduce((a, u) => ({
+          inputTokens: a.inputTokens + u.inputTokens,
+          outputTokens: a.outputTokens + u.outputTokens,
+        }));
+    await expect.poll(recorded).toEqual(spanTokens(add(SUSPENDED, RESUMED)));
+  });
+
   it('a tool that suspends again on resume records no new tokens', async () => {
     const { observability, ended } = capture();
     const { agent, toolCallId } = await setup('suspend', { observability });
