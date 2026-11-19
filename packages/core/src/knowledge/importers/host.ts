@@ -273,7 +273,7 @@ function checkFields<T>(
   where: string,
 ): T {
   if (!isPlainObject(value)) throw new TypeError(`${where} must be an object.`);
-  const out: Record<string, unknown> = {};
+  const out: Record<string, unknown> = Object.create(null);
   for (const key of Object.keys(value)) {
     if (!Object.hasOwn(fields, key)) throw new TypeError(`${where} has unknown field "${key}".`);
   }
@@ -308,7 +308,7 @@ function checkFields<T>(
         break;
     }
   }
-  return out as T;
+  return { ...out } as T;
 }
 
 /**
@@ -345,9 +345,9 @@ export function parseKnowledgeImporterFlushBody(body: { ops: unknown; state?: un
   });
   if (body.state === undefined || body.state === null) return { ops };
   if (!isPlainObject(body.state)) throw new TypeError('state must be an object of strings.');
-  const state: KnowledgeImporterState = {};
-  for (const [key, value] of Object.entries(body.state)) {
-    state[wellFormed(key)] = checkString(value, `state.${key}`);
-  }
+  // Object.fromEntries defines own properties, so a JSON key like "__proto__" is kept as data.
+  const state: KnowledgeImporterState = Object.fromEntries(
+    Object.entries(body.state).map(([key, value]) => [wellFormed(key), checkString(value, `state.${key}`)]),
+  );
   return { ops, state };
 }

@@ -119,6 +119,21 @@ describe('parseKnowledgeImporterFlushBody', () => {
     expect(() => parseKnowledgeImporterFlushBody(body)).toThrow(TypeError);
   });
 
+  it('keeps a "__proto__" state key from JSON as data, so its value changes the digest', async () => {
+    const a = JSON.parse('{"ops":[],"state":{"__proto__":"cursor-a"}}');
+    const b = JSON.parse('{"ops":[],"state":{"__proto__":"cursor-b"}}');
+    const parsed = parseKnowledgeImporterFlushBody(a);
+    expect(Object.hasOwn(parsed.state!, '__proto__')).toBe(true);
+    expect(parsed.state!['__proto__']).toBe('cursor-a');
+    expect(await knowledgeImporterFlushDigest(a)).not.toBe(await knowledgeImporterFlushDigest(b));
+    expect(canonicalJson(parsed.state)).toBe('{"__proto__":"cursor-a"}');
+  });
+
+  it('refuses a "__proto__" field on an item as unknown', () => {
+    const body = JSON.parse('{"ops":[{"op":"upsert","item":{"sourceId":"a","title":"A","body":"x","__proto__":"p"}}]}');
+    expect(() => parseKnowledgeImporterFlushBody(body)).toThrow(/unknown field "__proto__"/);
+  });
+
   it('refuses a body it would hash differently after a JSON round trip', async () => {
     const aliases = Array<string>(1);
     await expect(
