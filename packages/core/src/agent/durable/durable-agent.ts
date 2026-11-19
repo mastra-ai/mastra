@@ -118,7 +118,7 @@ import {
   globalRunRegistry,
   markResumeInFlight,
 } from './run-registry';
-import { carrySegmentSpans, openedSegment } from './segment-spans';
+import { carrySegmentSpans, openedSegment, openStepsOfCrashedSegment } from './segment-spans';
 import type { SegmentSpanData } from './segment-spans';
 import {
   createDurableAgentStream,
@@ -1557,6 +1557,7 @@ export class DurableAgent<
     abortController,
     executionFence,
     originalSpansEnded,
+    openStepsOf,
     latestMessageListState,
   }: {
     runId: string;
@@ -1564,6 +1565,8 @@ export class DurableAgent<
     abortController: AbortController;
     executionFence: ExecutionFence;
     originalSpansEnded: boolean;
+    /** The generations whose MODEL_STEP the crash left open, when the snapshot names them. */
+    openStepsOf?: string[];
     /** The transcript as of the crash; `workflowInput` only has the one the run started with. */
     latestMessageListState?: unknown;
   }): Promise<RehydratedRecoveryState> {
@@ -1799,7 +1802,11 @@ export class DurableAgent<
         ? {
             ...openedSegment(recoverAgentSpan, recoverModelSpan),
             adoptsOpenSteps: true,
-            ...(originalSpansEnded && origModelSpanData?.id ? { endedStepsOf: origModelSpanData.id } : {}),
+            ...(openStepsOf
+              ? { openStepsOf }
+              : originalSpansEnded && origModelSpanData?.id
+                ? { endedStepsOf: origModelSpanData.id }
+                : {}),
           }
         : null,
     );
@@ -4470,6 +4477,7 @@ export class DurableAgent<
         abortController,
         executionFence,
         originalSpansEnded: originalSpansEndedBeforeCrash(loaded.snapshot),
+        openStepsOf: openStepsOfCrashedSegment(loaded.snapshot.requestContext, runId),
         latestMessageListState: await this.#loadLatestMessageListState(workflowsStore, runId, loaded.snapshot),
       });
       // Memory is resolved from the rehydrated context; rehydration does not write to it.

@@ -141,6 +141,8 @@ const durableToolCallInputSchema = z.object({
   timeToFirstTokenMs: z.number().optional(),
   // Model usage of the step that produced this call, reported on its suspension chunk
   stepUsage: z.any().optional(),
+  // Other tool calls of the step run at the same time, so a suspension reports no model usage
+  sideBySide: z.boolean().optional(),
 });
 
 /**
@@ -538,12 +540,6 @@ export function createDurableToolCallStep() {
           const reg = getRunRegistryEntry(runId, mastra as Mastra | undefined);
           const segment = segmentSpanData(requestContext, runId, initData, reg);
           const { agentSpanData, modelSpanData } = segment;
-          // A segment suspends once. Tool calls that run side by side can each suspend, and the
-          // second would record the segment's usage again.
-          if (reg && agentSpanData) {
-            if (reg.suspendedAgentSpanId === agentSpanData.id) return;
-            reg.suspendedAgentSpanId = agentSpanData.id;
-          }
           // Rebuilt spans come from the run-start snapshot, so end them with the clocks
           // their segment captured: the loop state's (or this step's, on the first
           // iteration) for the originals.
@@ -560,10 +556,11 @@ export function createDurableToolCallStep() {
           // This segment made the suspended step's model call only when it owns the step; a later
           // suspension of the same step, after a resume, made none. The generation records the
           // run total so far less what earlier suspensions recorded, like the regular agent.
+          // Tool calls that run side by side can each suspend here, so none of them records it.
           const ownsStep = !!typedInput.stepSpanData && segmentOwnsStep(segment, typedInput.stepSpanData);
           const reported = initData.generationReportedUsage;
           const usage =
-            reported && ownsStep
+            reported && ownsStep && !typedInput.sideBySide
               ? subtractReportedUsage(
                   calculateAccumulatedUsage(initData.accumulatedUsage, typedInput.stepUsage),
                   reported,

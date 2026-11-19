@@ -31,6 +31,7 @@ import type {
 import { rebuildRunToolsFromMastra } from '../../utils/resolve-runtime';
 import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
 import { responseRecordSchema } from '../shared/schemas';
+import { toolCallsRunSideBySide } from '../shared/tool-call-concurrency';
 
 /**
  * Input schema for the durable LLM mapping step.
@@ -74,7 +75,7 @@ const durableLLMMappingOutputSchema = z.object({
   completionStartTime: z.coerce.date().optional(),
   timeToFirstTokenMs: z.number().optional(),
   response: responseRecordSchema.optional(),
-  stepEndedBySuspension: z.boolean().optional(),
+  suspensionReportedUsage: z.boolean().optional(),
 });
 
 /**
@@ -226,7 +227,7 @@ export function createDurableLLMMappingStep() {
             >['rebuildSpan']
           >
         | undefined;
-      let stepEndedBySuspension = false;
+      let suspensionReportedUsage = false;
       if (llmOutput.stepSpanData) {
         try {
           const initData = getInitData() as DurableAgenticWorkflowInput;
@@ -235,7 +236,12 @@ export function createDurableLLMMappingStep() {
             const observability = mastra?.observability?.getSelectedInstance({ requestContext });
             stepSpan = observability?.rebuildSpan(llmOutput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>);
           } else {
-            stepEndedBySuspension = true;
+            // A suspension ended the step. It reported no usage when the tool calls ran side by side.
+            suspensionReportedUsage = !toolCallsRunSideBySide({
+              options: initData.options,
+              toolsMetadata: initData.toolsMetadata,
+              toolCalls: llmOutput.toolCalls,
+            });
           }
         } catch {
           // Span bookkeeping must never break the merge step.
@@ -520,7 +526,7 @@ export function createDurableLLMMappingStep() {
         delegationBailed,
         tracingDelegationFailure,
         tracingTermination: llmOutput.tracingTermination,
-        ...(stepEndedBySuspension ? { stepEndedBySuspension } : {}),
+        ...(suspensionReportedUsage ? { suspensionReportedUsage } : {}),
         ...(deadlineTimeout ? { deadlineTimeout } : {}),
         ...(runAborted ? { runAborted } : {}),
         deferredStepFinishChunk,

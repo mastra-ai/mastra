@@ -217,7 +217,7 @@ export function createBaseIterationStateUpdate(
     // The suspension that ended this step reported the run total so far on its MODEL_GENERATION.
     // A count the provider left unknown was not reported, so its earlier value stands.
     generationReportedUsage:
-      currentState.generationReportedUsage && executionOutput.stepEndedBySuspension
+      currentState.generationReportedUsage && executionOutput.suspensionReportedUsage
         ? {
             ...currentState.generationReportedUsage,
             ...Object.fromEntries(Object.entries(newUsage).filter(([, count]) => count !== undefined)),

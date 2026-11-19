@@ -480,6 +480,8 @@ export interface DurableToolCallInput {
   stepSpanData?: unknown;
   /** Model usage of the step that produced this call, reported on its suspension chunk */
   stepUsage?: LanguageModelUsage;
+  /** Other tool calls of the step run at the same time, so a suspension of this one reports no model usage */
+  sideBySide?: boolean;
 }
 
 /**
@@ -624,8 +626,8 @@ export interface DurableAgenticExecutionOutput {
   tracingTermination?: SpanTermination;
   /** Failure behind this iteration's delegation bail, see DurableToolCallOutput */
   tracingDelegationFailure?: SpanTermination;
-  /** This iteration's MODEL_STEP was ended, usage included, by an earlier segment's suspension */
-  stepEndedBySuspension?: boolean;
+  /** An earlier segment's suspension ended this iteration's MODEL_STEP and reported the run's usage so far */
+  suspensionReportedUsage?: boolean;
 }
 
 /**
@@ -893,8 +895,6 @@ export interface RunRegistryEntry {
   resumeCompletionStartTime?: Date;
   /** Time to first token of the resumed segment's spans, kept the same way. */
   resumeTimeToFirstTokenMs?: number;
-  /** The AGENT_RUN a suspension ended here, so a tool call suspending beside it ends nothing twice. */
-  suspendedAgentSpanId?: string;
   /**
    * Loop stop-condition predicate(s). Non-serializable (a closure), so the
    * durable workflow reads this from the in-process registry rather than from

@@ -54,6 +54,7 @@ import {
   durableOptionsSchema,
   createBaseIterationStateUpdate,
   resolveDurableToolCallConcurrency,
+  toolCallsRunSideBySide,
   executeDurableAgentScorers,
   dehydrateSnapshotTranscripts,
   hydrateMessageListState,
@@ -610,8 +611,14 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         .then(llmExecutionStep)
         // Step 2: Extract tool calls as array for foreach (forward model_step span for nesting)
         .map(
-          async ({ inputData }) => {
+          async ({ inputData, getInitData }) => {
             const llmOutput = inputData as DurableLLMStepOutput;
+            const state = getInitData() as IterationState | undefined;
+            const sideBySide = toolCallsRunSideBySide({
+              options: state?.options,
+              toolsMetadata: state?.toolsMetadata,
+              toolCalls: llmOutput.toolCalls,
+            });
             return (llmOutput.toolCalls ?? []).map(toolCall => ({
               ...toolCall,
               stepSpanData: llmOutput.stepSpanData,
@@ -619,6 +626,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               timeToFirstTokenMs: llmOutput.timeToFirstTokenMs,
               // A suspended step never emits step-finish, so its usage rides on the suspension chunk.
               stepUsage: llmOutput.stepResult?.totalUsage,
+              ...(sideBySide ? { sideBySide } : {}),
             })) as DurableToolCallInput[];
           },
           { id: 'extract-tool-calls' },
