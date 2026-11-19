@@ -681,7 +681,7 @@ const relevanceProvider = new CohereRelevanceScorer('rerank-v3.5')
 const relevanceProvider = new ZeroEntropyRelevanceScorer('zerank-1')
 ```
 
-Voyage AI provides dedicated reranking models: `rerank-2.5` and `rerank-2.5-lite` both allow up to 8,000 tokens for the query, up to 32,000 tokens for the query and any single document combined, and up to 600,000 tokens across a request. The request total counts the query once per document: query tokens × number of documents + tokens in all documents.
+Voyage AI provides dedicated reranking models. `rerank-2.5` is the default. `rerank-3` and `rerank-3-lite` are out of Preview in the Voyage AI API. `rerank-2.5`, `rerank-2.5-lite`, `rerank-3` and `rerank-3-lite` all allow up to 8,000 tokens for the query, up to 32,000 tokens for the query and any single document combined, and up to 600,000 tokens across a request. The request total counts the query once per document: query tokens × number of documents + tokens in all documents. By default, a query or document longer than its limit is truncated. Keep each request within the 600,000-token total yourself. `VoyageRelevanceScorer` reads `VOYAGE_API_KEY` from the environment, or accepts an `apiKey` in its config.
 
 `createVoyageReranker()` creates a `VoyageRelevanceScorer` from a model name or a config object. `voyageReranker()` is an alias for it. The `voyage` export also has preconfigured scorers, which read `VOYAGE_API_KEY` and use the default endpoint:
 

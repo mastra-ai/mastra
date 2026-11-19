@@ -254,6 +254,7 @@ exceptions:
   - 'OpenAI Responses'
   - 'Redis Cluster'
   - 'Redis Sentinel'
+  - 'Sanity Context'
   - 'Simple Auth'
   # "TanStack Start" and "GitHub Actions" only pass as word exceptions:
   # the `[A-Z][a-z]+(?:[A-Z][a-z]+)+` identifier pattern matches "TanStack"

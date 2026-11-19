@@ -46,6 +46,18 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
+    "meta/muse-spark-open": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "meta-models/Muse-Glimmer-30B": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
     "moonshotai/Kimi-K3.1-Pro": [
       {
         "type": "effort",
@@ -53,6 +65,30 @@
       }
     ],
     "moonshotai/kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Pro-0813": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Flash-0731": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4.1-Flash": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -76,49 +112,13 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "zai-org/GLM-5.3-Flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
     "zai-org/GLM-5.3": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "meta/muse-spark-open": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "meta-models/Muse-Glimmer-30B": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Pro-0813": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Flash-0731": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4.1-Flash-1017": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4.1-Flash": [
+    "zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
