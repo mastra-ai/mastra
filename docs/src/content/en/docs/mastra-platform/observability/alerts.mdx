@@ -5,6 +5,8 @@ description: "Get notified in Slack, email, PagerDuty, and other destinations wh
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
 
 # Alerts
 
@@ -16,8 +18,8 @@ Mastra platform has two kinds of alerts. Both are managed on the same **Alerts**
 
 | Kind | Watches | Examples |
 | - | - | - |
-| **Observability alert** | Traces, spans, and scores that your application sends to [Mastra Platform Observability](/docs/mastra-platform/observability/overview). Opens when a value crosses a threshold you set. | An agent fails more than 5% of its runs, a model's p95 latency goes above 8 seconds, today's spend passes a budget |
-| **Platform alert** | Events from projects you deploy on Mastra platform, and organization usage. Opens when the event happens. | A production deploy fails, a service stops responding, usage nears a plan limit |
+| Observability alert | Traces, spans, and scores that your application sends to [Mastra Platform Observability](/docs/mastra-platform/observability/overview). Opens when a value crosses a threshold you set. | An agent fails more than 5% of its runs, a model's p95 latency goes above 8 seconds, today's spend passes a budget |
+| Platform alert | Events from projects you deploy on Mastra platform, and organization usage. Opens when the event happens. | A production deploy fails, a service stops responding, usage nears a plan limit |
 
 ## Before you begin
 
@@ -108,30 +110,81 @@ Select **New alert** on the **Alerts** tab, then choose the kind of alert.
 
 <Tabs>
   <TabItem value="observability" label="Observability alert">
-    1. Select **Observability alert**, then choose a template such as **Agent error rate** or **Daily cost budget**. To write your own query and condition, select **Start blank** and continue with the full form below.
-    1. A template opens a short form with one question, such as **What error rate should open an alert?** Enter your threshold, choose **All projects** or one project, and choose one or more destinations in **Send to**.
-    1. Review the **Backtest** chart, then select **Create alert**. To change anything else, select **Customize all settings** instead.
+    <Steps>
+      <StepItem>
+        Select **Observability alert**, then choose a template such as **Agent error rate** or **Daily cost budget**. To write your own query and condition, select **Start blank** and continue with the full form below.
+      </StepItem>
+
+      <StepItem>
+        A template opens a short form with one question, such as **What error rate should open an alert?** Enter your threshold, choose **All projects** or one project, and choose one or more destinations in **Send to**.
+      </StepItem>
+
+      <StepItem>
+        Review the **Backtest** chart, then select **Create alert**. To change anything else, select **Customize all settings** instead.
+      </StepItem>
+    </Steps>
 
     In the full form, which opens from **Start blank** or **Customize all settings**:
 
-    1. Enter a **Name**. Use **Description** to explain what the alert means and how to respond, for example with a link to a runbook.
-    1. Under **What to watch**, choose **All projects** or one project. An alert for all projects reads the projects in one region, which you choose under **Region** if the field is shown. You can't change the project choice later.
-    1. Under **Watch**, choose **Spans**, **Traces**, or **Scores**, then a **Metric** and, when offered, a statistic, such as an error rate or a p95 duration. Under **Only spans where** or **Only traces where**, add filters that include or exclude values, for example to watch one agent or to leave out a test user.
-    1. Under **When it fires**, choose what to **Alert for**. Then choose a comparison (**above**, **at or above**, **below**, or **at or below**) and enter a threshold. Under **Over**, choose a window, such as **the last 15m** or **today (since midnight)**.
-    1. Review the **Backtest** chart. The **6h**, **1d**, and **2d** ranges replay every check and show when the alert would have opened and closed. The **7d** and **30d** ranges, when offered, plot the value against the threshold without replaying checks. Some alerts offer shorter ranges. Adjust the threshold or window until the alert would open only when you'd want someone to act. The backtest uses past data and doesn't send notifications.
-    1. Under **Notify**, choose one or more destinations in **Send to**.
-    1. Select **Create alert**. To save the alert turned off, open the menu next to it and select **Create as disabled**.
+    <Steps>
+      <StepItem>
+        Enter a **Name**. Use **Description** to explain what the alert means and how to respond, for example with a link to a runbook.
+      </StepItem>
+
+      <StepItem>
+        Under **What to watch**, choose **All projects** or one project. An alert for all projects reads the projects in one region, which you choose under **Region** if the field is shown. You can't change the project choice later.
+      </StepItem>
+
+      <StepItem>
+        Under **Watch**, choose **Spans**, **Traces**, or **Scores**, then a **Metric** and, when offered, a statistic, such as an error rate or a p95 duration. Under **Only spans where** or **Only traces where**, add filters that include or exclude values, for example to watch one agent or to leave out a test user.
+      </StepItem>
+
+      <StepItem>
+        Under **When it fires**, choose what to **Alert for**. Then choose a comparison (**above**, **at or above**, **below**, or **at or below**) and enter a threshold. Under **Over**, choose a window, such as **the last 15m** or **today (since midnight)**.
+      </StepItem>
+
+      <StepItem>
+        Review the **Backtest** chart. The **6h**, **1d**, and **2d** ranges replay every check and show when the alert would have opened and closed. The **7d** and **30d** ranges, when offered, plot the value against the threshold without replaying checks. Some alerts offer shorter ranges. Adjust the threshold or window until the alert would open only when you'd want someone to act. The backtest uses past data and doesn't send notifications.
+      </StepItem>
+
+      <StepItem>
+        Under **Notify**, choose one or more destinations in **Send to**.
+      </StepItem>
+
+      <StepItem>
+        Select **Create alert**. To save the alert turned off, open the menu next to it and select **Create as disabled**.
+      </StepItem>
+    </Steps>
 
     The alert's state starts as **Not checked yet**. Its page shows when the last check ran and when the next one runs. See [Observability alert checks](#observability-alert-checks) to tune recovery, grouping, and late data.
   </TabItem>
 
   <TabItem value="platform" label="Platform alert">
-    1. Select **Platform alert**, then choose a template, such as **Production deploy failed** or **Service unreachable**. Select **Blank** to start empty.
-    1. Enter a **Name**.
-    1. Under **What to watch**, choose one or more events in **Event**. See [Platform alert events](#platform-alert-events).
-    1. Choose what the alert covers. Leave **Applies to** empty to cover all projects, or select projects. You can narrow the alert to **Production**, **Staging**, or **Preview** environments. Leave an environment field empty to include every environment.
-    1. Under **Notify**, choose one or more destinations in **Send to**. In **Repeat**, choose how often Mastra can resend while the same incident stays open: **Every event**, **At most every 5 minutes**, **At most every 15 minutes**, or **At most every hour**.
-    1. Leave **Enabled** on, then select **Create alert**.
+    <Steps>
+      <StepItem>
+        Select **Platform alert**, then choose a template, such as **Production deploy failed** or **Service unreachable**. Select **Blank** to start empty.
+      </StepItem>
+
+      <StepItem>
+        Enter a **Name**.
+      </StepItem>
+
+      <StepItem>
+        Under **What to watch**, choose one or more events in **Event**. See [Platform alert events](#platform-alert-events).
+      </StepItem>
+
+      <StepItem>
+        Choose what the alert covers. Leave **Applies to** empty to cover all projects, or select projects. You can narrow the alert to **Production**, **Staging**, or **Preview** environments. Leave an environment field empty to include every environment.
+      </StepItem>
+
+      <StepItem>
+        Under **Notify**, choose one or more destinations in **Send to**. In **Repeat**, choose how often Mastra can resend while the same incident stays open: **Every event**, **At most every 5 minutes**, **At most every 15 minutes**, or **At most every hour**.
+      </StepItem>
+
+      <StepItem>
+        Leave **Enabled** on, then select **Create alert**.
+      </StepItem>
+    </Steps>
 
     The alert is listed on the **Alerts** tab with the type **Platform**.
   </TabItem>
@@ -170,13 +223,13 @@ An observability alert shows one of these states:
 
 | State | Meaning |
 | - | - |
-| **Not checked yet** | The alert hasn't run its first check. |
-| **OK** | The latest check was on the safe side of the threshold. |
-| **Alert open** | The latest check crossed the threshold. |
-| **Closed** | The alert was open and has since recovered, or someone closed it by hand. |
-| **No data** | The window contained no matching data. |
-| **Error** | The query failed, for example because it timed out. |
-| **Disabled** | The alert is turned off and isn't checked. |
+| Not checked yet | The alert hasn't run its first check. |
+| OK | The latest check was on the safe side of the threshold. |
+| Alert open | The latest check crossed the threshold. |
+| Closed | The alert was open and has since recovered, or someone closed it by hand. |
+| No data | The window contained no matching data. |
+| Error | The query failed, for example because it timed out. |
+| Disabled | The alert is turned off and isn't checked. |
 
 **No data** and **Error** don't send notifications. If an alert stays in either state, check its filters and whether your application sent matching data during the window.
 
@@ -186,14 +239,14 @@ Each platform alert watches one or more events:
 
 | Event | Sends when |
 | - | - |
-| **Deploy failed** | A build or deploy fails to reach a running state. |
-| **Service crashed** | A running service exhausts its restart policy and stops. |
-| **Service out of memory** | A service is stopped after running out of memory. |
-| **Service unreachable** | Health checks get no response from a deployed service for several minutes in a row. |
-| **Elevated error rate** | More than 10% of requests to a deployed service return `5xx` errors over a 5-minute window. |
-| **Resource usage threshold crossed** | An environment uses more CPU, memory, or egress over a window than the thresholds you set. |
-| **Usage threshold crossed** | Organization usage nears or reaches a plan limit. |
-| **Alert rule** | An observability alert in the covered projects opens or closes. Use it to route every observability alert to one place, such as an on-call PagerDuty service. |
+| Deploy failed | A build or deploy fails to reach a running state. |
+| Service crashed | A running service exhausts its restart policy and stops. |
+| Service out of memory | A service is stopped after running out of memory. |
+| Service unreachable | Health checks get no response from a deployed service for several minutes in a row. |
+| Elevated error rate | More than 10% of requests to a deployed service return `5xx` errors over a 5-minute window. |
+| Resource usage threshold crossed | An environment uses more CPU, memory, or egress over a window than the thresholds you set. |
+| Usage threshold crossed | Organization usage nears or reaches a plan limit. |
+| Alert rule | An observability alert in the covered projects opens or closes. Use it to route every observability alert to one place, such as an on-call PagerDuty service. |
 
 **Resource usage threshold crossed** adds a **Usage window**, from **Last 15 minutes** to **Last 24 hours**, and thresholds for **CPU above**, **Memory above**, and **Egress above**. Enter an amount, or switch the unit to **% of monthly allowance**. Leave a metric empty to skip it. Mastra adds up each environment's usage every five minutes, about 10 minutes behind real time.
 
@@ -237,13 +290,13 @@ The **Activity** tab shows each time an alert opened or closed, from the last 24
 
 | Delivery status | Meaning |
 | - | - |
-| **Scheduled** | Queued to send. |
-| **Sent** | The destination accepted the notification. |
-| **Suppressed** | Not sent, because a matching notification went out recently. |
-| **Retrying** | The last attempt failed, and Mastra is trying again. |
-| **Exhausted** | Every retry failed. The notification wasn't delivered. |
-| **Config error** | The destination rejected the notification because its settings are wrong. Edit the destination to fix it. |
-| **Replayed** | A failed delivery that was sent again. |
+| Scheduled | Queued to send. |
+| Sent | The destination accepted the notification. |
+| Suppressed | Not sent, because a matching notification went out recently. |
+| Retrying | The last attempt failed, and Mastra is trying again. |
+| Exhausted | Every retry failed. The notification wasn't delivered. |
+| Config error | The destination rejected the notification because its settings are wrong. Edit the destination to fix it. |
+| Replayed | A failed delivery that was sent again. |
 
 ## Related
 
