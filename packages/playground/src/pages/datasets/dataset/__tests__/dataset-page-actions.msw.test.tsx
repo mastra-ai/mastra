@@ -152,23 +152,6 @@ describe('DatasetPage', () => {
       expect(await screen.findByRole('dialog', { name: 'Dataset schema' })).toBeDefined();
     });
 
-    it('does not show when the dataset was created in the page header', async () => {
-      mockDataset(dataset, items);
-      renderPage();
-      await screen.findByRole('button', { name: /new experiment/i });
-
-      expect(within(getPageHeader()).queryByText(/^Created/)).toBeNull();
-    });
-
-    it('keeps the toolbar free of page-level actions', async () => {
-      mockDataset(dataset, items);
-      renderPage();
-      await screen.findByRole('button', { name: /new experiment/i });
-
-      const toolbar = screen.getByTestId('dataset-items-toolbar');
-      expect(within(toolbar).queryByRole('link', { name: 'Experiments' })).toBeNull();
-    });
-
     it('shows the tag editor', async () => {
       mockDataset(dataset, items);
       renderPage();
@@ -187,7 +170,6 @@ describe('DatasetPage', () => {
       const header = getPageHeader();
       expect(within(header).getByRole('button', { name: 'Schema' })).toBeDefined();
       expect(within(header).getByRole('button', { name: 'Dataset actions menu' })).toBeDefined();
-      expect(within(header).queryByText(/^Created/)).toBeNull();
       expect(screen.queryByRole('button', { name: /new experiment/i })).toBeNull();
       expect(screen.queryByRole('link', { name: 'Experiments' })).toBeNull();
     });

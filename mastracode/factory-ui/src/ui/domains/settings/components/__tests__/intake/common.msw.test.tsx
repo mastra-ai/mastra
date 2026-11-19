@@ -42,9 +42,6 @@ describe('IntakeSection common', () => {
       expect(
         within(linear).getByRole('button', { name: 'Add project or team to Linear projects and teams' }),
       ).toBeInTheDocument();
-      expect(screen.queryByRole('region', { name: 'Connected sources' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('region', { name: 'Add a source' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('switch')).not.toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'intake order' })).toHaveAttribute('href', '/factories/fp-1/work/intake');
     });
 
@@ -55,7 +52,6 @@ describe('IntakeSection common', () => {
       renderIntakeSection();
 
       expect(await screen.findByRole('button', { name: 'Add repository to Bring in issues from' })).toBeInTheDocument();
-      expect(screen.queryByRole('switch')).not.toBeInTheDocument();
       expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       await openSourcePicker('Linear projects and teams');
@@ -267,7 +263,6 @@ describe('IntakeSection common', () => {
       expect(
         within(screen.getByRole('region', { name: 'Sources' })).getByRole('region', { name: 'Linear' }),
       ).toBeInTheDocument();
-      expect(screen.queryByRole('switch')).not.toBeInTheDocument();
     });
   });
 

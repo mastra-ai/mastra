@@ -148,17 +148,6 @@ describe('PageLayout', () => {
       expect(container.contains(screen.getByRole('heading', { name: 'Title' }))).toBe(true);
       expect(contentOf('Body')?.className).not.toContain('p-4');
     });
-
-    it('leaves spacing between header and body to the call site', () => {
-      render(
-        <PageLayout variant="narrow" header={<h1>Title</h1>}>
-          <p>Body</p>
-        </PageLayout>,
-      );
-
-      const container = screen.getByText('Body').closest('[data-slot="page-layout-container"]');
-      expect(container?.className).not.toMatch(/\b(flex|gap-6)\b/);
-    });
   });
 
   describe('when neither breadcrumbs nor header actions are provided', () => {

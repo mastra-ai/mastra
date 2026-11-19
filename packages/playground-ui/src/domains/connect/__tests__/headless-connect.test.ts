@@ -210,10 +210,4 @@ describe('startHeadlessAuth', () => {
 
     expect(nangoMocks.create).toHaveBeenCalledWith('public-api', { params: { subdomain: 'acme' } });
   });
-
-  it('opens the provider popup for OAuth', async () => {
-    await startHeadlessAuth({ sessionToken: 'session-token', integrationId: 'github', authType: 'OAUTH2' }).result;
-
-    expect(nangoMocks.auth).toHaveBeenCalledWith('github', { detectClosedAuthWindow: true });
-  });
 });

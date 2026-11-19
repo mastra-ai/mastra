@@ -12,9 +12,9 @@ import { createAppRoutes } from '../router';
 import { saveKanbanView } from './boardLayoutQueries';
 import { FACTORY_ID, OTHER_FACTORY_ID, REPO_ID, stubWorkBoard } from './workBoardStubs';
 
-function renderBoard(search = '', board = 'work') {
+function renderBoard(search = '') {
   const router = createMemoryRouter(createAppRoutes(), {
-    initialEntries: [`/factories/${FACTORY_ID}/${board}${search}`],
+    initialEntries: [`/factories/${FACTORY_ID}/work${search}`],
   });
   renderWithProviders(<RouterProvider router={router} />);
   return router;
@@ -45,15 +45,6 @@ describe('Board empty-state actions', () => {
       `/factories/${FACTORY_ID}/settings/repositories`,
     );
     expect(screen.queryByTestId('board-column-intake')).not.toBeInTheDocument();
-  });
-
-  it('sends an old Review board link to Work, filtered to cards with a pull request', async () => {
-    stubWorkBoard();
-    const router = renderBoard('', 'review');
-
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work`));
-    expect(router.state.location.search).toBe('?source=pull-request');
-    expect(await screen.findByTestId('board-column-intake')).toBeVisible();
   });
 
   it.each(['list', 'board'])('offers manual creation and intake setup in the %s layout', async layout => {

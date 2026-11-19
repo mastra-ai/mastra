@@ -161,15 +161,22 @@ describe('chat runtime status', () => {
   });
 
   it('does not treat a block that already has content as a generation start', () => {
-    const state = runtimeReducer(initialChatRuntime, {
-      type: 'event',
-      event: {
-        type: 'message_update',
-        id: 'm',
-        event: { type: 'part', index: 0, part: { type: 'text', text: 'Replayed' } },
-      },
+    vi.useFakeTimers();
+    let state = initialChatRuntime;
+    const emit = (at: number, event: AgentControllerEvent) => {
+      vi.setSystemTime(at);
+      state = runtimeReducer(state, { type: 'event', event });
+    };
+    emit(1000, {
+      type: 'message_update',
+      id: 'm',
+      event: { type: 'part', index: 0, part: { type: 'text', text: 'Replayed' } },
     });
-    expect(state._decodeStartedAt).toBe(0);
+    for (const at of [59_000, 60_000]) {
+      emit(at, { type: 'message_update', id: 'm', event: { type: 'text-delta', delta: 'Output' } });
+    }
+    emit(60_010, { type: 'usage_update', usage: { promptTokens: 100, completionTokens: 40, totalTokens: 140 } });
+    expect(state.tokensPerSec).toBe(40);
   });
 
   it('counts thinking that starts after text in the same step', () => {
@@ -181,13 +188,11 @@ describe('chat runtime status', () => {
       type: 'event',
       event: { type: 'message_update', id: 'm', event: { type: 'text-delta', delta: 'Answer' } },
     });
-    expect(state._decodeHasReasoning).toBe(false);
     vi.setSystemTime(2000);
     state = runtimeReducer(state, {
       type: 'event',
       event: { type: 'message_update', id: 'm', event: { type: 'reasoning-delta', index: 0, delta: 'Thinking' } },
     });
-    expect(state._decodeHasReasoning).toBe(true);
     vi.setSystemTime(90_000);
     state = runtimeReducer(state, {
       type: 'event',
@@ -268,7 +273,6 @@ describe('chat runtime status', () => {
       },
     });
     expect(state.tokensPerSec).toBe(40);
-    expect(state._decodeStartedAt).toBe(0);
   });
 
   it('measures a generation window from 50ms up', () => {

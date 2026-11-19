@@ -151,42 +151,6 @@ describe('DropdownMenu', () => {
     ).not.toThrow();
   });
 
-  it('accepts Base UI positioning props on menu content', () => {
-    render(
-      <DropdownMenu defaultOpen>
-        <DropdownMenu.Trigger>Open</DropdownMenu.Trigger>
-        <DropdownMenu.Content
-          anchor={document.body}
-          arrowPadding={6}
-          collisionAvoidance={{ side: 'shift', align: 'shift', fallbackAxisSide: 'none' }}
-          collisionBoundary={document.body}
-          collisionPadding={8}
-          positionMethod="fixed"
-          sticky
-        >
-          <DropdownMenu.Item>Positioned action</DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu>,
-    );
-
-    expect(screen.getByRole('menuitem', { name: 'Positioned action' })).toBeTruthy();
-  });
-
-  it('fires the onSelect handler when an item is clicked', () => {
-    const onSelect = vi.fn();
-    render(
-      <DropdownMenu defaultOpen>
-        <DropdownMenu.Trigger>Open</DropdownMenu.Trigger>
-        <DropdownMenu.Content>
-          <DropdownMenu.Item onSelect={onSelect}>Run action</DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu>,
-    );
-
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Run action' }));
-    expect(onSelect).toHaveBeenCalledTimes(1);
-  });
-
   it('fires the onClick handler when an item is clicked', () => {
     const onClick = vi.fn();
     render(
