@@ -50,8 +50,9 @@ export type TracesExplorerDiscovery = {
 
 /** The values the filter bar suggests for its fields. */
 export type TracesExplorerFilterSuggestions = {
-  /** Names of the root entities (agents, workflows…), for the `Entity name` field. */
+  /** Names of the root entities (agents, workflows…) the `Primitive name` field picks from. Omitted, it takes free text. */
   rootEntityNames?: string[];
+  /** Environments the `Environment` field picks from. Omitted, it takes free text. */
   environments?: string[];
   /** A lazy resolver of the values observed for a field (`spans.model`, `metadata.region`…). Without it, those fields take free text. */
   resolveValues?: (scope: TraceQueryRelatedScope | 'trace', path: string) => TraceQueryValuesResolver;

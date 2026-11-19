@@ -16,16 +16,15 @@ import {
   FILTER_BAR_TIME_RANGE_ITEM,
 } from '@/ds/components/FilterBar/filter-bar-time-range';
 
-const NO_SUGGESTIONS: string[] = [];
-
 /**
  * The fields the trace filter bar offers: time range, trace fields, and discovered metadata. The
- * suggestions come from the host (Studio: `useTracesFilterSuggestionsQuery`); without them, the
- * fields take free text.
+ * suggestions come from the host (Studio: `useTracesFilterSuggestionsQuery`). A list the host leaves
+ * out makes its field take free text (`Primitive name`, `Environment`); without `resolveValues`, the
+ * span, score and feedback fields take free text too.
  */
 export function useTracesFilterBarFields({
-  rootEntityNames = NO_SUGGESTIONS,
-  environments = NO_SUGGESTIONS,
+  rootEntityNames,
+  environments,
   resolveValues,
 }: TracesExplorerFilterSuggestions = {}): FilterBarField[] {
   const {

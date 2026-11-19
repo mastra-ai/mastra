@@ -12,6 +12,9 @@ import type { TracesExplorerFeatures } from '../components/traces-explorer/trace
 import type { TraceQueryRelatedScope } from '../trace-query-filters';
 import { useTracesDiscoveryWindow } from './use-traces-discovery-window';
 
+/** Studio always offers a pick list: an empty one while the names load. */
+const NO_NAMES: string[] = [];
+
 export type UseTracesFilterSuggestionsQueryArgs = {
   filters: TracesFilters;
   capabilities: TracesExplorerCapabilities;
@@ -31,8 +34,8 @@ export function useTracesFilterSuggestionsQuery({
   const support = resolveTracesSupport(capabilities, features);
   const filters = sanitizeTracesFiltersFor(rawFilters, support);
   const selectedEntityType = getSelectedEntityOption(filters.tokens)?.entityType;
-  const { data: rootEntityNames } = useEntityNames({ entityType: selectedEntityType, rootOnly: true });
-  const { data: environments } = useEnvironments();
+  const { data: rootEntityNames = NO_NAMES } = useEntityNames({ entityType: selectedEntityType, rootOnly: true });
+  const { data: environments = NO_NAMES } = useEnvironments();
   const client = useMastraClient();
   const timeRange = useTracesDiscoveryWindow(rawFilters);
   const { withQueryTrace } = support;

@@ -11,6 +11,7 @@ import { TracesExplorer } from '../index';
 import type {
   TracesExplorerCapabilities,
   TracesExplorerDiscovery,
+  TracesExplorerFilterSuggestions,
   TracesExplorerHistogram,
   TracesExplorerOpenTrace,
   TracesExplorerPanelProps,
@@ -37,6 +38,10 @@ const WINDOW = { from: '2026-08-24T12:00:00.000Z', to: '2026-08-31T12:00:00.000Z
 const METRICS = { supported: true, isLoading: false };
 const FEATURES = { spanQuery: true, threadQuery: true };
 const COLUMNS: TraceColumnPreferences = TRACE_COLUMN_CATALOGS.traces.defaults;
+const APP_SUGGESTIONS: TracesExplorerFilterSuggestions = {
+  rootEntityNames: ['Travel Agent'],
+  environments: ['production'],
+};
 
 /** What the app loaded, as its own queries return it. */
 type AppData = {
@@ -85,6 +90,8 @@ type AppProps = {
   initialTraceId?: string;
   initialSpanId?: string;
   feedbackOptions?: TracesExplorerRootProps['feedbackOptions'];
+  /** The filter bar's suggestions; defaults to the app's entity names and environments. */
+  suggestions?: TracesExplorerFilterSuggestions;
   onChange?: (next: TracesExplorerState) => void;
   onSortChange?: (next: TracesSort) => void;
   onColumnsChange?: (next: TraceColumnPreferences) => void;
@@ -97,6 +104,7 @@ function AppTracesPage({
   initialTraceId,
   initialSpanId,
   feedbackOptions,
+  suggestions = APP_SUGGESTIONS,
   onChange,
   onSortChange,
   onColumnsChange,
@@ -138,9 +146,7 @@ function AppTracesPage({
       <TracesExplorer.Body
         toolbar={
           <>
-            <TracesExplorer.FilterBar
-              suggestions={{ rootEntityNames: ['Travel Agent'], environments: ['production'] }}
-            />
+            <TracesExplorer.FilterBar suggestions={suggestions} />
             <TracesExplorer.ColumnsMenu />
           </>
         }
@@ -562,6 +568,61 @@ describe('The traces page in an app other than Studio', () => {
       await screen.findByRole('dialog', { name: 'Trace details' });
 
       expect(renderThread).toHaveBeenLastCalledWith(expect.objectContaining({ feedbackOptions: FEEDBACK_OPTIONS }));
+    });
+  });
+  describe('when the app has no entity names or environments to suggest', () => {
+    const filterBy = async (field: string, value: string) => {
+      const onChange = vi.fn<(next: TracesExplorerState) => void>();
+      render(<AppTracesPage suggestions={{}} onChange={onChange} />);
+      await screen.findByRole('button', { name: /Plan a weekend in Paris/ });
+
+      const input = screen.getByRole('combobox', { name: 'Add filter' });
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: field } });
+      fireEvent.click(await screen.findByRole('option', { name: field }));
+      fireEvent.click(await screen.findByRole('option', { name: 'is', exact: true }));
+      fireEvent.change(input, { target: { value } });
+
+      fireEvent.keyDown(input, { key: 'Enter' });
+      return onChange;
+    };
+
+    it('lets the reader type the primitive name to filter on', async () => {
+      const onChange = await filterBy('Primitive name', 'Travel Agent');
+
+      await waitFor(() =>
+        expect(onChange.mock.lastCall?.[0].filters.tokens).toEqual([
+          expect.objectContaining({ fieldId: 'entityName', value: 'Travel Agent' }),
+        ]),
+      );
+    });
+
+    it('lets the reader type the environment to filter on', async () => {
+      const onChange = await filterBy('Environment', 'staging');
+
+      await waitFor(() =>
+        expect(onChange.mock.lastCall?.[0].filters.tokens).toEqual([
+          expect.objectContaining({ fieldId: 'environment', value: 'staging' }),
+        ]),
+      );
+    });
+  });
+  describe('when the app suggests the environments', () => {
+    it('only accepts an environment it suggests', async () => {
+      const onChange = vi.fn<(next: TracesExplorerState) => void>();
+      render(<AppTracesPage onChange={onChange} />);
+      await screen.findByRole('button', { name: /Plan a weekend in Paris/ });
+
+      const input = screen.getByRole('combobox', { name: 'Add filter' });
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: 'Environment' } });
+      fireEvent.click(await screen.findByRole('option', { name: 'Environment' }));
+      fireEvent.click(await screen.findByRole('option', { name: 'is', exact: true }));
+      fireEvent.change(input, { target: { value: 'staging' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(onChange).not.toHaveBeenCalled();
     });
   });
 });
