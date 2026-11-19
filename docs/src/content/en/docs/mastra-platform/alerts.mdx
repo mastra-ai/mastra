@@ -40,11 +40,11 @@ If **Alerts** isn't under **Observability**, your organization still uses the ea
 A destination is a place where Mastra sends notifications. One destination can serve many alerts of either kind.
 
 1. On the **Alerts** page, open the **Destinations** tab and select **New destination**.
-1. Choose a **Type** and fill in its fields. Expand a type below to see what it needs.
-1. Enter a **Name** that tells your team where the notifications go, for example `On-call team`, then select **Create destination**. Each name must be unique among destinations of the same type. For a webhook, copy the signing secret before you close the dialog. Mastra can't show it again.
+1. Choose a **Type** and fill in the fields described below. For Slack, the channel supplies the name. For other types, enter a **Name** such as `On-call team`. Names must be unique within each type.
+1. Select **Create destination**. For a webhook, copy the signing secret before you close the dialog. Mastra can't show it again.
 1. Open the new destination and select **Send test**. Check that the message arrives.
 
-You can also add a destination while you create an alert. Open the **Send to** list and select **New destination**.
+You can also add a destination while you create an alert. Open **Send to** and select **New destination**. When you save it, the form adds it to the alert.
 
 <div className="accordion-group">
   <details>
@@ -58,7 +58,7 @@ You can also add a destination while you create an alert. Open the **Send to** l
   <details>
     <summary>Email</summary>
 
-    Under **Recipients**, choose **All organization members**, roles, or members, or enter an address under **Add another email**. A destination can have up to 10 recipients. Role-based recipients update when organization membership changes.
+    In **Send to**, search for a person or group, or type a full email address and select it. You can add up to 10 individual people or addresses. To reach a group, select a role or **All organization members**. Group membership updates as people join, leave, or change roles.
   </details>
 
   <details>
@@ -112,23 +112,11 @@ Select **New alert** on the **Alerts** tab, then choose the kind of alert.
   <TabItem value="observability" label="Observability alert">
     <Steps>
       <StepItem>
-        Select **Observability alert**, then choose a template such as **Agent error rate** or **Daily cost budget**. To write your own query and condition, select **Start blank** and continue with the full form below.
+        Select **Observability alert** and choose a template to open the full form with its settings filled in. For example, **Agent run failures** checks each agent's error rate over five minutes, with a 5% threshold and a minimum of 20 runs per agent. If the settings fit, review the **Backtest**, choose a destination in **Send to**, and select **Create alert**. To configure your own alert, choose **Start blank**.
       </StepItem>
 
       <StepItem>
-        A template opens a short form with one question, such as **What error rate should open an alert?** Enter your threshold, choose **All projects** or one project, and choose one or more destinations in **Send to**.
-      </StepItem>
-
-      <StepItem>
-        Review the **Backtest** chart, then select **Create alert**. To change anything else, select **Customize all settings** instead.
-      </StepItem>
-    </Steps>
-
-    In the full form, which opens from **Start blank** or **Customize all settings**:
-
-    <Steps>
-      <StepItem>
-        Enter a **Name**. Use **Description** to explain what the alert means and how to respond, for example with a link to a runbook.
+        Under **Details**, give the alert a **Name**. Use **Description** to tell responders what to do when it opens, such as where to find the runbook.
       </StepItem>
 
       <StepItem>
@@ -136,33 +124,29 @@ Select **New alert** on the **Alerts** tab, then choose the kind of alert.
       </StepItem>
 
       <StepItem>
-        Under **Watch**, choose **Spans**, **Traces**, or **Scores**, then a **Metric** and, when offered, a statistic, such as an error rate or a p95 duration. Under **Only spans where** or **Only traces where**, add filters that include or exclude values, for example to watch one agent or to leave out a test user.
+        A blank alert starts with **Watch** set to **Traces** for whole runs. Choose **Spans** for individual operations. For either source, select a **Metric** and, when offered, a statistic. To watch evaluation results, choose **Scores**, select a scorer, and choose how to combine its scores. Add filters to narrow the data. Each record must match all the filters. The available fields depend on what you watch. For example, switch to **Spans** to filter by **Primitive type**.
       </StepItem>
 
       <StepItem>
-        Under **When it fires**, choose what to **Alert for**. Then choose a comparison (**above**, **at or above**, **below**, or **at or below**) and enter a threshold. Under **Over**, choose a window, such as **the last 15m** or **today (since midnight)**.
+        Under **When it fires**, use **Alert for** to check all matching traffic together or split it into groups. Choose a comparison and review the prefilled threshold. For **Over**, choose a rolling window such as **the last 15m**, or **since midnight UTC** for the current day.
       </StepItem>
 
       <StepItem>
-        Review the **Backtest** chart. The **6h**, **1d**, and **2d** ranges replay every check and show when the alert would have opened and closed. The **7d** and **30d** ranges, when offered, plot the value against the threshold without replaying checks. Some alerts offer shorter ranges. Adjust the threshold or window until the alert would open only when you'd want someone to act. The backtest uses past data and doesn't send notifications.
+        Review the **Backtest** chart. Once the condition is complete, the preview runs with the current threshold. The **6h**, **1d**, and **2d** ranges replay every check and show when the alert would have opened and closed. The **7d** and **30d** ranges, when offered, plot the value against the threshold without replaying checks. Some alerts offer shorter ranges. Adjust the threshold or window until the alert would open only when you'd want someone to act. The backtest uses past data and doesn't send notifications.
       </StepItem>
 
       <StepItem>
-        Under **Notify**, choose one or more destinations in **Send to**.
-      </StepItem>
-
-      <StepItem>
-        Select **Create alert**. To save the alert turned off, open the menu next to it and select **Create as disabled**.
+        Under **Notify**, choose where to send notifications in **Send to**, then select **Create alert**.
       </StepItem>
     </Steps>
 
-    The alert's state starts as **Not checked yet**. Its page shows when the last check ran and when the next one runs. See [Observability alert checks](#observability-alert-checks) to tune recovery, grouping, and late data.
+    Open the alert to see when it was last checked and when the next check runs. See [Observability alert checks](#observability-alert-checks) to tune recovery, grouping, and late data.
   </TabItem>
 
   <TabItem value="platform" label="Platform alert">
     <Steps>
       <StepItem>
-        Select **Platform alert**, then choose a template, such as **Production deploy failed** or **Service unreachable**. Select **Blank** to start empty.
+        Select **Platform alert**. Choose a template such as **Production deploy failed** to open the form with its events and scope filled in, or select **Start blank** to choose your own.
       </StepItem>
 
       <StepItem>
@@ -174,7 +158,7 @@ Select **New alert** on the **Alerts** tab, then choose the kind of alert.
       </StepItem>
 
       <StepItem>
-        Choose what the alert covers. Leave **Applies to** empty to cover all projects, or select projects. You can narrow the alert to **Production**, **Staging**, or **Preview** environments. Leave an environment field empty to include every environment.
+        Under **Project**, leave **All projects** selected or choose specific projects. Use **Environments** to narrow the alert to production, staging, or preview across all projects, or choose environments separately for each selected project. Organization usage alerts always cover the whole organization.
       </StepItem>
 
       <StepItem>
@@ -182,7 +166,7 @@ Select **New alert** on the **Alerts** tab, then choose the kind of alert.
       </StepItem>
 
       <StepItem>
-        Leave **Enabled** on, then select **Create alert**.
+        Select **Create alert**.
       </StepItem>
     </Steps>
 
@@ -200,7 +184,7 @@ Some cards can't become alerts, so their action is disabled. For example, the ca
 
 When an alert's condition is met, the alert opens and Mastra sends a notification to each of its destinations. The alert stays open while the condition lasts. Once the condition clears, the alert closes and Mastra sends a **Closed** notification.
 
-- **Observability alerts** send when they open and when they close, at most once every 15 minutes per group. Mastra doesn't send reminders while an alert stays open.
+- **Observability alerts** notify each destination when an incident opens and when it closes. Mastra doesn't send reminders while the same incident stays open.
 - **Platform alerts** resend according to **Repeat**. The first notification, recovery notifications, and increases in severity always send immediately. Incidents for **Usage threshold crossed** stay open, because they don't resolve on their own.
 
 Slack messages update in place, for example when another group of the same observability alert opens. Discord and Microsoft Teams post a separate **Closed** message.
@@ -209,7 +193,7 @@ Notifications for an open observability alert let you close it by hand. Slack me
 
 ## Observability alert checks
 
-Mastra checks every enabled observability alert every five minutes. Each check measures the window you chose: with **the last 1h**, each check measures the past hour. **today (since midnight)** measures from the start of the day in the timezone shown in the window's label.
+Mastra normally checks enabled observability alerts every five minutes. If a query keeps failing for 15 minutes, Mastra checks it less often. With **the last 1h**, each check measures the preceding hour. With **since midnight UTC**, each check measures from 00:00 UTC to the end of the evaluation window.
 
 Open **Advanced** in the alert form for these settings:
 
@@ -217,21 +201,9 @@ Open **Advanced** in the alert form for these settings:
 - **Skip agents with fewer than**, or the same setting for another group such as models: For spans and traces with a separate alert for each group, a minimum number of runs per check, so an agent with one failure out of two runs doesn't open the alert.
 - **Wait for late data**: A minute or two of the newest data to skip, if an alert on a short window opens and closes on its own within minutes. Keep **None** unless that happens.
 
-Some alerts can measure each group on its own. Under **Alert for**, choose **One alert for all traffic** for one check over everything, or a separate alert for each group, such as **A separate alert for each agent**, so one failing agent isn't hidden by healthy ones. If the backtest finds a group that crossed the threshold while all traffic combined didn't, the form shows a warning with a button to switch. Mastra checks up to 50 groups, prioritizing those closest to the threshold. All groups of one alert share one incident.
+Some alerts can measure each group on its own. Under **Alert for**, choose **One alert for all traffic** for one check over everything, or a separate alert for each group, such as **A separate alert for each agent**, so one failing agent isn't hidden by healthy ones. If you filter to a single agent, the form drops the option to split by agent. It also hides splits when the selected project has only one known value for that field.
 
-An observability alert shows one of these states:
-
-| State | Meaning |
-| - | - |
-| Not checked yet | The alert hasn't run its first check. |
-| OK | The latest check was on the safe side of the threshold. |
-| Alert open | The latest check crossed the threshold. |
-| Closed | The alert was open and has since recovered, or someone closed it by hand. |
-| No data | The window contained no matching data. |
-| Error | The query failed, for example because it timed out. |
-| Disabled | The alert is turned off and isn't checked. |
-
-**No data** and **Error** don't send notifications. If an alert stays in either state, check its filters and whether your application sent matching data during the window.
+If the backtest finds a group that crossed the threshold while all traffic combined didn't, the form shows a warning with a button to switch. Mastra checks up to 50 groups, prioritizing those closest to the threshold. All groups of one alert share one incident.
 
 ## Platform alert events
 
@@ -259,11 +231,21 @@ Close an observability alert by hand when you know about the problem and don't w
 1. Open the alert from the **Alerts** tab. The page shows **Close alert** when at least one group of the alert is open.
 1. Select **Close alert**, then confirm.
 
-The alert closes on the next check, and the **Closed** notification shows who closed it. It stays closed until a check finds the value back on the safe side of the threshold, or past the recovery level if you set one. After that, it can open again.
+The **Closed** notification shows who closed the alert. In Slack, Mastra updates the original message. The alert stays closed until a check finds the value back on the safe side of the threshold, or past the recovery level if you set one. After that, it can open again.
 
-You can also close the alert from its notifications. In Slack, select **Close alert** on the message. Slack matches your account to a Mastra user by email, so this works only for admins in your Mastra organization. In an email or a webhook, follow the close link to the alert's page.
+You can also close the alert from its notifications. In Slack, select **Close alert** on the message. Slack matches your account to a Mastra user by email, so this works only for admins in your Mastra organization. If Slack says the app needs additional permissions, ask a workspace admin to reinstall **Mastra Alerts**. You can close the alert from its page in Mastra in the meantime. In an email or a webhook, follow the close link to the alert's page.
 
 ## Manage alerts and destinations
+
+Use the **State** column on the **Alerts** tab to see which alerts need attention.
+
+| State | Meaning |
+| - | - |
+| On | The alert is enabled. A platform alert listens for matching events. An observability alert has no group firing. This includes alerts awaiting their first check. |
+| Off | The alert is turned off. |
+| Firing | An observability alert has at least one group with an open alert. |
+
+Open an observability alert for the result of its last check. **Alert open** means the condition was met. **Closed** means the alert recovered or someone closed it by hand. If you see **No data**, check the filters and whether your app sent data in the selected window. **Error** means the query failed. Neither result sends a notification.
 
 Open an alert from the **Alerts** tab to see its state, settings, and notification history. On the alert's page:
 
