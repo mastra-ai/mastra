@@ -4322,6 +4322,41 @@ describe('factory environment sandbox context', () => {
     expect(mocks.getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repository-2' });
   });
 
+  it('asks for the commits the active template was built from while pushes rebuild it', async () => {
+    const built = { 'octocat/hello': 'a'.repeat(40), 'octocat/docs': 'b'.repeat(40) };
+    const { resolver } = environmentFixture({
+      links: twoLinks,
+      project: { buildOnPushEnabled: true, activeTemplateHeads: built },
+    });
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+
+    await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    const ctx = mocks.createSandbox.mock.calls[0]![0] as any;
+    // The same answers a build gives the provider, so the session names the template that build made.
+    await expect(ctx.resolveHead('https://github.com/octocat/hello.git')).resolves.toBe(built['octocat/hello']);
+    await expect(ctx.resolveHead('https://github.com/octocat/docs.git')).resolves.toBe(built['octocat/docs']);
+    // A repository added since that build is left to the template's own lookup.
+    await expect(ctx.resolveHead('https://github.com/octocat/new.git')).resolves.toBeUndefined();
+  });
+
+  it.each([
+    [
+      'pushes do not rebuild the template',
+      { buildOnPushEnabled: false, activeTemplateHeads: { 'octocat/hello': 'a'.repeat(40) } },
+    ],
+    ['no template was built yet', { buildOnPushEnabled: true, activeTemplateHeads: null }],
+  ])('leaves the commits to the template when %s', async (_case, project) => {
+    const { resolver } = environmentFixture({ links: twoLinks, project });
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+
+    await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    expect('resolveHead' in (mocks.createSandbox.mock.calls[0]![0] as any)).toBe(false);
+  });
+
   it('passes no working directory or workspace setup when the project leaves them unset', async () => {
     const { resolver, sandbox } = environmentFixture({
       links: twoLinks,
