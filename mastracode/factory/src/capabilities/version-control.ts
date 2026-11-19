@@ -251,7 +251,7 @@ export interface PublishCommitCheckInput {
   headSha: string;
   /** Source branch of the change request; GitLab needs it to show the status on the merge request. */
   ref?: string;
-  /** Stable check name; publishing again with the same name updates the existing check. */
+  /** Stable check name. A provider shows the latest check published under a name for a commit (GitHub keeps each as a new run). */
   name: string;
   status: CommitCheckStatus;
   title: string;

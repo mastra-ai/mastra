@@ -31,6 +31,8 @@ export interface ReviewStatusState {
   head?: string;
   /** The Factory UI link to the session running the review. Absent until the run starts. */
   session?: string;
+  /** The commit this run's check in the Checks tab is on. */
+  checkHead?: string;
 }
 
 export interface ReviewStatusStats {
@@ -105,6 +107,7 @@ export function parseReviewStatusState(body: string | null | undefined): ReviewS
     ...(isTimestamp(value.startedAt) ? { startedAt: value.startedAt } : {}),
     ...(typeof value.head === 'string' && COMMIT_SHA.test(value.head) ? { head: value.head } : {}),
     ...(isSessionUrl(value.session) ? { session: value.session } : {}),
+    ...(typeof value.checkHead === 'string' && COMMIT_SHA.test(value.checkHead) ? { checkHead: value.checkHead } : {}),
   };
 }
 

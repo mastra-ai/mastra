@@ -11,4 +11,6 @@ Organizations using Platform GitHub can now move onto the new Mastra Factory Git
 - Accounts both apps are installed on later are picked up when Source control loads.
 - Agent sandboxes get a token scoped to their session's repositories, never one for the whole installation.
 
+**Reviews in the Checks tab.** While Factory reviews a pull request, the review now also shows in the pull request's Checks tab, as `Factory review` (named after `FACTORY_REVIEW_STATUS_NAME` when set). The check is in progress while the review is queued or running, and ends as a success when the review approves and neutral otherwise (changes requested, a failed run, a cancelled run), so a Factory review never fails a required check. A check left open on an older commit, because the pull request moved on or a newer review replaced the run, is closed as skipped. This works on both sets of GitHub apps and on a self-managed GitHub App with the `checks: write` permission.
+
 Organizations that don't switch keep using the Mastra GitHub App, with one change: a webhook Factory fails to handle three times in a row is now skipped and repaired by the next reconcile, instead of holding up every later webhook for its repository. There is no switch back.
