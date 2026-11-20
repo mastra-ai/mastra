@@ -2070,7 +2070,18 @@ export class Agent<
 
   /** @internal Only Mastra's stored native-agent registration applies defaults. */
   __registerExecutionEnginePolicy(defaults?: ExecutionEngineDefaults): void {
+    const previous = this.#executionEnginePolicy.durable;
     const diagnostic = this.#executionEnginePolicy.register(defaults);
+    if (this.#streamBus) {
+      const previousConfig = agentStreamsConfig(previous);
+      const config = agentStreamsConfig(this.#executionEnginePolicy.durable);
+      if (
+        previousConfig.cleanupTimeoutMs !== config.cleanupTimeoutMs ||
+        previousConfig.shouldCache !== config.shouldCache
+      ) {
+        this.#streamBus = this.#streamBus.withConfig(config);
+      }
+    }
     if (diagnostic) {
       this.#warnExecutionPolicy(
         diagnostic,
