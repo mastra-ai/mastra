@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Skeleton } from './skeleton';
+import { SkeletonText } from './skeleton-text';
 
 const meta: Meta<typeof Skeleton> = {
   title: 'Elements/Skeleton',
@@ -66,6 +67,17 @@ export const TextBlock: Story = {
       <Skeleton className="h-4 w-full" />
       <Skeleton className="h-4 w-full" />
       <Skeleton className="h-4 w-3/4" />
+    </div>
+  ),
+};
+
+/** Skeletons inside lines of text take the text's line height, so nothing moves when it arrives. */
+export const InTextLines: Story = {
+  render: () => (
+    <div className="flex w-75 flex-col">
+      <SkeletonText line="text-body" className="h-4 w-24" />
+      <SkeletonText className="w-40" />
+      <SkeletonText className="w-32" />
     </div>
   ),
 };

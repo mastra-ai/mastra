@@ -1,6 +1,11 @@
 import type { WorkflowRunStatus } from '@mastra/core/workflows';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Check, CirclePause, CircleSlash, Clock, X } from 'lucide-react';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconCircleBanSign } from '@mastra/playground-ui/icons/central/IconCircleBanSign';
+import { IconClock } from '@mastra/playground-ui/icons/central/IconClock';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconPause } from '@mastra/playground-ui/icons/central/IconPause';
 
 export interface WorkflowRunStatusInlineProps {
   status: WorkflowRunStatus;
@@ -14,11 +19,13 @@ export interface WorkflowRunStatusInlineProps {
 export function WorkflowRunStatusInline({ status }: WorkflowRunStatusInlineProps) {
   const { icon, color } = getStatusVisual(status);
   return (
-    <span className={`inline-flex items-center gap-1.5 text-caption whitespace-nowrap ${color}`}>
+    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap ${color}`}>
       <span className="inline-flex shrink-0 items-center" aria-hidden>
         {icon}
       </span>
-      <span>{status}</span>
+      <Txt as="span" variant="caption">
+        {status}
+      </Txt>
     </span>
   );
 }
@@ -26,18 +33,18 @@ export function WorkflowRunStatusInline({ status }: WorkflowRunStatusInlineProps
 function getStatusVisual(status: WorkflowRunStatus): { icon: React.ReactNode; color: string } {
   switch (status) {
     case 'success':
-      return { icon: <Check size={14} />, color: 'text-accent1' };
+      return { icon: <IconCheckmark2Medium className="size-icon-sm" />, color: 'text-success-indicator' };
     case 'failed':
-      return { icon: <X size={14} />, color: 'text-accent2' };
+      return { icon: <IconCrossMedium className="size-icon-sm" />, color: 'text-destructive-foreground' };
     case 'running':
       return { icon: <Spinner />, color: 'text-muted-foreground' };
     case 'suspended':
-      return { icon: <CirclePause size={14} />, color: 'text-accent3' };
+      return { icon: <IconPause className="size-icon-sm" />, color: 'text-info-indicator' };
     case 'canceled':
-      return { icon: <CircleSlash size={14} />, color: 'text-muted-foreground' };
+      return { icon: <IconCircleBanSign className="size-icon-sm" />, color: 'text-muted-foreground' };
     case 'pending':
     case 'waiting':
-      return { icon: <Clock size={14} />, color: 'text-muted-foreground' };
+      return { icon: <IconClock className="size-icon-sm" />, color: 'text-muted-foreground' };
     default:
       return { icon: null, color: 'text-muted-foreground' };
   }

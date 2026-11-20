@@ -1,11 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Activity, ChartNoAxesColumnIncreasing, Settings } from 'lucide-react';
 import { useState } from 'react';
 import type { ComponentProps, CSSProperties } from 'react';
+import { Button } from '../Button/Button';
 import { TabContent } from './tabs-content';
 import { TabList } from './tabs-list';
 import { Tabs } from './tabs-root';
 import { Tab } from './tabs-tab';
+import { IconChart3 } from '@/ds/icons/central/IconChart3';
+import { IconElectrocardiogram } from '@/ds/icons/central/IconElectrocardiogram';
+import { IconSettingsGear5 } from '@/ds/icons/central/IconSettingsGear5';
 
 const meta: Meta<typeof Tabs> = {
   title: 'Navigation/Tabs',
@@ -23,7 +26,7 @@ type TabIndicatorStyle = CSSProperties & {
 };
 
 const accentIndicatorStyle: TabIndicatorStyle = {
-  '--tab-indicator-color': 'var(--accent5)',
+  '--tab-indicator-color': 'var(--info-indicator)',
 };
 
 export const Recommended: Story = {
@@ -52,8 +55,8 @@ type ContainedStory = StoryObj<ContainedArgs>;
 
 const extraTabs = ['Deployments', 'Logs', 'Metrics', 'Scorers', 'Datasets', 'Integrations'];
 
-export const Contained: ContainedStory = {
-  args: { frame: 'stroke', moreTabs: false, closableTabs: false, attention: false },
+export const InsetFrame: ContainedStory = {
+  args: { moreTabs: false, closableTabs: false, attention: false },
   argTypes: {
     moreTabs: { name: 'More tabs', control: 'boolean' },
     closableTabs: { name: 'Closable tabs', control: 'boolean' },
@@ -62,11 +65,10 @@ export const Contained: ContainedStory = {
   parameters: {
     layout: 'fullscreen',
   },
-  render: ({ frame, moreTabs, closableTabs, attention }) => (
+  render: ({ moreTabs, closableTabs, attention }) => (
     <ContainedExample
       key={`${moreTabs}-${closableTabs}`}
       attention={attention}
-      frame={frame}
       moreTabs={moreTabs}
       closableTabs={closableTabs}
     />
@@ -74,11 +76,10 @@ export const Contained: ContainedStory = {
 };
 
 function ContainedExample({
-  frame,
   moreTabs,
   closableTabs,
   attention,
-}: Pick<ContainedArgs, 'frame' | 'moreTabs' | 'closableTabs' | 'attention'>) {
+}: Pick<ContainedArgs, 'moreTabs' | 'closableTabs' | 'attention'>) {
   const [closedTabs, setClosedTabs] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState('activity');
   const visibleTabs = ['activity', 'traces', 'settings', ...(moreTabs ? extraTabs : [])].filter(
@@ -99,25 +100,25 @@ function ContainedExample({
   return (
     <main className="min-h-screen bg-sidebar p-4 sm:p-10">
       <div className="mx-auto w-full max-w-5xl">
-        <Tabs defaultTab="activity" value={activeTab} onValueChange={setActiveTab} appearance="contained" frame={frame}>
+        <Tabs defaultTab="activity" value={activeTab} onValueChange={setActiveTab} appearance="contained" frame="inset">
           <TabList>
             {visibleTabs.includes('activity') && (
               <Tab value="activity" onClose={closeHandler('activity')}>
-                <Activity aria-hidden="true" className="size-4" />
+                <IconElectrocardiogram aria-hidden="true" className="size-4" />
                 Activity
                 <span className="rounded-full bg-surface-overlay-strong px-2 py-0.5 text-meta tabular-nums">12</span>
               </Tab>
             )}
             {visibleTabs.includes('traces') && (
               <Tab value="traces" attention={attention} onClose={closeHandler('traces')}>
-                <ChartNoAxesColumnIncreasing aria-hidden="true" className="size-4" />
+                <IconChart3 aria-hidden="true" className="size-4" />
                 Traces
                 <span className="rounded-full bg-surface-overlay-strong px-2 py-0.5 text-meta tabular-nums">248</span>
               </Tab>
             )}
             {visibleTabs.includes('settings') && (
               <Tab value="settings" onClose={closeHandler('settings')}>
-                <Settings aria-hidden="true" className="size-4" />
+                <IconSettingsGear5 aria-hidden="true" className="size-4" />
                 Settings
               </Tab>
             )}
@@ -168,11 +169,6 @@ function ContainedExample({
   );
 }
 
-export const InsetFrame: ContainedStory = {
-  ...Contained,
-  args: { frame: 'inset', moreTabs: false, closableTabs: false, attention: false },
-};
-
 export const LegacyLineFallback: Story = {
   render: () => (
     <Tabs defaultTab="tab1" className="w-100">
@@ -216,10 +212,10 @@ export const ManyTabs: Story = {
     <Tabs defaultTab="tab1" className="w-125">
       <TabList>
         <Tab value="tab1">Overview</Tab>
-        <Tab value="tab2">Usage Metrics</Tab>
-        <Tab value="tab3">Connected Tools</Tab>
-        <Tab value="tab4">Tracing Options</Tab>
-        <Tab value="tab5">Advanced Settings</Tab>
+        <Tab value="tab2">Usage metrics</Tab>
+        <Tab value="tab3">Connected tools</Tab>
+        <Tab value="tab4">Tracing options</Tab>
+        <Tab value="tab5">Advanced settings</Tab>
       </TabList>
       <TabContent value="tab1">
         <div className="p-4 text-foreground">Content 1</div>
@@ -279,6 +275,62 @@ export const PillGhostVariant: Story = {
         <div className="p-4 text-foreground">Account content</div>
       </TabContent>
     </Tabs>
+  ),
+};
+
+const BREAKDOWN_VIEWS = ['Projects', 'Agents', 'Workflows', 'Tools', 'Models', 'Threads', 'Environments'];
+
+/**
+ * `overflow="menu"`: tabs that don't fit fold into a "+N" menu after the last one that does, and
+ * the open tab always stays in the row (a metrics card's views). The default scrolls instead.
+ */
+export const OverflowMenu: Story = {
+  render: () => (
+    <div className="flex w-150 flex-col gap-6">
+      {[600, 320].map(width => (
+        <div key={width} style={{ width }}>
+          <Tabs defaultTab="Agents">
+            <TabList variant="pill" size="sm" overflow="menu">
+              {BREAKDOWN_VIEWS.map(view => (
+                <Tab key={view} value={view}>
+                  {view}
+                </Tab>
+              ))}
+            </TabList>
+            {BREAKDOWN_VIEWS.map(view => (
+              <TabContent key={view} value={view}>
+                <div className="p-4 text-foreground">Breakdown by {view.toLowerCase()}</div>
+              </TabContent>
+            ))}
+          </Tabs>
+        </div>
+      ))}
+    </div>
+  ),
+};
+
+/** `size="sm"`: the compact 24px tab with 12px labels, for card toolbars. */
+/**
+ * Tabs take the shared control rung: a `pill` track and a `pill-ghost` tab are as tall as a
+ * Button of the same size, so they line up in one toolbar row. See Foundations/Control sizes.
+ */
+export const Sizes: Story = {
+  render: () => (
+    <div className="flex flex-col gap-4">
+      {(['sm', 'md'] as const).map(size => (
+        <div key={size} className="flex items-center gap-3">
+          {(['pill', 'pill-ghost'] as const).map(variant => (
+            <Tabs key={variant} defaultTab="busiest">
+              <TabList variant={variant} size={size}>
+                <Tab value="busiest">Busiest</Tab>
+                <Tab value="time">Time spent</Tab>
+              </TabList>
+            </Tabs>
+          ))}
+          <Button size={size}>Button {size}</Button>
+        </div>
+      ))}
+    </div>
   ),
 };
 

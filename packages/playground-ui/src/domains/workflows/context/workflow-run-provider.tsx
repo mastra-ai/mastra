@@ -1,11 +1,14 @@
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import { useCreateWorkflowRun, useCancelWorkflowRun } from '@mastra/react';
+import {
+  useCreateWorkflowRun,
+  useCancelWorkflowRun,
+  useWorkflow,
+  workflowRunQueryKey,
+} from '@mastra/react/hooks/workflows';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import { useWorkflow } from '../hooks/use-workflow';
-import { workflowRunQueryKey } from '../hooks/use-workflow-runs';
 import {
   convertWorkflowRunStateToStreamResult,
   isIdleRunStatus,
@@ -24,7 +27,6 @@ import type {
   WorkflowRunContextType,
 } from './workflow-run-context';
 import { WorkflowStepDetailContext } from './workflow-step-detail-context';
-import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 
 const EMPTY_REQUEST_CONTEXT: Record<string, any> = {};
 
@@ -35,6 +37,7 @@ export function WorkflowRunProvider({
   initialRunId,
   withoutTimeTravel = false,
   requestContext = EMPTY_REQUEST_CONTEXT,
+  tracingOptions,
 }: {
   children: ReactNode;
   snapshot?: WorkflowRunState;
@@ -42,11 +45,19 @@ export function WorkflowRunProvider({
   initialRunId?: string;
   withoutTimeTravel?: boolean;
   requestContext?: Record<string, any>;
+  tracingOptions?: Record<string, any>;
 }) {
   const resetStepDetail = useContext(WorkflowStepDetailContext)?.resetStepDetail;
   const [debugMode, setDebugMode] = useState(false);
-  const { data: workflow, isLoading, error } = useWorkflow(workflowId, requestContext);
-  const { settings } = useTracingSettings();
+  const {
+    data: workflow,
+    isLoading,
+    error,
+  } = useWorkflow({
+    workflowId: workflowId,
+    requestContext: requestContext,
+    queryOptions: { enabled: Boolean(workflowId) },
+  });
   const queryClient = useQueryClient();
   const createWorkflowRun = useCreateWorkflowRun();
   const cancelWorkflowRun = useCancelWorkflowRun();
@@ -70,7 +81,7 @@ export function WorkflowRunProvider({
     resumeWorkflowStream,
     observeWorkflowStream,
     timeTravelWorkflowStream,
-  } = useStreamForRun({ runId, debugMode, tracingOptions: settings?.tracingOptions });
+  } = useStreamForRun({ runId, debugMode, tracingOptions });
 
   const liveResult = override ?? streamedResult;
   const localRunFinished = !initialRunId && isWorkflowRunFinished(liveResult?.status);

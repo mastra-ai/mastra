@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -31,6 +30,12 @@ export type LoadPluginRecordOptions = PluginPathOptions & {
 export type LoadPluginsOptions = LoadPluginRecordOptions & {
   globalRegistry?: PluginRegistry;
   projectRegistry?: PluginRegistry;
+  /**
+   * The plugins as currently loaded. A plugin that was active here and now fails
+   * to load keeps this load (see {@link LoadedPlugin.reloadError}), so a broken
+   * update leaves the working version running instead of removing the plugin.
+   */
+  previous?: LoadedPlugin[];
 };
 
 export async function loadPlugins(options: LoadPluginsOptions): Promise<LoadedPlugin[]> {
@@ -51,7 +56,14 @@ export async function loadPlugins(options: LoadPluginsOptions): Promise<LoadedPl
       continue;
     }
 
-    loaded.push(await loadPluginRecord(record, options));
+    const plugin = await loadPluginRecord(record, options);
+    const lastGood =
+      plugin.status === 'load failed'
+        ? options.previous?.find(
+            previous => previous.id === plugin.id && previous.scope === plugin.scope && previous.status === 'active',
+          )
+        : undefined;
+    loaded.push(lastGood ? { ...lastGood, reloadError: plugin.error } : plugin);
   }
 
   return markToolConflicts(loaded);
@@ -161,7 +173,9 @@ async function importPluginModule(entryPath: string): Promise<MastraCodePlugin> 
   }
 
   const url = pathToFileURL(entryPath);
-  const contentHash = createHash('sha1').update(fs.readFileSync(entryPath)).digest('hex');
+  const contentHash = Buffer.from(await globalThis.crypto.subtle.digest('SHA-1', fs.readFileSync(entryPath))).toString(
+    'hex',
+  );
   const stat = fs.statSync(entryPath, { bigint: true });
   url.searchParams.set('contentHash', contentHash);
   url.searchParams.set('mtimeNs', stat.mtimeNs.toString());

@@ -2,7 +2,9 @@ import { anthropic } from '@ai-sdk/anthropic-v5';
 import { openai } from '@ai-sdk/openai-v6';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { noopLogger } from '../../logger';
+import { runBeforeApprovalChecks } from '../../loop/workflows/agentic-execution/tool-approval-verdict';
 import { SpanType } from '../../observability';
 import type { AnySpan } from '../../observability';
 import { RequestContext } from '../../request-context';
@@ -109,6 +111,70 @@ describe('CoreToolBuilder FGA', () => {
       }),
     });
     expect(execute).toHaveBeenCalled();
+  });
+
+  it('checks tool execution FGA before running beforeApproval (#26772)', async () => {
+    const execute = vi.fn().mockResolvedValue({ result: 'ok' });
+    const beforeApproval = vi.fn().mockReturnValue({ proceed: false, output: 'order x balance 999' });
+    const testTool = createTool({
+      id: 'search',
+      description: 'Search',
+      inputSchema: z.object({ query: z.string() }),
+      requireApproval: true,
+      beforeApproval,
+      execute,
+    });
+    const user = { id: 'user-1' };
+    const requestContext = new RequestContext();
+    requestContext.set('user', user);
+    const denied = Object.assign(new Error('denied'), { name: 'FGADeniedError' });
+    const fgaProvider = {
+      require: vi.fn().mockRejectedValue(denied),
+    };
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'search',
+        agentId: 'agent-1',
+        logger: {
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any,
+        requestContext,
+        mastra: {
+          getServer: () => ({ fga: fgaProvider }),
+        } as any,
+      },
+    });
+
+    const builtTool = builder.build();
+    await expect(
+      runBeforeApprovalChecks({
+        tool: builtTool,
+        input: { query: 'docs' },
+        context: { toolCallId: 'call-1', toolName: 'search', requestContext },
+      }),
+    ).rejects.toBe(denied);
+    expect(fgaProvider.require).toHaveBeenCalledWith(user, {
+      resource: { type: 'tool', id: 'agent-1:search' },
+      permission: 'tools:execute',
+      context: expect.objectContaining({ requestContext }),
+    });
+    expect(beforeApproval).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+
+    fgaProvider.require.mockResolvedValue(undefined);
+    await expect(
+      runBeforeApprovalChecks({
+        tool: builtTool,
+        input: { query: 'docs' },
+        context: { toolCallId: 'call-2', toolName: 'search', requestContext },
+      }),
+    ).resolves.toEqual({ proceed: false, output: 'order x balance 999' });
+    expect(beforeApproval).toHaveBeenCalledTimes(1);
   });
 
   it('fails closed when FGA is configured and a tool executes without a user', async () => {
@@ -256,7 +322,13 @@ describe('MCP Tool Tracing', () => {
       }),
     );
 
-    expect(mockToolSpan.end).toHaveBeenCalledWith({ attributes: { success: true }, output: { files: ['/tmp'] } });
+    expect(mockToolSpan.end).toHaveBeenCalledWith({
+      attributes: { success: true },
+      output: { files: ['/tmp'] },
+      outcome: 'success',
+      stopReason: null,
+      stopReasonContext: null,
+    });
   });
 
   it('should use TOOL_CALL span type for tools without mcpMetadata', async () => {
@@ -953,6 +1025,212 @@ describe('CoreToolBuilder execution failures', () => {
         expect(JSON.stringify(call)).not.toContain(marker);
       }
     }
+  });
+
+  it.each(['MCP_CLIENT_TOOL_TASK_FAILED', 'MCP_CLIENT_TOOL_TASK_CANCELLED', 'MCP_CLIENT_TOOL_TASK_POLL_FAILED'])(
+    'keeps remote task failure text out of tracked exceptions (%s)',
+    async id => {
+      const secret = 'person@example.com';
+      const testTool = createTool({
+        id: 'remote_task',
+        description: 'Fails like an MCP task',
+        inputSchema: z.object({ email: z.string() }),
+        execute: async () => {
+          throw new MastraError({
+            id,
+            domain: ErrorDomain.MCP,
+            category: ErrorCategory.THIRD_PARTY,
+            text: `task task-123 failed for ${secret}`,
+          });
+        },
+      });
+      const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() };
+      const builtTool = new CoreToolBuilder({
+        originalTool: testTool,
+        options: { name: 'remote_task', logger: logger as any },
+      }).build();
+
+      const thrown = await builtTool.execute!({ email: secret }, { toolCallId: 'call-1', messages: [] }).catch(
+        (err: unknown) => err,
+      );
+
+      expect(String(thrown)).toContain(secret);
+      expect(logger.trackException).toHaveBeenCalledTimes(1);
+      const [tracked, metadata] = logger.trackException.mock.calls[0]!;
+      const trackedText = JSON.stringify({ ...tracked, message: tracked.message, metadata });
+      expect(trackedText).toContain(id);
+      expect(trackedText).not.toContain(secret);
+      expect(trackedText).not.toContain('task-123');
+    },
+  );
+});
+
+describe('CoreToolBuilder validation failure logs', () => {
+  const email = 'jane.doe@example.com';
+
+  function spyLogger() {
+    return { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() };
+  }
+
+  function expectNoLoggedValue(logger: ReturnType<typeof spyLogger>, value: string) {
+    for (const level of ['debug', 'info', 'warn', 'error', 'trackException'] as const) {
+      for (const call of logger[level].mock.calls) {
+        expect(JSON.stringify(call)).not.toContain(value);
+      }
+    }
+  }
+
+  it('logs the failing input paths without the submitted values (#29318)', async () => {
+    const logger = spyLogger();
+    const tool = createTool({
+      id: 'register_user',
+      description: 'Registers a user',
+      inputSchema: z.object({ email: z.string().email(), address: z.object({ zip: z.string() }) }),
+      execute: async () => ({ ok: true }),
+    });
+    const builtTool = new CoreToolBuilder({
+      originalTool: tool,
+      options: { name: 'register_user', logger: logger as any },
+    }).build();
+
+    const result: any = await builtTool.execute!(
+      { email: 123, address: { zip: 98101 }, note: email },
+      { toolCallId: 'call-1', messages: [] },
+    );
+
+    // The model still sees what it sent so it can correct the call.
+    expect(result.message).toContain('Provided arguments');
+    expect(result.message).toContain(email);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Tool input validation failed',
+      expect.objectContaining({ tool: 'register_user', issuePaths: ['email', 'address.zip'] }),
+    );
+    expectNoLoggedValue(logger, email);
+  });
+
+  it('masks submitted record keys in the logged input paths', async () => {
+    const logger = spyLogger();
+    const tool = createTool({
+      id: 'tag_contacts',
+      description: 'Tags contacts',
+      inputSchema: z.object({
+        contacts: z.record(z.string(), z.object({ tags: z.array(z.string()) })),
+      }),
+      execute: async () => ({ ok: true }),
+    });
+    const builtTool = new CoreToolBuilder({
+      originalTool: tool,
+      options: { name: 'tag_contacts', logger: logger as any },
+    }).build();
+
+    await builtTool.execute!({ contacts: { [email]: { tags: ['vip', 7] } } }, { toolCallId: 'call-1', messages: [] });
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Tool input validation failed',
+      expect.objectContaining({ tool: 'tag_contacts', issuePaths: ['contacts.*.tags.1'] }),
+    );
+    expectNoLoggedValue(logger, email);
+  });
+
+  it('logs the failing resume data paths without the submitted values', async () => {
+    const logger = spyLogger();
+    const tool = createTool({
+      id: 'confirm_order',
+      description: 'Confirms an order',
+      inputSchema: z.object({ orderId: z.string() }),
+      resumeSchema: z.object({ confirmed: z.boolean() }),
+      execute: async () => ({ ok: true }),
+    });
+    const builtTool = new CoreToolBuilder({
+      originalTool: tool,
+      options: { name: 'confirm_order', logger: logger as any },
+    }).build();
+
+    const result: any = await builtTool.execute!(
+      { orderId: 'o-1' },
+      { toolCallId: 'call-1', messages: [], resumeData: { confirmed: 'yes', contact: email } },
+    );
+
+    expect(result.message).toContain('Tool input validation failed');
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Tool resume data validation failed',
+      expect.objectContaining({ tool: 'confirm_order', issuePaths: ['confirmed'] }),
+    );
+    expectNoLoggedValue(logger, email);
+  });
+
+  it('logs the failing suspend data paths without the suspended values', async () => {
+    const logger = spyLogger();
+    const tool = createTool({
+      id: 'ask_approval',
+      description: 'Asks for approval',
+      inputSchema: z.object({ amount: z.number() }),
+      suspendSchema: z.object({ reason: z.string() }),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async (_input, context) => {
+        await context.agent!.suspend({ reason: 42, requester: email } as any);
+      },
+    });
+    const builtTool = new CoreToolBuilder({
+      originalTool: tool,
+      options: { name: 'ask_approval', logger: logger as any },
+    }).build();
+
+    const result: any = await builtTool.execute!({ amount: 10 }, {
+      toolCallId: 'call-1',
+      messages: [],
+      suspend: vi.fn(),
+    } as any);
+
+    expect(result.message).toContain('Tool suspension data validation failed');
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Tool suspend data validation failed',
+      expect.objectContaining({ tool: 'ask_approval', issuePaths: ['reason'] }),
+    );
+    expectNoLoggedValue(logger, email);
+  });
+
+  it('logs the failing output paths of an AI SDK tool without the returned values', async () => {
+    const logger = spyLogger();
+    const vercelTool = {
+      description: 'Looks up a user',
+      inputSchema: z.object({ id: z.string() }),
+      outputSchema: z.object({ name: z.string() }),
+      execute: async () => ({ name: 7, email }),
+    };
+    const builtTool = new CoreToolBuilder({
+      originalTool: vercelTool as any,
+      options: { name: 'lookup_user', logger: logger as any },
+    }).build();
+
+    const result: any = await builtTool.execute!({ id: 'u-1' }, { toolCallId: 'call-1', messages: [] });
+
+    expect(result.message).toContain('Tool output validation failed');
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Tool output validation failed',
+      expect.objectContaining({ tool: 'lookup_user', issuePaths: ['name'] }),
+    );
+    expectNoLoggedValue(logger, email);
+  });
+
+  it('logs the failing output paths of a Mastra tool without the returned values', async () => {
+    const logger = spyLogger();
+    const tool = createTool({
+      id: 'lookup_user',
+      description: 'Looks up a user',
+      inputSchema: z.object({ id: z.string() }),
+      outputSchema: z.object({ name: z.string() }),
+      execute: async () => ({ name: 7, email }) as any,
+    });
+
+    const result: any = await tool.execute!({ id: 'u-1' }, { mastra: { getLogger: () => logger } as any });
+
+    expect(result.message).toContain('Tool output validation failed');
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Tool output validation failed',
+      expect.objectContaining({ toolId: 'lookup_user', issuePaths: ['name'] }),
+    );
+    expectNoLoggedValue(logger, email);
   });
 });
 

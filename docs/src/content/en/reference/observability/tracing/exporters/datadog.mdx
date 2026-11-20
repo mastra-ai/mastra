@@ -33,6 +33,7 @@ interface DatadogExporterConfig extends BaseExporterConfig {
   env?: string
   agentless?: boolean
   integrationsEnabled?: boolean
+  flushGraceMs?: number
 }
 ```
 
@@ -86,6 +87,13 @@ Extends `BaseExporterConfig`, which includes:
     description: 'Enable dd-trace automatic integrations. Default: false.',
     required: false,
   },
+  {
+    name: 'flushGraceMs',
+    type: 'number',
+    description:
+      'How long flush() waits, in milliseconds, after handing data to dd-trace. dd-trace sends LLM Observability data in the background and gives no way to await the request, so the wait keeps a process that exits right after flush() from cutting it off. Only waits when something was sent since the last flush. Set to 0 to disable. Default: 2000.',
+    required: false,
+  },
 ]}
 />
 
@@ -107,6 +115,8 @@ async flush(): Promise<void>
 
 Force flushes any buffered spans to Datadog without shutting down the exporter. Useful in serverless environments where you need to ensure spans are exported before the runtime terminates.
 
+The flush is best-effort: dd-trace sends LLM Observability data from a background writer and gives no way to await the request, so `flush()` waits `flushGraceMs` (default 2000 ms) after asking dd-trace to flush. Each flush that sent new data costs that full wait, so a serverless handler that awaits `flush()` per request pays it per request. Raise it if spans from short-lived processes are missing in Datadog, or set it to `0` to skip the wait when something else keeps the process alive.
+
 ### shutdown
 
 ```typescript oxfmt:false
@@ -117,7 +127,7 @@ Flushes pending data and shuts down the exporter. Cancels any pending cleanup ti
 
 ## Usage
 
-### Zero-Config (using environment variables)
+### Zero-config (using environment variables)
 
 ```typescript
 import { DatadogExporter } from '@mastra/datadog'
@@ -126,7 +136,7 @@ import { DatadogExporter } from '@mastra/datadog'
 const exporter = new DatadogExporter()
 ```
 
-### Explicit Configuration
+### Explicit configuration
 
 ```typescript
 import { DatadogExporter } from '@mastra/datadog'
@@ -139,7 +149,7 @@ const exporter = new DatadogExporter({
 })
 ```
 
-### With Local Datadog Agent
+### With local Datadog agent
 
 ```typescript
 const exporter = new DatadogExporter({

@@ -2,7 +2,9 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import type { RequestContext } from '@mastra/core/request-context';
 
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext } from '../auth.js';
+import { REVIEW_CONTEXT } from '../boards/define-board.js';
 import type {
+  Card,
   FactoryRunBindingAddress,
   FactoryRunBindingRecord,
   FactoryRunBindingSessionAddress,
@@ -21,7 +23,9 @@ type FactorySessionControllerContext = AgentControllerRequestContext<FactorySess
 
 /** Minimal source-control session lookup used to heal recovered session state. */
 export interface FactorySessionSourceLookup {
-  getBySessionId(sessionId: string): Promise<{ orgId: string; projectRepositoryId: string; baseBranch: string } | null>;
+  getBySessionId(
+    sessionId: string,
+  ): Promise<{ orgId: string; projectRepositoryId: string | null; baseBranch: string } | null>;
 }
 
 export function getFactorySessionCoordinates(
@@ -30,12 +34,12 @@ export function getFactorySessionCoordinates(
   if (!requestContext || typeof requestContext.get !== 'function') return null;
   const context = requestContext.get('controller') as FactorySessionControllerContext | undefined;
   const factoryProjectId = context?.getState().factoryProjectId;
-  if (!context?.threadId || !context.resourceId || !factoryProjectId) return null;
+  if (!context?.threadId || !context.resourceId || !context.sessionId || !factoryProjectId) return null;
   return {
     factoryProjectId,
     threadId: context.threadId,
     resourceId: context.resourceId,
-    sessionId: context.resourceId,
+    sessionId: context.sessionId,
   };
 }
 
@@ -46,6 +50,52 @@ export function getFactorySessionAddress(requestContext: RequestContext | undefi
   const orgId = getFactoryAuthOrgId(user);
   if (!orgId) return null;
   return { orgId, ...coordinates };
+}
+
+/**
+ * Read the session's factory scoping off controller state: the project whose
+ * shared settings row applies to its runs, plus the org rung that row is keyed
+ * by (`factoryOrgId` is seeded at session start and is authoritative for
+ * downstream identity reads — the owner id is a user, never an org).
+ */
+export function readFactorySessionScope(
+  requestContext: RequestContext | undefined,
+): { factoryProjectId: string; factoryOrgId?: string } | null {
+  if (!requestContext || typeof requestContext.get !== 'function') return null;
+  const context = requestContext.get('controller') as FactorySessionControllerContext | undefined;
+  const state = context?.getState();
+  const factoryProjectId = state?.factoryProjectId;
+  if (typeof factoryProjectId !== 'string' || factoryProjectId.length === 0) return null;
+  const factoryOrgId = state?.factoryOrgId;
+  return {
+    factoryProjectId,
+    ...(typeof factoryOrgId === 'string' && factoryOrgId.length > 0 ? { factoryOrgId } : {}),
+  };
+}
+
+/**
+ * Read the active run binding for this session when controller state has lost
+ * `factoryProjectId` — a crash-recovered session ("Continue") is recreated with
+ * empty state, so the binding table is the only remaining source of the project
+ * whose shared settings row applies to the run. Read-only, unlike
+ * `resolveFactorySessionAddress`: it neither heals state nor touches source
+ * control, so input processors can call it before any tool has run.
+ */
+export async function findSessionRunBinding(
+  requestContext: RequestContext | undefined,
+  storage: Pick<WorkItemsStorage, 'findActiveRunBindingByThread'>,
+): Promise<FactoryRunBindingRecord | null> {
+  if (!requestContext || typeof requestContext.get !== 'function') return null;
+  const context = requestContext.get('controller') as FactorySessionControllerContext | undefined;
+  if (!context?.threadId || !context.resourceId || !context.sessionId) return null;
+  const orgId = getFactoryAuthOrgId(getFactoryAuthUserFromContext(requestContext));
+  if (!orgId) return null;
+  return storage.findActiveRunBindingByThread({
+    orgId,
+    threadId: context.threadId,
+    resourceId: context.resourceId,
+    sessionId: context.sessionId,
+  });
 }
 
 export interface FactorySessionAddressResolution {
@@ -82,7 +132,7 @@ export async function resolveFactorySessionAddress(options: {
   const requestContext = options.requestContext;
   if (!requestContext || typeof requestContext.get !== 'function') return null;
   const context = requestContext.get('controller') as FactorySessionControllerContext | undefined;
-  if (!context?.threadId || !context.resourceId) return null;
+  if (!context?.threadId || !context.resourceId || !context.sessionId) return null;
   const user = getFactoryAuthUserFromContext(requestContext);
   const orgId = getFactoryAuthOrgId(user);
   if (!orgId) return null;
@@ -91,7 +141,7 @@ export async function resolveFactorySessionAddress(options: {
     orgId,
     threadId: context.threadId,
     resourceId: context.resourceId,
-    sessionId: context.resourceId,
+    sessionId: context.sessionId,
   });
   if (!binding) return null;
 
@@ -103,10 +153,23 @@ export async function resolveFactorySessionAddress(options: {
       factoryProjectId: binding.factoryProjectId,
       threadId: context.threadId,
       resourceId: context.resourceId,
-      sessionId: context.resourceId,
+      sessionId: context.sessionId,
     },
     binding,
   };
+}
+
+// A review role decides from the row alone, so no failed work item lookup can lose the verdict.
+function isUntrustedRun(binding: FactoryRunBindingRecord, item?: Card | null): boolean {
+  return binding.role === REVIEW_CONTEXT || item?.externalSource?.type === 'pull-request';
+}
+
+function trustedBaseRef(sourceSession: { baseBranch: string } | null, item: Card | null | undefined) {
+  const metadataBaseBranch = item?.workItem.metadata?.baseBranch;
+  return (
+    sourceSession?.baseBranch ||
+    (typeof metadataBaseBranch === 'string' && metadataBaseBranch ? metadataBaseBranch : undefined)
+  );
 }
 
 async function healRecoveredSessionState(options: {
@@ -119,29 +182,17 @@ async function healRecoveredSessionState(options: {
   // `factoryOrgId` mirrors the start coordinator's seed: the binding row holds
   // the authoritative org id, so crash-recovered sessions heal it for free.
   const updates: FactorySessionState = { factoryProjectId: binding.factoryProjectId, factoryOrgId: binding.orgId };
-  // Security posture first, from the binding row alone (no I/O): review-bound
-  // sessions run against attacker-writable checkouts, so `untrustedCheckout`
-  // must survive even if the enrichment lookups below fail transiently.
-  if (binding.role === 'review') {
-    updates.untrustedCheckout = true;
-  }
-  // Best-effort enrichment mirroring the start coordinator's original seed:
-  // PR-sourced work items are untrusted regardless of role, and `baseRef`
-  // restores the trusted instruction source for untrusted checkouts.
+  if (isUntrustedRun(binding)) updates.untrustedCheckout = true;
   try {
     const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
     const foundSession = (await options.sessions?.getBySessionId(binding.sessionId)) ?? null;
     const sourceSession = foundSession?.orgId === binding.orgId ? foundSession : null;
-    if (sourceSession) {
+    if (sourceSession?.projectRepositoryId) {
       updates.projectRepositoryId = sourceSession.projectRepositoryId;
     }
-    const untrusted = updates.untrustedCheckout === true || item?.externalSource?.type === 'pull-request';
-    if (untrusted) {
+    if (isUntrustedRun(binding, item)) {
       updates.untrustedCheckout = true;
-      const metadataBaseBranch = item?.metadata?.baseBranch;
-      const baseRef =
-        sourceSession?.baseBranch ||
-        (typeof metadataBaseBranch === 'string' && metadataBaseBranch ? metadataBaseBranch : undefined);
+      const baseRef = trustedBaseRef(sourceSession, item);
       if (baseRef) updates.baseRef = baseRef;
     } else {
       // Record the trusted verdict explicitly so a healed session carries every
@@ -158,4 +209,58 @@ async function healRecoveredSessionState(options: {
   } catch {
     // State healing must never block tool registration on the recovered address.
   }
+}
+
+export async function restorePromptCheckoutTrust(options: {
+  requestContext: RequestContext;
+  storage: Pick<WorkItemsStorage, 'findActiveRunBindingByThread' | 'listRunBindingsForSession' | 'get'>;
+  sessions?: FactorySessionSourceLookup;
+}): Promise<void> {
+  const context = options.requestContext.get('controller') as FactorySessionControllerContext | undefined;
+  if (!context?.threadId || !context.sessionId) return;
+  const current = context.getState();
+  if (current.factoryProjectId && current.factoryOrgId && typeof current.untrustedCheckout === 'boolean') return;
+  const binding = (await resolveFactorySessionAddress({ ...options, forceBindingLookup: true }))?.binding;
+  // History is read even with an active binding: an earlier pull request run, or a card that
+  // can no longer be read, keeps the checkout untrusted whatever the active role is.
+  const untrusted =
+    (binding !== undefined && isUntrustedRun(binding)) || (await restoreHistoricalCheckoutPosture(context, options));
+  const state = context.getState();
+  if ((binding && state.factoryProjectId !== binding.factoryProjectId) || (untrusted && !state.untrustedCheckout)) {
+    throw new Error('Factory review session security state could not be restored before prompt creation.');
+  }
+}
+
+// Keyed by session, not thread or resource: the checkout outlives both. Never restores authority.
+async function restoreHistoricalCheckoutPosture(
+  context: FactorySessionControllerContext,
+  options: {
+    requestContext: RequestContext;
+    storage: Pick<WorkItemsStorage, 'listRunBindingsForSession' | 'get'>;
+    sessions?: FactorySessionSourceLookup;
+  },
+): Promise<boolean> {
+  const orgId = getFactoryAuthOrgId(getFactoryAuthUserFromContext(options.requestContext));
+  if (!orgId) return false;
+  const bindings = await options.storage.listRunBindingsForSession({ orgId, sessionId: context.sessionId });
+  if (bindings.length === 0) return false;
+  const workItemIds = [...new Set(bindings.map(binding => binding.workItemId))];
+  const items = new Map(
+    await Promise.all(
+      workItemIds.map(async id => [id, await options.storage.get({ orgId, id }).catch(() => undefined)] as const),
+    ),
+  );
+  const unverifiable =
+    new Set(bindings.map(binding => binding.factoryProjectId)).size > 1 ||
+    bindings.some(binding => !isUntrustedRun(binding) && !items.get(binding.workItemId));
+  if (unverifiable) {
+    await context.setState({ untrustedCheckout: true });
+    return true;
+  }
+  const latest = bindings.findLast(binding => isUntrustedRun(binding, items.get(binding.workItemId)));
+  if (!latest) return false;
+  const foundSession = await options.sessions?.getBySessionId(context.sessionId).catch(() => null);
+  const baseRef = trustedBaseRef(foundSession?.orgId === orgId ? foundSession : null, items.get(latest.workItemId));
+  await context.setState({ untrustedCheckout: true, ...(baseRef ? { baseRef } : {}) });
+  return true;
 }

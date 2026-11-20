@@ -24,6 +24,14 @@ export const RETRY_CONFIG = {
   maxDelayMs: 120_000,
   /** Random jitter as a fraction of the computed delay (e.g. 0.2 = ±20%). */
   jitter: 0.2,
+  /**
+   * How long one observer, reflector, or extraction model call may go without streaming any
+   * output before it is aborted and retried. Without it a provider that accepts the request but
+   * never answers stalls the call forever, and the retry schedule above never gets a chance to run.
+   * It measures inactivity, not total duration, so a long reply that keeps streaming is never cut
+   * off. It is generous because reasoning models can think silently before their first token.
+   */
+  modelCallIdleTimeoutMs: 300_000,
 };
 
 const TRANSIENT_MESSAGE_SUBSTRINGS = [
@@ -39,7 +47,76 @@ const TRANSIENT_MESSAGE_SUBSTRINGS = [
   'request timeout',
   'connection reset',
   'connection closed',
+  // Core raises this when a stream closes with finishReason 'other' before any output.
+  'finished with finishreason "other"',
 ];
+
+const INCOMPLETE_FINISH_REASONS = new Set(['other', 'unknown']);
+
+/**
+ * A model call that streamed nothing for `RETRY_CONFIG.modelCallIdleTimeoutMs`. Retryable, and
+ * deliberately not an AbortError so `withRetry` doesn't treat it as cancellation.
+ *
+ * @internal
+ */
+export class OmModelCallTimeoutError extends Error {
+  readonly isRetryable = true;
+
+  constructor(label: string, idleTimeoutMs: number) {
+    super(`${label} call produced no output for ${idleTimeoutMs}ms`);
+    this.name = 'OmModelCallTimeoutError';
+  }
+}
+
+/**
+ * A model reply that ended before the model finished. Carries the AI SDK's
+ * `isRetryable` flag, which `isTransientLLMError` and core's error processors
+ * already recognize.
+ *
+ * @internal
+ */
+export class OmIncompleteResponseError extends Error {
+  readonly isRetryable = true;
+
+  constructor(
+    label: string,
+    readonly finishReason: string,
+  ) {
+    super(`${label} response ended early (finishReason: ${finishReason})`);
+    this.name = 'OmIncompleteResponseError';
+  }
+}
+
+/**
+ * A model reply that finished but carries nothing usable: no text, only whitespace,
+ * or text with no recognised Observer sections (e.g. a refusal).
+ * Retryable, so an empty reply is retried like a transport error.
+ *
+ * @internal
+ */
+export class OmEmptyResponseError extends Error {
+  readonly isRetryable = true;
+
+  constructor(label: string, what = 'empty output') {
+    super(`${label} returned ${what}`);
+    this.name = 'OmEmptyResponseError';
+  }
+}
+
+/**
+ * OM calls are single-step (`maxSteps: 1`). A step that ends with `other` or
+ * `unknown` means the stream closed before the model finished, so its text is
+ * partial. Throw a retryable error so `withRetry` re-runs the whole call
+ * instead of saving it.
+ *
+ * @internal
+ */
+export function assertCompleteModelResponse<T extends { finishReason?: string }>(output: T, label: string): T {
+  if (output.finishReason && INCOMPLETE_FINISH_REASONS.has(output.finishReason)) {
+    throw new OmIncompleteResponseError(label, output.finishReason);
+  }
+  return output;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -82,6 +159,29 @@ function hasIsRetryableFlag(value: unknown): boolean {
 }
 
 /**
+ * Returns true when a user-initiated cancellation appears anywhere in the
+ * error's `cause`/`error` wrapper chain, so a wrapped abort can never be
+ * mistaken for a retryable or survivable provider failure.
+ *
+ * @internal
+ */
+export function hasAbortInChain(error: unknown): boolean {
+  const seen = new Set<object>();
+
+  function visit(candidate: unknown): boolean {
+    if (isAbortError(candidate)) return true;
+    if (!isRecord(candidate)) return false;
+    if (seen.has(candidate)) return false;
+    seen.add(candidate);
+    // Both wrapper shapes are traversed: some libraries nest under `cause`,
+    // others under `error`, and an error can carry both.
+    return visit(candidate.cause) || visit(candidate.error);
+  }
+
+  return visit(error);
+}
+
+/**
  * Returns true when the given error looks like a transient transport-class
  * failure that's worth retrying — undici `terminated`, `fetch failed`,
  * `UND_ERR_*` codes, AI SDK `APICallError` with `isRetryable: true`, and
@@ -93,7 +193,7 @@ function hasIsRetryableFlag(value: unknown): boolean {
  * @internal
  */
 export function isTransientLLMError(error: unknown): boolean {
-  if (isAbortError(error)) return false;
+  if (hasAbortInChain(error)) return false;
 
   const visited = new WeakSet<object>();
 
@@ -163,6 +263,65 @@ export interface WithRetryOptions {
   label: string;
   /** Optional abort signal — cancels both in-flight attempts and backoff waits. */
   abortSignal?: AbortSignal;
+  /** Internal retry override. Omit to use the shared retry schedule. */
+  maxRetries?: number;
+  /**
+   * Abort and retry an attempt that reports no activity for this long. The attempt
+   * reports activity by calling the `onActivity` callback it receives, typically on
+   * every streamed chunk. Only for model calls: a timed-out storage write may still
+   * land, so retrying it is unsafe.
+   */
+  idleTimeoutMs?: number;
+}
+
+/** Called by an attempt whenever it makes progress, resetting the idle timer. */
+export type OnAttemptActivity = () => void;
+
+/**
+ * Run one attempt, failing with a retryable `OmModelCallTimeoutError` if it
+ * goes `idleTimeoutMs` without calling `onActivity`. `fn` gets a signal that
+ * aborts on timeout or on the caller's signal, so the underlying request is
+ * cancelled too.
+ */
+async function attemptWithIdleTimeout<T>(
+  fn: (signal: AbortSignal, onActivity: OnAttemptActivity) => Promise<T>,
+  label: string,
+  idleTimeoutMs: number,
+  abortSignal?: AbortSignal,
+): Promise<T> {
+  const controller = new AbortController();
+  let rejectOnAbort!: (reason: unknown) => void;
+  const callerAborted = new Promise<never>((_, reject) => {
+    rejectOnAbort = reject;
+  });
+  const onAbort = () => {
+    controller.abort(abortSignal?.reason);
+    rejectOnAbort(abortSignal?.reason ?? new Error('The operation was aborted.'));
+  };
+  abortSignal?.addEventListener('abort', onAbort, { once: true });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let rejectOnIdle!: (reason: unknown) => void;
+  const idle = new Promise<never>((_, reject) => {
+    rejectOnIdle = reject;
+  });
+  const armIdleTimer = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      const error = new OmModelCallTimeoutError(label, idleTimeoutMs);
+      rejectOnIdle(error);
+      controller.abort(error);
+    }, idleTimeoutMs);
+  };
+  const onActivity = () => {
+    if (!controller.signal.aborted) armIdleTimer();
+  };
+  armIdleTimer();
+  try {
+    return await Promise.race([fn(controller.signal, onActivity), idle, callerAborted]);
+  } finally {
+    clearTimeout(timer);
+    abortSignal?.removeEventListener('abort', onAbort);
+  }
 }
 
 /**
@@ -173,8 +332,11 @@ export interface WithRetryOptions {
  *
  * @internal
  */
-export async function withRetry<T>(fn: () => Promise<T>, opts: WithRetryOptions): Promise<T> {
-  const { label, abortSignal } = opts;
+export async function withRetry<T>(
+  fn: (signal: AbortSignal, onActivity: OnAttemptActivity) => Promise<T>,
+  opts: WithRetryOptions,
+): Promise<T> {
+  const { label, abortSignal, maxRetries = RETRY_CONFIG.maxRetries, idleTimeoutMs } = opts;
   let attempt = 0;
   // total tries = maxRetries + 1 (the initial attempt isn't a "retry")
   while (true) {
@@ -182,10 +344,12 @@ export async function withRetry<T>(fn: () => Promise<T>, opts: WithRetryOptions)
       throw new Error('The operation was aborted.');
     }
     try {
-      return await fn();
+      if (idleTimeoutMs === undefined) return await fn(abortSignal ?? new AbortController().signal, () => {});
+      return await attemptWithIdleTimeout(fn, label, idleTimeoutMs, abortSignal);
     } catch (error) {
-      if (isAbortError(error) || abortSignal?.aborted) throw error;
-      if (attempt >= RETRY_CONFIG.maxRetries || !isTransientLLMError(error)) {
+      if (abortSignal?.aborted) throw error;
+      if (!(error instanceof OmModelCallTimeoutError) && hasAbortInChain(error)) throw error;
+      if (attempt >= maxRetries || !isTransientLLMError(error)) {
         if (attempt > 0) {
           omDebug(
             `[OM:retry:${label}] giving up after ${attempt} retry/retries: ${

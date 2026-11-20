@@ -53,6 +53,8 @@ export interface FakeBridge {
    * fresh container on next use.
    */
   sleep: () => void;
+  /** When true, `POST /mount` fails with a 500 (the request is still recorded). */
+  failMounts?: boolean;
   /** Overrides the default `echo`-only behaviour. */
   onExec?: (request: FakeExecRequest) => FakeExecResult;
 }
@@ -174,6 +176,9 @@ export function createFakeBridge(options: { apiToken?: string; baseUrl?: string 
       if (method === 'POST' && mount) {
         const body = JSON.parse(bodyText ?? '{}') as { mountPath?: string };
         bridge.mounts.push(body);
+        if (bridge.failMounts) {
+          return Response.json({ error: 's3fs failed', code: 'mount_failed' }, { status: 500 });
+        }
         if (body.mountPath) bridge.activeMounts.add(body.mountPath);
         return Response.json({ ok: true });
       }

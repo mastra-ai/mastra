@@ -1,26 +1,24 @@
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
-import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
+import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import {
-  ArrowLeft,
-  BookOpen,
-  Bot,
-  Brain,
-  Building2,
-  Cable,
-  CircleUserRound,
-  GitBranch,
-  Inbox,
-  Palette,
-  Search,
-  SlidersHorizontal,
-} from 'lucide-react';
+import { Cable } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 import { useCloseSettings } from '../hooks/useCloseSettings';
 import { useSettingsSection } from '../hooks/useSettingsSection';
-import { SETTINGS_SECTION_LABELS, settingsSectionPath, type SettingsSection } from '../settingsSections';
+import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../settingsSections';
+import type { SettingsSection } from '../settingsSections';
+import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
+import { IconBrain } from '@mastra/playground-ui/icons/central/IconBrain';
+import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
+import { IconBug } from '@mastra/playground-ui/icons/central/IconBug';
+import { IconBuildings } from '@mastra/playground-ui/icons/central/IconBuildings';
+import { IconInboxEmpty } from '@mastra/playground-ui/icons/central/IconInboxEmpty';
+import { IconMaintenance } from '@mastra/playground-ui/icons/central/IconMaintenance';
+import { IconRobot } from '@mastra/playground-ui/icons/central/IconRobot';
+import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
+import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
 
 type SettingsNavItem = {
   id: SettingsSection;
@@ -31,26 +29,27 @@ type SettingsNavItem = {
 
 type SettingsNavGroup = {
   id: string;
-  label?: string;
-  ariaLabel?: string;
+  label: string;
   items: SettingsNavItem[];
 };
 
 const SETTINGS_GROUPS: SettingsNavGroup[] = [
   {
-    id: 'preferences',
+    id: 'account',
+    label: 'Account',
     items: [
       {
         id: 'account',
         label: SETTINGS_SECTION_LABELS.account,
-        icon: CircleUserRound,
-        searchText: 'my account profile identity email authentication session log out sign out user',
+        icon: IconUser,
+        searchText:
+          'my account profile identity email authentication preferences general theme appearance color scheme completion sound session log out sign out user',
       },
       {
-        id: 'preferences',
-        label: SETTINGS_SECTION_LABELS.preferences,
-        icon: Palette,
-        searchText: 'preferences general theme appearance color scheme completion sound',
+        id: 'connections',
+        label: SETTINGS_SECTION_LABELS.connections,
+        icon: Cable,
+        searchText: 'personal organization connections connected accounts slack integrations github gitlab tokens pat',
       },
     ],
   },
@@ -61,63 +60,60 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
       {
         id: 'models',
         label: SETTINGS_SECTION_LABELS.models,
-        icon: Bot,
+        icon: IconRobot,
         searchText:
-          'models thinking level factory default model packs api keys providers credentials sign in oauth custom endpoints',
+          'models default model your models factory models routing personal factory defaults hybrid thinking level api keys providers credentials sign in oauth custom endpoints',
       },
       {
         id: 'memory',
         label: SETTINGS_SECTION_LABELS.memory,
-        icon: Brain,
-        searchText: 'memory observational recall observer reflector thresholds attachments summarize context',
+        icon: IconBrain,
+        searchText:
+          'memory personal memory factory memory your memory shared memory observational recall observer reflector thresholds attachments summarize context',
       },
       {
-        id: 'skills',
-        label: SETTINGS_SECTION_LABELS.skills,
-        icon: BookOpen,
-        searchText: 'skills factory triage plan review agent instructions prompts stages',
+        id: 'tools',
+        label: SETTINGS_SECTION_LABELS.tools,
+        icon: IconMaintenance,
+        searchText: 'tools mastra connect connections integrations sessions platform project approval',
       },
       {
         id: 'behavior',
         label: SETTINGS_SECTION_LABELS.behavior,
-        icon: SlidersHorizontal,
+        icon: IconSettingsSliderHor,
         searchText: 'behavior auto approve tools smart editing notifications permissions read edit execute mcp',
       },
     ],
   },
   {
-    id: 'sources',
-    label: 'Sources',
+    id: 'factory',
+    label: 'Factory',
     items: [
       {
         id: 'repositories',
         label: SETTINGS_SECTION_LABELS.repositories,
-        icon: GitBranch,
-        searchText: 'repositories source control git branches remotes code worktrees sandbox setup github',
+        icon: IconBranch,
+        searchText:
+          'repositories source control git branches remotes code worktrees clone order pre-clone setup teardown github gitlab',
       },
       {
         id: 'intake',
         label: SETTINGS_SECTION_LABELS.intake,
-        icon: Inbox,
-        searchText: 'work intake sources tasks issues pull requests github linear feed sync',
+        icon: IconInboxEmpty,
+        searchText: 'work intake sources accounts workspaces connect github gitlab linear jira incident vanta',
       },
-      {
-        id: 'connections',
-        label: SETTINGS_SECTION_LABELS.connections,
-        icon: Cable,
-        searchText: 'connections connected accounts slack communication integrations',
-      },
-    ],
-  },
-  {
-    id: 'factory',
-    ariaLabel: SETTINGS_SECTION_LABELS.factory,
-    items: [
       {
         id: 'factory',
         label: SETTINGS_SECTION_LABELS.factory,
-        icon: Building2,
-        searchText: 'factory project organization manage remove delete danger',
+        icon: IconBuildings,
+        searchText:
+          'factory project organization manage environment sandbox resources cpu memory workdir workspace setup builds templates triggers remove delete danger',
+      },
+      {
+        id: 'debug',
+        label: SETTINGS_SECTION_LABELS.debug,
+        icon: IconBug,
+        searchText: 'debug versions packages release build node mastra core factory installed running',
       },
     ],
   },
@@ -128,7 +124,7 @@ export function SettingsNavigation() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const location = useLocation();
   const closeSettings = useCloseSettings();
-  const { state } = useMainSidebar();
+  const { state } = useSidebar();
   const [query, setQuery] = useState('');
   const normalizedQuery = query.trim().toLowerCase();
   const filteredGroups = SETTINGS_GROUPS.map(group => ({
@@ -140,45 +136,30 @@ export function SettingsNavigation() {
 
   return (
     <>
-      <MainSidebar.NavList>
-        <MainSidebar.NavLink asChild link={{ name: 'Back to app', url: '#', icon: <ArrowLeft /> }}>
+      <Sidebar.NavList>
+        <Sidebar.NavLink asChild link={{ name: 'Back to app', url: '#', icon: <IconArrowLeft /> }}>
           <button type="button" aria-label="Back to app" onClick={closeSettings}>
-            <ArrowLeft aria-hidden="true" />
-            <MainSidebar.NavLabel>Back to app</MainSidebar.NavLabel>
+            <IconArrowLeft aria-hidden="true" />
+            <Sidebar.NavLabel>Back to app</Sidebar.NavLabel>
           </button>
-        </MainSidebar.NavLink>
-      </MainSidebar.NavList>
+        </Sidebar.NavLink>
+      </Sidebar.NavList>
       {state === 'default' && (
         <div className="py-2">
-          <InputGroup>
-            <InputGroupAddon>
-              <Search aria-hidden="true" />
-            </InputGroupAddon>
-            <InputGroupInput
-              type="search"
-              aria-label="Search settings"
-              placeholder="Search settings…"
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-            />
-          </InputGroup>
+          <SearchInput label="Search settings" placeholder="Search settings" value={query} onValueChange={setQuery} />
         </div>
       )}
       {filteredGroups.length > 0 ? (
         filteredGroups.map(group => {
-          const headerId = group.label ? `settings-${group.id}` : undefined;
+          const headerId = `settings-${group.id}`;
           return (
-            <MainSidebar.NavSection
-              key={group.id}
-              aria-labelledby={headerId}
-              aria-label={headerId ? undefined : (group.ariaLabel ?? group.id)}
-            >
-              {group.label && <MainSidebar.NavHeader id={headerId}>{group.label}</MainSidebar.NavHeader>}
-              <MainSidebar.NavList>
+            <Sidebar.NavSection key={group.id} aria-labelledby={headerId}>
+              <Sidebar.NavHeader id={headerId}>{group.label}</Sidebar.NavHeader>
+              <Sidebar.NavList>
                 {group.items.map(({ id, label, icon: Icon }) => {
                   const isActive = section === id;
                   return (
-                    <MainSidebar.NavLink
+                    <Sidebar.NavLink
                       key={id}
                       asChild
                       isActive={isActive}
@@ -191,13 +172,13 @@ export function SettingsNavigation() {
                         aria-current={isActive ? 'page' : undefined}
                       >
                         <Icon aria-hidden="true" />
-                        <MainSidebar.NavLabel>{label}</MainSidebar.NavLabel>
+                        <Sidebar.NavLabel>{label}</Sidebar.NavLabel>
                       </Link>
-                    </MainSidebar.NavLink>
+                    </Sidebar.NavLink>
                   );
                 })}
-              </MainSidebar.NavList>
-            </MainSidebar.NavSection>
+              </Sidebar.NavList>
+            </Sidebar.NavSection>
           );
         })
       ) : (

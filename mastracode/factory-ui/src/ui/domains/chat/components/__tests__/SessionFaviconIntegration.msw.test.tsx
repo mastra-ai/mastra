@@ -1,4 +1,4 @@
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -24,7 +24,7 @@ function renderThread() {
         <Route
           path="/factories/:factoryId/user/threads/:threadId"
           element={
-            <MainSidebarProvider storageKey="favicon-integration-test">
+            <SidebarProvider storageKey="favicon-integration-test">
               <ChatSessionTestProvider threadId={SESSION_ID} userScoped deferUntilMessagesReady={false}>
                 <OverlaysProvider>
                   <ChatMessageBoundary>
@@ -32,7 +32,7 @@ function renderThread() {
                   </ChatMessageBoundary>
                 </OverlaysProvider>
               </ChatSessionTestProvider>
-            </MainSidebarProvider>
+            </SidebarProvider>
           }
         />
       </Routes>
@@ -45,12 +45,12 @@ beforeEach(() => {
 });
 
 describe('Session favicon tracks the session lifecycle', () => {
-  describe('when the session prepare stepper is showing', () => {
+  describe('while the thread history is loading', () => {
     it('shows the purple initializing indicator', async () => {
       const session = stubPreparingSession();
       const { client } = renderThread();
 
-      await waitFor(() => expect(screen.getByTestId('session-prepare-steps')).toBeInTheDocument());
+      expect(await screen.findByRole('status', { name: 'Loading messages' })).toBeInTheDocument();
       expect(faviconHref()).toBe('/favicon-session-initializing.svg');
 
       session.finishWorkspace();
@@ -67,7 +67,7 @@ describe('Session favicon tracks the session lifecycle', () => {
       await waitForMutationsIdle(client);
       await waitFor(() => expect(screen.getByTestId('thread-body')).toBeInTheDocument());
 
-      expect(screen.queryByTestId('session-prepare-steps')).not.toBeInTheDocument();
+      expect(screen.queryByRole('status', { name: 'Loading messages' })).not.toBeInTheDocument();
       await waitFor(() => expect(faviconHref()).toBe('/favicon-session-awaiting.svg'));
     });
   });

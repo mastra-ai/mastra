@@ -1,27 +1,33 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Check, AlertCircle, FileText, Image as ImageIcon, Info as InfoIcon, TriangleAlert, Tag } from 'lucide-react';
 import { Badge } from './Badge';
 import type { BadgeProps } from './Badge';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { IconCircleInfo } from '@/ds/icons/central/IconCircleInfo';
+import { IconExclamationCircle } from '@/ds/icons/central/IconExclamationCircle';
+import { IconExclamationTriangle } from '@/ds/icons/central/IconExclamationTriangle';
+import { IconFileText } from '@/ds/icons/central/IconFileText';
+import { IconImages1 } from '@/ds/icons/central/IconImages1';
+import { IconTag } from '@/ds/icons/central/IconTag';
 import { cn } from '@/lib/utils';
 
-const meta: Meta<typeof Badge> = {
+const meta = {
   title: 'Elements/Badge',
   component: Badge,
   parameters: {
     layout: 'centered',
   },
-};
+} satisfies Meta<typeof Badge>;
 
 export default meta;
-type Story = StoryObj<typeof Badge>;
+type Story = StoryObj<typeof meta>;
 type ComparisonBadge = BadgeProps & { children: string };
 
 const comparisonTones = [
   { variant: 'neutral', children: 'Draft' },
-  { variant: 'green', children: 'Published' },
-  { variant: 'red', children: 'Failed' },
-  { variant: 'blue', children: 'Email' },
-  { variant: 'yellow', children: 'Pending' },
+  { variant: 'success', children: 'Published' },
+  { variant: 'destructive', children: 'Failed' },
+  { variant: 'info', children: 'Email' },
+  { variant: 'warning', children: 'Pending' },
   { variant: 'purple', children: 'Template' },
   { variant: 'orange', children: 'Component' },
   { variant: 'cyan', children: 'Workflow' },
@@ -38,17 +44,17 @@ const comparisonGroups = [
     label: 'With icons',
     surfaceClassName: '',
     badges: [
-      { variant: 'yellow', children: 'Health & wellness', icon: <Tag /> },
-      { children: 'SKILL.md, +1', icon: <FileText /> },
-      { variant: 'orange', children: 'Image lab', icon: <ImageIcon /> },
+      { variant: 'warning', children: 'Health & wellness', icon: <IconTag /> },
+      { children: 'SKILL.md, +1', icon: <IconFileText /> },
+      { variant: 'orange', children: 'Image lab', icon: <IconImages1 /> },
     ],
   },
   {
     label: 'On a raised surface',
     surfaceClassName: 'bg-card rounded-md p-4',
     badges: [
-      { variant: 'green', children: 'Connected', indicator: 'dot' },
-      { variant: 'blue', children: 'Running', indicator: 'dot' },
+      { variant: 'success', children: 'Connected', indicator: 'dot' },
+      { variant: 'info', children: 'Running', indicator: 'dot' },
       { children: 'Draft' },
     ],
   },
@@ -69,7 +75,7 @@ export const StyleComparison: Story = {
           <h2 className="text-subheading text-foreground">{group.label}</h2>
           <div className={cn('flex flex-wrap items-center gap-2', group.surfaceClassName)}>
             {group.badges.map(badge => (
-              <Badge key={badge.children} {...badge} emphasis="muted" />
+              <Badge key={badge.children} {...badge} emphasis="subtle" />
             ))}
           </div>
         </section>
@@ -83,32 +89,32 @@ export const Matrix: Story = {
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant="neutral">Neutral</Badge>
-        <Badge variant="green">Green</Badge>
-        <Badge variant="red">Red</Badge>
-        <Badge variant="blue">Blue</Badge>
-        <Badge variant="yellow">Yellow</Badge>
+        <Badge variant="success">Success</Badge>
+        <Badge variant="destructive">Destructive</Badge>
+        <Badge variant="info">Info</Badge>
+        <Badge variant="warning">Warning</Badge>
         <Badge variant="purple">Purple</Badge>
         <Badge variant="orange">Orange</Badge>
         <Badge variant="cyan">Cyan</Badge>
         <Badge variant="pink">Pink</Badge>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="neutral" icon={<Tag />}>
+        <Badge variant="neutral" icon={<IconTag />}>
           Neutral
         </Badge>
-        <Badge variant="green" icon={<Check />}>
-          Green
+        <Badge variant="success" icon={<IconCheckmark2Medium />}>
+          Success
         </Badge>
-        <Badge variant="red" icon={<AlertCircle />}>
-          Red
+        <Badge variant="destructive" icon={<IconExclamationCircle />}>
+          Destructive
         </Badge>
-        <Badge variant="blue" icon={<InfoIcon />}>
-          Blue
+        <Badge variant="info" icon={<IconCircleInfo />}>
+          Info
         </Badge>
-        <Badge variant="yellow" icon={<TriangleAlert />}>
-          Yellow
+        <Badge variant="warning" icon={<IconExclamationTriangle />}>
+          Warning
         </Badge>
-        <Badge variant="purple" icon={<Tag />}>
+        <Badge variant="purple" icon={<IconTag />}>
           Purple
         </Badge>
       </div>
@@ -121,18 +127,18 @@ export const Emphasis: Story = {
     <div className="grid gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <Badge>Neutral</Badge>
-        <Badge emphasis="muted">Neutral muted</Badge>
-        <Badge variant="green">Green</Badge>
-        <Badge variant="green" emphasis="muted">
-          Green muted
+        <Badge emphasis="subtle">Neutral subtle</Badge>
+        <Badge variant="success">Success</Badge>
+        <Badge variant="success" emphasis="subtle">
+          Success subtle
         </Badge>
         <Badge variant="purple">Purple</Badge>
-        <Badge variant="purple" emphasis="muted">
-          Purple muted
+        <Badge variant="purple" emphasis="subtle">
+          Purple subtle
         </Badge>
         <Badge variant="cyan">Cyan</Badge>
-        <Badge variant="cyan" emphasis="muted">
-          Cyan muted
+        <Badge variant="cyan" emphasis="subtle">
+          Cyan subtle
         </Badge>
       </div>
     </div>
@@ -145,21 +151,21 @@ export const Sizes: Story = {
       <div className="flex items-center gap-2">
         <span className="w-8 text-caption text-muted-foreground">md</span>
         <Badge size="md">Neutral</Badge>
-        <Badge size="md" icon={<Tag />}>
+        <Badge size="md" icon={<IconTag />}>
           With icon
         </Badge>
       </div>
       <div className="flex items-center gap-2">
         <span className="w-8 text-caption text-muted-foreground">sm</span>
         <Badge size="sm">Neutral</Badge>
-        <Badge size="sm" icon={<Tag />}>
+        <Badge size="sm" icon={<IconTag />}>
           With icon
         </Badge>
       </div>
       <div className="flex items-center gap-2">
         <span className="w-8 text-caption text-muted-foreground">xs</span>
         <Badge size="xs">Neutral</Badge>
-        <Badge size="xs" icon={<Tag />}>
+        <Badge size="xs" icon={<IconTag />}>
           With icon
         </Badge>
       </div>

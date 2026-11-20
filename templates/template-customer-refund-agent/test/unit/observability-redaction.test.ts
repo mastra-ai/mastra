@@ -40,4 +40,12 @@ describe('observability redaction', () => {
       },
     });
   });
+
+  it('scans long strings without an email in linear time', () => {
+    const value = '+'.repeat(50_000);
+    const start = performance.now();
+    expect(redactObservabilityValue(value)).toBe(value);
+    expect(performance.now() - start).toBeLessThan(100);
+    expect(redactObservabilityValue('ping ++alex@example.com')).not.toBe('ping ++alex@example.com');
+  });
 });

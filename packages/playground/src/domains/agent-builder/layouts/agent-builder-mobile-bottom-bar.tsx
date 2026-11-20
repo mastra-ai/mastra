@@ -1,8 +1,12 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { IconBlocks } from '@mastra/playground-ui/icons/central/IconBlocks';
+import { IconLibrary } from '@mastra/playground-ui/icons/central/IconLibrary';
+import { IconServer } from '@mastra/playground-ui/icons/central/IconServer';
+import { IconStar } from '@mastra/playground-ui/icons/central/IconStar';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Blocks, LibraryIcon, ServerCogIcon, StarIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLocation } from 'react-router';
 import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
@@ -19,22 +23,22 @@ const agentsLink: MobileLink = { name: 'Agents', url: '/agent-builder/agents', i
 const skillsLink: MobileLink = {
   name: 'Skills',
   url: '/agent-builder/skills',
-  icon: <Blocks className="size-5" />,
+  icon: <IconBlocks className="size-icon-lg" />,
 };
 const favoritesLink: MobileLink = {
   name: 'Favorites',
   url: '/agent-builder/favorite',
-  icon: <StarIcon className="size-5" />,
+  icon: <IconStar className="size-icon-lg" />,
 };
 const libraryLink: MobileLink = {
   name: 'Library',
   url: '/agent-builder/library',
-  icon: <LibraryIcon className="size-5" />,
+  icon: <IconLibrary className="size-icon-lg" />,
 };
 const infrastructureLink: MobileLink = {
   name: 'Infra',
   url: '/agent-builder/infrastructure',
-  icon: <ServerCogIcon className="size-5" />,
+  icon: <IconServer className="size-icon-lg" />,
 };
 
 export function AgentBuilderMobileBottomBar() {
@@ -74,17 +78,22 @@ export function AgentBuilderMobileBottomBar() {
                 href={link.url}
                 aria-current={isActive ? 'page' : undefined}
                 className={cn(
-                  'relative flex flex-col items-center justify-center gap-1 py-2 text-caption',
+                  isActive ? 'text-foreground' : 'text-muted-foreground',
+                  'relative flex flex-col items-center justify-center gap-1 py-2',
                   controlStateColorTransition,
                   isActive
-                    ? 'text-foreground before:absolute before:inset-x-0 before:-top-px before:h-0.5 before:bg-current'
-                    : 'text-muted-foreground hover:text-foreground',
+                    ? 'before:absolute before:inset-x-0 before:-top-px before:h-0.5 before:bg-current'
+                    : 'hover:text-foreground',
                 )}
               >
                 <span className="flex size-6 items-center justify-center" aria-hidden="true">
-                  {link.icon}
+                  <Txt as="span" variant="caption" className="block">
+                    {link.icon}
+                  </Txt>
                 </span>
-                <span className="leading-none">{link.name}</span>
+                <Txt as="span" variant="caption">
+                  {link.name}
+                </Txt>
               </Link>
             </li>
           );

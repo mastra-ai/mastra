@@ -1,4 +1,5 @@
-import { Loader2 } from 'lucide-react';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconLoadingCircle } from '@mastra/playground-ui/icons/central/IconLoadingCircle';
 
 const TOOL_DISPLAY_NAMES: Record<string, string> = {
   // AgentBrowser tools
@@ -39,8 +40,10 @@ export function AgentBusyOverlay({ toolName }: AgentBusyOverlayProps) {
   return (
     <div className="absolute inset-0 z-10 flex cursor-not-allowed items-center justify-center bg-sidebar/40">
       <div className="flex items-center gap-2 rounded-md bg-surface-panel px-3 py-1.5 shadow-overlay">
-        <Loader2 className="h-3.5 w-3.5 animate-spin text-accent1" />
-        <span className="text-column text-muted-foreground">Agent: {displayName}</span>
+        <IconLoadingCircle className="size-icon-sm animate-spin text-muted-foreground" />
+        <Txt as="span" variant="column" tone="muted">
+          Agent: {displayName}
+        </Txt>
       </div>
     </div>
   );

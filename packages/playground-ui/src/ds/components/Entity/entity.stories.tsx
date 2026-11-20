@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Bot, Workflow, Database, Settings } from 'lucide-react';
 import { Entity, EntityIcon, EntityName, EntityDescription, EntityContent } from './Entity';
+import { IconRobot } from '@/ds/icons/central/IconRobot';
+import { IconServer1 } from '@/ds/icons/central/IconServer1';
+import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 
 const meta: Meta<typeof Entity> = {
   title: 'Composite/Entity',
@@ -17,7 +19,7 @@ export const Default: Story = {
   render: () => (
     <Entity className="w-75">
       <EntityIcon>
-        <Bot />
+        <IconRobot />
       </EntityIcon>
       <EntityContent>
         <EntityName>My Agent</EntityName>
@@ -31,7 +33,7 @@ export const Clickable: Story = {
   render: () => (
     <Entity className="w-75" onClick={() => console.log('Entity clicked')}>
       <EntityIcon>
-        <Workflow />
+        <WorkflowIcon />
       </EntityIcon>
       <EntityContent>
         <EntityName>Data Pipeline</EntityName>
@@ -45,7 +47,7 @@ export const WithCustomContent: Story = {
   render: () => (
     <Entity className="w-[350px]">
       <EntityIcon>
-        <Database />
+        <IconServer1 />
       </EntityIcon>
       <EntityContent>
         <EntityName>Production Database</EntityName>
@@ -56,42 +58,6 @@ export const WithCustomContent: Story = {
         </div>
       </EntityContent>
     </Entity>
-  ),
-};
-
-export const EntityList: Story = {
-  render: () => (
-    <div className="flex w-75 flex-col gap-2">
-      <Entity onClick={() => console.log('Agent 1 clicked')}>
-        <EntityIcon>
-          <Bot />
-        </EntityIcon>
-        <EntityContent>
-          <EntityName>Customer Support</EntityName>
-          <EntityDescription>Handles customer inquiries</EntityDescription>
-        </EntityContent>
-      </Entity>
-
-      <Entity onClick={() => console.log('Agent 2 clicked')}>
-        <EntityIcon>
-          <Bot />
-        </EntityIcon>
-        <EntityContent>
-          <EntityName>Sales Assistant</EntityName>
-          <EntityDescription>Helps with sales queries</EntityDescription>
-        </EntityContent>
-      </Entity>
-
-      <Entity onClick={() => console.log('Agent 3 clicked')}>
-        <EntityIcon>
-          <Settings />
-        </EntityIcon>
-        <EntityContent>
-          <EntityName>Configuration</EntityName>
-          <EntityDescription>System settings</EntityDescription>
-        </EntityContent>
-      </Entity>
-    </div>
   ),
 };
 

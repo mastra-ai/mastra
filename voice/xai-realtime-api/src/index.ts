@@ -544,9 +544,9 @@ export class XAIRealtimeVoice extends MastraVoice<
           code: event.error?.code || event.error?.type,
           details: event,
         });
-        return;
+        break;
       default:
-        return;
+        break;
     }
   }
 

@@ -1,7 +1,22 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { it, expect } from 'vitest';
+import { z } from 'zod/v4';
+import { ChunkFrom } from '../../../../stream/types';
 import type { ChunkType } from '../../../../stream/types';
-import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import { createTool } from '../../../../tools';
+import {
+  createSharedAgent,
+  describeForAllEngines,
+  isDurableEngineVariant,
+  runLoopScenario,
+  useLoopScenarioAimock,
+} from '../aimock-scenario';
+
+async function collect<T>(stream: ReadableStream<T> | AsyncIterable<T>): Promise<T[]> {
+  const items: T[] = [];
+  for await (const item of stream as AsyncIterable<T>) items.push(item);
+  return items;
+}
 
 /**
  * Regression class: text-streaming fidelity.
@@ -18,6 +33,7 @@ import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '.
  *  - text-start/text-end chunks bracket text-delta chunks
  *  - step-start/step-finish bracket each model turn
  *  - start/finish bracket the entire run
+ *  - the `textStream` getter yields plain string deltas, replays, and spans tool loops
  */
 describeForAllEngines('AIMock loop scenario: text-streaming fidelity', engine => {
   const getMock = useLoopScenarioAimock();
@@ -62,10 +78,228 @@ describeForAllEngines('AIMock loop scenario: text-streaming fidelity', engine =>
     expect(finalText).toBe(scriptedText);
   });
 
+  // textStream getter: yields text deltas as plain strings, replays after the run.
+  it('streams the reply as string deltas and replays after the run', async () => {
+    const reply = 'Hello, wonderful streaming world!';
+    getMock().on({ endpoint: 'chat', userMessage: 'Say hello' }, { content: reply }, { chunkSize: 5 });
+    const { agent } = await createSharedAgent(getMock(), { engine, instructions: 'You are a helpful assistant.' });
+    const result: any = await agent.stream('Say hello');
+    const output = isDurableEngineVariant(engine) ? result.output : result;
+
+    try {
+      const deltas = await collect<unknown>(output.textStream);
+      expect(deltas.length).toBeGreaterThan(1);
+      for (const delta of deltas) expect(delta).toBeTypeOf('string');
+      expect(deltas.join('')).toBe(reply);
+
+      expect(await collect<unknown>(output.textStream)).toEqual(deltas);
+      expect(await output.text).toBe(reply);
+    } finally {
+      result.cleanup?.();
+    }
+  });
+
+  it('carries only text across a tool loop', async () => {
+    const lookup = createTool({
+      id: 'lookup',
+      description: 'Look up a value.',
+      inputSchema: z.object({ key: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      execute: async ({ key }) => ({ value: `VALUE_${key}` }),
+    });
+    const llm = getMock();
+    llm.on(
+      { endpoint: 'chat', hasToolResult: false },
+      { content: 'Looking it up. ', toolCalls: [{ id: 'call_1', name: 'lookup', arguments: { key: 'a' } }] },
+    );
+    llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'The value is VALUE_a.' });
+
+    const { agent } = await createSharedAgent(llm, {
+      engine,
+      instructions: 'You are a helpful assistant.',
+      tools: { lookup },
+    });
+    const result: any = await agent.stream('Look up a', { stopWhen: stepCountIs(3) });
+    const output = isDurableEngineVariant(engine) ? result.output : result;
+
+    try {
+      const deltas = await collect<unknown>(output.textStream);
+      for (const delta of deltas) expect(delta).toBeTypeOf('string');
+      expect(deltas.join('')).toBe('Looking it up. The value is VALUE_a.');
+      expect(llm.getRequests()).toHaveLength(2);
+    } finally {
+      result.cleanup?.();
+    }
+  });
+
+  // runLoopScenario does not forward `onChunk` to durable/evented engines (harness gap, #27408).
+  // Durable `onChunk` delivery stays covered by durable-agent-stream.test.ts until then.
+  const itOnChunk = isDurableEngineVariant(engine) ? it.skip : it;
+
+  itOnChunk('onChunk receives every text-delta in order and matches output.text', async () => {
+    const scriptedText = 'Hello, world! Streaming through onChunk.';
+    const seen: ChunkType[] = [];
+
+    const { output, chunks } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Say hello.',
+      stopWhen: stepCountIs(2),
+      collectChunks: true,
+      onChunk: (chunk: ChunkType) => {
+        seen.push(chunk);
+      },
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat' }, { content: scriptedText });
+      },
+    });
+
+    if (!chunks) {
+      throw new Error('collectChunks should have populated chunks');
+    }
+
+    const textOf = (list: ChunkType[]) =>
+      list
+        .filter((c): c is Extract<ChunkType, { type: 'text-delta' }> => c.type === 'text-delta')
+        .map(d => d.payload.text);
+    const streamedDeltas = textOf(chunks);
+    const callbackDeltas = textOf(seen);
+
+    const finalText = await (output as unknown as { text: Promise<string> }).text;
+    expect(streamedDeltas.length).toBeGreaterThan(1);
+    expect(callbackDeltas).toEqual(streamedDeltas);
+    expect(callbackDeltas.join('')).toBe(finalText);
+    expect(finalText).toBe(scriptedText);
+  });
+
+  it('streams the reply as string deltas and replays after the run', async () => {
+    const reply = 'Hello, wonderful streaming world!';
+    getMock().on({ endpoint: 'chat', userMessage: 'Say hello' }, { content: reply }, { chunkSize: 5 });
+    const { agent } = await createSharedAgent(getMock(), { engine, instructions: 'You are a helpful assistant.' });
+    const result: any = await agent.stream('Say hello');
+    const output = isDurableEngineVariant(engine) ? result.output : result;
+
+    try {
+      const deltas = await collect<unknown>(output.textStream);
+      expect(deltas.length).toBeGreaterThan(1);
+      for (const delta of deltas) expect(delta).toBeTypeOf('string');
+      expect(deltas.join('')).toBe(reply);
+
+      expect(await collect<unknown>(output.textStream)).toEqual(deltas);
+      expect(await output.text).toBe(reply);
+    } finally {
+      result.cleanup?.();
+    }
+  });
+
+  it('carries only text across a tool loop', async () => {
+    const lookup = createTool({
+      id: 'lookup',
+      description: 'Look up a value.',
+      inputSchema: z.object({ key: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      execute: async ({ key }) => ({ value: `VALUE_${key}` }),
+    });
+    const llm = getMock();
+    llm.on(
+      { endpoint: 'chat', hasToolResult: false },
+      { content: 'Looking it up. ', toolCalls: [{ id: 'call_1', name: 'lookup', arguments: { key: 'a' } }] },
+    );
+    llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'The value is VALUE_a.' });
+
+    const { agent } = await createSharedAgent(llm, {
+      engine,
+      instructions: 'You are a helpful assistant.',
+      tools: { lookup },
+    });
+    const result: any = await agent.stream('Look up a', { stopWhen: stepCountIs(3) });
+    const output = isDurableEngineVariant(engine) ? result.output : result;
+
+    try {
+      const deltas = await collect<unknown>(output.textStream);
+      for (const delta of deltas) expect(delta).toBeTypeOf('string');
+      expect(deltas.join('')).toBe('Looking it up. The value is VALUE_a.');
+      expect(llm.getRequests()).toHaveLength(2);
+    } finally {
+      result.cleanup?.();
+    }
+  });
+
+  it('final finish chunk after a tool step comes from the agent with reason "stop" and the final text', async () => {
+    const finalText = 'tool returned hello';
+    const echoTool = createTool({
+      id: 'echo',
+      description: 'Echo the input',
+      inputSchema: z.object({ text: z.string() }),
+      outputSchema: z.object({ echoed: z.string() }),
+      execute: async ({ text }) => ({ echoed: text }),
+    });
+
+    const { output, chunks, requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Run echo with hello.',
+      tools: { echo: echoTool },
+      maxSteps: 4,
+      collectChunks: true,
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          { toolCalls: [{ id: 'call_echo', name: 'echo', arguments: { text: 'hello' } }] },
+        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: finalText });
+      },
+    });
+
+    if (!chunks) {
+      throw new Error('collectChunks should have populated chunks');
+    }
+
+    expect(requests).toHaveLength(2);
+    const types = chunks.map(c => c.type);
+    expect(types).toContain('tool-call');
+    expect(types).toContain('tool-result');
+    expect(types).not.toContain('response-metadata');
+
+    const finish = chunks.findLast(c => c.type === 'finish') as Extract<ChunkType, { type: 'finish' }> | undefined;
+    expect(finish?.runId).toBe(output.runId);
+    expect(finish?.from).toBe(ChunkFrom.AGENT);
+    expect(finish?.payload.stepResult.reason).toBe('stop');
+    expect((finish?.payload as { output?: { text?: string } } | undefined)?.output?.text).toBe(finalText);
+  });
+
+  it('generate emits one opening message-identity event before its output chunks', async () => {
+    const scriptedText = 'A generated response with a correlated message.';
+    const llm = getMock();
+    llm.onMessage('Generate a response', { content: scriptedText });
+    const { agent } = await createSharedAgent(llm, { engine });
+    const chunks: ChunkType[] = [];
+
+    const output = await agent.generate('Generate a response', {
+      onChunk: chunk => {
+        chunks.push(chunk);
+      },
+    });
+
+    expect(output.text).toBe(scriptedText);
+    expect(chunks.some(c => c.type === 'text-delta')).toBe(true);
+    // Non-durable generate callbacks expose model chunks, not the stream envelope.
+    if (isDurableEngineVariant(engine)) {
+      expect(chunks[0]?.type).toBe('start');
+      const starts = chunks.filter(c => c.type === 'start');
+      expect(starts).toHaveLength(1);
+      expect(starts[0]).toMatchObject({
+        runId: output.runId,
+        from: ChunkFrom.AGENT,
+        payload: { id: agent.id, messageId: expect.any(String) },
+      });
+    }
+  });
+
   it('emits text-start/text-end bracketing and step/finish lifecycle chunks in order', async () => {
     const scriptedText = 'Hello world, this is a streaming fidelity test.';
 
-    const { output, chunks } = await runLoopScenario({
+    const { output, chunks, agent } = await runLoopScenario({
       engine,
       llm: getMock(),
       prompt: 'Test chunk ordering.',
@@ -83,8 +317,17 @@ describeForAllEngines('AIMock loop scenario: text-streaming fidelity', engine =>
     // Extract chunk types in order
     const types = chunks.map(c => c.type);
 
-    // Must start with 'start' chunk
+    // COR-1467: consumers need the opening event to identify the streamed message.
     expect(types[0]).toBe('start');
+    const starts = chunks.filter(c => c.type === 'start');
+    expect(starts).toHaveLength(1);
+    const stepStart = chunks.find(c => c.type === 'step-start');
+    expect(starts[0]).toMatchObject({
+      runId: output.runId,
+      from: ChunkFrom.AGENT,
+      payload: { id: agent.id, messageId: expect.any(String) },
+    });
+    expect(starts[0]?.payload.messageId).toBe(stepStart?.payload.messageId);
 
     // Must end with 'finish' chunk
     expect(types[types.length - 1]).toBe('finish');

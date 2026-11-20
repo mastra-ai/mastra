@@ -22,6 +22,7 @@ import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
+import { createStep, createWorkflow } from '../../../workflows';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
@@ -213,5 +214,169 @@ describe('DurableAgent processor data-chunk persistence (#19375)', () => {
     expect(serialized).toContain('tool-persisted-note');
     expect(serialized).not.toContain('tool-stream-only');
     result.cleanup();
+  });
+
+  it('persists non-transient data chunks written by a tool via context.writer.custom (#25122)', async () => {
+    const probeTool = createTool({
+      id: 'probe',
+      description: 'Writes data parts',
+      inputSchema: z.object({ city: z.string() }),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async (_input, context) => {
+        await context?.writer?.custom({ type: 'data-probe', data: { note: 'tool-writer-persisted' } });
+        await context?.writer?.custom({
+          type: 'data-probe-ephemeral',
+          data: { note: 'tool-writer-stream-only' },
+          transient: true,
+        });
+        return { ok: true };
+      },
+    });
+
+    const mockMemory = new MockMemory();
+    const baseAgent = new Agent({
+      id: 'tool-writer-agent',
+      name: 'Tool Writer Agent',
+      instructions: 'You are a helpful agent.',
+      model: createToolCallingModel('probe', { city: 'NYC' }) as LanguageModelV2,
+      tools: { probe: probeTool },
+      memory: mockMemory,
+    });
+
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    new Mastra({
+      agents: { 'tool-writer-agent': durableAgent as any },
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub,
+    });
+
+    const result = await durableAgent.stream('probe NYC', {
+      maxSteps: 3,
+      memory: { thread: 'thread-tool-writer', resource: 'resource-tool-writer' },
+    });
+    const chunks = await drain(result.fullStream);
+
+    expect(chunks.some((c: any) => c.type === 'data-probe')).toBe(true);
+    expect(chunks.some((c: any) => c.type === 'data-probe-ephemeral')).toBe(true);
+
+    const recalled = await mockMemory.recall({
+      threadId: 'thread-tool-writer',
+      resourceId: 'resource-tool-writer',
+    });
+    const serialized = JSON.stringify(recalled.messages);
+    expect(serialized.split('tool-writer-persisted').length - 1).toBe(1);
+    expect(serialized).not.toContain('tool-writer-stream-only');
+
+    result.cleanup();
+  });
+
+  it('persists a nested workflow question before the durable tool suspends', async () => {
+    const step = createStep({
+      id: 'ask-question',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ answer: z.string() }),
+      resumeSchema: z.object({ answer: z.string() }),
+      suspendSchema: z.object({ question: z.string() }),
+      execute: async ({ writer, resumeData, suspend }) => {
+        await writer.custom({ type: 'data-question', id: 'question', data: { state: 'waiting' } });
+        if (!resumeData) return suspend({ question: 'Continue?' });
+        return resumeData;
+      },
+    });
+    const workflow = createWorkflow({
+      id: 'question-workflow',
+      inputSchema: step.inputSchema,
+      outputSchema: step.outputSchema,
+    })
+      .then(step)
+      .commit();
+    const memory = new MockMemory();
+    const agent = new Agent({
+      id: 'question-agent',
+      name: 'Question Agent',
+      instructions: 'Ask the question.',
+      model: createToolCallingModel('workflow-questionWorkflow', { inputData: {} }) as LanguageModelV2,
+      memory,
+      workflows: { questionWorkflow: workflow },
+    });
+    const durable = createDurableAgent({ agent, pubsub });
+    new Mastra({
+      agents: { 'question-agent': durable as any },
+      workflows: { questionWorkflow: workflow },
+      storage: new InMemoryStore(),
+      pubsub,
+      logger: false,
+    });
+
+    const result = await durable.stream('Ask me', {
+      memory: { thread: 'thread-question', resource: 'resource-question' },
+      closeOnSuspend: true,
+    });
+    const chunks = await drain(result.fullStream);
+    expect(
+      chunks.some((chunk: any) => chunk.type === 'tool-output' && chunk.payload?.output?.type === 'data-question'),
+    ).toBe(true);
+    expect(chunks.some((chunk: any) => chunk.type === 'tool-call-suspended')).toBe(true);
+    const recalled = await memory.recall({ threadId: 'thread-question', resourceId: 'resource-question' });
+    expect(recalled.messages.flatMap(message => message.content.parts ?? [])).toContainEqual(
+      expect.objectContaining({ type: 'data-question', id: 'question', data: { state: 'waiting' } }),
+    );
+    result.cleanup();
+  });
+
+  it('persists tool-written data chunks when the tool runs as an awaited background task', async () => {
+    const probeTool = createTool({
+      id: 'probe',
+      description: 'Writes data parts',
+      inputSchema: z.object({ city: z.string() }),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async (_input, context) => {
+        await context?.writer?.custom({ type: 'data-probe', data: { note: 'bg-awaited-persisted' } });
+        return { ok: true };
+      },
+      background: { enabled: true },
+    });
+
+    const mockMemory = new MockMemory();
+    const baseAgent = new Agent({
+      id: 'bg-awaited-writer-agent',
+      name: 'BG Awaited Writer Agent',
+      instructions: 'You are a helpful agent.',
+      model: createToolCallingModel('probe', {
+        city: 'NYC',
+        _background: { disposition: 'awaited' },
+      }) as LanguageModelV2,
+      tools: { probe: probeTool },
+      memory: mockMemory,
+      backgroundTasks: { tools: { probe: true } },
+    });
+
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    const localMastra = new Mastra({
+      agents: { 'bg-awaited-writer-agent': durableAgent as any },
+      logger: false,
+      storage: new InMemoryStore(),
+      backgroundTasks: { enabled: true },
+      pubsub,
+    });
+    await localMastra.startWorkers();
+
+    const result = await durableAgent.stream('probe NYC', {
+      maxSteps: 3,
+      memory: { thread: 'thread-bg-awaited', resource: 'resource-bg-awaited' },
+    });
+    const chunks = await drain(result.fullStream);
+    expect(chunks.some((c: any) => c.type === 'data-probe')).toBe(true);
+
+    const recalled = await mockMemory.recall({
+      threadId: 'thread-bg-awaited',
+      resourceId: 'resource-bg-awaited',
+    });
+    const serialized = JSON.stringify(recalled.messages);
+    expect(serialized.split('bg-awaited-persisted').length - 1).toBe(1);
+
+    result.cleanup();
+    await localMastra.stopWorkers?.();
   });
 });

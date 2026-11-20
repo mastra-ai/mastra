@@ -62,7 +62,8 @@ export type TemplateSpec =
  * every sandbox constructed with the same name shares one template. When
  * the name is missing the build runs once; if the build fails the sandbox
  * falls back to `fallbackTemplate` (or the default mountable template) so a
- * broken build degrades to a cold start instead of a wedged session.
+ * broken build degrades to a cold start instead of a wedged session. Set
+ * `fallbackTemplate: false` to fail closed instead.
  */
 export interface NamedTemplateSpec {
   /** Deterministic template ref (`name:tag`, e.g. content-hashed name). */
@@ -75,8 +76,12 @@ export interface NamedTemplateSpec {
    * fallback's own `fallbackTemplate` is ignored, and anything failing past
    * it lands on the default mountable template. Defaults to the default
    * mountable template.
+   *
+   * `false` disables fallback entirely: a failed named build, or a resolved
+   * ref that cannot create a sandbox, rejects `start()` with the original
+   * error instead of booting a sandbox without the template's contents.
    */
-  fallbackTemplate?: string | TemplateBuilder | NamedTemplateSpec;
+  fallbackTemplate?: string | TemplateBuilder | NamedTemplateSpec | false;
   /**
    * Ref (`name:tag`) of a previous successful build of this template. When
    * `name` does not exist yet but this ref does, the sandbox is created
@@ -131,7 +136,7 @@ export const DEFAULT_MEMORY_MB = 1024;
  * contents can never drift under a stable identity hash; bump deliberately
  * (each bump builds new templates).
  */
-export const DEFAULT_NODE_VERSION = '24.20.0';
+export const DEFAULT_NODE_VERSION = '24.22.1';
 
 const NODE_VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
 
@@ -185,7 +190,7 @@ export interface MountableTemplateResult {
  * v3 installed a pinned current Node LTS over the base image's stale
  * runtime and enabled corepack.
  */
-export const MOUNTABLE_TEMPLATE_VERSION = 'v3';
+export const MOUNTABLE_TEMPLATE_VERSION = 'v4';
 
 /**
  * Create a base template with FUSE mounting dependencies pre-installed.
@@ -246,9 +251,12 @@ export function createDefaultMountableTemplate(options?: MountableTemplateOption
     // The base image ships a stale Node under /usr/local (v20.9.0 at last
     // check), old enough that corepack-fetched pnpm/yarn crash on it
     // (ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING). Overwrite it in place with
-    // a pinned current release so the fresh binaries win the PATH.
+    // a pinned current release so the fresh binaries win the PATH. tar only
+    // overlays files, so the old npm/corepack trees are removed first —
+    // leftover nested deps (e.g. an old minipass) otherwise shadow the new
+    // npm's and break it with "Class extends value undefined".
     .runCmd(
-      `curl -fsSL https://nodejs.org/dist/v${nodeVersion}/node-v${nodeVersion}-linux-x64.tar.gz | sudo tar -xz -C /usr/local --strip-components=1`,
+      `sudo rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack && curl -fsSL https://nodejs.org/dist/v${nodeVersion}/node-v${nodeVersion}-linux-x64.tar.gz | sudo tar -xz -C /usr/local --strip-components=1`,
     )
     // Corepack shims make `pnpm`/`yarn` resolve to whatever the repo's
     // `packageManager` field pins. It refuses to download a package manager

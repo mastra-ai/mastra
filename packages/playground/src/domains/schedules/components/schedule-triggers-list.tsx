@@ -3,9 +3,9 @@ import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playgro
 import { RelativeTimestamp } from '@mastra/playground-ui/components/RelativeTimestamp';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconExclamationTriangle } from '@mastra/playground-ui/icons/central/IconExclamationTriangle';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
-import { AlertTriangleIcon } from 'lucide-react';
 import { WorkflowRunStatusInline } from './workflow-run-status-inline';
 
 export interface ScheduleTriggersListProps {
@@ -73,13 +73,7 @@ export function ScheduleTriggersList({
         const isLinked = isTriggerLinked(t);
         if (isLinked) interactiveIndex += 1;
         const runIdLabel = (
-          <Txt
-            as="span"
-            variant="caption"
-            font="mono"
-            tone={isLinked ? undefined : 'muted'}
-            className={isLinked ? 'whitespace-nowrap text-accent1' : 'whitespace-nowrap'}
-          >
+          <Txt as="span" variant="caption" font="mono" tone={isLinked ? 'ink' : 'muted'} className="whitespace-nowrap">
             {t.runId}
           </Txt>
         );
@@ -91,22 +85,31 @@ export function ScheduleTriggersList({
             <DataList.Cell>
               <span className="inline-flex items-center gap-2">
                 {isPublishFailure ? (
-                  <span className="inline-flex items-center gap-1.5 text-caption whitespace-nowrap text-accent2">
-                    <AlertTriangleIcon size={14} />
+                  <Txt
+                    as="span"
+                    variant="caption"
+                    className="inline-flex items-center gap-1.5 whitespace-nowrap text-destructive-foreground"
+                  >
+                    <IconExclamationTriangle className="size-icon-sm" />
                     publish failed
-                  </span>
+                  </Txt>
                 ) : t.run ? (
                   <WorkflowRunStatusInline status={t.run.status} />
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 text-caption whitespace-nowrap text-muted-foreground">
+                  <Txt
+                    as="span"
+                    variant="caption"
+                    tone="muted"
+                    className="inline-flex items-center gap-1.5 whitespace-nowrap"
+                  >
                     pending
-                  </span>
+                  </Txt>
                 )}
                 {errorMessage ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="inline-flex text-accent2">
-                        <AlertTriangleIcon size={14} />
+                      <span className="inline-flex text-destructive-foreground">
+                        <IconExclamationTriangle className="size-icon-sm" />
                       </span>
                     </TooltipTrigger>
                     <TooltipContent>{errorMessage}</TooltipContent>
@@ -121,8 +124,8 @@ export function ScheduleTriggersList({
                 {showDriftWarning ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="inline-flex text-accent3">
-                        <AlertTriangleIcon size={14} />
+                      <span className="inline-flex text-info-indicator">
+                        <IconExclamationTriangle className="size-icon-sm" />
                       </span>
                     </TooltipTrigger>
                     <TooltipContent>Published {driftValue} after the scheduled fire time</TooltipContent>

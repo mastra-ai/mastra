@@ -1,12 +1,12 @@
-import { createHash } from 'node:crypto';
+import type { ConnectClient } from '@mastra/connect';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
-import type { MastraWorker } from '@mastra/core/worker';
-import type { Context } from 'hono';
 
+import type { MastraWorker } from '@mastra/core/worker';
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
 import type { Intake, IntakeIssue, IntakeIssueDetail, UpdateIntakeIssueInput } from '../../../capabilities/intake.js';
+import { loose } from '../../../routes/route.js';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
@@ -19,20 +19,14 @@ import type {
   LinearIssueDetail as LinearRouteIssueDetail,
 } from '../../linear/integration.js';
 import { attachLinearIssueReconciler } from '../../linear/issue-reconciler.js';
-import {
-  linearIssueReconciliationEnabled,
-  linearIssueReconciliationInterval,
-} from '../../linear/reconciliation-config.js';
+import { linearIssueReconciliationInterval } from '../../linear/reconciliation-config.js';
 import { buildLinearRoutes } from '../../linear/routes.js';
+import type { LinearWorkspaceListingError } from '../../linear/routes.js';
 import { attachLinearRules } from '../../linear/rules.js';
 import type { LinearConnectionData, LinearConnectionRow, LinearStorageHandle } from '../../linear/storage.js';
-import {
-  logPlatformInfo,
-  logPlatformWarn,
-  PlatformApiClient,
-  PlatformApiError,
-  platformApiClientConfigFromEnv,
-} from '../api-client.js';
+import { logPlatformBootInfo, logPlatformInfo, logPlatformWarn } from '../logging.js';
+import { createPlatformConnectClient, platformErrorStatus, platformRedirectLocation } from '../platform-connect.js';
+import type { PlatformConnectOption } from '../platform-connect.js';
 import { PlatformLinearEventWorker } from './event-worker.js';
 import type { PlatformLinearEventStorage } from './event-worker.js';
 
@@ -102,17 +96,13 @@ const MAX_REFERENCE_PAGES = 20;
 const MAX_COMMENT_PAGES = 20;
 const PLATFORM_MANAGED_CONNECTION_TOKEN = 'platform-managed';
 
-function loose(c: unknown): Context {
-  return c as Context;
-}
-
 function routeBaseUrl(ctx: IntegrationContext, requestUrl: string): string {
   return (ctx.baseUrl || new URL(requestUrl).origin).replace(/\/+$/, '');
 }
 
 export class PlatformLinearIntegration implements FactoryIntegration {
   readonly id = 'linear';
-  readonly #client: PlatformApiClient;
+  readonly #client: ConnectClient;
   readonly #endpointHost: string;
   #projects: FactoryProjectsStorage | undefined;
   #auth: RouteAuth | undefined;
@@ -180,8 +170,8 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       requireLinearConnection(connection);
       const result = await this.#listIssues(sourceIds, cursor, labels, attributionSourceIds);
       return {
-        issues: result.issues.map(({ issue, sourceId }) => ({
-          ...parseIssue(issue),
+        issues: result.issues.map(({ issue, sourceId, workspace }) => ({
+          ...parseIssue(issue, workspace.linearWorkspaceId),
           sourceId,
         })),
         nextCursor: result.nextCursor,
@@ -192,7 +182,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       const located = await this.#findIssue(sourceId, issueId);
       if (!located) return null;
       const comments = await this.#loadComments(located.workspaceId, issueId, located.issue.comments);
-      return parseIssueDetail(located.issue, comments);
+      return parseIssueDetail(located.issue, comments, located.workspaceId);
     },
     createComment: async ({ connection, sourceId, issueId, body }) => {
       requireLinearConnection(connection);
@@ -202,7 +192,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         const comment = await this.#client.request<LinearComment>(
           'POST',
           `${API_PREFIX}/workspaces/${encodeURIComponent(workspaceId)}/issues/${encodeURIComponent(issueId)}/comments`,
-          { body },
+          { body: { body } },
         );
         return { id: comment.id, url: comment.url };
       } catch (error) {
@@ -219,10 +209,10 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       const target = input.state;
       // Idempotency: skip the write entirely if the issue is already at the target state.
       if (target.kind === 'byType' && issue.state.type === target.stateType) {
-        return parseIssue(issue);
+        return parseIssue(issue, workspaceId);
       }
       if (target.kind === 'byName' && issue.state.name.toLowerCase() === target.name.toLowerCase()) {
-        return parseIssue(issue);
+        return parseIssue(issue, workspaceId);
       }
 
       let states: LinearWorkflowState[];
@@ -263,7 +253,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         await this.#client.request<LinearIssue>(
           'PATCH',
           `${API_PREFIX}/workspaces/${encodeURIComponent(workspaceId)}/issues/${encodeURIComponent(input.issueId)}`,
-          { stateId: matched.id },
+          { body: { stateId: matched.id } },
         );
       } catch (error) {
         if (isNotFound(error)) return null;
@@ -271,7 +261,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       }
 
       const refreshed = await this.#findIssue(input.sourceId, input.issueId);
-      return refreshed ? parseIssue(refreshed.issue) : null;
+      return refreshed ? parseIssue(refreshed.issue, refreshed.workspaceId) : null;
     },
   };
 
@@ -281,11 +271,10 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     return this.#rules;
   }
 
-  constructor({ rules }: { rules?: LinearRuleOverrides } = {}) {
+  constructor({ rules, connect }: { rules?: LinearRuleOverrides; connect?: PlatformConnectOption } = {}) {
     this.#rules = resolveLinearRules(rules);
-    const config = platformApiClientConfigFromEnv();
-    this.#client = new PlatformApiClient(config);
-    this.#endpointHost = new URL(config.baseUrl).host;
+    this.#client = createPlatformConnectClient(connect);
+    this.#endpointHost = new URL(this.#client.baseUrl).host;
   }
 
   get storage(): LinearStorageHandle {
@@ -321,7 +310,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   initialize({ projects, auth }: { projects: FactoryProjectsStorage; auth?: RouteAuth }): void {
     this.#projects = projects;
     this.#auth = auth;
-    logPlatformInfo('Platform Linear integration initialized', { endpointHost: this.#endpointHost });
+    logPlatformBootInfo('Platform Linear integration initialized', { endpointHost: this.#endpointHost });
   }
 
   get authEnabled(): boolean {
@@ -386,22 +375,25 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     return scopes.some(scope => scope === 'comments:create' || scope === 'write' || scope === 'admin');
   }
 
-  async checkConnection(orgId: string): Promise<LinearConnectionCheck> {
-    const connection = await this.loadConnection(orgId);
+  async checkConnection(_orgId: string): Promise<LinearConnectionCheck> {
+    // One snapshot for everything, so the count and the slug can't disagree.
+    // A single link pattern is only accurate with one connected workspace;
+    // with several, agents must link issues by their own `url`.
+    const workspaces = await this.#listWorkspaces();
+    const connected = workspaces.length > 0;
     return {
-      connected: connection !== null,
-      canComment: connection !== null && this.canPostComments(connection),
+      connected,
+      // Platform-managed connections always carry the `comments:create` scope.
+      canComment: connected,
+      workspaceUrlKey: workspaces.length === 1 ? (workspaces[0]?.urlKey ?? null) : null,
       checkedAt: Date.now(),
     };
   }
 
   workers(ctx: IntegrationContext): MastraWorker[] {
     const pollingEnabled = process.env.MASTRACODE_PLATFORM_LINEAR_POLLING_ENABLED?.trim().toLowerCase() !== 'false';
-    const reconcileEnabled = linearIssueReconciliationEnabled();
-    if (!pollingEnabled && !reconcileEnabled) return [];
-
     const ingest = attachLinearRules(this, ctx);
-    const reconcile = reconcileEnabled ? attachLinearIssueReconciler(this, ctx) : undefined;
+    const reconcile = attachLinearIssueReconciler(this, ctx);
     const workItems = ctx.runtime?.workItems;
     if (!workItems) return [];
     if (!ingest && !reconcile) return [];
@@ -428,14 +420,29 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   routes(ctx: IntegrationContext): ApiRoute[] {
     return [
       this.#connectRoute(ctx),
+      this.#reconnectReturnRoute(ctx),
       ...buildLinearRoutes({
         auth: ctx.auth,
         linear: this as unknown as LinearIntegration,
+        listConnectionWorkspaces: async () =>
+          (await this.#listAllWorkspaces()).map(workspace => ({
+            id: workspace.linearWorkspaceId,
+            name: workspace.linearWorkspaceName,
+            urlKey: workspace.urlKey,
+            connected: workspace.connected,
+          })),
+        listProjectsWithStatus: async () => {
+          const workspaceErrors: LinearWorkspaceListingError[] = [];
+          return { projects: await this.#listProjects(workspaceErrors), workspaceErrors };
+        },
+        listTeamsWithStatus: async () => {
+          const workspaceErrors: LinearWorkspaceListingError[] = [];
+          return { teams: await this.#listTeams(workspaceErrors), workspaceErrors };
+        },
         stateSigner: ctx.stateSigner,
         baseUrl: ctx.baseUrl,
         intake: ctx.storage.intake,
         projects: ctx.storage.projects,
-        ingestFactoryIssues: attachLinearRules(this, ctx),
         workItems: ctx.runtime?.workItems,
         boards: ctx.runtime?.boards,
       }).filter(route => !route.path.startsWith('/auth/linear/')),
@@ -451,16 +458,55 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         const tenant = ctx.auth.tenant(loose(c));
         if (!tenant?.orgId) return c.json({ error: 'unauthorized' }, 401);
 
-        const returnTo = c.req.query('return_to') || '/';
+        const returnUrl = localReturnUrl(c.req.query('return_to'));
+        const returnTo = localPath(returnUrl);
         const originator = routeBaseUrl(ctx, c.req.url);
+        const workspaceId = c.req.query('workspace_id');
+        let authorizationReturnTo = returnTo;
+        if (workspaceId) {
+          const workspaces = await this.#listAllWorkspaces().catch(() => null);
+          if (!workspaces) {
+            returnUrl.searchParams.set('linear_reconnect', 'unavailable');
+            returnUrl.searchParams.set('linear_workspace_id', workspaceId);
+            return c.redirect(localPath(returnUrl));
+          }
+          if (!workspaces.some(workspace => workspace.linearWorkspaceId === workspaceId)) {
+            return c.json({ error: 'linear_workspace_not_found' }, 404);
+          }
+          // Platform owns OAuth. Verify the intended workspace after it returns;
+          // authorizing a different workspace must not claim to repair this one.
+          authorizationReturnTo = `/auth/linear/reconnect-return?${new URLSearchParams({ workspace_id: workspaceId, return_to: returnTo })}`;
+        }
         logPlatformInfo('Starting Platform Linear connect flow', {
           orgId: tenant.orgId,
           returnTo,
           originator,
         });
-        const query = new URLSearchParams({ return_to: returnTo, originator });
-        const location = await this.#client.requestRedirect('GET', `${API_PREFIX}/authorize?${query}`);
+        const query = new URLSearchParams({ return_to: authorizationReturnTo, originator });
+        const location = await platformRedirectLocation(this.#client, 'GET', `${API_PREFIX}/authorize?${query}`);
         return c.redirect(location);
+      },
+    });
+  }
+
+  #reconnectReturnRoute(ctx: IntegrationContext): ApiRoute {
+    return registerApiRoute('/auth/linear/reconnect-return', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        await ctx.auth.ensureUser(loose(c));
+        if (!ctx.auth.tenant(loose(c))?.orgId) return c.json({ error: 'unauthorized' }, 401);
+        const destination = localReturnUrl(c.req.query('return_to'));
+        const workspaceId = c.req.query('workspace_id');
+        try {
+          const workspaces = await this.#listWorkspaces();
+          const restored = workspaces.some(workspace => workspace.linearWorkspaceId === workspaceId);
+          destination.searchParams.set('linear_reconnect', restored ? 'connected' : 'not_connected');
+        } catch {
+          destination.searchParams.set('linear_reconnect', 'unavailable');
+        }
+        if (workspaceId) destination.searchParams.set('linear_workspace_id', workspaceId);
+        return c.redirect(localPath(destination));
       },
     });
   }
@@ -474,15 +520,25 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   }
 
   async listProjects(): Promise<Array<LinearProject & { workspaceId: string }>> {
-    return (await this.#listProjectSources()).map(({ workspace, project }) => ({
+    return this.#listProjects();
+  }
+
+  async listTeams(_accessToken: string): Promise<Array<LinearTeam & { workspaceId: string; sourceId: string }>> {
+    return this.#listTeams();
+  }
+
+  async #listProjects(errors?: LinearWorkspaceListingError[]): Promise<Array<LinearProject & { workspaceId: string }>> {
+    return (await this.#listProjectSources(undefined, errors)).map(({ workspace, project }) => ({
       ...project,
       id: encodeSourceId(workspace.linearWorkspaceId, project.id),
       workspaceId: workspace.linearWorkspaceId,
     }));
   }
 
-  async listTeams(_accessToken: string): Promise<Array<LinearTeam & { workspaceId: string; sourceId: string }>> {
-    return (await this.#listTeamSources()).map(({ workspace, team }) => ({
+  async #listTeams(
+    errors?: LinearWorkspaceListingError[],
+  ): Promise<Array<LinearTeam & { workspaceId: string; sourceId: string }>> {
+    return (await this.#listTeamSources(undefined, errors)).map(({ workspace, team }) => ({
       ...team,
       workspaceId: workspace.linearWorkspaceId,
       sourceId: encodeTeamSourceId(workspace.linearWorkspaceId, team.id),
@@ -534,12 +590,15 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     return source.kind === 'team' ? issue.teamId === source.teamId : issue.projectId === source.projectId;
   }
 
-  async #listProjectSources(workspaceIds?: ReadonlySet<string>): Promise<ProjectSource[]> {
+  async #listProjectSources(
+    workspaceIds?: ReadonlySet<string>,
+    errors?: LinearWorkspaceListingError[],
+  ): Promise<ProjectSource[]> {
     const workspaces = await this.#listWorkspaces();
     const scopedWorkspaces = workspaceIds
       ? workspaces.filter(workspace => workspaceIds.has(workspace.linearWorkspaceId))
       : workspaces;
-    const projectGroups = await Promise.all(
+    const projectGroups = await Promise.allSettled(
       scopedWorkspaces.map(async workspace => {
         const projects: LinearProject[] = [];
         let after: string | undefined;
@@ -559,15 +618,18 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         return projects.map(project => ({ workspace, project }));
       }),
     );
-    return projectGroups.flat();
+    return collectWorkspaceListings(scopedWorkspaces, projectGroups, errors);
   }
 
-  async #listTeamSources(workspaceIds?: ReadonlySet<string>): Promise<TeamSource[]> {
+  async #listTeamSources(
+    workspaceIds?: ReadonlySet<string>,
+    errors?: LinearWorkspaceListingError[],
+  ): Promise<TeamSource[]> {
     const workspaces = await this.#listWorkspaces();
     const scopedWorkspaces = workspaceIds
       ? workspaces.filter(workspace => workspaceIds.has(workspace.linearWorkspaceId))
       : workspaces;
-    const teamGroups = await Promise.all(
+    const teamGroups = await Promise.allSettled(
       scopedWorkspaces.map(async workspace => {
         const teams: LinearTeam[] = [];
         let after: string | undefined;
@@ -587,16 +649,25 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         return teams.map(team => ({ workspace, team }));
       }),
     );
-    return teamGroups.flat();
+    return collectWorkspaceListings(scopedWorkspaces, teamGroups, errors);
   }
 
   async listWorkspaces(): Promise<LinearWorkspace[]> {
     return this.#listWorkspaces();
   }
 
+  async hasActiveConnections(): Promise<boolean> {
+    return (await this.#listWorkspaces()).length > 0;
+  }
+
   async #listWorkspaces(): Promise<LinearWorkspace[]> {
+    return (await this.#listAllWorkspaces()).filter(workspace => workspace.connected);
+  }
+
+  /** Includes workspaces whose connection stopped working. */
+  async #listAllWorkspaces(): Promise<LinearWorkspace[]> {
     const result = await this.#client.request<{ workspaces: LinearWorkspace[] }>('GET', `${API_PREFIX}/workspaces`);
-    return result.workspaces.filter(workspace => workspace.connected);
+    return result.workspaces;
   }
 
   async #listIssues(sourceIds: string[], cursor?: string, labels?: string[], attributionSourceIds = sourceIds) {
@@ -614,12 +685,18 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     const teamWorkspaceIds = new Set(
       parsedSources.flatMap(source => (source.kind === 'team' ? [source.workspaceId] : [])),
     );
-    const [projectSources, teamSources] = await Promise.all([
+    const [projectsResult, teamsResult] = await Promise.allSettled([
       projectWorkspaceIds.size > 0
         ? this.#listProjectSources(projectWorkspaceIds)
         : Promise.resolve([] as ProjectSource[]),
       teamWorkspaceIds.size > 0 ? this.#listTeamSources(teamWorkspaceIds) : Promise.resolve([] as TeamSource[]),
     ]);
+    if (projectsResult.status === 'rejected' && (teamWorkspaceIds.size === 0 || teamsResult.status === 'rejected')) {
+      throw projectsResult.reason;
+    }
+    if (teamsResult.status === 'rejected' && projectWorkspaceIds.size === 0) throw teamsResult.reason;
+    const projectSources = projectsResult.status === 'fulfilled' ? projectsResult.value : [];
+    const teamSources = teamsResult.status === 'fulfilled' ? teamsResult.value : [];
     const projectMap = new Map(
       projectSources.map(source => [encodeSourceId(source.workspace.linearWorkspaceId, source.project.id), source]),
     );
@@ -670,16 +747,13 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       }
     }
 
-    const cursors = decodeCursor(cursor, sourceIds, attributionSourceIds);
+    const cursors = await decodeCursor(cursor, sourceIds, attributionSourceIds);
+    const unfinished = descriptors.filter(({ sourceId }) => cursors[sourceId] !== null);
     const normalizedLabels = normalizeLabels(labels);
     const nextState: Record<string, string | null> = {};
     let hasNextPage = false;
-    const pages = await Promise.all(
-      descriptors.map(async ({ kind, sourceId, workspace, query }) => {
-        if (cursors[sourceId] === null) {
-          nextState[sourceId] = null;
-          return [] as ListedIssue[];
-        }
+    const pages = await Promise.allSettled(
+      unfinished.map(async ({ kind, sourceId, workspace, query }) => {
         const after = cursors[sourceId];
         if (after) query.set('after', after);
         const result = await this.#client.request<{ issues: LinearIssue[]; pageInfo: PageInfo }>(
@@ -705,8 +779,16 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       }),
     );
     return {
-      issues: dedupeIssuesBySource(pages.flat(), sourceIds),
-      nextCursor: hasNextPage ? encodeCursor(nextState, sourceIds, attributionSourceIds) : null,
+      // A failed workspace is retried from the start on the next intake poll;
+      // successful workspaces can finish their own pagination in this cycle.
+      issues: dedupeIssuesBySource(
+        collectWorkspaceListings(
+          unfinished.map(source => source.workspace),
+          pages,
+        ),
+        sourceIds,
+      ),
+      nextCursor: hasNextPage ? await encodeCursor(nextState, sourceIds, attributionSourceIds) : null,
     };
   }
 
@@ -811,7 +893,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   }
 }
 
-function parseIssue(issue: LinearIssue): IntakeIssue {
+function parseIssue(issue: LinearIssue, workspaceId: string): IntakeIssue {
   return {
     id: issue.id,
     identifier: issue.identifier,
@@ -823,6 +905,9 @@ function parseIssue(issue: LinearIssue): IntakeIssue {
     priority: issue.priorityLabel,
     assignee: issue.assignee?.displayName ?? issue.assignee?.name ?? null,
     source: issue.team.key,
+    // Use the same workspace-scoped identity as listProjects and intake bindings.
+    // The source may be a team, so it cannot stand in for the issue's project.
+    projectId: issue.project ? encodeSourceId(workspaceId, issue.project.id) : null,
     labels: issue.labels.map(label => label.name),
     commentCount: null,
     createdAt: issue.createdAt,
@@ -830,9 +915,9 @@ function parseIssue(issue: LinearIssue): IntakeIssue {
   };
 }
 
-function parseIssueDetail(issue: LinearIssue, comments: LinearComment[]): IntakeIssueDetail {
+function parseIssueDetail(issue: LinearIssue, comments: LinearComment[], workspaceId: string): IntakeIssueDetail {
   return {
-    ...parseIssue(issue),
+    ...parseIssue(issue, workspaceId),
     commentCount: comments.length,
     description: issue.description?.trim() ? issue.description : null,
     comments: comments.map(comment => ({
@@ -956,30 +1041,31 @@ function canonicalSourceIds(sourceIds: string[]): string[] {
   return [...new Set(sourceIds)].sort();
 }
 
-function linearSourceSetFingerprint(sourceIds: string[], attributionSourceIds: string[]): string {
+async function linearSourceSetFingerprint(sourceIds: string[], attributionSourceIds: string[]): Promise<string> {
   const scope = {
     sourceIds: canonicalSourceIds(sourceIds),
     attributionSourceIds: canonicalSourceIds(attributionSourceIds),
   };
-  return createHash('sha256').update(JSON.stringify(scope)).digest('base64url');
+  const bytes = new TextEncoder().encode(JSON.stringify(scope));
+  return Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', bytes)).toString('base64url');
 }
 
 function invalidLinearCursor(): Error {
   return Object.assign(new Error('Linear cursor is invalid or stale.'), { code: 'invalid_cursor' as const });
 }
 
-function decodeCursor(
+async function decodeCursor(
   cursor: string | undefined,
   sourceIds: string[],
   attributionSourceIds: string[],
-): Record<string, string | null | undefined> {
+): Promise<Record<string, string | null | undefined>> {
   if (!cursor) return {};
   try {
     const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as Partial<PlatformListCursor>;
     const canonical = canonicalSourceIds(sourceIds);
     if (
       parsed.v !== 1 ||
-      parsed.sourceSet !== linearSourceSetFingerprint(sourceIds, attributionSourceIds) ||
+      parsed.sourceSet !== (await linearSourceSetFingerprint(sourceIds, attributionSourceIds)) ||
       !Array.isArray(parsed.cursors) ||
       parsed.cursors.length !== canonical.length ||
       !parsed.cursors.every(value => value === null || typeof value === 'string')
@@ -992,15 +1078,15 @@ function decodeCursor(
   }
 }
 
-function encodeCursor(
+async function encodeCursor(
   state: Record<string, string | null>,
   sourceIds: string[],
   attributionSourceIds: string[],
-): string {
+): Promise<string> {
   const canonical = canonicalSourceIds(sourceIds);
   const cursor: PlatformListCursor = {
     v: 1,
-    sourceSet: linearSourceSetFingerprint(sourceIds, attributionSourceIds),
+    sourceSet: await linearSourceSetFingerprint(sourceIds, attributionSourceIds),
     cursors: canonical.map(sourceId => state[sourceId] ?? null),
   };
   return Buffer.from(JSON.stringify(cursor)).toString('base64url');
@@ -1013,7 +1099,47 @@ function requireLinearConnection(connection: IntegrationConnection): void {
 }
 
 function isNotFound(error: unknown): boolean {
-  return error instanceof PlatformApiError && error.status === 404;
+  return platformErrorStatus(error) === 404;
+}
+
+/** A provider outage in one workspace must not hide sources from the others. */
+function collectWorkspaceListings<T>(
+  workspaces: LinearWorkspace[],
+  results: PromiseSettledResult<T[]>[],
+  errors?: LinearWorkspaceListingError[],
+): T[] {
+  const items: T[] = [];
+  let firstFailure: unknown;
+  let succeeded = false;
+  for (const [index, result] of results.entries()) {
+    if (result.status === 'fulfilled') {
+      succeeded = true;
+      items.push(...result.value);
+      continue;
+    }
+    const workspace = workspaces[index]!;
+    firstFailure ??= result.reason;
+    errors?.push({ workspaceId: workspace.linearWorkspaceId, name: workspace.linearWorkspaceName });
+    logPlatformWarn('Platform Linear workspace sources could not be loaded; intake will retry.', {
+      workspaceId: workspace.linearWorkspaceId,
+    });
+  }
+  if (!succeeded && firstFailure) throw firstFailure;
+  return items;
+}
+
+const LOCAL_RETURN_ORIGIN = 'https://factory.invalid';
+
+function localPath(url: URL): string {
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+/** OAuth may only return to a path on this Factory host. */
+function localReturnUrl(value: string | undefined): URL {
+  const url = value?.startsWith('/') ? URL.parse(value, LOCAL_RETURN_ORIGIN) : null;
+  // Dot segments can normalize `/.//host` into a protocol-relative `//host`.
+  if (url?.origin === LOCAL_RETURN_ORIGIN && !url.pathname.startsWith('//')) return url;
+  return new URL('/', LOCAL_RETURN_ORIGIN);
 }
 
 function optionalPositiveIntegerEnv(name: string): number | undefined {

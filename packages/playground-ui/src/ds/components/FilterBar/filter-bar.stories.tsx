@@ -1,15 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import {
-  CircleIcon,
-  GlobeIcon,
-  HashIcon,
-  PlayIcon,
-  SearchIcon,
-  TagIcon,
-  TimerIcon,
-  TriangleAlertIcon,
-  UserIcon,
-} from 'lucide-react';
 import { useState } from 'react';
 import { userEvent, within } from 'storybook/test';
 import { DEFAULT_FILTER_OPERATORS } from './default-operators';
@@ -17,14 +6,23 @@ import { FilterBar } from './filter-bar';
 import type { FilterBarExpression, FilterBarField, FilterBarItem } from './types';
 import { Avatar } from '@/ds/components/Avatar/Avatar';
 import { Txt } from '@/ds/components/Txt';
-import { themedHueColor } from '@/lib/colors';
+import { IconExclamationTriangle } from '@/ds/icons/central/IconExclamationTriangle';
+import { IconFormCircle } from '@/ds/icons/central/IconFormCircle';
+import { IconGlobe } from '@/ds/icons/central/IconGlobe';
+import { IconHashtag } from '@/ds/icons/central/IconHashtag';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
+import { IconPlay } from '@/ds/icons/central/IconPlay';
+import { IconStopwatch } from '@/ds/icons/central/IconStopwatch';
+import { IconTag } from '@/ds/icons/central/IconTag';
+import { IconUser } from '@/ds/icons/central/IconUser';
+import { hueAccentColor } from '@/lib/colors';
 
 const FIELDS: FilterBarField[] = [
   {
     id: 'status',
     label: 'Status',
-    icon: CircleIcon,
-    color: themedHueColor(0),
+    icon: IconFormCircle,
+    color: hueAccentColor('orange'),
     operators: ['is', 'is-not', 'in', 'is-empty', 'is-not-empty'],
     suggestions: [
       { value: 'running', label: 'Running' },
@@ -35,16 +33,16 @@ const FIELDS: FilterBarField[] = [
   {
     id: 'environment',
     label: 'Environment',
-    icon: GlobeIcon,
-    color: themedHueColor(120),
+    icon: IconGlobe,
+    color: hueAccentColor('green'),
     operators: ['is', 'is-not', 'in'],
     suggestions: [{ value: 'prod' }, { value: 'staging' }, { value: 'dev' }],
   },
   {
     id: 'tags',
     label: 'Tags',
-    icon: TagIcon,
-    color: themedHueColor(280),
+    icon: IconTag,
+    color: hueAccentColor('purple'),
     operators: ['in'],
     strict: true,
     suggestions: [{ value: 'production' }, { value: 'experiment' }, { value: 'regression' }, { value: 'canary' }],
@@ -52,24 +50,24 @@ const FIELDS: FilterBarField[] = [
   {
     id: 'traceId',
     label: 'Trace ID',
-    icon: HashIcon,
-    color: themedHueColor(220),
+    icon: IconHashtag,
+    color: hueAccentColor('blue'),
     operators: ['is', 'contains', 'starts-with'],
   },
-  { id: 'runId', label: 'Run ID', icon: PlayIcon, color: themedHueColor(180), operators: ['is', 'contains'] },
+  { id: 'runId', label: 'Run ID', icon: IconPlay, color: hueAccentColor('cyan'), operators: ['is', 'contains'] },
   {
     id: 'duration',
     label: 'Duration (ms)',
-    icon: TimerIcon,
-    color: themedHueColor(40),
+    icon: IconStopwatch,
+    color: hueAccentColor('orange'),
     type: 'number',
     operators: ['gt', 'gte', 'lt', 'lte'],
   },
   {
     id: 'hasError',
     label: 'Has error',
-    icon: TriangleAlertIcon,
-    color: themedHueColor(330),
+    icon: IconExclamationTriangle,
+    color: hueAccentColor('pink'),
     type: 'boolean',
     operators: ['is'],
   },
@@ -112,7 +110,7 @@ function Demo({
     <div className="grid w-full max-w-3xl gap-3">
       <FilterBar fields={fields} operators={DEFAULT_FILTER_OPERATORS} value={items} onValueChange={setItems}>
         <FilterBar.Chips />
-        <FilterBar.Input placeholder="Filter traces…" />
+        <FilterBar.Input placeholder="Filter traces" />
       </FilterBar>
       {children?.(items)}
       <pre className="rounded-lg bg-card p-3 text-meta text-muted-foreground">{JSON.stringify(items, null, 2)}</pre>
@@ -147,12 +145,12 @@ export const FreeText: Story = {
   name: 'Free text (search field) and option avatars',
   render: function FreeTextStory() {
     const fields: FilterBarField[] = [
-      { id: 'text', label: 'Text', icon: SearchIcon, search: true, operators: ['contains'] },
+      { id: 'text', label: 'Text', icon: IconMagnifyingGlass, search: true, operators: ['contains'] },
       {
         id: 'teammate',
         label: 'Teammate',
-        icon: UserIcon,
-        color: themedHueColor(200),
+        icon: IconUser,
+        color: hueAccentColor('blue'),
         operators: ['is'],
         strict: true,
         suggestions: TEAMMATES.map(teammate => ({
@@ -255,7 +253,7 @@ export const CustomLayout: Story = {
           onValueChange={setItems}
           className="rounded-lg"
         >
-          <FilterBar.Input placeholder="Add a filter…" />
+          <FilterBar.Input placeholder="Add a filter" />
         </FilterBar>
         <div className="flex flex-wrap items-center gap-1">
           {items.map(item => (
@@ -305,7 +303,7 @@ function ExpressionDemo({ initial }: { initial: FilterBarExpression }) {
     <div className="grid w-full max-w-3xl gap-3">
       <FilterBar fields={FIELDS} operators={DEFAULT_FILTER_OPERATORS} value={expression} onValueChange={setExpression}>
         <FilterBar.Chips />
-        <FilterBar.Input placeholder="Filter traces…" />
+        <FilterBar.Input placeholder="Filter traces" />
       </FilterBar>
       <pre className="rounded-lg bg-card p-3 text-meta text-muted-foreground">
         {JSON.stringify(expression, null, 2)}

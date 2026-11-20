@@ -535,6 +535,37 @@ export function createDatasetsTests({
         expect(noMatch.datasets).toHaveLength(0);
       });
 
+      it('listDatasets filters by datasetIds and returns every match on one page', async () => {
+        const a = await datasetsStorage.createDataset({ name: 'ds-a' });
+        await datasetsStorage.createDataset({ name: 'ds-b' });
+        const c = await datasetsStorage.createDataset({ name: 'ds-c' });
+
+        const result = await datasetsStorage.listDatasets({
+          filters: { datasetIds: [a.id, c.id, 'missing-id'] },
+          pagination: { page: 0, perPage: false },
+        });
+        expect(result.datasets.map(d => d.name).sort()).toEqual(['ds-a', 'ds-c']);
+        expect(result.pagination).toMatchObject({ total: 2, perPage: false, hasMore: false });
+
+        const none = await datasetsStorage.listDatasets({
+          filters: { datasetIds: [] },
+          pagination: { page: 0, perPage: false },
+        });
+        expect(none.datasets).toHaveLength(0);
+        expect(none.pagination.total).toBe(0);
+      });
+
+      it('listDatasets keeps tenancy filters when datasetIds is set', async () => {
+        const mine = await datasetsStorage.createDataset({ name: 'mine', organizationId: 'org_a' });
+        const theirs = await datasetsStorage.createDataset({ name: 'theirs', organizationId: 'org_b' });
+
+        const result = await datasetsStorage.listDatasets({
+          filters: { organizationId: 'org_a', datasetIds: [mine.id, theirs.id] },
+          pagination: { page: 0, perPage: false },
+        });
+        expect(result.datasets.map(d => d.name)).toEqual(['mine']);
+      });
+
       it('listDatasets filters by name substring case-insensitively', async () => {
         await datasetsStorage.createDataset({ name: 'Production Tickets' });
         await datasetsStorage.createDataset({ name: 'production-logs' });

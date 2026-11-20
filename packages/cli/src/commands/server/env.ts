@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
 import { serializeEnvFile } from '../env/env-file.js';
+import { isSecretPlaceholder } from '../env/platform-api.js';
 import { loadProjectConfig } from '../studio/project-config.js';
 import { parseEnvFile } from './deploy.js';
 import { fetchServerProjects, getServerProjectEnv, updateServerProjectEnv } from './platform-api.js';
@@ -24,9 +25,8 @@ export async function resolveProjectId(
   opts: { config?: string; project?: string },
   auth?: { token: string; orgId: string },
 ): Promise<string> {
-  const envProjectId = process.env.MASTRA_PROJECT_ID;
-  if (envProjectId) return envProjectId;
-
+  // An explicit --project flag beats the environment so a command can target
+  // another project from a shell that exports MASTRA_PROJECT_ID.
   if (opts.project) {
     if (auth) {
       const projects = await fetchServerProjects(auth.token, auth.orgId);
@@ -35,6 +35,9 @@ export async function resolveProjectId(
     }
     return opts.project;
   }
+
+  const envProjectId = process.env.MASTRA_PROJECT_ID;
+  if (envProjectId) return envProjectId;
 
   const config = await loadProjectConfig(process.cwd(), opts.config);
   if (!config?.projectId) {
@@ -63,7 +66,7 @@ export async function envListAction(opts: { config?: string }) {
   for (const key of keys.sort()) {
     // Show only the first 4 chars of the value to avoid leaking secrets
     const val = envVars[key]!;
-    const masked = val.length > 4 ? val.slice(0, 4) + '...' : val;
+    const masked = isSecretPlaceholder(val) ? '(write-only secret)' : val.length > 4 ? val.slice(0, 4) + '...' : val;
     console.info(`    ${key}=${masked}`);
   }
   console.info('');
@@ -149,18 +152,30 @@ export async function envPullAction(file: string | undefined, opts: { config?: s
   const { token, orgId } = await resolveAuth();
   const projectId = await resolveProjectId(opts, { token, orgId });
 
-  const envVars = await getServerProjectEnv(token, orgId, projectId);
+  const stored = await getServerProjectEnv(token, orgId, projectId);
+  // Write-only secrets come back as a placeholder: list their names, never the placeholder.
+  const envVars: Record<string, string> = {};
+  const secretVarNames: string[] = [];
+  for (const [key, value] of Object.entries(stored)) {
+    if (isSecretPlaceholder(value)) secretVarNames.push(key);
+    else envVars[key] = value;
+  }
 
   const target = file ?? '.env';
   const { content, written, skipped } = serializeEnvFile(envVars, {
     header: 'Pulled from Mastra Server — do not edit manually',
+    secretVarNames,
   });
 
   const outputPath = resolve(target);
   await writeFile(outputPath, content, { encoding: 'utf-8', mode: 0o600 });
   await chmod(outputPath, 0o600);
 
-  if (written === 0) {
+  if (secretVarNames.length > 0) {
+    console.info(
+      `\n  Pulled ${written} variable(s) to ${target}. Listed ${secretVarNames.length} write-only secret name(s) as comments.${skipped > 0 ? ` Skipped ${skipped} unsafe key(s).` : ''}\n`,
+    );
+  } else if (written === 0) {
     console.info(`\n  No environment variables set in the project. Wrote empty ${target}.\n`);
   } else {
     console.info(

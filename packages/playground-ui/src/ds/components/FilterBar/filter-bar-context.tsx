@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   clearRemovable,
@@ -10,6 +10,7 @@ import {
   flattenItems,
   groupDepth,
   insertItem,
+  mergeCondition,
   normalize,
   pruneEmptyGroups,
   removeNode,
@@ -74,6 +75,8 @@ export type FilterBarContextValue = {
   /** The draft that just became an item, until its chip has glinted or the bar moves on. */
   lastCommit: FilterBarCommit | null;
   settleCommit: () => void;
+  /** False during the bar's first render: chips rendered then were there from the start and skip their entrance. */
+  mounted: boolean;
   updateItem: (id: string, patch: Partial<Omit<FilterBarItem, 'id'>>) => void;
   /** Removes a leaf. Its group stays, even empty, until the popover closes (see `setOpenGroup`). */
   removeItem: (id: string) => void;
@@ -121,6 +124,11 @@ export type FilterBarContextValue = {
   announce: (message: string) => void;
   announcement: string;
   ariaLabel: string;
+  /**
+   * Text shown when a field's `suggestions` resolver rejects. Return `undefined` to keep the
+   * default "Couldn't load values.".
+   */
+  describeSuggestionsError?: (error: unknown) => string | undefined;
 };
 
 const FilterBarContext = createContext<FilterBarContextValue | null>(null);
@@ -154,6 +162,11 @@ export type FilterBarProviderProps = {
   /** Deepest allowed group nesting (root-level group = 1). Defaults to 3. */
   maxDepth?: number;
   ariaLabel: string;
+  /**
+   * Text shown when a field's `suggestions` resolver rejects. Return `undefined` to keep the
+   * default "Couldn't load values.".
+   */
+  describeSuggestionsError?: (error: unknown) => string | undefined;
   children: ReactNode;
 };
 
@@ -200,6 +213,7 @@ export function FilterBarProvider({
   createItemId,
   maxDepth = DEFAULT_MAX_GROUP_DEPTH,
   ariaLabel,
+  describeSuggestionsError,
   children,
 }: FilterBarProviderProps) {
   const segments = useRef(new Map<SegmentKey, HTMLElement>());
@@ -212,6 +226,8 @@ export function FilterBarProvider({
   const [nonRemovableIds, setNonRemovableIds] = useState<ReadonlySet<string>>(() => new Set());
   const [inputTarget, setInputTarget] = useState<string | undefined>(undefined);
   const [openGroupId, setOpenGroupId] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const emit = useCallback(
     (next: FilterBarExpression) => onValueChange(denormalize(next, flat)),
@@ -220,14 +236,23 @@ export function FilterBarProvider({
 
   const getField = useCallback((fieldId: string) => fields.find(f => f.id === fieldId), [fields]);
   const getOperator = useCallback((operatorId: string) => operators.find(o => o.id === operatorId), [operators]);
-  const getFieldOperators = useCallback(
-    (field: FilterBarField) => {
-      if (!field.operators) return operators;
-      const allowed = new Set(field.operators);
-      return operators.filter(o => allowed.has(o.id));
-    },
-    [operators],
-  );
+  // Cached per field so a chip's operator and its option list stay the same objects across renders.
+  const getFieldOperators = useMemo(() => {
+    const cache = new WeakMap<FilterBarField, FilterBarOperator[]>();
+    return (field: FilterBarField) => {
+      const cached = cache.get(field);
+      if (cached) return cached;
+      const allowed = field.operators ? new Set(field.operators) : undefined;
+      const result = operators
+        .filter(o => !allowed || allowed.has(o.id))
+        .map((o): FilterBarOperator => {
+          const label = field.operatorLabels?.[o.id];
+          return label ? { ...o, label } : o;
+        });
+      cache.set(field, result);
+      return result;
+    };
+  }, [operators]);
 
   const announce = useCallback((message: string) => setAnnouncement(message), []);
 
@@ -255,13 +280,22 @@ export function FilterBarProvider({
   // Until the consumer reflects the commit in `value`, the committed item is ours to show;
   // nodes on their way out keep their place in the previously rendered tree.
   const renderedTreeRef = useRef<FilterBarNode[]>(expression.nodes);
+  // Once `value` holds the committed item it's the consumer's: if they later drop it (e.g. a
+  // saved view replaces the filters) it must go, not come back as our pending commit.
+  const reflectedCommitIdRef = useRef<string | undefined>(undefined);
+  // Recorded once a render showing the reflected item commits, so a discarded render can't mark it.
+  useLayoutEffect(() => {
+    if (lastCommit && idsOf(expression.nodes).has(lastCommit.item.id)) {
+      reflectedCommitIdRef.current = lastCommit.item.id;
+    }
+  }, [lastCommit, expression]);
   const { rendered, items, leaving, rootGroupOf } = useMemo(() => {
     const present = idsOf(expression.nodes);
     let rendered: FilterBarExpression =
       leavingIds.size === 0
         ? expression
         : { ...expression, nodes: mergeNodes(renderedTreeRef.current, expression.nodes, leavingIds) };
-    if (lastCommit && !present.has(lastCommit.item.id)) {
+    if (lastCommit && !present.has(lastCommit.item.id) && reflectedCommitIdRef.current !== lastCommit.item.id) {
       rendered = insertItem(rendered, lastCommit.groupId, lastCommit.item);
     }
     renderedTreeRef.current = rendered.nodes;
@@ -277,12 +311,27 @@ export function FilterBarProvider({
     return { rendered, items: flattenItems(rendered).map(e => e.item), leaving, rootGroupOf };
   }, [expression, lastCommit, leavingIds]);
 
+  // Consumers who derive root ids from the field hold one root filter per field: this is the
+  // one `fieldId` already has, which a new filter on that field updates instead of duplicating.
+  const fieldItem = useCallback(
+    (fieldId: string, groupId: string | undefined) => {
+      if (!createItemId || groupId !== undefined) return undefined;
+      const id = createItemId(fieldId);
+      return exprRef.current.nodes.find((node): node is FilterBarItem => !isFilterBarGroup(node) && node.id === id);
+    },
+    [createItemId],
+  );
+
   // The draft chip is keyed by the id the committed item will carry, so React keeps the same
   // element through the commit. Consumers who derive ids themselves supply `createItemId` so
-  // the id we hand back in `onValueChange` is the one they'll hand back in `value`.
+  // the id we hand back in `onValueChange` is the one they'll hand back in `value`. A draft for
+  // a field that already has its chip gets an id of its own, so the two chips never share a key.
   const newItemId = useCallback(
-    (fieldId: string) => (createItemId && inputTarget === undefined ? createItemId(fieldId) : createFilterId()),
-    [createItemId, inputTarget],
+    (fieldId: string) =>
+      createItemId && inputTarget === undefined && !fieldItem(fieldId, undefined)
+        ? createItemId(fieldId)
+        : createFilterId(),
+    [createItemId, inputTarget, fieldItem],
   );
 
   const setDraft = useCallback(
@@ -307,13 +356,27 @@ export function FilterBarProvider({
       // Operators without a value commit straight from the operator step, before a draft exists.
       const id = draftRef.current?.id ?? newItemId(fieldId);
       const groupId = draftRef.current?.groupId ?? inputTarget;
+      const from = stageOf(draftRef.current);
+      setDraftState(null);
+      const existing = fieldItem(fieldId, groupId);
+      if (existing) {
+        // An unknown field has no operator contract to widen into: the new filter replaces the old one.
+        const field = getField(fieldId);
+        const condition = mergeCondition(existing, { operatorId, value }, field ? getFieldOperators(field) : []);
+        const item = { ...existing, ...condition };
+        emit(updateTreeItem(exprRef.current, existing.id, condition));
+        reflectedCommitIdRef.current = undefined;
+        setLastCommit({ item, from, glint: true });
+        announce('Filter updated');
+        return;
+      }
       const item = { id, fieldId, operatorId, value };
       emit(insertItem(exprRef.current, groupId, item));
-      setLastCommit({ item, from: stageOf(draftRef.current), glint: true, groupId });
-      setDraftState(null);
+      reflectedCommitIdRef.current = undefined;
+      setLastCommit({ item, from, glint: true, groupId });
       announce('Filter added');
     },
-    [emit, announce, newItemId, inputTarget],
+    [emit, announce, newItemId, inputTarget, fieldItem, getField, getFieldOperators],
   );
 
   const updateItem = useCallback(
@@ -511,6 +574,7 @@ export function FilterBarProvider({
       commitDraft,
       lastCommit,
       settleCommit,
+      mounted,
       updateItem,
       removeItem,
       leaving,
@@ -537,6 +601,7 @@ export function FilterBarProvider({
       announce,
       announcement,
       ariaLabel,
+      describeSuggestionsError,
     }),
     [
       fields,
@@ -550,6 +615,7 @@ export function FilterBarProvider({
       commitDraft,
       lastCommit,
       settleCommit,
+      mounted,
       updateItem,
       removeItem,
       leaving,
@@ -576,6 +642,7 @@ export function FilterBarProvider({
       announce,
       announcement,
       ariaLabel,
+      describeSuggestionsError,
     ],
   );
 

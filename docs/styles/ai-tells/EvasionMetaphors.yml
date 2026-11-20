@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI evasion metaphor: '%s'. Name what the check missed and why."
+message: "AI evasion metaphor: '%s'. Say what the check missed and why."
 level: error
 nonword: true
 ignorecase: true

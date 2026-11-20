@@ -5,17 +5,19 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
-import { useScorer, useScoresByScorerId } from '@mastra/playground-ui/domains/scores';
-import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
+import { IconDotGrid1x3Vertical } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Vertical';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { sortBy } from '@mastra/playground-ui/sort/sort-by';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { MoreVertical, Pencil, Play } from 'lucide-react';
+import { useAgents } from '@mastra/react/hooks/agents';
+import { useScorer, useScoresByScorerId } from '@mastra/react/hooks/scores';
+import { useWorkflows } from '@mastra/react/hooks/workflows';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
-import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { ExperimentTriggerDialog } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-dialog';
 import { navCrumb, scorerCrumb } from '@/domains/navigation/crumbs';
 import { NoScoresInfo } from '@/domains/scores/components/no-scores-info';
@@ -25,13 +27,12 @@ import type { ScoresSortKey } from '@/domains/scores/components/scores-list';
 import { ScoresTools } from '@/domains/scores/components/scores-tools';
 import type { ScoreEntityOption as EntityOptions } from '@/domains/scores/components/scores-tools';
 import { useScoresColumns } from '@/domains/scores/hooks/use-scores-columns';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 const crumbs = [navCrumb('/scorers'), scorerCrumb];
 const SCORES_SORT_KEYS: readonly ScoresSortKey[] = ['date', 'score'];
 
 export default function Scorer() {
-  const { scorerId } = useParams()! as { scorerId: string };
+  const { scorerId } = useParams() as { scorerId: string };
   const [searchParams, setSearchParams] = useSearchParams();
   const scoreIdFromUrl = searchParams.get('scoreId') ?? undefined;
   const [selectedScoreId, setSelectedScoreId] = useState<string | undefined>(scoreIdFromUrl);
@@ -43,13 +44,11 @@ export default function Scorer() {
     type: 'ALL' as const,
   });
 
-  const { scorer, error: scorerError } = useScorer(scorerId!);
+  const { scorer, error: scorerError } = useScorer(scorerId);
   const columnsState = useScoresColumns();
 
   const { data: agents = {}, isLoading: isLoadingAgents, error: agentsError } = useAgents();
-  const { isLoading: isLoadingWorkflows, error: workflowsError } = useWorkflows({
-    requestContext: usePlaygroundStore().requestContext,
-  });
+  const { isLoading: isLoadingWorkflows, error: workflowsError } = useWorkflows({});
   const { sort, onSortChange } = useUrlSort({ searchParams, setSearchParams, allowedKeys: SCORES_SORT_KEYS });
   const {
     data: loadedScores = [],
@@ -198,13 +197,13 @@ export default function Scorer() {
   const scorerActionsMenu = isStoredScorer ? (
     <DropdownMenu>
       <DropdownMenu.Trigger asChild>
-        <Button size="lg" aria-label="Scorer actions menu">
-          <MoreVertical />
+        <Button size="icon-lg" aria-label="Scorer actions menu">
+          <IconDotGrid1x3Vertical />
         </Button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" className="w-48">
         <DropdownMenu.Item onSelect={() => void navigate(`/cms/scorers/${scorerId}/edit`)}>
-          <Pencil /> Edit Scorer
+          <IconPencil /> Edit scorer
         </DropdownMenu.Item>
       </DropdownMenu.Content>
     </DropdownMenu>
@@ -270,8 +269,8 @@ export default function Scorer() {
           </ActionRow.Start>
           <ActionRow.End>
             <ScoresColumnsMenu visibleColumns={columnsState.visibleColumns} toggleColumn={columnsState.toggleColumn} />
-            <Button variant="primary" onClick={() => setRunDialogOpen(true)} icon={<Play />}>
-              Run Experiment
+            <Button variant="primary" onClick={() => setRunDialogOpen(true)} icon={<IconPlusMedium />}>
+              New experiment
             </Button>
             {scorerActionsMenu}
           </ActionRow.End>

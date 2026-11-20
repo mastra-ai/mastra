@@ -1,6 +1,8 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { Plus } from 'lucide-react';
 import { useRef } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { useAgentColor } from '../../../contexts/agent-color-context';
@@ -45,7 +47,7 @@ export const AgentProfileAvatar = ({ disabled = false }: AgentProfileAvatarProps
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={disabled}
-            className="relative rounded-full focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+            className={cn('relative rounded-full disabled:cursor-not-allowed disabled:opacity-60', focusRing)}
             aria-label="Upload avatar"
             data-testid="agent-configure-avatar-trigger"
           >
@@ -58,7 +60,7 @@ export const AgentProfileAvatar = ({ disabled = false }: AgentProfileAvatarProps
               textColor={avatarTextColor}
             />
             <span className="absolute inset-0 flex items-center justify-center rounded-full bg-muted opacity-0 transition-opacity">
-              <Plus className="h-5 w-5 text-foreground" />
+              <IconPlusMedium className="size-icon-lg text-foreground" />
             </span>
           </button>
           <input

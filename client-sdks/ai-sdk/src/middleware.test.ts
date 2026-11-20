@@ -136,11 +136,13 @@ describe('withMastra middleware', () => {
 
     it('should run output processors after LLM call', async () => {
       const processedOutputs: string[] = [];
+      let processedUsage: ProcessOutputResultArgs['result']['usage'];
 
       const outputProcessor: OutputProcessor = {
         id: 'output-logger',
         name: 'Output Logger',
         async processOutputResult(args: ProcessOutputResultArgs) {
+          processedUsage = args.result.usage;
           for (const msg of args.messages) {
             if (msg.role === 'assistant') {
               const text =
@@ -165,6 +167,7 @@ describe('withMastra middleware', () => {
       });
 
       expect(processedOutputs).toContain('AI response here');
+      expect(processedUsage).toEqual({ inputTokens: 10, outputTokens: 5, totalTokens: 15 });
       expect(result.text).toBe('AI response here');
     });
 
@@ -323,6 +326,51 @@ describe('withMastra middleware', () => {
       expect(chunks).toContain('response');
     });
 
+    it('should preserve unknown usage counters from output processors', async () => {
+      const usageProcessor: OutputProcessor = {
+        id: 'usage-processor',
+        async processOutputStream(args: ProcessOutputStreamArgs) {
+          if (args.part.type !== 'finish') {
+            return args.part;
+          }
+
+          return {
+            ...args.part,
+            payload: {
+              ...args.part.payload,
+              output: {
+                ...args.part.payload.output,
+                usage: {
+                  inputTokens: undefined,
+                  outputTokens: 0,
+                  totalTokens: undefined,
+                },
+              },
+            },
+          };
+        },
+      };
+
+      const model = withMastra(createMockModel(), {
+        outputProcessors: [usageProcessor],
+      });
+
+      const result = await streamText({
+        model,
+        prompt: 'Test',
+      });
+
+      for await (const _ of result.fullStream) {
+        // Consume the stream.
+      }
+
+      await expect(result.usage).resolves.toEqual({
+        inputTokens: undefined,
+        outputTokens: 0,
+        totalTokens: undefined,
+      });
+    });
+
     it('should allow processOutputStream to filter chunks', async () => {
       const filterProcessor: OutputProcessor = {
         id: 'filter',
@@ -395,6 +443,7 @@ describe('withMastra middleware', () => {
 
     it('should run processOutputResult after streaming completes', async () => {
       let outputText = '';
+      let processedUsage: ProcessOutputResultArgs['result']['usage'];
 
       const upperCaseProcessor: OutputProcessor = {
         id: 'upper',
@@ -415,6 +464,7 @@ describe('withMastra middleware', () => {
       const inspectorProcessor: OutputProcessor = {
         id: 'inspector',
         async processOutputResult(args: ProcessOutputResultArgs) {
+          processedUsage = args.result.usage;
           outputText = args.messageList.get.response
             .db()
             .map(
@@ -445,6 +495,11 @@ describe('withMastra middleware', () => {
 
       expect(fullText).toBe('TEST RESPONSE');
       expect(outputText).toBe('TEST RESPONSE');
+      expect(processedUsage).toEqual({
+        inputTokens: undefined,
+        outputTokens: undefined,
+        totalTokens: undefined,
+      });
     });
 
     it('should not run processOutputResult when stream errors without finishing', async () => {

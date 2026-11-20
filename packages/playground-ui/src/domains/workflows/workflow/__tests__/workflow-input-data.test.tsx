@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -67,50 +66,6 @@ describe('WorkflowInputData', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Run' }));
 
       await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({ prompt: 'First line\nSecond line' }));
-    });
-  });
-
-  describe('when a stored processor input is edited', () => {
-    it('submits the new message while preserving its identity and phase', () => {
-      const onSubmit = vi.fn();
-      const input = {
-        messages: [
-          {
-            id: 'message-1',
-            role: 'assistant',
-            createdAt: '2026-06-08T00:00:00.000Z',
-            content: {
-              format: 2,
-              parts: [{ type: 'text', text: 'Stored processor run input' }],
-            },
-          },
-        ],
-        phase: 'outputResult',
-      };
-      render(
-        <WorkflowInputData
-          schema={processorSchema}
-          defaultValues={input}
-          isSubmitLoading={false}
-          submitButtonLabel="Run"
-          onSubmit={onSubmit}
-          isProcessorWorkflow
-        />,
-      );
-
-      fireEvent.change(screen.getByRole('textbox', { name: 'Test Message' }), {
-        target: { value: 'Edited processor input' },
-      });
-      fireEvent.click(screen.getByRole('button', { name: 'Run' }));
-      expect(onSubmit).toHaveBeenCalledWith({
-        ...input,
-        messages: [
-          {
-            ...input.messages[0],
-            content: { format: 2, parts: [{ type: 'text', text: 'Edited processor input' }] },
-          },
-        ],
-      });
     });
   });
 

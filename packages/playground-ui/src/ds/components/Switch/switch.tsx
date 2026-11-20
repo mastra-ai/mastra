@@ -1,6 +1,8 @@
 import { Switch as SwitchPrimitive } from '@base-ui/react/switch';
 import * as React from 'react';
 
+import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
+import { focusRingOffset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 import './switch.css';
 
@@ -29,18 +31,18 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
     const renderProps =
       asChild && React.isValidElement(children)
         ? { render: children as React.ReactElement }
-        : { render: <button type="button" />, nativeButton: true };
+        : { render: <button type="button" {...keepOwnAccessibleName(props)} />, nativeButton: true };
 
     return (
       <SwitchPrimitive.Root
         ref={ref}
         data-slot="switch"
         className={cn(
-          'peer group/switch inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-0 bg-fill-hover p-0.5 outline-hidden',
+          'peer group/switch inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-0 bg-fill-hover p-0.5',
           'transition-colors duration-normal ease-out-custom motion-reduce:transition-none',
           'hover:bg-fill-active',
           'active:bg-fill-strong',
-          'focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-border-focus focus-visible:outline-solid',
+          focusRingOffset,
           'data-[checked]:bg-foreground/90',
           'data-[checked]:hover:bg-foreground',
           'data-[checked]:active:bg-foreground/75',

@@ -1,12 +1,14 @@
 import { Tabs as BaseTabs } from '@base-ui/react/tabs';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
-import { ChevronDown, X } from 'lucide-react';
 import { Fragment, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { DropdownMenu } from '../DropdownMenu/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../Tooltip/tooltip';
 import { TabListContext, TabsContext } from './tabs-context';
 import type { TabMeasurement } from './tabs-context';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { controlHeight } from '@/ds/primitives/control-size';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -26,25 +28,38 @@ type TabListVariantsProps = VariantProps<typeof tabListVariants>;
 
 export type TabListVariant = NonNullable<TabListVariantsProps['variant']>;
 
+/** The shared control rung: a list of a size lines up with a Button or Input of that size. */
 export type TabListSize = 'sm' | 'md';
 
 export type TabListProps = Omit<TabListVariantsProps, 'variant'> & {
   children: React.ReactNode;
   className?: string;
   sticky?: boolean;
-  /** Control height of each tab; `sm` lines up with `size="sm"` buttons (e.g. inside a `DataPanel.Header`). */
   size?: TabListSize;
-  /** `pill` sits the selected tab on a track; `pill-ghost` drops the track. */
   variant?: TabListVariant | null;
-  /**
-   * Optional inline styles applied to the underlying tab list element.
-   * To override the active tab indicator color, set the `--tab-indicator-color`
-   * CSS variable, e.g. `style={{ '--tab-indicator-color': 'var(--accent5)' } as React.CSSProperties}`.
-   */
   style?: React.CSSProperties;
+  /**
+   * What happens to tabs that don't fit: `scroll` (default) scrolls the list; `menu` folds them into a
+   * "+N" menu after the last tab that fits, keeping the open one in the row. Contained tabs always fold.
+   */
+  overflow?: 'scroll' | 'menu';
 };
 
-export const TabList = ({ children, className, variant, size = 'md', sticky, style }: TabListProps) => {
+/** The active pill sits inside the track's inset: 2px on the rung-sized track, 4px when contained. */
+function indicatorHeightClass(variant: TabListVariant, contained: boolean) {
+  if (variant !== 'pill') return 'h-full';
+  return contained ? 'h-[calc(100%-0.5rem)]' : 'h-[calc(100%-0.25rem)]';
+}
+
+export const TabList = ({
+  children,
+  className,
+  variant,
+  size = 'md',
+  sticky,
+  style,
+  overflow = 'scroll',
+}: TabListProps) => {
   const resolvedVariant = variant ?? 'pill';
   const tabs = useContext(TabsContext);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -78,24 +93,32 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
     [],
   );
   const contained = tabs?.appearance === 'contained';
+  const folds = contained || overflow === 'menu';
+  const pillTrack = resolvedVariant === 'pill' && !contained;
+  const indicatorHeight = indicatorHeightClass(resolvedVariant, contained);
   useLayoutEffect(() => {
     const viewport = scrollRef.current;
-    if (!viewport || !contained) return;
+    if (!viewport || !folds) return;
     const measure = () => setAvailable(viewport.clientWidth);
     measure();
     if (!('ResizeObserver' in globalThis)) return;
     const observer = new ResizeObserver(measure);
     observer.observe(viewport);
     return () => observer.disconnect();
-  }, [contained]);
-  const gap = tabs?.frame === 'inset' ? 4 : 0;
-  const frameReserve = tabs?.frame === 'inset' ? 30 : 0;
+  }, [folds]);
+  // Space between tabs, and around them, that folding has to count: the inset frame's, a pill
+  // track's `gap-1` and 2px inset on each side, or ghost pills' `gap-0.5`. Once some fold, the "+N"
+  // menu needs room: 48px pinned in contained tabs; elsewhere the `sm` trigger, 58px for "+1" and up to
+  // 68px for a two-digit count, plus the `gap-1` before it.
+  const gap = contained || pillTrack ? 4 : resolvedVariant === 'pill-ghost' ? 2 : 0;
+  const frameReserve = contained ? 30 : pillTrack ? 4 : 0;
+  const menuReserve = contained ? 48 : 72;
   const hiddenValues = useMemo(() => {
     const hidden = new Set<string>();
-    if (!contained || available === null) return hidden;
+    if (!folds || available === null) return hidden;
     const tabTotal = measurements.reduce((sum, tab) => sum + tab.width, 0) + gap * Math.max(measurements.length - 1, 0);
     if (tabTotal + frameReserve <= available) return hidden;
-    let remaining = available - frameReserve - 48;
+    let remaining = available - frameReserve - menuReserve;
     const active = measurements.find(tab => tab.value === tabs?.value);
     if (active) remaining -= active.width + gap;
     let full = false;
@@ -107,11 +130,11 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
       } else remaining -= tab.width + gap;
     }
     return hidden;
-  }, [contained, available, measurements, gap, frameReserve, tabs?.value]);
+  }, [folds, available, measurements, gap, frameReserve, menuReserve, tabs?.value]);
   const hiddenTabs = measurements.filter(tab => hiddenValues.has(tab.value));
   const overflowX = measurements
     .filter(tab => !hiddenValues.has(tab.value))
-    .reduce((sum, tab) => sum + tab.width + gap, tabs?.frame === 'inset' ? 4 : 0);
+    .reduce((sum, tab) => sum + tab.width + gap, contained ? 4 : 0);
   const visibleClosableTabs = measurements.filter(tab => !hiddenValues.has(tab.value) && tab.onClose);
   const listContext = useMemo(
     () => ({ variant: resolvedVariant, size, hiddenValues, register, unregister }),
@@ -150,7 +173,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
     const previousValue = selectedValue.current;
     selectedValue.current = tabs?.value;
     const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-    if (!contained || tabs?.frame !== 'inset' || previousValue === tabs?.value || reduceMotion) return;
+    if (!contained || previousValue === tabs?.value || reduceMotion) return;
     const indicator = scrollRef.current?.querySelector<HTMLElement>('[data-slot="tabs-indicator"]');
     if (!indicator || !('animate' in indicator)) return;
     indicator.animate(
@@ -163,7 +186,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
         easing: 'cubic-bezier(0.32, 0.72, 0, 1)',
       },
     );
-  }, [contained, tabs?.frame, tabs?.value]);
+  }, [contained, tabs?.value]);
 
   return (
     <TabListContext.Provider value={listContext}>
@@ -171,21 +194,33 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
         <div
           ref={scrollRef}
           data-slot="tabs-list-scroll"
-          className={cn('relative w-full overflow-x-auto', sticky && 'sticky top-0 z-10 bg-background')}
+          className={cn(
+            'relative w-full',
+            // Outside contained tabs, the "+N" menu follows the list in the row.
+            folds && !contained ? 'flex items-center gap-1' : 'overflow-x-auto',
+            sticky && 'sticky top-0 z-10 bg-background',
+          )}
         >
           <BaseTabs.List
             data-slot="tabs-list"
             data-overflow={hiddenTabs.length > 0 || undefined}
             data-variant={resolvedVariant}
             data-size={size}
-            className={cn('group/tabs-list', tabListVariants({ variant: resolvedVariant }), className)}
+            className={cn(
+              'group/tabs-list',
+              tabListVariants({ variant: resolvedVariant }),
+              // A filled pill track is the control: its outer box takes the rung (like SegmentedControl),
+              // and the tabs fill it inside the 2px inset.
+              pillTrack && cn(controlHeight[size], 'items-stretch p-0.5'),
+              className,
+            )}
             style={style}
           >
             {children}
             <BaseTabs.Indicator
               className={cn(
                 'absolute top-1/2 left-0 z-0 rounded-full bg-[var(--tab-indicator-color,var(--fill-hover))]',
-                resolvedVariant === 'pill' ? 'h-[calc(100%-0.5rem)]' : 'h-full',
+                indicatorHeight,
                 'w-[var(--active-tab-width)]',
                 'transition-[width,transform] duration-200 ease-in-out motion-reduce:transition-none',
               )}
@@ -212,12 +247,15 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
                         tabIndex={tabs?.value === tab.value ? 0 : -1}
                         data-slot="tab-close"
                         onClick={tab.onClose}
-                        className={cn('rounded p-0.5 hover:bg-fill-hover hover:text-accent2', transitions.colors)}
+                        className={cn(
+                          'rounded p-0.5 hover:bg-fill-hover hover:text-destructive-foreground',
+                          transitions.colors,
+                        )}
                       />
                     }
                   >
                     <span className="sr-only">Close {tab.label}</span>
-                    <X aria-hidden="true" className="size-3" />
+                    <IconCrossMedium aria-hidden="true" className="size-icon-xs" />
                   </TooltipTrigger>
                   <TooltipContent>Close {tab.label}</TooltipContent>
                 </Tooltip>
@@ -227,8 +265,8 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
           {hiddenTabs.length > 0 && (
             <div
               data-slot="tabs-overflow"
-              style={{ transform: `translateX(${overflowX}px)` }}
-              className="tabs-overflow"
+              style={contained ? { transform: `translateX(${overflowX}px)` } : undefined}
+              className={contained ? 'tabs-overflow' : undefined}
             >
               <DropdownMenu>
                 <DropdownMenu.Trigger
@@ -238,9 +276,9 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
                   className="tabular-nums"
                 >
                   +{hiddenTabs.length}
-                  <ChevronDown aria-hidden="true" className="size-3" />
+                  <IconChevronDownMedium aria-hidden="true" className="size-icon-xs" />
                 </DropdownMenu.Trigger>
-                <DropdownMenu.Content className="grid">
+                <DropdownMenu.Content>
                   {hiddenTabs.map((tab, index) => (
                     <Fragment key={tab.value}>
                       <DropdownMenu.Item
@@ -261,14 +299,14 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
                             render={
                               <DropdownMenu.Item
                                 data-slot="tabs-overflow-close"
-                                className="pointer-events-none z-10 m-1 size-6 self-center justify-self-end p-0 opacity-0 hover:text-accent2 data-[highlighted]:text-accent2"
+                                className="pointer-events-none z-10 m-1 size-6 self-center justify-self-end p-0 opacity-0 hover:text-destructive-foreground data-[highlighted]:text-destructive-foreground"
                                 style={{ gridArea: `${index + 1} / 1` }}
                                 onClick={tab.onClose}
                               />
                             }
                           >
                             <span className="sr-only">Close {tab.label}</span>
-                            <X aria-hidden="true" className="size-3" />
+                            <IconCrossMedium aria-hidden="true" className="size-icon-xs" />
                           </TooltipTrigger>
                           <TooltipContent side="right">Close {tab.label}</TooltipContent>
                         </Tooltip>

@@ -1,10 +1,11 @@
 import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
 
-import { SkeletonRows } from '../../../../ui/SkeletonRows';
-import { providerDisplayName } from '../../../settings/components/provider-display-name';
+import { PaletteRowsSkeleton } from '../../../../ui/PaletteRowsSkeleton';
+import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import type { ProviderConnection } from '../../hooks/useProviderConnection';
-import { isProviderConfigured, matchesProviderQuery } from '../../hooks/useProviderConnection';
+import { matchesProviderQuery } from '../../hooks/useProviderConnection';
+import { MastraGatewayBilling } from '../MastraGatewayBilling';
 import { ProviderBrandIcon } from '../ProviderBrandIcon';
 import { CreateFactoryPaletteAlert, CreateFactoryPaletteMessage } from './CreateFactoryPalette';
 
@@ -16,19 +17,38 @@ export interface CreateFactoryProviderRowsProps {
 
 export function CreateFactoryProviderRows({ connection, query, error }: CreateFactoryProviderRowsProps) {
   if (connection.isPending) {
-    return <SkeletonRows label="Loading model providers" rows={3} rowClassName="mx-2 my-1 h-12 rounded-xl" />;
+    return <PaletteRowsSkeleton label="Loading model providers" rows={3} />;
   }
   if (connection.catalogError)
     return <CreateFactoryPaletteAlert>{connection.catalogError.message}</CreateFactoryPaletteAlert>;
 
+  const gateway =
+    connection.gatewayProvider && matchesProviderQuery(connection.gatewayProvider, query)
+      ? connection.gatewayProvider
+      : undefined;
   const signIn = connection.signInProviders.filter(provider => matchesProviderQuery(provider, query));
-  const withKey = connection.keyProviders.filter(provider => matchesProviderQuery(provider, query));
+  const withKey = connection.keyProviders.filter(
+    provider => provider.oauth?.supported !== true && matchesProviderQuery(provider, query),
+  );
 
   return (
     <>
       {error && <CreateFactoryPaletteAlert>{error}</CreateFactoryPaletteAlert>}
-      {signIn.length === 0 && withKey.length === 0 && (
+      {!gateway && signIn.length === 0 && withKey.length === 0 && (
         <CreateFactoryPaletteMessage>No providers match this search.</CreateFactoryPaletteMessage>
+      )}
+      {gateway && (
+        <CommandGroup heading="Recommended">
+          <CommandPaletteItem
+            icon={<ProviderBrandIcon provider={gateway.provider} />}
+            title={providerDisplayName(gateway.provider)}
+            subtitle={<MastraGatewayBilling />}
+            badge={connection.isConfigured(gateway) ? 'Connected' : undefined}
+            value={`gateway-${gateway.provider}`}
+            disabled={connection.pending}
+            onSelect={connection.chooseGateway}
+          />
+        </CommandGroup>
       )}
       {signIn.length > 0 && (
         <CommandGroup heading="Sign in">
@@ -37,8 +57,10 @@ export function CreateFactoryProviderRows({ connection, query, error }: CreateFa
               key={provider.provider}
               icon={<ProviderBrandIcon provider={provider.provider} />}
               title={providerDisplayName(provider.provider)}
-              subtitle={isProviderConfigured(provider) ? 'Signed in on this deployment' : 'Sign in with your account'}
-              badge={isProviderConfigured(provider) ? 'Connected' : undefined}
+              subtitle={
+                connection.isConfigured(provider) ? 'Signed in on this deployment' : 'Sign in with your account'
+              }
+              badge={connection.isConfigured(provider) ? 'Connected' : undefined}
               value={`signin-${provider.provider}`}
               disabled={connection.pending}
               onSelect={() => connection.chooseSignInProvider(provider)}
@@ -53,8 +75,8 @@ export function CreateFactoryProviderRows({ connection, query, error }: CreateFa
               key={provider.provider}
               icon={<ProviderBrandIcon provider={provider.provider} />}
               title={providerDisplayName(provider.provider)}
-              subtitle={isProviderConfigured(provider) ? 'API key saved' : 'Connect with an API key'}
-              badge={isProviderConfigured(provider) ? 'Connected' : undefined}
+              subtitle={connection.isConfigured(provider) ? 'API key saved' : 'Connect with an API key'}
+              badge={connection.isConfigured(provider) ? 'Connected' : undefined}
               value={`key-${provider.provider}`}
               disabled={connection.pending}
               onSelect={() => connection.chooseKeyProvider(provider)}

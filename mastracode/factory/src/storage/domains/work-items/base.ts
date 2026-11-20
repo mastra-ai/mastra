@@ -12,16 +12,71 @@ import { createHash } from 'node:crypto';
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
-import { externalSourceForWorkItem } from '../../../rules/types.js';
+import { factoryDispatchFailureMetadata } from '../../../rules/dispatch-errors.js';
+import { externalSourceForWorkItem, FACTORY_TRIAGE_TYPES } from '../../../rules/types.js';
 import type { FactoryTriageType, WorkItemSource } from '../../../rules/types.js';
-import type { FactoryHealthFinding } from '../../../supervisor/health.js';
+import { splitCardMetadata, workItemProviderAdapter } from '../../../work-items/providers/index.js';
 import {
-  WORK_ITEM_ACTIVITY_SCHEMA,
-  WORK_ITEM_COMMENT_MENTIONS_SCHEMA,
-  WORK_ITEM_COMMENTS_SCHEMA,
-} from '../comments/schema.js';
+  copyLegacyRows,
+  migrateWorkItemSplit,
+  readLegacyWatermark,
+  readWorkItemSplitMarker,
+  recordWorkItemSplitComplete,
+} from '../../../work-items/split-migration.js';
+import type { LegacyWatermark, WorkItemSplitReport } from '../../../work-items/split-migration.js';
+import { AnnouncedLists } from '../../announced-lists.js';
+import { ensureLegacyCollections } from '../../legacy-collections.js';
+import {
+  BoardScopes,
+  bumpBoardVersions,
+  CARD_TABLES,
+  DECISION_TABLES,
+  FACTORY_BOARD_VERSIONS_SCHEMA,
+  readBoardVersion,
+  trackBoardWrites,
+} from './board-version.js';
+import type { BoardScope } from './board-version.js';
+import { Cards, splitCardRows } from './cards.js';
+import { LEASE_TABLES, trackClaimableWrites } from './claimable-work.js';
+import type { FactoryClaimableWorkScope } from './claimable-work.js';
+import {
+  LEGACY_REST_PHASE,
+  LEGACY_REVIEW_BOARD,
+  LEGACY_TRIAGE_PHASE,
+  LEGACY_WORK_BOARD,
+  readReviewBoardInUse,
+  releaseLegacyReviewCards,
+} from './legacy-review.js';
+import type { ReviewBoardInUse, ReviewBoardScope } from './legacy-review.js';
+import type {
+  WorkItemRow as ProviderWorkItemRow,
+  WorkItemDbRecord,
+  WorkItemSourceDbRecord,
+  WorkItemSourceRow,
+} from './work-item-schema.js';
+import {
+  primarySource,
+  FACTORY_BOARD_ITEMS_SCHEMA,
+  FACTORY_WORK_ITEMS_SCHEMA,
+  FACTORY_WORK_ITEM_SOURCES_SCHEMA,
+  FACTORY_WORK_ITEM_SPLIT_LOCKS_SCHEMA,
+  FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA,
+  FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA,
+  WORK_ITEMS_SCHEMA,
+} from './work-item-schema.js';
+
+export type { FactoryClaimableWorkScope } from './claimable-work.js';
 
 export type WorkItemStage = string;
+
+/** Freeze `value` and everything reachable from it, so shared cache entries cannot be written to. */
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const entry of Object.values(value)) deepFreeze(entry);
+  }
+  return value;
+}
 
 function stableJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
@@ -45,6 +100,9 @@ function isWorkItemSource(value: unknown): value is WorkItemSource {
     value === 'linear-issue' ||
     value === 'jira-issue' ||
     value === 'incidentio-follow-up' ||
+    value === 'github-dependabot-alert' ||
+    value === 'vanta-vulnerability' ||
+    value === 'detail-finding' ||
     value === 'manual'
   );
 }
@@ -65,6 +123,8 @@ export interface ExternalWorkItemSource {
 /** Dispatcher upsert idempotency token — server bookkeeping, dropped from the read wire. */
 export const FACTORY_RULE_MATERIALIZATION_KEY = 'factoryRuleMaterializationKey';
 export const FACTORY_PULL_REQUEST_RECONCILIATION_KEY = 'factoryPullRequestReconciliation';
+/** Reason of the `stale` rejection a transition commit gets when the card's revision moved on. */
+export const REVISION_CONFLICT_REASON = 'The work item changed before this transition committed.';
 
 export interface WorkItemStageEntry {
   stage: WorkItemStage;
@@ -100,56 +160,54 @@ export interface WorkItemSessionRef {
   startedBy: string;
 }
 
-export interface FactoryRuleIngressRecord {
-  id: string;
-  orgId: string;
-  factoryProjectId: string;
-  identity: string;
-  triggerType: string;
-  transitionId: string;
-  result: Record<string, unknown>;
-  createdAt: Date;
-}
-
 export interface CommitFactoryRuleEvaluationInput {
   orgId: string;
   factoryProjectId: string;
   workItemId: string | null;
-  ingress: { identity: string; triggerType: string };
-  configVersion: string;
+  ingress: { identity: string };
   expectedRevision: number | null;
   actor: Record<string, unknown> | null;
   outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string };
   decisions: Record<string, unknown>[];
   causalChain: Array<{ ingressId: string; decisionType: string }>;
   now: Date;
+  /** Consent-bearing actor behind the evaluation; their id pre-approves the skill runs it queues. */
+  consentedBy?: string;
+  /**
+   * Card metadata written in the same transaction as the decisions, while the card is still at
+   * `expectedRevision`: what the evaluation saw of its source, so a change is never queued without
+   * being recorded, nor recorded over what a concurrent, newer evaluation saw. Otherwise `stale`.
+   */
+  cardMetadata?: { userId: string; metadata: Record<string, unknown> };
 }
+
+interface SyncCardInput {
+  orgId: string;
+  id: string;
+  userId: string;
+  patch: { title?: string; metadata?: Record<string, unknown> | null };
+  expectedSourceRevision?: number;
+  fillOnly?: boolean;
+  /** The card's revision the patch was worked out against: a card that moved on is refused. */
+  expectedRevision?: number;
+}
+
+/** Thrown inside a transaction to roll it back when the card is no longer at the revision a write expected. */
+class CardRevisionMoved extends Error {}
 
 export type CommitFactoryRuleEvaluationResult =
   | { status: 'committed'; result: Record<string, unknown> }
   | { status: 'replayed'; result: Record<string, unknown> }
-  | { status: 'missing' };
+  | { status: 'missing' }
+  /** The work item's revision moved; nothing was persisted, so the caller may re-read and retry. */
+  | { status: 'stale' };
 
 export interface FactoryToolResultCursorRecord {
   bindingId: string;
   orgId: string;
   factoryProjectId: string;
-  lastMessageId: string;
   lastMessageCreatedAt: Date;
   updatedAt: Date;
-}
-
-export interface FactoryRuleEvaluationRecord {
-  id: string;
-  ingressId: string;
-  workItemId: string | null;
-  configVersion: string;
-  expectedRevision: number | null;
-  outcome: 'accepted' | 'rejected';
-  code: string | null;
-  reason: string | null;
-  causalChain: Array<{ ingressId: string; decisionType: string }>;
-  createdAt: Date;
 }
 
 /** `proposed` is parked awaiting approval; `dismissed` is human, `superseded` is automatic. */
@@ -167,12 +225,15 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'session_unavailable',
   'source_control_missing',
   'source_repository_missing',
+  'source_repository_ambiguous',
   'unsupported_provider_item',
   'notification_delivery_failed',
   'run_terminal_event_missing',
+  'run_incomplete',
   'skill_delivery_ambiguous',
   'run_overdue',
   'repository_git_missing',
+  'repository_sandbox_unresponsive',
   'repository_egress_blocked',
   'repository_clone_failed',
   'repository_pull_failed',
@@ -181,6 +242,10 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'repository_cli_missing',
   'repository_pr_failed',
   'run_configuration_invalid',
+  'run_credentials_unavailable',
+  'run_user_unauthenticated',
+  'factory_org_key_missing',
+  'run_failed',
   'unknown',
 ] as const;
 
@@ -227,8 +292,6 @@ export interface FactoryDeferredDecisionRecord {
   evaluationId: string;
   workItemId: string | null;
   idempotencyKey: string;
-  effectOrdinal: number;
-  effectHash: string;
   causalChain: Array<{ ingressId: string; decisionType: string }>;
   actor: Record<string, unknown> | null;
   decision: Record<string, unknown>;
@@ -250,26 +313,9 @@ export interface FactoryDeferredDecisionRecord {
   updatedAt: Date;
 }
 
-export type FactoryAttentionKind =
-  | 'automation-failed'
-  | 'automation-proposed'
-  | 'mention'
-  | 'activity'
-  | 'supervisor-finding'
-  | 'agent-waiting';
+export type FactoryAttentionKind = 'automation-failed' | 'automation-proposed' | 'agent-waiting';
 export type FactoryAttentionReceiptState = 'read' | 'archived';
 
-export interface FactorySupervisorFindingRecord {
-  id: string;
-  orgId: string;
-  factoryProjectId: string;
-  findingKey: string;
-  occurrence: number;
-  finding: Record<string, unknown>;
-  openedAt: Date;
-  updatedAt: Date;
-  resolvedAt: Date | null;
-}
 export type FactoryAttentionReceiptAction = 'read' | 'archive' | 'restore';
 
 export interface FactoryAttentionIdentity {
@@ -322,22 +368,6 @@ function proposalReceiptFilter(orgId: string, factoryProjectId: string, decision
   };
 }
 
-export function factoryMentionAttentionIdentity(commentId: string): FactoryAttentionIdentity {
-  return { kind: 'mention', sourceId: commentId, occurrence: 0 };
-}
-
-/** Collapsed per work item, so the occurrence is what a new comment bumps. */
-export function factoryActivityAttentionIdentity(workItemId: string, occurrence: number): FactoryAttentionIdentity {
-  return { kind: 'activity', sourceId: workItemId, occurrence };
-}
-
-export function factorySupervisorFindingAttentionIdentity(
-  findingKey: string,
-  occurrence: number,
-): FactoryAttentionIdentity {
-  return { kind: 'supervisor-finding', sourceId: findingKey, occurrence };
-}
-
 /** Dated by the park itself, so an answer and a new park never share a receipt. */
 export function factoryAgentWaitingAttentionIdentity(sessionId: string, suspendedAt: number): FactoryAttentionIdentity {
   return { kind: 'agent-waiting', sourceId: sessionId, occurrence: suspendedAt };
@@ -366,9 +396,13 @@ export interface RevokeFactoryRunBindingInput {
 }
 
 export interface RevokeStaleFactoryRunBindingsInput {
-  /** Active bindings created before this instant are revoked regardless of item state. */
+  /** Active bindings created before this instant are revoked regardless of item state, unless `keep` exempts them. */
   olderThan: Date;
   now: Date;
+  /** Exempts an over-age binding from the age test only; the item-state checks still apply. */
+  keep?: (binding: FactoryRunBindingRecord) => Promise<boolean>;
+  /** Called for each binding this sweep revoked. */
+  onRevoked?: (binding: FactoryRunBindingRecord) => void;
 }
 
 export interface RevokeFactoryRunBindingsForWorkItemInput {
@@ -405,9 +439,6 @@ export interface FactoryPendingStartRecord {
   availableAt: Date;
   leaseOwner: string | null;
   leaseExpiresAt: Date | null;
-  lastError: string | null;
-  failureCode: StoredFactoryDispatchFailureCode | null;
-  completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -417,6 +448,17 @@ export interface FactoryLeaseClaimInput {
   now: Date;
   leaseExpiresAt: Date;
   limit: number;
+}
+
+export interface FactoryDeferredDecisionClaimInput extends FactoryLeaseClaimInput {
+  /** Restrict the claim by decision payload and who caused it; rejected rows are never leased. */
+  decisionFilter?: (decision: Record<string, unknown>, provenance: FactoryDecisionProvenance) => boolean;
+}
+
+/** Who caused a deferred decision: the rule actor, and the decisions it follows from. */
+export interface FactoryDecisionProvenance {
+  actor: Record<string, unknown> | null;
+  causalChain: FactoryDeferredDecisionRecord['causalChain'];
 }
 
 export interface FactoryLeaseIdentity {
@@ -441,9 +483,10 @@ export interface CommitFactoryTransitionInput {
   workItemId: string;
   expectedRevision: number;
   destinationStage: string;
+  /** The board the card moves to with this transition, when a card-move rule sends it to another one. */
+  destinationBoard?: string;
   actorId: string;
-  ingress: { identity: string; triggerType: string; transitionId: string };
-  configVersion: string;
+  ingress: { identity: string; transitionId: string };
   causalChain: Array<{ ingressId: string; decisionType: string }>;
   evaluation:
     | { outcome: 'accepted'; decisions: Record<string, unknown>[] }
@@ -459,9 +502,15 @@ export interface CommitFactoryTransitionInput {
 }
 
 export type CommitFactoryTransitionResult =
-  | { status: 'committed'; item: WorkItemRow | null; result: Record<string, unknown> }
-  | { status: 'replayed'; item: WorkItemRow | null; result: Record<string, unknown> }
+  | { status: 'committed'; item: Card | null; result: Record<string, unknown> }
+  | { status: 'replayed'; item: Card | null; result: Record<string, unknown> }
   | { status: 'missing' };
+
+export class FactoryRunBindingSupersededError extends Error {
+  constructor() {
+    super('Factory run binding was superseded before preparation.');
+  }
+}
 
 export interface PrepareFactoryRunStartInput {
   orgId: string;
@@ -469,6 +518,8 @@ export interface PrepareFactoryRunStartInput {
   factoryProjectId: string;
   workItem: { id?: string; input: CreateWorkItemInput };
   role: string;
+  /** Only recover this binding if it still owns the role when the transaction starts. */
+  expectedBindingId?: string;
   session: WorkItemSessionInput;
   resourceId: string;
   kickoffKey: string;
@@ -476,7 +527,7 @@ export interface PrepareFactoryRunStartInput {
 }
 
 export interface PrepareFactoryRunStartResult {
-  item: WorkItemRow;
+  item: Card;
   binding: FactoryRunBindingRecord;
   pendingStart: FactoryPendingStartRecord;
   replayed: boolean;
@@ -491,48 +542,43 @@ export interface WorkItemSessionInput {
 
 export type WorkItemSessions = Record<string, WorkItemSessionRef>;
 
-export interface WorkItemRow {
+export interface Card extends BoardItemRow {
+  workItem: ProviderWorkItemRow;
+  externalSource: ExternalWorkItemSource | null;
+  parentWorkItemId: string | null;
+  title: string;
+  /** What the card is about, in the words of whoever filed it; handed to agent runs at kickoff. */
+  description: string | null;
+}
+
+export interface BoardItemRow {
+  workItemId: string;
+  parentBoardItemId: string | null;
   id: string;
   orgId: string;
   factoryProjectId: string;
   board: string | null;
-  externalSource: ExternalWorkItemSource | null;
-  /**
-   * Org-wide ownership key for the external record this card tracks, or null
-   * for cards that never claimed one (older rows, integrations without claims,
-   * finished cards). Unique per org while set.
-   */
-  claimKey: string | null;
-  parentWorkItemId: string | null;
-  title: string;
   stages: WorkItemStage[];
   stageHistory: WorkItemStageEntry[];
   sessions: WorkItemSessions;
   metadata: Record<string, unknown> | null;
+  /** When the card last changed. A reader that keeps the board tells its copy of the card by it. */
+  changedAt?: Date | null;
   /** Authoritative verdict written by the bound triage run. */
   triageType: FactoryTriageType | null;
   /**
    * When a person first committed this item to the Factory, by starting a run
-   * on it or releasing one that was proposed. Projects that withhold auto-run
-   * are asking to decide what the Factory picks up, not to approve each step of
+   * on it or releasing one that was proposed. Boards whose phases don't start
+   * on their own are asking to decide what the Factory picks up, not to approve each step of
    * work they already asked for, so runs on an armed item skip the gate.
    */
   autonomyArmedAt: Date | null;
-  /**
-   * When a person chose to run this item hands-off: the dispatcher answers its
-   * parked plans even while the project's Auto-approve plans switch is off.
-   */
-  plansPreapprovedAt: Date | null;
   /**
    * When a person first moved this item out of Intake/Triage into working
    * stages. Non-bug items wait for that gesture; once it is recorded the
    * agents may advance the item through Planning and Execute on their own.
    */
   acceptedAt: Date | null;
-  /** Denormalized feed counters, maintained by the comments domain via recount. */
-  commentCount: number;
-  /** Bumps on every feed mutation (create/edit/delete) — the clients' change hint. */
-  feedActivityAt: Date | null;
   revision: number;
   createdBy: string;
   createdAt: Date;
@@ -542,10 +588,9 @@ export interface WorkItemRow {
 export interface CreateWorkItemInput {
   board?: string;
   externalSource?: ExternalWorkItemSource | null;
-  /** See {@link WorkItemRow.claimKey}. Refused with {@link WorkItemClaimConflictError} when another project holds it. */
-  claimKey?: string | null;
   parentWorkItemId?: string | null;
   title: string;
+  description?: string | null;
   stages?: WorkItemStage[];
   sessions?: Record<string, WorkItemSessionInput>;
   metadata?: Record<string, unknown> | null;
@@ -555,11 +600,10 @@ export interface UpdateWorkItemInput {
   board?: string;
   parentWorkItemId?: string | null;
   title?: string;
+  description?: string | null;
   stages?: WorkItemStage[];
   sessions?: Record<string, WorkItemSessionInput>;
   metadata?: Record<string, unknown> | null;
-  /** The person chose a hands-off run: stamped once, so a second grant never moves it. */
-  plansPreapproved?: true;
 }
 
 export interface WorkItemPriorState {
@@ -568,69 +612,95 @@ export interface WorkItemPriorState {
 }
 
 export interface UpsertWorkItemResult {
-  item: WorkItemRow;
+  item: Card;
   created: boolean;
   previous: WorkItemPriorState;
 }
 
-export const WORK_ITEMS_SCHEMA: CollectionSchema = {
-  name: 'work_items',
+export const FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA: CollectionSchema = {
+  name: 'factory_work_item_subscriptions',
   columns: {
     id: { type: 'uuid-pk' },
     org_id: { type: 'text' },
     factory_project_id: { type: 'text' },
-    board: { type: 'text', nullable: true },
-    external_source: { type: 'json', nullable: true },
-    source_key: { type: 'text', nullable: true },
-    claim_key: { type: 'text', nullable: true },
-    parent_work_item_id: { type: 'text', nullable: true },
-    title: { type: 'text' },
-    stages: { type: 'json' },
-    stage_history: { type: 'json' },
-    sessions: { type: 'json' },
-    metadata: { type: 'json', nullable: true },
-    triage_type: { type: 'text', nullable: true },
-    autonomy_armed_at: { type: 'timestamp', nullable: true },
-    plans_preapproved_at: { type: 'timestamp', nullable: true },
-    accepted_at: { type: 'timestamp', nullable: true },
-    comment_count: { type: 'integer', default: 0 },
-    feed_activity_at: { type: 'timestamp', nullable: true },
-    revision: { type: 'integer', default: 1 },
-    created_by: { type: 'text' },
+    work_item_id: { type: 'text' },
+    session_id: { type: 'text' },
+    thread_id: { type: 'text' },
+    resource_id: { type: 'text' },
+    user_id: { type: 'text' },
+    reason: { type: 'text' },
     created_at: { type: 'timestamp' },
-    updated_at: { type: 'timestamp' },
   },
   uniqueIndexes: [
-    {
-      name: 'work_items_project_source_key_unique',
-      columns: ['factory_project_id', 'source_key'],
-    },
-    {
-      // One live card per claimed external record per org. NULL keys never
-      // collide, so unclaimed cards are unaffected.
-      name: 'work_items_org_claim_key_unique',
-      columns: ['org_id', 'claim_key'],
-    },
+    { name: 'factory_work_item_subscriptions_item_session_unique', columns: ['work_item_id', 'session_id'] },
   ],
   indexes: [
     {
-      name: 'work_items_org_project_created_at_id_idx',
-      columns: ['org_id', 'factory_project_id', 'created_at', 'id'],
-    },
-    {
-      name: 'work_items_project_parent_idx',
-      columns: ['org_id', 'factory_project_id', 'parent_work_item_id'],
-    },
-    {
-      // The unique index leads with `factory_project_id`, so it cannot serve a
-      // lookup by the key alone — which is what a platform message has.
-      name: 'work_items_source_key_idx',
-      columns: ['source_key'],
+      name: 'factory_work_item_subscriptions_session_idx',
+      columns: ['org_id', 'factory_project_id', 'session_id'],
     },
   ],
 };
 
-interface WorkItemDbRow extends Record<string, unknown> {
+/** Why a session follows a work item: it filed it, moved it, started a role on it, or asked to. */
+export type WorkItemSubscriptionReason = 'created' | 'moved' | 'started' | 'subscribed';
+
+/** A session following a work item, so it hears what happens to it. */
+export interface WorkItemSubscription {
+  id: string;
+  orgId: string;
+  factoryProjectId: string;
+  workItemId: string;
+  sessionId: string;
+  threadId: string;
+  resourceId: string;
+  userId: string;
+  reason: WorkItemSubscriptionReason;
+  createdAt: Date;
+}
+
+export interface SubscribeToWorkItemInput {
+  orgId: string;
+  factoryProjectId: string;
+  workItemId: string;
+  sessionId: string;
+  threadId: string;
+  resourceId: string;
+  userId: string;
+  reason: WorkItemSubscriptionReason;
+}
+
+interface WorkItemSubscriptionDbRow extends Record<string, unknown> {
+  id: string;
+  org_id: string;
+  factory_project_id: string;
+  work_item_id: string;
+  session_id: string;
+  thread_id: string;
+  resource_id: string;
+  user_id: string;
+  reason: WorkItemSubscriptionReason;
+  created_at: Date;
+}
+
+function toWorkItemSubscription(row: WorkItemSubscriptionDbRow): WorkItemSubscription {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    factoryProjectId: String(row.factory_project_id),
+    workItemId: row.work_item_id,
+    sessionId: row.session_id,
+    threadId: row.thread_id,
+    resourceId: row.resource_id,
+    userId: row.user_id,
+    reason: row.reason,
+    createdAt: row.created_at,
+  };
+}
+
+export interface WorkItemDbRow extends Record<string, unknown> {
+  work_item?: WorkItemDbRecord;
+  work_item_sources?: WorkItemSourceDbRecord[];
   id: string;
   org_id: string;
   factory_project_id: string;
@@ -640,6 +710,7 @@ interface WorkItemDbRow extends Record<string, unknown> {
   claim_key: string | null;
   parent_work_item_id: string | null;
   title: string;
+  description: string | null;
   stages: WorkItemStage[];
   stage_history: WorkItemStageEntry[];
   sessions: WorkItemSessions;
@@ -648,12 +719,11 @@ interface WorkItemDbRow extends Record<string, unknown> {
   autonomy_armed_at: Date | null;
   plans_preapproved_at: Date | null;
   accepted_at: Date | null;
-  comment_count: number;
-  feed_activity_at: Date | null;
   revision: number;
   created_by: string;
   created_at: Date;
   updated_at: Date;
+  changed_at?: Date | null;
 }
 
 /**
@@ -667,41 +737,88 @@ export function externalSourceKey(source: ExternalWorkItemSource | null | undefi
   return `${source.integrationId}:${source.type}:${workspace}${source.externalId}`;
 }
 
-function toWorkItem(row: WorkItemDbRow): WorkItemRow {
+function toSource(source: WorkItemSourceDbRecord): WorkItemSourceRow {
   return {
+    id: source.id,
+    workItemId: source.work_item_id,
+    provider: source.provider,
+    integrationId: source.integration_id,
+    sourceType: source.source_type,
+    workspaceId: source.workspace_id,
+    externalId: source.external_id,
+    sourceKey: source.source_key,
+    key: source.key,
+    url: source.url,
+    state: source.state,
+    labels: source.labels,
+    author: source.author,
+    metadata: source.metadata,
+    revision: source.revision,
+    syncedAt: source.synced_at,
+    createdAt: source.created_at,
+    updatedAt: source.updated_at,
+  };
+}
+
+function toWorkItem(row: WorkItemDbRow): Card {
+  const fallback = row.work_item ? null : splitCardRows(row, { workItemId: row.id });
+  const work = row.work_item ?? fallback!.workItem;
+  const sources = (row.work_item_sources ?? (fallback?.source ? [fallback.source] : [])).map(toSource);
+  const source = primarySource({ workItem: { sources } });
+  return {
+    workItem: {
+      sources,
+      id: work.id,
+      orgId: work.org_id,
+      factoryProjectId: work.factory_project_id,
+      provider: source?.provider ?? 'factory',
+      externalId: source?.externalId ?? row.id,
+      key: source?.key ?? null,
+      url: source?.url ?? null,
+      title: work.title,
+      state: source?.state ?? null,
+      labels: source?.labels ?? [],
+      author: source?.author ?? null,
+      parentWorkItemId: work.parent_work_item_id,
+      metadata: source?.metadata ?? null,
+      revision: work.revision,
+      syncedAt: source?.syncedAt ?? null,
+      createdAt: work.created_at,
+      updatedAt: work.updated_at,
+    },
+    workItemId: work.id,
+    parentBoardItemId: row.parent_work_item_id,
     id: row.id,
     orgId: row.org_id,
     factoryProjectId: String(row.factory_project_id),
     board: row.board ?? null,
     externalSource: row.external_source,
-    claimKey: row.claim_key ?? null,
     parentWorkItemId: row.parent_work_item_id,
     title: row.title,
+    description: row.description ?? null,
     stages: row.stages,
     stageHistory: row.stage_history,
     sessions: row.sessions,
-    metadata: row.metadata,
+    metadata: splitCardMetadata(row.metadata, workItemProviderAdapter(row.external_source).providerMetadataKeys).board,
     triageType: row.triage_type ?? null,
     autonomyArmedAt: row.autonomy_armed_at ?? null,
-    plansPreapprovedAt: row.plans_preapproved_at ?? null,
     acceptedAt: row.accepted_at ?? null,
-    commentCount: row.comment_count ?? 0,
-    feedActivityAt: row.feed_activity_at ?? null,
     revision: row.revision,
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    changedAt: row.changed_at ?? null,
   };
 }
 
 const toRow = toWorkItem;
 
-function patchColumns(changes: Partial<WorkItemRow>): Partial<WorkItemDbRow> {
+function patchColumns(changes: Partial<Card>): Partial<WorkItemDbRow> {
   return {
     ...(changes.board !== undefined ? { board: changes.board } : {}),
     ...(changes.parentWorkItemId !== undefined ? { parent_work_item_id: changes.parentWorkItemId } : {}),
     ...(changes.title !== undefined ? { title: changes.title } : {}),
-    ...(changes.claimKey !== undefined ? { claim_key: changes.claimKey } : {}),
+    ...(changes.description !== undefined ? { description: changes.description } : {}),
     ...(changes.stages !== undefined ? { stages: changes.stages } : {}),
     ...(changes.stageHistory !== undefined ? { stage_history: changes.stageHistory } : {}),
     ...(changes.sessions !== undefined ? { sessions: changes.sessions } : {}),
@@ -722,17 +839,20 @@ function priorState(row: WorkItemDbRow): WorkItemPriorState {
   return { stages: row.stages, sessionRoles: Object.keys(row.sessions) };
 }
 
-export class WorkItemRelationError extends Error {
-  readonly code = 'invalid_work_item_relation';
+export class WorkItemSplitModeError extends Error {}
+
+const OPEN_PASS_PAGE_SIZE = 500;
+
+function logSplit(line: string): void {
+  console.info(`[factory] ${line}`);
 }
 
-/** Another card in the org already holds the claim the write asked for. */
-export class WorkItemClaimConflictError extends Error {
-  readonly code = 'work_item_claim_conflict';
+function sameWatermark(a: LegacyWatermark | null, b: LegacyWatermark): boolean {
+  return a !== null && a.id === b.id && new Date(a.updatedAt).getTime() === new Date(b.updatedAt).getTime();
+}
 
-  constructor(readonly claimant: WorkItemRow) {
-    super(`Work item claim is held by ${claimant.id} in project ${claimant.factoryProjectId}`);
-  }
+export class WorkItemRelationError extends Error {
+  readonly code = 'invalid_work_item_relation';
 }
 
 export class WorkItemUpdateConflictError extends Error {
@@ -743,8 +863,17 @@ export class WorkItemUpdateConflictError extends Error {
   }
 }
 
+/** The source a caller tried to attach already belongs to another work item in the project. */
+export class WorkItemSourceConflictError extends Error {
+  readonly code = 'work_item_source_conflict';
+
+  constructor(readonly ownerWorkItemId: string) {
+    super(`The source already belongs to work item ${ownerWorkItemId}.`);
+  }
+}
+
 export function validateParentRelation(
-  projectItems: WorkItemRow[],
+  projectItems: Card[],
   itemId: string | undefined,
   parentWorkItemId: string | null,
 ): void {
@@ -755,7 +884,7 @@ export function validateParentRelation(
   if (itemId === parentWorkItemId) throw new WorkItemRelationError('A work item cannot relate to itself.');
 
   const visited = new Set<string>();
-  let cursor: WorkItemRow | undefined = parent;
+  let cursor: Card | undefined = parent;
   while (cursor?.parentWorkItemId) {
     if (cursor.parentWorkItemId === itemId) {
       throw new WorkItemRelationError('This relationship would create a cycle.');
@@ -805,16 +934,29 @@ function applyUpdate({
   current,
   userId,
   input,
+  now = new Date(),
 }: {
   current: WorkItemDbRow;
   userId: string;
   input: UpdateWorkItemInput;
+  now?: Date;
 }): Partial<WorkItemDbRow> {
-  const now = new Date();
+  const metadata = input.metadata ? { ...input.metadata } : input.metadata;
+  const reconciliation = current.metadata?.[FACTORY_PULL_REQUEST_RECONCILIATION_KEY];
+  // Clearing an absent reconciliation marker must not invalidate pending rules.
+  if (
+    metadata?.[FACTORY_PULL_REQUEST_RECONCILIATION_KEY] === null &&
+    reconciliation !== 'merged' &&
+    reconciliation !== 'closed' &&
+    reconciliation !== null
+  ) {
+    delete metadata[FACTORY_PULL_REQUEST_RECONCILIATION_KEY];
+  }
   return {
     ...(input.board !== undefined ? { board: input.board } : {}),
     ...(input.parentWorkItemId !== undefined ? { parent_work_item_id: input.parentWorkItemId } : {}),
     ...(input.title !== undefined ? { title: input.title } : {}),
+    ...(input.description !== undefined ? { description: input.description } : {}),
     ...(input.stages !== undefined
       ? {
           stages: input.stages,
@@ -824,14 +966,15 @@ function applyUpdate({
     ...(input.sessions !== undefined
       ? { sessions: { ...current.sessions, ...stampSessions(input.sessions, userId) } }
       : {}),
-    ...(input.metadata !== undefined
-      ? { metadata: input.metadata === null ? null : { ...(current.metadata ?? {}), ...input.metadata } }
+    ...(metadata !== undefined
+      ? { metadata: metadata === null ? null : { ...(current.metadata ?? {}), ...metadata } }
       : {}),
-    ...(input.plansPreapproved && !current.plans_preapproved_at ? { plans_preapproved_at: now } : {}),
     revision: current.revision + 1,
     updated_at: now,
   };
 }
+/** Stage-history actor for the one-time move of cards held for triage acceptance. */
+export const HELD_CARD_SWEEP_ACTOR = 'factory-held-card-sweep';
 const ATTENTION_RECEIPT_QUERY_BATCH_SIZE = 200;
 const ATTENTION_RECEIPT_WRITE_BATCH_SIZE = 25;
 
@@ -859,13 +1002,22 @@ function decisionSourceKey(decision: unknown): string | null {
   return record.sourceKey;
 }
 
-function deferredDecisionType(decision: FactoryDeferredDecisionRecord): string | undefined {
-  return typeof decision.decision.type === 'string' ? decision.decision.type : undefined;
+function decisionRowPayload(decision: unknown): Record<string, unknown> {
+  const parsed = typeof decision === 'string' ? safeJsonParse(decision) : decision;
+  return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {};
 }
 
-function ingressWasAccepted(row: GovernanceDbRow | null): boolean {
-  if (!row || typeof row.result !== 'object' || row.result === null || Array.isArray(row.result)) return false;
-  return 'status' in row.result && row.result.status === 'accepted';
+function jsonRowValue<T>(value: unknown, is: (parsed: unknown) => parsed is T): T | undefined {
+  const parsed = typeof value === 'string' ? safeJsonParse(value) : value;
+  return is(parsed) ? parsed : undefined;
+}
+
+function safeJsonParse(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
 }
 
 const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
@@ -876,8 +1028,6 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       org_id: { type: 'text' },
       factory_project_id: { type: 'text' },
       identity: { type: 'text' },
-      trigger_type: { type: 'text' },
-      transition_id: { type: 'text' },
       result: { type: 'json' },
       created_at: { type: 'timestamp' },
     },
@@ -890,15 +1040,9 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
     columns: {
       id: { type: 'uuid-pk' },
       ingress_id: { type: 'text' },
-      work_item_id: { type: 'text', nullable: true },
-      rule_set_version: { type: 'text' },
-      expected_revision: { type: 'integer', nullable: true },
-      outcome: { type: 'text' },
-      code: { type: 'text', nullable: true },
-      reason: { type: 'text', nullable: true },
-      causal_chain: { type: 'json' },
       created_at: { type: 'timestamp' },
     },
+    indexes: [{ name: 'factory_rule_evaluations_ingress_idx', columns: ['ingress_id'] }],
   },
   {
     name: 'factory_deferred_decisions',
@@ -910,8 +1054,6 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       work_item_id: { type: 'text', nullable: true },
       source_key: { type: 'text', nullable: true },
       idempotency_key: { type: 'text' },
-      effect_ordinal: { type: 'integer' },
-      effect_hash: { type: 'text' },
       causal_chain: { type: 'json' },
       actor: { type: 'json', nullable: true },
       decision: { type: 'json' },
@@ -946,31 +1088,14 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
         name: 'factory_deferred_decisions_tenant_status_failed_idx',
         columns: ['org_id', 'factory_project_id', 'status', 'updated_at', 'id'],
       },
-    ],
-  },
-  {
-    name: 'factory_supervisor_findings',
-    columns: {
-      id: { type: 'uuid-pk' },
-      org_id: { type: 'text' },
-      factory_project_id: { type: 'text' },
-      finding_key: { type: 'text' },
-      occurrence: { type: 'integer' },
-      finding: { type: 'json' },
-      opened_at: { type: 'timestamp' },
-      updated_at: { type: 'timestamp' },
-      resolved_at: { type: 'timestamp', nullable: true },
-    },
-    uniqueIndexes: [
       {
-        name: 'factory_supervisor_findings_project_key_unique',
-        columns: ['org_id', 'factory_project_id', 'finding_key'],
+        name: 'factory_deferred_decisions_tenant_evaluation_idx',
+        columns: ['org_id', 'factory_project_id', 'evaluation_id'],
       },
-    ],
-    indexes: [
+      // One card's decisions: the update fold, overtaken status events and the intake tester.
       {
-        name: 'factory_supervisor_findings_project_open_idx',
-        columns: ['org_id', 'factory_project_id', 'resolved_at', 'updated_at', 'id'],
+        name: 'factory_deferred_decisions_tenant_work_item_idx',
+        columns: ['org_id', 'factory_project_id', 'work_item_id', 'created_at'],
       },
     ],
   },
@@ -1023,6 +1148,7 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       status: { type: 'text' },
       created_at: { type: 'timestamp' },
       revoked_at: { type: 'timestamp', nullable: true },
+      stop_requested_at: { type: 'timestamp', nullable: true },
     },
     indexes: [
       // Exact-address lookups run on every processor message; status filter is
@@ -1031,6 +1157,12 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
         name: 'factory_run_bindings_session_idx',
         columns: ['factory_project_id', 'thread_id', 'resource_id', 'session_id'],
       },
+      {
+        name: 'factory_run_bindings_org_thread_idx',
+        columns: ['org_id', 'thread_id', 'resource_id', 'session_id'],
+      },
+      // Prompt-time checkout trust reads a session's whole binding history, on any thread.
+      { name: 'factory_run_bindings_org_session_idx', columns: ['org_id', 'session_id'] },
       // Restart reconciler enumerates active bindings across all tenants.
       { name: 'factory_run_bindings_status_idx', columns: ['status'] },
     ],
@@ -1041,7 +1173,6 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       binding_id: { type: 'text', primaryKey: true },
       org_id: { type: 'text' },
       factory_project_id: { type: 'text' },
-      last_message_id: { type: 'text' },
       last_message_created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
     },
@@ -1060,9 +1191,6 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       available_at: { type: 'timestamp' },
       lease_owner: { type: 'text', nullable: true },
       lease_expires_at: { type: 'timestamp', nullable: true },
-      last_error: { type: 'text', nullable: true },
-      failure_code: { type: 'text', nullable: true },
-      completed_at: { type: 'timestamp', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
     },
@@ -1108,8 +1236,6 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
     evaluationId: String(row.evaluation_id),
     workItemId: row.work_item_id === null || row.work_item_id === undefined ? null : String(row.work_item_id),
     idempotencyKey: String(row.idempotency_key),
-    effectOrdinal: Number(row.effect_ordinal),
-    effectHash: String(row.effect_hash),
     causalChain: (row.causal_chain as FactoryDeferredDecisionRecord['causalChain']) ?? [],
     actor: (row.actor as Record<string, unknown> | null) ?? null,
     decision: row.decision as Record<string, unknown>,
@@ -1130,31 +1256,10 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
   };
 }
 function attentionReceiptKind(value: unknown): FactoryAttentionKind {
-  if (
-    value === 'automation-failed' ||
-    value === 'automation-proposed' ||
-    value === 'mention' ||
-    value === 'activity' ||
-    value === 'supervisor-finding' ||
-    value === 'agent-waiting'
-  ) {
+  if (value === 'automation-failed' || value === 'automation-proposed' || value === 'agent-waiting') {
     return value;
   }
   throw new Error(`Unsupported attention receipt kind '${String(value)}'.`);
-}
-
-function toSupervisorFinding(row: GovernanceDbRow): FactorySupervisorFindingRecord {
-  return {
-    id: row.id,
-    orgId: String(row.org_id),
-    factoryProjectId: String(row.factory_project_id),
-    findingKey: String(row.finding_key),
-    occurrence: Number(row.occurrence),
-    finding: row.finding as Record<string, unknown>,
-    openedAt: row.opened_at as Date,
-    updatedAt: row.updated_at as Date,
-    resolvedAt: (row.resolved_at as Date | null) ?? null,
-  };
 }
 
 function attentionReceiptState(value: unknown): FactoryAttentionReceiptState {
@@ -1205,90 +1310,604 @@ function toPendingStart(row: GovernanceDbRow): FactoryPendingStartRecord {
     availableAt: row.available_at as Date,
     leaseOwner: (row.lease_owner as string | null) ?? null,
     leaseExpiresAt: (row.lease_expires_at as Date | null) ?? null,
-    lastError: (row.last_error as string | null) ?? null,
-    failureCode: (row.failure_code as FactoryDispatchFailureCode | null) ?? null,
-    completedAt: (row.completed_at as Date | null) ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at as Date,
   };
 }
 
-/** The project whose attention list a write just changed. */
-export interface FactoryAttentionScope {
-  orgId: string;
-  factoryProjectId: string;
-}
+/** The project whose board a committed card or decision write just changed. */
+export type FactoryBoardScope = Required<BoardScope>;
+
+/** A safety net, not the invalidation path: bounds how long a missed version bump or a stuck read can last. */
+const LIST_CACHE_TTL_MS = 60_000;
+const LIST_CACHE_MAX_PROJECTS = 100;
+const LIST_DELTA_CLOCK_SKEW_MS = 5_000;
+
+type WorkItemSourceSyncPatch = Partial<
+  Pick<WorkItemSourceRow, 'state' | 'labels' | 'author' | 'url' | 'key' | 'metadata'>
+>;
 
 export class WorkItemsStorage extends FactoryStorageDomain {
-  #attentionChanged: (scope: FactoryAttentionScope) => void = () => {};
-  // Storage does not know boards. Until the host says which phases are terminal,
-  // no card counts as finished, so the boot sweep never supersedes on a guess.
-  #isTerminal: (item: WorkItemRow) => boolean = () => false;
+  /** Last full card list per project, valid while the project's board version is unchanged. */
+  /** `takenAt` is the last full read; `readFrom` when the latest read, full or delta, began. */
+  readonly #listCache = new Map<string, { version: string; takenAt: number; readFrom: number; items: Card[] }>();
+  // Joined only at the same board version: a poll after a write must not join a read begun before it.
+  readonly #listInFlight = new Map<string, { version: string; startedAt: number; items: Promise<Card[]> }>();
+  readonly projectSubscriptions = new AnnouncedLists<WorkItemSubscription>();
+  #boardChanged: (scope: FactoryBoardScope) => void = () => {};
+  readonly #claimableWorkListeners = new Set<(scope: FactoryClaimableWorkScope) => void>();
+  // Storage does not know boards: no card counts as finished until the host wires the predicate.
+  #isTerminal: (item: Card) => boolean = () => false;
+
+  #legacyMode = false;
+  /**
+   * Legacy cards this replica may still have to copy. While pending, lookups by id or source
+   * copy a missed card on demand; `since` limits the passes to rows written after the last
+   * finished pass.
+   */
+  #split: { pending: boolean; since: LegacyWatermark | null } = { pending: false, since: null };
+
+  get legacyMode(): boolean {
+    return this.#legacyMode;
+  }
+
+  get legacyBackfillPending(): boolean {
+    return this.#split.pending;
+  }
+
+  /** Projects found not to use the Review board; once redundant it stays so, with no card left to reopen on it. */
+  readonly #reviewRedundant = new Set<string>();
+
+  #ownReviewBoard: ReviewBoardInUse | undefined;
+
+  /**
+   * Tells cards apart from the retired Review board's: where `owned` answers true the project has
+   * a board of its own under `review`, and the cards stored on it are that board's.
+   */
+  useOwnReviewBoard(owned: ReviewBoardInUse): void {
+    this.#ownReviewBoard = owned;
+  }
+
+  /** {@link reviewBoardInUse} through `ops`, so a caller inside a transaction reads within it. */
+  readonly #reviewInUse: ReviewBoardInUse = async (ops, scope) => {
+    // Asked every time: a project can make or delete a board of its own under `review` at any moment.
+    if (await this.#ownReviewBoard?.(ops, scope)) return true;
+    const key = `${scope.orgId}\0${scope.factoryProjectId}`;
+    if (this.#reviewRedundant.has(key)) return false;
+    const inUse = await readReviewBoardInUse(ops, scope, {
+      split: !this.#legacyMode,
+      // Legacy cards not copied yet still count.
+      legacy: this.#legacyMode || this.#split.pending,
+    });
+    if (!inUse) this.#reviewRedundant.add(key);
+    return inUse;
+  };
+
+  /**
+   * Whether cards stored on `review` stay there: the project has a board of its own under that
+   * key, or still uses the retired Review board (it holds a card stored on Review that isn't Done
+   * or Canceled) and keeps it. In any other project Review is redundant and its cards read as Work.
+   */
+  reviewBoardInUse(scope: ReviewBoardScope): Promise<boolean> {
+    return this.#reviewInUse(this.#db, scope);
+  }
+
+  /**
+   * Leaves `review` to a board about to take it: stores the Work placement of the cards the
+   * retired Review board left there, through `ops`, so it happens in the board write's
+   * transaction. See {@link releaseLegacyReviewCards} for `open`.
+   */
+  async releaseReviewCards(
+    ops: FactoryStorageOps,
+    scope: ReviewBoardScope,
+    { open }: { open: 'refuse' | 'move' },
+  ): Promise<void> {
+    const rewritten = await releaseLegacyReviewCards(
+      ops,
+      scope,
+      // Legacy cards not copied yet still count.
+      { split: !this.#legacyMode, legacy: this.#legacyMode || this.#split.pending },
+      open,
+    );
+    // An open card that moved was listed on Review until now.
+    if (rewritten > 0) await bumpBoardVersions(ops, [scope]);
+  }
 
   constructor() {
     super('work-items');
   }
 
   /**
-   * Wired once at boot. Every write below that changes what this project's
-   * attention list projects announces it here — the one place a new such write
-   * has to remember, since clients stop polling while their stream is up.
+   * Wired once at boot. Fires after a committed write changes what a board shows of a card
+   * or a deferred decision, so open boards refetch instead of polling.
    */
-  onAttentionChanged(listener: (scope: FactoryAttentionScope) => void): void {
-    this.#attentionChanged = listener;
+  onBoardChanged(listener: (scope: FactoryBoardScope) => void): void {
+    this.#boardChanged = listener;
   }
 
   /**
-   * Wired once at boot, before `init()`. Tells the legacy attention sweep and
-   * the stale-binding sweep which cards sit in a phase their installed board
-   * declares terminal.
+   * Fires after any committed write leaves a pending start or deferred decision
+   * `pending` or `retry`, so an idle dispatcher can wake instead of polling.
+   * Listeners run after the write has committed, so a listener that throws is
+   * logged and skipped rather than failing the write or the other listeners.
+   * Returns a function that removes the listener.
    */
-  useTerminalPhasePredicate(isTerminal: (item: WorkItemRow) => boolean): void {
+  onClaimableWork(listener: (scope: FactoryClaimableWorkScope) => void): () => void {
+    this.#claimableWorkListeners.add(listener);
+    return () => this.#claimableWorkListeners.delete(listener);
+  }
+
+  #claimableWork(scope: FactoryClaimableWorkScope): void {
+    for (const listener of this.#claimableWorkListeners) {
+      try {
+        listener(scope);
+      } catch (error) {
+        console.error('[factory] claimable-work listener failed', error instanceof Error ? error.message : error);
+      }
+    }
+  }
+
+  /**
+   * When the next pending start or deferred decision becomes claimable: the earliest
+   * `available_at` of a queued row, or `lease_expires_at` of a leased one (a crashed
+   * dispatcher's lease is reclaimed once it lapses). `null` when nothing is queued or leased.
+   * May be in the past when work is already due.
+   */
+  async nextClaimableAt(): Promise<Date | null> {
+    const earliest = async (table: string, status: string | { in: string[] }, column: string) => {
+      const [row] = await this.#db.findMany<GovernanceDbRow>(
+        table,
+        { status },
+        { orderBy: [[column, 'asc']], limit: 1 },
+      );
+      const value = row?.[column];
+      return value ? new Date(value as Date | string).getTime() : undefined;
+    };
+    const times = await Promise.all(
+      LEASE_TABLES.flatMap(table => [
+        earliest(table, { in: ['pending', 'retry'] }, 'available_at'),
+        earliest(table, 'leased', 'lease_expires_at'),
+      ]),
+    );
+    const due = times.filter((time): time is number => time !== undefined);
+    return due.length ? new Date(Math.min(...due)) : null;
+  }
+
+  /** Tells the stale-binding sweep which cards sit in a phase their installed board declares terminal. */
+  useTerminalPhasePredicate(isTerminal: (item: Card) => boolean): void {
     this.#isTerminal = isTerminal;
   }
 
-  /**
-   * The claim a new row may carry: the requested key, unless the row is born
-   * finished, in which case there is nothing to own and holding the key would
-   * only block the next project from filing the record.
-   */
-  #claimForNewRow(input: CreateWorkItemInput, stages: WorkItemStage[]): string | null {
-    if (!input.claimKey) return null;
-    const shape = { board: input.board ?? null, externalSource: input.externalSource ?? null, stages } as WorkItemRow;
-    return this.#isTerminal(shape) ? null : input.claimKey;
-  }
-
-  /** The claim an existing unclaimed row adopts from `input`, if it is not finished after `patch`. */
-  #claimToAdopt(current: WorkItemDbRow, patch: Partial<WorkItemDbRow>, input: CreateWorkItemInput): string | null {
-    if (!input.claimKey || current.claim_key !== null) return null;
-    return this.#isTerminal(toWorkItem({ ...current, ...patch })) ? null : input.claimKey;
-  }
-
-  /** Drop the org-wide claim from a patch that moves the card into a terminal phase. */
-  #releaseClaimIfFinished(current: WorkItemDbRow, patch: Partial<WorkItemDbRow>): Partial<WorkItemDbRow> {
-    if (patch.stages === undefined || current.claim_key === null) return patch;
-    return this.#isTerminal(toWorkItem({ ...current, ...patch })) ? { ...patch, claim_key: null } : patch;
-  }
-
   async init(): Promise<void> {
-    // The comment schemas are co-registered so the delete cascade below can
-    // purge feed rows regardless of domain init order.
+    this.#legacyMode = process.env.MASTRA_FACTORY_WORK_ITEM_SPLIT === 'dry-run';
+    // Pre-split cards and the split's progress marker exist only on databases an earlier release
+    // wrote cards to; dry-run mode serves from the pre-split table, so it always needs it.
+    const legacySchemas = [WORK_ITEMS_SCHEMA, FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA];
+    let hasLegacyCards = true;
+    if (this.#legacyMode) await this.ensureCollections(legacySchemas);
+    else hasLegacyCards = await ensureLegacyCollections(this.storage, legacySchemas);
     await this.ensureCollections([
-      WORK_ITEMS_SCHEMA,
+      FACTORY_WORK_ITEMS_SCHEMA,
+      FACTORY_WORK_ITEM_SOURCES_SCHEMA,
+      FACTORY_WORK_ITEM_SPLIT_LOCKS_SCHEMA,
+      FACTORY_BOARD_ITEMS_SCHEMA,
+      FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA,
+      FACTORY_BOARD_VERSIONS_SCHEMA,
       ...FACTORY_GOVERNANCE_SCHEMAS,
-      WORK_ITEM_COMMENTS_SCHEMA,
-      WORK_ITEM_COMMENT_MENTIONS_SCHEMA,
-      WORK_ITEM_ACTIVITY_SCHEMA,
+      FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA,
     ]);
-    await this.repairLegacyAttentionState();
+    if (this.#legacyMode && (await super.ops.findOne(FACTORY_BOARD_ITEMS_SCHEMA.name, {}))) {
+      throw new WorkItemSplitModeError(
+        'MASTRA_FACTORY_WORK_ITEM_SPLIT=dry-run cannot serve a database with migrated board items.',
+      );
+    }
+    if (this.#legacyMode) {
+      this.#split = { pending: false, since: null };
+      await migrateWorkItemSplit(this.storage, { dryRun: true, ops: super.ops, log: logSplit });
+      return;
+    }
+    if (!hasLegacyCards) {
+      this.#split = { pending: false, since: null };
+      return;
+    }
+    const [marker, newest] = await Promise.all([readWorkItemSplitMarker(super.ops), readLegacyWatermark(super.ops)]);
+    const finished = !newest || (marker !== null && sameWatermark(marker.watermark, newest));
+    // The factory copies open cards once boards load, and the rest in the background.
+    this.#split = { pending: !finished, since: marker?.watermark ?? null };
+  }
+
+  /**
+   * Copy the legacy cards `isTerminal` rejects, before Factory serves. Terminal cards are left
+   * to `backfillLegacyCards`. A no-op once the split finished.
+   */
+  async migrateOpenLegacyCards(
+    isTerminal: (card: Card) => boolean | Promise<boolean>,
+  ): Promise<WorkItemSplitReport | null> {
+    if (this.#legacyMode || !this.#split.pending) return null;
+    return migrateWorkItemSplit(this.storage, {
+      ops: super.ops,
+      since: this.#split.since,
+      // Mostly unchanged rows on a re-boot: larger pages mean fewer round trips.
+      pageSize: OPEN_PASS_PAGE_SIZE,
+      include: async row => !(await isTerminal(toWorkItem(row))),
+      label: 'boot pass',
+      log: logSplit,
+    });
+  }
+
+  /**
+   * Copy every remaining legacy card, then record the newest legacy row seen before the pass
+   * began, so later boots skip rows up to it. Skipped cards are logged and count as done: they
+   * conflict with newer split state and a rescan would only skip them again.
+   */
+  async backfillLegacyCards({ signal }: { signal?: AbortSignal } = {}): Promise<WorkItemSplitReport | null> {
+    if (this.#legacyMode || !this.#split.pending) return null;
+    // Captured first: a legacy write during the pass sorts after it and is rescanned next boot.
+    const watermark = await readLegacyWatermark(super.ops);
+    const report = await migrateWorkItemSplit(this.storage, {
+      ops: super.ops,
+      since: this.#split.since,
+      signal,
+      label: 'background pass',
+      log: logSplit,
+    });
+    if (!report.aborted) {
+      await recordWorkItemSplitComplete(super.ops, watermark);
+      this.#split = { pending: false, since: watermark };
+    }
+    return report;
+  }
+
+  /**
+   * Copy the legacy cards filed for these external records, so a lookup that matches on `list()`
+   * finds them. A no-op once the split finished.
+   */
+  async copyLegacyCards({
+    orgId,
+    factoryProjectId,
+    sources,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+    sources: readonly ExternalWorkItemSource[];
+  }): Promise<void> {
+    if (this.#legacyMode || !this.#split.pending || !sources.length) return;
+    const sourceKeys = new Set(sources.map(source => externalSourceKey(source)!));
+    await this.#cards(this.#db, { transaction: false }).findMany({
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      source_key: { in: [...sourceKeys] },
+    });
+  }
+
+  /**
+   * Card row access. While legacy cards remain uncopied, a lookup that misses copies the card:
+   * inside the caller's transaction when `ops` is one (a nested transaction would deadlock
+   * LibSQL), else in a transaction of its own.
+   */
+  #cards(ops: FactoryStorageOps, { transaction }: { transaction: boolean }): Cards {
+    if (this.#legacyMode || !this.#split.pending) return new Cards(ops, this.#legacyMode, undefined, this.#reviewInUse);
+    return new Cards(
+      ops,
+      false,
+      {
+        copy: async rows => {
+          if (transaction) {
+            await copyLegacyRows(ops, rows);
+            return;
+          }
+          try {
+            await this.#withTransaction(tx => copyLegacyRows(tx, rows));
+          } catch (error) {
+            // A concurrent first copy won (its retry lost again); the re-read finds its rows.
+            if (!(error instanceof UniqueViolationError)) throw error;
+          }
+        },
+      },
+      this.#reviewInUse,
+    );
+  }
+
+  /** Validation reads the split tables only, so a parent still in legacy is copied first. */
+  async #copyLegacyParent(ops: FactoryStorageOps, orgId: string, parentId: string | null | undefined) {
+    if (parentId && this.#split.pending)
+      await this.#cards(ops, { transaction: true }).findOne({ org_id: orgId, id: parentId });
+  }
+
+  /** Refresh source evidence without changing work identity or board concurrency tokens. */
+  async syncWorkItemSource(params: {
+    orgId: string;
+    factoryProjectId: string;
+    provider: string;
+    externalId: string;
+    patch: WorkItemSourceSyncPatch | ((current: WorkItemSourceDbRecord) => WorkItemSourceSyncPatch | null);
+    expectedRevision?: number;
+  }): Promise<void> {
+    await this.#withTransaction(async ops => {
+      await this.#syncWorkItemSource(ops, params);
+    });
+  }
+
+  async #syncWorkItemSource(
+    ops: FactoryStorageOps,
+    {
+      orgId,
+      factoryProjectId,
+      provider,
+      externalId,
+      patch,
+      expectedRevision,
+    }: Parameters<WorkItemsStorage['syncWorkItemSource']>[0],
+  ): Promise<Date | undefined> {
+    const where = { org_id: orgId, factory_project_id: factoryProjectId, provider, external_id: externalId };
+    const source = await ops.findOne<WorkItemSourceDbRecord>(FACTORY_WORK_ITEM_SOURCES_SCHEMA.name, where);
+    const card = source && { work_item_id: source.work_item_id };
+    // Lock the card's row before its source, the order every card write takes them in.
+    if (card) await ops.updateAtomic(FACTORY_BOARD_ITEMS_SCHEMA.name, card, () => null);
+    let synced = false;
+    await ops.updateAtomic<WorkItemSourceDbRecord>(
+      FACTORY_WORK_ITEM_SOURCES_SCHEMA.name,
+      { org_id: orgId, factory_project_id: factoryProjectId, provider, external_id: externalId },
+      current => {
+        if (expectedRevision !== undefined && current.revision !== expectedRevision) {
+          throw new WorkItemUpdateConflictError('revision');
+        }
+        const next = typeof patch === 'function' ? patch(current) : patch;
+        if (!next) return null;
+        synced = true;
+        const { metadata, ...facts } = next;
+        // Raw provider state can be 'closed' while normalized state is 'merged'.
+        const nextMetadata =
+          metadata === null
+            ? null
+            : {
+                ...current.metadata,
+                ...metadata,
+                ...(next.labels !== undefined && !Object.hasOwn(metadata ?? {}, 'labels')
+                  ? { labels: next.labels }
+                  : {}),
+                ...(next.state !== undefined && !Object.hasOwn(metadata ?? {}, 'state') ? { state: next.state } : {}),
+                ...(next.author !== undefined && !Object.hasOwn(metadata ?? {}, 'author')
+                  ? { author: next.author }
+                  : {}),
+                ...(next.key !== undefined && !Object.hasOwn(metadata ?? {}, 'identifier')
+                  ? { identifier: next.key }
+                  : {}),
+              };
+        return {
+          ...facts,
+          metadata: nextMetadata,
+          revision: current.revision + 1,
+          synced_at: new Date(),
+          updated_at: new Date(),
+        };
+      },
+    );
+    // The card shows these facts but its own row did not move: stamp it so a board reload rereads it.
+    if (!card || !synced) return undefined;
+    const changed_at = new Date();
+    await ops.updateMany(FACTORY_BOARD_ITEMS_SCHEMA.name, card, { changed_at });
+    return changed_at;
+  }
+
+  /**
+   * File one more external record on an existing card: a pull request on the
+   * issue card it fixes. The card's primary source stays first, so the card keeps
+   * reading as the issue. Attaching a source the card already holds is a no-op
+   * (`attached: false`); one another card holds throws
+   * {@link WorkItemSourceConflictError}. Later state for the attached record goes
+   * through {@link syncWorkItemSource}, never {@link syncCard}, which writes the
+   * primary source.
+   */
+  async attachSource({
+    orgId,
+    id,
+    source,
+    metadata,
+    expectedRevision,
+    cardMetadata,
+  }: {
+    orgId: string;
+    id: string;
+    source: ExternalWorkItemSource;
+    metadata: Record<string, unknown> | null;
+    expectedRevision?: number;
+    /** Rewrites the card's own metadata in the same write that attaches the source. */
+    cardMetadata?: (metadata: Record<string, unknown>) => Record<string, unknown>;
+  }): Promise<{ item: Card; attached: boolean } | null> {
+    let result: Awaited<ReturnType<Cards['attachSource']>>;
+    try {
+      result = await this.#withTransaction(async ops => {
+        const cards = new Cards(ops, this.#legacyMode, undefined, this.#reviewInUse);
+        const attached = await cards.attachSource(
+          { org_id: orgId, id },
+          { external_source: source, metadata, now: new Date() },
+          expectedRevision,
+          cardMetadata,
+        );
+        if (attached?.ownerWorkItemId) throw new WorkItemSourceConflictError(attached.ownerWorkItemId);
+        if (attached?.revisionConflict) throw new WorkItemUpdateConflictError('revision');
+        return attached;
+      });
+    } catch (error) {
+      // A concurrent attach or upsert of the same record won the unique index.
+      if (error instanceof UniqueViolationError && error.collection === FACTORY_WORK_ITEM_SOURCES_SCHEMA.name) {
+        // Sources are unique per project, so another project's copy of the record is no owner here.
+        const card = await new Cards(this.#db, this.#legacyMode, undefined, this.#reviewInUse).findOne({
+          org_id: orgId,
+          id,
+        });
+        const owner = card
+          ? await this.#db.findOne<WorkItemSourceDbRecord>(FACTORY_WORK_ITEM_SOURCES_SCHEMA.name, {
+              org_id: orgId,
+              factory_project_id: card.factory_project_id,
+              source_key: externalSourceKey(source),
+            })
+          : null;
+        if (owner && card && owner.work_item_id === card.work_item?.id)
+          return { item: toWorkItem(card), attached: false };
+        throw new WorkItemSourceConflictError(owner?.work_item_id ?? 'unknown');
+      }
+      throw error;
+    }
+    return result ? { item: toWorkItem(result.row), attached: result.attached } : null;
+  }
+
+  /** Apply source facts and their process stamps in one transaction. */
+  async syncCard(input: SyncCardInput): Promise<{ item: Card; previous: WorkItemPriorState } | null> {
+    try {
+      return await this.#withTransaction(ops => this.#syncCardIn(ops, input));
+    } catch (error) {
+      if (error instanceof CardRevisionMoved) throw new WorkItemUpdateConflictError('revision');
+      throw error;
+    }
+  }
+
+  /** `syncCard` inside a transaction; `expectedRevision` makes it throw `CardRevisionMoved` if the card moved on. */
+  async #syncCardIn(
+    ops: FactoryStorageOps,
+    { orgId, id, userId, patch, expectedSourceRevision, fillOnly = false, expectedRevision }: SyncCardInput,
+  ): Promise<{ item: Card; previous: WorkItemPriorState } | null> {
+    let previous = emptyPrior();
+    let stamped: Date | undefined;
+    const row = await this.#cards(ops, { transaction: true }).updateAtomic({ org_id: orgId, id }, async current => {
+      if (expectedRevision !== undefined && current.revision !== expectedRevision) throw new CardRevisionMoved();
+      previous = priorState(current);
+      const item = toWorkItem(current);
+      const source = primarySource(item);
+      if (this.#legacyMode || !source) {
+        const metadata = fillOnly
+          ? Object.fromEntries(
+              Object.entries(patch.metadata ?? {}).filter(([key]) => current.metadata?.[key] === undefined),
+            )
+          : patch.metadata;
+        if (fillOnly && patch.title === undefined && Object.keys(metadata ?? {}).length === 0) return null;
+        return applyUpdate({ current, userId, input: { ...patch, metadata } });
+      }
+      const adapter = workItemProviderAdapter(item.externalSource);
+      const split = splitCardMetadata(patch.metadata, adapter.providerMetadataKeys);
+      if (Object.keys(split.provider ?? {}).length > 0) {
+        stamped = await this.#syncWorkItemSource(ops, {
+          orgId,
+          factoryProjectId: item.factoryProjectId,
+          provider: source.provider,
+          externalId: source.externalId,
+          expectedRevision: expectedSourceRevision,
+          patch: currentSource => {
+            const providerPatch = fillOnly
+              ? Object.fromEntries(
+                  Object.entries(split.provider ?? {}).filter(([key]) => currentSource.metadata?.[key] === undefined),
+                )
+              : split.provider;
+            if (fillOnly && Object.keys(providerPatch ?? {}).length === 0) return null;
+            const facts = adapter.toSource(item.externalSource, { ...currentSource.metadata, ...providerPatch });
+            if (!facts) throw new Error('An external source must produce provider facts.');
+            return {
+              key: facts.key,
+              url: facts.url,
+              state: facts.state,
+              labels: facts.labels,
+              author: facts.author,
+              metadata: facts.metadata,
+            };
+          },
+        });
+      }
+      const boardPatch = Object.fromEntries(
+        Object.entries(split.board ?? {}).filter(([key, value]) =>
+          fillOnly
+            ? item.metadata?.[key] === undefined
+            : JSON.stringify(item.metadata?.[key]) !== JSON.stringify(value),
+        ),
+      );
+      if (patch.title === undefined && Object.keys(boardPatch).length === 0) return null;
+      return applyUpdate({
+        current,
+        userId,
+        input: { ...(patch.title !== undefined ? { title: patch.title } : {}), metadata: boardPatch },
+      });
+    });
+    if (!row) return null;
+    const item = toWorkItem(row);
+    // `row` was read before the source's sync stamped it; a write of the card itself stamps later.
+    const changedAt = stamped && !(item.changedAt && item.changedAt > stamped) ? stamped : item.changedAt;
+    return { item: { ...item, changedAt }, previous };
   }
 
   async dangerouslyClearAll(): Promise<void> {
-    await this.ops.deleteMany('work_items', {});
+    await this.#withTransaction(ops => this.#cards(ops, { transaction: true }).deleteMany({}));
+    await super.ops.deleteMany(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, {});
+    // A project with no version row is never served from cache, so this invalidates every replica.
+    await super.ops.deleteMany(FACTORY_BOARD_VERSIONS_SCHEMA.name, {});
+    this.#listCache.clear();
   }
 
   get #db(): FactoryStorageOps {
     return this.ops;
+  }
+
+  protected override get ops(): FactoryStorageOps {
+    const ops = super.ops;
+    // Outside a transaction a resolved write has committed, so its wake can go out at once.
+    const cards = trackBoardWrites(ops, CARD_TABLES, async scope => {
+      await bumpBoardVersions(ops, [scope]);
+      this.#announceBoard(scope);
+    });
+    return trackClaimableWrites(
+      trackBoardWrites(cards, DECISION_TABLES, scope => this.#announceBoard(scope)),
+      scope => this.#claimableWork(scope),
+    );
+  }
+
+  /** Only legacy dry-run writes name no project, and no feed is keyed by org alone. */
+  #announceBoard(scope: BoardScope): void {
+    if (scope.factoryProjectId) this.#boardChanged({ orgId: scope.orgId, factoryProjectId: scope.factoryProjectId });
+  }
+
+  /** `storage.withTransaction`, bumping and announcing the board of every project it wrote once it commits. */
+  async #withTransaction<T>(
+    fn: (ops: FactoryStorageOps) => Promise<T>,
+    options?: { isolationLevel?: 'serializable' },
+  ): Promise<T> {
+    const changed = new BoardScopes();
+    const touched = new BoardScopes();
+    const cardWritten = (scope: BoardScope) => {
+      changed.add(scope);
+      touched.add(scope);
+    };
+    let queued = new Map<string, FactoryClaimableWorkScope>();
+    const run = () => {
+      // A retried transaction starts over: wakes queued by the rolled-back attempt never committed.
+      queued = new Map();
+      return this.storage.withTransaction(
+        ops =>
+          fn(
+            trackClaimableWrites(
+              trackBoardWrites(trackBoardWrites(ops, CARD_TABLES, cardWritten), DECISION_TABLES, touched.add),
+              scope => queued.set(`${scope.orgId}\u0000${scope.factoryProjectId}`, scope),
+            ),
+          ),
+        options,
+      );
+    };
+    let result: T;
+    try {
+      result = await run();
+    } catch (error) {
+      // A first guard insert can race. Retry only after the failed transaction
+      // rolls back; PostgreSQL cannot recover from a unique violation inside it.
+      if (!(error instanceof UniqueViolationError) || error.collection !== FACTORY_WORK_ITEM_SPLIT_LOCKS_SCHEMA.name)
+        throw error;
+      result = await run();
+    }
+    try {
+      await bumpBoardVersions(super.ops, changed.values());
+    } finally {
+      // Only after commit: a dispatcher woken earlier could miss the uncommitted row and go idle.
+      for (const scope of queued.values()) this.#claimableWork(scope);
+    }
+    for (const scope of touched.values()) this.#announceBoard(scope);
+    return result;
   }
 
   async #countRows(collection: string, where: CollectionWhere): Promise<number> {
@@ -1297,155 +1916,79 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return count.call(this.#db, collection, where);
   }
 
-  async syncSupervisorFindings(input: {
-    orgId: string;
-    factoryProjectId: string;
-    findings: FactoryHealthFinding[];
-    now: Date;
-  }): Promise<void> {
-    const changed = await this.#withProjectRelationTransaction(input.orgId, input.factoryProjectId, async ops => {
-      let changed = false;
-      const existingOpen = await ops.findMany<GovernanceDbRow>('factory_supervisor_findings', {
-        org_id: input.orgId,
-        factory_project_id: input.factoryProjectId,
-        resolved_at: null,
-      });
-      const currentKeys = new Set(input.findings.map(finding => finding.id));
-      for (const row of existingOpen) {
-        if (!currentKeys.has(String(row.finding_key))) {
-          await ops.updateAtomic<GovernanceDbRow>(
-            'factory_supervisor_findings',
-            { id: row.id, resolved_at: null },
-            () => ({ resolved_at: input.now, updated_at: input.now }),
-          );
-          changed = true;
-        }
-      }
-      const openByKey = new Map(existingOpen.map(row => [String(row.finding_key), row]));
-      for (const finding of input.findings) {
-        const row =
-          openByKey.get(finding.id) ??
-          (await ops.findOne<GovernanceDbRow>('factory_supervisor_findings', {
-            org_id: input.orgId,
-            factory_project_id: input.factoryProjectId,
-            finding_key: finding.id,
-          }));
-        if (!row) {
-          await ops.insertOne<GovernanceDbRow>('factory_supervisor_findings', {
-            org_id: input.orgId,
-            factory_project_id: input.factoryProjectId,
-            finding_key: finding.id,
-            occurrence: 0,
-            finding,
-            opened_at: input.now,
-            updated_at: input.now,
-            resolved_at: null,
-          });
-          changed = true;
-          continue;
-        }
-        const reopening = row.resolved_at !== null;
-        const findingChanged = stableJson(row.finding) !== stableJson(finding);
-        if (!reopening && !findingChanged) continue;
-        await ops.updateAtomic<GovernanceDbRow>('factory_supervisor_findings', { id: row.id }, current => ({
-          finding,
-          occurrence: Number(current.occurrence) + (current.resolved_at !== null ? 1 : 0),
-          opened_at: current.resolved_at !== null ? input.now : current.opened_at,
-          updated_at: input.now,
-          resolved_at: null,
-        }));
-        changed = true;
-      }
-      return changed;
-    });
-    if (changed) this.#attentionChanged?.({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
-  }
-
-  async listSupervisorFindingPage(input: {
-    orgId: string;
-    factoryProjectId: string;
-    before?: { occurredAt: Date; id: string };
-    limit: number;
-  }): Promise<{ rows: FactorySupervisorFindingRecord[]; hasMore: boolean }> {
-    const rows = await this.#db.findMany<GovernanceDbRow>(
-      'factory_supervisor_findings',
-      { org_id: input.orgId, factory_project_id: input.factoryProjectId, resolved_at: null },
-      {
-        orderBy: [
-          ['opened_at', 'desc'],
-          ['id', 'desc'],
-        ],
-        limit: input.limit + 1,
-        ...(input.before ? { cursor: { values: [input.before.occurredAt, input.before.id] } } : {}),
-      },
-    );
-    return { rows: rows.slice(0, input.limit).map(toSupervisorFinding), hasMore: rows.length > input.limit };
-  }
-
-  async countOpenSupervisorFindings(input: { orgId: string; factoryProjectId: string }): Promise<number> {
-    return this.#countRows('factory_supervisor_findings', {
-      org_id: input.orgId,
-      factory_project_id: input.factoryProjectId,
-      resolved_at: null,
-    });
-  }
-
   async #withProjectRelationTransaction<T>(
     orgId: string,
     factoryProjectId: string,
     fn: (ops: FactoryStorageOps) => Promise<T>,
   ): Promise<T> {
     const key = `work-items:${orgId}:${factoryProjectId}`;
-    return withInProcessProjectLock(key, () => this.storage.withTransaction(fn, { isolationLevel: 'serializable' }));
+    return withInProcessProjectLock(key, () => this.#withTransaction(fn, { isolationLevel: 'serializable' }));
   }
 
   async #claimLeases<T>(
     table: 'factory_deferred_decisions' | 'factory_pending_starts',
     input: FactoryLeaseClaimInput,
     map: (row: GovernanceDbRow) => T,
+    accept?: (row: GovernanceDbRow) => boolean,
   ): Promise<T[]> {
     const claim = () =>
-      this.storage.withTransaction(async ops => {
+      this.#withTransaction(async ops => {
         // Bounded candidate window: only rows in claimable/expirable statuses,
         // oldest first. Terminal rows (sent/succeeded/failed) accumulate over a
         // deployment's lifetime and must never be scanned per dispatch tick.
-        const candidates = await ops.findMany<GovernanceDbRow>(
-          table,
-          { status: { in: ['pending', 'retry', 'leased'] } },
-          { orderBy: [['created_at', 'asc']], limit: Math.max(input.limit * 5, 50) },
-        );
+        const where = { status: { in: ['pending', 'retry', 'leased'] } };
         const claimed: T[] = [];
-        for (const candidate of candidates) {
-          if (claimed.length >= input.limit) break;
-          const availableAt = new Date(candidate.available_at as Date | string).getTime();
-          const leaseExpiresAt = candidate.lease_expires_at
-            ? new Date(candidate.lease_expires_at as Date | string).getTime()
-            : 0;
-          const claimable =
-            (candidate.status === 'pending' || candidate.status === 'retry') && availableAt <= input.now.getTime();
-          const expired = candidate.status === 'leased' && leaseExpiresAt <= input.now.getTime();
-          if (!claimable && !expired) continue;
-          let didClaim = false;
-          const row = await ops.updateAtomic<GovernanceDbRow>(table, { id: candidate.id }, current => {
-            const currentAvailable = new Date(current.available_at as Date | string).getTime();
-            const currentExpiry = current.lease_expires_at
-              ? new Date(current.lease_expires_at as Date | string).getTime()
-              : 0;
-            const currentClaimable =
-              (current.status === 'pending' || current.status === 'retry') && currentAvailable <= input.now.getTime();
-            const currentExpired = current.status === 'leased' && currentExpiry <= input.now.getTime();
-            if (!currentClaimable && !currentExpired) return null;
-            didClaim = true;
-            return {
-              status: 'leased',
-              attempts: Number(current.attempts) + 1,
-              lease_owner: input.ownerId,
-              lease_expires_at: input.leaseExpiresAt,
-              updated_at: input.now,
-            };
+        // A filtered claim widens its window past rows it rejects so matching
+        // rows queued behind any size of filtered-out backlog stay reachable.
+        // Unfiltered claims read one window: the first claimable rows are the
+        // oldest. Ties on created_at keep the store's insertion order.
+        let window = Math.max(input.limit * 5, 50);
+        let scanned = 0;
+        let exhausted = false;
+        do {
+          const page = await ops.findMany<GovernanceDbRow>(table, where, {
+            orderBy: [['created_at', 'asc']],
+            limit: window,
           });
-          if (didClaim && row) claimed.push(map(row));
-        }
+          exhausted = !accept || page.length < window;
+          const candidates = page.slice(scanned);
+          scanned = page.length;
+          window *= 4;
+          for (const candidate of candidates) {
+            if (claimed.length >= input.limit) break;
+            const availableAt = new Date(candidate.available_at as Date | string).getTime();
+            const leaseExpiresAt = candidate.lease_expires_at
+              ? new Date(candidate.lease_expires_at as Date | string).getTime()
+              : 0;
+            const claimable =
+              (candidate.status === 'pending' || candidate.status === 'retry') && availableAt <= input.now.getTime();
+            const expired = candidate.status === 'leased' && leaseExpiresAt <= input.now.getTime();
+            if (!claimable && !expired) continue;
+            if (accept && !accept(candidate)) continue;
+            let didClaim = false;
+            const row = await ops.updateAtomic<GovernanceDbRow>(table, { id: candidate.id }, current => {
+              const currentAvailable = new Date(current.available_at as Date | string).getTime();
+              const currentExpiry = current.lease_expires_at
+                ? new Date(current.lease_expires_at as Date | string).getTime()
+                : 0;
+              const currentClaimable =
+                (current.status === 'pending' || current.status === 'retry') && currentAvailable <= input.now.getTime();
+              const currentExpired = current.status === 'leased' && currentExpiry <= input.now.getTime();
+              if (!currentClaimable && !currentExpired) return null;
+              didClaim = true;
+              return {
+                status: 'leased',
+                attempts: Number(current.attempts) + 1,
+                lease_owner: input.ownerId,
+                lease_expires_at: input.leaseExpiresAt,
+                // A new attempt starts clean: the previous attempt's cause no longer describes this one.
+                ...(table === 'factory_deferred_decisions' ? { last_error: null, failure_code: null } : {}),
+                updated_at: input.now,
+              };
+            });
+            if (didClaim && row) claimed.push(map(row));
+          }
+        } while (!exhausted && claimed.length < input.limit);
         return claimed;
       });
     return claim();
@@ -1473,6 +2016,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     table: 'factory_deferred_decisions' | 'factory_pending_starts',
     identity: FactoryLeaseIdentity,
     now: Date,
+    status?: 'superseded',
   ): Promise<GovernanceDbRow | null> {
     let completed = false;
     const row = await this.#db.updateAtomic<GovernanceDbRow>(
@@ -1482,10 +2026,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         if (current.status !== 'leased' || current.lease_owner !== identity.ownerId) return null;
         completed = true;
         return {
-          status: table === 'factory_pending_starts' ? 'sent' : 'succeeded',
+          status: status ?? (table === 'factory_pending_starts' ? 'sent' : 'succeeded'),
           lease_owner: null,
           lease_expires_at: null,
-          completed_at: now,
+          ...(table === 'factory_deferred_decisions' ? { completed_at: now } : {}),
           updated_at: now,
         };
       },
@@ -1512,11 +2056,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           available_at: input.availableAt,
           lease_owner: null,
           lease_expires_at: null,
-          last_error: input.lastError,
-          failure_code: input.failureCode,
-          completed_at: input.terminal ? input.now : null,
-          ...(table === 'factory_deferred_decisions' && input.terminal
-            ? { failure_occurrence: Number(current.failure_occurrence ?? 0) + 1 }
+          ...(table === 'factory_deferred_decisions'
+            ? {
+                last_error: input.lastError,
+                failure_code: input.failureCode,
+                completed_at: input.terminal ? input.now : null,
+                ...(input.terminal ? { failure_occurrence: Number(current.failure_occurrence ?? 0) + 1 } : {}),
+              }
             : {}),
           updated_at: input.now,
         };
@@ -1525,9 +2071,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return failed ? row : null;
   }
 
-  async #listWithOps(ops: FactoryStorageOps, orgId: string, factoryProjectId: string): Promise<WorkItemRow[]> {
-    const rows = await ops.findMany<WorkItemDbRow>(
-      'work_items',
+  async #listWithOps(ops: FactoryStorageOps, orgId: string, factoryProjectId: string): Promise<Card[]> {
+    const rows = await this.#cards(ops, { transaction: true }).findMany(
       { org_id: orgId, factory_project_id: factoryProjectId },
       {
         orderBy: [
@@ -1539,13 +2084,176 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return rows.map(toWorkItem);
   }
 
+  /** The ids deleted after `from`. */
+  #removedSince(scope: CollectionWhere, from: Date) {
+    return super.ops.findMany<{ id: string }>(FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA.name, scope, {
+      orderBy: [['deleted_at', 'asc']],
+      cursor: { values: [from] },
+    });
+  }
+
+  /**
+   * `previous` updated with the cards changed or deleted since `since`. Reads from a few seconds
+   * earlier so a writer whose clock runs behind this one is still caught.
+   */
+  async #listDelta(orgId: string, factoryProjectId: string, previous: readonly Card[], since: number): Promise<Card[]> {
+    const from = new Date(since - LIST_DELTA_CLOCK_SKEW_MS);
+    const scope = { org_id: orgId, factory_project_id: factoryProjectId };
+    const [rows, tombstones] = await Promise.all([
+      this.#cards(super.ops, { transaction: true }).findMany(scope, {
+        orderBy: [['changed_at', 'asc']],
+        cursor: { values: [from] },
+      }),
+      this.#removedSince(scope, from),
+    ]);
+    if (rows.length === 0 && tombstones.length === 0) return [...previous];
+    const changed = new Map(rows.map(row => [row.id, toWorkItem(row)]));
+    const deleted = new Set(tombstones.map(row => row.id));
+    const items = previous.filter(item => !changed.has(item.id) && !deleted.has(item.id));
+    for (const item of changed.values()) if (!deleted.has(item.id)) items.push(item);
+    return items.sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0),
+    );
+  }
+
+  /** The project's cards as {@link list} reads them, uncached, through `ops`: a transaction's, to read them in it. */
+  async listWith(ops: FactoryStorageOps, { orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }) {
+    return this.#listWithOps(ops, orgId, factoryProjectId);
+  }
+
   /**
    * List the org's work items for a project, newest first. Ordered on `created_at` with an id
    * tiebreak so the order is stable: `updated_at` moves under every write, which makes it useless
    * as a cursor and non-deterministic for the callers that iterate this list.
    */
-  async list({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }): Promise<WorkItemRow[]> {
-    return this.#listWithOps(this.#db, orgId, factoryProjectId);
+  async list({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }): Promise<Card[]> {
+    const { items, cached } = await this.#listCached(orgId, factoryProjectId);
+    return cached ? structuredClone(items) : items;
+  }
+
+  /**
+   * Same rows as {@link list}, but shared with the list cache instead of cloned: the board poll
+   * reads every card of the project every few seconds, and cloning thousands of rows per poll
+   * costs more than the query the cache saves. The cached cards are frozen, so a caller that
+   * writes to one throws instead of changing the board every other caller sees.
+   */
+  async listShared({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }): Promise<readonly Card[]> {
+    return (await this.#listCached(orgId, factoryProjectId)).items;
+  }
+
+  /**
+   * {@link listShared} for a reader that keeps the board between reads. `cursor` names this read.
+   * Sent back as `since`, it adds what moved since that read: `changed`, the listed cards written
+   * since, and `removed`, the ids no longer listed. Without them only the whole list answers: no
+   * cursor or one this didn't issue, or a board showing Review cards, which move without a write.
+   */
+  async listSharedSince(scope: { orgId: string; factoryProjectId: string; since?: string }): Promise<{
+    items: readonly Card[];
+    cursor?: string;
+    changed?: Card[];
+    removed?: string[];
+  }> {
+    const { items, readFrom } = await this.#listCached(scope.orgId, scope.factoryProjectId);
+    if (readFrom === undefined || items.some(card => card.board === LEGACY_REVIEW_BOARD)) return { items };
+    const cursor = String(readFrom);
+    if (scope.since === undefined) return { items, cursor };
+    // The reader holds this very list.
+    if (scope.since === cursor) return { items, cursor, changed: [], removed: [] };
+    // Answered from `items`, the list `cursor` names, so the two agree: a write that list doesn't
+    // hold yet is left for the read that sends `cursor` back.
+    const from = new Date(Number(scope.since) - LIST_DELTA_CLOCK_SKEW_MS);
+    const gone = await this.#removedSince({ org_id: scope.orgId, factory_project_id: scope.factoryProjectId }, from);
+    const removed = new Set(gone.map(row => row.id));
+    const changed = items.filter(card => {
+      removed.delete(card.id);
+      return card.changedAt && new Date(card.changedAt) > from;
+    });
+    return { items, cursor, changed, removed: [...removed] };
+  }
+
+  /**
+   * `cached` is true when `items` is shared with other callers, which callers that mutate must clone.
+   * `readFrom` is when the read that produced a cached `items` began.
+   */
+  async #listCached(
+    orgId: string,
+    factoryProjectId: string,
+  ): Promise<{ items: Card[]; cached: boolean; readFrom?: number }> {
+    const key = `${orgId}\u0000${factoryProjectId}`;
+    // Read the version before the rows: a write that lands in between bumps it again afterwards,
+    // so the next call refetches instead of trusting a snapshot taken before that write.
+    const version = await readBoardVersion(super.ops, orgId, factoryProjectId);
+    const hit = this.#listCache.get(key);
+    if (version && hit?.version === version && Date.now() - hit.takenAt < LIST_CACHE_TTL_MS) {
+      return { items: hit.items, cached: true, readFrom: hit.readFrom };
+    }
+    if (!version) {
+      const items = await this.#listWithOps(super.ops, orgId, factoryProjectId);
+      this.#listCache.delete(key);
+      return { items, cached: false };
+    }
+    const inFlight = this.#listInFlight.get(key);
+    if (inFlight?.version === version && Date.now() - inFlight.startedAt < LIST_CACHE_TTL_MS) {
+      return { items: await inFlight.items, cached: true, readFrom: inFlight.startedAt };
+    }
+    const startedAt = Date.now();
+    // Within the TTL a version change only needs the cards changed since the last read; the TTL
+    // still forces a full read as a backstop for anything a delta could miss. A board showing
+    // Review cards is read whole: closing its last open one moves the others without writing them.
+    const delta =
+      hit && startedAt - hit.takenAt < LIST_CACHE_TTL_MS && !hit.items.some(card => card.board === LEGACY_REVIEW_BOARD);
+    const read = (
+      delta
+        ? this.#listDelta(orgId, factoryProjectId, hit.items, hit.readFrom)
+        : this.#listWithOps(super.ops, orgId, factoryProjectId)
+    ).then(deepFreeze);
+    this.#listInFlight.set(key, { version, startedAt, items: read });
+    try {
+      const items = await read;
+      if (this.#listInFlight.get(key)?.items === read) {
+        this.#listCache.delete(key);
+        this.#listCache.set(key, {
+          version,
+          takenAt: delta ? hit.takenAt : Date.now(),
+          readFrom: startedAt,
+          items,
+        });
+        if (this.#listCache.size > LIST_CACHE_MAX_PROJECTS) {
+          this.#listCache.delete(this.#listCache.keys().next().value!);
+        }
+      }
+      return { items, cached: true, readFrom: startedAt };
+    } finally {
+      if (this.#listInFlight.get(key)?.items === read) this.#listInFlight.delete(key);
+    }
+  }
+
+  /**
+   * The cards linked to `item` in its project, its parent and its children, newest first as
+   * {@link list} orders them. Read by id and by the parent index, so the cost does not grow with
+   * the board.
+   */
+  async listLinked({ item, limit }: { item: Card; limit: number }): Promise<Card[]> {
+    const cards = this.#cards(this.#db, { transaction: false });
+    const scope = { org_id: item.orgId, factory_project_id: item.factoryProjectId };
+    const [parent, children] = await Promise.all([
+      item.parentWorkItemId ? cards.findOne({ ...scope, id: item.parentWorkItemId }) : null,
+      cards.findMany(
+        { ...scope, parent_work_item_id: item.id },
+        {
+          orderBy: [
+            ['created_at', 'desc'],
+            ['id', 'desc'],
+          ],
+          limit,
+        },
+      ),
+    ]);
+    return (parent ? [parent, ...children] : children)
+      .map(toWorkItem)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || (a.id < b.id ? 1 : -1))
+      .slice(0, limit);
   }
 
   async listByIds({
@@ -1556,9 +2264,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     orgId: string;
     factoryProjectId: string;
     ids: string[];
-  }): Promise<WorkItemRow[]> {
+  }): Promise<Card[]> {
     if (ids.length === 0) return [];
-    const rows = await this.#db.findMany<WorkItemDbRow>('work_items', {
+    const rows = await this.#cards(this.#db, { transaction: false }).findMany({
       org_id: orgId,
       factory_project_id: factoryProjectId,
       id: { in: [...new Set(ids)] },
@@ -1572,17 +2280,32 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    * ponytail: org-wide scan per session delete; JSON-path query if it measures.
    */
   async clearSessionReferences({ orgId, sessionId }: { orgId: string; sessionId: string }): Promise<number> {
-    const rows = await this.#db.findMany<WorkItemDbRow>('work_items', { org_id: orgId });
+    const rows = await this.#db.findMany<Pick<WorkItemDbRow, 'id' | 'sessions'> & Record<string, unknown>>(
+      this.#legacyMode ? WORK_ITEMS_SCHEMA.name : FACTORY_BOARD_ITEMS_SCHEMA.name,
+      { org_id: orgId },
+    );
+    if (this.#split.pending) {
+      // An uncopied card holding the session would bring the reference back when copied; the
+      // update below copies it first.
+      const split = new Set(rows.map(row => row.id));
+      const legacy = await this.#db.findMany<Pick<WorkItemDbRow, 'id' | 'sessions'> & Record<string, unknown>>(
+        WORK_ITEMS_SCHEMA.name,
+        { org_id: orgId },
+      );
+      rows.push(...legacy.filter(row => !split.has(row.id)));
+    }
     const holding = rows.filter(row => Object.values(row.sessions).some(ref => ref.sessionId === sessionId));
     let cleared = 0;
     for (const row of holding) {
       let changed = false;
-      await this.#db.updateAtomic<WorkItemDbRow>('work_items', { id: row.id }, current => {
-        const kept = Object.entries(current.sessions).filter(([, ref]) => ref.sessionId !== sessionId);
-        if (kept.length === Object.keys(current.sessions).length) return null;
-        changed = true;
-        return { sessions: Object.fromEntries(kept), revision: current.revision + 1, updated_at: new Date() };
-      });
+      await this.#withTransaction(ops =>
+        this.#cards(ops, { transaction: true }).updateAtomic({ id: row.id }, current => {
+          const kept = Object.entries(current.sessions).filter(([, ref]) => ref.sessionId !== sessionId);
+          if (kept.length === Object.keys(current.sessions).length) return null;
+          changed = true;
+          return { sessions: Object.fromEntries(kept), revision: current.revision + 1, updated_at: new Date() };
+        }),
+      );
       if (changed) cleared += 1;
     }
     return cleared;
@@ -1596,8 +2319,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     orgId: string;
     factoryProjectId: string;
     source: ExternalWorkItemSource;
-  }): Promise<WorkItemRow | null> {
-    const row = await this.#db.findOne<WorkItemDbRow>('work_items', {
+  }): Promise<Card | null> {
+    const row = await this.#cards(this.#db, { transaction: false }).findOne({
       org_id: orgId,
       factory_project_id: factoryProjectId,
       source_key: externalSourceKey(source),
@@ -1605,8 +2328,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return row ? toWorkItem(row) : null;
   }
 
-  async get({ orgId, id }: { orgId: string; id: string }): Promise<WorkItemRow | null> {
-    const row = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
+  async get({ orgId, id }: { orgId: string; id: string }): Promise<Card | null> {
+    const row = await this.#cards(this.#db, { transaction: false }).findOne({ org_id: orgId, id });
     return row ? toWorkItem(row) : null;
   }
 
@@ -1616,8 +2339,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    * unlinked sender has no tenant. Tenant safety rides on the key's
    * `workspaceId` instead. Ambiguous matches resolve to nothing, not a guess.
    */
-  async getBySource(source: ExternalWorkItemSource): Promise<WorkItemRow | null> {
-    const rows = await this.#db.findMany<WorkItemDbRow>('work_items', { source_key: externalSourceKey(source) });
+  async getBySource(source: ExternalWorkItemSource): Promise<Card | null> {
+    const rows = await this.#cards(this.#db, { transaction: false }).findMany({
+      source_key: externalSourceKey(source),
+    });
     return rows.length === 1 ? toWorkItem(rows[0]!) : null;
   }
 
@@ -1627,57 +2352,16 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    * issue whose routing moved between projects can own one card in each; intake
    * consults this before creating another.
    */
-  async listBySource({ orgId, source }: { orgId: string; source: ExternalWorkItemSource }): Promise<WorkItemRow[]> {
-    const rows = await this.#db.findMany<WorkItemDbRow>('work_items', {
+  async listBySource({ orgId, source }: { orgId: string; source: ExternalWorkItemSource }): Promise<Card[]> {
+    const rows = await this.#cards(this.#db, { transaction: false }).findMany({
       org_id: orgId,
       source_key: externalSourceKey(source),
     });
     return rows.map(toWorkItem);
   }
 
-  /** The one card in the org holding `claimKey`, if any. */
-  async getByClaimKey({ orgId, claimKey }: { orgId: string; claimKey: string }): Promise<WorkItemRow | null> {
-    const row = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, claim_key: claimKey });
-    return row ? toWorkItem(row) : null;
-  }
-
-  /**
-   * Give an unclaimed card the org-wide claim for its record. Returns the card
-   * once claimed, or null when the card already carries a different claim or
-   * another card in the org holds this one.
-   */
-  async claimWorkItem({
-    orgId,
-    id,
-    claimKey,
-  }: {
-    orgId: string;
-    id: string;
-    claimKey: string;
-  }): Promise<WorkItemRow | null> {
-    const heldBy = async () => {
-      const holder = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, claim_key: claimKey });
-      return holder && holder.id !== id ? holder : null;
-    };
-    if (await heldBy()) return null;
-    try {
-      const row = await this.#db.updateAtomic<WorkItemDbRow>('work_items', { org_id: orgId, id }, async current => {
-        if (current.claim_key === claimKey) return {};
-        if (current.claim_key !== null) throw new WorkItemClaimConflictError(toWorkItem(current));
-        return { claim_key: claimKey };
-      });
-      return row ? toWorkItem(row) : null;
-    } catch (error) {
-      if (error instanceof WorkItemClaimConflictError) return null;
-      // Backends map unique violations on inserts only, so a lost race on the
-      // update surfaces as a driver error: the claim's new holder settles it.
-      if (await heldBy()) return null;
-      throw error;
-    }
-  }
-
-  async getForProject(orgId: string, factoryProjectId: string, id: string): Promise<WorkItemRow | null> {
-    const row = await this.#db.findOne<WorkItemDbRow>('work_items', {
+  async getForProject(orgId: string, factoryProjectId: string, id: string): Promise<Card | null> {
+    const row = await this.#cards(this.#db, { transaction: false }).findOne({
       id,
       org_id: orgId,
       factory_project_id: factoryProjectId,
@@ -1698,28 +2382,46 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return (row?.result as Record<string, unknown> | undefined) ?? null;
   }
 
+  async listRecordedIngress(
+    orgId: string,
+    factoryProjectId: string,
+    identities: readonly string[],
+  ): Promise<Set<string>> {
+    if (identities.length === 0) return new Set();
+    const rows = await this.#db.findMany<GovernanceDbRow>('factory_rule_ingress', {
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      identity: { in: [...new Set(identities)] },
+    });
+    return new Set(rows.map(row => String(row.identity)));
+  }
+
   async commitTransition(input: CommitFactoryTransitionInput): Promise<CommitFactoryTransitionResult> {
     const commit = (): Promise<CommitFactoryTransitionResult> =>
-      this.storage.withTransaction<CommitFactoryTransitionResult>(async ops => {
+      this.#withTransaction<CommitFactoryTransitionResult>(async ops => {
         const prior = await ops.findOne<GovernanceDbRow>('factory_rule_ingress', {
           org_id: input.orgId,
           factory_project_id: input.factoryProjectId,
           identity: input.ingress.identity,
         });
-        if (prior)
-          return {
-            status: 'replayed',
-            item: await this.getForProject(input.orgId, input.factoryProjectId, input.workItemId),
-            result: prior.result as Record<string, unknown>,
-          };
+        if (prior) {
+          // Read through the transaction: on a single-connection database the
+          // root client waits for this transaction, which would never finish.
+          const row = await this.#cards(ops, { transaction: true }).findOne({
+            id: input.workItemId,
+            org_id: input.orgId,
+            factory_project_id: input.factoryProjectId,
+          });
+          return { status: 'replayed', item: row ? toRow(row) : null, result: prior.result as Record<string, unknown> };
+        }
 
         const now = new Date();
-        let item: WorkItemRow | null = null;
+        let item: Card | null = null;
+        let movedBoard = false;
         let code: string | null = null;
         let reason: string | null = null;
         let result: Record<string, unknown>;
-        const updated = await ops.updateAtomic<WorkItemDbRow>(
-          'work_items',
+        const updated = await this.#cards(ops, { transaction: true }).updateAtomic(
           {
             id: input.workItemId,
             org_id: input.orgId,
@@ -1730,7 +2432,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             item = existing;
             if (existing.revision !== input.expectedRevision) {
               code = 'stale';
-              reason = 'The work item changed before this transition committed.';
+              reason = REVISION_CONFLICT_REASON;
               return null;
             }
             if (input.evaluation.outcome === 'rejected') {
@@ -1743,7 +2445,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             const accept = input.accept === true && !existing.acceptedAt;
             const triageType = existing.triageType ?? input.triageType ?? null;
             const classified = triageType !== existing.triageType;
-            if (existing.stages.length === 1 && existing.stages[0] === input.destinationStage) {
+            const changesBoard = input.destinationBoard !== undefined && input.destinationBoard !== existing.board;
+            movedBoard = changesBoard;
+            if (!changesBoard && existing.stages.length === 1 && existing.stages[0] === input.destinationStage) {
               // Classification is part of a terminal handoff, so unlike an
               // autonomy flip alone it is a revisioned work-item change.
               return arm || disarm || accept || classified
@@ -1760,17 +2464,24 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               ...(disarm ? { autonomyArmedAt: null } : {}),
               ...(accept ? { acceptedAt: now } : {}),
               ...(classified ? { triageType } : {}),
-              // A finished card gives up its org-wide claim so the record can be
-              // filed afresh wherever it is routed next.
-              ...(this.#isTerminal({ ...existing, stages: [input.destinationStage] }) ? { claimKey: null } : {}),
+              ...(changesBoard ? { board: input.destinationBoard } : {}),
               stages: [input.destinationStage],
-              stageHistory: applyStageTransition(
-                existing.stageHistory,
-                existing.stages,
-                [input.destinationStage],
-                input.actorId,
-                now,
-              ),
+              // On another board, a phase of the same name is a new one: leave every phase, then enter it.
+              stageHistory: changesBoard
+                ? applyStageTransition(
+                    applyStageTransition(existing.stageHistory, existing.stages, [], input.actorId, now),
+                    [],
+                    [input.destinationStage],
+                    input.actorId,
+                    now,
+                  )
+                : applyStageTransition(
+                    existing.stageHistory,
+                    existing.stages,
+                    [input.destinationStage],
+                    input.actorId,
+                    now,
+                  ),
               revision: existing.revision + 1,
               updatedAt: now,
             });
@@ -1794,25 +2505,20 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 decisions: input.evaluation.outcome === 'accepted' ? input.evaluation.decisions : [],
               }
             : { status: 'rejected', transitionId: input.ingress.transitionId, itemId: input.workItemId, code, reason };
+        // A stale revision only lost a race with another write; recording it
+        // under this identity would replay the loss to every retry, so a
+        // re-read at the current revision could never commit the transition.
+        if (code === 'stale') return { status: 'committed', item, result };
         const ingress = await ops.insertOne<GovernanceDbRow>('factory_rule_ingress', {
           org_id: input.orgId,
           factory_project_id: input.factoryProjectId,
           identity: input.ingress.identity,
-          trigger_type: input.ingress.triggerType,
-          transition_id: input.ingress.transitionId,
           result,
           created_at: now,
         });
         if (item) {
           const evaluation = await ops.insertOne<GovernanceDbRow>('factory_rule_evaluations', {
             ingress_id: ingress.id,
-            work_item_id: item.id,
-            rule_set_version: input.configVersion,
-            expected_revision: input.expectedRevision,
-            outcome,
-            code,
-            reason,
-            causal_chain: input.causalChain,
             created_at: now,
           });
           if (outcome === 'accepted' && input.evaluation.outcome === 'accepted') {
@@ -1826,8 +2532,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 work_item_id: item.id,
                 source_key: decisionSourceKey(decision),
                 idempotency_key: String(decision.idempotencyKey),
-                effect_ordinal: index,
-                effect_hash: factoryDecisionHash(decision),
                 causal_chain: input.causalChain,
                 actor: null,
                 decision,
@@ -1847,6 +2551,44 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             }
           }
         }
+        if (item && outcome === 'accepted' && movedBoard) {
+          // Runs the old board proposed, and its failures awaiting a retry, mean nothing on the
+          // new board. Retired inside this transaction, the move and the supersession land or
+          // fail together — and a proposal filed after the move is never caught by mistake.
+          // Live runs never reach here: a busy card's move is refused before commit.
+          const stranded = await ops.findMany<GovernanceDbRow>('factory_deferred_decisions', {
+            org_id: input.orgId,
+            factory_project_id: input.factoryProjectId,
+            work_item_id: item.id,
+            status: { in: ['proposed', 'failed'] },
+          });
+          for (const row of stranded) {
+            await ops.updateAtomic<GovernanceDbRow>(
+              'factory_deferred_decisions',
+              { id: row.id, org_id: input.orgId, factory_project_id: input.factoryProjectId },
+              current =>
+                current.status === row.status
+                  ? {
+                      status: 'superseded',
+                      updated_at: now,
+                      ...(row.status === 'proposed' ? { completed_at: now } : {}),
+                    }
+                  : null,
+            );
+            await ops.deleteMany(
+              'factory_attention_receipts',
+              row.status === 'proposed'
+                ? proposalReceiptFilter(input.orgId, input.factoryProjectId, String(row.id))
+                : {
+                    org_id: input.orgId,
+                    factory_project_id: input.factoryProjectId,
+                    kind: 'automation-failed',
+                    source_id: String(row.id),
+                    occurrence: Number(row.failure_occurrence ?? 0),
+                  },
+            );
+          }
+        }
         return { status: 'committed', item, result };
       });
     try {
@@ -1859,7 +2601,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   async commitRuleEvaluation(input: CommitFactoryRuleEvaluationInput): Promise<CommitFactoryRuleEvaluationResult> {
     const commit = () =>
-      this.storage.withTransaction<CommitFactoryRuleEvaluationResult>(async ops => {
+      this.#withTransaction<CommitFactoryRuleEvaluationResult>(async ops => {
         const prior = await ops.findOne<GovernanceDbRow>('factory_rule_ingress', {
           org_id: input.orgId,
           factory_project_id: input.factoryProjectId,
@@ -1886,7 +2628,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               sourceKey: string;
               idempotencyKey: string;
             };
-            const item = await ops.findOne<WorkItemDbRow>('work_items', {
+            const item = await this.#cards(ops, { transaction: true }).findOne({
               org_id: input.orgId,
               factory_project_id: input.factoryProjectId,
               source_key: externalSourceKey(
@@ -1920,7 +2662,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           return { status: 'replayed' as const, result };
         }
         const itemRow = input.workItemId
-          ? await ops.findOne<WorkItemDbRow>('work_items', {
+          ? await this.#cards(ops, { transaction: true }).findOne({
               id: input.workItemId,
               org_id: input.orgId,
               factory_project_id: input.factoryProjectId,
@@ -1928,12 +2670,21 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           : null;
         if (input.workItemId !== null && !itemRow) return { status: 'missing' as const };
         const item = itemRow ? toRow(itemRow) : null;
-        const stale = item !== null && item.revision !== input.expectedRevision;
-        const outcome = stale ? 'rejected' : input.outcome.status;
-        const code = stale ? 'stale' : (input.outcome.code ?? null);
-        const reason = stale
-          ? 'The work item changed before this rule evaluation committed.'
-          : (input.outcome.reason ?? null);
+        // A lost revision race is not a verdict on the event: persisting it would
+        // make every redelivery replay an empty result, so record nothing.
+        if (item !== null && item.revision !== input.expectedRevision) return { status: 'stale' as const };
+        if (item !== null && input.cardMetadata && input.expectedRevision !== null) {
+          await this.#syncCardIn(ops, {
+            orgId: input.orgId,
+            id: item.id,
+            userId: input.cardMetadata.userId,
+            patch: { metadata: input.cardMetadata.metadata },
+            expectedRevision: input.expectedRevision,
+          });
+        }
+        const outcome = input.outcome.status;
+        const code = input.outcome.code ?? null;
+        const reason = input.outcome.reason ?? null;
         const decisions = outcome === 'accepted' ? input.decisions : [];
         const result = {
           status: outcome,
@@ -1947,23 +2698,15 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           org_id: input.orgId,
           factory_project_id: input.factoryProjectId,
           identity: input.ingress.identity,
-          trigger_type: input.ingress.triggerType,
-          transition_id: input.ingress.identity,
           result,
           created_at: input.now,
         });
         const evaluation = await ops.insertOne<GovernanceDbRow>('factory_rule_evaluations', {
           ingress_id: ingress.id,
-          work_item_id: item?.id ?? null,
-          rule_set_version: input.configVersion,
-          expected_revision: input.expectedRevision,
-          outcome,
-          code,
-          reason,
-          causal_chain: input.causalChain,
           created_at: input.now,
         });
         for (const [effectOrdinal, decision] of decisions.entries()) {
+          const approvedBy = decision.type === 'invokeSkill' ? (input.consentedBy ?? null) : null;
           await ops.insertOne<GovernanceDbRow>('factory_deferred_decisions', {
             org_id: input.orgId,
             factory_project_id: input.factoryProjectId,
@@ -1971,8 +2714,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             work_item_id: item?.id ?? null,
             source_key: decisionSourceKey(decision),
             idempotency_key: String(decision.idempotencyKey),
-            effect_ordinal: effectOrdinal,
-            effect_hash: factoryDecisionHash(decision),
             causal_chain: input.causalChain,
             actor: input.actor,
             decision,
@@ -1984,17 +2725,28 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             lease_expires_at: null,
             last_error: null,
             completed_at: null,
+            approved_at: approvedBy ? input.now : null,
+            approved_by: approvedBy,
             created_at: new Date(input.now.getTime() + effectOrdinal),
             updated_at: input.now,
           });
         }
         return { status: 'committed' as const, result };
       });
+    const attempt = async (): Promise<CommitFactoryRuleEvaluationResult> => {
+      try {
+        return await commit();
+      } catch (error) {
+        // Another write moved the card between the revision check and the locked card write.
+        if (error instanceof CardRevisionMoved) return { status: 'stale' };
+        throw error;
+      }
+    };
     try {
-      return await commit();
+      return await attempt();
     } catch (error) {
       if (!(error instanceof UniqueViolationError)) throw error;
-      return commit();
+      return attempt();
     }
   }
 
@@ -2013,7 +2765,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           bindingId: String(row.binding_id),
           orgId: row.org_id,
           factoryProjectId: String(row.factory_project_id),
-          lastMessageId: String(row.last_message_id),
           lastMessageCreatedAt: row.last_message_created_at as Date,
           updatedAt: row.updated_at as Date,
         }
@@ -2027,19 +2778,50 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       binding_id: cursor.bindingId,
       org_id: cursor.orgId,
       factory_project_id: cursor.factoryProjectId,
-      last_message_id: cursor.lastMessageId,
       last_message_created_at: cursor.lastMessageCreatedAt,
       updated_at: cursor.updatedAt,
     });
   }
 
-  async listDeferredDecisions(orgId: string, factoryProjectId: string): Promise<FactoryDeferredDecisionRecord[]> {
+  async listDeferredDecisions(
+    orgId: string,
+    factoryProjectId: string,
+    /** `newest`: only that many of the most recent, still oldest first. */
+    filter: { statuses?: readonly string[]; workItemId?: string; newest?: number } = {},
+  ): Promise<FactoryDeferredDecisionRecord[]> {
+    const rows = await this.#db.findMany<GovernanceDbRow>(
+      'factory_deferred_decisions',
+      {
+        org_id: orgId,
+        factory_project_id: factoryProjectId,
+        ...(filter.statuses ? { status: { in: [...filter.statuses] } } : {}),
+        ...(filter.workItemId ? { work_item_id: filter.workItemId } : {}),
+      },
+      filter.newest === undefined
+        ? { orderBy: [['created_at', 'asc']] }
+        : {
+            orderBy: [
+              ['created_at', 'desc'],
+              ['id', 'desc'],
+            ],
+            limit: filter.newest,
+          },
+    );
+    return (filter.newest === undefined ? rows : rows.toReversed()).map(toDeferredDecision);
+  }
+
+  async listDecisionsForEvaluations(
+    orgId: string,
+    factoryProjectId: string,
+    evaluationIds: string[],
+  ): Promise<FactoryDeferredDecisionRecord[]> {
+    if (evaluationIds.length === 0) return [];
     return (
-      await this.#db.findMany<GovernanceDbRow>(
-        'factory_deferred_decisions',
-        { org_id: orgId, factory_project_id: factoryProjectId },
-        { orderBy: [['created_at', 'asc']] },
-      )
+      await this.#db.findMany<GovernanceDbRow>('factory_deferred_decisions', {
+        org_id: orgId,
+        factory_project_id: factoryProjectId,
+        evaluation_id: { in: [...new Set(evaluationIds)] },
+      })
     ).map(toDeferredDecision);
   }
 
@@ -2206,7 +2988,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   async setAttentionReceipt(input: SetAttentionReceiptInput): Promise<FactoryAttentionReceiptRecord | null> {
     return this.#retryAttentionReceiptWrite(() =>
-      this.storage.withTransaction(ops => this.#setAttentionReceiptWithOps(ops, input)),
+      this.#withTransaction(ops => this.#setAttentionReceiptWithOps(ops, input)),
     );
   }
 
@@ -2260,45 +3042,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       return Boolean(decision) && parked;
     }
     // A parked session has no row here; the route checks it against the live registry.
-    if (identity.kind === 'agent-waiting') return true;
-    if (identity.kind === 'activity') {
-      // Occurrence-exact: a bump since the read makes that receipt stale, and
-      // the route answers 409. Scoped to this user or every badge would skew.
-      const activity = await ops.findOne('work_item_activity', {
-        work_item_id: identity.sourceId,
-        participant_id: userId,
-        org_id: orgId,
-        factory_project_id: factoryProjectId,
-        occurrence: identity.occurrence,
-      });
-      return activity !== null;
-    }
-    if (identity.kind === 'supervisor-finding') {
-      const finding = await ops.findOne('factory_supervisor_findings', {
-        org_id: orgId,
-        factory_project_id: factoryProjectId,
-        finding_key: identity.sourceId,
-        occurrence: identity.occurrence,
-        resolved_at: null,
-      });
-      return finding !== null;
-    }
-    if (identity.occurrence !== 0) return false;
-    const mention = await ops.findOne('work_item_comment_mentions', {
-      comment_id: identity.sourceId,
-      org_id: orgId,
-      factory_project_id: factoryProjectId,
-      mentioned_kind: 'user',
-      mentioned_id: userId,
-    });
-    if (!mention) return false;
-    const comment = await ops.findOne('work_item_comments', {
-      id: identity.sourceId,
-      org_id: orgId,
-      factory_project_id: factoryProjectId,
-      deleted_at: null,
-    });
-    return comment !== null;
+    return true;
   }
 
   async #setAttentionReceiptWithOps(
@@ -2366,7 +3110,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     for (let index = 0; index < uniqueIdentities.length; index += ATTENTION_RECEIPT_WRITE_BATCH_SIZE) {
       const batch = uniqueIdentities.slice(index, index + ATTENTION_RECEIPT_WRITE_BATCH_SIZE);
       await this.#retryAttentionReceiptWrite(() =>
-        this.storage.withTransaction(async ops => {
+        this.#withTransaction(async ops => {
           for (const identity of batch) {
             await this.#setAttentionReceiptWithOps(ops, {
               orgId,
@@ -2382,8 +3126,24 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     }
   }
 
-  async claimDeferredDecisions(input: FactoryLeaseClaimInput): Promise<FactoryDeferredDecisionRecord[]> {
-    return this.#claimLeases('factory_deferred_decisions', input, toDeferredDecision);
+  async claimDeferredDecisions(input: FactoryDeferredDecisionClaimInput): Promise<FactoryDeferredDecisionRecord[]> {
+    const filter = input.decisionFilter;
+    const accept = filter
+      ? (row: GovernanceDbRow) =>
+          filter(decisionRowPayload(row.decision), {
+            actor:
+              jsonRowValue(
+                row.actor,
+                (value): value is Record<string, unknown> =>
+                  typeof value === 'object' && value !== null && !Array.isArray(value),
+              ) ?? null,
+            causalChain:
+              jsonRowValue(row.causal_chain, (value): value is FactoryDecisionProvenance['causalChain'] =>
+                Array.isArray(value),
+              ) ?? [],
+          })
+      : undefined;
+    return this.#claimLeases('factory_deferred_decisions', input, toDeferredDecision, accept);
   }
 
   async renewDeferredDecisionLease(identity: FactoryLeaseIdentity, leaseExpiresAt: Date): Promise<boolean> {
@@ -2398,13 +3158,47 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return row ? toDeferredDecision(row) : null;
   }
 
+  /** Settle a leased decision whose card moved on before it could act: nothing ran, and nothing needs a person. */
+  async supersedeLeasedDecision(
+    identity: FactoryLeaseIdentity,
+    now: Date,
+  ): Promise<FactoryDeferredDecisionRecord | null> {
+    const row = await this.#completeLease('factory_deferred_decisions', identity, now, 'superseded');
+    return row ? toDeferredDecision(row) : null;
+  }
+
+  /**
+   * Hand a leased decision back untouched until `availableAt`: it could not act yet and did
+   * nothing, so the claim is not an attempt and leaves no error behind.
+   */
+  async postponeDeferredDecision(
+    identity: FactoryLeaseIdentity,
+    availableAt: Date,
+    now: Date,
+  ): Promise<FactoryDeferredDecisionRecord | null> {
+    let postponed = false;
+    const row = await this.#db.updateAtomic<GovernanceDbRow>(
+      'factory_deferred_decisions',
+      { id: identity.id, org_id: identity.orgId, factory_project_id: identity.factoryProjectId },
+      current => {
+        if (current.status !== 'leased' || current.lease_owner !== identity.ownerId) return null;
+        postponed = true;
+        return {
+          status: 'pending',
+          attempts: Math.max(0, Number(current.attempts) - 1),
+          available_at: availableAt,
+          lease_owner: null,
+          lease_expires_at: null,
+          updated_at: now,
+        };
+      },
+    );
+    return postponed && row ? toDeferredDecision(row) : null;
+  }
+
   async failDeferredDecision(input: FactoryDispatchFailureInput): Promise<FactoryDeferredDecisionRecord | null> {
     const row = await this.#failLease('factory_deferred_decisions', input);
-    if (!row) return null;
-    const record = toDeferredDecision(row);
-    // A retryable failure surfaces nothing; only a terminal one mints an item.
-    if (input.terminal) this.#attentionChanged(record);
-    return record;
+    return row ? toDeferredDecision(row) : null;
   }
 
   /** Park a claimed effect for human approval; the dispatcher never claims `proposed` rows. */
@@ -2429,10 +3223,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         };
       },
     );
-    if (!proposed || !row) return null;
-    const record = toDeferredDecision(row);
-    this.#attentionChanged(record);
-    return record;
+    return proposed && row ? toDeferredDecision(row) : null;
   }
 
   /**
@@ -2448,7 +3239,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     now: Date,
     approvedBy?: string,
   ): Promise<FactoryDeferredDecisionRecord | null> {
-    const approved = await this.storage.withTransaction(async ops => {
+    return this.#withTransaction(async ops => {
       let settled = false;
       const row = await ops.updateAtomic<GovernanceDbRow>(
         'factory_deferred_decisions',
@@ -2470,14 +3261,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       const record = toDeferredDecision(row);
       await ops.deleteMany('factory_attention_receipts', proposalReceiptFilter(orgId, factoryProjectId, decisionId));
       if (record.workItemId) {
-        await ops.updateAtomic<WorkItemDbRow>('work_items', { org_id: orgId, id: record.workItemId }, current =>
+        await this.#cards(ops, { transaction: true }).updateAtomic({ org_id: orgId, id: record.workItemId }, current =>
           current.autonomy_armed_at ? null : { autonomy_armed_at: now },
         );
       }
       return record;
     });
-    if (approved) this.#attentionChanged(approved);
-    return approved;
   }
 
   /** Retire a proposal nobody wants: `dismissed` is terminal, so the run never happens. */
@@ -2502,6 +3291,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     factoryProjectId: string;
     workItemId: string;
     role?: string;
+    /** Idempotency keys of decisions to keep: what a move just queued for the card. */
+    except?: readonly string[];
     supersededAt: Date;
   }): Promise<FactoryDeferredDecisionRecord[]> {
     const rows = await this.#db.findMany<GovernanceDbRow>('factory_deferred_decisions', {
@@ -2514,6 +3305,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     for (const row of rows) {
       const decision = toDeferredDecision(row);
       if (input.role !== undefined && decision.decision.role !== input.role) continue;
+      if (input.except?.includes(decision.idempotencyKey)) continue;
       const record =
         decision.status === 'proposed'
           ? await this.#settleProposedDecision(
@@ -2524,11 +3316,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               },
               { status: 'superseded', updated_at: input.supersededAt, completed_at: input.supersededAt },
             )
-          : await this.#resolveFailedDecision({
+          : await this.#supersedeFailedDecision({
               orgId: input.orgId,
               factoryProjectId: input.factoryProjectId,
               decisionId: decision.id,
-              status: 'superseded',
               now: input.supersededAt,
             });
       if (record) superseded.push(record);
@@ -2540,7 +3331,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     { orgId, factoryProjectId, decisionId }: { orgId: string; factoryProjectId: string; decisionId: string },
     patch: Partial<GovernanceDbRow>,
   ): Promise<FactoryDeferredDecisionRecord | null> {
-    const settled = await this.storage.withTransaction(async ops => {
+    return this.#withTransaction(async ops => {
       let updated = false;
       const row = await ops.updateAtomic<GovernanceDbRow>(
         'factory_deferred_decisions',
@@ -2555,24 +3346,20 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       await ops.deleteMany('factory_attention_receipts', proposalReceiptFilter(orgId, factoryProjectId, decisionId));
       return toDeferredDecision(row);
     });
-    if (settled) this.#attentionChanged(settled);
-    return settled;
   }
 
-  async #resolveFailedDecision({
+  async #supersedeFailedDecision({
     orgId,
     factoryProjectId,
     decisionId,
-    status,
     now,
   }: {
     orgId: string;
     factoryProjectId: string;
     decisionId: string;
-    status: 'succeeded' | 'superseded';
     now: Date;
   }): Promise<FactoryDeferredDecisionRecord | null> {
-    const resolved = await this.storage.withTransaction(async ops => {
+    return this.#withTransaction(async ops => {
       let resolved = false;
       const row = await ops.updateAtomic<GovernanceDbRow>(
         'factory_deferred_decisions',
@@ -2580,7 +3367,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         current => {
           if (current.status !== 'failed') return null;
           resolved = true;
-          return { status, updated_at: now };
+          return { status: 'superseded', updated_at: now };
         },
       );
       if (!resolved || !row) return null;
@@ -2593,8 +3380,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       });
       return toDeferredDecision(row);
     });
-    if (resolved) this.#attentionChanged(resolved);
-    return resolved;
   }
 
   async supersedeTerminalDecisionsForWorkItem(input: {
@@ -2606,80 +3391,83 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     await this.supersedeDecisionsForWorkItem(input);
   }
 
-  async repairLegacyAttentionState(): Promise<void> {
-    let cursor: { values: Array<Date | string> } | undefined;
-    const inspectedWorkItems = new Set<string>();
-    while (true) {
-      const rows = await this.#db.findMany<GovernanceDbRow>(
-        'factory_deferred_decisions',
-        { status: { in: ['failed', 'proposed'] } },
-        {
-          orderBy: [
-            ['created_at', 'asc'],
-            ['id', 'asc'],
-          ],
-          limit: ATTENTION_RECEIPT_QUERY_BATCH_SIZE + 1,
-          ...(cursor ? { cursor } : {}),
-        },
+  /**
+   * Factory used to hold a triaged non-bug in Triage until a person accepted it.
+   * Triage now sends those cards back to Intake instead, so move the ones still
+   * held there, once. A card with a live run, or one that changed under us, is
+   * left alone. Returns the cards moved; a second run finds none.
+   */
+  async returnHeldTriageCards(): Promise<Card[]> {
+    // A one-time migration of rows written when Work was the only board, so it reads Work's phase
+    // keys (`triage`, `intake`) by name. Cards filed before boards were recorded carry no board;
+    // outside pull requests they are Work cards.
+    const held = (
+      await this.#cards(this.#db, { transaction: false }).findMany({
+        board: { in: [LEGACY_WORK_BOARD, null] },
+        triage_type: { in: FACTORY_TRIAGE_TYPES.filter(type => type !== 'bug') },
+        accepted_at: null,
+      })
+    )
+      .map(toWorkItem)
+      .filter(
+        item =>
+          item.stages.length === 1 &&
+          item.stages[0] === LEGACY_TRIAGE_PHASE &&
+          (item.board === LEGACY_WORK_BOARD || item.externalSource?.type !== 'pull-request'),
       );
-      const page = rows.slice(0, ATTENTION_RECEIPT_QUERY_BATCH_SIZE);
-      for (const row of page) {
-        const decision = toDeferredDecision(row);
-        if (
-          decision.status === 'failed' &&
-          decision.failureOccurrence === 0 &&
-          deferredDecisionType(decision) === 'transition'
-        ) {
-          const ingress = await this.#db.findOne<GovernanceDbRow>('factory_rule_ingress', {
-            org_id: decision.orgId,
-            factory_project_id: decision.factoryProjectId,
-            identity: `decision:${decision.idempotencyKey}`,
-          });
-          if (ingressWasAccepted(ingress)) {
-            await this.#resolveFailedDecision({
-              orgId: decision.orgId,
-              factoryProjectId: decision.factoryProjectId,
-              decisionId: decision.id,
-              status: 'succeeded',
-              now: new Date(),
-            });
-            continue;
-          }
-        }
-        if (!decision.workItemId) continue;
-        const itemKey = `${decision.orgId}\0${decision.factoryProjectId}\0${decision.workItemId}`;
-        if (inspectedWorkItems.has(itemKey)) continue;
-        inspectedWorkItems.add(itemKey);
-        const item = await this.get({ orgId: decision.orgId, id: decision.workItemId });
-        if (!item || !this.#isTerminal(item)) continue;
-        await this.supersedeDecisionsForWorkItem({
-          orgId: decision.orgId,
-          factoryProjectId: decision.factoryProjectId,
-          workItemId: decision.workItemId,
-          supersededAt: new Date(),
-        });
-      }
-      const last = page.at(-1);
-      if (rows.length <= ATTENTION_RECEIPT_QUERY_BATCH_SIZE || !last) return;
-      if (!(last.created_at instanceof Date)) throw new Error('Deferred decision created_at is not a timestamp.');
-      cursor = { values: [last.created_at, last.id] };
+    if (held.length === 0) return [];
+    // A binding stays active after its run ends until the stale-binding sweep, so the triage
+    // run that classified the card is still bound. Only a run started since the card last
+    // changed can still be working on it.
+    const startedAt = new Map<string, number>();
+    for (const row of await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {
+      status: 'active',
+      work_item_id: { in: held.map(item => item.id) },
+    })) {
+      const key = `${row.org_id}:${row.work_item_id}`;
+      startedAt.set(key, Math.max(startedAt.get(key) ?? 0, new Date(row.created_at as string | Date).getTime()));
     }
+    const moved: Card[] = [];
+    for (const item of held) {
+      if ((startedAt.get(`${item.orgId}:${item.id}`) ?? 0) >= item.updatedAt.getTime()) continue;
+      // A governed transition leaves an audit row and disarms autonomy so the card
+      // waits for a person; the identity makes a second replica's move a replay.
+      const identity = `${HELD_CARD_SWEEP_ACTOR}:${item.id}:${item.revision}`;
+      const committed = await this.commitTransition({
+        orgId: item.orgId,
+        factoryProjectId: item.factoryProjectId,
+        workItemId: item.id,
+        expectedRevision: item.revision,
+        destinationStage: LEGACY_REST_PHASE,
+        actorId: HELD_CARD_SWEEP_ACTOR,
+        ingress: { identity, transitionId: identity },
+        causalChain: [],
+        evaluation: { outcome: 'accepted', decisions: [] },
+        autonomy: 'disarm',
+      });
+      if (committed.status === 'committed' && committed.result.status === 'accepted' && committed.item) {
+        moved.push(committed.item);
+      }
+    }
+    return moved;
   }
 
-  /** Requeue the same idempotent terminal effect; non-failed decisions are never rerun. */
+  /** Requeue the same idempotent terminal effect; non-failed or non-retryable decisions are never rerun. */
   async retryDeferredDecision(
     orgId: string,
     factoryProjectId: string,
     decisionId: string,
     now: Date,
   ): Promise<FactoryDeferredDecisionRecord | null> {
-    const retriedRecord = await this.storage.withTransaction(async ops => {
+    return this.#withTransaction(async ops => {
       let retried = false;
       const row = await ops.updateAtomic<GovernanceDbRow>(
         'factory_deferred_decisions',
         { id: decisionId, org_id: orgId, factory_project_id: factoryProjectId },
         current => {
           if (current.status !== 'failed') return null;
+          const failureCode = isStoredFactoryDispatchFailureCode(current.failure_code) ? current.failure_code : null;
+          if (!factoryDispatchFailureMetadata(failureCode).canRetry) return null;
           retried = true;
           return {
             status: 'retry',
@@ -2705,8 +3493,22 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       });
       return toDeferredDecision(row);
     });
-    if (retriedRecord) this.#attentionChanged(retriedRecord);
-    return retriedRecord;
+  }
+
+  /** The binding an `agent:<bindingId>` actor names, active or revoked. Identifies; never authorizes. */
+  async findRunBindingById(input: {
+    orgId: string;
+    factoryProjectId: string;
+    id: string;
+  }): Promise<FactoryRunBindingRecord | null> {
+    // Actor ids are free text and the id column is a uuid on Postgres.
+    if (!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(input.id)) return null;
+    const row = await this.#db.findOne<GovernanceDbRow>('factory_run_bindings', {
+      id: input.id,
+      org_id: input.orgId,
+      factory_project_id: input.factoryProjectId,
+    });
+    return row ? toBinding(row) : null;
   }
 
   /** Resolve exact active agent authority; partial session matches never authorize. */
@@ -2732,6 +3534,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     threadId: string;
     resourceId: string;
     sessionId: string;
+    rejectAmbiguous?: boolean;
   }): Promise<FactoryRunBindingRecord | null> {
     const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {
       org_id: input.orgId,
@@ -2740,9 +3543,79 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       session_id: input.sessionId,
       status: 'active',
     });
-    if (new Set(rows.map(row => row.factory_project_id)).size !== 1) return null;
+    const projectCount = new Set(rows.map(row => row.factory_project_id)).size;
+    if (projectCount > 1 && input.rejectAmbiguous)
+      throw new Error('Factory session has ambiguous active run bindings.');
+    if (projectCount !== 1) return null;
     const row = rows.sort((left, right) => right.created_at.getTime() - left.created_at.getTime())[0];
     return row ? toBinding(row) : null;
+  }
+
+  /** Historical thread membership for model/billing policy only; never grants active agent authority. */
+  async findRunBindingByThread(input: {
+    orgId: string;
+    threadId: string;
+    resourceId: string;
+    sessionId: string;
+    rejectAmbiguous?: boolean;
+  }): Promise<FactoryRunBindingRecord | null> {
+    const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {
+      org_id: input.orgId,
+      thread_id: input.threadId,
+      resource_id: input.resourceId,
+      session_id: input.sessionId,
+    });
+    const projectCount = new Set(rows.map(row => row.factory_project_id)).size;
+    if (projectCount > 1 && input.rejectAmbiguous) throw new Error('Factory session has ambiguous run bindings.');
+    if (projectCount !== 1) return null;
+    const row = rows.sort((left, right) => right.created_at.getTime() - left.created_at.getTime())[0];
+    return row ? toBinding(row) : null;
+  }
+
+  /**
+   * The active binding a Factory session is serving, keyed by the session
+   * alone so it resolves before the session has a live thread (e.g. when the
+   * dispatcher builds the workspace for a kickoff). Ambiguous matches never
+   * authorize.
+   */
+  async findActiveRunBindingForSession(input: {
+    orgId: string;
+    factoryProjectId: string;
+    sessionId: string;
+  }): Promise<FactoryRunBindingRecord | null> {
+    const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {
+      org_id: input.orgId,
+      factory_project_id: input.factoryProjectId,
+      session_id: input.sessionId,
+      status: 'active',
+    });
+    if (rows.length !== 1) return null;
+    return toBinding(rows[0]!);
+  }
+
+  /** Whether this session was ever bound to a run, on any thread and whether or not the binding was revoked. */
+  async hasRunBindingForSession(input: {
+    orgId: string;
+    factoryProjectId: string;
+    sessionId: string;
+  }): Promise<boolean> {
+    const row = await this.#db.findOne<GovernanceDbRow>('factory_run_bindings', {
+      org_id: input.orgId,
+      factory_project_id: input.factoryProjectId,
+      session_id: input.sessionId,
+    });
+    return row !== null;
+  }
+
+  /** Every binding a session ever held, revoked ones included, oldest first; never grants agent authority. */
+  async listRunBindingsForSession(input: { orgId: string; sessionId: string }): Promise<FactoryRunBindingRecord[]> {
+    return (
+      await this.#db.findMany<GovernanceDbRow>(
+        'factory_run_bindings',
+        { org_id: input.orgId, session_id: input.sessionId },
+        { orderBy: [['created_at', 'asc']] },
+      )
+    ).map(toBinding);
   }
 
   /** Resolve exact bound-session state for processor awareness; ambiguous cross-tenant matches return null. */
@@ -2796,22 +3669,62 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Revoke leaked/legacy active bindings: older than `olderThan`, or whose
-   * work item is gone, malformed, or already terminal. Terminal-stage cleanup
-   * handles bindings go-forward; this sweep drains anything that slipped past
-   * it. Returns the number of bindings revoked.
+   * A client asked to stop the session's run on purpose. Stored, not held in memory: the dispatcher
+   * watching that run can be on another replica. Scoped to the caller's org, since the access guard
+   * lets through a session id it has no row for.
+   */
+  async requestRunBindingStop(input: { orgId: string; sessionId: string; at: Date }): Promise<void> {
+    await this.#db.updateMany(
+      'factory_run_bindings',
+      { org_id: input.orgId, session_id: input.sessionId, status: 'active' },
+      { stop_requested_at: input.at },
+    );
+  }
+
+  /** Before each kickoff: a stop requested earlier, even with nothing running, is not about the run it starts. */
+  async clearRunBindingStopRequest(input: { orgId: string; bindingId: string }): Promise<void> {
+    await this.#db.updateMany(
+      'factory_run_bindings',
+      { id: input.bindingId, org_id: input.orgId },
+      { stop_requested_at: null },
+    );
+  }
+
+  async runBindingStopRequested(input: { orgId: string; bindingId: string }): Promise<boolean> {
+    const row = await this.#db.findOne<GovernanceDbRow>('factory_run_bindings', {
+      id: input.bindingId,
+      org_id: input.orgId,
+    });
+    return row?.stop_requested_at != null;
+  }
+
+  /**
+   * Revoke leaked/legacy active bindings: older than `olderThan` (unless
+   * `keep` vouches for them), or whose work item is gone, malformed, or
+   * already terminal. Terminal-stage cleanup handles bindings go-forward; this
+   * sweep drains anything that slipped past it. Returns the number of bindings revoked.
    */
   async revokeStaleRunBindings(input: RevokeStaleFactoryRunBindingsInput): Promise<number> {
     const bindings = await this.listActiveRunBindings();
-    const itemCache = new Map<string, WorkItemRow | null>();
+    const itemCache = new Map<string, Card | null>();
     let revoked = 0;
     for (const binding of bindings) {
-      let stale = binding.createdAt.getTime() < input.olderThan.getTime();
+      let stale = binding.createdAt.getTime() < input.olderThan.getTime() && !(await input.keep?.(binding));
       if (!stale) {
         const key = `${binding.orgId}:${binding.workItemId}`;
         let item = itemCache.get(key);
         if (item === undefined) {
-          item = await this.get({ orgId: binding.orgId, id: binding.workItemId });
+          try {
+            item = await this.get({ orgId: binding.orgId, id: binding.workItemId });
+          } catch (error) {
+            // One unreadable card must not end the sweep for every binding after it.
+            // Nothing is known about this card, so its binding stays for the next sweep.
+            console.error(
+              `[factory] stale-binding sweep could not read card ${binding.workItemId}`,
+              error instanceof Error ? error.message : error,
+            );
+            continue;
+          }
           itemCache.set(key, item);
         }
         // Terminal-ness comes from the installed board via the host-wired
@@ -2829,7 +3742,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         bindingId: binding.id,
         revokedAt: input.now,
       });
-      if (result) revoked += 1;
+      if (result) {
+        revoked += 1;
+        input.onRevoked?.(binding);
+      }
     }
     return revoked;
   }
@@ -2839,19 +3755,45 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return (await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', { status: 'active' })).map(toBinding);
   }
 
-  /** List binding history, optionally narrowed to one work item. */
+  /**
+   * The work items a session was ever bound to run, revoked bindings included.
+   * `null` stands for a bound item that no longer loads. Empty when the session
+   * never ran a work item.
+   */
+  async listRunBoundItems(sessionId: string): Promise<(Card | null)[]> {
+    const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', { session_id: sessionId });
+    const keys = new Map(rows.map(row => [`${row.org_id}:${row.work_item_id}`, row]));
+    return Promise.all(
+      [...keys.values()].map(row => this.get({ orgId: String(row.org_id), id: String(row.work_item_id) })),
+    );
+  }
+
+  /**
+   * Move a session's bindings from the legacy `resourceId = sessionId` onto
+   * `resourceId`. Only rows still on the session id change, so a rerun is a no-op.
+   */
+  async moveRunBindingsToResource(input: { sessionId: string; resourceId: string }): Promise<number> {
+    return this.#db.updateMany(
+      'factory_run_bindings',
+      { session_id: input.sessionId, resource_id: input.sessionId },
+      { resource_id: input.resourceId },
+    );
+  }
+
+  /** List binding history, optionally narrowed to one or some work items. */
   async listRunBindings(
     orgId: string,
     factoryProjectId: string,
-    workItemId?: string,
+    workItemId?: string | string[],
   ): Promise<FactoryRunBindingRecord[]> {
+    if (Array.isArray(workItemId) && workItemId.length === 0) return [];
     return (
       await this.#db.findMany<GovernanceDbRow>(
         'factory_run_bindings',
         {
           org_id: orgId,
           factory_project_id: factoryProjectId,
-          ...(workItemId ? { work_item_id: workItemId } : {}),
+          ...(workItemId ? { work_item_id: Array.isArray(workItemId) ? { in: workItemId } : workItemId } : {}),
         },
         { orderBy: [['created_at', 'asc']] },
       )
@@ -2888,7 +3830,20 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   async prepareRunStart(input: PrepareFactoryRunStartInput): Promise<PrepareFactoryRunStartResult> {
     const prepare = () =>
-      this.storage.withTransaction(async ops => {
+      this.#withTransaction(async ops => {
+        if (input.expectedBindingId) {
+          const workItemId = input.workItem.id;
+          if (!workItemId) throw new FactoryRunBindingSupersededError();
+          const expected = await ops.findOne<GovernanceDbRow>('factory_run_bindings', {
+            id: input.expectedBindingId,
+            org_id: input.orgId,
+            factory_project_id: input.factoryProjectId,
+            work_item_id: workItemId,
+            role: input.role,
+            status: 'active',
+          });
+          if (!expected) throw new FactoryRunBindingSupersededError();
+        }
         const prior = await ops.findOne<GovernanceDbRow>('factory_pending_starts', {
           org_id: input.orgId,
           factory_project_id: input.factoryProjectId,
@@ -2902,7 +3857,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           });
           const itemRow =
             bindingRow &&
-            (await ops.findOne<WorkItemDbRow>('work_items', {
+            (await this.#cards(ops, { transaction: true }).findOne({
               id: String(bindingRow.work_item_id),
               org_id: input.orgId,
               factory_project_id: input.factoryProjectId,
@@ -2929,37 +3884,39 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         const now = new Date();
         const create = input.workItem.input;
         let row = input.workItem.id
-          ? await ops.findOne<WorkItemDbRow>('work_items', {
+          ? await this.#cards(ops, { transaction: true }).findOne({
               id: input.workItem.id,
               org_id: input.orgId,
               factory_project_id: input.factoryProjectId,
             })
           : externalSourceKey(create.externalSource)
-            ? await ops.findOne<WorkItemDbRow>('work_items', {
+            ? await this.#cards(ops, { transaction: true }).findOne({
                 org_id: input.orgId,
                 factory_project_id: input.factoryProjectId,
                 source_key: externalSourceKey(create.externalSource),
               })
             : null;
-        let item: WorkItemRow;
+        let item: Card;
         if (row) {
-          row = await ops.updateAtomic<WorkItemDbRow>('work_items', { id: row.id }, current => {
+          row = await this.#cards(ops, { transaction: true }).updateAtomic({ id: row.id }, current => {
             // Stamp only the starting role — `applyUpdate` merges sessions, so
             // other roles keep their own session and `startedBy` (#22254).
-            const next = applyUpdate({
+            // The binding below shares this clock, so a run started on an existing card
+            // is never older than the card's last change.
+            return applyUpdate({
               current,
               userId: input.userId,
               input: { sessions: { [input.role]: input.session } },
+              now,
             });
-            const adopt = this.#claimToAdopt(current, next, create);
-            return adopt ? { ...next, claim_key: adopt } : next;
           });
           item = toRow(row!);
         } else {
+          if (create.parentWorkItemId) await this.#copyLegacyParent(ops, input.orgId, create.parentWorkItemId);
           if (create.parentWorkItemId)
             validateParentRelation(
               (
-                await ops.findMany<WorkItemDbRow>('work_items', {
+                await this.#cards(ops, { transaction: true }).findMany({
                   org_id: input.orgId,
                   factory_project_id: input.factoryProjectId,
                 })
@@ -2967,16 +3924,16 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               undefined,
               create.parentWorkItemId,
             );
-          row = await ops.insertOne<WorkItemDbRow>('work_items', {
+          row = await this.#cards(ops, { transaction: true }).insertOne({
             org_id: input.orgId,
             created_by: input.userId,
             factory_project_id: input.factoryProjectId,
             board: create.board ?? null,
             external_source: create.externalSource ?? null,
             source_key: externalSourceKey(create.externalSource),
-            claim_key: this.#claimForNewRow(create, create.stages ?? []),
             parent_work_item_id: create.parentWorkItemId ?? null,
             title: create.title,
+            description: create.description ?? null,
             stages: create.stages ?? [],
             stage_history: applyStageTransition([], [], create.stages ?? [], input.userId, now),
             sessions: stampSessions({ [input.role]: input.session }, input.userId),
@@ -3010,6 +3967,19 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           },
           { status: 'revoked', revoked_at: now },
         );
+        // A role continuing in an earlier role's session (e.g. build after plan)
+        // may open a new thread; the earlier role's agent must stop acting.
+        await ops.updateMany(
+          'factory_run_bindings',
+          {
+            org_id: input.orgId,
+            factory_project_id: input.factoryProjectId,
+            work_item_id: item.id,
+            session_id: input.session.sessionId,
+            status: 'active',
+          },
+          { status: 'revoked', revoked_at: now },
+        );
         const bindingRow = await ops.insertOne<GovernanceDbRow>('factory_run_bindings', {
           org_id: input.orgId,
           factory_project_id: input.factoryProjectId,
@@ -3034,9 +4004,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           available_at: now,
           lease_owner: null,
           lease_expires_at: null,
-          last_error: null,
-          failure_code: null,
-          completed_at: null,
           created_at: now,
           updated_at: now,
         });
@@ -3052,29 +4019,17 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         return await prepare();
       } catch (error) {
         if (!(error instanceof UniqueViolationError)) throw error;
-        // A claim another project holds is a refusal, not a race to retry.
-        const claimKey = input.workItem.input.claimKey;
-        const claimant = claimKey
-          ? await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: input.orgId, claim_key: claimKey })
-          : null;
-        if (claimant && claimant.factory_project_id !== input.factoryProjectId) {
-          throw new WorkItemClaimConflictError(toWorkItem(claimant));
-        }
         lastError = error;
       }
     }
     throw lastError;
   }
 
-  async markPendingStart(
-    bindingId: string,
-    status: 'sent' | 'failed',
-    lastError?: string,
-  ): Promise<FactoryPendingStartRecord | null> {
+  async markPendingStart(bindingId: string, status: 'sent' | 'failed'): Promise<FactoryPendingStartRecord | null> {
     const row = await this.#db.updateAtomic<GovernanceDbRow>(
       'factory_pending_starts',
       { binding_id: bindingId },
-      () => ({ status, last_error: lastError ?? null, updated_at: new Date() }),
+      () => ({ status, updated_at: new Date() }),
     );
     return row ? toPendingStart(row) : null;
   }
@@ -3098,22 +4053,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const execute = () =>
       params.input.parentWorkItemId
         ? this.#withProjectRelationTransaction(params.orgId, params.factoryProjectId, run)
-        : run(this.#db);
+        : this.#withTransaction(run);
     try {
       return await execute();
     } catch (error) {
       if (!(error instanceof UniqueViolationError)) throw error;
-      // A claim taken by another project is a refusal, not a race to replay.
-      // A claim already held by this project (the record was renamed under a
-      // new source key) resolves to the card that holds it.
-      const claimKey = params.input.claimKey;
-      const claimant = claimKey
-        ? await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: params.orgId, claim_key: claimKey })
-        : null;
-      if (claimant && claimant.factory_project_id !== params.factoryProjectId) {
-        throw new WorkItemClaimConflictError(toWorkItem(claimant));
-      }
-      if (claimant) return { item: toWorkItem(claimant), created: false, previous: priorState(claimant) };
+      // Another writer filed the same source key first; the retry reuses its card.
       return execute();
     }
   }
@@ -3137,28 +4082,18 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const key = externalSourceKey(input.externalSource);
     const reuse = async (): Promise<UpsertWorkItemResult | null> => {
       if (!key) return null;
-      const existing = await ops.findOne<WorkItemDbRow>('work_items', {
+      const existing = await this.#cards(ops, { transaction: true }).findOne({
         org_id: orgId,
         factory_project_id: factoryProjectId,
         source_key: key,
       });
       if (!existing) return null;
       if (reuseMode === 'preserve') {
-        const adopt = this.#claimToAdopt(existing, {}, input);
-        const row = adopt
-          ? await ops.updateAtomic<WorkItemDbRow>(
-              'work_items',
-              { org_id: orgId, factory_project_id: factoryProjectId, source_key: key },
-              current => (current.claim_key === null ? { claim_key: adopt } : null),
-            )
-          : null;
-        const item = toWorkItem(row ?? existing);
-        return { created: false, item, previous: priorState(existing) };
+        return { created: false, item: toWorkItem(existing), previous: priorState(existing) };
       }
 
       let previous = emptyPrior();
-      const updated = await ops.updateAtomic<WorkItemDbRow>(
-        'work_items',
+      const updated = await this.#cards(ops, { transaction: true }).updateAtomic(
         { org_id: orgId, factory_project_id: factoryProjectId, source_key: key },
         async current => {
           previous = priorState(current);
@@ -3167,25 +4102,28 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             reuseMode === 'non-stage'
               ? {
                   title: input.title,
+                  description: input.description,
                   parentWorkItemId: input.parentWorkItemId ?? undefined,
                   metadata: input.metadata,
                 }
               : fullPatch;
           if (patch.parentWorkItemId !== undefined) {
+            await this.#copyLegacyParent(ops, orgId, patch.parentWorkItemId);
             validateParentRelation(
               await this.#listWithOps(ops, orgId, factoryProjectId),
               current.id,
               patch.parentWorkItemId,
             );
           }
-          const next: Partial<WorkItemDbRow> = {
+          return {
             board: reuseMode === 'non-stage' ? current.board : (input.board ?? current.board ?? null),
             external_source: input.externalSource ?? null,
             ...applyUpdate({ current, userId, input: patch }),
           };
-          const adopt = this.#claimToAdopt(current, next, input);
-          return adopt ? { ...next, claim_key: adopt } : next;
         },
+        // The card is handed to this second caller, so a concurrent creator's guarded rollback
+        // must see the reuse; pending rules keep their revision.
+        { touch: reuseMode === 'non-stage' },
       );
       return updated ? { item: toWorkItem(updated), created: false, previous } : null;
     };
@@ -3194,21 +4132,21 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     if (reused) return reused;
 
     const now = new Date();
-    const stages = input.stages ?? ['intake'];
-    validateParentRelation(
-      await this.#listWithOps(ops, orgId, factoryProjectId),
-      undefined,
-      input.parentWorkItemId ?? null,
-    );
-    const row = await ops.insertOne<WorkItemDbRow>('work_items', {
+    // Legacy writers omit stages; they only ever filed onto the default board's resting phase.
+    const stages = input.stages ?? [LEGACY_REST_PHASE];
+    if (input.parentWorkItemId != null) {
+      await this.#copyLegacyParent(ops, orgId, input.parentWorkItemId);
+      validateParentRelation(await this.#listWithOps(ops, orgId, factoryProjectId), undefined, input.parentWorkItemId);
+    }
+    const row = await this.#cards(ops, { transaction: true }).insertOne({
       org_id: orgId,
       factory_project_id: factoryProjectId,
       board: input.board ?? null,
       external_source: input.externalSource ?? null,
       source_key: key,
-      claim_key: this.#claimForNewRow(input, stages),
       parent_work_item_id: input.parentWorkItemId ?? null,
       title: input.title,
+      description: input.description ?? null,
       stages,
       stage_history: stages.map(stage => ({ stage, enteredAt: now.toISOString(), by: userId })),
       sessions: stampSessions(input.sessions ?? {}, userId),
@@ -3231,13 +4169,14 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     id: string;
     userId: string;
     parentWorkItemId: string;
-  }): Promise<WorkItemRow | null> {
-    const candidate = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
+  }): Promise<Card | null> {
+    const candidate = await this.#cards(this.#db, { transaction: false }).findOne({ org_id: orgId, id });
     if (!candidate) return null;
 
     return this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
-      const row = await ops.updateAtomic<WorkItemDbRow>('work_items', { org_id: orgId, id }, async current => {
+      const row = await this.#cards(ops, { transaction: true }).updateAtomic({ org_id: orgId, id }, async current => {
         if (current.parent_work_item_id !== null) return current;
+        await this.#copyLegacyParent(ops, orgId, parentWorkItemId);
         validateParentRelation(
           await this.#listWithOps(ops, orgId, current.factory_project_id),
           current.id,
@@ -3256,6 +4195,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     patch,
     expectedRevision,
     expectedBoard,
+    check,
   }: {
     orgId: string;
     id: string;
@@ -3263,10 +4203,15 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     patch: UpdateWorkItemInput;
     expectedRevision?: number;
     expectedBoard?: string | null;
-  }): Promise<{ item: WorkItemRow; previous: WorkItemPriorState } | null> {
+    /**
+     * Runs on the card as locked for the write, sources included; throw to refuse it. Source syncs
+     * lock the card first, so what it reads can't change before the write lands.
+     */
+    check?: (item: Card) => void;
+  }): Promise<{ item: Card; previous: WorkItemPriorState } | null> {
     const run = async (ops: FactoryStorageOps) => {
       let previous = emptyPrior();
-      const row = await ops.updateAtomic<WorkItemDbRow>('work_items', { org_id: orgId, id }, async current => {
+      const row = await this.#cards(ops, { transaction: true }).updateAtomic({ org_id: orgId, id }, async current => {
         previous = priorState(current);
         if (expectedBoard !== undefined && current.board !== expectedBoard) {
           throw new WorkItemUpdateConflictError('board');
@@ -3274,20 +4219,22 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         if (expectedRevision !== undefined && current.revision !== expectedRevision) {
           throw new WorkItemUpdateConflictError('revision');
         }
+        check?.(toWorkItem(current));
         if (patch.parentWorkItemId !== undefined) {
+          await this.#copyLegacyParent(ops, orgId, patch.parentWorkItemId);
           validateParentRelation(
             await this.#listWithOps(ops, orgId, current.factory_project_id),
             current.id,
             patch.parentWorkItemId,
           );
         }
-        return this.#releaseClaimIfFinished(current, applyUpdate({ current, userId, input: patch }));
+        return applyUpdate({ current, userId, input: patch });
       });
       return row ? { item: toWorkItem(row), previous } : null;
     };
 
-    if (patch.parentWorkItemId === undefined) return run(this.#db);
-    const candidate = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
+    if (patch.parentWorkItemId === undefined) return this.#withTransaction(run);
+    const candidate = await this.#cards(this.#db, { transaction: false }).findOne({ org_id: orgId, id });
     if (!candidate) return null;
     return this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, run);
   }
@@ -3340,61 +4287,158 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Feed rows die with their work item: orphan mention rows would keep
-   * projecting attention items that deep-link to a card that no longer exists.
+   * Make a session follow a work item. Idempotent: following again keeps the
+   * first subscription, including its reason (filing beats a later subscribe).
    */
-  async #purgeFeedState(
-    ops: FactoryStorageOps,
-    { orgId, factoryProjectId, workItemId }: { orgId: string; factoryProjectId: string; workItemId: string },
-  ): Promise<void> {
-    // Paged harvest: this runs inside the delete transaction and a long-lived
-    // item can carry thousands of comments — never materialize them all.
-    const where = { org_id: orgId, factory_project_id: factoryProjectId, work_item_id: workItemId };
-    while (true) {
-      const comments = await ops.findMany<{ id: string } & Record<string, unknown>>('work_item_comments', where, {
-        limit: ATTENTION_RECEIPT_QUERY_BATCH_SIZE,
+  async subscribeToWorkItem(input: SubscribeToWorkItemInput): Promise<WorkItemSubscription> {
+    // Subscriptions never change the board, so they skip the board-version bump.
+    const ops = super.ops;
+    const where = { work_item_id: input.workItemId, session_id: input.sessionId };
+    const existing = await ops.findOne<WorkItemSubscriptionDbRow>(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, where);
+    if (existing) return toWorkItemSubscription(existing);
+    try {
+      const row = await ops.insertOne<WorkItemSubscriptionDbRow>(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, {
+        org_id: input.orgId,
+        factory_project_id: input.factoryProjectId,
+        work_item_id: input.workItemId,
+        session_id: input.sessionId,
+        thread_id: input.threadId,
+        resource_id: input.resourceId,
+        user_id: input.userId,
+        reason: input.reason,
+        created_at: new Date(),
       });
-      if (comments.length === 0) break;
-      const commentIds = comments.map(comment => comment.id);
-      await ops.deleteMany('factory_attention_receipts', {
-        org_id: orgId,
-        factory_project_id: factoryProjectId,
-        kind: 'mention',
-        source_id: { in: commentIds },
-      });
-      await ops.deleteMany('work_item_comments', { ...where, id: { in: commentIds } });
-      if (comments.length < ATTENTION_RECEIPT_QUERY_BATCH_SIZE) break;
+      this.projectSubscriptions.announce({ orgId: row.org_id, factoryProjectId: row.factory_project_id });
+      return toWorkItemSubscription(row);
+    } catch (error) {
+      if (!(error instanceof UniqueViolationError)) throw error;
+      const raced = await ops.findOne<WorkItemSubscriptionDbRow>(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, where);
+      if (!raced) throw error;
+      return toWorkItemSubscription(raced);
     }
-    await ops.deleteMany('work_item_comment_mentions', where);
-    // Activity is keyed on the item, so one statement covers every occurrence
-    // and every participant.
-    await ops.deleteMany('factory_attention_receipts', {
+  }
+
+  /** Stop a session following a work item. Returns whether it was following. */
+  async unsubscribeFromWorkItem({
+    orgId,
+    factoryProjectId,
+    workItemId,
+    sessionId,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+    workItemId: string;
+    sessionId: string;
+  }): Promise<boolean> {
+    const deleted = await super.ops.deleteMany(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, {
       org_id: orgId,
       factory_project_id: factoryProjectId,
-      kind: 'activity',
-      source_id: workItemId,
+      work_item_id: workItemId,
+      session_id: sessionId,
     });
-    await ops.deleteMany('work_item_activity', where);
+    if (deleted > 0) this.projectSubscriptions.announce({ orgId, factoryProjectId });
+    return deleted > 0;
+  }
+
+  /** The sessions following a work item, earliest first. */
+  async listWorkItemSubscribers({
+    orgId,
+    workItemId,
+  }: {
+    orgId: string;
+    workItemId: string;
+  }): Promise<WorkItemSubscription[]> {
+    const rows = await super.ops.findMany<WorkItemSubscriptionDbRow>(
+      FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name,
+      { org_id: orgId, work_item_id: workItemId },
+      {
+        orderBy: [
+          ['created_at', 'asc'],
+          ['id', 'asc'],
+        ],
+      },
+    );
+    return rows.map(toWorkItemSubscription);
+  }
+
+  /** Every follow link in a Factory, earliest first: which session follows which work item. */
+  async listProjectSubscriptions({
+    orgId,
+    factoryProjectId,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+  }): Promise<readonly WorkItemSubscription[]> {
+    const ops = super.ops;
+    const where = { org_id: orgId, factory_project_id: factoryProjectId };
+    return this.projectSubscriptions.read({ orgId, factoryProjectId }, async () =>
+      (
+        await ops.findMany<WorkItemSubscriptionDbRow>(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, where, {
+          orderBy: [
+            ['created_at', 'asc'],
+            ['id', 'asc'],
+          ],
+        })
+      ).map(toWorkItemSubscription),
+    );
+  }
+
+  /** The work items one session follows in a Factory, earliest first. */
+  async listSessionSubscriptions({
+    orgId,
+    factoryProjectId,
+    sessionId,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+    sessionId: string;
+  }): Promise<WorkItemSubscription[]> {
+    const rows = await super.ops.findMany<WorkItemSubscriptionDbRow>(
+      FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name,
+      { org_id: orgId, factory_project_id: factoryProjectId, session_id: sessionId },
+      {
+        orderBy: [
+          ['created_at', 'asc'],
+          ['id', 'asc'],
+        ],
+      },
+    );
+    return rows.map(toWorkItemSubscription);
   }
 
   async delete({
     orgId,
     id,
     purgeRuleState = true,
+    expectedRevision,
+    expectedUpdatedAt,
   }: {
     orgId: string;
     id: string;
     purgeRuleState?: boolean;
-  }): Promise<WorkItemRow | null> {
-    const candidate = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
+    /** Deletes only while the card is still at this revision; returns `null` and keeps it otherwise. */
+    expectedRevision?: number;
+    /** Likewise for the card's `updatedAt`, which a reuse of a sourced card moves without a new revision. */
+    expectedUpdatedAt?: Date;
+  }): Promise<Card | null> {
+    const where = {
+      org_id: orgId,
+      id,
+      ...(expectedRevision === undefined ? {} : { revision: expectedRevision }),
+      ...(expectedUpdatedAt === undefined ? {} : { updated_at: expectedUpdatedAt }),
+    };
+    const candidate = await this.#cards(this.#db, { transaction: false }).findOne(where);
     if (!candidate) return null;
 
-    const removed = await this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
-      const existing = await ops.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
+    let unfollowed = false;
+    const card = await this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
+      unfollowed = false;
+      const existing = await this.#cards(ops, { transaction: true }).findOne(where);
       if (!existing) return null;
-      const deleted = await ops.deleteMany('work_items', { org_id: orgId, id });
+      const deleted = await this.#cards(ops, { transaction: true }).deleteMany(where);
       if (deleted === 0) return null;
-      await this.#purgeFeedState(ops, { orgId, factoryProjectId: existing.factory_project_id, workItemId: id });
+      unfollowed =
+        (await ops.deleteMany(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, { org_id: orgId, work_item_id: id })) > 0;
       if (purgeRuleState && existing.external_source?.externalId) {
         await this.#purgeRuleState(ops, {
           orgId,
@@ -3402,14 +4446,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           sourceKeys: [existing.external_source.externalId],
         });
       }
-      await ops.updateMany(
-        'work_items',
+      await this.#cards(ops, { transaction: true }).updateMany(
         { org_id: orgId, parent_work_item_id: id },
         { parent_work_item_id: null, updated_at: new Date() },
       );
       return toWorkItem(existing);
     });
-    if (removed) this.#attentionChanged(removed);
-    return removed;
+    if (card && unfollowed) this.projectSubscriptions.announce({ orgId, factoryProjectId: card.factoryProjectId });
+    return card;
   }
 }

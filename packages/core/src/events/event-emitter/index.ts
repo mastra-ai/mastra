@@ -18,6 +18,15 @@ export interface EventEmitterPubSubOptions {
 // to module scope so we don't allocate two new closures per emitted event.
 const NOOP_ACK = async (): Promise<void> => {};
 
+/**
+ * The default pubsub: delivers events inside the process that published them.
+ *
+ * Several Mastra instances that share one storage but each use their own
+ * `EventEmitterPubSub` are not supported for evented workflows: every instance
+ * treats the others' runs as its own to recover. A multi-instance evented
+ * deployment needs a broker such as Redis Streams, Valkey Streams or Google
+ * Cloud Pub/Sub.
+ */
 export class EventEmitterPubSub extends PubSub implements LeaseProvider {
   // EventEmitter dispatches synchronously to listeners, so it can serve both
   // a push consumer (no worker) and a pull-style worker that simply calls
@@ -37,6 +46,14 @@ export class EventEmitterPubSub extends PubSub implements LeaseProvider {
    */
   override get supportsNativeBatching(): boolean {
     return true;
+  }
+
+  /**
+   * Ack and nack are no-ops here: a message lives only in the process that
+   * published it, so nothing redelivers it once that process stops.
+   */
+  override get redeliversUnacked(): boolean {
+    return false;
   }
 
   private emitter: EventEmitter;
@@ -159,9 +176,13 @@ export class EventEmitterPubSub extends PubSub implements LeaseProvider {
       this.subscribeWithGroup(topic, cb, options.group);
     } else {
       const wrapper = (event: Event) => {
-        void Promise.resolve(cb(event, NOOP_ACK, NOOP_ACK)).catch(err => {
+        try {
+          void Promise.resolve(cb(event, NOOP_ACK, NOOP_ACK)).catch(err => {
+            this.logSubscriberError(topic, err);
+          });
+        } catch (err) {
           this.logSubscriberError(topic, err);
-        });
+        }
       };
       let byCb = this.fanoutWrappers.get(topic);
       if (!byCb) {
@@ -367,9 +388,13 @@ export class EventEmitterPubSub extends PubSub implements LeaseProvider {
         this.logBufferError(topic, err, { phase: 'cb' });
       });
     } else {
-      void Promise.resolve(member(eventWithAttempt, ack, nack)).catch(err => {
+      try {
+        void Promise.resolve(member(eventWithAttempt, ack, nack)).catch(err => {
+          this.logSubscriberError(topic, err);
+        });
+      } catch (err) {
         this.logSubscriberError(topic, err);
-      });
+      }
     }
   }
 

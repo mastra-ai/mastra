@@ -1,4 +1,5 @@
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ReactNode } from 'react';
 
 export type LoginLayoutProps = {
@@ -19,7 +20,9 @@ export function LoginLayout({ title, description, errorBanner, children }: Login
     <div data-testid="login-page" className="w-full max-w-sm space-y-6 p-6">
       <div className="flex flex-col items-center space-y-2">
         <LogoWithoutText className="h-10 w-10" />
-        <h1 className="text-heading text-foreground">{title}</h1>
+        <Txt as="h1" variant="heading" tone="ink">
+          {title}
+        </Txt>
       </div>
 
       {description}

@@ -1,9 +1,9 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { WorkflowStepDetailContent } from '@mastra/playground-ui/domains/workflows/components/workflow-step-detail';
 import { useWorkflowStepDetail } from '@mastra/playground-ui/domains/workflows/context/workflow-step-detail-context';
-import { useWorkflow } from '@mastra/playground-ui/domains/workflows/hooks/use-workflow';
 import { WorkflowGraph } from '@mastra/playground-ui/domains/workflows/workflow/workflow-graph';
 import { WorkflowSuspendedOverlay } from '@mastra/playground-ui/domains/workflows/workflow/workflow-suspended-overlay';
 import { WorkflowTimeline } from '@mastra/playground-ui/domains/workflows/workflow/workflow-timeline';
@@ -11,11 +11,10 @@ import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
 import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { useWorkflow } from '@mastra/react/hooks/workflows';
 import { Panel } from 'react-resizable-panels';
 import { useParams } from 'react-router';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 interface WorkflowContentProps {
   workflowId: string;
@@ -24,7 +23,7 @@ interface WorkflowContentProps {
 }
 
 const WorkflowContent = ({ workflowId, workflow, isLoading }: WorkflowContentProps) => {
-  const requestContext = useMergedRequestContext();
+  const [requestContext] = useEntityRequestContext('workflow', workflowId);
   const { canExecute, isLoading: isLoadingPermissions } = usePermissions();
   const { stepDetail } = useWorkflowStepDetail();
   const isMobile = useIsMobile();
@@ -83,7 +82,15 @@ const WorkflowContent = ({ workflowId, workflow, isLoading }: WorkflowContentPro
 
 export const Workflow = () => {
   const { workflowId } = useParams();
-  const { data: workflow, isLoading, error } = useWorkflow(workflowId!, usePlaygroundStore().requestContext);
+  const {
+    data: workflow,
+    isLoading,
+    error,
+  } = useWorkflow({
+    workflowId: workflowId!,
+    requestContext: useEntityRequestContext('workflow', workflowId!)[0],
+    queryOptions: { enabled: Boolean(workflowId) },
+  });
 
   if (error && is401UnauthorizedError(error)) {
     return <SessionExpired variant="fill" />;

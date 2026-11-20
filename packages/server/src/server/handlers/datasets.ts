@@ -59,6 +59,23 @@ import {
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 
+// Result rows don't store targetType; attach the parent experiment's so clients can narrow `output`.
+type ExperimentResultResponse = z.infer<typeof experimentResultResponseSchema>;
+type TypedResultOutput = ExperimentResultResponse extends infer R
+  ? R extends ExperimentResultResponse
+    ? Pick<R, 'targetType' | 'output'>
+    : never
+  : never;
+
+// The executor persists `output` in the shape of the experiment's target, so the
+// stored row's target type is the discriminant for its output.
+function withTargetType<T extends { output: unknown }>(
+  result: T,
+  targetType: TargetType | null | undefined,
+): Omit<T, 'output'> & TypedResultOutput {
+  return { ...result, targetType: targetType ?? null } as Omit<T, 'output'> & TypedResultOutput;
+}
+
 // ============================================================================
 // Feature gate + local type guards
 // ============================================================================
@@ -80,6 +97,22 @@ function assertExperimentDeletionAvailable(): void {
   if (!coreFeatures.has('experiment-deletion')) {
     throw new HTTPException(501, {
       message: 'Experiment deletion requires a newer @mastra/core with experiment deletion support.',
+    });
+  }
+}
+
+/**
+ * `compareExperiments` only applies organizationId/projectId when core advertises
+ * `experiment-comparison-tenancy`. The server peer range still allows older cores
+ * that accept the arguments and ignore them, which would return another tenant's
+ * results. Scoped requests fail closed on those cores. Unscoped comparison is unchanged.
+ */
+function assertScopedExperimentComparisonAvailable(organizationId?: string, projectId?: string): void {
+  if (typeof organizationId !== 'string' && typeof projectId !== 'string') return;
+  if (!coreFeatures.has('experiment-comparison-tenancy')) {
+    throw new HTTPException(501, {
+      message:
+        'Scoped experiment comparison requires a newer @mastra/core that enforces organizationId and projectId. Upgrade @mastra/core alongside @mastra/server.',
     });
   }
 }
@@ -173,9 +206,14 @@ export const LIST_DATASETS_ROUTE = createRoute({
   handler: async ({ mastra, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { page, perPage, targetType, targetIds, orderBy } = params;
-      const filters = targetType || targetIds ? { targetType, targetIds } : undefined;
-      const result = await mastra.datasets.list({ page: page ?? 0, perPage: perPage ?? 10, filters, orderBy });
+      const { page, perPage, targetType, targetIds, datasetIds, orderBy } = params;
+      const filters = targetType || targetIds || datasetIds ? { targetType, targetIds, datasetIds } : undefined;
+      // An ID lookup is already bounded by the schema's ID limit, so it returns every match on one page.
+      const result = await mastra.datasets.list(
+        datasetIds
+          ? { page: 0, perPage: false, filters, orderBy }
+          : { page: page ?? 0, perPage: perPage ?? 10, filters, orderBy },
+      );
       return {
         datasets: result.datasets as any,
         pagination: result.pagination,
@@ -733,6 +771,41 @@ export const EXPERIMENT_REVIEW_SUMMARY_ROUTE = createRoute({
   },
 });
 
+export const GET_ANY_EXPERIMENT_ROUTE = createRoute({
+  method: 'GET',
+  path: '/experiments/:experimentId',
+  responseType: 'json',
+  pathParamSchema: experimentIdPathParams,
+  queryParamSchema: tenancyQuerySchema,
+  responseSchema: experimentResponseSchema,
+  summary: 'Get experiment',
+  description:
+    'Returns an experiment by ID regardless of dataset association, including its datasetId (null for experiments orphaned by dataset deletion).',
+  tags: ['Experiments'],
+  requiresAuth: true,
+  handler: async ({ mastra, experimentId, ...params }) => {
+    assertDatasetsAvailable();
+    try {
+      const { organizationId, projectId } = params as { organizationId?: string; projectId?: string };
+      // A tenancy mismatch returns null, so it is indistinguishable from a missing experiment.
+      const experiment = await mastra.datasets.getExperiment({
+        experimentId,
+        ...(organizationId !== undefined ? { organizationId } : {}),
+        ...(projectId !== undefined ? { projectId } : {}),
+      });
+      if (!experiment) {
+        throw new HTTPException(404, { message: `Experiment not found: ${experimentId}` });
+      }
+      return experiment;
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error getting experiment');
+    }
+  },
+});
+
 export const DELETE_ANY_EXPERIMENT_ROUTE = createRoute({
   method: 'DELETE',
   path: '/experiments/:experimentId',
@@ -840,6 +913,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         scorerIds,
         version,
         agentVersion,
+        agentModel,
         maxConcurrency,
         provenance,
         grouping,
@@ -856,6 +930,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         scorerIds?: string[];
         version?: number;
         agentVersion?: string;
+        agentModel?: { provider: string; modelId: string };
         maxConcurrency?: number;
         provenance?: {
           source?: string;
@@ -913,6 +988,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         scorers: scorerIds,
         version,
         agentVersion,
+        agentModel: agentModel ? `${agentModel.provider}/${agentModel.modelId}` : undefined,
         maxConcurrency,
         provenance,
         grouping,
@@ -960,7 +1036,11 @@ export const RUN_EXPERIMENT_ITEM_ROUTE = createRoute({
       };
       const requestContext = rawRequestContext instanceof RequestContext ? rawRequestContext.all : rawRequestContext;
       const ds = await mastra.datasets.get({ id: datasetId });
-      return await ds.runExperimentItem({ experimentId, itemId, attempt, requestContext });
+      const [run, experiment] = await Promise.all([
+        ds.runExperimentItem({ experimentId, itemId, attempt, requestContext }),
+        ds.getExperiment({ experimentId }),
+      ]);
+      return { ...run, result: withTargetType(run.result, experiment?.targetType) };
     } catch (error) {
       if (error instanceof MastraError) {
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
@@ -1005,7 +1085,8 @@ export const SUBMIT_EXPERIMENT_RESULT_ROUTE = createRoute({
           }[];
         };
       const ds = await mastra.datasets.get({ id: datasetId });
-      return await ds.submitExperimentResult({
+      const experiment = await ds.getExperiment({ experimentId });
+      const submitted = await ds.submitExperimentResult({
         experimentId,
         itemId,
         attempt,
@@ -1018,6 +1099,7 @@ export const SUBMIT_EXPERIMENT_RESULT_ROUTE = createRoute({
         traceId,
         scores,
       });
+      return withTargetType(submitted, experiment?.targetType);
     } catch (error) {
       if (error instanceof MastraError) {
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
@@ -1153,7 +1235,7 @@ export const LIST_EXPERIMENT_RESULTS_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, experimentId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { page, perPage, tags, orderBy } = params;
+      const { page, perPage, tags, status, orderBy } = params;
       const ds = await mastra.datasets.get({ id: datasetId });
       // Validate experiment belongs to dataset
       const run = await ds.getExperiment({ experimentId });
@@ -1165,10 +1247,13 @@ export const LIST_EXPERIMENT_RESULTS_ROUTE = createRoute({
         page: page ?? 0,
         perPage: perPage ?? 10,
         ...(tags !== undefined ? { tags } : {}),
+        ...(status !== undefined ? { status } : {}),
         orderBy,
       });
       return {
-        results: result.results.map(({ experimentId: _eid, ...rest }) => ({ experimentId, ...rest })),
+        results: result.results.map(({ experimentId: _eid, ...rest }) =>
+          withTargetType({ experimentId, ...rest }, run.targetType),
+        ),
         pagination: result.pagination,
       };
     } catch (error) {
@@ -1191,7 +1276,7 @@ export const UPDATE_EXPERIMENT_RESULT_ROUTE = createRoute({
   description: 'Updates the status, tags, and/or comment on an experiment result',
   tags: ['Datasets'],
   requiresAuth: true,
-  handler: async ({ mastra, resultId, experimentId, ...params }) => {
+  handler: async ({ mastra, datasetId, resultId, experimentId, ...params }) => {
     assertDatasetsAvailable();
     try {
       const storage = mastra.getStorage();
@@ -1203,6 +1288,11 @@ export const UPDATE_EXPERIMENT_RESULT_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Experiments storage not available' });
       }
 
+      const experiment = await experimentsStore.getExperimentById({ id: experimentId });
+      if (!experiment || experiment.datasetId !== datasetId) {
+        throw new HTTPException(404, { message: `Experiment not found: ${experimentId}` });
+      }
+
       const result = await experimentsStore.updateExperimentResult({
         id: resultId,
         experimentId,
@@ -1211,7 +1301,7 @@ export const UPDATE_EXPERIMENT_RESULT_ROUTE = createRoute({
         comment: params.comment,
       });
 
-      return result;
+      return withTargetType(result, experiment.targetType);
     } catch (error) {
       if (error instanceof MastraError) {
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
@@ -1230,26 +1320,22 @@ export const COMPARE_EXPERIMENTS_ROUTE = createRoute({
   path: '/datasets/:datasetId/compare',
   responseType: 'json',
   pathParamSchema: datasetIdPathParams,
+  queryParamSchema: tenancyQuerySchema,
   bodySchema: compareExperimentsBodySchema,
   responseSchema: comparisonResponseSchema,
-  summary: 'Compare two experiments',
-  description: 'Compares two experiments to detect score regressions',
+  summary: 'Compare two to ten experiments',
+  description: 'Compares two to ten experiments item by item against a baseline experiment',
   tags: ['Datasets'],
   requiresAuth: true,
-  handler: async ({ mastra, datasetId, ...params }) => {
+  handler: async ({ mastra, datasetId, experimentIds, baselineId, ...params }) => {
     assertDatasetsAvailable();
+    const { organizationId, projectId } = params as { organizationId?: string; projectId?: string };
+    // Before any read: an older core would compare by id and ignore this scope.
+    assertScopedExperimentComparisonAvailable(organizationId, projectId);
     try {
-      const { experimentIdA, experimentIdB } = params as {
-        experimentIdA: string;
-        experimentIdB: string;
-      };
       // Validate dataset exists
-      await mastra.datasets.get({ id: datasetId });
-      const result = await mastra.datasets.compareExperiments({
-        experimentIds: [experimentIdA, experimentIdB],
-        baselineId: experimentIdA,
-      });
-      return result;
+      await mastra.datasets.get({ id: datasetId, organizationId, projectId });
+      return await mastra.datasets.compareExperiments({ experimentIds, baselineId, organizationId, projectId });
     } catch (error) {
       if (error instanceof MastraError) {
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });

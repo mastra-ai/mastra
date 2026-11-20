@@ -52,7 +52,11 @@ TooltipTrigger.displayName = 'TooltipTrigger';
 
 type TooltipContentPositionerProps = Omit<TooltipPositionerProps, keyof TooltipPopupProps>;
 
-type TooltipContentProps = TooltipPopupProps & TooltipContentPositionerProps;
+type TooltipContentProps = TooltipPopupProps &
+  TooltipContentPositionerProps & {
+    /** Keep the popup in the DOM (hidden) while closed, e.g. so a trigger can point `aria-describedby` at it. */
+    keepMounted?: boolean;
+  };
 
 const TooltipContent = React.forwardRef<HTMLDivElement, TooltipContentProps>(
   (
@@ -70,6 +74,7 @@ const TooltipContent = React.forwardRef<HTMLDivElement, TooltipContentProps>(
       sticky,
       disableAnchorTracking,
       collisionAvoidance,
+      keepMounted,
       children,
       ...props
     },
@@ -91,7 +96,7 @@ const TooltipContent = React.forwardRef<HTMLDivElement, TooltipContentProps>(
     };
 
     return (
-      <TooltipPrimitive.Portal>
+      <TooltipPrimitive.Portal keepMounted={keepMounted}>
         <TooltipPrimitive.Positioner className="isolate z-100" {...positionerProps}>
           <TooltipPrimitive.Popup
             ref={ref}
@@ -111,8 +116,8 @@ const TooltipContent = React.forwardRef<HTMLDivElement, TooltipContentProps>(
             <TooltipPrimitive.Arrow
               className={cn(
                 'flex',
-                'data-[side=top]:-bottom-[7px] data-[side=top]:rotate-180',
-                'data-[side=bottom]:-top-[7px]',
+                'data-[side=top]:bottom-[-7px] data-[side=top]:rotate-180',
+                'data-[side=bottom]:top-[-7px]',
                 'data-[side=left]:right-[-9px] data-[side=left]:rotate-90',
                 'data-[side=right]:left-[-9px] data-[side=right]:-rotate-90',
               )}
@@ -147,3 +152,4 @@ function TooltipArrowSvg() {
 }
 
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider };
+export type { TooltipContentProps };

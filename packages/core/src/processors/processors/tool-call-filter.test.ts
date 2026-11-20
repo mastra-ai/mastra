@@ -374,6 +374,66 @@ describe('ToolCallFilter', () => {
     });
   });
 
+  describe('current-run detection when step content is empty (observational memory pruning)', () => {
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'user', content: [{ type: 'text', text: 'Search' }] },
+      { role: 'assistant', content: [toolCallPart('old-1', 'search')] },
+      { role: 'tool', content: [toolResultPart('old-1', 'search')] },
+      { role: 'assistant', content: [toolCallPart('run-1', 'search')] },
+      { role: 'tool', content: [toolResultPart('run-1', 'search')] },
+      { role: 'assistant', content: [toolCallPart('run-2', 'search')] },
+      { role: 'tool', content: [toolResultPart('run-2', 'search')] },
+    ];
+
+    async function runWithSteps(steps: unknown[]) {
+      const result = await new ToolCallFilter({ exclude: ['search'] }).processLLMRequest?.({
+        prompt,
+        model: 'test-model' as any,
+        stepNumber: steps.length,
+        steps,
+        state: {},
+        abort: (() => {
+          throw new Error('Aborted');
+        }) as any,
+      } as any);
+      return result?.prompt ?? prompt;
+    }
+
+    it('reads current-run ids from response.messages when content is empty', async () => {
+      const result = await runWithSteps([
+        {
+          content: [],
+          response: {
+            messages: [
+              { role: 'assistant', content: [toolCallPart('run-1', 'search')] },
+              { role: 'tool', content: [toolResultPart('run-1', 'search')] },
+            ],
+          },
+        },
+        {
+          content: [],
+          response: {
+            messages: [
+              { role: 'assistant', content: [toolCallPart('run-2', 'search')] },
+              { role: 'tool', content: [toolResultPart('run-2', 'search')] },
+            ],
+          },
+        },
+      ]);
+
+      expect(toolCallIdsIn(result)).toEqual(['run-1', 'run-1', 'run-2', 'run-2']);
+    });
+
+    it('reads current-run ids from toolCalls/toolResults when content is empty', async () => {
+      const result = await runWithSteps([
+        { content: [], toolCalls: [{ toolCallId: 'run-1' }], toolResults: [{ toolCallId: 'run-1' }] },
+        { content: [], toolCalls: [{ toolCallId: 'run-2' }], toolResults: [] },
+      ]);
+
+      expect(toolCallIdsIn(result)).toEqual(['run-1', 'run-1', 'run-2', 'run-2']);
+    });
+  });
+
   describe('filterAfterToolSteps', () => {
     const threeStepPrompt = (): LanguageModelV2Prompt => [
       { role: 'user', content: [{ type: 'text', text: 'Check three cities' }] },

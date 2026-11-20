@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
+import { createWorkflow as createDefaultWorkflow } from '../create';
 import { createStep } from '../workflow';
 import { createWorkflow } from './workflow';
 
@@ -12,10 +13,15 @@ import { createWorkflow } from './workflow';
  * D1/KV/DO, Elasticsearch) would silently lose step results, so `createRun()`
  * refuses to start.
  *
- * The error has to name the missing capability and the store it came from, since the
- * only remaining way to reach it is opting into the engine via `schedule`. Durable
+ * COR-1410 / harness T60: replace the harness's LibSQL capability override
+ * with the existing MockStore supportsConcurrentUpdates spy.
+ *
+ * The error has to name the missing capability and the store it came from, since
+ * users reach this engine by importing `createWorkflow` from
+ * `@mastra/core/workflows/evented`, or by declaring `schedule` while
+ * `MASTRA_WORKERS` is set. Durable
  * agents resolve to the in-process engine before they get here — see
- * `DurableAgent.resolveWorkflowEngine`, covered by durable-agent-engine-fallback.test.ts.
+ * `DurableExecutionEngine.resolveWorkflowEngine`, covered by durable-agent-engine-fallback.test.ts.
  */
 describe('evented createRun — storage capability gate', () => {
   function buildWorkflow() {
@@ -55,6 +61,29 @@ describe('evented createRun — storage capability gate', () => {
     // `name` has to survive the init-wrapping proxy around the registered storage,
     // otherwise the message degrades to a generic "the configured storage".
     await expect(workflow.createRun()).rejects.toThrow(/InMemoryStorage/);
+  });
+
+  it('executes a default-engine workflow even when storage lacks atomic concurrent updates', async () => {
+    const storage = new MockStore();
+    vi.spyOn(storage.stores.workflows, 'supportsConcurrentUpdates').mockReturnValue(false);
+    const workflow = createDefaultWorkflow({
+      id: 'default-nonatomic',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+    })
+      .then(
+        createStep({
+          id: 'noop',
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          execute: async () => ({}),
+        }),
+      )
+      .commit();
+    new Mastra({ storage, workflows: { workflow }, logger: false });
+
+    const run = await workflow.createRun();
+    expect((await run.start({ inputData: {} })).status).toBe('success');
   });
 
   it('starts on a store that supports atomic concurrent updates', async () => {

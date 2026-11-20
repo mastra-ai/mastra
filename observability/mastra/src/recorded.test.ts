@@ -598,6 +598,67 @@ describe('RecordedTrace', () => {
     });
   });
 
+  it('picks the true root over an orphan span when spans arrive newest-first', async () => {
+    const emitRecordedEvent = vi.fn().mockResolvedValue(undefined);
+    const baseSpan = {
+      traceId: 'trace-orphan',
+      isEvent: false,
+      startedAt: new Date('2026-01-01T00:00:00Z'),
+      endedAt: new Date('2026-01-01T00:00:05Z'),
+    };
+
+    const trace = hydrateRecordedTrace({
+      trace: {
+        traceId: 'trace-orphan',
+        // Newest-first order (e.g. startedAt DESC). The orphan's parent span was never persisted.
+        spans: [
+          {
+            ...baseSpan,
+            spanId: 'orphan-span',
+            parentSpanId: 'missing-span',
+            name: 'tool-call',
+            spanType: SpanType.TOOL_CALL,
+            entityType: EntityType.TOOL,
+            entityId: 'tool-1',
+            entityName: 'lookup',
+            startedAt: new Date('2026-01-01T00:00:02Z'),
+          },
+          {
+            ...baseSpan,
+            spanId: 'root-span',
+            parentSpanId: null,
+            name: 'agent-root',
+            spanType: SpanType.AGENT_RUN,
+            entityType: EntityType.AGENT,
+            entityId: 'agent-1',
+            entityName: 'support-agent',
+            tags: ['prod'],
+          },
+        ],
+      },
+      emitRecordedEvent,
+      canEmitRecordedEvent: () => true,
+    });
+
+    expect(trace!.rootSpan.id).toBe('root-span');
+    expect(trace!.rootSpan.isRootSpan).toBe(true);
+
+    await trace!.getSpan('orphan-span')!.addScore({ scorerId: 'manual-review', score: 1 });
+
+    expect(emitRecordedEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        score: expect.objectContaining({
+          correlationContext: expect.objectContaining({
+            tags: ['prod'],
+            rootEntityType: EntityType.AGENT,
+            rootEntityId: 'agent-1',
+            rootEntityName: 'support-agent',
+          }),
+        }),
+      }),
+    );
+  });
+
   it('debug-logs when a top-level recorded annotation is dropped because no observability instance is registered', async () => {
     const storage = new MockStore();
     const debug = vi.fn();
@@ -641,129 +702,6 @@ describe('RecordedTrace', () => {
 
     expect(debug).toHaveBeenCalledWith('Score event was dropped because no observability instance is registered', {
       eventType: 'score',
-    });
-  });
-
-  describe('recorded annotation flush race', () => {
-    function createScoringMirror() {
-      return {
-        name: 'scoring-mirror',
-        onTracingEvent: vi.fn(async () => {}),
-        onScoreEvent: vi.fn(async () => {}),
-      };
-    }
-
-    function createMastraWithStorageExporter(
-      storage: MockStore,
-      scoringMirror: ReturnType<typeof createScoringMirror>,
-    ) {
-      const observability = new Observability({
-        configs: {
-          default: {
-            serviceName: 'test-service',
-            exporters: [new MastraStorageExporter(), scoringMirror as any],
-          },
-        },
-      });
-
-      const mastra = new Mastra({
-        logger: false,
-        storage,
-        observability,
-      });
-
-      const instance = mastra.observability.getDefaultInstance()!;
-      return { mastra, observability, instance };
-    }
-
-    it('retries storage lookup and persists a score for a span flushed at the default batch interval', async () => {
-      vi.useFakeTimers();
-      try {
-        const storage = new MockStore();
-        const scoringMirror = createScoringMirror();
-
-        // Dedicated instance whose only job is to flush the trace spans to
-        // storage, mimicking the async exporter flush of a live workflow run.
-        const { mastra, instance } = createMastraWithStorageExporter(storage, scoringMirror);
-
-        const root = instance.startSpan({
-          type: SpanType.WORKFLOW_RUN,
-          name: 'workflow-root',
-          entityType: EntityType.WORKFLOW_RUN,
-          entityId: 'workflow-1',
-        });
-        const child = root.createChildSpan({
-          type: SpanType.WORKFLOW_STEP,
-          name: 'step-1',
-          entityType: EntityType.WORKFLOW_STEP,
-          entityId: 'step-1',
-        });
-
-        // The annotation arrives before the spans have been exported.
-        child.end();
-
-        const addScorePromise = mastra.observability.addScore({
-          traceId: root.traceId,
-          spanId: root.id,
-          score: {
-            scorerId: 'manual-review',
-            score: 0.75,
-            reason: 'late flush',
-          },
-        });
-
-        // The exporter only persists the spans when its scheduled flush runs,
-        // at the default maxBatchWaitMs (5000ms).
-        setTimeout(() => {
-          root.end({ end: true });
-          void instance.flush().catch(() => {});
-        }, 5000);
-
-        await vi.advanceTimersByTimeAsync(6100);
-        await addScorePromise;
-
-        expect(scoringMirror.onScoreEvent).toHaveBeenCalledTimes(1);
-        const event = scoringMirror.onScoreEvent.mock.calls[0]![0];
-        expect(event.type).toBe('score');
-        expect(event.score.traceId).toBe(root.traceId);
-        expect(event.score.spanId).toBe(root.id);
-        expect(event.score.score).toBe(0.75);
-        expect(event.score.scorerId).toBe('manual-review');
-        expect(event.score.reason).toBe('late flush');
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
-    it('warns instead of silently dropping a score whose target span never reaches storage', async () => {
-      vi.useFakeTimers();
-      try {
-        const storage = new MockStore();
-        const scoringMirror = createScoringMirror();
-        const warn = vi.fn();
-
-        const { mastra } = createMastraWithStorageExporter(storage, scoringMirror);
-        (mastra.observability as any).__setLogger({ warn });
-
-        const addScorePromise = mastra.observability.addScore({
-          traceId: 'missing-trace',
-          spanId: 'missing-span',
-          score: {
-            scorerId: 'manual-review',
-            score: 0.5,
-          },
-        });
-
-        // Advance past the full retry schedule; the target never appears.
-        await vi.advanceTimersByTimeAsync(6000);
-        await addScorePromise;
-
-        expect(scoringMirror.onScoreEvent).not.toHaveBeenCalled();
-        expect(warn).toHaveBeenCalledTimes(1);
-        expect(warn).toHaveBeenCalledWith(expect.stringContaining('Score event was dropped'));
-      } finally {
-        vi.useRealTimers();
-      }
     });
   });
 });

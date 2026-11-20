@@ -1,276 +1,286 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
+import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
-import { useState, type ReactNode } from 'react';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
+import { useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 
+import { queryKeys } from '../../../../api/keys';
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
-import { useGithubReposQuery } from '../../../../hooks/useGithubRepos';
+import { useGithubReposQuery, useRefreshGithubReposMutation } from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
-import { gitLabProjectRepository, openMastraPlatformIntegrations } from '../../factory/services/gitlab';
-import type { SourceControlRepository } from '../services/github';
-import { GitLabIcon, SearchIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { gitLabProjectRepository } from '../../factory/services/gitlab';
+import type { GithubStatus, SourceControlRepository } from '../services/github';
+import { githubCallbackAwaitsAccess } from '../services/githubCallbackRecovery';
+import { gitLabUnavailableReason, githubUnavailableReason, repositoryHost } from '../services/sourceControlHosts';
+import type { SourceControlHost } from '../services/sourceControlHosts';
+import type { GitHubAppCallbackResult } from './GitHubAppCallbackHandler';
+import { OnboardingGithubHostRow } from './onboarding/OnboardingGithubHostRow';
+import { OnboardingGithubNotice } from './onboarding/OnboardingGithubNotice';
+import { OnboardingGitlabHostRow } from './onboarding/OnboardingGitlabHostRow';
+import { OnboardingInset } from './onboarding/OnboardingInset';
+import { OnboardingRepositoryError } from './onboarding/OnboardingRepositoryError';
+import { OnboardingRepositoryRows } from './onboarding/OnboardingRepositoryRows';
+import { OnboardingSearchInset } from './onboarding/OnboardingSearchInset';
+import { OnboardingStepCard } from './onboarding/OnboardingStepCard';
 
 export interface VcsFactoryStepProps {
-  connectingRepositoryId: number | string | null;
+  initialRepository?: SourceControlRepository;
   githubRedirecting: boolean;
-  mutationPending: boolean;
-  mutationError: string | null;
+  githubCallback?: GitHubAppCallbackResult;
+  onDismissGithubCallback: () => void;
   onConnect: () => void;
   onManageConnection: () => void;
   onSelectRepository: (repository: SourceControlRepository) => void;
+  onPreviewRepository?: (repository: SourceControlRepository | undefined) => void;
 }
 
 export function VcsFactoryStep({
-  connectingRepositoryId,
+  initialRepository,
   githubRedirecting,
-  mutationPending,
-  mutationError,
+  githubCallback,
+  onDismissGithubCallback,
   onConnect,
   onManageConnection,
   onSelectRepository,
+  onPreviewRepository,
 }: VcsFactoryStepProps) {
-  const [selectedProvider, setSelectedProvider] = useState<'github' | 'gitlab' | null>(null);
+  // Decided once on arrival: a GitHub App result is about GitHub, so it opens there even over a GitLab
+  // repository or a ready GitLab, and stays there when the result is dismissed. Undefined follows the
+  // connection status, so an OAuth return lands on the connected host.
+  const [pinnedHost, setPinnedHost] = useState<SourceControlHost | undefined>(() => {
+    if (githubCallback) return 'github';
+    return initialRepository && repositoryHost(initialRepository);
+  });
+  const [chosenRepository, setChosenRepository] = useState(initialRepository);
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebouncedValue(query, 750);
+  // Clearing the box shows the full list at once; only typing waits for the debounce.
+  const search = query === '' ? '' : debouncedQuery;
+  const queryClient = useQueryClient();
   const githubStatus = useGithubStatusQuery();
   const connected = githubStatus.data?.connected === true;
-  const repos = useGithubReposQuery(debouncedQuery || undefined, connected && selectedProvider === 'github');
   const gitlabStatus = useGitLabStatusQuery();
   const gitlabConfigured = Boolean(gitlabStatus.data?.enabled && gitlabStatus.data.configured);
-  const gitlabProjects = useGitLabProjectsQuery(gitlabConfigured && selectedProvider === 'gitlab');
+  const anyHostReady = connected || gitlabConfigured;
+  const host = pinnedHost ?? (connected ? 'github' : 'gitlab');
+  const hostReady = host === 'github' ? connected : gitlabConfigured;
+  const repositoryForProvider =
+    chosenRepository && repositoryHost(chosenRepository) === host ? chosenRepository : undefined;
+  const repositorySearch = search || undefined;
+  const repos = useGithubReposQuery(repositorySearch, connected && host === 'github');
+  const refreshRepos = useRefreshGithubReposMutation(repositorySearch);
+  const gitlabProjects = useGitLabProjectsQuery(gitlabConfigured && host === 'gitlab');
   const gitlabRepos = (gitlabProjects.data ?? []).flatMap(project => {
     const repository = gitLabProjectRepository(project);
     return repository ? [repository] : [];
   });
+  const repositoryQuery = host === 'gitlab' ? gitlabProjects : repos;
+  // A failed first load has no list; its empty-list text would wrongly blame repository access.
+  const repositoriesFailed = repositoryQuery.isError && repositoryQuery.data === undefined;
+  const refreshFailed = host === 'github' && refreshRepos.isError;
+  const statusPending = githubStatus.isPending || gitlabStatus.isPending;
+  const chooseRepository = (repository: SourceControlRepository) => {
+    setChosenRepository(repository);
+    onPreviewRepository?.(repository);
+  };
+  const resetChoice = () => {
+    setChosenRepository(undefined);
+    onPreviewRepository?.(undefined);
+    // A refresh failure was about the list it refreshed.
+    refreshRepos.reset();
+  };
+  const showRepositories = !statusPending && hostReady;
+  // With no host ready both rows show; otherwise only the selected host's row, so it can be connected.
+  const showGithubRow = !statusPending && !hostReady && (!anyHostReady || host === 'github');
+  const showGitlabRow = !statusPending && !hostReady && (!anyHostReady || host === 'gitlab');
+  const refreshGithub = () => {
+    // The repository refresh re-syncs status itself; refetching here too cancels and repeats it.
+    if (connected) {
+      const listedIds = new Set(repos.data?.map(repository => repository.id));
+      const listedAt = repos.dataUpdatedAt;
+      const installationCount = githubStatus.data?.installations.length ?? 0;
+      refreshRepos.mutate(undefined, {
+        // A new installation or repository means the access an approval or a Platform fix waited on has landed.
+        // The list is capped to the most recent repositories, so its length alone can't show that, and a
+        // repository pushed since it loaded may only have moved into it.
+        onSuccess: next => {
+          if (!githubCallbackAwaitsAccess(githubCallback)) return;
+          const status = queryClient.getQueryData<GithubStatus>(queryKeys.githubStatus());
+          const newInstallation = (status?.installations.length ?? 0) > installationCount;
+          const newRepository = next.some(
+            repository =>
+              !listedIds.has(repository.id) && !(repository.pushedAt && Date.parse(repository.pushedAt) > listedAt),
+          );
+          if (newInstallation || newRepository) onDismissGithubCallback();
+        },
+      });
+      return;
+    }
+    // A fix made elsewhere (an approval, Platform's Refresh accounts) shows up here; its notice is then moot.
+    void githubStatus.refetch().then(result => {
+      if (result.data?.connected) onDismissGithubCallback();
+    });
+  };
 
   return (
-    <section
-      aria-label="Source control repository"
-      className="border-border bg-background/80 mx-auto max-w-2xl rounded-2xl border p-5 text-left"
+    <OnboardingStepCard
+      section="vcs"
+      headerEnd={
+        !statusPending &&
+        anyHostReady && (
+          <SegmentedControl
+            aria-label="Source control host"
+            value={host}
+            onValueChange={next => {
+              setPinnedHost(next);
+              setQuery('');
+              resetChoice();
+            }}
+            className="max-[899px]:w-full"
+          >
+            <SegmentedControlItem value="github" className="max-[899px]:min-w-0 max-[899px]:flex-1">
+              GitHub
+            </SegmentedControlItem>
+            <SegmentedControlItem value="gitlab" className="max-[899px]:min-w-0 max-[899px]:flex-1">
+              GitLab
+            </SegmentedControlItem>
+          </SegmentedControl>
+        )
+      }
+      notice={
+        // With no host ready both host rows show, so GitHub's notice belongs there too.
+        (host === 'github' || !anyHostReady) && (
+          <OnboardingGithubNotice
+            callback={githubCallback}
+            statusReason={githubStatus.data?.reason}
+            statusChecked={githubStatus.isFetchedAfterMount}
+            redirecting={githubRedirecting}
+            refreshing={githubStatus.isFetching || refreshRepos.isPending}
+            onConnect={onConnect}
+            onRefresh={refreshGithub}
+            onDismiss={onDismissGithubCallback}
+          />
+        )
+      }
+      actions={
+        showRepositories &&
+        host === 'github' && (
+          <>
+            <Button variant="ghost" size="sm" onClick={onManageConnection}>
+              Manage access
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label="Refresh GitHub repositories"
+              disabled={refreshRepos.isPending}
+              onClick={refreshGithub}
+            >
+              <IconArrowRotateClockwise
+                className={cn('size-icon-sm', refreshRepos.isPending && 'animate-spin')}
+                aria-hidden="true"
+              />
+              Refresh
+            </Button>
+          </>
+        )
+      }
+      primary={
+        showRepositories && (
+          <Button
+            variant="primary"
+            disabled={!repositoryForProvider}
+            onClick={() => {
+              if (repositoryForProvider) onSelectRepository(repositoryForProvider);
+            }}
+          >
+            Continue
+          </Button>
+        )
+      }
     >
-      {githubStatus.isPending || gitlabStatus.isPending ? (
-        <SkeletonRows label="Loading source control status" rows={2} rowClassName="h-32 w-full rounded-xl" />
-      ) : selectedProvider === null ? (
-        <ProviderChoice
-          githubRedirecting={githubRedirecting}
-          onChooseGithub={() => {
-            if (connected) setSelectedProvider('github');
-            else if (githubStatus.data?.enabled) onConnect();
-            else openMastraPlatformIntegrations();
-          }}
-          onChooseGitlab={() => {
-            if (gitlabConfigured) setSelectedProvider('gitlab');
-            else openMastraPlatformIntegrations();
-          }}
-        />
-      ) : (
-        <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-between gap-3">
-            <ProviderHeading>
-              {selectedProvider === 'github' ? 'GitHub repositories' : 'GitLab repositories'}
-            </ProviderHeading>
-            <button
-              type="button"
-              className="text-meta text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
-              onClick={() => {
-                setQuery('');
-                setSelectedProvider(null);
+      {statusPending && (
+        <OnboardingInset>
+          <SkeletonRows label="Loading source control status" rows={2} rowClassName="h-15 w-full" />
+        </OnboardingInset>
+      )}
+      {(showGithubRow || showGitlabRow) && (
+        <OnboardingInset>
+          {showGithubRow && (
+            <OnboardingGithubHostRow
+              redirecting={githubRedirecting}
+              unavailableReason={githubUnavailableReason(githubStatus.data?.reason)}
+              retrying={githubStatus.isFetching}
+              onConnect={onConnect}
+              onRetry={() => void githubStatus.refetch()}
+            />
+          )}
+          {showGitlabRow && (
+            <OnboardingGitlabHostRow
+              unavailableReason={gitLabUnavailableReason(gitlabStatus.data)}
+              retrying={gitlabStatus.isFetching}
+              onConnected={() => {
+                setPinnedHost('gitlab');
+                void gitlabStatus.refetch();
+              }}
+              onRetry={() => void gitlabStatus.refetch()}
+            />
+          )}
+        </OnboardingInset>
+      )}
+      {showRepositories && (
+        <OnboardingSearchInset
+          search={
+            <SearchInput
+              label="Search repositories"
+              placeholder="Find a repository"
+              value={query}
+              onValueChange={value => {
+                setQuery(value);
+                resetChoice();
+              }}
+            />
+          }
+        >
+          {refreshFailed ? (
+            <OnboardingRepositoryError
+              message={refreshRepos.error.message}
+              retrying={refreshRepos.isPending}
+              onRetry={refreshGithub}
+            />
+          ) : (
+            repositoryQuery.isError && (
+              <OnboardingRepositoryError
+                message={repositoryQuery.error.message}
+                retrying={repositoryQuery.isFetching}
+                onRetry={() => void repositoryQuery.refetch()}
+              />
+            )
+          )}
+          {!repositoriesFailed && (
+            <div
+              onMouseLeave={() => onPreviewRepository?.(repositoryForProvider)}
+              onBlur={event => {
+                if (!event.currentTarget.contains(event.relatedTarget)) onPreviewRepository?.(repositoryForProvider);
               }}
             >
-              Choose another provider
-            </button>
-          </div>
-          <div className="border-border bg-sidebar flex items-center gap-2 rounded-lg border px-3 py-2">
-            <SearchIcon size={15} className="text-placeholder" />
-            <input
-              aria-label="Search repositories"
-              className="text-caption text-foreground placeholder:text-placeholder min-w-0 flex-1 bg-transparent focus:outline-none"
-              placeholder="Filter repositories…"
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-            />
-          </div>
-          {mutationError && <RepositoryError message={mutationError} />}
-          {selectedProvider === 'github' ? (
-            <>
-              {repos.isError && <RepositoryError message={repos.error.message} />}
-              <RepositoryRows
-                repositories={repos.data ?? []}
-                query=""
-                pending={repos.isPending}
-                mutationPending={mutationPending}
-                connectingRepositoryId={connectingRepositoryId}
-                provider="github"
-                onSelectRepository={onSelectRepository}
+              <OnboardingRepositoryRows
+                repositories={host === 'github' ? (repos.data ?? []) : gitlabRepos}
+                host={host}
+                search={search}
+                pending={repositoryQuery.isPending}
+                selectedRepositoryId={repositoryForProvider?.id}
+                onSelectRepository={chooseRepository}
+                onPreviewRepository={onPreviewRepository}
               />
-              <Button size="sm" className="self-start" onClick={onManageConnection}>
-                Manage GitHub connection
-              </Button>
-            </>
-          ) : (
-            <>
-              {gitlabProjects.isError && <RepositoryError message={gitlabProjects.error.message} />}
-              <RepositoryRows
-                repositories={gitlabRepos}
-                query={debouncedQuery}
-                pending={gitlabProjects.isPending}
-                mutationPending={mutationPending}
-                connectingRepositoryId={connectingRepositoryId}
-                provider="gitlab"
-                onSelectRepository={onSelectRepository}
-              />
-            </>
+            </div>
           )}
-        </div>
+        </OnboardingSearchInset>
       )}
-    </section>
-  );
-}
-
-function ProviderChoice({
-  githubRedirecting,
-  onChooseGithub,
-  onChooseGitlab,
-}: {
-  githubRedirecting: boolean;
-  onChooseGithub: () => void;
-  onChooseGitlab: () => void;
-}) {
-  return (
-    <div className="grid grid-cols-[minmax(0,1fr)_1px_minmax(0,1fr)] items-stretch gap-5">
-      <ProviderConnection
-        provider="GitHub"
-        message="Connect GitHub to choose a repository."
-        icon={<GithubIcon />}
-        buttonIcon={<GithubIcon className="size-4" />}
-        isConnecting={githubRedirecting}
-        onConnect={onChooseGithub}
-      />
-      <div role="separator" aria-orientation="vertical" className="bg-border h-full min-h-36 w-px" />
-      <ProviderConnection
-        provider="GitLab"
-        message="Connect GitLab to choose a repository."
-        icon={<GitLabIcon />}
-        buttonIcon={<GitLabIcon className="size-4" />}
-        onConnect={onChooseGitlab}
-      />
-    </div>
-  );
-}
-
-function ProviderConnection({
-  provider,
-  message,
-  icon,
-  buttonIcon,
-  isConnecting = false,
-  onConnect,
-}: {
-  provider: 'GitHub' | 'GitLab';
-  message: string;
-  icon: ReactNode;
-  buttonIcon: ReactNode;
-  isConnecting?: boolean;
-  onConnect: () => void;
-}) {
-  return (
-    <EmptyState
-      className="min-w-0 py-8"
-      iconSlot={icon}
-      titleSlot={`Connect ${provider}`}
-      descriptionSlot={message}
-      actionSlot={
-        <Button variant="primary" disabled={isConnecting} onClick={onConnect}>
-          {isConnecting ? <Spinner size="sm" aria-label={`Connecting to ${provider}`} /> : buttonIcon}
-          Connect {provider}
-        </Button>
-      }
-    />
-  );
-}
-
-function ProviderHeading({ children }: { children: string }) {
-  return (
-    <Txt as="h2" variant="label" className="text-foreground m-0">
-      {children}
-    </Txt>
-  );
-}
-
-function RepositoryError({ message }: { message: string }) {
-  return (
-    <p role="alert" className="text-caption text-notice-destructive-fg m-0">
-      {message}
-    </p>
-  );
-}
-
-function RepositoryRows({
-  repositories,
-  query,
-  pending,
-  mutationPending,
-  connectingRepositoryId,
-  provider,
-  onSelectRepository,
-}: {
-  repositories: SourceControlRepository[];
-  query: string;
-  pending: boolean;
-  mutationPending: boolean;
-  connectingRepositoryId: number | string | null;
-  provider: 'github' | 'gitlab';
-  onSelectRepository: (repository: SourceControlRepository) => void;
-}) {
-  if (pending)
-    return <SkeletonRows label={`Loading ${provider} repositories`} rows={3} rowClassName="h-12 w-full rounded-xl" />;
-  const normalizedQuery = query.trim().toLowerCase();
-  const visible = normalizedQuery
-    ? repositories.filter(repository => repository.fullName.toLowerCase().includes(normalizedQuery))
-    : repositories;
-  if (visible.length === 0) {
-    return (
-      <Txt as="p" variant="caption" className="text-muted-foreground m-0">
-        No {provider === 'gitlab' ? 'GitLab' : 'GitHub'} repositories found.
-      </Txt>
-    );
-  }
-  return (
-    <div className="flex max-h-80 flex-col gap-2 overflow-y-auto">
-      {visible.map(repo => {
-        const isConnecting = connectingRepositoryId === repo.id;
-        return (
-          <button
-            key={repo.id}
-            className="group bg-card hover:bg-fill flex cursor-pointer items-center gap-3 rounded-xl px-4 py-3 text-left disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={mutationPending}
-            onClick={() => onSelectRepository(repo)}
-          >
-            {provider === 'gitlab' ? (
-              <GitLabIcon className="text-muted-foreground size-4 shrink-0" />
-            ) : (
-              <GithubIcon className="text-muted-foreground size-4 shrink-0" />
-            )}
-            <span className="min-w-0 flex-1">
-              <span className="text-column text-foreground block truncate">{repo.fullName}</span>
-              <span className="text-meta text-muted-foreground block">
-                {provider === 'gitlab' ? 'GitLab' : repo.private ? 'Private' : 'Public'} · {repo.defaultBranch}
-              </span>
-            </span>
-            {isConnecting ? (
-              <Spinner size="sm" aria-label={`Connecting ${repo.fullName}`} className="text-accent1 shrink-0" />
-            ) : (
-              <span className="text-meta text-placeholder opacity-0 transition-opacity group-hover:opacity-100">
-                Select
-              </span>
-            )}
-          </button>
-        );
-      })}
-    </div>
+    </OnboardingStepCard>
   );
 }

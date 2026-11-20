@@ -18,10 +18,12 @@ import {
   parseExtractedValues,
   parseExtractorValue,
   resolveExtractors,
+  withoutRequiredSections,
   slugifyExtractorName,
   stripExtractorSections,
   validateExtractorList,
 } from '../extractor';
+import { RETRY_CONFIG } from '../retry';
 import { WorkingMemoryExtractor } from '../working-memory-extractor';
 
 describe('Extractor', () => {
@@ -274,6 +276,100 @@ describe('Extractor', () => {
     expect(buildThreadMetadataFromExtractedValues([resolved!], result.values)).toEqual({});
   });
 
+  describe('markdown working memory section (#25350)', () => {
+    const markdownMemory = () =>
+      ({
+        getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true } })),
+        getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'markdown', content: '# User\n' })),
+        getWorkingMemory: vi.fn(async () => '- Existing fact'),
+        updateWorkingMemory: vi.fn(async () => undefined),
+      }) as any;
+    const resolveMarkdown = async (memory: any) =>
+      (
+        await resolveExtractors([new WorkingMemoryExtractor()], {
+          source: 'observer',
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          memory,
+        })
+      )[0]!;
+
+    it('lists the section as required with an UNCHANGED instruction', async () => {
+      const resolved = await resolveMarkdown(markdownMemory());
+      const sections = buildExtractorOutputSections([resolved]);
+
+      expect(sections).toContain('This section is REQUIRED: always output <working-memory>');
+      expect(sections).toContain('write exactly UNCHANGED inside the tag');
+      expect(sections).not.toContain(
+        'Include this section when the observations contain relevant information for <working-memory>',
+      );
+    });
+
+    it('records an extraction failure when the required section is missing', async () => {
+      const resolved = await resolveMarkdown(markdownMemory());
+      const result = parseExtractedValues('<observations>\n- User now prefers USD\n</observations>', [resolved]);
+
+      expect(result.values).toEqual({});
+      expect(result.failures).toEqual([
+        { slug: 'working-memory', error: 'Observer output did not include the required <working-memory> section' },
+      ]);
+    });
+
+    it('does not write working memory when the section is UNCHANGED', async () => {
+      const memory = markdownMemory();
+      const resolved = await resolveMarkdown(memory);
+      const parsed = parseExtractedValues(
+        '<observations>\n- x\n</observations>\n<working-memory>\nUNCHANGED\n</working-memory>',
+        [resolved],
+      );
+      expect(parsed.failures).toEqual([]);
+      expect(parsed.values).toEqual({});
+      for (const variant of ['Unchanged.', '`UNCHANGED`', '"unchanged"']) {
+        expect(parseExtractedValues(`<working-memory>${variant}</working-memory>`, [resolved]).values).toEqual({});
+      }
+
+      await applyExtractorHooks({
+        source: 'observer',
+        extractors: [resolved],
+        values: parsed.values,
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        memory,
+      });
+
+      expect(memory.updateWorkingMemory).not.toHaveBeenCalled();
+    });
+
+    it('does not store UNCHANGED from the combined <extracted-values> JSON form', async () => {
+      const resolved = await resolveMarkdown(markdownMemory());
+      const parsed = parseExtractedValues('<extracted-values>{"working-memory":"UNCHANGED"}</extracted-values>', [
+        resolved,
+      ]);
+      expect(parsed).toEqual({ values: {}, failures: [] });
+    });
+
+    it('does not call the sections optional when one is required', async () => {
+      const sections = buildExtractorOutputSections([await resolveMarkdown(markdownMemory())]);
+      expect(sections).not.toContain('optional');
+    });
+
+    it('treats the section as optional in batched multi-thread calls', async () => {
+      const [batched] = withoutRequiredSections([await resolveMarkdown(markdownMemory())]);
+      expect(batched!.required).toBe(false);
+      expect(batched).toBeInstanceOf(Extractor);
+      expect(buildExtractorOutputSections([batched!])).not.toContain('REQUIRED');
+      expect(parseExtractedValues('<observations>\n- x\n</observations>', [batched!]).failures).toEqual([]);
+    });
+
+    it('keeps sibling inline sections optional', () => {
+      const optional = new Extractor({ name: 'Mood', instructions: 'Extract mood.' });
+      expect(buildExtractorOutputSections([optional])).toContain(
+        'Include this section when the observations contain relevant information for <mood>',
+      );
+      expect(parseExtractedValues('<observations>\n- x\n</observations>', [optional]).failures).toEqual([]);
+    });
+  });
+
   it('replaces JSON working memory from the working memory extractor', async () => {
     const memory = {
       getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema: {} } })),
@@ -385,6 +481,60 @@ describe('Extractor', () => {
     expect(stream.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe('inline');
   });
 
+  it('retries a transient provider failure in native output mode', async () => {
+    const originalRetryConfig = { ...RETRY_CONFIG };
+    RETRY_CONFIG.initialDelayMs = 1;
+    RETRY_CONFIG.maxDelayMs = 4;
+    RETRY_CONFIG.jitter = 0;
+    try {
+      const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
+      const stream = vi
+        .fn()
+        .mockRejectedValueOnce(Object.assign(new Error('rate limited'), { statusCode: 429 }))
+        .mockResolvedValueOnce({ object: Promise.resolve({ priority: 'high' }) });
+
+      const result = await extractStructuredValues({
+        agent: { stream } as unknown as Agent<any, any, any, any>,
+        source: 'observer',
+        extractors: [priority],
+      });
+
+      expect(result.values).toEqual({ priority: 'high' });
+      expect(result.failures).toEqual([]);
+      expect(stream).toHaveBeenCalledTimes(2);
+      // Retried in the same (native) output mode rather than falling through to
+      // the json-prompt-injection fallback.
+      expect(stream.mock.calls[1]![1].structuredOutput.jsonPromptInjection).toBeUndefined();
+    } finally {
+      Object.assign(RETRY_CONFIG, originalRetryConfig);
+    }
+  });
+
+  it('retries a transient extraction failure once, independent of the stage retry budget, with no fallback ladder', async () => {
+    const originalRetryConfig = { ...RETRY_CONFIG };
+    RETRY_CONFIG.initialDelayMs = 1;
+    RETRY_CONFIG.maxDelayMs = 4;
+    RETRY_CONFIG.jitter = 0;
+    try {
+      const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
+      const stream = vi.fn().mockRejectedValue(Object.assign(new Error('rate limited'), { statusCode: 429 }));
+
+      const result = await extractStructuredValues({
+        agent: { stream } as unknown as Agent<any, any, any, any>,
+        source: 'observer',
+        extractors: [priority],
+      });
+
+      expect(result.failures).toEqual([{ slug: 'priority', error: 'rate limited' }]);
+      // Fixed budget: initial call + 1 retry. The Observer/Reflector `maxRetries`
+      // (default 8) must not apply here, and there is no JSON-prompt fallback ladder.
+      expect(stream).toHaveBeenCalledTimes(2);
+      expect(stream.mock.calls.every(call => call[1].structuredOutput.jsonPromptInjection === undefined)).toBe(true);
+    } finally {
+      Object.assign(RETRY_CONFIG, originalRetryConfig);
+    }
+  });
+
   it('uses streaming for structured extraction', async () => {
     const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
     const generate = vi.fn();
@@ -453,6 +603,152 @@ describe('Extractor', () => {
     expect(stream.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe('inline');
   });
 
+  it('retries schema working-memory extraction when the working-memory value is an empty object', async () => {
+    const memory = {
+      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema: {} } })),
+      getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'json', content: '{"type":"object"}' })),
+      getWorkingMemory: vi.fn(async () => '{"preferences":{}}'),
+    } as any;
+    const [resolved] = await resolveExtractors([new WorkingMemoryExtractor()], {
+      source: 'observer',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+    const stream = vi
+      .fn()
+      .mockResolvedValueOnce({ object: Promise.resolve({ 'working-memory': {} }) })
+      .mockResolvedValueOnce({
+        object: Promise.resolve({ 'working-memory': { preferences: { responseStyle: 'concise' } } }),
+      });
+
+    const result = await extractStructuredValues({
+      agent: { stream } as unknown as Agent<any, any, any, any>,
+      source: 'observer',
+      extractors: [resolved!],
+    });
+
+    expect(result.values).toEqual({ 'working-memory': { preferences: { responseStyle: 'concise' } } });
+    expect(result.failures).toEqual([]);
+    expect(stream).toHaveBeenCalledTimes(2);
+    expect(stream.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe('inline');
+  });
+
+  it('keeps sibling values and fails only the empty working-memory value when the retry fails', async () => {
+    const memory = {
+      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema: {} } })),
+      getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'json', content: '{"type":"object"}' })),
+      getWorkingMemory: vi.fn(async () => null),
+    } as any;
+    const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
+    const resolved = await resolveExtractors([new WorkingMemoryExtractor(), priority], {
+      source: 'observer',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+    const stream = vi
+      .fn()
+      .mockResolvedValueOnce({ object: Promise.resolve({ 'working-memory': {}, priority: 'high' }) })
+      .mockRejectedValueOnce(new Error('fallback failed'));
+
+    const result = await extractStructuredValues({
+      agent: { stream } as unknown as Agent<any, any, any, any>,
+      source: 'observer',
+      extractors: resolved,
+    });
+
+    expect(result.values).toEqual({ priority: 'high' });
+    expect(result.failures).toEqual([{ slug: 'working-memory', error: 'fallback failed' }]);
+    expect(stream).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps first-response sibling values that a successful retry omits', async () => {
+    const memory = {
+      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema: {} } })),
+      getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'json', content: '{"type":"object"}' })),
+      getWorkingMemory: vi.fn(async () => null),
+    } as any;
+    const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
+    const resolved = await resolveExtractors([new WorkingMemoryExtractor(), priority], {
+      source: 'observer',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+    const stream = vi
+      .fn()
+      .mockResolvedValueOnce({ object: Promise.resolve({ 'working-memory': {}, priority: 'high' }) })
+      .mockResolvedValueOnce({ object: Promise.resolve({ 'working-memory': { name: 'Neo' } }) });
+
+    const result = await extractStructuredValues({
+      agent: { stream } as unknown as Agent<any, any, any, any>,
+      source: 'observer',
+      extractors: resolved,
+    });
+
+    expect(result.values).toEqual({ 'working-memory': { name: 'Neo' }, priority: 'high' });
+    expect(result.failures).toEqual([]);
+    expect(stream).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry when an extractor that has not opted in returns an empty object', async () => {
+    const details = new Extractor({
+      name: 'Details',
+      instructions: 'Extract details.',
+      schema: z.record(z.string(), z.unknown()),
+    });
+    const stream = vi.fn().mockResolvedValueOnce({ object: Promise.resolve({ details: {} }) });
+
+    const result = await extractStructuredValues({
+      agent: { stream } as unknown as Agent<any, any, any, any>,
+      source: 'observer',
+      extractors: [details],
+    });
+
+    expect(result.values).toEqual({ details: {} });
+    expect(stream).toHaveBeenCalledTimes(1);
+  });
+
+  describe('WorkingMemoryExtractor onExtracted with a configured schema', () => {
+    const schema = z.object({ name: z.string().optional() });
+    const createMemory = () =>
+      ({
+        getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema } })),
+        updateWorkingMemory: vi.fn(async () => undefined),
+      }) as any;
+    const runHook = (memory: any, current: unknown) =>
+      new WorkingMemoryExtractor().onExtracted!({
+        current,
+        memory,
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+      } as any);
+
+    it('does not overwrite stored working memory with an empty object', async () => {
+      const memory = createMemory();
+
+      await expect(runHook(memory, {})).resolves.toBeUndefined();
+      expect(memory.updateWorkingMemory).not.toHaveBeenCalled();
+    });
+
+    it('does not overwrite stored working memory when validation leaves an empty object', async () => {
+      const memory = createMemory();
+
+      await expect(runHook(memory, { name: null })).resolves.toBeUndefined();
+      expect(memory.updateWorkingMemory).not.toHaveBeenCalled();
+    });
+
+    it('stores a non-empty document', async () => {
+      const memory = createMemory();
+
+      await expect(runHook(memory, { name: 'Neo' })).resolves.toEqual({ name: 'Neo' });
+      expect(memory.updateWorkingMemory).toHaveBeenCalledWith(
+        expect.objectContaining({ threadId: 'thread-1', resourceId: 'resource-1', workingMemory: '{"name":"Neo"}' }),
+      );
+    });
+  });
+
   it('falls back to system json prompt injection when inline support is not advertised', async () => {
     const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
     const stream = vi
@@ -488,6 +784,28 @@ describe('Extractor', () => {
         abortSignal,
       }),
     ).rejects.toThrow(/aborted/);
+
+    // Already-aborted signal short-circuits on the OM retry ladder, so no
+    // provider call is issued at all.
+    expect(stream).toHaveBeenCalledTimes(0);
+  });
+
+  it.each([
+    ['plain', () => new DOMException('aborted', 'AbortError')],
+    ['wrapped', () => new Error('request timeout', { cause: new DOMException('aborted', 'AbortError') })],
+    ['code-only', () => Object.assign(new Error('aborted'), { code: 'ABORT_ERR' })],
+  ])('rethrows %s mid-flight abort errors without retrying structured extraction', async (_label, createError) => {
+    const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
+    const stream = vi.fn().mockRejectedValue(createError());
+
+    await expect(
+      extractStructuredValues({
+        agent: { stream } as unknown as Agent<any, any, any, any>,
+        source: 'observer',
+        extractors: [priority],
+        abortSignal: new AbortController().signal,
+      }),
+    ).rejects.toThrow();
 
     expect(stream).toHaveBeenCalledTimes(1);
   });

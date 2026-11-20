@@ -1,23 +1,29 @@
 import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
+import { normalizeToolOutput } from '../agent/message-list/utils/unwrap-legacy-tool-output';
 import type { MastraDBMessage } from '../memory';
-import { InternalSpans } from '../observability';
+import { getResumeTracingContext, InternalSpans, SpanType } from '../observability';
 import { safeEnqueue } from '../stream/base';
 import type { ChunkType } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
-import { createEventedWorkflow, createWorkflow } from '../workflows/create';
+import type { createEventedWorkflow } from '../workflows/create';
+import { createWorkflow } from '../workflows/create';
+import { markFrameworkCondition } from '../workflows/framework-condition';
 import type { Step } from '../workflows/step';
-import type { OutputWriter } from '../workflows/types';
+import type { OutputWriter, WorkflowStateTracingContext } from '../workflows/types';
 import type { Workflow } from '../workflows/workflow';
 import { createStep } from '../workflows/workflow';
 import type { LoopRuntime, MainLoopIterationState } from './loop-runtime';
 import type { RunScopeContext } from './run-scope-access';
 import { readScoped, writeScoped } from './run-scope-access';
 import {
+  CONTINUATION_STOP_CAUSE_KEY,
   DELEGATION_BAILED_KEY,
   DRAIN_PENDING_SIGNALS_KEY,
   RESOURCE_ID_KEY,
   STEP_ACTIVE_TOOLS_KEY,
+  STEP_PROVIDER_METADATA_KEY,
   STEP_TOOLS_KEY,
+  STEP_USAGE_KEY,
   STEP_WORKSPACE_KEY,
   THREAD_ID_KEY,
   TOOL_APPROVAL_VERDICTS_KEY,
@@ -31,6 +37,7 @@ import { createGoalStep } from './workflows/agentic-execution/goal-step';
 import { createIsTaskCompleteStep } from './workflows/agentic-execution/is-task-complete-step';
 import { createLLMExecutionStep } from './workflows/agentic-execution/llm-execution-step';
 import { createLLMMappingStep } from './workflows/agentic-execution/llm-mapping-step';
+import { resolveRunToolApprovalPolicy } from './workflows/agentic-execution/tool-approval-verdict';
 import {
   normalizeToolCallConcurrency,
   resolveEmittedToolCallConcurrency,
@@ -278,6 +285,9 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       }),
     };
 
+    // Set once map-tool-calls has computed the per-call limit for this instance.
+    let emittedConcurrencyResolved = false;
+
     // Eager dispatch is a regular-streaming-only contract. The 'called' strategy is
     // excluded because its limit depends on the full set of tools the model ends up
     // calling, which is unknowable while the model is still streaming.
@@ -329,8 +339,9 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
             params.workflowStatus === 'suspended'
           );
         },
-        // Excluding `running` means resume claims cannot persist; the agent loop
-        // serializes its own resumes, so suppress the per-resume warning.
+        // Excluding `running` means the workflow's own resume claim cannot persist.
+        // Agent resume methods claim the parent agentic-loop run before the loop
+        // starts instead, so suppress the per-resume warning.
         allowUnclaimedResumes: true,
         // Agent-loop snapshots are pure resume artifacts — strip everything a
         // resume never reads (stale suspend payloads, duplicated message
@@ -363,7 +374,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
           // evaluating a potentially stateful policy a second time.
           const approvalVerdicts = new Map<string, boolean>();
           toolCallForeachOptions.concurrency = await resolveEmittedToolCallConcurrency({
-            requireToolApproval: rest.requireToolApproval ?? requestContext?.get('__mastra_requireToolApproval'),
+            requireToolApproval: resolveRunToolApprovalPolicy(rest.requireToolApproval, requestContext),
             tools: (readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as Tools | undefined) ?? rest.tools,
             activeTools: stepActiveTools,
             configuredConcurrency: configuredToolCallConcurrency,
@@ -374,12 +385,55 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
             workspace: readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace'),
             logger: rest.logger,
           });
-          writeScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts', approvalVerdicts);
+          emittedConcurrencyResolved = true;
+          // Calls that all start at once run on the verdicts they were scheduled with. When some
+          // calls wait for a free slot, every call is judged again when it starts, so a policy
+          // changed by an earlier call applies to the calls after it.
+          const keepVerdicts = toolCalls.length <= toolCallForeachOptions.concurrency;
+          writeScoped(
+            scopeCtx,
+            TOOL_APPROVAL_VERDICTS_KEY,
+            'toolApprovalVerdicts',
+            keepVerdicts ? approvalVerdicts : undefined,
+          );
+          writeScoped(scopeCtx, STEP_USAGE_KEY, 'stepUsage', typedInputData.output.usage);
+          writeScoped(
+            scopeCtx,
+            STEP_PROVIDER_METADATA_KEY,
+            'stepProviderMetadata',
+            typedInputData.metadata?.providerMetadata,
+          );
           return toolCalls;
         },
         { id: 'map-tool-calls' },
       )
-      .foreach(toolCallStep, toolCallForeachOptions)
+      .foreach(toolCallStep, {
+        // On a resume that re-enters the suspended foreach, map-tool-calls already
+        // completed in the snapshot and is skipped, so the limit above was never
+        // recomputed for this instance. Derive it from the persisted tool-call batch
+        // instead of falling back to the conservative construction-time value.
+        concurrency: ({ inputData }) => {
+          if (emittedConcurrencyResolved) {
+            return toolCallForeachOptions.concurrency;
+          }
+          const scopeCtx = { mastra: rest.mastra, runId: rest.runId, _internal };
+          // Verdicts cached before the step suspended are stale: the policy may have changed
+          // while it waited. Calls that have not run yet are judged again when they start.
+          writeScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts', undefined);
+          const toolCalls = Array.isArray(inputData) ? (inputData as { toolName?: unknown }[]) : [];
+          return resolveToolCallConcurrency({
+            // A function policy is gone on resume; its stored stand-in keeps the calls sequential.
+            requireToolApproval: resolveRunToolApprovalPolicy(rest.requireToolApproval, rest.requestContext),
+            tools: (readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as Tools | undefined) ?? rest.tools,
+            activeTools:
+              readScoped(scopeCtx, STEP_ACTIVE_TOOLS_KEY, 'stepActiveTools') ??
+              (rest.activeTools as string[] | undefined),
+            configuredConcurrency: configuredToolCallConcurrency,
+            strategy: toolCallConcurrencyStrategy,
+            calledToolNames: toolCalls.flatMap(call => (typeof call?.toolName === 'string' ? [call.toolName] : [])),
+          });
+        },
+      })
       .then(llmMappingStep)
       .then(backgroundTaskCheckStep)
       .then(signalDrainStep)
@@ -445,7 +499,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       }
 
       const drainOutcome = await drainSignalsToTranscript({
-        drainPendingSignals: rt.drainPendingSignals,
+        drainPendingSignals: rest.options?.abortSignal?.aborted ? undefined : rt.drainPendingSignals,
         rotateResponseMessageId: sealMessageId => rest.rotateResponseMessageId(sealMessageId),
         addSignal: signal => messageList.addSignal(signal),
         emitChunk: chunk => this.emitChunk(rt, chunk),
@@ -468,7 +522,19 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         };
       }
 
-      const allContent: StepResult<Tools>['content'] = typedInputData.messages.nonUser.flatMap(
+      // A signal replaces the physical request, not the logical step or its budget.
+      if (typedInputData.stepResult?.signalPreempted && typedInputData.stepResult.reason !== 'abort') {
+        return typedInputData.stepResult.isContinued;
+      }
+
+      // Read this run's response from the persisted view: with savePerStep the
+      // live response set is drained after each saved step, and a message that
+      // is no longer updated drops out of it, which would shift the content
+      // offset below and hand stopWhen the wrong parts (#25538).
+      const responseMessages = messageList.getPersisted.response.aiV5
+        .model()
+        .filter(message => message.role === 'assistant' || message.role === 'tool');
+      const allContent: StepResult<Tools>['content'] = responseMessages.flatMap(
         message => message.content as unknown as StepResult<Tools>['content'],
       );
 
@@ -508,6 +574,42 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         providerMetadata: typedInputData.metadata?.providerMetadata,
       };
 
+      const buildIterationContext = (isFinal: boolean, iteration = state.accumulatedSteps.length) => ({
+        iteration,
+        maxIterations: rt.maxSteps,
+        text: typedInputData.output.text || '',
+        toolCalls: (typedInputData.output.toolCalls || []).map((tc: any) => ({
+          id: tc.toolCallId || tc.id || '',
+          name: tc.toolName || tc.name || '',
+          args: (tc.args || {}) as Record<string, unknown>,
+        })),
+        toolResults: toolResultParts.map(tr => ({
+          id: tr.toolCallId,
+          name: tr.toolName,
+          result: normalizeToolOutput(tr.output).output,
+        })),
+        isFinal,
+        finishReason: typedInputData.stepResult?.reason || 'unknown',
+        runId,
+        threadId: rt.threadId,
+        resourceId: rt.resourceId,
+        agentId: rt.agentId,
+        agentName: rt.agentName || rt.agentId,
+        messages: messageList.get.all.db(),
+      });
+
+      if (typedInputData.stepResult?.reason === 'abort') {
+        typedInputData.stepResult.isContinued = false;
+        if (rt.onIterationComplete && !typedInputData.backgroundTaskPending) {
+          try {
+            await rt.onIterationComplete(buildIterationContext(true, state.accumulatedSteps.length + 1));
+          } catch (error) {
+            rt.logger?.error('Error in onIterationComplete hook:', error);
+          }
+        }
+        return false;
+      }
+
       state.accumulatedSteps.push(currentStep);
 
       // Shared continuation decision: two-phase feedback stop, stopWhen,
@@ -524,7 +626,11 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         policy: { mode: 'default', hasFiniteMaxSteps: !!rt.maxSteps },
         pendingFeedbackStop: state.pendingFeedbackStop,
         llmWantsToContinue: typedInputData.stepResult?.isContinued === true,
-        underMaxSteps: !rt.maxSteps || state.accumulatedSteps.length < rt.maxSteps,
+        // Processor retry steps re-run the same step, so only real LLM steps count against maxSteps.
+        // Retries stay bounded by maxProcessorRetries.
+        underMaxSteps:
+          !rt.maxSteps ||
+          state.accumulatedSteps.filter(s => (s.finishReason as string) !== 'retry').length < rt.maxSteps,
         steps: state.accumulatedSteps,
         stopWhen: rt.stopWhen,
         consumeDelegationBail: () => {
@@ -536,29 +642,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         },
         backgroundTaskPending: typedInputData.backgroundTaskPending,
         onIterationComplete: rt.onIterationComplete,
-        buildIterationContext: isFinal => ({
-          iteration: state.accumulatedSteps.length,
-          maxIterations: rt.maxSteps,
-          text: typedInputData.output.text || '',
-          toolCalls: (typedInputData.output.toolCalls || []).map((tc: any) => ({
-            id: tc.toolCallId || tc.id || '',
-            name: tc.toolName || tc.name || '',
-            args: (tc.args || {}) as Record<string, unknown>,
-          })),
-          toolResults: toolResultParts.map(tr => ({
-            id: tr.toolCallId,
-            name: tr.toolName,
-            result: unwrapToolResultOutput(tr.output),
-          })),
-          isFinal,
-          finishReason: typedInputData.stepResult?.reason || 'unknown',
-          runId: runId,
-          threadId: rt.threadId,
-          resourceId: rt.resourceId,
-          agentId: rt.agentId,
-          agentName: rt.agentName || rt.agentId,
-          messages: messageList.get.all.db(),
-        }),
+        buildIterationContext,
         injectFeedback: feedback => {
           messageList.add(
             {
@@ -590,6 +674,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
 
       state.pendingFeedbackStop = decision.nextPendingFeedbackStop;
       if (typedInputData.stepResult) {
+        rest.tracingScope?.set(CONTINUATION_STOP_CAUSE_KEY, decision.stopCause);
         if (decision.forceContinue) {
           typedInputData.stepResult.isContinued = true;
         }
@@ -605,6 +690,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       const shouldEmitStepFinish = typedInputData.stepResult?.reason !== 'tripwire' || hasSteps;
 
       if (shouldEmitStepFinish) {
+        if (typedInputData.stepResult?.reason !== 'retry') messageList.markStepCompleted();
         await outputWriter({
           type: 'step-finish',
           runId,
@@ -619,6 +705,12 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         return false;
       }
 
+      // A processor tripwire ends the run; the iteration hook cannot resume it.
+      if (reason === 'tripwire') {
+        typedInputData.stepResult!.isContinued = false;
+        return false;
+      }
+
       return typedInputData.stepResult?.isContinued ?? false;
     };
   }
@@ -628,7 +720,33 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
    * predicate).
    */
   build(): LoopWorkflow {
-    return this.workflowFactory()({
+    const currentSpan = this.params.tracingContext?.currentSpan;
+    let agentSpan = currentSpan;
+    if (currentSpan?.type !== SpanType.AGENT_RUN) {
+      agentSpan = currentSpan?.findParent(SpanType.AGENT_RUN);
+    }
+
+    // Keep all resumed invocations under the initial agent, not the generation
+    // that happened to be active when the internal workflow suspended. Only
+    // reuse the saved parent when this invocation actually resumed beneath it;
+    // an explicit caller tracing context can start a different lineage.
+    let resumeTracingContext: WorkflowStateTracingContext | undefined;
+    if (agentSpan) {
+      const previousContext = this.params.resumeContext?.snapshot?.tracingContext;
+      const continuesSavedLineage =
+        previousContext?.spanId &&
+        agentSpan.traceId === previousContext.traceId &&
+        agentSpan.getParentSpanId() === previousContext.spanId;
+
+      // An unsampled agent run saves no trace and decides again on resume; the empty context
+      // keeps the loop from saving its own span's decision instead.
+      const own = getResumeTracingContext(agentSpan) ?? {};
+      resumeTracingContext = continuesSavedLineage
+        ? { ...own, spanId: previousContext.spanId, parentSpanId: previousContext.parentSpanId }
+        : own;
+    }
+
+    const workflow = this.workflowFactory()({
       id: AGENTIC_LOOP_WORKFLOW_ID,
       inputSchema: llmIterationOutputSchema,
       outputSchema: llmIterationOutputSchema,
@@ -649,8 +767,9 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
             params.workflowStatus === 'suspended'
           );
         },
-        // Excluding `running` means resume claims cannot persist; the agent loop
-        // serializes its own resumes, so suppress the per-resume warning.
+        // Excluding `running` means the workflow's own resume claim cannot persist.
+        // Agent resume methods claim the parent agentic-loop run before the loop
+        // starts instead, so suppress the per-resume warning.
         allowUnclaimedResumes: true,
         // Agent-loop snapshots are pure resume artifacts — strip everything a
         // resume never reads (stale suspend payloads, duplicated message
@@ -659,29 +778,9 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         validateInputs: false,
       },
     })
-      .dowhile(this.buildIterationWorkflow(), this.buildContinuationPredicate())
+      .dowhile(this.buildIterationWorkflow(), markFrameworkCondition(this.buildContinuationPredicate()))
       .commit();
-  }
-}
-
-function unwrapToolResultOutput(output: unknown): unknown {
-  if (!output || typeof output !== 'object' || Array.isArray(output)) {
-    return output;
-  }
-
-  const record = output as Record<string, unknown>;
-  if (!('value' in record)) {
-    return output;
-  }
-
-  switch (record.type) {
-    case 'text':
-    case 'json':
-    case 'error-text':
-    case 'error-json':
-    case 'content':
-      return record.value;
-    default:
-      return output;
+    workflow.__setResumeTracingContext(resumeTracingContext);
+    return workflow;
   }
 }

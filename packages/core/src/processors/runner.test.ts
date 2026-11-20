@@ -746,7 +746,7 @@ describe('ProcessorRunner', () => {
       expect(result.reason).toBe('Content blocked');
     });
 
-    it('should handle processor errors gracefully', async () => {
+    it('should fail when a processor throws', async () => {
       const outputProcessors: Processor[] = [
         {
           id: 'processor1',
@@ -765,12 +765,17 @@ describe('ProcessorRunner', () => {
       });
 
       const processorStates = new Map();
-      const result = await runner.processPart(
-        { type: 'text-delta', payload: { text: 'test content', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
-        processorStates,
-      );
-      expect(result.part?.type === 'text-delta' ? result.part?.payload.text : '').toBe('test content'); // Should return original text on error
-      expect(result.blocked).toBe(false);
+      await expect(
+        runner.processPart(
+          {
+            type: 'text-delta',
+            payload: { text: 'test content', id: 'text-1' },
+            runId: '1',
+            from: ChunkFrom.AGENT,
+          },
+          processorStates,
+        ),
+      ).rejects.toThrow('Processor error');
     });
 
     it('should skip processors that do not implement processOutputStream', async () => {
@@ -2941,6 +2946,46 @@ describe('ProcessorRunner', () => {
       expect(memory.saveThread).toHaveBeenCalledTimes(1);
     });
 
+    it('forwards the abort signal to output-stream workflow processors', async () => {
+      const processOutputStream = vi.fn(async ({ part }: any) => part);
+      const workflow = createWorkflow({
+        id: 'output-stream-abort-test',
+        inputSchema: ProcessorStepSchema,
+        outputSchema: ProcessorStepSchema,
+        type: 'processor',
+        options: { validateInputs: false },
+      })
+        .then(createStep({ id: 'abort-aware-processor', processOutputStream } as any))
+        .commit() as ProcessorWorkflow;
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors: [workflow],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const controller = new AbortController();
+      controller.abort();
+      await runner.processPart(
+        {
+          type: 'text-delta',
+          runId: 'run-1',
+          from: ChunkFrom.AGENT,
+          payload: { id: 'text-1', text: 'hi' },
+        } as ChunkType,
+        new Map(),
+        undefined,
+        undefined,
+        messageList,
+        0,
+        undefined,
+        controller.signal,
+      );
+
+      expect(processOutputStream).toHaveBeenCalledWith(expect.objectContaining({ abortSignal: controller.signal }));
+    });
+
     it('passes empty state history to computeStateSignal before any state exists', async () => {
       messageList = new MessageList({ threadId: 'thread-1' });
       const requestContext = new RequestContext();
@@ -3877,5 +3922,56 @@ describe('ProcessorRunner', () => {
         }),
       ]);
     });
+  });
+});
+
+describe.each([1, 2] as const)('ProcessorRunner workflow failure diagnostics (storage v%s)', storageVersion => {
+  it('keeps the underlying processor error as the cause of PROCESSOR_WORKFLOW_FAILED', async () => {
+    const original = new Error('processor exploded');
+    const workflow = createWorkflow({
+      id: 'failing-processor-workflow',
+      inputSchema: ProcessorStepSchema,
+      outputSchema: ProcessorStepSchema,
+      type: 'processor',
+      options: { validateInputs: false, storageVersion },
+    })
+      .then(
+        createStep({
+          id: 'exploding-processor',
+          execute: async () => {
+            throw original;
+          },
+        } as any),
+      )
+      .commit() as ProcessorWorkflow;
+
+    const runner = new ProcessorRunner({
+      inputProcessors: [workflow],
+      outputProcessors: [],
+      logger: mockLogger,
+      agentName: 'test-agent',
+    });
+
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    const error = await runner
+      .runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        model: {} as any,
+        tools: {},
+        retryCount: 0,
+        runId: 'run-failing-processor',
+        requestContext: new RequestContext(),
+        memory: undefined,
+      })
+      .catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({ id: 'PROCESSOR_WORKFLOW_FAILED' });
+    expect((error as Error).message).toContain('step exploding-processor: processor exploded');
+    // The original error must stay reachable instead of being flattened into text.
+    const cause = (error as { cause?: Error }).cause;
+    expect(cause).toBe(original);
+    expect(cause?.stack).toBeDefined();
   });
 });

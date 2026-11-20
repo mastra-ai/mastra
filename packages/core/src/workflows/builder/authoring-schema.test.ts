@@ -51,6 +51,7 @@ describe('shared workflow builder authoring schema', () => {
       'Default agents consume { prompt: string } and return { text: string }',
     );
     expect(workflowBuilderClassifierEntrySchema.description).toContain('{ answers, usage }');
+    expect(workflowBuilderClassifierEntrySchema.description).toContain('{ type: "refusal" }');
     expect(workflowBuilderClassifierEntrySchema.description).toContain('following conditional entry');
     // The call-site id addresses the nested workflow's result; it is independent
     // of the referenced workflowId (registry keys and intrinsic ids can differ).
@@ -262,6 +263,21 @@ describe('shared workflow builder authoring schema', () => {
       // Emptied containers are dropped: canonical foreach opts requires concurrency.
       expect(foreach.step.options).toBeUndefined();
       expect(foreach.opts).toBeUndefined();
+    });
+    it('normalizes null classifier-only options so the canonical schema accepts them', () => {
+      const normalized = normalizeWorkflowBuilderDefinition({
+        ...authoringDefinition,
+        graph: [
+          {
+            type: 'classifier',
+            id: 'classify-ticket',
+            classifierId: 'ticket-router',
+            options: { maxRetries: null, providerOptions: null, retries: null, metadata: null },
+          },
+        ],
+      });
+      const parsed = workflowBuilderDefinitionSchema.parse(normalized);
+      expect(parsed.graph[0]).toEqual({ type: 'classifier', id: 'classify-ticket', classifierId: 'ticket-router' });
     });
   });
 

@@ -7,7 +7,6 @@ import type { WorkflowDataEdgeModel } from './types';
 
 export interface WorkflowDataEdgeViewProps extends EdgeProps<WorkflowDataEdgeModel> {
   output?: unknown;
-  label?: string;
   dataControl?: ReactNode;
 }
 
@@ -37,9 +36,7 @@ export function WorkflowDataEdgeView({ output, label, dataControl, ...props }: W
   const labelY = labelPlacement === 'source' ? sourceY + Math.min(24, Math.max(0, (targetY - sourceY) / 4)) : midpointY;
   const arrowId = useId();
   const isExecuted = props.data?.edgeStatus === 'success';
-  const pathColor = isExecuted
-    ? 'color-mix(in oklab, var(--positive1) 82%, var(--foreground))'
-    : 'var(--muted-foreground)';
+  const pathColor = isExecuted ? 'var(--success-indicator)' : 'var(--muted-foreground)';
 
   return (
     <>
@@ -78,7 +75,7 @@ export function WorkflowDataEdgeView({ output, label, dataControl, ...props }: W
               <WorkflowEdgeDataButton
                 previousStepId={props.data?.boundaryPayload ? undefined : props.data?.previousStepId}
                 output={output}
-                label={label}
+                label={typeof label === 'string' ? label : undefined}
               />
             )}
           </div>

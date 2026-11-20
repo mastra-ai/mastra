@@ -1,29 +1,23 @@
 import type { ComponentProps } from 'react';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { fieldsOnSurface } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
-export function SettingsContainerLayout({
-  layout,
-  className,
-  ...props
-}: ComponentProps<'div'> & { layout: 'factory' | 'section' }) {
-  return (
-    <div
-      data-slot={layout === 'section' ? 'section-content' : 'settings-container'}
-      className={cn(
-        layout === 'factory'
-          ? cn(raisedSurfaceStyle, 'divide-y divide-border rounded-xl')
-          : cn(
-              'group-data-[variant=factory]/section:overflow-hidden group-data-[variant=factory]/section:rounded-xl',
-              'group-data-[variant=factory]/section:bg-card group-data-[variant=factory]/section:shadow-raised',
-            ),
-        className,
-      )}
-      {...props}
-    />
-  );
-}
+/**
+ * A settings card: the card fill with no rim, 14px from its edge to the content, and hairlines between rows that
+ * stop at that inset. The card owns its rows' spacing: each direct child gets 13px above and below, and the card
+ * adds the last 1px at its edges. Children with nothing in them (an empty `SettingsNoticeRow`) take no space and
+ * draw no hairline, so a list can always render its notice row.
+ */
+const settingsCardStyle = cn(
+  // `!`: the card owns row spacing, so a row's own reset (`Fieldset`'s `p-0`) can't remove it.
+  'flex min-w-0 flex-col rounded-xl bg-card px-3.5 py-px *:py-3.25! *:empty:hidden',
+  '[&>:not(:empty)~:not(:empty)]:border-t [&>:not(:empty)~:not(:empty)]:border-border',
+  fieldsOnSurface,
+);
 
-export function SettingsContainer(props: ComponentProps<'div'>) {
-  return <SettingsContainerLayout {...props} layout="factory" />;
+export type SettingsContainerProps = ComponentProps<'div'>;
+
+/** One settings card. Holds `SettingsRow`s, `SettingsItem`s, a `SettingsListHeader` or a `SettingsEmptyRow`. */
+export function SettingsContainer({ className, ...props }: SettingsContainerProps) {
+  return <div data-slot="settings-container" className={cn(settingsCardStyle, className)} {...props} />;
 }

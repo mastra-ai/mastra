@@ -170,6 +170,36 @@ describe('Tracing', () => {
           expect(span.input).toBe(input);
         });
       });
+      it('redacts sensitive keys inside a provider error body recorded as an object', () => {
+        const mockSpan = {
+          id: 'test-span-err',
+          name: 'test-span',
+          type: SpanType.AGENT_RUN,
+          startTime: new Date(),
+          traceId: 'trace-123',
+          trace: { traceId: 'trace-123' } as any,
+          errorInfo: {
+            message: 'Unauthorized',
+            name: 'AI_APICallError',
+            details: {
+              statusCode: 401,
+              responseBody: { error: { message: 'bad key', api_key: 'sk-live-123' } },
+            },
+          },
+          observabilityInstance: {} as any,
+          end: () => {},
+          error: () => {},
+          update: () => {},
+          createChildSpan: () => ({}) as any,
+        } as any;
+
+        const filtered = new SensitiveDataFilter().process(mockSpan);
+
+        expect(filtered!.errorInfo?.details?.responseBody).toEqual({
+          error: { message: 'bad key', api_key: '[REDACTED]' },
+        });
+      });
+
       it('should redact default sensitive fields (case-insensitive)', () => {
         const processor = new SensitiveDataFilter();
 
@@ -328,8 +358,8 @@ describe('Tracing', () => {
               apiKey: 'nested-secret', // Should be redacted (nested)
               temperature: 0.7,
               auth: {
-                token: 'deeply-nested-secret', // Should be redacted (deeply nested)
-                userId: 'user123', // Should be visible
+                token: 'deeply-nested-secret', // Whole object should be redacted
+                userId: 'user123',
               },
             },
             headers: {
@@ -354,7 +384,7 @@ describe('Tracing', () => {
         // All sensitive fields should be redacted at any level
         expect(attributes?.['apiKey']).toBe('[REDACTED]');
         expect(attributes?.['config']['apiKey']).toBe('[REDACTED]');
-        expect(attributes?.['config']['auth']['token']).toBe('[REDACTED]');
+        expect(attributes?.['config']['auth']).toBe('[REDACTED]');
         expect(attributes?.['headers']['Authorization']).toBe('[REDACTED]');
         expect(attributes?.['results'][0]['secret']).toBe('[REDACTED]');
         expect(attributes?.['results'][1]['password']).toBe('[REDACTED]');
@@ -362,10 +392,37 @@ describe('Tracing', () => {
         // Non-sensitive fields should be visible
         expect(attributes?.['model']).toBe('gpt-4');
         expect(attributes?.['config']['temperature']).toBe(0.7);
-        expect(attributes?.['config']['auth']['userId']).toBe('user123');
         expect(attributes?.['headers']['Content-Type']).toBe('application/json');
         expect(attributes?.['results'][0]['data']).toBe('visible');
         expect(attributes?.['results'][1]['value']).toBe(42);
+      });
+
+      it('redacts object and array values under a sensitive key in every style', () => {
+        for (const redactionStyle of ['full', 'partial', 'indexed'] as const) {
+          const span = {
+            id: 'span-obj',
+            name: 'test-span',
+            type: SpanType.MODEL_GENERATION,
+            startTime: new Date(),
+            traceId: 'trace-obj',
+            trace: { traceId: 'trace-obj' } as any,
+            attributes: {
+              secret: { value: 'raw-secret', nested: { more: 'raw' } },
+              credential: ['raw-1', 'raw-2'],
+            },
+            observabilityInstance: {} as any,
+            end: () => {},
+            error: () => {},
+            update: () => {},
+            createChildSpan: () => ({}) as any,
+          } as any;
+
+          const attributes = new SensitiveDataFilter({ redactionStyle }).process(span)!.attributes as any;
+
+          expect(attributes.secret).toBe('[REDACTED]');
+          expect(attributes.credential).toBe('[REDACTED]');
+          expect(JSON.stringify(attributes)).not.toContain('raw');
+        }
       });
 
       it('should redact structured data in JSON strings', () => {

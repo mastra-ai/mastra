@@ -1,5 +1,10 @@
 {
-  "attachment": ["Qwen/Qwen2.5-VL-32B-Instruct", "mistralai/Mistral-Small-3.2-24B-Instruct-2506"],
+  "attachment": [
+    "Qwen/Qwen2.5-VL-32B-Instruct",
+    "Qwen/Qwen3.5-Plus",
+    "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
+    "moonshotai/Kimi-K2.5"
+  ],
   "temperature": [
     "MiniMaxAI/MiniMax-M2.1",
     "MiniMaxAI/MiniMax-M2.5",
@@ -29,5 +34,12 @@
     "deepseek-ai/DeepSeek-V3.2-Exp",
     "mistralai/Mistral-Nemo-Instruct-2407",
     "mistralai/Mistral-Small-3.2-24B-Instruct-2506"
-  ]
+  ],
+  "reasoning": {
+    "zai-org/GLM-5": [
+      {
+        "type": "toggle"
+      }
+    ]
+  }
 }

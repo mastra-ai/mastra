@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import type { GetWorkflowResponse } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -21,7 +20,7 @@ const baseWorkflow: GetWorkflowResponse = {
   inputSchema: '',
   outputSchema: '',
   stateSchema: '',
-} as GetWorkflowResponse;
+};
 
 function renderHeader(workflowId = 'demo-workflow') {
   const queryClient = new QueryClient({

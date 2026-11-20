@@ -70,7 +70,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const isInterrupted = (value: Record<string, unknown>): value is Record<string, unknown> & InterruptedSpanOutput =>
-  value.status === 'suspended' || value.status === 'aborted';
+  value.status === 'suspended' || value.status === 'aborted' || value.status === 'interrupted';
 
 /** Span types whose `input` is a message list when it is an array. */
 const MESSAGE_LIST_INPUT_SPANS: readonly SpanType[] = [

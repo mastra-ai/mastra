@@ -67,6 +67,29 @@ describe('DuckDB trace query delta execution', () => {
     });
   });
 
+  it('reports the stream head for a time range with no traces', async () => {
+    await event('a', 'start');
+    await event('a', 'end');
+    // Root rows exist only on 2026-01-01; this range holds no traces.
+    const emptyRange = { from: '2026-02-01T00:00:00Z', to: '2026-02-02T00:00:00Z' };
+    const emptyPlan = (input: Record<string, unknown>) =>
+      planTraceQuery(parseTraceQueryRequest({ timeRange: emptyRange, ...input }));
+
+    const bootstrap = await queryTraces(db, emptyPlan({ mode: 'delta' }));
+    const deltaPlan = emptyPlan({ mode: 'delta' });
+    expect(bootstrap).toMatchObject({
+      traces: [],
+      deltaCursor: encodeTraceQueryDeltaCursor(deltaPlan, 'duckdb', String(cursorId)),
+    });
+
+    const pagePlan = emptyPlan({ pagination: { page: 0, perPage: 10 } });
+    const page = await queryTraces(db, pagePlan);
+    expect(page).toMatchObject({
+      traces: [],
+      deltaCursor: encodeTraceQueryDeltaCursor(pagePlan, 'duckdb', String(cursorId)),
+    });
+  });
+
   it('applies recursive predicates before lookahead and advances past nonmatching roots', async () => {
     const where = { op: 'not', arg: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'excluded' } } };
     const initial = await queryTraces(db, makePlan({ mode: 'delta', where }));

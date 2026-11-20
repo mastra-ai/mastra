@@ -1,12 +1,20 @@
+import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+
+// createMastraCode() pulls in a large module graph, so these tests routinely
+// exceed the 5s default (matches the sibling headless/libsql suites).
+vi.setConfig({ testTimeout: 30_000 });
 
 // Captures the createSession() args so tests can assert on wiring (e.g.
 // id/ownerId). Hoisted so the vi.mock factory can reference it.
-const createSessionCalls = vi.hoisted<Array<{ id?: string; ownerId?: string; resourceId?: string }>>(() => []);
+const createSessionCalls = vi.hoisted<
+  Array<{ id?: string; ownerId?: string; resourceId?: string; createInitialThread?: boolean }>
+>(() => []);
 
 // Captures the AgentController constructor initialState so tests can assert on
 // which settings.json values were seeded into session state.
 const controllerInitialStates = vi.hoisted<Array<Record<string, unknown>>>(() => []);
+const agentConfigs = vi.hoisted<Array<Record<string, unknown>>>(() => []);
 const authCredentials = vi.hoisted(() => new Map<string, Record<string, unknown>>());
 
 vi.mock('@mastra/core/llm', () => ({
@@ -18,11 +26,24 @@ vi.mock('@mastra/core/llm', () => ({
     })),
   },
   PROVIDER_REGISTRY: {},
+  // The real router throws like this when the provider's key isn't in the environment.
+  ModelRouterEmbeddingModel: class {
+    constructor(id: string) {
+      throw new Error(`API key not found for provider ${id.split('/')[0]}`);
+    }
+  },
 }));
 
 vi.mock('@mastra/core/agent', () => ({
   Agent: class {},
   SignalProvider: class {},
+}));
+
+vi.mock('@mastra/core/coding-agent', () => ({
+  createCodingAgent: (config: Record<string, unknown>) => {
+    agentConfigs.push(config);
+    return {};
+  },
 }));
 
 vi.mock('@mastra/core/agent-controller', () => ({
@@ -52,8 +73,13 @@ vi.mock('@mastra/core/agent-controller', () => ({
       return undefined;
     }
 
-    async createSession(args?: { id?: string; ownerId?: string; resourceId?: string }) {
-      createSessionCalls.push({ id: args?.id, ownerId: args?.ownerId, resourceId: args?.resourceId });
+    async createSession(args?: { id?: string; ownerId?: string; resourceId?: string; createInitialThread?: boolean }) {
+      createSessionCalls.push({
+        id: args?.id,
+        ownerId: args?.ownerId,
+        resourceId: args?.resourceId,
+        createInitialThread: args?.createInitialThread,
+      });
       return {
         subscribe() {},
         thread: { getId: () => undefined },
@@ -67,6 +93,7 @@ vi.mock('@mastra/core/agent-controller', () => ({
 vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {},
   createBackgroundWorkSignalProcessor: () => ({}),
+  CyberRefusalHandler: class {},
   isBadRequestError: (error: unknown) =>
     typeof error === 'object' &&
     error !== null &&
@@ -121,20 +148,15 @@ vi.mock('./mcp/index.js', () => ({ createMcpManager: vi.fn() }));
 vi.mock('./onboarding/packs.js', () => ({
   getAvailableModePacks: vi.fn(() => []),
   getAvailableOmPacks: vi.fn(() => []),
-  selectPreferredOMPack: vi.fn(() => undefined),
-}));
-
-vi.mock('./onboarding/om-settings.js', () => ({
-  hasExplicitOMConfiguration: vi.fn(() => false),
 }));
 
 vi.mock('./onboarding/settings.js', () => ({
   OBSERVABILITY_AUTH_PREFIX: 'observability:',
   getCustomProviderId: vi.fn(),
+  parseExperimentalAgentSetting: vi.fn(value => value ?? null),
   loadSettings: vi.fn(() => ({
     onboarding: { completedAt: null, skippedAt: null, version: 0, modePackId: null, omPackId: null },
     models: {
-      activeModelPackId: null,
       modeDefaults: {},
       activeOmPackId: null,
       omModelOverride: null,
@@ -144,7 +166,7 @@ vi.mock('./onboarding/settings.js', () => ({
       omReflectionThreshold: null,
       subagentModels: {},
     },
-    preferences: { yolo: null, theme: 'auto', thinkingLevel: 'off', quietMode: false },
+    preferences: { yolo: null, theme: 'auto', thinkingLevel: 'off', previewLines: 2 },
     storage: { backend: 'libsql', libsql: {}, pg: {} },
     customModelPacks: [],
     customProviders: [],
@@ -206,7 +228,7 @@ vi.mock('./utils/project.js', () => ({
 }));
 
 vi.mock('./utils/storage-factory.js', () => ({
-  createStorage: vi.fn(() => ({ storage: {}, backend: 'memory' })),
+  createStorage: vi.fn(() => ({ storage: new InMemoryStore({ id: 'startup-test' }), backend: 'memory' })),
   createVectorStore: vi.fn(() => ({})),
 }));
 
@@ -214,6 +236,33 @@ vi.mock('./utils/thread-lock.js', () => ({
   acquireThreadLock: vi.fn(),
   releaseThreadLock: vi.fn(),
 }));
+
+vi.mock('./utils/maintenance-lock.js', () => ({
+  registerSessionAndWaitForMaintenance: vi.fn(async () => {}),
+  unregisterSession: vi.fn(),
+  UNKNOWN_OWNER: -1,
+}));
+
+describe('code agent scorers', () => {
+  beforeEach(() => {
+    agentConfigs.length = 0;
+  });
+
+  it('registers no scorers by default', async () => {
+    const { createMastraCode } = await import('./index.js');
+    await createMastraCode();
+
+    expect(agentConfigs.at(-1)).not.toHaveProperty('scorers');
+  });
+
+  it('passes caller-provided scorers to the coding agent', async () => {
+    const { createMastraCode } = await import('./index.js');
+    const scorers = () => ({});
+    await createMastraCode({ scorers });
+
+    expect(agentConfigs.at(-1)?.scorers).toBe(scorers);
+  });
+});
 
 describe('createMastraCode startup performance', () => {
   it('does not wait for background gateway sync before returning storage warnings', async () => {
@@ -229,7 +278,7 @@ describe('createMastraCode startup performance', () => {
         }),
     );
     vi.mocked(createStorage).mockReturnValue({
-      storage: {},
+      storage: new InMemoryStore({ id: 'startup-test' }),
       backend: 'memory',
       warning: 'Storage fallback warning',
     } as never);
@@ -252,10 +301,125 @@ describe('createMastraCode startup performance', () => {
   }, 60_000);
 });
 
+describe('recall embedder', () => {
+  it('fails on a missing provider key before registering the session or opening storage', async () => {
+    const [{ registerSessionAndWaitForMaintenance }, { createStorage }] = await Promise.all([
+      import('./utils/maintenance-lock.js'),
+      import('./utils/storage-factory.js'),
+    ]);
+    vi.mocked(registerSessionAndWaitForMaintenance).mockClear();
+    vi.mocked(createStorage).mockClear();
+    const { createMastraCode } = await import('./index.js');
+
+    await expect(createMastraCode({ embedder: 'openai/text-embedding-3-small' })).rejects.toThrow(
+      'API key not found for provider openai',
+    );
+    expect(registerSessionAndWaitForMaintenance).not.toHaveBeenCalled();
+    expect(createStorage).not.toHaveBeenCalled();
+  });
+});
+
+describe('storage maintenance exclusion', () => {
+  it('registers the session and waits for maintenance before opening storage', async () => {
+    const [{ registerSessionAndWaitForMaintenance }, { createStorage }] = await Promise.all([
+      import('./utils/maintenance-lock.js'),
+      import('./utils/storage-factory.js'),
+    ]);
+    const order: string[] = [];
+    let finishMaintenance!: () => void;
+    vi.mocked(registerSessionAndWaitForMaintenance).mockImplementationOnce(
+      () =>
+        new Promise<void>(resolve => {
+          order.push('wait');
+          finishMaintenance = () => {
+            order.push('maintenance-done');
+            resolve();
+          };
+        }),
+    );
+    vi.mocked(createStorage).mockImplementationOnce(async () => {
+      order.push('storage');
+      return { storage: new InMemoryStore({ id: 'maintenance-test' }), backend: 'memory' };
+    });
+    const { createMastraCode } = await import('./index.js');
+
+    const started = createMastraCode();
+    await vi.waitFor(() => expect(order).toEqual(['wait']));
+    // Give startup ample turns to (incorrectly) open storage while maintenance is pending.
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(order).not.toContain('storage');
+
+    finishMaintenance();
+    await started;
+
+    expect(order).toEqual(['wait', 'maintenance-done', 'storage']);
+  });
+
+  it('unregisters the session when opening storage fails', async () => {
+    const [{ unregisterSession }, { createStorage }] = await Promise.all([
+      import('./utils/maintenance-lock.js'),
+      import('./utils/storage-factory.js'),
+    ]);
+    const failure = new Error('storage unavailable');
+    vi.mocked(createStorage).mockRejectedValueOnce(failure);
+    const { createMastraCode } = await import('./index.js');
+
+    await expect(createMastraCode()).rejects.toBe(failure);
+    expect(unregisterSession).toHaveBeenCalled();
+  });
+});
+
+describe('scores storage domain', () => {
+  it('discards score writes by default without retaining them', async () => {
+    const { DiscardingScoresStorage } = await import('./utils/discarding-scores-storage.js');
+    const { createMastraCode } = await import('./index.js');
+    const result = await createMastraCode();
+    const scores = await result.storage.getStore('scores');
+
+    expect(scores).toBeInstanceOf(DiscardingScoresStorage);
+    const saved = await scores!.saveScore({
+      scorerId: 'custom',
+      entityId: 'thread-1',
+      runId: 'run-1',
+      output: { ok: true },
+      score: 1,
+      scorer: {},
+      source: 'LIVE',
+      entity: {},
+    });
+    expect(saved.score.id).toEqual(expect.any(String));
+    expect(await scores!.getScoreById({ id: saved.score.id })).toBeNull();
+  });
+
+  it('persists score writes when explicitly enabled', async () => {
+    const { DiscardingScoresStorage } = await import('./utils/discarding-scores-storage.js');
+    const { createMastraCode } = await import('./index.js');
+    const result = await createMastraCode({
+      storage: new InMemoryStore({ id: 'persistent-scores' }),
+      storageBackend: 'libsql',
+      disableScoreStorage: false,
+    });
+    const scores = await result.storage.getStore('scores');
+
+    expect(scores).not.toBeInstanceOf(DiscardingScoresStorage);
+    const saved = await scores!.saveScore({
+      scorerId: 'custom',
+      entityId: 'thread-1',
+      runId: 'run-1',
+      output: { ok: true },
+      score: 1,
+      scorer: {},
+      source: 'LIVE',
+      entity: {},
+    });
+    expect(await scores!.getScoreById({ id: saved.score.id })).toMatchObject({ scorerId: 'custom' });
+  });
+});
+
 describe('Kimi startup access', () => {
-  it('rejects stored OAuth credentials without a valid device ID', async () => {
+  it('rejects stored OAuth credentials without a valid device ID for OM pack selection', async () => {
     const previousApiKey = process.env.KIMI_API_KEY;
-    const { getAvailableModePacks } = await import('./onboarding/packs.js');
+    const { getAvailableOmPacks } = await import('./onboarding/packs.js');
     const { createMastraCode } = await import('./index.js');
 
     try {
@@ -266,11 +430,11 @@ describe('Kimi startup access', () => {
         refresh: 'refresh-token',
         expires: Date.now() + 60_000,
       });
-      vi.mocked(getAvailableModePacks).mockClear();
+      vi.mocked(getAvailableOmPacks).mockClear();
 
       await createMastraCode({ cwd: '/tmp/project-invalid-kimi-oauth' });
 
-      expect(getAvailableModePacks).toHaveBeenLastCalledWith(expect.objectContaining({ 'kimi-for-coding': false }));
+      expect(getAvailableOmPacks).toHaveBeenLastCalledWith(expect.objectContaining({ 'kimi-for-coding': false }));
     } finally {
       authCredentials.clear();
       if (previousApiKey === undefined) delete process.env.KIMI_API_KEY;
@@ -324,16 +488,9 @@ describe('settings.json OM seeding', () => {
     }
   });
 
-  it('seeds provider-matched OM models when settings are untouched', async () => {
-    const { selectPreferredOMPack } = await import('./onboarding/packs.js');
+  it('preserves auto OM selection when settings are untouched', async () => {
     const { resolveOmRoleModel, loadSettings } = await import('./onboarding/settings.js');
     vi.mocked(resolveOmRoleModel).mockReturnValue(null);
-    vi.mocked(selectPreferredOMPack).mockReturnValue({
-      id: 'openai',
-      name: 'OpenAI Mini',
-      description: 'Via Codex subscription',
-      modelId: 'openai/gpt-5.4-mini',
-    });
     const baseSettings = vi.mocked(loadSettings)();
     const { createMastraCode } = await import('./index.js');
 
@@ -341,40 +498,27 @@ describe('settings.json OM seeding', () => {
       await createMastraCode({ cwd: '/tmp/project-provider-om-seed' });
 
       expect(controllerInitialStates).toHaveLength(1);
-      expect(controllerInitialStates[0]!.observerModelId).toBe('openai/gpt-5.4-mini');
-      expect(controllerInitialStates[0]!.reflectorModelId).toBe('openai/gpt-5.4-mini');
+      expect(controllerInitialStates[0]!.observerModelId).toBeUndefined();
+      expect(controllerInitialStates[0]!.reflectorModelId).toBeUndefined();
+      expect(controllerInitialStates[0]!.observerModelSelection).toBe('auto');
+      expect(controllerInitialStates[0]!.reflectorModelSelection).toBe('auto');
     } finally {
       vi.mocked(resolveOmRoleModel).mockReturnValue('');
-      vi.mocked(selectPreferredOMPack).mockReturnValue(undefined);
       vi.mocked(loadSettings).mockReturnValue(baseSettings);
     }
   });
 
-  it('leaves OM models unset when the user already configured OM', async () => {
-    const { selectPreferredOMPack } = await import('./onboarding/packs.js');
-    const { hasExplicitOMConfiguration } = await import('./onboarding/om-settings.js');
-    const { resolveOmRoleModel } = await import('./onboarding/settings.js');
-    vi.mocked(resolveOmRoleModel).mockReturnValue(null);
-    vi.mocked(hasExplicitOMConfiguration).mockReturnValue(true);
-    vi.mocked(selectPreferredOMPack).mockReturnValue({
-      id: 'openai',
-      name: 'OpenAI Mini',
-      description: 'Via Codex subscription',
-      modelId: 'openai/gpt-5.4-mini',
-    });
+  it('does not resolve model packs for startup mode defaults', async () => {
+    const { getAvailableModePacks } = await import('./onboarding/packs.js');
+    const { resolveModelDefaults } = await import('./onboarding/settings.js');
     const { createMastraCode } = await import('./index.js');
+    vi.mocked(getAvailableModePacks).mockClear();
+    vi.mocked(resolveModelDefaults).mockClear();
 
-    try {
-      await createMastraCode({ cwd: '/tmp/project-explicit-om' });
+    await createMastraCode({ cwd: '/tmp/project-no-runtime-packs' });
 
-      expect(controllerInitialStates).toHaveLength(1);
-      expect(controllerInitialStates[0]!.observerModelId).toBeUndefined();
-      expect(controllerInitialStates[0]!.reflectorModelId).toBeUndefined();
-    } finally {
-      vi.mocked(resolveOmRoleModel).mockReturnValue('');
-      vi.mocked(hasExplicitOMConfiguration).mockReturnValue(false);
-      vi.mocked(selectPreferredOMPack).mockReturnValue(undefined);
-    }
+    expect(getAvailableModePacks).not.toHaveBeenCalled();
+    expect(resolveModelDefaults).not.toHaveBeenCalled();
   });
 
   it('does not seed OM knobs when disableSettingsOmSeed is set', async () => {
@@ -417,6 +561,15 @@ describe('AgentController session id and ownerId wiring', () => {
     expect(call.id).toMatch(/^mastracode-session-/);
     expect(call.ownerId).toBeTruthy();
     expect(call.ownerId).toMatch(/^mastracode-/);
+  });
+
+  it('can defer initial thread creation during local boot', async () => {
+    const { createMastraCode } = await import('./index.js');
+
+    await createMastraCode({ cwd: '/tmp/project-deferred-thread', createInitialThread: false });
+
+    expect(createSessionCalls).toHaveLength(1);
+    expect(createSessionCalls[0]!.createInitialThread).toBe(false);
   });
 
   it('derives stable id and ownerId for the same cwd across calls', async () => {

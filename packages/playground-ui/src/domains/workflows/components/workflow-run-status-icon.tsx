@@ -1,7 +1,12 @@
 import type { WorkflowRunStatus } from '@mastra/core/workflows';
-import { Check, CirclePause, CircleSlash, Clock, Pause, X } from 'lucide-react';
+import { workflowStatusTone, workflowStatusToneText } from '../workflow-status-tone';
 import { Spinner } from '@/ds/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { IconCircleBanSign } from '@/ds/icons/central/IconCircleBanSign';
+import { IconClock } from '@/ds/icons/central/IconClock';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconPause } from '@/ds/icons/central/IconPause';
 import { Icon } from '@/ds/icons/Icon';
 
 export interface WorkflowRunStatusIconProps {
@@ -9,24 +14,25 @@ export interface WorkflowRunStatusIconProps {
 }
 
 function StatusIcon({ status }: WorkflowRunStatusIconProps) {
+  const toneText = workflowStatusToneText[workflowStatusTone(status)];
   switch (status) {
     case 'running':
       return <Spinner />;
     case 'failed':
-      return <X className="text-accent2" />;
+      return <IconCrossMedium className={toneText} />;
     case 'canceled':
-      return <CircleSlash className="text-muted-foreground" />;
+      return <IconCircleBanSign className={toneText} />;
     case 'pending':
     case 'waiting':
-      return <Clock className="text-muted-foreground" />;
+      return <IconClock className={toneText} />;
     case 'paused':
-      return <Pause className="text-badge-yellow-fg" />;
+      return <IconPause className={toneText} />;
     case 'suspended':
-      return <CirclePause className="text-accent3" />;
+      return <IconPause className={toneText} />;
     case 'success':
-      return <Check className="text-accent1" />;
+      return <IconCheckmark2Medium className={toneText} />;
     default:
-      return <Clock className="text-muted-foreground" />;
+      return <IconClock className={toneText} />;
   }
 }
 

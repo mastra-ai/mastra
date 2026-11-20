@@ -3,9 +3,16 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { describe, it, expect, expectTypeOf, beforeEach, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
+import { MockMemory } from '../memory/mock';
 import { SpanType } from '../observability';
 import { StreamErrorRetryProcessor } from '../processors';
-import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../request-context';
+import {
+  MASTRA_AUTH_TOKEN_KEY,
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_SCOPES_KEY,
+  MASTRA_THREAD_ID_KEY,
+  RequestContext,
+} from '../request-context';
 import { createMockModel } from '../test-utils/llm-mock';
 import { createScorer, ScorerRunError } from './base';
 import type { ScorerJudgeExecutionFailure, ScorerJudgeExecutionSuccess } from './base';
@@ -622,13 +629,31 @@ describe('createScorer', () => {
       });
     });
 
-    it('does not retry a V2 judge request when processor configuration is omitted', async () => {
+    it('retries a transient V2 judge request with the default error processors', async () => {
+      const { model, getCallCount } = createJudgeModel([createProviderError(429, true, 'rate limited')]);
+      const scorer = createScorer({
+        id: 'v2-judge-default-retry-scorer',
+        name: 'v2-judge-default-retry-scorer',
+        description: 'Retries transient V2 judge errors with the shared default error processors',
+        judge: { model, instructions: 'Test instructions' },
+      }).generateScore({
+        description: 'score',
+        createPrompt: () => 'score this',
+      });
+
+      await expect(scorer.run(testData.scoringInput)).rejects.toBeDefined();
+      // The judge is an Agent, so it picks up the shared stability error processors and the default
+      // StreamErrorRetryProcessor retries the transient 429 twice before giving up.
+      expect(getCallCount()).toBe(3);
+    });
+
+    it('does not retry a V2 judge request when the judge opts out of error processors', async () => {
       const { model, getCallCount } = createJudgeModel([createProviderError(429, true, 'rate limited')]);
       const scorer = createScorer({
         id: 'v2-judge-no-retry-scorer',
         name: 'v2-judge-no-retry-scorer',
-        description: 'Leaves V2 judge retries disabled without an error processor',
-        judge: { model, instructions: 'Test instructions' },
+        description: 'Leaves V2 judge retries disabled when the judge opts out',
+        judge: { model, instructions: 'Test instructions', errorProcessorDefaults: false },
       }).generateScore({
         description: 'score',
         createPrompt: () => 'score this',
@@ -1051,6 +1076,10 @@ describe('createScorer', () => {
             instructions: 'Return a score.',
             onStepFinish,
             onFinish,
+            // This case isolates the judge's structured-output fallback path. The shared stability
+            // error processors would retry inside the first stream instead of letting the fallback
+            // run, so opt the judge out to keep that path under test.
+            errorProcessorDefaults: false,
           },
         }).generateScore({
           description: 'score',
@@ -1224,6 +1253,176 @@ describe('createScorer', () => {
     });
   });
 
+  describe('Judge instructions and the run request context', () => {
+    const SCORE = '{"score":0.5}';
+    const CACHE = { anthropic: { cacheControl: { type: 'ephemeral' } } } as const;
+    const reportInstructions = ({ requestContext }: { requestContext: RequestContext<any> }) => [
+      { role: 'system' as const, content: 'Score the report.' },
+      { role: 'system' as const, content: `REPORT: ${requestContext.get('report')}`, providerOptions: CACHE },
+    ];
+    const systemText = (prompt: unknown) =>
+      (prompt as { role: string; content: unknown }[])
+        .filter(message => message.role === 'system')
+        .map(message => message.content)
+        .join('\n');
+
+    it.each([
+      ['a plain object', { report: 'report-A' }],
+      ['a RequestContext', new RequestContext([['report', 'report-A']])],
+    ])('sends the report from the run as a cached system message when the run passes %s', async (_, context) => {
+      const { model, getPrompts } = createJudgeModel(['{"facts":1}', SCORE]);
+      const scorer = createScorer({
+        id: 'report-judge',
+        description: 'Scores a report',
+        judge: { model, instructions: reportInstructions },
+      })
+        .analyze({
+          description: 'Check facts',
+          judge: { model, instructions: reportInstructions },
+          outputSchema: z.object({ facts: z.number() }),
+          createPrompt: () => 'Check facts.',
+        })
+        .generateScore({ description: 'Accuracy', createPrompt: () => 'How accurate is it?' });
+
+      await scorer.run({ input: 'q', output: 'a', requestContext: context });
+
+      const cachedReport = expect.objectContaining({ content: 'REPORT: report-A', providerOptions: CACHE });
+      expect(getPrompts()).toEqual([expect.arrayContaining([cachedReport]), expect.arrayContaining([cachedReport])]);
+    });
+
+    it('lets run values override judge.requestContext and leaves the scorer context unchanged', async () => {
+      const { model, getPrompts } = createJudgeModel([SCORE]);
+      const scorerContext = new RequestContext<any>([
+        ['shared', 'from-scorer'],
+        ['scorerOnly', 'kept'],
+      ]);
+      const scorer = createScorer({
+        id: 'report-judge',
+        description: 'Scores a report',
+        judge: {
+          model,
+          requestContext: scorerContext,
+          instructions: ({ requestContext }) =>
+            ['shared', 'scorerOnly', 'runOnly'].map(key => `${key}=${requestContext.get(key)}`).join(' '),
+        },
+      }).generateScore({ description: 'Accuracy', createPrompt: () => 'How accurate is it?' });
+
+      await scorer.run({ input: 'q', output: 'a', requestContext: { shared: 'from-run', runOnly: 'added' } });
+
+      expect(systemText(getPrompts()[0])).toBe('shared=from-run scorerOnly=kept runOnly=added');
+      expect(scorerContext.get('shared')).toBe('from-scorer');
+      expect(scorerContext.has('runOnly')).toBe(false);
+    });
+
+    it('lets a dynamic judge model read values from the run', async () => {
+      const fast = createJudgeModel([SCORE]);
+      const fallback = createJudgeModel([SCORE]);
+      const scorer = createScorer({
+        id: 'report-judge',
+        description: 'Scores a report',
+        judge: {
+          // The public type has no function form, but the model resolver accepts one at runtime.
+          model: (({ requestContext }: { requestContext: RequestContext<any> }) =>
+            requestContext.get('judgeTier') === 'fast' ? fast.model : fallback.model) as any,
+          instructions: 'Score the report.',
+        },
+      }).generateScore({ description: 'Accuracy', createPrompt: () => 'How accurate is it?' });
+
+      await scorer.run({ input: 'q', output: 'a', requestContext: { judgeTier: 'fast' } });
+
+      expect(fast.getCallCount()).toBe(1);
+      expect(fallback.getCallCount()).toBe(0);
+    });
+
+    it('gives the judge a report that a preprocess step loads into the run context', async () => {
+      const { model, getPrompts } = createJudgeModel([SCORE]);
+      const scorer = createScorer({
+        id: 'report-judge',
+        description: 'Scores a report',
+        judge: { model, instructions: reportInstructions },
+      })
+        .preprocess(({ run }) => {
+          (run.requestContext as RequestContext).set('report', 'loaded-report');
+          return {};
+        })
+        .generateScore({ description: 'Accuracy', createPrompt: () => 'How accurate is it?' });
+
+      await scorer.run({
+        input: 'q',
+        output: 'a',
+        requestContext: new RequestContext<any>([['report', 'stale-report']]),
+      });
+
+      expect(systemText(getPrompts()[0])).toContain('REPORT: loaded-report');
+    });
+
+    it.each<[string, [string, unknown][]]>([
+      [
+        'thread and resource keys',
+        [
+          [MASTRA_THREAD_ID_KEY, 'caller-thread'],
+          [MASTRA_RESOURCE_ID_KEY, 'caller-user'],
+        ],
+      ],
+      ['scopes', [[MASTRA_SCOPES_KEY, ['thread:caller-thread', 'resource:caller-user']]]],
+    ])(
+      'keeps a judge with memory on its own thread when the run names the caller thread by %s',
+      async (_, identity) => {
+        const memory = new MockMemory();
+        const { model } = createJudgeModel([SCORE]);
+        const scorer = createScorer({
+          id: 'report-judge',
+          description: 'Scores a report',
+          judge: {
+            model,
+            memory,
+            defaultMemoryOptions: { thread: 'judge-thread', resource: 'judge-user' },
+            instructions: reportInstructions,
+          },
+        }).generateScore({ description: 'Accuracy', createPrompt: () => 'How accurate is it?' });
+
+        await scorer.run({
+          input: 'q',
+          output: 'a',
+          requestContext: new RequestContext<any>([...identity, ['report', 'report-A']]),
+        });
+
+        const judgeThread = await memory.recall({ threadId: 'judge-thread', resourceId: 'judge-user' });
+        const callerThread = await memory.recall({ threadId: 'caller-thread', resourceId: 'caller-user' });
+        expect(judgeThread.messages.length).toBeGreaterThan(0);
+        expect(callerThread.messages).toEqual([]);
+      },
+    );
+
+    it("leaves the run's memory binding and reserved keys out of the judge", async () => {
+      const { model, getPrompts } = createJudgeModel([SCORE]);
+      const scorer = createScorer({
+        id: 'report-judge',
+        description: 'Scores a report',
+        judge: {
+          model,
+          instructions: ({ requestContext }) =>
+            ['MastraMemory', MASTRA_THREAD_ID_KEY, MASTRA_AUTH_TOKEN_KEY, 'report']
+              .map(key => `${requestContext.get(key)}`)
+              .join(' '),
+        },
+      }).generateScore({ description: 'Accuracy', createPrompt: () => 'How accurate is it?' });
+
+      await scorer.run({
+        input: 'q',
+        output: 'a',
+        requestContext: {
+          MastraMemory: { thread: { id: 'caller-thread' } },
+          [MASTRA_THREAD_ID_KEY]: 'caller-thread',
+          [MASTRA_AUTH_TOKEN_KEY]: 'caller-token',
+          report: 'report-A',
+        },
+      });
+
+      expect(systemText(getPrompts()[0])).toBe('undefined undefined undefined report-A');
+    });
+  });
+
   describe('Scorer run failures', () => {
     it('retains analyze output when score generation fails', async () => {
       const scoreError = new Error('score generation failed');
@@ -1276,7 +1475,9 @@ describe('createScorer', () => {
       const scorer = createScorer({
         id: 'reason-failure-scorer',
         description: 'Retains a completed score on reason failure',
-        judge: { model, instructions: 'Evaluate the output.' },
+        // A terminal provider rejection is the subject; the shared default error processors are
+        // opted out so their retry does not turn one failed attempt into several.
+        judge: { model, instructions: 'Evaluate the output.', errorProcessorDefaults: false },
       })
         .generateScore({ description: 'score', createPrompt: () => 'score this output' })
         .generateReason({ description: 'reason', createPrompt: () => 'explain this score' });
@@ -1355,7 +1556,9 @@ describe('createScorer', () => {
       const scorer = createScorer({
         id: 'provider-attempt-failure-scorer',
         description: 'Records an attempted judge invocation',
-        judge: { model, instructions: 'Return a score.' },
+        // The shared default error processors would retry inside the first stream and absorb the
+        // fallback this case asserts, so the judge opts out to keep the failure path under test.
+        judge: { model, instructions: 'Return a score.', errorProcessorDefaults: false },
       }).generateScore({ description: 'score', createPrompt: () => 'score this output' });
 
       const error = await scorer.run(testData.scoringInput).catch(error => error);
@@ -1391,7 +1594,10 @@ describe('createScorer', () => {
         const scorer = createScorer({
           id: 'fallback-provider-failure-scorer',
           description: 'Separates attempted fallback invocations from completed model calls',
-          judge: { model, instructions: 'Return a score.' },
+          // This case asserts the structured-output fallback path itself. The shared default error
+          // processors would retry inside the first stream instead of letting the fallback run, so
+          // opt the judge out to keep that path under test.
+          judge: { model, instructions: 'Return a score.', errorProcessorDefaults: false },
         }).generateScore({ description: 'score', createPrompt: () => 'score this output' });
 
         const error = await scorer.run(testData.scoringInput).catch(error => error);
@@ -1423,7 +1629,10 @@ describe('createScorer', () => {
         const scorer = createScorer({
           id: 'fallback-failure-scorer',
           description: 'Retains completed fallback telemetry on failure',
-          judge: { model, instructions: 'Return a score.' },
+          // This case asserts the structured-output fallback path itself. The shared default error
+          // processors would retry inside the first stream instead of letting the fallback run, so
+          // opt the judge out to keep that path under test.
+          judge: { model, instructions: 'Return a score.', errorProcessorDefaults: false },
         }).generateScore({ description: 'score', createPrompt: () => 'score this output' });
 
         const error = await scorer.run(testData.scoringInput).catch(error => error);
@@ -1676,6 +1885,37 @@ describe('createScorer', () => {
       });
     });
 
+    describe('when a scorer run starts its span', () => {
+      function captureScorerRunSpan(config: { id: string; name?: string }) {
+        const captured: { options?: any } = {};
+        const mockMastra = createMockMastra({
+          startSpan: (options: any) => {
+            captured.options = options;
+            return createMockSpan('entity-trace', SpanType.SCORER_RUN);
+          },
+        });
+        const scorer = createScorer({ ...config, description: 'entity scorer' }).generateScore(() => 1);
+        scorer.__registerMastra(mockMastra as any);
+        return { captured, scorer };
+      }
+
+      it('records the scorer name as the span entity name', async () => {
+        const { captured, scorer } = captureScorerRunSpan({ id: 'tone-scorer', name: 'Tone' });
+
+        await scorer.run(testData.scoringInput);
+
+        expect(captured.options).toMatchObject({ entityId: 'tone-scorer', entityName: 'Tone' });
+      });
+
+      it('falls back to the scorer id when the scorer has no name', async () => {
+        const { captured, scorer } = captureScorerRunSpan({ id: 'tone-scorer' });
+
+        await scorer.run(testData.scoringInput);
+
+        expect(captured.options).toMatchObject({ entityId: 'tone-scorer', entityName: 'tone-scorer' });
+      });
+    });
+
     describe('requestContext persistence on the scorer-run input', () => {
       function captureScorerRun() {
         const captured: { input?: any } = {};
@@ -1730,7 +1970,7 @@ describe('createScorer', () => {
         expect(captured.input?.requestContext).toEqual({ userId: 'u1', locale: 'en' });
       });
 
-      it('redacts the framework auth token even with the wildcard', async () => {
+      it('omits the framework auth token even with the wildcard', async () => {
         const { captured, scorer } = captureScorerRun();
 
         const requestContext = new RequestContext([
@@ -1744,8 +1984,7 @@ describe('createScorer', () => {
           requestContextKeys: ['*'],
         });
 
-        expect(captured.input?.requestContext?.userId).toBe('u1');
-        expect(captured.input?.requestContext?.[MASTRA_AUTH_TOKEN_KEY]).toBe('[REDACTED]');
+        expect(captured.input?.requestContext).toEqual({ userId: 'u1' });
       });
     });
 

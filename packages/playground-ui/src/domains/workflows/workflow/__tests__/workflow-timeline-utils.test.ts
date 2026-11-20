@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import { describe, expect, it } from 'vitest';
 import type { Step } from '../../context/use-current-run';
 import { buildTimeline } from '../workflow-timeline-utils';

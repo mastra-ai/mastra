@@ -1,70 +1,46 @@
-/* Dialog motion. Tailwind v4 sets `translate: -50% -50%` via the standalone
- * `translate` property — keyframes only animate `transform: scale(...)` so
- * the two don't compose and double-offset the centering. */
+/* Transitions, not keyframes: a close mid-open retargets instead of jumping. */
 
-@keyframes dialog-content-in {
-  from {
-    opacity: 0;
-    transform: scale(1.08);
-  }
+.dialog-backdrop-motion,
+.dialog-popup-motion {
+  --dialog-ease: cubic-bezier(0.23, 1, 0.32, 1);
 
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
+  transition-timing-function: var(--dialog-ease);
+  transition-duration: var(--duration-normal);
 }
 
-@keyframes dialog-content-out {
-  from {
-    opacity: 1;
-    transform: scale(1);
-  }
-
-  to {
-    opacity: 0;
-    transform: scale(1.02);
-  }
+.dialog-backdrop-motion {
+  transition-property: opacity;
 }
 
-@keyframes dialog-overlay-in {
-  from {
-    opacity: 0;
+.dialog-popup-motion {
+  transition-property: opacity, scale;
+}
+
+.dialog-backdrop-motion[data-starting-style],
+.dialog-backdrop-motion[data-ending-style] {
+  opacity: 0;
+}
+
+.dialog-popup-motion[data-starting-style] {
+  opacity: 0;
+  scale: 0.96;
+}
+
+.dialog-popup-motion[data-ending-style] {
+  opacity: 0;
+  scale: 0.98;
+}
+
+.dialog-backdrop-motion[data-ending-style],
+.dialog-popup-motion[data-ending-style] {
+  transition-duration: var(--duration-fast);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog-popup-motion,
+  .dialog-popup-motion[data-starting-style],
+  .dialog-popup-motion[data-ending-style] {
+    scale: none;
+    transition-property: opacity;
   }
-
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes dialog-overlay-out {
-  from {
-    opacity: 1;
-  }
-
-  to {
-    opacity: 0;
-  }
-}
-
-/* Open/close state attributes: Radix (`data-state`) for AlertDialog, Base UI
- * (`data-open` / `data-closed`) for Dialog. Both share these animation classes. */
-
-.dialog-overlay-anim[data-state='open'],
-.dialog-overlay-anim[data-open] {
-  animation: dialog-overlay-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.dialog-overlay-anim[data-state='closed'],
-.dialog-overlay-anim[data-closed] {
-  animation: dialog-overlay-out 240ms cubic-bezier(0.32, 0, 0.67, 0) both;
-}
-
-.dialog-content-anim[data-state='open'],
-.dialog-content-anim[data-open] {
-  animation: dialog-content-in 680ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.dialog-content-anim[data-state='closed'],
-.dialog-content-anim[data-closed] {
-  animation: dialog-content-out 180ms cubic-bezier(0.5, 0, 0.75, 0);
 }

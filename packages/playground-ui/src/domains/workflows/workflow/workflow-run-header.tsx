@@ -1,13 +1,15 @@
 import type { WorkflowRunStatus } from '@mastra/core/workflows';
-import { Pause, Timer } from 'lucide-react';
 import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import type { WorkflowRunTiming } from '../context/workflow-step-timing';
 import { resolveRunTiming } from '../context/workflow-step-timing';
+import { workflowStatusTone } from '../workflow-status-tone';
 import { Badge } from '@/ds/components/Badge';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { RelativeTimestamp } from '@/ds/components/RelativeTimestamp';
 import { Txt } from '@/ds/components/Txt';
+import { IconPause } from '@/ds/icons/central/IconPause';
+import { IconStopwatch } from '@/ds/icons/central/IconStopwatch';
 import { useTimeDiff } from '@/hooks/use-time-diff';
 import { formatDuration } from '@/utils/duration';
 
@@ -20,8 +22,8 @@ export function WorkflowRunStatusBadge({ status }: { status?: WorkflowRunStatus 
   return (
     <Badge
       size="md"
-      variant={status === 'paused' ? 'yellow' : 'neutral'}
-      emphasis="muted"
+      variant={workflowStatusTone(status)}
+      emphasis="subtle"
       icon={status && <WorkflowRunStatusIcon status={status} />}
     >
       {formatRunStatus(status)}
@@ -33,15 +35,18 @@ function RunDuration({ span, spansSuspension }: Omit<WorkflowRunTiming, 'waiting
   const elapsed = formatDuration(useTimeDiff(span));
 
   return (
-    <span
-      className="flex items-center gap-1.5 text-meta text-muted-foreground"
+    <Txt
+      as="span"
+      variant="meta"
+      tone="muted"
+      className="flex items-center gap-1.5"
       title={spansSuspension ? 'Run duration, including time spent suspended' : 'Run duration'}
     >
-      <Timer aria-hidden className="size-3.5" />
+      <IconStopwatch aria-hidden className="size-icon-sm" />
       <Txt as="span" variant="meta" font="mono">
         {elapsed}
       </Txt>
-    </span>
+    </Txt>
   );
 }
 
@@ -49,10 +54,15 @@ function RunWaiting({ since }: { since: number }) {
   const waiting = formatDuration(useTimeDiff({ startedAt: since }));
 
   return (
-    <span className="flex items-center gap-1.5 text-meta text-accent3 tabular-nums" title="Waiting for input">
-      <Pause aria-hidden className="size-3.5" />
+    <Txt
+      as="span"
+      variant="meta"
+      className="flex items-center gap-1.5 text-warning-foreground tabular-nums"
+      title="Waiting for input"
+    >
+      <IconPause aria-hidden className="size-icon-sm" />
       {waiting}
-    </span>
+    </Txt>
   );
 }
 
@@ -77,7 +87,7 @@ export function RunWorkflowHeader({
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <WorkflowRunStatusBadge status={status} />
           {resourceId && (
-            <Badge size="md" variant="neutral" emphasis="muted" className="min-w-0">
+            <Badge size="md" variant="neutral" emphasis="subtle" className="min-w-0">
               <span className="min-w-0 truncate" title={`Resource ${resourceId}`}>
                 {resourceId}
               </span>
@@ -89,7 +99,7 @@ export function RunWorkflowHeader({
           {timing && <RunDuration span={timing.span} spansSuspension={timing.spansSuspension} />}
         </div>
       </div>
-      <div className="flex min-w-0 items-center gap-1 text-meta text-muted-foreground">
+      <div className="flex min-w-0 items-center gap-1 text-muted-foreground">
         <Txt as="span" variant="meta" font="mono" className="min-w-0 truncate" title={runId}>
           {runId}
         </Txt>

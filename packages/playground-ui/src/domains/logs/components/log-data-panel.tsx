@@ -1,11 +1,13 @@
-import { ArrowRightIcon } from 'lucide-react';
 import { Fragment } from 'react';
+import type { ReactNode } from 'react';
 import type { LogRecord } from '../types';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { DataPanel } from '@/ds/components/DataPanel';
+import { Txt } from '@/ds/components/Txt';
+import { IconArrowRight } from '@/ds/icons/central/IconArrowRight';
 import { formatTimestampPrecise } from '@/utils/date-format';
 
 export interface LogDataPanelProps {
@@ -17,6 +19,8 @@ export interface LogDataPanelProps {
   onPrevious?: () => void;
   onNext?: () => void;
   depth?: 1 | 2 | 3;
+  /** Extra controls in the header, before the previous/next buttons. */
+  actions?: ReactNode;
 }
 
 export function LogDataPanel({
@@ -27,6 +31,7 @@ export function LogDataPanel({
   onPrevious,
   onNext,
   depth,
+  actions,
 }: LogDataPanelProps) {
   const formattedDate = log ? (formatTimestampPrecise(log.timestamp) ?? '') : '';
 
@@ -36,8 +41,12 @@ export function LogDataPanel({
         <>
           <DataPanel.Header>
             <DataPanel.CloseButton onClick={onClose} />
-            <DataPanel.Heading>Log · {formattedDate}</DataPanel.Heading>
+            <DataPanel.Heading>Log</DataPanel.Heading>
+            <DataPanel.Metadata>
+              <DataPanel.Meta tooltip={formattedDate}>{formattedDate}</DataPanel.Meta>
+            </DataPanel.Metadata>
             <DataPanel.HeaderActions>
+              {actions}
               <DataPanel.NextPrevNav
                 onPrevious={onPrevious}
                 onNext={onNext}
@@ -97,13 +106,15 @@ export function LogDataPanel({
                     <ButtonsGroup className="w-full min-w-0">
                       <Button
                         className="min-w-0 flex-1 justify-between overflow-hidden"
-                        icon={<ArrowRightIcon />}
+                        icon={<IconArrowRight />}
                         onClick={() => log.traceId && onTraceClick?.(log.traceId)}
                       >
                         <span>Trace</span>
-                        <span className="ml-auto min-w-0 truncate text-caption text-placeholder"># {log.traceId}</span>
+                        <Txt as="span" variant="caption" tone="faint" className="ml-auto min-w-0 truncate">
+                          # {log.traceId}
+                        </Txt>
                       </Button>
-                      <CopyButton content={log.traceId} tooltip="Copy Trace ID to clipboard" />
+                      <CopyButton content={log.traceId} tooltip="Copy trace ID to clipboard" />
                     </ButtonsGroup>
                   )}
                   {log.spanId && (
@@ -112,12 +123,14 @@ export function LogDataPanel({
                         className="min-w-0 flex-1 justify-between overflow-hidden"
                         disabled={!log.traceId || !onSpanClick}
                         onClick={() => log.traceId && log.spanId && onSpanClick?.(log.traceId, log.spanId)}
-                        icon={<ArrowRightIcon />}
+                        icon={<IconArrowRight />}
                       >
                         <span>Span</span>
-                        <span className="ml-auto min-w-0 truncate text-caption text-placeholder"># {log.spanId}</span>
+                        <Txt as="span" variant="caption" tone="faint" className="ml-auto min-w-0 truncate">
+                          # {log.spanId}
+                        </Txt>
                       </Button>
-                      <CopyButton content={log.spanId} tooltip="Copy Span ID to clipboard" />
+                      <CopyButton content={log.spanId} tooltip="Copy span ID to clipboard" />
                     </ButtonsGroup>
                   )}
                 </div>

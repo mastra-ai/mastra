@@ -107,14 +107,71 @@ describe('MastraCompositeStore — default delegation (issue #16782)', () => {
     await expect(composite.init()).rejects.toThrow('inner init failed');
   });
 
-  it('initializes a knowledge domain override', async () => {
+  it('activates a knowledge domain override only on explicit access', async () => {
     const knowledge = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
     const knowledgeInitSpy = vi.spyOn(knowledge, 'init');
     const composite = new MastraCompositeStore({ id: 'outer-knowledge', domains: { knowledge } });
 
     await composite.init();
-
+    expect(knowledgeInitSpy).not.toHaveBeenCalled();
+    expect(await composite.getStore('knowledge')).toBe(knowledge);
     expect(knowledgeInitSpy).toHaveBeenCalledOnce();
+  });
+
+  it('coalesces explicit knowledge activation across composites sharing a domain', async () => {
+    const knowledge = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
+    const knowledgeInitSpy = vi.spyOn(knowledge, 'init');
+    const parent = new MastraCompositeStore({ id: 'parent', domains: { knowledge } });
+    const composite = new MastraCompositeStore({ id: 'outer', default: parent });
+    const parentInitSpy = vi.spyOn(parent, 'init');
+
+    await Promise.all([composite.getStore('knowledge'), parent.getStore('knowledge')]);
+    expect(parentInitSpy).toHaveBeenCalled();
+    expect(knowledgeInitSpy).toHaveBeenCalledOnce();
+    await composite.getStore('knowledge');
+    expect(knowledgeInitSpy).toHaveBeenCalledOnce();
+  });
+
+  it('isolates knowledge activation failure from ordinary startup and retries it', async () => {
+    const knowledge = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
+    const knowledgeInitSpy = vi.spyOn(knowledge, 'init').mockRejectedValueOnce(new Error('incompatible knowledge'));
+    const composite = new MastraCompositeStore({ id: 'retry', domains: { knowledge } });
+
+    await composite.init();
+    expect(knowledgeInitSpy).not.toHaveBeenCalled();
+    await expect(composite.getStore('knowledge')).rejects.toThrow('incompatible knowledge');
+    await expect(composite.init()).resolves.toBeUndefined();
+    expect(await composite.getStore('knowledge')).toBe(knowledge);
+    expect(knowledgeInitSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('respects disabled automatic initialization during knowledge access', async () => {
+    const knowledge = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
+    const knowledgeInitSpy = vi.spyOn(knowledge, 'init');
+    const composite = new MastraCompositeStore({ id: 'disabled', domains: { knowledge }, disableInit: true });
+
+    expect(await composite.getStore('knowledge')).toBe(knowledge);
+    await composite.init();
+    expect(knowledgeInitSpy).not.toHaveBeenCalled();
+    await Promise.all([composite.initKnowledge(), composite.initKnowledge()]);
+    expect(knowledgeInitSpy).toHaveBeenCalledOnce();
+  });
+
+  it('supports explicit activation and retry when the environment disables automatic initialization', async () => {
+    vi.stubEnv('MASTRA_DISABLE_STORAGE_INIT', 'true');
+    try {
+      const knowledge = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
+      const knowledgeInitSpy = vi.spyOn(knowledge, 'init').mockRejectedValueOnce(new Error('activation failed'));
+      const composite = new MastraCompositeStore({ id: 'env-disabled', domains: { knowledge } });
+      expect(await composite.getStore('knowledge')).toBe(knowledge);
+      await composite.init();
+      expect(knowledgeInitSpy).not.toHaveBeenCalled();
+      await expect(composite.initKnowledge()).rejects.toThrow('activation failed');
+      await expect(composite.initKnowledge()).resolves.toBeUndefined();
+      expect(knowledgeInitSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
 

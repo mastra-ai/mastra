@@ -1,5 +1,5 @@
 import EventEmitter from 'node:events';
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { globalRunRegistry } from '../agent/durable/run-registry';
 import { EventEmitterPubSub } from '../events/event-emitter';
@@ -57,6 +57,14 @@ function makeGatedWorkflow(gate: Promise<void>, onStepStarted: () => void, id = 
     .commit();
   return wf;
 }
+
+// Asserts the default shutdown drain budget lets in-flight work finish; keep real waits.
+beforeAll(() => {
+  vi.stubEnv('MASTRA_TEST_FAST_WAITS', '0');
+});
+afterAll(() => {
+  vi.unstubAllEnvs();
+});
 
 describe('Mastra shutdown lifecycle', () => {
   it('releases the process-global scorer hook', async () => {

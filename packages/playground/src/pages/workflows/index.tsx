@@ -1,27 +1,25 @@
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { NoWorkflowsInfo } from '@mastra/playground-ui/domains/workflows/components/workflows-list/no-workflows-info';
 import { WorkflowsList } from '@mastra/playground-ui/domains/workflows/components/workflows-list/workflows-list';
 import type { WorkflowsSort } from '@mastra/playground-ui/domains/workflows/components/workflows-list/workflows-sort';
-import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
+import { IconCalendarClock4 } from '@mastra/playground-ui/icons/central/IconCalendarClock4';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { CalendarClockIcon } from 'lucide-react';
+import { useWorkflows } from '@mastra/react/hooks/workflows';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb } from '@/domains/navigation/crumbs';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 const crumbs = [navCrumb('/workflows')];
 
 function Workflows() {
-  const { requestContext } = usePlaygroundStore();
-  const { data: workflows, isLoading, error } = useWorkflows({ requestContext });
+  const { data: workflows, isLoading, error } = useWorkflows();
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<WorkflowsSort>();
 
@@ -68,11 +66,16 @@ function Workflows() {
         <ActionRow>
           <ActionRow.Start>
             <div className="max-w-120 flex-1">
-              <ListSearch onSearch={setSearch} label="Filter workflows" placeholder="Filter by name or description" />
+              <SearchInput
+                {...listSearchProps}
+                onValueChange={setSearch}
+                label="Search workflows"
+                placeholder="Search by name or description"
+              />
             </div>
           </ActionRow.Start>
           <ActionRow.End>
-            <Button render={<Link to="/workflows/schedules" />} variant="primary" icon={<CalendarClockIcon />}>
+            <Button render={<Link to="/workflows/schedules" />} variant="primary" icon={<IconCalendarClock4 />}>
               Schedules
             </Button>
           </ActionRow.End>
@@ -86,7 +89,6 @@ function Workflows() {
         search={search}
         sort={sort}
         onSortChange={(direction, key) => setSort({ key, direction })}
-        requestContext={requestContext}
       />
     </PageLayout>
   );

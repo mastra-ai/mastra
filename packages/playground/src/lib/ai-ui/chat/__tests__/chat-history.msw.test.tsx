@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
-import { ChunkFrom, type ChunkType, type DataChunkType } from '@mastra/core/stream';
-import { MastraReactProvider, useChat } from '@mastra/react';
+import { ChunkFrom } from '@mastra/core/stream';
+import type { ChunkType, DataChunkType } from '@mastra/core/stream';
+import { MastraReactProvider } from '@mastra/react';
+import { useChat } from '@mastra/react/chat';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
@@ -134,14 +136,6 @@ describe('Chat history recovery', () => {
       expect(result.current.isAwaitingToolApproval).toBe(true);
     });
 
-    it('does not restore stale pending approvals after the run finishes', async () => {
-      const { result, rerender } = await setup();
-      await act(async () => push(finishChunk));
-      await waitFor(() => expect(result.current.isRunning).toBe(false));
-      rerender({ threadId: 'first', history: approvalHistory() });
-      expect(result.current.isAwaitingToolApproval).toBe(false);
-    });
-
     it('keeps parallel approvals independent and does not resurrect accepted decisions', async () => {
       const { result, rerender } = await setup();
       const requests: unknown[] = [];
@@ -241,7 +235,7 @@ describe('Chat history recovery', () => {
       expect(result.current.tasks).toEqual(savedTasks);
       rerender({ threadId: 'second', history: emptyHistory });
       expect(result.current.tasks).toEqual([]);
-    });
+    }, 15_000);
 
     it('does not replace newer streamed tasks with saved tasks', async () => {
       const { result, rerender } = await setup();

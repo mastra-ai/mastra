@@ -110,17 +110,20 @@ describe('SystemReminderComponent', () => {
     expect(lines).toEqual(['  loaded src/agents/nested/AGENTS.md']);
   });
 
-  it('keeps the right border aligned on every rendered line', () => {
+  it('renders a left-bar card with every row padded to the terminal width', () => {
     const comp = new SystemReminderComponent({
       message: 'Use the nested instructions when replying.',
     });
 
     const lines = nonEmpty(renderPlain(comp));
-    const widths = lines.map(line => line.length);
 
-    expect(new Set(widths).size).toBe(1);
-    expect(lines[0]?.trimEnd().endsWith('╮')).toBe(true);
-    expect(lines.at(-1)?.trimEnd().endsWith('╯')).toBe(true);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatch(/^▎ System Reminder\s+$/);
+    expect(lines[1]).toMatch(/^▎ Use the nested instructions when replying\.\s+$/);
+    for (const line of lines) {
+      expect(line).toHaveLength(WIDTH);
+    }
+    expect(lines.join('\n')).not.toMatch(/[╭╮╰╯│]/);
   });
 
   it('collapses long content by default', () => {

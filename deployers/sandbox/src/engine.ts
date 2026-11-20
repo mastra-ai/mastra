@@ -1,5 +1,4 @@
 import { execFile } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -251,9 +250,9 @@ const LOCKFILES = ['package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml',
  * matching hash means the previous `node_modules` can be reused.
  */
 export async function hashInstallInputs(dir: string, installCommand: string): Promise<string | null> {
-  const hash = createHash('sha256');
+  const inputs: Buffer[] = [];
   try {
-    hash.update(await readFile(join(dir, 'package.json')));
+    inputs.push(await readFile(join(dir, 'package.json')));
   } catch {
     return null;
   }
@@ -265,8 +264,8 @@ export async function hashInstallInputs(dir: string, installCommand: string): Pr
       // Lockfile not part of the build output.
       continue;
     }
-    hash.update(lockfile).update(content);
+    inputs.push(Buffer.from(lockfile), content);
   }
-  hash.update(installCommand);
-  return hash.digest('hex');
+  inputs.push(Buffer.from(installCommand));
+  return Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', Buffer.concat(inputs))).toString('hex');
 }

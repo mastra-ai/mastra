@@ -70,16 +70,16 @@ function parseMergeRequest(value: number | string, target: SessionTarget): numbe
 
 /**
  * Whether the current request comes from a session that merge-request
- * subscriptions can ever apply to: an authenticated org user on a repository
+ * subscriptions can ever apply to: an authenticated org user on a factory
  * session with an active thread. Mirrors the GitHub gate; whether the
- * repository is GitLab-linked is only known after a storage read, so the
- * entry points verify that and fail loudly for the explicit tools.
+ * session's repository is GitLab-linked is only known after a storage read,
+ * so the entry points verify that and fail loudly for the explicit tools.
  */
 function isRepositorySession(requestContext: RequestContext): boolean {
   const context = requestContext.get('controller') as AgentControllerRequestContext<RepositorySessionState> | undefined;
   return Boolean(
     context?.threadId &&
-    context.getState().projectRepositoryId &&
+    context.getState().factoryProjectId &&
     sessionOrgId(requestContext) &&
     sessionUserId(requestContext),
   );
@@ -92,12 +92,19 @@ async function resolveSessionTarget(
   const context = requestContext.get('controller') as AgentControllerRequestContext<RepositorySessionState> | undefined;
   const orgId = sessionOrgId(requestContext);
   const userId = sessionUserId(requestContext);
-  const projectRepositoryId = context?.getState().projectRepositoryId;
-  if (!context || !context.threadId || !projectRepositoryId || !orgId || !userId) {
+  if (!context || !context.threadId || !context.getState().factoryProjectId || !orgId || !userId) {
     throw new Error('GitLab subscriptions require an authenticated repository session with an active thread.');
   }
   const storage = gitlab.sourceControlStorage;
   if (!storage) throw new Error('GitLab source control is unavailable.');
+
+  // Merge requests stay bound to the link the session is filed under: the
+  // controller state names it for dispatched sessions, the session row for
+  // the rest. A session filed under no link cannot subscribe.
+  const projectRepositoryId =
+    context.getState().projectRepositoryId ??
+    (await storage.sessions.getBySessionId(context.sessionId))?.projectRepositoryId;
+  if (!projectRepositoryId) return undefined;
 
   // The handle is scoped to GitLab rows, so a GitHub-linked repository is
   // simply absent here rather than misidentified.
@@ -161,7 +168,6 @@ function subscriptionInput(target: SessionTarget, iid: number) {
     ownerId: target.context.session.ownerId,
     resourceId: target.connection.factoryProjectId,
     threadId: target.context.threadId!,
-    sessionScope: target.context.scope,
     source: 'explicit-tool' as GitLabSignalSubscriptionSource,
     subscribedByUserId: target.userId,
   };
@@ -211,7 +217,7 @@ export function createGitLabSubscriptionTools(requestContext: RequestContext, gi
     gitlab_subscribe_mr: createTool({
       id: 'gitlab_subscribe_mr',
       description:
-        'Subscribe this thread to GitLab merge request activity. You usually do not need this tool: successful source_control_create_change_request calls subscribe automatically. Use it for an existing MR or to recover when automatic subscription did not occur. Closed or merged MRs are unsubscribed automatically. Accepts an MR IID or canonical URL for the active project.',
+        'Subscribe this thread to GitLab merge request activity. MRs created with source_control_create_change_request are subscribed automatically. Call this when you start working on an existing MR you did not create in this thread (reviewing it, fixing merge conflicts, addressing review comments, fixing CI, pushing to its branch), or to recover when automatic subscription did not occur. Closed or merged MRs are unsubscribed automatically. Accepts an MR IID or canonical URL for the active project.',
       inputSchema: mergeRequestInputSchema,
       execute: async ({ mergeRequest }) => {
         const iid = await subscribeCurrentSessionToMergeRequest(requestContext, mergeRequest, 'explicit-tool', gitlab);

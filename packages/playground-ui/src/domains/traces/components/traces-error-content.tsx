@@ -1,8 +1,8 @@
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/react/hooks/query';
 import { PermissionDenied } from '@/domains/auth/components/permission-denied';
 import { SessionExpired } from '@/domains/auth/components/session-expired';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { parseError } from '@/lib/errors';
-import { is401UnauthorizedError, is403ForbiddenError } from '@/lib/query-utils';
 
 export interface TracesErrorContentProps {
   /** The error from a useTraces / useTraceLightSpans / etc. query. */

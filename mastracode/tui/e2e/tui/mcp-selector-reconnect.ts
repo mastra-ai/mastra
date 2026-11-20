@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { z } from 'zod/v3';
 import { createGlobalPatchScope } from './global-patches.js';
 import { startMcpHttpFixtureServer } from './mcp-http-fixture.js';
+import { enableMouseSettings } from './settings-fixture.js';
 import type { McE2eInProcessApp, McE2eScenario } from './types.js';
 
 async function startMcpSelectorFixtureServer(readyFile: string) {
@@ -32,10 +33,11 @@ export const mcpSelectorReconnectScenario = {
   description: 'Uses the interactive MCP selector to inspect a failed server, reconnect it, and reload changed config.',
   testName: 'reconnects and reloads MCP servers from the interactive selector overlay',
   projectFixture: 'long-branch',
-  prepare({ projectDir }) {
+  prepare({ appDataDir, projectDir }) {
     const readyFile = join(projectDir, '.mc-e2e-mcp-selector-ready');
     rmSync(readyFile, { force: true });
     mkdirSync(join(projectDir, '.mastracode'), { recursive: true });
+    enableMouseSettings(appDataDir, { dialogs: true, input: false });
   },
   async inProcessApp({ projectDir, startMastraCodeApp }): Promise<McE2eInProcessApp> {
     const readyFile = join(projectDir, '.mc-e2e-mcp-selector-ready');
@@ -89,17 +91,20 @@ export const mcpSelectorReconnectScenario = {
       `!node -e 'const fs=require("fs"); const ready=process.env.MC_E2E_MCP_SELECTOR_READY_FILE; if(!ready) throw new Error("missing ready file env"); fs.writeFileSync(ready,"ready"); console.log("MCP_SELECTOR_READY=1");'`,
     );
     await runtime.waitForScreenText(/MCP_SELECTOR_READY=1/i, terminal, 10_000);
-    await runtime.waitForScreenText(/MCP_SELECTOR_READY=1[\s\S]*✓/i, terminal, 10_000);
+    await runtime.waitForScreenText(
+      /• \$ node -e[\s\S]*? \d+(?:ms|\.\ds|m\d+s)\b[\s\S]*MCP_SELECTOR_READY=1/i,
+      terminal,
+      10_000,
+    );
 
     terminal.write('\x15');
     terminal.submit('/mcp');
     await runtime.waitForScreenText(/Manage MCP servers/i, terminal, 8_000);
     await runtime.waitForScreenText(/selector_retry \[http\] failed/i, terminal, 8_000);
-    terminal.write('\r');
+    // Clicks run the same path as Enter: click the server, then its action.
+    await terminal.clickText?.('selector_retry [http] failed');
     await runtime.waitForScreenText(/Reconnect/i, terminal, 8_000);
-    terminal.write('\x1b[B');
-    terminal.write('\x1b[B');
-    terminal.write('\r');
+    await terminal.clickText?.('Reconnect');
     await runtime.waitForScreenText(/selector_retry \[http\] connected.*1 tools/i, terminal, 15_000);
     terminal.write('\x1b');
     await runtime.waitForScreenTextAbsent(/Manage MCP servers/i, terminal, 8_000);
@@ -108,7 +113,11 @@ export const mcpSelectorReconnectScenario = {
       `!node -e 'const fs=require("fs"); const url=process.env.MC_E2E_MCP_SELECTOR_URL; if(!url) throw new Error("missing selector url"); fs.mkdirSync(".mastracode",{recursive:true}); fs.writeFileSync(".mastracode/mcp.json", JSON.stringify({mcpServers:{selector_retry:{url,headers:{"x-mc-e2e":"selector-reconnect"}},selector_reload:{url,headers:{"x-mc-e2e":"selector-reconnect"}}}}, null, 2)); console.log("MCP_SELECTOR_RELOAD_CONFIG=2");'`,
     );
     await runtime.waitForScreenText(/MCP_SELECTOR_RELOAD_CONFIG=2/i, terminal, 10_000);
-    await runtime.waitForScreenText(/MCP_SELECTOR_RELOAD_CONFIG=2[\s\S]*✓/i, terminal, 10_000);
+    await runtime.waitForScreenText(
+      /• \$ node -e[\s\S]*? \d+(?:ms|\.\ds|m\d+s)\b[\s\S]*MCP_SELECTOR_RELOAD_CONFIG=2/i,
+      terminal,
+      10_000,
+    );
 
     terminal.submit('/mcp');
     await runtime.waitForScreenText(/selector_retry \[http\] connected/i, terminal, 8_000);

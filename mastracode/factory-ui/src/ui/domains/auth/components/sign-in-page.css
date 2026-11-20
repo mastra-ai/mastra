@@ -12,9 +12,6 @@
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  color: var(--muted-foreground);
-  font-size: 0.8125rem;
-  font-weight: 450;
 }
 
 .factory-stage-label::before {
@@ -39,13 +36,6 @@
 
 .factory-stage-label:nth-child(4) {
   --factory-stage-color: var(--factory-ship);
-}
-
-.factory-visual-hint::before {
-  width: 1.375rem;
-  height: 1px;
-  background: var(--factory-rail-line);
-  content: '';
 }
 
 @media (width < 31.25rem) {

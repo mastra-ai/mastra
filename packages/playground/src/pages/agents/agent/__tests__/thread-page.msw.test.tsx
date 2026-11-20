@@ -1,16 +1,20 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto';
+import {
+  readThreadDraft,
+  writeThreadDraft,
+} from '@mastra/playground-ui/domains/agents/chat/drafts/thread-draft-storage';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { deleteDB, openDB } from 'idb';
 import { http, HttpResponse } from 'msw';
 import { createContext, useContext, useEffect, useImperativeHandle, useState } from 'react';
 import type { ReactNode, Ref } from 'react';
 import { createMemoryRouter, Outlet, RouterProvider, useLocation } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentSession from '../session';
 import AgentThread from '../thread';
 import {
@@ -30,9 +34,8 @@ import {
   preferenceThread,
 } from './fixtures/thread-preferences';
 import { emptyHistory, liveChunks, staleHistory } from './fixtures/thread-recovery';
+import { emptyThreadTracesList } from './fixtures/thread-traces';
 import { AgentLayout } from '@/domains/agents/agent-layout';
-import { readThreadDraft } from '@/domains/conversation/context/thread-draft-storage';
-import { emptyThreadTracesList } from '@/domains/traces/components/__tests__/fixtures/thread-traces';
 import { agentIndexLoader, agentThreadsIndexLoader, legacyAgentChatLoader, paths } from '@/lib/app-routing';
 import { Link } from '@/lib/link';
 import { server } from '@/test/msw-server';
@@ -303,7 +306,7 @@ afterEach(async () => {
   window.sessionStorage.clear();
 });
 
-async function composerInput(placeholder = 'Enter your message...') {
+async function composerInput(placeholder = 'Enter your message') {
   await screen.findByPlaceholderText(placeholder);
   await waitFor(() => expect(screen.queryByText('Restoring draft…')).toBeNull());
   return screen.getByPlaceholderText<HTMLTextAreaElement>(placeholder);
@@ -356,7 +359,7 @@ describe('Standalone thread page', () => {
       const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
       renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`, queryClient);
       try {
-        await screen.findByText('OpenAI');
+        await screen.findByRole('button', { name: /GPT-5 Mini/ });
         await waitFor(() => expect(push).toBeDefined());
         await act(async () => push?.());
         await waitFor(() => expect(document.body.textContent).toContain('Live response survives'), SSE_TIMEOUT);
@@ -560,6 +563,30 @@ describe('Standalone thread page', () => {
       },
     );
   });
+  describe('when an unauthenticated user returns to an existing thread', () => {
+    it('does not restore an unscoped anonymous draft from a previous session', async () => {
+      installHandlers();
+      const key = JSON.stringify([BASE_URL, null, null, AGENT_ID, THREAD_ID]);
+      await writeThreadDraft(key, { text: 'Someone else’s unfinished recipe', attachments: [] });
+
+      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+
+      expect((await composerInput()).value).toBe('');
+    });
+
+    it('restores its own draft after reloading in the same browser session', async () => {
+      installHandlers();
+      const path = `/agents/${AGENT_ID}/threads/${THREAD_ID}`;
+      renderAt(path);
+      fireEvent.change(await composerInput(), { target: { value: 'My unfinished recipe' } });
+      cleanup();
+
+      renderAt(path);
+
+      expect((await composerInput()).value).toBe('My unfinished recipe');
+    });
+  });
+
   describe('when a saved draft cannot be decoded', () => {
     it('starts empty and saves subsequent edits without recovery controls', async () => {
       installHandlers();
@@ -584,6 +611,20 @@ describe('Standalone thread page', () => {
     });
   });
 
+  describe('when a saved draft is still being restored', () => {
+    it('ignores files dragged over the page', async () => {
+      installHandlers();
+      renderAt(`/agents/${AGENT_ID}/threads/new`);
+      await screen.findByText('Restoring draft…');
+      const event = new Event('dragenter', { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'dataTransfer', { value: { types: ['Files'], files: [] } });
+      act(() => {
+        fireEvent(window, event);
+      });
+      expect(screen.queryByText('Drop to attach')).toBeNull();
+    });
+  });
+
   describe('when authentication status cannot be checked', () => {
     it.each([false, true])(
       'blocks fallback composing and restores the saved draft after recovery (retryOnMount=%s)',
@@ -597,7 +638,7 @@ describe('Standalone thread page', () => {
         const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount } } });
         renderAt(path, client);
         await screen.findByText('Failed to check authentication');
-        expect(screen.queryByPlaceholderText('Enter your message...')).toBeNull();
+        expect(screen.queryByPlaceholderText('Enter your message')).toBeNull();
         server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false })));
         await act(async () => {
           await client.invalidateQueries({ queryKey: ['auth', 'capabilities'] });
@@ -685,9 +726,8 @@ describe('Standalone thread page', () => {
           renderAt(path);
           fireEvent.change(await composerInput(), { target: { value: 'Read my attachment' } });
           fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
-          fireEvent.click(screen.getByRole('button', { name: 'Add a local file' }));
-          const picker = document.querySelector('input[type=file]');
-          if (!(picker instanceof HTMLInputElement)) throw new Error('File picker did not open');
+          fireEvent.click(await screen.findByRole('menuitem', { name: 'Files' }));
+          const picker = screen.getByLabelText('Files');
           const contents = 'name,note\r\nZoë,"hello\nworld"\r\n';
           fireEvent.change(picker, { target: { files: [new File([contents], 'leads.csv', { type: 'text/csv' })] } });
           await screen.findByRole('button', { name: 'Preview leads.csv' }, ATTACHMENT_TIMEOUT);
@@ -707,9 +747,8 @@ describe('Standalone thread page', () => {
           if (editWhilePreparing) {
             fireEvent.change(input, { target: { value: 'Keep the next question' } });
             fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
-            fireEvent.click(screen.getByRole('button', { name: 'Add a local file' }));
-            const nextPicker = document.querySelector('input[type=file]');
-            if (!(nextPicker instanceof HTMLInputElement)) throw new Error('File picker did not open');
+            fireEvent.click(await screen.findByRole('menuitem', { name: 'Files' }));
+            const nextPicker = screen.getByLabelText('Files');
             fireEvent.change(nextPicker, {
               target: { files: [new File(['Next file'], 'next.txt', { type: 'text/plain' })] },
             });
@@ -747,7 +786,7 @@ describe('Standalone thread page', () => {
       fireEvent.change(input, { target: { value: 'Pasta draft' } });
       await act(() => router.navigate(`/agents/${AGENT_ID}/threads/thread-2`));
       expect((await composerInput()).value).toBe('');
-      fireEvent.change(screen.getByPlaceholderText('Enter your message...'), { target: { value: 'Sushi draft' } });
+      fireEvent.change(screen.getByPlaceholderText('Enter your message'), { target: { value: 'Sushi draft' } });
       await act(() => router.navigate(`/agents/${AGENT_ID}/threads/${THREAD_ID}`));
       expect((await composerInput()).value).toBe('Pasta draft');
     });
@@ -863,7 +902,9 @@ describe('Standalone thread page', () => {
       expect(input.value).toBe('');
       fireEvent.change(input, { target: { value: 'Keep this follow-up' } });
       await act(async () => response.finish());
-      await waitFor(() => expect(router.state.location.pathname).not.toContain('/threads/new'));
+      // The router commits navigations in a transition, so wait for the created thread to render,
+      // not just for the router state, before reading its composer or leaving it.
+      await waitFor(() => expect(screen.getByTestId('location-probe').textContent).not.toContain('/threads/new'));
       const createdPath = router.state.location.pathname;
       expect((await composerInput()).value).toBe('Keep this follow-up');
       await act(() => router.navigate(`/agents/${AGENT_ID}/threads/new`));
@@ -899,17 +940,9 @@ describe('Standalone thread page', () => {
 
     await screen.findByText('Tonight we cook carbonara.');
     // Provider + model pill (needs PlaygroundModelProvider, which this page must supply itself).
-    expect(await screen.findByText('OpenAI')).not.toBeNull();
-    expect(await screen.findByText('gpt-5-mini')).not.toBeNull();
+    expect(await screen.findByRole('button', { name: /^Model:.*GPT-5 Mini$/ })).not.toBeNull();
+    expect(await screen.findByText('GPT-5 Mini')).not.toBeNull();
     expect(await screen.findByTestId('composer-model-settings-trigger')).not.toBeNull();
-  });
-
-  it('shows the thread list next to the chat', async () => {
-    installHandlers();
-    renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
-
-    await screen.findByText('Tonight we cook carbonara.');
-    expect(await screen.findByText('Sushi ideas')).not.toBeNull();
   });
 
   it('lets the user hide the threads panel and bring it back from the page edge', async () => {
@@ -988,7 +1021,7 @@ describe('Standalone thread page', () => {
   });
 
   describe('when the thread list is still loading', () => {
-    it('shows a compact skeleton in the sidebar, replaced by the threads once loaded', async () => {
+    it('keeps the sidebar header in place without a skeleton, then fills in the threads', async () => {
       installHandlers();
       let releaseThreads!: () => void;
       const gate = new Promise<void>(resolve => (releaseThreads = resolve));
@@ -1001,11 +1034,56 @@ describe('Standalone thread page', () => {
 
       renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
 
-      expect(await screen.findByTestId('agent-route-sidebar-skeleton')).not.toBeNull();
+      expect(await screen.findByRole('link', { name: /New Thread/ })).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Hide threads panel' })).not.toBeNull();
+      expect(screen.queryByTestId('agent-route-sidebar-skeleton')).toBeNull();
+      expect(screen.queryByText(/Your conversations will appear here/)).toBeNull();
 
       releaseThreads();
       expect(await screen.findByText('Sushi ideas')).not.toBeNull();
-      expect(screen.queryByTestId('agent-route-sidebar-skeleton')).toBeNull();
+    });
+  });
+
+  describe('when the agent is still loading', () => {
+    it('keeps the threads panel in place next to the chat skeleton', async () => {
+      installHandlers();
+      let releaseAgent!: () => void;
+      const gate = new Promise<void>(resolve => (releaseAgent = resolve));
+      server.use(
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, async () => {
+          await gate;
+          return HttpResponse.json(agentResponse);
+        }),
+      );
+
+      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+
+      expect(await screen.findByTestId('agent-thread-skeleton')).not.toBeNull();
+      expect(screen.getByRole('link', { name: /New Thread/ })).not.toBeNull();
+
+      releaseAgent();
+      expect(await screen.findByText('Sushi ideas')).not.toBeNull();
+    });
+  });
+
+  describe('when the user reloads an agent without threads after opening its threads panel', () => {
+    it('keeps the threads panel open', async () => {
+      installHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/memory/threads`, () =>
+          HttpResponse.json({ ...threadsResponse, threads: [], total: 0 }),
+        ),
+      );
+      window.localStorage.setItem(
+        `react-resizable-panels:agent-layout-v6-${AGENT_ID}`,
+        JSON.stringify({ 'left-slot': 300 }),
+      );
+
+      renderAt(`/agents/${AGENT_ID}/threads/new`);
+
+      expect(await screen.findByText(/Your conversations will appear here/)).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Hide threads panel' })).not.toBeNull();
+      expect(screen.queryByRole('button', { name: 'Expand panel' })).toBeNull();
     });
   });
 
@@ -1014,8 +1092,8 @@ describe('Standalone thread page', () => {
     renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
 
     await screen.findByText('Tonight we cook carbonara.');
-    expect(screen.getByRole('tab', { name: 'Chat' }).getAttribute('aria-selected')).toBe('true');
-    expect(screen.queryByRole('tab', { name: 'Overview' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Chat' }).getAttribute('aria-current')).toBe('page');
+    expect(screen.queryByRole('link', { name: 'Overview' })).toBeNull();
   });
 
   it('highlights the Chat tab on /threads/new', async () => {
@@ -1023,7 +1101,7 @@ describe('Standalone thread page', () => {
     renderAt(`/agents/${AGENT_ID}/threads/new`);
 
     await screen.findByText('Sushi ideas');
-    expect(screen.getByRole('tab', { name: 'Chat' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('link', { name: 'Chat' }).getAttribute('aria-current')).toBe('page');
   });
 
   it('navigates to another thread when clicked in the list', async () => {
@@ -1041,15 +1119,6 @@ describe('Standalone thread page', () => {
   it('redirects /agents/:agentId/threads to /threads/new', async () => {
     installHandlers();
     renderAt(`/agents/${AGENT_ID}/threads`);
-
-    await waitFor(() =>
-      expect(screen.getByTestId('location-probe').textContent).toBe(`/agents/${AGENT_ID}/threads/new`),
-    );
-  });
-
-  it('redirects bare /agents/:agentId to the new-thread chat', async () => {
-    installHandlers();
-    renderAt(`/agents/${AGENT_ID}`);
 
     await waitFor(() =>
       expect(screen.getByTestId('location-probe').textContent).toBe(`/agents/${AGENT_ID}/threads/new`),
@@ -1141,9 +1210,10 @@ describe('Standalone thread page', () => {
       renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
       await screen.findByText('Sushi ideas');
 
-      const deleteButtons = screen.getAllByRole('button', { name: /delete thread/i });
-      expect(deleteButtons).toHaveLength(2);
-      fireEvent.click(deleteButtons[1]);
+      const menus = screen.getAllByRole('button', { name: 'Thread actions' });
+      expect(menus).toHaveLength(2);
+      fireEvent.click(menus[1]);
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
 
       // Confirmation dialog gates the deletion.
       expect(await screen.findByText('Are you absolutely sure?')).not.toBeNull();
@@ -1166,7 +1236,8 @@ describe('Standalone thread page', () => {
       renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
       await screen.findByText('Pasta night');
 
-      fireEvent.click(screen.getAllByRole('button', { name: /delete thread/i })[0]);
+      fireEvent.click(screen.getAllByRole('button', { name: 'Thread actions' })[0]);
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
       fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
 
       await waitFor(() =>
@@ -1191,7 +1262,74 @@ describe('Standalone thread page', () => {
       renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
       await screen.findByText('Sushi ideas');
 
-      expect(screen.queryByRole('button', { name: /delete thread/i })).toBeNull();
+      fireEvent.click(screen.getAllByRole('button', { name: 'Thread actions' })[1]);
+      expect(await screen.findByRole('menuitem', { name: 'Pin' })).not.toBeNull();
+      expect(screen.queryByRole('menuitem', { name: 'Delete' })).toBeNull();
+    });
+  });
+
+  describe('thread rename', () => {
+    async function renameSushiThread(title: string) {
+      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+      await screen.findByText('Sushi ideas');
+      fireEvent.click(screen.getAllByRole('button', { name: 'Thread actions' })[1]);
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
+      const dialog = await screen.findByRole('dialog');
+      fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: title } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    }
+
+    describe('when the server accepts the rename', () => {
+      it('shows the new title in the thread list', async () => {
+        installHandlers();
+        let renamed = false;
+        server.use(
+          http.get(`${BASE_URL}/api/memory/threads`, () =>
+            HttpResponse.json(
+              renamed
+                ? {
+                    ...threadsResponse,
+                    threads: threadsResponse.threads.map(t => (t.id === 'thread-2' ? { ...t, title: 'Omakase' } : t)),
+                  }
+                : threadsResponse,
+            ),
+          ),
+          http.patch(`${BASE_URL}/api/memory/threads/thread-2`, async ({ request }) => {
+            expect(await request.json()).toMatchObject({ title: 'Omakase' });
+            renamed = true;
+            const thread = threadsResponse.threads.find(t => t.id === 'thread-2');
+            return HttpResponse.json({ ...thread, title: 'Omakase' });
+          }),
+        );
+
+        await renameSushiThread('Omakase');
+
+        expect(await screen.findByText('Omakase')).not.toBeNull();
+        expect(screen.queryByText('Sushi ideas')).toBeNull();
+      });
+    });
+
+    describe('when the server rejects the rename', () => {
+      it('keeps the previous title', async () => {
+        installHandlers();
+        const rejected = vi.fn();
+        server.use(
+          http.patch(`${BASE_URL}/api/memory/threads/thread-2`, () => {
+            rejected();
+            return HttpResponse.json({ error: 'boom' }, { status: 500 });
+          }),
+        );
+
+        await renameSushiThread('Omakase');
+
+        await waitFor(() => expect(rejected).toHaveBeenCalled(), { timeout: 5000 });
+        await waitFor(
+          () => expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(false),
+          { timeout: 5000 },
+        );
+        expect(screen.getByRole('dialog')).not.toBeNull();
+        expect(screen.getAllByText('Sushi ideas').length).toBeGreaterThan(0);
+      });
     });
   });
 
@@ -1228,14 +1366,14 @@ describe('Standalone thread page', () => {
       const router = renderAt(`/agents/${AGENT_ID}/threads/new`);
       // The switcher lists only the agent's own model until the providers query resolves.
       await waitFor(() => expect(providersServed).toHaveBeenCalled());
-      fireEvent.click(await screen.findByText('gpt-5-mini'));
-      fireEvent.click(await screen.findByRole('option', { name: /gpt-4o-mini/ }));
+      fireEvent.click(await screen.findByRole('button', { name: /^Model:.*GPT-5 Mini$/ }));
+      fireEvent.click(await screen.findByRole('option', { name: /GPT-4o Mini/ }));
       fireEvent.click(screen.getByTestId('composer-model-settings-trigger'));
       fireEvent.click(await screen.findByRole('radio', { name: 'Stream' }));
       // Base UI hides slider thumbs until layout measurement, which jsdom cannot provide.
       const temperature = screen.getAllByRole('slider', { hidden: true })[0];
       fireEvent.change(temperature, { target: { value: '0.2' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Advanced Settings' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Advanced settings' }));
       fireEvent.change(await screen.findByLabelText('Max Steps'), { target: { value: '8' } });
       fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
       fireEvent.keyDown(screen.getByTestId('composer-model-settings-trigger'), { key: 'Escape' });
@@ -1253,14 +1391,14 @@ describe('Standalone thread page', () => {
           modelSettings: expect.objectContaining({ temperature: 0.2 }),
         }),
       );
-      expect(await screen.findByText('gpt-4o-mini')).toBeTruthy();
+      expect(await screen.findByText('GPT-4o Mini')).toBeTruthy();
       await act(() => router.navigate(`/agents/${AGENT_ID}/threads/thread-2`));
-      expect(await screen.findByText('gpt-5-mini')).toBeTruthy();
+      expect(await screen.findByText('GPT-5 Mini')).toBeTruthy();
       await act(() => router.navigate(savedPath));
-      expect(await screen.findByText('gpt-4o-mini')).toBeTruthy();
+      expect(await screen.findByText('GPT-4o Mini')).toBeTruthy();
       cleanup();
       renderAt(savedPath);
-      expect(await screen.findByText('gpt-4o-mini')).toBeTruthy();
+      expect(await screen.findByText('GPT-4o Mini')).toBeTruthy();
       fireEvent.click(screen.getByTestId('composer-model-settings-trigger'));
       expect((await screen.findByRole('radio', { name: 'Stream' })).getAttribute('aria-checked')).toBe('true');
       fireEvent.keyDown(screen.getByTestId('composer-model-settings-trigger'), { key: 'Escape' });
@@ -1276,7 +1414,7 @@ describe('Standalone thread page', () => {
           modelSettings: expect.objectContaining({ temperature: 0.2 }),
         }),
       );
-    });
+    }, 15_000);
   });
 
   describe('when the current agent no longer exists', () => {
@@ -1306,7 +1444,7 @@ describe('Standalone thread page', () => {
       expect(screen.getByText(/may have been renamed or removed/)).not.toBeNull();
       expect(screen.getByRole('button', { name: 'Reload' })).not.toBeNull();
       expect(screen.getByRole('link', { name: 'Choose agent' })).not.toBeNull();
-      expect(screen.queryByPlaceholderText('Enter your message...')).toBeNull();
+      expect(screen.queryByPlaceholderText('Enter your message')).toBeNull();
     });
 
     it('lets the user leave the dead chat and choose an agent', async () => {

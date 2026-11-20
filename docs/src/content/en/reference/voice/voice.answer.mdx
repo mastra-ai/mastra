@@ -68,7 +68,7 @@ Returns a `Promise<void>` that resolves when the response has been triggered.
 ## Notes
 
 - This method is only implemented by real-time voice providers that support speech-to-speech capabilities
-- If called on a voice provider that doesn't support this functionality, it will log a warning and resolve immediately
+- If called on a voice provider that doesn't support this functionality, it will log a debug message and resolve immediately
 - The response audio will typically be emitted through the 'speaking' event rather than returned directly
 - For providers that support it, you can use this method to send a specific response instead of having the AI generate one
 - This method is commonly used in conjunction with `send()` to create a conversational flow

@@ -1,11 +1,11 @@
 import type { ReviewSummaryResponse } from '@mastra/client-js';
+import type { AuthCapabilities } from '@mastra/react/hooks/auth';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { noMcpServers, noWorkspaces } from './fixtures/nav-more';
 import { authHandler, BASE_URL, builderHandler, renderSidebar, systemPackagesHandler } from './render-sidebar';
-import type { AuthCapabilities } from '@/domains/auth/types';
 import { server } from '@/test/msw-server';
 
 const authDisabledCapabilities = {
@@ -46,27 +46,33 @@ describe('AppSidebar shell', () => {
       expect(screen.getByRole('contentinfo')).toBeTruthy();
     });
 
-    it('exposes the search trigger with the keyboard shortcut', async () => {
+    it('shows the keyboard shortcut in the search tooltip, not beside the icon', async () => {
       renderSidebar();
 
       const trigger = await screen.findByRole('button', { name: 'Search and navigate' });
-      expect(trigger.textContent).toMatch(/K$/);
+      expect(trigger.querySelector('kbd')).toBeNull();
+
+      fireEvent.focus(trigger);
+
+      const tooltip = await screen.findByRole('tooltip');
+      expect(tooltip.querySelector('kbd')?.textContent).toMatch(/K$/);
     });
   });
 
   describe('when the sidebar is collapsed', () => {
-    it('marks the command header as collapsed so the search trigger is hidden', async () => {
+    it('hides the search trigger and keeps the toggle at the top to expand again', async () => {
       renderSidebar();
 
-      const trigger = await screen.findByRole('button', { name: 'Search and navigate' });
-      const commandHeader = trigger.closest('header');
-      expect(commandHeader?.getAttribute('data-state')).toBe('default');
+      await screen.findByRole('button', { name: 'Search and navigate' });
 
       fireEvent.click(screen.getByRole('button', { name: 'Toggle sidebar' }));
 
       await waitFor(() => {
-        expect(commandHeader?.getAttribute('data-state')).toBe('collapsed');
+        expect(screen.queryByRole('button', { name: 'Search and navigate' })).toBeNull();
       });
+      const toggle = screen.getByRole('button', { name: 'Toggle sidebar' });
+      expect(toggle.getAttribute('aria-expanded')).toBe('false');
+      expect(toggle.closest('header')).toBeTruthy();
     });
   });
 });

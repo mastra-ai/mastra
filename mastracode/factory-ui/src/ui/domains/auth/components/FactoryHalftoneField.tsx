@@ -1,3 +1,4 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEffect, useRef } from 'react';
 
 import './sign-in-page.css';
@@ -64,7 +65,7 @@ function densityAt(lane: number, laneProgress: number, verticalProgress: number,
  * lanes (Intake → Build → Review → Ship).
  *
  * - `panel` (default): the full sign-in visual — a bordered side panel with
- *   stage labels, a hover spotlight and the "move across the factory" hint.
+ *   stage labels and a hover spotlight.
  * - `backdrop`: the same animated field with the chrome stripped, sized to fill
  *   its positioned parent and faded toward the center so foreground content
  *   stays legible. Used behind the Factory onboarding flow.
@@ -263,15 +264,20 @@ export function FactoryHalftoneField({ variant = 'panel' }: { variant?: 'panel' 
         className="pointer-events-none absolute top-6 right-0 left-0 z-2 grid grid-cols-4 lg:top-11"
         aria-hidden="true"
       >
-        <span className="factory-stage-label">Intake</span>
-        <span className="factory-stage-label">Build</span>
-        <span className="factory-stage-label">Review</span>
-        <span className="factory-stage-label">Ship</span>
+        <Txt as="span" variant="body-sm" tone="muted" className="factory-stage-label">
+          Intake
+        </Txt>
+        <Txt as="span" variant="body-sm" tone="muted" className="factory-stage-label">
+          Build
+        </Txt>
+        <Txt as="span" variant="body-sm" tone="muted" className="factory-stage-label">
+          Review
+        </Txt>
+        <Txt as="span" variant="body-sm" tone="muted" className="factory-stage-label">
+          Ship
+        </Txt>
       </div>
       <canvas ref={canvasRef} className="absolute inset-0 size-full cursor-crosshair" aria-hidden="true" />
-      <span className="factory-visual-hint text-meta text-placeholder pointer-events-none absolute right-0 bottom-8 hidden items-center gap-2 lg:inline-flex">
-        Move across the factory
-      </span>
     </div>
   );
 }

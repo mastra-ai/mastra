@@ -1,4 +1,5 @@
-import { PlatformApiClient, PlatformApiError } from '../platform/api-client.js';
+import type { ConnectClient } from '@mastra/connect';
+import { MastraConnectError } from '@mastra/connect';
 
 export const GITLAB_PROJECTS_PAGE_SIZE = 100;
 export const GITLAB_ISSUES_PAGE_SIZE = 30;
@@ -161,6 +162,16 @@ export interface GitLabMember {
   access_level?: number;
 }
 
+export type GitLabCommitStatusState = 'pending' | 'running' | 'success' | 'failed' | 'canceled' | 'skipped';
+
+export interface GitLabCommitStatus {
+  id: number;
+  sha: string;
+  name: string;
+  status: GitLabCommitStatusState;
+  target_url: string | null;
+}
+
 export interface GitLabApiClientConfig {
   baseUrl: string;
   accessToken: string;
@@ -168,7 +179,8 @@ export interface GitLabApiClientConfig {
 }
 
 export interface PlatformGitLabApiClientConfig {
-  client: PlatformApiClient;
+  /** Reaches GitLab through the connection proxy: a `ConnectClient`, or a Platform integration's binding. */
+  client: Pick<ConnectClient, 'proxy'>;
   connectionId: string;
 }
 
@@ -489,6 +501,26 @@ export class GitLabApiClient {
     );
   }
 
+  async setCommitStatus(
+    projectId: string,
+    sha: string,
+    status: { state: GitLabCommitStatusState; name: string; ref?: string; description?: string; targetUrl?: string },
+  ): Promise<GitLabCommitStatus> {
+    return this.#request<GitLabCommitStatus>(
+      'POST',
+      `/api/v4/projects/${encodeURIComponent(projectId)}/statuses/${encodeURIComponent(sha)}`,
+      {
+        body: {
+          state: status.state,
+          name: status.name,
+          ref: status.ref,
+          description: status.description,
+          target_url: status.targetUrl,
+        },
+      },
+    );
+  }
+
   async createMergeRequestDiscussion(
     projectId: string,
     mergeRequestIid: number,
@@ -578,17 +610,13 @@ export class GitLabApiClient {
     projectId: string,
     options: { query?: string; page?: number } = {},
   ): Promise<GitLabMember[]> {
-    return this.#request<GitLabMember[]>(
-      'GET',
-      `/api/v4/projects/${encodeURIComponent(projectId)}/members/all`,
-      {
-        query: {
-          query: options.query,
-          page: options.page ?? 1,
-          per_page: GITLAB_DISCUSSIONS_PAGE_SIZE,
-        },
+    return this.#request<GitLabMember[]>('GET', `/api/v4/projects/${encodeURIComponent(projectId)}/members/all`, {
+      query: {
+        query: options.query,
+        page: options.page ?? 1,
+        per_page: GITLAB_DISCUSSIONS_PAGE_SIZE,
       },
-    );
+    });
   }
 
   async #request<T>(
@@ -611,11 +639,20 @@ export class GitLabApiClient {
     });
 
     if (this.#platform) {
-      const proxyPath = `/v2/connections/${encodeURIComponent(this.#platform.connectionId)}/proxy${apiPath}${suffix}`;
       try {
-        return await this.#platform.client.request<T>(method, proxyPath, options.body);
+        const data = await this.#platform.client.proxy(this.#platform.connectionId, {
+          method,
+          path: `${apiPath}${suffix}`,
+          body: options.body,
+        });
+        return (data ?? undefined) as T;
       } catch (error) {
-        if (error instanceof PlatformApiError) throw new GitLabApiError(error.message, error.status);
+        if (error instanceof MastraConnectError && error.status !== undefined) {
+          throw new GitLabApiError(error.detail ?? error.message, error.status);
+        }
+        // A binding reports a connection that needs reconnecting as an error with an HTTP status.
+        const status = (error as { status?: unknown } | null)?.status;
+        if (error instanceof Error && typeof status === 'number') throw new GitLabApiError(error.message, status);
         throw new GitLabApiError(error instanceof Error ? error.message : String(error), null);
       }
     }

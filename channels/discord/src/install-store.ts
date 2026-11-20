@@ -12,6 +12,14 @@ interface DiscordInstallationData {
   displayName?: string;
   commands?: DiscordCommand[];
   commandVersions?: Record<string, string>;
+  /** Pending-invite reconcile baseline — see {@link DiscordInstallation.guildSnapshot}. */
+  guildSnapshot?: string[];
+  /** ISO timestamp of the invite flow that owns the baseline — see {@link DiscordInstallation.snapshotAt}. */
+  snapshotAt?: string;
+  /** Application the baseline was taken against — see {@link DiscordInstallation.snapshotApplicationId}. */
+  snapshotApplicationId?: string;
+  /** Explicit invite target — see {@link DiscordInstallation.targetGuildId}. */
+  targetGuildId?: string;
 }
 
 /** App-config fields serialized into the platform `ChannelConfig.data` blob. */
@@ -164,6 +172,10 @@ export class DiscordInstallStore {
       displayName: install.displayName,
       commands: install.commands,
       commandVersions: install.commandVersions,
+      guildSnapshot: install.guildSnapshot,
+      snapshotAt: install.snapshotAt?.toISOString(),
+      snapshotApplicationId: install.snapshotApplicationId,
+      targetGuildId: install.targetGuildId,
     };
     return {
       id: install.id,
@@ -189,6 +201,10 @@ export class DiscordInstallStore {
       commands: data.commands,
       commandVersions: data.commandVersions,
       installedAt: record.createdAt,
+      guildSnapshot: data.guildSnapshot,
+      snapshotAt: data.snapshotAt ? new Date(data.snapshotAt) : undefined,
+      snapshotApplicationId: data.snapshotApplicationId,
+      targetGuildId: data.targetGuildId,
     };
   }
 }

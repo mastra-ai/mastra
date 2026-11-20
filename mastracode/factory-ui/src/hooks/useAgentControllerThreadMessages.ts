@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { hashKey, queryOptions, useQuery } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../api/keys';
@@ -19,12 +19,70 @@ import { createAgentControllerClient } from '../ui/domains/chat/services/agentCo
 const DEFAULT_INITIAL_MESSAGE_LIMIT = INITIAL_THREAD_MESSAGE_LIMIT;
 const LOAD_MORE_PAGE_SIZE = INITIAL_THREAD_MESSAGE_LIMIT;
 
-interface UseAgentControllerThreadMessagesArgs {
+/** How often to re-read a session thread the server has not created yet. */
+const MISSING_THREAD_REFETCH_MS = 2_000;
+
+function isNotFound(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && (error as { status?: unknown }).status === 404;
+}
+
+/**
+ * Message windows of session threads the server has not created yet, by query
+ * hash. Kept beside the cache rather than in one hook so a read the route
+ * loader started still schedules the re-read once the page mounts.
+ */
+const missingSessionThreads = new Set<string>();
+
+interface ThreadMessagesQueryArgs {
   agentControllerId: string;
-  resourceId: string;
-  scope?: string;
-  threadId?: string;
+  sessionId: string;
+  threadId: string | undefined;
   baseUrl?: string;
+  limit?: number;
+  /**
+   * The thread is the session's own thread. The server creates it only when
+   * the controller session boots, which can trail opening the session by as
+   * long as its environment takes to check out, so a 404 here means "not
+   * created yet": it reads as an empty history (the live stream fills the
+   * transcript) and is re-read until the thread exists.
+   */
+  isSessionThread?: boolean;
+}
+
+/**
+ * A thread's newest message window. The read is keyed by session and thread
+ * id alone: the server resolves the session's memory resource itself, so it
+ * can start before the session's metadata has loaded.
+ */
+export function threadMessagesQueryOptions({
+  agentControllerId,
+  sessionId,
+  threadId,
+  baseUrl = '',
+  limit = DEFAULT_INITIAL_MESSAGE_LIMIT,
+  isSessionThread = false,
+}: ThreadMessagesQueryArgs) {
+  return queryOptions({
+    queryKey: queryKeys.agentControllerThreadMessages(agentControllerId, sessionId, threadId, limit),
+    queryFn: async ({ queryKey }) => {
+      const { session } = createAgentControllerClient({ agentControllerId, sessionId, baseUrl });
+      const hash = hashKey(queryKey);
+      try {
+        const messages = await session!.listMessages(threadId!, limit);
+        missingSessionThreads.delete(hash);
+        return messages;
+      } catch (error) {
+        if (!isSessionThread || !isNotFound(error)) throw error;
+        missingSessionThreads.add(hash);
+        return [];
+      }
+    },
+    refetchInterval: query => (missingSessionThreads.has(query.queryHash) ? MISSING_THREAD_REFETCH_MS : false),
+  });
+}
+
+interface UseAgentControllerThreadMessagesArgs extends Omit<ThreadMessagesQueryArgs, 'threadId' | 'limit'> {
+  threadId?: string;
   enabled?: boolean;
   initialLimit?: number;
   pageSize?: number;
@@ -32,18 +90,17 @@ interface UseAgentControllerThreadMessagesArgs {
 
 export function useAgentControllerThreadMessages({
   agentControllerId,
-  resourceId,
-  scope,
+  sessionId,
   threadId,
   baseUrl = '',
   enabled = true,
   initialLimit = DEFAULT_INITIAL_MESSAGE_LIMIT,
   pageSize = LOAD_MORE_PAGE_SIZE,
+  isSessionThread = false,
 }: UseAgentControllerThreadMessagesArgs) {
   const { session } = createAgentControllerClient({
     agentControllerId,
-    resourceId,
-    scope,
+    sessionId,
     baseUrl,
     enabled,
   });
@@ -66,11 +123,10 @@ export function useAgentControllerThreadMessages({
   }
 
   // Prefix without the limit — used to detect "same thread" for placeholder data.
-  const threadKey = queryKeys.agentControllerThreadMessages(agentControllerId, resourceId, threadId);
+  const threadKey = queryKeys.agentControllerThreadMessages(agentControllerId, sessionId, threadId);
 
   const query = useQuery({
-    queryKey: queryKeys.agentControllerThreadMessages(agentControllerId, resourceId, threadId, limit),
-    queryFn: () => session!.listMessages(threadId!, limit),
+    ...threadMessagesQueryOptions({ agentControllerId, sessionId, threadId, baseUrl, limit, isSessionThread }),
     enabled: enabled && Boolean(session) && Boolean(threadId),
     refetchOnWindowFocus: false,
     // Live stream only reaches a mounted transcript — re-entering the route must

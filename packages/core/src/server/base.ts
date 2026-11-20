@@ -24,6 +24,13 @@ import { RegisteredLogger } from '../logger/constants';
 export abstract class MastraServerBase<TApp = unknown> extends MastraBase {
   #app: TApp;
 
+  /**
+   * True for servers that keep request bodies from setting agent scopes (the `scopes` option and
+   * the `mastra__scopes` request context key). While a registered server does not set it, agents
+   * refuse scopes from the call and the request context, and accept only their own `scopes` option.
+   */
+  declare readonly reservesAgentScopes?: boolean;
+
   constructor({ app, name }: { app: TApp; name?: string }) {
     super({ component: RegisteredLogger.SERVER, name: name ?? 'Server' });
     this.#app = app;

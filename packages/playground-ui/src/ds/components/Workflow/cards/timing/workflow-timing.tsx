@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { WorkflowStepCardViewProps } from '../../types';
 import { ClockDial, DurationDial } from './workflow-time-dial';
 import type { DurationUnit } from './workflow-time-dial';
+import { Txt } from '@/ds/components/Txt';
 import { formatDate, formatShortDate } from '@/utils/date-format';
 import { formatDuration } from '@/utils/duration';
 
@@ -28,10 +29,14 @@ function TimingReading({
   return (
     <span className="mt-1 flex min-h-27 items-center justify-between gap-1 text-foreground">
       <span className="z-10 flex min-w-0 flex-col gap-2">
-        <span className="flex items-baseline gap-1 text-display leading-none tracking-tighter whitespace-nowrap tabular-nums">
+        <Txt
+          as="span"
+          variant="display"
+          className="flex items-baseline gap-1 leading-none tracking-tighter whitespace-nowrap tabular-nums"
+        >
           {value}
           {unit && <small className="text-meta tracking-normal text-muted-foreground">{unit}</small>}
-        </span>
+        </Txt>
         <span className={captionClasses}>{caption}</span>
       </span>
       {dial}

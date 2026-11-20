@@ -43,30 +43,7 @@ const semanticTokens = [
   'muted-foreground',
   'placeholder',
   'border',
-  'ring',
-  // The only chromatic pair in the contract. Everything else here is neutral.
-  'destructive',
-  'destructive-foreground',
-] as const;
-
-const deferredSemanticTokens = [
-  'card-foreground',
-  'popover-foreground',
-  'tertiary-foreground',
-  'disabled-foreground',
-  'contrast-foreground',
-  'secondary',
-  'secondary-foreground',
-  'accent',
-  'accent-foreground',
-  'input',
-  'sidebar-foreground',
-  'sidebar-accent',
-  'sidebar-accent-foreground',
-  'sidebar-border',
-  'sidebar-ring',
-  'sidebar-divider',
-  'selected',
+  'border-focus',
 ] as const;
 
 const semanticAliases = {
@@ -78,7 +55,6 @@ const semanticAliases = {
   foreground: 'gray-10',
   'muted-foreground': 'gray-8',
   placeholder: 'gray-7',
-  ring: 'border-focus',
 } as const;
 
 const parseVariables = (css: string) => {
@@ -187,9 +163,39 @@ describe('theme.css export', () => {
     expect(themeCss).not.toMatch(/\.bg-sidebar\b/);
   });
 
-  it('overrides the green palette the native v4 way (initial + remap)', () => {
-    expect(themeCss).toContain('--color-green-*: initial;');
-    expect(themeCss).toContain('--color-green-500: var(--brand-green-500);');
+  it('keeps the Mastra brand palette fixed across theme modes', () => {
+    const brand = parseVariables(blocksOf(themeCss, '@theme static'));
+    for (const hue of ['green', 'orange', 'pink', 'purple', 'blue', 'red', 'yellow']) {
+      expect(brand.get(`color-brand-${hue}`)).toMatch(/^#[0-9a-f]{6}$/);
+    }
+    expect(lightTheme).not.toMatch(/--color-brand-/);
+  });
+
+  it('generates the badge and status utilities', async () => {
+    const compiler = await compileStylesheet("@import 'tailwindcss'; @import './theme.css';", pkgRoot);
+    const css = compiler.build(['text-badge-green-foreground', 'bg-success-subtle']);
+    for (const name of ['text-badge-green-foreground', 'bg-success-subtle']) expect(css).toContain(`.${name}`);
+  });
+
+  it('generates named chromatic utilities from the shared palette', async () => {
+    const compiler = await compileStylesheet("@import 'tailwindcss'; @import './theme.css';", pkgRoot);
+    const css = compiler.build([
+      'text-span-agent',
+      'bg-chart-blue',
+      'stroke-chart-orange',
+      'fill-span-tool',
+      'bg-purple-300',
+    ]);
+    for (const [utility, property, token] of [
+      ['text-span-agent', 'color', 'span-agent'],
+      ['bg-chart-blue', 'background-color', 'chart-blue'],
+      ['stroke-chart-orange', 'stroke', 'chart-orange'],
+      ['fill-span-tool', 'fill', 'span-tool'],
+      ['bg-purple-300', 'background-color', 'purple-300'],
+    ]) {
+      expect(css).toContain(`.${utility}`);
+      expect(css).toContain(`${property}: var(--${token})`);
+    }
   });
 
   it('exposes the background and gray foundation scales', () => {
@@ -309,12 +315,27 @@ describe('theme.css export', () => {
     expect(declared.toSorted()).toEqual([...TextRoles].toSorted());
   });
 
-  it('generates the field and dialog fill utilities', async () => {
-    const compiler = await compileStylesheet(productionCss, resolve(pkgRoot, 'src'));
-    const output = compiler.build(['bg-field', 'bg-field-disabled', 'bg-dialog']);
+  it('keeps display-lg a complete fixed-size role without changing display', () => {
+    const variables = parseVariables(themeCss);
+    expect(variables.get('text-display-lg')).toBe('1.75rem');
+    expect(variables.get('text-display-lg--line-height')).toBe('127%');
+    expect(variables.get('text-display-lg--font-weight')).toBe('var(--font-weight-medium)');
+    expect(variables.get('text-display-lg--letter-spacing')).toBe('-0.01em');
+    expect(variables.get('text-display')).toBe('1.375rem');
+    expect(variables.get('text-display--line-height')).toBe('127%');
+    expect(variables.get('text-display--font-weight')).toBe('var(--font-weight-medium)');
+    expect(variables.get('text-display--letter-spacing')).toBe('-0.01em');
+  });
 
-    for (const token of ['field', 'field-disabled', 'dialog']) {
-      expect(output).toContain(`.bg-${token} {`);
+  it('gives text roles two weights, regular 465 and strong 515', () => {
+    const variables = parseVariables(themeCss);
+    expect(variables.get('font-weight-normal')).toBe('465');
+    expect(variables.get('font-weight-medium')).toBe('515');
+    for (const role of ['body', 'body-sm', 'caption', 'lead', 'menu']) {
+      expect(variables.get(`text-${role}--font-weight`), role).toBe('var(--font-weight-normal)');
+    }
+    for (const role of ['label', 'column', 'eyebrow', 'meta', 'subheading', 'heading', 'title']) {
+      expect(variables.get(`text-${role}--font-weight`), role).toBe('var(--font-weight-medium)');
     }
   });
 
@@ -339,7 +360,6 @@ describe('theme.css export', () => {
     // surfaces needs less than a line drawn inside one.
     for (const theme of [darkTheme, lightTheme]) {
       expect(theme).toMatch(/--surface-rim:/);
-      expect(theme).toMatch(/--surface-rim-focus:/);
       expect(theme).toMatch(/--elevation-lip:/);
     }
   });
@@ -349,16 +369,6 @@ describe('theme.css export', () => {
 
     for (const token of semanticTokens) {
       expect(exportedColors[token]).toBe(`var(--${token})`);
-    }
-  });
-
-  it('keeps unproven semantic roles out of the contract', () => {
-    const exportedColors = { ...Colors, ...BorderColors };
-
-    for (const token of deferredSemanticTokens) {
-      expect(themeCss).not.toContain(`--${token}:`);
-      expect(themeCss).not.toContain(`--color-${token}:`);
-      expect(Object.hasOwn(exportedColors, token)).toBe(false);
     }
   });
 
@@ -399,6 +409,16 @@ describe('theme.css export', () => {
     }
   });
 
+  it('floors typed text at 16px on touch screens only, over any role or variant on the field', async () => {
+    const compiler = await compileStylesheet(productionCss, resolve(pkgRoot, 'src'));
+    const output = compiler.build(['zoom-safe-text']);
+
+    expect(output).toMatch(
+      /@media \(pointer: coarse\) \{\s*\.zoom-safe-text \{\s*font-size: 16px !important;\s*\}\s*\}/,
+    );
+    expect(output.match(/\.zoom-safe-text \{/g)).toHaveLength(1);
+  });
+
   it('registers semantic utilities and their :root defaults in the shared bundle', async () => {
     const compiler = await compileStylesheet(productionCss, resolve(pkgRoot, 'src'));
     const output = compiler.build(semanticTokens.map(token => `bg-${token}`));
@@ -413,7 +433,7 @@ describe('theme.css export', () => {
     const { darkVariables, lightVariables } = getThemeVariables(themeCss);
 
     for (const variables of [darkVariables, lightVariables]) {
-      const ring = resolveToken('ring', variables);
+      const ring = resolveToken('border-focus', variables);
       for (const background of ['sidebar', 'background', 'card', 'muted']) {
         const backgroundLightness = oklchLightness(resolveToken(background, variables));
         const ringLightness = compositeLightness(ring, backgroundLightness);
@@ -535,6 +555,37 @@ describe('theme.css export', () => {
     }
   });
 
+  it('resolves chromatic roles to opaque ramp values in both themes', () => {
+    const { darkVariables, lightVariables } = getThemeVariables(themeCss);
+    const roles =
+      /^(?:destructive|warning|success|info)-(?:subtle|edge|indicator|subtle-foreground)$|^product-|^chart-(?:blue|blue-deep|amber|green|purple|orange|pink|red|sequential-[1-5])$|^span-(?!type-)|^syntax-(?:string|keyword|literal|name|link)$/;
+
+    for (const variables of [darkVariables, lightVariables]) {
+      const tokens = [...variables.keys()].filter(name => roles.test(name));
+      expect(tokens.length).toBe(63);
+      for (const token of tokens) {
+        const value = resolveToken(token, variables);
+        expect(value).toMatch(/^oklch\(/);
+        expect(oklchAlpha(value)).toBe(1);
+      }
+    }
+    expect(resolveToken('success-subtle', darkVariables)).not.toBe(resolveToken('success-subtle', lightVariables));
+    expect(resolveToken('chart-blue', darkVariables)).not.toBe(resolveToken('chart-blue', lightVariables));
+    expect(resolveToken('syntax-string', darkVariables)).not.toBe(resolveToken('syntax-string', lightVariables));
+  });
+
+  it('keeps the brand green indicator readable as text on light surfaces', () => {
+    const { lightVariables } = getThemeVariables(themeCss);
+    const brandGreen = resolveToken('brand-green-indicator', lightVariables);
+    const brandLightness = Number(brandGreen.match(/^oklch\(([\d.]+)\s/)?.[1]);
+
+    expect(oklchAlpha(brandGreen)).toBe(1);
+    for (const background of ['background', 'card']) {
+      const backgroundLightness = oklchLightness(resolveToken(background, lightVariables));
+      expect(wcagContrast(brandLightness, backgroundLightness)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it('registers every @theme color with tailwind-merge, so cn() can resolve a conflict between two of them', () => {
     const exported = new Set(Object.keys({ ...Colors, ...BorderColors }));
     const themed = [...themeCss.matchAll(/--color-([\w-]+):/g)]
@@ -559,5 +610,51 @@ describe('theme.css export', () => {
       expect(existsSync(resolve(pkgRoot, layer))).toBe(true);
       expect(pkg.files.some((entry: string) => layer.startsWith(`${entry}/`) || layer === entry)).toBe(true);
     }
+  });
+
+  it('ships a sources entry that points a consumer Tailwind build at the compiled components', async () => {
+    expect(pkg.exports['./sources.css']).toBe('./sources.css');
+    expect(pkg.files).toContain('sources.css');
+
+    const compiler = await compileStylesheet("@import 'tailwindcss'; @import './sources.css';", pkgRoot);
+    const scannedPatterns = compiler.sources.map(source => resolve(source.base, source.pattern));
+
+    expect(scannedPatterns).toContain(resolve(pkgRoot, 'dist/**/*.js'));
+    expect(pkg.files).toContain('dist');
+  });
+
+  // One file feeds both the library build (`src/index.css`) and an app compiling its own
+  // sheet, so a rule can only land in both. It must not scan `dist` itself: the library
+  // build would then watch its own output. The plugin and the animation sheet resolve
+  // from this package's dependencies, which is what an app's Tailwind sees in node_modules.
+  it('ships the components entry raw, shared with the library build, with every file it imports', async () => {
+    expect(pkg.exports['./components.css']).toBe('./components.css');
+    expect(pkg.files).toContain('components.css');
+    expect(productionCss.trim().split('\n')).toEqual(["@import 'tailwindcss';", "@import '../components.css';"]);
+
+    const componentsEntry = readFileSync(resolve(pkgRoot, 'components.css'), 'utf8');
+    const imports = [...componentsEntry.matchAll(/@import\s+'\.\/([^']+)';/g)].map(([, path = '']) => path);
+
+    expect(imports).toContain('theme.css');
+    expect(imports).not.toContain('sources.css');
+    for (const path of imports) {
+      expect(existsSync(resolve(pkgRoot, path))).toBe(true);
+      expect(pkg.files.some((entry: string) => path.startsWith(`${entry}/`) || path === entry)).toBe(true);
+    }
+    for (const dependency of ['@tailwindcss/typography', 'tw-animate-css']) {
+      expect(pkg.dependencies[dependency]).toBeDefined();
+    }
+
+    const compiler = await compileStylesheet("@import 'tailwindcss'; @import './components.css';", pkgRoot);
+    const output = compiler.build(['shadow-raised', 'state-layer', 'prose', 'animate-in', 'bg-field', 'dark:invert']);
+
+    expect(compiler.sources).toEqual([]);
+    for (const utility of ['shadow-raised', 'prose', 'animate-in', 'bg-field']) {
+      expect(output).toContain(`.${utility} {`);
+    }
+    // Only states, no resting rule.
+    expect(output).toMatch(/\.state-layer:not\([^)]*\):hover/);
+    expect(output).toContain('.dark\\:invert:is(.dark *)');
+    expect(output).toContain('--syntax-string: var(--green-300)');
   });
 });

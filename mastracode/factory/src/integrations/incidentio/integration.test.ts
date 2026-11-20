@@ -9,10 +9,7 @@ vi.mock('../issue-reconcile-worker.js', () => ({
 }));
 
 import { createBoardRegistry } from '../../boards/index.js';
-import {
-  INCIDENTIO_FOLLOW_UPS_SOURCE_ID,
-  INCIDENTIO_INCIDENTS_SOURCE_ID,
-} from './intake.js';
+import { INCIDENTIO_FOLLOW_UPS_SOURCE_ID, INCIDENTIO_INCIDENTS_SOURCE_ID } from './intake.js';
 import { IncidentioIntegration } from './integration.js';
 import { incidentioReconciliationInterval } from './reconciliation-config.js';
 
@@ -74,16 +71,18 @@ describe('IncidentioIntegration', () => {
     expect(incidentioReconciliationInterval()).toBe(60000);
   });
 
-  it('does not register reconciliation when disabled', () => {
+  it('keeps sweeping on a server that still sets the old off switch', () => {
     vi.stubEnv('MASTRACODE_INCIDENT_IO_RECONCILE_ENABLED', 'false');
     const integration = new IncidentioIntegration({ apiKey: 'incident-key' });
 
     expect(
-      integration.workers({
-        storage: { projects: { listAll: async () => [] } },
-        runtime: { configVersion: 'test-v1', workItems: {}, boards: createBoardRegistry() },
-      } as never),
-    ).toEqual([]);
+      integration
+        .workers({
+          storage: { projects: { listAll: async () => [] } },
+          runtime: { configVersion: 'test-v1', workItems: {}, boards: createBoardRegistry() },
+        } as never)
+        .map(worker => worker.name),
+    ).toEqual(['incidentio-issue-reconcile']);
   });
 
   it('requires and uses INCIDENT_IO_API_KEY', async () => {
@@ -117,7 +116,11 @@ describe('IncidentioIntegration', () => {
         return json({
           incidents: [
             incident,
-            { ...incident, id: 'incident-closed', incident_status: { id: 'closed', name: 'Closed', category: 'closed' } },
+            {
+              ...incident,
+              id: 'incident-closed',
+              incident_status: { id: 'closed', name: 'Closed', category: 'closed' },
+            },
           ],
           pagination_meta: {},
         });

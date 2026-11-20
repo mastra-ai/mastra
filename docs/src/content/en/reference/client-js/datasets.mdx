@@ -258,7 +258,7 @@ Submitting to an experiment that has a target returns a `400`. Submitting after 
 
 ## finalizeExperiment()
 
-Marks a caller-driven experiment completed. The server computes per-item counts from the persisted result rows, so the caller keeps no bookkeeping: `succeededCount` (at least one attempt without an error), `failedCount` (every attempt errored), and `skippedCount` (never submitted). Idempotent: finalizing an already-completed experiment returns the stored record.
+Marks a caller-driven experiment completed. The server handles bookkeeping for the caller by computing per-item counts from the persisted result rows: `succeededCount` (at least one attempt without an error), `failedCount` (every attempt errored), and `skippedCount` (never submitted). Idempotent: finalizing an already-completed experiment returns the stored record.
 
 <PropertiesTable
   content={[
@@ -316,6 +316,41 @@ await client.deleteDatasetExperiment('dataset-id', 'experiment-id', {
 />
 
 Returns `Promise<{ success: boolean }>`. A missing experiment, an experiment associated with another dataset, or a dataset outside the supplied tenancy returns a `404` response.
+
+## getExperiment()
+
+Gets an experiment by ID without requiring a dataset reference. The response includes the experiment's `datasetId`, which is `null` for experiments orphaned by dataset deletion.
+
+```typescript
+const experiment = await client.getExperiment('experiment-id', {
+  organizationId: 'organization-id',
+  projectId: 'project-id',
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'experimentId',
+    type: 'string',
+    description: 'ID of the experiment to get.',
+  },
+  {
+    name: 'options.organizationId',
+    type: 'string',
+    isOptional: true,
+    description: 'Organization ID used to scope the lookup.',
+  },
+  {
+    name: 'options.projectId',
+    type: 'string',
+    isOptional: true,
+    description: 'Project ID used to scope the lookup.',
+  },
+]}
+/>
+
+Returns the experiment. A missing experiment, or one outside the supplied tenancy, returns a `404` response.
 
 ## deleteExperiment()
 

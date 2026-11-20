@@ -2,6 +2,7 @@ import { Radio as RadioPrimitive } from '@base-ui/react/radio';
 import { RadioGroup as RadioGroupPrimitive } from '@base-ui/react/radio-group';
 import * as React from 'react';
 
+import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
 import { selectionControlStyle } from '@/ds/primitives/selection-control';
 import { cn } from '@/lib/utils';
 
@@ -10,7 +11,15 @@ type RadioGroupProps = Omit<RadioGroupPrimitive.Props, 'className'> & {
 };
 
 const RadioGroup = React.forwardRef<HTMLDivElement, RadioGroupProps>(({ className, ...props }, ref) => {
-  return <RadioGroupPrimitive ref={ref} data-slot="radio-group" className={cn('grid gap-2', className)} {...props} />;
+  return (
+    <RadioGroupPrimitive
+      ref={ref}
+      data-slot="radio-group"
+      className={cn('grid gap-2', className)}
+      {...props}
+      {...keepOwnAccessibleName(props)}
+    />
+  );
 });
 RadioGroup.displayName = 'RadioGroup';
 
@@ -24,6 +33,7 @@ const RadioGroupItem = React.forwardRef<HTMLSpanElement, RadioGroupItemProps>(({
       ref={ref}
       data-slot="radio-group-item"
       className={cn('rounded-full', selectionControlStyle, className)}
+      render={<span {...keepOwnAccessibleName(props)} />}
       {...props}
     >
       <RadioPrimitive.Indicator

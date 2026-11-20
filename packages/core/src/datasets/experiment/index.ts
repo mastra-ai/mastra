@@ -3,6 +3,7 @@ import type { MastraScorer } from '../../evals/base';
 import type { TrajectoryExpectation } from '../../evals/types';
 import type { Mastra } from '../../mastra';
 import type { DatasetRecord } from '../../storage/types';
+import { assertAgentModelTarget, withAgentModelMetadata } from './agent-model';
 import { ExperimentEventDispatcher, createItemCompletedEvent, toExperimentJsonValue } from './events';
 import { executeTarget } from './executor';
 import type { ExecutionResult } from './executor';
@@ -10,6 +11,7 @@ import { resolveTarget } from './resolve-target';
 import {
   createItemScorerResolver,
   EXPERIMENT_ITEM_SCORER_NOT_FOUND,
+  flushForTrajectoryScorers,
   resolveScorers,
   resolveStepScorers,
   runScorersForItem,
@@ -48,8 +50,11 @@ type ExperimentItem = {
 
 // Re-export types and helpers
 export type {
+  AgentExperimentOutput,
   DataItem,
   ExperimentConfig,
+  ExperimentResultOutput,
+  ScorerExperimentOutput,
   ExperimentHookArgs,
   ExperimentHookItem,
   ExperimentItemHookArgs,
@@ -304,6 +309,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   let execFn: (item: ExperimentItem, signal?: AbortSignal) => Promise<ExecutionResult>;
 
   try {
+    assertAgentModelTarget(config);
     if (config.task) {
       // Inline task path
       const taskFn = config.task;
@@ -344,6 +350,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           requestContext: mergedRequestContext,
           experimentId,
           versions,
+          agentModel: config.agentModel,
           toolMocks: targetType === 'agent' ? item.toolMocks : undefined,
           unmockedToolPolicy:
             targetType === 'agent' ? (item.unmockedToolPolicy ?? config.unmockedToolPolicy ?? 'allow') : undefined,
@@ -413,7 +420,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         id: experimentId,
         name,
         description,
-        metadata,
+        metadata: withAgentModelMetadata(metadata, config.agentModel),
         provenance,
         experimentSetId: grouping?.experimentSetId,
         comparisonId: grouping?.comparisonId,
@@ -625,6 +632,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
                   }
                 : undefined;
 
+            await flushForTrajectoryScorers(mastra, itemScorers, execResult.traceId);
             const flatScores = await runScorersForItem(
               itemScorers,
               itemWithMetadataSnapshot(),

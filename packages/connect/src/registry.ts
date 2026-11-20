@@ -8,7 +8,7 @@ import type { ProviderToolsOptions } from './toolset.js';
 interface ProviderRegistrationBase {
   /** Platform catalog id used to match project connections. */
   integrationId: string;
-  /** Fallback connection-id environment variable when more than one active connection exists. */
+  /** Legacy connection-id env fallback; kept working but intentionally undocumented. */
   envVar: string;
 }
 
@@ -29,17 +29,7 @@ export type ProviderRegistration = ProxyProviderRegistration | McpProviderRegist
  * Providers with checked-in HTTP toolsets. MCP-backed providers are discovered
  * from the Platform integration catalog at runtime.
  */
-export const TOOLS: readonly ProviderRegistration[] = GENERATED_PROVIDERS;
-
-/**
- * @deprecated Use `TOOLS`. This alias is retained for one release cycle so
- * downstream consumers keep working; it will be removed in the next minor.
- */
-export const PROVIDERS: readonly ProviderRegistration[] = TOOLS;
-
-export function findRegistration(integrationId: string): ProviderRegistration | undefined {
-  return TOOLS.find(p => p.integrationId === integrationId);
-}
+export const PROVIDERS: readonly ProviderRegistration[] = GENERATED_PROVIDERS;
 
 /**
  * Channel-capable providers with a hand-maintained `channels()` registration.
@@ -47,7 +37,3 @@ export function findRegistration(integrationId: string): ProviderRegistration | 
  * grows to cover new entries when a fourth lands.
  */
 export const CHANNELS: readonly ChannelProviderRegistration[] = CHANNELS_LIST;
-
-export function findChannelRegistration(integrationId: string): ChannelProviderRegistration | undefined {
-  return CHANNELS.find(c => c.integrationId === integrationId);
-}

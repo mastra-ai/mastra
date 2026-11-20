@@ -1,9 +1,8 @@
 import type { BaseUIEvent } from '@base-ui/react/types';
-import { BracesIcon, ListFilterIcon, Search } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { flushSync } from 'react-dom';
-import { FILTER_BAR_CONTROL_SIZE, FilterBarFieldLabel } from './filter-bar-chip';
+import { FILTER_BAR_CONTROL_SIZE, FilterBarFieldLabel, alwaysHighlightProps } from './filter-bar-chip';
 import { useFilterBarContext } from './filter-bar-context';
 import { FilterBarOptionLabel, FilterBarOptionList } from './filter-bar-option-list';
 import { findGroup } from './filter-bar-tree';
@@ -16,9 +15,12 @@ import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
 import { comboboxTriggerClass } from '@/ds/components/Combobox/combobox-styles';
 import { Kbd } from '@/ds/components/Kbd/kbd';
 import { Txt } from '@/ds/components/Txt';
+import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
+import { IconFilter2 } from '@/ds/icons/central/IconFilter2';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { inputFocusBorderWithin, unstyledFormElementStyle } from '@/ds/primitives/form-element';
 import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
+import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { useIsApplePlatform } from '@/hooks/use-keyboard-shortcut-label';
 import { cn } from '@/lib/utils';
@@ -35,7 +37,7 @@ const ADVANCED_FIELD_ID = '__filter-bar-advanced__';
 const ADVANCED_FIELD: FilterBarField = {
   id: ADVANCED_FIELD_ID,
   label: 'Advanced filter…',
-  icon: BracesIcon,
+  icon: IconCodeBrackets,
   operators: [],
 };
 
@@ -63,7 +65,7 @@ export function FilterBarInput(props: FilterBarInputProps) {
 }
 
 function FilterBarInputImpl({
-  placeholder = 'Filter…',
+  placeholder = 'Filter',
   className,
   'aria-label': ariaLabel = 'Add filter',
   groupId,
@@ -72,6 +74,7 @@ function FilterBarInputImpl({
   const ctx = useFilterBarContext();
   const container = usePortalContainer();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [highlighted, setHighlighted] = useState<Item | null>(null);
@@ -82,14 +85,16 @@ function FilterBarInputImpl({
   const { draft, setDraft: setDraftState, commitDraft } = ctx;
   const step: Step = !draft ? 'field' : !draft.operatorId ? 'operator' : 'value';
   const field = draft ? ctx.getField(draft.fieldId) : undefined;
-  const operator = draft?.operatorId ? ctx.getOperator(draft.operatorId) : undefined;
   const fieldOperators = useMemo(() => (field ? ctx.getFieldOperators(field) : []), [ctx, field]);
+  const operator = draft?.operatorId
+    ? (fieldOperators.find(o => o.id === draft.operatorId) ?? ctx.getOperator(draft.operatorId))
+    : undefined;
   // The advanced option lives in the bar only; inside a popover, nesting is the editor's `+ Group`.
   const offerAdvanced = ctx.groupsEnabled && groupId === undefined;
   const visibleFields = useMemo(() => {
-    const fields = ctx.fields.filter(f => !f.hidden);
+    const fields = ctx.fields.filter(f => !f.hidden && (!f.rootOnly || groupId === undefined));
     return offerAdvanced ? [...fields, ADVANCED_FIELD] : fields;
-  }, [ctx.fields, offerAdvanced]);
+  }, [ctx.fields, offerAdvanced, groupId]);
   const targetGroup = groupId ? findGroup(ctx.expression, groupId) : undefined;
 
   // A group's input mounts on demand (see `openGroupInput`) and takes focus itself.
@@ -176,6 +181,7 @@ function FilterBarInputImpl({
     operator,
     query,
     enabled: open && step === 'value',
+    setQuery,
     onCommit: value => {
       if (draft?.operatorId) commit(draft.fieldId, draft.operatorId, value);
     },
@@ -276,19 +282,16 @@ function FilterBarInputImpl({
     [],
   );
 
-  const searchPlaceholder =
-    step === 'field' ? 'Search fields…' : step === 'operator' ? 'Search operators…' : 'Search values…';
-
   const inputPlaceholder =
     step === 'field'
       ? placeholder
       : step === 'operator'
-        ? 'Operator…'
+        ? 'Operator'
         : valueStep.hasSuggestions && valueStep.allowFreeText
-          ? 'Search or type a value…'
+          ? 'Search or type a value'
           : field?.type === 'number'
-            ? 'Number…'
-            : 'Value…';
+            ? 'Number'
+            : 'Value';
 
   return (
     <>
@@ -326,12 +329,11 @@ function FilterBarInputImpl({
           if (next) setOpen(true);
           else close();
         }}
-        // ComboboxRoot's typings narrow `autoHighlight` to boolean, but the runtime (shared with
-        // AutocompleteRoot) supports 'always': highlight the first item as soon as the list opens.
-        autoHighlight={'always' as unknown as boolean}
+        {...alwaysHighlightProps}
         modal={false}
       >
         <div
+          ref={anchorRef}
           data-slot="filter-bar-input-trigger"
           className={cn(
             // Same trigger recipe as every other DS Combobox (fill, radius, `[&>svg]` icon sizing
@@ -339,13 +341,14 @@ function FilterBarInputImpl({
             // nested input, so the recipe's `focus-visible` border becomes `focus-within`.
             comboboxTriggerClass({ variant: 'default', size: FILTER_BAR_CONTROL_SIZE }),
             'w-auto cursor-text',
+            groupId === undefined && 'max-w-80 grow basis-32',
             'focus-within:bg-fill-hover',
             inputFocusBorderWithin,
-            step === 'field' ? 'min-w-40' : 'min-w-28',
+            step === 'field' ? 'min-w-32' : 'min-w-24',
             className,
           )}
         >
-          <ListFilterIcon aria-hidden className="-ml-[.3em] shrink-0 text-muted-foreground" />
+          <IconFilter2 aria-hidden className="shrink-0" />
           <ComboboxPrimitive.Input
             ref={el => {
               inputRef.current = el;
@@ -353,6 +356,7 @@ function FilterBarInputImpl({
             }}
             aria-label={ariaLabel}
             spellCheck={false}
+            {...passwordManagerOptOutProps}
             data-slot="filter-bar-input"
             data-step={step}
             data-target={targetGroup?.id}
@@ -360,7 +364,7 @@ function FilterBarInputImpl({
             placeholder={inputPlaceholder}
             className={cn(
               unstyledFormElementStyle,
-              'min-w-0 flex-1 bg-transparent',
+              'min-w-0 flex-1 bg-transparent zoom-safe-text',
               'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal focus:placeholder:opacity-70',
             )}
             onFocus={() => setOpen(true)}
@@ -369,36 +373,17 @@ function FilterBarInputImpl({
         </div>
         <ComboboxPrimitive.Portal container={container}>
           <ComboboxPrimitive.Positioner
+            // Base UI anchors to the input, which starts after the filter icon; align with the pill instead.
+            anchor={anchorRef}
             align="start"
             sideOffset={MENU_SIDE_OFFSET}
             positionMethod={FLOATING_POSITION_METHOD}
             className={comboboxStyles.positioner}
           >
-            <ComboboxPrimitive.Popup // The input stretches across the bar, so drop the anchor-width floor: size to content.
-              className={cn(comboboxStyles.popup, 'min-w-56')}
+            <ComboboxPrimitive.Popup // Match the pill, with the DS Combobox's 11rem floor (replaces the menu's anchor-width minimum).
+              className={cn(comboboxStyles.popup, 'w-(--anchor-width) min-w-44')}
               data-slot="filter-bar-editor"
             >
-              {(step !== 'value' || valueStep.hasSuggestions) && (
-                // Search row mirroring the bar input, so the popup reads as a searchable combobox.
-                // The bar input stays the only real input: focus and keyboard navigation never move.
-                <div
-                  className={cn(comboboxStyles.searchContainer, 'cursor-text')}
-                  data-slot="filter-bar-search"
-                  onMouseDown={e => e.preventDefault()}
-                  onClick={() => inputRef.current?.focus()}
-                >
-                  <Search className={comboboxStyles.searchIcon} />
-                  <span
-                    className={cn(
-                      comboboxStyles.searchInput,
-                      'flex items-center truncate',
-                      query === '' && comboboxStyles.placeholder,
-                    )}
-                  >
-                    {query === '' ? searchPlaceholder : query}
-                  </span>
-                </div>
-              )}
               {step === 'field' && (
                 <FilterBarOptionList<FilterBarField>
                   aria-label="Fields"
@@ -424,7 +409,7 @@ function FilterBarInputImpl({
                   emptyText="No matching operator."
                 />
               )}
-              {step === 'value' && valueStep.hasSuggestions && (
+              {step === 'value' && valueStep.hasOptions && (
                 <FilterBarOptionList<FilterBarOption>
                   aria-label="Values"
                   aria-multiselectable={valueStep.isMany || undefined}
@@ -434,21 +419,21 @@ function FilterBarInputImpl({
                   isLoading={valueStep.isLoading}
                   error={valueStep.error}
                   emptyText={
-                    valueStep.allowFreeText ? 'No suggestions — press Enter to use your text.' : 'No matching value.'
+                    valueStep.allowFreeText ? 'No suggestions. Press Enter to use your text.' : 'No matching value.'
                   }
                 />
               )}
               {step === 'value' && !valueStep.hasSuggestions && (
                 <div className="flex items-center justify-between gap-2 py-1 pr-1 pl-[.9em]">
                   <Txt variant="caption" tone="muted">
-                    Type a value
+                    {valueStep.validationMessage ?? 'Type a value'}
                   </Txt>
                   <Button
                     size="sm"
                     variant="default"
                     disabled={!valueStep.canCommitQuery}
                     onMouseDown={e => e.preventDefault()}
-                    onClick={() => valueStep.commitFreeText()}
+                    onClick={() => valueStep.submitFreeText()}
                   >
                     Apply
                     <Kbd size="xs">↵</Kbd>
@@ -461,7 +446,7 @@ function FilterBarInputImpl({
                     size="sm"
                     variant="default"
                     onMouseDown={e => e.preventDefault()}
-                    onClick={() => valueStep.commitSelection() || valueStep.commitFreeText()}
+                    onClick={() => valueStep.commitDone()}
                   >
                     Done
                     <Kbd size="xs">{modEnterLabel}</Kbd>

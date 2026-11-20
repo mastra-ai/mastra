@@ -14,6 +14,7 @@ import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
 import type { ObservabilityEntrypoint, ObservabilityInstance } from '../../../observability';
+import { getCurrentSpan } from '../../../observability/context-storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
@@ -52,6 +53,13 @@ describe('DurableAgent observability tracing', () => {
     await pubsub.close();
   });
 
+  function endMockSpanTree(span: any) {
+    span.ended = true;
+    for (const child of createdSpans.filter(candidate => candidate.parent === span)) {
+      endMockSpanTree(child);
+    }
+  }
+
   function createMockSpan(type: string, parentSpan?: any): any {
     spanIdCounter += 1;
     const span: Record<string, any> = {
@@ -65,10 +73,18 @@ describe('DurableAgent observability tracing', () => {
       isValid: true,
       isRootSpan: !parentSpan,
       parent: parentSpan,
-      end: vi.fn(),
-      error: vi.fn(),
+      ended: false,
+      end: vi.fn((opts?: { endTree?: boolean }) => {
+        if (opts?.endTree) endMockSpanTree(span);
+        else span.ended = true;
+      }),
+      error: vi.fn((opts?: { endTree?: boolean }) => {
+        if (opts?.endTree) endMockSpanTree(span);
+        else span.ended = true;
+      }),
       update: vi.fn(),
       exportSpan: vi.fn(() => ({ id: span.id, type })),
+      snapshot: vi.fn(() => ({ id: span.id, type })),
       getParentSpanId: vi.fn(() => parentSpan?.id),
       findParent: vi.fn(function (this: any, spanType: string) {
         let current: any = this.parent;
@@ -225,13 +241,59 @@ describe('DurableAgent observability tracing', () => {
       const { output, cleanup } = await durableAgent.stream('What is the weather in Paris?');
       await output.consumeStream();
 
+      await vi.waitFor(() =>
+        expect(endGenerationCalls.find(call => call.output?.text === 'It is sunny in Paris.')).toBeDefined(),
+      );
       const finalCall = endGenerationCalls.find(call => call.output?.text === 'It is sunny in Paris.');
-      expect(finalCall).toBeDefined();
       expect(finalCall.output.toolCalls).toEqual([
         { toolCallId: 'call_1', toolName: 'get_weather', args: { city: 'Paris' } },
       ]);
 
       cleanup();
+    } finally {
+      spy.mockRestore();
+    }
+  }, 30000);
+
+  it('nests the resumed AGENT_RUN span under the suspended span instead of opening a second root (#25718)', async () => {
+    const { spy, agentSpans, agentSpanOpts } = await spyOnSpans();
+
+    try {
+      const baseAgent = new Agent({
+        id: 'trace-agent-resume',
+        name: 'Trace Agent (resume)',
+        instructions: 'You are a test assistant',
+        model: createToolCallThenTextModel() as LanguageModelV2,
+        tools: {
+          get_weather: createTool({
+            id: 'get_weather',
+            description: 'Get the weather',
+            inputSchema: z.object({ city: z.string() }),
+            requireApproval: true,
+            execute: async ({ city }) => ({ forecast: `Sunny in ${city}` }),
+          }),
+        },
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      registerWithMockObservability(durableAgent as unknown as Agent);
+
+      const result = await durableAgent.stream('What is the weather in Paris?');
+      for await (const chunk of result.fullStream) {
+        if (chunk.type === 'tool-call-approval') break;
+      }
+
+      const resumed = await durableAgent.approveToolCall({ runId: result.runId });
+      for await (const _chunk of resumed.fullStream) {
+        // Drain the resumed segment.
+      }
+
+      expect(agentSpans).toHaveLength(2);
+      const [original] = agentSpans;
+      const resumedOpts = agentSpanOpts[1];
+      expect(resumedOpts.name).toContain('(resumed)');
+      expect(resumedOpts.resumeFrom).toMatchObject({ traceId: original.traceId, spanId: original.id });
+      expect(resumedOpts.tracingOptions?.traceId).toBe(original.traceId);
+      expect(resumedOpts.metadata?.resumedFromSpanId).toBe(original.id);
     } finally {
       spy.mockRestore();
     }
@@ -253,8 +315,8 @@ describe('DurableAgent observability tracing', () => {
       const { output, cleanup } = await durableAgent.stream('Hi');
       await output.consumeStream();
 
+      await vi.waitFor(() => expect(endGenerationCalls.find(call => call.output?.text === 'Hello')).toBeDefined());
       const finalCall = endGenerationCalls.find(call => call.output?.text === 'Hello');
-      expect(finalCall).toBeDefined();
       expect(finalCall.output.toolCalls).toBeUndefined();
 
       cleanup();
@@ -291,6 +353,71 @@ describe('DurableAgent observability tracing', () => {
     }
   }, 30000);
 
+  it('falls back to exportSpan() when the span has no snapshot() (older @mastra/observability)', async () => {
+    const { spy, agentSpans } = await spyOnSpans();
+    const original = spy.getMockImplementation()!;
+    const stripSnapshot = (span: any) => {
+      delete span.snapshot;
+      const createChildSpan = span.createChildSpan;
+      span.createChildSpan = vi.fn((opts: any) => stripSnapshot(createChildSpan(opts)));
+      return span;
+    };
+    spy.mockImplementation((opts: any) => stripSnapshot(original(opts)));
+
+    try {
+      const baseAgent = new Agent({
+        id: 'trace-agent',
+        name: 'Trace Agent',
+        instructions: 'You are a test assistant',
+        model: createTextStreamModel('Hello') as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const { output, cleanup } = await durableAgent.stream('Hi');
+      await output.consumeStream();
+
+      expect(agentSpans.length).toBe(1);
+      expect(agentSpans[0].exportSpan).toHaveBeenCalled();
+
+      cleanup();
+    } finally {
+      spy.mockRestore();
+    }
+  }, 30000);
+
+  it('runs the provider call inside the model span context (#25988)', async () => {
+    const { spy } = await spyOnSpans();
+
+    try {
+      const observedSpanTypes: (string | undefined)[] = [];
+      const model = createTextStreamModel('Hello');
+      const originalDoStream = model.doStream.bind(model);
+      model.doStream = async (options: any) => {
+        observedSpanTypes.push(getCurrentSpan()?.type);
+        return originalDoStream(options);
+      };
+
+      const baseAgent = new Agent({
+        id: 'span-context-agent',
+        name: 'Span Context Agent',
+        instructions: 'You are a test assistant',
+        model: model as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      registerWithMockObservability(durableAgent as unknown as Agent);
+
+      const { output, cleanup } = await durableAgent.stream('Hi');
+      await output.consumeStream();
+
+      // The mock tracker exposes the MODEL_GENERATION span as its current span.
+      expect(observedSpanTypes).toEqual(['model_generation']);
+
+      cleanup();
+    } finally {
+      spy.mockRestore();
+    }
+  }, 30000);
+
   it('opens an AGENT_RUN span for an evented (fire-and-forget) run too', async () => {
     const { spy, agentSpans } = await spyOnSpans();
 
@@ -315,6 +442,73 @@ describe('DurableAgent observability tracing', () => {
       spy.mockRestore();
     }
   }, 30000);
+
+  it('ends the AGENT_RUN span when a run-start input processor throws', async () => {
+    const { spy, agentSpans } = await spyOnSpans();
+
+    try {
+      for (const engine of ['durable', 'evented'] as const) {
+        const baseAgent = new Agent({
+          id: `${engine}-trace-agent-input-error`,
+          name: 'Trace Agent (input error)',
+          instructions: 'You are a test assistant',
+          model: createTextStreamModel('unreachable') as LanguageModelV2,
+          inputProcessors: [
+            {
+              id: 'throwing-input-processor',
+              processInput: () => {
+                throw new Error('guardrail exploded');
+              },
+            },
+          ],
+        });
+        const wrappedAgent =
+          engine === 'durable'
+            ? createDurableAgent({ agent: baseAgent, pubsub })
+            : createEventedAgent({ agent: baseAgent, pubsub });
+
+        await expect(wrappedAgent.stream('Hi'), engine).rejects.toMatchObject({
+          id: 'AGENT_INPUT_PROCESSOR_ERROR',
+          message: '[Agent:Trace Agent (input error)] - Input processor error',
+        });
+
+        expect(agentSpans, engine).toHaveLength(1);
+        expect(agentSpans[0].error, engine).toHaveBeenCalledTimes(1);
+        expect(agentSpans[0].error, engine).toHaveBeenCalledWith({
+          error: expect.objectContaining({
+            id: 'AGENT_INPUT_PROCESSOR_ERROR',
+            message: '[Agent:Trace Agent (input error)] - Input processor error',
+          }),
+          outcome: 'error',
+          stopReason: 'runtime_error',
+          stopReasonContext: null,
+          endTree: true,
+        });
+
+        const agentTraceSpans = createdSpans.filter(span => {
+          let current = span;
+          while (current) {
+            if (current === agentSpans[0]) return true;
+            current = current.parent;
+          }
+          return false;
+        });
+        expect(
+          agentTraceSpans.map(span => span.type),
+          engine,
+        ).toContain('processor_run');
+        expect(
+          agentTraceSpans.every(span => span.ended),
+          engine,
+        ).toBe(true);
+
+        agentSpans.length = 0;
+        createdSpans = [];
+      }
+    } finally {
+      spy.mockRestore();
+    }
+  });
 
   it('parents agent-level input processor spans to AGENT_RUN', async () => {
     const { spy, agentSpans } = await spyOnSpans();
@@ -428,6 +622,59 @@ describe('DurableAgent observability tracing', () => {
       }
       expect(outputStepProcessorSpan).toBeDefined();
       expect(outputStepProcessorSpan.findParent('agent_run')).toBe(agentSpans[0]);
+
+      cleanup();
+    } finally {
+      spy.mockRestore();
+    }
+  }, 30000);
+
+  it('parents the output processor spans of the total-deadline save to AGENT_RUN', async () => {
+    const { spy, agentSpans } = await spyOnSpans();
+
+    try {
+      const processOutputStep = vi.fn(async () => undefined);
+      const processOutputResult = vi.fn(async ({ messageList }: any) => messageList);
+      const outputProcessor = { id: 'deadline-processor', processOutputStep, processOutputResult };
+      // The reply streams some text, then stalls past the total deadline.
+      const model = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
+              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'PARTIAL ' });
+            },
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        }),
+      });
+
+      const baseAgent = new Agent({
+        id: 'trace-agent-deadline',
+        name: 'Trace Agent (deadline)',
+        instructions: 'You are a test assistant',
+        model: model as LanguageModelV2,
+        outputProcessors: [outputProcessor as any],
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const { output, cleanup } = await durableAgent.stream('Hi', { modelSettings: { timeout: { totalMs: 300 } } });
+      await output.consumeStream().catch(() => {});
+      await vi.waitFor(() => expect(processOutputResult).toHaveBeenCalled());
+
+      expect(agentSpans.length).toBe(1);
+      for (const name of ['output step processor: deadline-processor', 'output processor: deadline-processor']) {
+        let processorSpan: any;
+        for (const span of createdSpans) {
+          const callIndex = span.createChildSpan.mock.calls.findIndex(
+            (call: any[]) => call[0]?.type === 'processor_run' && call[0]?.name === name,
+          );
+          if (callIndex !== -1) processorSpan = span.createChildSpan.mock.results[callIndex]?.value;
+        }
+        expect(processorSpan, name).toBeDefined();
+        expect(processorSpan.findParent('agent_run'), name).toBe(agentSpans[0]);
+      }
 
       cleanup();
     } finally {

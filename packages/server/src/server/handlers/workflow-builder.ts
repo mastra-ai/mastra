@@ -1,9 +1,11 @@
+import { stripClientAuthoredTurnMarks } from '@mastra/core/memory';
 import { HTTPException } from '../http-exception';
 import { agentExecutionBodySchema, streamResponseSchema } from '../schemas/agents';
 import { workflowBuilderSettingsResponseSchema } from '../schemas/workflow-builder';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 import {
+  applyEffectiveThreadId,
   enforceThreadAccess,
   getEffectiveResourceId,
   getEffectiveThreadId,
@@ -62,8 +64,10 @@ export const STREAM_WORKFLOW_BUILDER_ROUTE = createRoute({
       if (!builder?.enabled) throw new HTTPException(404, { message: 'Workflow builder is not enabled' });
       const agent = builder.getAgent();
 
-      const { messages, memory: memoryOption, requestContext: bodyRequestContext, ...rest } = params;
+      const { messages, memory: memoryOption, requestContext: bodyRequestContext, scopes: _scopes, ...rest } = params;
       validateBody({ messages });
+      stripClientAuthoredTurnMarks(messages);
+      stripClientAuthoredTurnMarks((rest as { context?: unknown }).context);
 
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
 
@@ -92,7 +96,7 @@ export const STREAM_WORKFLOW_BUILDER_ROUTE = createRoute({
         authorizedMemoryOption = {
           ...memoryOption,
           resource: effectiveResourceId ?? memoryOption.resource,
-          thread: effectiveThreadId ?? memoryOption.thread,
+          thread: applyEffectiveThreadId(memoryOption.thread, effectiveThreadId),
         };
       }
 

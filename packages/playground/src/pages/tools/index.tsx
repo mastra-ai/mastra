@@ -1,18 +1,21 @@
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { useAgents } from '@mastra/react/hooks/agents';
+import { useTools } from '@mastra/react/hooks/tools';
 import { useState } from 'react';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
-import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { navCrumb } from '@/domains/navigation/crumbs';
+import { ToolDrawer } from '@/domains/tools/components/tool-drawer/tool-drawer';
+import { ToolsPageDrawerBody } from '@/domains/tools/components/tool-drawer/tools-page-tool-drawer-body';
 import { NoToolsInfo } from '@/domains/tools/components/tools-list/no-tools-info';
 import { ToolsList } from '@/domains/tools/components/tools-list/tools-list';
 import type { ToolsSort } from '@/domains/tools/components/tools-list/tools-list';
-import { useTools } from '@/domains/tools/hooks/use-all-tools';
+import { useToolDrawerParam } from '@/domains/tools/hooks/use-tool-drawer-param';
 
 const crumbs = [navCrumb('/tools')];
 
@@ -21,6 +24,7 @@ export default function Tools() {
   const { data: tools = {}, isLoading: isLoadingTools, error: toolsError } = useTools();
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<ToolsSort>();
+  const { toolId: openToolId } = useToolDrawerParam();
 
   const isLoading = isLoadingAgents || isLoadingTools;
   const error = toolsError || agentsError;
@@ -68,7 +72,12 @@ export default function Tools() {
         <ActionRow>
           <ActionRow.Start>
             <div className="max-w-120 flex-1">
-              <ListSearch onSearch={setSearch} label="Filter tools" placeholder="Filter by name" />
+              <SearchInput
+                {...listSearchProps}
+                onValueChange={setSearch}
+                label="Search tools"
+                placeholder="Search by name"
+              />
             </div>
           </ActionRow.Start>
         </ActionRow>
@@ -82,7 +91,11 @@ export default function Tools() {
         search={search}
         sort={sort}
         onSortChange={(direction, key) => setSort({ key, direction })}
+        selectedToolId={openToolId}
       />
+      <ToolDrawer>
+        <ToolsPageDrawerBody />
+      </ToolDrawer>
     </PageLayout>
   );
 }

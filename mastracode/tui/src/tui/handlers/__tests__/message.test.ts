@@ -13,7 +13,6 @@ import { NotificationComponent } from '../../components/notification.js';
 import { ReactiveSignalComponent } from '../../components/reactive-signal.js';
 import { StateSignalComponent } from '../../components/state-signal.js';
 import { SubagentExecutionComponent } from '../../components/subagent-execution.js';
-import { SubconsciousActivityComponent } from '../../components/subconscious-activity.js';
 import { SystemReminderComponent } from '../../components/system-reminder.js';
 import { TemporalGapComponent } from '../../components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from '../../components/tool-execution-enhanced.js';
@@ -236,36 +235,6 @@ describe('handleMessageStart signals', () => {
     expect(rendered).toContain('changed: browser opened');
   });
 
-  it('renders streamed Subconscious activity with the specialized component', () => {
-    handleMessageStart(
-      ctx,
-      signalMessage({
-        type: 'state',
-        tagName: 'subconscious-activity',
-        contents: 'Hot: [[Atlas launch]] (1)',
-        metadata: {
-          state: { id: 'subconscious-activity', mode: 'snapshot', cacheKey: 'subconscious-activity:v1' },
-          value: {
-            updates: [
-              {
-                id: 'activity-1',
-                action: 'node-created',
-                type: 'node',
-                recordId: 'node-1',
-                name: 'Atlas launch',
-                createdAt: '2026-07-15T00:00:00.000Z',
-              },
-            ],
-            hot: [{ type: 'node', name: 'Atlas launch', updates: 1 }],
-          },
-        },
-      } as Parameters<typeof createSignal>[0]),
-    );
-
-    expect(state.chatContainer.children.some(child => child instanceof SubconsciousActivityComponent)).toBe(true);
-    expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(false);
-  });
-
   it('does not render the tasks state signal inline (the pinned task UI shows it)', () => {
     handleMessageStart(
       ctx,
@@ -327,12 +296,12 @@ describe('handleMessageStart signals', () => {
     expect(visibleChildren(state)).toHaveLength(1);
     const component = visibleChildren(state)[0];
     expect(component).toBeInstanceOf(NotificationComponent);
-    const rendered = stripAnsi((component as NotificationComponent).render(100).join('\n'));
-    expect(rendered).toContain('notification from github');
-    expect(rendered).toContain('╭');
-    expect(rendered).toContain('╰');
-    expect(rendered).toContain('high · ci-status · delivered');
-    expect(rendered).toContain('CI failed on main');
+    const lines = stripAnsi((component as NotificationComponent).render(100).join('\n')).split('\n');
+    // Left-bar card: title and message, every row on the bar, no details row.
+    expect(lines).toEqual([
+      expect.stringMatching(/^▎ notification from github/),
+      expect.stringMatching(/^▎ CI failed on main/),
+    ]);
   });
 
   it('wraps long streamed full notifications within the terminal width', () => {
@@ -644,20 +613,22 @@ describe('handleMessageUpdate assistant streaming', () => {
     } as EventHandlerContext;
   });
 
-  it('shows quiet-mode Thinking in the status line while reasoning streams, and nowhere in the chat', () => {
+  it('flags thinking for the Working row while reasoning streams, and shows nothing in the chat', () => {
     const idleCounter = new IdleCounterComponent();
-    Object.assign(state, { quietMode: true, hideThinkingBlock: true, idleCounter });
-    const status = () => stripAnsi(idleCounter.render(80).join('')).trim();
+    Object.assign(state, { hideThinkingBlock: true, idleCounter });
+    const updateStatusLine = vi.fn();
+    Object.assign(ctx, { updateStatusLine });
     const chat = () => stripAnsi(state.chatContainer.render(80).join('\n'));
 
     handleMessageStart(ctx, assistantMessage([{ type: 'reasoning', reasoning: 'planning' } as Part]));
-    expect(status()).toBe('Thinking...');
+    expect(idleCounter.isThinking()).toBe(true);
+    expect(updateStatusLine).toHaveBeenCalledTimes(1);
 
     handleMessageUpdate(
       ctx,
       assistantMessage([{ type: 'reasoning', reasoning: 'planning' } as Part, { type: 'text', text: 'Answer' }]),
     );
-    expect(status()).toBe('');
+    expect(idleCounter.isThinking()).toBe(false);
 
     handleMessageUpdate(
       ctx,
@@ -667,11 +638,11 @@ describe('handleMessageUpdate assistant streaming', () => {
         { type: 'reasoning', reasoning: 'more' } as Part,
       ]),
     );
-    expect(status()).toBe('Thinking...');
+    expect(idleCounter.isThinking()).toBe(true);
 
     handleMessageEnd(ctx, assistantMessage([{ type: 'text', text: 'Answer' }]));
-    expect(status()).toBe('');
-    expect(chat()).not.toContain('Thinking...');
+    expect(idleCounter.isThinking()).toBe(false);
+    expect(chat()).not.toMatch(/thinking/i);
   });
 
   it('adds spacing as soon as assistant text starts after a user message', () => {
@@ -710,13 +681,8 @@ describe('handleMessageUpdate assistant streaming', () => {
     expect(state.streamingComponent).toBe(children[2]);
   });
 
-  it('adds boundary spacing between a quiet tool preview and assistant text', () => {
-    const tool = new ToolExecutionComponentEnhanced(
-      'write_file',
-      {},
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
-      state.ui,
-    );
+  it('adds boundary spacing between a compact tool preview and assistant text', () => {
+    const tool = new ToolExecutionComponentEnhanced('write_file', {}, { collapsedByDefault: true }, state.ui);
     tool.updateArgs({ path: 'src/example.ts', content: 'first line\nsecond line' });
     tool.updateResult({ content: [{ type: 'text', text: 'done' }], isError: false });
 
@@ -869,9 +835,8 @@ describe('handleMessageUpdate assistant streaming', () => {
     expect(stripAnsi(component.render(80).join('\n'))).toContain(terminal.errorMessage);
   });
 
-  it('surfaces failed pending tools in quiet mode when the assistant run errors', () => {
-    state.quietMode = true;
-    state.quietModeMaxToolPreviewLines = 2;
+  it('surfaces failed pending tools when the assistant run errors', () => {
+    state.previewLines = 2;
 
     handleMessageUpdate(
       ctx,

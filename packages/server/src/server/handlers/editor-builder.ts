@@ -1,4 +1,5 @@
 import type { Mastra } from '@mastra/core';
+import type { ChannelProvider } from '@mastra/core/channels';
 
 import { HTTPException } from '../http-exception';
 import {
@@ -195,6 +196,13 @@ export const GET_EDITOR_BUILDER_SETTINGS_ROUTE = createRoute({
 export const GET_EDITOR_BUILDER_AVAILABLE_MODELS_ROUTE = createRoute({
   method: 'GET',
   path: '/editor/builder/models/available',
+  mcp: {
+    toolset: 'stored_agents',
+    name: 'list_available_models',
+    description:
+      'List the models you can give an agent (providers with an API key, filtered by the agent-builder model policy).',
+    requires: capabilities => capabilities.storedAgents,
+  },
   responseType: 'json',
   responseSchema: builderAvailableModelsResponseSchema,
   summary: 'List builder-available AI models',
@@ -276,7 +284,15 @@ export const GET_INFRASTRUCTURE_STATUS_ROUTE = createRoute({
           .filter(([key, value]) => !omittedKeys.includes(key) && value !== undefined && value !== null)
           .map(([key, value]) => ({ key, value: formatConfigValue(value) }));
 
-      const channelProviders = mastra.getChannelProviders() ?? {};
+      // Prefer resolveChannels() so a live channels resolver (e.g. @mastra/connect's
+      // channels()) reports connections added after boot; older cores lack the method.
+      const mastraWithResolver = mastra as typeof mastra & {
+        resolveChannels?: () => Promise<Record<string, ChannelProvider>>;
+      };
+      const channelProviders =
+        typeof mastraWithResolver.resolveChannels === 'function'
+          ? await mastraWithResolver.resolveChannels()
+          : (mastra.getChannelProviders() ?? {});
       const channels: InfrastructureStatus['channels'] = {
         providers: Object.entries(channelProviders)
           .map(([id, provider]) => {

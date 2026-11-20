@@ -1,8 +1,11 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconArrowInbox } from '@mastra/playground-ui/icons/central/IconArrowInbox';
+import { IconLock } from '@mastra/playground-ui/icons/central/IconLock';
+import { IconSquareBehindSquare1 } from '@mastra/playground-ui/icons/central/IconSquareBehindSquare1';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { CopyIcon, DownloadIcon, LockIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { SkillFavoriteButton } from './skill-favorite-button';
 import { getSkillOrigin } from '@/domains/agent-builder/utils/skill-origin';
@@ -40,7 +43,9 @@ export function SkillBuilderList({ skills, search, onSkillClick, showFavorites =
           <>
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-2">
-                <div className="truncate text-body text-foreground">{skill.name}</div>
+                <Txt as="p" variant="body" tone="ink" className="truncate">
+                  {skill.name}
+                </Txt>
                 {skill.visibility === 'private' && (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -50,7 +55,7 @@ export function SkillBuilderList({ skills, search, onSkillClick, showFavorites =
                         data-testid="skill-builder-private-visibility-icon"
                       >
                         <Icon size="xs">
-                          <LockIcon />
+                          <IconLock />
                         </Icon>
                       </span>
                     </TooltipTrigger>
@@ -64,14 +69,21 @@ export function SkillBuilderList({ skills, search, onSkillClick, showFavorites =
                   return (
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <span
-                          className="inline-flex shrink-0 items-center gap-1 rounded bg-card px-1.5 py-0.5 text-meta text-muted-foreground"
+                        <Txt
+                          as="span"
+                          variant="meta"
+                          tone="muted"
+                          className="inline-flex shrink-0 items-center gap-1 rounded bg-card px-1.5 py-0.5"
                           aria-label={isCopy ? 'Copied skill' : 'Imported skill'}
                           data-testid="skill-builder-origin-badge"
                         >
-                          {isCopy ? <CopyIcon className="h-2.5 w-2.5" /> : <DownloadIcon className="h-2.5 w-2.5" />}
+                          {isCopy ? (
+                            <IconSquareBehindSquare1 className="size-icon-xs" />
+                          ) : (
+                            <IconArrowInbox className="size-icon-xs" />
+                          )}
                           {origin.type === 'skills-sh' ? 'skills.sh' : isCopy ? 'copied' : 'imported'}
-                        </span>
+                        </Txt>
                       </TooltipTrigger>
                       <TooltipContent>
                         {origin.type === 'skills-sh'
@@ -85,9 +97,9 @@ export function SkillBuilderList({ skills, search, onSkillClick, showFavorites =
                 })()}
               </div>
               <div className="mt-0.5 flex items-center gap-2">
-                <span className="line-clamp-1 text-caption text-muted-foreground">
+                <Txt as="span" variant="caption" tone="muted" className="line-clamp-1">
                   {skill.description || 'No description'}
-                </span>
+                </Txt>
               </div>
               {showFavorites && (
                 <div className="mt-2 md:hidden">

@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
+import { resolveDiscordBotToken } from './_bot-token.js';
 
 export const createRoleInputSchema = z.object({
   guildId: z.string().describe('Guild ID (Snowflake). Example: "197038439483310086"'),
@@ -77,10 +78,6 @@ export const createRoleOutputSchema = z.object({
   flags: z.number().int(),
 });
 
-const MetadataSchema = z.object({
-  botToken: z.string(),
-});
-
 export function createRoleTool(proxy: PlatformProxy) {
   return createTool({
     id: 'discord_create_role',
@@ -89,15 +86,7 @@ export function createRoleTool(proxy: PlatformProxy) {
     outputSchema: createRoleOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof createRoleOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const metadata = await platformProxy.getMetadata<{ botToken?: string }>();
-      const botToken = metadata?.botToken;
-
-      if (!botToken) {
-        throw new platformProxy.ActionError({
-          type: 'invalid_metadata',
-          message: 'botToken is required in metadata.',
-        });
-      }
+      const botToken = await resolveDiscordBotToken(platformProxy);
 
       // https://discord.com/developers/docs/resources/guild#create-guild-role
       const response = await platformProxy.post({

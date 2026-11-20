@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
 import { StudioSettingsPage } from './index';
+import { authDisabledCapabilities } from '@/domains/configuration/context/__tests__/fixtures/capabilities';
 import {
   MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY,
   StudioConfigProvider,
@@ -13,7 +14,7 @@ import { server } from '@/test/msw-server';
 const BASE_URL = 'http://localhost:4111';
 
 async function renderSettingsPage() {
-  server.use(http.get(BASE_URL, () => HttpResponse.text('ok')));
+  server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authDisabledCapabilities)));
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
   render(
@@ -38,10 +39,10 @@ afterEach(() => {
 
 describe('StudioSettingsPage', () => {
   describe('when the settings page is visited', () => {
-    it('exposes the settings breadcrumb and settings controls inside the main landmark', async () => {
+    it('shows the settings title and controls inside the main landmark', async () => {
       await renderSettingsPage();
 
-      expect(within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getByText('Settings')).toBeDefined();
+      expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeDefined();
       const main = within(screen.getByRole('main'));
       expect(
         within(main.getByRole('radiogroup', { name: 'Theme' }))
@@ -58,7 +59,7 @@ describe('StudioSettingsPage', () => {
       await renderSettingsPage();
 
       fireEvent.change(screen.getByRole('textbox', { name: 'API prefix' }), { target: { value: '/custom-api' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Save Configuration' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
       expect(JSON.parse(localStorage.getItem(MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY) ?? '{}')).toMatchObject({
         baseUrl: BASE_URL,

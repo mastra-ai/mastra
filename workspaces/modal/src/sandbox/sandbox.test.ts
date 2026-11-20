@@ -51,9 +51,9 @@ vi.mock('modal', async () => {
 });
 
 // Import after mock registration
-// eslint-disable-next-line import/order
+// oxlint-disable-next-line mastra/import-order
 import { ClientClosedError, NotFoundError } from 'modal';
-// eslint-disable-next-line import/order
+// oxlint-disable-next-line mastra/import-order
 import { SandboxNotReadyError } from '@mastra/core/workspace';
 import { ModalSandbox } from './index';
 
@@ -724,6 +724,14 @@ describe('ModalSandbox.clone', () => {
     const child = template.clone({ idleTimeoutMinutes: 15 });
 
     expect(child['_constructorOptions']).toMatchObject({ timeoutMs: 900_000 });
+  });
+
+  it('applies workingDirectory override', () => {
+    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', workingDirectory: '/template' });
+
+    const child = template.clone({ workingDirectory: '/project' });
+
+    expect(child['_constructorOptions']).toMatchObject({ workingDirectory: '/project' });
   });
 
   it('inherits template defaults when no overrides are passed', () => {

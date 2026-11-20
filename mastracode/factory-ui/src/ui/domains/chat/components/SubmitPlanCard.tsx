@@ -20,6 +20,7 @@ import {
 import { normalizePlanPath, usePlanFile, useWorkspaceRenderedListing } from '../../../../hooks/use-fs';
 import { useThreadWorkspacePath } from '../../workspace-viewer/hooks/useThreadWorkspacePath';
 import { parsePlanMarkdown, resolveInlinePlan } from './submit-plan-source';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 /**
  * The `submit_plan` approval and history card.
@@ -44,12 +45,17 @@ export function SubmitPlanCard({ toolCallId, input, output, isSubmitting = false
   const path = inline.path;
 
   const workspace = useThreadWorkspacePath();
-  // Absolute artifact paths must be normalized against the authoritative
-  // workspace `.artifacts` root before the file route (which requires a
-  // workspace-relative path) will serve them.
+  // Normalize absolute paths against the server's authoritative workspace or
+  // checkout `.artifacts` root before fetching a workspace-relative file.
   const needsRoot = inline.plan === undefined && Boolean(path?.startsWith('/'));
   const rendered = useWorkspaceRenderedListing(workspace.workspacePath, '.artifacts', { enabled: needsRoot });
-  const readablePath = normalizePlanPath(path, rendered.data?.rootPath);
+  const rootReadablePath = normalizePlanPath(path, rendered.data?.rootPath);
+  const checkout = needsRoot && !rootReadablePath ? path?.match(/\/([^/]+)\/\.artifacts\/[^/]+/)?.[1] : undefined;
+  const checkoutRoot = checkout ? `${checkout}/.artifacts` : undefined;
+  const checkoutRendered = useWorkspaceRenderedListing(workspace.workspacePath, checkoutRoot, {
+    enabled: needsRoot && Boolean(checkoutRoot),
+  });
+  const readablePath = rootReadablePath ?? normalizePlanPath(path, checkoutRendered.data?.rootPath, checkoutRoot);
   const fetchable = inline.plan === undefined && readablePath !== undefined;
   const file = usePlanFile(workspace.workspacePath, readablePath, toolCallId, { enabled: fetchable });
   const fetched = fetchable && file.data?.content !== undefined ? parsePlanMarkdown(file.data.content) : undefined;
@@ -60,9 +66,9 @@ export function SubmitPlanCard({ toolCallId, input, output, isSubmitting = false
     inline.plan === undefined &&
     !fetched &&
     !file.isError &&
-    !rendered.isError &&
     (workspace.isPending ||
       (needsRoot && Boolean(workspace.workspacePath) && rendered.isPending) ||
+      (needsRoot && Boolean(workspace.workspacePath) && Boolean(checkoutRoot) && checkoutRendered.isPending) ||
       (fetchable && Boolean(workspace.workspacePath) && file.isPending));
   const unavailable = inline.plan === undefined && !fetched && !loading;
   // Responding while the plan is still loading would back-fill an empty plan
@@ -95,20 +101,24 @@ export function SubmitPlanCard({ toolCallId, input, output, isSubmitting = false
         </PlanIntro>
         <PlanMain>
           {loading ? (
-            <p aria-label="Loading plan" className="text-caption text-muted-foreground my-2">
+            <Txt variant="caption" tone="muted" aria-label="Loading plan" className="my-2">
               Loading plan…
-            </p>
+            </Txt>
           ) : unavailable ? (
-            <p role="note" className="text-caption text-muted-foreground my-2">
+            <Txt variant="caption" tone="muted" role="note" className="my-2">
               The plan could not be loaded from {path ?? 'its file'}. You can still respond below.
-            </p>
+            </Txt>
           ) : (
             <PlanContent>{plan}</PlanContent>
           )}
           {inline.feedback ? (
-            <div role="note" aria-label="Plan feedback" className="border-accent1 mt-4 border-l-2 pl-3">
-              <p className="text-meta text-muted-foreground mb-1">Feedback</p>
-              <p className="text-caption text-foreground whitespace-pre-wrap">{inline.feedback}</p>
+            <div role="note" aria-label="Plan feedback" className="border-badge-green-indicator mt-4 border-l-2 pl-3">
+              <Txt variant="meta" tone="muted" className="mb-1">
+                Feedback
+              </Txt>
+              <Txt variant="caption" tone="ink" className="whitespace-pre-wrap">
+                {inline.feedback}
+              </Txt>
             </div>
           ) : null}
           {onRespond ? (
@@ -120,7 +130,7 @@ export function SubmitPlanCard({ toolCallId, input, output, isSubmitting = false
                     size="sm"
                     variant="primary"
                     className="whitespace-nowrap"
-                    aria-label="Approve the plan and switch to build"
+                    aria-label="Approve the plan and build it"
                     disabled={approveDisabled}
                     onClick={() => respond({ action: 'approved' })}
                   >

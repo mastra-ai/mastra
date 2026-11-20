@@ -1,6 +1,6 @@
+import type { StoredAgent } from '@mastra/react/hooks/agents';
 import type { AgentBuilderEditFormValues, AgentBuilderModel } from '../schemas';
 import { extractWorkspaceId } from './extract-workspace-id';
-import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { extractFormToolProviders } from '@/domains/tool-providers/mappers/tool-providers-form-mappers';
 
 function flattenAgentSkills(skills: StoredAgent['skills'] | undefined): Record<string, unknown> {
@@ -12,7 +12,7 @@ function flattenAgentSkills(skills: StoredAgent['skills'] | undefined): Record<s
     }
     return merged;
   }
-  return skills as Record<string, unknown>;
+  return skills;
 }
 
 /**
@@ -31,15 +31,6 @@ export function extractStaticModel(model: StoredAgent['model'] | undefined): Age
     return { provider, name };
   }
   return undefined;
-}
-
-/**
- * `true` when the stored agent's model is configured conditionally (in code).
- * The form shows a read-only banner for these — v1 does not support editing
- * conditional models in the playground UI.
- */
-export function isConditionalStoredModel(model: StoredAgent['model'] | undefined): boolean {
-  return Array.isArray(model);
 }
 
 export function storedAgentToFormValues(storedAgent: StoredAgent | null | undefined): AgentBuilderEditFormValues {

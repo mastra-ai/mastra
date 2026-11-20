@@ -1,7 +1,7 @@
-import { useSyncExternalStore } from 'react';
 import { Badge } from '@/ds/components/Badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { focusRing } from '@/ds/primitives/transitions';
+import { useClock } from '@/hooks/use-clock';
 import { cn } from '@/lib/utils';
 import { formatDate, toDate } from '@/utils/date-format';
 import type { DateInput } from '@/utils/date-format';
@@ -9,34 +9,8 @@ import { formatRelativeTime } from '@/utils/relative-time';
 
 export interface RelativeTimestampProps {
   value: DateInput;
+  label?: string;
   className?: string;
-}
-
-const listeners = new Set<() => void>();
-let ticker: ReturnType<typeof setInterval> | undefined;
-let now = Date.now();
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  if (!ticker) {
-    now = Date.now();
-    ticker = setInterval(() => {
-      now = Date.now();
-      listeners.forEach(notify => notify());
-    }, 1000);
-  }
-  return () => {
-    listeners.delete(listener);
-    if (listeners.size === 0) {
-      clearInterval(ticker);
-      ticker = undefined;
-    }
-  };
-}
-
-function useNow() {
-  const read = () => (ticker ? now : Date.now());
-  return useSyncExternalStore(subscribe, read, read);
 }
 
 const SINCE_UNITS = [
@@ -68,11 +42,20 @@ function formatSince(date: Date, at: number) {
 }
 
 function Relative({ date }: { date: Date }) {
-  return <>{formatRelativeTime(date, { now: useNow() })}</>;
+  const parts = useClock(now => formatRelativeTime(date, { now }))?.split(/(\d+[smhd])/) ?? [];
+  return parts.map((part, index) =>
+    index % 2 ? (
+      <span key={index} className="font-mono [font-size-adjust:cap-height_0.729]">
+        {part}
+      </span>
+    ) : (
+      part
+    ),
+  );
 }
 
 function Since({ date }: { date: Date }) {
-  return <>{formatSince(date, useNow())}</>;
+  return <>{useClock(now => formatSince(date, now))}</>;
 }
 
 function zoneName(date: Date, timeZone?: string) {
@@ -94,7 +77,7 @@ function zoneRow(date: Date, timeZone?: string) {
   };
 }
 
-export function RelativeTimestamp({ value, className }: RelativeTimestampProps) {
+export function RelativeTimestamp({ value, label, className }: RelativeTimestampProps) {
   const date = toDate(value);
   if (!date) return null;
 
@@ -108,17 +91,18 @@ export function RelativeTimestamp({ value, className }: RelativeTimestampProps) 
           <time
             dateTime={date.toISOString()}
             tabIndex={0}
-            className={cn('rounded-sm font-mono whitespace-nowrap tabular-nums', focusRing.visible, className)}
+            className={cn('rounded-sm whitespace-nowrap tabular-nums', focusRing, className)}
           />
         }
       >
         <span aria-hidden="true">
           <Relative date={date} />
         </span>
-        <span className="sr-only">{formatDate(date, 'date-time-seconds')}</span>
+        <span className="sr-only">{[label, formatDate(date, 'date-time-seconds')].filter(Boolean).join(' ')}</span>
       </TooltipTrigger>
       <TooltipContent>
         <span className="text-muted-foreground">
+          {label ? `${label} ` : null}
           <Since date={date} />
         </span>
         <table className="mt-1.5 border-t border-border font-mono tabular-nums">

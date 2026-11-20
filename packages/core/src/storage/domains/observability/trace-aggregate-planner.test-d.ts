@@ -1,5 +1,6 @@
 import { describe, expectTypeOf, it } from 'vitest';
-import type { TraceAggregateMeasure } from './trace-aggregate';
+import type { ObservabilityStorage, ObservabilityStorageFeature } from './base';
+import type { TraceAggregateMeasure, TraceAggregateResponse } from './trace-aggregate';
 import type {
   TrustedTraceAggregateHavingPredicate,
   TrustedTraceAggregateOrderBy,
@@ -34,5 +35,16 @@ describe('TrustedTraceAggregatePlan type', () => {
     expectTypeOf<Extract<TrustedTraceAggregateOrderBy, { target: 'dimension' }>>().toHaveProperty('dimension');
     expectTypeOf<Extract<TrustedTraceAggregateOrderBy, { target: 'measure' }>>().toHaveProperty('measure');
     expectTypeOf<Extract<TrustedTraceAggregateOrderBy, { target: 'measure' }>>().not.toHaveProperty('dimension');
+  });
+});
+
+describe('trace-aggregate storage capability type', () => {
+  it('declares trace-aggregate as a storage feature', () => {
+    expectTypeOf<'trace-aggregate'>().toMatchTypeOf<ObservabilityStorageFeature>();
+  });
+
+  it('types aggregateTraces over the trusted plan and aggregate response', () => {
+    expectTypeOf<ObservabilityStorage['aggregateTraces']>().parameters.toEqualTypeOf<[TrustedTraceAggregatePlan]>();
+    expectTypeOf<ObservabilityStorage['aggregateTraces']>().returns.toEqualTypeOf<Promise<TraceAggregateResponse>>();
   });
 });

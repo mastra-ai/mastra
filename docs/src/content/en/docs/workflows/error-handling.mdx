@@ -39,7 +39,7 @@ switch (result.status) {
 
 The result object contains:
 
-- `status` - The workflow status: `'success'`, `'failed'`, `'suspended'`, or `'tripwire'`
+- `status` - The workflow status: `'success'`, `'failed'`, `'suspended'`, `'paused'`, or `'tripwire'`
 - `result` - The workflow output (when status is `'success'`)
 - `error` - Error details (when status is `'failed'`)
 - `steps` - Individual step results with their status and output
@@ -64,6 +64,8 @@ if (result.status === 'failed') {
 ## Lifecycle callbacks
 
 For scenarios where you need to handle workflow completion without awaiting the result, such as background jobs, fire-and-forget workflows, or centralized logging, you can use lifecycle callbacks.
+
+Lifecycle callbacks are awaited, but they aren't durable or retried. Use workflow steps for work that must complete reliably.
 
 ### `onFinish`
 
@@ -93,7 +95,7 @@ const orderWorkflow = createWorkflow({
 
 The `onFinish` callback receives:
 
-- `status` - The workflow status
+- `status` - The workflow status, typed as `WorkflowRunStatus`: `'running'`, `'success'`, `'failed'`, `'tripwire'`, `'suspended'`, `'waiting'`, `'pending'`, `'canceled'`, `'bailed'`, `'paused'`, or `'skipped'`
 - `result` - The workflow output (on success)
 - `error` - Error details (on failure)
 - `steps` - Individual step results
@@ -101,7 +103,7 @@ The `onFinish` callback receives:
 - `runId` - The unique identifier for this workflow run
 - `workflowId` - The workflow's identifier
 - `resourceId` - Optional resource identifier (if provided when creating the run)
-- `getInitData<any>()` - Function that returns the initial input data
+- `getInitData()` - Function that returns the initial input data
 - `mastra` - The Mastra instance (if workflow is registered with Mastra)
 - `requestContext` - Request-scoped context data
 - `logger` - The workflow's logger instance
@@ -232,6 +234,38 @@ const step1 = createStep({
 })
 ```
 
+## Skipping retries with `MastraNonRetryableError`
+
+Some failures are permanent, for example invalid input or a resource that doesn't exist. Retrying them only delays the failure. Throw `MastraNonRetryableError` from a step to fail it immediately, without using the remaining attempts from `retries` or `retryConfig`:
+
+```typescript {2,13} title="src/mastra/workflows/test-workflow.ts"
+import { createStep } from '@mastra/core/workflows'
+import { MastraNonRetryableError } from '@mastra/core/error'
+import { z } from 'zod'
+
+const step1 = createStep({
+  id: 'step-1',
+  inputSchema: z.object({ templateId: z.string() }),
+  outputSchema: z.object({ value: z.string() }),
+  execute: async ({ inputData }) => {
+    const response = await fetch(`https://example.com/templates/${inputData.templateId}`)
+
+    if (response.status === 404) {
+      throw new MastraNonRetryableError(`Template ${inputData.templateId} not found`)
+    }
+
+    if (!response.ok) {
+      throw new Error(`Request failed with status ${response.status}`)
+    }
+
+    return { value: await response.text() }
+  },
+  retries: 3,
+})
+```
+
+In this example, a `404` response fails the step on the first attempt. Other failed responses throw a regular `Error`. The step retries up to three times.
+
 ## Conditional branching
 
 You can create alternative workflow paths based on the success or failure of previous steps using conditional logic:
@@ -274,7 +308,7 @@ export const testWorkflow = createWorkflow({})
 
 ## Check previous step results
 
-Use `getStepResult()` to inspect a previous step’s results.
+Use `getStepResultAsync()` to inspect a previous step’s results. It resolves to `null` if the step hasn't completed successfully.
 
 ```typescript oxfmt:false {8} title="src/mastra/workflows/test-workflow.ts"
 import { createStep } from "@mastra/core/workflows";
@@ -283,8 +317,8 @@ import { z } from "zod";
 const step1 = createStep({...});
 
 const step2 = createStep({
-  execute: async ({ getStepResult }) => {
-    const step1Result = getStepResult(step1);
+  execute: async ({ getStepResultAsync }) => {
+    const step1Result = await getStepResultAsync(step1);
 
     return {
       value: ""

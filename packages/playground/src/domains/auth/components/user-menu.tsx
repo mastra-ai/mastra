@@ -1,14 +1,16 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Loader2, Settings, X, LogOut } from 'lucide-react';
+import { IconArrowBoxLeft } from '@mastra/playground-ui/icons/central/IconArrowBoxLeft';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconLoadingCircle } from '@mastra/playground-ui/icons/central/IconLoadingCircle';
+import { IconSettingsGear5 } from '@mastra/playground-ui/icons/central/IconSettingsGear5';
+import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
+import type { AuthenticatedUser, CurrentUser } from '@mastra/react/hooks/auth';
 import { useState } from 'react';
 import { Link } from 'react-router';
-
-import { useAuthCapabilities, useLogout } from '../hooks';
+import { useLogout } from '../hooks';
 import { useRoleImpersonation } from '../hooks/use-role-impersonation';
-import { isAuthenticated } from '../types';
-import type { AuthenticatedUser, CurrentUser } from '../types';
 import { UserAvatar } from './user-avatar';
 
 export type UserMenuProps = {
@@ -76,7 +78,7 @@ export function UserMenu({ user }: UserMenuProps) {
         {/* Preview as role section — only for admins with available roles */}
         {availableRoles && availableRoles.length > 0 && (
           <div className="border-b border-border p-2">
-            <Txt variant="meta" tone="muted" className="px-2 py-1 tracking-wider uppercase">
+            <Txt variant="meta" tone="muted" className="px-2 py-1 uppercase">
               Preview as role
             </Txt>
             {availableRoles.map(role => {
@@ -94,13 +96,15 @@ export function UserMenu({ user }: UserMenuProps) {
                     }
                     setOpen(false);
                   }}
-                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-body ${
+                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left ${
                     isActive ? 'bg-fill-hover' : 'hover:bg-fill-subtle'
                   } ${isSwitching ? 'cursor-not-allowed opacity-50' : ''}`}
                 >
-                  {isSwitching && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  <span className="flex-1 capitalize">{role.name}</span>
-                  {isActive && <X className="h-3.5 w-3.5 text-muted-foreground" />}
+                  {isSwitching && <IconLoadingCircle className="size-icon-sm animate-spin" />}
+                  <Txt as="span" variant="body" className="flex-1 capitalize">
+                    {role.name}
+                  </Txt>
+                  {isActive && <IconCrossMedium className="size-icon-sm text-muted-foreground" />}
                 </button>
               );
             })}
@@ -109,9 +113,9 @@ export function UserMenu({ user }: UserMenuProps) {
 
         <div className="flex flex-col gap-1 p-2">
           {logoutError && (
-            <p role="alert" className="text-ui-sm">
+            <Txt variant="caption" role="alert">
               {logoutError.message}
-            </p>
+            </Txt>
           )}
           <Button
             render={<Link to="/settings" />}
@@ -119,12 +123,12 @@ export function UserMenu({ user }: UserMenuProps) {
             variant="ghost"
             className="w-full justify-start"
             onClick={() => setOpen(false)}
-            icon={<Settings />}
+            icon={<IconSettingsGear5 />}
           >
             Settings
           </Button>
           <Button
-            icon={<LogOut />}
+            icon={<IconArrowBoxLeft />}
             variant="ghost"
             onClick={() => handleLogout()}
             disabled={isPending}

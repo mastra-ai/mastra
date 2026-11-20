@@ -1,13 +1,16 @@
 import type { BackgroundTaskManager, TaskContext } from '@mastra/core/background-tasks';
 import { EventEmitterPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
+import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { MockStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
+import { getEffectivePermission } from '../server-adapter/routes/permissions';
 import {
   BACKGROUND_TASK_STREAM_ROUTE,
   LIST_BACKGROUND_TASKS_ROUTE,
   GET_BACKGROUND_TASK_ROUTE,
+  RESUME_BACKGROUND_TASK_ROUTE,
 } from './background-tasks';
 
 function ctx(executeFn: (args: any, opts?: any) => Promise<any>): TaskContext {
@@ -15,6 +18,12 @@ function ctx(executeFn: (args: any, opts?: any) => Promise<any>): TaskContext {
 }
 
 const tick = (ms = 50) => new Promise(resolve => setTimeout(resolve, ms));
+
+function scopedContext(resourceId: string) {
+  const requestContext = new RequestContext();
+  requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+  return requestContext;
+}
 
 describe('Background Tasks handlers', () => {
   let mastra: Mastra;
@@ -55,7 +64,7 @@ describe('Background Tasks handlers', () => {
     it('returns empty list when no tasks exist', async () => {
       const result = await LIST_BACKGROUND_TASKS_ROUTE.handler({
         mastra,
-        requestContext: {} as any,
+        requestContext: new RequestContext(),
         abortSignal: new AbortController().signal,
       } as any);
 
@@ -71,7 +80,7 @@ describe('Background Tasks handlers', () => {
 
       const result = await LIST_BACKGROUND_TASKS_ROUTE.handler({
         mastra,
-        requestContext: {} as any,
+        requestContext: new RequestContext(),
         abortSignal: new AbortController().signal,
       } as any);
 
@@ -95,7 +104,7 @@ describe('Background Tasks handlers', () => {
       const result = await LIST_BACKGROUND_TASKS_ROUTE.handler({
         mastra,
         agentId: 'a1',
-        requestContext: {} as any,
+        requestContext: new RequestContext(),
         abortSignal: new AbortController().signal,
       } as any);
 
@@ -117,7 +126,7 @@ describe('Background Tasks handlers', () => {
       const result = await LIST_BACKGROUND_TASKS_ROUTE.handler({
         mastra,
         status: 'failed',
-        requestContext: {} as any,
+        requestContext: new RequestContext(),
         abortSignal: new AbortController().signal,
       } as any);
 
@@ -138,7 +147,7 @@ describe('Background Tasks handlers', () => {
         mastra,
         page: 0,
         perPage: 2,
-        requestContext: {} as any,
+        requestContext: new RequestContext(),
         abortSignal: new AbortController().signal,
       } as any);
 
@@ -151,7 +160,7 @@ describe('Background Tasks handlers', () => {
 
       const result = await LIST_BACKGROUND_TASKS_ROUTE.handler({
         mastra: noTasksMastra,
-        requestContext: {} as any,
+        requestContext: new RequestContext(),
         abortSignal: new AbortController().signal,
       } as any);
 
@@ -170,7 +179,7 @@ describe('Background Tasks handlers', () => {
       const result = await GET_BACKGROUND_TASK_ROUTE.handler({
         mastra,
         backgroundTaskId: task.id,
-        requestContext: {} as any,
+        requestContext: new RequestContext(),
         abortSignal: new AbortController().signal,
       } as any);
 
@@ -184,7 +193,7 @@ describe('Background Tasks handlers', () => {
         GET_BACKGROUND_TASK_ROUTE.handler({
           mastra,
           backgroundTaskId: 'nonexistent',
-          requestContext: {} as any,
+          requestContext: new RequestContext(),
           abortSignal: new AbortController().signal,
         } as any),
       ).rejects.toThrow(HTTPException);
@@ -197,7 +206,7 @@ describe('Background Tasks handlers', () => {
         GET_BACKGROUND_TASK_ROUTE.handler({
           mastra: noTasksMastra,
           backgroundTaskId: 'any',
-          requestContext: {} as any,
+          requestContext: new RequestContext(),
           abortSignal: new AbortController().signal,
         } as any),
       ).rejects.toThrow(HTTPException);
@@ -211,7 +220,7 @@ describe('Background Tasks handlers', () => {
       const result = await BACKGROUND_TASK_STREAM_ROUTE.handler({
         mastra,
         abortSignal: abortController.signal,
-        requestContext: {} as any,
+        requestContext: new RequestContext(),
       } as any);
 
       expect(result).toBeInstanceOf(ReadableStream);
@@ -224,7 +233,7 @@ describe('Background Tasks handlers', () => {
       const stream = (await BACKGROUND_TASK_STREAM_ROUTE.handler({
         mastra,
         abortSignal: abortController.signal,
-        requestContext: {} as any,
+        requestContext: new RequestContext(),
       } as any)) as ReadableStream;
 
       const reader = stream.getReader();
@@ -255,7 +264,7 @@ describe('Background Tasks handlers', () => {
       const stream = (await BACKGROUND_TASK_STREAM_ROUTE.handler({
         mastra,
         abortSignal: abortController.signal,
-        requestContext: {} as any,
+        requestContext: new RequestContext(),
       } as any)) as ReadableStream;
 
       const reader = stream.getReader();
@@ -285,7 +294,7 @@ describe('Background Tasks handlers', () => {
         mastra,
         agentId: 'target-agent',
         abortSignal: abortController.signal,
-        requestContext: {} as any,
+        requestContext: new RequestContext(),
       } as any)) as ReadableStream;
 
       const reader = stream.getReader();
@@ -322,7 +331,7 @@ describe('Background Tasks handlers', () => {
       const result = await BACKGROUND_TASK_STREAM_ROUTE.handler({
         mastra: noTasksMastra,
         abortSignal: abortController.signal,
-        requestContext: {} as any,
+        requestContext: new RequestContext(),
       } as any);
 
       expect(result).toBeInstanceOf(ReadableStream);
@@ -331,6 +340,307 @@ describe('Background Tasks handlers', () => {
       abortController.abort();
       const { done } = await reader.read();
       expect(done).toBe(true);
+    });
+
+    it('returns an empty stream that is already closed when the client left before the stream started', async () => {
+      const noTasksMastra = new Mastra({ logger: false, storage, backgroundTasks: { enabled: false } });
+      const abortController = new AbortController();
+      abortController.abort();
+
+      const result = (await BACKGROUND_TASK_STREAM_ROUTE.handler({
+        mastra: noTasksMastra,
+        abortSignal: abortController.signal,
+        requestContext: new RequestContext(),
+      } as any)) as ReadableStream;
+
+      const { done } = await result.getReader().read();
+      expect(done).toBe(true);
+    });
+  });
+
+  describe('resource scoping', () => {
+    const enqueueFor = (resourceId: string, toolCallId: string, result: string) =>
+      bgManager.enqueue(
+        { toolName: 'tool', toolCallId, args: {}, agentId: 'a1', runId: `run-${toolCallId}`, resourceId },
+        ctx(vi.fn().mockResolvedValue(result)),
+      );
+
+    const drain = async (stream: ReadableStream, abortController: AbortController) => {
+      await tick();
+      abortController.abort();
+      const events: any[] = [];
+      const reader = stream.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        events.push(value);
+      }
+      return events;
+    };
+
+    it('pins the stream to the request-context resource', async () => {
+      const abortController = new AbortController();
+      const stream = (await BACKGROUND_TASK_STREAM_ROUTE.handler({
+        mastra,
+        abortSignal: abortController.signal,
+        requestContext: scopedContext('user-1'),
+      } as any)) as ReadableStream;
+
+      await enqueueFor('user-1', 'own', 'mine');
+      await enqueueFor('user-2', 'other', 'SECRET');
+
+      const events = await drain(stream, abortController);
+      expect(new Set(events.map(e => e.payload.toolCallId))).toEqual(new Set(['own']));
+      expect(JSON.stringify(events)).not.toContain('SECRET');
+    });
+
+    it('rejects a stream for a different resource than the request context', async () => {
+      await expect(
+        BACKGROUND_TASK_STREAM_ROUTE.handler({
+          mastra,
+          resourceId: 'user-2',
+          abortSignal: new AbortController().signal,
+          requestContext: scopedContext('user-1'),
+        } as any),
+      ).rejects.toMatchObject({ status: 403 });
+    });
+
+    it('keeps cross-resource access for privileged callers', async () => {
+      const abortController = new AbortController();
+      const stream = (await BACKGROUND_TASK_STREAM_ROUTE.handler({
+        mastra,
+        abortSignal: abortController.signal,
+        requestContext: new RequestContext(),
+      } as any)) as ReadableStream;
+
+      await enqueueFor('user-1', 'one', 'r1');
+      await enqueueFor('user-2', 'two', 'r2');
+
+      const events = await drain(stream, abortController);
+      expect(new Set(events.map(e => e.payload.toolCallId))).toEqual(new Set(['one', 'two']));
+    });
+
+    it('lists only the request-context resource and rejects a different resourceId', async () => {
+      await enqueueFor('user-1', 'own', 'mine');
+      await enqueueFor('user-2', 'other', 'theirs');
+      await tick();
+
+      const result = await LIST_BACKGROUND_TASKS_ROUTE.handler({
+        mastra,
+        requestContext: scopedContext('user-1'),
+        abortSignal: new AbortController().signal,
+      } as any);
+      expect(result.tasks.map(t => t.toolCallId)).toEqual(['own']);
+
+      await expect(
+        LIST_BACKGROUND_TASKS_ROUTE.handler({
+          mastra,
+          resourceId: 'user-2',
+          requestContext: scopedContext('user-1'),
+          abortSignal: new AbortController().signal,
+        } as any),
+      ).rejects.toMatchObject({ status: 403 });
+    });
+
+    it('returns 404 for a task owned by another resource', async () => {
+      const { task: own } = await enqueueFor('user-1', 'own', 'mine');
+      const { task: other } = await enqueueFor('user-2', 'other', 'theirs');
+      await tick();
+
+      const found = await GET_BACKGROUND_TASK_ROUTE.handler({
+        mastra,
+        backgroundTaskId: own.id,
+        requestContext: scopedContext('user-1'),
+        abortSignal: new AbortController().signal,
+      } as any);
+      expect(found.id).toBe(own.id);
+
+      await expect(
+        GET_BACKGROUND_TASK_ROUTE.handler({
+          mastra,
+          backgroundTaskId: other.id,
+          requestContext: scopedContext('user-1'),
+          abortSignal: new AbortController().signal,
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('rejects an empty context resource id instead of granting privileged access', async () => {
+      const { task: other } = await enqueueFor('user-2', 'other', 'SECRET');
+      await tick();
+
+      await expect(
+        BACKGROUND_TASK_STREAM_ROUTE.handler({
+          mastra,
+          abortSignal: new AbortController().signal,
+          requestContext: scopedContext(''),
+        } as any),
+      ).rejects.toMatchObject({ status: 403 });
+
+      await expect(
+        LIST_BACKGROUND_TASKS_ROUTE.handler({
+          mastra,
+          requestContext: scopedContext(''),
+          abortSignal: new AbortController().signal,
+        } as any),
+      ).rejects.toMatchObject({ status: 403 });
+
+      await expect(
+        GET_BACKGROUND_TASK_ROUTE.handler({
+          mastra,
+          backgroundTaskId: other.id,
+          requestContext: scopedContext(''),
+          abortSignal: new AbortController().signal,
+        } as any),
+      ).rejects.toMatchObject({ status: 403 });
+    });
+  });
+
+  // A chat answers a deferred background tool's input request over HTTP. (#28986)
+  describe('RESUME_BACKGROUND_TASK_ROUTE', () => {
+    function approvalTask(seen: unknown[]) {
+      return ctx(async (_args, opts) => {
+        if (opts?.resumeData === undefined) {
+          await opts?.suspend?.({ question: 'Approve the refund?' });
+          return undefined;
+        }
+        seen.push(opts.resumeData);
+        return { refunded: (opts.resumeData as { approved: boolean }).approved };
+      });
+    }
+
+    async function suspendedTask(seen: unknown[], resourceId?: string) {
+      const { task } = await bgManager.enqueue(
+        { toolName: 'refund', toolCallId: 'call-1', args: {}, agentId: 'a1', runId: 'run-1', resourceId },
+        approvalTask(seen),
+      );
+      await vi.waitFor(async () => expect((await bgManager.getTask(task.id))?.status).toBe('suspended'));
+      return (await bgManager.getTask(task.id))!;
+    }
+
+    const resume = (backgroundTaskId: string, body: Record<string, unknown>, requestContext = new RequestContext()) =>
+      RESUME_BACKGROUND_TASK_ROUTE.handler({
+        mastra,
+        backgroundTaskId,
+        ...body,
+        requestContext,
+        abortSignal: new AbortController().signal,
+      } as any);
+
+    it('answers a suspended task and the tool finishes with the answer', async () => {
+      const seen: unknown[] = [];
+      const task = await suspendedTask(seen);
+      expect(task.suspendPayload).toEqual({ question: 'Approve the refund?' });
+
+      const returned = await resume(task.id, {
+        resumeData: { approved: true },
+        suspendedAt: task.suspendedAt!.toISOString(),
+      });
+      expect(returned.id).toBe(task.id);
+      expect(returned.status).not.toBe('suspended');
+
+      await vi.waitFor(async () => expect((await bgManager.getTask(task.id))?.status).toBe('completed'));
+      expect((await bgManager.getTask(task.id))?.result).toEqual({ refunded: true });
+      expect(seen).toEqual([{ approved: true }]);
+    });
+
+    it('accepts the suspension timestamp as epoch milliseconds', async () => {
+      const task = await suspendedTask([]);
+      await resume(task.id, { resumeData: { approved: false }, suspendedAt: task.suspendedAt!.getTime() });
+      await vi.waitFor(async () => expect((await bgManager.getTask(task.id))?.result).toEqual({ refunded: false }));
+    });
+
+    it('returns 404 for an unknown task', async () => {
+      await expect(resume('missing-task', { resumeData: {} })).rejects.toMatchObject({ status: 404 });
+    });
+
+    it("returns 404 for another resource's task and leaves it suspended", async () => {
+      const task = await suspendedTask([], 'user-2');
+      await expect(resume(task.id, { resumeData: { approved: true } }, scopedContext('user-1'))).rejects.toMatchObject({
+        status: 404,
+      });
+      expect((await bgManager.getTask(task.id))?.status).toBe('suspended');
+    });
+
+    it('returns 409 for a task that is not suspended', async () => {
+      const { task } = await bgManager.enqueue(
+        { toolName: 'tool', toolCallId: 'c1', args: {}, agentId: 'a1', runId: 'run-1' },
+        ctx(vi.fn().mockResolvedValue('done')),
+      );
+      await vi.waitFor(async () => expect((await bgManager.getTask(task.id))?.status).toBe('completed'));
+      await expect(resume(task.id, { resumeData: {} })).rejects.toMatchObject({
+        status: 409,
+        message: 'Background task is completed, not suspended',
+      });
+    });
+
+    it("returns 409 while the agent's background slots are full, and the task stays answerable", async () => {
+      const task = await suspendedTask([]);
+      let release!: () => void;
+      const blocker = new Promise<void>(resolve => (release = resolve));
+      // perAgentConcurrency is 3: occupy every slot for the same agent.
+      for (const id of ['busy-1', 'busy-2', 'busy-3']) {
+        await bgManager.enqueue(
+          { toolName: 'busy', toolCallId: id, args: {}, agentId: 'a1', runId: `run-${id}` },
+          ctx(() => blocker),
+        );
+      }
+      await vi.waitFor(async () =>
+        expect((await bgManager.listTasks({ agentId: 'a1', status: 'running' })).total).toBe(3),
+      );
+
+      await expect(resume(task.id, { resumeData: { approved: true } })).rejects.toMatchObject({
+        status: 409,
+        message: expect.stringContaining('Concurrency limit reached'),
+      });
+      expect((await bgManager.getTask(task.id))?.status).toBe('suspended');
+      release();
+    });
+
+    it.each([
+      ['ISO', (d: Date) => new Date(d.getTime() - 1000).toISOString()],
+      ['epoch', (d: Date) => d.getTime() - 1000],
+    ])('returns 409 for a stale %s suspendedAt and leaves the task suspended', async (_label, stale) => {
+      const seen: unknown[] = [];
+      const task = await suspendedTask(seen);
+      await expect(
+        resume(task.id, { resumeData: { approved: true }, suspendedAt: stale(task.suspendedAt!) }),
+      ).rejects.toMatchObject({ status: 409 });
+      expect((await bgManager.getTask(task.id))?.status).toBe('suspended');
+      expect(seen).toEqual([]);
+    });
+
+    it('returns 409 when the suspension changes between the route reading it and the resume', async () => {
+      const seen: unknown[] = [];
+      const task = await suspendedTask(seen);
+      const getTask = bgManager.getTask.bind(bgManager);
+      const storage = await (bgManager as any).getStorage();
+      // The route reads the original suspension; before manager.resume reads it, the task suspends again.
+      const spy = vi.spyOn(bgManager, 'getTask').mockImplementationOnce(async id => {
+        const read = await getTask(id);
+        await storage.updateTask(id, { suspendedAt: new Date(task.suspendedAt!.getTime() + 5000) });
+        return read;
+      });
+      try {
+        await expect(
+          resume(task.id, { resumeData: { approved: true }, suspendedAt: task.suspendedAt!.toISOString() }),
+        ).rejects.toMatchObject({ status: 409, message: expect.stringContaining('suspension has changed') });
+      } finally {
+        spy.mockRestore();
+      }
+      expect((await bgManager.getTask(task.id))?.status).toBe('suspended');
+      expect(seen).toEqual([]);
+    });
+
+    it('requires resumeData in the body', () => {
+      const schema = RESUME_BACKGROUND_TASK_ROUTE.bodySchema!;
+      expect(schema.safeParse({}).success).toBe(false);
+      expect(schema.safeParse({ resumeData: null }).success).toBe(true);
+      expect(schema.safeParse({ resumeData: {}, suspendedAt: 'yesterday' }).success).toBe(false);
+    });
+
+    it('requires the background-tasks:execute permission', () => {
+      expect(getEffectivePermission(RESUME_BACKGROUND_TASK_ROUTE)).toBe('background-tasks:execute');
     });
   });
 });

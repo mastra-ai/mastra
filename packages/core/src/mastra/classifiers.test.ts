@@ -56,10 +56,10 @@ describe('Mastra classifier registration', () => {
     const { entrypoint, startSpan } = createObservability();
     new Mastra({ classifiers: { registered }, observability: entrypoint });
 
-    await registered.evaluate({ state: 'test' });
+    await registered.decide({ state: 'test' });
     expect(startSpan).toHaveBeenCalledOnce();
 
-    await unregistered.evaluate({ state: 'test' });
+    await unregistered.decide({ state: 'test' });
     expect(startSpan).toHaveBeenCalledOnce();
   });
 
@@ -112,7 +112,7 @@ describe('Mastra classifier registration', () => {
     new Mastra({ classifiers: { safety: classifier }, observability: first.entrypoint });
     new Mastra({ classifiers: { safety: classifier }, observability: second.entrypoint });
 
-    await classifier.evaluate({ state: 'test' });
+    await classifier.decide({ state: 'test' });
 
     expect(first.startSpan).not.toHaveBeenCalled();
     expect(second.startSpan).toHaveBeenCalledOnce();

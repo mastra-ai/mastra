@@ -149,6 +149,14 @@ export interface WorkspaceToolConfig {
 export interface BackgroundProcessMeta {
   pid: string;
   toolCallId?: string;
+  /** Agent that started the process, when it was started from an agent run. */
+  agentId?: string;
+  /** Memory thread of the run that started the process, if any. */
+  threadId?: string;
+  /** Memory resource of the run that started the process, if any. */
+  resourceId?: string;
+  /** Run that started the process. */
+  runId?: string;
 }
 
 /** Metadata passed to the onExit callback. */
@@ -160,6 +168,11 @@ export interface BackgroundProcessExitMeta extends BackgroundProcessMeta {
   stderrTruncated?: boolean;
   stdoutDroppedBytes?: number;
   stderrDroppedBytes?: number;
+  /**
+   * True when the process was killed because the abort signal fired (for example the user
+   * cancelled the run). False for normal exits and for `kill_process`.
+   */
+  killedByAbort?: boolean;
 }
 
 /**

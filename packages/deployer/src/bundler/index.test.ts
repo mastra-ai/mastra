@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { prepareFsAgentsEntry, writeFsAgentsEntry } from '../build/fs-routing/prepare';
 import type { SourceDependencyConstraints } from './index';
 import { Bundler, applySourceDependencyRange, getSourceDependencyConstraints, isRegistryVersionSpec } from './index';
 
@@ -28,6 +29,10 @@ class TestBundler extends Bundler {
 
   installForTest(outputDirectory: string, rootDir: string, pnpmOverrides?: Record<string, string>) {
     return this.installDependencies(outputDirectory, rootDir, pnpmOverrides);
+  }
+
+  bundlerOptionsForTest(entryFile: string, outputDirectory: string) {
+    return this.getUserBundlerOptions(entryFile, outputDirectory);
   }
 }
 
@@ -87,6 +92,57 @@ afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })));
 });
 
+describe('Bundler.loadEnvVars', () => {
+  it('layers the env files returned by getEnvFiles, later files winning', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'mastra-bundler-env-'));
+    tempDirs.push(tempDir);
+    const envFile = join(tempDir, '.env');
+    const localFile = join(tempDir, '.env.local');
+    await writeFile(envFile, 'SHARED=base\nBASE_ONLY=1\n');
+    await writeFile(localFile, 'SHARED=local\nLOCAL_ONLY=2\n');
+
+    class EnvBundler extends TestBundler {
+      getEnvFiles(): Promise<string[]> {
+        return Promise.resolve([envFile, localFile]);
+      }
+    }
+
+    const env = await new EnvBundler('env-test').loadEnvVars();
+
+    expect(Object.fromEntries(env)).toEqual({ SHARED: 'local', BASE_ONLY: '1', LOCAL_ONLY: '2' });
+  });
+});
+
+describe('Bundler.getUserBundlerOptions', () => {
+  // With file-based agents the CLI bundles a generated wrapper that only re-exports `mastra`,
+  // so extracting from it found no `new Mastra({...})` and fell back to the defaults (#29048).
+  it('keeps the bundler options from index.ts when the project has file-based agents (#29048)', async () => {
+    const mastraDir = await mkdtemp(join(tmpdir(), 'mastra-bundler-fs-agents-'));
+    tempDirs.push(mastraDir);
+    const userEntry = join(mastraDir, 'index.ts');
+    await writeFile(
+      userEntry,
+      `class Mastra { constructor(config) { this.config = config; } }
+export const mastra = new Mastra({ bundler: { sourcemap: true, externals: ['pg'] } });
+`,
+    );
+    await mkdir(join(mastraDir, 'agents', 'weather'), { recursive: true });
+    await writeFile(join(mastraDir, 'agents', 'weather', 'instructions.md'), 'hi');
+    const outputDirectory = join(mastraDir, '.mastra');
+
+    const fsAgents = await prepareFsAgentsEntry(mastraDir, userEntry, outputDirectory);
+    await writeFsAgentsEntry(fsAgents);
+    const bundler = new TestBundler('Test');
+    bundler.setConfigEntryFile(userEntry);
+
+    expect(fsAgents.entryFile).not.toBe(userEntry);
+    await expect(bundler.bundlerOptionsForTest(fsAgents.entryFile, outputDirectory)).resolves.toEqual({
+      sourcemap: true,
+      externals: ['pg'],
+    });
+  });
+});
+
 describe('Bundler.installDependencies', () => {
   it('updates the selected lockfile and installs packed workspace dependencies in one operation', async () => {
     const bundler = new TestBundler('Test');
@@ -101,6 +157,7 @@ describe('Bundler.installDependencies', () => {
       dir: join('/tmp/build', 'output'),
       pnpmOverrides,
       pnpmNodeLinker: undefined,
+      pnpmWorkspaceSettings: undefined,
     });
   });
 });

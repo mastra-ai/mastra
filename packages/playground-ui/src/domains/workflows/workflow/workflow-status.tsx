@@ -1,11 +1,16 @@
-import { CirclePause, HourglassIcon, Loader2, ShieldAlert } from 'lucide-react';
+import { workflowStatusTone, workflowStatusToneText } from '../workflow-status-tone';
 import { WorkflowCard } from './workflow-card';
 import { TripwireNotice } from '@/domains/chat/messages/tripwire-notice';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Txt } from '@/ds/components/Txt';
+import { IconHourglass } from '@/ds/icons/central/IconHourglass';
+import { IconLoadingCircle } from '@/ds/icons/central/IconLoadingCircle';
+import { IconPause } from '@/ds/icons/central/IconPause';
+import { IconShield2 } from '@/ds/icons/central/IconShield2';
 import { CheckIcon } from '@/ds/icons/CheckIcon';
 import { CrossIcon } from '@/ds/icons/CrossIcon';
 import { Icon } from '@/ds/icons/Icon';
+import { cn } from '@/utils/cn';
 
 export interface TripwireInfo {
   reason?: string;
@@ -23,18 +28,19 @@ export interface WorkflowStatusProps {
 
 export const WorkflowStatus = ({ stepId, status, result, tripwire }: WorkflowStatusProps) => {
   const isTripwire = status === 'tripwire';
+  const toneText = workflowStatusToneText[workflowStatusTone(status)];
 
   return (
     <WorkflowCard
       header={
         <div className="flex items-center gap-3">
           <Icon>
-            {status === 'success' && <CheckIcon className="text-accent1" />}
-            {status === 'failed' && <CrossIcon className="text-accent2" />}
-            {status === 'tripwire' && <ShieldAlert className="text-notice-warning-fg" />}
-            {status === 'suspended' && <CirclePause className="text-accent3" />}
-            {status === 'waiting' && <HourglassIcon className="text-accent5" />}
-            {status === 'running' && <Loader2 className="animate-spin text-accent6" />}
+            {status === 'success' && <CheckIcon className={toneText} />}
+            {status === 'failed' && <CrossIcon className={toneText} />}
+            {status === 'tripwire' && <IconShield2 className="text-warning-foreground" />}
+            {status === 'suspended' && <IconPause className={toneText} />}
+            {status === 'waiting' && <IconHourglass className={toneText} />}
+            {status === 'running' && <IconLoadingCircle className={cn('animate-spin', toneText)} />}
           </Icon>
           <Txt as="span" variant="heading" tone="ink">
             {stepId.charAt(0).toUpperCase() + stepId.slice(1)}

@@ -1,8 +1,7 @@
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
-import { XIcon } from 'lucide-react';
+import { ClearFiltersButton } from '@mastra/playground-ui/components/ClearFiltersButton';
+import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { useState } from 'react';
 import { SCORER_SOURCE_OPTIONS } from './constants';
 
@@ -23,8 +22,8 @@ export function ScorersToolbar({
   onReset,
   hasActiveFilters,
 }: ScorersToolbarProps) {
-  // Remount the search on Reset so a typed-but-uncommitted term is dropped even when the
-  // controlled `search` value is already '' (ListSearch only resyncs on value change).
+  // Remount the search on Reset so a typed-but-uncommitted term is dropped: when `search` is
+  // already '', Reset doesn't change it, so the field would keep showing the pending text.
   const [searchKey, setSearchKey] = useState(0);
 
   const handleReset = () => {
@@ -36,28 +35,28 @@ export function ScorersToolbar({
     <ActionRow>
       <ActionRow.Start>
         <div className="max-w-120 flex-1">
-          <ListSearch
+          <SearchInput
+            {...listSearchProps}
             key={searchKey}
             label="Search scorers"
-            placeholder="Filter by scorer name"
+            placeholder="Search by scorer name"
             value={search}
-            onSearch={onSearchChange}
+            onValueChange={onSearchChange}
           />
         </div>
-        <SelectFieldBlock
-          label="Source"
-          labelIsHidden
-          name="filter-source"
-          options={[...SCORER_SOURCE_OPTIONS]}
-          value={sourceFilter}
-          onValueChange={onSourceFilterChange}
-          className="whitespace-nowrap"
-        />
-        {onReset && hasActiveFilters && (
-          <Button onClick={handleReset} size="sm" variant="default" icon={<XIcon />}>
-            Reset
-          </Button>
-        )}
+        <Select value={sourceFilter} onValueChange={onSourceFilterChange}>
+          <SelectTrigger aria-label="Source" size="sm" className="w-auto whitespace-nowrap">
+            <SelectValue placeholder="Select an option" />
+          </SelectTrigger>
+          <SelectContent>
+            {SCORER_SOURCE_OPTIONS.map(option => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {onReset && hasActiveFilters && <ClearFiltersButton onClick={handleReset} />}
       </ActionRow.Start>
     </ActionRow>
   );

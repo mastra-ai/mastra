@@ -10,7 +10,7 @@ on:
 
 jobs:
   changeset:
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     if: startsWith(github.head_ref, 'renovate/') && github.repository == 'mastra-ai/mastra'
     permissions:
       pull-requests: write
@@ -20,6 +20,8 @@ jobs:
         timeout-minutes: 20
         with:
           fetch-depth: 0
+          # Partial clone: full history without every historical file version.
+          filter: blob:none
           token: ${{ secrets.RENOVATE_PAT  }}
           persist-credentials: true
 

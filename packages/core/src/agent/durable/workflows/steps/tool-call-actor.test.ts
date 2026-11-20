@@ -22,6 +22,7 @@ describe('durable tool-call context forwarding', () => {
 
     try {
       await (createDurableToolCallStep() as any).execute({
+        getState: async () => ({}),
         inputData: {
           toolCallId: 'call-1',
           toolName: 'secureTool',
@@ -90,12 +91,14 @@ describe('durable tool-call context forwarding', () => {
         get: {
           response: { db: () => [message] },
           all: { db: () => [message] },
+          input: { aiV5: { model: () => [] } },
         },
       };
       globalRunRegistry.set(runId, { tools: { 'workflow-sub': { execute } }, messageList } as any);
 
       try {
         await (createDurableToolCallStep() as any).execute({
+          getState: async () => ({}),
           inputData: {
             toolCallId: 'resume-call',
             toolName: 'workflow-sub',
@@ -160,12 +163,14 @@ describe('durable tool-call context forwarding', () => {
       get: {
         response: { db: () => [message] },
         all: { db: () => [message] },
+        input: { aiV5: { model: () => [] } },
       },
     };
     globalRunRegistry.set(runId, { tools: { 'workflow-sub': { execute } }, messageList } as any);
 
     try {
       await (createDurableToolCallStep() as any).execute({
+        getState: async () => ({}),
         inputData: {
           toolCallId: 'call-a',
           toolName: 'workflow-sub',
@@ -214,6 +219,7 @@ describe('durable tool-call context forwarding', () => {
 
     try {
       await (createDurableToolCallStep() as any).execute({
+        getState: async () => ({}),
         inputData: {
           toolCallId: 'call-1',
           toolName: 'secureTool',

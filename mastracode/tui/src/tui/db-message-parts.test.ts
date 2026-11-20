@@ -172,10 +172,10 @@ describe('getAssistantRenderParts', () => {
   it('drops a persisted pack-fallback part whose reason is not a pack-fallback reason', () => {
     const message = assistantMessage([
       {
-        type: 'data-mastracode-pack-fallback',
+        type: 'data-mastracode-model-fallback',
         data: {
-          from: { packId: 'custom:Daily', label: 'Daily' },
-          to: { packId: 'anthropic', label: 'Anthropic' },
+          from: { entryId: 'custom:Daily', label: 'Daily' },
+          to: { entryId: 'anthropic', label: 'Anthropic' },
           // A valid *account-switch* reason that this part must not accept —
           // `packFallbackNoticeText` would render it as "rate limit".
           reason: 'rate-limit',
@@ -192,10 +192,10 @@ describe('getAssistantRenderParts', () => {
     reason => {
       const message = assistantMessage([
         {
-          type: 'data-mastracode-pack-fallback',
+          type: 'data-mastracode-model-fallback',
           data: {
-            from: { packId: 'custom:Daily', label: 'Daily' },
-            to: { packId: 'anthropic', label: 'Anthropic' },
+            from: { entryId: 'custom:Daily', label: 'Daily' },
+            to: { entryId: 'anthropic', label: 'Anthropic' },
             reason,
             at: '2026-09-17T00:00:00.000Z',
           },
@@ -205,8 +205,8 @@ describe('getAssistantRenderParts', () => {
       expect(getAssistantRenderParts(message)).toEqual([
         {
           kind: 'pack-fallback',
-          from: { packId: 'custom:Daily', label: 'Daily' },
-          to: { packId: 'anthropic', label: 'Anthropic' },
+          from: { entryId: 'custom:Daily', label: 'Daily' },
+          to: { entryId: 'anthropic', label: 'Anthropic' },
           reason,
           at: '2026-09-17T00:00:00.000Z',
         },

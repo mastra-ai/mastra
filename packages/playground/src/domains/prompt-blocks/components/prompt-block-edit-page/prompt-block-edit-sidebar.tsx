@@ -1,19 +1,24 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { TextareaFieldBlock, TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { JSONSchemaForm, jsonSchemaToFields } from '@mastra/playground-ui/components/JSONSchemaForm';
 import type { SchemaField } from '@mastra/playground-ui/components/JSONSchemaForm';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconFloppyDisk1 } from '@mastra/playground-ui/icons/central/IconFloppyDisk1';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
-import { Check, Plus, PlusIcon, Save } from 'lucide-react';
+import { useStoredAgents } from '@mastra/react/hooks/agents';
 import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
 import type { UseFormReturn } from 'react-hook-form';
-
 import type { PromptBlockFormValues } from './utils/form-validation';
-import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
 import { SectionHeader } from '@/domains/cms';
 
 function RecursiveFieldRenderer({
@@ -26,7 +31,7 @@ function RecursiveFieldRenderer({
   depth: number;
 }) {
   return (
-    <div className={'py-2'} style={{ paddingLeft: depth * 8 }}>
+    <div className="py-2" style={{ paddingLeft: depth * 8 }}>
       <JSONSchemaForm.Field key={field.id} field={field} parentPath={parentPath} depth={depth}>
         <div className="space-y-2 px-2">
           <div className="flex flex-row items-center gap-4">
@@ -51,7 +56,7 @@ function RecursiveFieldRenderer({
             )}
           </JSONSchemaForm.FieldList>
           <JSONSchemaForm.AddField className="mt-2" size="sm">
-            <PlusIcon />
+            <IconPlusMedium />
             Add nested variable
           </JSONSchemaForm.AddField>
         </JSONSchemaForm.NestedFields>
@@ -121,30 +126,27 @@ export function PromptBlockEditSidebar({
         <div className="flex flex-col gap-4 p-4">
           <SectionHeader title="Configuration" subtitle="Define your prompt block's name and description." />
 
-          <TextFieldBlock
-            label="Name"
-            required
-            placeholder="My Prompt Block"
-            {...register('name')}
-            errorMsg={errors.name?.message}
-          />
+          <Field invalid={Boolean(errors.name)}>
+            <FieldLabel required>Name</FieldLabel>
+            <Input placeholder="My Prompt Block" required {...register('name')} />
+            <FieldError>{errors.name?.message}</FieldError>
+          </Field>
 
-          <TextareaFieldBlock
-            label="Description"
-            placeholder="Describe what this prompt block does"
-            {...register('description')}
-            errorMsg={errors.description?.message}
-          />
+          <Field invalid={Boolean(errors.description)}>
+            <FieldLabel>Description</FieldLabel>
+            <Textarea placeholder="Describe what this prompt block does" {...register('description')} />
+            <FieldError>{errors.description?.message}</FieldError>
+          </Field>
         </div>
 
-        {/* Variables */}
         <div className="flex flex-col gap-4 border-t border-border p-4">
           <SectionHeader
             title="Variables"
             subtitle={
               <>
                 Define variables for this prompt block. Use{' '}
-                <code className="font-medium text-accent1">{'{{variableName}}'}</code> syntax in your content.
+                <InlineCode className="text-label text-foreground">{'{{variableName}}'}</InlineCode> syntax in your
+                content.
               </>
             }
           />
@@ -163,14 +165,13 @@ export function PromptBlockEditSidebar({
 
             <div className="p-2">
               <JSONSchemaForm.AddField>
-                <Plus />
+                <IconPlusMedium />
                 Add variable
               </JSONSchemaForm.AddField>
             </div>
           </JSONSchemaForm.Root>
         </div>
 
-        {/* Used by */}
         {mode === 'edit' && blockId && (
           <div className="flex flex-col gap-3 border-t border-border p-4">
             <SectionHeader title="Used by" subtitle="Agents that reference this prompt block." />
@@ -198,7 +199,6 @@ export function PromptBlockEditSidebar({
         )}
       </ScrollArea>
 
-      {/* Sticky footer */}
       <div className="shrink-0 p-4">
         {mode === 'edit' && onSaveDraft ? (
           <div className="flex gap-2">
@@ -210,7 +210,7 @@ export function PromptBlockEditSidebar({
                 </>
               ) : (
                 <>
-                  <Save />
+                  <IconFloppyDisk1 />
                   Save
                 </>
               )}
@@ -228,7 +228,7 @@ export function PromptBlockEditSidebar({
                 </>
               ) : (
                 <>
-                  <Check />
+                  <IconCheckmark2Medium />
                   Publish
                 </>
               )}
@@ -243,7 +243,7 @@ export function PromptBlockEditSidebar({
               </>
             ) : (
               <>
-                <Check />
+                <IconCheckmark2Medium />
                 Create prompt block
               </>
             )}

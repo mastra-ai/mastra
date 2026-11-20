@@ -1,5 +1,71 @@
 # @mastra/codemod
 
+## 1.1.8
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@clack/prompts@^1.8.1` ↗︎](https://www.npmjs.com/package/@clack/prompts/v/1.8.1) (from `^1.7.0`, in `dependencies`)
+  - Updated dependency [`jscodeshift@^17.4.0` ↗︎](https://www.npmjs.com/package/jscodeshift/v/17.4.0) (from `^17.3.0`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
+## 1.1.8-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@clack/prompts@^1.8.1` ↗︎](https://www.npmjs.com/package/@clack/prompts/v/1.8.1) (from `^1.7.0`, in `dependencies`)
+  - Updated dependency [`jscodeshift@^17.4.0` ↗︎](https://www.npmjs.com/package/jscodeshift/v/17.4.0) (from `^17.3.0`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
+## 1.1.7
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 1.1.7-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 1.1.6
+
+### Patch Changes
+
+- Fixed the `v1/agent-abort-signal` codemod creating a duplicate `abortSignal` key when the call already had one at the top level. It now leaves those calls unchanged and asks you to resolve them manually. ([#25617](https://github.com/mastra-ai/mastra/pull/25617))
+
+## 1.1.6-alpha.0
+
+### Patch Changes
+
+- Fixed the `v1/agent-abort-signal` codemod creating a duplicate `abortSignal` key when the call already had one at the top level. It now leaves those calls unchanged and asks you to resolve them manually. ([#25617](https://github.com/mastra-ai/mastra/pull/25617))
+
+## 1.1.5
+
+### Patch Changes
+
+- Fixed the v1 evals codemod to migrate legacy scores imports. ([#25108](https://github.com/mastra-ai/mastra/pull/25108))
+
+- Fixed v1 message type migrations to use valid agent and memory exports. ([#25104](https://github.com/mastra-ai/mastra/pull/25104))
+
+- Fixed large codemod previews so printed and verbose output completes without hitting the process buffer limit. ([#25244](https://github.com/mastra-ai/mastra/pull/25244))
+
+## 1.1.5-alpha.1
+
+### Patch Changes
+
+- Fixed large codemod previews so printed and verbose output completes without hitting the process buffer limit. ([#25244](https://github.com/mastra-ai/mastra/pull/25244))
+
+## 1.1.5-alpha.0
+
+### Patch Changes
+
+- Fixed the v1 evals codemod to migrate legacy scores imports. ([#25108](https://github.com/mastra-ai/mastra/pull/25108))
+
+- Fixed v1 message type migrations to use valid agent and memory exports. ([#25104](https://github.com/mastra-ai/mastra/pull/25104))
+
 ## 1.1.4
 
 ### Patch Changes

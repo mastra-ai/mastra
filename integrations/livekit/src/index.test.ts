@@ -21,10 +21,12 @@ describe('root entry (@mastra/livekit)', () => {
 
     expect(Object.keys(entry).sort()).toEqual([
       'DEFAULT_LIVEKIT_AGENT_NAME',
+      'LiveKitRecordingRoomConflictError',
       'createConsentTool',
       'createEndCallTool',
       'dispatchVoiceSession',
       'liveKitConnectionRoute',
+      'liveKitRecordingRoute',
       'pipeAgentReplyToWriter',
       'serializeSessionMetadata',
     ]);

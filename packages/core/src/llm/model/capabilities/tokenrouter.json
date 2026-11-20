@@ -1,4 +1,12 @@
 {
   "temperature": ["z-ai/glm-5.3-free"],
-  "structuredOutput": ["z-ai/glm-5.3-free"]
+  "structuredOutput": ["z-ai/glm-5.3-free"],
+  "reasoning": {
+    "z-ai/glm-5.3-free": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ]
+  }
 }

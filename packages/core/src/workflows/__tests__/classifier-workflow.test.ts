@@ -127,7 +127,9 @@ describe.each(ENGINES)('classifier workflow ($name engine)', ({ evented }) => {
       const result = await (await workflow.createRun()).start({ inputData: { message: 'Account locked' } });
 
       expect(result.status).toBe('success');
-      expect(doEvaluate).toHaveBeenCalledWith(expect.objectContaining({ state: { message: 'Account locked' } }));
+      expect(doEvaluate).toHaveBeenCalledWith(
+        expect.objectContaining({ state: [{ type: 'json', value: { message: 'Account locked' } }] }),
+      );
     } finally {
       if (evented) await mastra.stopWorkers?.();
     }
@@ -282,7 +284,7 @@ describe('classifier workflow construction', () => {
     });
     const result = await (await workflow.createRun()).start({ inputData: { message: 'Need help' } });
     expect(result.status).toBe('success');
-    expect(states).toEqual([{ message: 'Need help' }]);
+    expect(states).toEqual([[{ type: 'json', value: { message: 'Need help' } }]]);
   });
 
   it('fails clearly when a registered classifier is missing', async () => {
@@ -298,7 +300,7 @@ describe('classifier workflow construction', () => {
 
   it('keeps workflow retries separate from classifier model retries and forwards abort signals', async () => {
     const classifier = createClassifier();
-    const evaluate = vi.spyOn(classifier, 'evaluate');
+    const decide = vi.spyOn(classifier, 'decide');
     const workflow = createWorkflow({ id: 'options', inputSchema: z.string(), outputSchema: z.any() })
       .classifier(classifier, { maxRetries: 4, retries: 2, providerOptions: { test: { mode: 'fast' } } })
       .commit();
@@ -314,7 +316,7 @@ describe('classifier workflow construction', () => {
 
     expect(result.status).toBe('success');
     expect(workflow.stepGraph[0]).toMatchObject({ options: { maxRetries: 4, retries: 2 } });
-    expect(evaluate).toHaveBeenCalledWith(
+    expect(decide).toHaveBeenCalledWith(
       expect.objectContaining({
         maxRetries: 4,
         providerOptions: { test: { mode: 'fast' } },

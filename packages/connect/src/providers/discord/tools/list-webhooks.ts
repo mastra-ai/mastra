@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
+import { resolveDiscordBotToken } from './_bot-token.js';
 
 export const listWebhooksInputSchema = z.object({
   channelId: z.string().describe('Discord channel ID. Example: "1504364254634180618"'),
@@ -46,10 +47,6 @@ export const listWebhooksOutputSchema = z.object({
   webhooks: z.array(WebhookSchema),
 });
 
-const MetadataSchema = z.object({
-  botToken: z.string(),
-});
-
 export function listWebhooksTool(proxy: PlatformProxy) {
   return createTool({
     id: 'discord_list_webhooks',
@@ -58,20 +55,13 @@ export function listWebhooksTool(proxy: PlatformProxy) {
     outputSchema: listWebhooksOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof listWebhooksOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const metadata = await platformProxy.getMetadata<z.infer<typeof MetadataSchema>>();
-
-      if (!metadata?.botToken) {
-        throw new platformProxy.ActionError({
-          type: 'missing_bot_token',
-          message: 'Bot token is required in connection metadata.',
-        });
-      }
+      const botToken = await resolveDiscordBotToken(platformProxy);
 
       // https://discord.com/developers/docs/resources/webhook#list-channel-webhooks
       const response = await platformProxy.get({
         endpoint: `/api/v10/channels/${input.channelId}/webhooks`,
         headers: {
-          Authorization: `Bot ${metadata.botToken}`,
+          Authorization: `Bot ${botToken}`,
         },
         retries: 3,
       });

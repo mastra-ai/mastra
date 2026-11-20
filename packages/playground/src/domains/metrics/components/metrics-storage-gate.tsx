@@ -2,8 +2,9 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { createMetricsPropertyFilterFields } from '@mastra/playground-ui/domains/metrics/metrics-filters';
-import { ExternalLinkIcon } from 'lucide-react';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { createMetricsFilterBarFields } from '@mastra/playground-ui/domains/metrics/metrics-filters';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 import type { ReactNode } from 'react';
 import { metricsCrumbs } from '../metrics-crumbs';
 import { MetricsCapabilityError } from './metrics-capability-error';
@@ -11,7 +12,7 @@ import { MetricsPageLayout } from './metrics-page-layout';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 
-const filterFieldsWithoutDiscovery = createMetricsPropertyFilterFields({
+const filterFieldsWithoutDiscovery = createMetricsFilterBarFields({
   availableTags: [],
   availableEntityNames: [],
   availableServiceNames: [],
@@ -24,10 +25,12 @@ export function MetricsStorageGate({ children }: { children: ReactNode }) {
 
   if (isLoading) {
     return (
-      <MetricsPageLayout filterFields={filterFieldsWithoutDiscovery} isLoading>
+      <MetricsPageLayout filterFields={filterFieldsWithoutDiscovery}>
         <div className="flex h-full items-center justify-center gap-2">
           <Spinner aria-label="Loading storage capabilities" />
-          <span className="text-caption text-muted-foreground">Loading storage capabilities</span>
+          <Txt as="span" variant="caption" tone="muted">
+            Loading storage capabilities
+          </Txt>
         </div>
       </MetricsPageLayout>
     );
@@ -60,9 +63,9 @@ export function MetricsStorageGate({ children }: { children: ReactNode }) {
               />
             }
 
-            icon={<ExternalLinkIcon />}
+            icon={<IconSquareArrowTopRight />}
           >
-            Metrics Documentation
+            Metrics documentation
           </Button>
         }
         variant="fill"

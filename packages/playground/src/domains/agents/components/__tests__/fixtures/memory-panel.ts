@@ -4,7 +4,7 @@ import type {
   GetObservationalMemoryResponse,
   ListMemoryThreadMessagesResponse,
 } from '@mastra/client-js';
-import type { AuthCapabilities } from '@/domains/auth/types';
+import type { AuthCapabilities } from '@mastra/react/hooks/auth';
 
 export const memoryEnabled: GetMemoryStatusResponse = {
   result: true,

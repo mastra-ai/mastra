@@ -8,6 +8,7 @@ import { WorkflowGraphBoundary } from './workflow-graph-boundary';
 import { getWorkflowGraphGroups } from './workflow-graph-groups';
 import { getWorkflowIterationScopes } from './workflow-iteration-scopes';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
+import { Txt } from '@/ds/components/Txt';
 import { WorkflowGraphCanvas, WORKFLOW_BOUNDARY_NODE_TYPE } from '@/ds/components/Workflow';
 
 export interface WorkflowNestedGraphProps {
@@ -64,7 +65,9 @@ function WorkflowNestedGraphContent({
     <div className="relative flex size-full flex-col">
       {activeIteration && (
         <div className="nodrag nopan flex items-center gap-3 border-b border-border px-4 py-2">
-          <span className="text-caption text-muted-foreground">Iteration</span>
+          <Txt as="span" variant="caption" tone="muted">
+            Iteration
+          </Txt>
           <Select value={activeIteration.value} onValueChange={setSelectedIteration} items={iterations}>
             <SelectTrigger aria-label="Loop item" size="sm" className="w-36">
               <SelectValue />

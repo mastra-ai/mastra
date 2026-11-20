@@ -5,6 +5,8 @@ import type { DataListSticky } from './shared';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { cn } from '@/lib/utils';
 import { formatDate, formatTimestampPrecise } from '@/utils/date-format';
+import type { DatePreset } from '@/utils/date-format';
+import { getShortId } from '@/utils/id';
 
 export type DataListCellProps = {
   children?: ReactNode;
@@ -133,7 +135,7 @@ export function DataListRowHeaderCell({ children, className, ...rest }: DataList
     <DataListCell
       sticky="start"
       className={cn(
-        'data-list-row-header -mx-3 w-auto max-w-none px-3 text-left text-label text-foreground',
+        'data-list-row-header -ml-3 w-auto max-w-none px-3 text-left text-label text-foreground',
         className,
       )}
       {...rest}
@@ -178,10 +180,6 @@ export function DataListNumberCell({
       {children}
     </DataListCell>
   );
-}
-
-function getShortId(id: string | undefined): string {
-  return id?.slice(0, 8) ?? '';
 }
 
 export interface DataListIdCellProps {
@@ -240,13 +238,15 @@ export function DataListDateCell({ timestamp }: DataListDateCellProps) {
 
 export interface DataListCreatedCellProps {
   timestamp: Date | string;
+  /** Visible format. The hover title always shows the full date and time. */
+  preset?: Extract<DatePreset, 'date-time-seconds' | 'day-time-seconds'>;
 }
 
 /** Locale-aware date and time cell with second precision. */
-export function DataListCreatedCell({ timestamp }: DataListCreatedCellProps) {
+export function DataListCreatedCell({ timestamp, preset = 'date-time-seconds' }: DataListCreatedCellProps) {
   return (
     <DataListCell className="text-muted-foreground tabular-nums" title={formatDate(timestamp, 'date-time-seconds')}>
-      {formatDate(timestamp, 'date-time-seconds')}
+      {formatDate(timestamp, preset)}
     </DataListCell>
   );
 }

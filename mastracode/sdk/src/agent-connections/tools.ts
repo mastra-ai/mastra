@@ -1,5 +1,3 @@
-import { createHash, randomUUID } from 'node:crypto';
-
 import type { SendAgentNotificationSignalResult, SendAgentSignalAccepted } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
@@ -11,8 +9,8 @@ import {
   readSentAgentSignals,
   updateAgentConnections,
   writeSentAgentSignals,
-  type AgentConnectionContext,
 } from './thread-state.js';
+import type { AgentConnectionContext } from './thread-state.js';
 import type {
   AgentConnectResult,
   AgentConnectionDeltaOp,
@@ -180,11 +178,13 @@ Use agent_connections_list first, then pass [discovered] peer ids from that resu
         const discoveredById = new Map((await registry.discoverPeers(registryContext)).map(peer => [peer.id, peer]));
         const unknownId = uniqueIds.find(id => !discoveredById.has(id));
         if (unknownId) {
-          return errorConnectResult(
-            `Unknown or unadvertised agent peer id: ${unknownId}`,
-            await readAgentConnections(agentContext),
-            [],
+          const saved = await readAgentConnections(agentContext);
+          const hint = suggestNearPeers(
+            unknownId,
+            [...saved, ...discoveredById.values()],
+            'Nothing was saved; connect with the exact id.',
           );
+          return errorConnectResult(`Unknown or unadvertised agent peer id: ${unknownId}${hint}`, saved, []);
         }
 
         // Apply the connect delta against the freshly read state inside the
@@ -333,8 +333,9 @@ The target must already be saved and freshly advertise the same exact thread end
         }
         const saved = await readAgentConnections(agentContext);
         if (!saved.some(peer => peer.id === targetId)) {
+          const hint = suggestNearPeers(targetId, saved, 'Nothing was sent; resend with the exact id.');
           return {
-            content: `Cannot send: peer is not saved: ${targetId}`,
+            content: `Cannot send: no saved peer has id ${targetId}${hint}`,
             replyTo,
             ...(replyTo ? { replyOutcome: 'peer-unavailable' as const } : {}),
             isError: true,
@@ -365,8 +366,8 @@ The target must already be saved and freshly advertise the same exact thread end
           resourceId: currentAgent.resourceId,
           threadId: currentAgent.threadId,
         });
-        const messageId = inputMessageId ?? randomUUID();
-        const fingerprint = fingerprintAgentSignal({ targetId, summary, priority, expectsReply, replyTo });
+        const messageId = inputMessageId ?? globalThis.crypto.randomUUID();
+        const fingerprint = await fingerprintAgentSignal({ targetId, summary, priority, expectsReply, replyTo });
         const sentSignals = await readSentAgentSignals(agentContext);
         const previousSend = sentSignals.find(signal => signal.messageId === messageId);
         if (previousSend) {
@@ -453,6 +454,25 @@ The target must already be saved and freshly advertise the same exact thread end
             accepted = { action: 'persist' };
           } else if (notification.decision.action === 'discard') {
             accepted = { action: 'discard' };
+          } else if (notification.record.status === 'pending') {
+            // Direct delivery failed, but the notification is saved in the
+            // target's inbox and the notification dispatcher retries it on its
+            // own. Sent history is skipped so a resend with the same messageId
+            // is not recorded, and the model is told not to resend at all.
+            const reason = notification.record.lastDeliveryError ?? 'the target thread owner did not acknowledge it';
+            return {
+              content: expectsReply
+                ? `Failed to establish a reply obligation: the signal was queued for ${untrustedPeerLabel(target)} but not delivered directly (${reason}). It is retried automatically, so do not resend it; the reply obligation is established once that retry delivers the signal.`
+                : `Queued for ${untrustedPeerLabel(target)}: direct delivery failed (${reason}), so the signal waits in their notification inbox and is retried automatically. Do not resend it.`,
+              target,
+              priority: priority as AgentSignalPriority,
+              expectsReply,
+              messageId,
+              replyTo,
+              returnPeerId,
+              routingAction: 'persist',
+              isError: expectsReply,
+            };
           } else {
             return {
               content: `Failed to send agent signal: ${notification.record.lastDeliveryError ?? 'delivery was not acknowledged by the target thread owner'}`,
@@ -620,6 +640,85 @@ function formatSignalResult({
   }
 }
 
+// A model copying a peer id can change a character or two, splice a stretch of another peer's id
+// into it, or send the peer's label instead. Name the saved peers it most likely meant so the next
+// attempt can use the exact id; never send to a guess.
+const NEAR_PEER_MIN_THREAD_EDITS = 2;
+const NEAR_PEER_MAX_SUGGESTIONS = 3;
+
+// A third of the thread id: catches a spliced stretch of a UUID (about 9 edits). This is a
+// heuristic, not a guarantee of identity: the registry accepts any thread id, so a different
+// legitimate peer whose id is close enough can be suggested too. That is tolerable because the
+// suggestion is only text; nothing is ever sent to a guess.
+function maxNearPeerThreadEdits(a: string, b: string): number {
+  return Math.max(NEAR_PEER_MIN_THREAD_EDITS, Math.floor(Math.max(a.length, b.length) / 3));
+}
+
+type NearPeerCandidate = Pick<ConnectedAgentPeer, 'id' | 'resourceId' | 'threadId' | 'label' | 'title'>;
+
+function suggestNearPeers(requestedId: string, candidates: NearPeerCandidate[], instruction: string): string {
+  const requested = parsePeerId(requestedId);
+  const requestedLabel = requestedId.trim().toLowerCase();
+  const closest = new Map<string, { peer: NearPeerCandidate; distance: number }>();
+  for (const peer of candidates) {
+    if (peer.id === requestedId) continue;
+    let distance: number | undefined;
+    if (peer.label && peer.label.trim().toLowerCase() === requestedLabel) {
+      distance = 0;
+    } else if (requested && requested.resourceId === peer.resourceId) {
+      const edits = boundedEditDistance(
+        requested.threadId,
+        peer.threadId,
+        maxNearPeerThreadEdits(requested.threadId, peer.threadId),
+      );
+      if (edits !== undefined) distance = edits;
+    }
+    if (distance === undefined) continue;
+    const previous = closest.get(peer.id);
+    if (!previous || distance < previous.distance) closest.set(peer.id, { peer, distance });
+  }
+  const suggestions = [...closest.values()]
+    .sort((a, b) => a.distance - b.distance || a.peer.id.localeCompare(b.peer.id))
+    .slice(0, NEAR_PEER_MAX_SUGGESTIONS)
+    .map(({ peer }) => formatNearPeer(peer));
+  if (suggestions.length === 0) return '';
+  return `. Did you mean ${suggestions.join(' or ')}? ${instruction}`;
+}
+
+function formatNearPeer(peer: NearPeerCandidate): string {
+  const id = boundUntrustedText(peer.id, UNTRUSTED_PEER_ID_MAX_LENGTH);
+  const label = boundUntrustedText(peer.label ?? peer.title ?? peer.id, UNTRUSTED_PEER_METADATA_MAX_LENGTH);
+  return `${id} (${serializeUntrustedData(label)})`;
+}
+
+function parsePeerId(id: string): { resourceId: string; threadId: string } | undefined {
+  const parts = id.split(':');
+  if (parts.length !== 3) return undefined;
+  try {
+    return { resourceId: decodeURIComponent(parts[1]!), threadId: decodeURIComponent(parts[2]!) };
+  } catch {
+    return undefined;
+  }
+}
+
+function boundedEditDistance(a: string, b: string, max: number): number | undefined {
+  if (Math.abs(a.length - b.length) > max) return;
+  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i++) {
+    const current = [i];
+    let rowMin = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      current[j] = Math.min(previous[j]! + 1, current[j - 1]! + 1, previous[j - 1]! + cost);
+      rowMin = Math.min(rowMin, current[j]!);
+    }
+    if (rowMin > max) return;
+    previous = current;
+  }
+  const distance = previous[b.length]!;
+  return distance <= max ? distance : undefined;
+}
+
 function untrustedThreadId(target: AgentPeerView): string {
   return serializeUntrustedData(boundUntrustedText(target.threadId, UNTRUSTED_PEER_ID_MAX_LENGTH));
 }
@@ -630,16 +729,17 @@ function untrustedPeerLabel(target: AgentPeerView): string {
   );
 }
 
-function fingerprintAgentSignal(value: {
+async function fingerprintAgentSignal(value: {
   targetId: string;
   summary: string;
   priority: string;
   expectsReply: boolean;
   replyTo?: string;
-}): string {
-  return createHash('sha256')
-    .update(JSON.stringify(sortJsonValue(value)))
-    .digest('hex');
+}): Promise<string> {
+  const serialized = JSON.stringify(sortJsonValue(value));
+  return Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(serialized))).toString(
+    'hex',
+  );
 }
 
 function sortJsonValue(value: unknown): unknown {

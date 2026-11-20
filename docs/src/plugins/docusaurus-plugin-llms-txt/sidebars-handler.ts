@@ -33,10 +33,17 @@ type SidebarDoc = {
   customProps?: Record<string, unknown>
 }
 
+type SidebarCategoryLink =
+  | string
+  | { type: 'doc'; id: string }
+  | { type: 'generated-index' }
+  | { type: 'ref'; id: string }
+
 type SidebarCategory = {
   type: 'category'
   label: string
   collapsed?: boolean
+  link?: SidebarCategoryLink
   customProps?: Record<string, unknown>
   items: SidebarItem[]
 }
@@ -106,15 +113,54 @@ function indexMarkdownUrl(baseUrl: string): string {
 }
 
 /**
- * Find the overview/index doc in a category's items
+ * Build the markdown URL for a doc id.
+ *
+ * Index docs map to their parent route, so "x/index" is served as "<baseUrl>/x.md"
+ * and never as "<baseUrl>/x/index.md".
  */
-function findCategoryOverviewUrl(items: SidebarItem[], baseUrl: string): string | null {
+function docMarkdownUrl(docId: string, baseUrl: string): string {
+  if (docId === 'index') {
+    return indexMarkdownUrl(baseUrl)
+  }
+
+  if (docId.endsWith('/index')) {
+    return `${baseUrl}/${docId.slice(0, -'/index'.length)}.md`
+  }
+
+  return `${baseUrl}/${docId}.md`
+}
+
+/**
+ * Get the doc a category links to.
+ *
+ * Docusaurus lets a category declare its overview page on `link` instead of listing
+ * it in `items`, so the link is the first place to look for a category's overview.
+ */
+function getCategoryLinkDocId(category: SidebarCategory): string | null {
+  const link = category.link
+
+  if (typeof link === 'string') {
+    return link
+  }
+
+  if (link && typeof link === 'object' && link.type === 'doc') {
+    return link.id
+  }
+
+  return null
+}
+
+/**
+ * Find an index doc listed in a category's items.
+ */
+function findIndexDocId(items: SidebarItem[]): string | null {
   for (const item of items) {
     const docId = getDocId(item)
     if (docId && (docId.endsWith('/index') || docId === 'index')) {
-      return `${baseUrl}/${docId}.md`
+      return docId
     }
   }
+
   return null
 }
 
@@ -132,25 +178,26 @@ export function generateMarkdownList(
 
   for (const item of items) {
     const label = getItemLabel(item)
-    const docId = getDocId(item)
 
     if (typeof item === 'string' || item.type === 'doc') {
       // It's a doc item - link to the page's sibling markdown file
-      const url = docId === 'index' ? indexMarkdownUrl(baseUrl) : `${baseUrl}/${docId}.md`
-      output += `${indent}- [${label}](${url})\n`
+      const docId = typeof item === 'string' ? item : item.id
+      output += `${indent}- [${label}](${docMarkdownUrl(docId, baseUrl)})\n`
     } else if (item.type === 'category') {
-      // Check if this category should be condensed to just its overview link
-      if (condensedCategories.includes(label)) {
-        const overviewUrl = findCategoryOverviewUrl(item.items, baseUrl)
-        if (overviewUrl) {
-          output += `${indent}- [${label}](${overviewUrl})\n`
-        } else {
-          // Fallback: just show category name without link
-          output += `${indent}- ${label}\n`
-        }
-      } else {
-        // It's a category - create a label and recurse
-        output += `${indent}- ${label}\n`
+      const condensed = condensedCategories.includes(label)
+
+      // Condensed categories collapse to one link, so an index doc in their items is a
+      // valid overview. Normal categories only link the label when they declare a link,
+      // otherwise the overview doc listed in their items would appear twice.
+      const overviewDocId = condensed
+        ? (getCategoryLinkDocId(item) ?? findIndexDocId(item.items))
+        : getCategoryLinkDocId(item)
+
+      output += overviewDocId
+        ? `${indent}- [${label}](${docMarkdownUrl(overviewDocId, baseUrl)})\n`
+        : `${indent}- ${label}\n`
+
+      if (!condensed) {
         output += generateMarkdownList(item.items, baseUrl, depth + 1, condensedCategories)
       }
     }
@@ -168,9 +215,5 @@ export async function parseSidebarFile(filePath: string): Promise<SidebarItem[]>
   const module = await import(fileUrl)
   const sidebars = module.default as SidebarsConfig
 
-  const sidebarKey = Object.keys(sidebars)[0]
-  if (!sidebarKey) {
-    return []
-  }
-  return sidebars[sidebarKey]
+  return Object.values(sidebars).flat()
 }

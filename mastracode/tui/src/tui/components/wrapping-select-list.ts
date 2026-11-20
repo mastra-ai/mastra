@@ -8,6 +8,8 @@
 import { getKeybindings, wrapTextWithAnsi } from '@earendil-works/pi-tui';
 import type { Component, SelectItem, SelectListTheme } from '@earendil-works/pi-tui';
 
+import type { MouseAware, MousePoint, MouseTarget } from '../mouse/hit-test.js';
+
 const SELECTED_PREFIX = '→ ';
 const UNSELECTED_PREFIX = '  ';
 const CONTINUATION_PREFIX = '↳ ';
@@ -16,7 +18,15 @@ const CHECKBOX_CHECKED = '[x] ';
 const CHECKBOX_UNCHECKED = '[ ] ';
 const CHECKBOX_WIDTH = 4;
 
-export class WrappingSelectList implements Component {
+/** Styling for `card` lists; prefixes must stay 2 columns (cursor) and 4 columns (checkbox) wide. */
+export interface CardListStyle {
+  cursor: string;
+  checked: string;
+  unchecked: string;
+  selectedLabel: (label: string) => string;
+}
+
+export class WrappingSelectList implements Component, MouseAware {
   private items: SelectItem[];
   private filteredItems: SelectItem[];
   private selectedIndex = 0;
@@ -33,12 +43,25 @@ export class WrappingSelectList implements Component {
   /** Called when the user confirms a multi-select list with Enter; receives all checked items in display order. */
   onConfirmMulti?: (items: SelectItem[]) => void;
 
-  constructor(items: SelectItem[], maxVisible: number, theme: SelectListTheme, multiSelect = false) {
+  /**
+   * `card` style (inline prompts): an accent ❯ cursor and a bold label instead of a highlighted row,
+   * and ●/○ instead of [x]/[ ] in multi-select mode.
+   */
+  private cardStyle: CardListStyle | undefined;
+
+  constructor(
+    items: SelectItem[],
+    maxVisible: number,
+    theme: SelectListTheme,
+    multiSelect = false,
+    cardStyle?: CardListStyle,
+  ) {
     this.items = items;
     this.filteredItems = items;
     this.maxVisible = maxVisible;
     this.theme = theme;
     this.multiSelect = multiSelect;
+    this.cardStyle = cardStyle;
   }
 
   setFilter(filter: string): void {
@@ -64,11 +87,7 @@ export class WrappingSelectList implements Component {
       return lines;
     }
 
-    const startIndex = Math.max(
-      0,
-      Math.min(this.selectedIndex - Math.floor(this.maxVisible / 2), this.filteredItems.length - this.maxVisible),
-    );
-    const endIndex = Math.min(startIndex + this.maxVisible, this.filteredItems.length);
+    const { startIndex, endIndex } = this.visibleRange();
 
     for (let i = startIndex; i < endIndex; i++) {
       const item = this.filteredItems[i];
@@ -86,6 +105,46 @@ export class WrappingSelectList implements Component {
     return lines;
   }
 
+  /** Maps a row to the (possibly multi-row) item drawn there. Clicks select, or toggle in multi-select mode. */
+  mouseTarget(point: MousePoint): MouseTarget | undefined {
+    const { startIndex, endIndex } = this.visibleRange();
+    let top = 0;
+    for (let i = startIndex; i < endIndex; i++) {
+      const item = this.filteredItems[i];
+      if (!item) continue;
+      const height = this.renderItem(item, i === this.selectedIndex, point.width).length;
+      if (point.row < top + height) {
+        return {
+          top,
+          height,
+          activate: () => {
+            if (this.selectedIndex !== i) {
+              this.selectedIndex = i;
+              this.notifySelectionChange();
+            }
+            if (this.multiSelect) this.toggleChecked(item);
+            else this.onSelect?.(item);
+          },
+        };
+      }
+      top += height;
+    }
+    return undefined;
+  }
+
+  private visibleRange(): { startIndex: number; endIndex: number } {
+    const startIndex = Math.max(
+      0,
+      Math.min(this.selectedIndex - Math.floor(this.maxVisible / 2), this.filteredItems.length - this.maxVisible),
+    );
+    return { startIndex, endIndex: Math.min(startIndex + this.maxVisible, this.filteredItems.length) };
+  }
+
+  private toggleChecked(item: SelectItem): void {
+    if (this.checkedValues.has(item.value)) this.checkedValues.delete(item.value);
+    else this.checkedValues.add(item.value);
+  }
+
   handleInput(keyData: string): void {
     const kb = getKeybindings();
 
@@ -97,13 +156,7 @@ export class WrappingSelectList implements Component {
       this.notifySelectionChange();
     } else if (this.multiSelect && keyData === ' ') {
       const current = this.filteredItems[this.selectedIndex];
-      if (current) {
-        if (this.checkedValues.has(current.value)) {
-          this.checkedValues.delete(current.value);
-        } else {
-          this.checkedValues.add(current.value);
-        }
-      }
+      if (current) this.toggleChecked(current);
     } else if (kb.matches(keyData, 'tui.select.confirm')) {
       if (this.multiSelect) {
         const checked = this.items.filter(item => this.checkedValues.has(item.value));
@@ -129,6 +182,17 @@ export class WrappingSelectList implements Component {
         ? CHECKBOX_CHECKED
         : CHECKBOX_UNCHECKED
       : '';
+
+    if (this.cardStyle) {
+      const style = this.cardStyle;
+      const box = this.multiSelect ? (this.checkedValues.has(item.value) ? style.checked : style.unchecked) : '';
+      const rows = wrapped.length === 0 ? [''] : wrapped;
+      return rows.map((chunk, index) => {
+        if (index > 0) return `${' '.repeat(PREFIX_WIDTH + (this.multiSelect ? CHECKBOX_WIDTH : 0))}${chunk}`;
+        const cursor = isSelected ? style.cursor : UNSELECTED_PREFIX;
+        return `${cursor}${box}${isSelected ? style.selectedLabel(chunk) : chunk}`;
+      });
+    }
 
     if (wrapped.length === 0) {
       const prefix = isSelected ? SELECTED_PREFIX : UNSELECTED_PREFIX;

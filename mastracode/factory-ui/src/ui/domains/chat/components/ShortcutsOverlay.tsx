@@ -1,4 +1,4 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
+import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
@@ -25,30 +25,32 @@ export function ShortcutsOverlay() {
 
   return (
     <Dialog open onOpenChange={open => !open && close('shortcuts')}>
-      <DialogContent className="w-full max-w-md" aria-label="Keyboard shortcuts">
-        <DialogHeader className="px-5 pt-4 pb-2">
+      <DialogContent aria-label="Keyboard shortcuts">
+        <DialogHeader>
           <DialogTitle>Keyboard shortcuts</DialogTitle>
         </DialogHeader>
-        <ul className="flex flex-col gap-1 px-5 pb-5">
-          <li className="flex items-center justify-between gap-4 py-1.5">
-            <Txt as="span" variant="caption" className="text-foreground">
-              Search and navigate
-            </Txt>
-            <Kbd>{searchShortcutLabel}</Kbd>
-          </li>
-          {SHORTCUTS.map(s => (
-            <li key={s.description} className="flex items-center justify-between gap-4 py-1.5">
-              <Txt as="span" variant="caption" className="text-foreground">
-                {s.description}
+        <DialogBody>
+          <ul className="flex flex-col gap-1">
+            <li className="flex items-center justify-between gap-4 py-1.5">
+              <Txt as="span" variant="body-sm" tone="ink">
+                Search and navigate
               </Txt>
-              <span className="flex shrink-0 items-center gap-1">
-                {s.keys.map(k => (
-                  <Kbd key={k}>{k}</Kbd>
-                ))}
-              </span>
+              <Kbd>{searchShortcutLabel}</Kbd>
             </li>
-          ))}
-        </ul>
+            {SHORTCUTS.map(s => (
+              <li key={s.description} className="flex items-center justify-between gap-4 py-1.5">
+                <Txt as="span" variant="body-sm" tone="ink">
+                  {s.description}
+                </Txt>
+                <span className="flex shrink-0 items-center gap-1">
+                  {s.keys.map(k => (
+                    <Kbd key={k}>{k}</Kbd>
+                  ))}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

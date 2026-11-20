@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ bb789a55bfcf — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ 4e61bff484f0 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -17,13 +17,13 @@ const IssueSchema = z.object({
 const UserSchema = z.object({
   id: z.string(),
   name: z.string().optional(),
-  email: z.string().optional(),
+  email: z.string().nullable().optional(),
 });
 
 const ExternalUserSchema = z.object({
   id: z.string(),
   name: z.string().optional(),
-  email: z.string().optional(),
+  email: z.string().nullable().optional(),
 });
 
 const ProviderAttachmentSchema = z.object({

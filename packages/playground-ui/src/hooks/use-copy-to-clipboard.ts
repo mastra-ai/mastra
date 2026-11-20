@@ -77,7 +77,7 @@ export function useCopyToClipboard(props: UseCopyToClipboardProps | UseCopyToCli
   const hasConfiguredText = 'text' in props;
   const text = hasConfiguredText ? props.text : undefined;
   const [isCopied, setIsCopied] = useState(false);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const copyToClipboard = useCallback(
     (value: string) => {

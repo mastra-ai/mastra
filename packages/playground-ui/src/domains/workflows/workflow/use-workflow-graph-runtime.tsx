@@ -57,7 +57,7 @@ export const useWorkflowGraphRuntime = ({
   );
   const styledEdges = useMemo(
     () =>
-      groupWorkflowEdgeData(edges).map(edge => {
+      groupWorkflowEdgeData(edges).map((edge): WorkflowGraphEdge => {
         const previousStepId = getScopedStepId(edge.data?.previousStepId, workflowName);
         const nextStepId = getScopedStepId(edge.data?.nextStepId, workflowName);
         const previousStepSucceeded = steps[previousStepId ?? '']?.status === 'success';
@@ -79,7 +79,7 @@ export const useWorkflowGraphRuntime = ({
           },
           style: {
             ...edge.style,
-            stroke: isFinishedEdge ? '#22c55e' : '#8e8e8e',
+            stroke: isFinishedEdge ? 'var(--success-indicator)' : 'var(--muted-foreground)',
             strokeDasharray: isFinishedEdge ? 'none' : edge.style?.strokeDasharray,
           },
         };

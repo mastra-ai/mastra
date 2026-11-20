@@ -1,4 +1,3 @@
-import { ChartNoAxesGantt, ChevronDown, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useCurrentRun } from '../context/use-current-run';
 import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
@@ -7,6 +6,11 @@ import { WorkflowTimelineRow } from './workflow-timeline-row';
 import { buildTimeline } from './workflow-timeline-utils';
 import { Button } from '@/ds/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
+import { Txt } from '@/ds/components/Txt';
+import { IconChevronGrabberVertical } from '@/ds/icons/central/IconChevronGrabberVertical';
+import { IconChevronGrabberVerticalToward } from '@/ds/icons/central/IconChevronGrabberVerticalToward';
+import { IconGanttChart } from '@/ds/icons/central/IconGanttChart';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { useAutoscroll } from '@/hooks/use-autoscroll';
 import { cn } from '@/utils/cn';
@@ -53,15 +57,14 @@ export function WorkflowTimeline() {
             aria-label={isCollapsed ? 'Expand timeline' : 'Collapse timeline'}
           >
             <span>
-              <ChartNoAxesGantt aria-hidden className="size-4 text-muted-foreground" />
+              <IconGanttChart aria-hidden className="size-icon-md text-muted-foreground" />
             </span>
             <span>Timeline</span>
-            <span className="text-meta text-muted-foreground">{rows.length} events</span>
+            <Txt as="span" variant="meta" tone="muted">
+              {rows.length} events
+            </Txt>
             <span className="ml-auto">
-              <ChevronDown
-                aria-hidden
-                className={cn('size-4 transition-transform motion-reduce:transition-none', isCollapsed && '-rotate-90')}
-              />
+              <DisclosureChevron direction="right" className="size-4" />
             </span>
           </CollapsibleTrigger>
           {!isCollapsed && (
@@ -73,7 +76,7 @@ export function WorkflowTimeline() {
               onClick={() => setIsEnlarged(!isEnlarged)}
               className="mr-2 shrink-0"
             >
-              {isEnlarged ? <ChevronsDownUp /> : <ChevronsUpDown />}
+              {isEnlarged ? <IconChevronGrabberVerticalToward /> : <IconChevronGrabberVertical />}
             </Button>
           )}
         </div>

@@ -31,8 +31,7 @@ Extend the `MastraAuthProvider` class and implement the required methods:
 
 ```typescript
 import { MastraAuthProvider } from '@mastra/core/server'
-import type { MastraAuthProviderOptions } from '@mastra/core/server'
-import type { HonoRequest } from 'hono'
+import type { MastraAuthProviderOptions, MastraAuthRequest } from '@mastra/core/server'
 
 // Define your user type
 type MyUser = {
@@ -75,7 +74,7 @@ export class MyAuthProvider extends MastraAuthProvider<MyUser> {
    * Verify the token and return the user
    * Return null if authentication fails
    */
-  async authenticateToken(token: string, request: HonoRequest): Promise<MyUser | null> {
+  async authenticateToken(token: string, request: MastraAuthRequest): Promise<MyUser | null> {
     try {
       const response = await fetch(`${this.apiUrl}/verify`, {
         method: 'POST',
@@ -102,7 +101,7 @@ export class MyAuthProvider extends MastraAuthProvider<MyUser> {
    * Check if the authenticated user is authorized
    * Return true to allow access, false to deny
    */
-  async authorizeUser(user: MyUser, request: HonoRequest): Promise<boolean> {
+  async authorizeUser(user: MyUser, request: MastraAuthRequest): Promise<boolean> {
     // Basic authorization: user must exist and have an ID
     return !!user?.id
   }
@@ -116,13 +115,13 @@ export class MyAuthProvider extends MastraAuthProvider<MyUser> {
 Verify the incoming token and return the user object if valid, or `null` if authentication fails.
 
 ```typescript oxfmt:false
-async authenticateToken(token: string, request: HonoRequest): Promise<TUser | null>
+async authenticateToken(token: string, request: MastraAuthRequest): Promise<TUser | null>
 ```
 
 | Parameter | Type | Description |
 | - | - | - |
 | `token` | `string` | The bearer token extracted from the `Authorization` header |
-| `request` | `HonoRequest` | The incoming request object (access headers, cookies, etc.) |
+| `request` | `MastraAuthRequest` | The incoming request. Read headers with `getRequestHeader()` and the underlying web `Request` with `getWebRequest()`, both exported from `@mastra/core/server` |
 
 **Returns**: The user object if authentication succeeds, or `null` if it fails.
 
@@ -133,15 +132,81 @@ The token is automatically extracted from the `Authorization: Bearer <token>` he
 Determine if the authenticated user is allowed to access the resource.
 
 ```typescript oxfmt:false
-async authorizeUser(user: TUser, request: HonoRequest): Promise<boolean> | boolean
+async authorizeUser(user: TUser, request: MastraAuthRequest): Promise<boolean> | boolean
 ```
 
 | Parameter | Type | Description |
 | - | - | - |
 | `user` | `TUser` | The user object returned by `authenticateToken` |
-| `request` | `HonoRequest` | The incoming request object |
+| `request` | `MastraAuthRequest` | The incoming request |
 
 **Returns**: `true` to allow access, `false` to deny (returns 403 Forbidden).
+
+## Optional methods
+
+### `toMastraUser()`
+
+Normalize your provider-specific user object to the stable `MastraUser` shape that dynamic configuration callbacks (such as dynamic `instructions`, `model`, or `tools`) receive as the optional `user` argument.
+
+```typescript oxfmt:false
+toMastraUser(user: TUser): MastraUser
+```
+
+| Parameter | Type | Description |
+| - | - | - |
+| `user` | `TUser` | The user object returned by `authenticateToken` |
+
+**Returns**: A `MastraUser` object: `{ id: string, name?: string, email?: string, avatarUrl?: string, role?: string }`.
+
+The default implementation picks `id` from `id`, `sub`, or `userId`, `avatarUrl` from `avatarUrl` or `picture`, and passes `name`, `email`, and `role` through when present. Override it when your user type stores these fields elsewhere:
+
+```typescript {8-14} title="src/mastra/auth/provider.ts"
+import type { MastraUser } from '@mastra/core/auth'
+
+export class MyAuthProvider extends MastraAuthProvider<MyUser> {
+  async authenticateToken(token: string) {
+    /* ... */
+  }
+
+  toMastraUser(user: MyUser): MastraUser {
+    return {
+      id: user.accountId,
+      name: user.profile.displayName,
+      role: user.permissions.primaryRole,
+    }
+  }
+}
+```
+
+If no `id` can be derived from the user object, the normalized user is omitted and callbacks receive `user: undefined`. The raw user object remains available on the request context.
+
+## Optional methods for MCP OAuth
+
+The [built-in MCP server](/docs/server/mcp#oauth-discovery) uses two optional methods for OAuth discovery and audience checks.
+
+`getOAuthMetadata()` returns the authorization servers, and optionally scopes, that MCP clients should use. `server.mcp.oauth.authorizationServers` and `server.mcp.oauth.scopesSupported` take precedence.
+
+```typescript oxfmt:false
+getOAuthMetadata(): { authorizationServers?: string[]; scopesSupported?: string[] } | undefined
+```
+
+`verifyAudience()` runs on `/api/mcp` when `server.mcp.oauth.resource` is set. It receives the value `authenticateToken()` returned and the `resource` URL, and returns whether the token was issued for it. Returning `false` rejects the request with a `401`. Without this method the audience isn't checked, and Mastra logs a warning.
+
+```typescript oxfmt:false
+verifyAudience(user: TUser, audience: string): boolean | Promise<boolean>
+```
+
+For a JWT provider whose `authenticateToken()` returns the verified payload:
+
+```typescript oxfmt:false
+getOAuthMetadata() {
+  return { authorizationServers: ['https://auth.example.com/'] }
+}
+
+verifyAudience(user: JwtPayload, audience: string) {
+  return Array.isArray(user.aud) ? user.aud.includes(audience) : user.aud === audience
+}
+```
 
 ## Configuration options
 
@@ -152,9 +217,9 @@ The `MastraAuthProviderOptions` interface supports these options:
 | `name` | `string` | Provider name for logging/debugging |
 | `authorizeUser` | `(user, request) => Promise<boolean> \| boolean` | Custom authorization function |
 | `protected` | `(RegExp \| string \| [string, Methods \| Methods[]])[]` | Paths that require authentication |
-| `public` | `(RegExp \| string \| [string, Methods \| Methods[]])[]` | Paths that bypass authentication |
+| `public` | `(RegExp \| string \| [string, Methods \| Methods[]])[]` | Paths that bypass authentication, unless the route sets `requiresAuth: true` |
 
-### Path Patterns
+### Path patterns
 
 Configure which paths require authentication using pattern matching:
 
@@ -198,7 +263,7 @@ export const mastra = new Mastra({
 
 The `@mastra/auth` package provides utilities for common token verification patterns:
 
-### JWT Verification
+### JWT verification
 
 ```typescript
 import { verifyHmac, verifyJwks, decodeToken, getTokenIssuer } from '@mastra/auth'
@@ -216,7 +281,7 @@ const decoded = await decodeToken(token)
 const issuer = getTokenIssuer(decoded)
 ```
 
-### Example: JWKS-based Provider
+### Example: JWKS-based provider
 
 ```typescript
 import { MastraAuthProvider } from '@mastra/core/server'
@@ -292,13 +357,20 @@ const auth = new MyAuthProvider({
 })
 ```
 
-### Role-based Authorization
+### Role-based authorization
 
 ```typescript
+import { getWebRequest } from '@mastra/core/server'
+
 const auth = new MyAuthProvider({
   async authorizeUser(user, request) {
-    const path = request.url
-    const method = request.method
+    const webRequest = getWebRequest(request)
+    if (!webRequest) {
+      return false
+    }
+
+    const path = new URL(webRequest.url).pathname
+    const method = webRequest.method
 
     // Admin routes require admin role
     if (path.startsWith('/admin/')) {
@@ -502,12 +574,12 @@ export class MyAuthProvider extends MastraAuthProvider<MyUser> {
 
 Mastra includes these auth providers as reference implementations:
 
-- **MastraJwtAuth**: Simple JWT verification with HMAC secrets (`@mastra/auth`)
+- **MastraJwtAuth**: JWT verification with HMAC secrets (`@mastra/auth`)
 - **MastraAuthClerk**: Clerk authentication (`@mastra/auth-clerk`)
 - **MastraAuthAuth0**: Auth0 authentication (`@mastra/auth-auth0`)
 - **MastraAuthSupabase**: Supabase authentication (`@mastra/auth-supabase`)
 - **MastraAuthFirebase**: Firebase authentication (`@mastra/auth-firebase`)
-- **MastraAuthWorkOS**: WorkOS authentication (`@mastra/auth-workos`)
+- **MastraAuthWorkos**: WorkOS authentication (`@mastra/auth-workos`)
 - **MastraAuthBetterAuth**: Better Auth integration (`@mastra/auth-better-auth`)
 - **SimpleAuth**: Token-to-user mapping for development (`@mastra/core/server`)
 

@@ -1,26 +1,14 @@
 import fs from 'node:fs/promises';
-import { realpathSync } from 'node:fs';
 import path, { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import ts from 'typescript';
-import { defineConfig, loadEnv, searchForWorkspaceRoot } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import type { Plugin } from 'vite';
 
 const here = dirname(fileURLToPath(import.meta.url));
-
-/**
- * Resolve the mona-sans font package root. In the monorepo workspace the
- * package is a pnpm symlink into the virtual store; in the standalone web
- * host (linked via `link:`) it sits in the host's node_modules. realpathSync
- * resolves the symlink so Vite can serve font files in dev without exposing
- * the entire pnpm store.
- */
-const monaSansEntry = resolve(here, '../node_modules/@fontsource-variable/mona-sans');
-const monaSansPackageRoot = realpathSync(monaSansEntry);
-const fsAllow = [searchForWorkspaceRoot(here), monaSansPackageRoot];
 
 /**
  * Dev-proxy target for the API server and the UI dev-server port. Overridable
@@ -47,6 +35,44 @@ function runtimeConfigPlugin(): Plugin {
           injectTo: 'head-prepend',
         },
       ];
+    },
+  };
+}
+
+/** Green mark while developing Factory itself, so the dev tab is easy to tell apart from a deployed one. */
+function devFaviconPlugin(): Plugin {
+  return {
+    name: 'mastracode-dev-favicon',
+    apply: 'serve',
+    transformIndexHtml(html) {
+      return html.replace('href="/mastra.svg"', 'href="/mastra-dev.svg"');
+    },
+  };
+}
+
+/**
+ * `@mastra/playground-ui`'s dev task prunes the JS from its `dist` and leaves a marker until its first watch build
+ * lands. Vite caches imports it fails to resolve, so starting before then breaks every playground-ui import until
+ * this server restarts. Mirrors the same wait in `packages/playground/vite.config.ts`.
+ */
+function waitForPlaygroundUiWatchPlugin(): Plugin {
+  return {
+    name: 'wait-for-playground-ui-watch',
+    apply: 'serve',
+    async configureServer() {
+      const pendingFile = resolve(here, '../node_modules/@mastra/playground-ui/node_modules/.cache/dev-watch-pending');
+      const exists = () =>
+        fs.access(pendingFile).then(
+          () => true,
+          () => false,
+        );
+      if (!(await exists())) return;
+
+      console.info('Waiting for the @mastra/playground-ui watch build…');
+      const deadline = Date.now() + 120_000;
+      while ((await exists()) && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
     },
   };
 }
@@ -283,7 +309,14 @@ export default defineConfig(({ mode }) => {
   return {
     root: resolve(here, 'ui'),
     envDir,
-    plugins: [react(), tailwindcss(), runtimeConfigPlugin(), routesManifestPlugin()],
+    plugins: [
+      waitForPlaygroundUiWatchPlugin(),
+      react(),
+      tailwindcss(),
+      runtimeConfigPlugin(),
+      devFaviconPlugin(),
+      routesManifestPlugin(),
+    ],
     resolve: {
       // Monorepo packages arrive via `link:`/`workspace:` and would otherwise
       // resolve their own react copy from the monorepo store — force a single
@@ -297,11 +330,6 @@ export default defineConfig(({ mode }) => {
     server: {
       host: uiHost,
       port: uiPort,
-      fs: {
-        // Linked font files resolve outside the workspace; expose only that
-        // package instead of pnpm's entire global store.
-        allow: fsAllow,
-      },
       // OAuth callback URLs (WorkOS/GitHub/Linear) are registered against the
       // configured UI origin ahead of time. Silently hopping to a free port
       // would keep the UI working while every OAuth redirect breaks — fail
@@ -328,6 +356,12 @@ export default defineConfig(({ mode }) => {
         // server after the `/api/web` → `/web` path migration. Proxy them so the
         // configured dev UI server can reach the configured API server.
         '/web': {
+          target: apiTarget,
+          changeOrigin: true,
+        },
+        // MCP clients follow the Factory MCP endpoint's `WWW-Authenticate` challenge
+        // to this RFC 9728 metadata to find where to sign in.
+        '/.well-known/oauth-protected-resource': {
           target: apiTarget,
           changeOrigin: true,
         },

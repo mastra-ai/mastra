@@ -1,6 +1,6 @@
-import { X } from 'lucide-react';
-
 import { Button } from '@/ds/components/Button';
+import { Txt } from '@/ds/components/Txt';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { cn } from '@/lib/utils';
 
 export interface CommentQuoteProps {
@@ -22,7 +22,11 @@ export function CommentQuote({ authorName, quote, onDismiss, className }: Commen
       )}
     >
       <span className="min-w-0 flex-1">
-        {authorName ? <span className="text-column">{authorName} </span> : null}
+        {authorName ? (
+          <Txt as="span" variant="column">
+            {authorName}{' '}
+          </Txt>
+        ) : null}
         <span className="line-clamp-2 wrap-anywhere whitespace-pre-line">{quote}</span>
       </span>
       {onDismiss ? (
@@ -34,7 +38,7 @@ export function CommentQuote({ authorName, quote, onDismiss, className }: Commen
           onClick={onDismiss}
           className="shrink-0"
         >
-          <X size={12} aria-hidden />
+          <IconCrossMedium aria-hidden />
         </Button>
       ) : null}
     </blockquote>

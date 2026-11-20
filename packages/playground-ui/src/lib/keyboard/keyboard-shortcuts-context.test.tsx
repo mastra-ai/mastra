@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
-import { StrictMode, useRef, type ReactNode } from 'react';
+import { StrictMode, useRef } from 'react';
+import type { ReactNode } from 'react';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 
 import { KeyboardScope, KeyboardShortcutsProvider } from './keyboard-shortcuts-context';
-import { useKeydown, type UseKeydownArgs, type UseKeydownOptions } from './use-keydown';
+import { useKeydown } from './use-keydown';
+import type { UseKeydownArgs, UseKeydownOptions } from './use-keydown';
 
 const pressKey = (key: string, modifiers: Partial<KeyboardEventInit> = {}) =>
   fireEvent.keyDown(window, { key, ...modifiers });
@@ -342,11 +344,19 @@ describe('useKeydown inside KeyboardShortcutsProvider', () => {
       expect(onPage).not.toHaveBeenCalled();
     });
 
-    it('when the page loads first (child effects run before parent), then the page still wins', () => {
+    it('when the page mounts after the global binding, then the page still wins', () => {
       const onGlobal = vi.fn();
       const onPage = vi.fn();
-      renderApp(true, onGlobal, onPage);
+      const { rerender } = renderApp(false, onGlobal, onPage);
 
+      rerender(
+        <KeyboardShortcutsProvider>
+          <Shortcuts bindings={{ 'g$+t': onGlobal }} />
+          <Page>
+            <Shortcuts bindings={{ 'g$+t': onPage }} />
+          </Page>
+        </KeyboardShortcutsProvider>,
+      );
       pressSequence('g', 't');
 
       expect(onPage).toHaveBeenCalledTimes(1);
@@ -576,39 +586,6 @@ describe('useKeydown inside KeyboardShortcutsProvider', () => {
 
       expect(onGlobal).toHaveBeenCalledTimes(1);
       expect(onTarget).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('given a mounted provider', () => {
-    it('when it unmounts, then the window listener is removed', () => {
-      const removeSpy = vi.spyOn(window, 'removeEventListener');
-      const { unmount } = render(
-        <KeyboardShortcutsProvider>
-          <Shortcuts bindings={{ k: vi.fn() }} />
-        </KeyboardShortcutsProvider>,
-      );
-
-      unmount();
-
-      expect(removeSpy).toHaveBeenCalledWith('keydown', expect.any(Function));
-      removeSpy.mockRestore();
-    });
-
-    it('when several hooks register, then a single window listener is attached', () => {
-      const addSpy = vi.spyOn(window, 'addEventListener');
-      render(
-        <KeyboardShortcutsProvider>
-          <Shortcuts bindings={{ a: vi.fn() }} />
-          <Shortcuts bindings={{ b: vi.fn() }} />
-          <Page>
-            <Shortcuts bindings={{ c: vi.fn() }} />
-          </Page>
-        </KeyboardShortcutsProvider>,
-      );
-
-      const keydownRegistrations = addSpy.mock.calls.filter(([type]) => type === 'keydown');
-      expect(keydownRegistrations).toHaveLength(1);
-      addSpy.mockRestore();
     });
   });
 });

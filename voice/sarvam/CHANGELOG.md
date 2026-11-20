@@ -1,5 +1,82 @@
 # @mastra/voice-sarvam
 
+## 1.1.4
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
+## 1.1.4-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
+## 1.1.3
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 1.1.3-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 1.1.2
+
+### Patch Changes
+
+- Fixed `SarvamVoice.listen()` sending the speech model's API key. `listen()` now uses `options.apiKey`, then the listening model's key, and `speak()` uses the speech model's key, so projects with separate Sarvam keys for speech-to-text and text-to-speech bill each to the right key. ([#27206](https://github.com/mastra-ai/mastra/pull/27206))
+
+  ```ts
+  const voice = new SarvamVoice({
+    speechModel: { apiKey: 'tts-key' },
+    listeningModel: { apiKey: 'stt-key' },
+  });
+  await voice.listen(audio); // uses 'stt-key'
+  await voice.listen(audio, { apiKey: 'per-call-key' }); // uses 'per-call-key'
+  ```
+
+- `SarvamVoice.listen()` now throws on Sarvam API errors (e.g. invalid API key, rate limits) instead of silently returning `undefined`. Error messages for both `listen()` and `speak()` now surface Sarvam's `error.message`. ([#27173](https://github.com/mastra-ai/mastra/pull/27173))
+
+  Before, a failed `listen()` call returned `undefined`. Now it throws, so handle it with `try`/`catch`:
+
+  ```ts
+  try {
+    const text = await voice.listen(audio);
+  } catch (error) {
+    // error.message: "Sarvam AI API Error: <message>"
+  }
+  ```
+
+- Fixed `SarvamVoice.listen()` ignoring the `listeningModel` passed to the constructor. A voice created with `listeningModel: { model: 'saaras:v3', languageCode: 'hi-IN', mode: 'translit' }` now transcribes with that model, language and mode; before, it always sent `saarika:v2.5` with automatic language detection. Options passed to `listen()` still take precedence. ([#27102](https://github.com/mastra-ai/mastra/pull/27102))
+
+## 1.1.2-alpha.1
+
+### Patch Changes
+
+- `SarvamVoice.listen()` now throws on Sarvam API errors (e.g. invalid API key, rate limits) instead of silently returning `undefined`. Error messages for both `listen()` and `speak()` now surface Sarvam's `error.message`. ([#27173](https://github.com/mastra-ai/mastra/pull/27173))
+
+  Before, a failed `listen()` call returned `undefined`. Now it throws, so handle it with `try`/`catch`:
+
+  ```ts
+  try {
+    const text = await voice.listen(audio);
+  } catch (error) {
+    // error.message: "Sarvam AI API Error: <message>"
+  }
+  ```
+
+## 1.1.2-alpha.0
+
+### Patch Changes
+
+- Fixed `SarvamVoice.listen()` ignoring the `listeningModel` passed to the constructor. A voice created with `listeningModel: { model: 'saaras:v3', languageCode: 'hi-IN', mode: 'translit' }` now transcribes with that model, language and mode; before, it always sent `saarika:v2.5` with automatic language detection. Options passed to `listen()` still take precedence. ([#27102](https://github.com/mastra-ai/mastra/pull/27102))
+
 ## 1.1.1
 
 ### Patch Changes

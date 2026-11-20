@@ -1,5 +1,6 @@
+import { isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import type { IMastraLogger } from '@mastra/core/logger';
+import type { IMastraLogger } from '@internal/core/logger';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import virtual from '@rollup/plugin-virtual';
@@ -8,14 +9,17 @@ import { rollup } from 'rollup';
 import type { OutputChunk, Plugin, SourceMap } from 'rollup';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import { mastraInternalAliasPlugin, mastraToolsAliasPlugin } from '../bundler';
-import { getPackageMetadata, getPackageRootPath } from '../package-info';
+import { getPackageMetadata, getPackageRootPath, isOptionalPeerOfImporter } from '../package-info';
 import { esbuild } from '../plugins/esbuild';
+import { moduleAlias } from '../plugins/module-alias';
 import { protocolExternalResolver } from '../plugins/protocol-external-resolver';
 import { removeDeployer } from '../plugins/remove-deployer';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
 import type { DependencyMetadata } from '../types';
 import { getPackageName, isBareModuleSpecifier, isDependencyPartOfPackage, slash } from '../utils';
+import type { BundlerPlatform } from '../utils';
 import { DEPS_TO_IGNORE } from './constants';
+import { isUserListedExternal } from './externals';
 
 function analysisExternals({
   workspaceMap,
@@ -47,6 +51,21 @@ function analysisExternals({
   };
 }
 
+/** Records which modules dynamically import each external module id. */
+function collectDynamicImporters(dynamicImporters: Map<string, readonly string[]>): Plugin {
+  return {
+    name: 'collect-dynamic-importers',
+    buildEnd() {
+      for (const id of this.getModuleIds()) {
+        const info = this.getModuleInfo(id);
+        if (info?.isExternal && info.dynamicImporters.length) {
+          dynamicImporters.set(id, info.dynamicImporters);
+        }
+      }
+    },
+  };
+}
+
 /**
  * Configures and returns the Rollup plugins needed for analyzing entry files.
  * Sets up module resolution, transpilation, and custom alias handling for Mastra-specific imports.
@@ -60,12 +79,18 @@ function getInputPlugins(
     workspaceMap,
     externals,
     externalsPreset,
+    alias,
+    platform,
+    configEntryFile,
   }: {
     sourcemapEnabled: boolean;
     env: Record<string, string>;
     workspaceMap: Map<string, WorkspacePackageInfo>;
     externals: string[];
     externalsPreset: boolean;
+    alias: Record<string, string>;
+    platform: BundlerPlatform;
+    configEntryFile: string;
   },
 ): Plugin[] {
   let virtualPlugin = null;
@@ -81,10 +106,12 @@ function getInputPlugins(
     plugins.push(virtualPlugin);
   }
 
+  const aliasPlugin = moduleAlias(alias, mastraEntry, platform);
   plugins.push(
     ...[
       protocolExternalResolver(),
       mastraInternalAliasPlugin(mastraEntry),
+      ...(aliasPlugin ? [aliasPlugin] : []),
       mastraToolsAliasPlugin(),
       tsConfigPaths(),
       analysisExternals({ workspaceMap, externals, externalsPreset }),
@@ -96,7 +123,7 @@ function getInputPlugins(
         transformMixedEsModules: true,
         extensions: ['.js', '.ts'],
       }),
-      removeDeployer(mastraEntry, {
+      removeDeployer(configEntryFile, {
         sourcemap: sourcemapEnabled,
       }),
       esbuild(),
@@ -115,6 +142,7 @@ async function captureDependenciesToOptimize(
   output: OutputChunk,
   workspaceMap: Map<string, WorkspacePackageInfo>,
   projectRoot: string,
+  dynamicImporters: Map<string, readonly string[]>,
   {
     logger,
     mastraEntry,
@@ -124,9 +152,13 @@ async function captureDependenciesToOptimize(
     activeEntries,
     externals,
     externalsPreset,
+    alias,
+    platform,
+    configEntryFile,
   }: {
     logger: IMastraLogger;
     mastraEntry: string;
+    configEntryFile: string;
     shouldCheckTransitiveDependencies: boolean;
     env: Record<string, string>;
     /** Shared cache to avoid re-analyzing the same entry across recursive calls */
@@ -135,6 +167,8 @@ async function captureDependenciesToOptimize(
     activeEntries: Set<string>;
     externals: string[];
     externalsPreset: boolean;
+    alias: Record<string, string>;
+    platform: BundlerPlatform;
   },
 ): Promise<Map<string, DependencyMetadata>> {
   const depsToOptimize = new Map<string, DependencyMetadata>();
@@ -228,6 +262,9 @@ async function captureDependenciesToOptimize(
         activeEntries,
         externals,
         externalsPreset,
+        alias,
+        platform,
+        configEntryFile,
       });
 
       if (!analysis?.dependencies) {
@@ -278,6 +315,29 @@ async function captureDependenciesToOptimize(
           rootPath = metadata.rootPath;
           version = metadata.version;
           packageSpec = metadata.packageSpec;
+        }
+
+        const importers = dynamicImporters.get(dynamicImport) ?? [];
+        if (pkgName && !rootPath && !version && !packageSpec) {
+          // The bundler resolves the import from the importing file, so a package installed only there is installed.
+          for (const importer of importers) {
+            if (!isAbsolute(importer)) continue;
+            const metadata = await getPackageMetadata(dynamicImport, importer);
+            if (metadata.rootPath || metadata.version || metadata.packageSpec) {
+              ({ rootPath, version, packageSpec } = metadata);
+              break;
+            }
+          }
+        }
+
+        if (pkgName && !rootPath && !version && !packageSpec && !isUserListedExternal(dynamicImport, externals)) {
+          // Not installed: leave it out only when every importing package declares it as an optional peer.
+          const optionalPeerChecks = await Promise.all(
+            importers.map(importer => isOptionalPeerOfImporter(pkgName, importer)),
+          );
+          if (optionalPeerChecks.length && optionalPeerChecks.every(Boolean)) {
+            continue;
+          }
         }
 
         depsToOptimize.set(dynamicImport, {
@@ -337,6 +397,9 @@ export async function analyzeEntry(
     activeEntries: providedActiveEntries,
     externals = [],
     externalsPreset = false,
+    alias = {},
+    platform = 'node',
+    configEntryFile = mastraEntry,
   }: {
     logger: IMastraLogger;
     sourcemapEnabled: boolean;
@@ -352,6 +415,11 @@ export async function analyzeEntry(
     externals?: string[];
     /** Whether all non-workspace dependencies must remain external during analysis */
     externalsPreset?: boolean;
+    /** Exact module specifier aliases applied before externalization */
+    alias?: Record<string, string>;
+    platform?: BundlerPlatform;
+    /** File holding `new Mastra({...})`, when `mastraEntry` is a generated wrapper that imports it */
+    configEntryFile?: string;
   },
 ): Promise<AnalyzeEntryResult> {
   const resolvedEntry = isVirtualFile ? undefined : slash(entry);
@@ -372,6 +440,7 @@ export async function analyzeEntry(
   }
 
   try {
+    const dynamicImporters = new Map<string, readonly string[]>();
     const optimizerBundler = await rollup({
       logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
       input: isVirtualFile ? '#entry' : entry,
@@ -383,7 +452,10 @@ export async function analyzeEntry(
         workspaceMap,
         externals,
         externalsPreset,
-      }),
+        alias,
+        platform,
+        configEntryFile,
+      }).concat(collectDynamicImporters(dynamicImporters)),
       external: id => DEPS_TO_IGNORE.some(dep => isDependencyPartOfPackage(id, dep)),
     });
 
@@ -398,16 +470,25 @@ export async function analyzeEntry(
       }
     })();
 
-    const depsToOptimize = await captureDependenciesToOptimize(output[0] as OutputChunk, workspaceMap, projectRoot, {
-      logger,
-      mastraEntry,
-      shouldCheckTransitiveDependencies,
-      env,
-      analyzeCache: effectiveAnalyzeCache,
-      activeEntries,
-      externals,
-      externalsPreset,
-    });
+    const depsToOptimize = await captureDependenciesToOptimize(
+      output[0] as OutputChunk,
+      workspaceMap,
+      projectRoot,
+      dynamicImporters,
+      {
+        logger,
+        mastraEntry,
+        configEntryFile,
+        shouldCheckTransitiveDependencies,
+        env,
+        analyzeCache: effectiveAnalyzeCache,
+        activeEntries,
+        externals,
+        externalsPreset,
+        alias,
+        platform,
+      },
+    );
 
     const result: AnalyzeEntryResult = {
       dependencies: depsToOptimize,

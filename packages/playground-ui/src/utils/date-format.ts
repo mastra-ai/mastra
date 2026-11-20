@@ -1,5 +1,13 @@
 export type DateInput = Date | string | number | null | undefined;
-export type DatePreset = 'date' | 'date-time' | 'date-time-seconds' | 'time' | 'time-seconds' | 'relative-time';
+export type DatePreset =
+  | 'date'
+  | 'date-time'
+  | 'date-time-seconds'
+  | 'day-time-seconds'
+  | 'time'
+  | 'time-seconds'
+  | 'relative-time'
+  | 'relative-long';
 
 type FormatOptions = { locale?: string; now?: Date | number; timeZone?: string };
 
@@ -21,6 +29,7 @@ const PRESET_OPTIONS = {
     minute: '2-digit',
     second: '2-digit',
   },
+  'day-time-seconds': { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' },
   calendar: { year: 'numeric', month: 'numeric', day: 'numeric', calendar: 'gregory', numberingSystem: 'latn' },
   dayMonth: { month: 'short', day: 'numeric' },
   dayMonthYear: { month: 'short', day: 'numeric', year: 'numeric' },
@@ -69,11 +78,33 @@ export function formatShortDate(value: DateInput, { locale, now, timeZone }: For
   return getFormatter(key, locale, timeZone).format(date);
 }
 
+const LONG_RELATIVE_UNITS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+  ['year', 365 * 86_400],
+  ['month', 30 * 86_400],
+  ['week', 7 * 86_400],
+  ['day', 86_400],
+  ['hour', 3_600],
+  ['minute', 60],
+];
+
+const relativeFormatters = new Map<string, Intl.RelativeTimeFormat>();
+
+function getRelativeFormatter(locale?: string) {
+  const key = locale ?? '';
+  let formatter = relativeFormatters.get(key);
+  if (!formatter) {
+    formatter = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+    relativeFormatters.set(key, formatter);
+  }
+  return formatter;
+}
+
 /**
  * Uses the browser locale unless `locale` is given.
  * - `date`: date only; omits the year when it matches `now` in the requested timezone
  * - `date-time`: date, year and time to minutes, including historical dates
  * - `date-time-seconds`: date, year and time to seconds
+ * - `day-time-seconds`: month, day and time to seconds, without the year
  * - `time`: time to minutes, without a date
  * - `time-seconds`: time to seconds, without a date
  * - `relative-time`: short relative label; delegates to `date` at seven days
@@ -98,9 +129,31 @@ export function formatDate(value: DateInput, preset: DatePreset, options: Format
     const label = `${Math.floor(abs / match.size)}${match.unit}`;
     return diff < 0 ? `${label} ago` : `in ${label}`;
   }
+  if (preset === 'relative-long') {
+    const seconds = (date.getTime() - new Date(now ?? Date.now()).getTime()) / 1000;
+    const [unit, size] = LONG_RELATIVE_UNITS.find(([, size]) => Math.abs(seconds) >= size) ?? ['second', 1];
+    return getRelativeFormatter(locale).format(Math.round(seconds / size), unit);
+  }
   if (preset === 'date') return formatShortDate(date, options);
 
   return getFormatter(preset, locale, timeZone).format(date);
+}
+
+function calendarDay(date: Date, timeZone?: string) {
+  const { year, month, day } = calendarDate(date, timeZone);
+  return Date.UTC(Number(year), Number(month) - 1, Number(day)) / 86_400_000;
+}
+
+/** When something happened, by its day and clock: `Today at 10:44:44 AM`, `Yesterday at …`, `Oct 21 at …`. */
+export function formatMoment(value: DateInput, options: FormatOptions = {}) {
+  const date = toDate(value);
+  if (!date) return undefined;
+  const clock = formatDate(date, 'time-seconds', options);
+  const daysAgo =
+    calendarDay(new Date(options.now ?? Date.now()), options.timeZone) - calendarDay(date, options.timeZone);
+  if (daysAgo === 0) return `Today at ${clock}`;
+  if (daysAgo === 1) return `Yesterday at ${clock}`;
+  return `${formatShortDate(date, options)} at ${clock}`;
 }
 
 /** Locale-aware compact date range, e.g. `Sep 2 – 5, 2026`. */

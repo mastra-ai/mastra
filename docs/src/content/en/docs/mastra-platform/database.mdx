@@ -1,6 +1,6 @@
 ---
 title: "Hosted databases | Mastra platform"
-description: "Provision and attach managed Turso or Postgres databases to Mastra platform environments, then use injected credentials from your application code."
+description: "Provision and attach managed Turso, Neon, or Postgres databases to Mastra platform environments, then use injected credentials from your application code."
 ---
 
 import Steps from "@site/src/components/Steps";
@@ -8,7 +8,7 @@ import StepItem from "@site/src/components/StepItem";
 
 # Hosted databases
 
-Provision a fully managed database from the CLI or your [platform](/docs/mastra-platform/overview) project settings and attach it to your project. Mastra creates it with your provider and stores credentials securely, plus injects connection details as runtime environment variables when the database is ready, so there are no connection strings to copy or configure.
+Provision a fully managed database from the CLI or your [platform](/docs/mastra-platform/overview) project settings and attach it to your project. Mastra creates the database with your provider and stores its credentials. When the database is ready, the platform injects its connection details as runtime environment variables. You don't copy or configure connection strings.
 
 ```bash
 mastra env db create --kind turso
@@ -24,32 +24,33 @@ Use a hosted database when your project needs durable storage that's managed by 
 
 ## Providers
 
-Hosted databases are available through two providers today, Turso and Postgres, with MongoDB coming soon. Pick one when you attach a database, then wire its injected variables into the matching Mastra storage adapter in your code.
+Hosted databases are available through three providers today: Turso, Neon, and Postgres, with MongoDB coming soon. Pick one when you attach a database, then wire its injected variables into the matching Mastra storage adapter in your code.
 
-Each provider injects a fixed set of variable names, for example, a single `DATABASE_URL` for Postgres and separate `TURSO_*` variables for Turso. Those names must be unique within each environment, which means an environment can use at most one database per provider. Attach Turso and Postgres to the same project when you need separate stores for different workloads.
+Each provider injects a fixed set of variable names, for example, a single `DATABASE_URL` for both Neon and Postgres and separate `TURSO_*` variables for Turso. Those names must be unique within each environment, so a single environment can use at most one database per variable name. Because Neon and Postgres both inject `DATABASE_URL`, they're mutually exclusive within the same environment. Turso can be attached alongside either one.
 
-For most agent-focused projects, **Turso** is the simplest starting point. It provides a lightweight, SQLite-compatible engine well suited to agent memory, conversation history, and per-tenant isolation. Choose **Postgres** when your workload needs full SQL, relational schemas, or structured application data beyond Mastra runtime state. **MongoDB** (_coming soon_) will add document storage and built-in vector search for workloads that don't map cleanly to SQL.
+For most agent-focused projects, **Turso** is a good starting point. It provides a lightweight, SQLite-compatible engine well suited to agent memory, conversation history, and per-tenant isolation. Choose **Neon** when you want a public, serverless Postgres you can reach from your laptop, other services, or a migration tool. Choose **Postgres** when your workload needs to stay on your deployment's private network: it runs alongside your server and is only reachable from it. **MongoDB** (_coming soon_) will add document storage and built-in vector search for workloads that don't map cleanly to SQL.
 
-| Provider | Engine | Best for |
-| - | - | - |
-| **Turso** | LibSQL, SQLite-compatible | Agent memory, per-tenant isolation |
-| **PostgreSQL** | Serverless Postgres | Relational workloads, structured data |
-| **MongoDB** | Document and vector search | Document storage, vector search (_coming soon_) |
+| Provider | Engine | Network | Best for |
+| - | - | - | - |
+| **Turso** | LibSQL, SQLite-compatible | Public | Agent memory, per-tenant isolation |
+| **Neon** | Serverless Postgres with branching | Public | Relational workloads reachable from outside your deployment |
+| **Postgres** | Managed PostgreSQL | VPC (private) | Relational workloads that must stay on your deployment's private network |
+| **MongoDB** | Document and vector search | _TBD_ | Document storage, vector search (_coming soon_) |
 
 ## Database scope
 
 A database is attached at one of two scopes:
 
 - **Environment scope**: The default. Attached to a single environment so data stays isolated between environments (for example separate production and staging databases). When your project has one environment, `mastra env db create` picks it automatically; with several, the CLI prompts you to select one.
-- **Project scope**: One database shared by all of the project's [environments](/docs/mastra-platform/environments). Opt in with `--shared`. Its variables are injected into every deploy.
+- **Project scope**: One database shared by all of the project's [environments](/docs/mastra-platform/deploy/environments). Opt in with `--shared`. Its variables are injected into every deploy. Available for Turso and Neon.
 
 The scope is set when you attach the database and shown in `mastra env db list`.
 
-The scopes can't overlap for the same provider. Because a project-scoped database already injects its variables into every environment, attaching an environment-scoped database of the same provider is rejected with a variable name conflict. To move from a shared database to per-environment databases, delete the project-scoped database first, then attach one database per environment. Deleting a database destroys it with the provider along with all of its data, export anything you need to keep before switching scopes. Environment-scoped databases on different environments never conflict, each deploy only receives the variables for its own environment.
+The scopes can't overlap for the same provider. Because a project-scoped database already injects its variables into every environment, attaching an environment-scoped database of the same provider is rejected with a variable name conflict. To move from a shared database to per-environment databases, delete the project-scoped database first, then attach one database per environment. Deleting a database destroys it with the provider along with all of its data. Export anything you need to keep before switching scopes. Environment-scoped databases on different environments never conflict, because each deploy only receives the variables for its own environment.
 
 ## Attach with the CLI
 
-You don't have to run this command up front. If your project needs a hosted database but doesn't have one yet, `mastra deploy` offers to attach one for you when the deploy preflight check runs. Say yes and the deploy continues without leaving the CLI.
+You don't have to run this command up front. If your project needs a hosted database but doesn't have one yet, `mastra deploy` offers to attach one for you when the deploy preflight check runs. Say yes and the deploy continues without leaving the CLI. When both Neon and Postgres are available for your organization and the missing variable is `DATABASE_URL`, the prompt lets you choose which one to provision.
 
 Alternatively, create and attach a database ahead of time. The CLI polls until it's ready, which takes a few seconds:
 
@@ -64,9 +65,9 @@ mastra env db create staging --kind turso
 mastra env db create --kind turso --shared
 ```
 
-Supported kinds are `turso` and `neon` (Postgres). Useful flags:
+Supported kinds are `turso`, `neon` (public serverless Postgres), and `postgres` (VPC-isolated Postgres). Useful flags:
 
-- `--shared`: Attach a project-scoped database shared by every environment. Can't be combined with an environment argument.
+- `--shared`: Attach a project-scoped database shared by every environment. Can't be combined with an environment argument. Turso and Neon only.
 - `--name <name>`: Database name. Defaults to a name derived from the project slug.
 - `--region <region>`: Provider region ID for project-scoped databases (for example `fra`). Environment-scoped databases are placed near the environment's region automatically, and an explicit `--region` is ignored.
 - `--no-wait`: Return immediately instead of polling. Check progress later with `mastra env db show`.
@@ -94,14 +95,16 @@ mastra env db delete <database>
   </StepItem>
 
   <StepItem>
-    Select a **provider** (Turso or Postgres). You can switch providers before attaching.
+    Select a **provider** (Turso, Neon, or Postgres). You can switch providers before attaching.
   </StepItem>
 
   <StepItem>
     Configure the database:
 
     - **Name**: A label for the database within your project.
-    - **Region**: Where the database is hosted. Select the region closest to your users. Turso defaults to `sjc` (San Jose) and is available in 20+ locations worldwide. Postgres defaults to `aws-us-west-2` and is available across AWS and Azure regions in the US, EU, and APAC.
+    - **Environment**: The [environment](/docs/mastra-platform/deploy/environments) the database is attached to. When the project has one environment, it's selected for you. An environment that already has a database with the same variables can't be selected.
+
+    The **Database location** is chosen for you from the environment's [region](/docs/mastra-platform/deploy/regions). Postgres runs on the same private network as the environment's server.
   </StepItem>
 
   <StepItem>
@@ -109,7 +112,7 @@ mastra env db delete <database>
   </StepItem>
 </Steps>
 
-Databases attached from project settings are project-scoped. Use the [CLI](#attach-with-the-cli) to attach an environment-scoped database.
+Databases attached from project settings are environment-scoped. To share one Turso or Neon database across all environments, use the [CLI](#attach-with-the-cli) with `--shared`. Postgres can only be attached to a single environment.
 
 ## Connect from your code
 
@@ -121,6 +124,14 @@ Open a `ready` database to view those variables and a code snippet. Use the vari
 
 Turso exposes two environment variables: `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`. The following example connects a [LibSQLStore](/integrations/databases/libsql) using those variables.
 
+Install the adapter:
+
+```bash npm2yarn
+npm install @mastra/libsql@latest
+```
+
+Create the storage instance:
+
 ```ts title="src/mastra/storage.ts" caption="Connect a Turso (LibSQL) database"
 import { LibSQLStore } from '@mastra/libsql'
 
@@ -131,29 +142,28 @@ export const storage = new LibSQLStore({
 })
 ```
 
-Install the adapter:
+### Neon and Postgres
 
-```bash npm2yarn
-npm install @mastra/libsql@latest
-```
-
-### PostgreSQL
-
-PostgreSQL exposes a single `DATABASE_URL` connection string. The following example connects a [PostgresStore](/integrations/databases/postgresql) using that variable.
-
-```ts title="src/mastra/storage.ts" caption="Connect a Postgres database"
-import { PostgresStore } from '@mastra/pg'
-
-export const storage = new PostgresStore({
-  connectionString: process.env.DATABASE_URL!,
-})
-```
+Neon (public serverless) and Postgres (VPC-isolated) both expose a single `DATABASE_URL` connection string, so the same [PostgresStore](/integrations/databases/postgresql) code works for either. An environment can have one or the other, not both.
 
 Install the adapter:
 
 ```bash npm2yarn
 npm install @mastra/pg@latest
 ```
+
+Create the storage instance:
+
+```ts title="src/mastra/storage.ts" caption="Connect a Neon or Postgres database"
+import { PostgresStore } from '@mastra/pg'
+
+export const storage = new PostgresStore({
+  id: 'mastra-storage',
+  connectionString: process.env.DATABASE_URL!,
+})
+```
+
+The VPC-isolated Postgres is only reachable from the deployed server, so local development can't connect to it directly. Point `DATABASE_URL` at a local Postgres (or a Neon branch) during development, then let the platform inject the managed value at deploy time.
 
 Pass the `storage` instance to your `Mastra` configuration so agents, memory, and workflows can use it:
 
@@ -173,6 +183,7 @@ Each provider injects a fixed set of managed environment variables. These are av
 | Provider | Variables |
 | - | - |
 | Turso | `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` |
+| Neon | `DATABASE_URL` |
 | Postgres | `DATABASE_URL` |
 
 :::warning

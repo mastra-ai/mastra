@@ -8,6 +8,17 @@ export type FilterBarOperator = {
   id: string;
   label: string;
   arity?: FilterBarArity;
+  /**
+   * The value is typed text, such as a word to match: the field's suggestions are not offered
+   * and a `strict` field accepts free text.
+   */
+  freeText?: boolean;
+  /**
+   * Id of the `many` operator that holds several of this operator's values (`is` → `is any of`).
+   * When items are keyed by field (`createItemId`), adding another value to a field filtered
+   * with this operator widens its chip to that operator instead of replacing the value.
+   */
+  widensTo?: string;
 };
 
 export type FilterBarOption = {
@@ -55,6 +66,10 @@ export type FilterBarField = {
   type?: FilterBarFieldType;
   /** Operator ids allowed for this field. Defaults to every root operator. */
   operators?: string[];
+  /** Keep the operator label visible even when this field allows only one operator. */
+  alwaysShowOperator?: boolean;
+  /** Field-specific labels for operators, keyed by operator id (e.g. `notExists` → `is not recorded`). */
+  operatorLabels?: Record<string, string>;
   /**
    * Optional value suggestions. Absent → free text.
    * - array: static list, filtered locally by the query.
@@ -67,6 +82,12 @@ export type FilterBarField = {
   strict?: boolean;
   /** Never offered in the input's field step; existing chips for it still render with the field label. */
   hidden?: boolean;
+  /** Only offered at the root, for query options that cannot be nested in boolean groups. */
+  rootOnly?: boolean;
+  /** Cannot replace another chip's field when this field already has a chip. */
+  singleton?: boolean;
+  /** A validation message prevents committing free text until the input is valid. */
+  validateInput?: (value: string) => string | undefined;
   /**
    * Free-text entry point. The field stays offered in the input's field step whatever the
    * query, so typed text never dead-ends on "No matching field"; picking it with text typed

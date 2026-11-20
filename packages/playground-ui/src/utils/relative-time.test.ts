@@ -34,4 +34,24 @@ describe('formatDate relative-time', () => {
       expect(formatDate('nope', 'relative-time', options)).toBeUndefined();
     });
   });
+
+  describe('relative-long', () => {
+    it('describes far dates in words instead of falling back to a date', () => {
+      expect(formatDate(NOW + 29 * 86_400_000, 'relative-long', options)).toBe('in 4 weeks');
+      expect(formatDate(NOW + 90 * 86_400_000, 'relative-long', options)).toBe('in 3 months');
+      expect(formatDate(NOW - 400 * 86_400_000, 'relative-long', options)).toBe('last year');
+      expect(formatDate(NOW - 3 * 365 * 86_400_000, 'relative-long', options)).toBe('3 years ago');
+    });
+
+    it('uses day, hour, and minute units for near dates', () => {
+      expect(formatDate(NOW + 86_400_000, 'relative-long', options)).toBe('tomorrow');
+      expect(formatDate(NOW + 3 * 3_600_000, 'relative-long', options)).toBe('in 3 hours');
+      expect(formatDate(NOW - 5 * 60_000, 'relative-long', options)).toBe('5 minutes ago');
+      expect(formatDate(NOW + 10_000, 'relative-long', options)).toBe('in 10 seconds');
+    });
+
+    it('returns undefined for unusable values', () => {
+      expect(formatDate(undefined, 'relative-long', options)).toBeUndefined();
+    });
+  });
 });

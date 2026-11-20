@@ -1,4 +1,4 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual } from 'node:crypto';
 import type { Context } from 'hono';
 
 import { dispatchGitLabWebhook } from './webhook-dispatch.js';
@@ -108,7 +108,9 @@ export async function parseGitLabWebhook(
     normalizeHeader(c.req.header('idempotency-key')) ??
     normalizeHeader(c.req.header('x-gitlab-webhook-uuid')) ??
     normalizeHeader(c.req.header('x-gitlab-event-uuid')) ??
-    createHash('sha256').update(event).update('\0').update(rawBody).digest('hex');
+    Buffer.from(
+      await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${event}\0${rawBody}`)),
+    ).toString('hex');
   const instanceHost = normalizeInstanceHost(c.req.header('x-gitlab-instance'));
   return {
     event,

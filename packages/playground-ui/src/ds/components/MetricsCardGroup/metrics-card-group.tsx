@@ -1,49 +1,37 @@
 import type { ReactNode } from 'react';
-import { frameSurfaceStyle, raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
-
-export type MetricsCardGroupVariant = 'default' | 'inset';
 
 export type MetricsCardGroupProps = {
   children: ReactNode;
-  /**
-   * `default` — raised cards sitting in a frame one step below them.
-   * `inset` — the DataList treatment: the group is the raised surface, and the
-   * cards are flat wells cut into it, so the frame reads as a thick border.
-   */
-  variant?: MetricsCardGroupVariant;
   className?: string;
 };
 
 /**
- * Like DataList, the inset group is the only element that defines a color: it
- * repaints its cards as wells, whatever card is dropped in. `!` is needed to beat
- * `Card`'s pinned `hover:`/`active:` fills.
+ * A row of metrics cards (KPI, chart, …) held as one unit. No frame of its own: the cards
+ * sit directly on the page with the page's 16px gap, so there is never a card inside a card.
+ * Columns follow the group's own width (container queries), not the viewport, so a sidebar or
+ * a narrow pane never squeezes cards into one row. One column, two, then three from 48rem for groups
+ * of three or more, so one or two cards never leave an empty column, and four cards stay 2 + 2 there
+ * rather than leave one alone. Up to four cards share one row
+ * from 56rem; five stay 3 + 2 until they share one row from 72rem. Every card stays at least
+ * 12rem wide, room for its value, change badge and footer on one line each.
+ * The group owns their width, so each card's own `min-w-*` is neutralised.
  */
-const variantClasses: Record<MetricsCardGroupVariant, string> = {
-  default: frameSurfaceStyle,
-  // Wells swap the card's elevation for a bare 1px `--surface-rim`: the same edge
-  // every raised surface draws, with no lift, so they stay crisp against the frame
-  // in light, where `background` and `card` sit only a step apart.
-  inset: cn(raisedSurfaceStyle, '*:bg-background! *:shadow-rim!'),
-};
-
-/**
- * A frame that holds a row of metrics cards (KPI, chart, …) as one unit.
- * One column below `md`, two below `lg`, then every card on a single row with
- * equal widths. The group owns their width, so each card's own `min-w-*` is neutralised.
- */
-export function MetricsCardGroup({ children, variant = 'default', className }: MetricsCardGroupProps) {
+// An app that loads this package's CSS next to its own Tailwind output can emit the same utility
+// (say `@xl:grid-cols-2`) again, later in the cascade. So no two column rules of equal specificity
+// may apply at the same width, or the later copy wins whatever the breakpoint: each plain rule owns
+// its own width range (one column needs no rule), and the `has-*` overrides win by specificity.
+export function MetricsCardGroup({ children, className }: MetricsCardGroupProps) {
   return (
-    <div
-      // Outer radius = card radius (8px) + 4px inset so the corners stay concentric.
-      className={cn(
-        'grid grid-cols-1 gap-1 rounded-xl p-1 *:min-w-0! md:grid-cols-2 lg:flex lg:*:flex-1',
-        variantClasses[variant],
-        className,
-      )}
-    >
-      {children}
+    <div className="@container">
+      <div
+        className={cn(
+          'grid gap-4 *:min-w-0! @xl:@max-4xl:grid-cols-2 @3xl:@max-4xl:has-[>:nth-child(3)]:grid-cols-3 @3xl:@max-4xl:has-[>:nth-child(4):last-child]:grid-cols-2 @4xl:grid-cols-[repeat(auto-fit,minmax(12rem,1fr))] @4xl:@max-6xl:has-[>:nth-child(5)]:grid-cols-3',
+          className,
+        )}
+      >
+        {children}
+      </div>
     </div>
   );
 }

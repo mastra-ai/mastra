@@ -1,9 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ArrowDown, ArrowUp } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { Txt } from '../components/Txt/Txt';
 import { ARRIVING_CLASS, ARRIVING_MS } from './animations';
 import { FoundationPage, FoundationSection, Specimen, SpecimenGroup } from './foundations-layout';
+import { IconArrowDown } from '@/ds/icons/central/IconArrowDown';
+import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
 import { cn } from '@/lib/utils';
 import '@/ds/components/Arrival/arrival.css';
 
@@ -33,7 +35,7 @@ const DemoButton = ({ onClick, children }: { onClick: () => void; children: Reac
   <button
     type="button"
     onClick={onClick}
-    className="state-layer w-fit cursor-pointer rounded-md border border-border bg-card px-2.5 py-1 text-label text-foreground"
+    className="w-fit cursor-pointer rounded-md border border-border bg-card state-layer px-2.5 py-1 text-label text-foreground"
   >
     {children}
   </button>
@@ -81,7 +83,7 @@ const stateSpecimens: UtilitySpecimen[] = [
     tokens: ['state-layer'],
     note: 'Hover: the rung lands on top of the fill, never in it',
     demo: (
-      <div className="state-layer flex h-24 items-center justify-center rounded-lg bg-card shadow-raised">
+      <div className="flex h-24 items-center justify-center rounded-lg bg-card state-layer shadow-raised">
         <Txt variant="label">Reach for this one</Txt>
       </div>
     ),
@@ -94,7 +96,7 @@ const stateSpecimens: UtilitySpecimen[] = [
         <input
           aria-label="Filter runs"
           placeholder="Filter runs"
-          className="h-8 w-full rounded-full bg-card px-3 text-body text-foreground shadow-raised outline-hidden placeholder:text-placeholder focus-visible:[--surface-rim:var(--surface-rim-focus)] [&:hover:not(:focus-visible)]:[--surface-tint:var(--fill-subtle)]"
+          className="h-8 w-full rounded-full bg-card px-3 text-body text-foreground shadow-raised outline-hidden placeholder:text-placeholder focus-visible:[--surface-rim:var(--border-focus)] [&:hover:not(:focus-visible)]:[--surface-tint:var(--fill-subtle)]"
         />
       </div>
     ),
@@ -162,7 +164,7 @@ const animationSpecimens: UtilitySpecimen[] = [
     note: 'Ascending: drawn from the bottom up, the way it points',
     demo: (
       <div className="flex h-16 items-center justify-center rounded-md bg-background">
-        <ArrowUp className="animate-sort-arrow-up size-icon-lg text-foreground" />
+        <IconArrowUp className="animate-sort-arrow-up size-icon-lg text-foreground" />
       </div>
     ),
   },
@@ -171,7 +173,7 @@ const animationSpecimens: UtilitySpecimen[] = [
     note: 'Descending: the same reveal, top down',
     demo: (
       <div className="flex h-16 items-center justify-center rounded-md bg-background">
-        <ArrowDown className="animate-sort-arrow-down size-icon-lg text-foreground" />
+        <IconArrowDown className="animate-sort-arrow-down size-icon-lg text-foreground" />
       </div>
     ),
   },
@@ -180,7 +182,7 @@ const animationSpecimens: UtilitySpecimen[] = [
     note: 'Where a click landed in a remote browser view',
     demo: (
       <div className="relative flex h-16 items-center justify-center overflow-hidden rounded-md bg-background">
-        <span className="animate-click-ripple pointer-events-none size-12 rounded-full bg-accent1/40" />
+        <span className="animate-click-ripple pointer-events-none size-12 rounded-full bg-success-subtle" />
       </div>
     ),
   },
@@ -231,7 +233,7 @@ export const UtilitiesFoundations: Story = {
       title="Utilities foundations"
       description="These are the classes that carry a decision rather than a value. Each one exists because the obvious Tailwind spelling of the same idea breaks in one theme, on one surface, or under a scroller."
       note="Every animation and transition on this page stops under prefers-reduced-motion."
-      noteAside="Declared in src/index.css, theme/motion.css and ds/components/Arrival/arrival.css."
+      noteAside="Declared in components.css, theme/motion.css and ds/components/Arrival/arrival.css."
     >
       <FoundationSection
         label="Interaction layer"

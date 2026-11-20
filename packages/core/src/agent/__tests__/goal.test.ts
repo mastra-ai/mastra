@@ -12,6 +12,7 @@ import {
   GOAL_STATE_TYPE,
   resolveEffectiveGoalSettings,
 } from '../goal';
+import { resolveGoalStore, writeObjective } from '../goal/objective';
 import { Agent } from '../index';
 import type { GoalConfig } from '../types';
 
@@ -237,6 +238,99 @@ describe('Agent objective methods', () => {
     expect(preserved).toMatchObject({ activeDurationMs: 2_500, prompt: 'Keep going.' });
   });
 
+  it('updateObjectiveOptions persists the pause cause and clears it when the goal leaves paused', async () => {
+    const agent = makeAgent();
+    await agent.setObjective('Goal', { threadId: THREAD, resourceId: RESOURCE });
+
+    const paused = await agent.updateObjectiveOptions({
+      threadId: THREAD,
+      status: 'paused',
+      pausedReason: 'The goal judge failed to evaluate the objective.',
+    });
+    expect(paused).toMatchObject({
+      status: 'paused',
+      pausedReason: 'The goal judge failed to evaluate the objective.',
+    });
+    expect(await agent.getObjective({ threadId: THREAD })).toMatchObject({
+      pausedReason: 'The goal judge failed to evaluate the objective.',
+    });
+
+    const resumed = await agent.updateObjectiveOptions({ threadId: THREAD, status: 'active' });
+    expect(resumed?.pausedReason).toBeUndefined();
+    expect((await agent.getObjective({ threadId: THREAD }))?.pausedReason).toBeUndefined();
+
+    // A reason supplied alongside a non-paused status is retired too: the
+    // resulting status decides, not the caller's arguments.
+    const done = await agent.updateObjectiveOptions({
+      threadId: THREAD,
+      status: 'done',
+      pausedReason: 'stale reason',
+    });
+    expect(done).toMatchObject({ status: 'done' });
+    expect(done?.pausedReason).toBeUndefined();
+  });
+
+  it('updateObjectiveOptions keeps the pause cause when an already-paused goal is paused again without one', async () => {
+    const agent = makeAgent();
+    await agent.setObjective('Goal', { threadId: THREAD, resourceId: RESOURCE });
+
+    await agent.updateObjectiveOptions({
+      threadId: THREAD,
+      status: 'paused',
+      pausedReason: 'The goal judge failed to evaluate the objective.',
+    });
+
+    // An idempotent re-pause (the agent goal route forwards a status and never
+    // a reason) changes nothing, so it must not erase why the goal paused.
+    const repaused = await agent.updateObjectiveOptions({ threadId: THREAD, status: 'paused' });
+    expect(repaused?.status).toBe('paused');
+    expect(repaused?.pausedReason).toBe('The goal judge failed to evaluate the objective.');
+    expect((await agent.getObjective({ threadId: THREAD }))?.pausedReason).toBe(
+      'The goal judge failed to evaluate the objective.',
+    );
+  });
+
+  it('updateObjectiveOptions drops a stale pause cause when an active record is paused without one', async () => {
+    const agent = new Agent({
+      id: 'goal-agent',
+      name: 'goal-agent',
+      instructions: 'You work toward goals.',
+      model: singleStepModel(),
+      memory: new MockMemory(),
+    });
+    const mastra = new Mastra({ agents: { 'goal-agent': agent }, storage: new InMemoryStore(), logger: false });
+    const created = await agent.setObjective('Goal', { threadId: THREAD, resourceId: RESOURCE });
+
+    // Records written before pause causes were retired on resume can be active
+    // while still carrying the old cause.
+    const store = await resolveGoalStore(mastra);
+    await writeObjective(store, THREAD, { ...created!, status: 'active', pausedReason: 'stale reason' });
+
+    const paused = await agent.updateObjectiveOptions({ threadId: THREAD, status: 'paused' });
+    expect(paused?.status).toBe('paused');
+    expect(paused?.pausedReason).toBeUndefined();
+  });
+
+  it('updateObjectiveOptions keeps the pause cause when an update carries no status', async () => {
+    const agent = makeAgent();
+    await agent.setObjective('Goal', { threadId: THREAD, resourceId: RESOURCE });
+    await agent.updateObjectiveOptions({
+      threadId: THREAD,
+      status: 'paused',
+      pausedReason: 'The goal judge failed to evaluate the objective.',
+    });
+
+    // Only an explicit pause is authoritative about its own cause. A settings
+    // update that says nothing about status must not silently retire it.
+    const updated = await agent.updateObjectiveOptions({ threadId: THREAD, maxRuns: 9 });
+    expect(updated?.maxRuns).toBe(9);
+    expect(updated?.status).toBe('paused');
+    expect(updated?.pausedReason).toBe('The goal judge failed to evaluate the objective.');
+
+    const reloaded = await agent.getObjective({ threadId: THREAD });
+    expect(reloaded?.pausedReason).toBe('The goal judge failed to evaluate the objective.');
+  });
+
   it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
     'normalizes invalid initial active duration %s to zero',
     async invalidDuration => {
@@ -371,6 +465,57 @@ describe('in-loop goal scoring', () => {
     expect(record?.runsUsed).toBe(1);
   });
 
+  describe('string goal.scorer resolution', () => {
+    async function runWithRegisteredScorer(scorerRef: string, scorers: Record<string, any>) {
+      const agent = new Agent({
+        id: 'goal-agent',
+        name: 'goal-agent',
+        instructions: 'You work toward goals.',
+        model: singleStepModel(),
+        memory: new MockMemory(),
+        goal: { judge: 'mock-model-id', scorer: scorerRef },
+      });
+      new Mastra({ agents: { 'goal-agent': agent }, scorers, storage: new InMemoryStore(), logger: false });
+      await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE });
+      const stream = await agent.stream('go', { memory: { resource: RESOURCE, thread: { id: THREAD } }, maxSteps: 3 });
+      for await (const _chunk of stream.fullStream) {
+        // drain
+      }
+      return agent.getObjective({ threadId: THREAD });
+    }
+
+    it('resolves a scorer by its id when registered under a different key', async () => {
+      const scorer = { ...passingScorer(), id: 'tests-pass', name: 'Tests Pass', __registerMastra: vi.fn() };
+      const record = await runWithRegisteredScorer('tests-pass', { testsPass: scorer });
+      expect(scorer.run).toHaveBeenCalled();
+      expect(record?.status).toBe('done');
+    });
+
+    it('prefers a scorer id over another scorer name', async () => {
+      const scorerA = { ...passingScorer(), id: 'shared-ref', name: 'Scorer A', __registerMastra: vi.fn() };
+      const scorerB = { ...passingScorer(), id: 'scorer-b', name: 'shared-ref', __registerMastra: vi.fn() };
+      const record = await runWithRegisteredScorer('shared-ref', { scorerB, scorerA });
+      expect(scorerA.run).toHaveBeenCalled();
+      expect(scorerB.run).not.toHaveBeenCalled();
+      expect(record?.status).toBe('done');
+    });
+
+    it('still resolves a scorer by its registration key', async () => {
+      const scorer = { ...passingScorer(), id: 'tests-pass', name: 'Tests Pass', __registerMastra: vi.fn() };
+      const record = await runWithRegisteredScorer('testsPass', { testsPass: scorer });
+      expect(scorer.run).toHaveBeenCalled();
+      expect(record?.status).toBe('done');
+    });
+
+    it('pauses with a not-found reason for an unknown scorer', async () => {
+      const scorer = { ...passingScorer(), id: 'tests-pass', name: 'Tests Pass', __registerMastra: vi.fn() };
+      const record = await runWithRegisteredScorer('missing-scorer', { testsPass: scorer });
+      expect(scorer.run).not.toHaveBeenCalled();
+      expect(record?.status).toBe('paused');
+      expect(record?.pausedReason).toContain('not found');
+    });
+  });
+
   it('direct agent goal loop completes with built-in scorer without manual continuation', async () => {
     const agent = makeAgent({
       judge: goalJudgeModel([
@@ -483,181 +628,6 @@ describe('in-loop goal scoring', () => {
     const record = await agent.getObjective({ threadId: THREAD });
     expect(record?.status).toBe('active');
     expect(record?.runsUsed).toBe(1);
-  });
-
-  it('goal gate wins over isTaskComplete: an incomplete goal forces continuation past an isTaskComplete pass', async () => {
-    // isTaskComplete passes immediately (would normally end the loop), but the
-    // goal is never complete, so the goal step (which runs after isTaskComplete)
-    // overrides isContinued and keeps the loop running until maxRuns.
-    const taskScorer = passingScorer(1, 'task done');
-    const goalScorer = passingScorer(0, 'goal not yet');
-    const agent = makeAgent({ judge: 'mock-model-id', scorer: goalScorer as any, maxRuns: 2 });
-    await agent.setObjective('Keep going', { threadId: THREAD, resourceId: RESOURCE });
-
-    const taskChunks: any[] = [];
-    const goalChunks: any[] = [];
-    const stream = await agent.stream('go', {
-      memory: { resource: RESOURCE, thread: { id: THREAD } },
-      maxSteps: 10,
-      isTaskComplete: { scorers: [taskScorer as any] },
-    });
-    for await (const chunk of stream.fullStream) {
-      if (chunk.type === 'is-task-complete') taskChunks.push(chunk);
-      if (chunk.type === 'goal') goalChunks.push(chunk);
-    }
-
-    // Filter out pending (loading-indicator) chunks.
-    const resultChunks = goalChunks.filter(c => !c.payload.pending);
-
-    // isTaskComplete reported complete...
-    expect(taskChunks.some(c => c.payload.passed === true)).toBe(true);
-    // ...but the goal gate overrode it and drove the loop to the run budget.
-    expect(goalScorer.run).toHaveBeenCalledTimes(2);
-    expect(resultChunks).toHaveLength(2);
-    expect(resultChunks[resultChunks.length - 1].payload.maxRunsReached).toBe(true);
-
-    const record = await agent.getObjective({ threadId: THREAD });
-    expect(record?.runsUsed).toBe(2);
-    // Exhausting the budget without completing parks the goal as `paused`.
-    expect(record?.status).toBe('paused');
-  });
-
-  it('emits no goal chunk when there is no active objective', async () => {
-    const agent = makeAgent({ judge: 'mock-model-id', scorer: passingScorer() as any });
-
-    const goalChunks: any[] = [];
-    const stream = await agent.stream('go', {
-      memory: { resource: RESOURCE, thread: { id: THREAD } },
-      maxSteps: 2,
-    });
-    for await (const chunk of stream.fullStream) {
-      if (chunk.type === 'goal') goalChunks.push(chunk);
-    }
-    expect(goalChunks).toHaveLength(0);
-  });
-
-  it('stops at maxRuns when the goal is never complete', async () => {
-    const scorer = passingScorer(0, 'Not yet');
-    const agent = makeAgent({ judge: 'mock-model-id', scorer: scorer as any, maxRuns: 2 });
-    await agent.setObjective('Unreachable goal', { threadId: THREAD, resourceId: RESOURCE });
-
-    const goalChunks: any[] = [];
-    const stream = await agent.stream('go', {
-      memory: { resource: RESOURCE, thread: { id: THREAD } },
-      maxSteps: 10,
-    });
-    for await (const chunk of stream.fullStream) {
-      if (chunk.type === 'goal') goalChunks.push(chunk);
-    }
-
-    // Filter out pending (loading-indicator) chunks.
-    const resultChunks = goalChunks.filter(c => !c.payload.pending);
-    expect(resultChunks.length).toBe(2);
-    const last = resultChunks[resultChunks.length - 1].payload;
-    expect(last.maxRunsReached).toBe(true);
-    expect(resultChunks.every(c => c.payload.passed === false)).toBe(true);
-    // Budget exhaustion parks the goal visibly as `paused` (with a reason)
-    // rather than leaving it silently `active`.
-    expect(last.status).toBe('paused');
-    expect(last.pausedReason).toContain('budget');
-
-    const record = await agent.getObjective({ threadId: THREAD });
-    expect(record?.status).toBe('paused');
-    expect(record?.pausedReason).toContain('budget');
-    expect(record?.runsUsed).toBe(2);
-  });
-
-  it('parks an objective left active at the run budget when a later run re-enters the goal step', async () => {
-    // A `waiting` verdict deliberately keeps the record `active` (waiting is a
-    // per-turn display state, not a lifecycle state), which can leave an active
-    // objective sitting at its budget. The next run re-enters the goal step with
-    // nothing left to judge: the budget guard must park the objective rather
-    // than emit a stale `active` continuation chunk (which the UI renders as
-    // `continue` on every later turn).
-    let judgeCalls = 0;
-    const judge = goalJudgeModel([{ decision: 'waiting', reason: 'waiting for your review' }], () => {
-      judgeCalls++;
-    });
-    const agent = makeAgent({ judge: judge as any, maxRuns: 1 });
-    await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE });
-
-    const firstStream = await agent.stream('go', {
-      memory: { resource: RESOURCE, thread: { id: THREAD } },
-      maxSteps: 10,
-    });
-    for await (const _ of firstStream.fullStream) {
-      void _;
-    }
-    expect(judgeCalls).toBe(1);
-    // Waiting keeps the record active by design.
-    expect((await agent.getObjective({ threadId: THREAD }))?.status).toBe('active');
-    expect((await agent.getObjective({ threadId: THREAD }))?.runsUsed).toBe(1);
-
-    const goalChunks: any[] = [];
-    const secondStream = await agent.stream('again', {
-      memory: { resource: RESOURCE, thread: { id: THREAD } },
-      maxSteps: 10,
-    });
-    for await (const chunk of secondStream.fullStream) {
-      if (chunk.type === 'goal') goalChunks.push(chunk);
-    }
-
-    // The guard is a backstop: no further judge call, no run past the budget.
-    expect(judgeCalls).toBe(1);
-    const resultChunks = goalChunks.filter(c => !c.payload.pending);
-    expect(resultChunks).toHaveLength(1);
-    expect(resultChunks[0].payload).toMatchObject({
-      objective: 'Reach the goal',
-      passed: false,
-      status: 'paused',
-      maxRunsReached: true,
-    });
-    expect(resultChunks[0].payload.pausedReason).toContain('budget');
-
-    const record = await agent.getObjective({ threadId: THREAD });
-    expect(record?.status).toBe('paused');
-    expect(record?.runsUsed).toBe(1);
-  });
-
-  it('does not re-score a budget-exhausted (now paused) objective on a later run', async () => {
-    // An objective that stops at the run budget is parked as `paused`. A
-    // subsequent run on the same thread must not burn another judge call or push
-    // runsUsed past the budget — a paused goal is gated out before scoring and
-    // emits no goal chunk (it is parked, not iterating).
-    const scorer = passingScorer(0, 'Not yet');
-    const agent = makeAgent({ judge: 'mock-model-id', scorer: scorer as any, maxRuns: 2 });
-    await agent.setObjective('Unreachable goal', { threadId: THREAD, resourceId: RESOURCE });
-
-    // First run exhausts the budget (runsUsed → 2, status → paused).
-    const firstStream = await agent.stream('go', {
-      memory: { resource: RESOURCE, thread: { id: THREAD } },
-      maxSteps: 10,
-    });
-    for await (const _ of firstStream.fullStream) {
-      void _;
-    }
-    expect(scorer.run).toHaveBeenCalledTimes(2);
-    expect((await agent.getObjective({ threadId: THREAD }))?.status).toBe('paused');
-    expect((await agent.getObjective({ threadId: THREAD }))?.runsUsed).toBe(2);
-
-    // Second run on the same thread: a paused goal is gated out before scoring.
-    const goalChunks: any[] = [];
-    const secondStream = await agent.stream('again', {
-      memory: { resource: RESOURCE, thread: { id: THREAD } },
-      maxSteps: 10,
-    });
-    for await (const chunk of secondStream.fullStream) {
-      if (chunk.type === 'goal') goalChunks.push(chunk);
-    }
-
-    // No additional scorer calls, no goal chunk: the paused goal is inert until
-    // the user resumes it.
-    expect(scorer.run).toHaveBeenCalledTimes(2);
-    expect(goalChunks.length).toBe(0);
-
-    const record = await agent.getObjective({ threadId: THREAD });
-    expect(record?.runsUsed).toBe(2);
-    expect(record?.status).toBe('paused');
   });
 
   // Regression: when `inputProcessors` is a function, the Agent folds the

@@ -705,6 +705,84 @@ describe('convertFullStreamChunkToMastra', () => {
       }
     });
 
+    it('keeps a derived V3 total unknown when input usage is missing', () => {
+      const chunk = {
+        type: 'finish',
+        finishReason: { unified: 'stop', raw: 'end_turn' },
+        usage: {
+          inputTokens: { total: undefined, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
+          outputTokens: { total: 5, text: 5, reasoning: undefined },
+        },
+        messages: { all: [], user: [], nonUser: [] },
+      } as unknown as StreamPart;
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('finish');
+      if (result?.type === 'finish') {
+        expect(result.payload.output.usage).toMatchObject({
+          inputTokens: undefined,
+          outputTokens: 5,
+          totalTokens: undefined,
+        });
+      }
+    });
+
+    it('derives a measured V3 total from explicit zero usage', () => {
+      const chunk: StreamPart = {
+        type: 'finish',
+        finishReason: { unified: 'stop', raw: 'end_turn' },
+        usage: {
+          inputTokens: { total: 0, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+          outputTokens: { total: 0, text: 0, reasoning: 0 },
+        },
+        messages: { all: [], user: [], nonUser: [] },
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('finish');
+      if (result?.type === 'finish') {
+        expect(result.payload.output.usage.totalTokens).toBe(0);
+      }
+    });
+
+    it('keeps a derived V2 total unknown when output usage is missing', () => {
+      const chunk = {
+        type: 'finish',
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: undefined, totalTokens: undefined },
+        messages: { all: [], user: [], nonUser: [] },
+      } as unknown as StreamPart;
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('finish');
+      if (result?.type === 'finish') {
+        expect(result.payload.output.usage.totalTokens).toBeUndefined();
+      }
+    });
+
+    it('preserves an explicit V2 total when an individual count is missing', () => {
+      const chunk = {
+        type: 'finish',
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: undefined, totalTokens: 12 },
+        messages: { all: [], user: [], nonUser: [] },
+      } as unknown as StreamPart;
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('finish');
+      if (result?.type === 'finish') {
+        expect(result.payload.output.usage).toMatchObject({
+          inputTokens: 10,
+          outputTokens: undefined,
+          totalTokens: 12,
+        });
+      }
+    });
+
     it('should read Anthropic cache creation TTL buckets from the raw API usage', () => {
       // @ai-sdk/anthropic exposes the split as `cache_creation` on providerMetadata.anthropic.usage
       // and on usage.raw, never as `cacheCreation`.

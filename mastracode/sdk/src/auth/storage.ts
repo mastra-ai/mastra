@@ -3,7 +3,7 @@
  * Handles loading, saving, and refreshing credentials from auth.json.
  */
 
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { getAppDataDir } from '../utils/project.js';
@@ -25,6 +25,21 @@ import type {
 } from './types.js';
 
 /**
+ * API keys this process exported to environment variables, keyed by variable name.
+ * `previous` is the value the variable held before the first export, so removing the
+ * key can restore it. Module-level because `process.env` is shared by every instance.
+ */
+const exportedApiKeys = new Map<string, { provider: string; key: string; previous: string | undefined }>();
+
+function exportApiKey(envVar: string, provider: string, key: string): void {
+  const exported = exportedApiKeys.get(envVar);
+  // Saving again keeps the value from before the first export.
+  const previous = exported && process.env[envVar] === exported.key ? exported.previous : process.env[envVar];
+  exportedApiKeys.set(envVar, { provider, key, previous });
+  process.env[envVar] = key;
+}
+
+/**
  * Best/default models for each OAuth provider.
  * Used when auto-selecting a model after login.
  */
@@ -35,7 +50,7 @@ export const PROVIDER_DEFAULT_MODELS: Record<OAuthProviderId, string> = {
   // adapter handles); Anthropic-shaped Copilot models (Claude on `/v1/messages`)
   // are not yet wired up, so picking one as the post-login default would error.
   'github-copilot': 'github-copilot/gpt-4.1',
-  'kimi-for-coding': 'kimi-for-coding/kimi-for-coding',
+  'kimi-for-coding': 'kimi-code-plan-cn/kimi-for-coding',
   xai: 'xai/grok-4.5',
 };
 
@@ -73,7 +88,7 @@ export function getOAuthProviders(): OAuthProviderInterface[] {
  * then failed to match its own entry and registered a second one for it.
  */
 function mintAccountId(providerId: string): string {
-  return `${providerId}:${randomUUID()}`;
+  return `${providerId}:${globalThis.crypto.randomUUID()}`;
 }
 
 /**
@@ -275,7 +290,7 @@ export class AuthStorage {
     // fetch wrappers reload this file on every request, including in older
     // Mastra Code processes; writing in place lets them observe truncated JSON
     // and temporarily treat every provider as logged out.
-    const tempPath = `${this.authPath}.${process.pid}.${randomUUID()}.tmp`;
+    const tempPath = `${this.authPath}.${process.pid}.${globalThis.crypto.randomUUID()}.tmp`;
     try {
       writeFileSync(tempPath, JSON.stringify(this.data, null, 2), { encoding: 'utf-8', mode: 0o600 });
       chmodSync(tempPath, 0o600);
@@ -365,7 +380,25 @@ export class AuthStorage {
   setStoredApiKey(provider: string, key: string, envVar?: string): void {
     this.set(`apikey:${provider}`, { type: 'api_key', key });
     if (envVar) {
-      process.env[envVar] = key;
+      exportApiKey(envVar, provider, key);
+    }
+  }
+
+  /**
+   * Remove a stored API key for a provider.
+   * Also undoes the environment variable export done by {@link setStoredApiKey} or
+   * {@link loadStoredApiKeysIntoEnv}: the variable gets back the value it had before
+   * (for example the key the process was started with), or is unset if it had none.
+   * A variable changed since the export is left alone.
+   */
+  removeStoredApiKey(provider: string): void {
+    this.remove(`apikey:${provider}`);
+    for (const [envVar, exported] of exportedApiKeys) {
+      if (exported.provider !== provider) continue;
+      exportedApiKeys.delete(envVar);
+      if (process.env[envVar] !== exported.key) continue;
+      if (exported.previous === undefined) delete process.env[envVar];
+      else process.env[envVar] = exported.previous;
     }
   }
 
@@ -380,7 +413,7 @@ export class AuthStorage {
       const provider = key.substring('apikey:'.length);
       const envVar = providerEnvVars[provider];
       if (envVar && !process.env[envVar]) {
-        process.env[envVar] = cred.key;
+        exportApiKey(envVar, provider, cred.key);
       }
     }
   }

@@ -10,7 +10,8 @@ export type LinkComponent = ForwardRefExoticComponent<LinkComponentProps & RefAt
 export type LinkComponentPaths = {
   agentLink: (agentId: string) => string;
   agentsLink: () => string;
-  agentToolLink: (agentId: string, toolId: string) => string;
+  /** Opens the tool's drawer on the agent's chat: over the open thread when given, otherwise a new one. */
+  agentToolLink: (agentId: string, toolId: string, threadId?: string) => string;
   agentSkillLink: (agentId: string, skillName: string, skillPath?: string, workspaceId?: string) => string;
   agentThreadLink: (agentId: string, threadId: string, messageId?: string) => string;
   agentNewThreadLink: (agentId: string) => string;
@@ -24,7 +25,7 @@ export type LinkComponentPaths = {
   networkNewThreadLink: (networkId: string) => string;
   networkThreadLink: (networkId: string, threadId: string) => string;
 
-  scorerLink: (scorerId: string) => string;
+  scorerLink: (scorerId: string, params?: { scoreId?: string; entity?: string }) => string;
   cmsScorersCreateLink: () => string;
   cmsScorerEditLink: (scorerId: string) => string;
 
@@ -61,8 +62,10 @@ const LinkComponentContext = createContext<{
   navigate: (path: string) => void;
   paths: LinkComponentPaths;
 }>({
-  Link: forwardRef<HTMLAnchorElement, LinkComponentProps>(function DefaultLink(_props, _ref) {
-    return null;
+  // Without a provider, a link is a plain anchor: a host outside Studio still shows the links its parts were
+  // given an href for, while the Studio routes (`paths`) stay empty, so the parts that build them show text.
+  Link: forwardRef<HTMLAnchorElement, LinkComponentProps>(function DefaultLink(props, ref) {
+    return <a ref={ref} {...props} />;
   }),
   navigate: () => {},
   paths: {

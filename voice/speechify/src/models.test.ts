@@ -2,13 +2,19 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import { SpeechifyVoice } from './index';
 
-const { audioStreamMock } = vi.hoisted(() => ({
-  audioStreamMock: vi.fn(),
+const { streamMock, listMock, clientOptions } = vi.hoisted(() => ({
+  streamMock: vi.fn(),
+  listMock: vi.fn(),
+  clientOptions: [] as unknown[],
 }));
 
-vi.mock('@speechify/api-sdk', () => ({
-  Speechify: class {
-    audioStream = audioStreamMock;
+vi.mock('@speechify/api', () => ({
+  SpeechifyClient: class {
+    audio = { stream: streamMock };
+    voices = { list: listMock };
+    constructor(options: unknown) {
+      clientOptions.push(options);
+    }
   },
 }));
 
@@ -20,98 +26,155 @@ async function drain(stream: NodeJS.ReadableStream): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-describe('SpeechifyVoice model support', () => {
-  beforeEach(() => {
-    audioStreamMock.mockReset();
-    audioStreamMock.mockResolvedValue(
-      new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(new Uint8Array([1, 2, 3]));
-          controller.close();
-        },
-      }),
-    );
-  });
-
-  it('passes simba-3.2 from the constructor config to the API', async () => {
-    const voice = new SpeechifyVoice({ speechModel: { name: 'simba-3.2', apiKey: 'test-key' } });
-    const audio = await drain(await voice.speak('Hello'));
-
-    expect(audio.length).toBeGreaterThan(0);
-    expect(audioStreamMock).toHaveBeenCalledWith(expect.objectContaining({ model: 'simba-3.2' }));
-  });
-
-  it('passes simba-3.2 as a per-request override', async () => {
-    const voice = new SpeechifyVoice({ speechModel: { apiKey: 'test-key' } });
-    await drain(await voice.speak('Hello', { model: 'simba-3.2' }));
-
-    expect(audioStreamMock).toHaveBeenCalledWith(expect.objectContaining({ model: 'simba-3.2' }));
-  });
-
-  it('accepts simba-3.0', async () => {
-    const voice = new SpeechifyVoice({ speechModel: { name: 'simba-3.0', apiKey: 'test-key' } });
-    await drain(await voice.speak('Hello'));
-
-    expect(audioStreamMock).toHaveBeenCalledWith(expect.objectContaining({ model: 'simba-3.0' }));
-  });
-
-  it('still defaults to simba-english', async () => {
-    const voice = new SpeechifyVoice({ speechModel: { apiKey: 'test-key' } });
-    await drain(await voice.speak('Hello'));
-
-    expect(audioStreamMock).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'simba-english', voiceId: 'george' }),
-    );
-  });
+const audioResponse = () => ({
+  stream: () =>
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2, 3]));
+        controller.close();
+      },
+    }),
 });
 
-describe('SpeechifyVoice Simba 3 voice pairing', () => {
-  beforeEach(() => {
-    audioStreamMock.mockReset();
-    audioStreamMock.mockResolvedValue(
-      new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(new Uint8Array([1, 2, 3]));
-          controller.close();
-        },
-      }),
-    );
+const requestBody = () => (streamMock.mock.calls[0]?.[0] as { body: Record<string, unknown> }).body;
+const requestAccept = () => (streamMock.mock.calls[0]?.[0] as { Accept: string }).Accept;
+
+beforeEach(() => {
+  streamMock.mockReset();
+  listMock.mockReset();
+  clientOptions.length = 0;
+  streamMock.mockResolvedValue(audioResponse());
+});
+
+describe('SpeechifyVoice model support', () => {
+  it('defaults to simba-3.5 with the harper_32 voice', async () => {
+    const voice = new SpeechifyVoice({ speechModel: { apiKey: 'test-key' } });
+    const audio = await drain(await voice.speak('Hello'));
+
+    expect([...audio]).toEqual([1, 2, 3]);
+    expect(requestBody()).toEqual({ input: 'Hello', model: 'simba-3.5', voice_id: 'harper_32' });
+    expect(requestAccept()).toBe('audio/mpeg');
   });
 
-  it('accepts a curated Simba 3 voice as the constructor speaker', async () => {
-    const voice = new SpeechifyVoice({
-      speechModel: { name: 'simba-3.2', apiKey: 'test-key' },
-      speaker: 'harper_32',
-    });
-    await drain(await voice.speak('Hello'));
-
-    expect(audioStreamMock).toHaveBeenCalledWith(expect.objectContaining({ model: 'simba-3.2', voiceId: 'harper_32' }));
-  });
-
-  it('defaults the speaker to harper_32 when a Simba 3 model is configured', async () => {
+  it('passes the constructor model to the API', async () => {
     const voice = new SpeechifyVoice({ speechModel: { name: 'simba-3.2', apiKey: 'test-key' } });
     await drain(await voice.speak('Hello'));
 
-    expect(audioStreamMock).toHaveBeenCalledWith(expect.objectContaining({ voiceId: 'harper_32' }));
+    expect(requestBody()).toMatchObject({ model: 'simba-3.2', voice_id: 'harper_32' });
+  });
+
+  it('lets a per-request model override the constructor model', async () => {
+    const voice = new SpeechifyVoice({ speechModel: { name: 'simba-3.2', apiKey: 'test-key' } });
+    await drain(await voice.speak('Hello', { model: 'simba-3.0' }));
+
+    expect(requestBody()).toMatchObject({ model: 'simba-3.0' });
+  });
+
+  it('keeps george as the default voice for the legacy models', async () => {
+    const voice = new SpeechifyVoice({ speechModel: { name: 'simba-english', apiKey: 'test-key' } });
+    await drain(await voice.speak('Hello'));
+
+    expect(requestBody()).toMatchObject({ model: 'simba-english', voice_id: 'george' });
+  });
+
+  it('changes the default voice when overriding the model for a request', async () => {
+    const voice = new SpeechifyVoice({ speechModel: { name: 'simba-english', apiKey: 'test-key' } });
+    await drain(await voice.speak('Hello', { model: 'simba-3.5' }));
+
+    expect(requestBody()).toMatchObject({ model: 'simba-3.5', voice_id: 'harper_32' });
+  });
+
+  it('preserves the constructor speaker when overriding the model', async () => {
+    const voice = new SpeechifyVoice({
+      speechModel: { name: 'simba-english', apiKey: 'test-key' },
+      speaker: 'wyatt_32',
+    });
+    await drain(await voice.speak('Hello', { model: 'simba-3.5' }));
+
+    expect(requestBody()).toMatchObject({ model: 'simba-3.5', voice_id: 'wyatt_32' });
   });
 
   it('keeps an explicit speaker over the model-based default', async () => {
-    const voice = new SpeechifyVoice({
-      speechModel: { name: 'simba-3.0', apiKey: 'test-key' },
-      speaker: 'wyatt_32',
-    });
-    await drain(await voice.speak('Hello'));
+    const voice = new SpeechifyVoice({ speechModel: { apiKey: 'test-key' }, speaker: 'wyatt_32' });
+    await drain(await voice.speak('Hello', { speaker: 'cristiane' }));
 
-    expect(audioStreamMock).toHaveBeenCalledWith(expect.objectContaining({ voiceId: 'wyatt_32' }));
+    expect(requestBody()).toMatchObject({ voice_id: 'cristiane' });
   });
 
-  it('lists the curated Simba 3 voices in getSpeakers', async () => {
+  it('passes language, output format and synthesis options through', async () => {
     const voice = new SpeechifyVoice({ speechModel: { apiKey: 'test-key' } });
-    const speakers = await voice.getSpeakers();
-    const ids = speakers.map(s => s.voiceId);
+    await drain(
+      await voice.speak('Olá', {
+        language: 'pt-BR',
+        audioFormat: 'ogg',
+        outputFormat: 'ogg_24000',
+        options: { loudness_normalization: true },
+      }),
+    );
 
-    expect(ids).toContain('harper_32');
-    expect(ids).toContain('wyatt_32');
-    expect(ids).toContain('george');
+    expect(requestAccept()).toBe('audio/ogg');
+    expect(requestBody()).toEqual({
+      input: 'Olá',
+      model: 'simba-3.5',
+      voice_id: 'harper_32',
+      language: 'pt-BR',
+      output_format: 'ogg_24000',
+      options: { loudness_normalization: true },
+    });
+  });
+
+  it('reads text from a stream input', async () => {
+    const { Readable } = await import('node:stream');
+    const voice = new SpeechifyVoice({ speechModel: { apiKey: 'test-key' } });
+    await drain(await voice.speak(Readable.from(['Hello ', 'stream'])));
+
+    expect(requestBody()).toMatchObject({ input: 'Hello stream' });
+  });
+
+  it('identifies itself to Speechify as the mastra integration', () => {
+    new SpeechifyVoice({ speechModel: { apiKey: 'test-key' } });
+
+    expect(clientOptions[0]).toMatchObject({ token: 'test-key', headers: { 'Speechify-Caller': 'mastra' } });
+  });
+
+  it('throws without an API key', () => {
+    vi.stubEnv('SPEECHIFY_API_KEY', '');
+    expect(() => new SpeechifyVoice()).toThrow('SPEECHIFY_API_KEY is not set');
+    vi.unstubAllEnvs();
+  });
+});
+
+describe('SpeechifyVoice speakers', () => {
+  it('lists the live catalog with the models that render each voice', async () => {
+    listMock.mockResolvedValue(
+      (async function* () {
+        yield {
+          id: 'harper_32',
+          display_name: 'Harper',
+          locale: 'en-US',
+          gender: 'female',
+          models: [
+            { name: 'simba-3.5', languages: [] },
+            { name: 'simba-3.2', languages: [] },
+          ],
+          type: 'shared',
+        };
+        yield {
+          id: 'cristiane',
+          display_name: 'Cristiane',
+          locale: 'pt-BR',
+          gender: 'female',
+          models: [{ name: 'simba-3.5', languages: [] }],
+          type: 'shared',
+        };
+      })(),
+    );
+    const voice = new SpeechifyVoice({ speechModel: { apiKey: 'test-key' } });
+
+    expect(await voice.getSpeakers()).toEqual([
+      { voiceId: 'harper_32', name: 'Harper', language: 'en-US', gender: 'female', models: ['simba-3.5', 'simba-3.2'] },
+      { voiceId: 'cristiane', name: 'Cristiane', language: 'pt-BR', gender: 'female', models: ['simba-3.5'] },
+    ]);
+    expect(listMock).toHaveBeenCalledOnce();
   });
 });

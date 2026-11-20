@@ -359,6 +359,14 @@ export abstract class FactoryStorage {
    */
   authDatabase?(): FactoryAuthDatabase;
 
+  /**
+   * Whether the table behind collection `name` already exists in the
+   * database, registered or not. Lets a domain register a collection that an
+   * older release created only on databases that already have it. Absent →
+   * callers must assume the table may exist.
+   */
+  collectionExists?(name: string): Promise<boolean>;
+
   async #ensureStorageReady(): Promise<void> {
     if (this.#storageReady) return;
     if (this.#storageInitPromise) return this.#storageInitPromise;

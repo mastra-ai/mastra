@@ -3,6 +3,12 @@ import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 
+// These tests pin the backoff timing itself with fake timers, so they need the
+// real waitDelay and p-retry backoff rather than the instant ones from
+// @internal/test-utils/setup.
+vi.unmock('../../utils/retry-after');
+vi.mock('../../../node_modules/p-retry', importOriginal => importOriginal());
+
 /**
  * Regression coverage for #19885: an Agent's model-call retry used p-retry's fixed
  * exponential backoff and ignored the provider's `Retry-After` response header, so a
@@ -35,6 +41,9 @@ function createAgent(model: MockLanguageModelV2, maxRetries?: number) {
     name: 'model-retry-after',
     instructions: 'You are a test agent',
     model,
+    // This suite covers the model call's own Retry-After handling, so it opts out of the
+    // default error processors — their retry layer would otherwise add calls on top.
+    errorProcessorDefaults: false,
     ...(maxRetries === undefined ? {} : { maxRetries }),
   });
 }
@@ -106,6 +115,8 @@ describe('agent model-call retry honors Retry-After', () => {
       name: 'fallback-model-retry-after',
       instructions: 'You are a test agent',
       model: [{ model: provider.model, maxRetries: 0 }],
+      // Model-call retry semantics under test; no processor-level retry layer.
+      errorProcessorDefaults: false,
     });
 
     await agent.generate('hi', { modelSettings: { maxRetries: 2 } }).catch(() => {});

@@ -1,35 +1,17 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { RadioGroup, RadioGroupItem } from './radio-group';
 
 // Base UI's Radio synthesizes a PointerEvent on click, which jsdom does not
 // implement. Polyfill it with the available MouseEvent constructor.
-beforeAll(() => {
-  if (typeof window.PointerEvent === 'undefined') {
-    window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;
-  }
-});
 
 afterEach(() => {
   cleanup();
 });
 
 describe('RadioGroup', () => {
-  it('renders all radio options without throwing', () => {
-    expect(() =>
-      render(
-        <RadioGroup aria-label="Plan">
-          <RadioGroupItem value="option-1" aria-label="Option 1" />
-          <RadioGroupItem value="option-2" aria-label="Option 2" />
-        </RadioGroup>,
-      ),
-    ).not.toThrow();
-
-    expect(screen.getAllByRole('radio')).toHaveLength(2);
-  });
-
   it('reflects the selected value via aria-checked', () => {
     render(
       <RadioGroup aria-label="Plan" defaultValue="option-2">

@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
+import { resolveDiscordBotToken } from './_bot-token.js';
 
 export const listRolesInputSchema = z.object({
   guild_id: z.string().describe('Guild ID to list roles from. Example: "123456789012345678"'),
@@ -67,15 +68,7 @@ export function listRolesTool(proxy: PlatformProxy) {
     outputSchema: listRolesOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof listRolesOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const metadata = await platformProxy.getMetadata<{ botToken?: string }>();
-      const botToken = metadata?.botToken;
-
-      if (!botToken) {
-        throw new platformProxy.ActionError({
-          type: 'invalid_metadata',
-          message: 'botToken is required in metadata.',
-        });
-      }
+      const botToken = await resolveDiscordBotToken(platformProxy);
 
       // https://discord.com/developers/docs/resources/guild#get-guild-roles
       const response = await platformProxy.get({

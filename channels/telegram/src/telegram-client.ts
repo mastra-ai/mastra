@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 import type { TelegramUser } from '@chat-adapter/telegram';
 import { TELEGRAM_API_BASE_URL } from './types';
 import type { BotCommand } from './types';
@@ -160,5 +159,5 @@ export async function setMyCommands(
  * @see https://core.telegram.org/bots/api#setwebhook
  */
 export function generateSecretToken(): string {
-  return randomBytes(32).toString('base64url');
+  return Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(32))).toString('base64url');
 }

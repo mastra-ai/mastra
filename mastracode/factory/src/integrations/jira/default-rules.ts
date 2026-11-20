@@ -1,5 +1,5 @@
+import { closedByRoutes, recordExplicitRuleOverrides } from '../../rules/event-rules.js';
 import type { FactoryJiraEventName, FactoryJiraRuleContext, FactoryRuleHandler } from '../../rules/types.js';
-import { jiraClaimKey } from './claim.js';
 
 export type JiraRuleOverrides = Partial<
   Record<FactoryJiraEventName, FactoryRuleHandler<FactoryJiraRuleContext> | null | undefined>
@@ -7,19 +7,17 @@ export type JiraRuleOverrides = Partial<
 export type JiraEventRules = Readonly<Record<FactoryJiraEventName, FactoryRuleHandler<FactoryJiraRuleContext> | null>>;
 
 function jiraIssueObserved(context: FactoryJiraRuleContext) {
-  if (context.item) return;
+  if (context.item || !context.intake) return;
   return {
     type: 'upsertLinkedWorkItem',
     idempotencyKey: `${context.ingress.id}:issue-triage`,
-    // A source bound to a custom board lands on that board's initial phase;
-    // otherwise the issue waits in Work Intake.
-    board: context.intake?.board ?? 'work',
+    // Filed on the default board's first phase; the project's intake routes place it from there.
+    board: context.intake.board,
     source: 'jira-issue',
     sourceKey: context.issue.id,
-    claimKey: jiraClaimKey(context.issue.id),
     title: context.issue.title,
     url: context.issue.url,
-    stage: context.intake?.initialPhase ?? 'intake',
+    stage: context.intake.initialPhase,
     metadata: {
       identifier: context.issue.identifier,
       issueRef: context.issue.id,
@@ -42,22 +40,24 @@ function jiraIssueObserved(context: FactoryJiraRuleContext) {
 
 function jiraIssueClosed(context: FactoryJiraRuleContext) {
   if (!context.item || context.item.source !== 'jira-issue') return;
-  if (context.board !== 'work') return;
-  // Already off the board: nothing to reconcile.
-  if (context.item.stages.some(stage => stage === 'done' || stage === 'canceled')) return;
+  // The project's intake routes decide where a closed source sends the card. The board's
+  // `sourceClosed` mapping applies only when no route on the board handles closes; without
+  // one the close goes to the routes alone (see `routeEventDecision`).
+  const closure = context.boardClosure;
+  if (!context.board || !closure || closure.itemTerminal) return;
   // Only terminal state types trigger close.
   const stateType = context.issue.stateType;
   if (stateType !== 'completed' && stateType !== 'canceled') return;
   const canceled = stateType === 'canceled';
-  return {
-    type: 'transition',
+  const target = canceled ? closure.canceled : closure.completed;
+  return closedByRoutes(canceled, {
     idempotencyKey: `${context.ingress.id}:issue-closed`,
-    board: 'work',
-    stage: canceled ? 'canceled' : 'done',
+    board: context.board,
+    stage: target.phase,
     message: {
-      text: `Jira issue ${context.issue.identifier} was ${canceled ? 'canceled' : 'completed'}; this Work card was moved to ${canceled ? 'Canceled' : 'Done'}.`,
+      text: `Jira issue ${context.issue.identifier} was ${canceled ? 'canceled' : 'completed'}; this ${closure.boardTitle} card was moved to ${target.title}.`,
     },
-  } as const;
+  });
 }
 
 export const defaultJiraRules = Object.freeze({
@@ -86,5 +86,5 @@ export function resolveJiraRules(overrides?: JiraRuleOverrides): JiraEventRules 
     }
     if (handler !== undefined) rules[key] = handler;
   }
-  return Object.freeze(rules) as JiraEventRules;
+  return recordExplicitRuleOverrides(Object.freeze(rules) as JiraEventRules, overrides);
 }

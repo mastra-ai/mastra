@@ -1,9 +1,10 @@
 import type { AutoFormFieldProps } from '@autoform/react';
 import { v4 as uuid } from '@lukeed/uuid';
-import { Plus, TrashIcon } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '@/ds/components/Button';
 import { Input } from '@/ds/components/Input';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 
 interface KeyValuePair {
   id: string;
@@ -29,15 +30,12 @@ export const RecordField: React.FC<AutoFormFieldProps> = ({ inputProps, field })
 
   const updateForm = React.useCallback(
     (newPairs: KeyValuePair[]) => {
-      const newValue = newPairs.reduce(
-        (acc, pair) => {
-          if (pair.key) {
-            acc[pair.key] = pair.value;
-          }
-          return acc;
-        },
-        {} as Record<string, string>,
-      );
+      const newValue = newPairs.reduce<Record<string, string>>((acc, pair) => {
+        if (pair.key) {
+          acc[pair.key] = pair.value;
+        }
+        return acc;
+      }, {});
 
       onChange?.({
         target: { value: newValue, name: inputProps.name },
@@ -70,31 +68,47 @@ export const RecordField: React.FC<AutoFormFieldProps> = ({ inputProps, field })
   };
 
   return (
-    <div className="space-y-3">
+    <div className="grid gap-2">
       {pairs.map(pair => (
-        <div key={pair.id} className="relative space-y-2 rounded-lg border p-4">
-          <Button type="button" className="absolute top-2 right-2" onClick={() => removePair(pair.id)}>
-            <TrashIcon className="size-4" />
+        // One row per pair: the field already sits in the form's surface, so no card of its own.
+        <div key={pair.id} className="flex items-center gap-2">
+          <Input
+            placeholder="Key"
+            className="flex-1"
+            aria-label="Key"
+            value={pair.key}
+            onChange={e => handleChange(pair.id, 'key', e.target.value)}
+            onBlur={handleBlur}
+          />
+          <Input
+            placeholder="Value"
+            className="flex-1"
+            aria-label="Value"
+            value={pair.value}
+            onChange={e => handleChange(pair.id, 'value', e.target.value)}
+            onBlur={handleBlur}
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-md"
+            tooltip="Remove pair"
+            aria-label="Remove pair"
+            onClick={() => removePair(pair.id)}
+          >
+            <TrashIcon />
           </Button>
-
-          <div className="space-y-2 pt-4">
-            <Input
-              placeholder="Key"
-              value={pair.key}
-              onChange={e => handleChange(pair.id, 'key', e.target.value)}
-              onBlur={handleBlur}
-            />
-            <Input
-              placeholder="Value"
-              value={pair.value}
-              onChange={e => handleChange(pair.id, 'value', e.target.value)}
-              onBlur={handleBlur}
-            />
-          </div>
         </div>
       ))}
-      <Button type="button" className="w-full" onClick={addPair} icon={<Plus />}>
-        Add Key-Value Pair
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="justify-self-start"
+        onClick={addPair}
+        icon={<IconPlusMedium />}
+      >
+        Add pair
       </Button>
     </div>
   );

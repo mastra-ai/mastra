@@ -1,6 +1,7 @@
-import { ChevronRightIcon } from 'lucide-react';
 import React from 'react';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/ds/components/HoverCard';
+import { Txt } from '@/ds/components/Txt';
+import { IconChevronRightMedium } from '@/ds/icons/central/IconChevronRightMedium';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
@@ -85,7 +86,7 @@ export function KeyValueList({ data, className, labelsAreHidden, isLoading, Link
                     return (
                       <RelationWrapper description={item.description} key={item.id}>
                         <Link href={item.path}>
-                          {item?.name} <ChevronRightIcon />
+                          {item?.name} <IconChevronRightMedium />
                         </Link>
                       </RelationWrapper>
                     );
@@ -94,7 +95,7 @@ export function KeyValueList({ data, className, labelsAreHidden, isLoading, Link
                     return (
                       <RelationWrapper description={item.description} key={item.id}>
                         <a href={item.path}>
-                          {item?.name} <ChevronRightIcon />
+                          {item?.name} <IconChevronRightMedium />
                         </a>
                       </RelationWrapper>
                     );
@@ -102,7 +103,15 @@ export function KeyValueList({ data, className, labelsAreHidden, isLoading, Link
                   return <span key={item.id}>{item?.name}</span>;
                 })
               ) : (
-                <>{value ? value : <span className="text-caption text-muted-foreground">n/a</span>}</>
+                <>
+                  {value ? (
+                    value
+                  ) : (
+                    <Txt as="span" variant="caption" tone="muted">
+                      n/a
+                    </Txt>
+                  )}
+                </>
               )}
             </dd>
           </React.Fragment>

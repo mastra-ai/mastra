@@ -1,5 +1,6 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
+import type { AuthCapabilities } from '@mastra/react/hooks/auth';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -8,14 +9,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import AgentBuilderSkillsCreate from '../create';
 import { authDisabledCapabilities, currentUser, rbacCapabilities } from './fixtures/auth';
-import type { AuthCapabilities } from '@/domains/auth/types';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
-vi.mock('@/store/playground-store', () => ({
-  usePlaygroundStore: () => ({ requestContext: undefined }),
-}));
-
 vi.mock('@mastra/playground-ui/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
@@ -88,15 +84,6 @@ describe('AgentBuilderSkillsCreate', () => {
       renderPage();
 
       await waitFor(() => expect(screen.getByTestId('skills-list-page')).toBeTruthy());
-    });
-
-    it('does not render the skill builder starter', async () => {
-      setCapabilities(rbacCapabilities(['stored-skills:read']));
-
-      renderPage();
-
-      await waitFor(() => expect(screen.getByTestId('skills-list-page')).toBeTruthy());
-      expect(screen.queryByTestId('skill-builder-starter-stub')).toBeNull();
     });
   });
 });

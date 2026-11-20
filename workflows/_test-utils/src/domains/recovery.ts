@@ -10,8 +10,10 @@
  *    the run persists its workflow-input snapshot and running step-result and
  *    then dies mid-LLM-call — the longest-running crash window and the one
  *    durability exists to survive.
- *  - The crash is simulated by dropping the run's in-process registry entry
- *    WITHOUT running graceful teardown (a dead process never cleans up).
+ *  - The crash is simulated by dropping the run's in-process state WITHOUT
+ *    running graceful teardown (a dead process never cleans up). Host 1's
+ *    claim on the run stops renewing; the test then lets it lapse, as its
+ *    lease would run out.
  *  - "Host 2" is built over the same storage with the same agent id but its
  *    own pubsub (a restarted process has a new bus) and a working model, then
  *    recovers via `listActiveRuns()` / `recoverActiveRuns()` / `recover()`.
@@ -27,7 +29,7 @@
 import { describe, it, expect } from 'vitest';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { globalRunRegistry } from '@mastra/core/agent/durable';
+import { __resetExecutionFencesForTests, globalRunRegistry } from '@mastra/core/agent/durable';
 import { MockMemory } from '@mastra/core/memory';
 import { MockStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
@@ -69,7 +71,8 @@ async function waitUntil(
 
 /**
  * Kill "host 1" from the run's point of view: a crashed process loses its
- * in-memory registry but never runs graceful teardown. Deleting a registry
+ * in-memory registry and its executions, and its claims on runs stop
+ * renewing, but it never runs graceful teardown. Deleting a registry
  * entry fires the TTL cache's dispose hook (which calls `entry.cleanup()`),
  * so neuter cleanup first — otherwise the "crash" would abort the run and
  * tear down its streams the way a live shutdown would, which is exactly what
@@ -80,6 +83,20 @@ function simulateHostCrash(runId: string): void {
   if (entry) {
     (entry as { cleanup?: unknown }).cleanup = undefined;
     globalRunRegistry.delete(runId);
+  }
+  __resetExecutionFencesForTests();
+}
+
+/**
+ * End a crashed host's claim on `runId` the way its lease running out would.
+ * Releasing it through the store leaves the same not-live record an expired
+ * lease does, without waiting out the lease.
+ */
+async function lapseClaim(storage: InstanceType<typeof MockStore>, runId: string): Promise<void> {
+  const workflows = (await storage.getStore('workflows'))!;
+  const record = await workflows.getRunOwnership({ runId });
+  if (record?.live) {
+    await workflows.releaseRunOwnership({ runId, generation: record.generation, ownerId: record.ownerId });
   }
 }
 
@@ -185,6 +202,7 @@ export function createRecoveryTests(context: DurableAgentTestContext) {
         await reached.promise;
         await sleep(settleDelay);
         simulateHostCrash(runId);
+        await lapseClaim(storage, runId);
 
         // Host 2: fresh bus, same storage, working model.
         const host2Model = createCountingTextModel('Recovered response.');
@@ -254,6 +272,10 @@ export function createRecoveryTests(context: DurableAgentTestContext) {
           model: host2Model.model,
         });
 
+        // Until host 1's claim lapses, the run still looks live to host 2.
+        await expect(host2.recover!(runId)).rejects.toMatchObject({ id: 'DURABLE_AGENT_RUN_ACTIVE' });
+        await lapseClaim(storage, runId);
+
         const recovered = await host2.recover!(runId);
         expect(recovered.runId).toBe(runId);
 
@@ -317,6 +339,7 @@ export function createRecoveryTests(context: DurableAgentTestContext) {
         await reached.promise;
         await sleep(settleDelay);
         simulateHostCrash(runId);
+        await lapseClaim(storage, runId);
 
         const host2Model = createCountingTextModel('Recovered weather summary.');
         const host2 = await createAgent({

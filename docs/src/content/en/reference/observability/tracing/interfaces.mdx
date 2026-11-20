@@ -18,7 +18,7 @@ Primary interface for observability.
 ```typescript
 interface ObservabilityInstance {
   /** Get current configuration */
-  getConfig(): Readonly<Required<ObservabilityInstanceConfig>>
+  getConfig(): Readonly<ObservabilityInstanceConfig>
 
   /** Get all exporters */
   getExporters(): readonly ObservabilityExporter[]
@@ -158,7 +158,7 @@ describeSpanError(span) // SpanErrorInfo | undefined
 
 ### Processor spans
 
-A processor span records which pipeline phase produced it, so a reader narrows its
+A processor span records which pipeline phase produced it. A reader narrows its
 payloads on that phase instead of on the payload's shape. The recorded phase is finer
 than the one a processor declares: `outputStream` and `outputResult` are separate
 here, because they record different payloads.
@@ -215,6 +215,11 @@ interface Span<TType extends SpanType> {
   readonly type: TType
   readonly name: string
 
+  /** Entity that created the span */
+  entityType?: EntityType
+  entityId?: string
+  entityName?: string
+
   /** Is an internal span? (spans internal to the operation of mastra) */
   isInternal: boolean
 
@@ -232,6 +237,9 @@ interface Span<TType extends SpanType> {
 
   /** Tags for categorizing traces (only present on root spans) */
   tags?: string[]
+
+  /** Spans in other traces this span is related to */
+  links?: SpanLink[]
 
   /** End the span */
   end(options?: EndSpanOptions<TType>): void
@@ -506,7 +514,7 @@ Structured event emitted when the exporter pipeline drops observability events.
 ```typescript
 type ObservabilityDropSignal = 'tracing' | 'log' | 'metric' | 'score' | 'feedback'
 
-type ObservabilityDropReason = 'unsupported-storage' | 'retry-exhausted'
+type ObservabilityDropReason = 'unsupported-storage' | 'retry-exhausted' | 'span-not-updatable'
 
 interface ObservabilityDropEvent {
   type: 'drop'
@@ -672,8 +680,8 @@ Agent Run attributes.
 
 ```typescript
 interface AgentRunAttributes {
-  /** Agent identifier */
-  agentId: string
+  /** Conversation/thread/session identifier for multi-turn interactions */
+  conversationId?: string
 
   /** Agent Instructions */
   instructions?: string
@@ -686,6 +694,22 @@ interface AgentRunAttributes {
 
   /** Maximum steps allowed */
   maxSteps?: number
+
+  /**
+   * Model the run was configured with, resolved at run preparation (call-time
+   * override, then agent config). The first enabled candidate of a fallback list.
+   * Never updated by later steps; see MODEL_STEP `model` for what each step ran.
+   */
+  model?: string
+
+  /** Provider of `model`, taken from the same model object */
+  provider?: string
+
+  /** When the run's model streamed its first chunk, copied from the agent's own first generation */
+  completionStartTime?: Date
+
+  /** Time to first token of the model inference that streamed the run's first chunk, copied the same way */
+  timeToFirstTokenMs?: number
 }
 ```
 
@@ -704,8 +728,8 @@ interface ModelGenerationAttributes {
   /**
    * Definitions of the tools made available to the model for this generation
    * (name, description, and JSON-schema parameters), captured once per
-   * generation. Per-step tool names live on MODEL_INFERENCE spans as
-   * `availableTools`.
+   * generation. The definitions sent on each provider call live on
+   * MODEL_INFERENCE spans as `tools`.
    */
   tools?: ModelToolDefinition[]
 
@@ -713,13 +737,7 @@ interface ModelGenerationAttributes {
   resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning'
 
   /** Token usage statistics */
-  usage?: {
-    promptTokens?: number
-    completionTokens?: number
-    totalTokens?: number
-    promptCacheHitTokens?: number
-    promptCacheMissTokens?: number
-  }
+  usage?: UsageStats
 
   /** Model parameters */
   parameters?: {
@@ -736,6 +754,12 @@ interface ModelGenerationAttributes {
 
   /** Whether this was a streaming response */
   streaming?: boolean
+
+  /** When the generation's first inference streamed its first chunk */
+  completionStartTime?: Date
+
+  /** Time to first token of the model inference that streamed the generation's first chunk */
+  timeToFirstTokenMs?: number
 
   /** Reason the generation finished */
   finishReason?: string
@@ -772,6 +796,16 @@ interface ModelStepAttributes {
   /** Index of this step in the generation (0, 1, 2, ...) */
   stepIndex?: number
 
+  /**
+   * Model actually invoked for this step, after per-step overrides (input
+   * processors, fallback). Recorded at invocation, so a failed provider call
+   * still carries it. Absent when no model was invoked, e.g. a cached response.
+   */
+  model?: string
+
+  /** Provider of `model`, taken from the same model object */
+  provider?: string
+
   /** Token usage statistics */
   usage?: UsageStats
 
@@ -783,6 +817,75 @@ interface ModelStepAttributes {
 
   /** Result warnings */
   warnings?: Record<string, any>
+
+  /** When the step's first inference streamed its first chunk */
+  completionStartTime?: Date
+
+  /** Time to first token of the model inference that streamed the step's first chunk */
+  timeToFirstTokenMs?: number
+}
+```
+
+### `ModelInferenceAttributes`
+
+Model Inference attributes - for a single call to the model provider within a step. The span covers only the provider call, so it doesn't include processors or tool executions.
+
+```typescript
+interface ModelInferenceAttributes {
+  /** Model name (e.g., 'gpt-5.4', 'claude-opus-4-6') */
+  model?: string
+
+  /** Model provider (e.g., 'openai', 'anthropic') */
+  provider?: string
+
+  /** Index of the parent step in the generation (0, 1, 2, ...) */
+  stepIndex?: number
+
+  /** Token usage statistics */
+  usage?: UsageStats
+
+  /** Reason this inference finished (stop, tool-calls, length, etc.) */
+  finishReason?: string
+
+  /** Whether this was a streaming response */
+  streaming?: boolean
+
+  /** When the first token/chunk of the completion was received */
+  completionStartTime?: Date
+
+  /** Milliseconds from the start of the model inference that streamed the first chunk to that chunk */
+  timeToFirstTokenMs?: number
+
+  /** Result warnings */
+  warnings?: Record<string, any>
+
+  /** Actual model used in the response (may differ from request model) */
+  responseModel?: string
+
+  /** Unique identifier for the response */
+  responseId?: string
+
+  /** Model parameters sent on the request (temperature, maxOutputTokens, topP, etc.) */
+  parameters?: Record<string, unknown>
+
+  /** Provider-specific options forwarded on the request */
+  providerOptions?: Record<string, unknown>
+
+  /** Names of tools made available to the model on this inference call */
+  availableTools?: string[]
+
+  /**
+   * Definitions of the tools sent to the provider on this inference call
+   * (name, description, and JSON-schema parameters), after per-step changes
+   * from processors, `prepareStep`, `activeTools`, and `toolChoice`.
+   */
+  tools?: ModelToolDefinition[]
+
+  /** How the model was instructed to choose tools */
+  toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }
+
+  /** Requested response format */
+  responseFormat?: 'text' | 'json' | 'json_schema' | { type: string; name?: string }
 }
 ```
 
@@ -811,6 +914,8 @@ interface ToolCallAttributes {
   toolDescription?: string
   toolCallId?: string
   success?: boolean
+  /** True when a dataset experiment tool mock intercepted the call (served, mismatched, exhausted or denied) and the tool never ran */
+  mocked?: boolean
 }
 ```
 
@@ -865,6 +970,12 @@ interface MCPServerRequestAttributes {
 
   /** Client implementation version, when the client reported one */
   clientVersion?: string
+
+  /** W3C `traceparent` the caller sent, when it parses */
+  callerTraceparent?: string
+
+  /** W3C `tracestate` the caller sent with a valid `traceparent`, capped at 512 characters */
+  callerTracestate?: string
 }
 ```
 
@@ -883,8 +994,9 @@ interface ProcessorRunAttributes {
   /**
    * Milliseconds spent inside `processOutputStream`, summed across every
    * chunk. Only set on output stream processor spans. The span's own duration
-   * covers the whole stream, model latency included, so this is what
-   * separates a slow processor from a slow model.
+   * covers its step, from the first chunk to the step's end with model latency
+   * and tool calls included, so this is what separates a slow processor from
+   * the rest of the step.
    */
   hookDurationMs?: number
 
@@ -913,9 +1025,6 @@ Workflow Run attributes.
 
 ```typescript
 interface WorkflowRunAttributes {
-  /** Workflow identifier */
-  workflowId: string
-
   /** Workflow status */
   status?: WorkflowRunStatus
 }
@@ -927,11 +1036,49 @@ Workflow Step attributes.
 
 ```typescript
 interface WorkflowStepAttributes {
-  /** Step identifier */
-  stepId: string
-
   /** Step status */
   status?: WorkflowStepStatus
+
+  /** Authored graph entry description */
+  entryDescription?: string
+
+  /** Authored graph entry metadata */
+  entryMetadata?: Record<string, any>
+}
+```
+
+`AgentRunAttributes`, `WorkflowRunAttributes`, and `WorkflowStepAttributes` don't include agent or workflow identifiers. Read them from the span's `entityType`, `entityId`, and `entityName` fields. On a `WORKFLOW_STEP` span, `entityId` is the step ID, and `entityName` is inherited from the enclosing workflow. To get the workflow ID, read `entityId` from the enclosing `WORKFLOW_RUN` span. If `excludeSpanTypes` excludes `WORKFLOW_RUN` spans, the step inherits `entityName` from the nearest ancestor that isn’t excluded instead. That ancestor can be an agent span, or there can be none, so `entityName` doesn’t reliably name the workflow in that case.
+
+### `UsageStats`
+
+Token usage recorded on model spans.
+
+```typescript
+interface UsageStats {
+  /** Total input tokens (sum of all input details) */
+  inputTokens?: number
+
+  /** Total output tokens (sum of all output details) */
+  outputTokens?: number
+
+  /** Detailed breakdown of input token usage */
+  inputDetails?: {
+    text?: number
+    cacheRead?: number
+    cacheWrite?: number
+    cacheWrite5m?: number
+    cacheWrite1h?: number
+    audio?: number
+    image?: number
+  }
+
+  /** Detailed breakdown of output token usage */
+  outputDetails?: {
+    text?: number
+    reasoning?: number
+    audio?: number
+    image?: number
+  }
 }
 ```
 
@@ -1040,11 +1187,11 @@ interface ModelStepResult {
 
 ### `InterruptedSpanOutput`
 
-Output recorded on `AGENT_RUN`, `MODEL_GENERATION` and `MODEL_STEP` spans when the run stops before the span's own result exists: a durable run suspended, or the caller aborted. `MODEL_INFERENCE` spans never carry it.
+Output recorded on `AGENT_RUN`, `MODEL_GENERATION` and `MODEL_STEP` spans when the run stops before the span's own result exists: a durable run suspended, the caller aborted, or the process running a durable run stopped and the run was recovered elsewhere. `MODEL_INFERENCE` spans never carry it.
 
 ```typescript
 interface InterruptedSpanOutput {
-  status: 'suspended' | 'aborted'
+  status: 'suspended' | 'aborted' | 'interrupted'
   /** Why the run stopped */
   reason?: string
   /** Tool that suspended the run */
@@ -1085,6 +1232,23 @@ interface StartSpanOptions<TType extends SpanType> {
 
   /** Options passed when using a custom sampler strategy */
   customSamplerOptions?: CustomSamplerOptions
+
+  /** Spans in other traces this span is related to. Links with invalid IDs are ignored. */
+  links?: SpanLink[]
+}
+```
+
+### `SpanLink`
+
+A reference to a span in another trace, such as the caller's span when an `MCPServer` serves a request. Unlike a parent, a link doesn't put the two spans in the same trace.
+
+```typescript
+interface SpanLink {
+  /** Trace ID of the linked span (1-32 hexadecimal characters) */
+  traceId: string
+
+  /** Span ID of the linked span (1-16 hexadecimal characters) */
+  spanId: string
 }
 ```
 
@@ -1205,6 +1369,13 @@ interface TracingOptions {
   parentSpanId?: string
 
   /**
+   * Set to true together with parentSpanId to attach this run as a child of
+   * that span inside the existing trace. Exporters then keep the trace's own
+   * name, input, output, and tags. Ignored without a valid traceId and parentSpanId.
+   */
+  nestUnderParent?: boolean
+
+  /**
    * Tags to apply to this trace.
    * Tags are string labels that can be used to categorize and filter traces
    * Note: Tags are only applied to the root span of a trace.
@@ -1270,6 +1441,8 @@ interface ObservabilityInstanceConfig {
   requestContextKeys?: string[]
 }
 ```
+
+The `@mastra/observability` implementation also supports `retainStorageExporterOnPlatform`. See the [configuration reference](/reference/observability/tracing/configuration#observabilityinstanceconfig) for this implementation-specific option.
 
 ### `ObservabilityRegistryConfig`
 

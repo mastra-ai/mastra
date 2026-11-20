@@ -186,7 +186,7 @@ describe('voice call from a brand-new chat (/threads/new)', () => {
 
     // The call connecting must transition the page out of /threads/new (like a text send).
     await waitFor(() => {
-      const path = screen.getByTestId('location-probe').textContent!;
+      const path = screen.getByTestId('location-probe').textContent;
       expect(path).toMatch(new RegExp(`^/agents/${AGENT_ID}/threads/(?!new$).+`));
     });
 

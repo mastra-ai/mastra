@@ -70,7 +70,14 @@ export const getScrollTarget = ({
 };
 
 /**
- * Where the reader must sit for the last row to rest at the end of the view.
+ * Whether a row has a box to measure. A row hidden by `display: none` — its own or
+ * an ancestor's — stays registered but has none, and reports a zero rect at the
+ * window origin: read as a position, it sits wherever the reader happens to be.
+ */
+const isDrawn = (element: HTMLElement) => element.getClientRects().length > 0;
+
+/**
+ * Where the reader must sit for the last drawn row to rest at the end of the view.
  *
  * Not the end of the scroll: a chat reserves room under a live turn so a reply
  * grows into empty space, and docks its composer in the flow. Both sit below the
@@ -88,7 +95,7 @@ export const getFollowTarget = ({
   viewportElement: HTMLElement;
 }) => {
   const end = getMaxScroll(viewportElement);
-  const lastRow = items.at(-1)?.[1].element;
+  const lastRow = items.findLast(([, item]) => isDrawn(item.element))?.[1].element;
   if (!lastRow || !contentElement) return end;
 
   const contentBottom = getRelativeTop(contentElement, viewportElement) + contentElement.getBoundingClientRect().height;
@@ -115,14 +122,18 @@ export const getCurrentAnchorId = ({
 }) => {
   const anchorLine = viewportElement.getBoundingClientRect().top + scrollMargin + scrollPreviousItemPeek;
   const anchors = items.filter(([, item]) => item.scrollAnchor);
-  let anchoredAboveViewport: string | undefined;
-
-  for (const [messageId, item] of anchors) {
-    if (item.element.getBoundingClientRect().top <= anchorLine + VISIBILITY_EPSILON) {
-      anchoredAboveViewport = messageId;
-    }
+  const passedLine = (index: number) =>
+    (anchors[index]?.[1].element.getBoundingClientRect().top ?? Infinity) <= anchorLine + VISIBILITY_EPSILON;
+  // Anchors stack top to bottom in document order, so their tops only grow: a scroll reads log(n) of them.
+  let firstUnpassed = 0;
+  let lastCandidate = anchors.length;
+  while (firstUnpassed < lastCandidate) {
+    const middle = (firstUnpassed + lastCandidate) >>> 1;
+    if (passedLine(middle)) firstUnpassed = middle + 1;
+    else lastCandidate = middle;
   }
 
+  const anchoredAboveViewport = anchors[firstUnpassed - 1]?.[0];
   if (anchoredAboveViewport) return anchoredAboveViewport;
   return anchors.find(([messageId]) => visibleMessageIds.has(messageId))?.[0] ?? fallbackAnchorId;
 };

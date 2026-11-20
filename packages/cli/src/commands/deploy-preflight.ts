@@ -6,6 +6,7 @@ import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import type { DatabaseKind } from './db/platform-api.js';
 import { DB_ENV_VAR_NAMES } from './db/platform-api.js';
+import { isSecretPlaceholder } from './env/platform-api.js';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -243,12 +244,20 @@ export async function preflightBuildOutput(
  * project (request wins). Preflight should see this merged picture so vars
  * stored only on the platform don't produce false MISSING_ENV_VAR /
  * LOCAL_STORAGE_PATH alarms.
+ *
+ * A local write-only secret placeholder (written by older `env vars pull`)
+ * makes the platform keep the stored value, so it doesn't override here.
+ * Stored placeholders stay: the secret is set, its value just isn't readable.
  */
 export function mergePreflightEnvVars(
   stored: Record<string, string> | null | undefined,
   local: Record<string, string>,
 ): Record<string, string> {
-  return { ...stored, ...local };
+  const merged: Record<string, string> = { ...stored };
+  for (const [name, value] of Object.entries(local)) {
+    if (!isSecretPlaceholder(value)) merged[name] = value;
+  }
+  return merged;
 }
 
 export type PreflightOutcome = 'ok' | 'blocked' | 'cancelled';
@@ -413,6 +422,8 @@ function localhostHostOf(value: string): string {
 }
 
 function isUsableEnvVarValue(name: string, value: string): boolean {
+  // A write-only secret is set; its value just isn't readable to validate.
+  if (isSecretPlaceholder(value)) return true;
   const trimmed = value.trim();
   if (trimmed.length === 0) return false;
   if (!dbAutofixFor(name)) return true;
@@ -656,7 +667,7 @@ export function dbCreateCommandFor(envVarName: string, environmentName?: string)
  * still emitted: `maybeAutoProvisionDatabases` consults the platform's
  * per-org provider catalog before offering it, so gated orgs never see it.
  */
-export const SELF_SERVE_DB_KINDS: ReadonlySet<DatabaseKind> = new Set(['turso', 'neon']);
+export const SELF_SERVE_DB_KINDS: ReadonlySet<DatabaseKind> = new Set(['turso', 'neon', 'postgres']);
 
 export function dbAutofixFor(envVarName: string): PreflightAutofix | undefined {
   for (const [kind, names] of Object.entries(DB_ENV_VAR_NAMES) as [DatabaseKind, string[]][]) {

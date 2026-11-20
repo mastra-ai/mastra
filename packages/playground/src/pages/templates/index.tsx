@@ -1,13 +1,13 @@
 import { Header, HeaderTitle } from '@mastra/playground-ui/components/Header';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { IconPackage } from '@mastra/playground-ui/icons/central/IconPackage';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { PackageIcon } from 'lucide-react';
+import { useMastraTemplates } from '@mastra/react/hooks/templates';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { TemplatesList } from '@/domains/templates/templates-list';
 import { TemplatesTools } from '@/domains/templates/templates-tools';
-import { useMastraTemplates } from '@/hooks/use-templates';
 import { cn } from '@/lib/utils';
 
 const crumbs = [{ id: 'templates', label: 'Templates' }];
@@ -71,7 +71,7 @@ export default function Templates() {
       <Header>
         <HeaderTitle>
           <Icon>
-            <PackageIcon />
+            <IconPackage />
           </Icon>
           Templates
         </HeaderTitle>

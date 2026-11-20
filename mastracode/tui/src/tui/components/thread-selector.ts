@@ -3,10 +3,11 @@
  * Uses pi-tui overlay pattern with search and navigation.
  */
 
-import { Box, Container, fuzzyFilter, getKeybindings, Input, matchesKey, Spacer, Text } from '@earendil-works/pi-tui';
+import { Box, fuzzyFilter, getKeybindings, Input, matchesKey, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable, TUI } from '@earendil-works/pi-tui';
 import type { AgentControllerThread } from '@mastra/core/agent-controller';
 import { theme } from '../theme.js';
+import { PickerList } from './picker-list.js';
 
 // =============================================================================
 // Types
@@ -44,7 +45,7 @@ const FOLLOW_UP_PREVIEW_LOAD_DELAY_MS = 50;
 
 export class ThreadSelectorComponent extends Box implements Focusable {
   private searchInput!: Input;
-  private listContainer!: Container;
+  private list!: PickerList<AgentControllerThread>;
   private allThreads: AgentControllerThread[];
   private filteredThreads: AgentControllerThread[];
   private selectedIndex = 0;
@@ -211,8 +212,16 @@ export class ThreadSelectorComponent extends Box implements Focusable {
     this.addChild(this.searchInput);
     this.addChild(new Spacer(1));
 
-    this.listContainer = new Container();
-    this.addChild(this.listContainer);
+    this.list = new PickerList({
+      maxVisible: MAX_VISIBLE_THREADS,
+      renderItem: (thread, selected) => this.renderThread(thread, selected),
+      onActivate: index => {
+        this.selectedIndex = index;
+        this.handleInput('\r');
+      },
+      emptyText: () => 'No matching threads',
+    });
+    this.addChild(this.list);
 
     this.updateList();
   }
@@ -272,60 +281,33 @@ export class ThreadSelectorComponent extends Box implements Focusable {
   }
 
   private updateList(): void {
-    this.listContainer.clear();
+    this.list.setItems(this.filteredThreads, this.selectedIndex);
+  }
 
-    const startIndex = Math.max(
-      0,
-      Math.min(
-        this.selectedIndex - Math.floor(MAX_VISIBLE_THREADS / 2),
-        this.filteredThreads.length - MAX_VISIBLE_THREADS,
-      ),
-    );
-    const endIndex = Math.min(startIndex + MAX_VISIBLE_THREADS, this.filteredThreads.length);
+  private renderThread(thread: AgentControllerThread, isSelected: boolean): string[] {
+    const isCurrent = thread.id === this.currentThreadId;
+    const checkmark = isCurrent ? theme.fg('success', ' ✓') : '';
+    const shortId = thread.id.slice(-6);
+    const threadPath = thread.metadata?.projectPath as string | undefined;
+    const pathTag = threadPath ? theme.fg('dim', ` [${threadPath.split('/').pop()}]`) : '';
+    const displayId = `${thread.resourceId}/${shortId}`;
+    const timeAgo = theme.fg('muted', ` (${this.formatTimeAgo(thread.updatedAt)})`);
 
-    for (let i = startIndex; i < endIndex; i++) {
-      const thread = this.filteredThreads[i];
-      if (!thread) continue;
+    // Show thread title when available, except the default placeholder title.
+    const displayTitle = thread.title && thread.title !== 'New Thread' ? thread.title : null;
 
-      const isSelected = i === this.selectedIndex;
-      const isCurrent = thread.id === this.currentThreadId;
-      const checkmark = isCurrent ? theme.fg('success', ' ✓') : '';
-      const shortId = thread.id.slice(-6);
-      const threadPath = thread.metadata?.projectPath as string | undefined;
-      const pathTag = threadPath ? theme.fg('dim', ` [${threadPath.split('/').pop()}]`) : '';
-      const displayId = `${thread.resourceId}/${shortId}`;
-      const timeAgo = theme.fg('muted', ` (${this.formatTimeAgo(thread.updatedAt)})`);
-
-      // Show thread title when available, except the default placeholder title.
-      const displayTitle = thread.title && thread.title !== 'New Thread' ? thread.title : null;
-
-      let line = '';
-      if (isSelected) {
-        line = theme.fg('accent', `→ ${displayId}`) + pathTag + timeAgo + checkmark;
-      } else {
-        line = `  ${displayId}` + pathTag + timeAgo + checkmark;
-      }
-
-      this.listContainer.addChild(new Text(line, 0, 0));
-
-      if (displayTitle) {
-        this.listContainer.addChild(new Text(`     ${theme.fg('muted', displayTitle)}`, 0, 0));
-      } else {
-        const preview = this.messagePreviews.get(thread.id);
-        if (preview) {
-          this.listContainer.addChild(new Text(`     ${theme.fg('dim', `"${preview}"`)}`, 0, 0));
-        }
-      }
+    const lines = [
+      isSelected
+        ? theme.fg('accent', `→ ${displayId}`) + pathTag + timeAgo + checkmark
+        : `  ${displayId}` + pathTag + timeAgo + checkmark,
+    ];
+    if (displayTitle) {
+      lines.push(`     ${theme.fg('muted', displayTitle)}`);
+    } else {
+      const preview = this.messagePreviews.get(thread.id);
+      if (preview) lines.push(`     ${theme.fg('dim', `"${preview}"`)}`);
     }
-
-    if (startIndex > 0 || endIndex < this.filteredThreads.length) {
-      const scrollInfo = theme.fg('muted', `(${this.selectedIndex + 1}/${this.filteredThreads.length})`);
-      this.listContainer.addChild(new Text(scrollInfo, 0, 0));
-    }
-
-    if (this.filteredThreads.length === 0) {
-      this.listContainer.addChild(new Text(theme.fg('muted', 'No matching threads'), 0, 0));
-    }
+    return lines;
   }
 
   handleInput(keyData: string): void {

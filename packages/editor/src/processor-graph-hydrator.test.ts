@@ -251,12 +251,10 @@ describe('hydrateProcessorGraph', () => {
         });
         if (result instanceof MessageList) {
           messages = result.get.all.db();
+        } else if ('messages' in result) {
+          messages = result.messages;
         } else {
-          if ('messages' in result) {
-            messages = result.messages;
-          } else {
-            messages = result;
-          }
+          messages = result;
         }
       }
 

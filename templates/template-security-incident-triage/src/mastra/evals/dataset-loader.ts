@@ -45,7 +45,7 @@ export async function loadSecurityEvalDataset(
   await assertProductProvenance(
     loaded.manifest,
     options.projectRoot ?? join(securityEvalDatasetDirectory, '..', '..', '..', '..', '..'),
-    join(directory, 'runbooks'),
+    directory,
   );
   return loaded;
 }
@@ -53,9 +53,12 @@ export async function loadSecurityEvalDataset(
 async function assertProductProvenance(
   manifest: SecurityEvalManifest,
   root: string,
-  runbookRoot: string,
+  datasetDirectory: string,
 ): Promise<void> {
-  const prompt = await readFile(join(root, manifest.provenance.promptPath), 'utf8');
+  // v1 is an immutable historical replay, so its prompt hash binds the
+  // response planner as recorded, not the live file, whose model default
+  // moves when providers retire models.
+  const prompt = await readFile(join(datasetDirectory, 'prompt', 'response-planner.ts.txt'), 'utf8');
   if (sha256Text(prompt) !== manifest.provenance.promptHash)
     throw new Error('SECURITY_EVAL_DATASET_PROMPT_PROVENANCE_INVALID');
   const replay = await readFile(join(root, manifest.provenance.replayPath), 'utf8');
@@ -70,7 +73,7 @@ async function assertProductProvenance(
     if (!source) throw new Error('SECURITY_EVAL_DATASET_RUNBOOK_PROVENANCE_INVALID');
     // v1 is an immutable historical replay. Its approved hashes bind these
     // snapshots; current policy is exercised by eval:check's live workflow.
-    const text = await readFile(join(runbookRoot, source), 'utf8');
+    const text = await readFile(join(datasetDirectory, 'runbooks', source), 'utf8');
     if (sha256Text(text) !== runbook.hash) throw new Error('SECURITY_EVAL_DATASET_RUNBOOK_PROVENANCE_INVALID');
   }
 }

@@ -97,6 +97,7 @@ const ATTRIBUTE_KEYS = {
   TOOL_SUCCESS: 'tool.success',
   GEN_AI_PIPELINE_NAME: 'gen_ai.pipeline.name',
   GEN_AI_AGENT_PROMPT: 'gen_ai.agent.prompt',
+  GEN_AI_SYSTEM_INSTRUCTIONS: 'gen_ai.system_instructions',
   WORKFLOW_ID: 'workflow.id',
   WORKFLOW_STATUS: 'workflow.status',
   WORKFLOW_STEP_ID: 'workflow.step.id',
@@ -106,7 +107,7 @@ const ATTRIBUTE_KEYS = {
   GEN_AI_USAGE_TOTAL_TOKENS: 'gen_ai.usage.total_tokens',
   GEN_AI_USAGE_CACHE_READ_TOKENS: 'gen_ai.usage.cache_read.input_tokens',
   GEN_AI_USAGE_CACHE_WRITE_TOKENS: 'gen_ai.usage.cache_creation.input_tokens',
-  GEN_AI_USAGE_REASONING_TOKENS: 'gen_ai.usage.reasoning_tokens',
+  GEN_AI_USAGE_REASONING_TOKENS: 'gen_ai.usage.reasoning.output_tokens',
 } as const;
 
 export interface SentryExporterConfig extends BaseExporterConfig {
@@ -121,6 +122,13 @@ export interface SentryExporterConfig extends BaseExporterConfig {
   release?: string;
   /** Additional Sentry SDK options (integrations, beforeSend, etc.) */
   options?: Partial<Sentry.NodeOptions>;
+}
+
+/** Sentry span links for Mastra span links. Only full-length W3C IDs are kept. */
+function toSentryLinks(links: { traceId: string; spanId: string }[] | undefined) {
+  return (links ?? [])
+    .filter(link => /^[0-9a-f]{32}$/.test(link.traceId) && /^[0-9a-f]{16}$/.test(link.spanId))
+    .map(link => ({ context: { traceId: link.traceId, spanId: link.spanId, traceFlags: 1 } }));
 }
 
 /**
@@ -141,6 +149,8 @@ type SpanData = {
     id?: string;
     type?: string;
   }>;
+  /** Keys of the links the span was started with, so links set later are added once at end. */
+  startLinkKeys?: Set<string>;
 };
 
 /** Config type with Sentry-specific fields resolved */
@@ -253,12 +263,14 @@ export class SentryExporter extends BaseExporter {
   private async handleSpanStarted(span: AnyExportedSpan): Promise<void> {
     const resolvedParentId = this.resolveParentSpanId(span.parentSpanId);
 
+    const links = toSentryLinks(span.links);
     const sentrySpan = Sentry.startInactiveSpan({
       op: this.getOperationType(span),
       name: getGenAISpanName(span, this.genAIOptions(span)),
       startTime: span.startTime.getTime(),
       forceTransaction: span.isRootSpan,
       parentSpan: resolvedParentId ? this.spanMap.get(resolvedParentId)?.span : undefined,
+      ...(links.length > 0 ? { links } : {}),
     });
 
     sentrySpan.setAttributes(this.buildSpanAttributes(span));
@@ -266,6 +278,9 @@ export class SentryExporter extends BaseExporter {
     this.spanMap.set(span.id, {
       span: sentrySpan,
       spanType: span.type,
+      ...(span.links?.length
+        ? { startLinkKeys: new Set(span.links.map(link => `${link.traceId}:${link.spanId}`)) }
+        : {}),
     });
 
     // Track tool calls as children of MODEL_GENERATION spans for gen_ai.response.tool_calls attribute
@@ -278,7 +293,6 @@ export class SentryExporter extends BaseExporter {
     const spanData = this.spanMap.get(span.id);
     if (!spanData) {
       this.logMissingSpan(span, 'span update');
-      return;
     }
     // Attributes are set on SPAN_STARTED and finalized on SPAN_ENDED.
     // If dynamic updates become necessary, add spanData.span.setAttributes() here.
@@ -352,6 +366,15 @@ export class SentryExporter extends BaseExporter {
       });
     }
 
+    // Links set after the span started, such as an MCP tool call's link to the
+    // server span that handled it
+    const lateLinks = toSentryLinks(
+      span.links?.filter(link => !spanData.startLinkKeys?.has(`${link.traceId}:${link.spanId}`)),
+    );
+    if (lateLinks.length > 0 && typeof sentrySpan.addLinks === 'function') {
+      sentrySpan.addLinks(lateLinks);
+    }
+
     const endTime = span.endTime ? span.endTime.getTime() : undefined;
     sentrySpan.end(endTime);
     this.spanMap.delete(span.id);
@@ -388,6 +411,11 @@ export class SentryExporter extends BaseExporter {
 
   private buildSpanAttributes(span: AnyExportedSpan): Record<string, any> {
     const attributes = getGenAIAttributes(span, this.genAIOptions(span)) as Record<string, any>;
+
+    // Sentry span attributes hold primitives only, so lists go as JSON text.
+    for (const [key, value] of Object.entries(attributes)) {
+      if (Array.isArray(value)) attributes[key] = this.serializeValue(value);
+    }
 
     attributes[ATTRIBUTE_KEYS.SPAN_TYPE] = span.type;
     attributes[ATTRIBUTE_KEYS.ORIGIN] = 'auto.ai.mastra';
@@ -509,6 +537,8 @@ export class SentryExporter extends BaseExporter {
     }
 
     this.setAttributeIfDefined(attributes, ATTRIBUTE_KEYS.GEN_AI_AGENT_PROMPT, agentAttr.prompt);
+    // Sentry reads the system instructions as plain text, not as the OpenTelemetry list of parts.
+    this.setAttributeIfDefined(attributes, ATTRIBUTE_KEYS.GEN_AI_SYSTEM_INSTRUCTIONS, agentAttr.instructions);
   }
 
   // ============================================================================

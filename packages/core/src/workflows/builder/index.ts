@@ -180,7 +180,7 @@ const OPTIONAL_ENTRY_KEYS = ['description', 'metadata', 'outputSchema', 'options
 // on sleep/sleepUntil/mapping it is required, so a null id there must survive to
 // fail validation instead of being silently dropped.
 const OPTIONAL_ID_ENTRY_TYPES = new Set(['parallel', 'conditional', 'foreach', 'loop']);
-const OPTIONAL_STEP_OPTION_KEYS = ['retries', 'metadata'] as const;
+const OPTIONAL_STEP_OPTION_KEYS = ['retries', 'metadata', 'maxRetries', 'providerOptions'] as const;
 const OPTIONAL_FOREACH_OPT_KEYS = ['concurrency'] as const;
 
 function dropNullKeys(target: WorkflowBuilderJsonObject, keys: readonly string[]): void {

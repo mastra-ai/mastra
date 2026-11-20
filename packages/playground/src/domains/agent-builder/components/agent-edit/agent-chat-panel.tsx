@@ -1,12 +1,16 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { IconChecklist } from '@mastra/playground-ui/icons/central/IconChecklist';
+import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
+import { IconLightBulbSimple } from '@mastra/playground-ui/icons/central/IconLightBulbSimple';
+import { IconMaintenance } from '@mastra/playground-ui/icons/central/IconMaintenance';
+import { controlStateColorTransition, focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { CircleCheckIcon, LightbulbIcon, ListChecksIcon, WrenchIcon } from 'lucide-react';
+import { useAgentMessages } from '@mastra/react/hooks/agents';
+import { useCurrentUser } from '@mastra/react/hooks/auth';
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
-
 import { useStreamMessages, useStreamRunning, useStreamSend } from '../../contexts/stream-chat-context';
 import { StreamChatProvider } from '../../contexts/stream-chat-provider';
 import { useChatDraft } from '../../hooks/use-chat-draft';
@@ -14,8 +18,6 @@ import { ChatComposer } from '../chat-primitives/chat-composer';
 import { MessageList } from '../chat-primitives/message-list';
 import { BrowserThumbnail } from '@/domains/agents/components/browser-view';
 import { useBrowserSession } from '@/domains/agents/context/browser-session-context';
-import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
-import { useAgentMessages } from '@/hooks/use-agent-messages';
 
 interface AgentChatPanelProviderProps {
   agentId: string;
@@ -43,25 +45,25 @@ const STARTER_PROMPTS = [
     title: 'What can you do?',
     description: 'Get an overview of capabilities',
     prompt: 'What can you do? Give me a quick overview of your capabilities.',
-    Icon: ListChecksIcon,
+    Icon: IconChecklist,
   },
   {
     title: 'Show available tools',
     description: 'See what this agent can call',
     prompt: 'Show me the available tools you can call and explain when you would use each one.',
-    Icon: WrenchIcon,
+    Icon: IconMaintenance,
   },
   {
     title: 'Suggest a task',
     description: 'Get an example prompt to try',
     prompt: 'Suggest a useful task I can try with you, including an example prompt.',
-    Icon: LightbulbIcon,
+    Icon: IconLightBulbSimple,
   },
   {
     title: 'Run a self-check',
     description: 'Verify tools are reachable',
     prompt: 'Run a self-check and verify whether your tools are reachable. Tell me what works and what does not.',
-    Icon: CircleCheckIcon,
+    Icon: IconCircleCheck,
   },
 ];
 
@@ -131,7 +133,7 @@ export const AgentChatPanelChat = ({ hasBrowser = false }: AgentChatPanelChatPro
         disabled={isRunning}
         isRunning={isRunning}
         canSubmit={trimmed.length > 0 && !isRunning}
-        placeholder="Message your agent…"
+        placeholder="Message your agent"
         inputTestId="agent-builder-agent-chat-input"
         submitTestId="agent-builder-agent-chat-submit"
         containerTestId="agent-builder-agent-chat-composer"
@@ -205,7 +207,10 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
                 onClick={() => onStarterPromptSelect(starterPrompt.prompt)}
                 data-testid={`agent-builder-agent-chat-starter-${starterPrompt.title.toLowerCase().replace(/\s+/g, '-')}`}
                 style={{ animationDelay: `${280 + index * 40}ms` }}
-                className="starter-chip group state-layer flex gap-3 rounded-3xl border border-border bg-background p-4 text-left hover:border-border-strong focus-visible:ring-2 focus-visible:ring-accent1 focus-visible:outline-none"
+                className={cn(
+                  'starter-chip group flex gap-3 rounded-3xl border border-border bg-background state-layer p-4 text-left hover:border-border-strong',
+                  focusRing,
+                )}
               >
                 <span
                   className={cn(

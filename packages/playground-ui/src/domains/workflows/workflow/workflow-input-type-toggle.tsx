@@ -1,7 +1,8 @@
-import { Braces, FormInput } from 'lucide-react';
 import { Txt } from '@/ds/components/Txt';
+import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
+import { IconInputForm } from '@/ds/icons/central/IconInputForm';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/utils/cn';
 
@@ -31,8 +32,8 @@ export function WorkflowInputTypeToggle({
   const iconClassName = compact ? 'h-3 w-3' : 'h-4 w-4';
   const options: InputTypeOption[] = [
     ...(includeSimple ? [{ value: 'simple' as const, label: 'Simple' }] : []),
-    { value: 'form', label: 'Form', icon: <FormInput className={iconClassName} /> },
-    { value: 'json', label: 'JSON', icon: <Braces className={iconClassName} /> },
+    { value: 'form', label: 'Form', icon: <IconInputForm className={iconClassName} /> },
+    { value: 'json', label: 'JSON', icon: <IconCodeBrackets className={iconClassName} /> },
   ];
 
   return (
@@ -61,7 +62,7 @@ export function WorkflowInputTypeToggle({
               'flex items-center justify-center rounded-md',
               controlStateColorTransition,
               compact ? 'gap-0.5 px-1 py-0' : 'gap-2 px-3 py-1.5',
-              'focus-visible:ring-2 focus-visible:ring-accent1 focus-visible:outline-none',
+              focusRing,
               isActive ? 'bg-fill-hover text-foreground' : quietTextHover,
               disabled && 'cursor-not-allowed opacity-50',
             )}

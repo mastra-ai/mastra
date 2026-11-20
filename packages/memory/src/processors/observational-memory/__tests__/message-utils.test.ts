@@ -1,7 +1,12 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
 import { describe, it, expect } from 'vitest';
-import { getObservableMessages, stripThreadTags } from '../message-utils';
+import {
+  findLastCompletedObservationBoundary,
+  getObservableMessages,
+  getUnobservedParts,
+  stripThreadTags,
+} from '../message-utils';
 
 const THREAD_ID = 'thread-1';
 const RESOURCE_ID = 'resource-1';
@@ -33,16 +38,18 @@ describe('getObservableMessages', () => {
 
   it('keeps the synthetic continuation live while excluding it from the OM window', () => {
     const messageList = new MessageList({ threadId: THREAD_ID, resourceId: RESOURCE_ID });
+    // Stored messages were saved before this turn, so they carry earlier timestamps than the live input.
+    const stored = (message: MastraDBMessage) => ({ ...message, createdAt: new Date('2026-07-19T00:00:00.000Z') });
     messageList.add(createMessage('input-1', 'hello'), 'input');
-    messageList.add(createMessage('memory-1', 'durable memory context'), 'memory');
+    messageList.add(stored(createMessage('memory-1', 'durable memory context')), 'memory');
     messageList.add(
-      createMessage('om-continuation', '<system-reminder>Continue naturally</system-reminder>'),
+      stored(createMessage('om-continuation', '<system-reminder>Continue naturally</system-reminder>')),
       'memory',
     );
     messageList.add(createMessage('response-1', 'hi', 'assistant'), 'response');
 
     expect(messageList.get.all.db().map(m => m.id)).toContain('om-continuation');
-    expect(getObservableMessages(messageList).map(m => m.id)).toEqual(['input-1', 'memory-1', 'response-1']);
+    expect(getObservableMessages(messageList).map(m => m.id)).toEqual(['memory-1', 'input-1', 'response-1']);
   });
 });
 
@@ -78,5 +85,25 @@ describe('stripThreadTags', () => {
     // Generous budget — linear implementation finishes in a few ms;
     // a quadratic implementation would take multiple seconds.
     expect(elapsed).toBeLessThan(2000);
+  });
+});
+
+describe('reflection markers on the live user message', () => {
+  it('does not treat a reflection end marker as an observation boundary, so the message stays observable', () => {
+    const message = createMessage('input-1', 'Keep me observable');
+    message.content.parts.push(
+      { type: 'data-om-observation-start', data: { operationType: 'reflection' } } as any,
+      { type: 'data-om-observation-end', data: { operationType: 'reflection' } } as any,
+      { type: 'data-om-observation-failed', data: { operationType: 'reflection' } } as any,
+    );
+
+    expect(findLastCompletedObservationBoundary(message)).toBe(-1);
+    expect(getUnobservedParts(message)).toContainEqual({ type: 'text', text: 'Keep me observable' });
+  });
+
+  it('still honours observation end markers as boundaries', () => {
+    const message = createMessage('input-1', 'Already observed');
+    message.content.parts.push({ type: 'data-om-observation-end', data: { operationType: 'observation' } } as any);
+    expect(findLastCompletedObservationBoundary(message)).toBe(1);
   });
 });

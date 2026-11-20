@@ -102,7 +102,11 @@ describe('AgentLayout tool tabs', () => {
 
       await waitFor(() => expect(queryClient.getQueryState(['mastra-packages'])?.status).toBe('success'));
       const editor = screen.getByRole('button', { name: 'Editor' });
-      expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Chat']);
+      expect(
+        within(screen.getByRole('navigation', { name: 'Agent views' }))
+          .getAllByRole('link')
+          .map(tab => tab.textContent),
+      ).toEqual(['Chat']);
       expect(editor.getAttribute('aria-disabled')).toBe('true');
       fireEvent.click(editor);
       expect(navigateSpy).not.toHaveBeenCalled();
@@ -138,7 +142,11 @@ describe('AgentLayout tool tabs', () => {
       const { queryClient } = renderLayout();
 
       await waitFor(() => expect(queryClient.getQueryState(['mastra-packages'])?.status).toBe('success'));
-      expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Chat', 'Editor']);
+      expect(
+        within(screen.getByRole('navigation', { name: 'Agent views' }))
+          .getAllByRole('link')
+          .map(tab => tab.textContent),
+      ).toEqual(['Chat', 'Editor']);
       expect(screen.getByRole('button', { name: 'Traces' }).getAttribute('aria-disabled')).toBe('true');
     });
 
@@ -158,11 +166,15 @@ describe('AgentLayout tool tabs', () => {
     it('renders the selected Editor after Chat and Traces', async () => {
       server.use(...commonHandlers(enabledPackages));
       renderLayout('/agents/agent-1/editor');
-      const editor = await screen.findByRole('tab', { name: 'Editor' });
-      expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Chat', 'Traces', 'Editor']);
-      expect(editor.getAttribute('aria-selected')).toBe('true');
+      const editor = await screen.findByRole('link', { name: 'Editor' });
+      expect(
+        within(screen.getByRole('navigation', { name: 'Agent views' }))
+          .getAllByRole('link')
+          .map(tab => tab.textContent),
+      ).toEqual(['Chat', 'Traces', 'Editor']);
+      expect(editor.getAttribute('aria-current')).toBe('page');
       await waitFor(() =>
-        expect(screen.getByRole('tab', { name: 'Editor' }).getAttribute('aria-disabled')).not.toBe('true'),
+        expect(screen.getByRole('link', { name: 'Editor' }).getAttribute('aria-disabled')).not.toBe('true'),
       );
     });
 
@@ -170,42 +182,61 @@ describe('AgentLayout tool tabs', () => {
       server.use(...commonHandlers(enabledPackages));
       renderLayout();
 
-      await screen.findByRole('tab', { name: 'Editor' });
-      fireEvent.click(screen.getByRole('tab', { name: 'Editor' }));
-
-      expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/editor');
+      expect((await screen.findByRole('link', { name: 'Editor' })).getAttribute('href')).toBe('/agents/agent-1/editor');
     });
   });
 
-  describe('when the agent tabs render', () => {
-    it('does not expose Review as a top-level tab', async () => {
+  describe('when the user is in a conversation', () => {
+    it('opens Traces filtered to that conversation', async () => {
       server.use(...commonHandlers(enabledPackages));
-      renderLayout();
-      await screen.findByRole('tab', { name: 'Chat' });
-      expect(screen.queryByRole('tab', { name: 'Review' })).toBeNull();
+      renderLayout('/agents/agent-1/threads/thread-1');
+
+      expect((await screen.findByRole('link', { name: 'Traces' })).getAttribute('href')).toBe(
+        '/agents/agent-1/traces?filterThreadId=thread-1',
+      );
     });
   });
-  it('renders the tool tabs without a Channels tab (channels moved to settings)', async () => {
-    const onPlatforms = vi.fn();
-    server.use(
-      ...commonHandlers(),
-      http.get(`${BASE_URL}/api/channels/platforms`, () => {
-        onPlatforms();
-        return HttpResponse.json([]);
-      }),
-    );
 
-    renderLayout();
+  describe('when the user is in a new conversation', () => {
+    it('opens Traces for the whole agent', async () => {
+      server.use(...commonHandlers(enabledPackages));
+      renderLayout('/agents/agent-1/threads/new');
 
-    expect(await screen.findByRole('button', { name: 'Traces' })).not.toBeNull();
-    expect(screen.getByRole('tab', { name: 'Chat' })).not.toBeNull();
-    // Overview is now a side panel toggled from the header, not a tab.
-    expect(screen.queryByRole('tab', { name: 'Overview' })).toBeNull();
-    expect(screen.getByTestId('agent-overview-panel-toggle')).not.toBeNull();
+      expect((await screen.findByRole('link', { name: 'Traces' })).getAttribute('href')).toBe('/agents/agent-1/traces');
+    });
+  });
 
-    // Channels is configuration, not a tool: no tab and no platforms fetch from the tab bar.
-    await waitFor(() => expect(screen.queryByText('Channels')).toBeNull());
-    expect(onPlatforms).not.toHaveBeenCalled();
+  describe('when Traces is filtered to a conversation', () => {
+    it('returns to that conversation from Chat', async () => {
+      server.use(...commonHandlers(enabledPackages));
+      renderLayout('/agents/agent-1/traces?filterThreadId=thread-1');
+
+      expect((await screen.findByRole('link', { name: 'Chat' })).getAttribute('href')).toBe(
+        '/agents/agent-1/threads/thread-1',
+      );
+    });
+  });
+
+  describe('when Traces excludes a conversation', () => {
+    it('opens a new conversation from Chat', async () => {
+      server.use(...commonHandlers(enabledPackages));
+      renderLayout('/agents/agent-1/traces?filterThreadId=thread-1&filterThreadId.op=isNot');
+
+      expect((await screen.findByRole('link', { name: 'Chat' })).getAttribute('href')).toBe(
+        '/agents/agent-1/threads/new',
+      );
+    });
+  });
+
+  describe('when Traces has no conversation filter', () => {
+    it('opens a new conversation from Chat', async () => {
+      server.use(...commonHandlers(enabledPackages));
+      renderLayout('/agents/agent-1/traces');
+
+      expect((await screen.findByRole('link', { name: 'Chat' })).getAttribute('href')).toBe(
+        '/agents/agent-1/threads/new',
+      );
+    });
   });
 
   it('highlights the Chat tab on the thread routes', async () => {
@@ -213,18 +244,8 @@ describe('AgentLayout tool tabs', () => {
 
     renderLayout('/agents/agent-1/threads/new');
 
-    const chatTab = await screen.findByRole('tab', { name: 'Chat' });
-    expect(chatTab.getAttribute('aria-selected')).toBe('true');
+    const chatTab = await screen.findByRole('link', { name: 'Chat' });
+    expect(chatTab.getAttribute('aria-current')).toBe('page');
     expect(screen.getByRole('button', { name: 'Traces' }).getAttribute('aria-disabled')).toBe('true');
-  });
-
-  it('keeps run options out of the Editor tab bar because the editor chat composer owns them', async () => {
-    server.use(...commonHandlers(enabledPackages));
-
-    renderLayout('/agents/agent-1/editor');
-
-    expect(await screen.findByRole('tab', { name: 'Editor' })).not.toBeNull();
-    expect(screen.queryByTestId('agent-top-bar-run-options-trigger')).toBeNull();
-    expect(screen.queryByTestId('agent-tracing-controls-trigger')).toBeNull();
   });
 });

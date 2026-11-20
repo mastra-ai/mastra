@@ -1,10 +1,11 @@
 import { getSignalRecordNodeId, getSignalRecordNodeLabel, getSignalRecordNodeValue } from './sankey-signals-data';
-import { getSignalHue } from './signal-colors';
+import { getSignalColor } from './signal-colors';
 import { SortableSignalHeaders } from './sortable-signal-headers';
 import type { ThemeFlowResponse, TraceSignalName } from './types';
 import { Card, CardContent } from '@/ds/components/Card';
 import { Sankey, SankeyChart } from '@/ds/components/SankeyChart';
 import type { SankeyChartColumn, SankeyChartNodeSelection, SankeyChartRecord } from '@/ds/components/SankeyChart';
+import { Txt } from '@/ds/components/Txt';
 
 export function FlowCard({
   columns,
@@ -50,25 +51,27 @@ export function FlowCard({
       elevation="raised"
       title={drillInDisabledReason}
     >
-      <span
+      <Txt
+        as="span"
+        variant="meta"
+        tone="muted"
+
         aria-hidden="true"
-        className="absolute top-0 left-5 -translate-y-1/2 bg-background px-2 font-mono text-meta tracking-[0.18em] text-muted-foreground"
+        className="absolute top-0 left-5 -translate-y-1/2 bg-background px-2"
       >
         SIGNALS
-      </span>
+      </Txt>
       <CardContent className="px-0 pt-4 pb-2 sm:pt-5 sm:pb-3">
         <SortableSignalHeaders
           signalNames={headerSignalNames}
           reorderDisabled={reorderDisabled}
           onOrderChange={handleHeaderOrderChange}
         />
-        <div
-          aria-label="Themes"
-          className="flex items-center gap-2 py-1 font-mono text-meta tracking-[0.18em] text-muted-foreground"
-          role="separator"
-        >
+        <div aria-label="Themes" role="separator" className="flex items-center gap-2 py-1">
           <span aria-hidden="true" className="h-px w-5 bg-border" />
-          THEMES
+          <Txt tone="muted" as="span" variant="meta" className="block">
+            THEMES
+          </Txt>
           <span aria-hidden="true" className="h-px flex-1 bg-border" />
         </div>
         <div aria-busy={reorderDisabled} data-testid="sankey-order-transition">
@@ -76,7 +79,7 @@ export function FlowCard({
             data={records}
             columns={chartColumns}
             columnOrder={chartColumns.map(column => column.id)}
-            getColumnHue={column => getSignalHue(column.id)}
+            getColumnColor={column => getSignalColor(column.id)}
             getRecordNodeId={getSignalRecordNodeId}
             getRecordNodeLabel={getSignalRecordNodeLabel}
             getRecordNodeValue={getSignalRecordNodeValue}

@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
+import { resolveDiscordBotToken } from './_bot-token.js';
 
 export const createThreadFromMessageInputSchema = z.object({
   channel_id: z.string().describe('The ID of the channel containing the message. Example: "123456789012345678"'),
@@ -75,8 +76,7 @@ export function createThreadFromMessageTool(proxy: PlatformProxy) {
     outputSchema: createThreadFromMessageOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof createThreadFromMessageOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const metadata = await platformProxy.getMetadata<{ botToken?: string }>();
-      const botToken = metadata?.botToken || '';
+      const botToken = await resolveDiscordBotToken(platformProxy);
 
       const requestData: Record<string, unknown> = {
         name: input.name,

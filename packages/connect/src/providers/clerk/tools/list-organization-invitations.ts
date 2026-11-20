@@ -1,13 +1,18 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ 8b75595da34c — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ 23df553a789b — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
 export const listOrganizationInvitationsInputSchema = z.object({
-  cursor: z.string().optional().describe('Pagination cursor returned by a previous request. Omit for the first page.'),
+  cursor: z
+    .string()
+    .regex(/^\d+$/, 'Cursor must be a non-negative integer.')
+    .refine(value => Number.isSafeInteger(Number(value)), 'Cursor must be a non-negative integer.')
+    .optional()
+    .describe('Pagination cursor returned by a previous request. Omit for the first page.'),
   limit: z.number().int().min(1).max(500).optional(),
-  organization_id: z.string(),
+  organization_id: z.string().min(1),
   status: z.enum(['pending', 'accepted', 'revoked', 'expired']).optional(),
   email_address: z.string().optional(),
   order_by: z.string().optional(),
@@ -20,7 +25,7 @@ const ResourceSchema = z
     email_address: z.string(),
     organization_id: z.string().optional(),
     role: z.string().optional(),
-    status: z.enum(['pending', 'accepted', 'revoked', 'expired']).optional(),
+    status: z.enum(['pending', 'accepted', 'revoked', 'expired']).or(z.string()).optional(),
     created_at: z.number().optional(),
     updated_at: z.number().optional(),
   })
@@ -30,7 +35,12 @@ const ProviderResponseSchema = z.object({ data: z.array(ResourceSchema), total_c
 
 export const listOrganizationInvitationsOutputSchema = z.object({
   items: z.array(ResourceSchema),
-  next_cursor: z.string().optional(),
+  next_cursor: z
+    .string()
+    .regex(/^\d+$/, 'Cursor must be a non-negative integer.')
+    .refine(value => Number.isSafeInteger(Number(value)), 'Cursor must be a non-negative integer.')
+    .optional()
+    .describe('Pagination cursor returned by a previous request. Omit for the first page.'),
   total: z.number(),
 });
 
@@ -42,12 +52,7 @@ export function listOrganizationInvitationsTool(proxy: PlatformProxy) {
     outputSchema: listOrganizationInvitationsOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof listOrganizationInvitationsOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const offset = input.cursor === undefined ? 0 : Number.parseInt(input.cursor, 10);
-      if (!Number.isInteger(offset) || offset < 0)
-        throw new platformProxy.ActionError({
-          type: 'invalid_cursor',
-          message: 'Cursor must be a non-negative integer.',
-        });
+      const offset = input.cursor === undefined ? 0 : Number(input.cursor);
       const response = await platformProxy.get({
         // https://clerk.com/docs/reference/backend-api/tag/Organization-Invitations#operation/ListOrganizationInvitations
         endpoint: `/v1/organizations/${encodeURIComponent(input.organization_id)}/invitations`,

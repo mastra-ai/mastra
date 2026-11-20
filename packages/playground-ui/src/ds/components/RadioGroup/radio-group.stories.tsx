@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ReactNode } from 'react';
-import { Label } from '../Label';
+import { FieldContent, FieldDescription, FieldItem, FieldLabel, Fieldset } from '../Field';
 import { RadioGroup, RadioGroupItem } from './radio-group';
 
 const SURFACES: { token: string; label: string; className: string }[] = [
@@ -34,7 +34,7 @@ function RadioPreview({
 }) {
   return (
     <RadioGroup aria-label={label} defaultValue={checked ? id : undefined} disabled={disabled}>
-      <RadioGroupItem aria-label={label} value={id} id={id} className={className} />
+      <RadioGroupItem aria-label={label} value={id} className={className} />
     </RadioGroup>
   );
 }
@@ -83,34 +83,34 @@ type Story = StoryObj<typeof RadioGroup>;
 export const Default: Story = {
   render: args => (
     <RadioGroup defaultValue="option-1" {...args}>
-      <div className="flex items-center space-x-2">
-        <RadioGroupItem value="option-1" id="option-1" />
-        <Label htmlFor="option-1">Option 1</Label>
-      </div>
-      <div className="flex items-center space-x-2">
-        <RadioGroupItem value="option-2" id="option-2" />
-        <Label htmlFor="option-2">Option 2</Label>
-      </div>
-      <div className="flex items-center space-x-2">
-        <RadioGroupItem value="option-3" id="option-3" />
-        <Label htmlFor="option-3">Option 3</Label>
-      </div>
+      <FieldItem>
+        <RadioGroupItem value="option-1" />
+        <FieldLabel>Option 1</FieldLabel>
+      </FieldItem>
+      <FieldItem>
+        <RadioGroupItem value="option-2" />
+        <FieldLabel>Option 2</FieldLabel>
+      </FieldItem>
+      <FieldItem>
+        <RadioGroupItem value="option-3" />
+        <FieldLabel>Option 3</FieldLabel>
+      </FieldItem>
     </RadioGroup>
   ),
 };
 
 export const Disabled: Story = {
   render: () => (
-    <RadioGroup defaultValue="option-1" disabled>
-      <div className="flex items-center space-x-2">
-        <RadioGroupItem value="option-1" id="disabled-1" />
-        <Label htmlFor="disabled-1">Option 1</Label>
-      </div>
-      <div className="flex items-center space-x-2">
-        <RadioGroupItem value="option-2" id="disabled-2" />
-        <Label htmlFor="disabled-2">Option 2</Label>
-      </div>
-    </RadioGroup>
+    <Fieldset disabled render={<RadioGroup defaultValue="option-1" />}>
+      <FieldItem>
+        <RadioGroupItem value="option-1" />
+        <FieldLabel>Option 1</FieldLabel>
+      </FieldItem>
+      <FieldItem>
+        <RadioGroupItem value="option-2" />
+        <FieldLabel>Option 2</FieldLabel>
+      </FieldItem>
+    </Fieldset>
   ),
 };
 
@@ -143,18 +143,18 @@ export const OnSurfaces: Story = {
 export const Horizontal: Story = {
   render: () => (
     <RadioGroup defaultValue="small" className="flex flex-row gap-4">
-      <div className="flex items-center space-x-2">
-        <RadioGroupItem value="small" id="small" />
-        <Label htmlFor="small">Small</Label>
-      </div>
-      <div className="flex items-center space-x-2">
-        <RadioGroupItem value="medium" id="medium" />
-        <Label htmlFor="medium">Medium</Label>
-      </div>
-      <div className="flex items-center space-x-2">
-        <RadioGroupItem value="large" id="large" />
-        <Label htmlFor="large">Large</Label>
-      </div>
+      <FieldItem>
+        <RadioGroupItem value="small" />
+        <FieldLabel>Small</FieldLabel>
+      </FieldItem>
+      <FieldItem>
+        <RadioGroupItem value="medium" />
+        <FieldLabel>Medium</FieldLabel>
+      </FieldItem>
+      <FieldItem>
+        <RadioGroupItem value="large" />
+        <FieldLabel>Large</FieldLabel>
+      </FieldItem>
     </RadioGroup>
   ),
 };
@@ -162,27 +162,27 @@ export const Horizontal: Story = {
 export const WithDescriptions: Story = {
   render: () => (
     <RadioGroup defaultValue="startup">
-      <div className="flex items-start space-x-2">
-        <RadioGroupItem value="startup" id="startup" className="mt-1" />
-        <div className="grid gap-1">
-          <Label htmlFor="startup">Startup</Label>
-          <p className="text-caption text-muted-foreground">Best for small teams just getting started</p>
-        </div>
-      </div>
-      <div className="flex items-start space-x-2">
-        <RadioGroupItem value="business" id="business" className="mt-1" />
-        <div className="grid gap-1">
-          <Label htmlFor="business">Business</Label>
-          <p className="text-caption text-muted-foreground">For growing companies with advanced needs</p>
-        </div>
-      </div>
-      <div className="flex items-start space-x-2">
-        <RadioGroupItem value="enterprise" id="enterprise" className="mt-1" />
-        <div className="grid gap-1">
-          <Label htmlFor="enterprise">Enterprise</Label>
-          <p className="text-caption text-muted-foreground">For large organizations requiring customization</p>
-        </div>
-      </div>
+      <FieldItem className="items-start">
+        <RadioGroupItem value="startup" className="mt-1" />
+        <FieldContent className="gap-1">
+          <FieldLabel>Startup</FieldLabel>
+          <FieldDescription className="mt-0">Best for small teams just getting started</FieldDescription>
+        </FieldContent>
+      </FieldItem>
+      <FieldItem className="items-start">
+        <RadioGroupItem value="business" className="mt-1" />
+        <FieldContent className="gap-1">
+          <FieldLabel>Business</FieldLabel>
+          <FieldDescription className="mt-0">For growing companies with advanced needs</FieldDescription>
+        </FieldContent>
+      </FieldItem>
+      <FieldItem className="items-start">
+        <RadioGroupItem value="enterprise" className="mt-1" />
+        <FieldContent className="gap-1">
+          <FieldLabel>Enterprise</FieldLabel>
+          <FieldDescription className="mt-0">For large organizations requiring customization</FieldDescription>
+        </FieldContent>
+      </FieldItem>
     </RadioGroup>
   ),
 };

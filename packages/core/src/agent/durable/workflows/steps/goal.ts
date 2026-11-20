@@ -1,13 +1,15 @@
 import { z } from 'zod';
 import type { PubSub } from '../../../../events/pubsub';
 import { evaluateGoal } from '../../../../loop/shared/steps/goal-core';
-import { RequestContext } from '../../../../request-context';
 import type { ChunkType } from '../../../../stream/types';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
-import { globalRunRegistry } from '../../run-registry';
+import { getRunRegistryEntry, globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent } from '../../stream-adapter';
+import { restoreCustomContext, restoreRequestContext } from '../../utils/resolve-runtime';
 import { createRunMessageList } from '../../utils/run-message-list';
+import { loadAccumulatedSteps } from '../shared/accumulated-steps';
+import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
 
 /**
  * Create the durable goal step.
@@ -32,17 +34,20 @@ export function createDurableGoalStep() {
       const state = inputData as {
         runId: string;
         iterationCount: number;
-        messageListState: any;
+        /** Present only on runs that thread the transcript through step payloads. */
+        messageListState?: any;
         messageId: string;
-        accumulatedSteps: Array<{
+        /** Present only on runs that thread step records through step payloads. */
+        accumulatedSteps?: Array<{
           text?: string;
           toolCalls?: Array<{ toolName?: string; args?: unknown }>;
           toolResults?: Array<{ toolName?: string; result?: unknown }>;
         }>;
-        lastStepResult?: { isContinued?: boolean; reason?: string };
+        lastStepResult?: { isContinued?: boolean; reason?: string; signalPreempted?: boolean };
         options?: { maxSteps?: number };
         backgroundTaskPending?: boolean;
       };
+      if (state.lastStepResult?.signalPreempted) return state;
       const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
       const initData = getInitData() as {
         agentId?: string;
@@ -51,7 +56,7 @@ export function createDurableGoalStep() {
         requestContextEntries?: Record<string, unknown>;
       };
 
-      const registryEntry = globalRunRegistry.get(state.runId);
+      const registryEntry = getRunRegistryEntry(state.runId, mastra);
       // This is shared agent configuration (judge, scorer, tools, defaults), not per-goal state.
       // The objective and its progress are isolated by thread and loaded from storage in the core.
       let goalConfig = registryEntry?.goal;
@@ -59,27 +64,29 @@ export function createDurableGoalStep() {
         goalConfig = (mastra as any)?.getAgentById?.(initData.agentId)?.__getGoalConfig?.();
       }
 
-      // Reconstruct requestContext from serialized entries for resolvers.
-      const requestContext = new RequestContext();
-      if (initData.requestContextEntries) {
-        for (const [key, value] of Object.entries(initData.requestContextEntries)) {
-          requestContext.set(key, value);
-        }
-      }
+      // Rebuild requestContext from serialized entries for resolvers. The signed-in
+      // user comes from the live run context, never from the run's starting request.
+      const liveRequestContext = registryEntry?.requestContext ?? params.requestContext;
+      const requestContext = restoreRequestContext(initData.requestContextEntries, liveRequestContext);
+      const customContext = restoreCustomContext(initData.requestContextEntries, liveRequestContext);
 
-      // Rehydrate the message list lazily — only when the core actually judges
+      // No goal configured on the agent → nothing to judge.
+      if (!goalConfig) return state;
+
+      // Build the message list lazily — only when the core actually judges
       // this iteration does it read the transcript / append the feedback
       // signal. Memoized so the scorer context and signal injection share one
       // instance, which is then serialized back into state.
+      const messageListState = await readMessageListState(params, state);
       let messageList: ReturnType<ReturnType<typeof createRunMessageList>['deserialize']> | undefined;
       const list = () => {
         if (!messageList) {
-          messageList = createRunMessageList({ mastra }).deserialize(state.messageListState);
+          messageList = createRunMessageList({ mastra }).deserialize(messageListState);
         }
         return messageList;
       };
 
-      const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
+      const lastStep = (await loadAccumulatedSteps(params, state)).at(-1);
       const outcome = await evaluateGoal({
         goal: goalConfig,
         stepReason: state.lastStepResult?.reason,
@@ -93,7 +100,7 @@ export function createDurableGoalStep() {
         agentName: initData.agentName,
         threadId: initData.state?.threadId,
         resourceId: initData.state?.resourceId,
-        customContext: initData.requestContextEntries,
+        customContext,
         mastra,
         requestContext,
         messageList: list,
@@ -125,7 +132,7 @@ export function createDurableGoalStep() {
         // The transcript gained the feedback signal (and the response message
         // id may have rotated) — persist both back into serialized state.
         nextState.messageId = outcome.messageId;
-        nextState.messageListState = list().serialize();
+        Object.assign(nextState, await storeMessageListState(params, list().serialize()));
       }
       return nextState;
     },

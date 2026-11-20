@@ -84,6 +84,7 @@ export class AgentsPG extends AgentsStorage {
    */
   async createDefaultIndexes(): Promise<void> {
     if (this.#skipDefaultIndexes) {
+      // oxlint-disable-next-line no-useless-return -- Preserve the explicit skip-index guard and its property read.
       return;
     }
     // No default indexes for agents domain
@@ -114,6 +115,7 @@ export class AgentsPG extends AgentsStorage {
         'durable',
         'browser',
         'toolProviders',
+        'modelList',
       ],
     });
 
@@ -192,10 +194,10 @@ export class AgentsPG extends AgentsStorage {
 
       await this.#db.client.none(
         `INSERT INTO ${fullVersionsTableName}
-         (id, "agentId", "versionNumber", name, description, instructions, model, tools,
+         (id, "agentId", "versionNumber", name, description, instructions, model, "modelList", tools,
           "defaultOptions", workflows, agents, "integrationTools", "toolProviders", "inputProcessors",
           "outputProcessors", memory, scorers, "changedFields", "changeMessage", "createdAt")
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
          ON CONFLICT (id) DO NOTHING`,
         [
           versionId,
@@ -205,6 +207,7 @@ export class AgentsPG extends AgentsStorage {
           row.description ?? null,
           this.serializeInstructions(row.instructions ?? ''),
           row.model ? toPgJson(row.model) : '{}',
+          row.modelList ? toPgJson(row.modelList) : null,
           row.tools ? toPgJson(row.tools) : null,
           row.defaultOptions ? toPgJson(row.defaultOptions) : null,
           row.workflows ? toPgJson(row.workflows) : null,
@@ -406,6 +409,7 @@ export class AgentsPG extends AgentsStorage {
 
   async create(input: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
     const { agent } = input;
+    let draftInserted = false;
     try {
       const agentsTable = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
       const now = new Date();
@@ -436,6 +440,7 @@ export class AgentsPG extends AgentsStorage {
           nowIso,
         ],
       );
+      draftInserted = true;
 
       // 2. Extract config fields from the flat input
       const { id: _id, authorId: _authorId, visibility: _visibility, metadata: _metadata, ...snapshotConfig } = agent;
@@ -464,18 +469,21 @@ export class AgentsPG extends AgentsStorage {
         updatedAt: now,
       };
     } catch (error) {
-      if (error instanceof MastraError) throw error;
-      // Best-effort cleanup to prevent orphaned draft records
-      try {
-        const agentsTable = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
-        await this.#db.client.none(
-          `DELETE FROM ${agentsTable} WHERE id = $1 AND status = 'draft' AND "activeVersionId" IS NULL`,
-          [agent.id],
-        );
-      } catch {
-        // Ignore cleanup errors
+      // Best-effort cleanup, only for a draft this call inserted. If our INSERT failed
+      // (e.g. duplicate id), the row belongs to a concurrent creator and must be kept.
+      if (draftInserted) {
+        try {
+          const agentsTable = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
+          await this.#db.client.none(
+            `DELETE FROM ${agentsTable} WHERE id = $1 AND status = 'draft' AND "activeVersionId" IS NULL`,
+            [agent.id],
+          );
+        } catch {
+          // Ignore cleanup errors
+        }
       }
 
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'CREATE_AGENT', 'FAILED'),
@@ -779,22 +787,23 @@ export class AgentsPG extends AgentsStorage {
       const row = await this.#db.client.one(
         `INSERT INTO ${tableName} (
           id, "agentId", "versionNumber",
-          name, description, instructions, model, tools,
+          name, description, instructions, model, "modelList", tools,
           "defaultOptions", workflows, agents, "integrationTools", "toolProviders",
           "inputProcessors", "outputProcessors", memory, scorers,
           "mcpClients", "requestContextSchema", workspace, skills, "skillsFormat",
           durable, browser,
           "changedFields", "changeMessage",
           "createdAt", "createdAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28) RETURNING *`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29) RETURNING *`,
         [
           input.id,
           input.agentId,
           input.versionNumber,
           input.name,
           input.description ?? null,
-          this.serializeInstructions(input.instructions),
-          toPgJson(input.model),
+          this.serializeInstructions(input.instructions) ?? '',
+          toPgJson(input.model ?? {}),
+          input.modelList ? toPgJson(input.modelList) : null,
           input.tools ? toPgJson(input.tools) : null,
           input.defaultOptions ? toPgJson(input.defaultOptions) : null,
           input.workflows ? toPgJson(input.workflows) : null,
@@ -1100,6 +1109,7 @@ export class AgentsPG extends AgentsStorage {
       description: row.description as string | undefined,
       instructions: this.deserializeInstructions(row.instructions as string),
       model: parseJsonResilient(row.model, 'model'),
+      modelList: parseJsonResilient(row.modelList, 'modelList'),
       tools: parseJsonResilient(row.tools, 'tools'),
       defaultOptions: parseJsonResilient(row.defaultOptions, 'defaultOptions'),
       workflows: parseJsonResilient(row.workflows, 'workflows'),

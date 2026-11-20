@@ -1,0 +1,240 @@
+import { z } from 'zod';
+
+/**
+ * Conditions a board phase tests against a card, such as when it starts on its own or
+ * when its exit tool is approved without a person. The shape mirrors the editor's rule
+ * groups (`{field, operator, value}` leaves inside AND/OR groups), but Factory owns
+ * the types and evaluator; nothing is shared with `@mastra/editor` or `@mastra/server`.
+ */
+export const RULE_OPERATORS = [
+  'equals',
+  'not_equals',
+  'contains',
+  'not_contains',
+  'in',
+  'not_in',
+  'exists',
+  'not_exists',
+  'greater_than',
+  'less_than',
+  'greater_than_or_equal',
+  'less_than_or_equal',
+] as const;
+export type RuleOperator = (typeof RULE_OPERATORS)[number];
+
+export const MAX_RULE_GROUP_DEPTH = 3;
+const MAX_CONDITIONS_PER_GROUP = 20;
+const MAX_STRING_VALUE_LENGTH = 500;
+
+/** Facts a phase condition can test about a card (see `cardRuleFacts`). */
+export const CARD_RULE_FIELDS = [
+  'item.labels',
+  'item.title',
+  'item.author',
+  'item.key',
+  'item.state',
+  'item.assignees',
+  'item.trusted',
+  'pullRequest.trusted',
+  'source.kind',
+  'source.integration',
+  'source.provider',
+  'source.repository',
+  'item.pullRequest',
+  'item.hasPullRequest',
+  'item.hasIssue',
+] as const;
+
+/**
+ * Fields renamed since conditions were first saved, by their old name. A stored condition naming
+ * one reads, and is tested, as the new field: `author.trusted` became `item.trusted`.
+ */
+const RENAMED_FIELDS: Readonly<Record<string, string>> = { 'author.trusted': 'item.trusted' };
+
+const currentField = (field: string) => RENAMED_FIELDS[field] ?? field;
+
+/** A stored group as it reads today: conditions saved under a renamed field name the new one. */
+export function currentRuleGroup<T extends RuleGroup | null | undefined>(group: T): T {
+  if (!group) return group;
+  return {
+    ...group,
+    conditions: group.conditions.map(member =>
+      'conditions' in member ? currentRuleGroup(member) : { ...member, field: currentField(member.field) },
+    ),
+  } as T;
+}
+
+export type RuleValue = string | number | boolean | Array<string | number | boolean>;
+
+export interface RuleCondition {
+  field: string;
+  operator: RuleOperator;
+  value?: RuleValue;
+}
+
+export interface RuleGroup {
+  operator: 'AND' | 'OR';
+  conditions: Array<RuleCondition | RuleGroup>;
+}
+
+export type RuleFacts = Readonly<Record<string, unknown>>;
+
+const scalarSchema = z.union([z.string().max(MAX_STRING_VALUE_LENGTH), z.number().finite(), z.boolean()]);
+const valueSchema = z.union([scalarSchema, z.array(scalarSchema).max(100)]);
+
+const VALUELESS: ReadonlySet<RuleOperator> = new Set(['exists', 'not_exists']);
+const LIST_VALUE: ReadonlySet<RuleOperator> = new Set(['in', 'not_in']);
+const ORDERED: ReadonlySet<RuleOperator> = new Set([
+  'greater_than',
+  'less_than',
+  'greater_than_or_equal',
+  'less_than_or_equal',
+]);
+
+function conditionSchema(fields: readonly [string, ...string[]]) {
+  return z
+    .object({
+      field: z.preprocess(field => (typeof field === 'string' ? currentField(field) : field), z.enum(fields)),
+      operator: z.enum(RULE_OPERATORS),
+      value: valueSchema.optional(),
+    })
+    .strict()
+    .superRefine((condition, ctx) => {
+      if (VALUELESS.has(condition.operator)) {
+        if (condition.value !== undefined) {
+          ctx.addIssue({ code: 'custom', path: ['value'], message: `'${condition.operator}' takes no value.` });
+        }
+        return;
+      }
+      if (condition.value === undefined) {
+        ctx.addIssue({ code: 'custom', path: ['value'], message: `'${condition.operator}' needs a value.` });
+        return;
+      }
+      if (LIST_VALUE.has(condition.operator) !== Array.isArray(condition.value)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['value'],
+          message: LIST_VALUE.has(condition.operator)
+            ? `'${condition.operator}' needs a list value.`
+            : `'${condition.operator}' needs a single value.`,
+        });
+      }
+      if (ORDERED.has(condition.operator) && typeof condition.value !== 'number') {
+        ctx.addIssue({ code: 'custom', path: ['value'], message: `'${condition.operator}' needs a number.` });
+      }
+    });
+}
+
+/** Zod schema for a rule group whose leaves may only name `fields`. Depth is capped at {@link MAX_RULE_GROUP_DEPTH}. */
+export function ruleGroupSchema(fields: readonly [string, ...string[]]): z.ZodType<RuleGroup> {
+  const leaf = conditionSchema(fields);
+  const groupAt = (depth: number): z.ZodType<RuleGroup> => {
+    const member: z.ZodType<RuleCondition | RuleGroup> =
+      depth < MAX_RULE_GROUP_DEPTH ? z.union([leaf, z.lazy(() => groupAt(depth + 1))]) : leaf;
+    return z
+      .object({
+        operator: z.enum(['AND', 'OR']),
+        conditions: z.array(member).min(1).max(MAX_CONDITIONS_PER_GROUP),
+      })
+      .strict() as z.ZodType<RuleGroup>;
+  };
+  return groupAt(1);
+}
+
+export const cardRuleGroupSchema = ruleGroupSchema(CARD_RULE_FIELDS);
+
+function isGroup(member: RuleCondition | RuleGroup): member is RuleGroup {
+  return 'conditions' in member;
+}
+
+const normalize = (value: unknown) => (typeof value === 'string' ? value.trim().toLowerCase() : value);
+const same = (left: unknown, right: unknown) => normalize(left) === normalize(right);
+
+function contains(actual: unknown, expected: unknown): boolean {
+  if (Array.isArray(actual)) return actual.some(entry => same(entry, expected));
+  if (typeof actual === 'string' && typeof expected === 'string') {
+    return actual.toLowerCase().includes(expected.toLowerCase());
+  }
+  return false;
+}
+
+function compare(actual: unknown, expected: unknown, test: (left: number, right: number) => boolean): boolean {
+  return typeof actual === 'number' && typeof expected === 'number' && test(actual, expected);
+}
+
+/** Whether `actual` is `expected`; a list fact (labels, assignees) is when one of its members is. */
+const matches = (actual: unknown, expected: unknown) =>
+  Array.isArray(actual) ? actual.some(entry => same(entry, expected)) : same(actual, expected);
+
+/**
+ * Evaluate one condition. Strings compare case-insensitively (labels and
+ * repository slugs are case-insensitive on every provider Factory reads). A
+ * list fact is tested by its members, and an empty list counts as missing. A
+ * missing fact fails every operator except `not_exists`, `not_equals`,
+ * `not_contains` and `not_in`.
+ */
+function evaluateCondition(condition: RuleCondition, facts: RuleFacts): boolean {
+  const actual = facts[currentField(condition.field)];
+  const present = actual !== undefined && actual !== null && !(Array.isArray(actual) && actual.length === 0);
+  const expected = condition.value;
+  switch (condition.operator) {
+    case 'exists':
+      return present;
+    case 'not_exists':
+      return !present;
+    case 'equals':
+      return present && matches(actual, expected);
+    case 'not_equals':
+      return !present || !matches(actual, expected);
+    case 'contains':
+      return present && contains(actual, expected);
+    case 'not_contains':
+      return !present || !contains(actual, expected);
+    case 'in':
+      return present && Array.isArray(expected) && expected.some(candidate => matches(actual, candidate));
+    case 'not_in':
+      return !present || !Array.isArray(expected) || !expected.some(candidate => matches(actual, candidate));
+    case 'greater_than':
+      return compare(actual, expected, (left, right) => left > right);
+    case 'less_than':
+      return compare(actual, expected, (left, right) => left < right);
+    case 'greater_than_or_equal':
+      return compare(actual, expected, (left, right) => left >= right);
+    case 'less_than_or_equal':
+      return compare(actual, expected, (left, right) => left <= right);
+  }
+}
+
+/** A condition a rule group failed on, with the fact it read (`null` when the item has none). */
+export interface FailedRuleCondition extends RuleCondition {
+  actual: unknown;
+}
+
+export interface RuleGroupExplanation {
+  matched: boolean;
+  /** The conditions that made the group fail: every failing one of an AND, every branch of an OR. Empty on a match. */
+  failed: FailedRuleCondition[];
+}
+
+/**
+ * Whether `facts` satisfy `group`, and the conditions it failed on when they don't.
+ * {@link evaluateRuleGroup} is this without the reasons, so anything that explains a rule
+ * decides exactly as the rule does.
+ */
+export function explainRuleGroup(group: RuleGroup | null | undefined, facts: RuleFacts): RuleGroupExplanation {
+  if (!group) return { matched: true, failed: [] };
+  const results = group.conditions.map(member =>
+    isGroup(member)
+      ? explainRuleGroup(member, facts)
+      : evaluateCondition(member, facts)
+        ? { matched: true, failed: [] }
+        : { matched: false, failed: [{ ...member, actual: facts[currentField(member.field)] ?? null }] },
+  );
+  const matched = group.operator === 'AND' ? results.every(r => r.matched) : results.some(r => r.matched);
+  return { matched, failed: matched ? [] : results.flatMap(r => r.failed) };
+}
+
+/** True when `facts` satisfy `group`. A `null`/absent group matches everything (an unconditional phase). */
+export function evaluateRuleGroup(group: RuleGroup | null | undefined, facts: RuleFacts): boolean {
+  return explainRuleGroup(group, facts).matched;
+}

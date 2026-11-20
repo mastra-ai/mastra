@@ -3,7 +3,7 @@ import type { BackgroundTaskManager } from '../../../background-tasks';
 import type { AgentBackgroundConfig } from '../../../background-tasks/types';
 import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
-import type { ToolCallConcurrency } from '../../../loop/types';
+import type { AgentLoopResumeClaim, ToolCallConcurrency } from '../../../loop/types';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfigInternal } from '../../../memory/types';
 import { resolveObservabilityContext } from '../../../observability';
@@ -13,7 +13,8 @@ import type { RequireToolApproval, ToolPayloadTransformPolicy } from '../../../t
 import { createStep } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
 import type { SaveQueueManager } from '../../save-queue';
-import type { CreatedAgentSignal } from '../../signals';
+import type { PendingSignalListener, CreatedAgentSignal } from '../../signals';
+import type { AgentStreamPublisher } from '../../streams/publisher';
 import type { AgentMethodType } from '../../types';
 import type { PrepareStreamRunScope } from './run-scope';
 import { LOOP_OPTIONS_KEY } from './run-scope-keys';
@@ -26,12 +27,17 @@ interface StreamStepOptions<OUTPUT = undefined> {
   requireToolApproval?: RequireToolApproval;
   toolCallConcurrency?: ToolCallConcurrency;
   eagerToolExecution?: boolean;
+  streamPublisher?: AgentStreamPublisher;
   resumeContext?: {
     resumeData: any;
     snapshot: any;
+    claim?: AgentLoopResumeClaim;
   };
+  /** The resume snapshot with its transcript hydrated from memory; set when resuming. */
+  getResumeSnapshot?: () => Promise<any>;
   agentId: string;
   agentVersionId?: string;
+  resolvedScopes?: string[];
   agentName?: string;
   toolCallId?: string;
   methodType: AgentMethodType;
@@ -51,6 +57,7 @@ interface StreamStepOptions<OUTPUT = undefined> {
    */
   skipBgTaskWait?: boolean;
   drainPendingSignals?: (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
+  subscribePendingSignals?: (runId: string, listener: PendingSignalListener) => () => void;
   runScope: PrepareStreamRunScope<OUTPUT>;
 }
 
@@ -61,9 +68,12 @@ export function createStreamStep<OUTPUT = undefined>({
   requireToolApproval,
   toolCallConcurrency,
   eagerToolExecution,
+  streamPublisher,
   resumeContext,
+  getResumeSnapshot,
   agentId,
   agentVersionId,
+  resolvedScopes,
   agentName,
   toolCallId,
   methodType,
@@ -78,13 +88,14 @@ export function createStreamStep<OUTPUT = undefined>({
   toolPayloadTransform,
   skipBgTaskWait,
   drainPendingSignals,
+  subscribePendingSignals,
   runScope,
 }: StreamStepOptions<OUTPUT>) {
   return createStep({
     id: 'stream-text-step',
     inputSchema: z.any(),
     outputSchema: z.instanceof(MastraModelOutput<OUTPUT>),
-    execute: async ({ ...observabilityContext }) => {
+    execute: async ({ tracing, tracingContext, loggerVNext, metrics }) => {
       // `loopOptions` carries class instances (MessageList, Tools) and closures
       // (onStepFinish, onFinish, ...) — none of which survive the evented engine's
       // JSON round-trip in step inputs. map-results-step parked it on runScope.
@@ -104,15 +115,18 @@ export function createStreamStep<OUTPUT = undefined>({
 
       const modelMethodType: ModelMethodType = getModelMethodFromAgentMethod(methodType);
 
+      const resumeSnapshot = resumeContext && (await getResumeSnapshot?.());
+
       const streamResult = capabilities.llm.stream({
         ...loopOptions,
         outputProcessors: processors,
         returnScorerData,
-        ...resolveObservabilityContext(observabilityContext),
+        ...resolveObservabilityContext({ tracing, tracingContext, loggerVNext, metrics }),
         requireToolApproval,
         toolCallConcurrency,
         eagerToolExecution,
-        resumeContext,
+        streamPublisher,
+        resumeContext: resumeContext && { ...resumeContext, snapshot: resumeSnapshot },
         _internal: {
           generateId: capabilities.generateMessageId,
           saveQueueManager,
@@ -120,16 +134,19 @@ export function createStreamStep<OUTPUT = undefined>({
           threadId: loopOptions.threadId,
           resourceId,
           memory,
+          fixedMemory: capabilities.agent.__hasFixedMemory(),
           backgroundTaskManager,
           agentBackgroundConfig,
           backgroundTaskManagerConfig: backgroundTaskManager?.config,
           toolPayloadTransform,
           skipBgTaskWait,
           drainPendingSignals,
+          subscribePendingSignals,
           initialSignalEchoes: loopOptions.initialSignalEchoes,
         },
         agentId,
         agentVersionId,
+        resolvedScopes,
         agentName,
         toolCallId,
         methodType: modelMethodType,

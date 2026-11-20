@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
+import { resolveDiscordBotToken } from './_bot-token.js';
 
 export const getGuildInputSchema = z.object({
   guildId: z.string().describe('Guild ID (snowflake). Example: "197038439483310086"'),
@@ -20,15 +21,7 @@ export function getGuildTool(proxy: PlatformProxy) {
     outputSchema: getGuildOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof getGuildOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const metadata = await platformProxy.getMetadata<{ botToken?: string }>();
-      const botToken = metadata?.botToken;
-
-      if (!botToken) {
-        throw new platformProxy.ActionError({
-          type: 'invalid_metadata',
-          message: 'botToken is required in metadata. Please configure the bot token from Discord Developer Portal.',
-        });
-      }
+      const botToken = await resolveDiscordBotToken(platformProxy);
 
       // https://discord.com/developers/docs/resources/guild#get-guild
       const response = await platformProxy.get({

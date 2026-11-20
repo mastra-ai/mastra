@@ -141,6 +141,43 @@ const template = new DockerTemplate({ secrets: { GITHUB_TOKEN: token } })
 `dispose()` removes the image; Docker refuses while a container still references
 it, so destroy the template's sandboxes first.
 
+#### Build progress
+
+Pass `onProgress` to `build()` (or `onTemplateBuildProgress` to `DockerSandbox`)
+to follow a long preparation while it runs:
+
+```typescript
+const result = await template.build({
+  onProgress: event => {
+    if (event.type === 'step-start') console.log(`> ${event.step.name}${event.step.cached ? ' (cached)' : ''}`);
+    if (event.type === 'output') process.stdout.write(redact(event.text));
+  },
+  maxOutputBytes: 32 * 1024, // default 64 KiB
+});
+if (result.status === 'failed') {
+  console.error(result.error, result.failedStep?.name, result.output, result.outputTruncated);
+}
+```
+
+Events are `reused` (the image already exists, nothing is built),
+`build-start` (with `builder: 'legacy' | 'buildkit'`), `step-start`,
+`step-complete` (with `cached` when the builder reports a cache hit), `output`,
+and `build-complete`. Plain builds use the legacy builder, which reports
+`Step N/M` steps; builds with secrets use BuildKit, which reports build
+vertices. The callback contract:
+
+- Delivery is synchronous, in arrival order, with no backpressure — keep the
+  callback fast and hand heavy work off elsewhere.
+- Errors thrown by the callback are ignored and never fail the build.
+- Concurrent callers sharing a build each receive its events from the moment
+  they join (no replay). A caller that aborts stops receiving events; the build
+  continues for the remaining callers.
+- Only the most recent `maxOutputBytes` of output are retained, and only to
+  populate `output` on failed results; `outputTruncated` reports whether older
+  output was dropped.
+- `output` text is raw command output. Commands run with `runWithSecrets` can
+  echo secret values into it, so redact before logging or persisting.
+
 #### Repository templates
 
 `createDockerRepoTemplate` prepares a repository checkout plus setup commands,
@@ -168,6 +205,8 @@ const sandbox = new DockerSandbox({
   }),
 });
 ```
+
+If `baseImage` runs as a non-root `USER`, set `owner` to that user (for example `owner: 'node'` or `owner: '1000:1000'`). The checkout is then copied with `COPY --chown`, so git and setup commands can write to it. Without `owner`, the checkout is owned by root.
 
 ## Documentation
 

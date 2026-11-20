@@ -171,6 +171,20 @@ describe('tool call concurrency resolution', () => {
       ).toBe(1);
     });
 
+    it('serializes a called suspend tool emitted by its id rather than its registry key', () => {
+      expect(
+        resolveToolCallConcurrency({
+          tools: {
+            safe: safeTool,
+            renamedSuspend: { ...suspendTool, id: 'suspend-by-id' },
+          },
+          configuredConcurrency: 4,
+          strategy: 'called',
+          calledToolNames: ['safe', 'suspend-by-id'],
+        }),
+      ).toBe(1);
+    });
+
     it('serializes a batch that actually called an approval tool', () => {
       expect(
         resolveToolCallConcurrency({
@@ -184,6 +198,19 @@ describe('tool call concurrency resolution', () => {
           calledToolNames: ['approval'],
         }),
       ).toBe(1);
+    });
+
+    it('serializes a called tool whose needsApprovalFn has not been evaluated', () => {
+      const fnPolicyTool = { needsApprovalFn: vi.fn(async () => false) };
+      expect(
+        resolveToolCallConcurrency({
+          tools: { safe: safeTool, fnPolicy: fnPolicyTool },
+          configuredConcurrency: 4,
+          strategy: 'called',
+          calledToolNames: ['safe', 'fnPolicy'],
+        }),
+      ).toBe(1);
+      expect(fnPolicyTool.needsApprovalFn).not.toHaveBeenCalled();
     });
 
     it('still forces sequential when run-wide requireToolApproval is set', () => {

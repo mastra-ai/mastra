@@ -2,7 +2,6 @@
 title: "MongoDB | Database"
 description: "Store Mastra application data and vectors in MongoDB, configure connections and collections, initialize schemas, and add persistent agent memory."
 packages:
-  - "@mastra/core"
   - "@mastra/memory"
   - "@mastra/mongodb"
 ---
@@ -151,7 +150,7 @@ await store4.init() // Call init explicitly
 
 ## Additional notes
 
-### Collection Management
+### Collection management
 
 The storage implementation handles collection creation and management automatically. It creates the following collections:
 
@@ -208,7 +207,7 @@ const thread = await memoryStore?.getThreadById({ threadId: '...' })
 If `init()` isn't called, collections won't be created and storage operations will fail silently or throw errors.
 :::
 
-### Connection Management
+### Connection management
 
 The `close()` method closes the MongoDB client connection. Call this when shutting down your application:
 
@@ -229,7 +228,7 @@ await storage.close()
 
 ## Vector search capabilities
 
-MongoDB storage includes built-in vector search capabilities for AI applications. For detailed vector operations including index creation, upserting embeddings, similarity search, and metadata filtering, see the [MongoDB vector reference](/reference/vectors/mongodb).
+MongoDB storage includes built-in vector search capabilities for AI applications. For detailed vector operations including index creation, upserting embeddings, similarity search, and metadata filtering, see the [MongoDB vector reference](/integrations/vectors/mongodb).
 
 ## Usage example
 

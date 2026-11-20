@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useJSONSchemaFormField } from './json-schema-form-field-context';
 import { Checkbox } from '@/ds/components/Checkbox';
-import { cn } from '@/lib/utils';
+import { Field, FieldLabel } from '@/ds/components/Field';
 
 type CheckboxProps = React.ComponentPropsWithoutRef<typeof Checkbox>;
 
@@ -26,9 +26,13 @@ export function FieldNullable({
   );
 
   return (
-    <label className={cn('flex cursor-pointer items-center gap-2 text-caption text-muted-foreground', labelClassName)}>
+    <Field orientation="horizontal">
       <Checkbox {...props} className={className} checked={field.nullable} onCheckedChange={handleCheckedChange} />
-      {label}
-    </label>
+      {label ? (
+        <FieldLabel size="smaller" className={labelClassName}>
+          {label}
+        </FieldLabel>
+      ) : null}
+    </Field>
   );
 }

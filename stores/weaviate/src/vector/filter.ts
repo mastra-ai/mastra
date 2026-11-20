@@ -83,6 +83,17 @@ export class WeaviateFilterTranslator extends BaseFilterTranslator<WeaviateVecto
     return this.translateNode(filter as Record<string, any>, api);
   }
 
+  /**
+   * An empty set matches nothing. Weaviate can't send `containsAny([])` against a text[]
+   * property (the empty array is serialized as numbers), so express it as a contradiction
+   * on the property's null state, which the collection indexes (`indexNullState: true`).
+   */
+  private containsAny(prop: WeaviateFilterProperty, values: any[]): FilterValue {
+    const normalized = this.normalizeArrayValues(values);
+    if (normalized.length === 0) return Filters.and(prop.isNull(true), prop.isNull(false));
+    return prop.containsAny(normalized);
+  }
+
   private combine(parts: Array<FilterValue | undefined>): FilterValue | undefined {
     const filtered = parts.filter((p): p is FilterValue => p !== undefined);
     if (filtered.length === 0) return undefined;
@@ -181,7 +192,7 @@ export class WeaviateFilterTranslator extends BaseFilterTranslator<WeaviateVecto
         return this.combine(this.normalizeArrayValues(value as any[]).map(v => prop.notEqual(v)));
       case '$nin':
         // NOT(nin [..]) = in [..].
-        return prop.containsAny(this.normalizeArrayValues(value as any[]));
+        return this.containsAny(prop, value as any[]);
       case '$exists':
         return prop.isNull(!!value);
       case '$not':
@@ -212,7 +223,7 @@ export class WeaviateFilterTranslator extends BaseFilterTranslator<WeaviateVecto
     }
 
     if (Array.isArray(value)) {
-      return prop.containsAny(this.normalizeArrayValues(value));
+      return this.containsAny(prop, value);
     }
 
     // Operator object: combine each operator condition with AND.
@@ -238,7 +249,7 @@ export class WeaviateFilterTranslator extends BaseFilterTranslator<WeaviateVecto
       case '$lte':
         return prop.lessOrEqual(this.normalizeComparisonValue(value));
       case '$in':
-        return prop.containsAny(this.normalizeArrayValues(value as any[]));
+        return this.containsAny(prop, value as any[]);
       case '$nin':
         // Weaviate's ContainsNone is not available on all server versions; express
         // "not in" as an AND of not-equals instead.

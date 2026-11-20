@@ -1,11 +1,11 @@
-import type { MastraClient } from '@mastra/client-js';
 import type { EntityType } from '@mastra/core/observability';
+import type { LightSpanRecord, TraceSpansData } from '@mastra/react/hooks/traces';
 import type { ReactNode } from 'react';
 
-type GetTraceLightResponse = Awaited<ReturnType<MastraClient['getTraceLight']>>;
-type GetSpanResponse = Awaited<ReturnType<MastraClient['getSpan']>>;
-export type LightSpanRecord = GetTraceLightResponse['spans'][number];
-export type SpanRecord = GetSpanResponse['span'];
+export type { LightSpanRecord, SpanRecord } from '@mastra/react/hooks/traces';
+
+/** A span of a whole trace with its payload, as `getTrace` returns it (the light record plus input, output, attributes…). */
+export type TraceSpanRecord = TraceSpansData['spans'][number];
 
 /**
  * A light span carrying a precomputed haystack of everything it holds.
@@ -37,6 +37,8 @@ export type UISpan = {
    * timeline paints such a row differently since the term is nowhere on it.
    */
   matchedInPayloadOnly?: boolean;
+  /** What started an agent run when a signal (a skill, a reminder…) did, e.g. `Skill factory-triage`. */
+  signalLabel?: string;
 };
 
 export type UISpanStyle = {
@@ -55,8 +57,13 @@ export type EntityOptions =
 
 export type TraceDatePreset = 'all' | 'last-24h' | 'last-3d' | 'last-7d' | 'last-14d' | 'last-30d' | 'custom';
 
+/** Tabs of SpanDataPanelView, in display order. */
+export const SPAN_TABS = ['details', 'input', 'output', 'feedback'] as const;
+
 /** Tab identifier for SpanDataPanelView. */
-export type SpanTab = 'details' | 'feedback';
+export type SpanTab = (typeof SPAN_TABS)[number];
+
+export const isSpanTab = (value: unknown): value is SpanTab => SPAN_TABS.includes(value as SpanTab);
 
 /** Canonical list of context field IDs used for trace filtering and value extraction */
 export const CONTEXT_FIELD_IDS = [

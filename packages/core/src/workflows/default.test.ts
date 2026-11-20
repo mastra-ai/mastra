@@ -6,6 +6,7 @@ import type { PubSub } from '../events';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { createObservabilityContext, SpanType } from '../observability';
 import { MASTRA_AUTH_TOKEN_KEY } from '../request-context';
+import { WORKFLOW_CANCELLED_SYMBOL } from './constants';
 import { createWorkflow } from './create';
 import { DefaultExecutionEngine } from './default';
 import type { Step } from './step';
@@ -454,7 +455,7 @@ describe('DefaultExecutionEngine.executeEntry resume payload handling', () => {
     abortController = new AbortController();
   });
 
-  it('should use the suspended step payload when resuming a step with stale previous output', async () => {
+  it.each([[], undefined])('uses the suspended step payload with resumePath=%j', async resumePath => {
     const workflowId = 'resume-payload-repro';
     const runId = globalThis.crypto.randomUUID();
     const resumedStep = {
@@ -500,7 +501,7 @@ describe('DefaultExecutionEngine.executeEntry resume payload handling', () => {
         steps: ['needs-approval'],
         stepResults,
         resumePayload: { approved: true },
-        resumePath: [],
+        resumePath: resumePath as number[],
       },
       executionContext: {
         workflowId,
@@ -1340,6 +1341,30 @@ describe('DefaultExecutionEngine.fmtReturnValue stepExecutionPath and payload de
     pubsub = new EventEmitterPubSub();
   });
 
+  it('preserves an already-classified nested tripwire result', async () => {
+    // Nested workflow results include tripwire even though leaf StepResult does not.
+    const lastOutput = {
+      status: 'tripwire',
+      tripwire: { reason: 'Guardrail fired', processorId: 'policy' },
+    } as unknown as StepResult<any, any, any, any>;
+    const result = await engine.fmtReturnValuePublic(pubsub, { step: lastOutput }, lastOutput);
+    expect(result).toMatchObject({
+      status: 'tripwire',
+      tripwire: { reason: 'Guardrail fired', processorId: 'policy' },
+    });
+  });
+
+  it.each(['suspended', 'canceled'] as const)('retains %s when step data also carries a tripwire', async status => {
+    const lastOutput = {
+      status,
+      tripwire: { reason: 'Earlier guardrail', processorId: 'policy' },
+      suspendPayload: { question: 'Which order?' },
+    } as unknown as StepResult<any, any, any, any>;
+    const result = await engine.fmtReturnValuePublic(pubsub, { step: lastOutput }, lastOutput);
+    expect(result.status).toBe(status);
+    if (status === 'suspended') expect(result.suspendPayload).toEqual({ step: { question: 'Which order?' } });
+  });
+
   it('should include stepExecutionPath in the result', async () => {
     const stepResults: Record<string, StepResult<any, any, any, any>> = {
       input: { value: 1 } as any,
@@ -1660,7 +1685,7 @@ describe('DefaultExecutionEngine.execute cancellation onFinish contract', () => 
       outputSchema: z.any(),
       execute: async ({ inputData }: any) => {
         // Trigger cancel during step 1 so step 2 is skipped and engine loop catches cancellation
-        abortController.abort();
+        abortController.abort(WORKFLOW_CANCELLED_SYMBOL);
         // Return a payload matching input to test deduplication
         return {
           ...inputData,
@@ -2296,6 +2321,34 @@ describe('DefaultExecutionEngine control-flow span identity', () => {
       entryId: 'process-items',
       entryMetadata: { batch: true },
     });
+  });
+
+  it.each(['sleep', 'sleepUntil'] as const)('preserves the exact error from a dynamic %s function', async kind => {
+    const error = new Error('Dynamic wait failed', { cause: new Error('Original cause') });
+    const before = Object.getOwnPropertyDescriptors(error);
+    const params = {
+      workflowId: 'dynamic-wait-error',
+      runId: 'dynamic-wait-run',
+      serializedStepGraph: [],
+      entry: {
+        type: kind,
+        id: 'dynamic',
+        fn: async () => {
+          throw error;
+        },
+      },
+      prevStep: { type: 'step', step: passthroughStep },
+      prevOutput: null,
+      stepResults: {},
+      executionContext: baseExecutionContext('dynamic-wait-error', 'dynamic-wait-run'),
+      pubsub,
+      abortController,
+      requestContext,
+      ...createObservabilityContext(),
+    };
+    const invoke = kind === 'sleep' ? engine.executeSleep.bind(engine) : engine.executeSleepUntil.bind(engine);
+    await expect(invoke(params as any)).rejects.toBe(error);
+    expect(Object.getOwnPropertyDescriptors(error)).toEqual(before);
   });
 
   it('attaches entry identity to the sleep span while keeping the duration name', async () => {

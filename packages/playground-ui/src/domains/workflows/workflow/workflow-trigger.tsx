@@ -1,9 +1,7 @@
 import type { WorkflowRunStatus } from '@mastra/core/workflows';
-import { Loader2 } from 'lucide-react';
 import { useState, useEffect, useContext, useRef } from 'react';
+import type { ReactNode } from 'react';
 import { z } from 'zod/v4';
-import { WorkflowRequestContextDialog } from '../components/workflow-request-context-dialog';
-import { WorkflowRunOptionsDialog } from '../components/workflow-run-options-dialog';
 import type { WorkflowRunContextType } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { getRunResourceId, isWorkflowRunFinished } from '../utils';
@@ -20,6 +18,7 @@ import { InitialWorkflowHeader } from './workflow-trigger-header';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Txt } from '@/ds/components/Txt';
+import { IconLoadingCircle } from '@/ds/icons/central/IconLoadingCircle';
 import { Icon } from '@/ds/icons/Icon';
 import { useLocalStorageState } from '@/hooks/use-local-storage-state';
 import { toast } from '@/utils/toast';
@@ -40,9 +39,14 @@ export type WorkflowTriggerProps = Pick<
   paramsRunStatus?: WorkflowRunStatus;
   observeWorkflowStream?: (params: { workflowId: string; runId: string }) => void;
   requestContext: Record<string, any>;
-  onRequestContextChange: (values: Record<string, any>) => void;
+  runActionsSlot?: (ctx: WorkflowRunActionsContext) => ReactNode;
   canExecute: boolean;
 };
+
+export interface WorkflowRunActionsContext {
+  resourceId: string;
+  setResourceId: (resourceId: string) => void;
+}
 
 export function WorkflowTrigger({
   workflowId,
@@ -57,7 +61,7 @@ export function WorkflowTrigger({
   isCancellingWorkflowRun,
   cancelWorkflowRun,
   requestContext,
-  onRequestContextChange,
+  runActionsSlot,
   canExecute: canExecuteWorkflow,
 }: WorkflowTriggerProps) {
   const {
@@ -151,7 +155,7 @@ export function WorkflowTrigger({
 
   if (isLoading) {
     return (
-      <ScrollArea className="h-[calc(100vh-126px)] px-4 pt-2 pb-4 text-caption">
+      <ScrollArea className="h-[calc(100vh-126px)] px-4 pt-2 pb-4">
         <div className="space-y-4">
           <Skeleton className="h-10" />
           <Skeleton className="h-10" />
@@ -194,7 +198,7 @@ export function WorkflowTrigger({
         {isSuspendedSteps && isStreamingWorkflow && (
           <div className="-mt-5 flex items-center gap-2 border-b border-border bg-card px-5 py-2">
             <Icon>
-              <Loader2 className="animate-spin text-foreground" />
+              <IconLoadingCircle className="animate-spin text-foreground" />
             </Icon>
             <Txt>Resuming workflow</Txt>
           </div>
@@ -216,18 +220,7 @@ export function WorkflowTrigger({
             headingSlot={headingSlot}
             leftActions={!paramsRunId ? <WorkflowDebugModeSwitch /> : undefined}
             submitButtonLabel={isStarting ? 'Starting…' : 'Run'}
-            submitActions={
-              <>
-                {workflow?.requestContextSchema && (
-                  <WorkflowRequestContextDialog
-                    requestContextSchema={workflow.requestContextSchema}
-                    requestContext={requestContext}
-                    onRequestContextChange={onRequestContextChange}
-                  />
-                )}
-                <WorkflowRunOptionsDialog resourceId={resourceId} onResourceIdChange={setResourceId} />
-              </>
-            }
+            submitActions={runActionsSlot?.({ resourceId, setResourceId })}
           />
         )}
 

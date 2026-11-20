@@ -41,6 +41,7 @@ export function createIsTaskCompleteStep<Tools extends ToolSet = ToolSet, OUTPUT
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
     execute: async ({ inputData }) => {
+      if (inputData.stepResult?.signalPreempted) return inputData;
       // Increment iteration count
       currentIteration++;
 

@@ -101,7 +101,10 @@ export const listWorkflowsResponseSchema = z.record(z.string(), workflowInfoSche
 const workflowRunSchema = z.object({
   workflowName: z.string(),
   runId: z.string(),
-  snapshot: typedPermissive<WorkflowRunState | string>(z.union([z.record(z.string(), z.unknown()), z.string()])),
+  // `Pick<...>` is the reduced snapshot returned when listing runs with `summary=true`.
+  snapshot: typedPermissive<WorkflowRunState | Pick<WorkflowRunState, 'status' | 'timestamp'> | string>(
+    z.union([z.record(z.string(), z.unknown()), z.string()]),
+  ),
   createdAt: z.date(),
   updatedAt: z.date(),
   resourceId: z.string().optional(),
@@ -126,6 +129,10 @@ export const listWorkflowRunsQuerySchema = createCombinedPaginationSchema().exte
   toDate: z.coerce.date().optional(),
   resourceId: z.string().optional(),
   status: workflowRunStatusSchema.optional(),
+  summary: z
+    .preprocess(value => (value === 'true' ? true : value === 'false' ? false : value), z.boolean())
+    .optional()
+    .describe('When true, each run snapshot is reduced to { status, timestamp }. Defaults to false.'),
 });
 
 export const workflowRunCountsEntrySchema = z.object({

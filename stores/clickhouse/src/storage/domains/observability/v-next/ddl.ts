@@ -170,6 +170,18 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SPAN_EVENTS} (
   isEvent            Bool DEFAULT false,
   startedAt          DateTime64(3, 'UTC'),
   endedAt            DateTime64(3, 'UTC'),
+  timeToFirstChunkMs Nullable(Float64),
+
+  -- Native span fields, stored as supplied (NULL when the producer set none)
+  externalParentSpanId Nullable(String),
+  resumedFromSpanId  Nullable(String),
+  model              LowCardinality(Nullable(String)),
+  provider           LowCardinality(Nullable(String)),
+  outcome            LowCardinality(Nullable(String)),
+  stopReason         LowCardinality(Nullable(String)),
+  stopReasonContext  Nullable(String),
+  timeToFirstTokenMs Nullable(Float64),
+  errorCount         Nullable(UInt32),
 
   -- Query-relevant flexible fields
   tags               Array(LowCardinality(String)) DEFAULT [],
@@ -183,7 +195,14 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SPAN_EVENTS} (
   output             Nullable(String),
   error              Nullable(String),
   metadataRaw        Nullable(String),
-  requestContext     Nullable(String)
+  requestContext     Nullable(String),
+
+  -- Previews of \`input\` / \`output\` / \`error\` in core's \`buildPreview\` format, written
+  -- on every span ('' when there is nothing to preview). NULL on rows written before
+  -- the columns existed; readers build those from the payload columns.
+  inputPreview       Nullable(String),
+  outputPreview      Nullable(String),
+  errorPreview       Nullable(String)
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(endedAt)
@@ -241,6 +260,18 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS} (
   isEvent            Bool DEFAULT false,
   startedAt          DateTime64(3, 'UTC'),
   endedAt            DateTime64(3, 'UTC'),
+  timeToFirstChunkMs Nullable(Float64),
+
+  -- Native span fields, stored as supplied (NULL when the producer set none)
+  externalParentSpanId Nullable(String),
+  resumedFromSpanId  Nullable(String),
+  model              LowCardinality(Nullable(String)),
+  provider           LowCardinality(Nullable(String)),
+  outcome            LowCardinality(Nullable(String)),
+  stopReason         LowCardinality(Nullable(String)),
+  stopReasonContext  Nullable(String),
+  timeToFirstTokenMs Nullable(Float64),
+  errorCount         Nullable(UInt32),
 
   -- Query-relevant flexible fields
   tags               Array(LowCardinality(String)) DEFAULT [],
@@ -254,7 +285,18 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS} (
   output             Nullable(String),
   error              Nullable(String),
   metadataRaw        Nullable(String),
-  requestContext     Nullable(String)
+  requestContext     Nullable(String),
+
+  -- Previews of \`input\` / \`output\` / \`error\` ('' when there is nothing to preview).
+  -- NULL on rows written before the columns existed.
+  inputPreview       Nullable(String),
+  outputPreview      Nullable(String),
+  errorPreview       Nullable(String),
+
+  -- traceId is second in the sort key, behind startedAt, so point lookups by
+  -- traceId (getRootSpan, trace deletes, trace-query root dedupe) need a skip
+  -- index to avoid scanning every granule.
+  INDEX idx_traceId traceId TYPE bloom_filter(0.01) GRANULARITY 1
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(endedAt)
@@ -333,6 +375,18 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_BRANCHES} (
   isEvent            Bool DEFAULT false,
   startedAt          DateTime64(3, 'UTC'),
   endedAt            DateTime64(3, 'UTC'),
+  timeToFirstChunkMs Nullable(Float64),
+
+  -- Native span fields, stored as supplied (NULL when the producer set none)
+  externalParentSpanId Nullable(String),
+  resumedFromSpanId  Nullable(String),
+  model              LowCardinality(Nullable(String)),
+  provider           LowCardinality(Nullable(String)),
+  outcome            LowCardinality(Nullable(String)),
+  stopReason         LowCardinality(Nullable(String)),
+  stopReasonContext  Nullable(String),
+  timeToFirstTokenMs Nullable(Float64),
+  errorCount         Nullable(UInt32),
 
   -- Query-relevant flexible fields
   tags               Array(LowCardinality(String)) DEFAULT [],
@@ -346,7 +400,12 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_BRANCHES} (
   output             Nullable(String),
   error              Nullable(String),
   metadataRaw        Nullable(String),
-  requestContext     Nullable(String)
+  requestContext     Nullable(String),
+  inputPreview       Nullable(String),
+  outputPreview      Nullable(String),
+  errorPreview       Nullable(String),
+
+  INDEX idx_traceId traceId TYPE bloom_filter(0.01) GRANULARITY 1
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(endedAt)
@@ -616,7 +675,19 @@ CREATE TABLE IF NOT EXISTS ${TABLE_LOG_EVENTS} (
   -- Information-only JSON payloads
   data               Nullable(String),
   metadata           Nullable(String),
-  scope              Nullable(String)
+  scope              Nullable(String),
+
+  -- Same ID drilldown indexes as metric_events: these columns are outside
+  -- the sort key, so without them every drilldown scans the time range.
+  INDEX idx_traceId traceId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_threadId threadId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_resourceId resourceId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_userId userId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_organizationId organizationId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_experimentId experimentId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_runId runId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_sessionId sessionId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_requestId requestId TYPE bloom_filter(0.01) GRANULARITY 2
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
@@ -757,7 +828,8 @@ SETTINGS allow_nullable_key = 1
 
 export const SCORE_EVENTS_CURRENT_DDL = `
 CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS_CURRENT} (
-${SCORE_EVENT_COLUMNS_DDL}
+${SCORE_EVENT_COLUMNS_DDL},
+  INDEX idx_traceId traceId TYPE bloom_filter(0.01) GRANULARITY 1
 )
 ENGINE = ReplacingMergeTree(writeVersion)
 PARTITION BY cityHash64(scoreId) % 64
@@ -910,7 +982,11 @@ CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS} (
 
   -- Information-only JSON payloads
   metadata           Nullable(String),
-  scope              Nullable(String)
+  scope              Nullable(String),
+
+  -- feedbackId is last in the sort key; id lookups (write versions, review
+  -- updates, deletes, trace-query dedupe) need a skip index.
+  INDEX idx_feedbackId feedbackId TYPE bloom_filter(0.01) GRANULARITY 1
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
@@ -1206,6 +1282,26 @@ export type MigrationEntry =
   | { kind: 'column'; table: string; name: string; sql: string }
   | { kind: 'index'; table: string; name: string; sql: string };
 
+/**
+ * Span columns added after the first span tables shipped, with their types.
+ * Present on span events, trace roots and trace branches.
+ */
+export const ADDED_SPAN_COLUMNS = [
+  ['inputPreview', 'Nullable(String)'],
+  ['outputPreview', 'Nullable(String)'],
+  ['errorPreview', 'Nullable(String)'],
+  ['timeToFirstChunkMs', 'Nullable(Float64)'],
+  ['externalParentSpanId', 'Nullable(String)'],
+  ['resumedFromSpanId', 'Nullable(String)'],
+  ['model', 'LowCardinality(Nullable(String))'],
+  ['provider', 'LowCardinality(Nullable(String))'],
+  ['outcome', 'LowCardinality(Nullable(String))'],
+  ['stopReason', 'LowCardinality(Nullable(String))'],
+  ['stopReasonContext', 'Nullable(String)'],
+  ['timeToFirstTokenMs', 'Nullable(Float64)'],
+  ['errorCount', 'Nullable(UInt32)'],
+] as const;
+
 const addColumn = (table: string, name: string, type: string): MigrationEntry => ({
   kind: 'column',
   table,
@@ -1220,7 +1316,33 @@ const addBloomIndex = (table: string, name: string, column: string, granularity 
   sql: `ALTER TABLE ${table} ADD INDEX IF NOT EXISTS ${name} ${column} TYPE bloom_filter(0.01) GRANULARITY ${granularity}`,
 });
 
+const LOG_SKIP_INDEX_COLUMNS = [
+  'traceId',
+  'threadId',
+  'resourceId',
+  'userId',
+  'organizationId',
+  'experimentId',
+  'runId',
+  'sessionId',
+  'requestId',
+] as const;
+
 export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
+  // Added span columns. The trace_roots / trace_branches views copy span_events
+  // with SELECT *, so both targets get each column first and no write lands
+  // while the source has a column its targets lack.
+  ...ADDED_SPAN_COLUMNS.flatMap(([column, type]) => [
+    addColumn(TABLE_TRACE_ROOTS, column, type),
+    addColumn(TABLE_TRACE_BRANCHES, column, type),
+    addColumn(TABLE_SPAN_EVENTS, column, type),
+  ]),
+  // Trace branches, before span_events: its view copies span_events with SELECT *, so the target
+  // needs each column first. CREATE has always included these; listed so a table lacking them
+  // still gains them.
+  addColumn(TABLE_TRACE_BRANCHES, 'entityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_TRACE_BRANCHES, 'parentEntityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_TRACE_BRANCHES, 'rootEntityVersionId', 'Nullable(String)'),
   // Span events
   addColumn(TABLE_SPAN_EVENTS, 'entityVersionId', 'Nullable(String)'),
   addColumn(TABLE_SPAN_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
@@ -1244,12 +1366,17 @@ export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   addColumn(TABLE_SCORE_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
   addBloomIndex(TABLE_SCORE_EVENTS, 'idx_scoreId', 'scoreId', 1),
   addBloomIndex(TABLE_SCORE_EVENTS_DELTA, 'idx_scoreId', 'scoreId', 1),
+  addBloomIndex(TABLE_SCORE_EVENTS_CURRENT, 'idx_traceId', 'traceId', 1),
   // Feedback
   addColumn(TABLE_FEEDBACK_EVENTS, 'writeVersion', 'UInt64 DEFAULT 0'),
   addColumn(TABLE_FEEDBACK_EVENTS, 'entityVersionId', 'Nullable(String)'),
   addColumn(TABLE_FEEDBACK_EVENTS, 'reviewStatus', "LowCardinality(String) DEFAULT 'needs-review'"),
   addColumn(TABLE_FEEDBACK_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
   addColumn(TABLE_FEEDBACK_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
+  addBloomIndex(TABLE_FEEDBACK_EVENTS, 'idx_feedbackId', 'feedbackId', 1),
+  // Trace roots / branches: traceId sits behind startedAt in the sort key.
+  addBloomIndex(TABLE_TRACE_ROOTS, 'idx_traceId', 'traceId', 1),
+  addBloomIndex(TABLE_TRACE_BRANCHES, 'idx_traceId', 'traceId', 1),
   // Metric skip indexes — additive, instant DDL. Existing parts keep no index
   // until merged or `MATERIALIZE INDEX` is run; new parts are bloom-filtered
   // immediately. With normal retention turning over the table, the index
@@ -1263,6 +1390,8 @@ export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   addBloomIndex(TABLE_METRIC_EVENTS, 'idx_runId', 'runId'),
   addBloomIndex(TABLE_METRIC_EVENTS, 'idx_sessionId', 'sessionId'),
   addBloomIndex(TABLE_METRIC_EVENTS, 'idx_requestId', 'requestId'),
+  // Log skip indexes — same ID drilldown set as metrics.
+  ...LOG_SKIP_INDEX_COLUMNS.map(column => addBloomIndex(TABLE_LOG_EVENTS, `idx_${column}`, column)),
   // Deletion requests: `predicateValues` is outside the sort key, so guard
   // lookups via `has()` need a skip index to avoid a per-scope full scan.
   addBloomIndex(TABLE_DELETION_REQUESTS, 'idx_predicateValues', 'predicateValues'),

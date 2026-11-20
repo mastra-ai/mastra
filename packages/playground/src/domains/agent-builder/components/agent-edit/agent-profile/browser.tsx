@@ -1,7 +1,8 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { GlobeIcon } from 'lucide-react';
+import { IconGlobe } from '@mastra/playground-ui/icons/central/IconGlobe';
 import type { CSSProperties } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { useAgentColor } from '../../../contexts/agent-color-context';
@@ -30,8 +31,8 @@ export const Browser = ({ editable = true }: BrowserProps) => {
   return (
     <div className="flex h-full min-h-0 items-center justify-center px-4 py-5" data-testid="browser-detail-picker">
       <div className="flex w-full max-w-[28rem] flex-col items-center gap-5 text-center">
-        <div className="grid size-14 place-items-center rounded-full" style={iconStyle}>
-          <GlobeIcon className="h-7 w-7" />
+        <div className="grid size-14 place-items-center rounded-full [&>svg]:size-7" style={iconStyle}>
+          <IconGlobe />
         </div>
 
         <div className="flex flex-col gap-2">
@@ -44,22 +45,18 @@ export const Browser = ({ editable = true }: BrowserProps) => {
           </Txt>
         </div>
 
-        <div className="mt-1 flex items-center gap-3">
+        <Field orientation="horizontal" disabled={!editable} className="mt-1 gap-3">
           <Switch
-            id={TOGGLE_ID}
             checked={browserEnabled}
             onCheckedChange={handleCheckedChange}
-            disabled={!editable}
             data-testid={TOGGLE_ID}
             style={switchStyle}
           />
-          <label htmlFor={TOGGLE_ID} className="cursor-pointer text-column text-foreground">
-            Enable browser
-          </label>
-          <Badge variant={browserEnabled ? 'green' : 'neutral'} size="sm" indicator="dot">
+          <FieldLabel size="smaller">Enable browser</FieldLabel>
+          <Badge variant={browserEnabled ? 'success' : 'neutral'} size="sm" indicator="dot">
             {browserEnabled ? 'Enabled' : 'Disabled'}
           </Badge>
-        </div>
+        </Field>
       </div>
     </div>
   );

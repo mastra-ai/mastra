@@ -1,6 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { computeDelay, isTransientLLMError, RETRY_CONFIG, withRetry } from '../retry';
+import {
+  assertCompleteModelResponse,
+  computeDelay,
+  isTransientLLMError,
+  OmIncompleteResponseError,
+  OmModelCallTimeoutError,
+  RETRY_CONFIG,
+  withRetry,
+} from '../retry';
 
 describe('isTransientLLMError', () => {
   it('matches undici "terminated" error messages', () => {
@@ -228,5 +236,142 @@ describe('withRetry', () => {
     await expect(promise).rejects.toThrow(/aborted/);
     // Exactly one attempt happened before we aborted the backoff wait.
     expect(fn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('assertCompleteModelResponse', () => {
+  it.each(['other', 'unknown'])('throws a transient error for finishReason %s', finishReason => {
+    let thrown: unknown;
+    try {
+      assertCompleteModelResponse({ finishReason, text: 'partial' }, 'OM observer');
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(OmIncompleteResponseError);
+    expect(thrown).toMatchObject({ name: 'OmIncompleteResponseError', finishReason });
+    expect(isTransientLLMError(thrown)).toBe(true);
+  });
+
+  it.each(['stop', 'length'])('returns the output for finishReason %s', finishReason => {
+    const output = { finishReason, text: 'done' };
+    expect(assertCompleteModelResponse(output, 'OM observer')).toBe(output);
+  });
+});
+
+describe('withRetry idleTimeoutMs', () => {
+  const original = { ...RETRY_CONFIG };
+  beforeEach(() => {
+    vi.useFakeTimers();
+    RETRY_CONFIG.initialDelayMs = 1;
+    RETRY_CONFIG.maxDelayMs = 1;
+    RETRY_CONFIG.jitter = 0;
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    Object.assign(RETRY_CONFIG, original);
+  });
+
+  const hang = (signal: AbortSignal) =>
+    new Promise<never>((_, reject) => signal.addEventListener('abort', () => reject(signal.reason)));
+
+  /** Settle-state probe that doesn't depend on the promise resolving. */
+  const track = <T>(promise: Promise<T>) => {
+    const state: { status: 'pending' | 'resolved' | 'rejected'; value?: T; error?: unknown } = { status: 'pending' };
+    promise.then(
+      value => Object.assign(state, { status: 'resolved', value }),
+      error => Object.assign(state, { status: 'rejected', error }),
+    );
+    return state;
+  };
+
+  it('aborts a hung attempt and retries it', async () => {
+    const signals: AbortSignal[] = [];
+    const fn = vi.fn(async (signal: AbortSignal) => {
+      signals.push(signal);
+      if (signals.length === 1) return hang(signal);
+      return 'ok';
+    });
+    const state = track(withRetry(fn, { label: 'observer', idleTimeoutMs: 1_000 }));
+    await vi.advanceTimersByTimeAsync(1_010);
+    expect(state).toEqual({ status: 'resolved', value: 'ok' });
+    expect(fn).toHaveBeenCalledTimes(2);
+    expect(signals[0]!.aborted).toBe(true);
+    expect(signals[0]!.reason).toBeInstanceOf(OmModelCallTimeoutError);
+  });
+
+  it('never aborts an attempt that keeps reporting activity, however long it runs', async () => {
+    const signals: AbortSignal[] = [];
+    const fn = vi.fn(async (signal: AbortSignal, onActivity: () => void) => {
+      signals.push(signal);
+      // 50 chunks, 400ms apart: 20s total against a 1s idle limit.
+      for (let chunk = 0; chunk < 50; chunk++) {
+        await new Promise(resolve => setTimeout(resolve, 400));
+        onActivity();
+      }
+      return 'long reply';
+    });
+    const state = track(withRetry(fn, { label: 'reflector', idleTimeoutMs: 1_000 }));
+    await vi.advanceTimersByTimeAsync(20_100);
+    expect(state).toEqual({ status: 'resolved', value: 'long reply' });
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(signals[0]!.aborted).toBe(false);
+  });
+
+  it('aborts an attempt that goes silent after streaming for a while', async () => {
+    const fn = vi.fn(async (signal: AbortSignal, onActivity: () => void) => {
+      for (let chunk = 0; chunk < 5; chunk++) {
+        await new Promise(resolve => setTimeout(resolve, 400));
+        onActivity();
+      }
+      return hang(signal);
+    });
+    const state = track(withRetry(fn, { label: 'reflector', idleTimeoutMs: 1_000, maxRetries: 0 }));
+    // 5 chunks over 2s, then silence: the idle limit fires 1s after the last chunk.
+    await vi.advanceTimersByTimeAsync(2_990);
+    expect(state.status).toBe('pending');
+    await vi.advanceTimersByTimeAsync(20);
+    expect(state.status).toBe('rejected');
+    expect(state.error).toBeInstanceOf(OmModelCallTimeoutError);
+    expect((state.error as Error).message).toBe('reflector call produced no output for 1000ms');
+  });
+
+  it('bounds a call that ignores its signal', async () => {
+    const fn = vi.fn(() => new Promise<never>(() => {}));
+    const state = track(withRetry(fn, { label: 'observer', idleTimeoutMs: 1_000, maxRetries: 1 }));
+    await vi.advanceTimersByTimeAsync(2_100);
+    expect(state.status).toBe('rejected');
+    expect(state.error).toBeInstanceOf(OmModelCallTimeoutError);
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry when the caller aborts', async () => {
+    const controller = new AbortController();
+    const fn = vi.fn((signal: AbortSignal) => hang(signal));
+    const promise = withRetry(fn, { label: 'observer', idleTimeoutMs: 1_000, abortSignal: controller.signal });
+    controller.abort(new Error('cancelled'));
+    await expect(promise).rejects.toThrow('cancelled');
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects with the caller abort right away when the call ignores its signal', async () => {
+    const controller = new AbortController();
+    const fn = vi.fn(() => new Promise<never>(() => {}));
+    const state = track(withRetry(fn, { label: 'observer', idleTimeoutMs: 60_000, abortSignal: controller.signal }));
+    controller.abort(new Error('cancelled'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(state.status).toBe('rejected');
+    expect((state.error as Error).message).toBe('cancelled');
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('applies no timeout unless asked', async () => {
+    const fn = vi.fn(async () => {
+      await new Promise(resolve => setTimeout(resolve, 30_000));
+      return 'slow';
+    });
+    RETRY_CONFIG.modelCallIdleTimeoutMs = 1;
+    const state = track(withRetry(fn, { label: 'append' }));
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(state).toEqual({ status: 'resolved', value: 'slow' });
   });
 });

@@ -3,7 +3,7 @@ import type { Adapter, StreamChunk, Thread } from 'chat';
 import type { IMastraLogger } from '../logger/logger';
 import type { AgentChunkType } from '../stream/types';
 import { chatModule } from './chat-lazy';
-import { formatToolApproval } from './formatting';
+import { formatTaskTitle, formatToolApproval } from './formatting';
 import { asOmChunk, formatTokens, renderOmTaskUpdate } from './om';
 import type { PendingApprovalRecord } from './stream-helpers';
 import {
@@ -15,6 +15,12 @@ import {
   renderBuiltInToolEvent,
 } from './stream-helpers';
 import type { PostableMessage, ToolDisplayEvent, ToolDisplayFn, ToolDisplayResult } from './types';
+
+/**
+ * Header for the tool Plan widget. The rows carry the per-tool detail, so
+ * the header is a fixed label rather than an echo of the current row.
+ */
+const PLAN_TITLE = 'Working…';
 
 export interface StreamingDriverArgs {
   stream: AsyncIterable<AgentChunkType<any>>;
@@ -151,11 +157,15 @@ export async function runStreamingDriver({
     } | null;
   } = { current: null };
 
-  // Whether we have set a non-default plan title this session. The chat
-  // SDK falls back to "Thinking completed" when no `plan_update` ever fires
-  // — push a meaningful title with the first OM event so memory-only runs
-  // don't show the default.
+  // Whether we have set a plan title this session. The chat SDK falls back
+  // to "Thinking completed" when no `plan_update` ever fires, so the first
+  // tool or OM event pushes one.
   const planTitleRef: { current: boolean } = { current: false };
+
+  // Whether a tool row has been pushed this session. Kept apart from
+  // `planTitleRef` because an OM event can set a header first; the opener
+  // split and the `Working…` header both key off tool rows specifically.
+  const toolTasksRef: { current: boolean } = { current: false };
 
   const openSession = (): StreamingSession => {
     let buffer: (string | StreamChunk)[] = [];
@@ -255,6 +265,7 @@ export async function runStreamingDriver({
     pendingOmTasks.clear();
     aggregatedRecallRef.current = null;
     planTitleRef.current = false;
+    toolTasksRef.current = false;
     sessionRef.current = null;
     s.close();
     await s.done;
@@ -288,7 +299,30 @@ export async function runStreamingDriver({
   // to the approval card's stashed displayName + argsSummary.
   const lookupTaskTitle = (toolCallId: string, fallback: string): string => {
     const stash = getPendingApproval(toolCallId);
-    return stash ? `${stash.displayName} ${stash.argsSummary}` : fallback;
+    return stash ? formatTaskTitle(stash.displayName, stash.argsSummary, stash.args) : fallback;
+  };
+
+  // Push a tool row into the Plan widget. The first row of a session also
+  // sets the header: one fixed label, because mirroring each row's title
+  // into it made a single-tool run read the same line twice. Result-only
+  // sessions (a resumed approval whose `tool-call` we never saw) go through
+  // here too, so they get a header instead of the SDK's fallback.
+  //
+  // In grouped mode the first row also closes any text-only session first,
+  // so an "On it — checking X" opener posts as its own message instead of
+  // landing under the widget (Slack renders tasks above text in one post).
+  // Only until the first tool row: every later step keeps accumulating under
+  // the one widget. Memory rows alone don't count — an OM event before the
+  // first tool must not pin the opener either. Timeline splits per step at
+  // the `tool-call` site instead.
+  const pushToolTask = async (task: Extract<StreamChunk, { type: 'task_update' }>) => {
+    if (!toolTasksRef.current) {
+      if (toolDisplay === 'grouped' && sessionRef.current) await closeSession();
+      pushToSession({ type: 'plan_update', title: PLAN_TITLE });
+      planTitleRef.current = true;
+      toolTasksRef.current = true;
+    }
+    pushToSession(task);
   };
 
   /**
@@ -516,11 +550,10 @@ export async function runStreamingDriver({
         continue;
       }
 
-      // For Plan-widget modes, close any active text-only session before
-      // the first tool of a step in timeline mode so the preceding text
-      // posts as its own platform message. In grouped mode keep the
-      // session open so every task accumulates under one plan widget.
-      if (toolDisplay === 'timeline' && sessionRef.current && tracker.inFlightCount === 1) {
+      // Timeline: close any active text-only session before each step's
+      // first tool so the preceding text posts as its own platform message.
+      // (Grouped does the equivalent once, inside `pushToolTask`.)
+      if (sessionRef.current && toolDisplay === 'timeline' && tracker.inFlightCount === 1) {
         await closeSession();
       }
 
@@ -555,17 +588,10 @@ export async function runStreamingDriver({
       }
 
       // 'timeline' | 'grouped' — push task_update into Plan widget.
-      const taskTitle = `${enr.displayName} ${enr.argsSummary}`;
-      if (toolDisplay === 'grouped') {
-        // Mirror the task title (with inline args) into the plan title so
-        // Slack's AI Assistant Thinking Steps widget shows the current
-        // tool instead of the default "Thinking…"/"completed" label.
-        pushToSession({ type: 'plan_update', title: taskTitle });
-      }
-      pushToSession({
+      await pushToolTask({
         type: 'task_update',
         id: enr.toolCallId,
-        title: taskTitle,
+        title: formatTaskTitle(enr.displayName, enr.argsSummary, enr.args),
         status: 'in_progress',
       });
       continue;
@@ -631,10 +657,9 @@ export async function runStreamingDriver({
       }
 
       // 'timeline' | 'grouped' — push task_update into Plan widget.
-      const fallbackTitle = `${enr.displayName} ${enr.argsSummary}`;
+      const fallbackTitle = formatTaskTitle(enr.displayName, enr.argsSummary, enr.args);
       const taskTitle = lookupTaskTitle(enr.toolCallId, fallbackTitle);
-      pushToSession({ type: 'plan_update', title: taskTitle });
-      pushToSession({
+      await pushToolTask({
         type: 'task_update',
         id: enr.toolCallId,
         title: taskTitle,
@@ -703,12 +728,12 @@ export async function runStreamingDriver({
       }
 
       // 'timeline' | 'grouped' — push task_update into Plan widget.
-      const fallbackTitle = `${enr.displayName} ${enr.argsSummary}`;
+      const fallbackTitle = formatTaskTitle(enr.displayName, enr.argsSummary, enr.args);
       const taskTitle = lookupTaskTitle(enr.toolCallId, fallbackTitle);
       // Mark as `complete` rather than `error` so a single failing tool
       // doesn't flip the overall plan header to ⚠. The error text in
       // `details` is enough to convey the failure inline.
-      pushToSession({
+      await pushToolTask({
         type: 'task_update',
         id: enr.toolCallId,
         title: taskTitle,
@@ -724,7 +749,7 @@ export async function runStreamingDriver({
         toolName: chunk.payload.toolName,
         args: chunk.payload.args,
       });
-      const taskTitle = `${enr.displayName} ${enr.argsSummary}`;
+      const taskTitle = formatTaskTitle(enr.displayName, enr.argsSummary, enr.args);
       // Only park the plan row in modes where tool calls are already rendered
       // in the plan. Non-plan modes (`'cards'`/`'text'`/`'hidden'`) would
       // otherwise flash a one-row Plan widget that closes immediately after.

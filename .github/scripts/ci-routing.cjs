@@ -3,6 +3,7 @@ const { join } = require('node:path');
 
 const WORKSPACE_ROUTING_FILES = new Set([
   '.github/scripts/ci-routing.cjs',
+  '.github/scripts/select-affected-tests.cjs',
   '.github/workflows/prebuild.yml',
   '.github/workflows/test-workspaces.yml',
   '.github/workflows/secrets.test-workspaces.yml',
@@ -141,8 +142,12 @@ function validateWorkspacePackages(packages, workspacePackages) {
   );
 }
 
-function qualityAssuranceInputs(changedFiles, packageReadmePaths = []) {
-  if (!Array.isArray(changedFiles) || changedFiles.some(file => typeof file !== 'string')) {
+function qualityAssuranceInputs(changedFiles, packageReadmePaths = [], missingPackageDocs = []) {
+  if (
+    !Array.isArray(changedFiles) ||
+    changedFiles.some(file => typeof file !== 'string') ||
+    !Array.isArray(missingPackageDocs)
+  ) {
     return {
       hasAgentsInputs: true,
       hasPeerdepsInputs: true,
@@ -150,6 +155,7 @@ function qualityAssuranceInputs(changedFiles, packageReadmePaths = []) {
       readmeReasons: ['invalid-input'],
       agentsReasons: ['invalid-input'],
       peerdepsReasons: ['invalid-input'],
+      missingPackageDocs: [],
     };
   }
 
@@ -191,10 +197,11 @@ function qualityAssuranceInputs(changedFiles, packageReadmePaths = []) {
   return {
     hasAgentsInputs: agentsReasons.length > 0,
     hasPeerdepsInputs: peerdepsReasons.length > 0,
-    hasReadmeInputs: readmeReasons.length > 0,
+    hasReadmeInputs: readmeReasons.length > 0 || missingPackageDocs.length > 0,
     agentsReasons,
     peerdepsReasons,
     readmeReasons,
+    missingPackageDocs,
   };
 }
 

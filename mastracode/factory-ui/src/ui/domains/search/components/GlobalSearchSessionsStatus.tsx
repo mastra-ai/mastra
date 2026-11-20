@@ -1,12 +1,7 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { RefreshCw } from 'lucide-react';
-
-function repositoryFailureMessage(allFailed: boolean): string {
-  if (allFailed) return 'Sessions could not be loaded from any linked repository.';
-  return 'Some linked repositories could not be searched.';
-}
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 
 function LoadingSessionsRow() {
   return (
@@ -25,30 +20,28 @@ function LoadingSessionsRow() {
 
 export function GlobalSearchSessionsStatus({
   pending,
-  failedCount,
-  allFailed,
+  failed,
   onRetry,
 }: {
   pending: boolean;
-  failedCount: number;
-  allFailed: boolean;
+  failed: boolean;
   onRetry: () => void;
 }) {
-  if (!pending && failedCount === 0) return null;
+  if (!pending && !failed) return null;
 
   return (
     <div className="flex flex-col gap-2 px-3 py-2">
       {pending && <LoadingSessionsRow />}
-      {failedCount > 0 && (
+      {failed && (
         <Notice
-          variant={allFailed ? 'destructive' : 'warning'}
+          variant="destructive"
           action={
             <Notice.Button onClick={onRetry}>
-              Retry <RefreshCw />
+              Retry <IconArrowRotateClockwise />
             </Notice.Button>
           }
         >
-          {repositoryFailureMessage(allFailed)}
+          Sessions could not be loaded.
         </Notice>
       )}
     </div>

@@ -5,6 +5,7 @@
 
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
+import { getCredentialProviderId } from '@mastra/code-sdk/providers/model-ids';
 
 import { ApiKeyDialogComponent } from '../components/api-key-dialog.js';
 import { showModalOverlay } from '../overlay.js';
@@ -15,14 +16,6 @@ interface ProviderInfo {
   provider: string;
   envVar?: string;
   source: 'oauth' | 'env' | 'stored' | 'none';
-}
-
-/**
- * OAuth credentials are stored under the auth provider id, which differs from
- * the catalog provider id for OpenAI (stored as `openai-codex`).
- */
-function getAuthProviderId(provider: string): string {
-  return provider === 'openai' ? 'openai-codex' : provider;
 }
 
 /**
@@ -39,7 +32,9 @@ export function getProviderList(
     if (seen.has(model.provider)) continue;
 
     let source: ProviderInfo['source'] = 'none';
-    if (ctx.authStorage?.isLoggedIn(getAuthProviderId(model.provider))) {
+    // OAuth credentials are stored under the credential id, which differs from
+    // the catalog provider id for OpenAI (`openai-codex`) and Kimi (`kimi-for-coding`).
+    if (ctx.authStorage?.isLoggedIn(getCredentialProviderId(model.provider))) {
       source = 'oauth';
     } else if (ctx.authStorage?.hasStoredApiKey(model.provider)) {
       source = 'stored';
@@ -146,11 +141,7 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
         if (data === '\x7f' || data === '\x1b[3~') {
           const info = providers.find(p => p.provider === currentSelection);
           if (info?.source === 'stored' && ctx.authStorage) {
-            const storedKey = ctx.authStorage.getStoredApiKey(info.provider);
-            ctx.authStorage.remove(`apikey:${info.provider}`);
-            if (info.envVar && process.env[info.envVar] === storedKey) {
-              delete process.env[info.envVar];
-            }
+            ctx.authStorage.removeStoredApiKey(info.provider);
             ctx.state.controller.invalidateAvailableModelsCache();
             models = await ctx.state.controller.listAvailableModels();
             providers = getProviderList(ctx, models);

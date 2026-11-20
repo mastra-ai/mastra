@@ -1,5 +1,10 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto';
+import { createThreadDraftState } from '@mastra/playground-ui/domains/agents/chat/drafts/thread-draft-state';
+import {
+  readThreadDraft,
+  writeThreadDraft,
+} from '@mastra/playground-ui/domains/agents/chat/drafts/thread-draft-storage';
 import { MastraReactProvider, useMastraClient } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
@@ -8,10 +13,8 @@ import { deleteDB } from 'idb';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { useLogout } from '../use-auth-actions';
+import { useLogout } from '../use-logout';
 import { logoutResponse } from './fixtures/logout';
-import { createThreadDraftState } from '@/domains/conversation/context/thread-draft-state';
-import { readThreadDraft, writeThreadDraft } from '@/domains/conversation/context/thread-draft-storage';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -54,6 +57,31 @@ describe('Studio sign-out', () => {
       expect(observedDrafts).toEqual(['Private draft']);
       expect((await readThreadDraft(key)).text).toBe('');
       expect(response).toEqual(logoutResponse);
+    });
+  });
+
+  describe('when the shared composer has unsaved edits', () => {
+    it('does not recreate the private draft after sign-out or pagehide', async () => {
+      const { result } = mount();
+      const { baseUrl, apiPrefix } = result.current.client.options;
+      const key = JSON.stringify([baseUrl, apiPrefix, 'user', 'agent', 'new']);
+      const draft = createThreadDraftState(key);
+      const unsubscribe = draft.subscribe(() => {});
+      try {
+        await waitFor(() => expect(draft.getSnapshot().status.restoring).toBe(false));
+        draft.updateDraft(previous => ({ ...previous, text: 'Unsaved private edit' }));
+        server.use(http.post(`${BASE_URL}/api/auth/logout`, () => HttpResponse.json(logoutResponse)));
+        await act(async () => {
+          await result.current.logout.mutateAsync({ userId: 'user' });
+        });
+        window.dispatchEvent(new Event('pagehide'));
+        await new Promise(resolve => setTimeout(resolve, 350));
+        await readThreadDraft('__drain__');
+        expect(draft.getSnapshot().draft.text).toBe('');
+        expect((await readThreadDraft(key)).text).toBe('');
+      } finally {
+        unsubscribe();
+      }
     });
   });
 

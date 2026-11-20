@@ -12,9 +12,10 @@
  * never clipped, has to separate from arbitrary content beneath it, and so
  * carries the long falloff.
  *
- * Both tokens carry the rim as well as the elevation (the rim is `--border`
- * itself, plus a top inset highlight in dark), so neither draws a border of its
- * own: adding `border` on top doubles the edge.
+ * Both recipes carry a `--surface-rim` inset edge, a top highlight in dark,
+ * and elevation drops. Adding a CSS border on that same edge doubles it.
+ * Content dividers use `--border`; frame headers use `border-surface-rim`
+ * and stay inside the inset pixel reserved by MainCard.
  *
  * Radius is deliberately absent — it belongs to the family (`rounded-xl` for a
  * popup, `rounded-studio-frame` for the app frame).
@@ -26,12 +27,13 @@
  * site that genuinely wants another fill still overrides it, since its own
  * classes come after these.
  */
-const fieldsOnSurface =
-  '[--field:var(--field-on-surface)] [--field-disabled:var(--field-on-surface)] [--field-rim:var(--field-rim-on-surface)] [--field-rim-focus:var(--field-rim-focus-on-surface)]';
+/** The field colors a raised surface gives the inputs on it. A surface that drops the rim and shadow but keeps
+ * the card fill (a settings card) uses it alone, so its fields look the same as on a raised card. */
+export const fieldsOnSurface =
+  '[--field:var(--field-on-surface)] [--field-disabled:var(--field-on-surface)] [--field-rim:var(--field-rim-on-surface)]';
 const fieldsOnDialog =
-  '[--field:var(--field-on-surface)] [--field-disabled:var(--field-on-surface)] [--field-rim:var(--surface-rim)] [--field-rim-focus:var(--surface-rim-focus)]';
-const fieldsOnPage =
-  '[--field:var(--card)] [--field-disabled:var(--fill-subtle)] [--field-rim:var(--surface-rim)] [--field-rim-focus:var(--surface-rim-focus)]';
+  '[--field:var(--field-on-surface)] [--field-disabled:var(--field-on-surface)] [--field-rim:var(--surface-rim)]';
+const fieldsOnPage = '[--field:var(--card)] [--field-disabled:var(--fill-subtle)] [--field-rim:var(--surface-rim)]';
 
 export const raisedSurfaceStyle = 'bg-card hover:bg-card active:bg-card shadow-raised ' + fieldsOnSurface;
 
@@ -48,17 +50,22 @@ export const dialogSurfaceStyle = 'bg-dialog shadow-overlay ' + fieldsOnDialog;
 export const frameSurfaceStyle = 'bg-background shadow-raised ' + fieldsOnPage;
 
 /**
+ * The frame's fill without its elevation, for a frame that is raised only at
+ * some breakpoints: `MainCard` is flat page content below `lg`.
+ */
+export const frameFillStyle = 'bg-background ' + fieldsOnPage;
+
+/**
  * Interaction states for a surface that already carries an opaque fill. The
- * `state-layer` utility in `src/index.css` holds the reasoning and the measured
+ * `state-layer` utility in `components.css` holds the reasoning and the measured
  * numbers: the rung has to be layered, never swapped into `background-color`.
  */
 export const surfaceStateLayerStyle = 'state-layer';
 
 /**
  * Same layer, driven by an ancestor marked `group` rather than the surface
- * itself. A utility cannot read an ancestor's state, so this one stays composed
- * from variants — `isolate` and the negative z-index do the same job as the
- * utility's, and `inset-px` likewise keeps the inset rim visible.
+ * itself. A utility cannot read an ancestor's state, so this one is composed from
+ * variants that paint the same `background-image`.
  */
 export const surfaceGroupStateLayerStyle =
-  'relative isolate before:pointer-events-none before:absolute before:-z-1 before:inset-px before:rounded-[inherit] before:transition-colors before:duration-fast motion-reduce:before:transition-none group-hover:before:bg-fill-subtle group-focus-visible:before:bg-fill-subtle';
+  'group-hover:bg-[linear-gradient(var(--fill-subtle),var(--fill-subtle))] group-focus-visible:bg-[linear-gradient(var(--fill-subtle),var(--fill-subtle))]';

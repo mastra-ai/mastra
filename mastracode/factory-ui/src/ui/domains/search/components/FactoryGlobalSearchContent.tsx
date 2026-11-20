@@ -6,19 +6,16 @@ import {
   CommandPaletteResults,
 } from '@mastra/playground-ui/components/CommandPalette';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
-import { toast } from '@mastra/playground-ui/components/Toaster';
+import { searchTerms } from '@mastra/factory/work-items/search-terms';
 import { useState } from 'react';
 
+import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
-import { candidatePayload } from '../../factory/boardDrag';
-import { cardMoves } from '../../factory/cardPrimaryAction';
-import { useBoardItems } from '../../factory/hooks/useBoardItems';
-import { useBoardRuns } from '../../factory/hooks/useBoardRuns';
-import { useGlobalSearchIntake } from '../hooks/useGlobalSearchIntake';
+import { cardPath } from '../../workspaces/services/factoryPaths';
 import { useGlobalSearchNavigation } from '../hooks/useGlobalSearchNavigation';
 import { useGlobalSearchSessions } from '../hooks/useGlobalSearchSessions';
 import { useGlobalSearchWorkItems } from '../hooks/useGlobalSearchWorkItems';
-import { createSessionSearchGroups, createWorkItemSearchResults } from '../services/searchResults';
+import { createSessionSearchGroups, createWorkItemSearchResults, matchingResults } from '../services/searchResults';
 import {
   createGlobalSearchScopeCounts,
   isSessionScope,
@@ -38,41 +35,31 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const factories = useFactoriesQuery().data ?? [];
   const activeFactory = factories.find(factory => factory.id === factoryId);
   const repositoryIds = activeFactory?.repositories.map(repository => repository.projectRepositoryId) ?? [];
-  const sessions = useGlobalSearchSessions(repositoryIds);
   const searchableFactoryId = repositoryIds.length > 0 ? factoryId : undefined;
-  const workItems = useGlobalSearchWorkItems(searchableFactoryId);
-  // Both boards read `repositories[0]`, so that is the repository whose intake feeds are searchable.
-  const projectRepositoryId = activeFactory?.repositories[0]?.projectRepositoryId;
-  const intake = useGlobalSearchIntake(factoryId, projectRepositoryId, activeFactory?.repositories[0]?.provider);
-  // The palette closes on select, so a failed move has no card left to carry its reason.
-  const workBoard = useBoardItems({
-    factoryProjectId: searchableFactoryId,
-    kind: 'work',
-    onFailure: message => toast.error(message),
-  });
-  const reviewBoard = useBoardItems({
-    factoryProjectId: searchableFactoryId,
-    kind: 'review',
-    onFailure: message => toast.error(message),
-  });
-  const runs = useBoardRuns({ factoryProjectId: factoryId, refetchItems: workItems.refetch });
+  const sessions = useGlobalSearchSessions(searchableFactoryId);
+  const [query, setQuery] = useState('');
+  const workItems = useGlobalSearchWorkItems(searchableFactoryId, query);
+  const catalog = useBoardCatalog(searchableFactoryId);
   const { selectPath } = useGlobalSearchNavigation(closeSearch);
   const [activeScope, setActiveScope] = useState<GlobalSearchScope>('all');
 
   const sessionGroups = createSessionSearchGroups({
     factoryId,
     repositories: sessions.repositories,
-    workItems: workItems.items,
+    workItems: workItems.withSessions,
+    boards: catalog.data,
   });
   const unstartedItems = createWorkItemSearchResults({
     factoryId,
-    workItems: workItems.items,
-    candidates: intake.candidates,
+    workItems: workItems.unstarted,
+    boards: catalog.data,
   });
+  // The board's own search decides which session and card rows show; the rail keeps counting them all.
+  const terms = searchTerms(query);
   const counts = createGlobalSearchScopeCounts({
     work: sessionGroups.work.length,
     review: sessionGroups.review.length,
-    items: unstartedItems.length,
+    items: workItems.count,
     user: sessionGroups.user.length,
     factories: factories.length,
   });
@@ -83,72 +70,50 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
     <>
       <CommandPaletteInput
         autoFocus
-        placeholder="Search sessions, reviews, #issues, pages, and Factories…"
+        onValueChange={setQuery}
+        placeholder="Search sessions, reviews, #issues, pages, and Factories"
         rightSlot={<Kbd>Esc</Kbd>}
       />
 
       <CommandPaletteBody>
         <GlobalSearchRail activeScope={activeScope} counts={counts} onScopeChange={setActiveScope} />
         <CommandPaletteResults aria-label="Search results" footer={<CommandPaletteFooter label="Factory search" />}>
-          {!sessionsPending && !intake.pending && <CommandEmpty>No matching results.</CommandEmpty>}
+          {!sessionsPending && <CommandEmpty>No matching results.</CommandEmpty>}
           {scopeIncludes(activeScope, 'navigation') && (
             <GlobalSearchNavigationResults factoryId={factoryId} onSelect={selectPath} />
           )}
           {scopeIncludes(activeScope, 'work') && (
-            <GlobalSearchSessionResults title="Work Sessions" results={sessionGroups.work} onSelect={selectPath} />
+            <GlobalSearchSessionResults
+              title="Work Sessions"
+              results={matchingResults(sessionGroups.work, terms)}
+              onSelect={selectPath}
+            />
           )}
           {scopeIncludes(activeScope, 'review') && (
-            <GlobalSearchSessionResults title="Review Sessions" results={sessionGroups.review} onSelect={selectPath} />
+            <GlobalSearchSessionResults
+              title="Review Sessions"
+              results={matchingResults(sessionGroups.review, terms)}
+              onSelect={selectPath}
+            />
           )}
           {scopeIncludes(activeScope, 'items') && (
             <GlobalSearchWorkItemResults
-              results={unstartedItems}
-              onSelect={result => {
-                closeSearch();
-                const target = result.target;
-                if (target.kind === 'candidate') {
-                  const [move] = cardMoves(target.candidate, target.candidate.column);
-                  const board =
-                    target.candidate.source === 'github-pr' || target.candidate.source === 'gitlab-pr'
-                      ? reviewBoard
-                      : workBoard;
-                  if (move) board.handleDrop(candidatePayload(target.candidate), move.stage, 'card_action');
-                  return;
-                }
-                const [move] = cardMoves(target.item, 'intake');
-                if (move) {
-                  const board = target.item.board === 'review' ? reviewBoard : workBoard;
-                  board.move(target.item.id, move.stage);
-                  return;
-                }
-                void runs
-                  .openOrCreateSession(target.item)
-                  .catch(error =>
-                    toast.error(error instanceof Error ? error.message : 'The session could not be started.'),
-                  );
-              }}
+              results={matchingResults(unstartedItems, terms)}
+              onSelect={result => selectPath(cardPath(factoryId, result.item.id, undefined), false)}
             />
           )}
           {scopeIncludes(activeScope, 'user') && (
-            <GlobalSearchSessionResults title="User Sessions" results={sessionGroups.user} onSelect={selectPath} />
+            <GlobalSearchSessionResults
+              title="User Sessions"
+              results={matchingResults(sessionGroups.user, terms)}
+              onSelect={selectPath}
+            />
           )}
           {isSessionScope(activeScope) && hasRepositories && (
-            <GlobalSearchSessionsStatus
-              pending={sessionsPending}
-              failedCount={sessions.failedCount}
-              allFailed={sessions.allFailed}
-              onRetry={sessions.retry}
-            />
+            <GlobalSearchSessionsStatus pending={sessionsPending} failed={sessions.failed} onRetry={sessions.retry} />
           )}
           {isWorkItemScope(activeScope) && hasRepositories && (
-            <GlobalSearchWorkItemsStatus
-              boardFailed={workItems.failed}
-              intakeFailed={intake.failed}
-              onRetry={() => {
-                workItems.retry();
-                intake.retry();
-              }}
-            />
+            <GlobalSearchWorkItemsStatus failed={workItems.failed} onRetry={workItems.retry} />
           )}
           {scopeIncludes(activeScope, 'factories') && (
             <GlobalSearchFactoriesResults factories={factories} activeFactoryId={factoryId} onSelect={selectPath} />

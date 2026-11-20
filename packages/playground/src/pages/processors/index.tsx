@@ -1,17 +1,17 @@
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { useProcessors } from '@mastra/react/hooks/processors';
 import { useState } from 'react';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { NoProcessorsInfo } from '@/domains/processors/components/processors-list/no-processors-info';
 import { ProcessorsList } from '@/domains/processors/components/processors-list/processors-list';
 import type { ProcessorsSort } from '@/domains/processors/components/processors-list/processors-list';
-import { useProcessors } from '@/domains/processors/hooks/use-processors';
 
 const crumbs = [navCrumb('/processors')];
 
@@ -63,7 +63,12 @@ export function Processors() {
         <ActionRow>
           <ActionRow.Start>
             <div className="max-w-120 flex-1">
-              <ListSearch onSearch={setSearch} label="Filter processors" placeholder="Filter by name" />
+              <SearchInput
+                {...listSearchProps}
+                onValueChange={setSearch}
+                label="Search processors"
+                placeholder="Search by name"
+              />
             </div>
           </ActionRow.Start>
         </ActionRow>

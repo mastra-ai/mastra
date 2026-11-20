@@ -337,5 +337,30 @@ describe('serializable MCP tool definitions (issue #20527)', () => {
 
       expect(Object.keys(tools).sort()).toEqual(['weather_greet', 'weather_measure']);
     });
+
+    it('skips cached definitions with an invalid input schema and keeps their siblings (issue #23731)', async () => {
+      const definitions = await createClient().listToolDefinitions();
+      const cached = JSON.parse(JSON.stringify(definitions));
+      cached.weather.broken = {
+        ...cached.weather.greet,
+        name: 'broken',
+        inputSchema: { type: 'object', properties: { coin: { type: 'string' }, required: ['coin'] } },
+      };
+
+      const tools = await mcp.toolsFromDefinitions({ definitions: cached });
+
+      expect(Object.keys(tools).sort()).toEqual(['weather_greet', 'weather_measure']);
+    });
+
+    it('rejects explicit hydration of a definition with an invalid input schema without connecting', async () => {
+      const definitions = await createClient().listToolDefinitions();
+      const broken = { ...definitions.weather.greet, inputSchema: { type: 'object', properties: { coin: ['x'] } } };
+      const worker = createClient();
+
+      await expect(
+        worker.toolFromDefinition({ serverName: 'weather', definition: broken as any }),
+      ).rejects.toMatchObject({ id: 'MCP_CLIENT_INVALID_TOOL_INPUT_SCHEMA' });
+      expect((worker as any).mcpClientsById.get('weather')?.isConnected).toBeFalsy();
+    });
   });
 });

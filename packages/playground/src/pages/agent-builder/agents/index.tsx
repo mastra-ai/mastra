@@ -2,25 +2,25 @@ import type { ListStoredAgentsParams } from '@mastra/client-js';
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { PlusIcon } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useStoredAgents } from '@mastra/react/hooks/agents';
 
+import { useCurrentUser } from '@mastra/react/hooks/auth';
+import { useMemo, useState } from 'react';
 import {
   AgentBuilderList,
   AgentBuilderListSkeleton,
 } from '@/domains/agent-builder/components/agent-list/agent-builder-list';
 import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
 import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
-import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
-import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 
 export default function AgentBuilderAgentsPage() {
   const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUser();
@@ -41,7 +41,10 @@ export default function AgentBuilderAgentsPage() {
     return params;
   }, [currentUser?.id]);
 
-  const { data, isLoading, error } = useStoredAgents(listParams, { enabled: !isCurrentUserLoading });
+  const { data, isLoading, error } = useStoredAgents({
+    ...listParams,
+    queryOptions: { enabled: !isCurrentUserLoading },
+  });
   const agents = data?.agents ?? [];
 
   const body = (() => {
@@ -82,7 +85,7 @@ export default function AgentBuilderAgentsPage() {
                 <Button
                   render={<FrameworkLink href="/agent-builder/agents/create" />}
                   variant="primary"
-                  icon={<PlusIcon />}
+                  icon={<IconPlusMedium />}
                 >
                   Create an agent
                 </Button>
@@ -114,7 +117,7 @@ export default function AgentBuilderAgentsPage() {
                 <Button
                   render={<FrameworkLink href="/agent-builder/agents/create" />}
                   variant="primary"
-                  icon={<PlusIcon />}
+                  icon={<IconPlusMedium />}
                 >
                   New agent
                 </Button>
@@ -124,7 +127,12 @@ export default function AgentBuilderAgentsPage() {
           <ActionRow>
             <ActionRow.Start>
               <div className="max-w-120 flex-1">
-                <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or description" />
+                <SearchInput
+                  {...listSearchProps}
+                  onValueChange={setSearch}
+                  label="Search agents"
+                  placeholder="Search by name or description"
+                />
               </div>
             </ActionRow.Start>
           </ActionRow>

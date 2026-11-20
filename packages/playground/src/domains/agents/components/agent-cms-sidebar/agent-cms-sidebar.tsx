@@ -1,12 +1,12 @@
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check } from 'lucide-react';
-import { useMemo } from 'react';
 
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { useMemo } from 'react';
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { isActive } from './agent-cms-is-active';
 import { AGENT_CMS_SECTIONS, getCodeAgentOverrideSections } from './agent-cms-sections';
@@ -101,14 +101,15 @@ const SidebarLink = ({
       <Link
         href={href}
         className={cn(
-          'flex items-center gap-2.5 border-r-2 border-transparent px-3 py-2 text-body',
+          active ? 'text-foreground' : '',
+          'flex items-center gap-2.5 border-r-2 border-transparent px-3 py-2',
           controlStateColorTransition,
-          active ? 'border-accent1 bg-fill-hover text-foreground' : `hover:bg-fill-subtle ${quietTextHover}`,
+          active ? 'border-border-strong bg-fill-hover' : `hover:bg-fill-subtle ${quietTextHover}`,
         )}
       >
         {done ? (
-          <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-accent1">
-            <Check className="size-3.5 text-white" />
+          <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-success-subtle text-success-subtle-foreground">
+            <IconCheckmark2Medium className="size-icon-sm" />
           </div>
         ) : (
           <Txt

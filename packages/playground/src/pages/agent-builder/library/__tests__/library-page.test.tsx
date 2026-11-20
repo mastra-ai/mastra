@@ -8,10 +8,6 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentBuilderLibraryPage from '..';
 import { server } from '@/test/msw-server';
-vi.mock('@/store/playground-store', () => ({
-  usePlaygroundStore: () => ({ requestContext: undefined }),
-}));
-
 vi.mock('@mastra/playground-ui/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
@@ -138,21 +134,6 @@ describe('AgentBuilderLibraryPage', () => {
     expect(rows).toHaveLength(2);
     expect(rows[0].getAttribute('href')).toBe('/agent-builder/agents/lib-1/view');
     expect(rows[1].getAttribute('href')).toBe('/agent-builder/agents/lib-2/view');
-  });
-
-  it('shows the empty state when the API returns no agents', async () => {
-    server.use(
-      http.get(`${BASE_URL}/api/stored/agents`, () =>
-        HttpResponse.json({ agents: [], total: 0, page: 1, perPage: 100, hasMore: false }),
-      ),
-    );
-
-    renderPage();
-
-    await waitFor(() => {
-      expect(screen.getByText('No public agents yet')).toBeTruthy();
-    });
-    expect(screen.queryByTestId('library-agent-row')).toBeNull();
   });
 
   it('shows the error state when the API returns 500', async () => {

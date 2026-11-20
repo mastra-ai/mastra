@@ -12,5 +12,19 @@ export * from './components/workflows-list/no-workflows-info';
 export * from './components/workflow-information';
 export * from './components/workflow-combobox';
 export * from './utils';
-export * from './hooks';
+export {
+  PER_PAGE,
+  RUN_COUNTS_REFETCH_INTERVAL_MS,
+  getWorkflowRunsNextPageParam,
+  isRunCountsUnsupported,
+  runCountsRefetchInterval,
+  selectUniqueRuns,
+  useDeleteWorkflowRun,
+  useWorkflow,
+  useWorkflowRun,
+  useWorkflowRuns,
+  useWorkflows,
+  useWorkflowsRunCounts,
+  workflowRunQueryKey,
+} from '@mastra/react/hooks/workflows';
 export * from './components/workflow-layout';

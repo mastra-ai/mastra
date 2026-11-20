@@ -15,6 +15,11 @@ import type {
   TelemetrySettings as TelemetrySettingsV6,
   ProviderOptions as ProviderOptionsV6,
 } from '@internal/ai-v6';
+import type {
+  EmbeddingModel as EmbeddingModelV7,
+  TelemetryOptions as TelemetryOptionsV7,
+  ProviderOptions as ProviderOptionsV7,
+} from '@internal/ai-v7';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { VectorFilter } from './filter';
@@ -34,8 +39,11 @@ import type {
 /** Legacy embedding model (V1) - use embedV1 function */
 export type MastraLegacyEmbeddingModel<T> = EmbeddingModelV1<T>;
 
-/** Modern embedding model (V2/V3) - use embedV2 for V2 models, embedV3 for V3 models */
-export type MastraSupportedEmbeddingModel<T> = EmbeddingModelV2<T> | EmbeddingModelV3;
+/** Modern embedding model (V2/V3/V4) - use the corresponding embedV2, embedV3, or embedV4 function */
+export type MastraSupportedEmbeddingModel<T> =
+  | EmbeddingModelV2<T>
+  | EmbeddingModelV3
+  | Extract<EmbeddingModelV7, { specificationVersion: 'v4' }>;
 
 /** All supported embedding model types */
 export type MastraEmbeddingModel<T> = MastraLegacyEmbeddingModel<T> | MastraSupportedEmbeddingModel<T>;
@@ -47,19 +55,19 @@ export type MastraEmbeddingOptions = {
   /**
    * Optional telemetry configuration (experimental).
    */
-  telemetry?: TelemetrySettingsV1 | TelemetrySettingsV5 | TelemetrySettingsV6;
+  telemetry?: TelemetrySettingsV1 | TelemetrySettingsV5 | TelemetrySettingsV6 | TelemetryOptionsV7;
 
-  providerOptions?: ProviderOptionsV1 | ProviderOptionsV5 | ProviderOptionsV6;
+  providerOptions?: ProviderOptionsV1 | ProviderOptionsV5 | ProviderOptionsV6 | ProviderOptionsV7;
 
   maxParallelCalls?: number;
 };
 
 /** Specification versions for supported (modern) embedding models */
-export const supportedEmbeddingModelSpecifications = ['v2', 'v3'] as const;
+export const supportedEmbeddingModelSpecifications = ['v2', 'v3', 'v4'] as const;
 
 /**
- * Type guard to check if an embedding model is a supported modern version (V2 or V3).
- * Use embedV2 for V2 models, embedV3 for V3 models, and embedV1 for legacy V1 models.
+ * Type guard to check if an embedding model is a supported modern version (V2, V3, or V4).
+ * Use the corresponding embedV2, embedV3, or embedV4 function, and embedV1 for legacy V1 models.
  */
 export const isSupportedEmbeddingModel = <T>(
   model: MastraEmbeddingModel<T>,
@@ -89,6 +97,17 @@ export abstract class MastraVector<Filter = VectorFilter> extends MastraBase {
 
   get indexSeparator(): string {
     return '_';
+  }
+
+  /**
+   * Whether this store generates the embeddings itself from text. Stores that return true
+   * accept text on write and on query and produce the vectors in the backend. The default is
+   * false, for stores that expect the caller to supply vectors.
+   *
+   * Semantic recall reads this to decide whether an embedder is required.
+   */
+  get isSelfEmbedding(): boolean {
+    return false;
   }
 
   abstract query(params: QueryVectorParams<Filter>): Promise<QueryResult[]>;

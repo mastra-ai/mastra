@@ -175,9 +175,20 @@ function createNestedResumeFixture(
     invokeImpl?: (id: string, opts: any) => Promise<any>;
     /** Registers a spy logger on the engine via __registerMastra. */
     withLoggerSpy?: boolean;
+    /** Resume labels stored on the nested snapshot, and the label the parent resumes with. */
+    resumeLabels?: Record<string, { stepId: string; foreachIndex?: number }>;
+    label?: string;
   } = {},
 ) {
-  const { stepResultShape = 'legacy', foreachIndex, mode = 'resume', invokeImpl, withLoggerSpy } = options;
+  const {
+    stepResultShape = 'legacy',
+    foreachIndex,
+    mode = 'resume',
+    invokeImpl,
+    withLoggerSpy,
+    resumeLabels,
+    label,
+  } = options;
   const inngest = new Inngest({ id: 'nested-resume-test' });
   const { createWorkflow, createStep } = init(inngest);
   const suspendedStep = createStep({
@@ -204,6 +215,7 @@ function createNestedResumeFixture(
     value: { count: 1 },
     context: nestedStepResults,
     suspendedPaths,
+    resumeLabels,
   });
   const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() };
   const mastra = {
@@ -246,7 +258,7 @@ function createNestedResumeFixture(
         state: {},
         ...(foreachIndex !== undefined ? { foreachIndex } : {}),
       } as any,
-      ...(mode === 'resume' ? { resume: { steps: [nestedWorkflow.id], resumePayload } } : {}),
+      ...(mode === 'resume' ? { resume: { steps: [nestedWorkflow.id], resumePayload, label } } : {}),
       prevOutput: {},
       inputData: { value: 'start' },
       pubsub: { publish: vi.fn().mockResolvedValue(undefined) } as any,
@@ -409,6 +421,25 @@ describe('InngestExecutionEngine.executeWorkflowStep', () => {
     });
   });
 
+  // Technical: without the iteration index the child's foreach hands the payload to every parked
+  // iteration, so approving one agent tool call ran the others too (#27925).
+  it('resumes only the parked tool call the approval names', async () => {
+    const { execute, invoke } = createNestedResumeFixture(
+      { 'suspended-child-step': [1, 0] },
+      {
+        label: 'call-b',
+        resumeLabels: {
+          'call-a': { stepId: 'suspended-child-step', foreachIndex: 0 },
+          'call-b': { stepId: 'suspended-child-step', foreachIndex: 1 },
+        },
+      },
+    );
+
+    await execute();
+
+    expect(invoke.mock.calls[0]?.[1].data.resume).toMatchObject({ label: 'call-b', forEachIndex: 1 });
+  });
+
   it('replays the memoized invoke on the delivery pass when the child is no longer suspended', async () => {
     // step.invoke parks the parent until the child finishes, so Inngest re-executes
     // the resume block to deliver the memoized result — by which point the child has
@@ -527,6 +558,25 @@ describe('InngestExecutionEngine.executeWorkflowStep', () => {
     expect(result).toMatchObject({ status: 'failed' });
     expect(logger.error).toHaveBeenCalledTimes(1);
     expect(logger.error.mock.calls[0]?.[0]).toContain('child blew up');
+  });
+
+  it('keeps the message of a failed step.invoke() through step output serialization', async () => {
+    const { execute } = createNestedResumeFixture(
+      {},
+      {
+        mode: 'fresh',
+        invokeImpl: async (id: string) => {
+          throw new StepError(id, serializeError(new Error('step output size is greater than the limit')));
+        },
+      },
+    );
+
+    const result = await execute();
+
+    expect(result).toMatchObject({ status: 'failed' });
+    // Inngest memoizes step.run() output as JSON, so assert on the serialized form.
+    const serialized = JSON.parse(JSON.stringify((result as any).error));
+    expect(serialized.message).toContain('step output size is greater than the limit');
   });
 });
 

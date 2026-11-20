@@ -33,7 +33,10 @@ function canResetWithPendingMarker(val: unknown): boolean {
     return true;
   }
 
-  return isSuspendedStepResult(val);
+  return (
+    isSuspendedStepResult(val) ||
+    (typeof val === 'object' && '__mastra_foreach_queued__' in val && val.__mastra_foreach_queued__ === true)
+  );
 }
 
 export function createEmptyWorkflowSnapshot(runId: string): Record<string, any> {
@@ -57,11 +60,13 @@ export function mergeWorkflowStepResult({
   stepId,
   result,
   requestContext,
+  state,
 }: {
   snapshot: Record<string, any>;
   stepId: string;
   result: Record<string, any>;
   requestContext: Record<string, any>;
+  state?: Record<string, any>;
 }): Record<string, any> {
   if (!snapshot?.context) {
     throw new Error(`Snapshot context not found for runId ${snapshot?.runId}`);
@@ -102,8 +107,39 @@ export function mergeWorkflowStepResult({
       ...(hasPendingMarker ? {} : result),
       output: mergedOutput,
     };
+    // A failed foreach stays failed with its first failure. Siblings settling from a read taken
+    // before the failure landed would otherwise flip it back to running, and a later failure
+    // would replace the error (and the failed index) the run fails with.
+    if (existingResult.status === 'failed') {
+      const failedIndex = existingResult.metadata?.foreachFailedIndex;
+      snapshot.context[stepId] = {
+        ...snapshot.context[stepId],
+        status: 'failed',
+        error: existingResult.error,
+        endedAt: existingResult.endedAt,
+        ...(failedIndex !== undefined
+          ? { metadata: { ...snapshot.context[stepId].metadata, foreachFailedIndex: failedIndex } }
+          : {}),
+      };
+    }
   } else {
     snapshot.context[stepId] = result;
+  }
+
+  // Concurrent child starts and completions carry partial/stale foreach metadata.
+  // Preserve the durable identity of every sibling, not just the last writer's child.
+  if (existingResult?.metadata?.foreachNestedRunIds || result.metadata?.foreachNestedRunIds) {
+    snapshot.context[stepId].metadata = {
+      ...snapshot.context[stepId].metadata,
+      foreachNestedRunIds: {
+        ...existingResult?.metadata?.foreachNestedRunIds,
+        ...snapshot.context[stepId].metadata?.foreachNestedRunIds,
+      },
+    };
+  }
+
+  if (state !== undefined) {
+    snapshot.context.__state = state;
   }
 
   snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };

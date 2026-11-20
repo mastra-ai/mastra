@@ -7,11 +7,14 @@ import {
   DrawerTitle,
 } from '@mastra/playground-ui/components/Drawer';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Menu, Share, Smartphone, SquarePlus } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { IosBrowser } from './platform';
 import { detectIosBrowser } from './platform';
+import { IconBarsThree } from '@mastra/playground-ui/icons/central/IconBarsThree';
+import { IconPhone } from '@mastra/playground-ui/icons/central/IconPhone';
+import { IconSquarePlus } from '@mastra/playground-ui/icons/central/IconSquarePlus';
+import { IconShareOs } from '@mastra/playground-ui/icons/central/IconShareOs';
 
 interface PwaInstallInstructionsProps {
   open: boolean;
@@ -23,10 +26,14 @@ function shareStep(browser: IosBrowser): { icon: ReactNode; label: ReactNode } {
   switch (browser) {
     case 'chrome':
       return {
-        icon: <Share className="size-4" aria-hidden="true" />,
+        icon: <IconShareOs className="size-icon-md" aria-hidden="true" />,
         label: (
           <>
-            Tap the <span className="text-foreground font-medium">Share</span> button in Chrome&rsquo;s address bar
+            Tap the{' '}
+            <Txt as="span" variant="label" tone="ink">
+              Share
+            </Txt>{' '}
+            button in Chrome&rsquo;s address bar
           </>
         ),
       };
@@ -34,19 +41,26 @@ function shareStep(browser: IosBrowser): { icon: ReactNode; label: ReactNode } {
     case 'edge':
     case 'opera':
       return {
-        icon: <Menu className="size-4" aria-hidden="true" />,
+        icon: <IconBarsThree className="size-icon-md" aria-hidden="true" />,
         label: (
           <>
-            Open the browser menu and tap <span className="text-foreground font-medium">Share</span>
+            Open the browser menu and tap{' '}
+            <Txt as="span" variant="label" tone="ink">
+              Share
+            </Txt>
           </>
         ),
       };
     case 'safari':
       return {
-        icon: <Share className="size-4" aria-hidden="true" />,
+        icon: <IconShareOs className="size-icon-md" aria-hidden="true" />,
         label: (
           <>
-            Tap the <span className="text-foreground font-medium">Share</span> button in Safari&rsquo;s toolbar
+            Tap the{' '}
+            <Txt as="span" variant="label" tone="ink">
+              Share
+            </Txt>{' '}
+            button in Safari&rsquo;s toolbar
           </>
         ),
       };
@@ -55,18 +69,25 @@ function shareStep(browser: IosBrowser): { icon: ReactNode; label: ReactNode } {
 
 const commonSteps: Array<{ icon: ReactNode; label: ReactNode }> = [
   {
-    icon: <SquarePlus className="size-4" aria-hidden="true" />,
+    icon: <IconSquarePlus className="size-icon-md" aria-hidden="true" />,
     label: (
       <>
-        Scroll down and tap <span className="text-foreground font-medium">Add to Home Screen</span>
+        Scroll down and tap{' '}
+        <Txt as="span" variant="label" tone="ink">
+          Add to Home Screen
+        </Txt>
       </>
     ),
   },
   {
-    icon: <Smartphone className="size-4" aria-hidden="true" />,
+    icon: <IconPhone className="size-icon-md" aria-hidden="true" />,
     label: (
       <>
-        Tap <span className="text-foreground font-medium">Add</span> to install the app
+        Tap{' '}
+        <Txt as="span" variant="label" tone="ink">
+          Add
+        </Txt>{' '}
+        to install the app
       </>
     ),
   },
@@ -81,7 +102,7 @@ export function PwaInstallInstructions({ open, onOpenChange }: PwaInstallInstruc
         <DrawerHeader>
           <div className="flex items-center gap-3">
             <div className="border-border bg-fill text-foreground flex size-10 shrink-0 items-center justify-center rounded-lg border">
-              <Smartphone className="size-5" aria-hidden="true" />
+              <IconPhone className="size-icon-lg" aria-hidden="true" />
             </div>
             <div className="min-w-0">
               <DrawerTitle>Install this app</DrawerTitle>
@@ -93,13 +114,16 @@ export function PwaInstallInstructions({ open, onOpenChange }: PwaInstallInstruc
           <ol className="flex flex-col">
             {steps.map((step, index) => (
               <li key={index} className="flex items-center gap-3 py-3">
-                <span
+                <Txt
+                  as="span"
+                  variant="meta"
+                  tone="ink"
                   aria-hidden="true"
-                  className="bg-fill text-foreground text-meta flex size-6 shrink-0 items-center justify-center rounded-full tabular-nums"
+                  className="bg-fill flex size-6 shrink-0 items-center justify-center rounded-full tabular-nums"
                 >
                   {index + 1}
-                </span>
-                <Txt as="span" variant="body" className="text-foreground min-w-0 flex-1">
+                </Txt>
+                <Txt tone="ink" as="span" variant="body" className="min-w-0 flex-1">
                   {step.label}
                 </Txt>
                 <span className="text-muted-foreground shrink-0">{step.icon}</span>

@@ -1,14 +1,16 @@
-import type { UpdateStoredPromptBlockParams } from '@mastra/client-js';
+import type { StoredPromptBlockResponse, UpdateStoredPromptBlockParams } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { IconEyeOpen } from '@mastra/playground-ui/icons/central/IconEyeOpen';
+import { IconRocket } from '@mastra/playground-ui/icons/central/IconRocket';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Rocket, Eye } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -32,7 +34,7 @@ import { PromptBlockCrumb } from '@/domains/prompt-blocks/prompt-block-crumb';
 
 const crumbs = [navCrumb('/prompts'), { id: 'prompt-block', Component: PromptBlockCrumb }];
 
-type StoredPromptBlockData = NonNullable<ReturnType<typeof useStoredPromptBlock>['data']>;
+type StoredPromptBlockData = StoredPromptBlockResponse;
 
 function buildUpdateParams(values: PromptBlockFormValues): UpdateStoredPromptBlockParams {
   return {
@@ -66,13 +68,14 @@ function CmsPromptBlocksEditForm({
   const client = useMastraClient();
   const queryClient = useQueryClient();
   const { navigate, paths } = useLinkComponent();
-  const { updateStoredPromptBlock } = useStoredPromptBlockMutations(blockId);
+  const { updateStoredPromptBlock } = useStoredPromptBlockMutations({ blockId: blockId });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
 
   const { data: versionData } = usePromptBlockVersion({
     blockId,
     versionId: selectedVersionId ?? '',
+    queryOptions: { enabled: !!blockId && !!selectedVersionId },
   });
 
   const isViewingVersion = !!selectedVersionId && !!versionData;
@@ -146,7 +149,7 @@ function CmsPromptBlocksEditForm({
       void queryClient.invalidateQueries({ queryKey: ['stored-prompt-block'] });
       void queryClient.invalidateQueries({ queryKey: ['prompt-block-versions', blockId] });
       toast.success('Prompt block published');
-      void navigate(paths.promptBlocksLink());
+      navigate(paths.promptBlocksLink());
     } catch (error) {
       toast.error(`Failed to publish: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
@@ -163,7 +166,7 @@ function CmsPromptBlocksEditForm({
         void queryClient.invalidateQueries({ queryKey: ['stored-prompt-block'] });
         void queryClient.invalidateQueries({ queryKey: ['prompt-block-versions', blockId] });
         toast.success('Version published');
-        void navigate(paths.promptBlocksLink());
+        navigate(paths.promptBlocksLink());
       } catch (error) {
         toast.error(`Failed to publish version: ${error instanceof Error ? error.message : 'Unknown error'}`);
       } finally {
@@ -195,25 +198,25 @@ function CmsPromptBlocksEditForm({
         <Notice variant="info" title="This is a previous version" className="m-4 mb-0">
           <Notice.Message>You are seeing a specific version of the prompt block.</Notice.Message>
           <div className="flex gap-2">
-            <Button icon={<Eye />} type="button" variant="default" size="sm" onClick={onClearVersion}>
+            <Button icon={<IconEyeOpen />} type="button" variant="default" size="sm" onClick={onClearVersion}>
               View latest version
             </Button>
             <Button
-              icon={<Rocket />}
+              icon={<IconRocket />}
               type="button"
               variant="default"
               size="sm"
               onClick={handlePublishVersion}
               disabled={selectedVersionId === activeVersionId || isSubmitting}
             >
-              {isSubmitting ? 'Publishing...' : 'Publish This Version'}
+              {isSubmitting ? 'Publishing...' : 'Publish this version'}
             </Button>
           </div>
         </Notice>
       )}
-      <form className="h-full">
+      <Form className="h-full">
         <PromptBlockEditMain form={form} formResetKey={formResetKey} />
-      </form>
+      </Form>
     </AgentEditLayout>
   );
 }
@@ -224,10 +227,15 @@ function CmsPromptBlocksEditPage() {
   const selectedVersionId = searchParams.get('versionId');
 
   const { isCmsAvailable } = useIsCmsAvailable();
-  const { data: block, isLoading } = useStoredPromptBlock(blockId, { status: 'draft' });
+  const { data: block, isLoading } = useStoredPromptBlock({
+    blockId: blockId,
+    status: 'draft',
+    queryOptions: { enabled: Boolean(blockId) },
+  });
   const { data: versionsData } = usePromptBlockVersions({
     blockId: blockId ?? '',
     params: { orderBy: { direction: 'DESC' } },
+    queryOptions: { enabled: !!blockId },
   });
 
   const activeVersionId = block?.activeVersionId;

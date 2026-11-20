@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": "sample",
+      "provider": "local",
+      "mountPath": "/sample",
+      "root": "./sample-documents",
+      "enabled": true,
+      "displayName": "Bundled sample"
+    }
+  ]
+}

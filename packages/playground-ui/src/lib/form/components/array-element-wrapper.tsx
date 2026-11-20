@@ -1,5 +1,4 @@
 import type { ArrayElementWrapperProps } from '@autoform/react';
-import { Check, ChevronRight, Trash2 } from 'lucide-react';
 import { useContext, useRef } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { ArrayAddButtonContext, FieldPathContext, FormReadOnlyContext } from '../field-context';
@@ -7,6 +6,10 @@ import { useSectionDisclosure } from '../use-section-disclosure';
 import { isPlainObject } from '../utils';
 import { Button } from '@/ds/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
+import { Txt } from '@/ds/components/Txt';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 
 const HUMAN_SUMMARY_KEYS = ['title', 'name', 'label'];
 
@@ -42,16 +45,20 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
         <CollapsibleTrigger
           ref={triggerRef}
           aria-label={invalid ? `${itemLabel}, Needs input` : itemLabel}
-          className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-3 text-left text-caption focus-visible:shadow-none focus-visible:ring-inset"
+          className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-3 text-left text-caption focus-visible:-outline-offset-1"
         >
-          <ChevronRight aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+          <DisclosureChevron direction="right" className="size-3.5 text-muted-foreground" />
           <span className="shrink-0 text-muted-foreground">Item {index + 1}</span>
           {summary && (
             <span className="truncate text-foreground" title={summary}>
               {summary}
             </span>
           )}
-          {invalid && <span className="ml-auto shrink-0 text-meta text-accent2">Needs input</span>}
+          {invalid && (
+            <Txt as="span" variant="meta" className="ml-auto shrink-0 text-destructive-foreground">
+              Needs input
+            </Txt>
+          )}
         </CollapsibleTrigger>
         {!readOnly && (
           <Button
@@ -65,7 +72,7 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
               addButtonRef?.current?.focus();
             }}
           >
-            <Trash2 />
+            <TrashIcon />
           </Button>
         )}
       </div>
@@ -81,7 +88,7 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
                 setExpanded(false);
                 triggerRef.current?.focus();
               }}
-              icon={<Check />}
+              icon={<IconCheckmark2Medium />}
             >
               Done
             </Button>

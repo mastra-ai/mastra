@@ -31,6 +31,7 @@ import type { ProviderStatus, SandboxStartOutcome, SandboxStartResult } from '..
 import { SandboxNotReadyError } from './errors';
 import { MountManager } from './mount-manager';
 import type { SandboxProcessManager } from './process-manager';
+import { DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES } from './process-manager/process-handle';
 import type {
   SandboxComputer,
   SandboxFileInput,
@@ -192,6 +193,9 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
    */
   executeCommand?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
 
+  /** Default timeout for foreground commands; background spawns are unaffected. */
+  protected defaultCommandTimeout?: number;
+
   /** Optional networking capability - implement to expose public port URLs */
   readonly networking?: SandboxNetworking;
 
@@ -331,8 +335,12 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
 
           const handle = await pm.spawn(fullCommand, {
             ...opts,
+            timeout: opts?.timeout ?? this.defaultCommandTimeout,
             ...(args?.length ? { originalInvocation: { command, args: [...args] } } : {}),
-            maxRetainedBytes: opts?.maxRetainedBytes ?? Infinity,
+            // Unbounded retention lets a command with huge output grow the buffer past
+            // V8's max string length, which throws RangeError inside the stdout handler
+            // and crashes the process. Callers that need every byte pass Infinity.
+            maxRetainedBytes: opts?.maxRetainedBytes ?? DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES,
             // executeCommand runs to completion and collects output; nothing can
             // feed the process's stdin, so close it at spawn. Otherwise a command
             // that reads stdin (e.g. `rg` with no path argument) blocks forever.
@@ -340,6 +348,10 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
           });
           try {
             const result = await handle.wait();
+            // A process the command left behind can still hold its output after
+            // the command returns. Nothing gets a PID to manage it once the
+            // handle is released, so stop it now.
+            if (handle.exitCode === undefined) await handle.kill();
 
             this.logger.debug('Command completed', {
               sandbox: this.name,

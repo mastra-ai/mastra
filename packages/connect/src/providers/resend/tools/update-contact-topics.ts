@@ -43,7 +43,10 @@ export function updateContactTopicsTool(proxy: PlatformProxy) {
         // https://raw.githubusercontent.com/resend/resend-openapi/68c1b66c20ad62020962838832e53af10558c2f5/resend.yaml,
         endpoint: `/contacts/${encodeURIComponent(input['contact_id'])}/topics`,
         retries: 3,
-        data: input.body,
+        // Resend expects the request body to be the bare topics array; the
+        // OpenAPI spec's `{ topics: [...] }` wrapper is rejected with
+        // `The `` field must be an `array`.` (422).
+        data: input.body.topics,
       };
       const response = await platformProxy.patch(config);
       const data = ProviderResponseSchema.parse(response.data);

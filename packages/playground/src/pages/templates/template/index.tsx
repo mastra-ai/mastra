@@ -1,8 +1,19 @@
 import { version } from '@mastra/core/package.json';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { IconBrain } from '@mastra/playground-ui/icons/central/IconBrain';
+import { IconTag } from '@mastra/playground-ui/icons/central/IconTag';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
-import { BrainIcon, TagIcon, WorkflowIcon } from 'lucide-react';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
+import {
+  useTemplateRepo,
+  useTemplateRepoEnvVars,
+  useStreamTemplateInstall,
+  useCreateTemplateInstallRun,
+  useAgentBuilderWorkflow,
+  useGetTemplateInstallRun,
+  useObserveStreamTemplateInstall,
+} from '@mastra/react/hooks/templates';
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -12,19 +23,10 @@ import { TemplateForm } from '@/domains/templates/template-form';
 import { TemplateInfo } from '@/domains/templates/template-info';
 import { TemplateInstallation } from '@/domains/templates/template-installation';
 import { TemplateSuccess } from '@/domains/templates/template-success';
-import {
-  useTemplateRepo,
-  useTemplateRepoEnvVars,
-  useStreamTemplateInstall,
-  useCreateTemplateInstallRun,
-  useAgentBuilderWorkflow,
-  useGetTemplateInstallRun,
-  useObserveStreamTemplateInstall,
-} from '@/hooks/use-templates';
 import { cn } from '@/lib/utils';
 
 export default function Template() {
-  const { templateSlug } = useParams()! as { templateSlug: string };
+  const { templateSlug } = useParams() as { templateSlug: string };
   const crumbs = [
     { id: 'templates', label: 'Templates', to: '/templates' },
     { id: 'template', label: decodeRouteParam(templateSlug) },
@@ -60,12 +62,12 @@ export default function Template() {
   const { data: workflowInfo, isLoading: isLoadingWorkflow } = useAgentBuilderWorkflow();
   const { mutateAsync: createTemplateInstallRun, isPending: isCreatingRun } = useCreateTemplateInstallRun();
   const { mutateAsync: getTemplateInstallRun } = useGetTemplateInstallRun();
-  const { streamInstall, streamResult, isStreaming } = useStreamTemplateInstall(workflowInfo);
+  const { streamInstall, streamResult, isStreaming } = useStreamTemplateInstall({ workflowInfo: workflowInfo });
   const {
     observeInstall,
     streamResult: observeStreamResult,
     isStreaming: isObserving,
-  } = useObserveStreamTemplateInstall(workflowInfo);
+  } = useObserveStreamTemplateInstall({ workflowInfo: workflowInfo });
 
   // Check for completed runs after hot reload recovery
   useEffect(() => {
@@ -204,13 +206,13 @@ export default function Template() {
       key: 'providers',
       label: 'Providers',
       value: template?.supportedProviders?.length ? template.supportedProviders.join(', ') : 'n/a',
-      icon: <BrainIcon />,
+      icon: <IconBrain />,
     },
     {
       key: 'tags',
       label: 'Tags',
       value: template?.tags?.length ? template.tags.join(', ') : 'n/a',
-      icon: <TagIcon />,
+      icon: <IconTag />,
     },
   ];
 
@@ -256,12 +258,12 @@ export default function Template() {
   };
 
   const handleInstallTemplate = async () => {
-    const errors = Object.entries(variables).reduce((acc, [key, value]) => {
+    const errors = Object.entries(variables).reduce<string[]>((acc, [key, value]) => {
       if (value === '') {
         acc.push(key);
       }
       return acc;
-    }, [] as string[]);
+    }, []);
 
     if (errors.length > 0) {
       setErrors(errors);

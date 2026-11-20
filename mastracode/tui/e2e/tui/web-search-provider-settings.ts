@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { enableMouseSettings } from './settings-fixture.js';
 import type { McE2eScenario } from './types.js';
 
 export const webSearchProviderSettingsScenario = {
@@ -17,10 +18,10 @@ export const webSearchProviderSettingsScenario = {
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.preferences = {
       ...settings.preferences,
-      quietMode: false,
       webSearchProvider: 'auto',
     };
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+    enableMouseSettings(appDataDir, { dialogs: true, input: false });
   },
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
@@ -32,8 +33,7 @@ export const webSearchProviderSettingsScenario = {
     await runtime.waitForScreenText(/Web search provider\s+Auto/i, terminal);
     runtime.printScreen('web search provider initial', terminal);
 
-    terminal.write('\x1b[B'.repeat(5));
-    terminal.write('\r');
+    await terminal.clickText?.('Web search provider');
     await runtime.waitForScreenText(/Missing PARALLEL_API_KEY/i, terminal);
     await runtime.waitForScreenText(/Parallel \(unavailable\)/i, terminal);
     runtime.printScreen('provider submenu open', terminal);

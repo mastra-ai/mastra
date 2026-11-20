@@ -131,7 +131,7 @@ describe('AskQuestionInlineComponent multi-select', () => {
     expect(onSubmit).toHaveBeenCalledWith('React, Vue');
   });
 
-  it('freezes the box showing every selected option after answering', () => {
+  it('freezes the option list with a ✓ on every selected option after answering', () => {
     const component = new AskQuestionInlineComponent({
       question: 'Which apply?',
       options: opts,
@@ -146,11 +146,49 @@ describe('AskQuestionInlineComponent multi-select', () => {
     component.handleInput(' '); // Vue
     component.handleInput('__tui.select.confirm__');
 
-    const lines = (component as any).borderedBox.render(60).join('\n');
-    // Selected options get a ✓, the unselected one is dimmed (no ✓).
-    expect(lines).toContain('✓');
-    expect(lines).toContain('React');
-    expect(lines).toContain('Vue');
-    expect(lines).toContain('Svelte');
+    const lines = (component as any).borderedBox.render(60).map((l: string) => l.replace(/\x1b\[[0-9;]*m/g, ''));
+    // Question, then the options in place: ✓ on the selected ones, the rest dimmed.
+    expect(lines).toEqual(['▎ Which apply?', '▎', '▎ ✓ React', '▎ ✓ Vue', '▎   Svelte']);
+  });
+});
+
+describe('AskQuestionInlineComponent answered height', () => {
+  const opts = [{ label: 'React' }, { label: 'Vue' }, { label: 'Svelte' }];
+  const strip = (lines: string[]) => lines.map(l => l.replace(/\x1b\[[0-9;]*m/g, ''));
+  const create = (overrides: Record<string, unknown> = {}) =>
+    new AskQuestionInlineComponent({
+      question: 'Which apply?',
+      options: opts,
+      onSubmit: () => {},
+      onSubmitMulti: () => {},
+      onCancel: () => {},
+      ...overrides,
+    });
+  const box = (component: AskQuestionInlineComponent) => (component as any).borderedBox;
+
+  // The prompt sits right under the card, so a shorter answered card would pull it up.
+  it.each([
+    ['single-select answer', {}, ['__tui.select.down__', '__tui.select.confirm__']],
+    ['multi-select answer', { selectionMode: 'multi_select' }, [' ', '__tui.select.confirm__']],
+    ['cancel', {}, ['__tui.select.cancel__']],
+    ['free-text answer', { options: undefined }, []],
+  ] as const)('keeps the height it had while waiting after a %s', (_name, overrides, keys) => {
+    const component = create(overrides);
+    const waiting = box(component).render(60);
+    for (const key of keys) component.handleInput(key);
+    if (keys.length === 0) component.answer('Svelte');
+
+    const settled = strip(box(component).render(60));
+    expect(settled).toHaveLength(waiting.length);
+    expect(settled.slice(0, 2)).toEqual(['▎ Which apply?', '▎']);
+    expect(settled.join('\n')).toMatch(
+      keys[0] === '__tui.select.cancel__' ? /✗ \(cancelled\)/ : /✓ (Vue|React|Svelte)/,
+    );
+  });
+
+  it('stays compact when it was never shown waiting, as when replayed from history', () => {
+    const component = create();
+    component.answer('Vue');
+    expect(strip(box(component).render(60))).toEqual(['▎ Which apply?', '▎', '▎   React', '▎ ✓ Vue', '▎   Svelte']);
   });
 });

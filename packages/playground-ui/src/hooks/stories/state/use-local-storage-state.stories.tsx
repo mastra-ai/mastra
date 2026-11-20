@@ -3,8 +3,8 @@ import { useState } from 'react';
 import { z } from 'zod/v4';
 import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
 import { Button } from '@/ds/components/Button';
+import { Field, FieldLabel } from '@/ds/components/Field';
 import { Input } from '@/ds/components/Input';
-import { Txt } from '@/ds/components/Txt';
 import { useLocalStorageState } from '@/hooks/use-local-storage-state';
 
 const draftSchema = z.string();
@@ -14,10 +14,10 @@ function StoredDraft() {
   const [draft, setDraft] = useLocalStorageState({ initialKey: storageKey, defaultValue: '', schema: draftSchema });
   return (
     <>
-      <Txt as="label" htmlFor="stored-draft">
-        Draft persisted in this browser
-      </Txt>
-      <Input id="stored-draft" value={draft} onChange={event => setDraft(event.target.value)} />
+      <Field>
+        <FieldLabel>Draft persisted in this browser</FieldLabel>
+        <Input value={draft} onChange={event => setDraft(event.target.value)} />
+      </Field>
       <Button onClick={() => setDraft('')}>Reset draft</Button>
     </>
   );

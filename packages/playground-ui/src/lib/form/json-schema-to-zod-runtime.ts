@@ -26,8 +26,8 @@ const STRING_FORMATS: Record<string, (s: z.ZodString) => z.ZodString> = {
   uri: s => s.url(),
   url: s => s.url(),
   uuid: s => s.uuid(),
-  ipv4: s => s.ip({ version: 'v4' }),
-  ipv6: s => s.ip({ version: 'v6' }),
+  ipv4: s => s.ipv4(),
+  ipv6: s => s.ipv6(),
 };
 
 function buildString(schema: JsonSchema): z.ZodTypeAny {
@@ -75,10 +75,10 @@ function buildObject(schema: JsonSchema): z.ZodTypeAny {
   // collapse into an empty object — that would silently discard every entry.
   if (!properties || Object.keys(properties).length === 0) {
     if (additional && typeof additional === 'object') {
-      return z.record(convert(additional));
+      return z.record(z.string(), convert(additional));
     }
     if (additional === true) {
-      return z.record(z.any());
+      return z.record(z.string(), z.any());
     }
     return z.object({});
   }
@@ -99,7 +99,15 @@ function buildObject(schema: JsonSchema): z.ZodTypeAny {
   return additional && typeof additional === 'object' ? out.catchall(convert(additional)) : out;
 }
 
+function isNullSchema(schema: JsonSchema): boolean {
+  return typeof schema === 'object' && schema !== null && schema.type === 'null';
+}
+
 function buildComposite(schemas: JsonSchema[]): z.ZodTypeAny {
+  // `T | null` is a nullable `T`, not a two-way choice: a union would render a second, unlabeled input for null.
+  const nonNull = schemas.filter(schema => !isNullSchema(schema));
+  if (nonNull.length > 0 && nonNull.length < schemas.length) return buildComposite(nonNull).nullable();
+
   const options = schemas.map(convert);
   if (options.length === 0) return z.any();
   const [only] = options;
