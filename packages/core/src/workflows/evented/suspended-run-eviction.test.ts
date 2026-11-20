@@ -204,25 +204,31 @@ describe.each(engines)('$engine engine: suspended run eviction', ({ createWorkfl
     await expect.poll(() => workflow.runs.has(run.runId)).toBe(false);
   });
 
-  it('releases a run canceled while an execution of it later reports a suspension', async () => {
+  it('releases a run canceled after its suspension is written but before the run settles', async () => {
     const { workflow } = await setup();
     const run = await workflow.createRun();
-    expect((await run.start({ inputData: {} })).status).toBe('suspended');
+    const store = (await mastra!.getStorage()!.getStore('workflows'))!;
+    let canceled: Promise<void> | undefined;
+    if (evented) {
+      // The cancel races the suspended result back to the run.
+      const update = store.updateWorkflowState.bind(store);
+      store.updateWorkflowState = async args => {
+        const updated = await update(args);
+        if (args.opts.status === 'suspended') canceled ??= run.cancel();
+        return updated;
+      };
+    } else {
+      // The cancel lands while the run releases its ownership lease, after the engine returned.
+      const release = store.releaseRunOwnership.bind(store);
+      store.releaseRunOwnership = async fence => {
+        await (canceled ??= run.cancel());
+        return release(fence);
+      };
+    }
 
-    let report!: () => void;
-    const reported = new Promise<void>(resolve => (report = resolve));
-    const stale = run as unknown as {
-      runExecution(
-        execute: (epoch: number, holdUntil: (work: Promise<unknown>) => void) => Promise<void>,
-      ): Promise<void>;
-      releaseAfterExecution(status: 'suspended', epoch: number): Promise<void>;
-    };
-    await stale.runExecution(async (epoch, holdUntil) => {
-      holdUntil(reported.then(() => stale.releaseAfterExecution('suspended', epoch)));
-    });
-
-    await run.cancel();
-    report();
+    await run.start({ inputData: {} });
+    await canceled;
     await expect.poll(() => workflow.runs.has(run.runId)).toBe(false);
+    expect((await workflow.getWorkflowRunById(run.runId))?.status).toBe('canceled');
   });
 });

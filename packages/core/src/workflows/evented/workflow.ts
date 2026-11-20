@@ -2185,7 +2185,7 @@ export class EventedRun<
       throw error;
     }
 
-    this.workflowRunStatus = result.status;
+    this.applyExecutionStatus(result.status, executionEpoch);
     if (result.status === 'failed') {
       const err = result.error;
       this.completeWorkflowTracing(workflowSpan, {
@@ -2332,7 +2332,7 @@ export class EventedRun<
         // As start() does once it has the result: a finished run, or one suspended with
         // its snapshot persisted, leaves the workflow's run cache. A resume that began
         // meanwhile owns the run's status, but the release still counts this result.
-        if (this.isLatestExecution(executionEpoch)) this.workflowRunStatus = result.status;
+        if (this.isLatestExecution(executionEpoch)) this.applyExecutionStatus(result.status, executionEpoch);
         try {
           await this.releaseAfterExecution(result.status, executionEpoch);
         } catch (error) {
@@ -2908,7 +2908,7 @@ export class EventedRun<
         storageVersion: this.storageVersion,
       })
       .then(async result => {
-        this.workflowRunStatus = result.status;
+        this.applyExecutionStatus(result.status, executionEpoch);
         if (result.status === 'failed') {
           const error = result.error;
           this.completeWorkflowTracing(workflowSpan, {
@@ -3004,7 +3004,7 @@ export class EventedRun<
 
     // Update storage directly for immediate status update (same pattern as Inngest)
     await this.runStorage.updateHeader({ status: 'canceled' });
-    this.workflowRunStatus = 'canceled';
+    this.markCanceled();
 
     // End the whole span tree now: a step that ignores abortSignal keeps running, so the
     // execution engine may never unwind and no span in the tree would otherwise be ended.

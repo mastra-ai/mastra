@@ -4343,6 +4343,9 @@ export class Run<
   /** Epochs of executions that began and have not returned yet. The run may only be evicted while this is empty. */
   #activeExecutions = new Set<number>();
 
+  /** The latest execution epoch when the run was last canceled; executions up to it keep the cancel. */
+  #canceledAtEpoch = 0;
+
   /** The result that decides how the run is released once no execution is active. Kept across executions. */
   #result?: { epoch: number; status: WorkflowRunStatus };
 
@@ -4454,6 +4457,21 @@ export class Run<
   }
 
   /** Whether no execution began after the one that started at `epoch`. */
+  /**
+   * Marks the run canceled, so executions already begun keep the cancel over the status they return.
+   * With none active, nothing else will release the run, so it leaves the cache now.
+   */
+  protected markCanceled(): void {
+    this.workflowRunStatus = 'canceled';
+    this.#canceledAtEpoch = this.#executionEpoch;
+    if (this.#activeExecutions.size === 0) this.cleanup?.();
+  }
+
+  /** Applies the status an execution returned, unless the run was canceled after it began. */
+  protected applyExecutionStatus(status: WorkflowRunStatus, epoch: number): void {
+    if (epoch > this.#canceledAtEpoch) this.workflowRunStatus = status;
+  }
+
   protected isLatestExecution(epoch: number): boolean {
     return epoch === this.#executionEpoch;
   }
@@ -4632,7 +4650,7 @@ export class Run<
 
     // Abort any running execution and update in-memory status
     this.abortController.abort(WORKFLOW_CANCELLED_SYMBOL);
-    this.workflowRunStatus = 'canceled';
+    this.markCanceled();
 
     // End the whole span tree now: a step that ignores abortSignal keeps running, so the
     // execution engine may never unwind and no span in the tree would otherwise be ended.
@@ -4944,7 +4962,7 @@ export class Run<
       held,
     );
 
-    this.workflowRunStatus = result.status;
+    this.applyExecutionStatus(result.status, executionEpoch);
     await this.releaseAfterExecution(result.status, executionEpoch);
     result.traceId = traceId;
     result.spanId = spanId;
@@ -6217,7 +6235,7 @@ export class Run<
         if (!params.isVNext && result.status !== 'suspended') {
           this.closeStreamAction?.().catch(() => {});
         }
-        this.workflowRunStatus = result.status;
+        this.applyExecutionStatus(result.status, executionEpoch);
         await this.releaseAfterExecution(result.status, executionEpoch);
         if (result.status === 'success') {
           if (claimedParent && this.parentWorkflow) {
@@ -6503,7 +6521,7 @@ export class Run<
       await ownership.release();
     }
 
-    this.workflowRunStatus = result.status;
+    this.applyExecutionStatus(result.status, executionEpoch);
     await this.releaseAfterExecution(result.status, executionEpoch);
 
     result.traceId = traceId;
@@ -6733,7 +6751,7 @@ export class Run<
       throw error;
     }
 
-    this.workflowRunStatus = result.status;
+    this.applyExecutionStatus(result.status, executionEpoch);
     await this.releaseAfterExecution(result.status, executionEpoch);
 
     result.traceId = traceId;
