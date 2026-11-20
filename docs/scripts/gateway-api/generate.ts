@@ -34,6 +34,8 @@ const EXCLUDED_OPERATIONS = new Set(['getOpenApi', 'getHealth', 'getReadiness'])
 
 const HTTP_METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace']
 
+const SCHEMA_SHAPE_KEYS = ['type', '$ref', 'properties', 'items', 'allOf', 'anyOf', 'oneOf', 'not', 'enum', 'const']
+
 type Operation = { operationId?: string; [key: string]: unknown }
 interface OpenApiDocument {
   openapi: string
@@ -125,6 +127,15 @@ export function transformSpec(source: OpenApiDocument): TransformResult {
     throw new Error(
       `The Gateway OpenAPI document no longer has ${[...missing].join(', ')}. Remove them from pages.ts and sidebars.js.`,
     )
+  }
+
+  // A schema with only a description (provider JSON passed through) renders as an empty Schema panel.
+  const components = spec.components as { schemas?: Record<string, Record<string, unknown>> } | undefined
+  for (const schema of Object.values(components?.schemas ?? {})) {
+    if (!SCHEMA_SHAPE_KEYS.some(key => key in schema)) {
+      schema.type = 'object'
+      schema.additionalProperties = true
+    }
   }
 
   // The spec uses a relative server URL, which would send API Explorer requests to the docs site.

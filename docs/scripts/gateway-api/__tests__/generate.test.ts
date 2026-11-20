@@ -52,6 +52,21 @@ describe('transformSpec', () => {
     expect(transformSpec(buildSpec()).spec.servers).toEqual([{ url: API_HOST, description: 'Mastra Gateway' }])
   })
 
+  test('gives description-only schemas an object shape so their Schema panel is not empty', () => {
+    const source = buildSpec()
+    const schemas = (source.components as { schemas: Record<string, unknown> }).schemas
+    schemas.Passthrough = { description: 'Provider JSON forwarded unchanged.' }
+    schemas.Status = { enum: ['ok'] }
+    const { spec } = transformSpec(source)
+    const result = (spec.components as { schemas: Record<string, unknown> }).schemas
+    expect(result.Passthrough).toEqual({
+      description: 'Provider JSON forwarded unchanged.',
+      type: 'object',
+      additionalProperties: true,
+    })
+    expect(result.Status).toEqual({ enum: ['ok'] })
+  })
+
   test('reports operations without a pages.ts entry', () => {
     const source = buildSpec()
     source.paths['/v1/new'] = { post: { operationId: 'createSomethingNew', responses: {} } }
