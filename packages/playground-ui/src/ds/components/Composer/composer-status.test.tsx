@@ -19,9 +19,10 @@ interface SessionStatus {
   announcement?: string;
   tokenRate?: string;
   emptyWrapper?: boolean;
+  progress?: number;
 }
 
-function StatusFooter({ steering, announcement, tokenRate, emptyWrapper }: SessionStatus) {
+function StatusFooter({ steering, announcement, tokenRate, emptyWrapper, progress }: SessionStatus) {
   return (
     <ComposerStatus aria-label="Session status">
       <ComposerStatusStart>
@@ -37,7 +38,10 @@ function StatusFooter({ steering, announcement, tokenRate, emptyWrapper }: Sessi
           </span>
         )}
       </ComposerStatusStart>
-      <ComposerStatusEnd>{tokenRate}</ComposerStatusEnd>
+      <ComposerStatusEnd>
+        {tokenRate}
+        {progress !== undefined && <progress aria-label="Context used" value={progress} max={1} />}
+      </ComposerStatusEnd>
     </ComposerStatus>
   );
 }
@@ -64,6 +68,12 @@ describe('Composer status footer', () => {
     render(<StatusFooter emptyWrapper />);
 
     expect(isCollapsed()).toBe(true);
+  });
+
+  it('shows a progress bar that carries no text', () => {
+    render(<StatusFooter progress={0.4} />);
+
+    expect(isCollapsed()).toBe(false);
   });
 
   it('shows plain text dropped straight into a group', () => {

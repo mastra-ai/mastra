@@ -3,7 +3,7 @@ import { useLayoutEffect, useRef } from 'react';
 import { glideComposerStatus } from './composer-line-motion';
 
 const COLLAPSE_DELAY_MS = 600;
-const GRAPHICS = 'img, svg, canvas, video, [role="img"]';
+const GRAPHICS = 'img, svg, canvas, video, progress, meter, [role="img"], [role="progressbar"], [role="meter"]';
 
 function shows(node: Node): boolean {
   if (node.nodeType === Node.TEXT_NODE) return (node.textContent ?? '').trim() !== '';

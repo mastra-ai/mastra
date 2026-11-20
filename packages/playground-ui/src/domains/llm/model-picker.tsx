@@ -84,7 +84,7 @@ export function ModelPicker({
   const triggerProps = {
     type: 'button' as const,
     disabled: busy,
-    'aria-label': ariaLabel ?? (value?.model ? `Model: ${formatModelName(value.model)}` : undefined),
+    'aria-label': ariaLabel ?? (!children && value?.model ? `Model: ${formatModelName(value.model)}` : undefined),
     'aria-busy': busy,
     title: value ? `${value.provider}/${value.model}` : undefined,
   };

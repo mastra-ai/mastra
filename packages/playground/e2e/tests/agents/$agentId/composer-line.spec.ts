@@ -15,7 +15,18 @@ const box = (page: Page) => page.locator('[data-slot="composer-box"]');
 const height = async (page: Page) => (await box(page).boundingBox())?.height ?? 0;
 const settledHeight = async (page: Page) => {
   await expect
-    .poll(() => page.locator('[data-slot="composer"]').evaluate(root => root.getAnimations({ subtree: true }).length))
+    .poll(() =>
+      page
+        .locator('[data-slot="composer"]')
+        .evaluate(
+          root =>
+            root
+              .getAnimations({ subtree: true })
+              .filter(
+                animation => animation.playState === 'running' && animation.effect?.getTiming().iterations !== Infinity,
+              ).length,
+        ),
+    )
     .toBe(0);
   return height(page);
 };
