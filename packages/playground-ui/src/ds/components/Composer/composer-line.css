@@ -1,6 +1,6 @@
 /*
- * One line until focus or a draft opens it. Actions keep their open-layout inset and the content sits
- * on the box's bottom edge, so "+" and Send never move. Hidden parts keep a box so the glide can fade them.
+ * One line until focus or a draft opens it. Actions keep their open-layout bottom inset whatever their size,
+ * and the content sits on the box's bottom edge, so "+" and Send never move. Hidden parts keep a box so the glide can fade them.
  * Actions not grouped into start/end have no place on the line, so those composers stay open.
  */
 [data-slot='composer']:not(
@@ -16,7 +16,7 @@
   & [data-slot='composer-box-content'] {
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
+    align-items: flex-end;
 
     & > * {
       flex-basis: 100%;
@@ -48,6 +48,7 @@
     order: 1;
     flex: none;
     padding-inline-start: var(--composer-inset);
+    padding-block-end: var(--composer-inset);
   }
 
   & [data-slot='composer-actions-end'] {
@@ -56,6 +57,7 @@
     max-width: calc(100% - 7rem);
     margin-inline-start: auto;
     padding-inline-end: var(--composer-inset);
+    padding-block-end: var(--composer-inset);
   }
 
   & [data-slot='composer-actions-detail'] > * {

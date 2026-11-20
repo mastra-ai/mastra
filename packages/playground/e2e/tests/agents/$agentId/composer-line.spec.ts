@@ -8,6 +8,7 @@ import { resetStorage } from '../../__utils__/reset-storage';
  * and to open into a full box when I start writing, without the Send button jumping away.
  * BEHAVIOR UNDER TEST: focus opens the composer upward, leaving focus with nothing typed
  * closes it, a draft keeps it open, and Send keeps its place throughout.
+ * Studio focuses the input once it can be used, so each test waits for that and blurs it to reach the idle line.
  */
 
 const box = (page: Page) => page.locator('[data-slot="composer-box"]');
@@ -18,9 +19,20 @@ const settledHeight = async (page: Page) => {
     .toBe(0);
   return height(page);
 };
+const gotoIdleComposer = async (page: Page) => {
+  await page.goto('/agents/weather-agent/chat/new');
+  const input = page.getByPlaceholder('Enter your message');
+  await expect(input).toBeFocused();
+  await input.blur();
+  return { input, idleHeight: await settledHeight(page) };
+};
 const sendPosition = async (page: Page) => {
   const rect = await page.getByRole('button', { name: 'Send' }).boundingBox();
-  return { x: Math.round(rect?.x ?? 0), y: Math.round(rect?.y ?? 0) };
+  return { x: rect?.x ?? 0, y: rect?.y ?? 0 };
+};
+const expectSamePlace = (actual: { x: number; y: number }, expected: { x: number; y: number }) => {
+  expect(Math.abs(actual.x - expected.x)).toBeLessThan(1);
+  expect(Math.abs(actual.y - expected.y)).toBeLessThan(1);
 };
 
 test.describe('One-line composer', () => {
@@ -30,16 +42,13 @@ test.describe('One-line composer', () => {
 
   test.describe('when the user focuses the input and leaves it', () => {
     test('opens upward without moving Send, then closes back to one line', async ({ page }) => {
-      await page.goto('/agents/weather-agent/chat/new');
-      const input = page.getByPlaceholder('Enter your message');
-      await expect(input).toBeVisible();
-
-      const idleHeight = await height(page);
+      const { input, idleHeight } = await gotoIdleComposer(page);
       const idleSend = await sendPosition(page);
 
       await input.click();
       await expect.poll(() => height(page)).toBeGreaterThan(idleHeight);
-      expect(await sendPosition(page)).toEqual(idleSend);
+      await settledHeight(page);
+      expectSamePlace(await sendPosition(page), idleSend);
 
       await input.blur();
       await expect.poll(() => height(page)).toBe(idleHeight);
@@ -48,10 +57,7 @@ test.describe('One-line composer', () => {
 
   test.describe('when the user leaves a draft behind', () => {
     test('keeps the composer open', async ({ page }) => {
-      await page.goto('/agents/weather-agent/chat/new');
-      const input = page.getByPlaceholder('Enter your message');
-      await expect(input).toBeVisible();
-      const idleHeight = await height(page);
+      const { input, idleHeight } = await gotoIdleComposer(page);
 
       await input.fill('What is the weather in Paris?');
       const openHeight = await settledHeight(page);
