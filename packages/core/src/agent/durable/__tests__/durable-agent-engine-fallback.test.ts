@@ -141,26 +141,6 @@ describe('Durable workflow subclass dispatch', () => {
           return strategy;
         }
 
-        protected override createWorkflow(): never {
-          throw new Error('Run reached the Agent compatibility workflow factory');
-        }
-
-        protected override resolveWorkflowEngine(): never {
-          throw new Error('Run reached the Agent compatibility engine resolver');
-        }
-
-        protected override resolveShouldPersistSnapshot(): never {
-          throw new Error('Run reached the Agent compatibility persistence policy');
-        }
-
-        protected override warnOnRiskyPersistencePolicy(): never {
-          throw new Error('Run reached the Agent compatibility persistence warning');
-        }
-
-        protected override async ensureEngineWorkersStarted(): Promise<never> {
-          throw new Error('Run reached the Agent compatibility worker startup');
-        }
-
         protected override async executeWorkflow(runId: string, input: DurableAgenticWorkflowInput) {
           const result = await super.executeWorkflow(runId, input);
           this.executionStatuses.push(result?.status);

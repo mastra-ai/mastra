@@ -22,24 +22,18 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "claude-haiku-4-5": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
     "gpt-6.1-sol": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "claude-sonnet-5-5": [
+    "claude-haiku-4-5": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
       }
     ],
     "claude-sonnet-5": [
@@ -52,6 +46,12 @@
       }
     ],
     "gpt-6-astra": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "claude-sonnet-5-5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
