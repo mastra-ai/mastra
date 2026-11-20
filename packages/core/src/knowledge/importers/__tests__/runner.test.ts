@@ -364,7 +364,8 @@ describe('runKnowledgeImport', () => {
       retryDelayMs: () => 0,
       maxRetries: 2,
     });
-    expect(result).toEqual({ status: 'unfinished', runId: 'run-1', lastSeq: 0 });
+    // The importer flushed nothing, so the runner's one empty settle flush is seq 1.
+    expect(result).toEqual({ status: 'unfinished', runId: 'run-1', lastSeq: 1 });
   });
 
   it('returns without finishing when the host skips the run', async () => {

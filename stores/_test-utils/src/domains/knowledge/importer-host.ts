@@ -109,6 +109,44 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect(await run([upsert({ sourceId: 'p' })])).toMatchObject({ counts: { unchanged: 1, moved: 0, updated: 0 } });
     });
 
+    it('a later run that imports nothing still finishes settle work an earlier run left', async () => {
+      const { knowledge, run, page } = setup();
+      const host = knowledge.importers!.host;
+      const first = await host.startRun('b1');
+      if (first.status !== 'started') throw new Error('not started');
+      const children = Array.from({ length: 60 }, (_, i) =>
+        upsert({ sourceId: `c${String(i).padStart(2, '0')}`, parent: 'p', links: [{ sourceId: 'p', rel: 'up' }] }),
+      );
+      await flushOnce(host, first.runId, first.generation, 1, children);
+      // The parent arrives and settles 50; the run ends there, with 10 left.
+      expect(await flushOnce(host, first.runId, first.generation, 2, [upsert({ sourceId: 'p' })])).toMatchObject({
+        moved: 50,
+        pending: true,
+      });
+      await host.finishRun({
+        runId: first.runId,
+        generation: first.generation,
+        outcome: 'succeeded',
+        backlog: false,
+        lastSeq: 2,
+      });
+      const left = (await (await knowledge.getStorage()).importers!.listNodes('b1', { unsettled: true })).items;
+      expect(left).toHaveLength(10);
+
+      // An incremental importer with nothing new: no items, no state.
+      expect(await run([])).toMatchObject({ outcome: 'succeeded', chain: false, counts: { moved: 10 } });
+      expect(await page('notion/c59')).toBeNull();
+      expect((await page('notion/p/c59'))?.body).toBe('body of c59\n\nLinks:\n- up: [[docs:acme#notion/p]]');
+      expect((await (await knowledge.getStorage()).importers!.listNodes('b1', { unsettled: true })).items).toEqual([]);
+    });
+
+    it('a run that imports nothing does not chain on a parent that never arrives', async () => {
+      const { run, page } = setup();
+      await run([upsert({ sourceId: 'orphan', parent: 'never' })]);
+      expect(await run([])).toMatchObject({ outcome: 'succeeded', chain: false, counts: { moved: 0 } });
+      expect(await page('notion/orphan')).toBeTruthy();
+    });
+
     it('escapes source IDs into keys and writes nothing on an unchanged rerun', async () => {
       const { run, page } = setup();
       await run([upsert({ sourceId: 'a/b:c' })]);

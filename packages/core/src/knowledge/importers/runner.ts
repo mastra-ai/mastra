@@ -170,8 +170,11 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     }
   }
 
-  /** The last receipt said the host has settle work left. */
-  let pending = false;
+  /**
+   * The last receipt said the host has settle work left. Unknown until a receipt arrives: settle
+   * work can be left from an earlier run, so a run that flushes nothing still sends one empty flush.
+   */
+  let pending: boolean | undefined;
   let flushing: Promise<void> = Promise.resolve();
   /** `settle` sends an empty flush, which only runs the host's next settle slice. */
   function flush(staged?: KnowledgeImporterState, settle = false): Promise<void> {
@@ -293,7 +296,7 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     }
     // The importer is done; let the host finish moving and linking what arrived out of order, one
     // bounded slice per flush, while it says there is more and the budget allows (O3 §C′).
-    while (!stop && !failure && pending && Date.now() - startedAt < budgetMs) {
+    while (!stop && !failure && pending !== false && Date.now() - startedAt < budgetMs) {
       try {
         await Promise.race([flush(undefined, true), stopped]);
       } catch {
