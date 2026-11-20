@@ -4,6 +4,7 @@ import { CircleDotIcon } from '@mastra/playground-ui/icons/CircleDotIcon';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
 import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
+import { Siren } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 
 import { GitLabIcon, IncidentIoIcon, JiraIcon, VantaIcon } from '../../ui/icons';
@@ -80,6 +81,13 @@ export const CARD_SOURCES: Record<WorkItemSource, CardSourcePresentation> = {
     linkLabel: 'Open finding',
     Icon: IconPageSearch,
     iconClassName: 'text-muted-foreground',
+  },
+  // A Mastra Alerts card links to its alert rule in Platform.
+  'platform-alert': {
+    label: 'Mastra Alerts',
+    linkLabel: 'Open alert rule',
+    Icon: Siren,
+    iconClassName: 'text-badge-red-indicator',
   },
   'slack-thread': { label: 'Slack', linkLabel: 'Open in Slack', Icon: SlackIcon, iconClassName: '' },
   manual: { label: 'Manual', linkLabel: 'Open link', Icon: CircleDotIcon, iconClassName: 'text-muted-foreground' },
