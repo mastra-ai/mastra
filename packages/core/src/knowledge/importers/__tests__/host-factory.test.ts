@@ -119,22 +119,39 @@ describe('createKnowledgeImporterHost', () => {
     function parkedBindings(park: number) {
       let reads = 0;
       let reject!: (error: Error) => void;
+      let resolve!: (list: KnowledgeImporterRunBinding[]) => void;
       let reached!: () => void;
-      const parkedAt = new Promise<void>(resolve => (reached = resolve));
+      const parkedAt = new Promise<void>(done => (reached = done));
       const bindings = async () => {
         reads += 1;
         if (reads !== park) return [binding('b1', 'docs:acme#notion')];
         reached();
-        return new Promise<never>((_, fail) => (reject = fail));
+        return new Promise<KnowledgeImporterRunBinding[]>((ok, fail) => {
+          resolve = ok;
+          reject = fail;
+        });
       };
-      return { bindings, parkedAt, rejectRead: (error: Error) => reject(error) };
+      return {
+        bindings,
+        parkedAt,
+        rejectRead: (error: Error) => reject(error),
+        resolveRead: () => resolve([binding('b1', 'docs:acme#notion')]),
+      };
     }
 
-    async function race(retryOps: KnowledgeImporterOp[]) {
+    /** `failAuthor`: the parked read resolves, and the configured `author` then throws for it. */
+    async function race(retryOps: KnowledgeImporterOp[], { failAuthor = false } = {}) {
       const { knowledge } = setup();
       // Read 1 is startRun; read 2 is the retry's flush, after its receipt lookup missed.
       const gate = parkedBindings(2);
-      const host = createKnowledgeImporterHost(knowledge, { bindings: gate.bindings });
+      let committedAuthor = false;
+      const host = createKnowledgeImporterHost(knowledge, {
+        bindings: gate.bindings,
+        author: b => {
+          if (committedAuthor) throw new Error('author lookup failed');
+          return `importer:${b.id}`;
+        },
+      });
       const started = await host.startRun('b1');
       if (started.status !== 'started') throw new Error('not started');
       const flushOf = async (flushOps: KnowledgeImporterOp[]) =>
@@ -149,7 +166,12 @@ describe('createKnowledgeImporterHost', () => {
       const retry = flushOf(retryOps);
       await gate.parkedAt;
       const committed = await flushOf(ops);
-      gate.rejectRead(new Error('bindings store is down'));
+      if (failAuthor) {
+        committedAuthor = true;
+        gate.resolveRead();
+      } else {
+        gate.rejectRead(new Error('bindings store is down'));
+      }
       return { committed, retry };
     }
 
@@ -162,6 +184,17 @@ describe('createKnowledgeImporterHost', () => {
     it('refuses changed content for the committed seq as digest_mismatch', async () => {
       const changed: KnowledgeImporterOp[] = [{ op: 'upsert', item: { sourceId: 'p1', title: 'P1', body: 'changed' } }];
       const { retry } = await race(changed);
+      await expect(retry).rejects.toMatchObject({ code: 'digest_mismatch' });
+    });
+
+    it('returns the committed receipt to an exact replay whose author throws', async () => {
+      const { committed, retry } = await race(ops, { failAuthor: true });
+      await expect(retry).resolves.toEqual(committed);
+    });
+
+    it('refuses changed content as digest_mismatch when its author throws', async () => {
+      const changed: KnowledgeImporterOp[] = [{ op: 'upsert', item: { sourceId: 'p1', title: 'P1', body: 'changed' } }];
+      const { retry } = await race(changed, { failAuthor: true });
       await expect(retry).rejects.toMatchObject({ code: 'digest_mismatch' });
     });
 

@@ -371,10 +371,9 @@ export function createLocalKnowledgeImporterHost(
       // surfaced once the locked checks below find new work: a concurrent identical flush may commit
       // meanwhile, and its replay must not depend on the bindings function.
       const resolvedAuthor: { author: string } | { error: unknown } = peekRun
-        ? await bindingFor(peekRun.bindingId).then(
-            ({ binding }) => ({ author: author(binding) }),
-            error => ({ error }),
-          )
+        ? await bindingFor(peekRun.bindingId)
+            .then(({ binding }) => ({ author: author(binding) }))
+            .catch((error: unknown) => ({ error }))
         : { error: conflict('run_not_active', 'The run is not running.') };
       // One absolute deadline for the whole write transaction (O3 §C‴), capped by the run's.
       const deadlineAt = Math.min(budgetAt, peekRun?.deadlineAt?.getTime() ?? Infinity);
