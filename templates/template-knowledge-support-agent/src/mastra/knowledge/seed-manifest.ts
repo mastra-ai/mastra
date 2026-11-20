@@ -7,6 +7,7 @@ import {
   knowledgeLinkRefKey,
   MAX_KNOWLEDGE_PAGE_DEPTH,
   MAX_KNOWLEDGE_PAGE_LINK_REF_LENGTH,
+  type KnowledgePage,
 } from '@mastra/core/knowledge';
 import { validateProfile, type Profile } from '../identity.ts';
 
@@ -142,10 +143,10 @@ async function containedFile(root: string, file: unknown) {
 
 function placement(value: unknown, profiles: Map<string, Profile>) {
   const obj = object(value, ['kind', 'profile'], 'placement');
-  if (!['docs', 'tenant', 'customer'].includes(String(obj.kind))) throw new Error('Unregistered placement kind');
+  const kind = obj.kind;
+  if (kind !== 'docs' && kind !== 'tenant' && kind !== 'customer') throw new Error('Unregistered placement kind');
   const profile = profiles.get(key(obj.profile, 'profile key'));
   if (!profile) throw new Error('Unknown example profile');
-  const kind = obj.kind as 'docs' | 'tenant' | 'customer';
   const scope =
     kind === 'customer'
       ? knowledgeScopeAddress('customer:$tenantId:$customerId', { ...profile })
@@ -186,6 +187,18 @@ function renderLinks(text: string, resolveAlias: (ref: string) => string) {
 
 export const pageMarker = (dataset: string, page: string) => `<!-- knowledge-seed:page:${dataset}:${page} -->`;
 export const noteMarker = (dataset: string, page: string, note: string) => `Seed note: ${dataset}/${page}/${note}`;
+const httpsSourceMarker = '<!-- knowledge-seed:source:https -->';
+
+export function hasSeededHttpsSource(page: KnowledgePage) {
+  const author = page.createdBy.author;
+  const [ownership, source] = page.body?.split('\n', 2) ?? [];
+  return (
+    author?.startsWith('seed:') &&
+    page.updatedBy.author === author &&
+    ownership?.startsWith(`<!-- knowledge-seed:page:${author.slice('seed:'.length)}:`) &&
+    source === httpsSourceMarker
+  );
+}
 
 /** Pure with respect to Knowledge storage: read and validate every input before opening a database. */
 export async function prepareDataset(config: DatasetConfiguration): Promise<PreparedDataset> {
@@ -232,19 +245,26 @@ export async function prepareDataset(config: DatasetConfiguration): Promise<Prep
     if (destinations.has(destinationKey)) throw new Error('Duplicate or ambiguous canonical destination');
     destinations.add(destinationKey);
     const name = line(obj.title, 'page title');
-    if (obj.kind !== undefined && !['policy', 'reference', 'case'].includes(String(obj.kind)))
+    if (obj.kind !== undefined && obj.kind !== 'policy' && obj.kind !== 'reference' && obj.kind !== 'case')
       throw new Error('Invalid page kind');
     const description = obj.description === undefined ? undefined : line(obj.description, 'description', 1000);
     assertKnowledgePageDescriptionWithinBound(description);
-    let body = string((await containedFile(root, obj.file)).trim(), 'Markdown body', 1_000_000);
+    const body = string(
+      (await containedFile(root, obj.file)).replace(/\r\n/g, '\n').trim(),
+      'Markdown body',
+      1_000_000,
+    );
     const envelopes = [...body.matchAll(/^```support-record\n([\s\S]*?)\n```[ \t]*$/gmu)];
     if (envelopes.length > 1 || (envelopes.length && obj.record !== undefined))
       throw new Error('Duplicate support record envelope');
     if (body.includes('```support-record') && !envelopes.length) throw new Error('Malformed support record envelope');
-    if (envelopes.length) validateSupportRecord(JSON.parse(envelopes[0]![1]!));
-    if (obj.record !== undefined)
-      body += `\n\n\`\`\`support-record\n${JSON.stringify(validateSupportRecord(obj.record), null, 2)}\n\`\`\``;
-    return { input: obj, key: alias, path, name, description, placement: target, body, ref };
+    const envelope = envelopes[0];
+    const record = envelope
+      ? validateSupportRecord(JSON.parse(envelope[1]!))
+      : obj.record === undefined
+        ? undefined
+        : validateSupportRecord(obj.record);
+    return { input: obj, key: alias, path, name, description, placement: target, body, ref, envelope, record };
   }
   for (const value of array(manifest.pages, 'pages')) {
     const page = await readPage(value, aliases);
@@ -271,19 +291,44 @@ export async function prepareDataset(config: DatasetConfiguration): Promise<Prep
       if (!canLink(page.placement, target.placement)) throw new Error(`Link crosses its audience: ${ref}`);
       return target.ref;
     };
-    const parts = [page.body];
+    const refs = new Set<string>();
+    const render = (text: string) => {
+      const result = renderLinks(text, lookup);
+      for (const ref of result.refs) refs.add(ref);
+      return result.text;
+    };
+    const envelope = page.envelope;
+    let markdown = render(envelope ? page.body.slice(0, envelope.index) : page.body);
+    if (page.record) {
+      const { summary, applicability } = page.record;
+      const record = validateSupportRecord({
+        ...page.record,
+        summary: render(summary),
+        ...(applicability === undefined ? {} : { applicability: render(applicability) }),
+      });
+      const fence =
+        envelope && record.summary === summary && record.applicability === applicability
+          ? envelope[0]
+          : `\`\`\`support-record\n${JSON.stringify(record, null, 2)}\n\`\`\``;
+      markdown += envelope ? fence + render(page.body.slice(envelope.index + envelope[0].length)) : `\n\n${fence}`;
+    }
+    const parts = [markdown];
+    let hasHttpsSource = false;
     if (page.input.source !== undefined) {
       const source = object(page.input.source, ['kind', 'url', 'verifiedOn', 'license'], 'source');
+      const sourceUrl = source.url === undefined ? undefined : url(source.url);
+      hasHttpsSource = sourceUrl !== undefined && /^https:\/\//iu.test(sourceUrl);
       parts.push(
-        `Source: ${line(source.kind, 'source kind')}${source.url === undefined ? '' : ` (${url(source.url)})`}${source.verifiedOn === undefined ? '' : `; verified ${date(source.verifiedOn, 'source verification date')}`}${source.license === undefined ? '' : `; license: ${line(source.license, 'source license')}`}.`,
+        render(
+          `Source: ${line(source.kind, 'source kind')}${sourceUrl === undefined ? '' : ` (${sourceUrl})`}${source.verifiedOn === undefined ? '' : `; verified ${date(source.verifiedOn, 'source verification date')}`}${source.license === undefined ? '' : `; license: ${line(source.license, 'source license')}`}.`,
+        ),
       );
     }
     if (page.input.links !== undefined) {
       const links = array(page.input.links, 'links', 100).map(value => lookup(key(value, 'link alias')));
       if (new Set(links).size !== links.length) throw new Error('Duplicate link alias');
-      parts.push(links.map(ref => `- [[${ref}]]`).join('\n'));
+      parts.push(render(links.map(ref => `- [[${ref}]]`).join('\n')));
     }
-    const body = renderLinks(parts.join('\n\n'), lookup);
     const noteKeys = new Set<string>();
     const notes = (page.input.notes === undefined ? [] : array(page.input.notes, 'notes', 100)).map(value => {
       const obj = object(value, ['key', 'text', 'date', 'author'], 'note');
@@ -309,9 +354,9 @@ export async function prepareDataset(config: DatasetConfiguration): Promise<Prep
       path: page.path,
       name: page.name,
       description: page.description ?? '',
-      body: `${marker}\n${body.text}\n`,
+      body: `${marker}\n${hasHttpsSource ? `${httpsSourceMarker}\n` : ''}${parts.filter(Boolean).join('\n\n')}\n`,
       marker,
-      refs: body.refs,
+      refs: [...refs],
       notes,
     };
   });

@@ -205,7 +205,12 @@ export async function demoFixture(example: 'retail-pos' | 'software-integration'
     },
   });
   const copied = join(f.directory, 'datasets');
-  await cp(join(process.cwd(), 'knowledge-datasets'), copied, { recursive: true });
+  try {
+    await cp(join(process.cwd(), 'knowledge-datasets'), copied, { recursive: true });
+  } catch (error) {
+    await f.close().catch(() => undefined);
+    throw error;
+  }
   const configs = Object.fromEntries(
     Object.entries(datasets).map(([id, config]) => [
       id,

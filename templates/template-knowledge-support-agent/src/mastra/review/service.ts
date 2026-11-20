@@ -6,10 +6,13 @@ import type { Memory } from '@mastra/memory';
 import { supportConfiguration } from '../../examples/support.ts';
 import { createCuratorAgent } from '../agents/curator-agent.ts';
 import { resourceId, type Profile } from '../identity.ts';
+import { hasSeededHttpsSource } from '../knowledge/seed-manifest.ts';
 import { acquireWriterLock } from '../knowledge/writer-lock.ts';
 import type { LocalProfile } from '../server/access.ts';
 import {
   candidateSchema,
+  proposalSchema,
+  publishedText,
   ReviewConflict,
   type Approval,
   type Candidate,
@@ -120,10 +123,6 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
       ),
       'Shared text contains private links, credentials, or payment-like data',
     );
-    requireReview(
-      candidate.publicSource && candidate.record.applicability.length >= 15,
-      'Shared findings require public evidence and shareable applicability',
-    );
   }
 
   async function validate(proposal: Proposal, checkTarget = true, reconciledUpdate?: KnowledgePage) {
@@ -144,21 +143,6 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
       selected.digest === proposal.source.digest && selected.confirmation === proposal.source.confirmation,
       'Source confirmation changed',
     );
-    const content = [
-      proposal.candidate.title,
-      proposal.candidate.content,
-      proposal.candidate.record.summary,
-      proposal.candidate.record.applicability,
-    ].join('\n');
-    requireReview(
-      !/knowledge-review:|knowledge-seed:|Seed note:|```support-record/iu.test(content),
-      'Reserved publication markers are not allowed in proposed content',
-    );
-    for (const link of content.matchAll(/\[\[([^\]]+)\]\]/gu))
-      requireReview(
-        proposal.candidate.evidence.some(item => item.ref === link[1]),
-        'Content contains an unvalidated evidence link',
-      );
     for (const evidence of proposal.candidate.evidence) {
       const current = await page(evidence.ref, [customer(proposal.reviewer)]);
       if (reconciledUpdate && evidence.ref === `${proposal.destination.scope}#${proposal.destination.path}`) {
@@ -196,17 +180,8 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
         knowledgeScopeAddress('docs:$tenantId', { ...proposal.reviewer }),
       ]);
       identity('public', source.ref, current);
-      const sourceUrl = /^Source:.*?(https:\/\/[^\s<>\])]+)/mu.exec(current.body ?? '')?.[1];
-      const parsedUrl = sourceUrl && URL.parse(sourceUrl);
       requireReview(
-        current.version === source.version &&
-          current.createdBy.author?.startsWith('seed:') &&
-          parsedUrl &&
-          parsedUrl.protocol === 'https:' &&
-          parsedUrl.hostname &&
-          !parsedUrl.username &&
-          !parsedUrl.password &&
-          !/http:\/\//iu.test(current.body ?? ''),
+        current.version === source.version && hasSeededHttpsSource(current),
         'Public source must be a current existing HTTPS source-backed page',
       );
     }
@@ -297,32 +272,19 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
       ]);
     if (candidate.target)
       await bind('target', `${proposal.destination.scope}#${proposal.destination.path}`, [proposal.destination.scope]);
+    proposal.revision = digest({ ...proposal, revision: undefined });
+    proposalSchema.parse(proposal);
     await validate(proposal);
     if (['page', 'note', 'update'].includes(candidate.action) && (await duplicate(proposal))) {
       proposal.candidate = { ...candidate, action: 'duplicate', target: null };
+      proposal.revision = digest({ ...proposal, revision: undefined });
     }
-    proposal.revision = digest({ ...proposal, revision: undefined });
     return proposal;
-  }
-
-  function publishedText(approval: Approval) {
-    const { proposal, reviewerId } = approval;
-    const { candidate } = proposal;
-    const marker = `<!-- knowledge-review:${proposal.id}:${proposal.revision} -->`;
-    const attribution = `Reviewed by: ${reviewerId}`;
-    const provenance =
-      proposal.source.audience === 'private'
-        ? `Source technician: ${proposal.source.sourceActorId}\nConfirmed in thread: ${proposal.source.threadId}, turn: ${proposal.source.messageId}\nEvidence: ${candidate.evidence.map(item => `[[${item.ref}]] (v${item.version})`).join(', ')}`
-        : `Public source: [[${candidate.publicSource!.ref}]] (v${candidate.publicSource!.version})`;
-    return `${marker}\n${attribution}\n${candidate.content}\n\n\`\`\`support-record\n${JSON.stringify(candidate.record)}\n\`\`\`\n\n${provenance}`;
   }
 
   async function publish(approval: Approval) {
     const { proposal, decision, reviewerId } = approval;
-    requireReview(
-      decision.revision === proposal.revision && digest({ ...proposal, revision: undefined }) === proposal.revision,
-      'Approved revision mismatch',
-    );
+    requireReview(digest({ ...proposal, revision: undefined }) === proposal.revision, 'Approved revision mismatch');
     requireReview(reviewerId === proposal.reviewer.actorId, 'Decision reviewer mismatch');
     const result = (
       status: 'published' | 'rejected' | 'duplicate' | 'contradiction' | 'insufficient-evidence',
@@ -332,7 +294,7 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
     if (decision.decision === 'reject') return result('rejected');
     if (['duplicate', 'contradiction', 'insufficient-evidence'].includes(proposal.candidate.action))
       return result(proposal.candidate.action as 'duplicate' | 'contradiction' | 'insufficient-evidence');
-    const lock = await acquireWriterLock(undefined, true);
+    const lock = await acquireWriterLock();
     try {
       // Reconcile an exact previous effect before checking revisions that this update itself changed.
       const store = await knowledge.getStorage();
@@ -340,19 +302,22 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
       const current =
         home &&
         (await store.getPageByPath({ scopeId: home.id, path: proposal.destination.path.split('/'), read: 'all' }));
-      const body = publishedText(approval),
+      const body = publishedText(proposal),
         marker = `<!-- knowledge-review:${proposal.id}:`;
       const author = `review:${reviewerId}`;
       const reference = `${proposal.destination.scope}#${proposal.destination.path}`;
       if (proposal.candidate.action === 'note') {
         requireReview(current, 'Note target is missing');
+        const noteLimit = 1000;
         const notes = [];
         let cursor: string | undefined;
         do {
-          const batch = await store.listNotes({ pageId: current.id, read: 'all', cursor, limit: 100 });
+          // Allow one extra slot to reconcile a publication that started at the scan limit.
+          const limit = Math.min(100, noteLimit + 1 - notes.length);
+          const batch = await store.listNotes({ pageId: current.id, read: 'all', cursor, limit });
           notes.push(...batch.notes);
           cursor = batch.nextCursor;
-          requireReview(notes.length <= 1000, 'Note reconciliation exceeds its bound');
+          requireReview(!cursor || notes.length <= noteLimit, 'Note reconciliation exceeds its bound');
         } while (cursor);
         await validate(proposal);
         const owned = notes.filter(note => note.text.startsWith(marker));
@@ -377,8 +342,9 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
           reviewer(proposal.reviewer);
           return result('published', `${reference}?note=${owned[0]!.id}`);
         }
+        requireReview(notes.length <= noteLimit, 'Note reconciliation exceeds its bound');
         requireReview(
-          !notes.some(note => !note.text.startsWith(marker) && note.text.includes(proposal.candidate.content)),
+          !notes.some(note => note.text.includes(proposal.candidate.content)),
           'A duplicate note now exists; reevaluate',
         );
         reviewer(proposal.reviewer);

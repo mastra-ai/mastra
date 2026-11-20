@@ -12,9 +12,27 @@ export async function startModelServer(script?: ModelScript) {
   const requests: Record<string, unknown>[] = [];
   const failures: { status: number; message: string }[] = [];
   const server = createServer(async (request, response) => {
-    let raw = '';
-    for await (const chunk of request) raw += chunk;
-    const body = JSON.parse(raw);
+    let body: Record<string, unknown>;
+    try {
+      request.setEncoding('utf8');
+      let raw = '';
+      for await (const chunk of request) raw += chunk;
+      body = JSON.parse(raw);
+      if (!Array.isArray(body?.messages)) throw new Error('Expected a messages array');
+    } catch (error) {
+      if (!response.destroyed && !response.writableEnded && !request.aborted) {
+        response.writeHead(400, { 'content-type': 'application/json' });
+        response.end(
+          JSON.stringify({
+            error: {
+              message: error instanceof Error ? error.message : 'Unable to read the model request',
+              type: 'fixture_request_body',
+            },
+          }),
+        );
+      }
+      return;
+    }
     requests.push(body);
     const messages = body.messages as { role: string; content?: unknown; tool_calls?: unknown }[];
     const userText = (message: (typeof messages)[number]) =>

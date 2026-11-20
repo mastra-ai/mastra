@@ -116,9 +116,16 @@ async function snapshot(f: Fixture) {
     pages.push(...batch.pages);
     cursor = batch.nextCursor;
   } while (cursor);
-  return Promise.all(
+  const pagesAndNotes = await Promise.all(
     pages.map(async page => ({ page, notes: await store.listNotes({ pageId: page.id, read: 'all', limit: 100 }) })),
   );
+  const pins = [];
+  do {
+    const batch = await store.listPins({ audience: 'all', read: 'all', cursor, limit: 100 });
+    pins.push(...batch.pins);
+    cursor = batch.nextCursor;
+  } while (cursor);
+  return { pagesAndNotes, pins };
 }
 async function sql(f: Fixture, query: string, parameters: string[] = []) {
   // Keep Node SQLite and the LibSQL native library in separate processes.
@@ -385,8 +392,8 @@ test('same_thread_gets_updated_policy_signal_and_rejects_pin_mutation', { timeou
         .join('\n');
       assert.match(results, /denied|editor|permission|not found|not readable/iu);
       assert.doesNotMatch(inputs, /SYNTHETIC_PRIVATE_2/u);
+      assert.deepEqual(await snapshot(f), before, `Denied operation cannot mutate Knowledge: ${prompt}`);
     }
-    assert.deepEqual(await snapshot(f), before, 'Denied pins cannot mutate Knowledge');
     const calls = f.model.requests.length;
     await f.supportKnowledge.removePage({
       scope: 'tenant:north',

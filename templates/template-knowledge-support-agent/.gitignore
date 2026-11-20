@@ -7,6 +7,8 @@ coverage/
 !.env.example
 *.db
 *.db-*
+*.writer.sqlite
+*.writer.sqlite-*
 
 !/package-lock.json
 .local/

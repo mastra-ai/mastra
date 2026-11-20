@@ -67,4 +67,5 @@ Use the `integration-team` token. In **Support**, ask “Our HTTP integration re
 
 - Studio and the seed command default to `.local/support.db`. Export the same `SUPPORT_DATABASE_URL` for both commands to use a different persistent local file. The seed command reads the shell environment.
 - Reapplying a dataset preserves IDs and versions for unchanged content. Keep dataset, page, and note keys stable so the seed can identify its records. Removed manifest entries are retained and reported by stored ID.
-- Privileged writes share a database lock. If seeding exits with code `75`, wait for the active writer to finish. After a crash, use `--recover-lock` once the recorded writer has stopped. For an interrupted recovery, inspect the recorded path, host, and PID before removing its `.writer.lock.recovery` file. Stop privileged writers before manual recovery.
+- Privileged writes share a lock in the database's `.writer.sqlite` sidecar. If seeding exits with code `75`, retry after the active writer exits. The operating system releases the lock even if the writer crashes. Keep the sidecar in place while the database is in use.
+- Tenant-wide publication requires an HTTPS source declared in the documentation page's seed manifest. Rerun the seed after upgrading to record source provenance for existing documentation.

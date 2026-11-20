@@ -194,6 +194,16 @@ test('seed_dry_run_apply_repeat_and_update_preserve_provenance', { timeout: 1200
     const supportedBodyPath = join(f.root, 'knowledge-datasets/retail-pos', manifest.pages[0]!.file);
     await writeFile(supportedBodyPath, `${await readFile(supportedBodyPath, 'utf8')}\n${supportedLinks}\n`);
     assert.ok((await readFile(supportedBodyPath, 'utf8')).includes(supportedLinks));
+    const casePath = join(f.root, 'knowledge-datasets/retail-pos', manifest.pages[2]!.file);
+    const envelope = '```support-record\n' + JSON.stringify(manifest.pages[2]!.record) + '\n```';
+    delete manifest.pages[2]!.record;
+    await writeFile(
+      casePath,
+      `${(await readFile(casePath, 'utf8')).trim()}\n\n${envelope}\n\n    Example transcript.\n`.replaceAll(
+        '\n',
+        '\r\n',
+      ),
+    );
     const loadedManifest = await f.saveManifest(manifest);
     const preview = (await f.cli({ args: ['--dry-run'] })).report;
     assert.equal(preview.dryRun, true);
@@ -206,7 +216,7 @@ test('seed_dry_run_apply_repeat_and_update_preserve_provenance', { timeout: 1200
       ],
     );
     await noFile(f.database);
-    await noFile(`${f.database}.writer.lock`);
+    await noFile(`${f.database}.writer.sqlite`);
     await f.sql('SELECT 1');
     await f.cli({ args: ['--dry-run'] });
     assert.deepEqual(await f.sql("SELECT name FROM sqlite_master WHERE type = 'table'"), []);
@@ -268,7 +278,8 @@ test('seed_dry_run_apply_repeat_and_update_preserve_provenance', { timeout: 1200
       assert.equal(await storage.getNote({ id: note.id, read: otherCustomer }), null);
       const record = (await storage.getPage({ id: history.id!, read: owner }))!.body!;
       assert.match(record, /```support-record\n/u);
-      assert.match(record, /"state": "approved"/u);
+      assert.match(record, /"state":\s*"approved"/u);
+      assert.match(record, /\n\n {4}Example transcript\./u);
       return knowledge.addNote({
         scope: 'customer:north:store-1',
         path: 'cases/connection-check',
@@ -362,13 +373,33 @@ test('seed_dry_run_apply_repeat_and_update_preserve_provenance', { timeout: 1200
     const repaired = (await f.cli()).report;
     assert.equal(repaired.repairedLinks, true);
     assert.ok(repaired.pages.every(item => item.status === 'unchanged'));
+    await f.knowledge(async (_, storage) => {
+      const edges = await storage.listPageLinks({
+        pageIds: [guide.id!],
+        read: 'all',
+        direction: 'out',
+        kinds: ['body'],
+      });
+      assert.deepEqual(
+        edges.map(edge => [edge.fromPageId, edge.toPageId]),
+        [[guide.id!, policy.id!]],
+      );
+    });
     assert.equal((await f.cli()).report.repairedLinks, false);
     const alternateManifest = JSON.parse(
       await readFile(join(f.root, 'knowledge-datasets/software-integration/manifest.json'), 'utf8'),
     ) as Manifest;
     assert.equal(alternateManifest.id, 'software-integration');
     const alternate = (await f.cli({ dataset: alternateManifest.id })).report;
-    assert.ok(alternate.pages.every(item => item.status === 'created' && item.destination.includes(':software')));
+    assert.deepEqual(
+      alternate.pages.map(item => item.destination),
+      [
+        'docs:software#guides/request-check',
+        'tenant:software#policies/safe-changes',
+        'customer:software:example-app#cases/request-check',
+      ],
+    );
+    assert.ok(alternate.pages.every(item => item.status === 'created'));
     await f.knowledge(async (knowledge, storage) => {
       const retail = await knowledge.readScopeFor(principals(exampleProfiles[0]!));
       const integration = await knowledge.readScopeFor(['tenant:software', 'customer:software:example-app']);
@@ -392,12 +423,13 @@ test('seed_rejects_invalid_input_and_recovers_partial_note_update', { timeout: 1
     const original = await f.readManifest();
     const bodyPath = join(f.root, 'knowledge-datasets/retail-pos/connectivity.md');
     const originalBody = await readFile(bodyPath, 'utf8');
-    await writeFile(join(f.directory, 'outside.md'), '# Outside dataset\n');
-    await symlink(join(f.directory, 'outside.md'), join(f.root, 'knowledge-datasets/retail-pos/escape.md'));
+    const outside = join(f.root, 'knowledge-datasets/outside.md');
+    await writeFile(outside, '# Outside dataset\n');
+    await symlink(outside, join(f.root, 'knowledge-datasets/retail-pos/escape.md'));
     const first = (await f.cli()).report;
     const guide = page(first, 'connection-guide');
     const history = page(first, 'store-case');
-    const invalid: Array<[string, (manifest: Manifest) => void]> = [
+    const invalid: Array<[string, (manifest: Manifest) => void, RegExp?]> = [
       [
         'schema version',
         manifest => {
@@ -427,17 +459,19 @@ test('seed_rejects_invalid_input_and_recovers_partial_note_update', { timeout: 1
         manifest => {
           manifest.pages[2]!.file = 'missing.md';
         },
+        /ENOENT.*missing\.md/u,
       ],
       [
         'relative path escape',
         manifest => {
           manifest.pages[2]!.file = '../outside.md';
         },
+        /Expected a relative Markdown file/u,
       ],
       [
         'absolute path',
         manifest => {
-          manifest.pages[2]!.file = join(f.directory, 'outside.md');
+          manifest.pages[2]!.file = outside;
         },
       ],
       [
@@ -445,6 +479,7 @@ test('seed_rejects_invalid_input_and_recovers_partial_note_update', { timeout: 1
         manifest => {
           manifest.pages[2]!.file = 'escape.md';
         },
+        /Markdown file escapes the dataset/u,
       ],
       [
         'unknown alias',
@@ -491,6 +526,27 @@ test('seed_rejects_invalid_input_and_recovers_partial_note_update', { timeout: 1
         },
       ],
       [
+        'array placement kind',
+        manifest => {
+          Object.assign(manifest.pages[0]!.scope, { kind: ['docs'] });
+        },
+        /Unregistered placement kind/u,
+      ],
+      [
+        'array page kind',
+        manifest => {
+          Object.assign(manifest.pages[0]!, { kind: ['reference'] });
+        },
+        /Invalid page kind/u,
+      ],
+      [
+        'record summary too long after link expansion',
+        manifest => {
+          manifest.pages[2]!.record!.summary = 'x'.repeat(975) + ' [[connection-guide]]';
+        },
+        /Invalid record summary/u,
+      ],
+      [
         'invalid mandatory policy kind',
         manifest => {
           manifest.pages[1]!.kind = 'reference';
@@ -522,18 +578,19 @@ test('seed_rejects_invalid_input_and_recovers_partial_note_update', { timeout: 1
       ],
     ];
     const stable = await f.snapshot();
-    for (const [label, mutate] of invalid) {
+    for (const [label, mutate, expectedError] of invalid) {
       const manifest = structuredClone(original);
       manifest.pages[0]!.title = 'This earlier valid edit must never be written';
       mutate(manifest);
       await f.saveManifest(manifest);
       const rejected = await f.cli({ code: 1 });
-      assert.ok(rejected.output.trim().length, label);
+      if (expectedError) assert.match(rejected.output, expectedError, label);
+      else assert.ok(rejected.output.trim().length, label);
       assert.deepEqual(await f.snapshot(), stable, `${label} changed stored Knowledge`);
-      await noFile(`${f.database}.writer.lock`);
     }
     await f.cli({ url: pathToFileURL(join(f.directory, 'invalid-fresh.db')).href, code: 1 });
     await noFile(join(f.directory, 'invalid-fresh.db'));
+    await noFile(join(f.directory, 'invalid-fresh.db.writer.sqlite'));
     await f.saveManifest(original);
     for (const body of [
       '# Unsafe\n\n[hidden](javascript:alert(1))',
@@ -602,7 +659,7 @@ test('seed_rejects_invalid_input_and_recovers_partial_note_update', { timeout: 1
         const fresh = join(f.directory, `unsafe-${index}-${placement}.db`);
         await f.cli({ url: pathToFileURL(fresh).href, code: 1 });
         await noFile(fresh);
-        await noFile(`${fresh}.writer.lock`);
+        await noFile(`${fresh}.writer.sqlite`);
       }
     }
     await writeFile(bodyPath, originalBody);
@@ -649,7 +706,7 @@ test('seed_rejects_invalid_input_and_recovers_partial_note_update', { timeout: 1
       await f.cli({ url: encodedAlias, code: 75 });
       await f.cli({ url: encodedAlias, args: ['--recover-lock'], code: 75 });
       assert.deepEqual(await f.snapshot(), beforeContention);
-      assert.equal(JSON.parse(await readFile(lock.lockPath, 'utf8')).pid, process.pid);
+      await assert.rejects(acquireWriterLock(pathToFileURL(f.database).href), { name: 'WriterBusyError' });
     } finally {
       await lock.release();
     }
@@ -662,7 +719,7 @@ test('seed_rejects_invalid_input_and_recovers_partial_note_update', { timeout: 1
       await emptyLock.release();
     }
 
-    // A real stopped process leaves its own lock behind, rather than fabricating stale ownership.
+    // An abruptly stopped writer must release its lock without running cleanup.
     const child = spawn(
       process.execPath,
       [
@@ -690,21 +747,14 @@ test('seed_rejects_invalid_input_and_recovers_partial_note_update', { timeout: 1
       child.kill('SIGKILL');
       await childExit;
     }
-    await f.cli({ code: 75 });
+    assert.ok((await f.cli()).report.pages.every(item => item.status === 'unchanged'));
+    assert.deepEqual(await f.snapshot(), beforeContention);
+
+    // An interrupted legacy writer or recovery may leave both files behind during an upgrade.
+    await writeFile(`${f.database}.writer.lock`, '');
+    await writeFile(`${f.database}.writer.lock.recovery`, 'abandoned recovery');
     assert.ok((await f.cli({ args: ['--recover-lock'] })).report.pages.every(item => item.status === 'unchanged'));
     assert.deepEqual(await f.snapshot(), beforeContention);
-    await noFile(`${f.database}.writer.lock`);
-
-    for (const uncertain of [
-      'unreadable owner metadata',
-      JSON.stringify({ pid: process.pid, host: 'another-host', token: 'uncertain' }),
-    ]) {
-      await writeFile(`${f.database}.writer.lock`, uncertain);
-      await f.cli({ args: ['--recover-lock'], code: 1 });
-      assert.equal(await readFile(`${f.database}.writer.lock`, 'utf8'), uncertain);
-      assert.deepEqual(await f.snapshot(), beforeContention);
-      await rm(`${f.database}.writer.lock`);
-    }
 
     const dangling = join(f.directory, 'dangling.db');
     await symlink(join(f.directory, 'absent.db'), dangling);

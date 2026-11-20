@@ -1,7 +1,6 @@
-import { randomUUID } from 'node:crypto';
-import { hostname } from 'node:os';
-import { mkdir, open, readFile, unlink } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { canonicalDatabasePath } from '../database.ts';
 
 export class WriterBusyError extends Error {
@@ -13,81 +12,20 @@ export class WriterBusyError extends Error {
   }
 }
 
-interface Owner {
-  pid: number;
-  host: string;
-  token: string;
-}
-
-function owner(text: string): Owner {
-  const value = JSON.parse(text) as Owner;
-  if (
-    !Number.isSafeInteger(value.pid) ||
-    value.pid < 1 ||
-    typeof value.host !== 'string' ||
-    typeof value.token !== 'string'
-  ) {
-    throw new Error('Uncertain writer ownership; leave the lock intact');
-  }
-  return value;
-}
-
-async function createLock(path: string, contents: Owner) {
-  let created = false;
+/** All privileged writers must hold this lock around reads and writes. */
+export async function acquireWriterLock(databaseUrl?: string) {
+  const databasePath = await canonicalDatabasePath(databaseUrl);
+  const lockPath = `${databasePath}.writer.sqlite`;
+  await mkdir(dirname(lockPath), { recursive: true, mode: 0o700 });
+  // SQLite holds an OS lock on a stable sidecar, separate from the Knowledge store's transactions.
+  // Closing the connection or exiting the process releases it. Leave the sidecar in place.
+  const connection = new DatabaseSync(lockPath);
   try {
-    const file = await open(path, 'wx', 0o600);
-    created = true;
-    try {
-      await file.writeFile(JSON.stringify(contents));
-    } finally {
-      await file.close();
-    }
+    connection.exec('BEGIN IMMEDIATE');
   } catch (error) {
-    if (created) await unlink(path);
-    if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new WriterBusyError(path);
+    connection.close();
+    if ((error as { errcode?: number }).errcode === 5) throw new WriterBusyError(lockPath); // SQLITE_BUSY
     throw error;
   }
-}
-
-/** All privileged writers, including review publication, must hold this lock around reads and writes. */
-export async function acquireWriterLock(databaseUrl?: string, recoverStoppedOwner = false) {
-  const databasePath = await canonicalDatabasePath(databaseUrl);
-  const lockPath = `${databasePath}.writer.lock`;
-  const contents: Owner = { pid: process.pid, host: hostname(), token: randomUUID() };
-  await mkdir(dirname(lockPath), { recursive: true, mode: 0o700 });
-  if (recoverStoppedOwner) {
-    // Serialize recovery itself. Ordinary acquisition still uses atomic exclusive creation.
-    const recoveryPath = `${lockPath}.recovery`;
-    await createLock(recoveryPath, contents);
-    try {
-      let previous: Owner | undefined;
-      try {
-        previous = owner(await readFile(lockPath, 'utf8'));
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-      }
-      if (previous) {
-        if (previous.host !== hostname()) throw new Error('Cannot prove the writer on another host has stopped');
-        try {
-          process.kill(previous.pid, 0);
-          throw new WriterBusyError(lockPath);
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
-        }
-        await unlink(lockPath);
-      }
-    } finally {
-      await unlink(recoveryPath);
-    }
-  }
-  await createLock(lockPath, contents);
-  return {
-    databasePath,
-    lockPath,
-    async release() {
-      const current = owner(await readFile(lockPath, 'utf8'));
-      if (current.token !== contents.token) throw new Error('Writer ownership changed; leave the lock intact');
-      await unlink(lockPath);
-    },
-  };
+  return { databasePath, lockPath, release: () => connection.close() };
 }

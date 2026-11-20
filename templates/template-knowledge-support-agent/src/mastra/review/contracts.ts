@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { assertKnowledgeNoteTextWithinBound, assertKnowledgePageDescriptionWithinBound } from '@mastra/core/knowledge';
 
 const text = (max: number) =>
   z
@@ -58,7 +59,31 @@ export const candidateSchema = z
       context.addIssue({ code: 'custom', message: 'Only notes and updates require an existing versioned target' });
     if (new Set(value.record.topicTags).size !== value.record.topicTags.length)
       context.addIssue({ code: 'custom', message: 'Topic tags must be unique' });
+    const content = [value.title, value.content, value.record.summary, value.record.applicability].join('\n');
+    if (/knowledge-review:|knowledge-seed:|Seed note:|```support-record/iu.test(content))
+      context.addIssue({ code: 'custom', message: 'Reserved publication markers are not allowed in proposed content' });
+    const evidence = new Set(value.evidence.map(item => item.ref));
+    if ([...content.matchAll(/\[\[([^\]]+)\]\]/gu)].some(link => !evidence.has(link[1]!)))
+      context.addIssue({ code: 'custom', message: 'Content contains an unvalidated evidence link' });
   });
+
+export function publishedText(proposal: {
+  id: string;
+  revision: string;
+  reviewer: { actorId: string };
+  source: ReviewInput;
+  candidate: Candidate;
+}) {
+  const { id, revision, reviewer, source, candidate } = proposal;
+  const marker = `<!-- knowledge-review:${id}:${revision} -->`;
+  const attribution = `Reviewed by: ${reviewer.actorId}`;
+  const provenance =
+    source.audience === 'private'
+      ? `Source technician: ${source.sourceActorId}\nConfirmed in thread: ${source.threadId}, turn: ${source.messageId}\nEvidence: ${candidate.evidence.map(item => `[[${item.ref}]] (v${item.version})`).join(', ')}`
+      : `Public source: [[${candidate.publicSource!.ref}]] (v${candidate.publicSource!.version})`;
+  return `${marker}\n${attribution}\n${candidate.content}\n\n\`\`\`support-record\n${JSON.stringify(candidate.record)}\n\`\`\`\n\n${provenance}`;
+}
+
 export const proposalSchema = z
   .object({
     id: z.uuid(),
@@ -82,7 +107,24 @@ export const proposalSchema = z
     destination: z.object({ scope: text(1000), path: text(500) }).strict(),
     revision: z.string().length(64),
   })
-  .strict();
+  .strict()
+  .superRefine((proposal, context) => {
+    const { candidate, source } = proposal;
+    if (candidate.action !== 'page' && candidate.action !== 'note' && candidate.action !== 'update') return;
+    if (source.audience === 'tenant' && (!candidate.publicSource || candidate.record.applicability.length < 15)) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Shared findings require public evidence and shareable applicability',
+      });
+      return;
+    }
+    try {
+      if (candidate.action === 'note') assertKnowledgeNoteTextWithinBound(publishedText(proposal));
+      else assertKnowledgePageDescriptionWithinBound(candidate.record.summary);
+    } catch (error) {
+      context.addIssue({ code: 'custom', message: (error as Error).message });
+    }
+  });
 export const approvalSchema = z
   .object({
     proposal: proposalSchema,
@@ -90,7 +132,24 @@ export const approvalSchema = z
     reviewerId: identifier,
     decidedAt: z.iso.datetime(),
   })
-  .strict();
+  .strict()
+  .refine(({ proposal, decision }) => proposal.revision === decision.revision, {
+    message: 'Decision revision mismatch',
+    path: ['decision', 'revision'],
+  });
+
+export function sameDecision(recorded: z.infer<typeof decisionSchema>, retry: z.infer<typeof decisionSchema>) {
+  return (
+    recorded.decision === retry.decision && recorded.reason === retry.reason && recorded.revision === retry.revision
+  );
+}
+
+export const publicationRetryInputSchema = z
+  .object({ approval: approvalSchema, retryDecision: decisionSchema.optional() })
+  .refine(({ approval, retryDecision }) => !retryDecision || sameDecision(approval.decision, retryDecision), {
+    message: 'Retry must replay the exact recorded decision',
+    path: ['retryDecision'],
+  });
 export const publicationSchema = z
   .object({
     proposalId: z.uuid(),

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { mkdtemp, writeFile, rm, readFile } from 'node:fs/promises';
+import { createConnection } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
@@ -11,18 +12,37 @@ import { principals, resourceId } from '../../src/mastra/identity.ts';
 import type { KnowledgePage } from '@mastra/core/knowledge';
 import { startModelServer, type ModelScript } from './model-server.ts';
 
-export async function runtimeFixture(
-  options: {
-    generatedCredentials?: boolean;
-    studioRole?: string;
-    modelScript?: ModelScript;
-    profiles?: (Profile & { review?: boolean })[];
-    syntheticKnowledge?: boolean;
-    example?: 'retail-pos' | 'software-integration';
-  } = {},
-) {
+interface RuntimeOptions {
+  generatedCredentials?: boolean;
+  studioRole?: string;
+  modelScript?: ModelScript;
+  profiles?: (Profile & { review?: boolean })[];
+  syntheticKnowledge?: boolean;
+  example?: 'retail-pos' | 'software-integration';
+}
+interface RuntimeProcess {
+  launcher: ReturnType<typeof spawn>;
+  closed: boolean;
+  error?: Error;
+}
+
+export async function runtimeFixture(options: RuntimeOptions = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'knowledge-support-'));
-  const model = await startModelServer(options.modelScript);
+  let model: Awaited<ReturnType<typeof startModelServer>> | undefined;
+  try {
+    model = await startModelServer(options.modelScript);
+    return await configureRuntime(directory, model, options);
+  } catch (error) {
+    await Promise.allSettled([model?.close(), rm(directory, { recursive: true, force: true })]);
+    throw error;
+  }
+}
+
+async function configureRuntime(
+  directory: string,
+  model: Awaited<ReturnType<typeof startModelServer>>,
+  options: RuntimeOptions,
+) {
   const studioRole = options.studioRole ?? exampleStudioRole;
   const credentials = (
     options.profiles ?? [
@@ -49,53 +69,58 @@ export async function runtimeFixture(
     `../../src/mastra/index.ts?fixture=${randomBytes(6).toString('hex')}`
   )) as typeof import('../../src/mastra/index.ts');
   const pages: KnowledgePage[] = [];
-  if (options.syntheticKnowledge !== false) {
-    for (const [index, credential] of credentials.entries()) {
-      if (index === 3) {
-        pages.push(pages[0]!);
-        continue;
+  try {
+    if (options.syntheticKnowledge !== false) {
+      for (const [index, credential] of credentials.entries()) {
+        if (index === 3) {
+          pages.push(pages[0]!);
+          continue;
+        }
+        const scope = principals(credential.profile)[1]!;
+        const { page } = await runtime.supportKnowledge.upsertPage({
+          scope,
+          path: 'cases/synthetic',
+          name: `SYNTHETIC case ${index}`,
+          body: `SYNTHETIC_PRIVATE_${index}`,
+          author: 'synthetic-fixture',
+        });
+        await runtime.supportKnowledge.addNote({
+          scope,
+          path: 'cases/synthetic',
+          text: `SYNTHETIC_NOTE_${index}`,
+          author: 'synthetic-fixture',
+        });
+        await runtime.supportKnowledge.upsertPage({
+          scope: `docs:${credential.profile.tenantId}`,
+          path: 'manual',
+          name: 'SYNTHETIC documentation',
+          body: `SYNTHETIC_DOC_${credential.profile.tenantId}`,
+          author: 'synthetic-fixture',
+        });
+        pages.push(page);
       }
-      const scope = principals(credential.profile)[1]!;
-      const { page } = await runtime.supportKnowledge.upsertPage({
-        scope,
-        path: 'cases/synthetic',
-        name: `SYNTHETIC case ${index}`,
-        body: `SYNTHETIC_PRIVATE_${index}`,
-        author: 'synthetic-fixture',
-      });
       await runtime.supportKnowledge.addNote({
-        scope,
-        path: 'cases/synthetic',
-        text: `SYNTHETIC_NOTE_${index}`,
-        author: 'synthetic-fixture',
-      });
-      await runtime.supportKnowledge.upsertPage({
-        scope: `docs:${credential.profile.tenantId}`,
+        scope: 'docs:north',
         path: 'manual',
-        name: 'SYNTHETIC documentation',
-        body: `SYNTHETIC_DOC_${credential.profile.tenantId}`,
+        text: 'SYNTHETIC_FOREIGN_STAMP_1',
+        stamps: ['customer:north:store-2'],
         author: 'synthetic-fixture',
       });
-      pages.push(page);
+      for (const tenant of ['north', 'south']) {
+        await runtime.supportKnowledge.upsertPage({
+          scope: `tenant:${tenant}`,
+          path: 'policies/safe-changes',
+          name: 'Synthetic safety policy',
+          body: 'Preserve pending work. Obtain authorization before any disruptive change. Do not reset while offline payments are pending.',
+          author: 'synthetic-fixture',
+        });
+      }
     }
-    await runtime.supportKnowledge.addNote({
-      scope: 'docs:north',
-      path: 'manual',
-      text: 'SYNTHETIC_FOREIGN_STAMP_1',
-      stamps: ['customer:north:store-2'],
-      author: 'synthetic-fixture',
-    });
-    for (const tenant of ['north', 'south']) {
-      await runtime.supportKnowledge.upsertPage({
-        scope: `tenant:${tenant}`,
-        path: 'policies/safe-changes',
-        name: 'Synthetic safety policy',
-        body: 'Preserve pending work. Obtain authorization before any disruptive change. Do not reset while offline payments are pending.',
-        author: 'synthetic-fixture',
-      });
-    }
+  } catch (error) {
+    await runtime.storage.close().catch(() => undefined);
+    throw error;
   }
-  let child: ReturnType<typeof spawn> | undefined;
+  let child: RuntimeProcess | undefined;
   let output = '';
   let activeCredentialFile: string | undefined;
   function launchEnvironment(generated: boolean) {
@@ -121,16 +146,25 @@ export async function runtimeFixture(
   async function start() {
     output = '';
     activeCredentialFile = undefined;
-    child = spawn('npm', ['run', 'dev'], {
+    assert.equal(child, undefined, 'Stop the existing runtime before starting it again');
+    const launcher = spawn('npm', ['run', 'dev'], {
       cwd: process.cwd(),
       detached: true,
       env: launchEnvironment(!!options.generatedCredentials),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    child.stdout?.on('data', chunk => {
+    const running: RuntimeProcess = { launcher, closed: false };
+    child = running;
+    launcher.once('close', () => {
+      running.closed = true;
+    });
+    launcher.once('error', error => {
+      running.error = error;
+    });
+    launcher.stdout?.on('data', chunk => {
       output = (output + chunk).slice(-10000);
     });
-    child.stderr?.on('data', chunk => {
+    launcher.stderr?.on('data', chunk => {
       output = (output + chunk).slice(-10000);
     });
     for (let index = 0; index < 150; index++) {
@@ -155,7 +189,8 @@ export async function runtimeFixture(
       } catch (error) {
         if (!(error instanceof TypeError)) throw error;
       }
-      if (child.exitCode !== null) throw new Error(`Dev exited: ${output}`);
+      if (running.error) throw running.error;
+      if (launcher.exitCode !== null || launcher.signalCode !== null) throw new Error(`Dev exited: ${output}`);
       await setTimeout(200);
     }
     throw new Error(`Dev did not boot: ${output}`);
@@ -183,7 +218,7 @@ export async function runtimeFixture(
         }
         reject(new Error('Duplicate dev launch did not exit'));
       }, 15000);
-      duplicate.once('exit', code => {
+      duplicate.once('close', code => {
         clearTimeout(timer);
         resolve(code);
       });
@@ -197,16 +232,42 @@ export async function runtimeFixture(
     return { exitCode, file: match[1]!, output: duplicateOutput };
   }
   async function stop() {
-    if (!child?.pid) return;
-    const pid = child.pid;
-    try {
-      process.kill(-pid, 'SIGTERM');
-    } catch {}
-    for (let index = 0; index < 50 && child.exitCode === null; index++) await setTimeout(100);
-    if (child.exitCode === null) {
+    const running = child;
+    if (!running) return;
+    const pid = running.launcher.pid;
+    const signalGroup = (signal: NodeJS.Signals) => {
+      if (!pid) return;
       try {
-        process.kill(-pid, 'SIGKILL');
-      } catch {}
+        process.kill(-pid, signal);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+      }
+    };
+    const portReleased = () =>
+      new Promise<boolean>(resolve => {
+        const socket = createConnection({ port, host: '127.0.0.1', timeout: 100 });
+        socket.once('connect', () => {
+          socket.destroy();
+          resolve(false);
+        });
+        socket.once('timeout', () => {
+          socket.destroy();
+          resolve(false);
+        });
+        socket.once('error', (error: NodeJS.ErrnoException) => resolve(error.code === 'ECONNREFUSED'));
+      });
+    const waitForShutdown = async () => {
+      const deadline = Date.now() + 5000;
+      do {
+        if (running.closed && (!pid || (await portReleased()))) return true;
+        await setTimeout(100);
+      } while (Date.now() < deadline);
+      return false;
+    };
+    signalGroup('SIGTERM');
+    if (!(await waitForShutdown())) {
+      signalGroup('SIGKILL');
+      if (!(await waitForShutdown())) throw new Error(`Dev did not release port ${port}: ${output}`);
     }
     child = undefined;
   }
@@ -227,8 +288,15 @@ export async function runtimeFixture(
     output: () => output,
     async close() {
       await stop();
-      await model.close();
-      await rm(directory, { recursive: true, force: true });
+      try {
+        await runtime.storage.close();
+      } finally {
+        try {
+          await model.close();
+        } finally {
+          await rm(directory, { recursive: true, force: true });
+        }
+      }
     },
   };
 }

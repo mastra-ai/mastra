@@ -14,7 +14,6 @@ import {
 export interface SeedOptions {
   dryRun?: boolean;
   databaseUrl?: string;
-  recoverStoppedOwner?: boolean;
 }
 export interface SeedReport {
   dataset: string;
@@ -37,16 +36,6 @@ export interface SeedReport {
   repairedLinks: boolean;
 }
 
-async function allPages(storage: KnowledgeStorage) {
-  const result: KnowledgePage[] = [];
-  let cursor: string | undefined;
-  do {
-    const batch = await storage.listPages({ read: 'all', cursor, limit: 100 });
-    result.push(...batch.pages);
-    cursor = batch.nextCursor;
-  } while (cursor);
-  return result;
-}
 async function allNotes(storage: KnowledgeStorage, pageId: string) {
   const result: KnowledgeNote[] = [];
   let cursor: string | undefined;
@@ -145,7 +134,7 @@ async function writeDataset(knowledge: Knowledge, dataset: PreparedDataset, repo
       })
     ).map(edge => edge.toPageId);
     if (!sameSet(indexed, expected)) throw new Error('Knowledge link index repair did not converge');
-    const existing = await allNotes(storage, current.id);
+    const existing = wanted.notes.length ? await allNotes(storage, current.id) : [];
     for (const note of wanted.notes) {
       const owned = existing.filter(
         item => item.text.split('\n')[0] === note.marker && item.provenance.author === author,
@@ -175,19 +164,26 @@ async function writeDataset(knowledge: Knowledge, dataset: PreparedDataset, repo
   const selectedNotes = new Set(dataset.pages.flatMap(page => page.notes.map(note => note.marker)));
   const pagePrefix = `<!-- knowledge-seed:page:${dataset.id}:`;
   const notePrefix = `Seed note: ${dataset.id}/`;
-  for (const page of await allPages(storage)) {
-    if (page.createdBy.author === author && page.body?.startsWith(pagePrefix) && !selectedIds.has(page.id))
-      report.retained.push(`page:${page.id}`);
-    for (const note of await allNotes(storage, page.id)) {
-      const marker = note.text.split('\n')[0]!;
-      if (
-        note.provenance.author === author &&
-        marker.startsWith(notePrefix) &&
-        (!selectedIds.has(page.id) || !selectedNotes.has(marker))
-      )
-        report.retained.push(`note:${note.id}`);
+  let cursor: string | undefined;
+  do {
+    const batch = await storage.listPages({ read: 'all', cursor, limit: 100 });
+    const noteCounts = await storage.countNotes({ pageIds: batch.pages.map(page => page.id), read: 'all' });
+    for (const page of batch.pages) {
+      if (page.createdBy.author === author && page.body?.startsWith(pagePrefix) && !selectedIds.has(page.id))
+        report.retained.push(`page:${page.id}`);
+      if (!noteCounts[page.id]) continue;
+      for (const note of await allNotes(storage, page.id)) {
+        const marker = note.text.split('\n')[0]!;
+        if (
+          note.provenance.author === author &&
+          marker.startsWith(notePrefix) &&
+          (!selectedIds.has(page.id) || !selectedNotes.has(marker))
+        )
+          report.retained.push(`note:${note.id}`);
+      }
     }
-  }
+    cursor = batch.nextCursor;
+  } while (cursor);
 }
 
 /** CLI and deterministic checks use this same path. Validation and dry-run never initialize storage. */
@@ -213,7 +209,7 @@ export async function seedDataset(config: DatasetConfiguration, options: SeedOpt
     );
     return report;
   }
-  const lock = await acquireWriterLock(options.databaseUrl, options.recoverStoppedOwner);
+  const lock = await acquireWriterLock(options.databaseUrl);
   try {
     const storage = new LibSQLStore({ id: 'knowledge-seed', url: databaseUrlForPath(lock.databasePath) });
     try {

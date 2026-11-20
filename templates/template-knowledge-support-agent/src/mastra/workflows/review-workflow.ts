@@ -5,6 +5,7 @@ import {
   approvalSchema,
   decisionSchema,
   proposalSchema,
+  publicationRetryInputSchema,
   publicationSchema,
   reviewInputSchema,
   ReviewConflict,
@@ -50,14 +51,14 @@ export function createReviewWorkflow(service: ReviewService) {
         recordOperation('review-decision', 'suspended');
         return suspend(inputData);
       }
-      recordOperation('review-decision', 'resumed');
-      if (resumeData.revision !== inputData.revision) throw new ReviewConflict('Decision revision mismatch');
-      return {
+      const approval = approvalSchema.parse({
         proposal: inputData,
         decision: resumeData,
         reviewerId: reviewer.actorId,
         decidedAt: new Date().toISOString(),
-      };
+      });
+      recordOperation('review-decision', 'resumed');
+      return approval;
     },
   });
   const publish = createStep({
@@ -74,11 +75,10 @@ export function createReviewWorkflow(service: ReviewService) {
         reviewer.customerId !== inputData.proposal.reviewer.customerId
       )
         throw new ReviewConflict('Reviewer does not own this approval');
-      if (resumeData && JSON.stringify(resumeData) !== JSON.stringify(inputData.decision))
-        throw new ReviewConflict('Retry must replay the exact recorded decision');
+      const { approval } = publicationRetryInputSchema.parse({ approval: inputData, retryDecision: resumeData });
       try {
         const started = performance.now();
-        const result = await service.publish(inputData);
+        const result = await service.publish(approval);
         recordOperation('review-publication', result.status, started);
         return result;
       } catch (error) {

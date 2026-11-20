@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { readFile, writeFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { promisify } from 'node:util';
@@ -9,6 +9,7 @@ import { test } from 'node:test';
 import { TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import { runtimeFixture } from '../fixtures/runtime.ts';
 import { resourceId } from '../../src/mastra/identity.ts';
+import { seedDataset } from '../../src/mastra/knowledge/seed.ts';
 import { acquireWriterLock } from '../../src/mastra/knowledge/writer-lock.ts';
 import type { Candidate, Proposal } from '../../src/mastra/review/contracts.ts';
 
@@ -18,6 +19,7 @@ const execute = promisify(execFile);
 const customer = 'customer:north:store-1';
 const evidence = `${customer}#cases/synthetic`;
 const publicRef = 'docs:north#public-network-guide';
+const bodyOnlySource = 'docs:north#body-only-guide';
 const publicUrl = 'https://example.com/synthetic-network-guide';
 const reviewer = 6;
 
@@ -74,6 +76,7 @@ async function credentials(f: Fixture, granted = true, otherReviewers: number[] 
 }
 async function fixture() {
   let selected = candidate('initial');
+  let emitted: Candidate | undefined;
   let sharedRead: string | undefined;
   const f = await runtimeFixture({
     modelScript: body => {
@@ -101,13 +104,15 @@ async function fixture() {
           return { tool: { name: 'knowledge_read', arguments: { page: selected.evidence[0].ref } } };
         const results = tools.map(tool => tool.content).join('\n');
         if (selected.evidence.some(item => item.ref === evidence)) assert.match(results, /SYNTHETIC_PRIVATE_0/u);
-        if (tools.length > 3) assert.match(tools.at(-1)!.content!, /Reviewed by: morgan/u);
+        if (tools.length > 3 && selected.evidence[0]?.ref.startsWith(`${customer}#cases/review-`))
+          assert.match(tools.at(-1)!.content!, /Reviewed by: morgan/u);
         assert.doesNotMatch(
           results,
           /SYNTHETIC_PRIVATE_[1245]|SYNTHETIC_DOC_|SYNTHETIC_FOREIGN|docs:north|tenant:north/u,
         );
         assert.match(tools[2]!.content!, /denied|not found|not readable|scope|access/iu);
-        return { content: JSON.stringify(selected) };
+        emitted = selected;
+        return { content: JSON.stringify(emitted) };
       }
       const question =
         [...list]
@@ -128,23 +133,55 @@ async function fixture() {
       };
     },
   });
-  f.credentials.push({
-    ...f.credentials[3]!,
-    token: randomBytes(32).toString('base64url'),
-    profile: { ...f.credentials[3]!.profile, id: 'north-reviewer', actorId: 'morgan' },
-  });
-  await credentials(f);
-  await f.supportKnowledge.upsertPage({
-    scope: 'docs:north',
-    path: 'public-network-guide',
-    name: 'Synthetic public network guide',
-    body: `Synthetic guide: inspect Ethernet cabling.\nSource: ${publicUrl}\nVerified: 2026-11-20`,
-    author: 'seed:synthetic',
-  });
+  try {
+    f.credentials.push({
+      ...f.credentials[3]!,
+      token: randomBytes(32).toString('base64url'),
+      profile: { ...f.credentials[3]!.profile, id: 'north-reviewer', actorId: 'morgan' },
+    });
+    await credentials(f);
+    const guide = {
+      title: 'Synthetic public network guide',
+      file: 'guide.md',
+      scope: { kind: 'docs', profile: f.credentials[0]!.profile.id },
+    };
+    await writeFile(
+      join(f.directory, 'guide.md'),
+      `Synthetic guide: inspect Ethernet cabling.\nSource: ${publicUrl}\n`,
+    );
+    await writeFile(
+      join(f.directory, 'manifest.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        id: 'synthetic',
+        version: '1',
+        pages: [
+          {
+            ...guide,
+            key: 'public-guide',
+            path: 'public-network-guide',
+            source: { kind: 'Synthetic source', url: publicUrl },
+          },
+          { ...guide, key: 'body-only-guide', path: 'body-only-guide' },
+        ],
+      }),
+    );
+    await seedDataset({
+      id: 'synthetic',
+      directory: f.directory,
+      profiles: [f.credentials[0]!.profile],
+      mandatoryPolicies: [],
+    });
+  } catch (error) {
+    await f.close().catch(() => undefined);
+    throw error;
+  }
   return Object.assign(f, {
     select(value: Candidate) {
       selected = value;
+      emitted = undefined;
     },
+    emittedCandidate: () => emitted,
     shared(value: string) {
       sharedRead = value;
     },
@@ -398,9 +435,28 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
     assert.equal((await inspect(f, guarded.runId)).status, 'suspended');
 
     // Invalid candidates and source selection fail through the same native start path.
-    for (const [changes, source] of [
+    for (const [changes, source, expectedError] of [
       [{ evidence: [{ ref: 'customer:north:store-2#cases/synthetic', version: 1 }] }, input],
-      [{ evidence: [{ ref: `${customer}#cases/missing`, version: 1 }] }, input],
+      [{ evidence: [{ ref: `${customer}#cases/missing`, version: 1 }] }, input, /Evidence or target is missing/u],
+      [
+        { publicSource: { ref: bodyOnlySource, version: 1 } },
+        { ...input, audience: 'tenant' },
+        /Public source must be a current existing HTTPS source-backed page/u,
+      ],
+      [
+        { record: { ...candidate('description').record, summary: 'word '.repeat(150).trim() } },
+        input,
+        /Knowledge page description exceeds the 100 token limit/u,
+      ],
+      [
+        {
+          action: 'note',
+          target: { path: 'cases/synthetic', expectedVersion: 1 },
+          content: 'word '.repeat(210).trim(),
+        },
+        input,
+        /Knowledge note text exceeds the 250 token limit/u,
+      ],
       [{ action: 'update', target: { path: 'cases/synthetic', expectedVersion: 1 } }, input],
       [
         { content: 'Private store-1 information', publicSource: { ref: publicRef, version: 1 } },
@@ -414,11 +470,16 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
       [{}, { ...input, sourceActorId: 'morgan' }],
       [{}, { ...input, messageId: 'missing-turn' }],
       [{}, await confirmation(f, 1)],
-    ] as Array<[Partial<Candidate>, typeof input]>) {
+    ] as Array<[Partial<Candidate>, typeof input, RegExp?]>) {
       await unchanged(async () => {
-        f.select(candidate(`invalid-${++serial}`, changes));
+        const selected = candidate(`invalid-${++serial}`, changes);
+        f.select(selected);
         const run = await begin(f, source);
         assert.equal(run.state.status, 'failed', JSON.stringify(run.state));
+        if (expectedError) {
+          assert.deepEqual(f.emittedCandidate(), selected, 'The model must deliver the candidate before validation');
+          assert.match(JSON.stringify(run.state), expectedError);
+        }
       });
     }
 
@@ -520,7 +581,11 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
       [0, 1].map(() =>
         post(f, `/workflows/review/resume-async?runId=${busy.runId}`, {
           step: ['publish-review'],
-          resumeData: decision(busy.proposal),
+          resumeData: {
+            reason: approval.decision.reason,
+            revision: approval.decision.revision,
+            decision: approval.decision.decision,
+          },
         }),
       ),
     );
@@ -578,7 +643,15 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
 
     // Reject terminal snapshot persistence after the actual Knowledge write. The last durable
     // publication checkpoint remains running, so the next process must reconcile that effect.
-    async function interruptAndRecover(interrupted: Awaited<ReturnType<typeof next>>, expectedVersion: number) {
+    async function interruptAndRecover(interrupted: Awaited<ReturnType<typeof next>>, expectedVersion?: number) {
+      const marker = `knowledge-review:${interrupted.proposal.id}:`;
+      const note = interrupted.proposal.candidate.action === 'note';
+      const effects = () =>
+        note
+          ? sql(f, 'SELECT id, text FROM mastra_knowledge_notes WHERE instr(text, ?) > 0 AND deletedAt IS NULL', [
+              marker,
+            ])
+          : sql(f, 'SELECT id, body, version FROM mastra_knowledge_pages WHERE instr(body, ?) > 0', [marker]);
       await sql(
         f,
         `CREATE TRIGGER fail_review_audit BEFORE INSERT ON ${TABLE_WORKFLOW_SNAPSHOT}
@@ -595,20 +668,14 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
         step: ['review-decision'],
         resumeData: decision(interrupted.proposal),
       }).catch(() => undefined);
-      let written: Awaited<ReturnType<typeof snapshot>> = [];
+      let written: Awaited<ReturnType<typeof effects>> = [];
       for (let attempt = 0; attempt < 100; attempt++) {
-        written = (await snapshot(f)).filter(item =>
-          item.page.body?.includes(`knowledge-review:${interrupted.proposal.id}:`),
-        );
+        written = await effects();
         if (written.length) break;
         await setTimeout(100);
       }
       assert.equal(written.length, 1, 'Native write must precede the injected audit failure');
-      assert.equal(
-        written[0]!.page.version,
-        expectedVersion,
-        'The native publication must increment the version exactly once',
-      );
+      if (!note) assert.equal(written[0]!.version, expectedVersion, 'A page publication increments the version once');
       // Wait for the native run to finish trying its terminal checkpoint. Core can suppress
       // persistence errors with logging disabled; the durable checkpoint must still be running.
       const transport = await request;
@@ -636,19 +703,16 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
       await f.stop();
       await sql(f, 'DROP TRIGGER fail_review_audit');
       await sql(f, 'DROP TRIGGER fail_review_audit_update');
-      // This child really owns the lock, then exits without releasing it. Awaiting execFile
-      // proves the owner stopped before recovery is permitted to remove the stale lock.
-      const stoppedWriter = await execute(
+      // The child exits with the writer transaction still open. The next process can take over.
+      await execute(
         process.execPath,
         [
           '--input-type=module',
           '-e',
-          "const { acquireWriterLock } = await import('./src/mastra/knowledge/writer-lock.ts'); const lock = await acquireWriterLock(); console.log(lock.lockPath);",
+          "const { acquireWriterLock } = await import('./src/mastra/knowledge/writer-lock.ts'); await acquireWriterLock();",
         ],
         { timeout: 10000 },
       );
-      const staleLock = stoppedWriter.stdout.trim();
-      assert.ok(JSON.parse(await readFile(staleLock, 'utf8')).pid > 0);
       await f.start();
       const beforeRetry = await snapshot(f);
       assert.equal(
@@ -656,16 +720,17 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
         403,
       );
       const recovered = await json(await post(f, `/workflows/review/restart-async?runId=${interrupted.runId}`, {}));
-      assert.deepEqual(await snapshot(f), beforeRetry, 'Recovery must preserve the single original page and version');
+      assert.deepEqual(await snapshot(f), beforeRetry, 'Recovery must preserve the stored Knowledge');
+      assert.deepEqual(await effects(), written, 'Recovery must preserve the single original effect');
       assert.equal(
         recovered.status,
         'success',
         JSON.stringify({ runId: interrupted.runId, status: recovered.status, error: recovered.error }),
       );
       assert.equal(recovered.result.status, 'published', JSON.stringify(recovered));
-      const originalRef = `${interrupted.proposal.destination.scope}#${interrupted.proposal.destination.path}`;
+      const { scope, path } = interrupted.proposal.destination;
+      const originalRef = `${scope}#${path}${note ? `?note=${written[0]!.id}` : ''}`;
       assert.equal(recovered.result.reference, originalRef);
-      await assert.rejects(readFile(staleLock), { code: 'ENOENT' });
       assert.equal((await inspect(f, interrupted.runId)).result.reference, originalRef);
       assert.equal(
         (await inspect(f, interrupted.runId)).steps['review-decision'].output.proposal.id,
@@ -781,6 +846,23 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
       assert.equal((await inspect(f, interrupted.runId)).result.reference, reference);
       assert.equal((await post(f, restartPath, {})).status, 403, 'A settled run cannot be restarted');
     }
+
+    const path = 'cases/note-limit';
+    const { page } = await f.supportKnowledge.upsertPage({
+      scope: customer,
+      path,
+      name: 'Case with a full note scan',
+      author: 'synthetic-fixture',
+    });
+    const interruptedNote = await next(
+      { action: 'note', target: { path, expectedVersion: page.version }, evidence: [] },
+      freshInput,
+    );
+    for (let index = 0; index < 1000; index++)
+      await f.supportKnowledge.addNote({ scope: customer, path, text: `Existing observation ${index}` });
+    assert.match(await interruptAndRecover(interruptedNote), /\?note=/u);
+    const store = await f.supportKnowledge.getStorage();
+    assert.deepEqual(await store.countNotes({ pageIds: [page.id], read: 'all' }), { [page.id]: 1001 });
   } finally {
     await f.close();
   }

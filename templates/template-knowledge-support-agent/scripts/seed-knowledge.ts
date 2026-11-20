@@ -13,13 +13,8 @@ try {
   const config = Object.hasOwn(datasets, dataset) ? datasets[dataset] : undefined;
   if (!config) throw new Error(`Choose --dataset ${Object.keys(datasets).join(' or ')}`);
   if (values['dry-run'] && values['recover-lock']) throw new Error('Lock recovery requires an apply run');
-  console.log(
-    JSON.stringify(
-      await seedDataset(config, { dryRun: values['dry-run'], recoverStoppedOwner: values['recover-lock'] }),
-      null,
-      2,
-    ),
-  );
+  // Accept the legacy recovery flag. Writers now recover automatically.
+  console.log(JSON.stringify(await seedDataset(config, { dryRun: values['dry-run'] }), null, 2));
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = error instanceof WriterBusyError ? 75 : 1;

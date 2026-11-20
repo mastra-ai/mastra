@@ -17,8 +17,10 @@ import {
   approvalSchema,
   decisionSchema,
   publicationSchema,
+  publicationRetryInputSchema,
   proposalSchema,
   reviewInputSchema,
+  sameDecision,
 } from '../review/contracts.ts';
 import type { ReviewerAuthority } from '../review/service.ts';
 import type { ReviewWorkflow } from '../workflows/review-workflow.ts';
@@ -82,8 +84,7 @@ const restartRun: WritePolicy = ({ body, owner, actorId, run }) => {
     !approved.success ||
     approved.data.decision.decision !== 'approve' ||
     approved.data.proposal.owner !== owner ||
-    approved.data.reviewerId !== actorId ||
-    approved.data.decision.revision !== approved.data.proposal.revision
+    approved.data.reviewerId !== actorId
   )
     return false;
 
@@ -106,7 +107,7 @@ const restartRun: WritePolicy = ({ body, owner, actorId, run }) => {
     completed.data.revision === proposal.revision &&
     completed.data.reviewerId === approved.data.reviewerId &&
     completed.data.status === expectedStatus &&
-    JSON.stringify(completed.data.decision) === JSON.stringify(approved.data.decision) &&
+    sameDecision(completed.data.decision, approved.data.decision) &&
     (expectedStatus !== 'published'
       ? completed.data.reference === null
       : proposal.candidate.action === 'note'
@@ -142,13 +143,11 @@ const resumeRun: WritePolicy = ({ body, owner, actorId, run }) => {
     );
   }
 
-  const approved = approvalSchema.safeParse(stored.suspendPayload);
-  return (
-    approved.success &&
-    approved.data.proposal.owner === owner &&
-    approved.data.reviewerId === actorId &&
-    JSON.stringify(approved.data.decision) === JSON.stringify(decision.data)
-  );
+  const retry = publicationRetryInputSchema.safeParse({
+    approval: stored.suspendPayload,
+    retryDecision: decision.data,
+  });
+  return retry.success && retry.data.approval.proposal.owner === owner && retry.data.approval.reviewerId === actorId;
 };
 
 export function createReviewAccess(workflow: ReviewWorkflow, authority: ReviewerAuthority) {
