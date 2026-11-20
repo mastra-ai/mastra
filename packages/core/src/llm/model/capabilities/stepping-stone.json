@@ -34,12 +34,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "google/gemma-4-31B-it": [
+    "NVIDIA/NVIDIA-Nemotron-3-Super-120B-A12B": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "low", "medium"]
+      },
+      {
+        "type": "budget_tokens"
       }
     ],
-    "apertus-ai/Apertus-v1.5-8B": [
+    "google/gemma-4-31B-it": [
       {
         "type": "toggle"
       }
@@ -48,12 +52,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "zai-org/GLM-5.3-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ],
     "Qwen/Qwen3.8-27B": [
@@ -76,13 +74,15 @@
         "type": "budget_tokens"
       }
     ],
-    "NVIDIA/NVIDIA-Nemotron-3-Super-120B-A12B": [
+    "zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium"]
-      },
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "apertus-ai/Apertus-v1.5-8B": [
       {
-        "type": "budget_tokens"
+        "type": "toggle"
       }
     ]
   }

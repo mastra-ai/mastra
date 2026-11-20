@@ -2,13 +2,13 @@
   "attachment": ["moonshotai/kimi-k3", "moonshotai/kimi-k3.1-pro", "moonshotai/kimi-k3.1-pro-highspeed"],
   "structuredOutput": ["moonshotai/kimi-k3", "moonshotai/kimi-k3.1-pro", "moonshotai/kimi-k3.1-pro-highspeed"],
   "reasoning": {
-    "moonshotai/kimi-k3.1-pro": [
+    "moonshotai/kimi-k3.1-pro-highspeed": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "moonshotai/kimi-k3.1-pro-highspeed": [
+    "moonshotai/kimi-k3.1-pro": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

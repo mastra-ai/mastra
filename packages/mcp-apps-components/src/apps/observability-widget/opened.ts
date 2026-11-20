@@ -23,10 +23,11 @@ const PRESET_HOURS: Record<ObservabilityDatePreset, number> = {
 const isPreset = (value: unknown): value is ObservabilityDatePreset =>
   (OBSERVABILITY_DATE_PRESETS as readonly unknown[]).includes(value);
 
-/** What the opening tool returns as `structuredContent`: a stored dashboard and, optionally, its window. */
+/** What the opening tool returns as `structuredContent`: a stored dashboard and, optionally, its window and project. */
 const openedSchema = z.object({
   dashboard: z.unknown(),
   datePreset: z.enum(OBSERVABILITY_DATE_PRESETS).optional(),
+  project: z.string().min(1).optional(),
 });
 
 export type Opened =
@@ -38,7 +39,8 @@ export type Opened =
       customRange: ObservabilityWidgetDateRange | undefined;
       /** The filters the widgets are drawn under: the host's, else the dashboard's `defaults.filters`. */
       filters: FilterNode[] | undefined;
-      projectId: string | undefined;
+      /** The project every read is for: the host's, else the tool result's. */
+      project: string | undefined;
       env: DashboardEnvironment;
     }
   | { status: 'error'; message: string };
@@ -78,12 +80,12 @@ function readRange(value: unknown): ObservabilityWidgetDateRange | string {
 export function readView(value: unknown): HostView {
   if (value === undefined) return { status: 'ok', view: {} };
   if (!isRecord(value)) return hostError("The host page sent a view that isn't one.");
-  const { datePreset, projectId } = value;
+  const { datePreset, project } = value;
   if (datePreset !== undefined && !isPreset(datePreset) && datePreset !== 'custom') {
     return hostError(`The host page sent an unknown date preset: ${JSON.stringify(datePreset)}.`);
   }
-  if (projectId !== undefined && (typeof projectId !== 'string' || !projectId)) {
-    return hostError("The host page sent a project that isn't an id.");
+  if (project !== undefined && (typeof project !== 'string' || !project)) {
+    return hostError("The host page sent a project that isn't an id or slug.");
   }
   const filters =
     value.filters === undefined ? undefined : dashboardDefaultsSchema.safeParse({ filters: value.filters });
@@ -98,7 +100,7 @@ export function readView(value: unknown): HostView {
       ...(datePreset ? { datePreset } : {}),
       ...(customRange ? { customRange } : {}),
       ...(filters?.data.filters ? { filters: filters.data.filters } : {}),
-      ...(projectId ? { projectId } : {}),
+      ...(project ? { project } : {}),
     },
   };
 }
@@ -151,7 +153,8 @@ export function environment(
  * Reads the opening tool's result; a bad one becomes a message rather than a broken app. The window
  * is the host's `datePreset` (with its `customRange` when `custom`), else the result's, else the dashboard's `defaults.datePreset` when it
  * is one the widget shows, else `24h`. The host's `filters`, else the dashboard's top-level
- * `defaults.filters` chips, filter every widget.
+ * `defaults.filters` chips, filter every widget. The project is the host's, else the result's, so a
+ * client that sets no project (e.g. Claude) still reads the project the dashboard belongs to.
  */
 export function readOpened(
   structuredContent: unknown,
@@ -179,7 +182,7 @@ export function readOpened(
     datePreset,
     customRange,
     filters,
-    projectId: view.projectId,
+    project: view.project ?? opened.data.project,
     env: environment(datePreset, now, filter, customRange),
   };
 }
