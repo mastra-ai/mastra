@@ -16,6 +16,8 @@ import { serveWebhookReceiver, waitFor } from './webhook-receiver';
 vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
 
 const tsxCli = path.join(path.dirname(require.resolve('tsx/package.json')), 'dist', 'cli.mjs');
+// Stdio servers inherit only a curated env; forward NODE_OPTIONS so fixtures resolve workspace packages like this test does.
+const fixtureEnv = { NODE_OPTIONS: process.env.NODE_OPTIONS ?? '' };
 
 /** Records writes and deletes, so tests can see subscribe, refresh and unsubscribe reach the server. */
 class RecordingStore extends InMemoryWebhookSubscriptionStore {
@@ -311,7 +313,7 @@ describe('MCPClient ↔ MCPServer webhook delivery over Streamable HTTP', () => 
         events: {
           command: process.execPath,
           args: [tsxCli, path.join(__dirname, 'stdio-server.fixture.ts')],
-          env: { EVENTS_INTEROP_WEBHOOK: '1' },
+          env: { ...fixtureEnv, EVENTS_INTEROP_WEBHOOK: '1' },
         },
       },
       webhook: { url: receiver.url },

@@ -28,7 +28,8 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-let workerExecArgv: string[] = [];
+// Locally children load source; CI loads the built dist.
+const workerExecArgv = process.env.CI ? [] : ['--import', import.meta.resolve('tsx')];
 
 interface WorkerMessage {
   type: 'ready' | 'event-received' | 'status' | 'error';
@@ -64,26 +65,6 @@ describe('UnixSocketPubSub - multi-process localOnly contract', () => {
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'mastra-local-only-mp-'));
-    const sourceResolverScript = join(tempDir, 'workspace-source-resolver.mjs');
-    const workspaceRoot = join(__dirname, '../../../../..').replace(/\\/g, '/');
-    await writeFile(
-      sourceResolverScript,
-      `
-import { registerHooks } from 'node:module';
-import { pathToFileURL } from 'node:url';
-import { createWorkspacePackageIndex, resolveWorkspaceSource } from '${workspaceRoot}/packages/_config/src/vitest-source-resolver.js';
-
-const index = createWorkspacePackageIndex('${workspaceRoot}');
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const resolved = resolveWorkspaceSource(specifier, index, context.parentURL ? new URL(context.parentURL).pathname : undefined);
-    if (resolved) return { url: pathToFileURL(resolved.path).href + resolved.query, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-});
-`,
-    );
-    workerExecArgv = process.env.CI ? [] : ['--import', 'tsx', '--import', sourceResolverScript];
     workerScript = join(tempDir, 'worker.mjs');
     const eventsPath = join(
       __dirname,

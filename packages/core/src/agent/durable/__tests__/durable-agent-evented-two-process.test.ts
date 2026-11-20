@@ -14,7 +14,8 @@
  * The worker checks that the producer's execution still owns the run before
  * and after each step, so the run's claim must be visible to both processes.
  *
- * Children import the built `dist`, matching `events/__tests__/local-only-multiprocess.test.ts`.
+ * In CI children import the built `dist`, matching `events/__tests__/local-only-multiprocess.test.ts`;
+ * locally they import source through tsx and the workspace source hooks.
  */
 import { fork } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
@@ -50,15 +51,20 @@ function waitForMessage(child: ChildProcess, type: ChildMessage['type'], timeout
   });
 }
 
-const distPath = (rel: string) => join(__dirname, '../../../../dist', rel).replace(/\\/g, '/');
+const corePath = (rel: string) =>
+  (process.env.CI
+    ? join(__dirname, '../../../../dist', rel)
+    : join(__dirname, '../../..', rel.replace(/\.js$/, '.ts'))
+  ).replace(/\\/g, '/');
+const childExecArgv = process.env.CI ? [] : ['--import', import.meta.resolve('tsx')];
 
 const CHILD_SCRIPT = `
-import { UnixSocketPubSub } from '${distPath('events/index.js')}';
-import { Mastra } from '${distPath('mastra/index.js')}';
-import { Agent } from '${distPath('agent/index.js')}';
-import { createEventedAgent } from '${distPath('agent/durable/index.js')}';
-import { createTool } from '${distPath('tools/index.js')}';
-import { InMemoryStore } from '${distPath('storage/index.js')}';
+import { UnixSocketPubSub } from '${corePath('events/index.js')}';
+import { Mastra } from '${corePath('mastra/index.js')}';
+import { Agent } from '${corePath('agent/index.js')}';
+import { createEventedAgent } from '${corePath('agent/durable/index.js')}';
+import { createTool } from '${corePath('tools/index.js')}';
+import { InMemoryStore } from '${corePath('storage/index.js')}';
 
 const [socketPath, role] = process.argv.slice(2);
 
@@ -181,7 +187,11 @@ describe('EventedAgent - producer (MASTRA_WORKERS=false) + dedicated worker proc
     const env = { ...process.env };
     if (role === 'producer') env.MASTRA_WORKERS = 'false';
     else delete env.MASTRA_WORKERS;
-    const child = fork(scriptPath, [socketPath, role], { env, stdio: ['pipe', 'pipe', 'pipe', 'ipc'] });
+    const child = fork(scriptPath, [socketPath, role], {
+      env,
+      execArgv: childExecArgv,
+      stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+    });
     children.push(child);
     await waitForMessage(child, 'ready');
     return child;

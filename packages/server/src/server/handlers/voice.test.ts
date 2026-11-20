@@ -12,7 +12,19 @@ import {
   TRANSCRIBE_SPEECH_ROUTE,
 } from './voice';
 
-vi.mock('@mastra/core/voice');
+// Stub only CompositeVoice's methods (they resolve to undefined). Automocking the whole module would also
+// replace the default voice that Agent builds internally when core is loaded from source.
+vi.mock('@mastra/core/voice', async importOriginal => {
+  const actual = await importOriginal<typeof import('@mastra/core/voice')>();
+  class CompositeVoice extends actual.CompositeVoice {}
+  for (const key of Object.getOwnPropertyNames(actual.CompositeVoice.prototype)) {
+    const descriptor = Object.getOwnPropertyDescriptor(actual.CompositeVoice.prototype, key);
+    if (key !== 'constructor' && typeof descriptor?.value === 'function') {
+      Object.defineProperty(CompositeVoice.prototype, key, { ...descriptor, value: vi.fn() });
+    }
+  }
+  return { ...actual, CompositeVoice };
+});
 
 function createAgentWithVoice({
   name,

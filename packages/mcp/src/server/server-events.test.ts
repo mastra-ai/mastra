@@ -649,6 +649,8 @@ describe('MCPServer events over Streamable HTTP', () => {
 
 describe('MCPServer events over stdio', () => {
   const tsxCli = path.join(path.dirname(require.resolve('tsx/package.json')), 'dist', 'cli.mjs');
+  // Stdio servers inherit only a curated env; forward NODE_OPTIONS so fixtures resolve workspace packages like this test does.
+  const fixtureEnv = { NODE_OPTIONS: process.env.NODE_OPTIONS ?? '' };
   const fixturePath = path.join(__dirname, '__tests__', 'events-server.fixture.ts');
   let client: Client | undefined;
 
@@ -665,6 +667,7 @@ describe('MCPServer events over stdio', () => {
     const transport = new StdioClientTransport({
       command: process.execPath,
       args: [tsxCli, fixturePath],
+      env: fixtureEnv,
       stderr: 'pipe',
     });
     transport.stderr?.on('data', (chunk: Buffer) => process.stderr.write(chunk));
@@ -674,7 +677,7 @@ describe('MCPServer events over stdio', () => {
     const { received, forSubscription, methods } = recordNotifications(client);
     const a = openStream(client, { name: 'ticket.created', arguments: { project: 'a' } });
     const b = openStream(client, { name: 'ticket.created', arguments: { project: 'b' } });
-    await vi.waitFor(() => expect(methods(received)).toEqual(['active', 'active']));
+    await vi.waitFor(() => expect(methods(received)).toEqual(['active', 'active']), { timeout: 15000 });
     const [idA, idB] = received.map(n => (n.params!._meta as Record<string, unknown>)[EVENTS_SUBSCRIPTION_ID_META_KEY]);
 
     const emitted = await client.callTool({ name: 'emitTicket', arguments: { id: 't1', project: 'b' } });
