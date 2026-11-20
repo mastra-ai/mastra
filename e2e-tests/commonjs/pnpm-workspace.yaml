@@ -63,7 +63,6 @@ allowBuilds:
 patchedDependencies:
   # minimatch 11 removed makeRe(); match package-access patterns with minimatch() instead
   '@verdaccio/core@8.4.0': patches/@verdaccio__core@8.4.0.patch
-  'body-parser@1.20.9': patches/body-parser@1.20.9.patch
 minimumReleaseAgeExclude:
   - '@vitest/mocker@5.1.0'
   - '@vitest/spy@5.1.0'
