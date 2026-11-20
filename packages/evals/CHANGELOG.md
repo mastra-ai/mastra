@@ -1,5 +1,14 @@
 # @mastra/evals
 
+## 1.10.12-alpha.0
+
+### Patch Changes
+
+- Fixed the completeness scorer failing with `Cannot read properties of null (reading 'concat')` on some questions, such as "will Acme Box crash after the update?". `@mastra/evals` now requires `compromise` 14.20.0 or later, which contains the fix. ([#31012](https://github.com/mastra-ai/mastra/pull/31012))
+
+- Updated dependencies [[`3baa66d`](https://github.com/mastra-ai/mastra/commit/3baa66dfc785c222bb727a6da6012a0f28480b4a), [`d1f0a92`](https://github.com/mastra-ai/mastra/commit/d1f0a92ca41e1b725ed296abeb540908d09b5c64), [`4c71c2e`](https://github.com/mastra-ai/mastra/commit/4c71c2e776563852ef2301d674a1b8c70f511039)]:
+  - @mastra/core@1.86.0-alpha.2
+
 ## 1.10.11
 
 ### Patch Changes
