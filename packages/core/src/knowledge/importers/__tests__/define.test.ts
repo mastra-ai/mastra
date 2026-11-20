@@ -4,12 +4,12 @@ import {
   KnowledgeImporterCredentialsError,
   KnowledgeImporterDefinitionError,
   KnowledgeImporterSettingsError,
-  defineKnowledgeImporter,
+  KnowledgeImporter,
   knowledgeImporterRegistry,
 } from '../index';
 
-const helpspot = () =>
-  defineKnowledgeImporter({
+const helpspotClass = () =>
+  class HelpSpotImporter extends KnowledgeImporter({
     id: 'helpspot',
     label: 'HelpSpot',
     iconUrl: 'https://help.example.com/icon.svg',
@@ -19,11 +19,12 @@ const helpspot = () =>
       pageSize: z.number().int().default(100),
     }),
     credentials: { apiKey: { description: 'HelpSpot API token' } },
-    defaultSchedule: '0 * * * *',
-    async sync() {},
-  });
+  }) {
+    async import() {}
+  };
+const helpspot = () => helpspotClass().definition;
 
-describe('defineKnowledgeImporter', () => {
+describe('KnowledgeImporter', () => {
   it('builds a JSON manifest from the input side of the settings schema', () => {
     expect(helpspot().toManifest()).toMatchInlineSnapshot(`
       {
@@ -33,7 +34,6 @@ describe('defineKnowledgeImporter', () => {
             "secret": true,
           },
         },
-        "defaultSchedule": "0 * * * *",
         "iconUrl": "https://help.example.com/icon.svg",
         "id": "helpspot",
         "label": "HelpSpot",
@@ -76,7 +76,7 @@ describe('defineKnowledgeImporter', () => {
   });
 
   it('gives an importer without settings an empty-object schema and accepts no settings', async () => {
-    const plain = defineKnowledgeImporter({ id: 'calendar', label: 'Calendar', async sync() {} });
+    const plain = KnowledgeImporter({ id: 'calendar', label: 'Calendar' }).definition;
     expect(plain.toManifest()).toEqual({
       id: 'calendar',
       label: 'Calendar',
@@ -121,39 +121,79 @@ describe('defineKnowledgeImporter', () => {
     ['a script icon URL', { iconUrl: 'javascript:alert(1)' }],
     ['a bad credential slot name', { credentials: { 'api-key': { description: 'Token' } } }],
     ['a credential slot without a description', { credentials: { apiKey: { description: '' } } }],
-    ['an empty schedule', { defaultSchedule: '' }],
-    ['no sync function', { sync: undefined }],
     [
       'a settings schema that refers outside itself',
       { settings: { type: 'object', properties: { a: { $ref: 'https://example.com/a.json' } } } },
     ],
   ])('refuses %s', (_name, change) => {
-    expect(() =>
-      defineKnowledgeImporter({ id: 'source', label: 'Source', async sync() {}, ...change } as never),
-    ).toThrow(KnowledgeImporterDefinitionError);
+    expect(() => KnowledgeImporter({ id: 'source', label: 'Source', ...change } as never)).toThrow(
+      KnowledgeImporterDefinitionError,
+    );
   });
 
   it('accepts a data:image icon', () => {
     expect(
-      defineKnowledgeImporter({
-        id: 'source',
-        label: 'Source',
-        iconUrl: 'data:image/svg+xml;base64,PHN2Zy8+',
-        async sync() {},
-      }).iconUrl,
+      KnowledgeImporter({ id: 'source', label: 'Source', iconUrl: 'data:image/svg+xml;base64,PHN2Zy8+' }).definition
+        .iconUrl,
     ).toBe('data:image/svg+xml;base64,PHN2Zy8+');
+  });
+
+  it('exposes the manifest on the class, without constructing it', () => {
+    expect(helpspotClass().toManifest()).toEqual(helpspot().toManifest());
+    expect(helpspotClass().id).toBe('helpspot');
+  });
+});
+
+describe('an importer instance', () => {
+  it('is one binding, with credentials checked when it is constructed', () => {
+    const HelpSpot = helpspotClass();
+    const importer = new HelpSpot({
+      id: 'support',
+      target: 'docs#support',
+      settings: { baseUrl: 'https://help.example.com' },
+      credentials: { apiKey: 'token' },
+    });
+    expect(importer.binding).toEqual({
+      id: 'support',
+      importer: 'helpspot',
+      target: 'docs#support',
+      settings: { baseUrl: 'https://help.example.com' },
+      credentials: { apiKey: 'token' },
+    });
+    expect(Object.isFrozen(importer.binding)).toBe(true);
+    expect(
+      () =>
+        new HelpSpot({
+          id: 'support',
+          target: 'docs#support',
+          settings: { baseUrl: 'https://help.example.com' },
+          credentials: {} as never,
+        }),
+    ).toThrow(KnowledgeImporterCredentialsError);
+  });
+
+  it.each([
+    ['no id', { id: ' ', target: 'docs#support' }],
+    ['no target', { id: 'support', target: '' }],
+  ])('refuses a binding with %s', (_name, binding) => {
+    const Plain = class extends KnowledgeImporter({ id: 'calendar', label: 'Calendar' }) {
+      async import() {}
+    };
+    expect(() => new Plain(binding)).toThrow(KnowledgeImporterDefinitionError);
   });
 });
 
 describe('knowledgeImporterRegistry', () => {
-  it('indexes definitions by id', () => {
-    const registry = knowledgeImporterRegistry([helpspot()]);
+  it('indexes importer classes by id', () => {
+    const registry = knowledgeImporterRegistry([helpspotClass()]);
     expect([...registry.keys()]).toEqual(['helpspot']);
   });
 
-  it('refuses two definitions with the same id', () => {
-    expect(() => knowledgeImporterRegistry([helpspot(), helpspot()])).toThrow(
-      /Two importer definitions have the id "helpspot"/,
+  it('accepts the same class twice and refuses two classes with the same id', () => {
+    const HelpSpot = helpspotClass();
+    expect([...knowledgeImporterRegistry([HelpSpot, HelpSpot]).keys()]).toEqual(['helpspot']);
+    expect(() => knowledgeImporterRegistry([HelpSpot, helpspotClass()])).toThrow(
+      /Two importer classes have the id "helpspot"/,
     );
   });
 });

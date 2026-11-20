@@ -30,7 +30,10 @@ import type {
 
 /** @experimental */
 export interface LocalKnowledgeImporterHostOptions {
-  /** The app's bindings, or a function that reads them at each run start. */
+  /**
+   * The bindings this host applies flushes for: a list, or a function read at each run start, so a
+   * host that keeps bindings in its own config picks up changes without a new host.
+   */
   bindings: readonly KnowledgeImporterRunBinding[] | (() => Promise<readonly KnowledgeImporterRunBinding[]>);
   /** Recorded as the writer of imported pages. Default `importer:<bindingId>`. */
   author?: (binding: KnowledgeImporterRunBinding) => string;
@@ -177,9 +180,10 @@ export function createLocalKnowledgeImporterHost(
   };
 
   const bindingFor = async (bindingId: string) => {
-    const binding = (await listBindings()).find(b => b.id === bindingId);
+    const bindings = await listBindings();
+    const binding = bindings.find(b => b.id === bindingId);
     if (!binding) throw new KnowledgeImporterHostError(`No importer binding "${bindingId}".`, 404);
-    return binding;
+    return { binding, bindings };
   };
 
   const runEmbeds = async (storage: KnowledgeStorage, jobs: KnowledgeImportEmbedJob[]) => {
@@ -262,13 +266,13 @@ export function createLocalKnowledgeImporterHost(
 
   return {
     async startRun(bindingId: string, start?: KnowledgeImporterStartRunOptions): Promise<KnowledgeImporterRunStart> {
-      const binding = await bindingFor(bindingId);
+      const { binding, bindings } = await bindingFor(bindingId);
       try {
         const { scope } = parseKnowledgeImportTarget(binding.target);
         const { storage } = await storageAndImporters();
         await writer.runtime.resolve();
         await writer.runtime.materializeScope(scope, [], { author: author(binding) });
-        const others = (await listBindings()).filter(b => b.id !== binding.id);
+        const others = bindings.filter(b => b.id !== binding.id);
         const overlapping = others.find(b => knowledgeImportTargetsOverlap(b.target, binding.target));
         if (overlapping) {
           throw new KnowledgeImporterHostError(
@@ -363,6 +367,10 @@ export function createLocalKnowledgeImporterHost(
       if (peekRun?.deadlineAt && peekRun.deadlineAt.getTime() <= Date.now()) {
         throw conflict('run_not_active', 'The run is past its deadline.');
       }
+      // Read before the transaction: a bindings function may do its own I/O, which never belongs
+      // inside the write transaction. A different run row under lock is caught by the generation fence.
+      if (!peekRun) throw conflict('run_not_active', 'The run is not running.');
+      const runAuthor = author((await bindingFor(peekRun.bindingId)).binding);
       // One absolute deadline for the whole write transaction (O3 §C‴), capped by the run's.
       const deadlineAt = Math.min(budgetAt, peekRun?.deadlineAt?.getTime() ?? Infinity);
       let embeds: KnowledgeImportEmbedJob[] = [];
@@ -394,7 +402,6 @@ export function createLocalKnowledgeImporterHost(
               throw conflict('seq_mismatch', 'The flush seq is not the committed seq + 1.');
 
             const binding = await importers.getBinding(run.bindingId);
-            const runBinding = await bindingFor(run.bindingId);
             if (!binding) throw conflict('run_not_active', 'The run has no binding.');
             const [scope] = await tx.getScopesByAddress([parseKnowledgeImportTarget(binding.target).scope]);
             if (!scope) throw new KnowledgeImporterHostError('The binding target scope does not exist.', 503);
@@ -407,7 +414,7 @@ export function createLocalKnowledgeImporterHost(
               scope,
               runId: run.id,
               ops: body.ops,
-              provenance: { author: author(runBinding) },
+              provenance: { author: runAuthor },
               // After a settle slice timed out, the next uses half as many nodes; after three in a
               // row the run stops settling (O3 §C″).
               ...(timeouts < SETTLE_MAX_TIMEOUTS

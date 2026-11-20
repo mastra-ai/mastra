@@ -2,17 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryStore } from '../../storage';
 import { Knowledge } from '../index';
 import { importerHostConformance } from './conformance';
-import { defineKnowledgeImporter } from './define';
+import { KnowledgeImporter } from './define';
 import type { KnowledgeImporterHost } from './host';
 
 function localHost(): KnowledgeImporterHost {
   const knowledge = new Knowledge({
     storage: new InMemoryStore(),
     scopes: { 'docs:$orgId': {} },
-    importers: {
-      definitions: [defineKnowledgeImporter({ id: 'notes', label: 'Notes', sync: async () => {} })],
-      bindings: [{ id: 'b1', importer: 'notes', target: 'docs:acme#notion', settings: {}, credentials: {} }],
-    },
+    importers: [
+      new (class extends KnowledgeImporter({ id: 'notes', label: 'Notes' }) {
+        async import() {}
+      })({ id: 'b1', target: 'docs:acme#notion' }),
+    ],
   });
   return knowledge.importers!.host;
 }

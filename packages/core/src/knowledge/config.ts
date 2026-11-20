@@ -1,7 +1,7 @@
 import type { MastraCompositeStore } from '../storage';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
 import type { KnowledgeScopeDeclarations } from './declarations';
-import type { KnowledgeImporterDefinition, KnowledgeImporterRunBinding } from './importers';
+import type { KnowledgeImporterBase } from './importers';
 import type { KnowledgeInstructionsOption } from './instructions';
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
@@ -46,14 +46,12 @@ export interface KnowledgeConfig {
   /** Usage instructions added whenever Knowledge attaches tools. */
   instructions?: KnowledgeInstructionsOption;
   /**
-   * Importers this app runs against its own Knowledge storage, and the bindings that place each one
-   * at a target (`<scope>#<path>`). Run one with `knowledge.importers.run(bindingId)`. Needs a
-   * storage adapter with importer support (PostgreSQL, LibSQL, in-memory).
+   * Importers this app runs against its own Knowledge storage: one instance per configured source,
+   * e.g. `[new HelpSpotImporter({ id: 'support', target: 'docs#support', settings, credentials })]`.
+   * Run one with `knowledge.importers.run(bindingId)`. Needs a storage adapter with importer
+   * support (PostgreSQL, LibSQL, in-memory).
    *
    * @experimental
    */
-  importers?: {
-    definitions: readonly KnowledgeImporterDefinition<any, any>[];
-    bindings: readonly KnowledgeImporterRunBinding[] | (() => Promise<readonly KnowledgeImporterRunBinding[]>);
-  };
+  importers?: readonly KnowledgeImporterBase[];
 }

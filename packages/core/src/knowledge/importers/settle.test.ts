@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryStore } from '../../storage';
 import { KnowledgeTransactionDeadlineError } from '../../storage/domains/knowledge/base';
 import { Knowledge } from '../index';
-import { defineKnowledgeImporter } from './define';
+import { KnowledgeImporter } from './define';
+import type { KnowledgeImporterContext } from './define';
 import { knowledgeImporterFlushDigest } from './host';
 import { applyKnowledgeImportFlush } from './sink';
 import type { KnowledgeImporterOp, KnowledgeImportItem } from './types';
@@ -24,22 +25,17 @@ function setup() {
   const knowledge = new Knowledge({
     storage: store,
     scopes: { 'docs:$orgId': {} },
-    importers: {
-      definitions: [
-        defineKnowledgeImporter({
-          id: 'notes',
-          label: 'Notes',
-          sync: async ctx => {
-            for (const op of passes.shift() ?? []) {
-              if (op.op === 'upsert') await ctx.items.upsert(op.item);
-              else if (op.op === 'remove') await ctx.items.remove(op.sourceId);
-            }
-            if (passes.length) ctx.reportBacklog();
-          },
-        }),
-      ],
-      bindings: [{ id: 'b1', importer: 'notes', target: 'docs:acme#notion', settings: {}, credentials: {} }],
-    },
+    importers: [
+      new (class extends KnowledgeImporter({ id: 'notes', label: 'Notes' }) {
+        async import(ctx: KnowledgeImporterContext<Record<string, never>, never>) {
+          for (const op of passes.shift() ?? []) {
+            if (op.op === 'upsert') await ctx.items.upsert(op.item);
+            else if (op.op === 'remove') await ctx.items.remove(op.sourceId);
+          }
+          if (passes.length) ctx.reportBacklog();
+        }
+      })({ id: 'b1', target: 'docs:acme#notion' }),
+    ],
   });
   const host = knowledge.importers!.host;
   const page = async (path: string) => {

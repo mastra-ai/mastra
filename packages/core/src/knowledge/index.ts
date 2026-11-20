@@ -26,15 +26,25 @@ import {
 } from './host-writes';
 import type {
   KnowledgeAddNoteInput,
+  KnowledgeHostWriter,
   KnowledgeMovePageInput,
   KnowledgeRemovePageInput,
   KnowledgeUpdateNoteInput,
   KnowledgeUpsertPageInput,
   KnowledgeUpsertPageResult,
 } from './host-writes';
-import { runKnowledgeImport } from './importers';
-import type { KnowledgeImporterHost, RunKnowledgeImportOptions, RunKnowledgeImportResult } from './importers';
+import { KnowledgeImporterDefinitionError, knowledgeImporterRegistry, runKnowledgeImport } from './importers';
+import type {
+  KnowledgeImporterClass,
+  KnowledgeImporterHost,
+  RunKnowledgeImportOptions,
+  RunKnowledgeImportResult,
+} from './importers';
 import { createLocalKnowledgeImporterHost } from './importers/local-host';
+import type { LocalKnowledgeImporterHostOptions } from './importers/local-host';
+
+/** Reads a Knowledge's host writer for {@link createKnowledgeImporterHost}; set in the class's static block. */
+let hostWriterOf: (knowledge: Knowledge) => KnowledgeHostWriter;
 import { buildKnowledgeInstructions } from './instructions';
 import type { KnowledgeInstructionsOption } from './instructions';
 import { reindexKnowledgeLinks } from './links';
@@ -128,6 +138,16 @@ export class Knowledge extends MastraBase {
     }
     this.#pins = resolvePins(config.pinnedContext);
     this.#instructions = config.instructions;
+    if (config.importers) {
+      knowledgeImporterRegistry(config.importers.map(importer => importer.constructor as KnowledgeImporterClass));
+      const ids = new Set<string>();
+      for (const importer of config.importers) {
+        if (ids.has(importer.binding.id)) {
+          throw new KnowledgeImporterDefinitionError(`Two importers have the binding id "${importer.binding.id}".`);
+        }
+        ids.add(importer.binding.id);
+      }
+    }
     this.#importers = config.importers;
     if (Boolean(config.vector) !== Boolean(config.embedder)) {
       throw new Error('Knowledge semantic search needs both `vector` and `embedder`; pass both or neither.');
@@ -321,16 +341,20 @@ export class Knowledge extends MastraBase {
    * @experimental
    */
   get importers(): KnowledgeImporters | undefined {
-    const config = this.#importers;
-    if (!config) return undefined;
-    const host = createLocalKnowledgeImporterHost(this.#hostWriter(), { bindings: config.bindings });
+    const importers = this.#importers;
+    if (!importers) return undefined;
+    const host = createKnowledgeImporterHost(this, { bindings: importers.map(importer => importer.binding) });
     return {
       host,
-      run: (bindingId, options) => runKnowledgeImport({ ...options, definitions: config.definitions, host, bindingId }),
+      run: (bindingId, options) => runKnowledgeImport({ ...options, importers, host, bindingId }),
     };
   }
 
-  #hostWriter() {
+  static {
+    hostWriterOf = knowledge => knowledge.#hostWriter();
+  }
+
+  #hostWriter(): KnowledgeHostWriter {
     return {
       runtime: this.#runtime,
       getStorage: () => this.getStorage(),
@@ -585,10 +609,30 @@ export type {
 export * from './importers';
 
 /** @experimental */
+export type KnowledgeImporterHostOptions = LocalKnowledgeImporterHostOptions;
+
+/**
+ * An importer host over this Knowledge's storage, for a host that applies flushes for bindings it
+ * keeps itself and runs no importer code (a service that importers in other processes flush to).
+ * Pass `bindings` as a function to read them at each run start. An app that runs its own importers
+ * uses `new Knowledge({ importers: [...] })` and `knowledge.importers` instead.
+ *
+ * Host-only, like {@link Knowledge.upsertPage}: never expose it without admin-level auth.
+ *
+ * @experimental
+ */
+export function createKnowledgeImporterHost(
+  knowledge: Knowledge,
+  options: KnowledgeImporterHostOptions,
+): KnowledgeImporterHost {
+  return createLocalKnowledgeImporterHost(hostWriterOf(knowledge), options);
+}
+
+/** @experimental */
 export interface KnowledgeImporters {
   host: KnowledgeImporterHost;
   run(
     bindingId: string,
-    options?: Omit<RunKnowledgeImportOptions, 'definitions' | 'host' | 'bindingId'>,
+    options?: Omit<RunKnowledgeImportOptions, 'importers' | 'host' | 'bindingId'>,
   ): Promise<RunKnowledgeImportResult>;
 }

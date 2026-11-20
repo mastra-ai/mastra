@@ -4,7 +4,8 @@ import { MastraVector } from '../../vector';
 import type { MastraEmbeddingModel, QueryResult } from '../../vector';
 import { Knowledge } from '../index';
 import { KnowledgeSemanticIndex } from '../semantic';
-import { defineKnowledgeImporter } from './define';
+import { KnowledgeImporter } from './define';
+import type { KnowledgeImporterContext } from './define';
 import { knowledgeImporterFlushDigest } from './host';
 import type { KnowledgeImporterOp } from './types';
 
@@ -71,18 +72,13 @@ function setup() {
     vector,
     embedder,
     scopes: { 'docs:$orgId': {} },
-    importers: {
-      definitions: [
-        defineKnowledgeImporter({
-          id: 'notes',
-          label: 'Notes',
-          sync: async ctx => {
-            for (const op of ops) if (op.op === 'upsert') await ctx.items.upsert(op.item);
-          },
-        }),
-      ],
-      bindings: [{ id: 'b1', importer: 'notes', target: 'docs:acme#notion', settings: {}, credentials: {} }],
-    },
+    importers: [
+      new (class extends KnowledgeImporter({ id: 'notes', label: 'Notes' }) {
+        async import(ctx: KnowledgeImporterContext<Record<string, never>, never>) {
+          for (const op of ops) if (op.op === 'upsert') await ctx.items.upsert(op.item);
+        }
+      })({ id: 'b1', target: 'docs:acme#notion' }),
+    ],
   });
   /** The next embed whose text contains `match` waits until `release` is called. */
   const holdEmbed = (match: string) => {

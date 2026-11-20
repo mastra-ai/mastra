@@ -1,11 +1,16 @@
 import {
   Knowledge,
   KnowledgeImporterHostConflictError,
-  defineKnowledgeImporter,
+  KnowledgeImporter,
   importerHostConformance,
   knowledgeImporterFlushDigest,
 } from '@mastra/core/knowledge';
-import type { KnowledgeImporterHost, KnowledgeImportItem, KnowledgeImporterOp } from '@mastra/core/knowledge';
+import type {
+  KnowledgeImporterContext,
+  KnowledgeImporterHost,
+  KnowledgeImportItem,
+  KnowledgeImporterOp,
+} from '@mastra/core/knowledge';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -30,24 +35,19 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
 
   function setup(bindings: { id: string; target: string }[] = [{ id: 'b1', target: 'docs:acme#notion' }]) {
     let ops: KnowledgeImporterOp[] = [];
-    const importer = defineKnowledgeImporter({
-      id: 'notes',
-      label: 'Notes',
-      sync: async ctx => {
+    class Notes extends KnowledgeImporter({ id: 'notes', label: 'Notes' }) {
+      async import(ctx: KnowledgeImporterContext<Record<string, never>, never>) {
         for (const op of ops) {
           if (op.op === 'upsert') await ctx.items.upsert(op.item);
           else if (op.op === 'declare') await ctx.items.declare(op.item);
           else await ctx.items.remove(op.sourceId);
         }
-      },
-    });
+      }
+    }
     const knowledge = new Knowledge({
       scopes: { 'docs:$orgId': {} },
       storage: fixture.storage,
-      importers: {
-        definitions: [importer],
-        bindings: bindings.map(b => ({ ...b, importer: 'notes', settings: {}, credentials: {} })),
-      },
+      importers: bindings.map(b => new Notes(b)),
     });
     const run = async (next: KnowledgeImporterOp[], bindingId = 'b1') => {
       ops = next;

@@ -1,9 +1,8 @@
 import type { JSONSchema7 } from 'json-schema';
 
 /**
- * What a host shows for an importer definition: its form, its credential slots and its default
- * schedule. Plain JSON, so a UI or another process (hosted Knowledge) can render it without the
- * importer's code.
+ * What a host shows for an importer class: its form and its credential slots. Plain JSON, so a UI
+ * or another process (hosted Knowledge) can render it without the importer's code.
  *
  * @experimental
  */
@@ -16,8 +15,6 @@ export interface KnowledgeImporterManifest {
   /** Draft-07 JSON Schema of the settings as a binding supplies them (the schema's input side). */
   settingsSchema: JSONSchema7;
   credentials: Record<string, { description: string; secret: boolean }>;
-  /** A UTC cron expression a scheduling host uses unless the binding sets its own. */
-  defaultSchedule?: string;
 }
 
 /** The settings schema of an importer with no settings: an empty object. */

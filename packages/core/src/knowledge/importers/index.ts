@@ -17,6 +17,8 @@ export {
   parseKnowledgeImporterFlushBody,
 } from './host';
 export type {
+  KnowledgeImporterBindingInput,
+  KnowledgeImporterClass,
   KnowledgeImporterContext,
   KnowledgeImporterCredentialSlot,
   KnowledgeImporterDefinition,
@@ -25,12 +27,13 @@ export type {
   KnowledgeImporterStateStore,
 } from './define';
 export {
+  KnowledgeImporter,
+  KnowledgeImporterBase,
   KnowledgeImporterCredentialsError,
   KnowledgeImporterDefinitionError,
   KnowledgeImporterHostError,
   KnowledgeImporterSettingsError,
   KnowledgeImporterSourceError,
-  defineKnowledgeImporter,
   knowledgeImporterRegistry,
 } from './define';
 export type { RunKnowledgeImportOptions, RunKnowledgeImportResult } from './runner';

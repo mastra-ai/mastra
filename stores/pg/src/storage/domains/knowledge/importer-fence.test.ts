@@ -1,5 +1,5 @@
-import { Knowledge, defineKnowledgeImporter, knowledgeImporterFlushDigest } from '@mastra/core/knowledge';
-import type { KnowledgeImporterOp, KnowledgeImportItem } from '@mastra/core/knowledge';
+import { Knowledge, KnowledgeImporter, knowledgeImporterFlushDigest } from '@mastra/core/knowledge';
+import type { KnowledgeImporterContext, KnowledgeImporterOp, KnowledgeImportItem } from '@mastra/core/knowledge';
 import { Pool } from 'pg';
 import type { PoolClient } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -50,23 +50,18 @@ async function setup(bindings: { id: string; target: string }[]) {
   await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
   await pool.query(`CREATE SCHEMA "${schemaName}"`);
   let ops: KnowledgeImporterOp[] = [];
-  const importer = defineKnowledgeImporter({
-    id: 'notes',
-    label: 'Notes',
-    sync: async ctx => {
+  class Notes extends KnowledgeImporter({ id: 'notes', label: 'Notes' }) {
+    async import(ctx: KnowledgeImporterContext<Record<string, never>, never>) {
       for (const op of ops) {
         if (op.op === 'upsert') await ctx.items.upsert(op.item);
         else if (op.op === 'remove') await ctx.items.remove(op.sourceId);
       }
-    },
-  });
+    }
+  }
   const knowledge = new Knowledge({
     scopes: { 'docs:$orgId': {} },
     storage: new PostgresStore({ id: 'importer-fence', pool, schemaName }),
-    importers: {
-      definitions: [importer],
-      bindings: bindings.map(b => ({ ...b, importer: 'notes', settings: {}, credentials: {} })),
-    },
+    importers: bindings.map(b => new Notes(b)),
   });
   const other = new KnowledgePG({ pool: otherPool, schemaName });
   const run = (next: KnowledgeImporterOp[], bindingId = 'b1') => {

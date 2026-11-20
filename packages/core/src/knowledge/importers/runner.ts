@@ -3,8 +3,9 @@ import {
   KnowledgeImporterHostError,
   KnowledgeImporterSettingsError,
   KnowledgeImporterSourceError,
+  KnowledgeImporterBase,
 } from './define';
-import type { KnowledgeImporterContext, KnowledgeImporterDefinition } from './define';
+import type { KnowledgeImporterClass, KnowledgeImporterContext } from './define';
 import { KnowledgeImporterHostConflictError, knowledgeImporterFlushDigest } from './host';
 import type { KnowledgeImporterHost, KnowledgeImporterStartRunOptions } from './host';
 import type {
@@ -19,8 +20,12 @@ import type {
 
 /** @experimental */
 export interface RunKnowledgeImportOptions {
-  /** The app's importers; the run's binding picks one by id. */
-  definitions: readonly KnowledgeImporterDefinition<any, any>[];
+  /**
+   * The app's importers. An instance runs when its binding is the run's binding; a class is
+   * constructed from the binding the host returns (a host that keeps bindings itself, as hosted
+   * Knowledge does).
+   */
+  importers: readonly (KnowledgeImporterBase | KnowledgeImporterClass)[];
   host: KnowledgeImporterHost;
   bindingId: string;
   start?: KnowledgeImporterStartRunOptions;
@@ -28,7 +33,7 @@ export interface RunKnowledgeImportOptions {
   budgetMs?: number;
   /** After the budget, how long a running pass may take before the run is stopped. Default 3 minutes. */
   graceMs?: number;
-  /** Most `sync` passes in one run. Default 200. */
+  /** Most `import` passes in one run. Default 200. */
   maxPasses?: number;
   /** Ops per flush. Default 200. */
   bufferSize?: number;
@@ -101,7 +106,7 @@ function sourceError(error: KnowledgeImporterSourceError): KnowledgeImporterRunE
 }
 
 /**
- * Runs one import: starts a run on the host, calls the importer's `sync` in passes, sends its items
+ * Runs one import: starts a run on the host, calls the importer's `import` in passes, sends its items
  * in numbered flushes, and records how the run ended. Every write goes through `host`; the runner
  * never touches storage. Failures end the run with a fixed code; no exception text leaves the app.
  *
@@ -143,7 +148,7 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
   /** Settles at the hard deadline; never otherwise. */
   const deadlinePassed = new Promise<void>(resolve => (deadlineHit = resolve));
   let wake!: () => void;
-  /** Settles when the run stops for any reason, so nothing waits on a sync or a backoff past it. */
+  /** Settles when the run stops for any reason, so nothing waits on an import or a backoff past it. */
   const stopped = new Promise<void>(resolve => (wake = resolve));
   const halt = (reason: RunStop['reason']) => {
     if (reason === 'stopped') deadlineHit();
@@ -217,14 +222,33 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
   const finish = (request: Omit<KnowledgeImporterFinishRequest, 'runId' | 'generation' | 'lastSeq'>) =>
     finishRun(host, { runId, generation, ...request }, lastSeq, unsettledSeq, send => withRetries(send, 'finish'));
 
-  const importer = started.binding && options.definitions.find(d => d.id === started.binding!.importer);
-  if (!importer) return finish({ outcome: 'failed', backlog: false, error: { code: 'importer_missing_from_deploy' } });
+  const binding = started.binding;
+  const configured =
+    binding &&
+    options.importers.find(
+      (entry): entry is KnowledgeImporterBase =>
+        entry instanceof KnowledgeImporterBase &&
+        entry.binding.id === binding.id &&
+        entry.binding.importer === binding.importer,
+    );
+  const importerClass =
+    binding &&
+    (configured
+      ? (configured.constructor as KnowledgeImporterClass)
+      : options.importers.find(
+          (entry): entry is KnowledgeImporterClass => typeof entry === 'function' && entry.id === binding.importer,
+        ));
+  if (!binding || !importerClass) {
+    return finish({ outcome: 'failed', backlog: false, error: { code: 'importer_missing_from_deploy' } });
+  }
 
+  let importer: KnowledgeImporterBase;
   let settings: unknown;
   let credentials: Readonly<Record<string, string>>;
   try {
-    settings = await importer.parseSettings(started.binding?.settings ?? {});
-    credentials = importer.checkCredentials(started.binding?.credentials ?? {});
+    importer = configured ?? new importerClass(binding as never);
+    settings = await importerClass.definition.parseSettings(binding.settings ?? {});
+    credentials = importerClass.definition.checkCredentials(binding.credentials ?? {});
   } catch (error) {
     if (error instanceof KnowledgeImporterSettingsError) {
       return finish({ outcome: 'failed', backlog: false, error: { code: 'settings_invalid' } });
@@ -239,7 +263,7 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
   const fetchImpl = options.fetch ?? globalThis.fetch;
   const ctx: KnowledgeImporterContext<any, string> = {
     signal: controller.signal,
-    binding: { id: options.bindingId, target: started.binding?.target ?? '' },
+    binding: { id: binding.id, target: binding.target },
     settings,
     credentials,
     fetch: (input, init) => fetchImpl(input, { ...init, signal: init?.signal ?? controller.signal }),
@@ -282,8 +306,8 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     for (let pass = 0; pass < maxPasses; pass++) {
       backlog = false;
       try {
-        // A sync that ignores the signal is left behind when the run stops; its writes are refused.
-        await Promise.race([importer.sync(ctx), stopped]);
+        // An import that ignores the signal is left behind when the run stops; its writes are refused.
+        await Promise.race([importer.import(ctx), stopped]);
         if (!stop) await Promise.race([flush(), stopped]);
       } catch (error) {
         if (stop) break;

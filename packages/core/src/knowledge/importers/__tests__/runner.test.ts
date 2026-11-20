@@ -15,7 +15,7 @@ vi.mock('../host', async importOriginal => {
   };
 });
 
-import { defineKnowledgeImporter, KnowledgeImporterHostError, KnowledgeImporterSourceError } from '../define';
+import { KnowledgeImporter, KnowledgeImporterHostError, KnowledgeImporterSourceError } from '../define';
 import type { KnowledgeImporterContext } from '../define';
 import { KnowledgeImporterHostConflictError, knowledgeImporterFlushDigest } from '../host';
 import type { KnowledgeImporterHost, KnowledgeImporterRunBinding } from '../host';
@@ -122,8 +122,13 @@ class RecordingHost implements KnowledgeImporterHost {
   }
 }
 
-const importer = (sync: (ctx: KnowledgeImporterContext) => Promise<void>) =>
-  defineKnowledgeImporter({ id: 'cal', label: 'Calendar', sync });
+/** An importer class, as a host that keeps bindings itself registers it. */
+const importer = (run: (ctx: KnowledgeImporterContext) => Promise<void>) =>
+  class Calendar extends KnowledgeImporter({ id: 'cal', label: 'Calendar' }) {
+    import(ctx: KnowledgeImporterContext<Record<string, never>, never>) {
+      return run(ctx);
+    }
+  };
 
 const item = (n: number) => ({ sourceId: `e${n}`, title: `Event ${n}`, body: `body ${n}` });
 
@@ -131,7 +136,7 @@ describe('runKnowledgeImport', () => {
   it('flushes when the buffer fills, with state.set, and when sync returns, in seq order', async () => {
     const host = new RecordingHost();
     const receipt = await runKnowledgeImport({
-      definitions: [
+      importers: [
         importer(async ctx => {
           for (let i = 1; i <= 5; i++) await ctx.items.upsert(item(i));
           await ctx.state.set('cursor', 'c5');
@@ -157,7 +162,7 @@ describe('runKnowledgeImport', () => {
     host.state = { cursor: 'old' };
     let seen: string | undefined;
     await runKnowledgeImport({
-      definitions: [importer(async ctx => void (seen = await ctx.state.get('cursor')))],
+      importers: [importer(async ctx => void (seen = await ctx.state.get('cursor')))],
       host,
       bindingId: 'b1',
     });
@@ -172,7 +177,7 @@ describe('runKnowledgeImport', () => {
       { error: new KnowledgeImporterHostError('lost ack', 503), afterCommit: true },
     ];
     await runKnowledgeImport({
-      definitions: [
+      importers: [
         importer(async ctx => {
           await ctx.items.upsert(item(1));
         }),
@@ -194,7 +199,7 @@ describe('runKnowledgeImport', () => {
       const host = new RecordingHost();
       host.failures = [{ error }];
       await runKnowledgeImport({
-        definitions: [
+        importers: [
           importer(async ctx => {
             await ctx.items.upsert(item(1));
           }),
@@ -211,7 +216,7 @@ describe('runKnowledgeImport', () => {
   it('maps a source error to its fixed code and never sends the message', async () => {
     const host = new RecordingHost();
     await runKnowledgeImport({
-      definitions: [
+      importers: [
         importer(async () => {
           throw new KnowledgeImporterSourceError('token sk-secret rejected', 401);
         }),
@@ -233,7 +238,7 @@ describe('runKnowledgeImport', () => {
     const host = new RecordingHost();
     let passes = 0;
     await runKnowledgeImport({
-      definitions: [
+      importers: [
         importer(async ctx => {
           passes++;
           await ctx.state.set('cursor', String(passes));
@@ -254,7 +259,7 @@ describe('runKnowledgeImport', () => {
     let upsertError: unknown;
     let setError: unknown;
     await runKnowledgeImport({
-      definitions: [
+      importers: [
         importer(async ctx => {
           await ctx.items.upsert(item(1));
           await ctx.state.set('cursor', 'c1');
@@ -280,7 +285,7 @@ describe('runKnowledgeImport', () => {
   it('stops at the hard deadline: aborts the signal and finishes failed with stopped', async () => {
     const host = new RecordingHost();
     await runKnowledgeImport({
-      definitions: [
+      importers: [
         importer(async ctx => {
           await new Promise<void>(resolve => ctx.signal.addEventListener('abort', () => resolve()));
         }),
@@ -293,19 +298,22 @@ describe('runKnowledgeImport', () => {
     expect(host.finish).toMatchObject({ outcome: 'failed', error: { code: 'stopped' } });
   });
 
-  it('finishes credential_missing and importer_missing_from_deploy without running sync', async () => {
+  it('finishes credential_missing and importer_missing_from_deploy without running import', async () => {
     let ran = false;
-    const withSlot = defineKnowledgeImporter({
+    class WithSlot extends KnowledgeImporter({
       id: 'cal',
       label: 'Calendar',
       credentials: { TOKEN: { description: 'API token' } },
-      sync: async () => void (ran = true),
-    });
+    }) {
+      async import() {
+        ran = true;
+      }
+    }
     const host = new RecordingHost();
-    await runKnowledgeImport({ definitions: [withSlot], host, bindingId: 'b1' });
+    await runKnowledgeImport({ importers: [WithSlot], host, bindingId: 'b1' });
     expect(host.finish).toMatchObject({ outcome: 'failed', error: { code: 'credential_missing' } });
     const other = new RecordingHost();
-    await runKnowledgeImport({ definitions: [], host: other, bindingId: 'b1' });
+    await runKnowledgeImport({ importers: [], host: other, bindingId: 'b1' });
     expect(other.finish).toMatchObject({ outcome: 'failed', error: { code: 'importer_missing_from_deploy' } });
     expect(ran).toBe(false);
   });
@@ -318,7 +326,7 @@ describe('runKnowledgeImport', () => {
       afterCommit: i === 0,
     }));
     const receipt = await runKnowledgeImport({
-      definitions: [
+      importers: [
         importer(async ctx => {
           await ctx.items.upsert(item(1));
         }),
@@ -341,7 +349,7 @@ describe('runKnowledgeImport', () => {
     const host = new RecordingHost();
     host.finishFailures = [new KnowledgeImporterHostError('lost ack', 502)];
     const receipt = await runKnowledgeImport({
-      definitions: [
+      importers: [
         importer(async ctx => {
           await ctx.items.upsert(item(1));
         }),
@@ -358,7 +366,7 @@ describe('runKnowledgeImport', () => {
     const host = new RecordingHost();
     host.finishFailures = Array(10).fill(new KnowledgeImporterHostError('down'));
     const result = await runKnowledgeImport({
-      definitions: [importer(async () => {})],
+      importers: [importer(async () => {})],
       host,
       bindingId: 'b1',
       retryDelayMs: () => 0,
@@ -371,7 +379,7 @@ describe('runKnowledgeImport', () => {
   it('returns without finishing when the host skips the run', async () => {
     const host = new RecordingHost();
     host.startRun = async () => ({ status: 'skipped', runId: 'run-2' }) as any;
-    const result = await runKnowledgeImport({ definitions: [importer(async () => {})], host, bindingId: 'b1' });
+    const result = await runKnowledgeImport({ importers: [importer(async () => {})], host, bindingId: 'b1' });
     expect(result).toEqual({ status: 'skipped', runId: 'run-2' });
     expect(host.finish).toBeUndefined();
   });
@@ -411,9 +419,9 @@ describe('runKnowledgeImport', () => {
       const host = new RecordingHost();
       host.hangFlushes = true;
       const startedAt = Date.now();
-      // One item, below bufferSize: it goes out in the flush after sync returns.
+      // One item, below bufferSize: it goes out in the flush after import returns.
       const result = await runKnowledgeImport({
-        definitions: [importer(async ctx => ctx.items.upsert(item(1)))],
+        importers: [importer(async ctx => ctx.items.upsert(item(1)))],
         host,
         bindingId: 'b1',
         budgetMs: 50,
@@ -435,7 +443,7 @@ describe('runKnowledgeImport', () => {
         await new Promise(resolve => setTimeout(resolve, 0));
       };
       const result = await runKnowledgeImport({
-        definitions: [importer(async ctx => ctx.items.upsert(item(1)))],
+        importers: [importer(async ctx => ctx.items.upsert(item(1)))],
         host,
         bindingId: 'b1',
         heartbeatMs: 5,
@@ -449,7 +457,7 @@ describe('runKnowledgeImport', () => {
       const left = await armedTimersAfter(
         () =>
           runKnowledgeImport({
-            definitions: [
+            importers: [
               importer(async ctx => {
                 await ctx.items.upsert(item(1));
                 host.cancel = true;
@@ -471,7 +479,7 @@ describe('runKnowledgeImport', () => {
       const host = new RecordingHost();
       host.hangStart = true;
       await expect(
-        runKnowledgeImport({ definitions: [importer(async () => {})], host, bindingId: 'b1', hostCallTimeoutMs: 20 }),
+        runKnowledgeImport({ importers: [importer(async () => {})], host, bindingId: 'b1', hostCallTimeoutMs: 20 }),
       ).rejects.toBeInstanceOf(KnowledgeImporterHostError);
       expect(host.startCalls).toBe(1);
     }, 3000);
@@ -480,7 +488,7 @@ describe('runKnowledgeImport', () => {
       const host = new RecordingHost();
       host.hangHeartbeats = true;
       await runKnowledgeImport({
-        definitions: [importer(async () => new Promise(resolve => setTimeout(resolve, 200)))],
+        importers: [importer(async () => new Promise(resolve => setTimeout(resolve, 200)))],
         host,
         bindingId: 'b1',
         heartbeatMs: 5,
@@ -493,7 +501,7 @@ describe('runKnowledgeImport', () => {
     it('sends the next heartbeat once the previous one has settled', async () => {
       const host = new RecordingHost();
       await runKnowledgeImport({
-        definitions: [importer(async () => new Promise(resolve => setTimeout(resolve, 100)))],
+        importers: [importer(async () => new Promise(resolve => setTimeout(resolve, 100)))],
         host,
         bindingId: 'b1',
         heartbeatMs: 5,
@@ -505,7 +513,7 @@ describe('runKnowledgeImport', () => {
       const host = new RecordingHost();
       const startedAt = Date.now();
       const result = await runKnowledgeImport({
-        definitions: [
+        importers: [
           importer(async ctx => {
             await ctx.items.upsert(item(1));
             await ctx.state.set('cursor', 'c1');
@@ -528,7 +536,7 @@ describe('runKnowledgeImport', () => {
       host.hangFlushes = true;
       const startedAt = Date.now();
       const result = await runKnowledgeImport({
-        definitions: [importer(async ctx => ctx.items.upsert(item(1)))],
+        importers: [importer(async ctx => ctx.items.upsert(item(1)))],
         host,
         bindingId: 'b1',
         bufferSize: 1,
@@ -546,7 +554,7 @@ describe('runKnowledgeImport', () => {
       const host = new RecordingHost();
       host.hangFlushes = true;
       const result = await runKnowledgeImport({
-        definitions: [importer(async ctx => ctx.items.upsert(item(1)))],
+        importers: [importer(async ctx => ctx.items.upsert(item(1)))],
         host,
         bindingId: 'b1',
         hostCallTimeoutMs: 20,
@@ -563,7 +571,7 @@ describe('runKnowledgeImport', () => {
       const host = new RecordingHost();
       host.failures = [{ error: new KnowledgeImporterHostError('down', 503) }];
       const result = await runKnowledgeImport({
-        definitions: [
+        importers: [
           importer(async ctx => {
             host.cancel = true;
             await ctx.items.upsert(item(1));
