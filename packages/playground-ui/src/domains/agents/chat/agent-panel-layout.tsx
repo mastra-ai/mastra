@@ -38,7 +38,7 @@ export function AgentPanelLayout({
   const sizeBeforeMemoryDetail = useRef<string | undefined>(undefined);
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
     id: `agent-layout-v6-${agentId}`,
-    storage: localStorage,
+    storage: typeof localStorage === 'undefined' ? { getItem: () => null, setItem: () => {} } : localStorage,
   });
 
   useEffect(() => {

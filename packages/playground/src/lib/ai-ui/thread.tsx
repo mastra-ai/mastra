@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { AgentChatFeaturesProvider } from '@mastra/playground-ui/domains/agents/chat';
+import { AgentChatFeaturesProvider, useAgentThreadInput } from '@mastra/playground-ui/domains/agents/chat';
+import type { AgentChatThreadInput } from '@mastra/playground-ui/domains/agents/chat';
 import { Thread as BaseThread } from '@mastra/playground-ui/domains/agents/chat/thread';
 import type { ThreadProps } from '@mastra/playground-ui/domains/agents/chat/thread';
 import { useChatMessages } from '@mastra/playground-ui/domains/chat/context/chat-context';
@@ -27,6 +28,23 @@ export type { ThreadProps };
  */
 export function Thread(props: ThreadProps) {
   const threadInput = useThreadInput(props.threadId);
+  return (
+    <StudioThreadFeatures {...props} threadInput={threadInput}>
+      <StudioThreadBody {...props} />
+    </StudioThreadFeatures>
+  );
+}
+
+export function StudioComposerFeatures(props: ThreadProps & { children: React.ReactNode }) {
+  const threadInput = useAgentThreadInput(props.threadId);
+  return <StudioThreadFeatures {...props} threadInput={threadInput} />;
+}
+
+function StudioThreadFeatures({
+  children,
+  threadInput,
+  ...props
+}: ThreadProps & { children: React.ReactNode; threadInput: AgentChatThreadInput }) {
   const { canExecute } = usePermissions();
   const browser = useBrowserSession();
   const messages = useChatMessages();
@@ -46,6 +64,7 @@ export function Thread(props: ThreadProps) {
       value={{
         canExecute: canExecute('agents'),
         threadInput,
+        mcpAppTools,
         readAloud,
         browser: { hasSession: browser.hasSession, viewMode: browser.viewMode },
         slots: {
@@ -61,9 +80,15 @@ export function Thread(props: ThreadProps) {
         },
       }}
     >
-      <BaseThread {...props} mcpAppTools={mcpAppTools} />
+      {children}
     </AgentChatFeaturesProvider>
   );
+}
+
+function StudioThreadBody(props: ThreadProps) {
+  const messages = useChatMessages();
+  const { data: mcpAppTools } = useMcpAppTools({ queryOptions: { enabled: messages.length > 0 } });
+  return <BaseThread {...props} mcpAppTools={mcpAppTools} />;
 }
 
 const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript: (text: string) => void }) => {

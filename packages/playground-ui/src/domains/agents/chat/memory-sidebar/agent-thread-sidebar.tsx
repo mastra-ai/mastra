@@ -56,21 +56,23 @@ type ConfigBadgeProps = {
 function ConfigBadge({ icon: Icon, tooltip, enabled, value }: ConfigBadgeProps) {
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <span
-          className={cn(
-            'inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 transition-colors duration-normal',
-            enabled ? 'border-border bg-muted text-foreground' : 'border-border text-muted-foreground/50',
-          )}
-        >
-          <Icon className="size-3 shrink-0" />
-          {value !== undefined && (
-            <Txt as="span" variant="meta" className="tabular-nums">
-              {value}
-            </Txt>
-          )}
-        </span>
-      </TooltipTrigger>
+      <TooltipTrigger
+        render={
+          <span
+            className={cn(
+              'inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 transition-colors duration-normal',
+              enabled ? 'border-border bg-muted text-foreground' : 'border-border text-muted-foreground/50',
+            )}
+          >
+            <Icon className="size-3 shrink-0" />
+            {value !== undefined && (
+              <Txt as="span" variant="meta" className="tabular-nums">
+                {value}
+              </Txt>
+            )}
+          </span>
+        }
+      />
       <TooltipContent>{tooltip}</TooltipContent>
     </Tooltip>
   );
@@ -113,7 +115,7 @@ export function AgentThreadSidebar({
   const [collapsedCardSize, setCollapsedCardSize] = useState({ height: 0, offset: 0 });
 
   useLayoutEffect(() => {
-    if (showMemory || memoryDetail || !hasMemory) return;
+    if (showMemory || memoryDetail || !hasMemory || isLoading || isMemoryLoading) return;
 
     const shell = memoryCardShellRef.current;
     const summary = memoryCardSummaryRef.current;
@@ -142,6 +144,8 @@ export function AgentThreadSidebar({
     return () => observer.disconnect();
   }, [
     hasMemory,
+    isLoading,
+    isMemoryLoading,
     memoryDetail,
     recentMessages.description,
     observationPercent,

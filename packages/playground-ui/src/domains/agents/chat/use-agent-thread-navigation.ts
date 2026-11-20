@@ -1,5 +1,5 @@
 import { v4 as uuid } from '@lukeed/uuid';
-import { useLayoutEffect, useRef } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 
 interface ThreadDraftHandle {
@@ -16,20 +16,22 @@ export function useAgentThreadNavigation({
   refreshThreads,
 }: {
   threadId?: string;
-  draftScope: (string | undefined)[];
+  draftScope: [string | undefined, string | undefined, string, string];
   canPersistDraft: boolean;
   draftHandle: RefObject<ThreadDraftHandle | null>;
   navigateToThread: (threadId: string) => void;
   expandThreadsPanel?: () => void;
   refreshThreads: () => Promise<unknown>;
 }) {
-  const generated = useRef<{ routeThreadId?: string; newThreadId: string } | undefined>(undefined);
-  if (!generated.current || generated.current.routeThreadId !== threadId) {
-    generated.current = { routeThreadId: threadId, newThreadId: uuid() };
+  const [generated, setGenerated] = useState(() => ({ routeThreadId: threadId, newThreadId: uuid() }));
+  let current = generated;
+  if (generated.routeThreadId !== threadId) {
+    current = { routeThreadId: threadId, newThreadId: uuid() };
+    setGenerated(current);
   }
 
   const isNewThread = threadId === 'new';
-  const newThreadId = generated.current.newThreadId;
+  const newThreadId = current.newThreadId;
   const actualThreadId = isNewThread ? newThreadId : (threadId ?? newThreadId);
   const draftKey = JSON.stringify([...draftScope, threadId ?? 'new']);
   const newThreadKey = JSON.stringify([...draftScope, newThreadId]);
