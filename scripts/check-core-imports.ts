@@ -101,7 +101,9 @@ function getPackageInfo(packageRoot: string): PackageInfo | undefined {
   };
 
   try {
-    const coreFloorVersion = semver.minVersion(resolveCoreSemverRange(coreRange), { includePrerelease: true })?.version;
+    // minVersion forwards its options to Range, so includePrerelease applies even though @types/semver types it as Options.
+    const rangeOptions: semver.RangeOptions = { includePrerelease: true };
+    const coreFloorVersion = semver.minVersion(resolveCoreSemverRange(coreRange), rangeOptions)?.version;
     const corePackVersion = coreFloorVersion?.endsWith('-0') ? coreFloorVersion.slice(0, -2) : coreFloorVersion;
 
     if (!coreFloorVersion || !corePackVersion) {
