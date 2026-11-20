@@ -61,6 +61,7 @@ export interface StepRecord {
   usage?: LanguageModelUsage;
   finishReason?: string;
   tripwire?: StepTripwireData;
+  providerMetadata?: Record<string, any>;
 }
 
 /**
@@ -111,6 +112,7 @@ export function buildStepRecord(executionOutput: DurableAgenticExecutionOutput):
     usage: executionOutput.output.usage,
     finishReason: executionOutput.stepResult.reason,
     tripwire: executionOutput.stepResult.tripwire,
+    providerMetadata: executionOutput.response?.providerMetadata,
   };
 }
 

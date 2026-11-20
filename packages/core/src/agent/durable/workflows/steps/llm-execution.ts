@@ -3053,6 +3053,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       deferredStepFinishChunk.payload?.metadata?.providerMetadata,
                       deferredStepFinishChunk.payload?.metadata?.modelId,
                     ),
+                    // After a fallback or a prepareStep change this is not the run's first model.
+                    servedBy: { provider: currentModel.provider, modelId: currentModel.modelId },
+                    providerMetadata: deferredStepFinishChunk.payload?.metadata?.providerMetadata,
                   }
                 : undefined,
               state: typedInput.state,
