@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { trimEdgeSlashes } from './s3-path';
+import { trimEdgeSlashes } from './s3-path.js';
 
 describe('S3 workspace paths', () => {
   it('treats a slash-only path as the bucket root and keeps interior slashes', () => {

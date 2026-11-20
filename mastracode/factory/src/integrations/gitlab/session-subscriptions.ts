@@ -47,9 +47,19 @@ function normalizePath(value: string): string {
 
 const MERGE_REQUEST_MARKER = '/-/merge_requests/';
 
+/** ASCII A-Z only. Full `toLowerCase()` can expand a character (İ → i + dot) and shift later indexes. */
+function asciiLower(value: string): string {
+  let lowered = '';
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index);
+    lowered += code >= 65 && code <= 90 ? String.fromCharCode(code + 32) : value[index];
+  }
+  return lowered;
+}
+
 export function parseMergeRequestUrl(url: string): { host: string; projectPath: string; iid: number } | undefined {
   const trimmed = url.trim();
-  const lower = trimmed.toLowerCase();
+  const lower = asciiLower(trimmed);
   let protocol: 'https://' | 'http://' | undefined;
   if (lower.startsWith('https://')) protocol = 'https://';
   else if (lower.startsWith('http://')) protocol = 'http://';
@@ -60,7 +70,7 @@ export function parseMergeRequestUrl(url: string): { host: string; projectPath: 
   while (hostEnd < rest.length && rest[hostEnd] !== '/' && !/\s/.test(rest[hostEnd]!)) hostEnd++;
   if (hostEnd === 0 || rest[hostEnd] !== '/') return undefined;
 
-  const markerAt = rest.toLowerCase().indexOf(MERGE_REQUEST_MARKER, hostEnd);
+  const markerAt = asciiLower(rest).indexOf(MERGE_REQUEST_MARKER, hostEnd);
   if (markerAt <= hostEnd) return undefined;
   let projectPath = rest.slice(hostEnd + 1, markerAt);
   let pathEnd = projectPath.length;

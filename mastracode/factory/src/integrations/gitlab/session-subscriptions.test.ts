@@ -2,6 +2,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { GitLabIntegrationBase } from './integration.js';
+import { normalizeGitLabHost } from './integration.js';
 
 const mocks = vi.hoisted(() => ({
   subscribe: vi.fn(async (_input: { source: string; sessionId?: string }) => ({ created: true })),
@@ -114,6 +115,12 @@ describe('parseCreatedMergeRequest', () => {
       iid: 42,
     });
     expect(parseMergeRequestUrl('https://gitlab.example.com/acme/app/-/merge_requests/0')).toBeUndefined();
+    const unicodeHost = 'GİTLAB.example.com';
+    expect(parseMergeRequestUrl(`https://${unicodeHost}/acme/app/-/merge_requests/42`)).toEqual({
+      host: normalizeGitLabHost(unicodeHost),
+      projectPath: 'acme/app',
+      iid: 42,
+    });
     expect(parseMergeRequestUrl('http://gitlab.example.com/acme/app//-/merge_requests/7/')).toEqual({
       host: 'gitlab.example.com',
       projectPath: 'acme/app',
