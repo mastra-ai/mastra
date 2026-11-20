@@ -3342,7 +3342,7 @@ export class Workflow<
     });
 
     // Return a new Run instance with object parameters
-    const run =
+    const run: Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion> =
       this.#runs.get(runIdToUse) ??
       new Run({
         workflowId: this.id,
@@ -3360,8 +3360,22 @@ export class Workflow<
         serializedStepGraph: this.serializedStepGraph,
         disableScorers: options?.disableScorers,
         cleanup: () => {
+          // A run evicted while suspended and then resumed through a held reference must
+          // not tear down a newer instance created for the same run id.
+          const cached = this.#runs.get(runIdToUse);
+          if (cached && cached !== run) return;
           this.#runs.delete(runIdToUse);
           this.executionEngine.clearRunPersistenceOverride(runIdToUse);
+        },
+        // Unlike cleanup, eviction keeps the run's persistence override: the run is not
+        // finished, and a later resume of it must persist under the same policy.
+        registration: {
+          evict: () => {
+            if (this.#runs.get(runIdToUse) === run) this.#runs.delete(runIdToUse);
+          },
+          reattach: () => {
+            if (!this.#runs.has(runIdToUse)) this.#runs.set(runIdToUse, run);
+          },
         },
         tracingPolicy: options?.tracingPolicy ?? this.#options?.tracingPolicy,
         workflowSteps: this.steps,
@@ -4170,6 +4184,17 @@ const TERMINAL_WORKFLOW_RUN_STATUSES = new Set<WorkflowRunStatus>([
  * Represents a workflow run that can be executed
  */
 
+/**
+ * How a run reaches its workflow's in-memory run cache.
+ * @internal
+ */
+export interface RunRegistration {
+  /** Drops the run from the cache, if it is still the cached instance. */
+  evict(): void;
+  /** Re-adds the run when it executes again and no other instance holds its slot. */
+  reattach(): void;
+}
+
 export class Run<
   TEngineType = DefaultEngineType,
   TSteps extends Step<string, any, any, any, any, any, TEngineType, any>[] = Step<
@@ -4309,6 +4334,21 @@ export class Run<
 
   protected cleanup?: () => void;
 
+  /** Lifecycle hooks into the owning workflow's in-memory run cache. */
+  #registration?: RunRegistration;
+
+  /** Bumped when an execution (start, resume, restart, time travel) begins on this run. */
+  #executionEpoch = 0;
+
+  /** Epochs of executions that began and have not returned yet. The run may only be evicted while this is empty. */
+  #activeExecutions = new Set<number>();
+
+  /** The result that decides how the run is released once no execution is active. Kept across executions. */
+  #result?: { epoch: number; status: WorkflowRunStatus };
+
+  /** In-process watchers that expect this instance to carry the run's next events. */
+  #liveWatchers = 0;
+
   protected retryConfig?: {
     attempts?: number;
     delay?: number;
@@ -4331,6 +4371,8 @@ export class Run<
       delay?: number;
     };
     cleanup?: () => void;
+    /** Hooks that drop a persisted suspended run from the workflow's run cache and re-add it when it executes again. */
+    registration?: RunRegistration;
     serializedStepGraph: SerializedStepFlowEntry[];
     disableScorers?: boolean;
     tracingPolicy?: TracingPolicy;
@@ -4356,6 +4398,7 @@ export class Run<
     this.pubsub = params.pubsub ?? new EventEmitterPubSub();
     this.retryConfig = params.retryConfig;
     this.cleanup = params.cleanup;
+    this.#registration = params.registration;
     this.disableScorers = params.disableScorers;
     this.tracingPolicy = params.tracingPolicy;
     this.workflowSteps = params.workflowSteps;
@@ -4376,6 +4419,118 @@ export class Run<
       getStore: async () => (this.executionEngine.mastra ?? this.#mastra)?.getStorage()?.getStore('workflows'),
     });
     this.#recoverable = params.recoverable ?? false;
+  }
+
+  /**
+   * Runs one execution (start, resume, restart, time travel) under a fresh epoch, so a pending
+   * suspended-run eviction can tell it went stale. The execution counts as active until it
+   * returns or throws, so a rejected start or resume still leaves the run evictable. An execution
+   * that returns before its work ends passes that work to `holdUntil` to stay active until it
+   * settles. Hands back the execution's own promise: an extra await here delays callers by a tick.
+   */
+  protected runExecution<T>(
+    execute: (epoch: number, holdUntil: (work: Promise<unknown>) => void) => Promise<T>,
+  ): Promise<T> {
+    this.#registration?.reattach();
+    const epoch = ++this.#executionEpoch;
+    this.#activeExecutions.add(epoch);
+    let held: Promise<unknown> | undefined;
+    let execution: Promise<T>;
+    try {
+      execution = execute(epoch, work => (held = work));
+    } catch (error) {
+      execution = Promise.reject(error);
+    }
+    // Usually already settled by releaseAfterExecution; this covers executions that threw or returned early.
+    const settle = () => this.#settleExecution(epoch);
+    execution
+      .then(
+        () => held,
+        () => held,
+      )
+      .then(settle, settle)
+      .catch(() => {});
+    return execution;
+  }
+
+  /** Whether no execution began after the one that started at `epoch`. */
+  protected isLatestExecution(epoch: number): boolean {
+    return epoch === this.#executionEpoch;
+  }
+
+  /**
+   * Counts an in-process watcher until its unwatch runs (once). A suspended run is kept in
+   * the workflow's run cache while watched, so a later resume reuses this instance and its
+   * events reach the watcher; the last unwatch lets the run be evicted.
+   */
+  protected trackWatcher<T>(unwatch: () => T): () => T | undefined {
+    this.#liveWatchers++;
+    let done = false;
+    return () => {
+      if (done) return undefined;
+      done = true;
+      this.#liveWatchers--;
+      const result = unwatch();
+      if (this.#liveWatchers === 0) void this.releaseIfSuspended();
+      return result;
+    };
+  }
+
+  /** Drops the run from the workflow's run cache once it finished, or suspended with a persisted snapshot. */
+  protected async releaseAfterExecution(status: WorkflowRunStatus, epoch: number): Promise<void> {
+    // Results win in the order they return, except that an older execution's suspension
+    // cannot hide a finish another execution already returned.
+    const kept = this.#result;
+    const olderSuspensionHidesFinish =
+      status === 'suspended' && !!kept && kept.status !== 'suspended' && epoch <= kept.epoch;
+    if (!olderSuspensionHidesFinish) this.#result = { epoch, status };
+    await this.#settleExecution(epoch);
+  }
+
+  /**
+   * Ends an execution. Once none is active, a cancel or else the kept result decides the release:
+   * an ended run leaves the cache now, a suspended one once its snapshot is persisted.
+   */
+  async #settleExecution(epoch: number): Promise<void> {
+    if (!this.#activeExecutions.delete(epoch) || this.#activeExecutions.size > 0) return;
+    // An execution that went stale, or threw after it began, may have left another status. A
+    // cancel stands, and releases the run like any other end.
+    const status = this.workflowRunStatus === 'canceled' ? 'canceled' : this.#result?.status;
+    if (status) this.workflowRunStatus = status;
+    if (status && status !== 'suspended') {
+      this.cleanup?.();
+      return;
+    }
+    await this.releaseIfSuspended();
+  }
+
+  /**
+   * Evicts a suspended run from the workflow's run cache when its snapshot is stored as
+   * suspended and nothing in-process still depends on this instance. `resume()` rebuilds
+   * the run from storage, so keeping it only pins memory until the process exits (#30774).
+   */
+  protected async releaseIfSuspended(): Promise<void> {
+    const registration = this.#registration;
+    // An execution that began and has not returned yet still uses this instance, though the
+    // run reads as suspended until it gets going.
+    const settled = () => this.#activeExecutions.size === 0;
+    if (!registration || !settled() || this.workflowRunStatus !== 'suspended' || this.#liveWatchers > 0) return;
+    const epoch = this.#executionEpoch;
+    let storedStatus: WorkflowRunStatus | undefined;
+    try {
+      storedStatus = (await this.runStorage.loadHeader())?.status;
+    } catch {
+      return;
+    }
+    if (storedStatus !== 'suspended') return;
+    if (
+      epoch !== this.#executionEpoch ||
+      !settled() ||
+      this.workflowRunStatus !== 'suspended' ||
+      this.#liveWatchers > 0
+    )
+      return;
+    registration.evict();
   }
 
   public get abortController(): AbortController {
@@ -4612,19 +4767,8 @@ export class Run<
     return this._validateTimetravelInputData(inputData, step);
   }
 
-  protected async _start(
-    {
-      inputData,
-      initialState,
-      requestContext,
-      outputWriter,
-      tracingOptions,
-      format,
-      outputOptions,
-      perStep,
-      actor,
-      ...rest
-    }: (TInput extends unknown
+  protected _start(
+    params: (TInput extends unknown
       ? {
           inputData?: TInput;
         }
@@ -4649,6 +4793,25 @@ export class Run<
         perStep?: boolean;
         actor?: ActorSignal;
       } & Partial<ObservabilityContext>,
+    onDispatched?: () => void,
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
+    return this.runExecution(executionEpoch => this.#executeStart(executionEpoch, params, onDispatched));
+  }
+
+  async #executeStart(
+    executionEpoch: number,
+    {
+      inputData,
+      initialState,
+      requestContext,
+      outputWriter,
+      tracingOptions,
+      format,
+      outputOptions,
+      perStep,
+      actor,
+      ...rest
+    }: Parameters<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion>['_start']>[0],
     onDispatched?: () => void,
   ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     const observabilityContext = resolveObservabilityContext(rest);
@@ -4782,9 +4945,7 @@ export class Run<
     );
 
     this.workflowRunStatus = result.status;
-    if (result.status !== 'suspended') {
-      this.cleanup?.();
-    }
+    await this.releaseAfterExecution(result.status, executionEpoch);
     result.traceId = traceId;
     result.spanId = spanId;
     return result;
@@ -5348,10 +5509,10 @@ export class Run<
     void this.pubsub.subscribe(`workflow.events.v2.${this.runId}`, wrappedCb);
     void this.pubsub.subscribe('nested-watch', nestedWatchCb);
 
-    return () => {
+    return this.trackWatcher(() => {
       void this.pubsub.unsubscribe(`workflow.events.v2.${this.runId}`, wrappedCb);
       void this.pubsub.unsubscribe('nested-watch', nestedWatchCb);
-    };
+    });
   }
 
   /**
@@ -5632,7 +5793,7 @@ export class Run<
     });
   }
 
-  protected async _resume<TResume>(
+  protected _resume<TResume>(
     params: {
       resumeData?: TResume;
       step?:
@@ -5663,6 +5824,15 @@ export class Run<
       /** Hands over a run lease the caller already holds, which the execution uses instead of claiming one. */
       takeHeldOwnership?: () => WorkflowRunOwnership | undefined;
     } & Partial<ObservabilityContext>,
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
+    return this.runExecution(executionEpoch => this.#executeResume(executionEpoch, params));
+  }
+
+  async #executeResume(
+    executionEpoch: number,
+    params: Parameters<
+      Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion>['_resume']
+    >[0],
   ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     const observabilityContext = resolveObservabilityContext(params);
     const fgaProvider = this.#mastra?.getServer()?.fga;
@@ -6048,9 +6218,7 @@ export class Run<
           this.closeStreamAction?.().catch(() => {});
         }
         this.workflowRunStatus = result.status;
-        if (result.status !== 'suspended') {
-          this.cleanup?.();
-        }
+        await this.releaseAfterExecution(result.status, executionEpoch);
         if (result.status === 'success') {
           if (claimedParent && this.parentWorkflow) {
             let parentExecutionStarted = false;
@@ -6189,23 +6357,32 @@ export class Run<
     return undefined;
   }
 
-  protected async _restart({
-    requestContext,
-    outputWriter,
-    tracingOptions,
-    outputOptions,
-    actor,
-    ...rest
-  }: {
-    requestContext?: RequestContext<TRequestContext>;
-    outputWriter?: OutputWriter;
-    tracingOptions?: TracingOptions;
-    outputOptions?: {
-      includeState?: boolean;
-      includeResumeLabels?: boolean;
-    };
-    actor?: ActorSignal;
-  } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
+  protected _restart(
+    params: {
+      requestContext?: RequestContext<TRequestContext>;
+      outputWriter?: OutputWriter;
+      tracingOptions?: TracingOptions;
+      outputOptions?: {
+        includeState?: boolean;
+        includeResumeLabels?: boolean;
+      };
+      actor?: ActorSignal;
+    } & Partial<ObservabilityContext>,
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
+    return this.runExecution(executionEpoch => this.#executeRestart(executionEpoch, params));
+  }
+
+  async #executeRestart(
+    executionEpoch: number,
+    {
+      requestContext,
+      outputWriter,
+      tracingOptions,
+      outputOptions,
+      actor,
+      ...rest
+    }: Parameters<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion>['_restart']>[0],
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     const observabilityContext = resolveObservabilityContext(rest);
     const allowedEngines = ['default', 'evented'];
     if (!allowedEngines.includes(this.workflowEngineType)) {
@@ -6327,53 +6504,83 @@ export class Run<
     }
 
     this.workflowRunStatus = result.status;
-    if (result.status !== 'suspended') {
-      this.cleanup?.();
-    }
+    await this.releaseAfterExecution(result.status, executionEpoch);
 
     result.traceId = traceId;
     result.spanId = spanId;
     return result;
   }
 
-  protected async _timeTravel<TInput>({
-    inputData,
-    resumeData,
-    initialState,
-    step: stepParam,
-    context,
-    nestedStepsContext,
-    requestContext,
-    outputWriter,
-    tracingOptions,
-    outputOptions,
-    perStep,
-    actor,
-    ...rest
-  }: {
-    inputData?: TInput;
-    resumeData?: any;
-    initialState?: TState;
-    step:
-      | Step<string, any, TInput, any, any, any, TEngineType, any>
-      | [
-          ...Step<string, any, any, any, any, any, TEngineType, any>[],
-          Step<string, any, TInput, any, any, any, TEngineType, any>,
-        ]
-      | string
-      | string[];
-    context?: TimeTravelContext<any, any, any, any>;
-    nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
-    requestContext?: RequestContext<TRequestContext>;
-    outputWriter?: OutputWriter;
-    tracingOptions?: TracingOptions;
-    outputOptions?: {
-      includeState?: boolean;
-      includeResumeLabels?: boolean;
-    };
-    perStep?: boolean;
-    actor?: ActorSignal;
-  } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
+  protected _timeTravel<TInput>(
+    params: {
+      inputData?: TInput;
+      resumeData?: any;
+      initialState?: TState;
+      step:
+        | Step<string, any, TInput, any, any, any, TEngineType, any>
+        | [
+            ...Step<string, any, any, any, any, any, TEngineType, any>[],
+            Step<string, any, TInput, any, any, any, TEngineType, any>,
+          ]
+        | string
+        | string[];
+      context?: TimeTravelContext<any, any, any, any>;
+      nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
+      requestContext?: RequestContext<TRequestContext>;
+      outputWriter?: OutputWriter;
+      tracingOptions?: TracingOptions;
+      outputOptions?: {
+        includeState?: boolean;
+        includeResumeLabels?: boolean;
+      };
+      perStep?: boolean;
+      actor?: ActorSignal;
+    } & Partial<ObservabilityContext>,
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
+    return this.runExecution(executionEpoch => this.#executeTimeTravel<TInput>(executionEpoch, params));
+  }
+
+  async #executeTimeTravel<TInput>(
+    executionEpoch: number,
+    {
+      inputData,
+      resumeData,
+      initialState,
+      step: stepParam,
+      context,
+      nestedStepsContext,
+      requestContext,
+      outputWriter,
+      tracingOptions,
+      outputOptions,
+      perStep,
+      actor,
+      ...rest
+    }: {
+      inputData?: TInput;
+      resumeData?: any;
+      initialState?: TState;
+      step:
+        | Step<string, any, TInput, any, any, any, TEngineType, any>
+        | [
+            ...Step<string, any, any, any, any, any, TEngineType, any>[],
+            Step<string, any, TInput, any, any, any, TEngineType, any>,
+          ]
+        | string
+        | string[];
+      context?: TimeTravelContext<any, any, any, any>;
+      nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
+      requestContext?: RequestContext<TRequestContext>;
+      outputWriter?: OutputWriter;
+      tracingOptions?: TracingOptions;
+      outputOptions?: {
+        includeState?: boolean;
+        includeResumeLabels?: boolean;
+      };
+      perStep?: boolean;
+      actor?: ActorSignal;
+    } & Partial<ObservabilityContext>,
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     const observabilityContext = resolveObservabilityContext(rest);
     const inheritedState = this.inheritedState;
     this.inheritedState = undefined;
@@ -6527,9 +6734,7 @@ export class Run<
     }
 
     this.workflowRunStatus = result.status;
-    if (result.status !== 'suspended') {
-      this.cleanup?.();
-    }
+    await this.releaseAfterExecution(result.status, executionEpoch);
 
     result.traceId = traceId;
     result.spanId = spanId;

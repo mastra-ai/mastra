@@ -405,9 +405,22 @@ Returns: `Promise<DurableAgentStreamResult>`
 
 :::warning
 
-The `cleanup()` returned by `observe()` destroys the run's registry entries and cached events. Only call it when you are done with the run. If the run is suspended and you intend to resume later, don't call `cleanup()`. Let the auto-cleanup timer handle it after the run finishes or errors. Auto-cleanup doesn't fire on suspended events.
+The `cleanup()` returned by `observe()` destroys the run's registry entries and cached events. Only call it when you are done with the run. If the run is suspended and you intend to resume later, don't call `cleanup()`. Let the auto-cleanup timer handle it after the run finishes or errors. Auto-cleanup doesn't fire on suspended events. To free a suspended run's memory and keep it resumable, call [`releaseParkedRun()`](#releaseparkedrunrunid) instead.
 
 :::
+
+#### `releaseParkedRun(runId)`
+
+Releases this process's hold on a run parked at a suspension and keeps its stored snapshot. A stream that stays open across a suspension holds the run's registry entries, request context, tools, and message list until the run resumes. Call this after permanently dropping the run's only reader. This releases memory held by the parked run. The run stays resumable: `resume()` rebuilds it from the snapshot, in this process or another.
+
+```typescript
+// Done with a run parked on an approval, but it may be resumed later.
+const released = await durableAgent.releaseParkedRun(runId)
+```
+
+Returns: `Promise<boolean>`. `true` when the run was released. `false`, with nothing released, when this agent doesn't hold the run, the run's snapshot isn't stored as suspended, or a resume of the run is in progress. Another agent on the same Mastra instance can't release a run this agent parked.
+
+`AgentController` calls this for you when you delete a session that left runs parked.
 
 #### `prepare(messages, options?)`
 
