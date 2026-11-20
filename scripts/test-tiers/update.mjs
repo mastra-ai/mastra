@@ -207,8 +207,8 @@ const NAMED_JOBS = {
  * tiered as a whole (unit and package-E2E file lists, builds, gates) return nothing. `steps` (the
  * jobs API's) is only read for the grouped container-store jobs: a store ran when its
  * `Run <store> tests` step ran and failed when that step failed; a cancelled step didn't run, and a
- * failed group build fails every store its step name lists.
- * @returns {{ ran: string[], failed: string[] }}
+ * failed checkout, setup or group build fails every store the job name lists (`prerequisite`).
+ * @returns {{ ran: string[], failed: string[], passed?: string[], prerequisite?: string[] }}
  */
 export function jobKeysFor(workflow, name, log = () => '', steps = []) {
   const one = key => ({ ran: [key], failed: [key] });
@@ -218,25 +218,35 @@ export function jobKeysFor(workflow, name, log = () => '', steps = []) {
   if (workflow === 'Workspace Cloud Tests' && (m = /^test-cloud \(([\w-]+)\)$/.exec(name)))
     return one(`job:workspace-cloud/${m[1]}`);
   if (workflow !== 'Prebuild') return { ran: [], failed: [] };
-  if (/^Combined Store Tests \/ test \(containers \d+\)$/.test(name)) {
+  if ((m = /^Combined Store Tests \/ test \(containers \d+(?:: ([\w -]+))?\)$/.exec(name))) {
+    const keysOf = stores =>
+      stores
+        .filter(Boolean)
+        .map(store => `job:store/${store}`)
+        .sort();
+    const firstTest = steps.findIndex(step => /^Run [\w-]+ tests$/.test(step.name));
+    const prerequisites = firstTest < 0 ? [] : steps.slice(0, firstTest);
+    // Checkout, setup or the shared build failed, so no store test ran: each selected store failed
+    // its prerequisite, as its own job used to. The job name lists the selected stores (older runs:
+    // the build step's name).
+    if (prerequisites.some(step => step.conclusion === 'failure')) {
+      const build = steps.find(step => /^Build grouped storage packages \(/.test(step.name));
+      const listed = m[1] ?? /\(([\w -]+)\)$/.exec(build?.name ?? '')?.[1] ?? '';
+      const keys = keysOf(listed.split(' '));
+      return { ran: keys, failed: keys, passed: [], prerequisite: keys };
+    }
     const ran = [];
     const failed = [];
-    // The build step is named `Build grouped storage packages (<store> …)`; when it fails, every
-    // store step skips, and each store in the group failed, as its own job used to.
-    const build = steps.find(step => /^Build grouped storage packages \(/.test(step.name));
-    if (build?.conclusion === 'failure') {
-      const stores = /\(([\w -]+)\)$/.exec(build.name)?.[1].split(' ').filter(Boolean) ?? [];
-      const keys = stores.map(store => `job:store/${store}`).sort();
-      return { ran: keys, failed: keys };
-    }
+    const passed = [];
     for (const step of steps) {
       const store = /^Run ([\w-]+) tests$/.exec(step.name)?.[1];
       // A cancelled step was killed by the job's time cap before it finished: it didn't run.
       if (!store || !step.conclusion || step.conclusion === 'skipped' || step.conclusion === 'cancelled') continue;
       ran.push(`job:store/${store}`);
       if (step.conclusion === 'failure') failed.push(`job:store/${store}`);
+      if (step.conclusion === 'success') passed.push(`job:store/${store}`);
     }
-    return { ran: ran.sort(), failed: failed.sort() };
+    return { ran: ran.sort(), failed: failed.sort(), passed: passed.sort() };
   }
   if ((m = /^Combined Store Tests \/ test \(([\w-]+)\)$/.exec(name))) return one(`job:store/${m[1]}`);
   if ((m = /^Workspace Tests \/ test-unit \(([\w-]+)\)$/.exec(name))) return one(`job:workspace-unit/${m[1]}`);
@@ -646,6 +656,9 @@ const runJobs = runId =>
   ghJson(`repos/${repo}/actions/runs/${runId}/jobs?filter=all&per_page=100`, '-q', '.jobs[]|@json');
 // Jobs whose log names the failing test files: the unit lists and the package E2E list.
 const isFileListJob = name => /UNIT Test|\/ E2E Test \(/.test(name);
+// Grouped container-store jobs: their store steps keep completed failures if the job ended early.
+const isGroupedJob = name => /^Combined Store Tests \/ test \(containers \d+/.test(name);
+const ENDED_EARLY = new Set(['cancelled', 'timed_out']);
 // Workflows with jobs tiered as a whole, beside Prebuild's.
 const JOB_WORKFLOWS = ['prebuild.yml', 'secrets.test-workspaces.yml', 'lint.yml'];
 // A failed job counts once it is this old, so a rerun has had time to mark it a flake.
@@ -679,6 +692,30 @@ function repoTestFiles() {
   return trackedTestFiles;
 }
 
+/**
+ * The keys a job failed. A job tiered as a whole blames its key only when the job failed; a
+ * grouped job (its keys carry `passed`) keeps the store steps that completed with a failure even
+ * when a later step's timeout or a cancellation ended the job.
+ */
+export function failedJobKeys(job, keys) {
+  return job.conclusion === 'failure' || keys.passed ? keys.failed : [];
+}
+
+/**
+ * Whether a failed job's tier key passed on a later attempt of the job or in a later green run of
+ * the same head (`candidates` holds those runs' jobs). Grouped jobs are judged by the key's own
+ * step, so a sibling's new failure doesn't hide a recovery and a skipped or cancelled retry isn't
+ * one; jobs tiered as a whole go by the job's conclusion.
+ */
+export function passedOnRetry(job, key, candidates, keysOf) {
+  return candidates.some(j => {
+    if (j === job || j.name !== job.name) return false;
+    if (j.run_id === job.run_id && !(j.run_attempt > job.run_attempt)) return false;
+    const { passed } = keysOf(j);
+    return passed ? passed.includes(key) : j.conclusion === 'success';
+  });
+}
+
 function versioningCommand(tiers, { runId, date, escapesOut }) {
   const jobs = runJobs(runId).filter(j => j.conclusion && j.conclusion !== 'skipped');
   const files = jobs
@@ -689,7 +726,7 @@ function versioningCommand(tiers, { runId, date, escapesOut }) {
   for (const job of jobs) {
     const keys = jobKeysFor(job.workflow_name, job.name, () => jobLog(job.id), job.steps);
     ran.push(...keys.ran);
-    if (job.conclusion === 'failure') failedJobs.push(...keys.failed);
+    failedJobs.push(...failedJobKeys(job, keys));
   }
   // The versioning PR runs every job, so this is where new jobs join the list.
   const added = addJobKeys(tiers, ran, date);
@@ -735,6 +772,24 @@ function dailyCommand(tiers, { days, date, budgetMinutes }) {
         r.conclusion === 'success',
     );
 
+  const laterGreenJobsCache = new Map();
+  const laterGreenJobs = run => {
+    if (!laterGreenJobsCache.has(run.id))
+      laterGreenJobsCache.set(
+        run.id,
+        runs
+          .filter(
+            r =>
+              r.id !== run.id &&
+              r.workflow_id === run.workflow_id &&
+              r.head_sha === run.head_sha &&
+              r.created_at > run.created_at &&
+              r.conclusion === 'success',
+          )
+          .flatMap(r => runJobs(r.id)),
+      );
+    return laterGreenJobsCache.get(run.id);
+  };
   const compareCache = new Map();
   const toInspect = runsToInspect(runs);
   const ready = (run, seen) => waitingRunReady(runs, run, seen);
@@ -749,15 +804,22 @@ function dailyCommand(tiers, { days, date, budgetMinutes }) {
     const passedLater = job =>
       jobs.some(j => j.name === job.name && j.run_attempt > job.run_attempt && j.conclusion === 'success') ||
       laterGreenRun(run);
-    for (const job of jobs.filter(j => j.conclusion === 'failure')) {
+    for (const job of jobs.filter(
+      j => j.conclusion === 'failure' || (isGroupedJob(j.name) && ENDED_EARLY.has(j.conclusion)),
+    )) {
       const failedOn = job.completed_at?.slice(0, 10) ?? run.created_at.slice(0, 10);
       if (!isFileListJob(job.name)) {
-        const { failed } = jobKeysFor(job.workflow_name, job.name, () => jobLog(job.id), job.steps);
+        const keys = jobKeysFor(job.workflow_name, job.name, () => jobLog(job.id), job.steps);
         const settled = Date.now() - Date.parse(job.completed_at ?? run.created_at) >= JOB_SETTLE_MS;
-        const verdict = passedLater(job) ? 'flake' : settled ? 'fail' : 'unresolved';
         const settlesAt = new Date(Date.parse(job.completed_at ?? run.created_at) + JOB_SETTLE_MS).toISOString();
-        for (const key of failed)
+        const keysOf = j => jobKeysFor(j.workflow_name, j.name, () => '', j.steps);
+        const flaked = keys.passed
+          ? key => passedOnRetry(job, key, [...jobs, ...laterGreenJobs(run)], keysOf)
+          : () => passedLater(job);
+        for (const key of failedJobKeys(job, keys)) {
+          const verdict = flaked(key) ? 'flake' : settled ? 'fail' : 'unresolved';
           failures.push({ file: key, jobId: String(job.id), date: failedOn, verdict, settlesAt });
+        }
         continue;
       }
       const rerunPassed = passedLater(job);

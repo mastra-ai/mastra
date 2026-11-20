@@ -142,8 +142,10 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.ABHI_CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.ABHI_CLOUDFLARE_ACCOUNT_ID }}
 
+  # The job name lists the selected stores, so scripts/test-tiers/update.mjs can still blame them
+  # when checkout or setup fails before any store step runs.
   test-grouped:
-    name: test (containers ${{ matrix.group.group }})
+    name: "test (containers ${{ matrix.group.group }}: ${{ join(matrix.group.stores, ' ') }})"
     needs: setup
     if: ${{ github.repository == 'mastra-ai/mastra' && needs.setup.outputs.container_groups != '[]' }}
     runs-on: starsling-ubuntu-26.04
