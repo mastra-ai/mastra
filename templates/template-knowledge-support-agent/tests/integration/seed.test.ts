@@ -174,7 +174,10 @@ test('seed_dry_run_apply_repeat_and_update_preserve_provenance', { timeout: 1200
     manifest.pages[0]!.source!.url = 'https://example.com/synthetic-reference';
     manifest.pages[0]!.source!.verifiedOn = '2026-01-15';
     const supportedLinks =
-      '[Reference](https://example.com/reference)\n\n![Indicator](https://example.com/indicator.png)\n\n[Section](#example-connectivity-checks)';
+      '[Reference](https://example.com/reference?first=1&second=2)\n\n![Indicator](https://example.com/indicator%28part%29.png?first=1&second=2)\n\n[Section](#example-connectivity-checks)\n\nhttps://example.com/path@fixture?first=1&second=2\n\n[Contact](https://example.com?contact=fixture@example.com)\n\nwww.example.com/path@fixture?first=1&second=2';
+    const supportedNoteLinks =
+      '[Reference](https://example.com?first=1&second=2)\n![Indicator](https://example.com/image.png)\nhttp://example.com/path@fixture\nwww.example.com/path@fixture';
+    manifest.pages[2]!.notes![0]!.text += `\n${supportedNoteLinks}`;
     const supportedBodyPath = join(f.root, 'knowledge-datasets/retail-pos', manifest.pages[0]!.file);
     await writeFile(supportedBodyPath, `${await readFile(supportedBodyPath, 'utf8')}\n${supportedLinks}\n`);
     assert.ok((await readFile(supportedBodyPath, 'utf8')).includes(supportedLinks));
@@ -244,6 +247,7 @@ test('seed_dry_run_apply_repeat_and_update_preserve_provenance', { timeout: 1200
       assert.ok(note);
       assert.equal(note.text.split('\n')[0], 'Seed note: retail-pos/store-case/follow-up');
       assert.match(note.text, /Fixture author: Example technician/u);
+      assert.ok(note.text.includes(supportedNoteLinks));
       assert.equal(note.when?.toISOString(), '2026-01-13T00:00:00.000Z');
       assert.equal(note.provenance.author, 'seed:retail-pos');
       assert.deepEqual(note.stampScopeIds, [(await storage.getPage({ id: history.id!, read: owner }))!.scopeId]);
@@ -530,26 +534,59 @@ test('seed_rejects_invalid_input_and_recovers_partial_note_update', { timeout: 1
       assert.deepEqual(await f.snapshot(), stable);
     }
     await writeFile(bodyPath, originalBody);
-    // CommonMark allows destinations on another line for links and images. This seed subset does not.
-    const multilineDestinations = [
-      '[Reference](\nhttps://fixture:secret@example.com/private\n)',
-      '![Indicator](\r\nhttps://fixture:secret@example.com/private\r\n)',
-      '[Reference](\njavascript:alert\n)',
-      '![Indicator](\ndata:text/plain,fixture\n)',
-    ];
-    for (const [index, markdown] of multilineDestinations.entries()) {
+    // Reject destination spellings whose CommonMark/GFM interpretation can bypass literal URL checks.
+    const unsafeDestinations = [
+      [
+        '[Reference](\nhttps://fixture:secret@example.com/private\n)',
+        /Multiline Markdown destinations are unsupported/u,
+      ],
+      [
+        '![Indicator](\r\nhttps://fixture:secret@example.com/private\r\n)',
+        /Multiline Markdown destinations are unsupported/u,
+      ],
+      ['[Reference](\njavascript:alert\n)', /Multiline Markdown destinations are unsupported/u],
+      ['![Indicator](\ndata:text/plain,fixture\n)', /Multiline Markdown destinations are unsupported/u],
+      [
+        '[Reference](https://fixture&#58;secret&#64;example.com/private)',
+        /Ambiguous Markdown destinations are unsupported/u,
+      ],
+      [
+        '![Indicator](https://fixture&colon;secret&commat;example.com/private)',
+        /Ambiguous Markdown destinations are unsupported/u,
+      ],
+      [
+        '[Reference](https://fixture&#x3a;secret&#X40;example.com/private)',
+        /Ambiguous Markdown destinations are unsupported/u,
+      ],
+      ['[Reference](https://fixture(part)@example.com/private)', /Ambiguous Markdown destinations are unsupported/u],
+      ['![Indicator](https://fixture(part)@example.com/private)', /Ambiguous Markdown destinations are unsupported/u],
+      ['https://fixture:secret@example.com/private', /Unsafe Markdown URL authority/u],
+      ['HTTPS://fixture@example.com/private', /Unsafe Markdown URL authority/u],
+      ['www.fixture:secret@example.com/private', /Unsafe Markdown URL authority/u],
+      ['www.fixture(part)@example.com/private', /Unsafe Markdown URL authority/u],
+      ['www.fixture@localhost', /Unsafe Markdown URL authority/u],
+      [
+        '[ref]\n\n> [ref]: https://fixture&colon;secret&commat;example.com/private',
+        /Unsupported or reserved Markdown syntax/u,
+      ],
+      [
+        '![ref\\]]\n\n- [ref\\]]: https://fixture&colon;secret&commat;example.com/private',
+        /Unsupported or reserved Markdown syntax/u,
+      ],
+    ] as const;
+    for (const [index, [markdown, error]] of unsafeDestinations.entries()) {
       for (const placement of ['body', 'note']) {
         const manifest = structuredClone(original);
-        manifest.pages[0]!.title = 'This edit must not survive a rejected multiline destination';
+        manifest.pages[0]!.title = 'This edit must not survive a rejected Markdown destination';
         const body = placement === 'body' ? `${originalBody}\n\n${markdown}` : originalBody;
         await writeFile(bodyPath, body);
         if (placement === 'note') manifest.pages[2]!.notes![0]!.text = markdown;
         const injected = await f.saveManifest(manifest);
         assert.equal(await readFile(bodyPath, 'utf8'), body);
         if (placement === 'note') assert.equal(injected.pages[2]!.notes![0]!.text, markdown);
-        assert.match((await f.cli({ code: 1 })).output, /Multiline Markdown destinations are unsupported/u);
+        assert.match((await f.cli({ code: 1 })).output, error);
         assert.deepEqual(await f.snapshot(), stable, `${placement} destination ${index} changed existing storage`);
-        const fresh = join(f.directory, `multiline-${index}-${placement}.db`);
+        const fresh = join(f.directory, `unsafe-${index}-${placement}.db`);
         await f.cli({ url: pathToFileURL(fresh).href, code: 1 });
         await noFile(fresh);
         await noFile(`${fresh}.writer.lock`);
