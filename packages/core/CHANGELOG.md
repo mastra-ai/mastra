@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 1.86.0-alpha.2
+
+### Patch Changes
+
+- The `knowledge_note` tool no longer requires `scope` when adding a note. A note added without `scope` is stamped with the page's own scope, so everyone who can read the page sees it. Pass narrower scopes to keep a note private. Restamping a note still requires `scope`. ([#30989](https://github.com/mastra-ai/mastra/pull/30989))
+
+- Refactored agent version-override composition to share precedence handling between plain calls and durable preparation while retaining their existing merge behavior. ([#30998](https://github.com/mastra-ai/mastra/pull/30998))
+
+- Restored Agent request-context validation and output completion timing after helper extraction. Fixed durable recovery and saved request-context reads to check the agent's current identity after storage returns. ([#30997](https://github.com/mastra-ai/mastra/pull/30997))
+
 ## 1.86.0-alpha.1
 
 ### Minor Changes
