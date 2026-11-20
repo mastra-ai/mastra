@@ -380,4 +380,57 @@ describe('PG service importer host', () => {
       await t.drop();
     }
   }, 15_000);
+  it('records no settle timeout, page, node, state or receipt when the lease ends while settling', async () => {
+    const t = await setup(1500);
+    let rowHolder: PoolClient | undefined;
+    try {
+      const started = await t.host.startRun('b1');
+      if (started.status !== 'started') throw new Error('not started');
+      const send = async (seq: number, flushOps: KnowledgeImporterOp[], state?: Record<string, string>) =>
+        t.host.flush({
+          runId: started.runId,
+          generation: started.generation,
+          seq,
+          digest: await knowledgeImporterFlushDigest({ ops: flushOps, ...(state ? { state } : {}) }),
+          ops: flushOps,
+          ...(state ? { state } : {}),
+        });
+      // c1 arrives before its parent: placed under the target, unsettled.
+      await send(1, [{ op: 'upsert', item: { sourceId: 'c1', parent: 'p0', title: 'C1', body: 'c' } }]);
+      const [scope] = await t.storage.getScopesByAddress(['docs:acme']);
+      const pageAt = (...path: string[]) => t.storage.getPageByPath({ scopeId: scope!.id, path, read: 'all' });
+      const child = (await pageAt('notion', 'c1'))!;
+      expect(child).toBeTruthy();
+      const stateBefore = await t.storage.importers!.getState('b1');
+
+      // Hold c1's row so the settle slice that moves it under p0 waits until the lease ends.
+      rowHolder = await otherPool.connect();
+      await rowHolder.query('BEGIN');
+      await rowHolder.query(`SELECT 1 FROM "${t.schemaName}".mastra_knowledge_pages WHERE "id" = $1 FOR UPDATE`, [
+        child.id,
+      ]);
+      const outcome = await send(2, [{ op: 'upsert', item: { sourceId: 'p0', title: 'P0', body: 'p' } }], {
+        cursor: 'after-2',
+      }).then(
+        () => 'applied' as const,
+        (error: unknown) => error,
+      );
+      await rowHolder.query('ROLLBACK');
+
+      expect(outcome).toMatchObject({ name: 'KnowledgeImporterHostError' });
+      expect((outcome as { status?: number }).status ?? 500).toBeGreaterThanOrEqual(500);
+      const importers = t.storage.importers!;
+      expect(await importers.getFlush(started.runId, started.generation, 2)).toBeNull();
+      expect(await importers.getNode('b1', 'p0')).toBeNull();
+      expect(await pageAt('notion', 'p0')).toBeNull();
+      expect((await pageAt('notion', 'c1'))?.version).toBe(child.version);
+      // Neither the flush's state nor the host's reserved settle-timeout counter.
+      expect(await importers.getState('b1')).toEqual(stateBefore);
+      expect(Object.keys(stateBefore).some(key => key.startsWith('mastra:settle:timeouts'))).toBe(false);
+    } finally {
+      await rowHolder?.query('ROLLBACK').catch(() => {});
+      rowHolder?.release();
+      await t.drop();
+    }
+  }, 15_000);
 });

@@ -387,22 +387,44 @@ export function createLocalKnowledgeImporterHost(
     }
   };
 
-  /** Counts a settle flush that timed out, outside its rolled-back transaction. Best effort. */
-  const countSettleTimeout = async (runId: string) => {
+  /**
+   * Counts a settle flush that timed out, outside its rolled-back transaction. Best effort, and
+   * only for a run still live by the same checks a flush passes: same generation, not canceled, not
+   * past its lease or deadline. Under a lease the write is also bounded by where the locked run
+   * stops being live, so a timeout caused by the lease ending never writes after it.
+   */
+  const countSettleTimeout = async (runId: string, generation: number) => {
     try {
       const { storage } = await storageAndImporters();
-      await storage.transaction(
-        async tx => {
-          const importers = tx.importers!;
-          await importers.lockWriterGuard('share');
-          const run = await importers.lockRun(runId);
-          if (!run || run.status !== 'running') return;
-          const n = settleTimeouts(await importers.getState(run.bindingId), runId) + 1;
-          await importers.setState(run.bindingId, { [SETTLE_TIMEOUTS_KEY]: `${runId}:${n}` });
-          // Bounded: the flush already ran out of time, and the reply shouldn't wait on another lock.
-        },
-        { deadlineAt: Date.now() + SETTLE_TIMEOUT_RECORD_MS },
-      );
+      const fenced = leaseMs !== undefined && storage.getCapabilities().enforcesTransactionDeadline === true;
+      // Bounded: the flush already ran out of time, and the reply shouldn't wait on another lock.
+      let deadlineAt = Date.now() + SETTLE_TIMEOUT_RECORD_MS;
+      for (let attempt = 1; attempt <= MAX_LEASE_BOUND_ATTEMPTS; attempt++) {
+        try {
+          await storage.transaction(
+            async tx => {
+              const importers = tx.importers!;
+              const guard = await importers.lockWriterGuard('share');
+              const run = await importers.lockRun(runId);
+              if (!run || run.status !== 'running' || run.cancelRequestedAt) return;
+              if (run.generation !== generation || guard.generation !== generation) return;
+              if (lapsed(run, await clock(importers))) return;
+              if (fenced) {
+                const cutoff = await localTimeOf(importers, liveUntil(run));
+                if (cutoff < deadlineAt) throw new LeaseCutoff(cutoff);
+              }
+              const n = settleTimeouts(await importers.getState(run.bindingId), runId) + 1;
+              await importers.setState(run.bindingId, { [SETTLE_TIMEOUTS_KEY]: `${runId}:${n}` });
+            },
+            { deadlineAt },
+          );
+          return;
+        } catch (error) {
+          if (!(error instanceof LeaseCutoff)) throw error;
+          deadlineAt = error.cutoff - LEASE_CUTOFF_MARGIN_MS;
+          if (deadlineAt <= Date.now()) return;
+        }
+      }
     } catch (error) {
       writer.warn(`Knowledge importer: recording a settle timeout for run ${runId} failed: ${String(error)}`);
     }
@@ -684,7 +706,7 @@ export function createLocalKnowledgeImporterHost(
         await runEmbeds(storage, embeds);
         return receipt;
       } catch (error) {
-        if (settling && timedOut(error)) await countSettleTimeout(flush.runId);
+        if (settling && timedOut(error)) await countSettleTimeout(flush.runId, flush.generation);
         throw hostError(error);
       }
     },
