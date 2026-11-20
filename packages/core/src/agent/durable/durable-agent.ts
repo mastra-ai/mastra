@@ -654,6 +654,11 @@ export class DurableAgent<
     return new DurableExecutionEngine(this.id, mastra);
   }
 
+  /** @internal Forced strategy, without resolving host/storage fallback. */
+  __getExecutionEngineStrategy(): 'durable' | 'evented' {
+    return this.workflowEngine === 'evented' ? 'evented' : 'durable';
+  }
+
   /** The wrapped agent */
   readonly #wrappedAgent: Agent<TAgentId, TTools, TOutput>;
   readonly #streamConfig: AgentStreamsConfig;

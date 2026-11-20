@@ -1561,13 +1561,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       return workspace;
     };
 
-    let existing: Workspace | undefined;
-    try {
-      existing = mastra?.getWorkspaceById(workspaceId) as Workspace | undefined;
-    } catch {
-      // Not registered yet.
-      existing = undefined;
-    }
+    // A miss is expected here; `optional` returns undefined instead of logging an error.
+    let existing = mastra?.getWorkspaceById(workspaceId, { optional: true }) as Workspace | undefined;
     existing ??= constructedWorkspaces.get(workspaceId);
     if (existing) {
       existing.setToolsConfig(FACTORY_WORKSPACE_TOOLS);
