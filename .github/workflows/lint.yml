@@ -179,7 +179,7 @@ jobs:
           install-dependencies: 'false'
 
       - name: Test npm package existence check, publish and placeholder scripts
-        run: node --test .github/scripts/check-npm-packages-exist.test.mjs .github/scripts/publish-packages.test.mjs scripts/npm-placeholder-publish.test.mjs
+        run: node --test .github/scripts/check-npm-packages-exist.test.mjs .github/scripts/publish-packages.test.mjs scripts/npm-placeholder-publish.test.mjs .github/scripts/sync-docs.test.mjs
 
       - name: Test the test-tier scripts
         run: node --test scripts/test-tiers/*.test.mjs
