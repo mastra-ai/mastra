@@ -106,9 +106,10 @@ export function CardStageBar({
             size="sm"
             aria-label={`Change stage from ${phaseName(current)}`}
             disabled={moving}
+            className="min-w-0"
           >
             {icon(current)}
-            <span>{phaseName(current)}</span>
+            <span className="truncate">{phaseName(current)}</span>
             {elapsed ? (
               <Txt as="span" variant="meta" tone="muted" font="mono">
                 {elapsed}
@@ -167,6 +168,7 @@ function NeighbourButton({
       tooltip={reason ?? action}
       disabled={disabled || held || step.blocked !== undefined}
       onClick={() => onMove(step.phase.id)}
+      className="shrink-0"
     >
       {direction === 'previous' ? <IconChevronLeftMedium aria-hidden /> : null}
       <span className="hidden @2xl:inline">{name}</span>
