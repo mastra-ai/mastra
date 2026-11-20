@@ -562,6 +562,8 @@ export class LibSQLKnowledgeImporters implements KnowledgeImportersStorage {
   async lockWriterGuard(_mode: 'share' | 'update') {
     return this.readWriterGuard();
   }
+  /** A write transaction already excludes every other writer, so holding one is the lock. */
+  async lockRegistration() {}
   async markFirstWrite() {
     return this.#transaction(async tx => {
       const result = await tx.execute({

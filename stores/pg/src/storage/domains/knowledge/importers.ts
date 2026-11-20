@@ -522,6 +522,12 @@ export class PgKnowledgeImporters implements KnowledgeImportersStorage {
       await this.#client.one(`SELECT * FROM ${this.#t.guard} FOR ${mode === 'share' ? 'SHARE' : 'UPDATE'}`),
     );
   }
+  /** A transaction-scoped advisory lock per schema: no row to contend on with the guard. */
+  async lockRegistration() {
+    await this.#client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+      `mastra-knowledge-importers-registration:${this.#schemaName ?? ''}`,
+    ]);
+  }
   async markFirstWrite() {
     const row = await this.#client.oneOrNone(
       `UPDATE ${this.#t.guard} SET first_write_at = clock_timestamp() WHERE first_write_at IS NULL RETURNING id`,

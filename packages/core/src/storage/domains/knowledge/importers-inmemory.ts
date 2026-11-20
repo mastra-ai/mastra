@@ -281,6 +281,8 @@ export class InMemoryKnowledgeImportersStorage extends KnowledgeImportersStorage
   async lockWriterGuard(_mode: 'share' | 'update') {
     return { ...this.#s.guard };
   }
+  /** Transactions are serialized here, so holding one is the lock. */
+  async lockRegistration() {}
   async markFirstWrite() {
     if (this.#s.guard.firstWriteAt) return false;
     this.#s.guard.firstWriteAt = new Date();

@@ -6,6 +6,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { PostgresStore } from '../../index';
 import { connectionString as defaultConnectionString } from '../../test-utils';
+import { PgKnowledgeImporters } from './importers';
 import { KnowledgePG, pgKnowledgeTransactionClient } from '.';
 
 /**
@@ -65,7 +66,62 @@ async function setup(leaseMs: number) {
   const guardTable = `"${schemaName}".mastra_knowledge_importer_writer_guard`;
   const scopeExists = async () => (await storage.getScopesByAddress(['docs:acme'])).length > 0;
   const drop = () => pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
-  return { host, storage, other, guardTable, scopeExists, drop };
+  return { host, storage, other, guardTable, scopeExists, drop, schemaName };
+}
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const ops: KnowledgeImporterOp[] = [{ op: 'upsert', item: { sourceId: 'p1', title: 'P1', body: 'x' } }];
+
+/**
+ * Wraps the store's clock read: `before`/`after` run around the query on the next `calls` reads
+ * only. Returns the restore function.
+ */
+function patchStoreClock(calls: number, hooks: { before?: () => Promise<void>; after?: () => Promise<void> }) {
+  const proto = PgKnowledgeImporters.prototype;
+  const original = proto.now;
+  let left = calls;
+  proto.now = async function (this: PgKnowledgeImporters) {
+    const hooked = left-- > 0;
+    if (hooked) await hooks.before?.();
+    const now = await original.call(this);
+    if (hooked) await hooks.after?.();
+    return now;
+  };
+  return () => {
+    proto.now = original;
+  };
+}
+
+/** Holds every page write in the schema (reads still pass) until the returned client rolls back. */
+async function blockPageWrites(schemaName: string) {
+  const client = await otherPool.connect();
+  await client.query('BEGIN');
+  await client.query(`LOCK TABLE "${schemaName}".mastra_knowledge_pages IN EXCLUSIVE MODE`);
+  const pid = Number((await client.query('SELECT pg_backend_pid() AS pid')).rows[0].pid);
+  let released = false;
+  return {
+    pid,
+    release: async () => {
+      if (released) return;
+      released = true;
+      await client.query('ROLLBACK').catch(() => {});
+      client.release();
+    },
+  };
+}
+
+/** Sends the flush and settles to the error it fails with, or 'applied', or 'still waiting' after `ms`. */
+function flushOutcome(t: Awaited<ReturnType<typeof setup>>, started: { runId: string; generation: number }, ms = 6000) {
+  return (async () => {
+    const digest = await knowledgeImporterFlushDigest({ ops });
+    return Promise.race([
+      t.host.flush({ runId: started.runId, generation: started.generation, seq: 1, digest, ops }).then(
+        () => 'applied' as const,
+        (error: unknown) => error,
+      ),
+      sleep(ms).then(() => 'still waiting' as const),
+    ]);
+  })();
 }
 
 describe('PG service importer host', () => {
@@ -80,7 +136,6 @@ describe('PG service importer host', () => {
       await guardHolder.query('BEGIN');
       await guardHolder.query(`SELECT * FROM ${t.guardTable} FOR UPDATE`);
 
-      const ops: KnowledgeImporterOp[] = [{ op: 'upsert', item: { sourceId: 'p1', title: 'P1', body: 'x' } }];
       const digest = await knowledgeImporterFlushDigest({ ops });
       const sent = Date.now();
       // The flush budget alone (45 s) would let it wait far longer than the lease.
@@ -176,6 +231,152 @@ describe('PG service importer host', () => {
     } finally {
       await guardHolder?.query('ROLLBACK').catch(() => {});
       guardHolder?.release();
+      await t.drop();
+    }
+  }, 15_000);
+  it('bounds the flush by the locked run when the peeked lease looked past and a heartbeat renewed it', async () => {
+    const t = await setup(1500);
+    let blocker: Awaited<ReturnType<typeof blockPageWrites>> | undefined;
+    let restore = () => {};
+    try {
+      const started = await t.host.startRun('b1');
+      if (started.status !== 'started') throw new Error('not started');
+      blocker = await blockPageWrites(t.schemaName);
+      // The flush's first clock read is held until the peeked lease (from the start) is past; a
+      // heartbeat renews the run meanwhile, so the locked run is live again.
+      let renewedAt = 0;
+      restore = patchStoreClock(1, {
+        before: async () => {
+          await sleep(500);
+          await t.host.heartbeat(started.runId, started.generation);
+          renewedAt = Date.now();
+          await sleep(1200);
+        },
+      });
+      const outcome = await flushOutcome(t, started);
+      const ended = Date.now();
+
+      // Without the locked re-bound the transaction keeps only the 45 s flush budget.
+      expect(outcome).toMatchObject({ name: 'KnowledgeImporterHostError' });
+      expect((outcome as { status?: number }).status ?? 500).toBeGreaterThanOrEqual(500);
+      expect(ended).toBeLessThan(renewedAt + 1500 + 500);
+      await blocker.release();
+      expect(await t.storage.importers!.getFlush(started.runId, started.generation, 1)).toBeNull();
+    } finally {
+      restore();
+      await blocker?.release();
+      await t.drop();
+    }
+  }, 15_000);
+
+  it("maps the lease cutoff from before the store's clock read, so a slow clock reply doesn't extend it", async () => {
+    const t = await setup(1500);
+    let blocker: Awaited<ReturnType<typeof blockPageWrites>> | undefined;
+    let restore = () => {};
+    try {
+      const started = await t.host.startRun('b1');
+      if (started.status !== 'started') throw new Error('not started');
+      const startedAt = Date.now();
+      blocker = await blockPageWrites(t.schemaName);
+      // The pre-lock clock reply arrives 800 ms after the store read its clock.
+      restore = patchStoreClock(1, { after: () => sleep(800) });
+      const outcome = await flushOutcome(t, started);
+      const ended = Date.now();
+
+      expect(outcome).toMatchObject({ name: 'KnowledgeImporterHostError' });
+      expect((outcome as { status?: number }).status ?? 500).toBeGreaterThanOrEqual(500);
+      // Mapped after the reply, the cutoff would land ~800 ms past the lease.
+      expect(ended).toBeLessThan(startedAt + 1500 + 300);
+    } finally {
+      restore();
+      await blocker?.release();
+      await t.drop();
+    }
+  }, 15_000);
+
+  it('rolls back a flush whose lease ends after its writes but before COMMIT', async () => {
+    const t = await setup(1500);
+    const proto = PgKnowledgeImporters.prototype;
+    const recordFlush = proto.recordFlush;
+    try {
+      const started = await t.host.startRun('b1');
+      if (started.status !== 'started') throw new Error('not started');
+      const leaseEnds = Date.now() + 1500;
+      // The last write of the flush returns only once the lease is over.
+      proto.recordFlush = async function (this: PgKnowledgeImporters, input) {
+        await recordFlush.call(this, input);
+        await sleep(Math.max(0, leaseEnds - Date.now()) + 200);
+      };
+      const outcome = await flushOutcome(t, started);
+
+      expect(outcome).toMatchObject({ name: 'KnowledgeImporterHostError' });
+      expect((outcome as { status?: number }).status ?? 500).toBeGreaterThanOrEqual(500);
+      proto.recordFlush = recordFlush;
+      expect(await t.storage.importers!.getFlush(started.runId, started.generation, 1)).toBeNull();
+      const [scope] = await t.storage.getScopesByAddress(['docs:acme']);
+      expect(await t.storage.getPageByPath({ scopeId: scope!.id, path: ['notion', 'p1'], read: 'all' })).toBeNull();
+    } finally {
+      proto.recordFlush = recordFlush;
+      await t.drop();
+    }
+  }, 15_000);
+
+  it('starts of nesting targets serialize on the registration lock while both hold the writer guard shared', async () => {
+    const t = await setup(60_000);
+    try {
+      // A first write makes later starts take the writer guard shared.
+      const first = await t.host.startRun('b1');
+      if (first.status !== 'started') throw new Error('not started');
+      expect((await t.storage.importers!.readWriterGuard()).firstWriteAt).not.toBeNull();
+      await t.host.finishRun({
+        runId: first.runId,
+        generation: first.generation,
+        outcome: 'succeeded',
+        backlog: false,
+        lastSeq: 0,
+      });
+
+      const nested: KnowledgeImporterRunBinding = { ...binding, id: 'b2', target: 'docs:acme#notion/inner' };
+      const sibling: KnowledgeImporterRunBinding = { ...binding, id: 'b3', target: 'docs:acme#other' };
+      const peer = createKnowledgeImporterHost(
+        new Knowledge({
+          scopes: { 'docs:$orgId': {} },
+          storage: new PostgresStore({ id: 'service-host-peer', pool: otherPool, schemaName: t.schemaName }),
+        }),
+        { bindings: [nested, sibling], leaseMs: 60_000 },
+      );
+      const admitted = gate();
+      const release = gate();
+      let pid = 0;
+      // b3 holds the guard shared and the registration lock, parked in admit.
+      const holding = peer.startRun('b3', {
+        admit: async tx => {
+          pid = Number((await pgKnowledgeTransactionClient(tx).one('SELECT pg_backend_pid() AS pid')).pid);
+          admitted.open();
+          await release.opened;
+        },
+      });
+      await admitted.opened;
+      // b2 nests in b1's stored target; it must wait for the lock, not pass beside b3.
+      const nestedStart = peer.startRun('b2').then(
+        () => 'started' as const,
+        (error: unknown) => error,
+      );
+      await waitUntilBlockedOn(pid);
+      // b3 holds the writer guard shared: another shared lock on it is granted at once.
+      const probe = await otherPool.connect();
+      try {
+        await probe.query('BEGIN');
+        await probe.query(`SET LOCAL lock_timeout = '500ms'`);
+        await probe.query(`SELECT * FROM ${t.guardTable} FOR SHARE`);
+      } finally {
+        await probe.query('ROLLBACK');
+        probe.release();
+      }
+      release.open();
+      expect((await holding).status).toBe('started');
+      expect(await nestedStart).toMatchObject({ status: 409 });
+    } finally {
       await t.drop();
     }
   }, 15_000);

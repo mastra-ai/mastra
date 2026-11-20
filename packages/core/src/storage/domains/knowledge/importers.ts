@@ -248,6 +248,13 @@ export abstract class KnowledgeImportersStorage {
    * Choose the mode before locking; never upgrade a held lock.
    */
   abstract lockWriterGuard(mode: 'share' | 'update'): Promise<KnowledgeImporterWriterGuard>;
+  /**
+   * Inside a transaction: takes the namespace's binding-registration lock, exclusive, until commit.
+   * Starts hold it while they check stored bindings for overlap and register theirs, so two starts
+   * of nesting targets can't both pass. Separate from the writer guard, which starts may hold
+   * shared. Take it after `lockWriterGuard` and before `lockRun`.
+   */
+  abstract lockRegistration(): Promise<void>;
   /** Sets `firstWriteAt` if it is still null; returns whether this call set it. */
   abstract markFirstWrite(): Promise<boolean>;
   /**

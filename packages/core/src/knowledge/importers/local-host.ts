@@ -147,6 +147,45 @@ class SkippedClaim extends Error {
   }
 }
 
+/**
+ * Unwinds a transaction that holds the writer guard shared but found `firstWriteAt` unset where it
+ * must mark it: marking under a shared lock can deadlock against another holder, so the work is
+ * redone holding it exclusively (O2 lock preselection).
+ */
+class NeedsExclusiveGuard extends Error {
+  constructor() {
+    super('The first write must be marked under the exclusive writer guard.');
+  }
+}
+
+/**
+ * Unwinds a flush whose transaction deadline runs past where its run stops being live (r352 S1):
+ * it is redone with `cutoff` as its deadline.
+ */
+class LeaseCutoff extends Error {
+  constructor(readonly cutoff: number) {
+    super('The flush transaction outlives its run lease.');
+  }
+}
+
+/** Attempts to bound a flush by its run's lease before it is refused as retryable. */
+const MAX_LEASE_BOUND_ATTEMPTS = 3;
+/**
+ * Taken off a redone flush's cutoff, so that a slower read of the store's clock on the next
+ * attempt, which maps it earlier, doesn't unwind it again.
+ */
+const LEASE_CUTOFF_MARGIN_MS = 250;
+
+/**
+ * The local time (epoch ms) by which the store's clock reaches `end`. The local clock is read
+ * before the store's, so the round trip only moves the result earlier, never later.
+ */
+async function localTimeOf(importers: KnowledgeImportersStorage, end: number): Promise<number> {
+  const anchor = Date.now();
+  const storeNow = (await importers.now()).getTime();
+  return anchor + (end - storeNow);
+}
+
 /** Carries `admit`'s own error out of the start transaction it rolled back. */
 class AdmitRefusal extends Error {
   constructor(readonly refusal: unknown) {
@@ -267,6 +306,12 @@ export function createLocalKnowledgeImporterHost(
     }
     return null;
   };
+  /** Store time (epoch ms) at which a running run stops being live under `leaseMs`. */
+  const liveUntil = (run: KnowledgeImporterRunRecord) =>
+    Math.min(
+      (run.heartbeatAt ?? run.startedAt).getTime() + (leaseMs ?? Infinity),
+      run.deadlineAt?.getTime() ?? Infinity,
+    );
   const listBindings = async () =>
     typeof options.bindings === 'function' ? await options.bindings() : options.bindings;
 
@@ -315,7 +360,7 @@ export function createLocalKnowledgeImporterHost(
 
   /**
    * Ends the binding's running run when its runner is gone (O3 §D): past its deadline, or no
-   * heartbeat within `staleRunAfterMs`. Called under the exclusive writer guard; the run row is
+   * heartbeat within `staleRunAfterMs`. Called under the writer guard and registration lock; the run row is
    * locked and rechecked so a heartbeat that commits first keeps it alive. Its runner's later
    * flushes and finish are refused as `run_not_active`; exact replays still return receipts.
    */
@@ -373,7 +418,9 @@ export function createLocalKnowledgeImporterHost(
       const claimed = start?.admit !== undefined || start?.generation !== undefined;
       try {
         const { scope } = parseKnowledgeImportTarget(binding.target);
-        const { storage } = await storageAndImporters();
+        const { storage, importers: rootImporters } = await storageAndImporters();
+        // O2 preselection: exclusive only until the first write is marked, chosen before locking.
+        let exclusive = !(await rootImporters.readWriterGuard()).firstWriteAt;
         // Declarations are read now: inside the transaction the scope is materialized through it alone.
         await writer.runtime.resolve();
         const others = bindings.filter(b => b.id !== binding.id);
@@ -384,52 +431,67 @@ export function createLocalKnowledgeImporterHost(
             409,
           );
         }
-        const result = await storage.transaction(async tx => {
-          const importers = tx.importers!;
-          // Registration and the overlap check against stored bindings happen under one lock. The
-          // lock is exclusive: this transaction may write the instance's first scope page.
-          const guard = await importers.lockWriterGuard('update');
-          if (
-            claimed &&
-            (guard.activePath !== 'new' || (start?.generation !== undefined && guard.generation !== start.generation))
-          ) {
-            throw conflict('stale_generation', 'The claim belongs to another writer generation or write path.');
-          }
-          const stored = (await importers.listBindings()).find(
-            b => b.id !== binding.id && knowledgeImportTargetsOverlap(b.target, binding.target),
-          );
-          if (stored) {
-            throw new KnowledgeImporterHostError(
-              `Importer binding "${binding.id}" overlaps binding "${stored.id}"; their targets must not nest.`,
-              409,
-            );
-          }
-          await importers.registerBinding({ id: binding.id, importer: binding.importer, target: binding.target });
-          await reclaimStaleRuns(importers, binding.id);
-          // r352 S4: the claim, the scope and the run row commit together or not at all.
-          if (start?.admit) {
-            try {
-              await start.admit(tx);
-            } catch (error) {
-              throw new AdmitRefusal(error);
+        const attempt = () =>
+          storage.transaction(async tx => {
+            const importers = tx.importers!;
+            const guard = await importers.lockWriterGuard(exclusive ? 'update' : 'share');
+            // Registration and the overlap check against stored bindings serialize on their own lock,
+            // so starts needn't hold the writer guard exclusively for them.
+            await importers.lockRegistration();
+            if (
+              claimed &&
+              (guard.activePath !== 'new' || (start?.generation !== undefined && guard.generation !== start.generation))
+            ) {
+              throw conflict('stale_generation', 'The claim belongs to another writer generation or write path.');
             }
-          }
-          const { wrote } = await writer.runtime.materializeScopeIn(tx, scope, { author: author(binding) });
-          if (wrote && !guard.firstWriteAt) await importers.markFirstWrite();
-          const run = await importers.startRun({
-            bindingId: binding.id,
-            runId,
-            generation: guard.generation,
-            ...(start?.fireKey !== undefined ? { fireKey: start.fireKey } : {}),
-            ...(start?.deadline !== undefined ? { deadlineAt: new Date(start.deadline) } : {}),
+            const stored = (await importers.listBindings()).find(
+              b => b.id !== binding.id && knowledgeImportTargetsOverlap(b.target, binding.target),
+            );
+            if (stored) {
+              throw new KnowledgeImporterHostError(
+                `Importer binding "${binding.id}" overlaps binding "${stored.id}"; their targets must not nest.`,
+                409,
+              );
+            }
+            await importers.registerBinding({ id: binding.id, importer: binding.importer, target: binding.target });
+            await reclaimStaleRuns(importers, binding.id);
+            // r352 S4: the claim, the scope and the run row commit together or not at all.
+            if (start?.admit) {
+              try {
+                await start.admit(tx);
+              } catch (error) {
+                throw new AdmitRefusal(error);
+              }
+            }
+            const { wrote } = await writer.runtime.materializeScopeIn(tx, scope, { author: author(binding) });
+            if (wrote && !guard.firstWriteAt) {
+              if (!exclusive) throw new NeedsExclusiveGuard();
+              await importers.markFirstWrite();
+            }
+            const run = await importers.startRun({
+              bindingId: binding.id,
+              runId,
+              generation: guard.generation,
+              ...(start?.fireKey !== undefined ? { fireKey: start.fireKey } : {}),
+              ...(start?.deadline !== undefined ? { deadlineAt: new Date(start.deadline) } : {}),
+            });
+            if (run.status !== 'started' && start?.admit) throw new SkippedClaim(run.run.id);
+            const saved: Record<string, string> = run.status === 'started' ? await importers.getState(binding.id) : {};
+            const state: Record<string, string> = Object.fromEntries(
+              Object.entries(saved).filter(([key]) => !key.startsWith(RESERVED_STATE_PREFIX)),
+            );
+            return { run, state };
           });
-          if (run.status !== 'started' && start?.admit) throw new SkippedClaim(run.run.id);
-          const saved: Record<string, string> = run.status === 'started' ? await importers.getState(binding.id) : {};
-          const state: Record<string, string> = Object.fromEntries(
-            Object.entries(saved).filter(([key]) => !key.startsWith(RESERVED_STATE_PREFIX)),
-          );
-          return { run, state };
-        });
+        let result: Awaited<ReturnType<typeof attempt>>;
+        try {
+          result = await attempt();
+        } catch (error) {
+          if (!(error instanceof NeedsExclusiveGuard)) throw error;
+          // The first write was cleared since it was read (a reset or a writer-generation advance):
+          // redo the start, `admit` included, under the exclusive guard.
+          exclusive = true;
+          result = await attempt();
+        }
         if (result.run.status !== 'started') return { status: 'skipped', runId: result.run.run.id };
         return {
           status: 'started',
@@ -502,106 +564,123 @@ export function createLocalKnowledgeImporterHost(
         : { error: conflict('run_not_active', 'The run is not running.') };
       // One absolute deadline for the whole write transaction (O3 §C‴), capped by the run's.
       let deadlineAt = Math.min(budgetAt, peekRun?.deadlineAt?.getTime() ?? Infinity);
-      if (leaseMs !== undefined && peekRun) {
-        // r352 S1 fence: also cut the transaction off where the lease ends, by the store's clock
-        // mapped onto ours. A heartbeat that lands meanwhile only makes this cutoff early, never late.
-        // A cutoff already past is left to the locked check below, after the receipt recheck.
-        const storeNow = await rootImporters.now().catch(error => {
+      // r352 S1 fence: under a lease, the transaction also stops where the run stops being live. The
+      // peeked run only gives a first guess; the locked run decides, and a transaction whose deadline
+      // runs past it is redone with that cutoff before it writes (`LeaseCutoff` below).
+      const fenced = leaseMs !== undefined && storage.getCapabilities().enforcesTransactionDeadline === true;
+      if (fenced && peekRun) {
+        const cutoff = await localTimeOf(rootImporters, liveUntil(peekRun)).catch(error => {
           throw hostError(error);
         });
-        const skew = Date.now() - storeNow.getTime();
-        const leaseEnd = (peekRun.heartbeatAt ?? peekRun.startedAt).getTime() + leaseMs;
-        const cutoff = Math.min(leaseEnd, peekRun.deadlineAt?.getTime() ?? Infinity) + skew;
-        deadlineAt = Math.min(budgetAt, cutoff > Date.now() ? cutoff : Infinity);
+        // A cutoff already past is left to the locked check, after the receipt recheck.
+        if (cutoff > Date.now()) deadlineAt = Math.min(deadlineAt, cutoff);
       }
       let embeds: KnowledgeImportEmbedJob[] = [];
       // Only a timeout after the settle slice started counts against settling (O3 §C″).
       let settling = false;
       try {
-        const receipt = await storage.transaction(
-          async tx => {
-            const importers = tx.importers!;
-            // Guard before run (O2 lock order); exclusive only until the first write is marked.
-            const guard = await importers.lockWriterGuard(peek.firstWriteAt ? 'share' : 'update');
-            const run = await importers.lockRun(flush.runId);
-            const stored = await importers.getFlush(flush.runId, flush.generation, flush.seq);
-            if (stored) {
-              if (stored.digest !== digest) {
-                throw conflict('digest_mismatch', 'This seq was committed with other content.');
+        const write = (deadlineAt: number) =>
+          storage.transaction(
+            async tx => {
+              const importers = tx.importers!;
+              // Guard before run (O2 lock order); exclusive only until the first write is marked.
+              const guard = await importers.lockWriterGuard(peek.firstWriteAt ? 'share' : 'update');
+              const run = await importers.lockRun(flush.runId);
+              const stored = await importers.getFlush(flush.runId, flush.generation, flush.seq);
+              if (stored) {
+                if (stored.digest !== digest) {
+                  throw conflict('digest_mismatch', 'This seq was committed with other content.');
+                }
+                return stored.receipt as KnowledgeImporterFlushReceipt;
               }
-              return stored.receipt as KnowledgeImporterFlushReceipt;
-            }
-            if (!run || run.status !== 'running') throw conflict('run_not_active', 'The run is not running.');
-            if (run.generation !== flush.generation || guard.generation !== flush.generation) {
-              throw conflict('stale_generation', 'The run belongs to an older writer generation.');
-            }
-            if (run.cancelRequestedAt) throw conflict('run_not_active', 'The run was canceled.');
-            if (lapsed(run, await clock(importers))) {
-              throw conflict('run_not_active', 'The run is past its lease or deadline.');
-            }
-            if (flush.seq !== run.lastSeq + 1)
-              throw conflict('seq_mismatch', 'The flush seq is not the committed seq + 1.');
+              if (!run || run.status !== 'running') throw conflict('run_not_active', 'The run is not running.');
+              if (run.generation !== flush.generation || guard.generation !== flush.generation) {
+                throw conflict('stale_generation', 'The run belongs to an older writer generation.');
+              }
+              if (run.cancelRequestedAt) throw conflict('run_not_active', 'The run was canceled.');
+              if (lapsed(run, await clock(importers))) {
+                throw conflict('run_not_active', 'The run is past its lease or deadline.');
+              }
+              if (fenced) {
+                // Mapped from the locked run, which no heartbeat can renew while this holds its lock.
+                const cutoff = await localTimeOf(importers, liveUntil(run));
+                if (cutoff < deadlineAt) throw new LeaseCutoff(cutoff);
+              }
+              if (flush.seq !== run.lastSeq + 1)
+                throw conflict('seq_mismatch', 'The flush seq is not the committed seq + 1.');
 
-            if ('error' in resolvedAuthor) throw resolvedAuthor.error;
-            const binding = await importers.getBinding(run.bindingId);
-            if (!binding) throw conflict('run_not_active', 'The run has no binding.');
-            const [scope] = await tx.getScopesByAddress([parseKnowledgeImportTarget(binding.target).scope]);
-            if (!scope) throw new KnowledgeImporterHostError('The binding target scope does not exist.', 503);
-            const hostState = await importers.getState(binding.id);
-            const timeouts = settleTimeouts(hostState, run.id);
-            const applied = await applyKnowledgeImportFlush({
-              storage: tx,
-              importers,
-              binding,
-              scope,
-              runId: run.id,
-              ops: body.ops,
-              provenance: { author: resolvedAuthor.author },
-              // After a settle slice timed out, the next uses half as many nodes; after three in a
-              // row the run stops settling (O3 §C″).
-              ...(timeouts < SETTLE_MAX_TIMEOUTS
-                ? {
-                    settle: {
-                      after: hostState[SETTLE_CURSOR_KEY] || null,
-                      candidates: Math.max(1, SETTLE_CANDIDATES >> timeouts),
-                      moves: SETTLE_MOVES,
-                      until: Math.min(Date.now() + (options.settleBudgetMs ?? DEFAULT_SETTLE_BUDGET_MS), deadlineAt),
-                      onStart: () => {
-                        settling = true;
+              if ('error' in resolvedAuthor) throw resolvedAuthor.error;
+              const binding = await importers.getBinding(run.bindingId);
+              if (!binding) throw conflict('run_not_active', 'The run has no binding.');
+              const [scope] = await tx.getScopesByAddress([parseKnowledgeImportTarget(binding.target).scope]);
+              if (!scope) throw new KnowledgeImporterHostError('The binding target scope does not exist.', 503);
+              const hostState = await importers.getState(binding.id);
+              const timeouts = settleTimeouts(hostState, run.id);
+              const applied = await applyKnowledgeImportFlush({
+                storage: tx,
+                importers,
+                binding,
+                scope,
+                runId: run.id,
+                ops: body.ops,
+                provenance: { author: resolvedAuthor.author },
+                // After a settle slice timed out, the next uses half as many nodes; after three in a
+                // row the run stops settling (O3 §C″).
+                ...(timeouts < SETTLE_MAX_TIMEOUTS
+                  ? {
+                      settle: {
+                        after: hostState[SETTLE_CURSOR_KEY] || null,
+                        candidates: Math.max(1, SETTLE_CANDIDATES >> timeouts),
+                        moves: SETTLE_MOVES,
+                        until: Math.min(Date.now() + (options.settleBudgetMs ?? DEFAULT_SETTLE_BUDGET_MS), deadlineAt),
+                        onStart: () => {
+                          settling = true;
+                        },
                       },
-                    },
-                  }
-                : {}),
-            });
-            const settled = applied.settle;
-            const hostUpdates: Record<string, string> = {};
-            if (settled && (settled.cursor ?? '') !== (hostState[SETTLE_CURSOR_KEY] ?? '')) {
-              hostUpdates[SETTLE_CURSOR_KEY] = settled.cursor ?? '';
+                    }
+                  : {}),
+              });
+              const settled = applied.settle;
+              const hostUpdates: Record<string, string> = {};
+              if (settled && (settled.cursor ?? '') !== (hostState[SETTLE_CURSOR_KEY] ?? '')) {
+                hostUpdates[SETTLE_CURSOR_KEY] = settled.cursor ?? '';
+              }
+              if (timeouts > 0 && timeouts < SETTLE_MAX_TIMEOUTS) hostUpdates[SETTLE_TIMEOUTS_KEY] = '';
+              const state = { ...body.state, ...hostUpdates };
+              if (Object.keys(state).length) await importers.setState(binding.id, state);
+              for (const change of applied.changes) await importers.recordRunChange({ runId: run.id, ...change });
+              const receipt: KnowledgeImporterFlushReceipt = {
+                seq: flush.seq,
+                ...applied.counts,
+                refused: applied.refused,
+                pending: settled?.pending ?? false,
+              };
+              await importers.recordFlush({
+                runId: run.id,
+                generation: flush.generation,
+                seq: flush.seq,
+                digest,
+                receipt,
+                counts: { ...applied.counts, refused: applied.refused.length, settled: settled?.settled ?? 0 },
+              });
+              if (applied.applied && !guard.firstWriteAt) await importers.markFirstWrite();
+              embeds = applied.embeds;
+              return receipt;
+            },
+            { deadlineAt },
+          );
+        let receipt: KnowledgeImporterFlushReceipt | undefined;
+        for (let attempt = 1; receipt === undefined; attempt++) {
+          try {
+            receipt = await write(deadlineAt);
+          } catch (error) {
+            if (!(error instanceof LeaseCutoff)) throw error;
+            if (attempt >= MAX_LEASE_BOUND_ATTEMPTS) {
+              throw new KnowledgeImporterHostError('The flush could not be bounded by its run lease; resend it.', 503);
             }
-            if (timeouts > 0 && timeouts < SETTLE_MAX_TIMEOUTS) hostUpdates[SETTLE_TIMEOUTS_KEY] = '';
-            const state = { ...body.state, ...hostUpdates };
-            if (Object.keys(state).length) await importers.setState(binding.id, state);
-            for (const change of applied.changes) await importers.recordRunChange({ runId: run.id, ...change });
-            const receipt: KnowledgeImporterFlushReceipt = {
-              seq: flush.seq,
-              ...applied.counts,
-              refused: applied.refused,
-              pending: settled?.pending ?? false,
-            };
-            await importers.recordFlush({
-              runId: run.id,
-              generation: flush.generation,
-              seq: flush.seq,
-              digest,
-              receipt,
-              counts: { ...applied.counts, refused: applied.refused.length, settled: settled?.settled ?? 0 },
-            });
-            if (applied.applied && !guard.firstWriteAt) await importers.markFirstWrite();
-            embeds = applied.embeds;
-            return receipt;
-          },
-          { deadlineAt },
-        );
+            deadlineAt = Math.min(budgetAt, error.cutoff - LEASE_CUTOFF_MARGIN_MS);
+          }
+        }
         await runEmbeds(storage, embeds);
         return receipt;
       } catch (error) {
