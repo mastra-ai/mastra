@@ -353,6 +353,8 @@ import { publishAbortRequest, requestAcknowledgedAbort } from './streams/abort-t
 import { AgentStreamBus } from './streams/bus';
 import { agentStreamsConfig, areAgentStreamsEnabled } from './streams/config';
 import { AGENT_STREAM_TOPIC } from './streams/constants';
+import { ExecutionEnginePolicy } from './streams/execution-policy';
+import type { ExecutionEngineDefaults } from './streams/execution-policy';
 import type { AgentStreamPublisher } from './streams/publisher';
 import { createAgentStreamPublisher } from './streams/publisher';
 import type { ResponseMessagesReplay } from './streams/response-messages';
@@ -1210,7 +1212,8 @@ export class Agent<
    */
   #suspendedRunOutputProcessors = new Map<string, OutputProcessorOrWorkflow[]>();
   readonly #options?: AgentCreateOptions;
-  readonly #durable?: AgentDurableOption;
+  #executionEnginePolicy: ExecutionEnginePolicy;
+  readonly #executionPolicyWarnings = new Set<string>();
   readonly #recoveryAttempts = new Map<string, Promise<unknown>>();
 
   #hasRecoveryAttempt(runId: string): boolean {
@@ -1303,7 +1306,7 @@ export class Agent<
     this.#description = config.description;
     this.#metadata = config.metadata;
     this.#options = config.options;
-    this.#durable = config.durable;
+    this.#executionEnginePolicy = new ExecutionEnginePolicy(config.durable);
 
     if (!config.model) {
       const mastraError = new MastraError({
@@ -1384,12 +1387,12 @@ export class Agent<
 
     const durable = config.durable;
     if (durable && typeof durable === 'object') {
-      const legacyKeys = ['maxSteps', 'shouldPersistSnapshot', 'id', 'name'].filter(key => Object.hasOwn(durable, key));
+      const legacyKeys = ['maxSteps', 'id', 'name'].filter(key => Object.hasOwn(durable, key));
       if (legacyKeys.length) {
         this.logger.warn(
           `Agent "${this.id}" ignores durable execution options: ${legacyKeys.join(', ')}. ` +
             'Use createDurableAgent({ agent, ...executionOptions }) for checkpoint execution. ' +
-            'On plain Agent, streams configuration has moved from streams to durable and controls resumable streams only.',
+            'On native Agent, durable configures resumable streams and staged engine policy; native execution activation is deferred.',
         );
       }
     }
@@ -2053,12 +2056,65 @@ export class Agent<
   }
 
   /**
-   * The `durable` option this agent was constructed with, if any.
+   * Effective resumable-stream configuration and staged execution-engine policy.
    *
-   * Controls resumable streams only. See {@link AgentDurableOption}.
+   * Native execution activation is deferred. See {@link AgentDurableOption}.
    */
   get durable(): AgentDurableOption | undefined {
-    return this.#durable;
+    return this.#executionEnginePolicy.durable;
+  }
+
+  /** @internal Configured policy, not a claim of active durable execution. */
+  __getExecutionEnginePolicy() {
+    return this.#executionEnginePolicy.engine;
+  }
+
+  /** @internal Only Mastra's stored native-agent registration applies defaults. */
+  __registerExecutionEnginePolicy(defaults?: ExecutionEngineDefaults): void {
+    const previous = this.#executionEnginePolicy.durable;
+    const diagnostic = this.#executionEnginePolicy.register(defaults);
+    if (this.#streamBus) {
+      const previousConfig = agentStreamsConfig(previous);
+      const config = agentStreamsConfig(this.#executionEnginePolicy.durable);
+      if (
+        previousConfig.cleanupTimeoutMs !== config.cleanupTimeoutMs ||
+        previousConfig.shouldCache !== config.shouldCache
+      ) {
+        this.#streamBus = this.#streamBus.withConfig(config);
+      }
+    }
+    if (diagnostic) {
+      this.#warnExecutionPolicy(
+        diagnostic,
+        'Execution engine policy is fixed for this Agent instance; conflicting registration defaults were ignored.',
+      );
+    }
+    if (typeof this.#defaultOptions !== 'function') this.#warnInheritedExecutionOptions(this.#defaultOptions);
+  }
+
+  #warnExecutionPolicy(kind: string, message: string): void {
+    if (this.#executionPolicyWarnings.has(kind)) return;
+    this.#executionPolicyWarnings.add(kind);
+    this.logger.warn(
+      `Agent "${this.id}": ${message} Native execution activation is deferred; this policy does not change execution yet.`,
+    );
+  }
+
+  #warnInheritedExecutionOptions(options: PublicAgentExecutionOptions<TOutput>): void {
+    if (!this.#executionEnginePolicy.inherited) return;
+    if (options.eagerToolExecution === true) {
+      this.#warnExecutionPolicy(
+        'eager',
+        'Mastra-inherited execution engine policy does not support eagerToolExecution.',
+      );
+    }
+    if (this.#executionEnginePolicy.engine === 'evented' && options.stopWhen !== undefined) {
+      this.#warnExecutionPolicy('stopWhen', 'Mastra-inherited evented policy does not support stopWhen.');
+    }
+  }
+
+  #beginExecutionPolicy(): void {
+    this.#executionEnginePolicy.freeze();
   }
 
   /**
@@ -2068,9 +2124,9 @@ export class Agent<
    * @internal
    */
   __getStreamBus(force = false): AgentStreamBus | undefined {
-    if (!force && !areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
+    if (!force && !areAgentStreamsEnabled(this.#executionEnginePolicy.durable, !!this.#mastra)) return undefined;
     if (!this.#streamBus) {
-      const config = agentStreamsConfig(this.#durable);
+      const config = agentStreamsConfig(this.#executionEnginePolicy.durable);
       this.#streamBus = new AgentStreamBus(
         { ...config, pubsub: config.pubsub ?? this.#pubsub },
         {
@@ -2097,7 +2153,11 @@ export class Agent<
 
   // Sharing transport does not opt durable execution into plain run records or abort checks.
   #ownStreamBus(): AgentStreamBus | undefined {
-    if (!this.__ownsPlainStreamPublisher() || !areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
+    if (
+      !this.__ownsPlainStreamPublisher() ||
+      !areAgentStreamsEnabled(this.#executionEnginePolicy.durable, !!this.#mastra)
+    )
+      return undefined;
     return this.__getStreamBus();
   }
 
@@ -2108,7 +2168,7 @@ export class Agent<
    * with streams on. See {@link AgentConfig.durable}.
    */
   hasResumableStreams(): boolean {
-    return !!this.#durable || !!this.__getStreamBus();
+    return !!this.#executionEnginePolicy.durable || !!this.__getStreamBus();
   }
 
   /**
@@ -2143,7 +2203,7 @@ export class Agent<
     resourceId: string | undefined,
     { resuming }: { resuming: boolean },
   ): Promise<AgentRunRecord | undefined> {
-    if (!areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
+    if (!areAgentStreamsEnabled(this.#executionEnginePolicy.durable, !!this.#mastra)) return undefined;
     const bus = this.__getStreamBus();
     if (!bus) return undefined;
 
@@ -2168,7 +2228,7 @@ export class Agent<
     runId: string,
     owner: { resourceId?: string; threadId?: string; abortSignal?: AbortSignal },
   ): AgentStreamPublisher | undefined {
-    if (!areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
+    if (!areAgentStreamsEnabled(this.#executionEnginePolicy.durable, !!this.#mastra)) return undefined;
     const bus = this.__getStreamBus();
     if (!bus) return undefined;
     const publisher = createAgentStreamPublisher({
@@ -4763,6 +4823,7 @@ export class Agent<
       fork.#primitives = this.#primitives;
     }
 
+    fork.#executionEnginePolicy = this.#executionEnginePolicy.clone();
     fork.#inheritedPubSub = this.#inheritedPubSub;
     fork.#defaultStreamPubsub = this.#defaultStreamPubsub ??= new EventEmitterPubSub();
     fork.source = this.source;
@@ -10370,6 +10431,7 @@ export class Agent<
   ) {
     await this.#validateRequestContext(options?.requestContext);
     const defaultOptions = await this.getDefaultOptions({ requestContext: options?.requestContext });
+    this.#warnInheritedExecutionOptions(defaultOptions);
     const { options: mergedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(
       deepMerge(
         withDefaultToolCallConcurrencyLimit(defaultOptions, options) as Record<string, unknown>,
@@ -10574,6 +10636,7 @@ export class Agent<
     // Extract and forward any client observability data attached to
     // tool-result messages before they reach the loop/model.
     this.#extractClientObservability(messages);
+    this.#beginExecutionPolicy();
 
     const { mergedOptions, resolvedScopes } = await this.#resolvePlainRunOptions<OUTPUT>(options);
     return this.#startPlainRun(messages, mergedOptions, resolvedScopes, 'generate');
@@ -11505,6 +11568,7 @@ export class Agent<
     // Extract and forward any client observability data attached to
     // tool-result messages before they reach the loop/model.
     this.#extractClientObservability(messages);
+    this.#beginExecutionPolicy();
 
     const { mergedOptions, resolvedScopes } = await this.#resolvePlainRunOptions<OUTPUT>(streamOptions);
 
@@ -14997,7 +15061,7 @@ export class Agent<
       id: 'AGENT_DURABLE_METHOD_NOT_AVAILABLE',
       domain: ErrorDomain.AGENT,
       category: ErrorCategory.USER,
-      text: `Agent.${method}() requires durable execution. Use createDurableAgent({ agent }) or new DurableAgent({ agent }); Agent.durable only enables resumable streams.`,
+      text: `Agent.${method}() requires durable execution. Use createDurableAgent({ agent }) or new DurableAgent({ agent }); Agent.durable configures staged engine policy; native execution activation is deferred.`,
       details: { agentId: this.id, method },
     });
   }
