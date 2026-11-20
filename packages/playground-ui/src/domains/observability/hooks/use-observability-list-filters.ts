@@ -33,6 +33,11 @@ export type ObservabilityListUrlState = {
   setSearchParams: SetURLSearchParamsLike;
 };
 
+/** What `useObservabilityListFilters` returns: the list's time range, filters and sort, with their setters. */
+export type ObservabilityListFiltersState<F extends string = 'startedAt'> = ReturnType<
+  typeof useObservabilityListFilters<F>
+>;
+
 /** The search params of `url`, or of an in-memory store when the host keeps no URL state. */
 function useListSearchParams(url: ObservabilityListUrlState | undefined): ObservabilityListUrlState {
   const [localParams, setLocalParams] = useState(() => new URLSearchParams());

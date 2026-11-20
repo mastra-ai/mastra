@@ -28,8 +28,8 @@ import {
   spanRowsPage,
 } from '../../__tests__/fixtures/spans';
 import type { SpanSelection } from '../span-detail-panel';
-import { SpansExplorerBody } from '../spans-explorer-body';
 import type { SpansExplorerPanelArgs } from '../spans-explorer-body';
+import { StudioSpansExplorerBody } from './studio-spans-explorer-body';
 import { OBSERVABILITY_LIST_POLL_INTERVAL_MS } from '@/domains/observability/list-polling';
 import { savedViewFromSearchParams } from '@/domains/observability/saved-view-state';
 import { SavedViewsProvider } from '@/domains/observability/saved-views';
@@ -61,7 +61,7 @@ const renderBody = (selection?: SpanSelection) => {
   const onSelectionChange = vi.fn<(selection: SpanSelection | undefined) => void>();
   const renderPanel = vi.fn<(args: SpansExplorerPanelArgs) => null>(() => null);
   renderWithProviders(
-    <SpansExplorerBody selection={selection} onSelectionChange={onSelectionChange} renderPanel={renderPanel} />,
+    <StudioSpansExplorerBody selection={selection} onSelectionChange={onSelectionChange} renderPanel={renderPanel} />,
   );
   return { onSelectionChange, renderPanel };
 };
@@ -83,7 +83,7 @@ const renderBodyAtUrl = (initial: string, savedViews?: SavedViewsSource) => {
   const body = (
     <SearchParamsHost initial={initial}>
       {urlState => (
-        <SpansExplorerBody
+        <StudioSpansExplorerBody
           selection={undefined}
           onSelectionChange={() => {}}
           renderPanel={() => null}
@@ -109,7 +109,7 @@ function BodyWithTracesColumns() {
   const traces = useTraceColumnPreferences();
   return (
     <>
-      <SpansExplorerBody selection={undefined} onSelectionChange={() => {}} renderPanel={() => null} />
+      <StudioSpansExplorerBody selection={undefined} onSelectionChange={() => {}} renderPanel={() => null} />
       <output data-testid="traces-columns">{traces.preferences.visibleColumns.join(',')}</output>
     </>
   );
@@ -452,7 +452,11 @@ describe('SpansExplorerBody', () => {
       const renderPanel = vi.fn<(args: SpansExplorerPanelArgs) => null>(() => null);
       const onSelectionChange = vi.fn();
       const { rerender } = renderWithProviders(
-        <SpansExplorerBody selection={undefined} onSelectionChange={onSelectionChange} renderPanel={renderPanel} />,
+        <StudioSpansExplorerBody
+          selection={undefined}
+          onSelectionChange={onSelectionChange}
+          renderPanel={renderPanel}
+        />,
       );
       await screen.findByText('agent run: weather');
       await act(async () => {
@@ -462,7 +466,7 @@ describe('SpansExplorerBody', () => {
       const spans = renderPanel.mock.lastCall?.[0].spans;
       expect(spans).toContainEqual({ traceId: endedSpan.traceId, spanId: endedSpan.spanId });
       rerender(
-        <SpansExplorerBody
+        <StudioSpansExplorerBody
           selection={firstListedSpan}
           onSelectionChange={onSelectionChange}
           renderPanel={renderPanel}
@@ -873,7 +877,7 @@ describe('SpansExplorerBody histogram', () => {
 
   const renderSettled = async () => {
     const { queryClient } = renderWithProviders(
-      <SpansExplorerBody selection={undefined} onSelectionChange={() => {}} renderPanel={() => null} />,
+      <StudioSpansExplorerBody selection={undefined} onSelectionChange={() => {}} renderPanel={() => null} />,
     );
     await screen.findByText('agent run: weather');
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
@@ -1101,7 +1105,7 @@ describe('SpansExplorerBody histogram', () => {
       setHistogramHandlers({ spans: emptySpanRows });
 
       renderWithProviders(
-        <SpansExplorerBody selection={undefined} onSelectionChange={() => {}} renderPanel={() => null} />,
+        <StudioSpansExplorerBody selection={undefined} onSelectionChange={() => {}} renderPanel={() => null} />,
       );
 
       expect(await screen.findByRole('heading', { name: 'No spans for the last 7 days' })).toBeTruthy();

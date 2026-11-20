@@ -2,3 +2,5 @@ export { THREAD_TIME_RANGE_PRESETS, useThreadsFilterBar, useThreadsFilterBarFiel
 export type { UseThreadsFilterBarOptions } from './use-threads-filter-bar';
 export { threadRowId, useThreadsListSource } from './use-threads-list-source';
 export type { UseThreadsListSourceArgs } from './use-threads-list-source';
+export { useThreadsExplorer, useThreadsListQuery, useThreadsSupport } from './use-threads-explorer';
+export type { UseThreadsListQueryArgs } from './use-threads-explorer';

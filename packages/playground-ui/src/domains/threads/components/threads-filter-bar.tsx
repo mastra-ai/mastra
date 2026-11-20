@@ -2,11 +2,8 @@ import { DEFAULT_TRACES_FILTERS } from '../../traces/components/traces-explorer/
 import { TRACE_FILTER_BAR_OPERATORS } from '../../traces/trace-filters';
 import type { TraceFilterGroup, TraceFilterToken } from '../../traces/trace-query-filters';
 import type { TraceDatePreset } from '../../traces/types';
-import {
-  THREAD_TIME_RANGE_PRESETS,
-  useThreadsFilterBar,
-  useThreadsFilterBarFields,
-} from '../hooks/use-threads-filter-bar';
+import { THREAD_TIME_RANGE_PRESETS, useThreadsFilterBar } from '../hooks/use-threads-filter-bar';
+import type { ThreadsExplorerFilterFields } from '../threads-explorer-data';
 import { FilterBar } from '@/ds/components/FilterBar';
 import { FILTER_BAR_TIME_RANGE_FIELD_ID } from '@/ds/components/FilterBar/filter-bar-time-range';
 
@@ -15,6 +12,8 @@ import { FILTER_BAR_TIME_RANGE_FIELD_ID } from '@/ds/components/FilterBar/filter
 const createItemId = (fieldId: string) => fieldId;
 
 export type ThreadsFilterBarProps = {
+  /** The bar's fields (Studio: `useThreadsFilterBarFields`). */
+  fields: ThreadsExplorerFilterFields;
   datePreset: TraceDatePreset;
   dateFrom?: Date;
   dateTo?: Date;
@@ -31,6 +30,7 @@ export type ThreadsFilterBarProps = {
 
 /** The threads filter bar: the time range plus the fields `queryTraceThreads()` accepts. */
 export function ThreadsFilterBar({
+  fields,
   datePreset,
   dateFrom,
   dateTo,
@@ -43,7 +43,6 @@ export function ThreadsFilterBar({
   onFiltersChange,
   disabled,
 }: ThreadsFilterBarProps) {
-  const fields = useThreadsFilterBarFields();
   const { filterBarValue, onFilterBarChange } = useThreadsFilterBar({ tokens, groups, onFiltersChange });
 
   return (

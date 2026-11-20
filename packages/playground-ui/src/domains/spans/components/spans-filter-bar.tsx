@@ -1,9 +1,9 @@
-import type { TraceQueryDiscoveryTimeRange } from '@mastra/react/hooks/traces';
 import { DEFAULT_TRACES_FILTERS } from '../../traces/components/traces-explorer/traces-explorer-actions';
 import { TRACE_FILTER_BAR_OPERATORS } from '../../traces/trace-filters';
 import type { TraceFilterGroup, TraceFilterToken } from '../../traces/trace-query-filters';
 import type { TraceDatePreset } from '../../traces/types';
-import { SPAN_TIME_RANGE_PRESETS, useSpansFilterBar, useSpansFilterBarFields } from '../hooks/use-spans-filter-bar';
+import { SPAN_TIME_RANGE_PRESETS, useSpansFilterBar } from '../hooks/use-spans-filter-bar';
+import type { SpansExplorerFilterFields } from '../spans-explorer-data';
 import { FilterBar } from '@/ds/components/FilterBar';
 import { FILTER_BAR_TIME_RANGE_FIELD_ID } from '@/ds/components/FilterBar/filter-bar-time-range';
 
@@ -12,14 +12,13 @@ import { FILTER_BAR_TIME_RANGE_FIELD_ID } from '@/ds/components/FilterBar/filter
 const createItemId = (fieldId: string) => fieldId;
 
 export type SpansFilterBarProps = {
-  withTokenSearch?: boolean;
+  /** The time range field plus the span fields the store filters on (Studio: `useSpansFilterBarFields`). */
+  fields: SpansExplorerFilterFields;
   datePreset: TraceDatePreset;
   dateFrom?: Date;
   dateTo?: Date;
   /** Earliest date the custom range picker allows. */
   minDate?: Date;
-  /** Window the value suggestions are looked up in. */
-  timeRange: TraceQueryDiscoveryTimeRange;
   tokens: TraceFilterToken[];
   groups: TraceFilterGroup[];
   onDatePresetChange: (preset: TraceDatePreset) => void;
@@ -35,12 +34,11 @@ export type SpansFilterBarProps = {
 
 /** The spans filter bar: the time range plus the fields `querySpans()` accepts. */
 export function SpansFilterBar({
-  withTokenSearch = false,
+  fields,
   datePreset,
   dateFrom,
   dateTo,
   minDate,
-  timeRange,
   tokens,
   groups,
   onDatePresetChange,
@@ -51,7 +49,6 @@ export function SpansFilterBar({
   describeSuggestionsError,
   disabled,
 }: SpansFilterBarProps) {
-  const fields = useSpansFilterBarFields({ timeRange, withTokenSearch });
   const { filterBarValue, onFilterBarChange } = useSpansFilterBar({
     tokens,
     groups,

@@ -4,7 +4,10 @@ import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useObservabilityViews } from '@mastra/playground-ui/domains/observability/hooks/use-observability-views';
 import { SpansExplorerBody } from '@mastra/playground-ui/domains/spans/components/spans-explorer-body';
+import { useSpansExplorer } from '@mastra/playground-ui/domains/spans/hooks/use-spans-explorer';
 import { ThreadsExplorerBody } from '@mastra/playground-ui/domains/threads/components/threads-explorer-body';
+import { useThreadsExplorer } from '@mastra/playground-ui/domains/threads/hooks/use-threads-explorer';
+import { TraceThreadPanel } from '@mastra/playground-ui/domains/traces/components/trace-thread-panel';
 import {
   DEFAULT_TRACES_FILTERS,
   DEFAULT_TRACES_SORT,
@@ -27,7 +30,11 @@ import { useTracesHistogramQuery } from '@mastra/playground-ui/domains/traces/ho
 import { useTracesListQuery } from '@mastra/playground-ui/domains/traces/hooks/use-traces-list-query';
 import { useTracesUsageQuery } from '@mastra/playground-ui/domains/traces/hooks/use-traces-usage-query';
 import { MastraReactProvider } from '@mastra/react';
-import { useObservabilityCapabilities } from '@mastra/react/hooks/capabilities';
+import {
+  useFeedbackAvailable,
+  useObservabilityCapabilities,
+  useTraceQueryAvailable,
+} from '@mastra/react/hooks/capabilities';
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { useApp } from '@modelcontextprotocol/ext-apps/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -275,10 +282,16 @@ function SpansTab({ app }: { app: App }) {
   const [open, setOpen] = useState<{ traceId: string; spanId: string }>();
   if (open)
     return <TraceView app={app} traceId={open.traceId} spanId={open.spanId} onBack={() => setOpen(undefined)} />;
+  return <SpansList onOpen={setOpen} />;
+}
+
+function SpansList({ onOpen }: { onOpen: (span: { traceId: string; spanId: string }) => void }) {
+  const explorer = useSpansExplorer();
   return (
     <SpansExplorerBody
+      {...explorer}
       selection={undefined}
-      onSelectionChange={selection => selection && setOpen({ traceId: selection.traceId, spanId: selection.spanId })}
+      onSelectionChange={selection => selection && onOpen({ traceId: selection.traceId, spanId: selection.spanId })}
       renderPanel={() => null}
     />
   );
@@ -286,8 +299,27 @@ function SpansTab({ app }: { app: App }) {
 
 function ThreadsTab() {
   const [threadId, setThreadId] = useState<string>();
+  const explorer = useThreadsExplorer();
+  const withQueryTrace = useTraceQueryAvailable().enabled;
+  const withFeedback = useFeedbackAvailable().enabled;
   return (
-    <ThreadsExplorerBody selectedThreadId={threadId} onSelectedThreadChange={setThreadId} onOpenScore={() => {}} />
+    <ThreadsExplorerBody
+      {...explorer}
+      selectedThreadId={threadId}
+      onSelectedThreadChange={setThreadId}
+      renderPanel={panel => (
+        <TraceThreadPanel
+          open={!!panel.threadId}
+          threadId={panel.threadId ?? ''}
+          depth={1}
+          closeLabel="Close"
+          withQueryTrace={withQueryTrace}
+          withFeedback={withFeedback}
+          onOpenScore={() => {}}
+          onClose={panel.onClose}
+        />
+      )}
+    />
   );
 }
 

@@ -1,75 +1,73 @@
-import { useObservabilityCapabilities } from '@mastra/react/hooks/capabilities';
-import type { ThreadQueryArgs } from '@mastra/react/hooks/traces';
 import { useMemo } from 'react';
-import { useThreadsListSource } from '../hooks/use-threads-list-source';
-import { buildThreadQueryWhere } from '../thread-filters';
+import type { ReactNode } from 'react';
 import { threadToListRow } from '../thread-list-row';
+import { threadsDisplayedColumns } from '../threads-explorer-data';
+import type {
+  ThreadsExplorerFilterFields,
+  ThreadsExplorerSupport,
+  ThreadsExplorerThreads,
+} from '../threads-explorer-data';
 import { ThreadsFilterBar } from './threads-filter-bar';
-import { useFeedbackAvailable, useTraceQueryAvailable } from '@/domains/capabilities';
+import { LoadMoreWhenInView } from '@/domains/observability/components/load-more-when-in-view';
 import { ObservabilityListBody } from '@/domains/observability/components/observability-list-body';
-import { useObservabilityListFilters } from '@/domains/observability/hooks/use-observability-list-filters';
-import type { ObservabilityListUrlState } from '@/domains/observability/hooks/use-observability-list-filters';
+import type {
+  ObservabilityListFiltersState,
+  ObservabilityListUrlState,
+} from '@/domains/observability/hooks/use-observability-list-filters';
 import { ObservabilitySavedViews } from '@/domains/observability/saved-views';
+import type { SavedViewColumnsControl } from '@/domains/observability/saved-views';
 import { ColumnsMenu } from '@/domains/traces/components/columns-menu';
 import { NoTracesInfo } from '@/domains/traces/components/no-traces-info';
-import { TraceThreadPanel } from '@/domains/traces/components/trace-thread-panel';
 import { TracesErrorContent } from '@/domains/traces/components/traces-error-content';
 import { TracesListView } from '@/domains/traces/components/traces-list-view';
 import type { TracesListViewTrace } from '@/domains/traces/components/traces-list-view';
-import { useTraceColumnPreferences } from '@/domains/traces/hooks/use-trace-column-preferences';
-import { withoutUnrecordedStreamingColumns } from '@/domains/traces/trace-list-columns';
 import { ActionRow } from '@/ds/components/ActionRow';
+import { useInView } from '@/hooks/use-in-view';
+
+export type ThreadsExplorerPanelArgs = {
+  /** The open thread, if any. */
+  threadId: string | undefined;
+  onClose: () => void;
+};
 
 export type ThreadsExplorerBodyProps = {
+  /** What the store can do (Studio: `useThreadsSupport`). */
+  support: ThreadsExplorerSupport;
+  /** The list's time range, filters and sort (`useObservabilityListFilters`). */
+  filters: ObservabilityListFiltersState;
+  /** The stored column selection. */
+  columns: SavedViewColumnsControl;
+  /** The loaded threads (Studio: `useThreadsListQuery`). */
+  threads: ThreadsExplorerThreads;
+  /** The filter bar's fields (Studio: `useThreadsFilterBarFields`). */
+  filterFields: ThreadsExplorerFilterFields;
   /** The open thread. The host keeps it (e.g. in the URL) so it survives a reload. */
   selectedThreadId: string | undefined;
   onSelectedThreadChange: (threadId: string | undefined) => void;
-  /** Opens a score from the thread drawer; scores live on host routes. */
-  onOpenScore: (traceId: string, scoreId: string) => void;
-  /** The host's search params, so the time range, filters and sort survive a reload. Omitted: kept in memory. */
+  /** Renders the open thread in the host's own drawer (Studio: `TraceThreadPanel`). */
+  renderPanel: (args: ThreadsExplorerPanelArgs) => ReactNode;
+  /** The host's search params, for saved views. Omitted: no saved views. */
   urlState?: ObservabilityListUrlState;
 };
 
-/** The threads page body: filter bar, thread list and the thread drawer. Router-agnostic. */
+/** The threads page body: filter bar, thread list and the host's thread drawer. Never fetches. */
 export function ThreadsExplorerBody({
+  support,
+  filters,
+  columns,
+  threads,
+  filterFields,
   selectedThreadId,
   onSelectedThreadChange,
-  onOpenScore,
+  renderPanel,
   urlState,
 }: ThreadsExplorerBodyProps) {
-  const filters = useObservabilityListFilters(urlState);
-  const { timeRange, tokens, groups, sort } = filters;
-  const withQueryTrace = useTraceQueryAvailable().enabled;
-  const withFeedback = useFeedbackAvailable().enabled;
-  const columns = useTraceColumnPreferences({ scope: 'threads' });
-  const { data: capabilities, isLoading: isCapabilitiesLoading } = useObservabilityCapabilities();
-  const withTimeToFirstChunk = capabilities?.capabilities.traceQueryTimeToFirstChunk ?? false;
-  const withTimeToFirstToken = capabilities?.capabilities.traceQueryTimeToFirstToken ?? false;
+  const displayedColumns = threadsDisplayedColumns(columns.preferences, support);
+  const { inView, setRef: setEndOfListElement } = useInView();
 
-  // Stored columns the store can't fill stay saved but aren't drawn, so they come back on a store that can.
-  const displayedColumns = useMemo(
-    () =>
-      isCapabilitiesLoading
-        ? columns.preferences
-        : withoutUnrecordedStreamingColumns(columns.preferences, { withTimeToFirstChunk, withTimeToFirstToken }),
-    [columns.preferences, isCapabilitiesLoading, withTimeToFirstChunk, withTimeToFirstToken],
-  );
-
-  // Threads with trace activity in the window, like the traces list for the same chip.
-  const query = useMemo<ThreadQueryArgs>(() => {
-    const where = buildThreadQueryWhere(tokens, groups, { withTimeToFirstChunk, withTimeToFirstToken });
-    return {
-      timeRange: { traces: timeRange },
-      orderBy: [{ field: 'startedAt', direction: sort.direction }],
-      ...(where ? { where } : {}),
-    };
-  }, [timeRange, sort, tokens, groups, withTimeToFirstChunk, withTimeToFirstToken]);
-
-  const { threads, hasNextPage, isFetchingNextPage, setEndOfListElement, isLoading, isError, error } =
-    useThreadsListSource({ query, rolling: filters.rolling, fixedStart: filters.datePreset === 'custom' });
-
-  const rows = useMemo(() => (threads ?? []).map(threadToListRow), [threads]);
+  const rows = useMemo(() => threads.threads.map(threadToListRow), [threads.threads]);
   const selectedRow = rows.find(row => row.threadId === selectedThreadId);
+  const { isLoading, isError } = threads;
 
   // The drawer is modal, so the list behind it cannot be clicked while a thread is open.
   const handleThreadClick = (row: TracesListViewTrace) => {
@@ -90,11 +88,12 @@ export function ThreadsExplorerBody({
             <ActionRow>
               <ActionRow.Start>
                 <ThreadsFilterBar
+                  fields={filterFields}
                   datePreset={filters.datePreset}
                   dateFrom={filters.dateFrom}
                   dateTo={filters.dateTo}
-                  tokens={tokens}
-                  groups={groups}
+                  tokens={filters.tokens}
+                  groups={filters.groups}
                   onDatePresetChange={filters.onDatePresetChange}
                   onDateChange={filters.onDateChange}
                   onDateRangeChange={filters.onDateRangeChange}
@@ -103,14 +102,19 @@ export function ThreadsExplorerBody({
                 />
               </ActionRow.Start>
               <ActionRow.End>
-                <ColumnsMenu scope="threads" value={columns.preferences} onChange={columns.setPreferences} />
+                <ColumnsMenu
+                  scope="threads"
+                  value={columns.preferences}
+                  onChange={columns.setPreferences}
+                  support={support}
+                />
               </ActionRow.End>
             </ActionRow>
           </>
         }
         error={
           isError ? (
-            <TracesErrorContent error={error} resource="threads" errorTitle="Failed to load threads" />
+            <TracesErrorContent error={threads.error} resource="threads" errorTitle="Failed to load threads" />
           ) : undefined
         }
         empty={
@@ -130,27 +134,25 @@ export function ThreadsExplorerBody({
           outcomeColumn={false}
           traces={rows}
           isLoading={isLoading}
-          isFetchingNextPage={isFetchingNextPage}
-          hasNextPage={hasNextPage}
+          isFetchingNextPage={threads.isFetchingNextPage}
+          hasNextPage={threads.hasNextPage}
           setEndOfListElement={setEndOfListElement}
           filtersApplied={filters.filtersApplied}
           resource="threads"
-          sort={sort}
+          sort={filters.sort}
           onSortChange={next => filters.setSort({ field: 'startedAt', direction: next.direction })}
           featuredTraceId={selectedRow?.traceId}
           onTraceClick={handleThreadClick}
         />
+        <LoadMoreWhenInView
+          inView={inView}
+          hasNextPage={threads.hasNextPage}
+          isFetchingNextPage={threads.isFetchingNextPage}
+          isError={isError}
+          onLoadMore={threads.onLoadMore}
+        />
       </ObservabilityListBody>
-      <TraceThreadPanel
-        open={!!selectedThreadId}
-        threadId={selectedThreadId ?? ''}
-        depth={1}
-        closeLabel="Close"
-        withQueryTrace={withQueryTrace}
-        withFeedback={withFeedback}
-        onOpenScore={onOpenScore}
-        onClose={() => onSelectedThreadChange(undefined)}
-      />
+      {renderPanel({ threadId: selectedThreadId, onClose: () => onSelectedThreadChange(undefined) })}
     </>
   );
 }
