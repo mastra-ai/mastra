@@ -2,6 +2,9 @@
 import { createContext, useContext, useMemo, useState } from 'react';
 import type { ComponentType, Dispatch, ReactNode, SetStateAction } from 'react';
 import type { ComposerAttachment } from './attachments/composer-attachments';
+import { ThreadInputContext } from './drafts/thread-input-context';
+import type { ThreadProps } from './thread';
+import type { AgentSettingsType } from './types';
 
 export interface AgentChatDraft {
   text: string;
@@ -66,6 +69,8 @@ export interface AgentChatFeatures {
   observationalMemory?: AgentChatObservationalMemory;
   refreshWorkingMemory?: () => void | Promise<unknown>;
   modelOverride?: string;
+  settings?: AgentSettingsType;
+  mcpAppTools?: ThreadProps['mcpAppTools'];
 }
 
 const EMPTY_FEATURES: AgentChatFeatures = { canExecute: true };
@@ -87,6 +92,18 @@ export function AgentChatFeaturesProvider({ value, children }: { value: AgentCha
 
 export function useAgentChatFeatures() {
   return useContext(AgentChatFeaturesContext);
+}
+
+export function useAgentThreadInput(threadId?: string): AgentChatThreadInput {
+  const input = useContext(ThreadInputContext);
+  const draft = input.drafts?.get(threadId);
+  return {
+    threadInput: input.getThreadInput(threadId),
+    setThreadInput: value => input.setThreadInputForThread(threadId, value),
+    draft,
+    updateDraft: input.drafts ? value => input.drafts?.update(threadId, value) : undefined,
+    draftStatus: input.drafts?.status,
+  };
 }
 
 const LocalThreadInputContext = createContext<AgentChatThreadInput | null>(null);

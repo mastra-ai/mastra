@@ -74,7 +74,7 @@ export function ChatProvider({
   const [streamErrors, setStreamErrors] = useState<MastraDBMessage[]>([]);
   const [threadSignalsUnsupported, setThreadSignalsUnsupported] = useState(false);
   const threadSignalsUnsupportedRef = useRef(false);
-  const modelSettings = settings?.modelSettings ?? {};
+  const modelSettings = (settings ?? features.settings)?.modelSettings ?? {};
   const threadSignalsEnabled =
     (window as { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS !== 'false' &&
     supportsMemory !== false &&

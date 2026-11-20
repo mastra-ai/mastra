@@ -290,7 +290,9 @@ export function TracesExplorerRoot({
   );
 
   const tokenSearchApplied = withTokenSearch && [...filters.tokens, ...filters.groups].some(hasTokenSearchFilter);
-  const contentFiltersApplied = filters.tokens.length > 0 || filters.groups.length > 0;
+  // Scope tokens are the page's own context, not filters the user applied.
+  const contentFiltersApplied =
+    filters.tokens.some(({ fieldId }) => !scopedFieldIds.has(fieldId)) || filters.groups.length > 0;
   const filtersApplied = contentFiltersApplied || filters.datePreset !== initialFilters.datePreset || !!dateTo;
   const runningSelected = useMemo(() => selectsRunningStatus(rawFilters), [rawFilters]);
   const filtersValue = useMemo<TracesFiltersContextValue>(
