@@ -52,6 +52,7 @@ import type {
   WidenedMastraModelConfig,
 } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
+import type { IMastraLogger } from '../logger';
 import { AGENTIC_EXECUTION_WORKFLOW_ID, AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
 import { networkLoop } from '../loop/network';
 import { LOCAL_MODEL_REQUEST_KEY } from '../loop/run-scope-keys';
@@ -514,6 +515,20 @@ function rebindRecoveredModelList(
 
 // Type-only imports from the durable module: erased at build time so they
 // don't create the runtime cycle `agent → agent/durable → agent`.
+
+const AGENT_CONFIGURATION_DELEGATE = Symbol('mastra.agent.configurationDelegate');
+
+type AgentDelegateConfig<TAgentId extends string, TTools extends ToolsInput, TOutput> = {
+  [AGENT_CONFIGURATION_DELEGATE]: Agent<TAgentId, TTools, TOutput>;
+  id: TAgentId;
+  name: string;
+};
+
+function hasConfigurationDelegate<TAgentId extends string, TTools extends ToolsInput, TOutput>(
+  config: object,
+): config is AgentDelegateConfig<TAgentId, TTools, TOutput> {
+  return AGENT_CONFIGURATION_DELEGATE in config;
+}
 
 const OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS = 5_000;
 
@@ -1123,7 +1138,15 @@ export class Agent<
   readonly #metadata?: DynamicArgument<Record<string, unknown>, TRequestContext>;
   model: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;
   #originalModel: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;
-  maxRetries?: number;
+  #maxRetries?: number;
+  get maxRetries(): number | undefined {
+    if (this.agentForExecution !== this) return this.agentForExecution.maxRetries;
+    return this.#maxRetries;
+  }
+  set maxRetries(maxRetries: number | undefined) {
+    if (this.agentForExecution !== this) this.agentForExecution.maxRetries = maxRetries;
+    else this.#maxRetries = maxRetries;
+  }
   readonly #maxRetriesConfigured: boolean;
   #mastra?: Mastra;
   /**
@@ -1305,6 +1328,22 @@ export class Agent<
   #publishedRuns = new Map<string, { publisher: AgentStreamPublisher; resourceId?: string; threadId?: string }>();
   #legacyHandler?: AgentLegacyHandler;
   #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext, TEditor>;
+  #configurationAgent?: Agent<TAgentId, TTools, TOutput>;
+
+  protected static configurationDelegate<TId extends string, TDelegateTools extends ToolsInput, TDelegateOutput>(
+    agent: Agent<TId, TDelegateTools, TDelegateOutput>,
+    id: TId,
+    name: string,
+  ): AgentConfig<TId, TDelegateTools, TDelegateOutput> & AgentDelegateConfig<TId, TDelegateTools, TDelegateOutput> {
+    return {
+      [AGENT_CONFIGURATION_DELEGATE]: agent,
+      id,
+      name,
+      instructions: ({ requestContext }) => agent.getInstructions({ requestContext }),
+      model: ({ requestContext }) => agent.getModel({ requestContext }),
+      notifications: agent.__getNotificationConfig(),
+    };
+  }
   #subAgentToolSchemas: Partial<Record<SubAgentToolSchemaVariant, SubAgentToolSchemas>> = {};
 
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
@@ -1332,6 +1371,9 @@ export class Agent<
   constructor(config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext, TEditor>) {
     super({ component: RegisteredLogger.AGENT, rawConfig: config.rawConfig });
 
+    this.#configurationAgent = hasConfigurationDelegate<TAgentId, TTools, TOutput>(config)
+      ? config[AGENT_CONFIGURATION_DELEGATE]
+      : undefined;
     this.#config = config;
 
     this.name = config.name;
@@ -1397,7 +1439,7 @@ export class Agent<
       this.#originalModel = config.model;
     }
 
-    this.maxRetries = config.maxRetries ?? 0;
+    this.#maxRetries = config.maxRetries ?? 0;
 
     if (config.workflows) {
       this.#workflows = config.workflows;
@@ -1661,6 +1703,21 @@ export class Agent<
     this._agentNetworkAppend = config._agentNetworkAppend || false;
   }
 
+  override __setLogger(logger: IMastraLogger): void {
+    super.__setLogger(logger);
+    if (this.agentForExecution !== this) this.agentForExecution.__setLogger(logger);
+  }
+
+  override toRawConfig(): Record<string, unknown> | undefined {
+    if (this.agentForExecution !== this) return this.agentForExecution.toRawConfig();
+    return super.toRawConfig();
+  }
+
+  override __setRawConfig(rawConfig: Record<string, unknown>): void {
+    if (this.agentForExecution !== this) this.agentForExecution.__setRawConfig(rawConfig);
+    else super.__setRawConfig(rawConfig);
+  }
+
   getMastraInstance() {
     return this.#mastra;
   }
@@ -1675,11 +1732,15 @@ export class Agent<
     return this.#notifications;
   }
 
-  getPubSub() {
+  getPubSub(): PubSub | undefined {
+    if (this.agentForExecution !== this) return this.agentForExecution.getPubSub();
+
     return this.#pubsub ?? this.#inheritedPubSub ?? this.#mastra?.pubsub;
   }
 
   hasOwnPubSub(): boolean {
+    if (this.agentForExecution !== this) return this.agentForExecution.hasOwnPubSub();
+
     return Boolean(this.#pubsub);
   }
 
@@ -1687,6 +1748,8 @@ export class Agent<
    * Returns the background tasks configuration for this agent.
    */
   getBackgroundTasksConfig(): AgentBackgroundConfig | undefined {
+    if (this.agentForExecution !== this) return this.agentForExecution.getBackgroundTasksConfig();
+
     return this.#backgroundTasks;
   }
 
@@ -1696,6 +1759,8 @@ export class Agent<
    * per-call → agent → mastra merge order.
    */
   getToolPayloadTransform(): ToolPayloadTransformPolicy | undefined {
+    if (this.agentForExecution !== this) return this.agentForExecution.getToolPayloadTransform();
+
     return this.#toolPayloadTransform;
   }
 
@@ -1705,6 +1770,8 @@ export class Agent<
    * @internal
    */
   __getGoalConfig(): GoalConfig | undefined {
+    if (this.agentForExecution !== this) return this.agentForExecution.__getGoalConfig();
+
     return this.#goal;
   }
 
@@ -1717,6 +1784,7 @@ export class Agent<
    * @internal
    */
   __getMaxRetriesConfigured(): boolean {
+    if (this.agentForExecution !== this) return this.agentForExecution.__getMaxRetriesConfigured();
     return this.#maxRetriesConfigured;
   }
 
@@ -1726,6 +1794,7 @@ export class Agent<
    * @internal
    */
   __getMaxProcessorRetries(): number | undefined {
+    if (this.agentForExecution !== this) return this.agentForExecution.__getMaxProcessorRetries();
     return this.#maxProcessorRetries;
   }
 
@@ -1841,6 +1910,9 @@ export class Agent<
     requestContext?: RequestContext,
     errorProcessorOverrides?: ErrorProcessorOrWorkflow[],
   ): Promise<LLMRequestProcessorOrWorkflow[]> {
+    if (this.agentForExecution !== this)
+      return this.agentForExecution.__listLLMRequestProcessors(requestContext, errorProcessorOverrides);
+
     return this.listResolvedLLMRequestProcessors(requestContext, undefined, errorProcessorOverrides);
   }
 
@@ -1957,6 +2029,8 @@ export class Agent<
    * @internal
    */
   __getStaticAgents(): Record<string, SubAgent> | undefined {
+    if (this.agentForExecution !== this) return this.agentForExecution.__getStaticAgents();
+
     if (typeof this.#agents === 'function') return undefined;
     return this.#agents as Record<string, SubAgent> | undefined;
   }
@@ -1970,6 +2044,8 @@ export class Agent<
    * @internal
    */
   __hasSubAgentsConfigured(): boolean {
+    if (this.agentForExecution !== this) return this.agentForExecution.__hasSubAgentsConfigured();
+
     if (typeof this.#agents === 'function') return true;
     const record = this.#agents as Record<string, SubAgent> | undefined;
     return !!record && Object.keys(record).length > 0;
@@ -1985,6 +2061,8 @@ export class Agent<
    * sub-agent's own tools to also dispatch separate background tasks inside it.
    */
   disableBackgroundTasks(): void {
+    if (this.agentForExecution !== this) return this.agentForExecution.disableBackgroundTasks();
+
     this.#backgroundTasks = { ...(this.#backgroundTasks ?? {}), disabled: true };
   }
 
@@ -1992,6 +2070,8 @@ export class Agent<
    * Re-enables background task dispatch after it has been disabled.
    */
   enableBackgroundTasks(): void {
+    if (this.agentForExecution !== this) return this.agentForExecution.enableBackgroundTasks();
+
     if (this.#backgroundTasks) {
       this.#backgroundTasks = { ...this.#backgroundTasks, disabled: false };
     }
@@ -2054,6 +2134,8 @@ export class Agent<
    * Returns null if no channels are configured.
    */
   getChannels(): AgentChannels | null {
+    if (this.agentForExecution !== this) return this.agentForExecution.getChannels();
+
     return this.#agentChannels;
   }
 
@@ -2070,6 +2152,11 @@ export class Agent<
    * @internal
    */
   setChannels(agentChannels: AgentChannels): void {
+    if (this.agentForExecution !== this) {
+      this.agentForExecution.setChannels(agentChannels);
+      agentChannels.__setDispatchAgent(this);
+      return;
+    }
     if (this.#agentChannels && this.#agentChannels !== agentChannels) {
       this.logger?.debug(`Replacing existing AgentChannels on agent "${this.name}"`);
     }
@@ -2088,6 +2175,8 @@ export class Agent<
    * like screencast streaming and input injection.
    */
   get browser(): MastraBrowser | undefined {
+    if (this.agentForExecution !== this) return this.agentForExecution.browser;
+
     return this.#browser;
   }
 
@@ -2335,6 +2424,8 @@ export class Agent<
    * @param browser - The new browser instance, or undefined to disable browser tools
    */
   setBrowser(browser: MastraBrowser | undefined): void {
+    if (this.agentForExecution !== this) return this.agentForExecution.setBrowser(browser);
+
     this.#browser = browser;
     // Mark as explicit so workspace browser doesn't overwrite
     // Setting to undefined is also explicit (disabling browser tools)
@@ -2346,6 +2437,8 @@ export class Agent<
    * Used by AgentController to avoid overwriting agent-level browser configuration.
    */
   hasOwnBrowser(): boolean {
+    if (this.agentForExecution !== this) return this.agentForExecution.hasOwnBrowser();
+
     return this.#hasExplicitBrowser;
   }
 
@@ -2649,6 +2742,8 @@ export class Agent<
   public listAgents({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
     | Record<string, SubAgent<string, TRequestContext>>
     | Promise<Record<string, SubAgent<string, TRequestContext>>> {
+    if (this.agentForExecution !== this) return this.agentForExecution.listAgents({ requestContext });
+
     const agentsToUse = this.#agents ? resolveDynamicArgument(this.#agents, { requestContext }) : {};
 
     return resolveMaybePromise(agentsToUse, agents => {
@@ -2784,6 +2879,9 @@ export class Agent<
     requestContext: RequestContext,
     overrides?: ErrorProcessorOrWorkflow[],
   ): Promise<{ errorProcessors: ErrorProcessorOrWorkflow[]; hasConfiguredErrorProcessors: boolean }> {
+    if (this.agentForExecution !== this)
+      return this.agentForExecution.__resolveRunErrorProcessors(requestContext, overrides);
+
     if (overrides) {
       return {
         errorProcessors: await this.#withMemoryErrorProcessors(overrides, requestContext),
@@ -3158,6 +3256,8 @@ export class Agent<
    * Returns the input processors for this agent, resolving function-based processors if necessary.
    */
   public async listInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]> {
+    if (this.agentForExecution !== this) return this.agentForExecution.listInputProcessors(requestContext);
+
     return this.listResolvedInputProcessors(requestContext);
   }
 
@@ -3165,6 +3265,8 @@ export class Agent<
    * Returns the output processors for this agent, resolving function-based processors if necessary.
    */
   public async listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]> {
+    if (this.agentForExecution !== this) return this.agentForExecution.listOutputProcessors(requestContext);
+
     return this.listResolvedOutputProcessors(requestContext);
   }
 
@@ -3178,6 +3280,8 @@ export class Agent<
    * `errorProcessorDefaults: false` only the configured list is returned.
    */
   public async listErrorProcessors(requestContext?: RequestContext): Promise<ErrorProcessorOrWorkflow[]> {
+    if (this.agentForExecution !== this) return this.agentForExecution.listErrorProcessors(requestContext);
+
     return this.#resolveErrorProcessors({
       requestContext: requestContext as RequestContext,
     });
@@ -3200,6 +3304,9 @@ export class Agent<
     processorId: TId,
     requestContext?: RequestContext,
   ): Promise<Processor<TId> | null> {
+    if (this.agentForExecution !== this)
+      return this.agentForExecution.resolveProcessorById(processorId, requestContext);
+
     const ctx = requestContext || new RequestContext();
 
     // Get raw input processors (before combining into workflow)
@@ -3244,6 +3351,8 @@ export class Agent<
    * this method returns only what was explicitly configured via the `inputProcessors` option.
    */
   public async listConfiguredInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]> {
+    if (this.agentForExecution !== this) return this.agentForExecution.listConfiguredInputProcessors(requestContext);
+
     if (!this.#inputProcessors) return [];
 
     const configuredProcessors = await resolveDynamicArgument(this.#inputProcessors, {
@@ -3261,6 +3370,8 @@ export class Agent<
    * this method returns only what was explicitly configured via the `outputProcessors` option.
    */
   public async listConfiguredOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]> {
+    if (this.agentForExecution !== this) return this.agentForExecution.listConfiguredOutputProcessors(requestContext);
+
     if (!this.#outputProcessors) return [];
 
     const configuredProcessors = await resolveDynamicArgument(this.#outputProcessors, {
@@ -3277,6 +3388,8 @@ export class Agent<
    * rejecting input or output processor resolver cannot block the caller.
    */
   public async getConfiguredErrorProcessorIds(requestContext?: RequestContext): Promise<string[]> {
+    if (this.agentForExecution !== this) return this.agentForExecution.getConfiguredErrorProcessorIds(requestContext);
+
     const ctx = requestContext || new RequestContext();
     const errorProcessors = await this.#resolveErrorProcessors({ requestContext: ctx, includeDefaults: false });
     return errorProcessors.map(p => p.id).filter(Boolean);
@@ -3290,6 +3403,8 @@ export class Agent<
   public async getConfiguredProcessorIds(
     requestContext?: RequestContext,
   ): Promise<{ inputProcessorIds: string[]; outputProcessorIds: string[]; errorProcessorIds: string[] }> {
+    if (this.agentForExecution !== this) return this.agentForExecution.getConfiguredProcessorIds(requestContext);
+
     const ctx = requestContext || new RequestContext();
 
     let inputProcessorIds: string[] = [];
@@ -3316,6 +3431,8 @@ export class Agent<
    * @internal
    */
   public async getConfiguredProcessorWorkflows(): Promise<ProcessorWorkflow[]> {
+    if (this.agentForExecution !== this) return this.agentForExecution.getConfiguredProcessorWorkflows();
+
     const workflows: ProcessorWorkflow[] = [];
 
     // Get input processors (static or from function)
@@ -3382,6 +3499,8 @@ export class Agent<
   }
 
   public hasOwnMemory(): boolean {
+    if (this.agentForExecution !== this) return this.agentForExecution.hasOwnMemory();
+
     return Boolean(this.#memory);
   }
 
@@ -3392,6 +3511,7 @@ export class Agent<
    * @internal
    */
   __hasFixedMemory(): boolean {
+    if (this.agentForExecution !== this) return this.agentForExecution.__hasFixedMemory();
     return Boolean(this.#memory) && typeof this.#memory !== 'function';
   }
 
@@ -3410,6 +3530,8 @@ export class Agent<
   public async getMemory({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}): Promise<
     MastraMemory | undefined
   > {
+    if (this.agentForExecution !== this) return this.agentForExecution.getMemory({ requestContext });
+
     // When a supervisor delegates to a memory-less sub-agent it passes its own
     // memory through the delegated run's RequestContext, so the inheritance
     // lasts for exactly that invocation instead of being grafted onto the
@@ -3476,6 +3598,8 @@ export class Agent<
    * ```
    */
   public hasOwnWorkspace(): boolean {
+    if (this.agentForExecution !== this) return this.agentForExecution.hasOwnWorkspace();
+
     return Boolean(this.#workspace);
   }
 
@@ -3484,6 +3608,7 @@ export class Agent<
    * @experimental
    */
   public getKnowledge(): Knowledge | undefined {
+    if (this.agentForExecution !== this) return this.agentForExecution.getKnowledge();
     if (typeof this.#knowledge !== 'string') return this.#knowledge;
     if (!this.#mastra) {
       throw new MastraError({
@@ -3512,6 +3637,8 @@ export class Agent<
   public async getWorkspace({
     requestContext = new RequestContext(),
   }: { requestContext?: RequestContext } = {}): Promise<AnyWorkspace | undefined> {
+    if (this.agentForExecution !== this) return this.agentForExecution.getWorkspace({ requestContext });
+
     // If agent has its own workspace configured, use it
     if (this.#workspace) {
       if (typeof this.#workspace !== 'function') {
@@ -3584,6 +3711,8 @@ export class Agent<
    * ```
    */
   public async getSkill(skillName: string, options?: { requestContext?: RequestContext }): Promise<Skill | null> {
+    if (this.agentForExecution !== this) return this.agentForExecution.getSkill(skillName, options);
+
     const skills = await this.resolveSkills(options?.requestContext);
     if (!skills) return null;
     return skills.get(skillName);
@@ -3604,6 +3733,8 @@ export class Agent<
    * ```
    */
   public async listSkills(options?: { requestContext?: RequestContext }): Promise<SkillMetadata[]> {
+    if (this.agentForExecution !== this) return this.agentForExecution.listSkills(options);
+
     const skills = await this.resolveSkills(options?.requestContext);
     if (!skills) return [];
     return skills.list();
@@ -3626,7 +3757,9 @@ export class Agent<
     this.#browser = workspace.browser;
   }
 
-  get voice() {
+  get voice(): IMastraVoice {
+    if (this.agentForExecution !== this) return this.agentForExecution.voice;
+
     if (typeof this.#voice === 'function') {
       const mastraError = new MastraError({
         id: 'AGENT_VOICE_INCOMPATIBLE_WITH_FUNCTION_VOICE',
@@ -3662,7 +3795,9 @@ export class Agent<
    * Gets the request context schema for this agent.
    * Returns the Zod schema used to validate request context values, or undefined if not set.
    */
-  get requestContextSchema() {
+  get requestContextSchema(): StandardSchemaWithJSON<TRequestContext> | undefined {
+    if (this.agentForExecution !== this) return this.agentForExecution.requestContextSchema;
+
     return this.#requestContextSchema;
   }
 
@@ -3679,6 +3814,8 @@ export class Agent<
   public async listWorkflows({
     requestContext = new RequestContext(),
   }: { requestContext?: RequestContext } = {}): Promise<Record<string, AnyWorkflow>> {
+    if (this.agentForExecution !== this) return this.agentForExecution.listWorkflows({ requestContext });
+
     let workflowRecord;
     if (typeof this.#workflows === 'function') {
       workflowRecord = await Promise.resolve(
@@ -3706,6 +3843,8 @@ export class Agent<
     requestContext = new RequestContext(),
     scopes = [],
   }: { requestContext?: RequestContext; scopes?: string[] } = {}): Promise<string[]> {
+    if (this.agentForExecution !== this) return this.agentForExecution.getScopes({ requestContext, scopes });
+
     return applyAgentScopesConfig(this.#scopes, {
       scopes,
       requestContext: requestContext as RequestContext<TRequestContext>,
@@ -3716,6 +3855,8 @@ export class Agent<
   async listScorers({
     requestContext = new RequestContext(),
   }: { requestContext?: RequestContext } = {}): Promise<MastraScorers> {
+    if (this.agentForExecution !== this) return this.agentForExecution.listScorers({ requestContext });
+
     if (typeof this.#scorers !== 'function') {
       return this.#scorers;
     }
@@ -3767,7 +3908,9 @@ export class Agent<
    * const audioStream = await voice.speak('Hello world');
    * ```
    */
-  public async getVoice({ requestContext }: { requestContext?: RequestContext } = {}) {
+  public async getVoice({ requestContext }: { requestContext?: RequestContext } = {}): Promise<IMastraVoice> {
+    if (this.agentForExecution !== this) return this.agentForExecution.getVoice({ requestContext });
+
     if (!this.#voice) {
       return new DefaultVoice();
     }
@@ -3798,7 +3941,7 @@ export class Agent<
             agentName: this.name,
             agentId: this.id,
             requestContext: resolvedRequestContext,
-            tracingPolicy: this.#options?.tracingPolicy,
+            tracingPolicy: this.getTracingPolicy(),
             requireApproval: (tool as any).requireApproval,
             backgroundConfig: (tool as any).background,
             agentBackgroundConfig: this.#backgroundTasks,
@@ -3828,6 +3971,8 @@ export class Agent<
   public getInstructions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
     | AgentInstructions
     | Promise<AgentInstructions> {
+    if (this.agentForExecution !== this) return this.agentForExecution.getInstructions({ requestContext });
+
     if (typeof this.#instructions === 'function') {
       const result = resolveDynamicArgument(this.#instructions, {
         requestContext,
@@ -3892,6 +4037,8 @@ export class Agent<
    * ```
    */
   public getDescription(): string {
+    if (this.agentForExecution !== this) return this.agentForExecution.getDescription();
+
     return this.#description ?? '';
   }
 
@@ -3902,6 +4049,8 @@ export class Agent<
    * @internal — not part of the public agent API.
    */
   public __setDeclaredSchedules(schedules: DeclaredAgentSchedule[]): void {
+    if (this.agentForExecution !== this) return this.agentForExecution.__setDeclaredSchedules(schedules);
+
     this.#declaredSchedules = schedules;
   }
 
@@ -3911,6 +4060,8 @@ export class Agent<
    * boot; see `registerDeclarativeSchedules`.
    */
   public getDeclaredSchedules(): DeclaredAgentSchedule[] {
+    if (this.agentForExecution !== this) return this.agentForExecution.getDeclaredSchedules();
+
     return this.#declaredSchedules;
   }
 
@@ -3922,6 +4073,8 @@ export class Agent<
    * fields.
    */
   public getTracingPolicy(): TracingPolicy | undefined {
+    if (this.agentForExecution !== this) return this.agentForExecution.getTracingPolicy();
+
     return this.#options?.tracingPolicy;
   }
 
@@ -3939,6 +4092,8 @@ export class Agent<
     | Record<string, unknown>
     | undefined
     | Promise<Record<string, unknown> | undefined> {
+    if (this.agentForExecution !== this) return this.agentForExecution.getMetadata({ requestContext });
+
     if (this.#metadata === undefined) {
       return undefined;
     }
@@ -3981,7 +4136,7 @@ export class Agent<
         genTitle: this.genTitle.bind(this),
         resolveTitleGenerationConfig: this.resolveTitleGenerationConfig.bind(this),
         convertInstructionsToString,
-        tracingPolicy: this.#options?.tracingPolicy,
+        tracingPolicy: this.getTracingPolicy(),
         resolvedVersionId: this.toRawConfig()?.resolvedVersionId as string | undefined,
         _agentNetworkAppend: this._agentNetworkAppend,
         listResolvedOutputProcessors: this.listResolvedOutputProcessors.bind(this),
@@ -4005,6 +4160,9 @@ export class Agent<
   public getDefaultGenerateOptionsLegacy({
     requestContext = new RequestContext(),
   }: { requestContext?: RequestContext } = {}): AgentGenerateOptions | Promise<AgentGenerateOptions> {
+    if (this.agentForExecution !== this)
+      return this.agentForExecution.getDefaultGenerateOptionsLegacy({ requestContext });
+
     if (typeof this.#defaultGenerateOptionsLegacy !== 'function') {
       return this.#defaultGenerateOptionsLegacy;
     }
@@ -4045,6 +4203,9 @@ export class Agent<
   public getDefaultStreamOptionsLegacy({
     requestContext = new RequestContext(),
   }: { requestContext?: RequestContext } = {}): AgentStreamOptions | Promise<AgentStreamOptions> {
+    if (this.agentForExecution !== this)
+      return this.agentForExecution.getDefaultStreamOptionsLegacy({ requestContext });
+
     if (typeof this.#defaultStreamOptionsLegacy !== 'function') {
       return this.#defaultStreamOptionsLegacy;
     }
@@ -4091,6 +4252,8 @@ export class Agent<
   public getDefaultOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
     | PublicAgentExecutionOptions<TOutput>
     | Promise<PublicAgentExecutionOptions<TOutput>> {
+    if (this.agentForExecution !== this) return this.agentForExecution.getDefaultOptions({ requestContext });
+
     if (typeof this.#defaultOptions !== 'function') {
       return this.#defaultOptions;
     }
@@ -4135,6 +4298,8 @@ export class Agent<
   public getDefaultNetworkOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
     | NetworkOptions
     | Promise<NetworkOptions> {
+    if (this.agentForExecution !== this) return this.agentForExecution.getDefaultNetworkOptions({ requestContext });
+
     if (typeof this.#defaultNetworkOptions !== 'function') {
       return this.#defaultNetworkOptions;
     }
@@ -4176,6 +4341,8 @@ export class Agent<
     requestContext = new RequestContext(),
     resolveWebSearch = true,
   }: { requestContext?: RequestContext; resolveWebSearch?: boolean } = {}): Promise<TTools> {
+    if (this.agentForExecution !== this) return this.agentForExecution.listTools({ requestContext, resolveWebSearch });
+
     const resolveToolList = async (tools: ToolsInput | undefined): Promise<TTools> => {
       if (!tools) {
         const mastraError = new MastraError({
@@ -4235,6 +4402,8 @@ export class Agent<
     requestContext?: RequestContext;
     model?: DynamicArgument<MastraModelConfig, TRequestContext>;
   } = {}): MastraLLM | Promise<MastraLLM> {
+    if (this.agentForExecution !== this) return this.agentForExecution.getLLM({ requestContext, model });
+
     const modelSelectionPromise = model
       ? this.resolveModelSelection(
           model as DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext>,
@@ -4275,14 +4444,14 @@ export class Agent<
             return new MastraLLMVNext({
               models,
               mastra: this.#mastra,
-              options: { tracingPolicy: this.#options?.tracingPolicy },
+              options: { tracingPolicy: this.getTracingPolicy() },
             });
           });
         } else {
           llm = new MastraLLMV1({
             model: modelInfo,
             mastra: this.#mastra,
-            options: { tracingPolicy: this.#options?.tracingPolicy },
+            options: { tracingPolicy: this.getTracingPolicy() },
           });
         }
 
@@ -4506,6 +4675,8 @@ export class Agent<
     requestContext?: RequestContext;
     modelConfig?: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;
   } = {}): MastraLanguageModel | MastraLegacyLanguageModel | Promise<MastraLanguageModel | MastraLegacyLanguageModel> {
+    if (this.agentForExecution !== this) return this.agentForExecution.getModel({ requestContext, modelConfig });
+
     return this.resolveModelSelection(modelConfig, requestContext).then(resolved =>
       this.resolveModelFromSelection(resolved, requestContext),
     );
@@ -4526,6 +4697,8 @@ export class Agent<
   public async getModelList(
     requestContext: RequestContext = new RequestContext(),
   ): Promise<Array<AgentModelManagerConfig> | null> {
+    if (this.agentForExecution !== this) return this.agentForExecution.getModelList(requestContext);
+
     let models: Array<AgentModelManagerConfig>;
 
     if (typeof this.model === 'function') {
@@ -4560,6 +4733,9 @@ export class Agent<
     modelList: Array<AgentModelManagerConfig> | null;
     fallbackTimeouts: Array<ModelFallbackSettings['timeout'] | undefined>;
   }> {
+    if (this.agentForExecution !== this) {
+      return this.agentForExecution.__getModelAndModelList({ requestContext, model: modelOverride });
+    }
     let selectionInput: Parameters<Agent['resolveModelSelection']>[0] = this.model;
     if (modelOverride) selectionInput = modelOverride;
     const resolvedSelection = await this.resolveModelSelection(selectionInput, requestContext);
@@ -4588,7 +4764,9 @@ export class Agent<
    * Updates the agent's instructions.
    * @internal
    */
-  __updateInstructions(newInstructions: DynamicArgument<AgentInstructions, any>) {
+  __updateInstructions(newInstructions: DynamicArgument<AgentInstructions, any>): void {
+    if (this.agentForExecution !== this) return this.agentForExecution.__updateInstructions(newInstructions);
+
     this.#instructions = newInstructions as DynamicArgument<AgentInstructions, TRequestContext>;
   }
 
@@ -4596,7 +4774,9 @@ export class Agent<
    * Updates the agent's model configuration.
    * @internal
    */
-  __updateModel({ model }: { model: DynamicArgument<MastraModelConfig, TRequestContext> | ModelFallbacks }) {
+  __updateModel({ model }: { model: DynamicArgument<MastraModelConfig, TRequestContext> | ModelFallbacks }): void {
+    if (this.agentForExecution !== this) return this.agentForExecution.__updateModel({ model });
+
     this.model = model as DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;
     this.logger.debug(`[Agents:${this.name}] Model updated.`, { model: this.model, name: this.name });
   }
@@ -4606,7 +4786,8 @@ export class Agent<
    * Clones arrays to prevent reordering mutations from affecting the original snapshot.
    * @internal
    */
-  __resetToOriginalModel() {
+  __resetToOriginalModel(): void {
+    if (this.agentForExecution !== this) return this.agentForExecution.__resetToOriginalModel();
     const originalModel = this.#originalModel;
     if (Array.isArray(originalModel)) {
       this.model = [...originalModel];
@@ -4619,7 +4800,9 @@ export class Agent<
    * Returns the editor ownership config for this agent.
    * @internal
    */
-  __getEditorConfig() {
+  __getEditorConfig(): AgentEditorConfig | undefined {
+    if (this.agentForExecution !== this) return this.agentForExecution.__getEditorConfig();
+
     return this.#editorConfig;
   }
 
@@ -4628,7 +4811,14 @@ export class Agent<
    * Used by the editor to save/restore code defaults externally.
    * @internal
    */
-  __getOverridableFields() {
+  __getOverridableFields(): {
+    instructions: DynamicArgument<AgentInstructions, TRequestContext>;
+    model: Agent<TAgentId, TTools, TOutput, TRequestContext, TEditor>['model'];
+    tools: DynamicArgument<TTools, TRequestContext>;
+    workspace: DynamicArgument<AnyWorkspace | undefined, TRequestContext> | undefined;
+  } {
+    if (this.agentForExecution !== this) return this.agentForExecution.__getOverridableFields();
+
     return {
       instructions: this.#instructions,
       model: this.model,
@@ -4642,6 +4832,7 @@ export class Agent<
    * function-valued models, whose selection is resolved per request and cannot be edited in place).
    */
   reorderModels(modelIds: string[]): boolean {
+    if (this.agentForExecution !== this) return this.agentForExecution.reorderModels(modelIds);
     if (!Array.isArray(this.model)) {
       this.logger.warn('Model is not an array', { agent: this.name });
       return false;
@@ -4676,6 +4867,9 @@ export class Agent<
     enabled?: boolean;
     maxRetries?: number;
   }): boolean {
+    if (this.agentForExecution !== this) {
+      return this.agentForExecution.updateModelInModelList({ id, model, enabled, maxRetries });
+    }
     if (!Array.isArray(this.model)) {
       this.logger.warn('Model is not an array', { agent: this.name });
       return false;
@@ -4745,6 +4939,11 @@ export class Agent<
     }
 
     this.#streamBus?.registerMastra(mastra.pubsub);
+    if (this.agentForExecution !== this) {
+      this.agentForExecution.__registerMastra(mastra);
+      this.__getStreamBus()?.registerMastra(mastra.pubsub);
+      return;
+    }
 
     // Propagate logger to workspace if it's a direct instance (not a factory function)
     if (this.#workspace && typeof this.#workspace !== 'function') {
@@ -4819,7 +5018,9 @@ export class Agent<
    * @param tools
    * @internal
    */
-  __setTools(tools: DynamicArgument<TTools, any>) {
+  __setTools(tools: DynamicArgument<TTools, any>): void {
+    if (this.agentForExecution !== this) return this.agentForExecution.__setTools(tools);
+
     this.#tools = tools as DynamicArgument<TTools, TRequestContext>;
   }
 
@@ -5102,19 +5303,22 @@ export class Agent<
     }
   }
 
-  public __setMemory(memory: DynamicArgument<MastraMemory, TRequestContext>) {
+  public __setMemory(memory: DynamicArgument<MastraMemory, TRequestContext>): void {
     this.#memory = memory;
+    if (this.agentForExecution !== this) this.agentForExecution.__setMemory(memory);
   }
 
-  public __setKnowledge(knowledge: Knowledge) {
+  public __setKnowledge(knowledge: Knowledge): void {
+    if (this.agentForExecution !== this) return this.agentForExecution.__setKnowledge(knowledge);
     this.#knowledge = knowledge;
   }
 
-  public __setPubSub(pubsub: PubSub) {
+  public __setPubSub(pubsub: PubSub): void {
     this.#inheritedPubSub = pubsub;
+    if (this.agentForExecution !== this) this.agentForExecution.__setPubSub(pubsub);
   }
 
-  public __setWorkspace(workspace: DynamicArgument<AnyWorkspace | undefined, TRequestContext>) {
+  public __setWorkspace(workspace: DynamicArgument<AnyWorkspace | undefined, TRequestContext>): void {
     this.#workspace = workspace;
     if (this.#mastra && workspace && typeof workspace !== 'function') {
       workspace.__setLogger(this.logger);
@@ -5125,6 +5329,7 @@ export class Agent<
         agentSource: this.source,
       });
     }
+    if (this.agentForExecution !== this) this.agentForExecution.__setWorkspace(workspace);
   }
 
   /**
@@ -5188,7 +5393,7 @@ export class Agent<
           requestContext,
           ...observabilityContext,
           model: await getModel(),
-          tracingPolicy: this.#options?.tracingPolicy,
+          tracingPolicy: this.getTracingPolicy(),
           requireApproval: (toolObj as any).requireApproval,
           backgroundConfig: (toolObj as any).background,
           agentBackgroundConfig: this.#backgroundTasks,
@@ -5250,7 +5455,7 @@ export class Agent<
         requestContext,
         ...observabilityContext,
         model: await getModel(),
-        tracingPolicy: this.#options?.tracingPolicy,
+        tracingPolicy: this.getTracingPolicy(),
         requireApproval: (tool as any).requireApproval,
         backgroundConfig: (tool as any).background,
         agentBackgroundConfig: this.#backgroundTasks,
@@ -5330,7 +5535,7 @@ export class Agent<
           requestContext,
           ...observabilityContext,
           model: await getModel(),
-          tracingPolicy: this.#options?.tracingPolicy,
+          tracingPolicy: this.getTracingPolicy(),
           requireApproval: (toolObj as any).requireApproval,
           backgroundConfig: (toolObj as any).background,
           agentBackgroundConfig: this.#backgroundTasks,
@@ -5420,7 +5625,7 @@ export class Agent<
           requestContext,
           ...observabilityContext,
           model: await getModel(),
-          tracingPolicy: this.#options?.tracingPolicy,
+          tracingPolicy: this.getTracingPolicy(),
           requireApproval: false, // Skill tools never require approval
           backgroundConfig: (toolObj as any).background,
           agentBackgroundConfig: this.#backgroundTasks,
@@ -5498,7 +5703,7 @@ export class Agent<
           requestContext,
           ...observabilityContext,
           model: await getModel(),
-          tracingPolicy: this.#options?.tracingPolicy,
+          tracingPolicy: this.getTracingPolicy(),
           requireApproval: (toolObj as any).requireApproval,
           backgroundConfig: (toolObj as any).background,
           agentBackgroundConfig: this.#backgroundTasks,
@@ -5629,7 +5834,7 @@ export class Agent<
               ...observabilityContext,
               model,
               outputWriter,
-              tracingPolicy: this.#options?.tracingPolicy,
+              tracingPolicy: this.getTracingPolicy(),
               requireApproval: (tool as any).requireApproval,
               backgroundConfig: (tool as any).background,
               agentBackgroundConfig: this.#backgroundTasks,
@@ -5846,7 +6051,7 @@ export class Agent<
                   ...observabilityContext,
                   model: resolvedModel,
                   outputWriter,
-                  tracingPolicy: this.#options?.tracingPolicy,
+                  tracingPolicy: this.getTracingPolicy(),
                   requireApproval: (tool as any).requireApproval,
                   backgroundConfig: (tool as any).background,
                   agentBackgroundConfig: this.#backgroundTasks,
@@ -6073,7 +6278,7 @@ export class Agent<
           ...observabilityContext,
           model,
           outputWriter,
-          tracingPolicy: this.#options?.tracingPolicy,
+          tracingPolicy: this.getTracingPolicy(),
           requireApproval: (tool as any).requireApproval,
           backgroundConfig: (tool as any).background,
           agentBackgroundConfig: this.#backgroundTasks,
@@ -6161,7 +6366,7 @@ export class Agent<
             ...observabilityContext,
             model: await getModel(),
             outputWriter,
-            tracingPolicy: this.#options?.tracingPolicy,
+            tracingPolicy: this.getTracingPolicy(),
             requireApproval: (toolObj as any).requireApproval,
             backgroundConfig: (toolObj as any).background,
             agentBackgroundConfig: this.#backgroundTasks,
@@ -6243,7 +6448,7 @@ export class Agent<
           requestContext,
           ...observabilityContext,
           model,
-          tracingPolicy: this.#options?.tracingPolicy,
+          tracingPolicy: this.getTracingPolicy(),
           requireApproval: (tool as any).requireApproval,
           backgroundConfig: (tool as any).background,
           agentBackgroundConfig: this.#backgroundTasks,
@@ -7525,7 +7730,7 @@ export class Agent<
           requestContext,
           model: await getModel(),
           ...observabilityContext,
-          tracingPolicy: this.#options?.tracingPolicy,
+          tracingPolicy: this.getTracingPolicy(),
           backgroundConfig: subAgentBackgroundConfig,
           agentBackgroundConfig: this.#backgroundTasks,
         };
@@ -7806,7 +8011,7 @@ export class Agent<
           requestContext,
           model: await getModel(),
           ...observabilityContext,
-          tracingPolicy: this.#options?.tracingPolicy,
+          tracingPolicy: this.getTracingPolicy(),
           agentBackgroundConfig: this.#backgroundTasks,
         };
 
@@ -8216,6 +8421,8 @@ export class Agent<
    * the configured hooks must read and compose them explicitly.
    */
   getConfiguredToolHooks(): ToolHooks | undefined {
+    if (this.agentForExecution !== this) return this.agentForExecution.getConfiguredToolHooks();
+
     return this.#hooks;
   }
 
@@ -9615,7 +9822,7 @@ export class Agent<
       options.memory?.resource &&
       options.memory?.thread &&
       !this.hasOwnMemory() &&
-      !this.#knowledge &&
+      !this.getKnowledge() &&
       !isGatewayModel
     ) {
       this.logger.warn('No memory is configured but resourceId and threadId were passed in args', { agent: this.name });
@@ -9716,7 +9923,7 @@ export class Agent<
           ? { entityVersionId: this.toRawConfig()!.resolvedVersionId as string }
           : {}),
       },
-      tracingPolicy: this.#options?.tracingPolicy,
+      tracingPolicy: this.getTracingPolicy(),
       tracingOptions: options.tracingOptions,
       tracingContext: options.tracingContext,
       requestContext,
@@ -12915,7 +13122,7 @@ export class Agent<
   }
 
   protected get agentForExecution(): Agent<TAgentId, TTools, TOutput> {
-    return this;
+    return this.#configurationAgent ?? this;
   }
 
   get #executionStreamBus(): AgentStreamBus {
