@@ -53,7 +53,7 @@ function recordingClient() {
     failReacts: number;
     failUnreacts: number;
     /** Holds a post or edit in flight until the returned promise settles; it lands after that. */
-    hold?: (call: 'post' | 'edit', text: string) => Promise<void> | undefined;
+    hold?: (call: 'post' | 'edit' | 'react', text: string) => Promise<void> | undefined;
   } = { covered: true, failPosts: 0, failEdits: 0, failReacts: 0, failUnreacts: 0 };
   let next = 0;
   const client: AlertSlackClient = {
@@ -81,6 +81,7 @@ function recordingClient() {
         slack.failReacts--;
         throw new Error('ratelimited');
       }
+      await slack.hold?.('react', emoji);
       calls.push({ call: 'react', ts, emoji });
     },
     unreact: async (_thread, ts, emoji) => {
@@ -349,6 +350,40 @@ describe('AlertSlackStatus', () => {
       { call: 'unreact', ts: '1700.1', emoji: 'eyes' },
       { call: 'react', ts: '1700.1', emoji: 'warning' },
     ]);
+  });
+
+  it('takes back a late reaction whose cleanup Slack refused, on a later write', async () => {
+    const { linked, card, calls, slack, status } = await setup();
+    await linked();
+    let release!: () => void;
+    let reached!: () => void;
+    const held = new Promise<void>(resolve => (release = resolve));
+    const atReact = new Promise<void>(resolve => (reached = resolve));
+    let holding = true;
+    slack.hold = (call, text) => {
+      if (call !== 'react' || text !== 'eyes' || !holding) return undefined;
+      holding = false;
+      reached();
+      return held;
+    };
+    const looking = status.runStarted(await card());
+    await atReact;
+    await status.runEnded(await card(), { status: 'failed', reason: 'sandbox crashed' });
+    // The cleanup and the same call's retry both refused.
+    slack.failUnreacts = 2;
+    release();
+    await looking;
+    const reactions = () => {
+      const on = new Set<string>();
+      for (const call of calls) {
+        if (call.call === 'react') on.add(call.emoji!);
+        if (call.call === 'unreact') on.delete(call.emoji!);
+      }
+      return [...on].sort();
+    };
+    expect(reactions()).toEqual(['eyes', 'warning']);
+    await status.runEnded(await card(), { status: 'failed', reason: 'sandbox crashed' });
+    expect(reactions()).toEqual(['warning']);
   });
 
   it('ends on the conclusion when an older "looking" edit lands after it', async () => {
