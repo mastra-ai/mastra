@@ -57,7 +57,7 @@ function findDescendant(node: Element, match: (el: Element) => boolean): Element
 }
 
 /** A schema property or parameter row. */
-export function isSchemaItem(node: ElementContent): node is Element {
+export function isSchemaItem(node: ElementContent): boolean {
   return isElement(node) && (hasClass(node, 'openapi-schema__list-item') || hasClass(node, 'openapi-params__list-item'))
 }
 
@@ -118,7 +118,7 @@ export function convertChildren(state: State, parent: Element, children = parent
   let items: ListItem[] | undefined
 
   for (const child of children) {
-    if (isSchemaItem(child)) {
+    if (isElement(child) && isSchemaItem(child)) {
       ;(items ??= []).push(handleSchemaItem(state, child))
       continue
     }
