@@ -344,4 +344,17 @@ describe('PlatformAlertRules', () => {
     expect(state(second)).toMatchObject({ fireCount: 2 });
     expect(state(second).incidents.b?.resolvedAt).toBe(new Date(T0).toISOString());
   });
+
+  it('keeps a recovery that arrived before its open when its first fire merges into another card', async () => {
+    const { ingest, drain, cards, state } = await setup();
+    await expect(ingest(alert('alert.resolved', 'b'))).resolves.toEqual({ status: 'remembered' });
+    await expect(ingest(alert('alert.opened', 'a'), T0 + MIN)).resolves.toEqual({ status: 'pending' });
+    await expect(ingest(alert('alert.opened', 'b'), T0 + 2 * MIN)).resolves.toEqual({ status: 'pending' });
+    await drain();
+    await ingest(alert('alert.opened', 'a'), T0 + 3 * MIN);
+    await ingest(alert('alert.opened', 'b'), T0 + 3 * MIN);
+    const [card, ...rest] = await cards();
+    expect(rest).toHaveLength(0);
+    expect(state(card!).incidents.b?.resolvedAt).toBe(new Date(T0).toISOString());
+  });
 });

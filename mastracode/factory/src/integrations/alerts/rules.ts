@@ -231,7 +231,13 @@ export class PlatformAlertRules {
    * `merging` re-applies an initial fire whose card another initial fire filed first: the dispatcher
    * reused that card without this fire's alert state, so it lands as a fire on the card instead.
    */
-  async ingest(input: PlatformAlertRulesIngress, attempt = 1, merging = false): Promise<PlatformAlertIngestResult> {
+  async ingest(
+    input: PlatformAlertRulesIngress,
+    attempt = 1,
+    merging = false,
+    /** A resolve the creation being merged had applied, so the merge doesn't lose it. */
+    carriedResolve?: string,
+  ): Promise<PlatformAlertIngestResult> {
     const { event } = input;
     // A Factory project only takes its own organization's alerts.
     if (event.organizationId !== input.orgId) return { status: 'missing' };
@@ -244,7 +250,7 @@ export class PlatformAlertRules {
     const { target: latest, resolvedEarly: rememberedOnCard } = await this.#targetCard(input, workKey);
     const view = latest ? this.#view(latest.card, boards) : null;
     const earlyKey = `${input.orgId}:${event.incident.id}`;
-    const resolvedEarly = this.#earlyResolves.get(earlyKey) ?? rememberedOnCard;
+    const resolvedEarly = this.#earlyResolves.get(earlyKey) ?? rememberedOnCard ?? carriedResolve;
     const plan = planAlertEvent({
       event,
       card: view,
@@ -386,7 +392,7 @@ export class PlatformAlertRules {
       if (attempt >= MAX_STALE_RULE_ATTEMPTS) {
         throw new Error(`Mastra Alerts rule evaluation for ${ingressId} kept losing revision races.`);
       }
-      return this.ingest(input, attempt + 1, merging);
+      return this.ingest(input, attempt + 1, merging, carriedResolve);
     }
     if (committed.status === 'missing') return { status: 'missing' };
     if (committed.status === 'replayed') {
@@ -400,7 +406,7 @@ export class PlatformAlertRules {
       // This event first planned a create, but its card was filed by another initial fire, without
       // this one's alert state (the planner didn't find the event on it): apply it as a fire.
       if (!merging && prior.status === 'accepted' && prior.itemId == null && queued) {
-        return this.ingest(input, 1, true);
+        return this.ingest(input, 1, true, createdResolve(prior.decisions as unknown[], event.incident.id));
       }
       if (card) await this.#attachThread(input, card);
       return { status: 'replayed' };
@@ -412,7 +418,9 @@ export class PlatformAlertRules {
       if (decisions.length === 0) return NOT_FILED;
       const filed = await this.#latestCard(input, workKey);
       if (!filed || filed.generation !== plan.state.generation) return { status: 'pending' };
-      if (!readState(filed.card)?.seenEventIds.includes(event.eventId)) return this.ingest(input, 1, true);
+      if (!readState(filed.card)?.seenEventIds.includes(event.eventId)) {
+        return this.ingest(input, 1, true, plan.state.incidents[event.incident.id]?.resolvedAt ?? undefined);
+      }
       await this.#attachThread(input, filed.card);
       return {
         status: 'committed',
@@ -439,6 +447,17 @@ export class PlatformAlertRules {
       ...(plan.bindThread ? { bindThread: plan.bindThread } : {}),
     };
   }
+}
+
+/** The resolve a queued creation recorded for the incident, read back from its stored decision. */
+function createdResolve(decisions: unknown[], incidentId: string): string | undefined {
+  for (const decision of decisions) {
+    const metadata = (decision as { metadata?: Record<string, unknown> } | null)?.metadata;
+    const state = metadata?.[ALERT_STATE_KEY] as AlertCardState | undefined;
+    const resolvedAt = state?.incidents?.[incidentId]?.resolvedAt;
+    if (resolvedAt) return resolvedAt;
+  }
+  return undefined;
 }
 
 /** Rules accepted the event but queued no card: nothing to wait for. */
