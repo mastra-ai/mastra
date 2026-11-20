@@ -43,7 +43,7 @@ export function createIntegrationBoardSetup(deps: {
   writes: Pick<BoardWrites, 'replace'>;
   /** Its first load stores the project's boards, so Factory's own are there to add to. */
   boards: Pick<ProjectBoardCache, 'describe'>;
-  storage: Pick<StoredBoardsStorage, 'get' | 'listIntakeRoutes' | 'createIntakeRoute'>;
+  storage: Pick<StoredBoardsStorage, 'get' | 'listIntakeRoutes' | 'createIntakeRouteUnlessNamed'>;
   audit: (scope: StoredBoardScope, entry: Parameters<BoardWriter['audit']>[0]) => Promise<void>;
 }): IntegrationBoardSetup {
   return {
@@ -93,7 +93,15 @@ export function createIntegrationBoardSetup(deps: {
       const board = await deps.storage.get(scope, route.target.boardKey);
       const phaseKey = route.target.phaseKey;
       if (!board || (phaseKey && !board.phases.some(phase => phase.key === phaseKey))) return 'no_phase';
-      await deps.storage.createIntakeRoute(scope, route, ACTOR, { unlessNamed: true });
+      const added = await deps.storage.createIntakeRouteUnlessNamed(scope, route, ACTOR);
+      if (added.created) {
+        await deps.audit(scope, {
+          action: 'factory.intake_route.created',
+          factoryProjectId: scope.factoryProjectId,
+          targets: [{ type: 'intake_route', id: added.route.id, name: added.route.name }],
+          metadata: { boardKey: route.target.boardKey, phaseKey: phaseKey ?? null, cause: 'integration_setup' },
+        });
+      }
       return 'present';
     },
   };
