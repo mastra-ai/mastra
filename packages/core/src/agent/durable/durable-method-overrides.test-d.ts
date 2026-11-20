@@ -54,11 +54,51 @@ function instrumentAgent(Base: typeof DurableAgent) {
   };
 }
 
+class InstrumentedEventedAgent extends EventedAgent<string, ToolsInput, Answer> {
+  override stream(messages: MessageListInput, options?: DurableAgentStreamOptions<Answer>) {
+    return super.stream(messages, options);
+  }
+
+  override resumeStream(resumeData: unknown, options?: DurableAgentResumeOptions<Answer> & { runId?: string }) {
+    return super.resumeStream(resumeData, options);
+  }
+
+  override generate(messages: MessageListInput, options?: DurableAgentStreamOptions<Answer>) {
+    return super.generate(messages, options);
+  }
+
+  override resumeGenerate(
+    resumeData: unknown,
+    options: DurableAgentResumeOptions<Answer> & { runId: string },
+  ): Promise<FullOutput<Answer>>;
+  override resumeGenerate(
+    runId: string,
+    resumeData: unknown,
+    options?: DurableAgentResumeOptions<Answer>,
+  ): Promise<FullOutput<Answer>>;
+  override resumeGenerate(...args: unknown[]): Promise<FullOutput<Answer>> {
+    if (typeof args[0] === 'string' && args.length === 3) {
+      return super.resumeGenerate(args[0], args[1], args[2] as DurableAgentResumeOptions<Answer>);
+    }
+    return super.resumeGenerate(args[0], args[1] as DurableAgentResumeOptions<Answer> & { runId: string });
+  }
+
+  override observe(runId: string, options?: Parameters<EventedAgent<string, ToolsInput, Answer>['observe']>[1]) {
+    return super.observe(runId, options);
+  }
+
+  override streamUntilIdle<OUTPUT = Answer>(
+    messages: MessageListInput,
+    options?: DurableAgentStreamOptions<OUTPUT> & { maxIdleMs?: number },
+  ) {
+    return super.streamUntilIdle<OUTPUT>(messages, options);
+  }
+}
+
 declare const durable: InstanceType<ReturnType<typeof instrumentAgent>>;
-declare const evented: InstanceType<ReturnType<typeof instrumentAgent>>;
+declare const evented: InstrumentedEventedAgent;
 
 instrumentAgent(DurableAgent);
-instrumentAgent(EventedAgent);
 
 describe('legacy durable method overrides', () => {
   it('preserves durable return types and observer options through super', () => {
