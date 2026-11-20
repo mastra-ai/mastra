@@ -24,6 +24,17 @@ describe('PageLayout kind="form"', () => {
     expect(main.textContent).toContain('Conditions');
   });
 
+  it('shows only the title when the form has no back link', () => {
+    render(
+      <PageLayout kind="form" title="New skill">
+        <section>Fields</section>
+      </PageLayout>,
+    );
+
+    expect(screen.getByRole('heading', { level: 1, name: 'New skill' })).toBeTruthy();
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+
   it('puts the back link above the title', () => {
     render(
       <PageLayout kind="form" backHref="/alerts" backLabel="Alerts" title="New alert">

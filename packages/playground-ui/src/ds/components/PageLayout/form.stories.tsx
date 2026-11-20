@@ -153,6 +153,18 @@ export const LongText: Story = {
   },
 };
 
+export const WithoutBackLink: Story = {
+  args: { backHref: undefined, backLabel: undefined, title: 'New skill' },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The back link is optional. Leave out `backHref` and `backLabel` when the app navigation is the way out, such as a form reached from the sidebar.',
+      },
+    },
+  },
+};
+
 export const WithAside: Story = {
   args: {
     aside: (

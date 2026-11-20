@@ -45,13 +45,15 @@ export interface PageLayoutSettingsProps {
 }
 
 /**
- * A create or edit form (New alert, New project, Edit destination): a centered 640px column under a back link
- * and the title. There is no breadcrumb bar: the back link is the way out, so a form shows one way back, not two.
+ * A create or edit form (New alert, New project, Edit destination): a centered 640px column under the title,
+ * with an optional back link above it. There is no breadcrumb bar, so a form shows one way back at most.
  */
 export interface PageLayoutFormProps {
   kind: 'form';
-  backHref: string;
-  backLabel: string;
+  /** Where the back link goes. Shown with `backLabel`; leave both out when the app's navigation is the way out. */
+  backHref?: string;
+  /** The back link's text, such as the page it returns to. */
+  backLabel?: string;
   title: ReactNode;
   /** Shows a skeleton in place of the title while the page loads. */
   isLoading?: boolean;
@@ -71,7 +73,7 @@ export type PageLayoutKind = PageLayoutProps['kind'];
  * The frame of every page: its width, gutter, scrolling and way back. Pick the `kind` that matches the page,
  * and each kind takes only the props that make sense for it.
  *
- * - `kind="form"`: a create or edit form. Back link and title, no breadcrumbs, 640px column.
+ * - `kind="form"`: a create or edit form. A title with an optional back link, no breadcrumbs, 640px column.
  * - `kind="settings"`: a settings page. Breadcrumbs and a title over a 640px column of `SettingsGroup`s.
  * - `kind="page"`: every other page (lists, dashboards, detail pages, explorers). Full width.
  *   Add `body="workspace"` when the body is panels that scroll on their own (chat, board, editor, graph).

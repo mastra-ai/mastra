@@ -7,8 +7,8 @@ import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
 export interface FormFrameProps {
-  backHref: string;
-  backLabel: string;
+  backHref?: string;
+  backLabel?: string;
   title: ReactNode;
   isLoading?: boolean;
   LinkComponent?: LinkComponent;
@@ -41,14 +41,16 @@ export function FormFrame({
           )}
         >
           <PageHeader className="@4xl:col-start-1">
-            <PageHeader.Eyebrow>
-              <Link href={backHref} aria-label={`Back to ${backLabel}`}>
-                <Icon size="xs">
-                  <IconArrowLeft aria-hidden />
-                </Icon>
-                {backLabel}
-              </Link>
-            </PageHeader.Eyebrow>
+            {backHref !== undefined && backLabel !== undefined && (
+              <PageHeader.Eyebrow>
+                <Link href={backHref} aria-label={`Back to ${backLabel}`}>
+                  <Icon size="xs">
+                    <IconArrowLeft aria-hidden />
+                  </Icon>
+                  {backLabel}
+                </Link>
+              </PageHeader.Eyebrow>
+            )}
             <PageHeader.Title isLoading={isLoading} aria-busy={isLoading || undefined}>
               {title}
             </PageHeader.Title>
