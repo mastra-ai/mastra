@@ -29,7 +29,7 @@ Tie the failing spans and logs to code in the card's repository: the agent, tool
 
 ## 3. Fix
 
-When the cause is in the repository and the fix is small and clear, make it on a new branch, add or update a test that reproduces the failure, and open a pull request against the default branch. The title names the alert. The body has the diagnosis, the evidence (the same `dashboardUrl` links, log lines, metric values) and the risk.
+When the cause is in the repository and the fix is small and clear, make it on a new branch, add or update a test that reproduces the failure, and open a pull request against the default branch. The title names the alert. The body has the diagnosis, the evidence and the risk. Pull requests are read by people who may not have access to the project's observability, so the evidence is the `dashboardUrl` links plus your own short summary of what they show (the error type, counts, rates, the failing operation). Never paste raw log lines, span attributes, request or response payloads, or anything that could hold secrets, tokens or personal data; if a value matters, describe it (for example "the provider returned 429") instead of quoting it.
 
 Never merge, approve or enable auto-merge. A human reviews the pull request.
 
