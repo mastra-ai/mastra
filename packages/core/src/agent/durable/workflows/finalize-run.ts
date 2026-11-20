@@ -74,6 +74,8 @@ export interface DurableFinishSideEffectsResult {
   titleForStream?: Promise<string | undefined>;
   /** Chunks from the `structuredOutput.model` structuring pass, to publish before FINISH. */
   structuredOutputChunks?: ChunkType[];
+  /** The validated `structuredOutput` object, when the run asked for one. */
+  object?: unknown;
   /**
    * Chunks output processors wrote with `writer.custom()` in processOutputResult. Publish them
    * marked output-processed, after `structuredOutputChunks` and before the tripwire or FINISH,
@@ -219,6 +221,7 @@ export async function runDurableFinishSideEffects({
       ? toLiveStructuredOutputSchema(structuredOutput.schema, structuredOutput.nullToUndefined)
       : undefined);
   let structuredOutputChunks: ChunkType[] | undefined;
+  let object: unknown;
   // The structuring model reads tool calls and results too, so a tool-only answer still qualifies.
   const structuringParts = structuredOutput?.hasStructuringModel ? responseStreamParts(messageList) : undefined;
   if (structuredOutputSchema && (structuredOutputText.trim() || structuringParts?.length)) {
@@ -265,6 +268,7 @@ export async function runDurableFinishSideEffects({
     const lastAssistantMessage = messageList.get.response
       .db()
       .findLast(message => message.role === 'assistant' && !message.content?.metadata?.completionResult);
+    object = value;
     if (value !== undefined && lastAssistantMessage) {
       lastAssistantMessage.content.metadata = {
         ...lastAssistantMessage.content.metadata,
@@ -484,6 +488,7 @@ export async function runDurableFinishSideEffects({
     titleGeneration,
     titleForStream,
     structuredOutputChunks,
+    object,
     outputResultChunks,
   };
 }

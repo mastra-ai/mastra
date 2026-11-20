@@ -1647,6 +1647,7 @@ export class DurableAgent<
           outcome: null,
           name: `llm: '${model?.modelId ?? ''}'`,
           attributes: { model: model?.modelId, provider: model?.provider, streaming: true },
+          tracingPolicy: agentTracingPolicy,
           metadata: { runId, recovered: true },
           requestContext,
         });
@@ -3941,6 +3942,7 @@ export class DurableAgent<
           outcome: null,
           name: `llm: '${resumeModel?.modelId ?? ''}'`,
           attributes: { model: resumeModel?.modelId, provider: resumeModel?.provider, streaming: true },
+          tracingPolicy: agentTracingPolicy,
           metadata: { runId, resumed: true },
           requestContext: resolvedOptions.requestContext,
         });
