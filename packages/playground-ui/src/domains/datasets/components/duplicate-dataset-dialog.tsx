@@ -1,0 +1,201 @@
+'use client';
+import { useMastraClient } from '@mastra/react';
+import { useDatasetMutations } from '@mastra/react/hooks/datasets';
+import { useState, useEffect } from 'react';
+import {
+  Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/ds/components/Dialog';
+import { Field, FieldLabel } from '@/ds/components/Field';
+import { Form } from '@/ds/components/Form';
+import { Input } from '@/ds/components/Input';
+import { Txt } from '@/ds/components/Txt';
+import { toast } from '@/utils/toast';
+
+export interface DuplicateDatasetDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  sourceDatasetId: string;
+  sourceDatasetName: string;
+  sourceDatasetDescription?: string;
+  sourceDatasetTargetType?: string | null;
+  onSuccess?: (datasetId: string) => void;
+}
+
+export function DuplicateDatasetDialog({
+  open,
+  onOpenChange,
+  sourceDatasetId,
+  sourceDatasetName,
+  sourceDatasetDescription,
+  sourceDatasetTargetType,
+  onSuccess,
+}: DuplicateDatasetDialogProps) {
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [isDuplicating, setIsDuplicating] = useState(false);
+  const [progress, setProgress] = useState({
+    phase: 'idle' as 'idle' | 'fetching' | 'creating' | 'copying',
+    current: 0,
+    total: 0,
+  });
+
+  const client = useMastraClient();
+  const { createDataset, addItem } = useDatasetMutations();
+
+  useEffect(() => {
+    if (open) {
+      setName(`${sourceDatasetName} (Copy)`);
+      setDescription(sourceDatasetDescription || '');
+    }
+  }, [open, sourceDatasetName, sourceDatasetDescription]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!name.trim()) {
+      toast.error('Dataset name is required');
+      return;
+    }
+
+    setIsDuplicating(true);
+    setProgress({ phase: 'fetching', current: 0, total: 0 });
+
+    try {
+      const allItems: Array<{ input: unknown; groundTruth?: unknown; metadata?: Record<string, unknown> }> = [];
+      let page = 0;
+      const perPage = 100;
+      let hasMore = true;
+
+      while (hasMore) {
+        const response = await client.listDatasetItems(sourceDatasetId, { page, perPage });
+        const items = response.items || [];
+        allItems.push(
+          ...items.map(item => ({
+            input: item.input,
+            groundTruth: item.groundTruth,
+            metadata: item.metadata as Record<string, unknown> | undefined,
+          })),
+        );
+
+        setProgress({
+          phase: 'fetching',
+          current: allItems.length,
+          total: response.pagination?.total || allItems.length,
+        });
+
+        const totalFetched = (page + 1) * perPage;
+        hasMore = items.length > 0 && totalFetched < (response.pagination?.total || 0);
+        page++;
+      }
+
+      setProgress({ phase: 'creating', current: 0, total: allItems.length });
+      const dataset = await createDataset.mutateAsync({
+        name: name.trim(),
+        description: description.trim() || undefined,
+        targetType: sourceDatasetTargetType ?? undefined,
+      });
+
+      setProgress({ phase: 'copying', current: 0, total: allItems.length });
+      for (const [i, item] of allItems.entries()) {
+        await addItem.mutateAsync({
+          datasetId: dataset.id,
+          input: item.input,
+          groundTruth: item.groundTruth,
+          metadata: item.metadata,
+        });
+        setProgress({ phase: 'copying', current: i + 1, total: allItems.length });
+      }
+
+      toast.success(`Dataset duplicated with ${allItems.length} items`);
+
+      setName('');
+      setDescription('');
+      setIsDuplicating(false);
+      setProgress({ phase: 'idle', current: 0, total: 0 });
+      onOpenChange(false);
+
+      onSuccess?.(dataset.id);
+    } catch (error) {
+      toast.error(`Failed to duplicate dataset: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setIsDuplicating(false);
+      setProgress({ phase: 'idle', current: 0, total: 0 });
+    }
+  };
+
+  const getProgressText = () => {
+    switch (progress.phase) {
+      case 'fetching':
+        return `Fetching items: ${progress.current}${progress.total > 0 ? ` / ${progress.total}` : ''}`;
+      case 'creating':
+        return 'Creating dataset...';
+      case 'copying':
+        return `Copying items: ${progress.current} / ${progress.total}`;
+      default:
+        return '';
+    }
+  };
+
+  const progressPercent = progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange} pending={isDuplicating}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Duplicate Dataset</DialogTitle>
+        </DialogHeader>
+        <Form onSubmit={handleSubmit}>
+          <DialogBody>
+            <Field>
+              <FieldLabel required>Name</FieldLabel>
+              <Input
+                required
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="Enter dataset name"
+                autoFocus
+                disabled={isDuplicating}
+              />
+            </Field>
+
+            <Field>
+              <FieldLabel>Description</FieldLabel>
+              <Input
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                placeholder="Enter dataset description (optional)"
+                disabled={isDuplicating}
+              />
+            </Field>
+
+            <Txt tone="muted">All items from &quot;{sourceDatasetName}&quot; will be copied to the new dataset</Txt>
+
+            {isDuplicating && (
+              <div className="space-y-2">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full bg-success-indicator transition-all duration-200"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+                <Txt tone="muted">{getProgressText()}</Txt>
+              </div>
+            )}
+          </DialogBody>
+          <DialogFooter>
+            <DialogCancel>Cancel</DialogCancel>
+            <DialogAction type="submit" disabled={!name.trim()}>
+              {isDuplicating ? 'Duplicating...' : 'Duplicate dataset'}
+            </DialogAction>
+          </DialogFooter>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
