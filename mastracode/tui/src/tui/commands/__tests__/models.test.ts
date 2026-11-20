@@ -388,7 +388,7 @@ describe('handleModelCommand', () => {
     mocks.promptForApiKeyIfNeeded.mockResolvedValue('cancelled');
 
     const ctx = {
-      authStorage: {},
+      authStorage: { get: vi.fn() },
       state: {
         controller: {
           listAvailableModels: vi.fn(async () => [model]),
@@ -440,7 +440,7 @@ describe('handleModelCommand', () => {
     mocks.loadSettings.mockReturnValue(settings);
     mocks.promptForApiKeyIfNeeded.mockResolvedValue('ready');
     const ctx = {
-      authStorage: {},
+      authStorage: { get: vi.fn() },
       state: {
         controller: {
           listAvailableModels: vi.fn(async () => [model]),
@@ -514,7 +514,7 @@ describe('handleModelCommand', () => {
     mocks.promptForApiKeyIfNeeded.mockResolvedValue('ready');
     const setSetting = vi.fn(async (_setting: { key: string; value: unknown }) => undefined);
     const ctx = {
-      authStorage: {},
+      authStorage: { get: vi.fn() },
       state: {
         controller: {
           listAvailableModels: vi.fn(async () => [model]),
@@ -585,7 +585,7 @@ describe('handleModelCommand', () => {
     });
     const switchModel = vi.fn(async () => undefined);
     const ctx = {
-      authStorage: {},
+      authStorage: { get: vi.fn() },
       state: {
         controller: {
           listAvailableModels: vi.fn(async () => [model]),

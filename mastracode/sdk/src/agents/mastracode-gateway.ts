@@ -514,11 +514,11 @@ export class MastraCodeGateway extends MastraModelGateway {
     codexServiceTier?: CodexServiceTier;
   }): GatewayLanguageModel {
     const selection = parseCodexModelSelection(`${args.providerId}/${args.modelId}`);
-    if (selection.codexServiceTier) {
+    if (selection.modelId !== `${args.providerId}/${args.modelId}`) {
       args = {
         ...args,
         modelId: selection.modelId.slice(OPENAI_PREFIX.length),
-        codexServiceTier: selection.codexServiceTier,
+        ...(selection.codexServiceTier ? { codexServiceTier: selection.codexServiceTier } : {}),
       };
     }
     const customProvider = this.#customProvider(args.providerId);

@@ -164,10 +164,14 @@ export MASTRACODE_OPENAI_CODEX_AUTH_MODE=device
 Append `:fast` to a supported OpenAI model ID to request priority processing when you use Codex sign-in:
 
 ```sh
-mastracode --model openai/gpt-5.3:fast
+mastracode --model openai/gpt-6.2-sol:fast
 ```
 
-`:fast` changes the request, not the model. Without the suffix, requests use the default service tier, and the suffix has no effect when you use an OpenAI API key.
+When you sign in with Codex, `/model` also lists a `:fast` entry next to each supported model.
+
+`:fast` changes the request, not the model. Without the suffix, requests use the default service tier. The suffix has no effect when you use an OpenAI API key or a model without a Fast tier.
+
+Supported models: GPT-6.2 Sol, GPT-6.2 Astra, GPT-6.1 Sol, GPT-6.1 Terra, GPT-6 Astra, GPT-6 Sol, GPT-6 Luna, GPT-5.6, GPT-5.6 Sol, GPT-5.5 and GPT-5.4.
 
 ### Authentication priority for anthropic
 

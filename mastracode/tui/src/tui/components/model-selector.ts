@@ -95,8 +95,6 @@ export function toCanonicalModelItems(models: ModelItem[]): ModelItem[] {
           provider: model.provider.slice(MASTRACODE_GATEWAY_PREFIX.length),
         }
       : model;
-    // Reserved selection suffixes are never separate rows in the model catalog.
-    if (parseCodexModelSelection(canonical.id).codexServiceTier) continue;
     const existing = byId.get(canonical.id);
     if (!existing || (!existing.hasApiKey && canonical.hasApiKey)) byId.set(canonical.id, canonical);
   }
@@ -137,8 +135,13 @@ export class ModelSelectorComponent extends Box implements Focusable {
     this.tui = options.tui;
     this.title = options.title ?? 'Select Model';
     this.titleColor = options.titleColor;
-    this.currentModelId = options.currentModelId && parseCodexModelSelection(options.currentModelId).modelId;
-    this.allModels = this.sortModels(toCanonicalModelItems(options.models), this.currentModelId);
+    const models = toCanonicalModelItems(options.models);
+    // A Fast selection marks its own row when the picker offers one, else its standard model's row.
+    this.currentModelId =
+      options.currentModelId && !models.some(model => model.id === options.currentModelId)
+        ? parseCodexModelSelection(options.currentModelId).modelId
+        : options.currentModelId;
+    this.allModels = this.sortModels(models, this.currentModelId);
     this.onSelectCallback = options.onSelect;
     this.onCancelCallback = options.onCancel;
     this.filteredModels = this.allModels;

@@ -9,7 +9,11 @@ import {
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
   THREAD_FALLBACK_STATUS_KEY,
 } from '@mastra/code-sdk/onboarding/settings';
-import { parseCodexModelSelection } from '@mastra/code-sdk/providers/model-ids';
+import {
+  getCredentialProviderId,
+  parseCodexModelSelection,
+  withCodexFastModels,
+} from '@mastra/code-sdk/providers/model-ids';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
 import { applyPackToSession } from '../model-packs/apply.js';
@@ -144,8 +148,13 @@ export async function handleModelCommand(ctx: SlashCommandContext): Promise<void
     }
 
     const models = await ctx.state.controller.listAvailableModels();
-    const { modelId: currentModelId } = parseCodexModelSelection(ctx.state.session.model.get());
-    const connected = models.filter(model => model.hasApiKey || model.id === currentModelId);
+    const currentModelId = ctx.state.session.model.get();
+    const { modelId: currentCatalogId } = parseCodexModelSelection(currentModelId);
+    const codexOAuth = ctx.authStorage?.get(getCredentialProviderId('openai'))?.type === 'oauth';
+    const connected = withCodexFastModels(
+      models.filter(model => model.hasApiKey || model.id === currentCatalogId),
+      { codexOAuth },
+    );
     if (connected.length === 0) {
       ctx.showInfo('No connected models. Use /connect to add a provider account or API key.');
       return;

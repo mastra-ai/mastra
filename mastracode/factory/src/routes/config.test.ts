@@ -1183,7 +1183,11 @@ describe('GET /web/config/models', () => {
     };
 
     const personal = await models('');
-    expect(personal.map(model => model.id)).toEqual(['openai/gpt-5.3', 'openai/gpt-6.2-sol', 'openai/gpt-6.2-sol:fast']);
+    expect(personal.map(model => model.id)).toEqual([
+      'openai/gpt-5.3',
+      'openai/gpt-6.2-sol',
+      'openai/gpt-6.2-sol:fast',
+    ]);
     expect(personal.find(model => model.id === 'openai/gpt-6.2-sol:fast')).toMatchObject({
       provider: 'openai',
       modelName: 'gpt-6.2-sol:fast',
