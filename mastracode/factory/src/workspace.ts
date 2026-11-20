@@ -789,9 +789,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     tokenIssuedAt: number;
     generation: number;
     tokenReplacementPending: boolean;
-    // The sandbox the registration installs into. A credential-vault sandbox
-    // (or one whose vault mode the platform did not report) takes no token,
-    // so nothing is minted or refreshed for it.
+    // The sandbox the registration installs into. A sandbox the platform
+    // reported as credential-vault takes no token, so nothing is minted or
+    // refreshed for it.
     target: SessionSandbox;
   };
   // The session setup path runs commands and installs credentials, so it
@@ -936,8 +936,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // Install the credentials and the note that matches them: a PAT needs no
     // note, and recording the environment drops the note, so every install
     // (including a reconnect that reuses a fresh token) restores it.
-    // A sandbox that takes no GitHub token (credential vault, or vault mode
-    // unknown) gets every Factory token removed from its overlay instead, so
+    // A credential-vault sandbox takes no GitHub token, so it gets every
+    // Factory token removed from its overlay instead, so
     // the provider's placeholder `GH_TOKEN` is what its commands see.
     // Returns whether the credential reached the sandbox.
     const installGithubTokens = (target: SessionSandbox, token: string, pat: boolean, required: boolean): boolean => {

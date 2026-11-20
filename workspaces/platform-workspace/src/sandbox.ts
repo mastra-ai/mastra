@@ -381,10 +381,49 @@ const FILE_COMMAND_TIMEOUT_MS = 10 * 60_000;
 const GITHUB_TOKEN_ENV = /^(GH_TOKEN(_\d+)?|GITHUB_TOKEN|GH_ENTERPRISE_TOKEN|GITHUB_ENTERPRISE_TOKEN)$/;
 const GIT_CONFIG_ENV = /^GIT_CONFIG_(COUNT|KEY_\d+|VALUE_\d+)$/;
 
+const GITHUB_HOSTS = ['github.com', 'api.github.com'];
+
+/**
+ * Whether git would apply a config key's credential to github.com. Scoped
+ * `http.<url>.*` and `credential.<url>.*` keys count when their URL's host is
+ * github.com or a subdomain, with or without a scheme, path or trailing slash,
+ * including `*` wildcards git allows in the host. Unscoped `http.extraHeader`,
+ * `http.cookieFile` and `credential.*` keys apply to every host, so they count too.
+ */
+function appliesToGithub(key: string): boolean {
+  const lower = key.toLowerCase();
+  const first = lower.indexOf('.');
+  const last = lower.lastIndexOf('.');
+  if (first < 0) return false;
+  const section = lower.slice(0, first);
+  if (section !== 'http' && section !== 'credential') return false;
+  if (first === last) {
+    const variable = lower.slice(last + 1);
+    return section === 'credential' || variable === 'extraheader' || variable === 'cookiefile';
+  }
+  const host = lower
+    .slice(first + 1, last)
+    .replace(/^[a-z][a-z0-9+.-]*:\/\//, '')
+    .replace(/^[^/@]*@/, '')
+    .split(/[/:]/)[0]!;
+  if (host === 'github.com' || host.endsWith('.github.com')) return true;
+  if (!host.includes('*')) return false;
+  const pattern = new RegExp(
+    '^' +
+      host
+        .split('*')
+        .map(part => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
+        .join('[^.]*') +
+      '$',
+  );
+  return GITHUB_HOSTS.some(candidate => pattern.test(candidate));
+}
+
 /**
  * Drops GitHub credentials from a per-call env: the token variables `gh` reads, and the
- * `GIT_CONFIG_*` pairs scoped to github.com. Other pairs (GitLab auth) are kept and
- * renumbered without gaps, because git reads indices 0..GIT_CONFIG_COUNT-1.
+ * `GIT_CONFIG_*` pairs git would apply to github.com (see {@link appliesToGithub}).
+ * Other pairs (GitLab auth) are kept and renumbered without gaps, because git
+ * reads indices 0..GIT_CONFIG_COUNT-1.
  */
 function withoutGithubCredentials<T extends Record<string, string | undefined>>(env: T): T {
   const result: Record<string, string | undefined> = Object.fromEntries(
@@ -395,7 +434,7 @@ function withoutGithubCredentials<T extends Record<string, string | undefined>>(
   let kept = 0;
   for (let index = 0; index < count; index++) {
     const key = env[`GIT_CONFIG_KEY_${index}`];
-    if (key === undefined || key.toLowerCase().startsWith('http.https://github.com/')) continue;
+    if (key === undefined || appliesToGithub(key)) continue;
     result[`GIT_CONFIG_KEY_${kept}`] = key;
     result[`GIT_CONFIG_VALUE_${kept}`] = env[`GIT_CONFIG_VALUE_${index}`];
     kept++;
@@ -1865,8 +1904,8 @@ export class PlatformSandbox extends MastraSandbox {
    * Return a cached exec lease, minting a fresh one when the cache is empty
    * or the JWT is within {@link LEASE_REFRESH_MARGIN_MS} of `expiresAt`.
    *
-   * Callers are expected to be on the "sandbox is running" path; we don't
-   * re-check `_sandboxId` here because `executeCommand` already gated on it.
+   * Throws when no sandbox is attached. The lease is bound to the sandbox id
+   * current at the call, and is neither reused nor cached for a different VM.
    */
   private async _ensureLease(): Promise<CachedExecLease> {
     const now = Date.now();

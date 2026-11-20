@@ -121,6 +121,28 @@ beforeEach(() => {
   __clearSessionSandboxesForTests();
 });
 
+const GITHUB_CONFIG_KEYS = [
+  'http.https://github.com.extraHeader',
+  'http.https://github.com/.extraHeader',
+  'http.https://user@github.com:443/octocat.extraHeader',
+  'http.github.com.extraHeader',
+  'http.https://*.github.com.extraHeader',
+  'http.https://api.github.com/.extraheader',
+  'http.extraHeader',
+  'HTTP.EXTRAHEADER',
+  'http.cookieFile',
+  'credential.helper',
+  'credential.https://github.com.helper',
+  'credential.https://github.com/.username',
+];
+const OTHER_HOST_CONFIG_KEYS = [
+  'http.https://gitlab.com.extraHeader',
+  'http.https://github.com.evil.example/.extraHeader',
+  'credential.https://gitlab.com.helper',
+  'http.sslVerify',
+  'url.https://vault.test/git/.insteadOf',
+];
+
 describe('materializeRepo', () => {
   it('clones on first open with structured argv and process-scoped credentials', async () => {
     const sandbox = new FakeSandbox();
@@ -536,6 +558,28 @@ describe('credential-vault sandboxes', () => {
     expect(attempts).toHaveLength(2);
     expect(attempts[0]!.options?.env?.GIT_CONFIG_COUNT).toBe('2');
     expect(attempts[1]!.options?.env).toEqual({ GIT_TERMINAL_PROMPT: '0' });
+  });
+
+  it.each([
+    ...GITHUB_CONFIG_KEYS.map(key => [key, false] as const),
+    ...OTHER_HOST_CONFIG_KEYS.map(key => [key, true] as const),
+  ])('sends %s to a vault sandbox: %s', async (key, kept) => {
+    const sandbox = vaultSandbox(true);
+    await sh(sandbox, 'true', {
+      env: { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: key, GIT_CONFIG_VALUE_0: 'value', A: '1' },
+    });
+
+    expect(sandbox.executions[0]!.options?.env).toEqual(
+      kept ? { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: key, GIT_CONFIG_VALUE_0: 'value', A: '1' } : { A: '1' },
+    );
+  });
+
+  it.each(GITHUB_CONFIG_KEYS)('keeps %s for a non-vault sandbox', async key => {
+    const sandbox = vaultSandbox(false);
+    const env = { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: key, GIT_CONFIG_VALUE_0: 'value' };
+    await sh(sandbox, 'true', { env });
+
+    expect(sandbox.executions[0]!.options?.env).toEqual(env);
   });
 
   it('drops GITHUB_TOKEN and only the github.com config pairs for a vault sandbox', async () => {

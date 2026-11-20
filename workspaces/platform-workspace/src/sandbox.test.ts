@@ -98,6 +98,28 @@ class FakeSocket implements DirectExecWebSocket {
   }
 }
 
+const GITHUB_CONFIG_KEYS = [
+  'http.https://github.com.extraHeader',
+  'http.https://github.com/.extraHeader',
+  'http.https://user@github.com:443/octocat.extraHeader',
+  'http.github.com.extraHeader',
+  'http.https://*.github.com.extraHeader',
+  'http.https://api.github.com/.extraheader',
+  'http.extraHeader',
+  'HTTP.EXTRAHEADER',
+  'http.cookieFile',
+  'credential.helper',
+  'credential.https://github.com.helper',
+  'credential.https://github.com/.username',
+];
+const OTHER_HOST_CONFIG_KEYS = [
+  'http.https://gitlab.com.extraHeader',
+  'http.https://github.com.evil.example/.extraHeader',
+  'credential.https://gitlab.com.helper',
+  'http.sslVerify',
+  'url.https://vault.test/git/.insteadOf',
+];
+
 describe('PlatformSandbox', () => {
   beforeEach(() => {
     vi.stubEnv('SANDBOX_PROVIDER', 'railway');
@@ -175,6 +197,34 @@ describe('PlatformSandbox', () => {
     expect(sandbox.vault).toBe(true);
     const init = JSON.parse(sockets[0]!.sent[0]!) as { data: { env: Record<string, string> } };
     expect(init.data.env).toEqual({ GIT_TERMINAL_PROMPT: '0', GITLAB_HOST_TOKEN: 'glpat_kept' });
+  });
+
+  it.each([
+    ...GITHUB_CONFIG_KEYS.map(key => [key, false] as const),
+    ...OTHER_HOST_CONFIG_KEYS.map(key => [key, true] as const),
+  ])('sends %s to a vault VM: %s', async (key, kept) => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z', vault: true }))
+      .mockResolvedValueOnce(leaseResponse());
+    const { factory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+      webSocketFactory: factory,
+    });
+
+    await sandbox.executeCommand('git', ['fetch'], {
+      env: { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: key, GIT_CONFIG_VALUE_0: 'value', A: '1' },
+    });
+
+    const init = JSON.parse(sockets[0]!.sent[0]!) as { data: { env: Record<string, string> } };
+    expect(init.data.env).toEqual(
+      kept ? { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: key, GIT_CONFIG_VALUE_0: 'value', A: '1' } : { A: '1' },
+    );
   });
 
   it('drops GITHUB_TOKEN and only the github.com config pairs, renumbering the rest', async () => {
