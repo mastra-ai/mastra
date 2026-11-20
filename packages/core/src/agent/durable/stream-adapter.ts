@@ -859,13 +859,18 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           }
           if (chunk.type === 'step-finish' && chunk.payload) {
             // The event is shared with other readers and the replay cache: rewrite a copy.
-            const { payload, messages: responseMessages } = rebuildResponseMessages(
+            const {
+              payload,
+              messages: responseMessages,
+              current,
+            } = rebuildResponseMessages(
               responseMessagesReplay,
               chunk.payload as unknown as AgentStreamStepFinishPayload,
             );
             // Without a rebuilt list (a missed diff) the list keeps what it has until a later
-            // step-finish brings one; a guess could drop or duplicate messages.
-            if (responseMessages && listFollowsStream?.()) {
+            // step-finish brings one; a guess could drop or duplicate messages. A late event of
+            // an execution that lost the run reports its own step, never the run's list.
+            if (responseMessages && current && listFollowsStream?.()) {
               messageList.clear.response.db();
               messageList.add(responseMessages, 'response');
             }
