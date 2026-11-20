@@ -12,12 +12,6 @@
     "qwen3.8-27b-uncensored"
   ],
   "reasoning": {
-    "glm-5.3-flash-uncensored": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "qwen3.8-27b-uncensored": [
       {
         "type": "effort",
@@ -28,6 +22,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "glm-5.3-flash-uncensored": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "mimo-v2.6-flash-uncensored": [

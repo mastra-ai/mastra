@@ -60,13 +60,22 @@ Variables are applied when a deploy starts. To apply changed variables to a runn
 mastra env restart staging
 ```
 
-To see the variables an environment's deploys run with, pull them into a local env file. Managed variables are listed by name only. Each pull covers one environment. The file never mixes in another environment's values:
+To see the variables an environment's deploys run with, pull them into a local env file. Each pull covers one environment. The file never mixes in another environment's values:
 
 ```bash
 mastra env vars pull staging --output .env.staging
 ```
 
-Managed variable values are injected at deploy time and never written to the file. They appear as name-only comments.
+Managed variables appear as name-only comments because the platform injects their values at deploy time. On environments where secrets are write-only, secrets are listed the same way, and deploying the file leaves them unchanged since their values stay stored on the platform. Review the pulled file before committing it, because it contains the full values of every variable that can be read back.
+
+### Secrets and config
+
+Each environment-scoped variable is either a secret or config:
+
+- **Secrets**: Write-only. The platform encrypts the value when you save it and delivers it to your service only at boot. After saving, neither the dashboard nor `mastra env vars pull` shows the value. To change a secret, enter a new value.
+- **Config**: Readable. The platform stores the value as plain text on the hosting provider, and both the dashboard and `mastra env vars pull` show it. Use config for values that aren't sensitive, like `LOG_LEVEL` or feature flags.
+
+New variables are secrets by default, except a few non-sensitive names the platform itself defines. Use the **Secret** toggle in the dashboard to store a variable as config instead. To turn a secret into config, enter its value again, because the platform can't read the stored secret back.
 
 :::note
 Environment variables don't override managed database variables. To point an environment at a different database, attach an [environment-scoped database](/docs/mastra-platform/database#attach-with-the-cli) instead.

@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { createRef } from 'react';
 import type { ComponentProps } from 'react';
+import { createPortal } from 'react-dom';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Cell } from './Cells';
@@ -12,6 +13,18 @@ import { Table, Thead, Th, Tbody, Row } from './Table';
 afterEach(() => {
   cleanup();
 });
+
+const rowOf = (element: Element) => {
+  const row = element.closest('tr');
+  if (!row) throw new Error('Expected the element to sit in a table row');
+  return row;
+};
+
+const secondCell = (element: Element) => {
+  const cell = rowOf(element).cells[1];
+  if (!cell) throw new Error('Expected the row to have a second cell');
+  return cell;
+};
 
 const CreditTable = ({ onAction }: { onAction?: () => void }) => (
   <Table variant="inset" aria-label="Credit history">
@@ -74,6 +87,134 @@ describe('Table', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Refund' }));
 
     expect(onAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves a control outside the table to its own click', () => {
+    const onOutside = vi.fn();
+    const onFollow = vi.fn((event: MouseEvent) => event.preventDefault());
+    render(
+      <>
+        <button type="button" onClick={onOutside}>
+          Add credit
+        </button>
+        <CreditTable />
+      </>,
+    );
+    screen.getByRole('link', { name: 'Credit grant' }).addEventListener('click', onFollow);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add credit' }));
+
+    expect(onOutside).toHaveBeenCalledTimes(1);
+    expect(onFollow).not.toHaveBeenCalled();
+  });
+
+  it('follows the row link when any other part of the row is clicked', () => {
+    const onFollow = vi.fn((event: MouseEvent) => event.preventDefault());
+    render(<CreditTable />);
+    const link = screen.getByRole('link', { name: 'Credit grant' });
+    link.addEventListener('click', onFollow);
+
+    fireEvent.click(secondCell(link));
+
+    expect(onFollow).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves modified and middle clicks outside the link alone, since a forwarded one opens no tab', () => {
+    const onFollow = vi.fn((event: MouseEvent) => event.preventDefault());
+    render(<CreditTable />);
+    const link = screen.getByRole('link', { name: 'Credit grant' });
+    link.addEventListener('click', onFollow);
+    const cell = secondCell(link);
+
+    fireEvent.click(cell, { metaKey: true });
+    fireEvent.click(cell, { ctrlKey: true });
+    fireEvent.click(cell, { shiftKey: true });
+    fireEvent.click(cell, { altKey: true });
+    fireEvent(cell, new MouseEvent('auxclick', { bubbles: true, cancelable: true, button: 1 }));
+    expect(onFollow).not.toHaveBeenCalled();
+
+    fireEvent.click(cell);
+    expect(onFollow).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls a row onClick once and follows the row link once when a row has both', () => {
+    const onRow = vi.fn();
+    const onFollow = vi.fn((event: MouseEvent) => event.preventDefault());
+    render(
+      <Table variant="inset" aria-label="Credits">
+        <Table.Body>
+          <Table.Row onClick={onRow}>
+            <Table.Cell>
+              <Table.RowLink href="/credits/1">Credit grant</Table.RowLink>
+            </Table.Cell>
+            <Table.Cell>$10</Table.Cell>
+          </Table.Row>
+        </Table.Body>
+      </Table>,
+    );
+    const link = screen.getByRole('link', { name: 'Credit grant' });
+    link.addEventListener('click', onFollow);
+
+    fireEvent.click(secondCell(link));
+    expect(onRow).toHaveBeenCalledTimes(1);
+    expect(onFollow).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(link);
+    expect(onRow).toHaveBeenCalledTimes(2);
+    expect(onFollow).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaves clicks on the link itself, other controls, portaled content and text selections alone', () => {
+    const onFollow = vi.fn((event: MouseEvent) => event.preventDefault());
+    const onAction = vi.fn();
+    const portal = document.createElement('div');
+    document.body.append(portal);
+    const PortaledMenu = () => createPortal(<span>Menu item</span>, portal);
+    render(
+      <Table variant="inset" aria-label="Credits">
+        <Table.Body>
+          <Table.Row>
+            <Table.Cell>
+              <Table.RowLink href="/credits/1">Credit grant</Table.RowLink>
+            </Table.Cell>
+            <Table.Cell>
+              <button type="button" onClick={onAction}>
+                Refund <span>now</span>
+              </button>
+              <a href="/docs">Docs</a>
+              <input aria-label="Note" />
+              <span tabIndex={0}>Tooltip trigger</span>
+              <PortaledMenu />
+              <span>Plain text</span>
+            </Table.Cell>
+          </Table.Row>
+        </Table.Body>
+      </Table>,
+    );
+    const link = screen.getByRole('link', { name: 'Credit grant' });
+    link.addEventListener('click', onFollow);
+    screen.getByRole('link', { name: 'Docs' }).addEventListener('click', event => event.preventDefault());
+
+    fireEvent.click(screen.getByText('now'));
+    fireEvent.click(screen.getByRole('link', { name: 'Docs' }));
+    fireEvent.click(screen.getByRole('textbox', { name: 'Note' }));
+    fireEvent.click(screen.getByText('Tooltip trigger'));
+    fireEvent.click(screen.getByText('Menu item'));
+    fireEvent.click(link);
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(onFollow).toHaveBeenCalledTimes(1);
+
+    const text = screen.getByText('Plain text');
+    const selection = window.getSelection();
+    if (!selection) throw new Error('Expected a selection');
+    selection.selectAllChildren(text);
+    fireEvent.click(text);
+    expect(onFollow).toHaveBeenCalledTimes(1);
+    selection.removeAllRanges();
+
+    fireEvent.click(text);
+    expect(onFollow).toHaveBeenCalledTimes(2);
+    portal.remove();
   });
 
   it('renders the row link through a router link component', () => {
@@ -321,6 +462,11 @@ describe('Table.RowButton', () => {
     await user.click(screen.getByRole('button', { name: 'Refund' }));
     expect(onOpen).toHaveBeenCalledTimes(1);
     expect(onRefund).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(secondCell(open));
+    expect(onOpen).toHaveBeenCalledTimes(2);
+    fireEvent(secondCell(open), new MouseEvent('auxclick', { bubbles: true, button: 1 }));
+    expect(onOpen).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -358,4 +504,133 @@ it('maps start and end alignment to valid native attributes in the default varia
 it('names collapsed page ranges for screen readers', () => {
   render(<Table.Pagination page={10} pageCount={24} onPageChange={() => {}} />);
   expect(screen.getAllByText('More pages')).toHaveLength(2);
+});
+
+describe('inset row click forwarding', () => {
+  it('runs an ancestor onClick once for a plain cell click and for a direct target click', () => {
+    const onAncestor = vi.fn();
+    const onOpen = vi.fn();
+    render(
+      <div onClick={onAncestor}>
+        <Table variant="inset" aria-label="Credits">
+          <Table.Body>
+            <Table.Row>
+              <Table.Cell>
+                <Table.RowButton onClick={onOpen}>Credit grant</Table.RowButton>
+              </Table.Cell>
+              <Table.Cell>$10</Table.Cell>
+            </Table.Row>
+          </Table.Body>
+        </Table>
+      </div>,
+    );
+    fireEvent.click(screen.getByText('$10'));
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(onAncestor).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Credit grant' }));
+    expect(onOpen).toHaveBeenCalledTimes(2);
+    expect(onAncestor).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaves every editable element alone, including plaintext-only', () => {
+    const onOpen = vi.fn();
+    render(
+      <Table variant="inset" aria-label="Credits">
+        <Table.Body>
+          <Table.Row>
+            <Table.Cell>
+              <Table.RowButton onClick={onOpen}>Credit grant</Table.RowButton>
+            </Table.Cell>
+            <Table.Cell>
+              <div contentEditable="plaintext-only" suppressContentEditableWarning>
+                Plain note
+              </div>
+            </Table.Cell>
+            <Table.Cell>
+              <div contentEditable="false">Read-only note</div>
+            </Table.Cell>
+          </Table.Row>
+        </Table.Body>
+      </Table>,
+    );
+    fireEvent.click(screen.getByText('Plain note'));
+    expect(onOpen).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Read-only note'));
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves a native summary and a roving-tabindex menu item alone', () => {
+    const onOpen = vi.fn();
+    const onItem = vi.fn();
+    render(
+      <Table variant="inset" aria-label="Credits">
+        <Table.Body>
+          <Table.Row>
+            <Table.Cell>
+              <Table.RowButton onClick={onOpen}>Credit grant</Table.RowButton>
+            </Table.Cell>
+            <Table.Cell>
+              <details>
+                <summary>More</summary>
+                Details
+              </details>
+            </Table.Cell>
+            <Table.Cell>
+              <div role="menuitem" tabIndex={-1} onClick={onItem}>
+                Rename
+              </div>
+            </Table.Cell>
+          </Table.Row>
+        </Table.Body>
+      </Table>,
+    );
+    fireEvent.click(screen.getByText('More'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Rename' }));
+    expect(onItem).toHaveBeenCalledTimes(1);
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it("runs another row's onClick when a row target's handler clicks that row", () => {
+    const onOther = vi.fn();
+    render(
+      <Table variant="inset" aria-label="Credits">
+        <Table.Body>
+          <Table.Row>
+            <Table.Cell>
+              <Table.RowButton onClick={() => screen.getByText('$20').click()}>First</Table.RowButton>
+            </Table.Cell>
+            <Table.Cell>$10</Table.Cell>
+          </Table.Row>
+          <Table.Row onClick={onOther}>
+            <Table.Cell>$20</Table.Cell>
+          </Table.Row>
+        </Table.Body>
+      </Table>,
+    );
+    fireEvent.click(screen.getByText('$10'));
+    expect(onOther).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs the row onClick for a real click after cell clicks on a disabled row button', () => {
+    const onRow = vi.fn();
+    const credits = (disabled: boolean) => (
+      <Table variant="inset" aria-label="Credits">
+        <Table.Body>
+          <Table.Row onClick={onRow}>
+            <Table.Cell>
+              <Table.RowButton disabled={disabled}>Credit grant</Table.RowButton>
+            </Table.Cell>
+            <Table.Cell>$10</Table.Cell>
+          </Table.Row>
+        </Table.Body>
+      </Table>
+    );
+    const { rerender } = render(credits(true));
+    fireEvent.click(screen.getByText('$10'));
+    fireEvent.click(screen.getByText('$10'));
+    expect(onRow).toHaveBeenCalledTimes(2);
+    rerender(credits(false));
+    fireEvent.click(screen.getByRole('button', { name: 'Credit grant' }));
+    expect(onRow).toHaveBeenCalledTimes(3);
+  });
 });

@@ -875,11 +875,11 @@ importers:
         specifier: workspace:*
         version: link:../../packages/auth
       '@workos-inc/node':
-        specifier: 8.13.0
-        version: 8.13.0
+        specifier: 12.2.0
+        version: 12.2.0
       '@workos/authkit-session':
         specifier: ^0.7.1
-        version: 0.7.1(@workos-inc/node@8.13.0)(typescript@7.0.2)
+        version: 0.7.1(@workos-inc/node@12.2.0)(typescript@7.0.2)
       hono:
         specifier: 4.13.18
         version: 4.13.18
@@ -2062,7 +2062,7 @@ importers:
     dependencies:
       voyageai:
         specifier: ^0.3.1
-        version: 0.3.1(encoding@0.1.14)(onnxruntime-node@1.24.3)
+        version: 0.3.1(encoding@0.1.14)(onnxruntime-node@1.30.0)
     devDependencies:
       '@internal/ai-sdk-v4':
         specifier: workspace:*
@@ -3258,7 +3258,7 @@ importers:
         version: 5.14.0(@opentelemetry/api@1.10.0)
       '@langfuse/otel':
         specifier: ^5.14.0
-        version: 5.14.0(@opentelemetry/api@1.10.0)(@opentelemetry/core@2.12.0(@opentelemetry/api@1.10.0))(@opentelemetry/exporter-trace-otlp-http@0.223.2(@opentelemetry/api@1.10.0))(@opentelemetry/otlp-exporter-base@0.223.2(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))
+        version: 5.14.0(@opentelemetry/api@1.10.0)(@opentelemetry/core@2.12.0(@opentelemetry/api@1.10.0))(@opentelemetry/exporter-trace-otlp-http@0.223.2(@opentelemetry/api@1.10.0))(@opentelemetry/otlp-exporter-base@0.223.2(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.1(@opentelemetry/api@1.10.0))
       '@mastra/observability':
         specifier: workspace:*
         version: link:../mastra
@@ -3286,7 +3286,7 @@ importers:
         version: 1.10.0
       '@opentelemetry/sdk-trace-base':
         specifier: ^2.12.0
-        version: 2.12.0(@opentelemetry/api@1.10.0)
+        version: 2.12.1(@opentelemetry/api@1.10.0)
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -3432,16 +3432,16 @@ importers:
         version: link:../../packages/core
       '@opentelemetry/context-async-hooks':
         specifier: ^2.12.0
-        version: 2.12.0(@opentelemetry/api@1.10.0)
+        version: 2.12.1(@opentelemetry/api@1.10.0)
       '@opentelemetry/sdk-logs':
         specifier: ^0.223.0
-        version: 0.223.0(@opentelemetry/api@1.10.0)
+        version: 0.223.2(@opentelemetry/api@1.10.0)
       '@opentelemetry/sdk-trace-base':
         specifier: ^2.12.0
-        version: 2.12.0(@opentelemetry/api@1.10.0)
+        version: 2.12.1(@opentelemetry/api@1.10.0)
       '@opentelemetry/sdk-trace-node':
         specifier: ^2.12.0
-        version: 2.12.0(@opentelemetry/api@1.10.0)
+        version: 2.12.1(@opentelemetry/api@1.10.0)
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -4661,10 +4661,10 @@ importers:
     dependencies:
       '@a2a-js/sdk-v0_3':
         specifier: npm:@a2a-js/sdk@~0.3.14
-        version: '@a2a-js/sdk@0.3.14(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.5)(express@5.3.0(supports-color@10.2.2))'
+        version: '@a2a-js/sdk@0.3.14(@bufbuild/protobuf@2.16.0)(@grpc/grpc-js@1.14.7)(express@5.3.0(supports-color@10.2.2))'
       '@a2a-js/sdk-v1':
         specifier: npm:@a2a-js/sdk@~1.0.1
-        version: '@a2a-js/sdk@1.0.1(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.5)(express@5.3.0(supports-color@10.2.2))'
+        version: '@a2a-js/sdk@1.0.1(@bufbuild/protobuf@2.16.0)(@grpc/grpc-js@1.14.7)(express@5.3.0(supports-color@10.2.2))'
       '@ai-sdk/provider-utils-v6':
         specifier: npm:@ai-sdk/provider-utils@4.0.66
         version: '@ai-sdk/provider-utils@4.0.66(zod@4.6.7)'
@@ -5003,8 +5003,8 @@ importers:
         specifier: workspace:*
         version: link:../server
       '@optimize-lodash/rollup-plugin':
-        specifier: ^5.1.0
-        version: 5.1.0(rollup@4.67.4)
+        specifier: ^6.0.0
+        version: 6.0.0(rollup@4.67.4)
       '@pnpm/config.parse-overrides':
         specifier: ^1100.1.8
         version: 1100.1.8
@@ -5224,8 +5224,8 @@ importers:
   packages/evals:
     dependencies:
       compromise:
-        specifier: ^14.19.0
-        version: 14.19.0
+        specifier: ^14.20.0
+        version: 14.20.0
       keyword-extractor:
         specifier: ^0.0.28
         version: 0.0.28
@@ -6114,6 +6114,12 @@ importers:
       '@hello-pangea/dnd':
         specifier: ^18.0.1
         version: 18.0.1(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@json-render/core':
+        specifier: ^0.22.0
+        version: 0.22.0(zod@4.6.7)
+      '@json-render/react':
+        specifier: ^0.22.0
+        version: 0.22.0(react@19.3.1)(zod@4.6.7)
       '@lezer/common':
         specifier: ^1.5.4
         version: 1.5.5
@@ -6123,6 +6129,9 @@ importers:
       '@lukeed/uuid':
         specifier: ^2.0.1
         version: 2.0.1
+      '@mastra/json-render':
+        specifier: workspace:^
+        version: link:../../integrations/json-render
       '@mcp-ui/client':
         specifier: ^7.1.1
         version: 7.1.1(@cfworker/json-schema@4.1.4)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(supports-color@10.2.2)
@@ -6156,6 +6165,9 @@ importers:
       date-fns:
         specifier: 'catalog:'
         version: 4.4.0
+      idb:
+        specifier: ^8.0.4
+        version: 8.0.4
       mdast-util-gfm:
         specifier: ^3.1.0
         version: 3.1.0(supports-color@10.2.2)
@@ -6208,6 +6220,9 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
     devDependencies:
+      '@internal/ai-sdk-v5':
+        specifier: workspace:*
+        version: link:../_vendored/ai_v5
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -6307,6 +6322,9 @@ importers:
       eslint-plugin-storybook:
         specifier: ^10.6.3
         version: 10.6.5(eslint@10.14.0(jiti@2.7.0)(supports-color@10.2.2))(supports-color@10.2.2)(typescript@7.0.2)
+      fake-indexeddb:
+        specifier: ^6.2.6
+        version: 6.2.7
       jsdom:
         specifier: ^30.1.3
         version: 30.1.3(@noble/hashes@2.4.0)
@@ -10638,8 +10656,8 @@ importers:
   workspaces/vercel:
     dependencies:
       '@vercel/sandbox':
-        specifier: 2.9.2
-        version: 2.9.2
+        specifier: 4.0.0
+        version: 4.0.0
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -12800,9 +12818,6 @@ packages:
   '@bufbuild/protobuf@1.10.1':
     resolution: {integrity: sha512-wJ8ReQbHxsAfXhrf9ixl0aYbZorRuOWpBNzm8pL8ftmSxQx/wnJD5Eg861NwJU/czy2VXFIebCeZnZrI9rktIQ==}
 
-  '@bufbuild/protobuf@2.13.0':
-    resolution: {integrity: sha512-acq7c49vxfm1ggJ95P70TX7ABDM0vxr1SYD3BB0o0jnBLB4OAqeHyKuN+cD3w80gXEDQ2zxHpR6CUeA+O/aU9g==}
-
   '@bufbuild/protobuf@2.16.0':
     resolution: {integrity: sha512-FWa0sPlqYGJgpTs6OxBRcL/AW4JT0OIO+W1ajerluoTVh8CV0B7XM1qsNCRgnkSCkRCgOICKHRQlY17jrsm0+Q==}
 
@@ -14925,10 +14940,6 @@ packages:
     peerDependencies:
       graphql: ^0.8.0 || ^0.9.0 || ^0.10.0 || ^0.11.0 || ^0.12.0 || ^0.13.0 || ^14.0.0 || ^15.0.0 || ^16.0.0 || ^17.0.0
 
-  '@grpc/grpc-js@1.14.5':
-    resolution: {integrity: sha512-7VZM+SVdEcUUqSQeNI3zM8Qs/BhQKZndPo2h5VkYkAM8Iz0wJIa8mKV5ekQGqG8UUsnkQ0NMxIxwkIHYvj0qOw==}
-    engines: {node: '>=12.10.0'}
-
   '@grpc/grpc-js@1.14.7':
     resolution: {integrity: sha512-W4W/fcBMGRVtG6dW2c7cw2mnpS3hvbBd+oQXjh2iYFTZDk1JJmcNqkM5KSaPubQpamlUUurrlb7G1s9NJeERmQ==}
     engines: {node: '>=12.10.0'}
@@ -16486,16 +16497,6 @@ packages:
     peerDependencies:
       '@modelcontextprotocol/server': ^2.4.0
 
-  '@modelcontextprotocol/sdk@1.32.1':
-    resolution: {integrity: sha512-2DdE+SJDtzLEEWzY1ZjY7Q+VcPhcV1KisD3zI4u0XZyktsjHum1mwbMI+JaulUBi2OZk+KJAi2uPXzxichPkdw==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      '@cfworker/json-schema': ^4.1.1
-      zod: 4.6.7
-    peerDependenciesMeta:
-      '@cfworker/json-schema':
-        optional: true
-
   '@modelcontextprotocol/sdk@1.32.2':
     resolution: {integrity: sha512-SWsVtH/0vULSQStoZ6xxH2K09Li8fXYTMC64ZeogCdpZ3XSi1eCPOByV1OpuJxuI3OcmHhosDWYyii07tpPsLw==}
     engines: {node: '>=18'}
@@ -18016,14 +18017,14 @@ packages:
     peerDependencies:
       '@opentelemetry/api': ^1.1.0
 
-  '@optimize-lodash/rollup-plugin@5.1.0':
-    resolution: {integrity: sha512-dBQYGH8+n4Z/877e61PJteVZEc+U1wfRF6IhKqW0cABRIsqMxpWynyov6M6Sd4IUjru0dnh0EG55X86JO6WakQ==}
+  '@optimize-lodash/rollup-plugin@6.0.0':
+    resolution: {integrity: sha512-zTNVDRHGcezQCT2UVK7CSqJi7YKyM1YTJPvCkbE3NecHCsI/mdlizXGqcXgoshzyemsfscY7Tf8MmGnor2HAFg==}
     engines: {node: '>= 18'}
     peerDependencies:
       rollup: '>= 4.x'
 
-  '@optimize-lodash/transform@3.0.6':
-    resolution: {integrity: sha512-9+qMSaDpahC0+vX2ChM46/ls6a5Ankqs6RTLrHSaFpm7o1mFanP82e+jm9/0o5D660ueK8dWJGPCXQrBxBNNWA==}
+  '@optimize-lodash/transform@4.0.0':
+    resolution: {integrity: sha512-/v61xAfj3e3g14UDP9qriYgkifLuSwALrhcSiY3SfuzzDJ5pRBsfp//Ih3daJlUMrODvB6IUk7dGfxgnRwcxjg==}
     engines: {node: '>= 12'}
 
   '@oxc-parser/binding-android-arm-eabi@0.127.0':
@@ -22184,6 +22185,17 @@ packages:
       vue-router:
         optional: true
 
+  '@vercel/cli-config@0.3.1':
+    resolution: {integrity: sha512-sISbygqlFXYb8qfPu/+2Cf/A8IjrlAuZePdag3EDQr2PRA455s7UZtl9Ro674CWsB/saBRmz3jEkw0YsQs8OoQ==}
+
+  '@vercel/cli-exec@1.0.1':
+    resolution: {integrity: sha512-g9XerViJ/paZujufXYcu5XYI2vU2rtB4sgdpjUHde5RnOkdmpu0ngH46LCFGHoPXO/C+qDPSczIHIRN+8Q2YKQ==}
+    engines: {node: '>= 18'}
+
+  '@vercel/detect-agent@1.2.5':
+    resolution: {integrity: sha512-0krENrjuitlW8s6TJu0MlqCevyCU7K7JK63jZAf7xZ6n17tx+vUEwzHT3sTxawtwZxaW21hu+oFUpoOrm49FsQ==}
+    engines: {node: '>=14'}
+
   '@vercel/functions@1.6.0':
     resolution: {integrity: sha512-R6FKQrYT5MZs5IE1SqeCJWxMuBdHawFcCZboKKw8p7s+6/mcd55Gx6tWmyKnQTyrSEA04NH73Tc9CbqpEle8RA==}
     engines: {node: '>= 16'}
@@ -22201,8 +22213,13 @@ packages:
     resolution: {integrity: sha512-UycprH3T6n3jH0k44NHMa7pnFHGu/N05MjojYr+Mc6I7obkoLIJujSWwin1pCvdy/eOxrI/l3uDLQsmcrOb4ug==}
     engines: {node: '>= 20'}
 
-  '@vercel/sandbox@2.9.2':
-    resolution: {integrity: sha512-tnPtCNL6MZKM9eRYvmyL0geA2Nifq+PSxVXBNhk/lQNeCWgMp/EYzCDOotKEWR/VH+c0Yv9HG4qk0w2I65xnLA==}
+  '@vercel/oidc@4.0.0':
+    resolution: {integrity: sha512-ko6ATeRUlHZMB5hLFdC7+/Q1dI2f3NX3gZHxtpALdkxurwjD5HFHGWYF+4o+4SF0E47jg6KzcHknmRpHcKgJ5A==}
+    engines: {node: '>= 20'}
+
+  '@vercel/sandbox@4.0.0':
+    resolution: {integrity: sha512-wFYlkheUEofX47e5MWKQ80MumZ+tYmqLc+Ni3DT4mMRXiQdbyg1caH7hSr24CgnGVWmRO0QV8oQwi6Pgyt9CRQ==}
+    engines: {node: '>=22.19.0'}
 
   '@verdaccio/auth@8.1.7':
     resolution: {integrity: sha512-U7SXtuPOLj5nO5XmxYLkuVdP/9djxX2eM81irYv+78n6rzBmEdYEwUQGAB0Z/qyMAo0gbOi5AhXg79K5kOBbMw==}
@@ -22455,9 +22472,9 @@ packages:
   '@workflow/serde@4.1.0-beta.2':
     resolution: {integrity: sha512-8kkeoQKLDaKXefjV5dbhBj2aErfKp1Mc4pb6tj8144cF+Em5SPbyMbyLCHp+BVrFfFVCBluCtMx+jjvaFVZGww==}
 
-  '@workos-inc/node@8.13.0':
-    resolution: {integrity: sha512-NgQKHpwh8AbT4KvAsW91Y+4f4jja2IvFPQ5atcy5NUxUMVRgXzRFEee3erawfXrTmiCVqJjd9PljHySKBXmHKQ==}
-    engines: {node: '>=20.15.0'}
+  '@workos-inc/node@12.2.0':
+    resolution: {integrity: sha512-uWzWtPieLqn+juXcIm8YQxh0qokZg0dnjzGm5AHeemiG6VeqzGYc6nlqQ2zw/OI80aYuaPo/ZOURACyQuqYgnA==}
+    engines: {node: '>=22.11.0'}
 
   '@workos/authkit-session@0.7.1':
     resolution: {integrity: sha512-3C8anDS67ITE6tvtlTo0sjOzNRhRXvzRHmrQ11kPBAKdLyxIspTBt+BzU/r2vUHJgCAeMlc2wNwqytkAexQhfw==}
@@ -23208,11 +23225,6 @@ packages:
   base64-js@1.5.1:
     resolution: {integrity: sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==}
 
-  baseline-browser-mapping@2.11.0:
-    resolution: {integrity: sha512-oCu2wfipvX3AePSgmOuKkIywOu+8n9psz7hXYmk56ghpu3+7KzNIBopaOs4c9BrtdnTtW30unG9GTfHo7EwERQ==}
-    engines: {node: '>=6.0.0'}
-    hasBin: true
-
   baseline-browser-mapping@2.11.35:
     resolution: {integrity: sha512-GNk8KX52CHqeNKGk8+7tZnQab/2k1t/BgrUHPKNdijzpEhF1saPQZHVKb6m5loSAxB39gyrTYw34Qf9CQ3u1qQ==}
     engines: {node: '>=6.0.0'}
@@ -23410,11 +23422,6 @@ packages:
 
   browserify-zlib@0.1.4:
     resolution: {integrity: sha512-19OEpq7vWgsH6WkvkBJQDFvJS1uPcbFOQ4v9CU839dO+ZZXUZO6XpE6hNCqvlIIj+4fZvRiJ6DsAQ382GwiyTQ==}
-
-  browserslist@4.28.7:
-    resolution: {integrity: sha512-JxV13hNrFxqjOc8alRbq9dK1MM79NEXYpma2B2J4wAtpWS5zIEIKqWPGCl7N4o7Uc7B7itylh7SuDujATRyyTw==}
-    engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
-    hasBin: true
 
   browserslist@4.29.5:
     resolution: {integrity: sha512-khTmKu5NGYTotqcYo8Bew2k4RAE9PuXRSFRXG2lQBrCEQHyeQ/vX6gKMxfokwywBsLiXZMnHsmWMG1pnO8J7uQ==}
@@ -23928,9 +23935,10 @@ packages:
     resolution: {integrity: sha512-o8vI5RE5A6EVVOd9o41jKp41aJom+QTEO/Bx8MYNjexMo/Bv2WOjUfZr+aL0WnYSgymUy6zeguqLTsIhV0gMvQ==}
     engines: {node: '>= 0.8.0'}
 
-  compromise@14.19.0:
-    resolution: {integrity: sha512-nA/ClpXt0PaS2Ne389wClhxFBBxV0el3nv6V7XFpoRRQBr8eCnV3Iv4ZY6C5H06UHq1k7bqth73nVc/hv/rrCg==}
+  compromise@14.20.0:
+    resolution: {integrity: sha512-XFtjCI4hs8jde5uY/3KqlKQ12dt4h1mAYVPnss0o91ia0971VdluY4ZN9GlxbV9zI8DW2YP+NzGqpnsFFidenA==}
     engines: {node: '>=18'}
+    hasBin: true
 
   concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
@@ -26770,10 +26778,6 @@ packages:
   js-base64@3.9.6:
     resolution: {integrity: sha512-LjkzbLtU6Lx6fjXMYGEACEB7rdtqZtxkBe9aS1ZpDNUyWgUivw3yBEIhQ37OVygJYRt+C+9e9fVT8PpFzH2Hww==}
 
-  js-cookie@3.0.7:
-    resolution: {integrity: sha512-z/wZZgDrkNV1eA0ULjM/F9/50Ya8fbzgKneSpoPsXSGd0KnpdtHfOZWK+GcwLk+EZbS4F9RBhU+K2RgzuDaItw==}
-    engines: {node: '>=20'}
-
   js-cookie@3.0.8:
     resolution: {integrity: sha512-yeJd4aNAdYZQjaon2bpD/Gb0B/omw7HQOsynXXcOiWVCacbBcPlgn8S/d1X6blFSaHao7ozqtW7NZW19xpCtIw==}
 
@@ -26795,10 +26799,6 @@ packages:
 
   js-yaml@4.3.2:
     resolution: {integrity: sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA==}
-    hasBin: true
-
-  js-yaml@5.4.1:
-    resolution: {integrity: sha512-28R/k+NAjeuf7+CKlTxWZVExJGwVVLwY06DgEnOMz2gEpfNkDcD7QvyiVPT0xy0XXhU8vHsd4Ot42OOPdJG7dQ==}
     hasBin: true
 
   js-yaml@5.5.0:
@@ -31118,8 +31118,8 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
-  suffix-thumb@6.0.0:
-    resolution: {integrity: sha512-HsCTMLaupbob5ZG//ZW6PSj446tHT5kSJ1qXS5F/qO2Nt13uAn6ZLPhJQ/H6bN/jVQCb+pcqe2psEwy4Mp5+Vw==}
+  suffix-thumb@6.1.0:
+    resolution: {integrity: sha512-Lh1ZP+tj1TWnlw3RsR6eY/ARhZ3fIPrquE2Xts/wnGB7j1od2OZbCrWYsahkuaLqY7omsNKDUA6JITtE4elhfw==}
     engines: {node: '>=18'}
 
   superagent@10.4.1:
@@ -31233,10 +31233,6 @@ packages:
 
   tar-stream@3.2.2:
     resolution: {integrity: sha512-+8NeqHRjQWH9nYlwo2gamAMImZCVzI4UoEgDpWorBt9OEfppiZn+uSkskzQKPWIZyji/C8fpWO7u69G0DX0tbg==}
-
-  tar@7.5.21:
-    resolution: {integrity: sha512-XdhtCvlMywwxpCW8YEq3lOXBJpUPTR2OHHcwLPO3HwsJqOHa2Ok/oJ7ruGzp+JrKoRPVCzJwAdEjqLW/vNRPHA==}
-    engines: {node: '>=18'}
 
   tar@7.5.22:
     resolution: {integrity: sha512-MFO/QzvtAOmJbkhOaCTvbGcFN9L9b+JunIsDwaKljSOdcLMea3NJ1k9Usz/rjdfSXTq4dfzfeS7W4p4YOAAHeA==}
@@ -32762,21 +32758,21 @@ snapshots:
       section-matter: 1.0.0
       strip-bom-string: 1.0.0
 
-  '@a2a-js/sdk@0.3.14(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.5)(express@5.3.0(supports-color@10.2.2))':
+  '@a2a-js/sdk@0.3.14(@bufbuild/protobuf@2.16.0)(@grpc/grpc-js@1.14.7)(express@5.3.0(supports-color@10.2.2))':
     dependencies:
       uuid: 11.1.1
     optionalDependencies:
-      '@bufbuild/protobuf': 2.13.0
-      '@grpc/grpc-js': 1.14.5
+      '@bufbuild/protobuf': 2.16.0
+      '@grpc/grpc-js': 1.14.7
       express: 5.3.0(supports-color@10.2.2)
 
-  '@a2a-js/sdk@1.0.1(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.5)(express@5.3.0(supports-color@10.2.2))':
+  '@a2a-js/sdk@1.0.1(@bufbuild/protobuf@2.16.0)(@grpc/grpc-js@1.14.7)(express@5.3.0(supports-color@10.2.2))':
     dependencies:
       jose: 6.2.12
       uuid: 11.1.1
     optionalDependencies:
-      '@bufbuild/protobuf': 2.13.0
-      '@grpc/grpc-js': 1.14.5
+      '@bufbuild/protobuf': 2.16.0
+      '@grpc/grpc-js': 1.14.7
       express: 5.3.0(supports-color@10.2.2)
 
   '@adobe/css-tools@4.5.0': {}
@@ -34283,7 +34279,7 @@ snapshots:
     dependencies:
       '@babel/compat-data': 8.0.5
       '@babel/helper-validator-option': 8.0.0
-      browserslist: 4.28.7
+      browserslist: 4.29.5
       flru: 1.0.2
       verkit: 0.5.0
 
@@ -35382,7 +35378,7 @@ snapshots:
   '@blaxel/core@0.3.34(@cfworker/json-schema@4.1.4)(@hey-api/openapi-ts@0.97.3(magicast@0.5.5)(typescript@7.0.2))(bufferutil@4.1.0)(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)':
     dependencies:
       '@hey-api/client-fetch': 0.10.2(@hey-api/openapi-ts@0.97.3(magicast@0.5.5)(typescript@7.0.2))
-      '@modelcontextprotocol/sdk': 1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7)
+      '@modelcontextprotocol/sdk': 1.32.2(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7)
       archiver: 7.0.1
       axios: 1.20.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
       dockerfile-ast: 0.7.1
@@ -35451,8 +35447,8 @@ snapshots:
       '@ai-sdk/provider': 2.0.5
       '@anthropic-ai/sdk': 0.39.0(encoding@0.1.14)
       '@browserbasehq/sdk': 2.24.0(encoding@0.1.14)
-      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7))(bufferutil@4.1.0)(supports-color@10.2.2)
-      '@modelcontextprotocol/sdk': 1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7)
+      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7))(bufferutil@4.1.0)(supports-color@10.2.2)
+      '@modelcontextprotocol/sdk': 1.32.2(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7)
       ai: 5.0.285(zod@4.6.7)
       devtools-protocol: 0.0.1642743
       fetch-cookie: 3.2.0
@@ -35490,8 +35486,6 @@ snapshots:
   '@bufbuild/protobuf@1.10.0': {}
 
   '@bufbuild/protobuf@1.10.1': {}
-
-  '@bufbuild/protobuf@2.13.0': {}
 
   '@bufbuild/protobuf@2.16.0': {}
 
@@ -36591,7 +36585,7 @@ snapshots:
 
   '@docker/sandboxes@0.53.0(bufferutil@4.1.0)':
     dependencies:
-      '@bufbuild/protobuf': 2.13.0
+      '@bufbuild/protobuf': 2.16.0
       '@types/formidable': 3.4.6
       '@types/ws': 8.18.2
       formidable: 3.5.4
@@ -36801,7 +36795,7 @@ snapshots:
       '@rspack/core': 1.7.12(@swc/helpers@0.5.23)
       '@swc/core': 1.16.21(@swc/helpers@0.5.23)
       '@swc/html': 1.16.21
-      browserslist: 4.28.7
+      browserslist: 4.29.5
       lightningcss: 1.33.0
       semver: 7.8.6
       swc-loader: 0.2.7(@swc/core@1.16.21(@swc/helpers@0.5.23))(webpack@5.112.2(@swc/core@1.16.21(@swc/helpers@0.5.23))(@swc/html@1.16.21)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.23))(csso@5.0.5)(esbuild@0.28.2)(html-minifier-terser@7.2.0)(lightningcss@1.33.0)(postcss@8.5.23)(uglify-js@3.19.3))
@@ -38533,14 +38527,14 @@ snapshots:
       '@google-cloud/precise-date': 6.2.1
       '@google-cloud/promisify': 6.2.1
       '@google-cloud/spanner-api': 0.4.0(supports-color@10.2.2)
-      '@grpc/grpc-js': 1.14.5
+      '@grpc/grpc-js': 1.14.7
       '@grpc/proto-loader': 0.8.1
       '@opentelemetry/api': 1.10.0
-      '@opentelemetry/context-async-hooks': 2.12.0(@opentelemetry/api@1.10.0)
+      '@opentelemetry/context-async-hooks': 2.12.1(@opentelemetry/api@1.10.0)
       '@opentelemetry/core': 2.12.0(@opentelemetry/api@1.10.0)
       '@opentelemetry/resource-detector-gcp': 0.57.0(@opentelemetry/api@1.10.0)(supports-color@10.2.2)
       '@opentelemetry/resources': 2.12.1(@opentelemetry/api@1.10.0)
-      '@opentelemetry/sdk-metrics': 2.12.0(@opentelemetry/api@1.10.0)
+      '@opentelemetry/sdk-metrics': 2.12.1(@opentelemetry/api@1.10.0)
       '@opentelemetry/semantic-conventions': 1.44.0
       '@types/big.js': 6.2.2
       big.js: 7.0.1
@@ -38593,19 +38587,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google/genai@1.52.0(@modelcontextprotocol/sdk@1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7))(bufferutil@4.1.0)(supports-color@10.2.2)':
-    dependencies:
-      google-auth-library: 10.9.1(supports-color@10.2.2)
-      p-retry: 4.6.2
-      protobufjs: 8.8.0
-      ws: 8.23.0(bufferutil@4.1.0)
-    optionalDependencies:
-      '@modelcontextprotocol/sdk': 1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7)
-    transitivePeerDependencies:
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-
   '@google/genai@1.52.0(@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7))(bufferutil@4.1.0)(supports-color@10.2.2)':
     dependencies:
       google-auth-library: 10.9.1(supports-color@10.2.2)
@@ -38622,11 +38603,6 @@ snapshots:
   '@graphql-typed-document-node/core@3.2.0(graphql@16.14.2)':
     dependencies:
       graphql: 16.14.2
-
-  '@grpc/grpc-js@1.14.5':
-    dependencies:
-      '@grpc/proto-loader': 0.8.1
-      '@js-sdsl/ordered-map': 4.4.2
 
   '@grpc/grpc-js@1.14.7':
     dependencies:
@@ -39408,7 +39384,7 @@ snapshots:
       '@fingerprintjs/fingerprintjs-pro-react': 2.7.1
       '@fingerprintjs/fingerprintjs-pro-spa': 1.3.3
       '@hcaptcha/react-hcaptcha': 1.17.4(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
-      js-cookie: 3.0.7
+      js-cookie: 3.0.8
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
       tldts: 7.4.19
@@ -39476,14 +39452,14 @@ snapshots:
     dependencies:
       '@opentelemetry/api': 1.10.0
 
-  '@langfuse/otel@5.14.0(@opentelemetry/api@1.10.0)(@opentelemetry/core@2.12.0(@opentelemetry/api@1.10.0))(@opentelemetry/exporter-trace-otlp-http@0.223.2(@opentelemetry/api@1.10.0))(@opentelemetry/otlp-exporter-base@0.223.2(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))':
+  '@langfuse/otel@5.14.0(@opentelemetry/api@1.10.0)(@opentelemetry/core@2.12.0(@opentelemetry/api@1.10.0))(@opentelemetry/exporter-trace-otlp-http@0.223.2(@opentelemetry/api@1.10.0))(@opentelemetry/otlp-exporter-base@0.223.2(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.1(@opentelemetry/api@1.10.0))':
     dependencies:
       '@langfuse/core': 5.14.0(@opentelemetry/api@1.10.0)
       '@opentelemetry/api': 1.10.0
       '@opentelemetry/core': 2.12.0(@opentelemetry/api@1.10.0)
       '@opentelemetry/exporter-trace-otlp-http': 0.223.2(@opentelemetry/api@1.10.0)
       '@opentelemetry/otlp-exporter-base': 0.223.2(@opentelemetry/api@1.10.0)
-      '@opentelemetry/sdk-trace-base': 2.12.0(@opentelemetry/api@1.10.0)
+      '@opentelemetry/sdk-trace-base': 2.12.1(@opentelemetry/api@1.10.0)
 
   '@langfuse/tracing@5.14.0(@opentelemetry/api@1.10.0)':
     dependencies:
@@ -39677,7 +39653,7 @@ snapshots:
       '@livekit/typed-emitter': 3.0.0
       '@opentelemetry/api': 1.10.0
       '@opentelemetry/api-logs': 0.220.0
-      '@opentelemetry/core': 2.12.0(@opentelemetry/api@1.10.0)
+      '@opentelemetry/core': 2.12.1(@opentelemetry/api@1.10.0)
       '@opentelemetry/exporter-logs-otlp-proto': 0.220.0(@opentelemetry/api@1.10.0)
       '@opentelemetry/exporter-metrics-otlp-proto': 0.220.0(@opentelemetry/api@1.10.0)
       '@opentelemetry/exporter-trace-otlp-proto': 0.220.0(@opentelemetry/api@1.10.0)
@@ -39685,9 +39661,9 @@ snapshots:
       '@opentelemetry/otlp-exporter-base': 0.220.0(@opentelemetry/api@1.10.0)
       '@opentelemetry/resources': 2.12.1(@opentelemetry/api@1.10.0)
       '@opentelemetry/sdk-logs': 0.220.0(@opentelemetry/api@1.10.0)
-      '@opentelemetry/sdk-metrics': 2.12.0(@opentelemetry/api@1.10.0)
-      '@opentelemetry/sdk-trace-base': 2.12.0(@opentelemetry/api@1.10.0)
-      '@opentelemetry/sdk-trace-node': 2.12.0(@opentelemetry/api@1.10.0)
+      '@opentelemetry/sdk-metrics': 2.12.1(@opentelemetry/api@1.10.0)
+      '@opentelemetry/sdk-trace-base': 2.12.1(@opentelemetry/api@1.10.0)
+      '@opentelemetry/sdk-trace-node': 2.12.1(@opentelemetry/api@1.10.0)
       '@opentelemetry/semantic-conventions': 1.44.0
       '@types/pidusage': 2.0.5
       commander: 12.1.0
@@ -39956,9 +39932,9 @@ snapshots:
       '@mastra/core': link:packages/core
       '@modelcontextprotocol/client': 2.3.1
       '@modelcontextprotocol/core': 2.3.1
-      '@modelcontextprotocol/ext-apps': 1.7.5(@modelcontextprotocol/sdk@1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(zod@4.6.7)
+      '@modelcontextprotocol/ext-apps': 1.7.5(@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(zod@4.6.7)
       '@modelcontextprotocol/node': 2.1.1(@modelcontextprotocol/server@2.3.1)
-      '@modelcontextprotocol/sdk': 1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7)
+      '@modelcontextprotocol/sdk': 1.32.2(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7)
       '@modelcontextprotocol/server': 2.3.1
       '@modelcontextprotocol/server-legacy': 2.3.1(express@5.3.0(supports-color@10.2.2))(supports-color@10.2.2)
       exit-hook: 5.1.0
@@ -39979,8 +39955,8 @@ snapshots:
 
   '@mcp-ui/client@7.1.1(@cfworker/json-schema@4.1.4)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(supports-color@10.2.2)':
     dependencies:
-      '@modelcontextprotocol/ext-apps': 1.7.5(@modelcontextprotocol/sdk@1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@3.25.76))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(zod@3.25.76)
-      '@modelcontextprotocol/sdk': 1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@3.25.76)
+      '@modelcontextprotocol/ext-apps': 1.7.5(@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(zod@3.25.76)
+      '@modelcontextprotocol/sdk': 1.32.2(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@3.25.76)
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
       zod: 3.25.76
@@ -40214,7 +40190,7 @@ snapshots:
 
   '@modelcontextprotocol/conformance@0.2.0-alpha.12(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)':
     dependencies:
-      '@modelcontextprotocol/sdk': 1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7)
+      '@modelcontextprotocol/sdk': 1.32.2(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7)
       '@octokit/rest': 22.0.1
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
@@ -40237,18 +40213,18 @@ snapshots:
     dependencies:
       zod: 4.6.7
 
-  '@modelcontextprotocol/ext-apps@1.7.5(@modelcontextprotocol/sdk@1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@3.25.76))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(zod@3.25.76)':
+  '@modelcontextprotocol/ext-apps@1.7.5(@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(zod@3.25.76)':
     dependencies:
-      '@modelcontextprotocol/sdk': 1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@3.25.76)
+      '@modelcontextprotocol/sdk': 1.32.2(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7)
       '@standard-schema/spec': 1.1.0
       zod: 3.25.76
     optionalDependencies:
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
 
-  '@modelcontextprotocol/ext-apps@1.7.5(@modelcontextprotocol/sdk@1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(zod@4.6.7)':
+  '@modelcontextprotocol/ext-apps@1.7.5(@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(zod@4.6.7)':
     dependencies:
-      '@modelcontextprotocol/sdk': 1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7)
+      '@modelcontextprotocol/sdk': 1.32.2(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7)
       '@standard-schema/spec': 1.1.0
       zod: 4.6.7
     optionalDependencies:
@@ -40289,7 +40265,7 @@ snapshots:
       '@modelcontextprotocol/server': 2.4.0
       hono: 4.13.18
 
-  '@modelcontextprotocol/sdk@1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@3.25.76)':
+  '@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@3.25.76)':
     dependencies:
       '@hono/node-server': 2.1.6(hono@4.13.18)
       ajv: 8.20.0
@@ -40308,30 +40284,6 @@ snapshots:
       raw-body: 4.0.0
       zod: 3.25.76
       zod-to-json-schema: 3.25.2(zod@3.25.76)
-    optionalDependencies:
-      '@cfworker/json-schema': 4.1.4
-    transitivePeerDependencies:
-      - supports-color
-
-  '@modelcontextprotocol/sdk@1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7)':
-    dependencies:
-      '@hono/node-server': 2.1.6(hono@4.13.18)
-      ajv: 8.20.0
-      ajv-formats: 3.0.1(ajv@8.20.0)
-      content-type: 1.0.5
-      cors: 2.8.6
-      cross-spawn: 7.0.6
-      eventsource: 3.0.7
-      eventsource-parser: 3.1.1
-      express: 5.3.0(supports-color@10.2.2)
-      express-rate-limit: 8.7.3(express@5.3.0(supports-color@10.2.2))(supports-color@10.2.2)
-      hono: 4.13.18
-      jose: 6.2.12
-      json-schema-typed: 8.0.2
-      pkce-challenge: 5.0.1
-      raw-body: 4.0.0
-      zod: 4.6.7
-      zod-to-json-schema: 3.25.2(zod@4.6.7)
     optionalDependencies:
       '@cfworker/json-schema': 4.1.4
     transitivePeerDependencies:
@@ -40886,7 +40838,7 @@ snapshots:
       debug: 4.4.3(supports-color@10.2.2)
       openai: 6.49.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7)
     optionalDependencies:
-      '@modelcontextprotocol/sdk': 1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7)
+      '@modelcontextprotocol/sdk': 1.32.2(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7)
       zod: 4.6.7
     transitivePeerDependencies:
       - '@aws-sdk/credential-provider-node'
@@ -41291,7 +41243,7 @@ snapshots:
 
   '@opentelemetry/exporter-trace-otlp-grpc@0.207.0(@opentelemetry/api@1.10.0)':
     dependencies:
-      '@grpc/grpc-js': 1.14.5
+      '@grpc/grpc-js': 1.14.7
       '@opentelemetry/api': 1.10.0
       '@opentelemetry/core': 2.12.0(@opentelemetry/api@1.10.0)
       '@opentelemetry/otlp-exporter-base': 0.207.0(@opentelemetry/api@1.10.0)
@@ -41856,7 +41808,7 @@ snapshots:
 
   '@opentelemetry/otlp-grpc-exporter-base@0.207.0(@opentelemetry/api@1.10.0)':
     dependencies:
-      '@grpc/grpc-js': 1.14.5
+      '@grpc/grpc-js': 1.14.7
       '@opentelemetry/api': 1.10.0
       '@opentelemetry/core': 2.12.0(@opentelemetry/api@1.10.0)
       '@opentelemetry/otlp-exporter-base': 0.207.0(@opentelemetry/api@1.10.0)
@@ -41864,7 +41816,7 @@ snapshots:
 
   '@opentelemetry/otlp-grpc-exporter-base@0.223.0(@opentelemetry/api@1.10.0)':
     dependencies:
-      '@grpc/grpc-js': 1.14.5
+      '@grpc/grpc-js': 1.14.7
       '@opentelemetry/api': 1.10.0
       '@opentelemetry/core': 2.12.0(@opentelemetry/api@1.10.0)
       '@opentelemetry/otlp-exporter-base': 0.223.0(@opentelemetry/api@1.10.0)
@@ -42270,13 +42222,13 @@ snapshots:
       '@opentelemetry/api': 1.10.0
       '@opentelemetry/core': 3.1.1(@opentelemetry/api@1.10.0)
 
-  '@optimize-lodash/rollup-plugin@5.1.0(rollup@4.67.4)':
+  '@optimize-lodash/rollup-plugin@6.0.0(rollup@4.67.4)':
     dependencies:
-      '@optimize-lodash/transform': 3.0.6
+      '@optimize-lodash/transform': 4.0.0
       '@rollup/pluginutils': 5.5.1(rollup@4.67.4)
       rollup: 4.67.4
 
-  '@optimize-lodash/transform@3.0.6':
+  '@optimize-lodash/transform@4.0.0':
     dependencies:
       estree-walker: 2.0.2
       magic-string: 0.30.21
@@ -44263,11 +44215,11 @@ snapshots:
 
   '@storybook/addon-mcp@10.6.5(storybook@10.6.5(@types/react@19.3.0)(bufferutil@4.1.0)(prettier@3.9.10)(react@19.3.1))(typescript@7.0.2)':
     dependencies:
-      '@tmcp/adapter-valibot': 0.1.7(tmcp@1.20.1(typescript@7.0.2))(valibot@1.4.2(typescript@7.0.2))
+      '@tmcp/adapter-valibot': 0.1.7(tmcp@1.20.1(typescript@7.0.2))(valibot@1.5.0(typescript@7.0.2))
       '@tmcp/transport-http': 0.8.6(tmcp@1.20.1(typescript@7.0.2))
       storybook: 10.6.5(@types/react@19.3.0)(bufferutil@4.1.0)(prettier@3.9.10)(react@19.3.1)
       tmcp: 1.20.1(typescript@7.0.2)
-      valibot: 1.4.2(typescript@7.0.2)
+      valibot: 1.5.0(typescript@7.0.2)
     transitivePeerDependencies:
       - '@tmcp/auth'
       - typescript
@@ -44904,7 +44856,7 @@ snapshots:
 
   '@temporalio/client@1.25.0(long@5.3.2)(protobufjs@8.8.0)':
     dependencies:
-      '@grpc/grpc-js': 1.14.5
+      '@grpc/grpc-js': 1.14.7
       '@temporalio/common': 1.25.0(long@5.3.2)(protobufjs@8.8.0)
       '@temporalio/proto': 1.25.0
       long: 5.3.2
@@ -44922,7 +44874,7 @@ snapshots:
 
   '@temporalio/core-bridge@1.25.0(long@5.3.2)(protobufjs@8.8.0)':
     dependencies:
-      '@grpc/grpc-js': 1.14.5
+      '@grpc/grpc-js': 1.14.7
       '@temporalio/common': 1.25.0(long@5.3.2)(protobufjs@8.8.0)
       long: 5.3.2
       protobufjs: 8.8.0
@@ -44945,7 +44897,7 @@ snapshots:
 
   '@temporalio/worker@1.25.0(@swc/helpers@0.5.23)(@swc/html@1.16.21)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.32))(csso@5.0.5)(esbuild@0.28.2)(html-minifier-terser@7.2.0)(lightningcss@1.33.0)(long@5.3.2)(postcss@8.5.32)(protobufjs@8.8.0)(sharp@0.35.5(@types/node@22.19.15))(svgo@3.3.5)(uglify-js@3.19.3)':
     dependencies:
-      '@grpc/grpc-js': 1.14.5
+      '@grpc/grpc-js': 1.14.7
       '@swc/core': 1.16.21(@swc/helpers@0.5.23)
       '@temporalio/activity': 1.25.0(long@5.3.2)(protobufjs@8.8.0)
       '@temporalio/client': 1.25.0(long@5.3.2)(protobufjs@8.8.0)
@@ -45037,12 +44989,12 @@ snapshots:
     dependencies:
       '@testing-library/dom': 10.4.2
 
-  '@tmcp/adapter-valibot@0.1.7(tmcp@1.20.1(typescript@7.0.2))(valibot@1.4.2(typescript@7.0.2))':
+  '@tmcp/adapter-valibot@0.1.7(tmcp@1.20.1(typescript@7.0.2))(valibot@1.5.0(typescript@7.0.2))':
     dependencies:
       '@standard-schema/spec': 1.1.0
-      '@valibot/to-json-schema': 1.8.0(valibot@1.4.2(typescript@7.0.2))
+      '@valibot/to-json-schema': 1.8.0(valibot@1.5.0(typescript@7.0.2))
       tmcp: 1.20.1(typescript@7.0.2)
-      valibot: 1.4.2(typescript@7.0.2)
+      valibot: 1.5.0(typescript@7.0.2)
 
   '@tmcp/session-manager@0.2.2(tmcp@1.20.1(typescript@7.0.2))':
     dependencies:
@@ -45963,10 +45915,6 @@ snapshots:
 
   '@upstash/vector@1.2.3': {}
 
-  '@valibot/to-json-schema@1.8.0(valibot@1.4.2(typescript@7.0.2))':
-    dependencies:
-      valibot: 1.4.2(typescript@7.0.2)
-
   '@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@6.0.3))':
     dependencies:
       valibot: 1.5.0(typescript@6.0.3)
@@ -45975,7 +45923,6 @@ snapshots:
   '@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@7.0.2))':
     dependencies:
       valibot: 1.5.0(typescript@7.0.2)
-    optional: true
 
   '@valkey/valkey-glide-darwin-arm64@2.5.2':
     optional: true
@@ -46015,6 +45962,17 @@ snapshots:
     optionalDependencies:
       react: 19.3.1
 
+  '@vercel/cli-config@0.3.1':
+    dependencies:
+      xdg-app-paths: 5.1.0
+      zod: 4.6.7
+
+  '@vercel/cli-exec@1.0.1':
+    dependencies:
+      execa: 5.1.1
+
+  '@vercel/detect-agent@1.2.5': {}
+
   '@vercel/functions@1.6.0(@aws-sdk/credential-provider-web-identity@3.972.86)':
     optionalDependencies:
       '@aws-sdk/credential-provider-web-identity': 3.972.86
@@ -46023,13 +45981,21 @@ snapshots:
 
   '@vercel/oidc@3.2.0': {}
 
-  '@vercel/sandbox@2.9.2':
+  '@vercel/oidc@4.0.0':
     dependencies:
-      '@vercel/oidc': 3.2.0
+      '@vercel/cli-config': 0.3.1
+      '@vercel/cli-exec': 1.0.1
+      jose: 6.2.12
+
+  '@vercel/sandbox@4.0.0':
+    dependencies:
+      '@vercel/detect-agent': 1.2.5
+      '@vercel/oidc': 4.0.0
       '@workflow/serde': 4.1.0-beta.2
       async-retry: 1.3.3
       jose: 6.2.12
       jsonlines: 0.1.1
+      lru-cache: 10.4.3
       ms: 2.1.3
       picocolors: 1.1.1
       tar-stream: 3.1.7
@@ -46497,7 +46463,7 @@ snapshots:
   '@wong2/mcp-cli@2.0.0(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7)':
     dependencies:
       '@json-schema-tools/traverse': 1.15.1
-      '@modelcontextprotocol/sdk': 1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7)
+      '@modelcontextprotocol/sdk': 1.32.2(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7)
       conf: 15.1.0
       eventsource: 4.1.1
       express: 5.3.0(supports-color@10.2.2)
@@ -46519,16 +46485,14 @@ snapshots:
 
   '@workflow/serde@4.1.0-beta.2': {}
 
-  '@workos-inc/node@8.13.0':
-    dependencies:
-      eventemitter3: 5.0.4
+  '@workos-inc/node@12.2.0': {}
 
-  '@workos/authkit-session@0.7.1(@workos-inc/node@8.13.0)(typescript@7.0.2)':
+  '@workos/authkit-session@0.7.1(@workos-inc/node@12.2.0)(typescript@7.0.2)':
     dependencies:
-      '@workos-inc/node': 8.13.0
+      '@workos-inc/node': 12.2.0
       iron-webcrypto: 2.0.0
       jose: 6.2.12
-      valibot: 1.4.2(typescript@7.0.2)
+      valibot: 1.5.0(typescript@7.0.2)
     transitivePeerDependencies:
       - typescript
 
@@ -47196,8 +47160,6 @@ snapshots:
 
   base64-js@1.5.1: {}
 
-  baseline-browser-mapping@2.11.0: {}
-
   baseline-browser-mapping@2.11.35: {}
 
   basic-ftp@6.2.6: {}
@@ -47422,14 +47384,6 @@ snapshots:
   browserify-zlib@0.1.4:
     dependencies:
       pako: 0.2.9
-
-  browserslist@4.28.7:
-    dependencies:
-      baseline-browser-mapping: 2.11.0
-      caniuse-lite: 1.0.30001820
-      electron-to-chromium: 1.5.473
-      node-releases: 2.0.63
-      update-browserslist-db: 1.3.4(browserslist@4.28.7)
 
   browserslist@4.29.5:
     dependencies:
@@ -47832,7 +47786,7 @@ snapshots:
       node-api-headers: 1.9.0
       rc: 1.2.8
       semver: 7.8.6
-      tar: 7.5.21
+      tar: 7.5.22
       url-join: 4.0.1
       which: 6.0.1
       yargs: 18.2.0
@@ -47974,10 +47928,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  compromise@14.19.0:
+  compromise@14.20.0:
     dependencies:
       efrt: 2.9.0
-      suffix-thumb: 6.0.0
+      suffix-thumb: 6.1.0
 
   concat-map@0.0.1: {}
 
@@ -48296,7 +48250,7 @@ snapshots:
   cssnano-preset-advanced@6.1.2(postcss@8.5.23):
     dependencies:
       autoprefixer: 10.6.2(postcss@8.5.23)
-      browserslist: 4.28.7
+      browserslist: 4.29.5
       cssnano-preset-default: 6.1.2(postcss@8.5.23)
       postcss: 8.5.23
       postcss-discard-unused: 6.0.5(postcss@8.5.23)
@@ -48685,7 +48639,7 @@ snapshots:
       '@opentelemetry/exporter-trace-otlp-proto': 0.211.0(@opentelemetry/api@1.10.0)
       '@opentelemetry/resources': 2.12.1(@opentelemetry/api@1.10.0)
       '@opentelemetry/sdk-trace-base': 2.12.1(@opentelemetry/api@1.10.0)
-      '@opentelemetry/sdk-trace-node': 2.12.0(@opentelemetry/api@1.10.0)
+      '@opentelemetry/sdk-trace-node': 2.12.1(@opentelemetry/api@1.10.0)
       '@opentelemetry/semantic-conventions': 1.44.0
       '@sentry/node': 10.78.0(@opentelemetry/core@2.12.0(@opentelemetry/api@1.10.0))(@opentelemetry/exporter-trace-otlp-http@0.223.2(@opentelemetry/api@1.10.0))(supports-color@10.2.2)
       axios: 1.20.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
@@ -48938,7 +48892,7 @@ snapshots:
   dockerode@4.0.12(supports-color@10.2.2):
     dependencies:
       '@balena/dockerignore': 1.0.2
-      '@grpc/grpc-js': 1.14.5
+      '@grpc/grpc-js': 1.14.7
       '@grpc/proto-loader': 0.7.15
       docker-modem: 5.0.7(supports-color@10.2.2)
       protobufjs: 8.8.0
@@ -49892,7 +49846,7 @@ snapshots:
       '@azure/core-auth': 1.11.0(supports-color@10.2.2)
       '@azure/identity': 4.14.1(supports-color@10.2.2)
       '@azure/storage-blob': 12.34.0(supports-color@10.2.2)
-      '@modelcontextprotocol/sdk': 1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7)
+      '@modelcontextprotocol/sdk': 1.32.2(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7)
       '@openai/agents': 0.11.8(@aws-sdk/credential-provider-node@3.972.92)(@cfworker/json-schema@4.1.4)(@smithy/signature-v4@5.7.5)(bufferutil@4.1.0)(supports-color@10.2.2)(ws@8.23.0(bufferutil@4.1.0))(zod@4.6.7)
       '@opentelemetry/api': 1.10.0
       '@supabase/storage-js': 2.118.0
@@ -50368,7 +50322,7 @@ snapshots:
 
   google-gax@5.0.8(supports-color@10.2.2):
     dependencies:
-      '@grpc/grpc-js': 1.14.5
+      '@grpc/grpc-js': 1.14.7
       '@grpc/proto-loader': 0.8.1
       duplexify: 4.1.3
       google-auth-library: 10.5.0(supports-color@10.2.2)
@@ -50384,7 +50338,7 @@ snapshots:
 
   google-gax@6.14.0(supports-color@10.2.2):
     dependencies:
-      '@grpc/grpc-js': 1.14.5
+      '@grpc/grpc-js': 1.14.7
       '@grpc/proto-loader': 0.8.1
       '@opentelemetry/api': 1.10.0
       duplexify: 4.1.3
@@ -50448,7 +50402,7 @@ snapshots:
 
   grpc-gcp@1.1.1:
     dependencies:
-      '@grpc/grpc-js': 1.14.5
+      '@grpc/grpc-js': 1.14.7
       protobufjs: 8.8.0
 
   gtoken@8.0.0(supports-color@10.2.2):
@@ -51079,19 +51033,19 @@ snapshots:
       adm-zip: 0.6.1
       debug: 4.4.3(supports-color@10.2.2)
       node-fetch: 2.7.0(encoding@0.1.14)
-      tar: 7.5.21
+      tar: 7.5.22
     transitivePeerDependencies:
       - encoding
       - supports-color
 
   inngest@4.26.2(@opentelemetry/core@3.1.1(@opentelemetry/api@1.10.0))(encoding@0.1.14)(express@5.3.0(supports-color@10.2.2))(fastify@5.12.8)(hono@4.13.18)(koa@3.3.0)(react@19.3.1)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7):
     dependencies:
-      '@bufbuild/protobuf': 2.13.0
+      '@bufbuild/protobuf': 2.16.0
       '@inngest/ai': 0.1.8
       '@jpwilliams/waitgroup': 2.1.1
       '@opentelemetry/api': 1.10.0
       '@opentelemetry/auto-instrumentations-node': 0.82.0(@opentelemetry/api@1.10.0)(@opentelemetry/core@3.1.1(@opentelemetry/api@1.10.0))(supports-color@10.2.2)
-      '@opentelemetry/context-async-hooks': 2.12.0(@opentelemetry/api@1.10.0)
+      '@opentelemetry/context-async-hooks': 2.12.1(@opentelemetry/api@1.10.0)
       '@opentelemetry/exporter-trace-otlp-http': 0.223.2(@opentelemetry/api@1.10.0)
       '@opentelemetry/instrumentation': 0.223.0(@opentelemetry/api@1.10.0)(supports-color@10.2.2)
       '@opentelemetry/resources': 2.12.1(@opentelemetry/api@1.10.0)
@@ -51355,8 +51309,6 @@ snapshots:
 
   js-base64@3.9.6: {}
 
-  js-cookie@3.0.7: {}
-
   js-cookie@3.0.8: {}
 
   js-md4@0.3.2: {}
@@ -51375,10 +51327,6 @@ snapshots:
       esprima: 4.0.1
 
   js-yaml@4.3.2:
-    dependencies:
-      argparse: 2.0.1
-
-  js-yaml@5.4.1:
     dependencies:
       argparse: 2.0.1
 
@@ -51478,7 +51426,7 @@ snapshots:
       '@apidevtools/json-schema-ref-parser': 11.9.3
       '@types/json-schema': 7.0.15
       '@types/lodash': 4.17.27
-      js-yaml: 5.4.1
+      js-yaml: 5.5.0
       lodash: 4.18.1
       minimist: 1.2.8
       prettier: 3.9.10
@@ -53130,7 +53078,7 @@ snapshots:
 
   nice-grpc@2.1.18:
     dependencies:
-      '@grpc/grpc-js': 1.14.5
+      '@grpc/grpc-js': 1.14.7
       abort-controller-x: 0.5.0
       nice-grpc-common: 2.0.4
 
@@ -54640,7 +54588,7 @@ snapshots:
       '@csstools/postcss-trigonometric-functions': 4.0.9(postcss@8.5.23)
       '@csstools/postcss-unset-value': 4.0.0(postcss@8.5.23)
       autoprefixer: 10.6.2(postcss@8.5.23)
-      browserslist: 4.28.7
+      browserslist: 4.29.5
       css-blank-pseudo: 7.0.1(postcss@8.5.23)
       css-has-pseudo: 7.0.3(postcss@8.5.23)
       css-prefers-color-scheme: 10.0.0(postcss@8.5.23)
@@ -57002,7 +56950,7 @@ snapshots:
     dependencies:
       commander: 12.1.0
 
-  suffix-thumb@6.0.0: {}
+  suffix-thumb@6.1.0: {}
 
   superagent@10.4.1(supports-color@10.2.2):
     dependencies:
@@ -57152,14 +57100,6 @@ snapshots:
       - bare-abort-controller
       - bare-buffer
       - react-native-b4a
-
-  tar@7.5.21:
-    dependencies:
-      '@isaacs/fs-minipass': 4.0.1
-      chownr: 3.0.0
-      minipass: 7.1.3
-      minizlib: 3.1.0
-      yallist: 5.0.0
 
   tar@7.5.22:
     dependencies:
@@ -57334,7 +57274,7 @@ snapshots:
       json-rpc-2.0: 1.8.1
       sqids: 0.3.0
       uri-template-matcher: 1.1.2
-      valibot: 1.4.2(typescript@7.0.2)
+      valibot: 1.5.0(typescript@7.0.2)
     transitivePeerDependencies:
       - typescript
 
@@ -57854,12 +57794,6 @@ snapshots:
 
   untildify@4.0.0: {}
 
-  update-browserslist-db@1.3.4(browserslist@4.28.7):
-    dependencies:
-      browserslist: 4.28.7
-      escalade: 3.2.0
-      picocolors: 1.1.1
-
   update-browserslist-db@1.3.4(browserslist@4.29.5):
     dependencies:
       browserslist: 4.29.5
@@ -57959,10 +57893,6 @@ snapshots:
   valibot@1.4.2(typescript@5.9.3):
     optionalDependencies:
       typescript: 5.9.3
-
-  valibot@1.4.2(typescript@7.0.2):
-    optionalDependencies:
-      typescript: 7.0.2
 
   valibot@1.5.0(typescript@6.0.3):
     optionalDependencies:
@@ -58292,11 +58222,11 @@ snapshots:
     transitivePeerDependencies:
       - msw
 
-  voyageai@0.3.1(encoding@0.1.14)(onnxruntime-node@1.24.3):
+  voyageai@0.3.1(encoding@0.1.14)(onnxruntime-node@1.30.0):
     dependencies:
       node-fetch: 2.7.0(encoding@0.1.14)
     optionalDependencies:
-      onnxruntime-node: 1.24.3
+      onnxruntime-node: 1.30.0
     transitivePeerDependencies:
       - encoding
 

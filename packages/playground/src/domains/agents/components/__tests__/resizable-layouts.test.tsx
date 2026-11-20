@@ -1,11 +1,10 @@
+import { ThreadsPanelProvider, useThreadsPanel } from '@mastra/playground-ui/domains/agents/chat';
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode, Ref } from 'react';
 import { useImperativeHandle } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type * as MemoryTimelineContext from '../../context/memory-timeline-context';
-import { ThreadsPanelProvider } from '../../context/threads-panel-context';
-import { useThreadsPanel } from '../../context/use-threads-panel';
 import { AgentLayout } from '../agent-layout';
 
 const resizeLeftPanel = vi.hoisted(() => vi.fn());

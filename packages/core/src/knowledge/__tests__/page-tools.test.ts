@@ -201,6 +201,35 @@ describe('Knowledge page tools (spec §10 scenarios, in-memory store)', () => {
     ).rejects.toThrow(/not found/);
   });
 
+  it("a note added without scope is stamped with the page's home scope", async () => {
+    const alex = as('alex', ['org:acme', 'agent:acme:alex']);
+    const bea = as('bea', ['org:acme', 'agent:acme:bea']);
+    const shared = await alex.page({ op: 'write', scope: 'org:acme', name: 'Billing Service' });
+    const mine = await alex.page({ op: 'write', scope: 'agent:acme:alex', name: 'Alex Scratch' });
+
+    const onShared = await alex.note({ op: 'add', page: 'Billing Service', text: 'Owned by payments.' });
+    const onEmpty = await alex.note({ op: 'add', page: 'Billing Service', scope: [], text: 'Runs on Postgres.' });
+    const onMine = await alex.note({ op: 'add', page: 'Alex Scratch', text: 'Ask Bea about retries.' });
+
+    const stamps = async (id: string) => (await store.getNote({ id, read: 'all' }))!.stampScopeIds;
+    const homeOf = async (id: string) => (await store.getPage({ id, read: 'all' }))!.scopeId;
+    expect(await stamps(onShared.note.id)).toEqual([await homeOf(shared.page.id)]);
+    expect(await stamps(onEmpty.note.id)).toEqual([await homeOf(shared.page.id)]);
+    expect(await stamps(onMine.note.id)).toEqual([await homeOf(mine.page.id)]);
+
+    // Readers of the page's scope see the note; a private page's note stays private.
+    expect((await bea.read('Billing Service')).notes.map((n: Result) => n.text)).toEqual([
+      'Owned by payments.',
+      'Runs on Postgres.',
+    ]);
+    expect((await alex.read('Alex Scratch')).notes.map((n: Result) => n.text)).toEqual(['Ask Bea about retries.']);
+    expect((await bea.search('retries')).results).toEqual([]);
+
+    // Restamping still names its scopes.
+    await expect(alex.note({ op: 'restamp', note: onShared.note.id })).rejects.toThrow(/needs scope/);
+    await expect(alex.note({ op: 'restamp', note: onShared.note.id, scope: [] })).rejects.toThrow(/needs scope/);
+  });
+
   it('tells the model page bodies and notes are markdown', () => {
     const describe = (tool: string) =>
       (
@@ -221,6 +250,22 @@ describe('Knowledge page tools (spec §10 scenarios, in-memory store)', () => {
     ).properties;
     expect(read.from!.description).toMatch(/token cap/);
     expect(read.limit!.description).toMatch(/not a line count/i);
+  });
+
+  it("tells the model a note's scope is optional on add and defaults to the page's scope", () => {
+    const schema = tools.knowledge_note!.inputSchema as Parameters<typeof validateToolInput>[0];
+    const modelSchema = standardSchemaToJSONSchema(schema!, { io: 'input' }) as {
+      required?: string[];
+      properties: { scope: { description?: string } };
+    };
+    expect(modelSchema.required ?? []).not.toContain('scope');
+    expect(modelSchema.properties.scope.description).toMatch(/defaults to the page's scope/);
+    for (const input of [
+      { op: 'add', page: 'Launch', text: 'Shipped.' },
+      { op: 'add', page: 'Launch', scope: [], text: 'Shipped.' },
+    ]) {
+      expect(validateToolInput(schema, input, 'knowledge_note')).toEqual({ data: input });
+    }
   });
 
   it('a note accepts a plain date or a date-time for when', async () => {

@@ -61,6 +61,7 @@
     "nano-banana-pro",
     "particle-1:free",
     "qwen3-7-plus",
+    "qwen4-max:free",
     "step-3-7-flash",
     "step-5-preview",
     "whisper-1",
@@ -120,6 +121,7 @@
     "particle-1:free",
     "qwen3-7-plus",
     "qwen3-8-max",
+    "qwen4-max:free",
     "solar-mini4:free",
     "step-3-7-flash",
     "step-5-preview",
@@ -147,64 +149,10 @@
     "kimi-k3"
   ],
   "reasoning": {
-    "muse-ember-1-0": [
+    "kimi-k3-1-pro": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "muse-wonder-1-0": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "nano-banana-pro": [
-      {
-        "type": "effort",
-        "values": ["low", "high"]
-      }
-    ],
-    "gpt-6-1-terra": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "glm-5-2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "xhigh"]
-      }
-    ],
-    "nano-banana-2-lite": [
-      {
-        "type": "effort",
-        "values": ["minimal", "high"]
-      }
-    ],
-    "gpt-6-1-sol": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "hy4-flash:free": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "claude-opus-5-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "gpt-5-6-sol": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
     "claude-haiku-5-5": [
@@ -213,25 +161,61 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "gpt-oss-20b": [
+    "nano-banana-2": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["minimal", "high"]
       }
     ],
-    "minimax-m3-1-flash": [
+    "claude-fable-5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "qwen3-8-max": [
+    "gemini-3-8-flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "xhigh"]
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "qwen4-max:free": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "xhigh"]
       }
     ],
     "step-5-preview": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "claude-opus-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "nano-banana-2-lite": [
+      {
+        "type": "effort",
+        "values": ["minimal", "high"]
+      }
+    ],
+    "gemini-3-1-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "claude-opus-5-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "grok-4-5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -243,45 +227,10 @@
         "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ],
-    "muse-spark-1-3": [
+    "kimi-k3": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "grok-4-6": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "gemini-3-1-flash-lite": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "gemini-3-1-pro": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "claude-opus-4-8": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "glm-4-7-flash:free": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nemotron-3-ultra-550b-a55b": [
-      {
-        "type": "effort",
-        "values": ["none", "medium", "high"]
+        "values": ["low", "high", "max"]
       }
     ],
     "gpt-6-sol": [
@@ -290,34 +239,40 @@
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "gpt-6-2-sol": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "muse-spark-1-2-contributor": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "gemini-3-8-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "hy3": [
       {
         "type": "effort",
         "values": ["none", "low", "high"]
+      }
+    ],
+    "muse-spark-1-3-contributor": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepseek-v4-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "muse-spark-1-3": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gpt-6-1-terra": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "nemotron-3-super-120b-a12b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium"]
       }
     ],
     "gemini-3-6-flash": [
@@ -326,7 +281,19 @@
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "glm-5-3-flash": [
+    "nemotron-3-ultra-550b-a55b:free": [
+      {
+        "type": "effort",
+        "values": ["none", "medium", "high"]
+      }
+    ],
+    "nano-banana-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "high"]
+      }
+    ],
+    "glm-5-3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -338,16 +305,22 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "grok-4-7": [
+    "muse-ember-1-0": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "grok-4-6": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "claude-sonnet-4-6": [
+    "glm-5-3-flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
     "claude-opus-4-7": [
@@ -356,28 +329,70 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "muse-glimmer-30b:free": [
+    "gpt-6-2-sol": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "grok-4-7": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "muse-spark-1-3-contributor": [
+    "muse-spark-1-2-contributor": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ],
-    "beam-1-0:free": [
+    "solar-mini4:free": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "claude-opus-5": [
+    "particle-1:free": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "nemotron-3-ultra-550b-a55b": [
+      {
+        "type": "effort",
+        "values": ["none", "medium", "high"]
+      }
+    ],
+    "gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "claude-sonnet-4-6": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "max"]
+      }
+    ],
+    "gpt-oss-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "qwen3-8-max": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "hy4-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ],
     "gpt-6-2-astra": [
@@ -392,10 +407,10 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "hy4-flash": [
+    "minimax-m3-1-flash": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "step-3-7-flash": [
@@ -404,28 +419,21 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "hy4": [
+    "deepseek-v4-1-flash": [
       {
         "type": "effort",
-        "values": ["none", "low", "high"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
-    "grok-4-5": [
+    "glm-4-7-flash:free": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "type": "toggle"
       }
     ],
-    "kimi-k3": [
+    "gemini-3-1-flash-lite": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "gpt-6-luna": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+        "values": ["minimal", "low", "medium", "high"]
       }
     ],
     "claude-sonnet-5": [
@@ -434,28 +442,28 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
+    "gpt-5-6-luna": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "gemini-3-7-flash": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "glm-5-3": [
+    "muse-glimmer-30b:free": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "nemotron-3-ultra-550b-a55b:free": [
+    "gpt-5-6-sol": [
       {
         "type": "effort",
-        "values": ["none", "medium", "high"]
-      }
-    ],
-    "nano-banana-2": [
-      {
-        "type": "effort",
-        "values": ["minimal", "high"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "gpt-6-astra": [
@@ -464,52 +472,52 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "nemotron-3-super-120b-a12b": [
+    "claude-opus-4-8": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "deepseek-v4-1-flash": [
+    "glm-5-2": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["none", "high", "xhigh"]
       }
     ],
-    "deepseek-v4-pro": [
+    "gpt-6-1-sol": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "particle-1:free": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "kimi-k3-1-pro": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "solar-mini4:free": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "gpt-5-6-luna": [
+    "gpt-6-luna": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "claude-fable-5": [
+    "muse-wonder-1-0": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "beam-1-0:free": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "hy4": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
+      }
+    ],
+    "hy4-flash:free": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ]
   }

@@ -89,19 +89,7 @@
     "zai-glm-5-3-flash"
   ],
   "reasoning": {
-    "glm-5-2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "zai-glm-5-2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "mistral-large-4-0-8": [
+    "mistral-large-latest": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -113,16 +101,16 @@
         "values": ["none", "high"]
       }
     ],
-    "mistral-small-2603": [
+    "mistral-large-4-0-8": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "mistral-medium-2604": [
       {
         "type": "effort",
         "values": ["none", "high"]
-      }
-    ],
-    "deepseek-v4-1-flash-1017": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
       }
     ],
     "zai-glm-5-3-flash": [
@@ -131,7 +119,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "mistral-medium-2604": [
+    "mistral-small-2603": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -143,16 +131,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "magistral-medium-latest": [
+    "deepseek-v4-1-flash-1017": [
       {
         "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "mistral-large-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "mistral-large-4": [
@@ -161,13 +143,31 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "mistral-medium-latest": [
+    "zai-glm-5-2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "magistral-medium-latest": [
       {
         "type": "effort",
         "values": ["none", "high"]
       }
     ],
+    "glm-5-2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
     "labs-leanstral-1-5-1": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "mistral-medium-latest": [
       {
         "type": "effort",
         "values": ["none", "high"]

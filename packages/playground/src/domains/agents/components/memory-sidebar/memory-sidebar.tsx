@@ -2,20 +2,20 @@ import type { StorageThreadType } from '@mastra/core/memory';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { getObservationWindowTokens } from '@mastra/playground-ui/domains/agents/chat/memory-sidebar/lib/observation-window';
+import type { OmAgentConfig } from '@mastra/playground-ui/domains/agents/chat/memory-sidebar/lib/observation-window';
+import { useMemoryFeatureFlags } from '@mastra/playground-ui/domains/agents/chat/memory-sidebar/use-memory-feature-flags';
+import { useMemorySidebarTab } from '@mastra/playground-ui/domains/agents/chat/memory-sidebar/use-memory-sidebar-tab';
+import { SidebarPanel } from '@mastra/playground-ui/domains/agents/chat/sidebar-panel';
 import { MemorySidebarView } from '@mastra/playground-ui/domains/memory/components/memory-sidebar-view';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 import { useObservationalMemory, useMemoryConfig, useThread, useMemory } from '@mastra/react/hooks/memory';
 import { AgentCapabilitiesFooter } from './agent-capabilities-footer';
 import { AgentMemory } from './agent-memory';
-import { getObservationWindowTokens } from './lib/observation-window';
-import type { OmAgentConfig } from './lib/observation-window';
 import { MemoryDetailView } from './memory-detail-view';
-import { useMemoryFeatureFlags } from './use-memory-feature-flags';
-import { useMemorySidebarTab } from './use-memory-sidebar-tab';
 import './memory-sidebar.css';
 import { ChatThreads } from '@/domains/agents/components/chat-threads';
-import { SidebarPanel } from '@/domains/agents/components/sidebar-panel';
 import { useMemoryTimeline, useObservationalMemoryContext } from '@/domains/agents/context';
 
 export interface MemorySidebarProps {
