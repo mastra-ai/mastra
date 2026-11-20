@@ -6,6 +6,11 @@ type StoredRecord = { status?: string; startedAt?: number; endedAt?: number; met
 
 const TERMINAL_STATUSES = new Set(['success', 'failed', 'canceled', 'tripwire']);
 
+/** Whether a run stored with `status` has ended. */
+export function isEndedRunStatus(status: string | undefined): boolean {
+  return TERMINAL_STATUSES.has(status!);
+}
+
 /**
  * The branch statuses `aggregateBranchResults` counts as accounted for. Once every branch of a
  * parallel or conditional entry has one, a branch's completion aggregates the entry: it goes past
