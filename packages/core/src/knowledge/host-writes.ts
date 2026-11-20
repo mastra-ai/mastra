@@ -34,10 +34,13 @@ export interface KnowledgeUpsertPageInput {
   /** Recorded as the writer. Default `host`. */
   author?: string;
   /**
-   * The page as the caller read it. With it the write only updates that page, and only while it is
-   * still at that version and at `scope#path`; otherwise (edited, moved, removed, or replaced by a new
-   * page at the same path) it throws `KnowledgeConflictError` and writes nothing: no page, scope or
-   * parent is created. A write prepared from a stale read never replaces someone else's edit.
+   * The page as the caller read it, by id and version. The call refuses unless `scope#path` holds
+   * that page at that version when it looks the page up, then updates that page by id, guarded by its
+   * version. If the page was edited, moved, removed, or replaced by a new page at the same path, it
+   * throws `KnowledgeConflictError` and writes nothing: no page, scope or parent is created. A write
+   * prepared from a stale read never replaces someone else's edit. The path is checked at lookup only:
+   * a parent page moved between the lookup and the write carries the page with it, and the write
+   * still lands on that same page.
    */
   expected?: { id: string; version: number };
 }
@@ -241,7 +244,9 @@ async function afterPageWrite(
 /**
  * `upsertPage` with `expected`: updates only the page the caller read, at the version it read. Reads
  * only, so a missing scope or parent stays missing; the store's version check makes the write itself
- * atomic against any writer that commits between this read and the update.
+ * atomic against any writer of this page that commits between this read and the update. The path
+ * is only how the page is found: moving a parent page bumps neither the page's version nor any
+ * field every store keeps, so a parent moved in between is followed, not refused.
  */
 async function updateExpectedPage(
   host: KnowledgeHostWriter,

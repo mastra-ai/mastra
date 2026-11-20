@@ -9,7 +9,7 @@ const conflict = { name: 'KnowledgeConflictError' };
 /**
  * `Knowledge.upsertPage` with `expected` against a real adapter: it updates only the page the host
  * read, at the version it read, and refuses (writing nothing) once that page was edited, removed or
- * replaced by a new page at the same path. `createStore` returns a fresh or cleared store each time.
+ * replaced by a new page at the same path. A parent page moved after the read is followed. `createStore` returns a fresh or cleared store each time.
  */
 export function createKnowledgeHostWriteTests(createStore: () => Promise<KnowledgeStorage> | KnowledgeStorage): void {
   describe('Knowledge host writes with an expected page (schema 4)', () => {
@@ -53,6 +53,34 @@ export function createKnowledgeHostWriteTests(createStore: () => Promise<Knowled
         knowledge.upsertPage({ ...faq, body: 'imported', expected: { id: page.id, version: 1 } }),
       ).rejects.toMatchObject(conflict);
       expect((await store.getPage({ id: replacement.page.id, read: 'all' }))?.body).toBe('Replacement');
+    });
+
+    it('follows the page it read when a parent page is moved between the read and the write', async () => {
+      const { page } = await knowledge.upsertPage({ ...faq, body: 'placeholder' });
+      const archive = await knowledge.upsertPage({ scope: 'org:acme', path: 'archive', name: 'Archive' });
+      const update = store.updatePage.bind(store);
+      store.updatePage = async input => {
+        store.updatePage = update;
+        const guides = (await store.getPage({ id: page.parentId!, read: 'all' }))!;
+        await store.movePage({
+          id: guides.id,
+          expectedVersion: guides.version,
+          parentId: archive.page.id,
+          provenance: { author: 'agent:a' },
+        });
+        return update(input);
+      };
+
+      const filled = await knowledge.upsertPage({ ...faq, body: 'imported', expected: { id: page.id, version: 1 } });
+      expect(filled).toMatchObject({ status: 'updated', page: { id: page.id, version: 2, body: 'imported' } });
+      const moved = await store.getPageByPath({
+        scopeId: page.scopeId,
+        path: ['archive', 'guides', 'faq'],
+        read: 'all',
+      });
+      expect(moved?.id).toBe(page.id);
+      expect(await knowledge.removePage(faq)).toBeNull();
+      expect(await knowledge.removePage({ scope: 'org:acme', path: 'guides' })).toBeNull();
     });
 
     it('refuses a page edited or removed after its read, and creates nothing in its place', async () => {
