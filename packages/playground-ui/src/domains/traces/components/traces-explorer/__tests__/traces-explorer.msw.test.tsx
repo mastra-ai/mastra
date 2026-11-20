@@ -12,7 +12,13 @@ import {
 } from '../../../trace-filters';
 import { serializeTraceColumnPreferences } from '../../../trace-list-columns';
 import type { TraceColumnPreferences } from '../../../trace-list-columns';
-import { TracesExplorer, useTracesConfig, useTracesFilterBar, useTracesFilterBarFields } from '../index';
+import {
+  TracesExplorer,
+  useTracesConfig,
+  useTracesFilterBar,
+  useTracesFilterBarFields,
+  useTracesFilters,
+} from '../index';
 import type {
   FeedbackOptions,
   TracesExplorerFeatures,
@@ -743,6 +749,22 @@ describe('TracesExplorer', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
 
       expect(onChange.mock.calls.at(-1)?.[0].filters.tokens).toEqual(SCOPE_TOKENS);
+    });
+
+    it('does not count the scope tokens as applied filters', async () => {
+      function FiltersAppliedProbe() {
+        const { contentFiltersApplied } = useTracesFilters();
+        return <output aria-label="content filters applied">{String(contentFiltersApplied)}</output>;
+      }
+      setExplorerHandlers();
+      const result = renderExplorer({
+        scope: { entityId: 'weather-agent', entityType: 'agent' },
+        initialFilters: { ...DEFAULT_TRACES_FILTERS, tokens: SCOPE_TOKENS },
+        tabs: <FiltersAppliedProbe />,
+      });
+      await settle(result.queryClient);
+
+      expect(screen.getByLabelText('content filters applied').textContent).toBe('false');
     });
   });
 
