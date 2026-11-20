@@ -1,8 +1,9 @@
+import type { ConnectClient } from '@mastra/connect';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
-import type { MastraWorker } from '@mastra/core/worker';
 
+import type { MastraWorker } from '@mastra/core/worker';
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
 import type { Intake, IntakeIssue, IntakeIssueDetail, UpdateIntakeIssueInput } from '../../../capabilities/intake.js';
 import { loose } from '../../../routes/route.js';
@@ -18,21 +19,14 @@ import type {
   LinearIssueDetail as LinearRouteIssueDetail,
 } from '../../linear/integration.js';
 import { attachLinearIssueReconciler } from '../../linear/issue-reconciler.js';
-import {
-  linearIssueReconciliationEnabled,
-  linearIssueReconciliationInterval,
-} from '../../linear/reconciliation-config.js';
+import { linearIssueReconciliationInterval } from '../../linear/reconciliation-config.js';
 import { buildLinearRoutes } from '../../linear/routes.js';
 import type { LinearWorkspaceListingError } from '../../linear/routes.js';
 import { attachLinearRules } from '../../linear/rules.js';
 import type { LinearConnectionData, LinearConnectionRow, LinearStorageHandle } from '../../linear/storage.js';
-import {
-  logPlatformInfo,
-  logPlatformWarn,
-  PlatformApiClient,
-  PlatformApiError,
-  platformApiClientConfigFromEnv,
-} from '../api-client.js';
+import { logPlatformBootInfo, logPlatformInfo, logPlatformWarn } from '../logging.js';
+import { createPlatformConnectClient, platformErrorStatus, platformRedirectLocation } from '../platform-connect.js';
+import type { PlatformConnectOption } from '../platform-connect.js';
 import { PlatformLinearEventWorker } from './event-worker.js';
 import type { PlatformLinearEventStorage } from './event-worker.js';
 
@@ -108,7 +102,7 @@ function routeBaseUrl(ctx: IntegrationContext, requestUrl: string): string {
 
 export class PlatformLinearIntegration implements FactoryIntegration {
   readonly id = 'linear';
-  readonly #client: PlatformApiClient;
+  readonly #client: ConnectClient;
   readonly #endpointHost: string;
   #projects: FactoryProjectsStorage | undefined;
   #auth: RouteAuth | undefined;
@@ -198,7 +192,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         const comment = await this.#client.request<LinearComment>(
           'POST',
           `${API_PREFIX}/workspaces/${encodeURIComponent(workspaceId)}/issues/${encodeURIComponent(issueId)}/comments`,
-          { body },
+          { body: { body } },
         );
         return { id: comment.id, url: comment.url };
       } catch (error) {
@@ -259,7 +253,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         await this.#client.request<LinearIssue>(
           'PATCH',
           `${API_PREFIX}/workspaces/${encodeURIComponent(workspaceId)}/issues/${encodeURIComponent(input.issueId)}`,
-          { stateId: matched.id },
+          { body: { stateId: matched.id } },
         );
       } catch (error) {
         if (isNotFound(error)) return null;
@@ -277,11 +271,10 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     return this.#rules;
   }
 
-  constructor({ rules }: { rules?: LinearRuleOverrides } = {}) {
+  constructor({ rules, connect }: { rules?: LinearRuleOverrides; connect?: PlatformConnectOption } = {}) {
     this.#rules = resolveLinearRules(rules);
-    const config = platformApiClientConfigFromEnv();
-    this.#client = new PlatformApiClient(config);
-    this.#endpointHost = new URL(config.baseUrl).host;
+    this.#client = createPlatformConnectClient(connect);
+    this.#endpointHost = new URL(this.#client.baseUrl).host;
   }
 
   get storage(): LinearStorageHandle {
@@ -317,7 +310,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   initialize({ projects, auth }: { projects: FactoryProjectsStorage; auth?: RouteAuth }): void {
     this.#projects = projects;
     this.#auth = auth;
-    logPlatformInfo('Platform Linear integration initialized', { endpointHost: this.#endpointHost });
+    logPlatformBootInfo('Platform Linear integration initialized', { endpointHost: this.#endpointHost });
   }
 
   get authEnabled(): boolean {
@@ -399,11 +392,8 @@ export class PlatformLinearIntegration implements FactoryIntegration {
 
   workers(ctx: IntegrationContext): MastraWorker[] {
     const pollingEnabled = process.env.MASTRACODE_PLATFORM_LINEAR_POLLING_ENABLED?.trim().toLowerCase() !== 'false';
-    const reconcileEnabled = linearIssueReconciliationEnabled();
-    if (!pollingEnabled && !reconcileEnabled) return [];
-
     const ingest = attachLinearRules(this, ctx);
-    const reconcile = reconcileEnabled ? attachLinearIssueReconciler(this, ctx) : undefined;
+    const reconcile = attachLinearIssueReconciler(this, ctx);
     const workItems = ctx.runtime?.workItems;
     if (!workItems) return [];
     if (!ingest && !reconcile) return [];
@@ -493,7 +483,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
           originator,
         });
         const query = new URLSearchParams({ return_to: authorizationReturnTo, originator });
-        const location = await this.#client.requestRedirect('GET', `${API_PREFIX}/authorize?${query}`);
+        const location = await platformRedirectLocation(this.#client, 'GET', `${API_PREFIX}/authorize?${query}`);
         return c.redirect(location);
       },
     });
@@ -664,6 +654,10 @@ export class PlatformLinearIntegration implements FactoryIntegration {
 
   async listWorkspaces(): Promise<LinearWorkspace[]> {
     return this.#listWorkspaces();
+  }
+
+  async hasActiveConnections(): Promise<boolean> {
+    return (await this.#listWorkspaces()).length > 0;
   }
 
   async #listWorkspaces(): Promise<LinearWorkspace[]> {
@@ -1105,7 +1099,7 @@ function requireLinearConnection(connection: IntegrationConnection): void {
 }
 
 function isNotFound(error: unknown): boolean {
-  return error instanceof PlatformApiError && error.status === 404;
+  return platformErrorStatus(error) === 404;
 }
 
 /** A provider outage in one workspace must not hide sources from the others. */

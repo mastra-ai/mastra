@@ -106,8 +106,12 @@ class Node {
   }
 }
 
-for (const engine of ['durable', 'evented'] as const) {
-  describe(`run abort route across two servers (${engine}, LibSQL file + Redis)`, () => {
+for (const { engine, busLocation } of [
+  { engine: 'durable', busLocation: 'mastra' },
+  { engine: 'evented', busLocation: 'mastra' },
+  { engine: 'durable', busLocation: 'agent' },
+] as const) {
+  describe(`run abort route across two servers (${engine}, ${busLocation} bus, LibSQL file + Redis)`, () => {
     let llm: LLMock;
     let owner: Node;
     let other: Node;
@@ -157,6 +161,7 @@ for (const engine of ['durable', 'evented'] as const) {
         STORAGE_URL: storage.storageUrl,
         LLM_URL: llm.url.replace(/\/+$/, ''),
         ENGINE: engine,
+        BUS_LOCATION: busLocation,
       };
       const start = async (nodeId: string) => {
         const port = await getFreePort();
@@ -182,14 +187,23 @@ for (const engine of ['durable', 'evented'] as const) {
     });
 
     it('answers aborted: true from the server that does not own the run, and the run ends aborted', async () => {
-      owner.send({ cmd: 'stream' });
+      const threadId = `thread-${randomUUID()}`;
+      const resourceId = 'cross-server-resource';
+      other.send({ cmd: 'subscribe', threadId, resourceId });
+      await other.next(e => e.type === 'subscribed');
+      owner.send({ cmd: 'stream', threadId, resourceId });
       const { runId } = await owner.next(e => e.type === 'run');
       await owner.next(e => e.type === 'tool-started');
+      await other.next(e => e.type === 'thread-chunk' && e.chunkType === 'tool-call');
+      other.send({ cmd: 'observe', runId });
+      await other.next(e => e.type === 'observed-chunk' && e.chunkType === 'tool-call');
 
       const first = await other.abort(runId);
       expect(first).toEqual({ status: 200, body: { aborted: true } });
 
       const done = await owner.next(e => e.type === 'stream-done', 15_000);
+      await other.next(e => e.type === 'observe-done', 15_000);
+      expect(other.events.filter(e => e.type === 'observed-chunk').at(-1)?.chunkType).toBe('finish');
       const finished = owner.events.find(e => e.type === 'tool-finished');
       expect(finished?.aborted).toBe(true);
       expect(done.finishReason).not.toBe('stop');

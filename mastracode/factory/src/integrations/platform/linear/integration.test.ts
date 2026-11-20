@@ -130,26 +130,23 @@ describe('PlatformLinearIntegration', () => {
       return { app, integration };
     }
 
-    it.each([true, false])(
-      'lists disconnected workspaces by name (healthy workspace present: %s)',
-      async healthy => {
-        provider.use(
-          http.get(`${config.baseUrl}/v1/server/linear/workspaces`, () =>
-            HttpResponse.json({
-              workspaces: [...(healthy ? [workspace] : []), disconnected],
-            }),
-          ),
-        );
-        const { app } = await recoveryApp();
-        const response = await app.request('/web/linear/status');
-        expect(response.status).toBe(200);
-        await expect(response.json()).resolves.toMatchObject({
-          mode: 'platform',
-          connected: healthy,
-          workspaces: expect.arrayContaining([{ id: 'old', name: 'Mastra', urlKey: 'acme', connected: false }]),
-        });
-      },
-    );
+    it.each([true, false])('lists disconnected workspaces by name (healthy workspace present: %s)', async healthy => {
+      provider.use(
+        http.get(`${config.baseUrl}/v1/server/linear/workspaces`, () =>
+          HttpResponse.json({
+            workspaces: [...(healthy ? [workspace] : []), disconnected],
+          }),
+        ),
+      );
+      const { app } = await recoveryApp();
+      const response = await app.request('/web/linear/status');
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({
+        mode: 'platform',
+        connected: healthy,
+        workspaces: expect.arrayContaining([{ id: 'old', name: 'Mastra', urlKey: 'acme', connected: false }]),
+      });
+    });
 
     it('keeps the intended workspace in the authorization return path and verifies recovery', async () => {
       let restored = false;
@@ -205,28 +202,23 @@ describe('PlatformLinearIntegration', () => {
       '/\\example.org/steal',
       '/.//factory.example//example.org/steal',
       '/%2e//example.org/steal',
-    ])(
-      'keeps the authorization return on the Factory host for %s',
-      async returnTo => {
-        let authorizationReturnTo: string | null = null;
-        provider.use(
-          http.get(`${config.baseUrl}/v1/server/linear/workspaces`, () =>
-            HttpResponse.json({ workspaces: [workspace] }),
-          ),
-          http.get(`${config.baseUrl}/v1/server/linear/authorize`, ({ request }) => {
-            authorizationReturnTo = new URL(request.url).searchParams.get('return_to');
-            return new HttpResponse(null, { status: 302, headers: { location: 'https://linear.app/oauth/authorize' } });
-          }),
-        );
-        const { app } = await recoveryApp();
-        await app.request(`/auth/linear/connect?${new URLSearchParams({ return_to: returnTo })}`);
-        expect(authorizationReturnTo).toBe('/');
-        const result = await app.request(
-          `/auth/linear/reconnect-return?${new URLSearchParams({ workspace_id: 'workspace-1', return_to: returnTo })}`,
-        );
-        expect(result.headers.get('location')).toBe('/?linear_reconnect=connected&linear_workspace_id=workspace-1');
-      },
-    );
+    ])('keeps the authorization return on the Factory host for %s', async returnTo => {
+      let authorizationReturnTo: string | null = null;
+      provider.use(
+        http.get(`${config.baseUrl}/v1/server/linear/workspaces`, () => HttpResponse.json({ workspaces: [workspace] })),
+        http.get(`${config.baseUrl}/v1/server/linear/authorize`, ({ request }) => {
+          authorizationReturnTo = new URL(request.url).searchParams.get('return_to');
+          return new HttpResponse(null, { status: 302, headers: { location: 'https://linear.app/oauth/authorize' } });
+        }),
+      );
+      const { app } = await recoveryApp();
+      await app.request(`/auth/linear/connect?${new URLSearchParams({ return_to: returnTo })}`);
+      expect(authorizationReturnTo).toBe('/');
+      const result = await app.request(
+        `/auth/linear/reconnect-return?${new URLSearchParams({ workspace_id: 'workspace-1', return_to: returnTo })}`,
+      );
+      expect(result.headers.get('location')).toBe('/?linear_reconnect=connected&linear_workspace_id=workspace-1');
+    });
 
     it.each(['projects', 'issues'])(
       'keeps healthy workspace intake working when another workspace fails to load %s',
@@ -455,7 +447,7 @@ describe('PlatformLinearIntegration', () => {
         });
         await expect(reconcile?.()).resolves.toMatchObject({ checked: 1, updated: 1, failed: 0 });
         await expect(seed.workItems.get({ orgId: project.orgId, id: item.id })).resolves.toMatchObject({
-          workItem: expect.objectContaining({ metadata: expect.objectContaining({linearProjectId: expected}) }),
+          workItem: expect.objectContaining({ metadata: expect.objectContaining({ linearProjectId: expected }) }),
         });
         await expect(reconcile?.()).resolves.toMatchObject({ checked: 1, updated: 0, failed: 0 });
       },
@@ -465,7 +457,11 @@ describe('PlatformLinearIntegration', () => {
   describe('when a Linear issue is new to Factory', () => {
     async function firstSight() {
       const seed = await createPlatformStorageForTests();
-      const factoryProject = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
+      const factoryProject = await seed.projects.create({
+        orgId: 'org-1',
+        userId: 'user-1',
+        input: { name: 'Factory' },
+      });
       await seed.intake.saveConfig({
         orgId: 'org-1',
         config: { linear: { enabled: true, sourceIds: [project1SourceId] } },
@@ -489,7 +485,7 @@ describe('PlatformLinearIntegration', () => {
         (await seed.workItems.listDeferredDecisions('org-1', factoryProject.id)).map(
           record => (record.decision as { sourceKey?: string }).sourceKey,
         );
-      return { seed, factoryProject, integration, runtime, filed };
+      return { seed, integration, runtime, filed };
     }
 
     it('files it from the reconcile sweep with no board open', async () => {
@@ -501,35 +497,6 @@ describe('PlatformLinearIntegration', () => {
 
       await expect(reconcile?.()).resolves.toMatchObject({ observed: 1, failed: 0 });
       expect(await filed()).toEqual(['linear:ENG-42']);
-    });
-
-    it('does not file it when someone views the board', async () => {
-      const { seed, factoryProject, integration, runtime, filed } = await firstSight();
-      const sourceControl = seed.sourceControl.forIntegration('linear');
-      const context: IntegrationContext = {
-        auth: fakeAuth(),
-        baseUrl: 'https://factory.example',
-        stateSigner: createStateSigner('test-secret'),
-        storage: {
-          generic: seed.integrations.forIntegration('linear'),
-          sourceControl,
-          sourceControls: [sourceControl],
-          projects: seed.projects,
-          intake: seed.intake,
-          memorySettings: seed.memorySettings,
-          modelDefaults: seed.modelDefaults,
-          channelIdentity: seed.channelIdentity,
-        },
-        runtime,
-      };
-      const app = new Hono();
-      mountApiRoutes(app, integration.routes(context));
-
-      const res = await app.request(`/web/linear/issues?factoryProjectId=${factoryProject.id}`);
-
-      expect(res.status).toBe(200);
-      expect((await res.json()).issues).toMatchObject([{ identifier: 'ENG-42' }]);
-      expect(await filed()).toEqual([]);
     });
   });
 
@@ -1269,7 +1236,7 @@ describe('PlatformLinearIntegration', () => {
         connection: { type: 'oauth', accessToken: 'unused-provider-token' },
         sourceIds: [project1SourceId],
       }),
-    ).rejects.toMatchObject({ status: 429, retryAfterSeconds: 11 });
+    ).rejects.toMatchObject({ status: 429, retryAfterMs: 11000 });
   });
 
   it('rejects GitHub-style app-installation connections', async () => {
@@ -1339,7 +1306,6 @@ describe('PlatformLinearIntegration', () => {
         '/web/linear/status',
         '/web/linear/projects',
         '/web/linear/teams',
-        '/web/linear/issues',
       ]),
     );
     expect(routes.some(route => route.path === '/auth/linear/callback')).toBe(false);
@@ -1453,9 +1419,14 @@ describe('PlatformLinearIntegration', () => {
       if ('handler' in route) app.on(route.method, route.path, route.handler as never);
     }
 
-    const response = await app.request(`/web/linear/issues?factoryProjectId=${projectRecord.id}`);
+    const detail = await app.request(`/web/linear/issues/ENG-42?factoryProjectId=${projectRecord.id}`);
 
-    expect(response.status).toBe(200);
+    expect(detail.status).toBe(200);
+    await expect(detail.json()).resolves.toMatchObject({
+      identifier: 'ENG-42',
+      title: 'Fix intake',
+      description: 'Issue body',
+    });
     expect(onEvent).not.toHaveBeenCalled();
     await expect(attachLinearIssueReconciler(integration, context)?.()).resolves.toMatchObject({
       observed: 1,
@@ -1468,13 +1439,6 @@ describe('PlatformLinearIntegration', () => {
         issue: expect.objectContaining({ id: 'issue-1', identifier: 'ENG-42' }),
       }),
     );
-    const detail = await app.request(`/web/linear/issues/ENG-42?factoryProjectId=${projectRecord.id}`);
-    expect(detail.status).toBe(200);
-    await expect(detail.json()).resolves.toMatchObject({
-      identifier: 'ENG-42',
-      title: 'Fix intake',
-      description: 'Issue body',
-    });
   });
 
   it('defaults the integrations API URL and requires a platform credential', () => {
@@ -1518,21 +1482,21 @@ describe('PlatformLinearIntegration', () => {
     ]);
   });
 
-  it('keeps event polling active when issue reconciliation is disabled', () => {
+  it('keeps sweeping on a server that still sets the old off switches', () => {
+    vi.stubEnv('MASTRACODE_LINEAR_RECONCILE_ENABLED', 'false');
     vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED', 'false');
     const integration = new PlatformLinearIntegration() as unknown as {
       workers(ctx: unknown): Array<{ config: { pollEventsEnabled: boolean; reconcileFactoryState?: unknown } }>;
     };
 
-    const config = integration.workers(workerContext)[0]?.config;
-    expect(config?.pollEventsEnabled).toBe(true);
-    expect(config).not.toHaveProperty('reconcileFactoryState');
+    expect(integration.workers(workerContext)[0]?.config).toMatchObject({
+      pollEventsEnabled: true,
+      reconcileFactoryState: expect.any(Function),
+    });
   });
 
   it('registers only issue reconciliation when event polling is disabled', () => {
     vi.stubEnv('MASTRACODE_PLATFORM_LINEAR_POLLING_ENABLED', 'false');
-    vi.stubEnv('MASTRACODE_LINEAR_RECONCILE_ENABLED', 'false');
-    vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED', 'true');
     const integration = new PlatformLinearIntegration() as unknown as {
       workers(ctx: unknown): Array<{ config: { pollEventsEnabled: boolean; reconcileFactoryState?: unknown } }>;
     };
@@ -1541,15 +1505,5 @@ describe('PlatformLinearIntegration', () => {
       pollEventsEnabled: false,
       reconcileFactoryState: expect.any(Function),
     });
-  });
-
-  it('does not register when polling and issue reconciliation are disabled', () => {
-    vi.stubEnv('MASTRACODE_PLATFORM_LINEAR_POLLING_ENABLED', 'false');
-    vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED', 'false');
-    const integration = new PlatformLinearIntegration() as unknown as {
-      workers(ctx: unknown): Array<{ name: string }>;
-    };
-
-    expect(integration.workers(workerContext)).toEqual([]);
   });
 });

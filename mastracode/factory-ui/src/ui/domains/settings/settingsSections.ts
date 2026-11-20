@@ -4,7 +4,6 @@ import type { ModelDefaults } from './components/models/routing/model-routes';
 
 export type SettingsSection =
   | 'account'
-  | 'preferences'
   | 'factory'
   | 'connections'
   | 'repositories'
@@ -17,7 +16,6 @@ export type SettingsSection =
 
 export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   account: 'My account',
-  preferences: 'Preferences',
   factory: 'Manage Factory',
   connections: 'Connections',
   repositories: 'Repositories',
@@ -43,14 +41,12 @@ export function sessionDefaultsAnchor(modelScope: FactoryModelScope | undefined)
 
 export const VOICE_INPUT_ANCHOR = 'voice-input';
 
-/** Work Intake's list of routes that decide where new cards land. */
-export const NEW_CARD_ROUTES_ANCHOR = 'new-cards';
-
-type SettingsAnchor = ModelDefaultsAnchor | typeof VOICE_INPUT_ANCHOR | typeof NEW_CARD_ROUTES_ANCHOR;
+type SettingsAnchor = ModelDefaultsAnchor | typeof VOICE_INPUT_ANCHOR;
 
 type SettingsTarget = { section: SettingsSection; anchor?: ModelDefaultsAnchor };
 
 const RETIRED_SETTINGS_SECTIONS = new Map<string, SettingsTarget>([
+  ['preferences', { section: 'account' }],
   ['personal-models', { section: 'models', anchor: MODEL_DEFAULTS_ANCHORS.personal }],
   ['factory-memory', { section: 'memory' }],
   ['environment', { section: 'repositories' }],

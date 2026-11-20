@@ -34,40 +34,11 @@ export interface LinearWorkspaceConnection {
   connected: boolean;
 }
 
-export interface LinearIssue {
-  id: string;
-  /** Human key like `ENG-123`. */
-  identifier: string;
-  title: string;
-  url: string;
-  /** Workflow state name, e.g. `In Progress`. */
-  state: string;
-  /** Workflow state type, e.g. `backlog` / `unstarted` / `started` / `triage`. */
-  stateType: string;
-  priorityLabel: string;
-  assignee: string | null;
-  creator?: string | null;
-  team: string | null;
-  /** Selected intake source (project or team); matches an intake binding's `sourceId`. */
-  sourceId?: string | null;
-  /** Actual Linear project, even when the issue was routed through a team. */
-  projectId?: string | null;
-  labels: string[];
-  createdAt: string;
-  updatedAt: string;
-}
-
 export interface LinearIssueDetail {
   identifier: string;
   title: string;
   url: string;
   description: string | null;
-}
-
-export interface LinearIssuePage {
-  issues: LinearIssue[];
-  /** Opaque cursor for the next page, or `null` on the last page. */
-  nextCursor: string | null;
 }
 
 export interface LinearProjectTeam {
@@ -145,17 +116,6 @@ async function getLinearResource<T>(baseUrl: string, path: string): Promise<T> {
  */
 export function isLinearReauthError(err: unknown): boolean {
   return (err as { code?: string } | null)?.code === 'linear_reauth_required';
-}
-
-/** List one cursor page of the workspace's active issues. */
-export async function listLinearIssues(
-  baseUrl: string,
-  factoryProjectId: string,
-  after?: string,
-): Promise<LinearIssuePage> {
-  const params = new URLSearchParams({ factoryProjectId });
-  if (after) params.set('after', after);
-  return getLinearResource<LinearIssuePage>(baseUrl, `/web/linear/issues?${params.toString()}`);
 }
 
 export async function getLinearIssue(

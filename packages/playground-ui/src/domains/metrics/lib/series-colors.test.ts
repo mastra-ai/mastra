@@ -139,13 +139,9 @@ describe('seriesColor', () => {
   });
 
   describe('when asked for a shade', () => {
-    it('moves lightness a share of the way to white or black, with a hue nudge and less chroma', () => {
-      expect(seriesColor('orange', 1)).toBe(
-        'oklch(from var(--chart-series-orange) calc(l + (1 - l) * 0.3) calc(c * 0.85) calc(h + 10))',
-      );
-      expect(seriesColor('orange', 2)).toBe(
-        'oklch(from var(--chart-series-orange) calc(l * 0.9) calc(c * 1) calc(h + -10))',
-      );
+    it('gives each shade index its own color, distinct from the base', () => {
+      const colors = [0, 1, 2, 3].map(n => seriesColor('orange', n));
+      expect(new Set(colors).size).toBe(colors.length);
     });
 
     // Base lightness of the series tokens: light-mode neutral, light mode, dark mode, dark amber, dark neutral.

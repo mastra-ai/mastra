@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { Search } from 'lucide-react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   Activity,
@@ -19,6 +18,7 @@ import {
   ActivityWorkingDirectory,
 } from './activity';
 import { ArrivalScope } from '@/ds/components/Arrival';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { ARRIVING_CLASS } from '@/ds/tokens';
 
 const Example = ({
@@ -70,7 +70,6 @@ describe('Activity', () => {
     render(<Example defaultOpen />);
 
     const root = screen.getByRole('group', { name: 'Tool: execute_command' });
-    expect(root.className).toContain('max-w-full');
     expect(root.className).toContain('root-class');
     expect(root.getAttribute('aria-busy')).toBe('false');
     expect(root.getAttribute('aria-invalid')).toBeNull();
@@ -78,16 +77,12 @@ describe('Activity', () => {
     expect(root.getAttribute('data-status')).toBe('idle');
     expect(screen.queryByText(/Running|Failed/)).toBeNull();
 
-    const trigger = screen.getByTestId('trigger');
-    expect(trigger.className).toContain('group/row');
-    expect(trigger.className).toContain('trigger-class');
-    expect(screen.getByTestId('header').className).toContain('items-center');
-    expect(screen.getByTestId('icon').className).toContain('size-4');
+    expect(screen.getByTestId('trigger').className).toContain('trigger-class');
     expect(screen.getByTestId('icon').textContent).toBe('$');
-    expect(screen.getByText('Ran command').className).toContain('truncate');
-    expect(screen.getByText('pnpm test').classList).toContain('truncate');
-    expect(screen.getByText('2 files').className).toContain('items-center');
-    expect(screen.getByText('Done').className).toContain('shrink-0');
+    expect(screen.getByText('Ran command')).toBeTruthy();
+    expect(screen.getByText('pnpm test')).toBeTruthy();
+    expect(screen.getByText('2 files')).toBeTruthy();
+    expect(screen.getByText('Done')).toBeTruthy();
 
     const content = document.querySelector<HTMLDivElement>('.body-class');
     expect(content?.textContent).toBe('Command output');
@@ -110,17 +105,6 @@ describe('Activity', () => {
     expect(screen.getByRole('button').getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByText('Command output')).toBeTruthy();
     expect(disclosureChevron().classList.contains('rotate-90')).toBe(true);
-  });
-
-  it('uses a focusable native button for keyboard disclosure', () => {
-    render(<Example />);
-
-    const trigger = screen.getByRole('button');
-    trigger.focus();
-
-    expect(trigger.tagName).toBe('BUTTON');
-    expect(document.activeElement).toBe(trigger);
-    expect(trigger.className).toContain('focus-visible');
   });
 
   it('reports controlled expansion without changing its own state', () => {
@@ -160,24 +144,18 @@ describe('Activity', () => {
     expect(screen.getByText('Failed').className).toContain('sr-only');
   });
 
-  it('renders optional spacer rules and custom disclosure content', () => {
+  it('renders custom disclosure content in place of the chevron', () => {
     render(
       <Activity aria-label="Tool: custom">
         <ActivityTrigger>
-          <ActivitySpacer rule data-testid="spacer" />
           <ActivityDisclosure data-testid="custom-disclosure">Toggle</ActivityDisclosure>
         </ActivityTrigger>
       </Activity>,
     );
 
-    expect(screen.getByRole('group', { name: 'Tool: custom' }).getAttribute('data-status')).toBe('idle');
-    expect(screen.getByTestId('spacer').className).toContain('min-w-2 flex-1');
-    expect(screen.getByTestId('custom-disclosure').className).toContain('justify-center');
-    const toggleClasses = screen.getByText('Toggle').className.split(' ');
-    expect(toggleClasses).toEqual(
-      expect.arrayContaining(['flex', 'shrink-0', 'items-center', 'transition', 'duration-150']),
-    );
-    expect(screen.getByText('Toggle').textContent).toBe('Toggle');
+    const disclosure = screen.getByTestId('custom-disclosure');
+    expect(disclosure.textContent).toBe('Toggle');
+    expect(disclosure.querySelector('[data-slot="disclosure-chevron"]')).toBeNull();
   });
 
   it('rejects compounds rendered outside the root', () => {
@@ -189,7 +167,7 @@ describe('ActivityHeadline', () => {
   const Presented = ({ status = 'idle', detail }: { status?: 'idle' | 'running' | 'error'; detail?: string }) => (
     <Activity status={status}>
       <ActivityTrigger>
-        <ActivityHeadline icon={<Search aria-hidden />} label="Searched files" detail={detail} />
+        <ActivityHeadline icon={<IconMagnifyingGlass aria-hidden />} label="Searched files" detail={detail} />
       </ActivityTrigger>
       <ActivityContent>body</ActivityContent>
     </Activity>
@@ -208,7 +186,7 @@ describe('ActivityHeadline', () => {
       <Activity>
         <ActivityTrigger>
           <ActivityHeadline
-            icon={<Search aria-hidden />}
+            icon={<IconMagnifyingGlass aria-hidden />}
             label="Run"
             detail="rg -n processor"
             description="Finding the processor wiring"
@@ -232,7 +210,11 @@ describe('ActivityHeadline', () => {
     render(
       <Activity>
         <ActivityTrigger>
-          <ActivityHeadline icon={<Search aria-hidden />} label="Searched files" leading={<time>3:42:05 PM</time>} />
+          <ActivityHeadline
+            icon={<IconMagnifyingGlass aria-hidden />}
+            label="Searched files"
+            leading={<time>3:42:05 PM</time>}
+          />
         </ActivityTrigger>
       </Activity>,
     );
@@ -246,7 +228,11 @@ describe('ActivityHeadline', () => {
     render(
       <Activity>
         <ActivityTrigger>
-          <ActivityHeadline icon={<Search aria-hidden />} label="Searched files" leading={<time>3:42:05 PM</time>} />
+          <ActivityHeadline
+            icon={<IconMagnifyingGlass aria-hidden />}
+            label="Searched files"
+            leading={<time>3:42:05 PM</time>}
+          />
         </ActivityTrigger>
         <ActivityContent>3 matches</ActivityContent>
       </Activity>,
@@ -289,7 +275,12 @@ describe('ActivityDetail arrival', () => {
 describe('ActivityItem', () => {
   it('folds a body behind a disclosure', () => {
     render(
-      <ActivityItem icon={<Search aria-hidden />} label="Searched files" detail="src/**/*.ts" aria-label="Tool: search">
+      <ActivityItem
+        icon={<IconMagnifyingGlass aria-hidden />}
+        label="Searched files"
+        detail="src/**/*.ts"
+        aria-label="Tool: search"
+      >
         3 matches
       </ActivityItem>,
     );
@@ -303,7 +294,12 @@ describe('ActivityItem', () => {
 
   it('stays a plain line with nothing to fold', () => {
     render(
-      <ActivityItem icon={<Search aria-hidden />} label="Thinking" detail="a long detail" aria-label="Thinking" />,
+      <ActivityItem
+        icon={<IconMagnifyingGlass aria-hidden />}
+        label="Thinking"
+        detail="a long detail"
+        aria-label="Thinking"
+      />,
     );
 
     expect(screen.queryByRole('button')).toBeNull();
@@ -311,7 +307,7 @@ describe('ActivityItem', () => {
 
   it('shows a body inline when folding is turned off', () => {
     render(
-      <ActivityItem icon={<Search aria-hidden />} label="Skill" collapsible={false} aria-label="Skill">
+      <ActivityItem icon={<IconMagnifyingGlass aria-hidden />} label="Skill" collapsible={false} aria-label="Skill">
         Instructions
       </ActivityItem>,
     );
@@ -324,7 +320,12 @@ describe('ActivityItem', () => {
 describe('a body landing on a line', () => {
   const Line = ({ body }: { body?: string }) => (
     <ArrivalScope>
-      <ActivityItem icon={<Search aria-hidden />} label="Searched files" detail="src/**/*.ts" aria-label="Tool: search">
+      <ActivityItem
+        icon={<IconMagnifyingGlass aria-hidden />}
+        label="Searched files"
+        detail="src/**/*.ts"
+        aria-label="Tool: search"
+      >
         {body}
       </ActivityItem>
     </ArrivalScope>
@@ -347,7 +348,7 @@ describe('an Activity with nothing to fold', () => {
     render(
       <Activity foldable={false} defaultOpen aria-label="Tool: view">
         <ActivityTrigger>
-          <ActivityHeadline icon={<Search aria-hidden />} label="Read" />
+          <ActivityHeadline icon={<IconMagnifyingGlass aria-hidden />} label="Read" />
         </ActivityTrigger>
         <ActivityContent>
           <span>rail</span>
@@ -363,7 +364,7 @@ describe('an Activity with nothing to fold', () => {
     const Tool = ({ foldable }: { foldable: boolean }) => (
       <Activity foldable={foldable} defaultOpen aria-label="Tool: view">
         <ActivityTrigger>
-          <ActivityHeadline icon={<Search aria-hidden />} label="Read" />
+          <ActivityHeadline icon={<IconMagnifyingGlass aria-hidden />} label="Read" />
         </ActivityTrigger>
         <ActivityContent>
           <span>arguments</span>

@@ -405,8 +405,7 @@ describe('factory_transition_work_item', () => {
       expectedRevision: prepared.item.revision,
       destinationStage: 'done',
       actorId: 'user-1',
-      ingress: { identity: 'external-close', triggerType: 'github', transitionId: 'external-close' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'external-close', transitionId: 'external-close' },
       causalChain: [],
       evaluation: { outcome: 'accepted', decisions: [] },
     });

@@ -82,18 +82,6 @@ function serialWrite<TCache, TVariables>(
   };
 }
 
-// The GitHub feed never reads intake config or bindings, so it has nothing to refresh.
-function invalidateIssueFeed(queryClient: QueryClient, baseUrl: string, integrationId: string) {
-  const feeds: Record<string, QueryKey> = {
-    linear: queryKeys.linearIssuesAll(),
-    jira: queryKeys.jiraIssuesAll(),
-    gitlab: queryKeys.gitlabIssuesAll(baseUrl),
-    incidentio: queryKeys.incidentioIssuesAll(),
-  };
-  const queryKey = feeds[integrationId];
-  if (queryKey) void queryClient.invalidateQueries({ queryKey });
-}
-
 export function useSaveIntakeSelectionMutation(
   integrationId: string,
   callbacks?: IntakeWriteCallbacks<IntakeSelection>,
@@ -113,7 +101,6 @@ export function useSaveIntakeSelectionMutation(
     onMutate: write.optimistic,
     onSuccess: (saved, selection) => {
       write.settle(saved);
-      invalidateIssueFeed(queryClient, baseUrl, integrationId);
       callbacks?.onSaved?.(selection);
     },
     onError: (error, selection, context) => {
@@ -143,7 +130,6 @@ export function useSaveIntakeBindingMutation(callbacks?: IntakeWriteCallbacks<In
     onMutate: write.optimistic,
     onSuccess: (saved, binding) => {
       write.settle(saved);
-      invalidateIssueFeed(queryClient, baseUrl, binding.integrationId);
       callbacks?.onSaved?.(binding);
     },
     onError: (error, binding, context) => {
@@ -169,7 +155,6 @@ export function useDeleteIntakeBindingMutation(callbacks?: IntakeWriteCallbacks<
     onMutate: write.optimistic,
     onSuccess: (saved, binding) => {
       write.settle(saved);
-      invalidateIssueFeed(queryClient, baseUrl, binding.integrationId);
       callbacks?.onSaved?.(binding);
     },
     onError: (error, binding, context) => {
@@ -195,7 +180,6 @@ export function useAddIntakeBindingMutation(callbacks?: IntakeWriteCallbacks<Int
     mutationFn: (binding: IntakeBindingWrite) => saveIntakeBinding(baseUrl, binding),
     onSuccess: (saved, binding) => {
       write.confirm(saved, binding);
-      invalidateIssueFeed(queryClient, baseUrl, binding.integrationId);
       callbacks?.onSaved?.(binding);
     },
     onError: (error, binding) => {

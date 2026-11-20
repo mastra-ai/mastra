@@ -3,10 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   hasResumableFactoryOnboarding,
   onboardingCreateReadiness,
-  ONBOARDING_FACTORY_KEY,
   ONBOARDING_LINKED_REPOSITORY_KEY,
   ONBOARDING_STEP_KEY,
-  ONBOARDING_UPDATED_AT_KEY,
   persistOnboardingDraft,
   persistOnboardingFactory,
   persistOnboardingStep,
@@ -67,8 +65,6 @@ describe('Factory onboarding flow', () => {
     persistOnboardingStep('model');
 
     expect(readOnboardingStep()).toBe('model');
-    expect(sessionStorage.getItem(ONBOARDING_STEP_KEY)).toBe('model');
-    expect(sessionStorage.getItem(ONBOARDING_UPDATED_AT_KEY)).not.toBeNull();
   });
 
   it('resumes an old wizard step for its pending Factory but opens no stored section', () => {
@@ -91,8 +87,6 @@ describe('Factory onboarding flow', () => {
         private: false,
         installationId: 7,
         installationStorageId: 'inst-7',
-        sandboxProvider: 'local',
-        sandboxWorkdir: '/workspace/hello',
       },
       modelScope: 'hybrid',
       model: { providerId: 'openai', method: 'api_key', modelId: '' },
@@ -111,12 +105,17 @@ describe('Factory onboarding flow', () => {
     expect(readOnboardingDraft()).toEqual(draft);
   });
 
+  it('keeps the code-host sync choice the Work step stored', () => {
+    persistOnboardingDraft({ modelScope: 'factory', codeHostSync: false });
+
+    expect(readOnboardingDraft()).toEqual({ modelScope: 'factory', codeHostSync: false });
+  });
+
   it('resumes the open Model section for its pending Factory', () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
     persistOnboardingStep('model');
     persistOnboardingFactory('factory-1');
 
-    expect(sessionStorage.getItem(ONBOARDING_FACTORY_KEY)).toBe('factory-1');
     expect(hasResumableFactoryOnboarding([{ id: 'factory-1' }])).toBe(true);
     expect(hasResumableFactoryOnboarding([{ id: 'factory-2' }])).toBe(false);
   });

@@ -4,7 +4,6 @@ import type { ComponentType } from 'react';
 import type { SpanRecord } from '../../types';
 import { hasProcessorPreview, processorInputToolKeys } from './span-payload-processor-fields';
 import { getSpanSignal } from '@/domains/traces/utils/span-signal';
-import type { LinkComponentPaths } from '@/lib/framework';
 
 type CoreSpanRecord = Parameters<typeof describeSpanInput>[0];
 
@@ -124,13 +123,6 @@ export function getDelegatedTool(toolName: string): DelegatedTool | undefined {
   const match = DELEGATED_TOOL.exec(toolName);
   if (!match?.[2]) return undefined;
   return { kind: match[1] === 'workflow' ? 'workflow' : 'agent', key: match[2] };
-}
-
-/** The page of the workflow or sub-agent behind a tool name, or `''` when it is neither. */
-export function getDelegatedToolHref(paths: LinkComponentPaths, toolName: string): string {
-  const delegated = getDelegatedTool(toolName);
-  if (!delegated) return '';
-  return delegated.kind === 'workflow' ? paths.workflowLink(delegated.key) : paths.agentLink(delegated.key);
 }
 
 export interface SpanTool {

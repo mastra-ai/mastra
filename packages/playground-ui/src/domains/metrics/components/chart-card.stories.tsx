@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { DownloadIcon } from 'lucide-react';
 import { useState } from 'react';
 import { bucketLabels } from '../lib/bucket-labels';
 import { EDGE_BUCKET_AXIS } from '../lib/chart-axis';
@@ -10,6 +9,7 @@ import { ChartCard } from './chart-card';
 import { Button } from '@/ds/components/Button';
 import { MetricsLineChart, MetricsLineChartLegend } from '@/ds/components/MetricsLineChart';
 import type { MetricsLineChartSeries } from '@/ds/components/MetricsLineChart';
+import { IconArrowInbox } from '@/ds/icons/central/IconArrowInbox';
 import { TraceIcon } from '@/ds/icons/TraceIcon';
 
 const DAY = 24 * 3_600_000;
@@ -287,7 +287,7 @@ export const Hero: Story = {
               <TraceIcon />
             </Button>
             <Button variant="ghost" size="icon-sm" tooltip="Download CSV">
-              <DownloadIcon />
+              <IconArrowInbox />
             </Button>
           </>
         }

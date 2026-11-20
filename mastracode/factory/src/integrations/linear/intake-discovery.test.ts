@@ -1,8 +1,7 @@
-import { Hono } from 'hono';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../../boards/index.js';
-import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils.js';
+import { fakeRouteAuth } from '../../routes/test-utils.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { LINEAR_INTAKE_DISCOVERY_MAX_PAGES } from './intake-discovery.js';
 import { LinearIntegration } from './integration.js';
@@ -122,25 +121,6 @@ afterEach(() => {
 });
 
 describe('Linear intake discovery', () => {
-  it('leaves Work untouched when someone views a bound project board', async () => {
-    const { linear, context, connect, project, filed } = await setup();
-    await connect('org-1');
-    const board = await project('org-1', ['proj-1']);
-    stubLinear([[{ id: 'issue-1', identifier: 'ENG-1', projectId: 'proj-1' }]]);
-
-    const app = new Hono();
-    app.use('*', async (c, next) => {
-      c.set('factoryAuthUser' as never, { workosId: 'u1', organizationId: 'org-1' } as never);
-      await next();
-    });
-    mountApiRoutes(app, linear.routes(context as never));
-    const res = await app.request(`/web/linear/issues?factoryProjectId=${board.id}`);
-
-    expect(res.status).toBe(200);
-    expect((await res.json()).issues).toMatchObject([{ identifier: 'ENG-1' }]);
-    expect(await filed('org-1', board.id)).toEqual([]);
-  });
-
   it('files a new issue on a bound source with no board open', async () => {
     const { connect, project, filed, sweep } = await setup();
     await connect('org-1');

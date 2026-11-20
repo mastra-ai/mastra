@@ -36,8 +36,58 @@ describe('scopeTitle', () => {
     expect(scopeTitle(scope('notion:Mastra:not_01', 'Engineering wiki'))).toBe('Engineering wiki');
   });
 
-  it('keeps the address of a scope from an unknown source', () => {
-    expect(scopeTitle(scope('org:team'))).toBe('org:team');
+  it('names a built-in scope by its kind instead of its address', () => {
+    expect(scopeTitle(scope('org:org_01KPRK1TA1J73YAV6ARRZYFM66'))).toBe('Organization');
+  });
+
+  it('names the page an importer writes under by its source, with its icon', () => {
+    const notion = {
+      ...scope('org:acme'),
+      id: 'notion',
+      isScope: false,
+      address: undefined,
+      scopeId: 'org',
+      parentId: 'org',
+      key: 'notion',
+      name: 'notion',
+    };
+    expect(scopeTitle(notion)).toBe('Notion');
+    expect(scopeSource(notion)?.icon).toBe(NotionIcon);
+    expect(scopeTitle({ ...notion, parentId: 'deeper' })).toBe('notion');
+  });
+
+  it.each([
+    ['org:org_01', 'Acme'],
+    ['project:proj_01', 'Roadmap'],
+    ['customer:c42', 'Customer success'],
+  ])('uses the API label for %s', (address, displayLabel) => {
+    expect(scopeTitle({ ...scope(address), displayLabel })).toBe(displayLabel);
+  });
+
+  it('uses the label of a child scope stored under its canonical child key', () => {
+    expect(scopeTitle({ ...scope('org:acme/handbook', 'handbook'), displayLabel: 'Company handbook' })).toBe(
+      'Company handbook',
+    );
+  });
+
+  it('preserves explicit titles and importer source titles ahead of declaration labels', () => {
+    expect(scopeTitle({ ...scope('project:p1', 'Launch roadmap'), displayLabel: 'Project' })).toBe('Launch roadmap');
+    expect(scopeTitle({ ...scope('org:acme/handbook', 'Team reference'), displayLabel: 'Handbook' })).toBe(
+      'Team reference',
+    );
+    expect(scopeTitle({ ...scope('notion:acme:n1'), displayLabel: 'Imported documents' })).toBe('Notion');
+  });
+
+  it('uses a readable custom kind when no label is available', () => {
+    expect(scopeTitle(scope('region:eu'))).toBe('Region');
+    expect(scopeTitle(scope('customer-account:c42'))).toBe('Customer account');
+  });
+
+  it('ignores blank labels and labels on ordinary pages', () => {
+    expect(scopeTitle({ ...scope('org:acme'), displayLabel: '   ' })).toBe('Organization');
+    expect(scopeTitle({ ...scope('org:acme', 'Overview'), isScope: false, displayLabel: 'Organization' })).toBe(
+      'Overview',
+    );
   });
 });
 

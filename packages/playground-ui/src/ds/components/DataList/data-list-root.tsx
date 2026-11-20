@@ -338,8 +338,6 @@ function DataListBase({
 
   // DataList uses the DS ScrollArea: an overlay scrollbar, so the sticky header
   // spans the full width, and the header scrolls sideways with the rows for free.
-  // Overscroll is off: a bounce would drag the sticky header along and expose the
-  // panel behind the content.
   return (
     <ScrollArea
       {...props}
@@ -367,7 +365,7 @@ function DataListBase({
         className={cn(
           // `relative` lifts the content above the well. `rounded-lg` (the root's 12px less its 4px
           // inset) clips the square header corners that otherwise cut into the panel's rim.
-          'relative min-h-0 flex-1 basis-auto overscroll-none rounded-lg',
+          'relative min-h-0 flex-1 basis-auto overscroll-x-none rounded-lg',
           // A pinned column draws its own edge (the divider), so nothing fades on the left.
           'has-[.data-list-sticky-start]:[--scroll-area-fade-left:0px]!',
         )}

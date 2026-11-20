@@ -1,11 +1,9 @@
-import { MenuIcon } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
-import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { useSidebar } from './sidebar-context';
-import { Drawer, DrawerClose, DrawerContent, DrawerDescription, DrawerTitle } from '@/ds/components/Drawer';
-import { overlaySurfaceStyle, surfaceGroupStateLayerStyle } from '@/ds/primitives/raised-surface';
+import { SidebarReveal } from './sidebar-reveal';
+import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from '@/ds/components/Drawer';
 import { ResizeHandleIndicator } from '@/ds/primitives/resize-handle-indicator';
-import { quietTextHoverInGroup } from '@/ds/primitives/typography';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
 
@@ -14,6 +12,8 @@ export type SidebarPanelProps = {
   className?: string;
   mobileMode?: 'drawer' | 'takeover';
 };
+
+type SidebarPanelStyle = CSSProperties & { '--sidebar-width': string };
 
 const KEYBOARD_STEP = 10;
 const DRAG_THRESHOLD = 5;
@@ -37,6 +37,7 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
     commit,
     toggleSidebar,
     setGestureActive,
+    panelRef,
   } = useSidebar();
   const isCollapsed = state === 'collapsed';
   const isHidden = isCollapsed && collapsedWidth === 0;
@@ -182,6 +183,14 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
     [setOpenMobile],
   );
 
+  if (isMobile && mobileMode === 'takeover') {
+    return (
+      <SidebarReveal className={className} onClick={closeOnAnchor}>
+        {children}
+      </SidebarReveal>
+    );
+  }
+
   if (isMobile) {
     return (
       <Drawer
@@ -193,50 +202,20 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
         }}
       >
         <DrawerContent
-          data-mobile-mode={mobileMode}
+          data-mobile-mode="drawer"
           finalFocus={mobileTriggerRef}
-          showCloseButton={mobileMode === 'drawer'}
           className={cn(
-            'border-0 bg-sidebar text-foreground',
-            mobileMode === 'takeover'
-              ? 'w-[calc(100%-3.5rem)] max-w-none overflow-visible rounded-l-none rounded-r-3xl pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]'
-              : 'w-3/4 max-w-(--sidebar-width-mobile) overflow-hidden rounded-none',
+            'w-3/4 max-w-(--sidebar-width-mobile) overflow-hidden rounded-none border-0 bg-sidebar text-foreground',
             className,
           )}
         >
-          {mobileMode === 'takeover' ? (
-            <DrawerClose asChild>
-              <button
-                type="button"
-                aria-label="Close"
-                className="group absolute top-2 -right-12 z-10 inline-flex size-11 touch-manipulation items-center justify-center transition-opacity duration-fast group-data-[ending-style]/popup:opacity-0 focus-visible:outline-hidden motion-reduce:duration-0"
-              >
-                <span
-                  className={cn(
-                    overlaySurfaceStyle,
-                    quietTextHoverInGroup,
-                    surfaceGroupStateLayerStyle,
-                    'inline-flex size-9 items-center justify-center rounded-full backdrop-blur-sm group-focus-visible:ring-1 group-focus-visible:ring-border-focus',
-                  )}
-                >
-                  <MenuIcon className="size-4" />
-                </span>
-              </button>
-            </DrawerClose>
-          ) : null}
           <VisuallyHidden asChild>
             <DrawerTitle>Navigation</DrawerTitle>
           </VisuallyHidden>
           <VisuallyHidden asChild>
             <DrawerDescription>Primary site navigation drawer</DrawerDescription>
           </VisuallyHidden>
-          <div
-            onClick={closeOnAnchor}
-            className={cn(
-              'flex h-full min-h-0 flex-col overflow-hidden py-2',
-              mobileMode === 'takeover' ? 'px-4' : 'px-3',
-            )}
-          >
+          <div onClick={closeOnAnchor} className="flex h-full min-h-0 flex-col overflow-hidden px-3 py-2">
             {children}
           </div>
         </DrawerContent>
@@ -245,8 +224,12 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
   }
 
   const currentWidth = isCollapsed ? collapsedWidth : width;
+  const panelStyle: SidebarPanelStyle = { '--sidebar-width': `${currentWidth}px` };
   return (
     <div
+      ref={panelRef}
+      data-slot="sidebar-panel"
+      style={panelStyle}
       className={cn(
         'sidebar-layout group/sidebar relative min-h-0 shrink-0 self-stretch bg-sidebar text-foreground',
         'w-(--sidebar-width)',

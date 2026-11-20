@@ -83,6 +83,8 @@ describeForAllEngines('AIMock loop scenario: workflow as tool', engine => {
     expect(toolResultMessage).toBeDefined();
     expect(toolResultMessage?.content).toContain('quantum computing');
     expect(toolResultMessage?.content).toContain('detailed findings');
+    // The tracing marker on workflow tool results stays out of the provider request (#30219).
+    expect(JSON.stringify(requests.map(request => request.body))).not.toContain('workflowTool');
 
     // Output text comes from the second turn
     expect(requests.length).toBe(2);

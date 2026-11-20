@@ -217,7 +217,7 @@ export function createGitLabSubscriptionTools(requestContext: RequestContext, gi
     gitlab_subscribe_mr: createTool({
       id: 'gitlab_subscribe_mr',
       description:
-        'Subscribe this thread to GitLab merge request activity. You usually do not need this tool: successful source_control_create_change_request calls subscribe automatically. Use it for an existing MR or to recover when automatic subscription did not occur. Closed or merged MRs are unsubscribed automatically. Accepts an MR IID or canonical URL for the active project.',
+        'Subscribe this thread to GitLab merge request activity. MRs created with source_control_create_change_request are subscribed automatically. Call this when you start working on an existing MR you did not create in this thread (reviewing it, fixing merge conflicts, addressing review comments, fixing CI, pushing to its branch), or to recover when automatic subscription did not occur. Closed or merged MRs are unsubscribed automatically. Accepts an MR IID or canonical URL for the active project.',
       inputSchema: mergeRequestInputSchema,
       execute: async ({ mergeRequest }) => {
         const iid = await subscribeCurrentSessionToMergeRequest(requestContext, mergeRequest, 'explicit-tool', gitlab);

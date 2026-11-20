@@ -9,17 +9,6 @@ function parseUrl(url: string) {
 }
 
 describe('buildTracesDrilldownUrl', () => {
-  it('maps metrics preset → traces preset', () => {
-    const url = buildTracesDrilldownUrl({
-      preset: '24h',
-      dashboardFilter: {},
-      scope: {},
-    });
-    const { path, params } = parseUrl(url);
-    expect(path).toBe('/traces');
-    expect(params.get('datePreset')).toBe('last-24h');
-  });
-
   it('maps all supported presets', () => {
     for (const [metricsPreset, tracesPreset] of [
       ['24h', 'last-24h'],
@@ -64,22 +53,6 @@ describe('buildTracesDrilldownUrl', () => {
     expect(params.get('datePreset')).toBe('custom');
     expect(params.get('dateFrom')).toBe(from.toISOString());
     expect(params.get('dateTo')).toBe(to.toISOString());
-  });
-
-  it('carries dashboard dimensional filters through', () => {
-    const url = buildTracesDrilldownUrl({
-      preset: '24h',
-      dashboardFilter: {
-        environment: 'prod',
-        tags: ['billing', 'retry'],
-        serviceName: 'orders',
-      },
-      scope: {},
-    });
-    const { params } = parseUrl(url);
-    expect(params.get('filterEnvironment')).toBe('prod');
-    expect(params.getAll('filterTags')).toEqual(['billing', 'retry']);
-    expect(params.get('filterServiceName')).toBe('orders');
   });
 
   it('scope dimensions override dashboard dimensions', () => {

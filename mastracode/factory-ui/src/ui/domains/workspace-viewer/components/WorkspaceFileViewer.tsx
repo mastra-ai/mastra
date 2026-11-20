@@ -5,14 +5,28 @@ import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRende
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ArrowLeft, RefreshCw } from 'lucide-react';
+import type { CSSProperties } from 'react';
 
 import type { WorkspaceFilePreview } from './workspace-file-preview';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 
 function formatBytes(size: number) {
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** CSS counters, so copying the code never copies the numbers. */
+const numberedLineClass =
+  '[counter-increment:line] before:mr-4 before:inline-block before:w-[calc(var(--line-digits)*1ch)] before:text-right before:text-placeholder before:content-[counter(line)]';
+const numberedLine = () => numberedLineClass;
+
+type GutterStyle = CSSProperties & { '--line-digits': number };
+
+function lineCount(text: string): number {
+  let count = 1;
+  for (let at = text.indexOf('\n'); at !== -1; at = text.indexOf('\n', at + 1)) count++;
+  return count;
 }
 
 interface WorkspaceFileViewerProps {
@@ -22,7 +36,6 @@ interface WorkspaceFileViewerProps {
   isRefreshing: boolean;
   error?: Error;
   onRefresh: () => void;
-  onBack: () => void;
 }
 
 export function WorkspaceFileViewer({
@@ -32,23 +45,14 @@ export function WorkspaceFileViewer({
   isRefreshing,
   error,
   onRefresh,
-  onBack,
 }: WorkspaceFileViewerProps) {
   const content = file?.content ?? '';
   const isMarkdown = file?.language === 'markdown';
+  const gutter: GutterStyle = { '--line-digits': String(lineCount(content)).length };
 
   return (
     <section className="flex min-h-0 min-w-0 grow flex-col" aria-label="Workspace file viewer">
       <div className="border-border flex shrink-0 items-center gap-2 border-b p-1.5">
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          className="shrink-0"
-          onClick={onBack}
-          aria-label="Back to workspace files"
-        >
-          <ArrowLeft />
-        </Button>
         <Txt tone="ink" variant="column" className="min-w-0 flex-1 truncate">
           {file?.name ?? filePath}
         </Txt>
@@ -63,7 +67,7 @@ export function WorkspaceFileViewer({
             disabled={isRefreshing}
             aria-label={isRefreshing ? 'Refreshing file' : 'Refresh file'}
           >
-            {isRefreshing ? <Spinner size="sm" /> : <RefreshCw />}
+            {isRefreshing ? <Spinner size="sm" /> : <IconArrowRotateClockwise />}
           </Button>
         </div>
       </div>
@@ -79,12 +83,13 @@ export function WorkspaceFileViewer({
           <Txt tone="muted" as="span" variant="caption" className="shrink-0">
             {new Date(file.updatedAt).toLocaleString()}
           </Txt>
-          {file.truncated ? (
-            <Txt tone="muted" as="span" variant="caption" className="shrink-0">
-              Truncated
-            </Txt>
-          ) : null}
         </div>
+      ) : null}
+
+      {file?.truncated ? (
+        <Txt as="p" variant="caption" tone="muted" className="border-border shrink-0 border-b px-3 py-2">
+          Too large to show in full: this is the start of the file.
+        </Txt>
       ) : null}
 
       {isLoading ? (
@@ -110,7 +115,9 @@ export function WorkspaceFileViewer({
               <Code
                 code={content}
                 lang={file.language}
-                className="border-border bg-background text-caption text-foreground m-0 rounded-md border p-3 font-mono"
+                lineClassName={numberedLine}
+                style={gutter}
+                className="border-border bg-background text-caption text-foreground m-0 rounded-md border p-3 font-mono [counter-reset:line]"
               />
             ) : null}
           </div>

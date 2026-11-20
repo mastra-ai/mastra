@@ -1,5 +1,144 @@
 # @mastra/connect
 
+## 1.5.0-alpha.0
+
+### Minor Changes
+
+- Added an ElevenLabs toolset with 35 tools. Agents can turn text into speech, transcribe audio or video (from base64 audio or a URL), clone voices, compose music from a prompt or an editable composition plan, manage conversational AI agents, voices and voice settings, and pronunciation dictionaries, and read and delete history items, dubbing projects, conversations, and knowledge-base documents. ([#30843](https://github.com/mastra-ai/mastra/pull/30843))
+
+  `elevenlabs_text_to_speech` and `elevenlabs_compose_music` return the audio base64-encoded to your code, while the model only sees a short summary, so audio bytes never fill its context. `elevenlabs_get_user` never returns the account's API key, even though ElevenLabs includes it in the response.
+
+  Voice cloning copies a real person's voice, so require approval for it:
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { tools } from '@mastra/connect';
+
+  const elevenlabsAgent = new Agent({
+    id: 'elevenlabs-agent',
+    name: 'ElevenLabs agent',
+    instructions: 'Use the connected ElevenLabs tools to narrate messages, transcribe recordings, and score videos.',
+    model: 'openai/gpt-5.6',
+    tools: tools({ providers: { elevenlabs: { requireApproval: ['elevenlabs_clone_voice'] } } }),
+  });
+  ```
+
+- Added a GitLab toolset with 44 tools. Agents can manage projects, groups, issues, merge requests, branches, files, commits, and releases, create and cancel pipelines, and retry jobs. ([#30842](https://github.com/mastra-ai/mastra/pull/30842))
+
+  Connect a GitLab account to your project first (`mastra connect add gitlab`). When running locally, set `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` in the app's environment so `tools()` can find the connection. Then add the tools to an agent:
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { tools } from '@mastra/connect';
+
+  const gitlabAgent = new Agent({
+    id: 'gitlab-agent',
+    name: 'GitLab agent',
+    instructions: 'Use the connected GitLab tools to triage issues and review merge requests.',
+    model: 'openai/gpt-5.6',
+    tools: tools({ providers: ['gitlab'] }),
+  });
+  ```
+
+  Project and group paths work raw (`team/app`) or URL-encoded (`team%2Fapp`). Branch names, file paths, and tag names are sent as given, so `release%2Fnext` and `release/next` stay distinct. Project results never include the project's runner registration token.
+
+  Tools refuse ambiguous or no-op input before calling GitLab: an update with nothing to change, a commit action missing the field it needs, a release with duplicate asset links, or a merge request update naming the milestone both by id and by title.
+
+- Added `ConnectClient` and `EventsClient` so your code can manage Mastra platform connections and react to provider events without polling. ([#30320](https://github.com/mastra-ai/mastra/pull/30320))
+
+  **ConnectClient** lists the connections linked to your project, reads credentials, calls providers through the platform proxy, and starts connect and reconnect sessions. Every call has a 15-second timeout by default. Errors now say whether the platform or the provider answered (`source`), carry the platform's problem type (`problemCode`), and include `retryAfterMs` for 429 and 503 responses.
+
+  ```typescript
+  import { ConnectClient } from '@mastra/connect';
+
+  const connect = new ConnectClient();
+  const [jira] = await connect.listConnections({ providerKeys: ['jira'] });
+  const issue = await connect.proxy(jira.id, { method: 'GET', path: '/rest/api/3/issue/ENG-1' });
+  ```
+
+  **EventsClient** streams a project's topics from the platform events service. `connectEvents()` delivers the webhooks your connections receive and reconnects on its own. Pass a `cursorStore` and it saves each event you finish handling, so a restart picks up where it stopped; `onGap` tells you when events were trimmed and you should resync.
+
+  ```typescript
+  const events = connect.events.connectEvents({
+    cursorStore: { load: () => db.get('cursor'), save: cursor => db.set('cursor', cursor) },
+    onGap: () => resync(),
+  });
+
+  for await (const event of events) {
+    await handle(event.integrationId, event.eventType, event.payload);
+  }
+  ```
+
+  Error messages from the platform and from the connection proxy no longer include your platform access token when the server echoes it back.
+
+### Patch Changes
+
+- Updated dependencies [[`d250e06`](https://github.com/mastra-ai/mastra/commit/d250e06d7c63b02aa0e5b7c61e1e54e07dcad13b), [`9315b28`](https://github.com/mastra-ai/mastra/commit/9315b2895a617947513be1f96d8964037b505f38), [`7c0c1cd`](https://github.com/mastra-ai/mastra/commit/7c0c1cdc9ed1211b3705554bf205a30ef05b0796), [`21a82af`](https://github.com/mastra-ai/mastra/commit/21a82af6e1c08daaa3c2700c98ac95a96e66399e), [`9c4da82`](https://github.com/mastra-ai/mastra/commit/9c4da8282cf9f163691df5c15eed2c89d48534f9), [`0458fdc`](https://github.com/mastra-ai/mastra/commit/0458fdc0c19abc0359746247cb55b71dd4afaf6e), [`4b5c347`](https://github.com/mastra-ai/mastra/commit/4b5c347734329ff434d7cdcb6408c23dfe046540), [`b8af9e3`](https://github.com/mastra-ai/mastra/commit/b8af9e313eb446fadb24454dc18fa19aa08a8cea), [`0280c14`](https://github.com/mastra-ai/mastra/commit/0280c141dae50809cfc7f6bd7e27d1f65432121c), [`ad5059e`](https://github.com/mastra-ai/mastra/commit/ad5059e90c201279628a799f1434a8fe35140b55), [`45b8470`](https://github.com/mastra-ai/mastra/commit/45b847050897411092b1c665cdbcbb59e2bec485), [`0f098fe`](https://github.com/mastra-ai/mastra/commit/0f098fe2425bc467ff9a800c41433efe90c44e58), [`8a0acd5`](https://github.com/mastra-ai/mastra/commit/8a0acd5ab9367a48d100b9c53eeb62362e6ddb72), [`389851e`](https://github.com/mastra-ai/mastra/commit/389851ef0380c222b6223148b8c070a6919b7a8e), [`9c4810b`](https://github.com/mastra-ai/mastra/commit/9c4810b48652bee44663452f136df5e9d9247d40), [`2f04296`](https://github.com/mastra-ai/mastra/commit/2f04296f9b815fde8395a32ddbabd214fdf2f914), [`4e0b782`](https://github.com/mastra-ai/mastra/commit/4e0b7820880774ed87c151d6575ba13820035773), [`a6a5b78`](https://github.com/mastra-ai/mastra/commit/a6a5b7808581c6e7dc086a165580b23138d5e441), [`8a0acd5`](https://github.com/mastra-ai/mastra/commit/8a0acd5ab9367a48d100b9c53eeb62362e6ddb72)]:
+  - @mastra/core@1.85.1-alpha.0
+  - @mastra/mcp@2.10.1-alpha.0
+
+## 1.4.1
+
+### Patch Changes
+
+- Changed the default model of the OpenAI create-image tool from `gpt-image-1` to `gpt-image-2.5-sunburst`. OpenAI retired `gpt-image-1` on October 23, 2026, so calls that omitted `model` were failing. The default is now a model that works again. ([#30364](https://github.com/mastra-ai/mastra/pull/30364))
+
+- The `resourceId` callback on `userConnectRoutes()` now receives the authenticated user as a typed `MastraUser`, the same `user` that agent callbacks such as `tools` receive. You can read the ID without a cast, and the routes and the agent's tools derive the same resource ID from one value. ([#30340](https://github.com/mastra-ai/mastra/pull/30340))
+
+  ```typescript
+  // Before
+  userConnectRoutes({ resourceId: ({ user }) => (user as { id: string } | undefined)?.id });
+
+  // After
+  userConnectRoutes({ resourceId: ({ user }) => user?.id });
+  ```
+
+  `user` is now the normalized user rather than the raw object your auth provider returned. To read provider-specific fields, use `requestContext.get('user')`.
+
+- Fixed `posthog_run_query` failing provider-response validation whenever PostHog returned column types, which it does for every query with columns, even `select 1`. PostHog returns column types as `[columnName, clickhouseType]` pairs, such as `[["count()", "UInt64"]]`, and the tool now accepts them and returns them in that shape. The inferred type of `types` in the tool's output changes from `string[]` to `[string, string][]`, and a plain string entry, which PostHog never sends, is now rejected. Fixes [#30528](https://github.com/mastra-ai/mastra/issues/30528). ([#30541](https://github.com/mastra-ai/mastra/pull/30541))
+
+- Updated dependencies [[`7277766`](https://github.com/mastra-ai/mastra/commit/7277766d6c967c475675d58ff2d0e5c6d7be7c84), [`5053f97`](https://github.com/mastra-ai/mastra/commit/5053f97664afec569f908f266e04865cbae51868), [`88b4a97`](https://github.com/mastra-ai/mastra/commit/88b4a970426f48731a153e46ed228d0301da32a1), [`33eaa29`](https://github.com/mastra-ai/mastra/commit/33eaa293e28aa8cd86ad68e1eaf44b4929be818d), [`1bac054`](https://github.com/mastra-ai/mastra/commit/1bac054f7a9089d112f2b4732caef0fe9801df71), [`f51098e`](https://github.com/mastra-ai/mastra/commit/f51098e60cbb47a9eac5e458d6d85cd4ef162926), [`51c340a`](https://github.com/mastra-ai/mastra/commit/51c340a7824530b348e157cb6f71094522e2b5c2), [`2788a6d`](https://github.com/mastra-ai/mastra/commit/2788a6d959ec16c454d1ac6564d546f47be8f1eb), [`8ce66cf`](https://github.com/mastra-ai/mastra/commit/8ce66cf4a19e23d5bd73cd861465d89bd0ee8065), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`51c340a`](https://github.com/mastra-ai/mastra/commit/51c340a7824530b348e157cb6f71094522e2b5c2), [`88f94f2`](https://github.com/mastra-ai/mastra/commit/88f94f237acc406efb774367f5ba7bdeaac8e88d), [`7517474`](https://github.com/mastra-ai/mastra/commit/7517474b395a44ca6b7573a16d307ca7964ab3a8), [`bf60feb`](https://github.com/mastra-ai/mastra/commit/bf60feb162e5a4482a7c6767d14a17f9dce212a8), [`7fd6830`](https://github.com/mastra-ai/mastra/commit/7fd6830a26ac38060fa02675b2daef82f2c0ef2e), [`99ec3bd`](https://github.com/mastra-ai/mastra/commit/99ec3bd582a79d85d4c0c09b50ed9ed0830c79d5), [`70f3eba`](https://github.com/mastra-ai/mastra/commit/70f3eba5ecb9870d21582455fb55137663766d50), [`7518c05`](https://github.com/mastra-ai/mastra/commit/7518c05d6f24d37ccebed2a0667e6fe189c3c368), [`b07dd23`](https://github.com/mastra-ai/mastra/commit/b07dd2371304f688a117c441501130853293a14f), [`175b4b5`](https://github.com/mastra-ai/mastra/commit/175b4b5194bd74d82a79c2567aec44ef0cfafa80), [`0eb407e`](https://github.com/mastra-ai/mastra/commit/0eb407ebcce9d87e96cb399df5a3afb265fc2806), [`5266060`](https://github.com/mastra-ai/mastra/commit/5266060ccd0766a14b94109dc4bc9c3d29a1b8f5), [`33fba78`](https://github.com/mastra-ai/mastra/commit/33fba789314c27a9c610095e75f3131ca92831c9), [`cb5f3a5`](https://github.com/mastra-ai/mastra/commit/cb5f3a5c7964e9304c9b2a9141ab971158fe16d4), [`984a8cf`](https://github.com/mastra-ai/mastra/commit/984a8cfd7bc751c3cd4421fb6516482fa863174b), [`984a8cf`](https://github.com/mastra-ai/mastra/commit/984a8cfd7bc751c3cd4421fb6516482fa863174b), [`8ac8822`](https://github.com/mastra-ai/mastra/commit/8ac88228d67a5b3987084adeb40364a333347c97), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`0170d70`](https://github.com/mastra-ai/mastra/commit/0170d700a411ce2b5e64a82bc1133716ae75cbd6), [`189c5dd`](https://github.com/mastra-ai/mastra/commit/189c5ddc674843e4fa67ad8bf03c2c1b9ae7b658), [`9abbec6`](https://github.com/mastra-ai/mastra/commit/9abbec671ccf0826550241d1f1c2d7ff89e5b95b), [`6d14d0e`](https://github.com/mastra-ai/mastra/commit/6d14d0edc4fb03e800d8d86e7e7fa00bf3943b56), [`d929736`](https://github.com/mastra-ai/mastra/commit/d9297364354b6a9c5dc0b870c2cea1e305f5faa1), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`e110fa6`](https://github.com/mastra-ai/mastra/commit/e110fa681a156277eed427ecea7a7bf488b02d37), [`7b9130f`](https://github.com/mastra-ai/mastra/commit/7b9130f50ec0d68daae4ef11bbfaf2d3bc9454ed), [`0278a5c`](https://github.com/mastra-ai/mastra/commit/0278a5ce834fad3cced73cfd19336a34d1bc8f10), [`d5f3546`](https://github.com/mastra-ai/mastra/commit/d5f35468273369ae7d4699d856f5db69e871c8db), [`bbc22ce`](https://github.com/mastra-ai/mastra/commit/bbc22ce1036a18c3d235a556883844b81fe2fecc), [`d5b0012`](https://github.com/mastra-ai/mastra/commit/d5b00123c6098104eda0eb8d39ef0e139a0fe3e3), [`037b9b7`](https://github.com/mastra-ai/mastra/commit/037b9b75a89388b5ecd7ca72799d29107180f211), [`a86a47c`](https://github.com/mastra-ai/mastra/commit/a86a47c7ef92aa3a48b6663336235a43b7535aaa), [`951a18b`](https://github.com/mastra-ai/mastra/commit/951a18b08571b87eae318bcd0f5970b8e70ca3c8), [`d0a2fa4`](https://github.com/mastra-ai/mastra/commit/d0a2fa4e34473a05a582af70270173747c93a938), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`8559e74`](https://github.com/mastra-ai/mastra/commit/8559e74767d2baf74e29f408e5dfa41a0d1007b0), [`7b646a0`](https://github.com/mastra-ai/mastra/commit/7b646a07a8da8aa84ca2a0a4564369c9d2462af5), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`f4458ee`](https://github.com/mastra-ai/mastra/commit/f4458eea7f221a5b741a4846bba9b95139a8aef8), [`a3b4ef9`](https://github.com/mastra-ai/mastra/commit/a3b4ef9ecda76f961cb9992a2c8787d37d8ce1b3), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b), [`547600d`](https://github.com/mastra-ai/mastra/commit/547600d004e08ecb8b08c84312b535ae5b016c92), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`8acea4c`](https://github.com/mastra-ai/mastra/commit/8acea4cc5b97dcfd1e1179f9b40ca34c05f255cf), [`1bae2df`](https://github.com/mastra-ai/mastra/commit/1bae2df59020ede9a2a6096e6bf24500b06a0a86), [`4e206cf`](https://github.com/mastra-ai/mastra/commit/4e206cf1d2e486be84e0de9a9c8dbfd8bedeb222)]:
+  - @mastra/core@1.84.0
+  - @mastra/mcp@2.10.0
+
+## 1.4.1-alpha.2
+
+### Patch Changes
+
+- Fixed `posthog_run_query` failing provider-response validation whenever PostHog returned column types, which it does for every query with columns, even `select 1`. PostHog returns column types as `[columnName, clickhouseType]` pairs, such as `[["count()", "UInt64"]]`, and the tool now accepts them and returns them in that shape. The inferred type of `types` in the tool's output changes from `string[]` to `[string, string][]`, and a plain string entry, which PostHog never sends, is now rejected. Fixes [#30528](https://github.com/mastra-ai/mastra/issues/30528). ([#30541](https://github.com/mastra-ai/mastra/pull/30541))
+
+- Updated dependencies [[`7518c05`](https://github.com/mastra-ai/mastra/commit/7518c05d6f24d37ccebed2a0667e6fe189c3c368), [`b07dd23`](https://github.com/mastra-ai/mastra/commit/b07dd2371304f688a117c441501130853293a14f), [`33fba78`](https://github.com/mastra-ai/mastra/commit/33fba789314c27a9c610095e75f3131ca92831c9), [`e110fa6`](https://github.com/mastra-ai/mastra/commit/e110fa681a156277eed427ecea7a7bf488b02d37), [`d0a2fa4`](https://github.com/mastra-ai/mastra/commit/d0a2fa4e34473a05a582af70270173747c93a938)]:
+  - @mastra/core@1.84.0-alpha.5
+
+## 1.4.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`88b4a97`](https://github.com/mastra-ai/mastra/commit/88b4a970426f48731a153e46ed228d0301da32a1), [`33eaa29`](https://github.com/mastra-ai/mastra/commit/33eaa293e28aa8cd86ad68e1eaf44b4929be818d), [`0170d70`](https://github.com/mastra-ai/mastra/commit/0170d700a411ce2b5e64a82bc1133716ae75cbd6), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b)]:
+  - @mastra/core@1.84.0-alpha.3
+  - @mastra/mcp@2.10.0-alpha.0
+
+## 1.4.1-alpha.0
+
+### Patch Changes
+
+- Changed the default model of the OpenAI create-image tool from `gpt-image-1` to `gpt-image-2.5-sunburst`. OpenAI retired `gpt-image-1` on October 23, 2026, so calls that omitted `model` were failing. The default is now a model that works again. ([#30364](https://github.com/mastra-ai/mastra/pull/30364))
+
+- The `resourceId` callback on `userConnectRoutes()` now receives the authenticated user as a typed `MastraUser`, the same `user` that agent callbacks such as `tools` receive. You can read the ID without a cast, and the routes and the agent's tools derive the same resource ID from one value. ([#30340](https://github.com/mastra-ai/mastra/pull/30340))
+
+  ```typescript
+  // Before
+  userConnectRoutes({ resourceId: ({ user }) => (user as { id: string } | undefined)?.id });
+
+  // After
+  userConnectRoutes({ resourceId: ({ user }) => user?.id });
+  ```
+
+  `user` is now the normalized user rather than the raw object your auth provider returned. To read provider-specific fields, use `requestContext.get('user')`.
+
+- Updated dependencies [[`1bac054`](https://github.com/mastra-ai/mastra/commit/1bac054f7a9089d112f2b4732caef0fe9801df71), [`f51098e`](https://github.com/mastra-ai/mastra/commit/f51098e60cbb47a9eac5e458d6d85cd4ef162926), [`51c340a`](https://github.com/mastra-ai/mastra/commit/51c340a7824530b348e157cb6f71094522e2b5c2), [`2788a6d`](https://github.com/mastra-ai/mastra/commit/2788a6d959ec16c454d1ac6564d546f47be8f1eb), [`51c340a`](https://github.com/mastra-ai/mastra/commit/51c340a7824530b348e157cb6f71094522e2b5c2), [`7fd6830`](https://github.com/mastra-ai/mastra/commit/7fd6830a26ac38060fa02675b2daef82f2c0ef2e), [`99ec3bd`](https://github.com/mastra-ai/mastra/commit/99ec3bd582a79d85d4c0c09b50ed9ed0830c79d5), [`70f3eba`](https://github.com/mastra-ai/mastra/commit/70f3eba5ecb9870d21582455fb55137663766d50), [`cb5f3a5`](https://github.com/mastra-ai/mastra/commit/cb5f3a5c7964e9304c9b2a9141ab971158fe16d4), [`8ac8822`](https://github.com/mastra-ai/mastra/commit/8ac88228d67a5b3987084adeb40364a333347c97), [`6d14d0e`](https://github.com/mastra-ai/mastra/commit/6d14d0edc4fb03e800d8d86e7e7fa00bf3943b56), [`7b9130f`](https://github.com/mastra-ai/mastra/commit/7b9130f50ec0d68daae4ef11bbfaf2d3bc9454ed), [`0278a5c`](https://github.com/mastra-ai/mastra/commit/0278a5ce834fad3cced73cfd19336a34d1bc8f10), [`a86a47c`](https://github.com/mastra-ai/mastra/commit/a86a47c7ef92aa3a48b6663336235a43b7535aaa), [`8559e74`](https://github.com/mastra-ai/mastra/commit/8559e74767d2baf74e29f408e5dfa41a0d1007b0), [`7b646a0`](https://github.com/mastra-ai/mastra/commit/7b646a07a8da8aa84ca2a0a4564369c9d2462af5), [`8acea4c`](https://github.com/mastra-ai/mastra/commit/8acea4cc5b97dcfd1e1179f9b40ca34c05f255cf)]:
+  - @mastra/core@1.84.0-alpha.1
+
 ## 1.4.0
 
 ### Minor Changes

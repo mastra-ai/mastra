@@ -106,16 +106,14 @@ describe('page graph', () => {
     ]);
   });
 
-  it('sizes every page and every scope alike and marks the selection', () => {
+  it('sizes every page alike and every scope alike, and marks the selection', () => {
     const edges = pageGraphEdges(pages, [{ source: 'a', target: 'b', kind: 'mention' }]);
     const flow = toPageFlow(pages, edges, 'a');
     const byId = new Map(flow.nodes.map(node => [node.id, node]));
     expect([...byId.keys()]).toEqual(['org', 'b', 'a', 'a-child', 'orphan']);
     expect(byId.get('b')?.data.size).toBe(KNOWLEDGE_PAGE_SIZE);
     expect(byId.get('orphan')?.data.size).toBe(KNOWLEDGE_PAGE_SIZE);
-    expect(byId.get('org')?.data.size).toBe(
-      byId.get('org')?.data.page.isScope ? KNOWLEDGE_SCOPE_SIZE : KNOWLEDGE_PAGE_SIZE,
-    );
+    expect(byId.get('org')?.data.size).toBe(KNOWLEDGE_SCOPE_SIZE);
     expect(byId.get('a')?.data.selected).toBe(true);
     expect(flow.edges.find(edge => edge.data?.kind === 'mention')).toMatchObject({
       id: 'mention:a->b',

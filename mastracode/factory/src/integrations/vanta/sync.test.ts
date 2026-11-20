@@ -3,7 +3,12 @@ import { createBoardRegistry } from '../../boards/index.js';
 import { createTestBoard } from '../../boards/test-utils.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { VantaRules } from './rules.js';
-import { createVantaSync } from './sync.js';
+import {
+  createVantaSync,
+  VANTA_VULNERABILITIES_SOURCE_ID,
+  vantaOrgsSyncingWithoutSource,
+  vantaVulnerabilitiesSelected,
+} from './sync.js';
 import type { VantaVulnerability } from './sync.js';
 
 const vulnerability: VantaVulnerability = {
@@ -96,42 +101,56 @@ describe('createVantaSync', () => {
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
   });
 
-  it("runs a card added to another board under its own identity when the vulnerability was first seen without a card", async () => {
-    const { project, sync, workItems } = await setup({ enabled: true });
-    // The first sync sees the vulnerability before any card exists, and files one.
-    await sync();
-    const { item: filed } = await workItems.upsert({
-      orgId: 'org-1',
-      userId: 'user-1',
-      factoryProjectId: project.id,
-      input: {
-        externalSource: { integrationId: 'vanta', type: 'vulnerability', externalId: vulnerability.id },
-        title: 'lodash: CVE-2026-1',
-        stages: ['intake'],
-        sessions: {},
-        metadata: { state: 'open' },
-      },
+  it('does not reconcile an unavailable snapshot or retry it for another project in the same org', async () => {
+    const ingest = vi.fn();
+    const listVulnerabilities = vi.fn(async () => null);
+    const sync = createVantaSync({
+      connected: async () => true,
+      listVulnerabilities,
+      listProjects: async () => [{ orgId: 'org-1', id: 'project-1' }, { orgId: 'org-1', id: 'project-2' }],
+      intakeEnabled: async () => true,
+      boundProjectIds: async () => [],
+      ingest,
+      userId: 'factory-rule-dispatcher',
     });
-    const security = await workItems.linkWorkItemToBoard({
-      orgId: 'org-1',
-      id: filed.id,
-      board: 'release',
-      stage: 'queued',
-      userId: 'user-1',
+    expect(await sync()).toMatchObject({ projects: 0, checked: 0 });
+    expect(listVulnerabilities).toHaveBeenCalledTimes(1);
+    expect(ingest).not.toHaveBeenCalled();
+  });
+
+  it('passes only the owning organization snapshot to each project', async () => {
+    const ingest = vi.fn();
+    const sync = createVantaSync({
+      connected: async () => true,
+      listVulnerabilities: async orgId => orgId === 'org-1' ? [vulnerability] : [{ ...vulnerability, id: 'vuln-2' }],
+      listProjects: async () => [{ orgId: 'org-1', id: 'project-1' }, { orgId: 'org-2', id: 'project-2' }],
+      intakeEnabled: async () => true,
+      boundProjectIds: async () => [],
+      ingest,
+      userId: 'factory-rule-dispatcher',
     });
-    const commits = vi.spyOn(workItems, 'commitRuleEvaluation');
+    expect(await sync()).toMatchObject({ projects: 2, checked: 2 });
+    expect(ingest.mock.calls[0]?.[0]).toMatchObject({ orgId: 'org-1', vulnerabilities: [{ id: 'vuln-1' }] });
+    expect(ingest.mock.calls[1]?.[0]).toMatchObject({ orgId: 'org-2', vulnerabilities: [{ id: 'vuln-2' }] });
+  });
+});
 
-    await sync();
-    await sync();
+describe('Vanta vulnerability selection', () => {
+  it('syncs only once vulnerabilities are selected', () => {
+    expect(vantaVulnerabilitiesSelected({ enabled: true, sourceIds: [VANTA_VULNERABILITIES_SOURCE_ID] })).toBe(true);
+    expect(vantaVulnerabilitiesSelected({ enabled: true, sourceIds: null })).toBe(false);
+    expect(vantaVulnerabilitiesSelected({ enabled: false, sourceIds: [VANTA_VULNERABILITIES_SOURCE_ID] })).toBe(false);
+    expect(vantaVulnerabilitiesSelected(undefined)).toBe(false);
+  });
 
-    const results = await Promise.all(commits.mock.results.map(result => result.value));
-    const byCard = commits.mock.calls.map(([input], index) => [input.workItemId, input.ingress.identity, results[index].status]);
-    expect(byCard).toEqual([
-      // The first card keeps the identity the unbound evaluation was stored under.
-      [filed.id, 'vanta:vuln-1:open', 'replayed'],
-      [security!.id, `vanta:vuln-1:open:${security!.id}`, 'committed'],
-      [filed.id, 'vanta:vuln-1:open', 'replayed'],
-      [security!.id, `vanta:vuln-1:open:${security!.id}`, 'replayed'],
-    ]);
+  it('selects vulnerabilities for orgs whose old switch was on with nothing selected', () => {
+    expect(
+      vantaOrgsSyncingWithoutSource([
+        { orgId: 'switch-on', config: { vanta: { enabled: true, sourceIds: null } } },
+        { orgId: 'switch-off', config: { vanta: { enabled: false, sourceIds: null } } },
+        { orgId: 'selected', config: { vanta: { enabled: true, sourceIds: [VANTA_VULNERABILITIES_SOURCE_ID] } } },
+        { orgId: 'no-vanta', config: { github: { enabled: true, sourceIds: ['acme/app'] } } },
+      ]),
+    ).toEqual(new Map([['switch-on', [VANTA_VULNERABILITIES_SOURCE_ID]]]));
   });
 });

@@ -59,7 +59,7 @@ Channel adapters require provider-specific environment variables for credentials
 
 :::
 
-We recommend configuring [storage](/docs/storage) for channels. Storage preserves channel and memory state across restarts, including thread subscriptions and tool approvals:
+Configure [storage](/docs/storage) for channels. Storage preserves channel and memory state across restarts, including thread subscriptions and tool approvals:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -246,7 +246,7 @@ In group conversations, Mastra prefixes each message with the sender's name and 
 [Bob (@U456DEF)]: I have a question too.
 ```
 
-## Per-message Signal metadata
+## Per-message signal metadata
 
 Use `signalMetadata` in a custom Channel handler to attach structured context to one inbound message. The metadata follows the message when it starts an idle run or joins an active run.
 

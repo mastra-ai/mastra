@@ -17,7 +17,7 @@ This demo runs in Mastra Studio, but you can connect this agent to your React, N
 ## Features
 
 - **Token Limit Protection**: Uses AI summarization to compress large CSV datasets, preventing token limit errors and reducing costs.
-- **Large Context Window**: Leverages `openai/gpt-5-mini` to handle large datasets efficiently.
+- **Large Context Window**: Leverages `openai/gpt-6.1-terra` to handle large datasets efficiently.
 - **Data Analysis Focus**: Generates questions focused on patterns, insights, and practical applications of the data.
 
 ## Quick start

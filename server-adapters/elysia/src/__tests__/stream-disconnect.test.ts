@@ -1,4 +1,3 @@
-import { createServer } from 'node:net';
 import { LLMock } from '@copilotkit/aimock';
 import { node } from '@elysiajs/node';
 import { Agent } from '@mastra/core/agent';
@@ -6,22 +5,13 @@ import { Mastra } from '@mastra/core/mastra';
 import { Elysia } from 'elysia';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MastraServer } from '../index';
-
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-// @elysiajs/node reports port 0 back instead of the bound port, so pick a free port up front.
-async function getFreePort(): Promise<number> {
-  const probe = createServer();
-  await new Promise<void>(resolve => probe.listen(0, 'localhost', () => resolve()));
-  const address = probe.address();
-  await new Promise(resolve => probe.close(resolve));
-  return typeof address === 'object' && address ? address.port : 0;
-}
+import { listenWithNodeAdapter } from './helpers';
 
 describe('Elysia stream client disconnect', () => {
   let llm: LLMock;
-  let stopServer: () => unknown;
-  let port: number;
+  let server: Awaited<ReturnType<typeof listenWithNodeAdapter>>;
+  // Settles when the agent's run ends; the run outlives the disconnect, reading the whole upstream reply.
+  let runEnded: Promise<void>;
   const loggedErrors: string[] = [];
 
   beforeEach(async () => {
@@ -38,10 +28,13 @@ describe('Elysia stream client disconnect', () => {
       },
     );
 
+    let endRun!: () => void;
+    runEnded = new Promise(resolve => (endRun = resolve));
     const agent = new Agent({
       id: 'streamer',
       name: 'streamer',
       instructions: 'Reply.',
+      defaultOptions: { onFinish: endRun, onError: endRun, onAbort: endRun },
       model: { id: 'openai/gpt-4o-mini', url: `${llm.url.replace(/\/+$/, '')}/v1`, apiKey: 'test-key' },
     });
     const mastra = new Mastra({ agents: { streamer: agent }, logger: false });
@@ -55,17 +48,11 @@ describe('Elysia stream client disconnect', () => {
     // Served through Elysia's official Node adapter, so disconnects reach the app the way they do in production.
     const app = new Elysia({ adapter: node() });
     await new MastraServer({ app, mastra }).init();
-    port = await getFreePort();
-    await new Promise<void>(resolve =>
-      app.listen({ port, hostname: 'localhost' }, server => {
-        stopServer = () => server.stop(true);
-        resolve();
-      }),
-    );
+    server = await listenWithNodeAdapter(app);
   });
 
   afterEach(async () => {
-    await stopServer();
+    await server.close();
     await llm.stop();
   });
 
@@ -73,7 +60,7 @@ describe('Elysia stream client disconnect', () => {
     'closes %s quietly when the client disconnects mid-stream',
     async path => {
       const controller = new AbortController();
-      const res = await fetch(`http://localhost:${port}${path}`, {
+      const res = await fetch(`${server.baseUrl}${path}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ messages: 'slow' }),
@@ -86,7 +73,8 @@ describe('Elysia stream client disconnect', () => {
       }
       controller.abort();
 
-      await sleep(1000);
+      // Every upstream chunk has gone through the adapter by the time the run ends.
+      await runEnded;
 
       expect(loggedErrors).toEqual([]);
     },

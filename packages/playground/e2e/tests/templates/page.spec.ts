@@ -14,13 +14,5 @@ test.describe('Templates list page', () => {
       await expect(page).toHaveTitle(/Mastra Studio/);
       await expectCurrentBreadcrumb(page, 'Templates');
     });
-
-    test('renders the filter controls', async ({ page }) => {
-      await page.goto('/templates');
-
-      // Wait for the page to load and check for filter UI elements
-      // The page should have tag and provider filter dropdowns
-      await expect(page.locator('main')).toBeVisible();
-    });
   });
 });

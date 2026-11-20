@@ -40,7 +40,7 @@ The deterministic workflow owns scope, provider reads, parallel fan-out, persist
   });
 }
 
-export const socSupervisor = createSocSupervisor(process.env.MASTRA_MODEL ?? 'openai/gpt-4o-mini');
+export const socSupervisor = createSocSupervisor(process.env.MASTRA_MODEL ?? 'openai/gpt-6-luna');
 
 const SupervisorSpecialistSchema = z.enum(['identity', 'endpoint', 'cloud']);
 const expectedSpecialists = ['identity', 'endpoint', 'cloud'] as const;

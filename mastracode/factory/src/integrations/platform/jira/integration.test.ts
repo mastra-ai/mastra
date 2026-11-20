@@ -41,7 +41,7 @@ const connections = [
 
 function integration(): PlatformJiraIntegration {
   return new PlatformJiraIntegration({
-    clientConfig: { baseUrl: PLATFORM_BASE, accessToken: 'platform-token' },
+    connect: { baseUrl: PLATFORM_BASE, projectId: 'proj_factory', accessToken: 'platform-token' },
   });
 }
 
@@ -82,7 +82,7 @@ function stubRoutes(
   const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
     const target = String(input);
     const method = init?.method ?? 'GET';
-    if (target.endsWith('/v2/connections?providerKey=jira')) {
+    if (target.endsWith('/v2/projects/proj_factory/connections')) {
       return json({ connections: visibleConnections });
     }
     const contextMatch = target.match(/\/v2\/connections\/([^/]+)\/context$/);
@@ -145,7 +145,7 @@ describe('PlatformJiraIntegration discovery', () => {
     ]);
     const jira = integration();
     const reconcile = attachJiraIssueReconciler(jira, {
-      storage: { projects: seeded.projects },
+      storage: { projects: seeded.projects, intake: seeded.intake },
       runtime: {
         configVersion: 'test-v1',
         workItems: seeded.workItems,
@@ -187,12 +187,14 @@ describe('PlatformJiraIntegration discovery', () => {
     expect(logged).not.toContain('a1b_acme');
   });
 
-  it('discovers connections by the jira provider configuration key', async () => {
+  it("discovers Jira connections from the Factory project's connection listing", async () => {
     const fetchMock = stubRoutes([]);
 
-    await expect(integration().listConnections()).resolves.toEqual(connections);
+    await expect(integration().listConnections()).resolves.toEqual(
+      connections.map(connection => ({ ...connection, resourceId: null, connectedAt: null })),
+    );
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`${PLATFORM_BASE}/v2/connections?providerKey=jira`);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`${PLATFORM_BASE}/v2/projects/proj_factory/connections`);
   });
 
   it('reports active connections only when a discovered connection is active', async () => {
@@ -209,7 +211,7 @@ describe('PlatformJiraIntegration discovery', () => {
     } satisfies Partial<JiraApiError>);
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`${PLATFORM_BASE}/v2/connections?providerKey=jira`);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`${PLATFORM_BASE}/v2/projects/proj_factory/connections`);
     expect(String(fetchMock.mock.calls[1]?.[0])).toBe(`${PLATFORM_BASE}/v2/connections/a1b_acme/context`);
   });
 });
@@ -238,6 +240,94 @@ describe('PlatformJiraIntegration over integrations v2', () => {
       metadata: { key: 'ENG', connectionId: 'a1b_acme', site: 'acme.atlassian.net' },
     });
     expect(decodeSourceId(sources[1]!.id)).toEqual({ connectionId: 'a1b_beta', projectId: '2' });
+  });
+
+  it('files a new issue on a second connection when the first fills every page of the sweep', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
+    const sourceIds = [encodeSourceId('a1b_acme', '1'), encodeSourceId('a1b_beta', '2')];
+    await seeded.intake.saveConfig({ orgId: 'org-1', config: { jira: { enabled: true, sourceIds } } });
+    for (const sourceId of sourceIds) {
+      await seeded.intake.setSharedBinding({
+        orgId: 'org-1',
+        integrationId: 'jira',
+        sourceId,
+        factoryProjectId: project.id,
+        labels: null,
+      });
+    }
+    let acmePage = 0;
+    stubRoutes([
+      [
+        'POST',
+        `a1b_acme/proxy/ex/jira/${ACME_CLOUD_ID}/rest/api/3/search/jql`,
+        () => {
+          acmePage += 1;
+          return json({ issues: [issue(`ENG-${acmePage}`)], nextPageToken: `acme-${acmePage}` });
+        },
+      ],
+      [
+        'POST',
+        `a1b_beta/proxy/ex/jira/${BETA_CLOUD_ID}/rest/api/3/search/jql`,
+        () => json({ issues: [issue('OPS-7', '2')] }),
+      ],
+    ]);
+    const reconcile = attachJiraIssueReconciler(integration(), {
+      auth: fakeRouteAuth(),
+      factoryStorage: seeded.storage,
+      storage: { projects: seeded.projects, intake: seeded.intake },
+      runtime: { configVersion: 'test-v1', workItems: seeded.workItems, boards: createBoardRegistry() },
+    } as never);
+
+    await expect(reconcile?.()).resolves.toMatchObject({ observed: 6, failed: 0 });
+    const proposed = await seeded.workItems.listDeferredDecisions('org-1', project.id);
+    expect(
+      proposed.map(entry => (entry.decision as { metadata?: { identifier?: string } }).metadata?.identifier),
+    ).toContain('OPS-7');
+  });
+
+  it('files a new issue on a second connection when the first fails', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
+    const sourceIds = [encodeSourceId('a1b_acme', '1'), encodeSourceId('a1b_beta', '2')];
+    await seeded.intake.saveConfig({ orgId: 'org-1', config: { jira: { enabled: true, sourceIds } } });
+    for (const sourceId of sourceIds) {
+      await seeded.intake.setSharedBinding({
+        orgId: 'org-1',
+        integrationId: 'jira',
+        sourceId,
+        factoryProjectId: project.id,
+        labels: null,
+      });
+    }
+    stubRoutes([
+      [
+        'POST',
+        `a1b_acme/proxy/ex/jira/${ACME_CLOUD_ID}/rest/api/3/search/jql`,
+        () => json({ errorMessages: ['boom'] }, 500),
+      ],
+      [
+        'POST',
+        `a1b_beta/proxy/ex/jira/${BETA_CLOUD_ID}/rest/api/3/search/jql`,
+        () => json({ issues: [issue('OPS-7', '2')] }),
+      ],
+    ]);
+    const reconcile = attachJiraIssueReconciler(integration(), {
+      auth: fakeRouteAuth(),
+      factoryStorage: seeded.storage,
+      storage: { projects: seeded.projects, intake: seeded.intake },
+      runtime: { configVersion: 'test-v1', workItems: seeded.workItems, boards: createBoardRegistry() },
+    } as never);
+
+    await expect(reconcile?.()).resolves.toMatchObject({
+      observed: 1,
+      failed: 1,
+      errors: [{ projectId: project.id }],
+    });
+    const proposed = await seeded.workItems.listDeferredDecisions('org-1', project.id);
+    expect(
+      proposed.map(entry => (entry.decision as { metadata?: { identifier?: string } }).metadata?.identifier),
+    ).toContain('OPS-7');
   });
 
   it('pages selected projects across multiple Jira connections without mixing credentials', async () => {

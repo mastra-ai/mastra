@@ -69,7 +69,7 @@ export function stripCachedSessionRefs(queryClient: QueryClient, factoryProjectI
 const selectCards = (board: BoardSnapshot) => board.workItems;
 
 /** The cards holding a session, with the cards related to them, and the sessions parked on them. */
-export function sessionCardsQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
+function sessionCardsQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
   return queryOptions({
     queryKey: queryKeys.workItemsWithSessions(factoryProjectId),
     queryFn: factoryProjectId
@@ -140,22 +140,19 @@ function heldCards(client: QueryClient, factoryProjectId: string, versions: Read
  * body it would send for each; only the cards the tab does not hold at that version are
  * downloaded, by id. The first read of a board holds none, so it asks for the bodies with the
  * listing. A card the read leaves equal stays the object held, so nothing showing it renders
- * again, and a read that changes nothing answers the snapshot held. `openCard` is asked for in
- * place of the card the view names: the answer says which phases hold it, however deep.
+ * again, and a read that changes nothing answers the snapshot held.
  */
 async function readBoardPhases(
   baseUrl: string,
   factoryProjectId: string,
   request: BoardPhasesRequest,
-  openCard: string | undefined,
   signal: AbortSignal,
   client: QueryClient,
 ): Promise<BoardPhasesSnapshot> {
   const boardHeld = client
     .getQueriesData<BoardPhasesSnapshot>({ queryKey: queryKeys.boardPhases(factoryProjectId, request.board) })
     .some(([, snapshot]) => snapshot !== undefined);
-  const asked = openCard ? { ...request, item: openCard } : request;
-  const answer = await fetchBoardPhases(baseUrl, factoryProjectId, asked, !boardHeld, signal);
+  const answer = await fetchBoardPhases(baseUrl, factoryProjectId, request, !boardHeld, signal);
   const named = [
     ...answer.phases.flatMap(phase => phase.cards),
     ...(answer.item ? [answer.item] : []),
@@ -196,8 +193,6 @@ async function readBoardPhases(
       : {}),
     matchingTotal: answer.matchingTotal,
     boardTotal: answer.boardTotal,
-    runningSessionIds: answer.runningSessionIds,
-    parkedSessionIds: answer.parkedSessionIds,
   };
   const workItems = [...cards.values()];
   const previous = client.getQueryData<BoardPhasesSnapshot>(queryKeys.boardPhasesView(factoryProjectId, request));
@@ -210,22 +205,16 @@ async function readBoardPhases(
   return { ...sharedListing, workItems: sameCards ? previousCards : workItems };
 }
 
-/**
- * One view of a board: its phases, and the cards they list. `openCard` is the card whose details
- * the page holds open: every read asks for it, so a refresh or a new order never takes it off the
- * page, however deep its phase holds it. It stays out of the key, because the view is the same
- * with a card open: opening or closing one reads nothing.
- */
+/** One view of a board: its phases, and the cards they list. */
 export function boardPhasesQueryOptions(
   baseUrl: string,
   factoryProjectId: string | undefined,
   request: BoardPhasesRequest,
-  openCard?: string,
 ) {
   return queryOptions({
     queryKey: queryKeys.boardPhasesView(factoryProjectId, request),
     queryFn: factoryProjectId
-      ? ({ signal, client }) => readBoardPhases(baseUrl, factoryProjectId, request, openCard, signal, client)
+      ? ({ signal, client }) => readBoardPhases(baseUrl, factoryProjectId, request, signal, client)
       : skipToken,
     // The feed provider refreshes this. A hidden tab holds no stream and polls nothing, so refresh immediately on return.
     refetchOnWindowFocus: true,
@@ -244,25 +233,6 @@ export function workItemFilterOptionsQueryOptions(baseUrl: string, factoryProjec
       : skipToken,
     // Refreshed with the board, by the feed provider and on return to a hidden tab.
     refetchOnWindowFocus: true,
-  });
-}
-
-/** Which cards are filed from `sources`, with the sources the answer covers. */
-export interface FiledFromAnswer extends BoardSnapshot {
-  sources: readonly string[];
-}
-
-/** The cards filed from any of `sources`: source ids or URLs, at most a hundred. */
-export function filedFromQueryOptions(baseUrl: string, factoryProjectId: string | undefined, sources: string[]) {
-  return queryOptions({
-    queryKey: queryKeys.workItemsFiledFrom(factoryProjectId, sources),
-    queryFn:
-      factoryProjectId && sources.length > 0
-        ? async ({ signal }): Promise<FiledFromAnswer> => ({
-            ...(await listWorkItems(baseUrl, factoryProjectId, signal, { source: sources })),
-            sources,
-          })
-        : skipToken,
   });
 }
 
@@ -297,9 +267,12 @@ export function workItemActivityQueryOptions(baseUrl: string, factoryProjectId: 
  * The cards holding one session, with the cards related to them: what a session page reads
  * instead of the board.
  */
-export function useSessionWorkItemsQuery(factoryProjectId: string | undefined, sessionId: string | undefined) {
-  const { baseUrl } = useApiConfig();
-  return useQuery({
+export function sessionWorkItemsQueryOptions(
+  baseUrl: string,
+  factoryProjectId: string | undefined,
+  sessionId: string | undefined,
+) {
+  return queryOptions({
     queryKey: queryKeys.sessionWorkItems(factoryProjectId, sessionId),
     queryFn:
       factoryProjectId && sessionId
@@ -311,33 +284,44 @@ export function useSessionWorkItemsQuery(factoryProjectId: string | undefined, s
   });
 }
 
-/** The cards the sidebar marks its sessions with: the ones holding a session, with the cards related to them. */
-export function useSidebarWorkItemsQuery(factoryProjectId: string | undefined) {
+export function useSessionWorkItemsQuery(factoryProjectId: string | undefined, sessionId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  return useQuery(sessionWorkItemsQueryOptions(baseUrl, factoryProjectId, sessionId));
+}
+
+/** One card by id, for a page that shows it off the board. */
+export function workItemQueryOptions(
+  baseUrl: string,
+  factoryProjectId: string | undefined,
+  workItemId: string | undefined,
+) {
+  return queryOptions({
+    queryKey: queryKeys.workItem(factoryProjectId, workItemId),
+    queryFn:
+      factoryProjectId && workItemId
+        ? ({ signal }) => listWorkItems(baseUrl, factoryProjectId, signal, { workItemId: [workItemId] })
+        : skipToken,
+    // Refreshed with the board, by the feed provider and on return to a hidden tab.
+    refetchOnWindowFocus: true,
+    select: (board: BoardSnapshot) => board.workItems.find(card => card.id === workItemId) ?? null,
+  });
+}
+
+export function useWorkItemQuery(factoryProjectId: string | undefined, workItemId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  return useQuery(workItemQueryOptions(baseUrl, factoryProjectId, workItemId));
+}
+
+export function useSessionCardsQuery(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery(sessionCardsQueryOptions(baseUrl, factoryProjectId));
 }
 
-/**
- * One view of a board. Changing the view keeps the phases shown until the new ones answer. A view
- * the tab read while `openCard` was closed may hold it below what its phases list: that read is
- * not shown over the open card. The view is read for the card instead, and the card stays on the
- * page until the answer says where it is.
- */
-export function useBoardPhasesQuery(
-  factoryProjectId: string | undefined,
-  request: BoardPhasesRequest,
-  openCard?: string,
-) {
+/** One view of a board. Changing the view keeps the phases shown until the new ones answer. */
+export function useBoardPhasesQuery(factoryProjectId: string | undefined, request: BoardPhasesRequest) {
   const { baseUrl } = useApiConfig();
-  const held = useQueryClient().getQueryData<BoardPhasesSnapshot>(queryKeys.boardPhasesView(factoryProjectId, request));
-  const heldWithoutOpenCard = openCard !== undefined && held?.workItems.every(card => card.id !== openCard);
   return useQuery({
-    ...boardPhasesQueryOptions(
-      baseUrl,
-      factoryProjectId,
-      heldWithoutOpenCard ? { ...request, item: openCard } : request,
-      openCard,
-    ),
+    ...boardPhasesQueryOptions(baseUrl, factoryProjectId, request),
     placeholderData: keepPreviousData,
   });
 }
@@ -385,12 +369,6 @@ function withoutCard(cached: BoardSnapshot | BoardPhasesSnapshot, id: string): B
   };
 }
 
-/** Whether a session is parked; `undefined` until the cards holding sessions have been read. */
-export function useSessionParked(factoryProjectId: string | undefined, sessionId: string): boolean | undefined {
-  const { data } = useSidebarWorkItemsQuery(factoryProjectId);
-  return data?.parkedSessionIds.includes(sessionId);
-}
-
 /**
  * Materialize a work item (the server upserts on `sourceKey`, so acting twice
  * on the same issue reuses the card). The cached cards are patched in place.
@@ -418,15 +396,6 @@ export function useUpsertWorkItemMutation(factoryProjectId: string | undefined) 
         queryKey: boardKey,
         predicate: query => !isUnnarrowedBoardView(query.queryKey),
       });
-      // Whoever asked which cards are filed from this one's source learns of it without asking again.
-      queryClient.setQueriesData<FiledFromAnswer>(
-        { queryKey: queryKeys.workItemsFiledFromAny(factoryProjectId) },
-        answer => {
-          const filedFromAsked = answer?.sources.some(source => source === item.sourceKey || source === item.url);
-          if (!answer || !filedFromAsked || answer.workItems.some(card => card.id === item.id)) return answer;
-          return { ...answer, workItems: [item, ...answer.workItems] };
-        },
-      );
     },
   });
 }
@@ -454,6 +423,7 @@ export function useUpdateWorkItemMutation(factoryProjectId: string | undefined) 
     },
     onSuccess: item => {
       patchCards(queryClient, listKey, cards => cards.map(i => (i.id === item.id ? item : i)));
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessionRowsRoot(factoryProjectId) });
     },
   });
 }
@@ -489,6 +459,19 @@ function optimisticStageHistory(
   return next;
 }
 
+/**
+ * Puts a refused move's card back in the phase it left. The card the move was asked of may be an
+ * older read than the one held now, so only its phase comes back, and the card loses its version
+ * so the settle's re-read downloads it whatever the server names.
+ */
+function moveUndone(asked: WorkItem) {
+  return (item: WorkItem): WorkItem => {
+    if (item.id !== asked.id) return item;
+    if (item.revision !== asked.revision) return { ...item, version: undefined };
+    return { ...item, stages: asked.stages, stageHistory: asked.stageHistory, version: undefined };
+  };
+}
+
 export function useTransitionWorkItemMutation(factoryProjectId: string | undefined, currentUserId?: string) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
@@ -522,20 +505,12 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
       );
       return { enteredAt, actor };
     },
-    // The card the move was asked of is the one held before it: every read holds cards by revision.
-    onError: (_error, variables) => {
-      patchCards(queryClient, listKey, cards =>
-        cards.map(item => {
-          if (item.id !== variables.item.id || item.revision !== variables.item.revision) return item;
-          return variables.item;
-        }),
-      );
-    },
+    onError: (_error, variables) => patchCards(queryClient, listKey, cards => cards.map(moveUndone(variables.item))),
     onSuccess: async (result, variables, context) => {
       patchCards(queryClient, listKey, cards =>
         cards.map(item => {
+          if (result.status === 'rejected') return moveUndone(variables.item)(item);
           if (item.id !== variables.item.id || item.revision !== variables.item.revision) return item;
-          if (result.status === 'rejected') return variables.item;
           if (result.revision <= item.revision) return item;
           const previousItem = variables.item;
           return {
@@ -559,6 +534,7 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
     // The lane's rule queues its run inside this commit. Awaiting both refetches keeps the
     // move pending until the card shows that run, so its button never reappears in between.
     onSettled: async () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessionRowsRoot(factoryProjectId) });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: listKey }),
         queryClient.invalidateQueries({ queryKey: queryKeys.factoryDecisionsRoot(factoryProjectId) }),
@@ -613,6 +589,7 @@ export function useDeleteWorkItemMutation(factoryProjectId: string | undefined) 
     onSuccess: () => {
       // patchCards keeps the snapshot's session markers, so refetch to drop the deleted card's with it.
       void queryClient.invalidateQueries({ queryKey: listKey });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessionRowsRoot(factoryProjectId) });
     },
   });
 }

@@ -17,10 +17,10 @@ import type {
   Session,
 } from '@mastra/core/agent-controller';
 import { createCodingAgent } from '@mastra/core/coding-agent';
-import { classifyProviderError } from '@mastra/core/error';
+import { classifyProviderError, getErrorFromUnknown } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
 import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge';
-import { PROVIDER_REGISTRY, findGatewayForModel, getGatewayId } from '@mastra/core/llm';
+import { ModelRouterEmbeddingModel, PROVIDER_REGISTRY, findGatewayForModel, getGatewayId } from '@mastra/core/llm';
 import type { MastraModelGatewayInterface, ProviderConfig } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { defaultNotificationDeliveryDecision, readNotificationRoutingRequirement } from '@mastra/core/notifications';
@@ -40,7 +40,7 @@ import { TaskSignalProvider } from '@mastra/core/signals';
 import type { SignalProvider } from '@mastra/core/signals';
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '@mastra/core/tools';
-import type { MastraVector } from '@mastra/core/vector';
+import type { MastraEmbeddingOptions, MastraVector } from '@mastra/core/vector';
 import type { DuckDBStore } from '@mastra/duckdb';
 
 import { GithubSignals } from '@mastra/github-signals';
@@ -64,6 +64,7 @@ import {
 } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
+import type { MemoryEmbedder } from './agents/memory.js';
 import {
   canUseProvider,
   createMastraCodeGateway,
@@ -97,7 +98,6 @@ import {
 import { isKimiCodingDeviceId } from './auth/providers/kimi-coding.js';
 import { AuthStorage } from './auth/storage.js';
 import { CODE_AGENT_ID, DEFAULT_CONFIG_DIR, DEFAULT_OM_MODEL_ID, validateConfigDirName } from './constants.js';
-import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
 import {
   resolveAgentStreamsOff,
   resolveExperimentalAgent,
@@ -106,7 +106,7 @@ import {
 } from './experimental-agent.js';
 import { HookManager } from './hooks/index.js';
 import { createKnowledgeInspector as createScopedKnowledgeInspector } from './knowledge-inspector.js';
-import { knowledgeUnresolvedScopes, LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeSessionScopes } from './knowledge-scope.js';
+import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeSessionScopes } from './knowledge-scope.js';
 import { createMcpManager } from './mcp/index.js';
 import type { McpServerConfig } from './mcp/index.js';
 import type { ProviderAccess } from './onboarding/packs.js';
@@ -257,7 +257,7 @@ function emitTransientRetry(
   const controllerContext = requestContext?.get('controller') as AgentControllerRequestContext | undefined;
   controllerContext?.emitEvent?.({
     type: 'error',
-    error: error instanceof Error ? error : new Error(String(error)),
+    error: getErrorFromUnknown(error, { supportSerialization: false }),
     retryable: true,
     retryDelay: delayMs,
     retryAttempt: retryCount + 1,
@@ -362,12 +362,22 @@ export interface MastraCodeConfig {
    * LibSQL fallback — if the injected store fails, that's a hard error.
    */
   storage?: StorageConfig | MastraCompositeStore;
+  /** Scorers for the code agent. None run by default. */
+  scorers?: Parameters<typeof createCodingAgent>[0]['scorers'];
   /** Disable persistence of rich scorer results. Default: true. */
   disableScoreStorage?: boolean;
   /** Backend for an injected custom storage instance. Inferred for LibSQLStore and PostgresStore. */
   storageBackend?: 'libsql' | 'pg';
   /** Pre-built vector store instance for recall search. Skips the default vector store creation. */
   vector?: MastraVector;
+  /**
+   * Embedder for recall vectors: a `provider/model` router string (e.g.
+   * `'openai/text-embedding-3-small'`) or an AI SDK embedding model. Used only when a vector store
+   * is set. Omitted → local `fastembed.small` (bge-small, 384 dimensions).
+   */
+  embedder?: MemoryEmbedder;
+  /** Options passed to every embedding call, e.g. provider options or headers. */
+  embedderOptions?: MastraEmbeddingOptions;
   /**
    * Knowledge for the code agent, attached like an Agent's `knowledge`. Unset, it follows the
    * `signals.experimentalKnowledge` global setting (off; on means `true`). `false` keeps it off
@@ -380,7 +390,8 @@ export interface MastraCodeConfig {
   /**
    * The scopes every Knowledge run acts with, like an Agent's `scopes`, such as `'org:acme'`. What a
    * run may do on each comes from the Knowledge instance's scope declarations. Factory sessions
-   * always add `org:` and `project:` scopes.
+   * add their own `org:` and `project:` scopes unless these name an `org:`; then they act with these
+   * alone, and a `project:`, `resource:` or `thread:` scope here is refused.
    */
   scopes?: string[];
   /** Observational memory scope. Default: auto-detected from env/config files, falls back to 'thread' */
@@ -696,6 +707,13 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const googleVertexGateway = createGoogleVertexGateway();
   const githubCopilotGateway = createGitHubCopilotGateway();
 
+  // Built now, once stored provider keys are in env and before any storage or pubsub is opened, so a
+  // missing key fails here without leaving resources behind.
+  const embedder =
+    config?.memory === undefined && typeof config?.embedder === 'string'
+      ? new ModelRouterEmbeddingModel(config.embedder)
+      : config?.embedder;
+
   // Project detection
   const project = detectProject(cwd);
 
@@ -911,6 +929,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     config?.memory === undefined
       ? getDynamicMemory(storage, vector, config?.settingsPath, {
           disableSettingsOmSeed: config?.disableSettingsOmSeed,
+          embedder,
+          embedderOptions: config?.embedderOptions,
         })
       : undefined;
   const memory =
@@ -958,10 +978,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   });
   const loadedPlugins = pluginManager ? await pluginManager.reload() : [];
   const pluginTools = pluginManager?.getPluginTools() ?? {};
-
-  // Scorers (live evaluation with sampling)
-  const outcomeScorer = createOutcomeScorer();
-  const efficiencyScorer = createEfficiencyScorer();
 
   // Notification delivery. Every local Mastra Code process shares one database,
   // so one notification store and one dispatch schedule, and whichever process
@@ -1342,6 +1358,14 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           ...(agentConnectionsSignalProvider ? [agentConnectionsSignalProvider.id] : []),
           ...(githubSignals ? [githubSignals.id] : []),
         ],
+        // A provider failing mid-session is a plugin problem the user should see,
+        // so it goes where plugin reload failures go rather than to the console.
+        onError: (message, error, pluginId) =>
+          pluginManager.reportPluginError({
+            pluginId,
+            message:
+              error === undefined ? message : `${message} ${error instanceof Error ? error.message : String(error)}`,
+          }),
       })
     : undefined;
   let unsubscribePluginReload: (() => void) | undefined;
@@ -1390,16 +1414,16 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     ...(knowledge
       ? {
           knowledge,
-          // Factory sessions add their org + project tags to the host's scopes, on top of the run's
-          // incoming scopes (identity and per-message scopes). An unresolved Factory session keeps
-          // only identity tags, so its writes stay private to the run, matching the inspector,
-          // which refuses to read for it.
+          // Factory sessions add their org + project tags to the host's scopes (or act with the host's
+          // scopes alone when they name an org:), on top of the run's incoming scopes (identity and
+          // per-message scopes). An unresolved Factory session adds no host tags, so its writes stay
+          // private to the run, matching the inspector, which refuses to read for it.
           scopes: ({ scopes, requestContext }) => {
             const controller = requestContext.get('controller') as
               | AgentControllerRequestContext<MastraCodeState>
               | undefined;
             const session = resolveKnowledgeSessionScopes(controller?.state, knowledgeHostScopes);
-            return [...scopes, ...(session.resolved ? session.scopes : knowledgeUnresolvedScopes(knowledgeHostScopes))];
+            return session.resolved ? [...scopes, ...session.scopes] : scopes;
           },
         }
       : {}),
@@ -1493,16 +1517,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       scheduleTools,
     ),
     hooks: createToolHooks(hookManager, config?.postToolObserver),
-    scorers: {
-      outcome: {
-        scorer: outcomeScorer,
-        sampling: { type: 'none' },
-      },
-      efficiency: {
-        scorer: efficiencyScorer,
-        sampling: { type: 'ratio', rate: 0.3 },
-      },
-    },
+    ...(config?.scorers ? { scorers: config.scorers } : {}),
     // TaskSignalProvider bundles the task tools + TaskStateProcessor: it merges
     // the tools into the toolset and registers the task state-signal processor,
     // so the task list persists across turns and survives OM truncation.

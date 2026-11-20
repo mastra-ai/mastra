@@ -1,11 +1,20 @@
 import { ContextMenu } from '@mastra/playground-ui/components/ContextMenu';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check, ExternalLink, Lock, Pin, PinOff, RefreshCw, Trash2, Users, X } from 'lucide-react';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
+import { IconLock } from '@mastra/playground-ui/icons/central/IconLock';
+import { IconPin } from '@mastra/playground-ui/icons/central/IconPin';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
+import { IconUnpin } from '@mastra/playground-ui/icons/central/IconUnpin';
+import { IconUserDuo } from '@mastra/playground-ui/icons/central/IconUserDuo';
 import { Link } from 'react-router';
 
 import { SourceIcon } from '../../factory/components/BoardIcons';
 import type { SessionExternalLink } from '../services/sessionRows';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
 export function SessionMenuItems({
   menu,
@@ -14,6 +23,7 @@ export function SessionMenuItems({
   pinned,
   onPinChange,
   onDelete,
+  onRename,
   onRegenerateTitle,
   regeneratingTitle,
   onAnswerApproval,
@@ -28,6 +38,7 @@ export function SessionMenuItems({
   pinned: boolean;
   onPinChange: (pinned: boolean) => void;
   onDelete?: () => void;
+  onRename?: () => void;
   onRegenerateTitle?: () => void;
   regeneratingTitle?: boolean;
   onAnswerApproval?: (decision: 'approve' | 'decline') => void;
@@ -41,7 +52,7 @@ export function SessionMenuItems({
   return (
     <>
       <Menu.Item render={<Link to={url} target="_blank" rel="noopener noreferrer" />}>
-        <ExternalLink />
+        <IconSquareArrowTopRight />
         Open in new tab
       </Menu.Item>
       {externalLinks.map(link => (
@@ -54,23 +65,29 @@ export function SessionMenuItems({
       {onAnswerApproval ? (
         <>
           <Menu.Item disabled={answeringApproval} onClick={() => onAnswerApproval('approve')}>
-            <Check />
+            <IconCheckmark2Medium />
             Approve
           </Menu.Item>
           <Menu.Item disabled={answeringApproval} onClick={() => onAnswerApproval('decline')}>
-            <X />
+            <IconCrossMedium />
             Decline
           </Menu.Item>
           <Menu.Separator />
         </>
       ) : null}
       <Menu.Item onClick={() => onPinChange(!pinned)}>
-        {pinned ? <PinOff /> : <Pin />}
+        {pinned ? <IconUnpin /> : <IconPin />}
         {pinned ? 'Unpin' : 'Pin session'}
       </Menu.Item>
+      {onRename ? (
+        <Menu.Item onClick={onRename}>
+          <IconPencil />
+          Rename
+        </Menu.Item>
+      ) : null}
       {onRegenerateTitle ? (
         <Menu.Item disabled={regeneratingTitle} onClick={onRegenerateTitle}>
-          <RefreshCw className={cn(regeneratingTitle && 'animate-spin')} />
+          <IconArrowRotateClockwise className={cn(regeneratingTitle && 'animate-spin')} />
           Regenerate title
         </Menu.Item>
       ) : null}
@@ -79,13 +96,13 @@ export function SessionMenuItems({
           disabled={changingVisibility}
           onClick={() => onVisibilityChange(visibility === 'private' ? 'org' : 'private')}
         >
-          {visibility === 'private' ? <Users /> : <Lock />}
+          {visibility === 'private' ? <IconUserDuo /> : <IconLock />}
           {visibility === 'private' ? 'Share with organization' : 'Make private'}
         </Menu.Item>
       ) : null}
       {onDelete ? (
         <Menu.Item variant="destructive" onClick={onDelete}>
-          <Trash2 />
+          <TrashIcon />
           Delete
         </Menu.Item>
       ) : null}

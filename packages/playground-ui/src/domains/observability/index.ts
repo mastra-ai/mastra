@@ -10,8 +10,8 @@ export type { ObservabilityListBodyProps } from './components/observability-list
 export { useObservabilityViews } from './hooks/use-observability-views';
 export type { ObservabilityViewsState, UseObservabilityViewsArgs } from './hooks/use-observability-views';
 export { observabilityListQueryOptions, useObservabilityListFilters } from './hooks/use-observability-list-filters';
-export { listHeadQueryKey, useListAnchor, useListHeadPoll } from './hooks/use-list-head-poll';
-export type { ListHeadStore, UseListHeadPollArgs } from './hooks/use-list-head-poll';
+export { listHeadQueryKey, useListAnchor, useListHeadPoll, windowEndingAt } from './hooks/use-list-head-poll';
+export type { ListHeadStore, ListWindow, UseListHeadPollArgs } from './hooks/use-list-head-poll';
 export { mergeHeadRows } from './merge-head-rows';
 export type { MergeHeadRowsOptions } from './merge-head-rows';
 export {

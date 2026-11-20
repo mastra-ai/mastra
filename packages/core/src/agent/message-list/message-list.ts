@@ -5,6 +5,7 @@ import { v4 as randomUUID } from '@lukeed/uuid';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { IMastraLogger } from '../../logger';
+import { messageDeclaresAuthoredTurn, sealUserTurnMessage } from '../../memory/turn-markup';
 import type { AnySpan } from '../../observability/types';
 import { resolveCurrentSpan } from '../../observability/utils';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../tools/payload-transform';
@@ -163,6 +164,14 @@ function withoutStaleToolStates(stored: MastraDBMessage, live: MastraDBMessage):
  * arguments and metadata stay as stored. A provider-executed call can only take an approval
  * answer, since the provider, not the client, produces its outcome.
  */
+function userTurnText(message: MastraDBMessage): string {
+  const parts = message.content.parts
+    .map(part => (part.type === 'text' ? part.text : ''))
+    .filter(Boolean)
+    .join('\n');
+  return typeof message.content.content === 'string' ? `${message.content.content}\n${parts}` : parts;
+}
+
 function clientToolOutcomes(stored: MastraDBMessage, live: MastraDBMessage): MastraDBMessage {
   const storedCalls = new Map<string, MastraToolInvocationPart>();
   for (const part of stored.content.parts) {
@@ -586,6 +595,7 @@ export class MessageList {
         options,
       );
     }
+    this.moveLiveMessagesPastStoredTies();
     return this;
   }
 
@@ -725,11 +735,11 @@ export class MessageList {
 
   private getMessagesForModelPrompt(): MastraDBMessage[] {
     return this.messages.flatMap(message => {
-      if ((message.role as string) !== 'signal') {
-        return [message];
+      if ((message.role as string) === 'signal') {
+        return this.convertSignalForModelPrompt(message);
       }
-
-      return this.convertSignalForModelPrompt(message);
+      // Stored text stays as written. Turn tags are escaped only on the copy the model reads.
+      return [sealUserTurnMessage(message)];
     });
   }
 
@@ -745,17 +755,20 @@ export class MessageList {
       metadata: { createdAt },
     };
 
+    // Signals never carry an authored turn, so every turn tag in their text is escaped.
     return [
-      convertInputToMastraDBMessage(promptMessage as MessageInput, 'input', {
-        memoryInfo: this.memoryInfo,
-        newMessageId: () => message.id,
-        generateCreatedAt: (_messageSource, start) => {
-          if (start instanceof Date) return start;
-          if (typeof start === 'string' || typeof start === 'number') return new Date(start);
-          return createdAt;
-        },
-        dbMessages: this.messages,
-      }),
+      sealUserTurnMessage(
+        convertInputToMastraDBMessage(promptMessage as MessageInput, 'input', {
+          memoryInfo: this.memoryInfo,
+          newMessageId: () => message.id,
+          generateCreatedAt: (_messageSource, start) => {
+            if (start instanceof Date) return start;
+            if (typeof start === 'string' || typeof start === 'number') return new Date(start);
+            return createdAt;
+          },
+          dbMessages: this.messages,
+        }),
+      ),
     ];
   }
 
@@ -2689,6 +2702,17 @@ export class MessageList {
     }
 
     const messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
+    if (messageDeclaresAuthoredTurn(message) && messageV2.role === 'user' && !messageDeclaresAuthoredTurn(messageV2)) {
+      const metadata = messageV2.content.metadata ?? {};
+      const mastra =
+        typeof metadata.mastra === 'object' && metadata.mastra !== null
+          ? metadata.mastra
+          : ({} as Record<string, unknown>);
+      messageV2.content = {
+        ...messageV2.content,
+        metadata: { ...metadata, mastra: { ...mastra, userTurn: true } },
+      };
+    }
     const signalMetadata =
       messageV2.role === 'signal'
         ? (messageV2.content.metadata?.signal as { acceptedAt?: string; createdAt?: string } | undefined)
@@ -2739,6 +2763,10 @@ export class MessageList {
       if (replacementTargetSource === 'input') {
         MessageMerger.merge(messageV2, clientToolOutcomes(messageV2, replacementTarget));
       } else if (messageV2.role === 'user' && replacementTarget.role === 'user') {
+        // The authored-turn mark belongs to the text it was set on, so the stored mark only
+        // carries over when the live message keeps the same text.
+        const keepStoredTurnMark =
+          messageDeclaresAuthoredTurn(replacementTarget) || userTurnText(messageV2) === userTurnText(replacementTarget);
         messageV2.content = {
           ...messageV2.content,
           ...replacementTarget.content,
@@ -2747,6 +2775,11 @@ export class MessageList {
             ...(replacementTarget.content.metadata ?? {}),
           },
         };
+        const mergedMastra = messageV2.content.metadata?.mastra;
+        if (!keepStoredTurnMark && mergedMastra && typeof mergedMastra === 'object' && 'userTurn' in mergedMastra) {
+          const { userTurn: _userTurn, ...mastra } = mergedMastra as Record<string, unknown>;
+          messageV2.content.metadata = { ...messageV2.content.metadata, mastra };
+        }
       } else {
         for (const incomingPart of replacementTarget.content.parts) {
           if (incomingPart.type !== 'text') continue;
@@ -2930,6 +2963,72 @@ export class MessageList {
   }
 
   private lastCreatedAt?: number;
+
+  // A run's input can be stamped in the same millisecond as the stored message it follows
+  // (the previous turn's answer, saved just before this turn was queued). Sorting on equal
+  // timestamps would then put the stored answer last, and this turn's response would merge
+  // into it. Stored history sits underneath the live turn, so a live message tied with a stored
+  // one moves just past it. Every pass places the live messages again from their own timestamps,
+  // in the order those timestamps and their arrival give, so a later history load cannot
+  // reorder the turn: each keeps its own time unless that ties a stored message or would no
+  // longer follow the live message before it, which was moved. A message that was loaded from
+  // memory stays stored even if it is added again under another source, and a signal anchored
+  // before a message (precedesMessageId) keeps its place.
+  private seenAsStored = new WeakSet<MastraDBMessage>();
+  private livePlacement = new WeakMap<MastraDBMessage, { own: number; placed: number; arrival: number }>();
+  private liveArrivals = 0;
+
+  private moveLiveMessagesPastStoredTies(): void {
+    const memory = this.memoryMessages;
+    if (!memory.size) return;
+    for (const message of memory) this.seenAsStored.add(message);
+    const live = this.messages.filter(message => !this.seenAsStored.has(message) && !this.isAnchoredSignal(message));
+    if (!live.length) return;
+
+    const storedTimes = new Set<number>();
+    for (const message of memory) storedTimes.add(message.createdAt.getTime());
+
+    const placements = live.map(message => {
+      const time = message.createdAt.getTime();
+      let placement = this.livePlacement.get(message);
+      // A timestamp someone else set since the last pass is the message's own again.
+      if (!placement || placement.placed !== time) {
+        placement = { own: time, placed: time, arrival: placement?.arrival ?? this.liveArrivals++ };
+        this.livePlacement.set(message, placement);
+      }
+      return { message, placement };
+    });
+    placements.sort((a, b) => a.placement.own - b.placement.own || a.placement.arrival - b.placement.arrival);
+
+    let moved = false;
+    let previous: { time: number; moved: boolean } | undefined;
+    for (const { message, placement } of placements) {
+      let time = placement.own;
+      if (previous?.moved && time <= previous.time) time = previous.time + 1;
+      while (storedTimes.has(time)) time++;
+      previous = { time, moved: time !== placement.own };
+      placement.placed = time;
+      if (time === message.createdAt.getTime()) continue;
+
+      const before = message.createdAt.toISOString();
+      message.createdAt = new Date(time);
+      const signal = message.content.metadata?.signal as { createdAt?: string } | undefined;
+      if (signal?.createdAt === before) signal.createdAt = message.createdAt.toISOString();
+      this.updateLastCreatedAt(message);
+      // A message already saved under its old time must be saved again under the new one.
+      if (this.newResponseMessagesPersisted.has(message)) this.newResponseMessages.add(message);
+      else if (this.newUserMessagesPersisted.has(message)) this.newUserMessages.add(message);
+      moved = true;
+    }
+    if (moved) this.sortMessages();
+  }
+
+  // A signal placed just before the message it names (addSignal's precedesMessageId) keeps that place.
+  private isAnchoredSignal(message: MastraDBMessage): boolean {
+    const signal = message.content.metadata?.signal as { metadata?: { precedesMessageId?: unknown } } | undefined;
+    const precedes = signal?.metadata?.precedesMessageId;
+    return typeof precedes === 'string' && this.getMessageById(precedes) !== undefined;
+  }
 
   private updateLastCreatedAt(message: MastraDBMessage): void {
     // Message-level createdAt controls transcript ordering and OM observation boundaries.

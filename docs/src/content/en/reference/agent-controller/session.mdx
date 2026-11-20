@@ -147,6 +147,17 @@ unsubscribe()
 
 Returns: `() => void`
 
+#### `initialStateEvents()`
+
+Return what a subscriber joining mid-run is missing, as ordinary events the session never emits itself. The list holds a `message_start` for the reply in flight, the latest `om_status` for the active thread, and a `usage_update` whose `total` is the thread's token total. Deliver them to the joining subscriber right before calling `subscribe()`, in the same synchronous block, so no live event lands between the two.
+
+```typescript
+for (const event of session.initialStateEvents()) send(event)
+const unsubscribe = session.subscribe(send)
+```
+
+Returns: `AgentControllerEvent[]`
+
 ### Messages and run control
 
 #### `sendMessage({ content, files?, requestContext?, author? })`
@@ -313,6 +324,8 @@ Resume a suspended tool with application-provided data. Supply `toolCallId` for 
 An addressed resume uses the source thread's mode, model, and thread-owned preferences, without selecting that thread or replacing the active thread's subscription. Tool state callbacks remain bound to the source even if you switch threads during execution. Host-owned custom state and permission rules remain shared.
 
 After a process restart, a full address can recover a persisted suspension through the controller's configured agents. Recovery requires a uniquely identified originating agent and the existing resume authorization checks. A setup failure leaves the prompt retryable without finishing another thread's active run.
+
+If the agent no longer holds the suspended call, for example because another runtime already resumed it, the prompt is retracted with a `tool_suspension_cancelled` event whose `reason` is the resume error. Other prompts on that run are retracted with it when stored runs show the agent no longer holds them. If that lookup fails, they stay open. Once no prompt on the run is still open and no other answer has resumed it, the run ends with an `error` and the next message starts a fresh run. Prompts parked on other runs stay open.
 
 ```typescript
 await session.respondToToolSuspension({

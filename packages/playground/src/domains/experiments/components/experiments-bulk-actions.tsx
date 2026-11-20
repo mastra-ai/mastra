@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { GitCompare, X } from 'lucide-react';
+import { IconChanges } from '@mastra/playground-ui/icons/central/IconChanges';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { DeleteExperimentsButton } from './delete-experiments-button';
 
 export interface ExperimentsBulkActionsProps {
@@ -27,7 +28,7 @@ export function ExperimentsBulkActions({
         variant="ghost"
         size="sm"
         disabled={isEmpty}
-        iconEnd={isEmpty ? undefined : <X />}
+        iconEnd={isEmpty ? undefined : <IconCrossMedium />}
         onClick={onClearSelection}
         tooltip={isEmpty ? undefined : 'Clear selection'}
         className="mr-2 tabular-nums"
@@ -39,14 +40,14 @@ export function ExperimentsBulkActions({
         // A disabled button swallows pointer and focus events, so the wrapper owns the tooltip.
         <Tooltip>
           <TooltipTrigger render={<span className="cursor-not-allowed" tabIndex={0} />}>
-            <Button size="sm" disabled tabIndex={-1} icon={<GitCompare />}>
+            <Button size="sm" disabled tabIndex={-1} icon={<IconChanges />}>
               Compare
             </Button>
           </TooltipTrigger>
           <TooltipContent>{compareDisabledReason}</TooltipContent>
         </Tooltip>
       ) : (
-        <Button size="sm" onClick={onCompare} icon={<GitCompare />}>
+        <Button size="sm" onClick={onCompare} icon={<IconChanges />}>
           Compare
         </Button>
       )}

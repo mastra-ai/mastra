@@ -12,12 +12,10 @@ export { SpanTimelineRow, type SpanTimelineRowProps } from './span-timeline-row'
 export { SpanTimingHoverCard } from './span-timing-hover-card';
 export { TraceSpanTree, type TraceSpanTreeProps } from './trace-span-tree';
 export { TraceSpanTimeline, type TraceSpanTimelineProps } from './trace-span-timeline';
-export {
-  TraceDataPanelView,
-  type TraceDataPanelViewProps,
-  type TraceDataPanelPlacement,
-} from './trace-data-panel-view';
 export { SpanDataPanelView, type SpanDataPanelViewProps } from './span-data-panel-view';
+export { TraceThreadPanelView, type TraceThreadPanelViewProps } from './trace-thread-panel-view';
+export { TraceThreadItemView, type TraceThreadItemViewProps } from './trace-thread-item-view';
+export { FeedbackThread, type FeedbackThreadProps } from './feedback-thread';
 export { SpanDetailsView, type SpanDetailsViewProps } from './span-details-view';
 export { TraceDetailsView, type TraceDetailsViewProps } from './trace-details-view';
 export { TracesListView, type TracesListViewProps, type TracesListViewTrace } from './traces-list-view';
@@ -32,4 +30,9 @@ export {
   type TracesSpansSwitchProps,
 } from './traces-spans-switch';
 export * from './thread-trace';
+export * from './trace-panel';
 export * from './span-payload';
+export * from './span-data-panel';
+export { useTraceNavigation, type TraceNavigation } from './trace-navigation';
+export { type TraceToolCallsProps } from './trace-tool-calls';
+export { LiveSpanInput, LiveSpanOutput, LiveTraceMessages, LiveTurnMessages } from './live-parts';

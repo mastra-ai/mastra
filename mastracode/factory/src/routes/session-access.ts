@@ -47,7 +47,7 @@ type Viewer = { orgId?: string; userId: string };
 
 const FACTORY_PROJECT_ID = new RegExp(UUID_PATTERN);
 
-const SESSION_PATH = /\/agent-controller\/[^/]+\/sessions\/([^/]+)/;
+export const SESSION_PATH = /\/agent-controller\/[^/]+\/sessions\/([^/]+)/;
 const CREATE_SESSION_PATH = /\/agent-controller\/[^/]+\/sessions\/?$/;
 const SET_RESOURCE_PATH = /\/agent-controller\/[^/]+\/sessions\/[^/]+\/resource\/?$/;
 const OM_CONFIG_PATH = /^\/web\/config\/om(\/|$)/;

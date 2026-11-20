@@ -19,7 +19,8 @@ import type { SourceControlStorageHandle } from '../storage/domains/source-contr
 import { FACTORY_TOOL_ANNOTATIONS } from '../tools/annotations.js';
 import { createFactoryTools } from '../tools/index.js';
 import type { FactoryToolDependencies, FactoryToolScope } from '../tools/index.js';
-import { hasEveryWord, searchWords } from '../work-items/search-words.js';
+import { cardFacts } from '../work-items/card-facts.js';
+import { matchesSearch, searchTerms } from '../work-items/search-terms.js';
 import { propagateClientDisconnect } from './disconnect.js';
 import { factoryActivityEvent } from './events.js';
 
@@ -139,13 +140,18 @@ function createSearchFetchTools(
     search: createTool({
       id: 'search',
       description:
-        'Search this Factory’s work items by title or id. Returns matching items with ids to pass to `fetch`.',
-      inputSchema: z.object({ query: z.string().describe('Words to look for in work item titles.') }),
+        'Search this Factory’s work items as its board does: by words of the title, a number, a key, an id or a branch, or the link of an issue or pull request. Returns matching items with ids to pass to `fetch`.',
+      inputSchema: z.object({
+        query: z
+          .string()
+          .describe('Words to look for, or a pasted link to an issue, a pull request or a Factory card.'),
+      }),
       execute: async ({ query }) => {
-        const words = searchWords(query);
+        const terms = searchTerms(query);
         const items = await deps.tools.workItems.listShared(project);
         const results = items
-          .filter(item => hasEveryWord(`${item.id} ${item.title}`.toLowerCase(), words))
+          // The board's search, with what it computed of each card.
+          .filter(item => matchesSearch(cardFacts(item).search, terms))
           .slice(0, 20)
           .map(item => ({
             id: item.id,
