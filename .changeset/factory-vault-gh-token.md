@@ -12,8 +12,12 @@ Kept real GitHub tokens out of credential-vault sandboxes. `PlatformSandbox` now
 await sandbox.start();
 // undefined until the platform has answered; refreshVault() asks it and throws if it cannot
 const vault = sandbox.vault ?? (await sandbox.refreshVault());
-if (vault !== true) {
+if (vault === false) {
   // token mode: safe to install a GitHub token
+} else if (vault === true) {
+  // vault mode: install no token, the vault adds the credential
+} else {
+  // still unknown (no sandbox attached, or it changed during the read): install nothing yet
 }
 ```
 
