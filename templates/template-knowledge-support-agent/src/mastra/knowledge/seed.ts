@@ -1,5 +1,6 @@
 import { LibSQLStore } from '@mastra/libsql';
 import type { Knowledge, KnowledgeNote, KnowledgePage, KnowledgeStorage } from '@mastra/core/knowledge';
+import { policyReference } from '../../examples/support.ts';
 import { databaseUrlForPath } from '../database.ts';
 import { createKnowledge } from './index.ts';
 import { acquireWriterLock } from './writer-lock.ts';
@@ -188,7 +189,7 @@ async function writeDataset(knowledge: Knowledge, dataset: PreparedDataset, repo
 
 /** CLI and deterministic checks use this same path. Validation and dry-run never initialize storage. */
 export async function seedDataset(config: DatasetConfiguration, options: SeedOptions = {}): Promise<SeedReport> {
-  const dataset = await prepareDataset(config);
+  const dataset = await prepareDataset(config, policyReference);
   const report: SeedReport = {
     dataset: dataset.id,
     version: dataset.version,

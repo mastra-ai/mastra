@@ -162,6 +162,38 @@ async function noFile(path: string) {
 }
 const quote = (text: string) => `'${text.replaceAll("'", "''")}'`;
 
+test('seed_rejects_an_invalid_rendered_policy_without_changing_stored_knowledge', { timeout: 30000 }, async () => {
+  const f = await fixture();
+  try {
+    await f.cli();
+    const before = await f.snapshot();
+    const manifest = await f.readManifest();
+    manifest.pages[0]!.title = 'Revised network checks';
+    await f.saveManifest(manifest);
+
+    const policyPath = join(dirname(f.manifestFile), 'policy.md');
+    const instructions = 'Before a disruptive change, confirm authorization and preserve pending work. ';
+    const oversized = `# Safe changes\n\n${instructions.repeat(10).trim()}`;
+    assert.ok(oversized.length < 800, 'The source fits before seed attribution and links are added');
+
+    for (const [body, reason] of [
+      [oversized, /exceeds the 800-character limit/u],
+      ['# Safe changes\n\n[[connection-guide]]', /substantive policy instructions/u],
+    ] as const) {
+      await writeFile(policyPath, body);
+      for (const args of [['--dry-run'], []]) {
+        const { output } = await f.cli({ args, code: 1 });
+        assert.match(output, /policy\.md/u);
+        assert.match(output, /tenant:north#policies\/safe-changes/u);
+        assert.match(output, reason);
+        assert.deepEqual(await f.snapshot(), before, 'The active policy version and other Knowledge must be preserved');
+      }
+    }
+  } finally {
+    await f.close();
+  }
+});
+
 test('seed_dry_run_apply_repeat_and_update_preserve_provenance', { timeout: 120000 }, async () => {
   const f = await fixture();
   try {

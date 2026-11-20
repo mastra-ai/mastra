@@ -5,9 +5,10 @@ import type { Knowledge, KnowledgePage } from '@mastra/core/knowledge';
 import type { InputProcessor } from '@mastra/core/processors';
 import { supportConfiguration, policyReference } from '../../examples/support.ts';
 import { principals, type Profile } from '../identity.ts';
+import { requiredPolicyContentIssue } from './required-policy.ts';
 import { validateSupportRecord, type SupportRecord } from './seed-manifest.ts';
 
-const bounds = { pageSize: 10, pages: 100, records: 3, policyCharacters: 800 };
+const bounds = { pageSize: 10, pages: 100, records: 3 };
 type History = { status: 'ready' | 'empty' | 'no-relevant-records' | 'unavailable'; records: Evidence[] };
 type Evidence = SupportRecord & { ref: string };
 
@@ -114,20 +115,8 @@ async function requiredPolicyReady(knowledge: Knowledge, profile: Profile) {
   const store = await knowledge.getStorage();
   const [home] = await store.getScopesByAddress([scope]);
   const page = home ? await store.getPageByPath({ scopeId: home.id, path: path.split('/'), read }) : null;
-  // Seed attribution and links alone cannot satisfy a mandatory policy.
-  const text = (page?.body ?? '')
-    .replace(/<!--[\s\S]*?-->|\[\[[\s\S]*?\]\]|^Source:.*$/gmu, '')
-    .replace(/^#.*$/gmu, '')
-    .trim();
-  const words = text.toLowerCase().match(/[a-z]{2,}/gu) ?? [];
-  const usable =
-    !!page &&
-    text.length >= 40 &&
-    words.length >= 6 &&
-    new Set(words).size >= 4 &&
-    (page.body?.length ?? 0) <= bounds.policyCharacters &&
-    /[a-z]{3}/iu.test(text);
-  return usable ? { id: page!.id, version: page!.version, ref, body: page!.body!.trim() } : null;
+  if (!page?.body || requiredPolicyContentIssue(page.body)) return null;
+  return { id: page.id, version: page.version, ref, body: page.body.trim() };
 }
 
 export function supportPreflight(knowledge: Knowledge): InputProcessor {

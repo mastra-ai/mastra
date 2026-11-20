@@ -10,6 +10,7 @@ import {
   type KnowledgePage,
 } from '@mastra/core/knowledge';
 import { validateProfile, type Profile } from '../identity.ts';
+import { requiredPolicyContentIssue } from './required-policy.ts';
 
 export interface DatasetConfiguration {
   id: string;
@@ -125,8 +126,7 @@ export function validateSupportRecord(value: unknown): SupportRecord {
   };
 }
 
-async function containedFile(root: string, file: unknown) {
-  const name = string(file, 'Markdown file', 500);
+async function containedFile(root: string, name: string) {
   if (
     isAbsolute(name) ||
     name.includes('\\') ||
@@ -201,7 +201,10 @@ export function hasSeededHttpsSource(page: KnowledgePage) {
 }
 
 /** Pure with respect to Knowledge storage: read and validate every input before opening a database. */
-export async function prepareDataset(config: DatasetConfiguration): Promise<PreparedDataset> {
+export async function prepareDataset(
+  config: DatasetConfiguration,
+  requiredPolicyReference: (profile: Profile) => string,
+): Promise<PreparedDataset> {
   key(config.id, 'dataset ID');
   const profiles = new Map<string, Profile>();
   for (const profile of config.profiles) {
@@ -249,11 +252,8 @@ export async function prepareDataset(config: DatasetConfiguration): Promise<Prep
       throw new Error('Invalid page kind');
     const description = obj.description === undefined ? undefined : line(obj.description, 'description', 1000);
     assertKnowledgePageDescriptionWithinBound(description);
-    const body = string(
-      (await containedFile(root, obj.file)).replace(/\r\n/g, '\n').trim(),
-      'Markdown body',
-      1_000_000,
-    );
+    const file = string(obj.file, 'Markdown file', 500);
+    const body = string((await containedFile(root, file)).replace(/\r\n/g, '\n').trim(), 'Markdown body', 1_000_000);
     const envelopes = [...body.matchAll(/^```support-record\n([\s\S]*?)\n```[ \t]*$/gmu)];
     if (envelopes.length > 1 || (envelopes.length && obj.record !== undefined))
       throw new Error('Duplicate support record envelope');
@@ -264,12 +264,13 @@ export async function prepareDataset(config: DatasetConfiguration): Promise<Prep
       : obj.record === undefined
         ? undefined
         : validateSupportRecord(obj.record);
-    return { input: obj, key: alias, path, name, description, placement: target, body, ref, envelope, record };
+    return { input: obj, key: alias, path, name, description, placement: target, file, body, ref, envelope, record };
   }
   for (const value of array(manifest.pages, 'pages')) {
     const page = await readPage(value, aliases);
     aliases.set(page.key, page);
   }
+  const mandatoryPolicyKeys = new Set<string>();
   for (const mapping of config.mandatoryPolicies) {
     const profile = profiles.get(mapping.profileId);
     const page = aliases.get(mapping.pageKey);
@@ -282,6 +283,7 @@ export async function prepareDataset(config: DatasetConfiguration): Promise<Prep
       page.placement.profile.tenantId !== profile.tenantId
     )
       throw new Error('Invalid mandatory policy mapping');
+    mandatoryPolicyKeys.add(mapping.pageKey);
   }
   const byRef = new Map([...aliases.values()].map(page => [page.ref, page]));
   const pages = [...aliases].map(([alias, page]) => {
@@ -329,6 +331,12 @@ export async function prepareDataset(config: DatasetConfiguration): Promise<Prep
       if (new Set(links).size !== links.length) throw new Error('Duplicate link alias');
       parts.push(render(links.map(ref => `- [[${ref}]]`).join('\n')));
     }
+    const marker = pageMarker(config.id, alias);
+    const body = `${marker}\n${hasHttpsSource ? `${httpsSourceMarker}\n` : ''}${parts.filter(Boolean).join('\n\n')}\n`;
+    if (mandatoryPolicyKeys.has(alias) || page.ref === requiredPolicyReference(page.placement.profile)) {
+      const issue = requiredPolicyContentIssue(body);
+      if (issue) throw new Error(`Invalid required policy ${page.ref} in ${page.file}. ${issue}.`);
+    }
     const noteKeys = new Set<string>();
     const notes = (page.input.notes === undefined ? [] : array(page.input.notes, 'notes', 100)).map(value => {
       const obj = object(value, ['key', 'text', 'date', 'author'], 'note');
@@ -347,14 +355,13 @@ export async function prepareDataset(config: DatasetConfiguration): Promise<Prep
         when: obj.date === undefined ? undefined : new Date(date(obj.date, 'note date')),
       };
     });
-    const marker = pageMarker(config.id, alias);
     return {
       key: alias,
       scope: page.placement.scope,
       path: page.path,
       name: page.name,
       description: page.description ?? '',
-      body: `${marker}\n${hasHttpsSource ? `${httpsSourceMarker}\n` : ''}${parts.filter(Boolean).join('\n\n')}\n`,
+      body,
       marker,
       refs: [...refs],
       notes,
