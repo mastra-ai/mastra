@@ -4013,17 +4013,26 @@ export class Mastra<
   /**
    * Retrieves a registered workspace by its ID.
    *
-   * @throws {MastraError} When the workspace with the specified ID is not found
+   * Pass `{ optional: true }` to get `undefined` instead of an error when the
+   * workspace isn't registered, e.g. when checking before creating it.
+   *
+   * @throws {MastraError} When the workspace with the specified ID is not found and `optional` is not set
    *
    * @example
    * ```typescript
    * const workspace = mastra.getWorkspaceById('workspace-123');
    * const files = await workspace.filesystem.readdir('/');
+   *
+   * const existing = mastra.getWorkspaceById('workspace-123', { optional: true });
    * ```
    */
-  public getWorkspaceById(id: string): Workspace {
+  public getWorkspaceById(id: string, options?: { optional?: false }): Workspace;
+  public getWorkspaceById(id: string, options: { optional: true }): Workspace | undefined;
+  public getWorkspaceById(id: string, options?: { optional?: boolean }): Workspace | undefined;
+  public getWorkspaceById(id: string, options?: { optional?: boolean }): Workspace | undefined {
     const entry = this.#workspaces[id];
     if (!entry) {
+      if (options?.optional) return undefined;
       const error = new MastraError({
         id: 'MASTRA_GET_WORKSPACE_BY_ID_NOT_FOUND',
         domain: ErrorDomain.MASTRA,
