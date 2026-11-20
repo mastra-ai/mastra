@@ -704,20 +704,21 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         expect(await store.loadWorkflowRunStep({ workflowName, runId: 'v1', stepId: 'a' })).toBeNull();
       });
 
-      it('keeps loading one step while the run is written to', async () => {
+      it('keeps loading one step while the run is written to, as one version of the run', async () => {
         // The engine reads one step of a live run (a nested run start reads its parent's step), so
-        // concurrent appends must not fail the read, and the header and step it returns must be
-        // the same version of the run. A composed header read + step read used to give up after
-        // enough writes landed in between.
+        // concurrent appends must not fail the read, and the header and step it returns must come
+        // from the same version of the run. Every write stamps the same marker on both, so a read
+        // stitched from two versions returns mismatched markers. A composed header read + step
+        // read used to give up after enough writes landed in between.
         const id = runId();
-        await checkpoint(id, makeSnapshot(id, { context: { a: ok(0) } }));
+        await checkpoint(id, makeSnapshot(id, { context: { a: ok(0) }, timestamp: 0 }));
 
         const writes = Array.from({ length: 20 }, (_, i) =>
           store.appendWorkflowRunEntries({
             workflowName,
             runId: id,
-            header: makeHeader(id),
-            steps: { [`s${i}`]: ok(i) },
+            header: makeHeader(id, { timestamp: i + 1 }),
+            steps: { a: ok(i + 1) },
           }),
         );
         const reads = Array.from({ length: 20 }, () =>
@@ -725,7 +726,7 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         );
         const [results] = await Promise.all([Promise.all(reads), Promise.all(writes)]);
         for (const stored of results) {
-          expect(stored).toMatchObject({ steps: { a: ok(0) } });
+          expect(stored!.steps.a).toEqual(ok(stored!.header.timestamp));
         }
       });
     });
