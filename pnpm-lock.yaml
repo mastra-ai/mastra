@@ -136,7 +136,7 @@ overrides:
   cjs-module-lexer@<2.2.1: 2.2.1
   fast-copy@<4.1.1: 4.1.1
   '@fastify/busboy@<3.2.2': 3.2.2
-  tinypool@<2.1.2: 2.1.2
+  tinypool@<2.1.2: 2.2.0
   ajv@>=8.0.0 <8.20.0: 8.20.0
   zod@>=4.0.0 <4.6.7: 4.6.7
   '@codemirror/lang-jinja': ^6.0.1
@@ -31379,8 +31379,8 @@ packages:
     resolution: {integrity: sha512-wXR/dYpcqKmfWpEdZjiKJOwCNFndD0DMnrW/cYjVGttEkBfVgcLFHoNrlj47mjOVic9yyNu65alsgF4NQyTa2g==}
     engines: {node: '>=12.0.0'}
 
-  tinypool@2.1.2:
-    resolution: {integrity: sha512-9YodfrxS9g9IbFr/KOjE5bAeJ0p61n3bW6mqvy0jtoeKd1kTW1Cxm0oulm6KX2lyM9Gl6WIe8nEbY7LWv5ZJww==}
+  tinypool@2.2.0:
+    resolution: {integrity: sha512-jBrmx4lYmaC9k/mgPbylxs7kBUxHtD8256up+HjLaDFfXScKJQyil+SWXSvhAtT7XHo+yTVlpB81PGmHP8oLSQ==}
     engines: {node: ^20.0.0 || >=22.0.0}
 
   tinyrainbow@2.0.0:
@@ -36747,7 +36747,7 @@ snapshots:
       react-router-dom: 5.3.4(react@19.3.1)
       semver: 7.8.6
       serve-handler: 6.1.7
-      tinypool: 2.1.2
+      tinypool: 2.2.0
       tslib: 2.9.1
       update-notifier: 6.0.2
       webpack: 5.112.2(@swc/core@1.16.21(@swc/helpers@0.5.23))(@swc/html@1.16.21)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.23))(csso@5.0.5)(esbuild@0.28.2)(html-minifier-terser@7.2.0)(lightningcss@1.33.0)(postcss@8.5.23)(uglify-js@3.19.3)
@@ -53602,7 +53602,7 @@ snapshots:
 
   oxfmt@0.59.0:
     dependencies:
-      tinypool: 2.1.2
+      tinypool: 2.2.0
     optionalDependencies:
       '@oxfmt/binding-android-arm-eabi': 0.59.0
       '@oxfmt/binding-android-arm64': 0.59.0
@@ -57245,7 +57245,7 @@ snapshots:
       fdir: 6.5.0(picomatch@4.0.7)
       picomatch: 4.0.7
 
-  tinypool@2.1.2: {}
+  tinypool@2.2.0: {}
 
   tinyrainbow@2.0.0: {}
 
