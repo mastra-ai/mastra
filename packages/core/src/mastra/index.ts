@@ -3256,7 +3256,7 @@ export class Mastra<
         (toolLoopInput && this.#toolLoopRegistrations.get(toolLoopInput)?.get(agentKey) === agents[agentKey]) ||
         (agents[agentKey].source === 'stored' && options?.source === 'stored')
       ) {
-        if (agents[agentKey] === mastraAgent) mastraAgent.__registerExecutionEnginePolicy(this.#durable);
+        if (agents[agentKey] === mastraAgent) mastraAgent.__registerExecutionEnginePolicy?.(this.#durable);
         return;
       }
       throw new MastraError({
@@ -3284,7 +3284,7 @@ export class Mastra<
       vectors: this.#vectors,
     });
 
-    mastraAgent.__registerExecutionEnginePolicy(this.#durable);
+    mastraAgent.__registerExecutionEnginePolicy?.(this.#durable);
     agents[agentKey] = mastraAgent;
     this.#durableAgentInitialization = undefined;
     if (toolLoopInput) {
