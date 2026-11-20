@@ -600,8 +600,7 @@ type PendingContinuation<OUTPUT = unknown> = {
 };
 
 type ClaimedThreadOwnerStreamOptions =
-  | AgentExecutionOptions<any>
-  | (() => AgentExecutionOptions<any> | Promise<AgentExecutionOptions<any>>);
+  AgentExecutionOptions<any> | (() => AgentExecutionOptions<any> | Promise<AgentExecutionOptions<any>>);
 
 type ClaimedThreadOwner<OUTPUT = unknown> = {
   agent: Agent<any, any, any, any>;
@@ -2450,6 +2449,20 @@ export class AgentThreadStreamRuntime {
     for (const key of state.threadControlSubscriptions.keys()) this.#releaseUnusedThreadControlSubscription(state, key);
   }
 
+  /**
+   * A `runId` target that also names a `resourceId` must name the run's own resource. Without this, the signal
+   * would be created for the caller's resource and delivered into another resource's run. Core cannot know who the
+   * caller is: a target naming only a `runId` is trusted, so callers exposing `runId` targets to untrusted input
+   * must pass the caller's `resourceId` or check ownership with `getThreadRunTarget()` first.
+   */
+  #assertRunTargetOwner(state: AgentThreadRuntimeState, target: { runId?: string; resourceId?: string }): void {
+    if (!target.runId || !target.resourceId) return;
+    const owner = state.threadRunsById.get(target.runId)?.resourceId;
+    if (owner && owner !== target.resourceId) {
+      throw new Error(`Agent run ${target.runId} belongs to a different resource`);
+    }
+  }
+
   #threadKey(resourceId: string | undefined, threadId: string): string {
     return agentThreadStreamKey(resourceId, threadId);
   }
@@ -3971,8 +3984,7 @@ export class AgentThreadStreamRuntime {
         try {
           if (cancelled) return;
           const source = (output.__getUnfilteredFullStream?.() ?? output.fullStream) as
-            | ReadableStream<unknown>
-            | undefined;
+            ReadableStream<unknown> | undefined;
           if (!source) return;
 
           if (typeof source.getReader === 'function') {
@@ -4073,7 +4085,8 @@ export class AgentThreadStreamRuntime {
       }
       if (cutoffAt === undefined || cutoff <= trimmedThrough) return;
       trimmedThrough = cutoff;
-      void runtime.#getPubSub(pubsub)
+      void runtime
+        .#getPubSub(pubsub)
         .trimTopic(runtime.#threadTopic(key), { runId: output.runId, producedBefore: cutoffAt })
         .catch(() => {});
       let keep = cutoff + 1;
@@ -7922,6 +7935,7 @@ export class AgentThreadStreamRuntime {
       }
     }
 
+    this.#assertRunTargetOwner(state, target);
     const resourceId = target.resourceId ?? activeRecord?.resourceId;
     const threadId = target.threadId ?? activeRecord?.threadId;
     if (!resourceId || !threadId) {
@@ -8138,6 +8152,7 @@ export class AgentThreadStreamRuntime {
       }
     }
 
+    this.#assertRunTargetOwner(state, target);
     const resourceId = target.resourceId ?? activeRecord?.resourceId;
     const threadId = target.threadId ?? activeRecord?.threadId;
     if (!resourceId || !threadId) {
