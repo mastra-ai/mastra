@@ -3928,9 +3928,10 @@ export class WorkflowEventProcessor extends EventProcessor {
         },
         step,
         stepResult,
+        // A resume or restart re-drives the stored occurrence, so it completes under that one.
         guardStart
           ? args.eventId
-          : !restart && !timeTravel && resumeSteps?.length
+          : !timeTravel && (restart || resumeSteps?.length)
             ? stepResults[leafId]?.metadata?.startedBy
             : undefined,
       );
