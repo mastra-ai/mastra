@@ -145,16 +145,37 @@ export class PlatformAlertRules {
     return this.options.now?.() ?? new Date();
   }
 
+  /**
+   * The card an event lands on: the one that filed its incident, so a late resolve or raise reaches
+   * the card it belongs to, else the alert's newest card, where a new fire goes.
+   */
+  async #targetCard(
+    input: PlatformAlertRulesIngress,
+    workKey: string,
+  ): Promise<{ card: Card; generation: number } | null> {
+    const cards = await this.#alertCards(input, workKey);
+    const owner = cards.find(({ card }) => readState(card)?.incidents[input.event.incident.id]?.openedAt);
+    return owner ?? cards[0] ?? null;
+  }
+
   /** The newest card filed for this alert's work key in the project. */
   async #latestCard(
     input: PlatformAlertRulesIngress,
     workKey: string,
   ): Promise<{ card: Card; generation: number } | null> {
+    return (await this.#alertCards(input, workKey))[0] ?? null;
+  }
+
+  /** This alert's cards in the project, newest generation first. */
+  async #alertCards(
+    input: PlatformAlertRulesIngress,
+    workKey: string,
+  ): Promise<Array<{ card: Card; generation: number }>> {
     const items = await this.options.storage.listShared({
       orgId: input.orgId,
       factoryProjectId: input.factoryProjectId,
     });
-    let latest: { card: Card; generation: number } | null = null;
+    const cards: Array<{ card: Card; generation: number }> = [];
     for (const card of items) {
       const keys = [
         ...card.workItem.sources
@@ -162,12 +183,34 @@ export class PlatformAlertRules {
           .map(source => source.externalId),
         ...(card.externalSource?.integrationId === ALERT_INTEGRATION_ID ? [card.externalSource.externalId] : []),
       ];
-      for (const key of keys) {
-        const generation = alertGeneration(key, workKey);
-        if (generation !== null && (!latest || generation > latest.generation)) latest = { card, generation };
-      }
+      const generations = keys.map(key => alertGeneration(key, workKey)).filter(g => g !== null);
+      if (generations.length) cards.push({ card, generation: Math.max(...generations) });
     }
-    return latest;
+    return cards.sort((a, b) => b.generation - a.generation);
+  }
+
+  /**
+   * Makes sure the card carries its alert's Slack thread as an attached source, so a mention there
+   * finds it. Runs on every delivery, a replay included, so an attach that failed is tried again.
+   */
+  async #attachThread(input: PlatformAlertRulesIngress, card: Card): Promise<void> {
+    const thread = readState(card)?.slackThread;
+    if (!thread) return;
+    const source = alertThreadSource(thread);
+    const attached = card.workItem.sources.some(
+      s => s.integrationId === source.integrationId && s.sourceType === source.type && s.externalId === source.externalId,
+    );
+    if (attached) return;
+    try {
+      await this.options.storage.attachSource({ orgId: input.orgId, id: card.id, source, metadata: null });
+    } catch (error) {
+      // Another card already holds the thread: nothing to bind here.
+      if (error instanceof WorkItemSourceConflictError) return;
+      throw error;
+    }
+    if (!this.options.onThreadAttached) return;
+    const fresh = await this.options.storage.get({ orgId: input.orgId, id: card.id });
+    if (fresh) await nonFatal('binding runs to the alert thread', card.id, () => this.options.onThreadAttached!(fresh));
   }
 
   #view(card: Card, boards: BoardRegistry): AlertCardView | null {
@@ -184,7 +227,11 @@ export class PlatformAlertRules {
     };
   }
 
-  async ingest(input: PlatformAlertRulesIngress, attempt = 1): Promise<PlatformAlertIngestResult> {
+  /**
+   * `merging` re-applies an initial fire whose card another initial fire filed first: the dispatcher
+   * reused that card without this fire's alert state, so it lands as a fire on the card instead.
+   */
+  async ingest(input: PlatformAlertRulesIngress, attempt = 1, merging = false): Promise<PlatformAlertIngestResult> {
     const { event } = input;
     // A Factory project only takes its own organization's alerts.
     if (event.organizationId !== input.orgId) return { status: 'missing' };
@@ -194,7 +241,7 @@ export class PlatformAlertRules {
     const boards = this.#boards(input);
 
     const workKey = alertWorkKey(event.workKey);
-    const latest = await this.#latestCard(input, workKey);
+    const latest = await this.#targetCard(input, workKey);
     const view = latest ? this.#view(latest.card, boards) : null;
     const earlyKey = `${input.orgId}:${event.incident.id}`;
     const resolvedEarly = this.#earlyResolves.get(earlyKey);
@@ -209,6 +256,7 @@ export class PlatformAlertRules {
     if (plan.kind === 'create' && input.createCards === false) return { status: 'missing' };
     if (plan.kind === 'noop') {
       if (plan.reason !== 'replayed' || !latest) return { status: 'missing' };
+      await this.#attachThread(input, latest.card);
       return { status: 'replayed', card: { workItemId: latest.card.id, board: boardForWorkItem(latest.card) } };
     }
     if (plan.kind === 'remember_resolve') {
@@ -220,7 +268,7 @@ export class PlatformAlertRules {
       return { status: 'remembered' };
     }
 
-    const ingressId = `platform-alert:${event.eventId}`;
+    const ingressId = `platform-alert:${event.eventId}${merging ? ':merge' : ''}`;
     const actor = { type: 'human' as const, id: input.userId };
     const name = eventName(plan, event);
     const card = plan.kind === 'update' ? latest?.card : undefined;
@@ -339,17 +387,34 @@ export class PlatformAlertRules {
       if (attempt >= MAX_STALE_RULE_ATTEMPTS) {
         throw new Error(`Mastra Alerts rule evaluation for ${ingressId} kept losing revision races.`);
       }
-      return this.ingest(input, attempt + 1);
+      return this.ingest(input, attempt + 1, merging);
     }
     if (committed.status === 'missing') return { status: 'missing' };
-    // A create that replays has no card yet (else the planner would have seen it): still being filed.
-    if (committed.status === 'replayed') return plan.kind === 'create' ? { status: 'pending' } : { status: 'replayed' };
+    if (committed.status === 'replayed') {
+      const prior = committed.result;
+      const queued = Array.isArray(prior.decisions) && prior.decisions.length > 0;
+      if (plan.kind === 'create') {
+        // A create that replays has no card yet (else the planner would have seen it): still being
+        // filed, unless the rules queued no card at all.
+        return prior.status === 'accepted' && queued ? { status: 'pending' } : NOT_FILED;
+      }
+      // This event first planned a create, but its card was filed by another initial fire, without
+      // this one's alert state (the planner didn't find the event on it): apply it as a fire.
+      if (!merging && prior.status === 'accepted' && prior.itemId == null && queued) {
+        return this.ingest(input, 1, true);
+      }
+      if (card) await this.#attachThread(input, card);
+      return { status: 'replayed' };
+    }
     if (outcome.status === 'rejected') return { status: 'rejected', code: outcome.code ?? 'rejected' };
     this.#earlyResolves.delete(earlyKey);
 
     if (plan.kind === 'create') {
+      if (decisions.length === 0) return NOT_FILED;
       const filed = await this.#latestCard(input, workKey);
       if (!filed || filed.generation !== plan.state.generation) return { status: 'pending' };
+      if (!readState(filed.card)?.seenEventIds.includes(event.eventId)) return this.ingest(input, 1, true);
+      await this.#attachThread(input, filed.card);
       return {
         status: 'committed',
         workItemId: filed.card.id,
@@ -360,45 +425,12 @@ export class PlatformAlertRules {
       };
     }
     if (!card || plan.kind !== 'update') return { status: 'missing' };
-    if (
-      this.options.onRecovered &&
-      input.event.type === 'alert.resolved' &&
-      plan.timeline.at(-1)?.kind === 'recovered'
-    ) {
-      const recovered = await this.options.storage.get({ orgId: input.orgId, id: card.id });
-      if (recovered) {
-        await this.options.onRecovered(recovered, this.#now()).catch(error => {
-          console.warn('[mastra-alerts] recording the recovery in Slack failed', {
-            workItemId: card.id,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        });
-      }
+    const updated = await this.options.storage.get({ orgId: input.orgId, id: card.id });
+    if (updated && plan.recovered && this.options.onRecovered) {
+      const onRecovered = this.options.onRecovered;
+      await nonFatal('recording the recovery in Slack', card.id, () => onRecovered(updated, this.#now()));
     }
-    if (plan.bindThread) {
-      // The alert's Slack thread joins the card as an attached source, so a mention there finds it.
-      try {
-        await this.options.storage.attachSource({
-          orgId: input.orgId,
-          id: card.id,
-          source: alertThreadSource(plan.bindThread),
-          metadata: null,
-        });
-      } catch (error) {
-        if (!(error instanceof WorkItemSourceConflictError)) throw error;
-      }
-      if (this.options.onThreadAttached) {
-        const attached = await this.options.storage.get({ orgId: input.orgId, id: card.id });
-        if (attached) {
-          await this.options.onThreadAttached(attached).catch(error => {
-            console.warn('[mastra-alerts] binding runs to the alert thread failed', {
-              workItemId: card.id,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          });
-        }
-      }
-    }
+    if (updated) await this.#attachThread(input, updated);
     return {
       status: 'committed',
       workItemId: card.id,
@@ -407,6 +439,21 @@ export class PlatformAlertRules {
       reopened: plan.reopen,
       ...(plan.bindThread ? { bindThread: plan.bindThread } : {}),
     };
+  }
+}
+
+/** Rules accepted the event but queued no card: nothing to wait for. */
+const NOT_FILED: PlatformAlertIngestResult = { status: 'rejected', code: 'not_filed' };
+
+/** Runs a hook whose failure, thrown or rejected, must not fail an event that already committed. */
+async function nonFatal(what: string, workItemId: string, hook: () => Promise<void>): Promise<void> {
+  try {
+    await hook();
+  } catch (error) {
+    console.warn(`[mastra-alerts] ${what} failed`, {
+      workItemId,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 
