@@ -35,33 +35,6 @@ function gatewayConfig() {
   return { key, base };
 }
 
-function sessionCookies(request?: Request): string | undefined {
-  const cookies = request?.headers
-    .get('cookie')
-    ?.split(';')
-    .map(value => value.trim());
-  const session = cookies?.filter(value => /^(?:__Host-wos-session|wos-session)=/.test(value));
-  return session?.length ? session.join('; ') : undefined;
-}
-
-async function hasAudioAccess(request?: Request): Promise<boolean> {
-  if (!gatewayConfig()) return false;
-  const base = process.env.MASTRA_SHARED_API_URL?.replace(/\/+$/, '');
-  const cookie = sessionCookies(request);
-  if (!base || !cookie) return false;
-  try {
-    const response = await fetch(`${base}/gateway/audio/access`, {
-      headers: { cookie },
-      signal: AbortSignal.timeout(3000),
-    });
-    if (!response.ok) return false;
-    const parsed = z.object({ enabled: z.boolean() }).safeParse(await response.json());
-    return parsed.success && parsed.data.enabled;
-  } catch {
-    return false;
-  }
-}
-
 function unavailable() {
   return Response.json({ error: 'Gateway audio is unavailable' }, { status: 403 });
 }
@@ -99,11 +72,11 @@ export const GET_GATEWAY_AUDIO_MODELS_ROUTE = createRoute({
   responseType: 'datastream-response',
   requiresAuth: true,
   summary: 'List Gateway audio models available to this deployment',
-  description: 'Lists speech and transcription models for deployments with Gateway audio access.',
+  description: 'Lists speech and transcription models for deployments with a Gateway V2 key.',
   tags: ['System', 'Voice'],
-  handler: async ({ request }) => {
+  handler: async () => {
     const config = gatewayConfig();
-    if (!config || !(await hasAudioAccess(request))) return unavailable();
+    if (!config) return unavailable();
     try {
       const response = await fetch(`${config.base}/v1/models`, {
         headers: { authorization: `Bearer ${config.key}` },
@@ -138,7 +111,7 @@ export const POST_GATEWAY_AUDIO_SPEECH_ROUTE = createRoute({
   handler: async ({ request, model, input, voice }) => {
     if (!trustedBrowserRequest(request)) return unavailable();
     const config = gatewayConfig();
-    if (!config || !(await hasAudioAccess(request))) return unavailable();
+    if (!config) return unavailable();
     try {
       const response = await fetch(`${config.base}/v1/audio/speech`, {
         method: 'POST',
@@ -166,7 +139,7 @@ export const POST_GATEWAY_AUDIO_TRANSCRIPTION_ROUTE = createRoute({
   handler: async ({ request }) => {
     if (!trustedBrowserRequest(request)) return unavailable();
     const config = gatewayConfig();
-    if (!config || !(await hasAudioAccess(request))) return unavailable();
+    if (!config) return unavailable();
     if (!request) return Response.json({ error: 'Audio request is missing' }, { status: 400 });
     try {
       const form = await request.formData();

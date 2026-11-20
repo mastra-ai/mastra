@@ -514,8 +514,8 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       // experimentId. The generic test context does not seed dataset storage;
       // deletion behavior is covered by datasets.test.ts.
       '/experiments/:experimentId',
-      // Gateway audio requires a deployment key and a signed-in user's feature flag.
-      // The generic adapter context has neither; the route handlers are covered by gateway-audio.test.ts.
+      // Gateway audio requires a deployment key. The generic adapter context has none;
+      // the route handlers are covered by gateway-audio.test.ts.
       '/system/gateway-audio/models',
       '/system/gateway-audio/speech',
       '/system/gateway-audio/transcriptions',
