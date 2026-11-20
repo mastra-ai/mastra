@@ -57,6 +57,46 @@ function findPackageRoots(dir: string): string[] {
   return roots;
 }
 
+let publishedCoreVersions: string[] | undefined;
+
+function getPublishedCoreVersions() {
+  if (publishedCoreVersions) return publishedCoreVersions;
+
+  const view = runCommand('npm', ['view', '@mastra/core', 'versions', '--json'], repoRoot);
+
+  if (view.status !== 0) {
+    return undefined;
+  }
+
+  const parsed = JSON.parse(view.stdout) as string | string[];
+  publishedCoreVersions = Array.isArray(parsed) ? parsed : [parsed];
+  return publishedCoreVersions;
+}
+
+function resolveExistingCorePackVersion(range: string, preferred: string) {
+  const versions = getPublishedCoreVersions();
+
+  if (!versions || versions.includes(preferred)) {
+    return preferred;
+  }
+
+  const published = versions
+    .filter(version => semver.satisfies(version, range, { includePrerelease: true }))
+    .sort((left, right) => semver.compare(left, right));
+
+  const fallback = published[0];
+
+  if (!fallback) {
+    return preferred;
+  }
+
+  console.info(
+    `@mastra/core@${preferred} is not published; checking imports against ${fallback}, the lowest published version matching ${range}`,
+  );
+
+  return fallback;
+}
+
 function resolveCoreSemverRange(coreRange: string) {
   if (!coreRange.startsWith('workspace:')) {
     return coreRange;
@@ -103,8 +143,12 @@ function getPackageInfo(packageRoot: string): PackageInfo | undefined {
   try {
     // minVersion forwards its options to Range, so includePrerelease applies even though @types/semver types it as Options.
     const rangeOptions: semver.RangeOptions = { includePrerelease: true };
-    const coreFloorVersion = semver.minVersion(resolveCoreSemverRange(coreRange), rangeOptions)?.version;
-    const corePackVersion = coreFloorVersion?.endsWith('-0') ? coreFloorVersion.slice(0, -2) : coreFloorVersion;
+    const resolvedRange = resolveCoreSemverRange(coreRange);
+    const coreFloorVersion = semver.minVersion(resolvedRange, rangeOptions)?.version;
+    const preferredPackVersion = coreFloorVersion?.endsWith('-0') ? coreFloorVersion.slice(0, -2) : coreFloorVersion;
+    const corePackVersion = preferredPackVersion
+      ? resolveExistingCorePackVersion(resolvedRange, preferredPackVersion)
+      : preferredPackVersion;
 
     if (!coreFloorVersion || !corePackVersion) {
       return {
