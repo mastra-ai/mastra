@@ -4,7 +4,11 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
-import { AddDatasetItemDialog } from '@mastra/playground-ui/domains/datasets';
+import {
+  AddDatasetItemDialog,
+  DatasetItemPanelProvider,
+  useDatasetItemsUrlState,
+} from '@mastra/playground-ui/domains/datasets';
 import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
 import { IconCodeBrackets } from '@mastra/playground-ui/icons/central/IconCodeBrackets';
 import { IconDotGrid1x3Vertical } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Vertical';
@@ -17,7 +21,7 @@ import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from 
 import { useDataset, useDatasetItems } from '@mastra/react/hooks/datasets';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import { Link, useParams, useNavigate, useSearchParams } from 'react-router';
+import { Link, useMatch, useParams, useNavigate, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import {
   DatasetItemsView,
@@ -28,8 +32,6 @@ import {
   DatasetSchemaDialog,
 } from '@/domains/datasets';
 import { DatasetItemSidePanel } from '@/domains/datasets/components/items/dataset-item-side-panel';
-import { DatasetItemPanelProvider } from '@/domains/datasets/context/dataset-item-panel-context';
-import { useDatasetItemsUrlState } from '@/domains/datasets/hooks/use-dataset-items-url-state';
 import { datasetCrumb, datasetVersionCrumb, navCrumb } from '@/domains/navigation/crumbs';
 import type { CrumbDef } from '@/domains/navigation/crumbs';
 
@@ -47,6 +49,7 @@ function DatasetPage() {
   const { datasetId } = useParams() as { datasetId: string };
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const currentItemId = useMatch('/datasets/:datasetId/items/:itemId')?.params.itemId;
   const { activeVersion } = useDatasetItemsUrlState(searchParams, setSearchParams);
   // The dataset crumb never links: its whole hit area is the dataset switcher.
   const shellCrumbs: CrumbDef[] = [navCrumb('/datasets'), datasetCrumb];
@@ -180,12 +183,19 @@ function DatasetPage() {
   );
 
   return (
-    <DatasetItemPanelProvider datasetId={datasetId} items={unfilteredItems} isLoadingItems={isUnfilteredLoading}>
+    <DatasetItemPanelProvider
+      datasetId={datasetId}
+      currentItemId={currentItemId}
+      items={unfilteredItems}
+      isLoadingItems={isUnfilteredLoading}
+    >
       <div className="h-full">
         <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={headerActions}>
           <h1 className="sr-only">{datasetId}</h1>
           <div>
             <DatasetItemsView
+              searchParams={searchParams}
+              setSearchParams={setSearchParams}
               datasetId={datasetId}
               onAddItemClick={() => setAddItemDialogOpen(true)}
               toolbarActionsSlot={showTagsEditor ? <DatasetTagsEditor datasetId={datasetId} /> : undefined}

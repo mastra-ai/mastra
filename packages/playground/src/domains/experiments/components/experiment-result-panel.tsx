@@ -7,6 +7,13 @@ import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import {
+  ComparisonMetricList,
+  ComparisonPayload,
+  ComparisonSection,
+  sectionStackClass,
+} from '@mastra/playground-ui/domains/experiments';
+import type { ComparisonMetric } from '@mastra/playground-ui/domains/experiments';
 import { ComputedTag } from '@mastra/playground-ui/domains/observability';
 import { ReviewStatusBadge } from '@mastra/playground-ui/domains/review/components/review-status-badge';
 import { SpanPayloadToolCalls } from '@mastra/playground-ui/domains/traces/components/span-payload/span-payload-primitives';
@@ -34,10 +41,6 @@ import {
   getResultToolCalls,
 } from '../utils/result-output';
 import { sideDurationMs } from './comparison/build-comparison-rows';
-import { ComparisonMetricList } from './comparison/comparison-metric-list';
-import type { ComparisonMetric } from './comparison/comparison-metric-list';
-import { ComparisonPayload } from './comparison/comparison-payload';
-import { ComparisonSection, sectionStackClass } from './comparison/comparison-section';
 import { itemMetrics } from './comparison/item-metrics';
 import { ExperimentResultsTagPicker } from './experiment-results-tag-picker';
 import { ToolMockReportSection } from './tool-mock-report-section';

@@ -6171,6 +6171,9 @@ importers:
       nanoid:
         specifier: ^5.1.16
         version: 5.1.16
+      papaparse:
+        specifier: ^5.7.0
+        version: 5.7.0
       prettier:
         specifier: ^3.9.10
         version: 3.9.10
@@ -6295,6 +6298,9 @@ importers:
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
+      '@types/papaparse':
+        specifier: ^5.5.2
+        version: 5.5.2
       '@types/react':
         specifier: ^19.3.0
         version: 19.3.0

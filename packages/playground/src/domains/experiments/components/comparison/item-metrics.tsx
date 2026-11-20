@@ -1,3 +1,5 @@
+import { ScorerLabel } from '@mastra/playground-ui/domains/experiments';
+import type { ComparisonMetric } from '@mastra/playground-ui/domains/experiments';
 import { IconClock } from '@mastra/playground-ui/icons/central/IconClock';
 import { IconCoins } from '@mastra/playground-ui/icons/central/IconCoins';
 import { IconGauge } from '@mastra/playground-ui/icons/central/IconGauge';
@@ -14,8 +16,6 @@ import {
   formatTokenCount,
   totalTokens,
 } from './comparison-metric-format';
-import { ScorerLabel } from './comparison-metric-list';
-import type { ComparisonMetric } from './comparison-metric-list';
 import { ScoreReasonHoverCard } from './score-reason-hover-card';
 
 export interface ItemMetricScore {

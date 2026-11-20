@@ -1,10 +1,9 @@
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
+import { DatasetItemPanel, useDatasetItemPanel } from '@mastra/playground-ui/domains/datasets';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
+
 import { useDatasetItem } from '@mastra/react/hooks/datasets';
 import { useMemo } from 'react';
-
-import { DatasetItemPanel } from '@/domains/datasets/components/items/dataset-item-panel';
-import { useDatasetItemPanel } from '@/domains/datasets/context/dataset-item-panel-context';
 import { RouteSidePanel, useSelectedItemSidePanel } from '@/lib/route-side-panel';
 
 /**
