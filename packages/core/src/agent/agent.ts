@@ -14263,7 +14263,6 @@ export class Agent<
    * Execute the durable workflow.
    *
    * Engines select the blocking or background execution path.
-   * Subclasses such as InngestAgent may override execution for an external backend.
    *
    * @param runId - The unique run ID
    * @param workflowInput - The serialized workflow input
