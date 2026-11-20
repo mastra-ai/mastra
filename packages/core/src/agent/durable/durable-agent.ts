@@ -489,6 +489,161 @@ export interface DurableAgentRecoverOptions<OUTPUT = undefined> {
   force?: boolean;
 }
 
+// @ts-expect-error - Legacy durable methods intentionally specialize the base Agent API.
+export interface DurableAgent<
+  TAgentId extends string = string,
+  TTools extends ToolsInput = ToolsInput,
+  TOutput = undefined,
+> {
+  stream(
+    messages: MessageListInput,
+    options?: DurableAgentStreamOptions<TOutput>,
+  ): Promise<DurableAgentStreamResult<TOutput>>;
+
+  resumeStream(resumeData: any, streamOptions?: any): Promise<MastraModelOutput<TOutput>>;
+
+  /**
+   * Generate a complete response from the agent using durable execution.
+   *
+   * Drains the underlying durable stream to completion and returns the same
+   * {@link FullOutput} shape as non-durable `Agent.generate`. The underlying
+   * workflow is identical to `stream()` — it just collects the final result
+   * for callers that don't want to consume chunks themselves.
+   *
+   * This method intentionally re-implements the `stream()` setup rather than
+   * delegating to `this.stream(...)` so that `prepareForDurableExecution` (and
+   * downstream `convertTools`) receives `methodType: 'generate'`. Tool
+   * factories that vary their `CoreTool` output based on the calling method
+   * (e.g. `clientTools` vs server-side tools) rely on this signal — calling
+   * `stream()` here would silently pass `methodType: 'stream'`.
+   *
+   * If the run suspends (e.g. tool approval or `suspend()` from a tool), the
+   * returned output's `finishReason` will be `'suspended'` and
+   * `suspendPayload` will be populated. Use {@link DurableAgent.resumeGenerate}
+   * to continue.
+   *
+   * Note on suspend persistence: both `DurableAgent` and `EventedAgent` track
+   * the workflow engine's `run.start()` through snapshot persistence, so
+   * awaiting `workflowExecution` on suspend is sufficient for a subsequent
+   * `resumeGenerate()` to find the snapshot.
+   */
+  generate(messages: MessageListInput, options?: DurableAgentStreamOptions<TOutput>): Promise<FullOutput<TOutput>>;
+
+  /**
+   * Resume a suspended durable run and drain it to a single
+   * {@link FullOutput}. Mirrors {@link Agent.resumeGenerate} on top of
+   * {@link DurableAgent.resume}.
+   *
+   * Unlike `generate()`, this delegates to `resume()` because resume reads
+   * its tools from the existing run-registry entry rather than running
+   * `prepareForDurableExecution` again — there is no `methodType` to thread
+   * through. The same `EventedAgent` caveat about fire-and-forget snapshot
+   * persistence noted on `generate()` applies if the resumed turn suspends.
+   */
+  resumeGenerate(
+    resumeData: unknown,
+    options: Parameters<DurableAgent<TAgentId, TTools, TOutput>['resume']>[2] & { runId: string },
+  ): Promise<FullOutput<TOutput>>;
+  /** @deprecated Use `resumeGenerate(resumeData, { runId, ...options })`, matching `Agent.resumeGenerate`. */
+  resumeGenerate(
+    runId: string,
+    resumeData: unknown,
+    options?: Parameters<DurableAgent<TAgentId, TTools, TOutput>['resume']>[2],
+  ): Promise<FullOutput<TOutput>>;
+
+  /**
+   * Observe an existing stream.
+   * Use this to reconnect to a stream after a network disconnection.
+   *
+   * To stop observing without affecting the run, call the returned `detach()`
+   * or leave the `for await` loop over `fullStream` (break, return, or throw).
+   * Both unsubscribe this observer only; the run keeps going and other
+   * observers can still replay it. To stop observing when a request is
+   * cancelled, wire its signal to `detach`:
+   *
+   * ```ts
+   * const { fullStream, detach } = await agent.observe(runId, { offset });
+   * req.signal.addEventListener('abort', detach, { once: true });
+   * if (req.signal.aborted) detach();
+   * for await (const chunk of fullStream) send(chunk);
+   * ```
+   *
+   * **Warning:** The returned `cleanup()` function destroys the run's registry
+   * entries and cached PubSub events (replay history), including for other
+   * observers. Only call it when you are done with the run entirely. If the
+   * workflow is suspended and you intend to resume later, do not call cleanup —
+   * let the auto-cleanup timer handle it after FINISH/ERROR. Auto-cleanup does
+   * not fire on SUSPENDED events.
+   *
+   * Pass `idleTimeoutMs` to bound how long the stream waits on a silent topic:
+   * a durable run whose driving process crashed stops emitting chunks but never
+   * publishes a terminal event, so without this `observe()` hangs forever on a
+   * producerless topic. When the idle timeout fires, the optional `isAlive`
+   * probe is consulted first — returning true (e.g. a live run-liveness
+   * heartbeat, or a suspended HITL gate) re-arms the timer and keeps waiting,
+   * while false/absent terminates the stream with an error chunk. Only an
+   * `isAlive` that returns false schedules the run's full cleanup; a bare
+   * `idleTimeoutMs` (no `isAlive`) only detaches this observer, so pass
+   * `isAlive` if you rely on the timeout to reclaim a crashed run's state. Both
+   * options are opt-in; omit them for the current unbounded behavior.
+   *
+   * By default the observed stream stays open when the run suspends (e.g. for
+   * tool approval) so a later resume can continue on the same reader. Pass
+   * `closeOnSuspend: true` to end the stream at the suspension boundary so
+   * `fullStream`/`text`/`getFullOutput()` resolve instead of hanging; closing
+   * stays observer-scoped, keeping the run's registry entry and replay history
+   * so it can still be resumed with `resume()`/`resumeStream()`.
+   */
+  observe(
+    runId: string,
+    options?: {
+      /**
+       * Inclusive, zero-based PubSub event index. It counts all cached run-topic events, including
+       * lifecycle events, not chunks. Each chunk carries its event's index as `chunk.index`: to resume
+       * after a dropped connection, pass the `index + 1` of the last chunk that has an index. Omit it to replay all available cached events. Transports
+       * without numeric offsets live-tail instead. Skipping earlier text deltas produces partial text
+       * and may make structured output fail to parse; beyond retained history, an offset also skips
+       * lower-index live events on numeric-offset transports. See
+       * https://mastra.ai/reference/agents/durable-agent#observerunid-options.
+       */
+      offset?: number;
+      idleTimeoutMs?: number;
+      isAlive?: () => boolean | Promise<boolean>;
+      /**
+       * Whether this observer's stream closes when the observed run suspends
+       * (e.g. for tool approval). Defaults to `false`: the stream stays open
+       * across suspension so a later resume can continue on this same reader.
+       *
+       * Set to `true` so `fullStream`, `text`, and `getFullOutput()` resolve at
+       * the suspension boundary instead of hanging. Closing stays
+       * observer-scoped — the run's registry entry and replay history are
+       * preserved. Resume the run with `resumeStream()`/`resume()`, which always
+       * return a fresh stream.
+       */
+      closeOnSuspend?: boolean;
+      onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
+      experimentalTransform?: MastraStreamTransformOptions<TOutput>;
+      onStepFinish?: (result: DurableAgentStepFinishResult) => void | Promise<void>;
+      onFinish?: MastraOnFinishCallback<TOutput>;
+      onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
+      onAbort?: (data: AgentAbortEventData) => void | Promise<void>;
+      onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
+    },
+  ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string; detach: () => void }>;
+
+  /**
+   * @deprecated Use `stream(messages, { untilIdle: true })` instead.
+   *
+   * Stream until all background tasks complete and the agent is idle.
+   * Mirrors the regular Agent's streamUntilIdle but adapted for durable execution.
+   */
+  streamUntilIdle<OUTPUT = TOutput>(
+    messages: MessageListInput,
+    streamOptions?: DurableAgentStreamOptions<OUTPUT> & { maxIdleMs?: number },
+  ): Promise<DurableAgentStreamResult<OUTPUT>>;
+}
+
+// @ts-expect-error - The merged interface preserves the legacy durable method signatures.
 export class DurableAgent<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
@@ -1104,68 +1259,6 @@ export class DurableAgent<
   /**
    * Stream a response from the agent using durable execution.
    */
-  // @ts-expect-error - Intentionally different signature for durable execution
-  declare stream: (
-    messages: MessageListInput,
-    options?: DurableAgentStreamOptions<TOutput>,
-  ) => Promise<DurableAgentStreamResult<TOutput>>;
-
-  declare resumeStream: (resumeData: any, streamOptions?: any) => Promise<MastraModelOutput<TOutput>>;
-
-  /**
-   * Generate a complete response from the agent using durable execution.
-   *
-   * Drains the underlying durable stream to completion and returns the same
-   * {@link FullOutput} shape as non-durable `Agent.generate`. The underlying
-   * workflow is identical to `stream()` — it just collects the final result
-   * for callers that don't want to consume chunks themselves.
-   *
-   * This method intentionally re-implements the `stream()` setup rather than
-   * delegating to `this.stream(...)` so that `prepareForDurableExecution` (and
-   * downstream `convertTools`) receives `methodType: 'generate'`. Tool
-   * factories that vary their `CoreTool` output based on the calling method
-   * (e.g. `clientTools` vs server-side tools) rely on this signal — calling
-   * `stream()` here would silently pass `methodType: 'stream'`.
-   *
-   * If the run suspends (e.g. tool approval or `suspend()` from a tool), the
-   * returned output's `finishReason` will be `'suspended'` and
-   * `suspendPayload` will be populated. Use {@link DurableAgent.resumeGenerate}
-   * to continue.
-   *
-   * Note on suspend persistence: both `DurableAgent` and `EventedAgent` track
-   * the workflow engine's `run.start()` through snapshot persistence, so
-   * awaiting `workflowExecution` on suspend is sufficient for a subsequent
-   * `resumeGenerate()` to find the snapshot.
-   */
-  // @ts-expect-error - Intentionally different signature for durable execution
-  declare generate: (
-    messages: MessageListInput,
-    options?: DurableAgentStreamOptions<TOutput>,
-  ) => Promise<FullOutput<TOutput>>;
-
-  /**
-   * Resume a suspended durable run and drain it to a single
-   * {@link FullOutput}. Mirrors {@link Agent.resumeGenerate} on top of
-   * {@link DurableAgent.resume}.
-   *
-   * Unlike `generate()`, this delegates to `resume()` because resume reads
-   * its tools from the existing run-registry entry rather than running
-   * `prepareForDurableExecution` again — there is no `methodType` to thread
-   * through. The same `EventedAgent` caveat about fire-and-forget snapshot
-   * persistence noted on `generate()` applies if the resumed turn suspends.
-   */
-  declare resumeGenerate: {
-    (
-      resumeData: unknown,
-      options: Parameters<DurableAgent<TAgentId, TTools, TOutput>['resume']>[2] & { runId: string },
-    ): Promise<FullOutput<TOutput>>;
-    /** @deprecated Use `resumeGenerate(resumeData, { runId, ...options })`, matching `Agent.resumeGenerate`. */
-    (
-      runId: string,
-      resumeData: unknown,
-      options?: Parameters<DurableAgent<TAgentId, TTools, TOutput>['resume']>[2],
-    ): Promise<FullOutput<TOutput>>;
-  };
 
   /**
    * Subscribe to a run's raw AgentStreamEvents, filtering out events from
@@ -1186,86 +1279,6 @@ export class DurableAgent<
   }
 
   /**
-   * Observe an existing stream.
-   * Use this to reconnect to a stream after a network disconnection.
-   *
-   * To stop observing without affecting the run, call the returned `detach()`
-   * or leave the `for await` loop over `fullStream` (break, return, or throw).
-   * Both unsubscribe this observer only; the run keeps going and other
-   * observers can still replay it. To stop observing when a request is
-   * cancelled, wire its signal to `detach`:
-   *
-   * ```ts
-   * const { fullStream, detach } = await agent.observe(runId, { offset });
-   * req.signal.addEventListener('abort', detach, { once: true });
-   * if (req.signal.aborted) detach();
-   * for await (const chunk of fullStream) send(chunk);
-   * ```
-   *
-   * **Warning:** The returned `cleanup()` function destroys the run's registry
-   * entries and cached PubSub events (replay history), including for other
-   * observers. Only call it when you are done with the run entirely. If the
-   * workflow is suspended and you intend to resume later, do not call cleanup —
-   * let the auto-cleanup timer handle it after FINISH/ERROR. Auto-cleanup does
-   * not fire on SUSPENDED events.
-   *
-   * Pass `idleTimeoutMs` to bound how long the stream waits on a silent topic:
-   * a durable run whose driving process crashed stops emitting chunks but never
-   * publishes a terminal event, so without this `observe()` hangs forever on a
-   * producerless topic. When the idle timeout fires, the optional `isAlive`
-   * probe is consulted first — returning true (e.g. a live run-liveness
-   * heartbeat, or a suspended HITL gate) re-arms the timer and keeps waiting,
-   * while false/absent terminates the stream with an error chunk. Only an
-   * `isAlive` that returns false schedules the run's full cleanup; a bare
-   * `idleTimeoutMs` (no `isAlive`) only detaches this observer, so pass
-   * `isAlive` if you rely on the timeout to reclaim a crashed run's state. Both
-   * options are opt-in; omit them for the current unbounded behavior.
-   *
-   * By default the observed stream stays open when the run suspends (e.g. for
-   * tool approval) so a later resume can continue on the same reader. Pass
-   * `closeOnSuspend: true` to end the stream at the suspension boundary so
-   * `fullStream`/`text`/`getFullOutput()` resolve instead of hanging; closing
-   * stays observer-scoped, keeping the run's registry entry and replay history
-   * so it can still be resumed with `resume()`/`resumeStream()`.
-   */
-  declare observe: (
-    runId: string,
-    options?: {
-      /**
-       * Inclusive, zero-based PubSub event index. It counts all cached run-topic events, including
-       * lifecycle events, not chunks. Each chunk carries its event's index as `chunk.index`: to resume
-       * after a dropped connection, pass the `index + 1` of the last chunk that has an index. Omit it to replay all available cached events. Transports
-       * without numeric offsets live-tail instead. Skipping earlier text deltas produces partial text
-       * and may make structured output fail to parse; beyond retained history, an offset also skips
-       * lower-index live events on numeric-offset transports. See
-       * https://mastra.ai/reference/agents/durable-agent#observerunid-options.
-       */
-      offset?: number;
-      idleTimeoutMs?: number;
-      isAlive?: () => boolean | Promise<boolean>;
-      /**
-       * Whether this observer's stream closes when the observed run suspends
-       * (e.g. for tool approval). Defaults to `false`: the stream stays open
-       * across suspension so a later resume can continue on this same reader.
-       *
-       * Set to `true` so `fullStream`, `text`, and `getFullOutput()` resolve at
-       * the suspension boundary instead of hanging. Closing stays
-       * observer-scoped — the run's registry entry and replay history are
-       * preserved. Resume the run with `resumeStream()`/`resume()`, which always
-       * return a fresh stream.
-       */
-      closeOnSuspend?: boolean;
-      onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
-      experimentalTransform?: MastraStreamTransformOptions<TOutput>;
-      onStepFinish?: (result: DurableAgentStepFinishResult) => void | Promise<void>;
-      onFinish?: MastraOnFinishCallback<TOutput>;
-      onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
-      onAbort?: (data: AgentAbortEventData) => void | Promise<void>;
-      onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
-    },
-  ) => Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string; detach: () => void }>;
-
-  /**
    * Get the workflow instance for direct execution.
    * Lazily creates the workflow and registers Mastra on it (needed for
    * getAgentById in execution steps).
@@ -1284,18 +1297,6 @@ export class DurableAgent<
       })
     );
   }
-
-  /**
-   * @deprecated Use `stream(messages, { untilIdle: true })` instead.
-   *
-   * Stream until all background tasks complete and the agent is idle.
-   * Mirrors the regular Agent's streamUntilIdle but adapted for durable execution.
-   */
-  // @ts-expect-error - Intentionally different return type for durable execution
-  declare streamUntilIdle: <OUTPUT = TOutput>(
-    messages: MessageListInput,
-    streamOptions?: DurableAgentStreamOptions<OUTPUT> & { maxIdleMs?: number },
-  ) => Promise<DurableAgentStreamResult<OUTPUT>>;
 
   /**
    * Get the durable workflows required by this agent.
