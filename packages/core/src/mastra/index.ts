@@ -4017,8 +4017,9 @@ export class Mastra<
    * const existing = mastra.getWorkspaceById('workspace-123', { optional: true });
    * ```
    */
-  public getWorkspaceById(id: string): Workspace;
+  public getWorkspaceById(id: string, options?: { optional?: false }): Workspace;
   public getWorkspaceById(id: string, options: { optional: true }): Workspace | undefined;
+  public getWorkspaceById(id: string, options?: { optional?: boolean }): Workspace | undefined;
   public getWorkspaceById(id: string, options?: { optional?: boolean }): Workspace | undefined {
     const entry = this.#workspaces[id];
     if (!entry) {
