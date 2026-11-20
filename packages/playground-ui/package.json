@@ -198,9 +198,12 @@
     "@codemirror/view": "^6.43.15",
     "@dagrejs/dagre": "^1.1.8",
     "@hello-pangea/dnd": "^18.0.1",
+    "@json-render/core": "^0.22.0",
+    "@json-render/react": "^0.22.0",
     "@lezer/common": "^1.5.4",
     "@lezer/highlight": "^1.2.5",
     "@lukeed/uuid": "^2.0.1",
+    "@mastra/json-render": "workspace:^",
     "@mcp-ui/client": "^7.1.1",
     "@nangohq/frontend": "0.71.9",
     "@pierre/diffs": "1.5.1",
@@ -243,6 +246,7 @@
     "tailwindcss": "^4.0.0"
   },
   "devDependencies": {
+    "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",
     "@mastra/ai-sdk": "workspace:*",
     "@mastra/client-js": "workspace:^",

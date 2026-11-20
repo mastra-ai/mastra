@@ -1,4 +1,5 @@
 import type { MastraDBMessage, MastraErrorPart } from '@mastra/core/agent/message-list';
+import { JSON_RENDER_STATE } from '@mastra/json-render/studio';
 import type { McpAppToolInfo } from '@mastra/react/hooks/mcps';
 import { MessageFactory } from '@mastra/react/ui';
 import type { MessageRenderers } from '@mastra/react/ui';
@@ -7,7 +8,9 @@ import type { ReactNode } from 'react';
 import { MessageAttachments } from '../attachments/message-attachments';
 import { splitMessageAttachments } from '../attachments/split-message-attachments';
 import { AssistantMessageActions, DatasetSaveAction } from '@/domains/chat';
-import { ChatRunningContext, useChatRunning } from '@/domains/chat/context/chat-context';
+import { ChatRunningContext, useChatRunning, useChatSend } from '@/domains/chat/context/chat-context';
+import { GenUiInterface, SPEC_PART_TYPE } from '@/domains/chat/messages/gen-ui/gen-ui-interface';
+import type { GenUiSend } from '@/domains/chat/messages/gen-ui/gen-ui-interface';
 import { AssistantTextPartRenderer } from '@/domains/chat/messages/renderers/assistant-text-part-renderer';
 import { DataPartRenderer } from '@/domains/chat/messages/renderers/data-part-renderer';
 import { messageTextKind } from '@/domains/chat/messages/renderers/message-text-kind';
@@ -167,6 +170,15 @@ export const MessageRow = memo(function MessageRow({
   const revealed = useRevealedParts(parts, isStreaming(parts));
   const shownParts = isProse(parts, metadata) ? revealed : parts;
   const revealing = shownParts !== parts;
+  const specParts = useMemo(() => shownParts.filter(part => part.type === SPEC_PART_TYPE), [shownParts]);
+  const send = useChatSend();
+  const sendFromInterface = useMemo<GenUiSend | undefined>(
+    () =>
+      readOnly
+        ? undefined
+        : (text, state) => void send({ message: text, requestContext: { [JSON_RENDER_STATE]: state } }),
+    [readOnly, send],
+  );
 
   const toolContext = useMemo<ToolCardContext>(() => ({ metadata, mcpAppTools }), [metadata, mcpAppTools]);
   const toolGroups = useMemo(() => collectToolGroups(shownParts, toolContext), [shownParts, toolContext]);
@@ -225,11 +237,22 @@ export const MessageRow = memo(function MessageRow({
     };
     return {
       Reasoning: part => <ReasoningPartRenderer part={part} />,
-      Data: part => (
-        <Arriving>
-          <DataPartRenderer part={part} />
-        </Arriving>
-      ),
+      Data: part => {
+        if (part.type === SPEC_PART_TYPE) {
+          // An interface is built from all of the reply's spec parts, drawn where the first one sits.
+          if (part !== specParts[0]) return null;
+          return (
+            <Arriving>
+              <GenUiInterface parts={specParts} onSend={sendFromInterface} disabled={isRunning} />
+            </Arriving>
+          );
+        }
+        return (
+          <Arriving>
+            <DataPartRenderer part={part} />
+          </Arriving>
+        );
+      },
       ToolInvocation: renderTool,
       DynamicTool: renderTool,
       Error: (part: MastraErrorPart) => (
@@ -238,7 +261,7 @@ export const MessageRow = memo(function MessageRow({
         </Notice>
       ),
     };
-  }, [metadata, dataParts, readOnly, toolGroups, isRunning, renderToolCard]);
+  }, [metadata, dataParts, readOnly, toolGroups, isRunning, renderToolCard, specParts, sendFromInterface]);
 
   const userRenderers = useMemo<MessageRenderers>(
     () => ({

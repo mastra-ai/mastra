@@ -57,6 +57,31 @@ function Reply({ message }) {
 }
 ```
 
+## Render interfaces in Studio
+
+Studio draws interfaces composed from `studioCatalog`, using its own components. Give an agent this catalog to see its interfaces in Studio's chat, with no client code:
+
+```typescript
+import { JsonRenderProcessor } from '@mastra/json-render';
+import { studioCatalog } from '@mastra/json-render/studio';
+
+const ui = new JsonRenderProcessor({ catalog: studioCatalog });
+
+export const uiAgent = new Agent({
+  id: 'ui-agent',
+  name: 'UI Agent',
+  model: 'openai/gpt-6.1-sol',
+  instructions: studioCatalog.prompt({ mode: 'inline', editModes: ['patch'] }),
+  inputProcessors: [ui],
+  outputProcessors: [ui],
+  memory: new Memory(),
+});
+```
+
+The catalog has layout (`Stack`, `Grid`, `Card`, `Separator`), content (`Heading`, `Text`, `Badge`, `Stat`, `Table`, `List`, `Progress`, `Notice`), and form controls (`Button`, `Input`, `Select`, `Checkbox`). Its `sendMessage` action sends a message as the user, along with the values entered in the interface. Controls are disabled while the reply streams, and in places where nothing can answer them, such as traces.
+
+`@mastra/json-render/studio` doesn't depend on React, so the same catalog can back your own registry.
+
 ## Documentation
 
 - [Processors](https://mastra.ai/docs/agents/processors)
