@@ -89,6 +89,7 @@ export class OrchestrationWorker extends MastraWorker {
 
     const group = this.#config.group ?? DEFAULT_GROUP;
     this.#transport = new PullTransport({ pubsub: this.deps.pubsub, group, logger: this.deps.logger });
+    this.#processor?.resumeRedeliveryWaits();
 
     await this.#transport.start({
       route: (event, ack, nack, extend) => this.#processEvent(event, ack, nack, extend),
@@ -102,7 +103,12 @@ export class OrchestrationWorker extends MastraWorker {
 
     try {
       if (this.#transport) {
-        await this.#transport.stop(options);
+        // stop() unsubscribes before it drains. Ending the retry delays once that has begun
+        // nacks waiting events right away, so the drain doesn't wait them out and the
+        // redelivery goes to a consumer that is still running.
+        const stopping = this.#transport.stop(options);
+        this.#processor?.stopRedeliveryWaits();
+        await stopping;
         this.#transport = undefined;
       }
     } finally {

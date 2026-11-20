@@ -8171,6 +8171,7 @@ export class Mastra<
     const modes = this.#pubsub.supportedModes ?? ['pull'];
     const pushOnly = modes.includes('push') && !modes.includes('pull');
     if (pushOnly && !this.#pushSubscription) {
+      this.#workflowEventProcessor?.resumeRedeliveryWaits();
       const cb: EventCallback = (event, ack, nack) => {
         // In cross-process push environments (e.g. UnixSocketPubSub),
         // every subscriber receives every event — including events for
@@ -8355,6 +8356,9 @@ export class Mastra<
     if (this.#pushSubscription) {
       await this.#pubsub.unsubscribe(this.#pushSubscription.topic, this.#pushSubscription.cb);
       this.#pushSubscription = undefined;
+      // Nothing new reaches this processor now, so a failed event waiting to be retried is
+      // nacked at once instead of holding the drain below.
+      this.#workflowEventProcessor?.stopRedeliveryWaits();
     }
     // Events already handed to handleWorkflowEvent() keep running after the
     // unsubscribe; wait for them so a step mid-execution finishes (or publishes
