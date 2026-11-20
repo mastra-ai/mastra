@@ -1992,6 +1992,100 @@ describe.each([DurableAgent, EventedAgent])('resume schema preflight (%#)', Agen
     },
   );
 
+  // Technical: a rejected cold resume removed the run's rebuilt registry entry after a concurrent valid
+  // resume had adopted it, which also cleared that resume's total deadline timer.
+  it('a rejected resume that finishes while a valid one runs leaves the valid run its timeout', async () => {
+    let releaseRejected!: () => void;
+    const rejectedMayFinish = new Promise<void>(resolve => {
+      releaseRejected = resolve;
+    });
+    let markRejectedWaiting!: () => void;
+    const rejectedWaiting = new Promise<void>(resolve => {
+      markRejectedWaiting = resolve;
+    });
+    let markToolStarted!: () => void;
+    const toolStarted = new Promise<void>(resolve => {
+      markToolStarted = resolve;
+    });
+    const abortedByDeadline: boolean[] = [];
+    const ask = createTool({
+      id: 'ask',
+      description: 'Ask for confirmation',
+      inputSchema: z.object({ action: z.string() }),
+      suspendSchema: z.object({}),
+      resumeSchema: z.object({ confirmed: z.boolean() }),
+      execute: async (_input, context) => {
+        if (!context?.agent?.resumeData) return context?.agent?.suspend({});
+        markToolStarted();
+        const signal = context.abortSignal;
+        await new Promise<void>(resolve => {
+          const timer = setTimeout(resolve, 1500);
+          signal?.addEventListener('abort', () => {
+            clearTimeout(timer);
+            resolve();
+          });
+        });
+        abortedByDeadline.push(signal?.aborted ?? false);
+        return { confirmed: context.agent.resumeData.confirmed };
+      },
+    });
+    const agent = new Agent({
+      id: 'resume-deadline-agent',
+      name: 'Resume Deadline Agent',
+      instructions: 'Ask for confirmation',
+      model: createSuspendingThenTextModel('ask', ['Confirmed']),
+      tools: async ({ requestContext }) => {
+        if (requestContext.get('tenant') === 'rejected-caller') {
+          markRejectedWaiting();
+          await rejectedMayFinish;
+        }
+        return { ask };
+      },
+    });
+    const pubsub = new EventEmitterPubSub();
+    const durable = new AgentClass({ agent, pubsub });
+    const host = new Mastra({ agents: { durable }, storage: new InMemoryStore(), logger: false });
+    try {
+      const initial = await durable.stream('Confirm', {
+        closeOnSuspend: true,
+        requestContext: new RequestContext([['tenant', 'acme']]),
+      });
+      await drain(initial.output.fullStream);
+      await globalRunRegistry.get(initial.runId)?.workflowExecution;
+      durable.runRegistry.clear();
+      globalRunRegistry.delete(initial.runId);
+
+      const rejected = durable.resume(
+        initial.runId,
+        { confirmed: 'yes' },
+        { runId: initial.runId, requestContext: new RequestContext([['tenant', 'rejected-caller']]) },
+      );
+      // The rejected resume has rebuilt the run and is still resolving its tools.
+      await rejectedWaiting;
+      const valid = durable.resume(
+        initial.runId,
+        { confirmed: true },
+        {
+          runId: initial.runId,
+          requestContext: new RequestContext([['requestId', 'valid']]),
+          modelSettings: { timeout: { totalMs: 300 } },
+        },
+      );
+      // Let the rejected resume finish once the valid one is running, or shortly after if it is held back.
+      await Promise.race([toolStarted, new Promise(resolve => setTimeout(resolve, 100))]);
+      releaseRejected();
+
+      await expect(rejected).rejects.toMatchObject({ id: 'AGENT_RESUME_INVALID_DATA' });
+      // The valid resume still stops at its own deadline.
+      await expect((await valid).output.getFullOutput()).rejects.toThrow('modelSettings.timeout.totalMs');
+      await vi.waitFor(() => expect(abortedByDeadline).toEqual([true]));
+    } finally {
+      releaseRejected();
+      await host.shutdown({ drainTimeout: 1000 });
+      await pubsub.close();
+    }
+  });
+
   // Technical: a resume can fail before validation decides anything, here because the tool resolver
   // throws for the caller. The cold path rebuilt the run from that caller's context before failing.
   it.each(['warm', 'cold'].flatMap(registry => [false, true].map(untilIdle => ({ registry, untilIdle }))))(

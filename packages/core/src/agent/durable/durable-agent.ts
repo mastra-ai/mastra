@@ -80,6 +80,7 @@ import type { AgentAbortThreadOptions, AgentDurableOption, AgentModelManagerConf
 import { isDurableAgentLike } from '../types';
 
 import { publishAbortRequest, releaseRemoteAbortListener, requestAcknowledgedAbort } from './abort-transport';
+import { ColdResumeAttempt, waitForUndecidedColdResume } from './cold-resume-gate';
 import {
   AGENT_STREAM_TOPIC,
   AgentStreamEventTypes,
@@ -3359,13 +3360,19 @@ export class DurableAgent<
       }
       releaseResumeMarker = release;
     }
+    const coldAttempt = new ColdResumeAttempt(runId);
     try {
       // An abort on another server leaves the run canceled in storage.
       if (await this.#isRunCanceledInStorage(runId)) throw abortedRunError();
-      return await this.#resumeRun(runId, resumeData, options, releaseResumeMarker);
+      return await this.#resumeRun(runId, resumeData, options, releaseResumeMarker, coldAttempt);
     } catch (error) {
+      // A rebuilt run whose resume never accepted is removed again, so no later resume inherits
+      // the rejected caller's request context.
+      coldAttempt.abandon();
       releaseResumeMarker();
       throw error;
+    } finally {
+      coldAttempt.accept();
     }
   }
 
@@ -3408,13 +3415,17 @@ export class DurableAgent<
     resumeData: unknown,
     options: DurableAgentResumeOptions<TOutput> | undefined,
     releaseResumeMarker: () => void,
+    coldAttempt: ColdResumeAttempt,
   ): Promise<DurableAgentStreamResult<TOutput>> {
+    await waitForUndecidedColdResume(runId);
     let entry = this.#runRegistry.get(runId);
     // Scopes persisted with a run rebuilt from storage. They are the suspended run's set even when
     // the caller passes its own request context.
     let rehydratedScopes: unknown;
     let coldSnapshot: WorkflowRunState | undefined;
     if (!entry) {
+      // Same tick as the read above: other resumes of this run wait until this one decides.
+      coldAttempt.begin();
       // A persisted durable run can outlive this process (or the registry TTL).
       // Rebuild the non-serializable runtime state before resuming the stored
       // workflow snapshot. Keep warm resumes on the existing path to avoid
@@ -3505,6 +3516,8 @@ export class DurableAgent<
             // Hand the tool-call marker to the pinned agent's resume(), which
             // re-takes it synchronously before its first await.
             releaseResumeMarker();
+            // The pinned agent's resume() rebuilds and decides for itself.
+            coldAttempt.accept();
             return (resolved as unknown as DurableAgent<TAgentId, TTools, TOutput>).resume(runId, resumeData, options);
           }
         }
@@ -3557,22 +3570,6 @@ export class DurableAgent<
           }
         : options?.memory;
 
-      // Validate before prepare() registers an entry built from this caller's request context. A
-      // rejected resume then leaves nothing for the corrected retry, or a concurrent resume, to
-      // inherit, and nothing to clean up. The check below covers warm resumes.
-      const preflightContext = options?.requestContext ?? snapshotRequestContext;
-      const preflightDefaults = await this.getDefaultOptions({ requestContext: preflightContext });
-      await this.#wrappedAgent.__validateToolResumeData({
-        snapshot,
-        toolCallId: options?.toolCallId,
-        resumeData,
-        requestContext: preflightContext,
-        toolsets: deepMerge(preflightDefaults?.toolsets ?? {}, options?.toolsets ?? {}),
-        clientTools: { ...preflightDefaults?.clientTools, ...options?.clientTools },
-        runId,
-        method: 'resume',
-      });
-
       // The resume below applies the suspended run's scopes, so preparation does not resolve them again.
       await this.prepare([], {
         [SCOPES_ALREADY_APPLIED]: true,
@@ -3590,6 +3587,14 @@ export class DurableAgent<
         modelSettings: options?.modelSettings ?? (workflowInput.options?.modelSettings as any),
       } as AgentExecutionOptions<TOutput>);
       entry = this.#runRegistry.get(runId);
+      const preparedEntry = entry;
+      const preparedGlobalEntry = getRunRegistryEntry(runId, this.#mastra);
+      coldAttempt.prepared(() => {
+        if (preparedEntry && this.#runRegistry.get(runId) === preparedEntry) this.#runRegistry.cleanup(runId);
+        if (preparedGlobalEntry && getRunRegistryEntry(runId, this.#mastra) === preparedGlobalEntry) {
+          deleteRunRegistryEntry(runId, this.#mastra);
+        }
+      });
     }
     if (!entry) {
       throw new Error(`Failed to rehydrate registry entry for run ${runId}. Cannot resume.`);
@@ -3664,38 +3669,6 @@ export class DurableAgent<
     // Scoped runs execute on a run-scoped copy of the request context.
     resumeRequestContext = (resolvedOptions.requestContext as typeof resumeRequestContext) ?? resumeRequestContext;
 
-    // Delegate to the idle-loop wrapper when `untilIdle` is set. Strip
-    // `untilIdle` before passing to the wrapper so the inner agent.resume()
-    // call (and subsequent agent.stream([]) continuations) don't recurse.
-    if (resolvedOptions.untilIdle) {
-      const { untilIdle, ...rest } = resolvedOptions;
-      const maxIdleMs = typeof untilIdle === 'object' ? untilIdle.maxIdleMs : undefined;
-      // The idle-loop wrapper re-enters resume() for this same tool call.
-      releaseResumeMarker();
-      const resolvedOptionsAgent = {
-        id: this.id,
-        getDefaultOptions: () => ({}),
-        getMemory: (args?: any) => this.getMemory(args),
-        resume: (innerRunId: string, innerResumeData: unknown, innerOptions?: DurableAgentResumeOptions<TOutput>) =>
-          this.resume(innerRunId, innerResumeData, {
-            ...innerOptions,
-            tracingOptions: resumeTracingOptions,
-          } as DurableAgentResumeOptions<TOutput>),
-        stream: (innerMessages: MessageListInput, innerOptions?: DurableAgentStreamOptions<TOutput>) =>
-          this.stream(innerMessages, innerOptions),
-      } as unknown as DurableAgent<any, any, TOutput>;
-      return runResumeDurableStreamUntilIdle<TOutput>(
-        resolvedOptionsAgent,
-        runId,
-        resumeData,
-        { ...rest, maxIdleMs } as DurableAgentStreamOptions<TOutput> & { maxIdleMs?: number },
-        {
-          activeStreams: this.#activeStreamUntilIdle,
-          bgManager: this.#mastra?.backgroundTaskManager,
-        },
-      );
-    }
-
     await this.requireAgentExecutionFGA({
       requestContext: resolvedOptions.requestContext,
       memory: resolvedOptions.memory,
@@ -3732,12 +3705,47 @@ export class DurableAgent<
       });
     }
     // Only an accepted resume may change the suspended run's request context: it carries
-    // the caller's identity and per-request tool configuration into the next resume.
+    // the caller's identity and per-request tool configuration into the next resume. Everything
+    // above runs before acceptance, so a cold resume that fails there is rolled back by resume().
     entry.requestContext = resumeRequestContext;
     const globalEntryForContext = getRunRegistryEntry(runId, this.#mastra);
     if (globalEntryForContext) {
       globalEntryForContext.requestContext = resumeRequestContext;
     }
+    coldAttempt.accept();
+
+    // Delegate to the idle-loop wrapper when `untilIdle` is set. Strip
+    // `untilIdle` before passing to the wrapper so the inner agent.resume()
+    // call (and subsequent agent.stream([]) continuations) don't recurse.
+    if (resolvedOptions.untilIdle) {
+      const { untilIdle, ...rest } = resolvedOptions;
+      const maxIdleMs = typeof untilIdle === 'object' ? untilIdle.maxIdleMs : undefined;
+      // The idle-loop wrapper re-enters resume() for this same tool call.
+      releaseResumeMarker();
+      const resolvedOptionsAgent = {
+        id: this.id,
+        getDefaultOptions: () => ({}),
+        getMemory: (args?: any) => this.getMemory(args),
+        resume: (innerRunId: string, innerResumeData: unknown, innerOptions?: DurableAgentResumeOptions<TOutput>) =>
+          this.resume(innerRunId, innerResumeData, {
+            ...innerOptions,
+            tracingOptions: resumeTracingOptions,
+          } as DurableAgentResumeOptions<TOutput>),
+        stream: (innerMessages: MessageListInput, innerOptions?: DurableAgentStreamOptions<TOutput>) =>
+          this.stream(innerMessages, innerOptions),
+      } as unknown as DurableAgent<any, any, TOutput>;
+      return runResumeDurableStreamUntilIdle<TOutput>(
+        resolvedOptionsAgent,
+        runId,
+        resumeData,
+        { ...rest, maxIdleMs } as DurableAgentStreamOptions<TOutput> & { maxIdleMs?: number },
+        {
+          activeStreams: this.#activeStreamUntilIdle,
+          bgManager: this.#mastra?.backgroundTaskManager,
+        },
+      );
+    }
+
     // A warm resume reuses the tools built for the first request, which close
     // over its request context, delegation hooks, and tool hooks (#25960). Rebuild them for
     // this call and swap in only entries still holding a request-built tool, so
