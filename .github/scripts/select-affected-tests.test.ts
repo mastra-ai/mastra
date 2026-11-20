@@ -245,9 +245,13 @@ describe('Prebuild test tiers', () => {
     const workflow = parse(readFileSync(new URL('../workflows/e2e-tests.yml', import.meta.url), 'utf8'));
     const steps = (workflow.jobs['e2e-light'] as { steps: Step[] }).steps;
     const names = steps.map(step => step.name);
-    const gated = steps.filter(step => step.name?.endsWith(': install e2e test dependencies') && step.if?.includes('skip_jobs'));
+    const gated = steps.filter(
+      step => step.name?.endsWith(': install e2e test dependencies') && step.if?.includes('skip_jobs'),
+    );
     expect(gated.length).toBeGreaterThanOrEqual(4);
-    for (const install of steps.filter(step => /^E2E .+: install /.test(step.name ?? '') && step.if?.includes('skip_jobs'))) {
+    for (const install of steps.filter(
+      step => /^E2E .+: install /.test(step.name ?? '') && step.if?.includes('skip_jobs'),
+    )) {
       const label = /^E2E (.+?): /.exec(install.name!)![1];
       const key = /'(job:e2e\/[\w-]+)'/.exec(install.if!)![1];
       const blocked = steps.find(step => step.name === `E2E ${label}: not run, a prerequisite failed`);
