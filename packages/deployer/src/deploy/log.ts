@@ -22,9 +22,14 @@ export const createPinoStream = (logger: IMastraLogger) => {
 /**
  * Windows needs a shell to run package manager `.cmd` shims, and the shell joins
  * every token into one command line. There, only allow characters that appear in
- * package specifiers, paths and CLI flags — never shell metacharacters.
+ * package specifiers, paths (including non-ASCII letters) and CLI flags — never
+ * shell metacharacters.
  */
-const SAFE_SHELL_ARG = /^[\w@%+=:,./\\^~-]*$/;
+const SAFE_SHELL_ARG = /^[\p{L}\p{M}\p{N}_@%+=:,./\\^~-]*$/u;
+
+export function isSafeShellArg(arg: string) {
+  return SAFE_SHELL_ARG.test(arg);
+}
 
 export function createChildProcessLogger({ logger, root }: { logger: IMastraLogger; root: string }) {
   const pinoStream = createPinoStream(logger);
@@ -36,7 +41,7 @@ export function createChildProcessLogger({ logger, root }: { logger: IMastraLogg
       const shell = process.platform === 'win32';
       if (shell) {
         for (const arg of [bin, ...allArgs]) {
-          if (!SAFE_SHELL_ARG.test(arg)) {
+          if (!isSafeShellArg(arg)) {
             throw new Error(`Refusing to pass unsafe argument to shell command: ${JSON.stringify(arg)}`);
           }
         }
