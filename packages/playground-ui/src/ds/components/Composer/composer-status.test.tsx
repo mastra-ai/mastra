@@ -20,9 +20,10 @@ interface SessionStatus {
   tokenRate?: string;
   emptyWrapper?: boolean;
   progress?: number;
+  progressHidden?: boolean;
 }
 
-function StatusFooter({ steering, announcement, tokenRate, emptyWrapper, progress }: SessionStatus) {
+function StatusFooter({ steering, announcement, tokenRate, emptyWrapper, progress, progressHidden }: SessionStatus) {
   return (
     <ComposerStatus aria-label="Session status">
       <ComposerStatusStart>
@@ -40,7 +41,9 @@ function StatusFooter({ steering, announcement, tokenRate, emptyWrapper, progres
       </ComposerStatusStart>
       <ComposerStatusEnd>
         {tokenRate}
-        {progress !== undefined && <progress aria-label="Context used" value={progress} max={1} />}
+        {progress !== undefined && (
+          <progress aria-label="Context used" value={progress} max={1} hidden={progressHidden} />
+        )}
       </ComposerStatusEnd>
     </ComposerStatus>
   );
@@ -74,6 +77,22 @@ describe('Composer status footer', () => {
     render(<StatusFooter progress={0.4} />);
 
     expect(isCollapsed()).toBe(false);
+  });
+
+  it('gives its row back when its only status is hidden', () => {
+    render(<StatusFooter progress={0.4} progressHidden />);
+
+    expect(isCollapsed()).toBe(true);
+  });
+
+  it('closes after the pause once its only status is hidden', async () => {
+    const { rerender } = render(<StatusFooter progress={0.4} />);
+
+    rerender(<StatusFooter progress={0.4} progressHidden />);
+    await flushMutations();
+    act(() => vi.advanceTimersByTime(600));
+
+    expect(isCollapsed()).toBe(true);
   });
 
   it('shows plain text dropped straight into a group', () => {
