@@ -356,7 +356,7 @@ trustPolicyExclude:
   - 'modal@0.10.1'
   # Same trusted publisher (Modal GitHub Actions OIDC config f7b14146) as 0.10.1; pnpm
   # flags it because modal stopped attaching provenance after 0.7.2.
-  - 'modal@0.11.1'
+  - 'modal@0.11.1 || 0.11.2'
 overrides:
   # Vanta 2026-11-13: hono <4.13.16 advisories; 4.13.18 is the latest 4.x
   hono@<4.13.18: 4.13.18
