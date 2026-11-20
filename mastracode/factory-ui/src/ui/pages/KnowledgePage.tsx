@@ -33,9 +33,11 @@ export function KnowledgePage() {
   const slots = useSidebarHeaderSlots();
   return (
     <PageLayout {...slots}>
-      <div className="flex h-full min-h-0 flex-col">
-        <KnowledgeContent key={factory.id} factoryProjectId={factory.id} />
-      </div>
+      <PageLayout.Workspace>
+        <div className="flex min-h-0 flex-col p-4">
+          <KnowledgeContent key={factory.id} factoryProjectId={factory.id} />
+        </div>
+      </PageLayout.Workspace>
     </PageLayout>
   );
 }
