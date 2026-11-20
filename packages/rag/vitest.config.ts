@@ -1,5 +1,5 @@
-import { transform } from 'esbuild';
 import { defineConfig } from '@internal/lint/vitest';
+import { transform } from 'esbuild';
 
 export default defineConfig({
   plugins: [
