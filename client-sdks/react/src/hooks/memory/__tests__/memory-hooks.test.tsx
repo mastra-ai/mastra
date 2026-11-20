@@ -4,7 +4,7 @@ import type {
   GetObservationalMemoryResponse,
   ListMemoryThreadMessagesResponse,
 } from '@mastra/client-js';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, dehydrate, hydrate } from '@tanstack/react-query';
 import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
@@ -192,6 +192,37 @@ describe('useMemoryThreadMessages', () => {
       expect(requests.filter(request => request === 'agent-1:0').length).toBeGreaterThan(firstPageRequests);
       expect(requests.filter(request => request === 'agent-1:2').length).toBeGreaterThan(secondPageRequests);
       expect(requests.filter(request => request === 'agent-2:0')).toHaveLength(otherAgentRequests);
+    });
+
+    it('invalidates a global memory page restored from JSON without invalidating an agent page', async () => {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      server.use(
+        http.get(`${ROOT}/memory/threads/:threadId/messages`, () => HttpResponse.json(threadMessagesResponse)),
+      );
+
+      const global = renderHook(() => useMemoryThreadMessages({ threadId: 'thread-1' }), {
+        wrapper: makeWrapper(queryClient),
+      });
+      const agent = renderHook(() => useMemoryThreadMessages({ threadId: 'thread-1', agentId: 'agent-1' }), {
+        wrapper: makeWrapper(queryClient),
+      });
+      await waitFor(() => {
+        expect(global.result.current.isSuccess).toBe(true);
+        expect(agent.result.current.isSuccess).toBe(true);
+      });
+
+      const restored = new QueryClient();
+      hydrate(restored, JSON.parse(JSON.stringify(dehydrate(queryClient))));
+      await restored.invalidateQueries({ queryKey: memoryThreadMessagesQueryKeyPrefix('thread-1') });
+
+      const globalPage = restored.getQueryCache().findAll({ queryKey: memoryThreadMessagesQueryKeyPrefix('thread-1') });
+      expect(globalPage).toHaveLength(1);
+      expect(globalPage[0]?.state.isInvalidated).toBe(true);
+      const agentPage = restored
+        .getQueryCache()
+        .findAll({ queryKey: memoryThreadMessagesQueryKeyPrefix('thread-1', 'agent-1') });
+      expect(agentPage).toHaveLength(1);
+      expect(agentPage[0]?.state.isInvalidated).toBe(false);
     });
   });
 

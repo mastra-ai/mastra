@@ -5,7 +5,7 @@ import { useMastraClient } from '../../mastra-client-context';
 import type { MastraQueryOptions } from '../shared/query-options';
 
 export const memoryThreadMessagesQueryKeyPrefix = (threadId: string | undefined, agentId?: string) =>
-  ['memory', 'thread', threadId, 'messages', agentId] as const;
+  ['memory', 'thread', threadId, 'messages', agentId ?? null] as const;
 
 export const memoryThreadMessagesQueryKey = (threadId: string | undefined, page?: number, agentId?: string) =>
   [...memoryThreadMessagesQueryKeyPrefix(threadId, agentId), page ?? 0] as const;
