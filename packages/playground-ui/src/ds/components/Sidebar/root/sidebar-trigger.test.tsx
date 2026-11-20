@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { hydrateRoot } from 'react-dom/client';
+import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SidebarSearchTrigger } from '../header/sidebar-search-trigger';
@@ -85,5 +87,29 @@ describe('SidebarProvider on a phone', () => {
     );
 
     expect(seen[0]).toBe(true);
+  });
+
+  it('hydrates server HTML on a phone without a mismatch, then switches to the phone layout', async () => {
+    const tree = (
+      <TooltipProvider>
+        <SidebarProvider>
+          <SidebarTrigger />
+        </SidebarProvider>
+      </TooltipProvider>
+    );
+    mockMatchMedia(false);
+    const container = document.createElement('div');
+    container.innerHTML = renderToString(tree);
+    document.body.appendChild(container);
+    mockMatchMedia(true);
+    const hydrationErrors: unknown[] = [];
+
+    await act(async () => {
+      hydrateRoot(container, tree, { onRecoverableError: error => hydrationErrors.push(error) });
+    });
+
+    expect(hydrationErrors).toEqual([]);
+    expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).toBeNull();
+    container.remove();
   });
 });
