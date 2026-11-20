@@ -4,8 +4,11 @@ import { skipToken, useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
 import type { MastraQueryOptions } from '../shared/query-options';
 
+export const memoryThreadMessagesQueryKeyPrefix = (threadId: string | undefined, agentId?: string) =>
+  ['memory', 'thread', threadId, 'messages', agentId] as const;
+
 export const memoryThreadMessagesQueryKey = (threadId: string | undefined, page?: number, agentId?: string) =>
-  ['memory', 'thread', threadId, 'messages', page ?? 0, agentId] as const;
+  [...memoryThreadMessagesQueryKeyPrefix(threadId, agentId), page ?? 0] as const;
 
 type MemoryThreadMessagesResponse = Awaited<ReturnType<ReturnType<MastraClient['getMemoryThread']>['listMessages']>>;
 

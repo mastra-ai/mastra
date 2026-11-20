@@ -13,7 +13,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 
 import { MastraReactProvider } from '../../../mastra-react-provider';
 import { useMemoryStatus } from '../use-memory-status';
-import { useMemoryThreadMessages } from '../use-memory-thread-messages';
+import { memoryThreadMessagesQueryKeyPrefix, useMemoryThreadMessages } from '../use-memory-thread-messages';
 import { useObservationalMemory } from '../use-observational-memory';
 
 const BASE_URL = 'http://localhost:4111';
@@ -47,8 +47,7 @@ const observationalMemoryResponse: GetObservationalMemoryResponse = {
   record: null,
 };
 
-function makeWrapper() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function makeWrapper(queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   return ({ children }: { children: ReactNode }) => (
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -155,6 +154,44 @@ describe('useMemoryThreadMessages', () => {
       await waitFor(() => expect(result.current.data?.messages[0]?.id).toBe('message-for-agent-2'));
       expect(requestedAgents).toContain('agent-1');
       expect(requestedAgents).toContain('agent-2');
+    });
+    it('refetches all pages for the selected agent without refreshing another agent', async () => {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const requests: string[] = [];
+      server.use(
+        http.get(`${ROOT}/memory/threads/:threadId/messages`, ({ request }) => {
+          const params = new URL(request.url).searchParams;
+          requests.push(`${params.get('agentId')}:${params.get('page')}`);
+          return HttpResponse.json(threadMessagesResponse);
+        }),
+      );
+
+      const wrapper = makeWrapper(queryClient);
+      const firstPage = renderHook(() => useMemoryThreadMessages({ threadId: 'thread-1', agentId: 'agent-1' }), {
+        wrapper,
+      });
+      const secondPage = renderHook(
+        () => useMemoryThreadMessages({ threadId: 'thread-1', agentId: 'agent-1', page: 2 }),
+        {
+          wrapper,
+        },
+      );
+      const otherAgent = renderHook(() => useMemoryThreadMessages({ threadId: 'thread-1', agentId: 'agent-2' }), {
+        wrapper,
+      });
+      await waitFor(() => {
+        expect(firstPage.result.current.isSuccess).toBe(true);
+        expect(secondPage.result.current.isSuccess).toBe(true);
+        expect(otherAgent.result.current.isSuccess).toBe(true);
+      });
+      const firstPageRequests = requests.filter(request => request === 'agent-1:0').length;
+      const secondPageRequests = requests.filter(request => request === 'agent-1:2').length;
+      const otherAgentRequests = requests.filter(request => request === 'agent-2:0').length;
+
+      await queryClient.refetchQueries({ queryKey: memoryThreadMessagesQueryKeyPrefix('thread-1', 'agent-1') });
+      expect(requests.filter(request => request === 'agent-1:0').length).toBeGreaterThan(firstPageRequests);
+      expect(requests.filter(request => request === 'agent-1:2').length).toBeGreaterThan(secondPageRequests);
+      expect(requests.filter(request => request === 'agent-2:0')).toHaveLength(otherAgentRequests);
     });
   });
 
