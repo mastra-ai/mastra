@@ -33,6 +33,11 @@ export interface KnowledgeImporterNodeRecord {
   unresolvedLinks: string[];
   /** The page was kept as a stub after the source removed it, because pages are nested under it. */
   stub: boolean;
+  /**
+   * The sink still owes this node follow-up work: it sits away from its source parent (which hadn't
+   * arrived), or it has links that didn't resolve. Settle passes visit only these.
+   */
+  unsettled: boolean;
   updatedAt: Date;
 }
 
@@ -205,10 +210,10 @@ export abstract class KnowledgeImportersStorage {
   /** Insert or replace by `(bindingId, sourceId)`. A page already mapped to another node throws. */
   abstract saveNode(node: Omit<KnowledgeImporterNodeRecord, 'updatedAt'>): Promise<void>;
   abstract deleteNode(bindingId: string, sourceId: string): Promise<void>;
-  /** Ordered by sourceId (byte order). */
+  /** Ordered by sourceId (byte order). `unsettled: true` lists only nodes with `unsettled` set. */
   abstract listNodes(
     bindingId: string,
-    options?: { after?: string; limit?: number },
+    options?: { after?: string; limit?: number; unsettled?: boolean },
   ): Promise<KnowledgeImporterPage<KnowledgeImporterNodeRecord>>;
   abstract findNodeByAlias(bindingId: string, alias: string): Promise<KnowledgeImporterNodeRecord | null>;
 

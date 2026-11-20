@@ -38,7 +38,7 @@ function importersOf(store: KnowledgeStorage): KnowledgeImportersStorage {
 const node = (
   sourceId: string,
   pageId: string,
-  extra: Partial<{ aliases: string[]; parentSourceId: string }> = {},
+  extra: Partial<{ aliases: string[]; parentSourceId: string; unsettled: boolean }> = {},
 ) => ({
   bindingId: 'b1',
   sourceId,
@@ -48,6 +48,7 @@ const node = (
   aliases: extra.aliases ?? [],
   unresolvedLinks: [],
   stub: false,
+  unsettled: extra.unsettled ?? false,
 });
 
 const counts = { created: 1, updated: 0, unchanged: 0, moved: 0, removed: 0, stubbed: 0, refused: 0 };
@@ -407,6 +408,26 @@ export function createKnowledgeImportersStorageTests(createFixture: () => Promis
         await importers.deleteNode('b1', 'b');
         expect(await importers.getNode('b1', 'b')).toBeNull();
         expect(await importers.getNodeByPage('page-b')).toBeNull();
+      });
+
+      it('pages through only the unsettled nodes, in byte order, and drops one once it is saved settled', async () => {
+        for (const id of ['a', 'b', 'c', 'd', 'e']) {
+          await importers.saveNode(node(id, `page-${id}`, { unsettled: id !== 'c' }));
+        }
+        expect(await importers.getNode('b1', 'a')).toMatchObject({ unsettled: true });
+        expect(await importers.getNode('b1', 'c')).toMatchObject({ unsettled: false });
+        const first = await importers.listNodes('b1', { unsettled: true, limit: 2 });
+        expect(first.items.map(n => n.sourceId)).toEqual(['a', 'b']);
+        const rest = await importers.listNodes('b1', { unsettled: true, after: first.next!, limit: 2 });
+        expect(rest.items.map(n => n.sourceId)).toEqual(['d', 'e']);
+        expect(rest.next).toBeNull();
+        await importers.saveNode(node('b', 'page-b'));
+        expect((await importers.listNodes('b1', { unsettled: true })).items.map(n => n.sourceId)).toEqual([
+          'a',
+          'd',
+          'e',
+        ]);
+        expect((await importers.listNodes('b1')).items).toHaveLength(5);
       });
 
       it('replaces a node in place and refuses a page another node owns', async () => {

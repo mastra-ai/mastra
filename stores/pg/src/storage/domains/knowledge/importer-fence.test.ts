@@ -126,6 +126,7 @@ describe('PG importer sink fences (r347 O3)', () => {
           aliases: [],
           unresolvedLinks: [],
           stub: false,
+          unsettled: false,
         });
       });
       const move = t.run([upsert({ sourceId: 'p1', parent: 'p2' })]);

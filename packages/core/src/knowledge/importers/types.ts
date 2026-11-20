@@ -69,6 +69,12 @@ export interface KnowledgeImportCounts {
 export interface KnowledgeImporterFlushReceipt extends Omit<KnowledgeImportCounts, 'refused'> {
   seq: number;
   refused: KnowledgeImportRefusal[];
+  /**
+   * The host has settle work left: pages to move under parents that arrived since, or links that
+   * now resolve. The runner sends empty flushes (`ops: []`) while this is true and its budget
+   * allows; each does one bounded slice. Stored with the receipt, so a replay returns the same value.
+   */
+  pending?: boolean;
 }
 
 /** One numbered batch from the runner. All or nothing. */
@@ -128,4 +134,10 @@ export interface KnowledgeImporterRunReceipt {
   lastSeq: number;
   error: { code: KnowledgeImporterErrorCode; retryable: boolean | null; httpStatus: number | null } | null;
   counts: KnowledgeImportCounts;
+  /**
+   * The host's decision to start another run right away: the app's `backlog`, or settle work left
+   * after this run's settle flushes made progress. Schedulers chain on this, never on `backlog`.
+   * Stored with the finish; a replay returns the same value.
+   */
+  chain: boolean;
 }

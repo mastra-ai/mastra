@@ -90,6 +90,25 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect(child?.body).toBe('body of c1\n\nLinks:\n- up: [[docs:acme#notion/p1]]');
     });
 
+    it('settles pages whose parent and link targets arrive in a later run, a bounded slice at a time', async () => {
+      const { run, page } = setup();
+      const children = Array.from({ length: 60 }, (_, i) =>
+        upsert({ sourceId: `c${String(i).padStart(2, '0')}`, parent: 'p', links: [{ sourceId: 'p', rel: 'up' }] }),
+      );
+      expect(await run(children)).toMatchObject({ outcome: 'succeeded', chain: false, counts: { created: 60 } });
+      expect((await page('notion/c00'))?.body).toBe('body of c00');
+
+      // The parent's flush settles 50 and leaves the rest pending; the runner drains it with an empty flush.
+      expect(await run([upsert({ sourceId: 'p' })])).toMatchObject({
+        outcome: 'succeeded',
+        chain: false,
+        counts: { created: 1, moved: 60 },
+      });
+      expect(await page('notion/c00')).toBeNull();
+      expect((await page('notion/p/c59'))?.body).toBe('body of c59\n\nLinks:\n- up: [[docs:acme#notion/p]]');
+      expect(await run([upsert({ sourceId: 'p' })])).toMatchObject({ counts: { unchanged: 1, moved: 0, updated: 0 } });
+    });
+
     it('escapes source IDs into keys and writes nothing on an unchanged rerun', async () => {
       const { run, page } = setup();
       await run([upsert({ sourceId: 'a/b:c' })]);

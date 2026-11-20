@@ -170,13 +170,16 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     }
   }
 
+  /** The last receipt said the host has settle work left. */
+  let pending = false;
   let flushing: Promise<void> = Promise.resolve();
-  function flush(staged?: KnowledgeImporterState): Promise<void> {
+  /** `settle` sends an empty flush, which only runs the host's next settle slice. */
+  function flush(staged?: KnowledgeImporterState, settle = false): Promise<void> {
     const ops = buffer;
     buffer = [];
     const next = flushing.then(async () => {
       if (stop) throw stop;
-      if (ops.length === 0 && !staged) return;
+      if (ops.length === 0 && !staged && !settle) return;
       const body = { ops, ...(staged ? { state: staged } : {}) };
       const seq = lastSeq + 1;
       const digest = await knowledgeImporterFlushDigest(body);
@@ -185,7 +188,8 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
       const request = { runId, generation, seq, digest, ...body };
       unsettledSeq = seq;
       try {
-        await withRetries(() => host.flush(request), 'mutation');
+        const receipt = await withRetries(() => host.flush(request), 'mutation');
+        pending = receipt.pending === true;
       } catch (error) {
         // A refusal (409) or a 4xx means nothing was applied; a retryable failure may have committed.
         if (!isRetryable(error)) unsettledSeq = undefined;
@@ -286,6 +290,15 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
         break;
       }
       if (stop || !backlog || Date.now() - startedAt >= budgetMs) break;
+    }
+    // The importer is done; let the host finish moving and linking what arrived out of order, one
+    // bounded slice per flush, while it says there is more and the budget allows (O3 §C′).
+    while (!stop && !failure && pending && Date.now() - startedAt < budgetMs) {
+      try {
+        await Promise.race([flush(undefined, true), stopped]);
+      } catch {
+        break;
+      }
     }
   } finally {
     clearInterval(heartbeat);

@@ -50,6 +50,7 @@ export const KNOWLEDGE_IMPORTER_DDL = [
     aliases TEXT NOT NULL DEFAULT '[]',
     unresolvedLinks TEXT NOT NULL DEFAULT '[]',
     stub INTEGER NOT NULL DEFAULT 0,
+    unsettled INTEGER NOT NULL DEFAULT 0,
     updatedAt INTEGER NOT NULL,
     PRIMARY KEY (bindingId, sourceId)
   )`,
@@ -77,6 +78,7 @@ export const KNOWLEDGE_IMPORTER_DDL = [
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_kimp_runs_one_running ON "${T.runs}" (bindingId) WHERE status = 'running'`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_kimp_runs_fire_key ON "${T.runs}" (bindingId, fireKey) WHERE fireKey IS NOT NULL`,
   `CREATE INDEX IF NOT EXISTS idx_kimp_runs_recent ON "${T.runs}" (bindingId, startedAt DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_kimp_nodes_unsettled ON "${T.nodes}" (bindingId, sourceId) WHERE unsettled = 1`,
   `CREATE TABLE IF NOT EXISTS "${T.flushes}" (
     runId TEXT NOT NULL REFERENCES "${T.runs}" (id) ON DELETE CASCADE,
     generation INTEGER NOT NULL,
@@ -147,6 +149,7 @@ const toNode = (row: Row): KnowledgeImporterNodeRecord => ({
   aliases: JSON.parse(String(row.aliases)),
   unresolvedLinks: JSON.parse(String(row.unresolvedLinks)),
   stub: Number(row.stub) === 1,
+  unsettled: Number(row.unsettled) === 1,
   updatedAt: new Date(Number(row.updatedAt)),
 });
 
@@ -424,12 +427,12 @@ export class LibSQLKnowledgeImporters implements KnowledgeImportersStorage {
     try {
       await this.#transaction(tx =>
         tx.execute({
-          sql: `INSERT INTO "${T.nodes}" (bindingId, sourceId, pageId, kind, parentSourceId, aliases, unresolvedLinks, stub, updatedAt)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          sql: `INSERT INTO "${T.nodes}" (bindingId, sourceId, pageId, kind, parentSourceId, aliases, unresolvedLinks, stub, unsettled, updatedAt)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (bindingId, sourceId) DO UPDATE SET
                   pageId = excluded.pageId, kind = excluded.kind, parentSourceId = excluded.parentSourceId,
                   aliases = excluded.aliases, unresolvedLinks = excluded.unresolvedLinks, stub = excluded.stub,
-                  updatedAt = excluded.updatedAt`,
+                  unsettled = excluded.unsettled, updatedAt = excluded.updatedAt`,
           args: [
             node.bindingId,
             node.sourceId,
@@ -439,6 +442,7 @@ export class LibSQLKnowledgeImporters implements KnowledgeImportersStorage {
             JSON.stringify(node.aliases),
             JSON.stringify(node.unresolvedLinks),
             node.stub ? 1 : 0,
+            node.unsettled ? 1 : 0,
             Date.now(),
           ],
         }),
@@ -457,13 +461,14 @@ export class LibSQLKnowledgeImporters implements KnowledgeImportersStorage {
   }
   async listNodes(
     bindingId: string,
-    options: { after?: string; limit?: number } = {},
+    options: { after?: string; limit?: number; unsettled?: boolean } = {},
   ): Promise<KnowledgeImporterPage<KnowledgeImporterNodeRecord>> {
     const limit = options.limit ?? 500;
     const rows = (
       await this.#read.execute({
-        sql: `SELECT * FROM "${T.nodes}" WHERE bindingId = ? AND (? IS NULL OR sourceId > ?) ORDER BY sourceId LIMIT ?`,
-        args: [bindingId, options.after ?? null, options.after ?? null, limit + 1],
+        sql: `SELECT * FROM "${T.nodes}" WHERE bindingId = ? AND (? IS NULL OR sourceId > ?) AND (? = 0 OR unsettled = 1)
+              ORDER BY sourceId LIMIT ?`,
+        args: [bindingId, options.after ?? null, options.after ?? null, options.unsettled ? 1 : 0, limit + 1],
       })
     ).rows;
     const items = rows.slice(0, limit).map(toNode);

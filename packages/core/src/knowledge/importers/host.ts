@@ -124,7 +124,7 @@ export const KNOWLEDGE_IMPORTER_ERROR_CODES = [
   'stopped',
 ] as const satisfies readonly KnowledgeImporterErrorCode[];
 
-export type NormalizedKnowledgeImporterFinish = Omit<KnowledgeImporterRunReceipt, 'runId' | 'counts'>;
+export type NormalizedKnowledgeImporterFinish = Omit<KnowledgeImporterRunReceipt, 'runId' | 'counts' | 'chain'>;
 
 /**
  * The finish request as a host stores and compares it: missing optional fields become null.

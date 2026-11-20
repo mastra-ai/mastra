@@ -222,11 +222,16 @@ export class InMemoryKnowledgeImportersStorage extends KnowledgeImportersStorage
   }
   async listNodes(
     bindingId: string,
-    options: { after?: string; limit?: number } = {},
+    options: { after?: string; limit?: number; unsettled?: boolean } = {},
   ): Promise<KnowledgeImporterPage<KnowledgeImporterNodeRecord>> {
     const limit = options.limit ?? 500;
     const nodes = [...this.#s.nodes.values()]
-      .filter(n => n.bindingId === bindingId && (options.after === undefined || n.sourceId > options.after))
+      .filter(
+        n =>
+          n.bindingId === bindingId &&
+          (options.after === undefined || n.sourceId > options.after) &&
+          (!options.unsettled || n.unsettled),
+      )
       .sort((a, b) => byteOrder(a.sourceId, b.sourceId));
     const items = nodes.slice(0, limit).map(n => structuredClone(n));
     return { items, next: nodes.length > limit ? items[items.length - 1]!.sourceId : null };

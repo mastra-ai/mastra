@@ -47,10 +47,45 @@ export interface LocalKnowledgeImporterHostOptions {
    * starts. A run past its deadline is reclaimed the same way. Default 5 minutes.
    */
   staleRunAfterMs?: number;
+  /**
+   * Wall-clock budget for one flush's settle slice; it stops before the next node once this has
+   * passed. Default 10 seconds, well inside `flushBudgetMs`. Settle work is also capped at 200
+   * nodes examined and 50 moves per flush.
+   */
+  settleBudgetMs?: number;
 }
 
 const DEFAULT_FLUSH_BUDGET_MS = 45_000;
 const DEFAULT_STALE_RUN_AFTER_MS = 5 * 60_000;
+const DEFAULT_SETTLE_BUDGET_MS = 10_000;
+const SETTLE_CANDIDATES = 200;
+const SETTLE_MOVES = 50;
+/** Settle flushes in a row that may time out before a run stops settling (O3 §C″). */
+const SETTLE_MAX_TIMEOUTS = 3;
+
+/**
+ * Host bookkeeping kept beside the importer's own state, under a prefix the importer can't write:
+ * where the settle pass stopped, and `<runId>:<n>` settle timeouts in a row for the current run.
+ */
+const RESERVED_STATE_PREFIX = 'mastra:';
+const SETTLE_CURSOR_KEY = 'mastra:settle:cursor';
+const SETTLE_TIMEOUTS_KEY = 'mastra:settle:timeouts';
+
+const settleTimeouts = (state: Record<string, string>, runId: string): number => {
+  const value = state[SETTLE_TIMEOUTS_KEY] ?? '';
+  const at = value.lastIndexOf(':');
+  return at > 0 && value.slice(0, at) === runId ? Number(value.slice(at + 1)) || 0 : 0;
+};
+
+const SETTLE_TIMEOUT_RECORD_MS = 5_000;
+
+const timedOut = (error: unknown): boolean => {
+  const e = error as { name?: string; code?: string; cause?: unknown } | undefined;
+  if (!e) return false;
+  if (e.name === 'KnowledgeTransactionDeadlineError' || e.name === 'TransactionDeadlineError') return true;
+  if (e.code === '57014' || e.code === '55P03') return true;
+  return e.cause !== undefined && e.cause !== error && timedOut(e.cause);
+};
 /** Re-index rounds after a page changed under its embed; a page rewritten faster than this is left to its own writes' jobs. */
 const MAX_REINDEX_ROUNDS = 3;
 
@@ -101,11 +136,18 @@ const receiptCounts = (counts: Record<string, number>): KnowledgeImportCounts =>
   refused: counts.refused ?? 0,
 });
 
-const runReceipt = (run: KnowledgeImporterRunRecord): KnowledgeImporterRunReceipt => ({
-  runId: run.id,
-  ...(run.finish as NormalizedKnowledgeImporterFinish),
-  counts: receiptCounts(run.counts),
-});
+/** A run's stored finish: the normalized request, compared on replay, and the host's chaining decision. */
+type StoredFinish = NormalizedKnowledgeImporterFinish & { chain: boolean };
+
+const runReceipt = (run: KnowledgeImporterRunRecord): KnowledgeImporterRunReceipt => {
+  const { chain, ...finish } = run.finish as StoredFinish;
+  return { runId: run.id, ...finish, counts: receiptCounts(run.counts), chain: chain ?? false };
+};
+
+const withoutChain = (finish: unknown) => {
+  const { chain: _chain, ...rest } = finish as StoredFinish;
+  return rest;
+};
 
 /**
  * A {@link KnowledgeImporterHost} over the app's own Knowledge storage: each flush is one storage
@@ -182,15 +224,39 @@ export function createLocalKnowledgeImporterHost(
       if (!pastDeadline && now - lastSign < staleAfter) continue;
       await importers.abandonRun({
         runId: run.id,
-        finish: normalizeKnowledgeImporterFinish({
-          runId: run.id,
-          generation: run.generation,
-          outcome: 'failed',
-          backlog: false,
-          lastSeq: run.lastSeq,
-          error: { code: 'stopped', retryable: true },
-        }),
+        finish: {
+          ...normalizeKnowledgeImporterFinish({
+            runId: run.id,
+            generation: run.generation,
+            outcome: 'failed',
+            backlog: false,
+            lastSeq: run.lastSeq,
+            error: { code: 'stopped', retryable: true },
+          }),
+          chain: false,
+        } satisfies StoredFinish,
       });
+    }
+  };
+
+  /** Counts a settle flush that timed out, outside its rolled-back transaction. Best effort. */
+  const countSettleTimeout = async (runId: string) => {
+    try {
+      const { storage } = await storageAndImporters();
+      await storage.transaction(
+        async tx => {
+          const importers = tx.importers!;
+          await importers.lockWriterGuard('share');
+          const run = await importers.lockRun(runId);
+          if (!run || run.status !== 'running') return;
+          const n = settleTimeouts(await importers.getState(run.bindingId), runId) + 1;
+          await importers.setState(run.bindingId, { [SETTLE_TIMEOUTS_KEY]: `${runId}:${n}` });
+          // Bounded: the flush already ran out of time, and the reply shouldn't wait on another lock.
+        },
+        { deadlineAt: Date.now() + SETTLE_TIMEOUT_RECORD_MS },
+      );
+    } catch (error) {
+      writer.warn(`Knowledge importer: recording a settle timeout for run ${runId} failed: ${String(error)}`);
     }
   };
 
@@ -232,7 +298,10 @@ export function createLocalKnowledgeImporterHost(
             ...(start?.fireKey !== undefined ? { fireKey: start.fireKey } : {}),
             ...(start?.deadline !== undefined ? { deadlineAt: new Date(start.deadline) } : {}),
           });
-          const state = run.status === 'started' ? await importers.getState(binding.id) : {};
+          const saved: Record<string, string> = run.status === 'started' ? await importers.getState(binding.id) : {};
+          const state: Record<string, string> = Object.fromEntries(
+            Object.entries(saved).filter(([key]) => !key.startsWith(RESERVED_STATE_PREFIX)),
+          );
           return { run, state };
         });
         if (result.run.status !== 'started') return { status: 'skipped', runId: result.run.run.id };
@@ -262,6 +331,10 @@ export function createLocalKnowledgeImporterHost(
         body = parseKnowledgeImporterFlushBody(flush);
       } catch (error) {
         throw new KnowledgeImporterHostError(`Malformed flush: ${(error as Error).message}`, 400);
+      }
+      const reserved = Object.keys(body.state ?? {}).find(key => key.startsWith(RESERVED_STATE_PREFIX));
+      if (reserved !== undefined) {
+        throw new KnowledgeImporterHostError(`Malformed flush: state key "${reserved}" is reserved for the host.`, 400);
       }
       const digest = await knowledgeImporterFlushDigest(body);
       if (digest !== flush.digest) throw conflict('digest_mismatch', 'The digest does not match the flush content.');
@@ -293,6 +366,8 @@ export function createLocalKnowledgeImporterHost(
       // One absolute deadline for the whole write transaction (O3 §C‴), capped by the run's.
       const deadlineAt = Math.min(budgetAt, peekRun?.deadlineAt?.getTime() ?? Infinity);
       let embeds: KnowledgeImportEmbedJob[] = [];
+      // Only a timeout after the settle slice started counts against settling (O3 §C″).
+      let settling = false;
       try {
         const receipt = await storage.transaction(
           async tx => {
@@ -323,6 +398,8 @@ export function createLocalKnowledgeImporterHost(
             if (!binding) throw conflict('run_not_active', 'The run has no binding.');
             const [scope] = await tx.getScopesByAddress([parseKnowledgeImportTarget(binding.target).scope]);
             if (!scope) throw new KnowledgeImporterHostError('The binding target scope does not exist.', 503);
+            const hostState = await importers.getState(binding.id);
+            const timeouts = settleTimeouts(hostState, run.id);
             const applied = await applyKnowledgeImportFlush({
               storage: tx,
               importers,
@@ -331,13 +408,36 @@ export function createLocalKnowledgeImporterHost(
               runId: run.id,
               ops: body.ops,
               provenance: { author: author(runBinding) },
+              // After a settle slice timed out, the next uses half as many nodes; after three in a
+              // row the run stops settling (O3 §C″).
+              ...(timeouts < SETTLE_MAX_TIMEOUTS
+                ? {
+                    settle: {
+                      after: hostState[SETTLE_CURSOR_KEY] || null,
+                      candidates: Math.max(1, SETTLE_CANDIDATES >> timeouts),
+                      moves: SETTLE_MOVES,
+                      until: Math.min(Date.now() + (options.settleBudgetMs ?? DEFAULT_SETTLE_BUDGET_MS), deadlineAt),
+                      onStart: () => {
+                        settling = true;
+                      },
+                    },
+                  }
+                : {}),
             });
-            if (body.state) await importers.setState(binding.id, body.state);
+            const settled = applied.settle;
+            const hostUpdates: Record<string, string> = {};
+            if (settled && (settled.cursor ?? '') !== (hostState[SETTLE_CURSOR_KEY] ?? '')) {
+              hostUpdates[SETTLE_CURSOR_KEY] = settled.cursor ?? '';
+            }
+            if (timeouts > 0 && timeouts < SETTLE_MAX_TIMEOUTS) hostUpdates[SETTLE_TIMEOUTS_KEY] = '';
+            const state = { ...body.state, ...hostUpdates };
+            if (Object.keys(state).length) await importers.setState(binding.id, state);
             for (const change of applied.changes) await importers.recordRunChange({ runId: run.id, ...change });
             const receipt: KnowledgeImporterFlushReceipt = {
               seq: flush.seq,
               ...applied.counts,
               refused: applied.refused,
+              pending: settled?.pending ?? false,
             };
             await importers.recordFlush({
               runId: run.id,
@@ -345,7 +445,7 @@ export function createLocalKnowledgeImporterHost(
               seq: flush.seq,
               digest,
               receipt,
-              counts: { ...applied.counts, refused: applied.refused.length },
+              counts: { ...applied.counts, refused: applied.refused.length, settled: settled?.settled ?? 0 },
             });
             if (applied.applied && !guard.firstWriteAt) await importers.markFirstWrite();
             embeds = applied.embeds;
@@ -356,6 +456,7 @@ export function createLocalKnowledgeImporterHost(
         await runEmbeds(storage, embeds);
         return receipt;
       } catch (error) {
+        if (settling && timedOut(error)) await countSettleTimeout(flush.runId);
         throw hostError(error);
       }
     },
@@ -385,7 +486,10 @@ export function createLocalKnowledgeImporterHost(
           const run = await importers.lockRun(request.runId);
           if (!run) throw conflict('run_not_active', 'No such run.');
           if (run.finish !== null) {
-            if (run.generation === request.generation && canonicalJson(run.finish) === canonicalJson(normalized)) {
+            if (
+              run.generation === request.generation &&
+              canonicalJson(withoutChain(run.finish)) === canonicalJson(normalized)
+            ) {
               return runReceipt(run);
             }
             throw conflict('finish_mismatch', 'The run already finished differently.');
@@ -395,12 +499,22 @@ export function createLocalKnowledgeImporterHost(
             throw conflict('stale_generation', 'The run belongs to an older writer generation.');
           }
           if (run.lastSeq !== request.lastSeq) throw conflict('seq_mismatch', 'lastSeq is not the committed seq.');
+          // Chain on settle work left only when this run's settling made progress and didn't give up,
+          // so a parent that never arrives can't chain runs forever (O3 §C′).
+          const last = run.lastSeq > 0 ? await importers.getFlush(run.id, run.generation, run.lastSeq) : null;
+          const pending = (last?.receipt as KnowledgeImporterFlushReceipt | undefined)?.pending === true;
+          const binding = await importers.getBinding(run.bindingId);
+          const gaveUp =
+            !!binding && settleTimeouts(await importers.getState(binding.id), run.id) >= SETTLE_MAX_TIMEOUTS;
+          const chain =
+            normalized.backlog ||
+            (normalized.outcome === 'succeeded' && pending && !gaveUp && (run.counts.settled ?? 0) > 0);
           const finished = await importers.finishRun({
             runId: run.id,
             generation: request.generation,
             lastSeq: request.lastSeq,
             status: normalized.outcome,
-            finish: normalized,
+            finish: { ...normalized, chain } satisfies StoredFinish,
           });
           return runReceipt(finished);
         });

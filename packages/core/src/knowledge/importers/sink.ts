@@ -45,7 +45,40 @@ export interface KnowledgeImportSinkResult {
   embeds: KnowledgeImportEmbedJob[];
   /** Whether any op wrote a page or the node map: an empty or all-refused flush applies nothing. */
   applied: boolean;
+  /** Present when the flush ran a settle slice. */
+  settle?: KnowledgeImportSettleResult;
 }
+
+/** Bounds for one settle slice (O3 §C, §C′): a slice never drains everything. */
+export interface KnowledgeImportSettleBudget {
+  /** The unsettled node to start after: where the last slice stopped. Null starts a pass. */
+  after: string | null;
+  /** Unsettled nodes examined at most. */
+  candidates: number;
+  /** Page moves at most. */
+  moves: number;
+  /** Epoch ms: the slice stops before the next candidate once this has passed. */
+  until: number;
+  /** Called as the slice starts, so a host can tell a timeout while settling from one before it. */
+  onStart?: () => void;
+}
+
+export interface KnowledgeImportSettleResult {
+  /** The pass isn't through the binding's unsettled nodes: another slice should run. */
+  pending: boolean;
+  /** Where the next slice starts; null when the pass ended and the next one starts over. */
+  cursor: string | null;
+  /** Moves and relinks this slice landed. */
+  settled: number;
+}
+
+/** An unresolved link as the node map keeps it, with its label, so a later slice can write it. */
+const encodeLink = (link: { sourceId: string; rel?: string }) => JSON.stringify([link.sourceId, link.rel ?? null]);
+const decodeLink = (entry: string): { sourceId: string; rel?: string } => {
+  const [sourceId, rel] = JSON.parse(entry) as [string, string | null];
+  return rel === null ? { sourceId } : { sourceId, rel };
+};
+const LINKS_HEADING = 'Links:';
 
 /** A per-item refusal: its savepoint rolls back and the flush goes on. */
 export class KnowledgeImportRefusalError extends Error {
@@ -164,6 +197,8 @@ export interface KnowledgeImportSinkInput {
   runId: string;
   ops: KnowledgeImporterOp[];
   provenance: KnowledgeProvenance;
+  /** Run one settle slice after the ops. */
+  settle?: KnowledgeImportSettleBudget;
 }
 
 export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput): Promise<KnowledgeImportSinkResult> {
@@ -177,7 +212,11 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     applied: false,
   };
   const ops = order(input.ops);
-  if (ops.length === 0) return result;
+  // An empty flush only settles, and there is nothing to settle before the anchor exists.
+  if (ops.length === 0 && !(input.settle && binding.anchorPageId)) {
+    if (input.settle) result.settle = { pending: false, cursor: null, settled: 0 };
+    return result;
+  }
 
   // The page's key path from its scope, or null when its chain is broken.
   const keyPath = async (page: KnowledgePage): Promise<{ keys: string[]; ids: string[] } | null> => {
@@ -301,24 +340,27 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
 
   const ref = (keys: string[]) => `${target.scope}#${keys.join('/')}`;
 
+  // A link's line, or null while its target has no live page.
+  const linkLine = async (link: { sourceId: string; rel?: string }): Promise<string | null> => {
+    const node = await importers.getNode(binding.id, link.sourceId);
+    const page = node ? await storage.getPage({ id: node.pageId, read: 'all' }) : null;
+    const path = live(page) ? await keyPath(page) : null;
+    return path ? `- ${link.rel ? `${link.rel}: ` : ''}[[${ref(path.keys)}]]` : null;
+  };
+  // Lines are sorted, so a body written in one flush and one completed by a later settle match.
+  const withLinks = (body: string, lines: Iterable<string>) => {
+    const sorted = [...new Set(lines)].sort();
+    return sorted.length ? [body, `${LINKS_HEADING}\n${sorted.join('\n')}`].filter(Boolean).join('\n\n') : body;
+  };
   const renderBody = async (item: KnowledgeImportItem): Promise<{ body: string; unresolved: string[] }> => {
-    const lines = new Set<string>();
+    const lines: string[] = [];
     const unresolved: string[] = [];
     for (const link of item.links ?? []) {
-      const node = await importers.getNode(binding.id, link.sourceId);
-      const page = node ? await storage.getPage({ id: node.pageId, read: 'all' }) : null;
-      const path = live(page) ? await keyPath(page) : null;
-      if (!path) {
-        unresolved.push(link.sourceId);
-        continue;
-      }
-      lines.add(`- ${link.rel ? `${link.rel}: ` : ''}[[${ref(path.keys)}]]`);
+      const line = await linkLine(link);
+      if (line) lines.push(line);
+      else unresolved.push(encodeLink(link));
     }
-    const body = item.body.trim();
-    return {
-      body: lines.size ? [body, `Links:\n${[...lines].join('\n')}`].filter(Boolean).join('\n\n') : body,
-      unresolved,
-    };
+    return { body: withLinks(item.body.trim(), lines), unresolved };
   };
 
   const write = async (
@@ -326,8 +368,11 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     hasBody: boolean,
   ) => {
     const existing = await importers.getNode(binding.id, item.sourceId);
-    // Where it goes: its parent's page, else its holding item's page, else the anchor.
-    const parentNode = (await nodeOf(item.parent)) ?? (await nodeOf(item.fallbackParent));
+    // Where it goes: its parent's page, else its holding item's page, else the anchor. Placed
+    // anywhere but under its parent, it waits for a settle slice to move it there.
+    const sourceParent = await nodeOf(item.parent);
+    const misplaced = !!item.parent && !sourceParent;
+    const parentNode = sourceParent ?? (await nodeOf(item.fallbackParent));
     const destination = parentNode
       ? await owned(parentNode.pageId, parentNode.sourceId)
       : { page: anchor, keys: anchorPath };
@@ -394,6 +439,7 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
       aliases: item.aliases ?? existing?.aliases ?? [],
       unresolvedLinks: rendered ? rendered.unresolved : (existing?.unresolvedLinks ?? []),
       stub: false,
+      unsettled: misplaced || (rendered ? rendered.unresolved : (existing?.unresolvedLinks ?? [])).length > 0,
     });
 
     if (change !== 'unchanged' || existing?.stub) {
@@ -497,5 +543,131 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
       result.refused.push({ sourceId, reason });
     }
   }
+  if (input.settle) {
+    input.settle.onStart?.();
+    result.settle = await settle(input.settle);
+  }
   return result;
+
+  /**
+   * One settle slice (O3 §C, §C′): visits the binding's unsettled nodes after `budget.after`, each
+   * in its own savepoint, moving a page under a source parent that has arrived since and writing
+   * links whose targets now resolve. Stops at the candidate, move or time cap and leaves the rest
+   * for the next slice. A node it can't settle (refused, or still waiting) is skipped and stays
+   * unsettled; the pass ends when it reaches the last unsettled node.
+   */
+  async function settle(budget: KnowledgeImportSettleBudget): Promise<KnowledgeImportSettleResult> {
+    let after = budget.after ?? undefined;
+    let examined = 0;
+    let moves = 0;
+    let settled = 0;
+    for (;;) {
+      const page = await importers.listNodes(binding.id, {
+        unsettled: true,
+        ...(after !== undefined ? { after } : {}),
+        limit: Math.max(1, budget.candidates - examined),
+      });
+      for (const node of page.items) {
+        if (examined >= budget.candidates || moves >= budget.moves || Date.now() >= budget.until) {
+          return { pending: true, cursor: after ?? null, settled };
+        }
+        examined++;
+        after = node.sourceId;
+        const embeds: KnowledgeImportEmbedJob[] = [];
+        try {
+          const outcome = await storage.transaction(() => settleNode(node.sourceId, embeds, moves < budget.moves));
+          if (outcome.moved) moves++;
+          if (outcome.moved || outcome.relinked) settled++;
+          result.embeds.push(...embeds);
+        } catch (error) {
+          if (!refusalFor(error)) throw error;
+        }
+      }
+      if (!page.next) return { pending: false, cursor: null, settled };
+      if (examined >= budget.candidates) return { pending: true, cursor: after ?? null, settled };
+    }
+  }
+
+  async function settleNode(
+    sourceId: string,
+    embeds: KnowledgeImportEmbedJob[],
+    canMove: boolean,
+  ): Promise<{ moved: boolean; relinked: boolean }> {
+    const node = await importers.getNode(binding.id, sourceId);
+    if (!node?.unsettled) return { moved: false, relinked: false };
+    let { page, keys } = await owned(node.pageId, sourceId);
+    let moved = false;
+    let relinked = false;
+
+    const parent = await nodeOf(node.parentSourceId);
+    let misplaced = !!node.parentSourceId && !parent;
+    if (parent && canMove) {
+      const destination = await owned(parent.pageId, parent.sourceId);
+      if (page.parentId !== destination.page.id) {
+        if (destination.keys.length > keys.length && sameKeys(destination.keys.slice(0, keys.length), keys)) {
+          throw new KnowledgeImportRefusalError('invalid');
+        }
+        await assertSubtreeOwned(page.id);
+        page = await storage.movePage({
+          id: page.id,
+          expectedVersion: page.version,
+          parentId: destination.page.id,
+          provenance,
+        });
+        keys = [...destination.keys, page.key!];
+        moved = true;
+        await syncLinks(() => refreshKnowledgeLinksTo(storage, [page], { withDescendants: true }));
+      }
+    } else if (parent) {
+      misplaced = true;
+    }
+
+    const waiting: string[] = [];
+    const lines: string[] = [];
+    for (const entry of node.unresolvedLinks) {
+      const line = await linkLine(decodeLink(entry));
+      if (line) lines.push(line);
+      else waiting.push(entry);
+    }
+    if (lines.length) {
+      const body = page.body ?? '';
+      const at = body.startsWith(`${LINKS_HEADING}\n`) ? 0 : body.lastIndexOf(`\n\n${LINKS_HEADING}\n`);
+      const text = at < 0 ? body : body.slice(0, at);
+      const kept =
+        at < 0
+          ? []
+          : body
+              .slice(at)
+              .split('\n')
+              .filter(line => line.startsWith('- '));
+      page = await storage.updatePage({
+        id: page.id,
+        expectedVersion: page.version,
+        body: withLinks(text.trim(), [...kept, ...lines]),
+        provenance,
+      });
+      relinked = true;
+      await syncLinks(() => syncKnowledgePageBodyLinks(storage, page));
+      embeds.push({ kind: 'index', pageId: page.id });
+    }
+
+    await importers.saveNode({
+      ...node,
+      unresolvedLinks: waiting,
+      unsettled: misplaced || waiting.length > 0,
+    });
+    if (moved || relinked) {
+      result.applied = true;
+      if (moved) result.counts.moved++;
+      if (relinked) result.counts.updated++;
+      result.changes.push({
+        sourceId,
+        pageId: page.id,
+        change: relinked ? 'updated' : 'moved',
+        title: page.name,
+        path: ref(keys),
+      });
+    }
+    return { moved, relinked };
+  }
 }

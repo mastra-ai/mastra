@@ -68,6 +68,7 @@ export function pgKnowledgeImportersDDL(schemaName?: string): string[] {
       aliases text[] NOT NULL DEFAULT '{}',
       unresolved_links text[] NOT NULL DEFAULT '{}',
       stub boolean NOT NULL DEFAULT false,
+      unsettled boolean NOT NULL DEFAULT false,
       updated_at timestamptz NOT NULL DEFAULT now(),
       PRIMARY KEY (binding_id, source_id)
     )`,
@@ -95,6 +96,7 @@ export function pgKnowledgeImportersDDL(schemaName?: string): string[] {
     `CREATE UNIQUE INDEX IF NOT EXISTS mastra_knowledge_importer_runs_one_running ON ${t.runs} (binding_id) WHERE status = 'running'`,
     `CREATE UNIQUE INDEX IF NOT EXISTS mastra_knowledge_importer_runs_fire_key ON ${t.runs} (binding_id, fire_key) WHERE fire_key IS NOT NULL`,
     `CREATE INDEX IF NOT EXISTS mastra_knowledge_importer_runs_recent ON ${t.runs} (binding_id, started_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS mastra_knowledge_importer_nodes_unsettled ON ${t.nodes} (binding_id, source_id COLLATE "C") WHERE unsettled`,
     `CREATE TABLE IF NOT EXISTS ${t.flushes} (
       run_id text NOT NULL REFERENCES ${t.runs} (id) ON DELETE CASCADE,
       generation integer NOT NULL,
@@ -156,6 +158,7 @@ const toNode = (row: Row): KnowledgeImporterNodeRecord => ({
   aliases: row.aliases ?? [],
   unresolvedLinks: row.unresolved_links ?? [],
   stub: row.stub,
+  unsettled: row.unsettled,
   updatedAt: row.updated_at,
 });
 
@@ -401,12 +404,12 @@ export class PgKnowledgeImporters implements KnowledgeImportersStorage {
     try {
       await this.#client.tx(tx =>
         tx.none(
-          `INSERT INTO ${this.#t.nodes} (binding_id, source_id, page_id, kind, parent_source_id, aliases, unresolved_links, stub)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          `INSERT INTO ${this.#t.nodes} (binding_id, source_id, page_id, kind, parent_source_id, aliases, unresolved_links, stub, unsettled)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
            ON CONFLICT (binding_id, source_id) DO UPDATE SET
              page_id = EXCLUDED.page_id, kind = EXCLUDED.kind, parent_source_id = EXCLUDED.parent_source_id,
              aliases = EXCLUDED.aliases, unresolved_links = EXCLUDED.unresolved_links, stub = EXCLUDED.stub,
-             updated_at = clock_timestamp()`,
+             unsettled = EXCLUDED.unsettled, updated_at = clock_timestamp()`,
           [
             node.bindingId,
             node.sourceId,
@@ -416,6 +419,7 @@ export class PgKnowledgeImporters implements KnowledgeImportersStorage {
             node.aliases,
             node.unresolvedLinks,
             node.stub,
+            node.unsettled,
           ],
         ),
       );
@@ -434,14 +438,15 @@ export class PgKnowledgeImporters implements KnowledgeImportersStorage {
   }
   async listNodes(
     bindingId: string,
-    options: { after?: string; limit?: number } = {},
+    options: { after?: string; limit?: number; unsettled?: boolean } = {},
   ): Promise<KnowledgeImporterPage<KnowledgeImporterNodeRecord>> {
     const limit = options.limit ?? 500;
     const rows = await this.#client.any(
       `SELECT * FROM ${this.#t.nodes}
        WHERE binding_id = $1 AND ($2::text IS NULL OR source_id COLLATE "C" > $2::text COLLATE "C")
+         AND (NOT $4::boolean OR unsettled)
        ORDER BY source_id COLLATE "C" LIMIT $3`,
-      [bindingId, options.after ?? null, limit + 1],
+      [bindingId, options.after ?? null, limit + 1, options.unsettled ?? false],
     );
     const items = rows.slice(0, limit).map(toNode);
     return { items, next: rows.length > limit ? items[items.length - 1]!.sourceId : null };
