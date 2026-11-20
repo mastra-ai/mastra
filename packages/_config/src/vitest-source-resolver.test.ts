@@ -33,13 +33,19 @@ function writePackage(root: string, dir: string, manifest: Record<string, any>, 
   return packageDir;
 }
 
-function resolveId(plugin: ReturnType<typeof workspaceSourceResolver>, id: string, importer?: string) {
+function resolveId(
+  plugin: ReturnType<typeof workspaceSourceResolver>,
+  id: string,
+  importer?: string,
+  project?: { root: string; test?: { setupFiles?: string[] } },
+) {
   const hook = plugin.resolveId;
   if (!hook) return Promise.resolve(null);
   const handler = typeof hook === 'function' ? hook : hook.handler;
   return handler.call(
     {
       resolve: (resolvedId: string) => Promise.resolve({ id: resolvedId }),
+      environment: project ? { config: project } : undefined,
     } as any,
     id,
     importer,
@@ -65,11 +71,11 @@ describe('workspace source resolver', () => {
 
     const packages = createWorkspacePackageIndex(root);
 
-    expect(resolveWorkspaceSource('@mastra/core', packages, undefined)).toEqual({
+    expect(resolveWorkspaceSource('@mastra/core', packages, undefined)).toMatchObject({
       path: join(packageDir, 'src/index.ts'),
       query: '',
     });
-    expect(resolveWorkspaceSource('@mastra/core/agent?raw', packages, undefined)).toEqual({
+    expect(resolveWorkspaceSource('@mastra/core/agent?raw', packages, undefined)).toMatchObject({
       path: join(packageDir, 'src/agent/index.ts'),
       query: '?raw',
     });
@@ -206,6 +212,37 @@ describe('workspace source resolver', () => {
     expect(resolveWorkspaceSource('@mastra/ui/asset.css', packages, undefined)).toBeNull();
   });
 
+  it('finds sources whose grouping folder the build flattens, only when unambiguous', () => {
+    const root = makeWorkspace();
+    const packageDir = writePackage(
+      root,
+      'packages/ui',
+      {
+        name: '@mastra/ui',
+        exports: {
+          './components/*': { import: './dist/components/*.es.js' },
+          './icons/*': { import: './dist/icons/*.es.js' },
+          './utils/*': { import: './dist/utils/*.es.js' },
+        },
+      },
+      [
+        'src/ds/components/Button/index.ts',
+        'src/ds/icons/Star.tsx',
+        'src/lib/icons/Star.tsx',
+        'src/utils/format.ts',
+        'src/ds/utils/format.ts',
+      ],
+    );
+
+    const packages = createWorkspacePackageIndex(root);
+    const resolve = (id: string) => resolveWorkspaceSource(id, packages, undefined)?.path ?? null;
+
+    expect(resolve('@mastra/ui/components/Button')).toBe(join(packageDir, 'src/ds/components/Button/index.ts'));
+    expect(resolve('@mastra/ui/utils/format')).toBe(join(packageDir, 'src/utils/format.ts'));
+    expect(resolve('@mastra/ui/icons/Star')).toBeNull();
+    expect(resolve('@mastra/ui/components/Missing')).toBeNull();
+  });
+
   it('falls back for missing source equivalents', () => {
     const root = makeWorkspace();
     writePackage(
@@ -276,7 +313,7 @@ describe('workspace source resolver', () => {
     const packages = createWorkspacePackageIndex(root);
     const expectedId = `${join(packageDir, 'src/agent/index.ts')}?raw#named`;
 
-    expect(resolveWorkspaceSource('@mastra/core/agent?raw#named', packages, undefined)).toEqual({
+    expect(resolveWorkspaceSource('@mastra/core/agent?raw#named', packages, undefined)).toMatchObject({
       path: join(packageDir, 'src/agent/index.ts'),
       query: '?raw#named',
     });
@@ -308,6 +345,50 @@ describe('workspace source resolver', () => {
     await expect(
       resolveId(workspaceSourceResolver({ root, disabled: false }), '@mastra/core', sourcePath),
     ).resolves.toBeNull();
+  });
+
+  it("leaves a package's own name unresolved only for its own suite's setup files", async () => {
+    const root = makeWorkspace();
+    const coreDir = writePackage(
+      root,
+      'packages/core',
+      { name: '@mastra/core', exports: { './mastra': './dist/mastra/index.js' } },
+      ['src/mastra/index.ts'],
+    );
+    const nestedDir = writePackage(
+      root,
+      'packages/core/integration',
+      { name: '@internal/core-integration', exports: { '.': './dist/index.js' } },
+      ['src/index.ts'],
+    );
+    const memoryDir = writePackage(
+      root,
+      'packages/memory',
+      { name: '@mastra/memory', exports: { '.': './dist/index.js' } },
+      ['src/index.ts'],
+    );
+    writeFileSync(join(root, 'pnpm-workspace.yaml'), `packages:\n  - packages/*\n  - packages/core/integration\n`);
+    const setupFile = join(root, 'packages/_test-utils/src/setup.ts');
+    const plugin = workspaceSourceResolver({ root, disabled: false });
+    const coreSource = { id: join(coreDir, 'src/mastra/index.ts') };
+
+    // A shared setup's vi.mock('@mastra/core/mastra') must not hit the module core's own tests import relatively.
+    await expect(
+      resolveId(plugin, '@mastra/core/mastra', setupFile, { root: coreDir, test: { setupFiles: [setupFile] } }),
+    ).resolves.toBeNull();
+    // Workspace source that core's tests load still gets core from source.
+    await expect(
+      resolveId(plugin, '@mastra/core/mastra', join(memoryDir, 'src/index.ts'), {
+        root: coreDir,
+        test: { setupFiles: [setupFile] },
+      }),
+    ).resolves.toEqual(coreSource);
+    // The same setup in a consumer's suite, including one nested inside core's directory, mocks core's source.
+    for (const consumerRoot of [memoryDir, nestedDir]) {
+      await expect(
+        resolveId(plugin, '@mastra/core/mastra', setupFile, { root: consumerRoot, test: { setupFiles: [setupFile] } }),
+      ).resolves.toEqual(coreSource);
+    }
   });
 
   it('excludes e2e-tests workspaces', () => {
@@ -353,5 +434,56 @@ describe('workspace source resolver', () => {
     ]);
 
     await expect(resolveId(workspaceSourceResolver({ root, disabled: true }), '@mastra/core')).resolves.toBeNull();
+  });
+
+  it("rewrites another package's tsconfig path aliases, leaving the project's own files alone", () => {
+    const root = makeWorkspace();
+    const uiDir = writePackage(root, 'packages/ui', { name: '@mastra/ui', exports: { '.': './dist/index.js' } }, [
+      'src/index.ts',
+    ]);
+    const appDir = writePackage(root, 'packages/app', { name: '@mastra/app' }, ['src/index.ts']);
+    writeFileSync(
+      join(uiDir, 'tsconfig.json'),
+      `{
+        // comments and trailing commas are allowed
+        "compilerOptions": { "paths": { "@/*": ["./src/*"], }, },
+      }`,
+    );
+    const code = [
+      `import { Button } from '@/ds/Button';`,
+      `export { cn } from "@/lib/utils";`,
+      `import '@/style.css';`,
+      `const lazy = () => import('@/lazy');`,
+      `import { other } from '@mastra/core';`,
+    ].join('\n');
+
+    const plugin = workspaceSourceResolver({ root, disabled: false });
+    const transform = (file: string, projectRoot: string) =>
+      (plugin.transform as any).call({ environment: { config: { root: projectRoot } } }, code, file);
+
+    const rewritten = transform(join(uiDir, 'src/index.ts'), appDir)?.code;
+    expect(rewritten).toContain(`from '${join(uiDir, 'src/ds/Button')}'`);
+    expect(rewritten).toContain(`from "${join(uiDir, 'src/lib/utils')}"`);
+    expect(rewritten).toContain(`import '${join(uiDir, 'src/style.css')}'`);
+    expect(rewritten).toContain(`import('${join(uiDir, 'src/lazy')}')`);
+    expect(rewritten).toContain(`from '@mastra/core'`);
+    expect(transform(join(uiDir, 'src/index.ts'), uiDir)).toBeNull();
+    expect(transform(join(appDir, 'src/index.ts'), appDir)).toBeNull();
+  });
+
+  it('keys the Vitest module cache on workspace export maps', () => {
+    const cacheKey = (target: string) => {
+      const root = makeWorkspace();
+      writePackage(root, 'packages/core', { name: '@mastra/core', exports: { '.': target } }, ['src/index.ts']);
+      let generator: (() => string) | undefined;
+      (workspaceSourceResolver({ root, disabled: false }) as any).configureVitest({
+        defineCacheKeyGenerator: (callback: () => string) => (generator = callback),
+      });
+      return generator?.();
+    };
+
+    const key = cacheKey('./dist/index.js');
+    expect(key).toMatch(/^[0-9a-f]{40}$/);
+    expect(cacheKey('./dist/main.js')).not.toBe(key);
   });
 });

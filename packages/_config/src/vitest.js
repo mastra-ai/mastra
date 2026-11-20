@@ -1,16 +1,19 @@
-import { existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-
 import { defineConfig as vitestDefineConfig } from 'vitest/config';
 export * from 'vitest/config';
 
 import {
+  RESOLVER_PLUGIN_NAME,
   createWorkspacePackageIndex,
+  findWorkspaceRoot,
   resolveWorkspaceSource,
   workspaceSourceResolver,
 } from './vitest-source-resolver.js';
 
 let workspacePackageIndex;
+
+// Node processes a test spawns (fork, spawn, worker threads) inherit this through the worker's env,
+// so they resolve workspace packages from source too. Tests still opt into TypeScript with tsx.
+const NODE_SOURCE_HOOKS = `--import=${new URL('./node-source-hooks.js', import.meta.url).href}`;
 
 export function defineConfig(config) {
   if (process.env.CI) return vitestDefineConfig(config);
@@ -37,13 +40,14 @@ function injectWorkspaceSourceResolver(config) {
   return injectIntoConfig(config);
 }
 
-function injectIntoConfig(config) {
-  const plugin = workspaceSourceResolver();
-  const test = config.test ? rewriteTestOptions(config.test) : config.test;
+function injectIntoConfig(config, { inheritsResolver = false } = {}) {
+  const test = rewriteTestOptions(config.test ?? {});
+  const plugins = toArray(config.plugins).filter(plugin => !isResolverPlugin(plugin));
   const nextConfig = {
     ...config,
-    plugins: [plugin, ...toArray(config.plugins)],
-    ...(test ? { test } : {}),
+    // Since Vitest 5, inline projects inherit the declaring config's plugins unless `extends: false`.
+    plugins: inheritsResolver ? plugins : [workspaceSourceResolver(), ...plugins],
+    test,
   };
 
   if (Array.isArray(config.test?.projects)) {
@@ -51,7 +55,7 @@ function injectIntoConfig(config) {
       ...test,
       projects: config.test.projects.map(project => {
         if (typeof project === 'string') return project;
-        return injectIntoConfig(project);
+        return injectIntoConfig(project, { inheritsResolver: project.extends !== false });
       }),
     };
   }
@@ -59,11 +63,25 @@ function injectIntoConfig(config) {
   return nextConfig;
 }
 
+function isResolverPlugin(plugin) {
+  return plugin?.name === RESOLVER_PLUGIN_NAME;
+}
+
 function rewriteTestOptions(test) {
-  if (!test.setupFiles) return test;
+  const nodeOptions = test.env?.NODE_OPTIONS ?? process.env.NODE_OPTIONS ?? '';
+  const nextTest = {
+    ...test,
+    env: {
+      ...test.env,
+      NODE_OPTIONS: nodeOptions.includes(NODE_SOURCE_HOOKS)
+        ? nodeOptions
+        : `${nodeOptions} ${NODE_SOURCE_HOOKS}`.trim(),
+    },
+  };
+  if (!test.setupFiles) return nextTest;
 
   return {
-    ...test,
+    ...nextTest,
     setupFiles: Array.isArray(test.setupFiles)
       ? test.setupFiles.map(rewriteWorkspaceSpecifier)
       : rewriteWorkspaceSpecifier(test.setupFiles),
@@ -73,17 +91,8 @@ function rewriteTestOptions(test) {
 function rewriteWorkspaceSpecifier(value) {
   if (typeof value !== 'string') return value;
 
-  workspacePackageIndex ??= createWorkspacePackageIndex(findWorkspaceRoot(process.cwd()));
+  workspacePackageIndex ??= createWorkspacePackageIndex(findWorkspaceRoot());
   return resolveWorkspaceSource(value, workspacePackageIndex)?.path ?? value;
-}
-
-function findWorkspaceRoot(start) {
-  let current = start;
-  while (current !== dirname(current)) {
-    if (existsSync(join(current, 'pnpm-workspace.yaml'))) return current;
-    current = dirname(current);
-  }
-  return start;
 }
 
 function toArray(value) {

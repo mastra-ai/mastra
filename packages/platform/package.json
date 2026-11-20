@@ -30,6 +30,7 @@
   "license": "Apache-2.0",
   "devDependencies": {
     "@internal/ai-sdk-v5": "workspace:*",
+    "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/memory": "workspace:*",

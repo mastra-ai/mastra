@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig } from '@internal/lint/vitest';
 
 // The simulator lives outside the package's `src/**/*.test.ts` discovery root, so
 // it owns its own Vitest config the way `integration-tests/` does. This keeps the
