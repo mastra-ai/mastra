@@ -114,7 +114,7 @@ export class HelpDeskImporter extends KnowledgeImporter({
 
 ## Place items in a tree
 
-Set `parent` to another item's `sourceId` to nest pages. You can send a child before its parent. Until the parent is imported, the child waits directly under the target. It moves under its parent once the parent is written, in the same run or a later one.
+Set `parent` to another item's `sourceId` to nest pages. You can send a child before its parent. Until the parent is imported, the child waits directly under the target. After the parent is written, Knowledge moves waiting children under it in bounded batches, in the same run or a later one. A move is refused when another binding owns a page under the child.
 
 To put a folder in the tree before you have its content, declare it. A declared item gets a page with a title and no body:
 
@@ -122,13 +122,13 @@ To put a folder in the tree before you have its content, declare it. A declared 
 await ctx.items.declare({ sourceId: `folder-${folder.id}`, title: folder.name })
 ```
 
-Upsert the same `sourceId` later to give it a body. Items can also link to each other with `links: [{ sourceId: '42' }]`. Each link becomes a page link once the item it points to exists.
+Upsert the same `sourceId` later to give it a body. Items can also link to each other with `links: [{ sourceId: '42' }]`. Each link becomes a page link after the item it points to is imported. Knowledge repairs links in the same bounded batches as moves.
 
 ## Remove items
 
 Call `ctx.items.remove(sourceId)` only when the source says an item is gone, for example archived or deleted. An item that's missing from one run's results is left alone, so a partial read never deletes pages.
 
-When a removed item's page still has pages nested under it, Knowledge keeps it as a stub whose body says the item was removed from the source. Its children keep their place.
+When a removed item's page still has pages nested under it, Knowledge keeps it as a stub whose body says the item was removed from the source. Its children keep their place. If another binding's page or target sits under it, Knowledge refuses the removal.
 
 ## Register and run the importer
 
@@ -175,7 +175,7 @@ if ('outcome' in result) {
 } else if (result.status === 'skipped') {
   console.log('Another run of this binding is still going')
 } else {
-  console.log('The run ended before Knowledge could record it')
+  console.log('The run ended, but Knowledge could not confirm its result')
 }
 ```
 
@@ -185,15 +185,17 @@ Knowledge doesn't schedule runs. Call `run()` from your own scheduler, such as a
 
 ### Read the run result
 
-A finished run has an `outcome` of `succeeded`, `failed` or `canceled`, and `counts` of what changed. When a run fails, `error.code` says why and `error.retryable` says whether running it again may help. When `chain` is `true`, start another run right away: the importer had more to read when the run ran out of time, or pages that arrived before their parents still need moving.
+A finished run has an `outcome` of `succeeded`, `failed` or `canceled`, and `counts` of what changed. When a run fails, `error.code` says why and `error.retryable` says whether running it again may help. When a run returns `status: 'unfinished'`, it ended but the runner couldn't confirm that Knowledge recorded its result, for example because a reply was lost. Errors from Knowledge that retrying can't fix are thrown from `run()`.
+
+A succeeded run sets `chain` to `true` to recommend another run right away. That happens when the importer still had more to read when it reached its pass or time limit, or when moving waiting pages made progress but didn't finish. A failed or canceled run never sets `chain`.
 
 Use `ctx.reportBacklog()` in your importer when it stops early on purpose, for example after a fixed number of pages. The run then calls `import` again while it has time, and sets `chain` when it doesn't.
 
 ## Pages your importer doesn't own
 
-An importer only changes pages it created. When an item's place is taken by a page someone else wrote, or its page was moved out of the target by someone, Knowledge refuses that item and writes the rest of the run. People can add their own pages under imported pages. Those move along with their parent.
+An importer only changes pages it created. When an item's place is taken by a page someone else wrote, or its page was moved out of the target by someone, Knowledge refuses that item and writes the rest of the run. Moves and removals are also refused when another binding's page or target sits under the page. People can add their own pages under imported pages. Those move along with their parent.
 
-Refused items are counted in `counts.refused`. Move or rename the page in the way, or change the item's place in the source, and the next run imports it.
+Refused items are counted in `counts.refused`. Move or rename the page in the way, then send the item again. An importer that reads from a cursor may already have saved a cursor past the refused item, so a normal next run doesn't always send it. Reset that cursor, or have your importer send the item again some other way.
 
 ## Import uploaded files
 
