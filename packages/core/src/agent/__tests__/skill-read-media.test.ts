@@ -16,6 +16,10 @@ import { Agent } from '../index';
 
 // 1x1 transparent PNG
 const PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=';
+// 1x1 lossless WebP
+const WEBP_BASE64 = 'UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==';
+// What a failed download saves under a .pdf name
+const HTML_ERROR_PAGE = '<!doctype html><html><body><h1>404 Not Found</h1></body></html>';
 
 describe('skill_read media through an agent (#25219)', () => {
   let tempDir: string;
@@ -29,13 +33,16 @@ describe('skill_read media through an agent (#25219)', () => {
       '---\nname: design-system\ndescription: Brand assets\n---\n\n# Design system',
     );
     await fs.writeFile(path.join(skillDir, 'assets', 'logo.png'), Buffer.from(PNG_BASE64, 'base64'));
+    // A WebP screenshot saved with a .png name.
+    await fs.writeFile(path.join(skillDir, 'assets', 'screenshot.png'), Buffer.from(WEBP_BASE64, 'base64'));
+    await fs.writeFile(path.join(skillDir, 'assets', 'manual.pdf'), HTML_ERROR_PAGE);
   });
 
   afterEach(async () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
-  it('passes a skill PNG asset to the model as a media part', async () => {
+  async function readSkillAssetThroughAgent(assetPath: string) {
     const prompts: any[] = [];
     const model = new MockLanguageModelV2({
       doStream: async ({ prompt }) => {
@@ -53,7 +60,7 @@ describe('skill_read media through an agent (#25219)', () => {
                     type: 'tool-call' as const,
                     toolCallId: 'call-1',
                     toolName: 'skill_read',
-                    input: JSON.stringify({ skillName: 'design-system', path: 'assets/logo.png' }),
+                    input: JSON.stringify({ skillName: 'design-system', path: assetPath }),
                   },
                 ]
               : [
@@ -83,23 +90,50 @@ describe('skill_read media through an agent (#25219)', () => {
       }),
     });
 
-    const result = await agent.stream('Read assets/logo.png from the design-system skill.', { maxSteps: 2 });
+    const result = await agent.stream(`Read ${assetPath} from the design-system skill.`, { maxSteps: 2 });
     await result.consumeStream();
 
     expect(prompts).toHaveLength(2);
     const toolMessage = prompts[1].find((message: any) => message.role === 'tool');
-    expect(toolMessage?.content).toEqual([
-      expect.objectContaining({
-        type: 'tool-result',
-        toolName: 'skill_read',
-        output: {
-          type: 'content',
-          value: [
-            { type: 'text', text: expect.stringContaining('assets/logo.png') },
-            { type: 'media', mediaType: 'image/png', data: PNG_BASE64 },
-          ],
-        },
-      }),
-    ]);
+    expect(toolMessage?.content).toHaveLength(1);
+    return toolMessage.content[0];
+  }
+
+  it('passes a skill PNG asset to the model as a media part', async () => {
+    expect(await readSkillAssetThroughAgent('assets/logo.png')).toMatchObject({
+      type: 'tool-result',
+      toolName: 'skill_read',
+      output: {
+        type: 'content',
+        value: [
+          { type: 'text', text: expect.stringContaining('assets/logo.png') },
+          { type: 'media', mediaType: 'image/png', data: PNG_BASE64 },
+        ],
+      },
+    });
+  });
+
+  // A part declared under the wrong type is rejected by the provider, and the stored result
+  // then fails every later call in the run, so the bytes decide the type, as in read_file.
+  it('sends a WebP saved as .png as image/webp, not image/png', async () => {
+    expect(await readSkillAssetThroughAgent('assets/screenshot.png')).toMatchObject({
+      output: {
+        type: 'content',
+        value: [
+          { type: 'text', text: expect.stringContaining('image/webp') },
+          { type: 'media', mediaType: 'image/webp', data: WEBP_BASE64 },
+        ],
+      },
+    });
+  });
+
+  it('shows an HTML page saved as .pdf as text instead of sending it as a PDF', async () => {
+    const result = await readSkillAssetThroughAgent('assets/manual.pdf');
+    expect(JSON.stringify(result.output)).not.toContain('"media"');
+    expect(result.output).toEqual({
+      type: 'text',
+      value: expect.stringContaining(HTML_ERROR_PAGE),
+    });
+    expect(result.output.value).toContain('the extension says application/pdf');
   });
 });
