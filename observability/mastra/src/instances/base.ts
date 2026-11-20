@@ -979,6 +979,17 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       return;
     }
 
+    // No exporter received this span, so usage rolled up onto it would be lost.
+    // Its metrics are already emitted, so only the trace attribute goes to the
+    // next ancestor. A span whose start was exported keeps it: exporters that
+    // write a span when it starts already hold the usage there.
+    const internalUsage =
+      span instanceof BaseSpan && span.isStartFiltered
+        ? (span.attributes as { internalUsage?: UsageStats } | undefined)?.internalUsage
+        : undefined;
+    const usageTarget = internalUsage && this.findExportedAncestor(span);
+    if (usageTarget) this.addInternalUsage(usageTarget, internalUsage);
+
     // `spanFilter` dropped the end of a span exporters saw start. Tell them, so
     // an exporter that opened the span on its start event can close it.
     if (unfilteredSpan && !span.isEvent && !(span instanceof BaseSpan && span.isStartFiltered)) {
@@ -1113,8 +1124,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     // guarantees `attributes` is always at least `{}` (see spans/base.ts),
     // and the ancestor hasn't ended yet (we're inside a descendant's end()),
     // so the export will pick up the mutated field.
-    const attrs = ancestor.attributes as { internalUsage?: UsageStats };
-    attrs.internalUsage = addUsageStats(attrs.internalUsage, usage);
+    this.addInternalUsage(ancestor, usage);
 
     try {
       emitTokenMetricsForUsage(usage, provider, model, usageIncomplete, this.getMetricsContext(ancestor));
@@ -1123,26 +1133,26 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     }
   }
 
+  private addInternalUsage(span: AnySpan, usage: UsageStats): void {
+    const attrs = span.attributes as { internalUsage?: UsageStats };
+    attrs.internalUsage = addUsageStats(attrs.internalUsage, usage);
+  }
+
   /**
    * Walk up the parent chain to find the closest ancestor that will actually
-   * reach exporters. Skips internal-filtered ancestors and ancestors whose
-   * type matches `excludeSpanTypes`, and prefers one whose start `spanFilter`
-   * kept, so the rollup target is one whose mutated `internalUsage` attribute
-   * is visible in exported traces.
+   * reach exporters. Skips both internal-filtered ancestors and ancestors
+   * whose type matches `excludeSpanTypes`, so the rollup target is one whose
+   * mutated `internalUsage` attribute is visible in exported traces.
+   *
+   * Whether `spanFilter` keeps the end of that ancestor is not known yet. When
+   * it drops that end, `emitSpanEnded` passes the usage on to the next one.
    */
   private findExportedAncestor(span: AnySpan): AnySpan | undefined {
-    // An ancestor whose start `spanFilter` dropped still emits metrics, and the
-    // filter can keep its end. It stays the target when no ancestor is better.
-    let nearestStartFiltered: AnySpan | undefined;
     let ancestor: AnySpan | undefined = span.parent;
-    while (ancestor) {
-      if (!this.isFilteredFromExport(ancestor)) {
-        if (!(ancestor instanceof BaseSpan && ancestor.isStartFiltered)) return ancestor;
-        nearestStartFiltered ??= ancestor;
-      }
+    while (ancestor && this.isFilteredFromExport(ancestor)) {
       ancestor = ancestor.parent;
     }
-    return nearestStartFiltered;
+    return ancestor;
   }
 
   /**
