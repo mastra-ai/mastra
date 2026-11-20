@@ -27,6 +27,11 @@ export interface AlertProjectCursor {
    * `incidents`, the incidents still open when it was bound, so old fires do not file cards.
    */
   backfill?: { until: string; incidents: string[] };
+  /**
+   * Set once `projectBound` has set the project's board up for alerts. Kept apart from `after`, so a
+   * project that was bound before the setup existed still gets it, once, without losing its place.
+   */
+  boardSetUp?: true;
 }
 
 /** Cursor state for the one Platform org this Factory's credential reads, per bound project. */
@@ -150,10 +155,12 @@ export function createAlertSync(deps: AlertSyncDeps): () => Promise<IssueReconci
     for (const binding of bindings) {
       const factoryProjectId = binding.factoryProjectId;
       let place = projects[factoryProjectId];
-      if (!place) {
+      const setUp = deps.projectBound && !place?.boardSetUp;
+      if (setUp) {
         try {
-          await deps.projectBound?.({ orgId, factoryProjectId });
+          await deps.projectBound!({ orgId, factoryProjectId });
         } catch (error) {
+          // Tried again next pass; until then the project takes no alerts, so none skip its triage.
           summary.failed++;
           summary.errors.push({
             projectId: factoryProjectId,
@@ -161,7 +168,9 @@ export function createAlertSync(deps: AlertSyncDeps): () => Promise<IssueReconci
           });
           continue;
         }
-        place = await startCursor();
+      }
+      if (!place || setUp) {
+        place = { ...(place ?? (await startCursor())), ...(setUp ? { boardSetUp: true as const } : {}) };
         projects[factoryProjectId] = place;
         await save();
       }

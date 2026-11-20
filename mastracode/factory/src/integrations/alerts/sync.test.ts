@@ -89,6 +89,7 @@ function setup(
     floors,
     creates,
     cursor: () => cursor,
+    seedCursor: (next: AlertSyncCursor) => void (cursor = next),
     bind: (next: AlertBinding[]) => void (bindings = next),
   };
 }
@@ -322,5 +323,19 @@ describe('AlertReadClient', () => {
     env.bind([{ factoryProjectId: 'fp-1', labels: null, createdAt: new Date('2026-11-01') }]);
     await env.sync();
     expect(calls).toEqual(['org-1/fp-1', 'org-1/fp-1', 'org-1/fp-1']);
+  });
+
+  it('sets up a project bound before setup existed, once, keeping its place', async () => {
+    const calls: string[] = [];
+    const env = setup([], { projectBound: async ({ factoryProjectId }) => void calls.push(factoryProjectId) });
+    env.append('i1');
+    env.append('i2');
+    env.append('i3');
+    env.seedCursor({ projects: { 'fp-1': { after: '2-0' } } });
+    await env.sync();
+    await env.sync();
+    expect(calls).toEqual(['fp-1']);
+    expect(env.ingested).toEqual(['fp-1:i3:alert.opened']);
+    expect(env.cursor().projects?.['fp-1']).toEqual({ after: '3-0', boardSetUp: true });
   });
 });

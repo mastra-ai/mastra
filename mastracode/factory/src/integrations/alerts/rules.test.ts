@@ -325,7 +325,9 @@ describe('PlatformAlertRules', () => {
         kickoffMessage: null,
       });
     await started('work');
-    const revoked = await started('review');
+    // A review session on the card is active too, but only the triage run speaks in the alert thread.
+    await started('review');
+    const revoked = await started('verify');
     await seeded.workItems.revokeRunBinding({
       orgId: 'org-1',
       factoryProjectId: project.id,
