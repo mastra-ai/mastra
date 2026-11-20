@@ -47,6 +47,102 @@ const runBus = (agent: any) => agent.__getStreamBus?.()?.pubsub ?? agent.pubsub;
 describeForAllEngines('AIMock loop scenario: observe across approval and resume', engine => {
   const getMock = useLoopScenarioAimock();
 
+  it('closes only the opted-in observer at approval suspension without canceling the run', async () => {
+    const llm = getMock();
+    llm.on(
+      { endpoint: 'chat', hasToolResult: false },
+      { toolCalls: [{ id: 'call_bounded_approval', name: 'lookup_status', arguments: { query: 'alpha' } }] },
+    );
+    llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Approved and done.' });
+    const execute = vi.fn(async ({ query }: { query: string }) => ({ status: `OK:${query}` }));
+    const lookup = createTool({
+      id: 'lookup_status',
+      description: 'Look up a status.',
+      inputSchema: z.object({ query: z.string() }),
+      execute,
+    });
+    const { agent } = await createSharedAgent(llm, { engine, tools: { lookup_status: lookup } });
+    const run = await agent.stream('Look up alpha', {
+      requireToolApproval: true,
+      closeOnSuspend: true,
+      maxSteps: 3,
+    });
+    for await (const _chunk of run.fullStream) {
+      // Drain to suspension before attaching, exercising replay as well as live resume.
+    }
+
+    const bounded = await agent.observe(run.runId, { closeOnSuspend: true });
+    const onSuspended = vi.fn();
+    const following = await agent.observe(run.runId, { onSuspended });
+    let followingClosed = false;
+    const followingDrain = drain(following, 20_000).finally(() => (followingClosed = true));
+    try {
+      const suspended = await drain(bounded, 3_000);
+      expect(suspended.timedOut).toBe(false);
+      expect(suspended.types).toContain('tool-call-approval');
+      expect(suspended.types).not.toContain('tool-result');
+      expect((await bounded.output.getFullOutput()).finishReason).toBe('suspended');
+      await vi.waitFor(() => expect(onSuspended).toHaveBeenCalledTimes(1));
+      expect(followingClosed).toBe(false);
+      expect(execute).not.toHaveBeenCalled();
+
+      const resumed = await agent.approveToolCall({ runId: run.runId, toolCallId: 'call_bounded_approval' });
+      await resumed.consumeStream();
+      const completed = await followingDrain;
+      expect(completed.timedOut).toBe(false);
+      expect(completed.types).toContain('tool-result');
+      expect(completed.types.at(-1)).toBe('finish');
+      expect(textOf(completed.chunks)).toBe('Approved and done.');
+      expect(execute).toHaveBeenCalledTimes(1);
+    } finally {
+      bounded.detach();
+      following.detach();
+      await followingDrain;
+    }
+  });
+
+  it('resumes approval until idle without an extra dynamic-default refresh on plain agents', async () => {
+    const llm = getMock();
+    llm.on(
+      { endpoint: 'chat', hasToolResult: false },
+      { toolCalls: [{ id: 'call_idle_defaults', name: 'lookup_status', arguments: { query: 'alpha' } }] },
+    );
+    llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Approved and done.' });
+    const execute = vi.fn(async ({ query }: { query: string }) => ({ status: `OK:${query}` }));
+    const lookup = createTool({
+      id: 'lookup_status',
+      description: 'Look up a status.',
+      inputSchema: z.object({ query: z.string() }),
+      execute,
+    });
+    const defaultOptions = vi.fn(() => ({ maxSteps: 3, modelSettings: { temperature: 0.2 } }));
+    const { agent } = await createSharedAgent(llm, {
+      engine,
+      tools: { lookup_status: lookup },
+      defaultOptions,
+    });
+    const run = await agent.stream('Look up alpha', { requireToolApproval: true, closeOnSuspend: true });
+    for await (const _chunk of run.fullStream) {
+      // Wait for the approval checkpoint before measuring resume defaults.
+    }
+    defaultOptions.mockClear();
+
+    const resumed = await agent.resumeStreamUntilIdle(
+      { approved: true },
+      { runId: run.runId, toolCallId: 'call_idle_defaults', maxIdleMs: 100 },
+    );
+    await resumed.consumeStream();
+    expect(await resumed.text).toBe('Approved and done.');
+    expect(execute).toHaveBeenCalledTimes(1);
+    const resumedRequest = llm
+      .getRequests()
+      .find(request => JSON.stringify(request.body?.messages).includes('OK:alpha'));
+    expect(resumedRequest?.body?.temperature).toBe(0.2);
+    if (engine === 'normal' || engine === 'fs') {
+      expect(defaultOptions).toHaveBeenCalledTimes(2);
+    }
+  });
+
   it('follows the approved run to its finish and replays both segments', async () => {
     const llm = getMock();
     llm.on(
@@ -123,13 +219,17 @@ describeForAllEngines('AIMock loop scenario: observe across approval and resume'
         expect(getRunRegistryEntry(run.runId, mastra)).toBe(resumedEntry);
       }
 
-      // A fresh replay of the finished run holds the suspended segment and the resumed one.
-      const replay = await drain((await agent.observe(run.runId)) as Observation, 5_000);
-      expect(replay.timedOut).toBe(false);
-      expect(replay.types).toContain('tool-call-approval');
-      expect(replay.types).toContain('tool-result');
-      expect(textOf(replay.chunks)).toBe('Approved and done.');
-      expect(replay.types.at(-1)).toBe('finish');
+      // Even bounded replays must follow a historical suspension through the resumed segment.
+      for (const closeOnSuspend of [false, true]) {
+        const observation = await agent.observe(run.runId, { closeOnSuspend });
+        const replay = await drain(observation as Observation, 5_000);
+        expect(replay.timedOut).toBe(false);
+        expect(replay.types).toContain('tool-call-approval');
+        expect(replay.types).toContain('tool-result');
+        expect(textOf(replay.chunks)).toBe('Approved and done.');
+        expect(replay.types.at(-1)).toBe('finish');
+        expect((await observation.output.getFullOutput()).finishReason).not.toBe('suspended');
+      }
 
       // Reconnecting just past the transport's suspension index yields the resumed segment once.
       const tail = await drain(

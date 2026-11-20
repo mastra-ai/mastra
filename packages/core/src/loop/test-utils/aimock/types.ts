@@ -146,12 +146,7 @@ export interface RunLoopScenarioOptions {
    * Default options for the agent (e.g. `autoResumeSuspendedTools`).
    * Applied to the Agent constructor via `defaultOptions` config.
    */
-  defaultOptions?: {
-    autoResumeSuspendedTools?: boolean;
-    inputProcessors?: any;
-    hooks?: ToolHooks;
-    tracingOptions?: TracingOptions;
-  };
+  defaultOptions?: AgentConfig['defaultOptions'];
   /** Per-call tool hooks forwarded to agent.stream(). */
   hooks?: ToolHooks;
   /** Tools available to the loop. Tool ids must match the scripted tool-call names. */
