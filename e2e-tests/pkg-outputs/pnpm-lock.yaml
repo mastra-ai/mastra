@@ -5,7 +5,6 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  vite@>=8.0.0 <8.3.7: 8.3.8
   '@modelcontextprotocol/sdk@>=1.0.0 <1.32.0': 1.32.1
   postcss@<8.5.23: 8.5.23
   nanoid@<5.1.16: 5.1.16
@@ -28,6 +27,9 @@ importers:
       tinyglobby:
         specifier: ^0.2.17
         version: 0.2.17
+      vite:
+        specifier: ^8.3.7
+        version: 8.3.8(yaml@2.9.1)
       vitest:
         specifier: ^5.1.0
         version: 5.1.0(vite@8.3.8(yaml@2.9.1))
@@ -195,7 +197,7 @@ packages:
     resolution: {integrity: sha512-5umB9/jlWcqVS6fsrFmv5Gdnpu6wAUio/lEOwAmvB7v+lFo/IW2B9FhAD0p19GCULTgMzLCdUmuCDCnAzWgppQ==}
     peerDependencies:
       msw: ^2.4.9 || ^3.0.0
-      vite: 8.3.8
+      vite: ^6.0.0 || ^7.0.0 || ^8.0.0
     peerDependenciesMeta:
       msw:
         optional: true
@@ -509,7 +511,7 @@ packages:
       '@vitest/ui': 5.1.0
       happy-dom: '*'
       jsdom: '*'
-      vite: 8.3.8
+      vite: ^6.4.0 || ^7.0.0 || ^8.0.0
     peerDependenciesMeta:
       '@edge-runtime/vm':
         optional: true

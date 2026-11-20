@@ -26,7 +26,6 @@
     "constructs": "^10.0.0"
   },
   "overrides": {
-    "vite": "8.3.8",
     "zod": "4.6.7"
   }
 }

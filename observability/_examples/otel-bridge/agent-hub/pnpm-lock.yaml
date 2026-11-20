@@ -7,7 +7,7 @@ settings:
 overrides:
   minimatch@>=7.0.0 <11.0.9: 11.0.9
   glob@>=9.0.0 <14.0.2: 14.0.4
-  vite@>=8.0.0 <8.3.7: 8.3.8
+  vite@>=8.0.0 <8.3.3: 8.3.8
   '@mastra/core': link:../../../../packages/core
   '@mastra/libsql': link:../../../../stores/libsql
   '@mastra/observability': link:../../../mastra
