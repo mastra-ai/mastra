@@ -19,7 +19,6 @@ import type { MediaToolResult } from '../tools/media';
 import {
   DEFAULT_MAX_MEDIA_BYTES,
   DEFAULT_MEDIA_TYPES,
-  MEDIA_SNIFF_BYTES,
   contentMediaType,
   isUtf8Text,
   mediaToModelOutput,
@@ -278,7 +277,7 @@ function createSkillReadTool(skills: WorkspaceSkills) {
           }
           // The bytes, not the name, decide the declared type: providers reject a part whose
           // content disagrees with it, and the stored result then fails every later call in the run.
-          const mediaType = contentMediaType(bytes.subarray(0, MEDIA_SNIFF_BYTES), declaredType);
+          const mediaType = contentMediaType(bytes, declaredType);
           if (mediaType && DEFAULT_MEDIA_TYPES.includes(mediaType)) {
             span.end({ success: true }, { bytesTransferred: bytes.length });
             return {

@@ -89,8 +89,10 @@ const SIGNED_MEDIA_TYPES = new Set([...MEDIA_SIGNATURES.map(([mediaType]) => med
  * undefined when they show none: an HTML error page saved as `.pdf` is not a PDF, and providers
  * reject it with a 400 that also fails every later call carrying the same history.
  */
-export function contentMediaType(head: Uint8Array, declared: string): string | undefined {
+export function contentMediaType(bytes: Uint8Array, declared: string): string | undefined {
   if (!SIGNED_MEDIA_TYPES.has(declared.split(';', 1)[0]!.trim().toLowerCase())) return declared;
+  // Only the first MEDIA_SNIFF_BYTES count, however many the caller read, so every tool agrees on a file.
+  const head = bytes.subarray(0, MEDIA_SNIFF_BYTES);
   return MEDIA_SIGNATURES.find(([, matches]) => matches(head))?.[0];
 }
 
