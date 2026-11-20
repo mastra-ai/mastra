@@ -149,7 +149,8 @@ const GITHUB_HOSTS = ['github.com', 'api.github.com'];
 /**
  * Whether git would apply a config key's credential to github.com. Scoped
  * `http.<url>.*` and `credential.<url>.*` keys count when their URL's host is
- * github.com or a subdomain, with or without a scheme, path or trailing slash,
+ * github.com or a subdomain, with or without a scheme, path, trailing slash
+ * or trailing dot on the host (git resolves `github.com.` to github.com),
  * including `*` wildcards git allows in the host. Unscoped `http.extraHeader`,
  * `http.cookieFile` and `credential.*` keys apply to every host, so they count too.
  */
