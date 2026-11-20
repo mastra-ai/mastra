@@ -1,16 +1,20 @@
 import type { FactoryStorage } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  boardRegistryOf,
-  createBoardRegistry,
-  defineBoard,
-  UNTRUSTED_PULL_REQUESTS_KEY,
-} from '../../boards/index.js';
+import { boardRegistryOf, createBoardRegistry, defineBoard, UNTRUSTED_PULL_REQUESTS_KEY } from '../../boards/index.js';
 import { ProjectBoardCache, toBoardSource } from '../../boards/project-boards.js';
 import { reviewBoard } from '../../boards/review.js';
-import { autoStartingBoards, createTestBoard, createTriageWorkRegistry, selfReviewWorkBoard } from '../../boards/test-utils.js';
-import { DEFAULT_INTAKE_ROUTES, LINKED_PULL_REQUEST_ROUTE, PULL_REQUEST_INTAKE_ROUTE } from '../../boards/work-routes.js';
+import {
+  autoStartingBoards,
+  createTestBoard,
+  createTriageWorkRegistry,
+  selfReviewWorkBoard,
+} from '../../boards/test-utils.js';
+import {
+  DEFAULT_INTAKE_ROUTES,
+  LINKED_PULL_REQUEST_ROUTE,
+  PULL_REQUEST_INTAKE_ROUTE,
+} from '../../boards/work-routes.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
@@ -25,6 +29,9 @@ import {
   finishQueuedRunsForTests,
 } from '../../storage/test-utils.js';
 import { workItemBranch, workItemBranchSource } from '../../work-item-branch.js';
+import { closingLinksIn } from '../../work-items/closing-pull-requests.js';
+import { relatedCardsIn } from '../../work-items/list-related-cards.js';
+import { matchesSearch, searchTerms } from '../../work-items/search-terms.js';
 import { KeptCards } from '../kept-cards.js';
 import { GithubAppIdentity } from './app-identity.js';
 import { defaultGithubRules, resolveGithubRules } from './default-rules.js';
@@ -310,11 +317,20 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('GitHub provider
     const boards = createTriageWorkRegistry();
     const configVersion = 'provider-split';
     const service = new GithubRules({
-      github, sourceControl, integrationStorage, projects, intake, storage: workItems, boards, configVersion,
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      intake,
+      storage: workItems,
+      boards,
+      configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: {
-        getSession: async () => { throw new Error('Ingest must not open a session.'); },
+        getSession: async () => {
+          throw new Error('Ingest must not open a session.');
+        },
         listActiveThreadRuns: () => [],
       },
       transitionService: new FactoryTransitionService({ storage: workItems, boards, configVersion }),
@@ -335,8 +351,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('GitHub provider
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
     const [card] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(card?.workItem).toMatchObject({
-      provider: 'github', key: 'acme/repo#42', title: 'Issue 42', state: 'open',
-      labels: ['bug'], author: 'reporter',
+      provider: 'github',
+      key: 'acme/repo#42',
+      title: 'Issue 42',
+      state: 'open',
+      labels: ['bug'],
+      author: 'reporter',
     });
     const [board] = await storage.ops.findMany('factory_board_items', {});
     const [work] = await storage.ops.findMany('factory_work_items', {});
@@ -344,8 +364,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('GitHub provider
     expect(board).toMatchObject({ id: card!.id, work_item_id: card!.workItem.id, metadata: { authorTrusted: true } });
     expect(work).toMatchObject({ id: card!.workItem.id, title: 'Issue 42' });
     expect(source).toMatchObject({
-      work_item_id: card!.workItem.id, provider: 'github', key: 'acme/repo#42',
-      state: 'open', labels: ['bug'], author: 'reporter',
+      work_item_id: card!.workItem.id,
+      provider: 'github',
+      key: 'acme/repo#42',
+      state: 'open',
+      labels: ['bug'],
+      author: 'reporter',
     });
     expect(card!.workItem.sources).toHaveLength(1);
     expect(card!.workItem.sources[0]).toMatchObject({ id: source!.id, workItemId: work!.id });
@@ -365,193 +389,190 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('GitHub provider
   });
 });
 
-describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
-  "Factory's commented review verdict on %s",
-  backend => {
-    // GitHub will not let Factory's app request changes on a pull request it
-    // authored, so the reviewer's verdict lands as a COMMENTED review whose first
-    // line (after the proxy's attribution) asks for changes. That review is the
-    // only hand-off the builder gets.
-    const requestChanges = '> Opened by @someone\n\nVerdict: request changes\nReviewed head: ' + 'a'.repeat(40);
+describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])("Factory's commented review verdict on %s", backend => {
+  // GitHub will not let Factory's app request changes on a pull request it
+  // authored, so the reviewer's verdict lands as a COMMENTED review whose first
+  // line (after the proxy's attribution) asks for changes. That review is the
+  // only hand-off the builder gets.
+  const requestChanges = '> Opened by @someone\n\nVerdict: request changes\nReviewed head: ' + 'a'.repeat(40);
 
-    async function ingestReview(input: {
-      body: string;
-      sender?: string;
-      state?: string;
-      factoryPullRequest?: boolean;
-      pullRequest?: { state?: string; merged?: boolean };
-      deliveries?: number;
-    }) {
-      const { github, sourceControl, integrationStorage, workItems, projects, intake, project } = await setup(
-        'read',
-        undefined,
-        backend === 'postgres'
-          ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
-          : new LibSQLFactoryStorage({ id: 'github-commented-verdict', url: ':memory:' }),
-      );
-      const work = await workItems.upsert({
+  async function ingestReview(input: {
+    body: string;
+    sender?: string;
+    state?: string;
+    factoryPullRequest?: boolean;
+    pullRequest?: { state?: string; merged?: boolean };
+    deliveries?: number;
+  }) {
+    const { github, sourceControl, integrationStorage, workItems, projects, intake, project } = await setup(
+      'read',
+      undefined,
+      backend === 'postgres'
+        ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
+        : new LibSQLFactoryStorage({ id: 'github-commented-verdict', url: ':memory:' }),
+    );
+    const work = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github:10:issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['execute'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    if (input.factoryPullRequest === false) {
+      // Not Factory's pull request: no provenance, a person's login, and a PR
+      // card that names the issue card as its author.
+      await workItems.upsert({
         orgId: 'org-1',
         userId: 'user-1',
         factoryProjectId: project.id,
         input: {
           externalSource: {
             integrationId: 'github',
-            type: 'issue',
-            externalId: 'github:10:issue:42',
-            url: 'https://github.com/acme/repo/issues/42',
+            type: 'pull-request',
+            externalId: 'github:10:pull-request:17',
+            url: 'https://github.com/acme/repo/pull/17',
           },
-          title: 'Issue 42',
-          stages: ['execute'],
+          parentWorkItemId: work.item.id,
+          title: 'PR 17',
+          stages: ['review'],
           sessions: {},
           metadata: {},
         },
       });
-      if (input.factoryPullRequest === false) {
-        // Not Factory's pull request: no provenance, a person's login, and a PR
-        // card that names the issue card as its author.
-        await workItems.upsert({
-          orgId: 'org-1',
-          userId: 'user-1',
-          factoryProjectId: project.id,
-          input: {
-            externalSource: {
-              integrationId: 'github',
-              type: 'pull-request',
-              externalId: 'github:10:pull-request:17',
-              url: 'https://github.com/acme/repo/pull/17',
-            },
-            parentWorkItemId: work.item.id,
-            title: 'PR 17',
-            stages: ['review'],
-            sessions: {},
-            metadata: {},
-          },
-        });
-      } else {
-        await integrationStorage.subscriptions.create({
-          orgId: 'org-1',
-          targetKey: 'factory-pr-provenance:10:17',
-          threadId: 'thread-1',
-          status: 'active',
-          data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: work.item.id },
-        });
-      }
-      const service = new GithubRules({
-        github,
-        sourceControl,
-        integrationStorage,
-        projects,
-        intake,
-        storage: workItems,
-        boards: createTriageWorkRegistry(),
-        configVersion: 'factory-config-v1',
+    } else {
+      await integrationStorage.subscriptions.create({
+        orgId: 'org-1',
+        targetKey: 'factory-pr-provenance:10:17',
+        threadId: 'thread-1',
+        status: 'active',
+        data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: work.item.id },
       });
-      const sender = input.sender ?? 'factory-app[bot]';
-      const delivery = {
-        event: 'pull_request_review',
-        deliveryId: 'delivery-commented-verdict',
-        payload: {
-          action: 'submitted',
-          installation: { id: 7 },
-          repository: { id: 10, full_name: 'acme/repo' },
-          sender: { login: sender },
-          review: {
-            id: 99,
-            state: input.state ?? 'commented',
-            body: input.body,
-            html_url: 'https://github.com/acme/repo/pull/17#pullrequestreview-99',
-            user: { login: sender },
-          },
-          pull_request: {
-            number: 17,
-            title: 'PR 17',
-            html_url: 'https://github.com/acme/repo/pull/17',
-            state: input.pullRequest?.state ?? 'open',
-            merged: input.pullRequest?.merged ?? false,
-            user: { login: input.factoryPullRequest === false ? 'contributor' : 'factory-app[bot]' },
-            head: { ref: 'feature' },
-            base: { ref: 'main' },
-          },
-        },
-      };
-      const results = [];
-      for (let delivered = 0; delivered < (input.deliveries ?? 1); delivered++) {
-        results.push(await service.ingest(delivery));
-      }
-      const messages = (await workItems.listDeferredDecisions('org-1', project.id)).filter(
-        record => record.decision.type === 'sendMessage',
-      );
-      return { results, messages, workItemId: work.item.id };
     }
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      intake,
+      storage: workItems,
+      boards: createTriageWorkRegistry(),
+      configVersion: 'factory-config-v1',
+    });
+    const sender = input.sender ?? 'factory-app[bot]';
+    const delivery = {
+      event: 'pull_request_review',
+      deliveryId: 'delivery-commented-verdict',
+      payload: {
+        action: 'submitted',
+        installation: { id: 7 },
+        repository: { id: 10, full_name: 'acme/repo' },
+        sender: { login: sender },
+        review: {
+          id: 99,
+          state: input.state ?? 'commented',
+          body: input.body,
+          html_url: 'https://github.com/acme/repo/pull/17#pullrequestreview-99',
+          user: { login: sender },
+        },
+        pull_request: {
+          number: 17,
+          title: 'PR 17',
+          html_url: 'https://github.com/acme/repo/pull/17',
+          state: input.pullRequest?.state ?? 'open',
+          merged: input.pullRequest?.merged ?? false,
+          user: { login: input.factoryPullRequest === false ? 'contributor' : 'factory-app[bot]' },
+          head: { ref: 'feature' },
+          base: { ref: 'main' },
+        },
+      },
+    };
+    const results = [];
+    for (let delivered = 0; delivered < (input.deliveries ?? 1); delivered++) {
+      results.push(await service.ingest(delivery));
+    }
+    const messages = (await workItems.listDeferredDecisions('org-1', project.id)).filter(
+      record => record.decision.type === 'sendMessage',
+    );
+    return { results, messages, workItemId: work.item.id };
+  }
 
-    it('wakes the builder on a Factory-sent commented review that requests changes on its pull request', async () => {
-      const { messages, workItemId } = await ingestReview({ body: requestChanges });
+  it('wakes the builder on a Factory-sent commented review that requests changes on its pull request', async () => {
+    const { messages, workItemId } = await ingestReview({ body: requestChanges });
+    expect(messages).toEqual([
+      expect.objectContaining({
+        workItemId,
+        decision: expect.objectContaining({
+          type: 'sendMessage',
+          role: 'work',
+          priority: 'high',
+          idempotencyKey: expect.stringMatching(/:address-review-feedback$/),
+          message: expect.stringContaining('#pullrequestreview-99'),
+        }),
+      }),
+    ]);
+  });
+
+  it('wakes the builder once when the same review is delivered twice', async () => {
+    const { results, messages } = await ingestReview({ body: requestChanges, deliveries: 2 });
+    expect(results.at(-1)).toEqual({ status: 'replayed' });
+    expect(messages).toHaveLength(1);
+  });
+
+  it("ignores the same commented review from a person: a person's notes do not block", async () => {
+    const { messages } = await ingestReview({ body: requestChanges, sender: 'maintainer' });
+    expect(messages).toEqual([]);
+  });
+
+  it.each([
+    ['an approval', 'Verdict: approve\nReviewed head: ' + 'a'.repeat(40)],
+    ['plain notes', '> Opened by @someone\n\nA few notes on naming.'],
+    ['a verdict quoted on a later line', 'Some notes first.\n\nVerdict: request changes'],
+  ])('ignores a Factory-sent commented review carrying %s', async (_label, body) => {
+    const { messages } = await ingestReview({ body });
+    expect(messages).toEqual([]);
+  });
+
+  it('ignores a Factory-sent commented verdict on a pull request Factory did not author', async () => {
+    const { messages } = await ingestReview({ body: requestChanges, factoryPullRequest: false });
+    expect(messages).toEqual([]);
+  });
+
+  it.each([{ state: 'closed' }, { state: 'closed', merged: true }])(
+    'ignores a Factory-sent commented verdict on a %o pull request',
+    async pullRequest => {
+      const { messages } = await ingestReview({ body: requestChanges, pullRequest });
+      expect(messages).toEqual([]);
+    },
+  );
+
+  it('still wakes the builder on a native changes-requested review, from a person or on any pull request', async () => {
+    for (const input of [
+      { body: 'Please rename this.', sender: 'maintainer', state: 'changes_requested' },
+      { body: 'Please rename this.', sender: 'maintainer', state: 'changes_requested', factoryPullRequest: false },
+    ]) {
+      const { messages } = await ingestReview(input);
       expect(messages).toEqual([
         expect.objectContaining({
-          workItemId,
           decision: expect.objectContaining({
             type: 'sendMessage',
             role: 'work',
-            priority: 'high',
             idempotencyKey: expect.stringMatching(/:address-review-feedback$/),
-            message: expect.stringContaining('#pullrequestreview-99'),
           }),
         }),
       ]);
-    });
-
-    it('wakes the builder once when the same review is delivered twice', async () => {
-      const { results, messages } = await ingestReview({ body: requestChanges, deliveries: 2 });
-      expect(results.at(-1)).toEqual({ status: 'replayed' });
-      expect(messages).toHaveLength(1);
-    });
-
-    it("ignores the same commented review from a person: a person's notes do not block", async () => {
-      const { messages } = await ingestReview({ body: requestChanges, sender: 'maintainer' });
-      expect(messages).toEqual([]);
-    });
-
-    it.each([
-      ['an approval', 'Verdict: approve\nReviewed head: ' + 'a'.repeat(40)],
-      ['plain notes', '> Opened by @someone\n\nA few notes on naming.'],
-      ['a verdict quoted on a later line', 'Some notes first.\n\nVerdict: request changes'],
-    ])('ignores a Factory-sent commented review carrying %s', async (_label, body) => {
-      const { messages } = await ingestReview({ body });
-      expect(messages).toEqual([]);
-    });
-
-    it("ignores a Factory-sent commented verdict on a pull request Factory did not author", async () => {
-      const { messages } = await ingestReview({ body: requestChanges, factoryPullRequest: false });
-      expect(messages).toEqual([]);
-    });
-
-    it.each([{ state: 'closed' }, { state: 'closed', merged: true }])(
-      'ignores a Factory-sent commented verdict on a %o pull request',
-      async pullRequest => {
-        const { messages } = await ingestReview({ body: requestChanges, pullRequest });
-        expect(messages).toEqual([]);
-      },
-    );
-
-    it('still wakes the builder on a native changes-requested review, from a person or on any pull request', async () => {
-      for (const input of [
-        { body: 'Please rename this.', sender: 'maintainer', state: 'changes_requested' },
-        { body: 'Please rename this.', sender: 'maintainer', state: 'changes_requested', factoryPullRequest: false },
-      ]) {
-        const { messages } = await ingestReview(input);
-        expect(messages).toEqual([
-          expect.objectContaining({
-            decision: expect.objectContaining({
-              type: 'sendMessage',
-              role: 'work',
-              idempotencyKey: expect.stringMatching(/:address-review-feedback$/),
-            }),
-          }),
-        ]);
-      }
-    });
-  },
-);
+    }
+  });
+});
 
 describe('GithubRules', () => {
   it('accepts a linked target on another installed board and preserves committed ingress after uninstall', async () => {
@@ -1006,9 +1027,11 @@ describe('GithubRules', () => {
       await service.ingest(issueComment('deleted', 'delivery-comment-deleted'));
 
       // Triage does not run again: the edit and the two new comments only point the card's session at them.
-      expect(
-        (await workItems.listDeferredDecisions('org-1', project.id)).map(record => record.decision.type),
-      ).toEqual(['signalActivity', 'signalActivity', 'signalActivity']);
+      expect((await workItems.listDeferredDecisions('org-1', project.id)).map(record => record.decision.type)).toEqual([
+        'signalActivity',
+        'signalActivity',
+        'signalActivity',
+      ]);
       expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({
         stages: [stage],
         revision: card.revision,
@@ -1032,9 +1055,9 @@ describe('GithubRules', () => {
       configVersion,
     });
     await service.ingest(issueComment('created', 'delivery-before-move'));
-    expect(
-      (await workItems.listDeferredDecisions('org-1', project.id)).map(record => record.decision.type),
-    ).toEqual(['signalActivity']);
+    expect((await workItems.listDeferredDecisions('org-1', project.id)).map(record => record.decision.type)).toEqual([
+      'signalActivity',
+    ]);
     await finishQueuedRunsForTests(workItems);
 
     const moved = await new FactoryTransitionService({ storage: workItems, configVersion, boards }).transition({
@@ -1058,7 +1081,10 @@ describe('GithubRules', () => {
   });
 
   it('re-evaluates against the fresh revision when a concurrent write makes the commit stale', async () => {
-    const { github, sourceControl, integrationStorage, workItems, projects, intake, project } = await setup('write', triageOnComment);
+    const { github, sourceControl, integrationStorage, workItems, projects, intake, project } = await setup(
+      'write',
+      triageOnComment,
+    );
     await createLinkedIssue(workItems, project.id);
     const original = workItems.commitRuleEvaluation.bind(workItems);
     const commit = vi
@@ -1089,7 +1115,10 @@ describe('GithubRules', () => {
   });
 
   it('fails the delivery after repeated stale commits so a redelivery can process it', async () => {
-    const { github, sourceControl, integrationStorage, workItems, projects, intake, project } = await setup('write', triageOnComment);
+    const { github, sourceControl, integrationStorage, workItems, projects, intake, project } = await setup(
+      'write',
+      triageOnComment,
+    );
     await createLinkedIssue(workItems, project.id);
     const commit = vi.spyOn(workItems, 'commitRuleEvaluation').mockResolvedValue({ status: 'stale' });
     const service = new GithubRules({
@@ -1112,7 +1141,10 @@ describe('GithubRules', () => {
   });
 
   it('ignores a marked handoff comment authored by the configured GitHub App', async () => {
-    const { github, sourceControl, integrationStorage, workItems, projects, intake, project } = await setup('write', triageOnComment);
+    const { github, sourceControl, integrationStorage, workItems, projects, intake, project } = await setup(
+      'write',
+      triageOnComment,
+    );
     await createLinkedIssue(workItems, project.id);
     const service = new GithubRules({
       github,
@@ -1143,7 +1175,10 @@ describe('GithubRules', () => {
     // slug names a *different*, self-hosted App. Recognition therefore has to
     // come from the resolved identity. Without it Factory's own handoff woke
     // triage and cancelled the run that had just written it.
-    const { github, sourceControl, integrationStorage, workItems, projects, intake, project } = await setup('write', triageOnComment);
+    const { github, sourceControl, integrationStorage, workItems, projects, intake, project } = await setup(
+      'write',
+      triageOnComment,
+    );
     await createLinkedIssue(workItems, project.id);
     const service = new GithubRules({
       github: {
@@ -1176,7 +1211,10 @@ describe('GithubRules', () => {
   it('still lets a comment rule see a human handoff comment when the identity is resolved', async () => {
     // The guard must key on authorship, not on the marker: a human quoting the
     // marker to add a lead still reaches a deployment's comment rule.
-    const { github, sourceControl, integrationStorage, workItems, projects, intake, project } = await setup('write', triageOnComment);
+    const { github, sourceControl, integrationStorage, workItems, projects, intake, project } = await setup(
+      'write',
+      triageOnComment,
+    );
     await createLinkedIssue(workItems, project.id);
     const service = new GithubRules({
       github: {
@@ -1595,8 +1633,16 @@ describe('GithubRules', () => {
   });
 
   it('materializes and starts the first Review pass when a trusted maintainer requests Factory', async () => {
-    const { github, sourceControl, integrationStorage, workItems, projects, intake, project, boards: storedBoards } =
-      await setup('write');
+    const {
+      github,
+      sourceControl,
+      integrationStorage,
+      workItems,
+      projects,
+      intake,
+      project,
+      boards: storedBoards,
+    } = await setup('write');
     const configVersion = 'factory-config-v1';
     const service = new GithubRules({
       github,
@@ -1673,8 +1719,16 @@ describe('GithubRules', () => {
   });
 
   it("materializes a Review card from Factory's exact PR comment command", async () => {
-    const { github, sourceControl, integrationStorage, workItems, projects, intake, project, boards: storedBoards } =
-      await setup('write');
+    const {
+      github,
+      sourceControl,
+      integrationStorage,
+      workItems,
+      projects,
+      intake,
+      project,
+      boards: storedBoards,
+    } = await setup('write');
     const configVersion = 'factory-config-v1';
     const service = new GithubRules({
       github,
@@ -3227,19 +3281,16 @@ describe('GithubRules', () => {
       return wake;
     }
 
-    it.each(['issue_comment', 'pull_request_review'] as const)(
-      'marks a %s a person sent as human',
-      async event => {
-        const wake = await ingestReply(event, { login: 'maintainer', type: 'User' });
-        expect(wake?.actor).toEqual({
-          type: 'github',
-          login: 'maintainer',
-          trusted: true,
-          factoryAuthored: false,
-          human: true,
-        });
-      },
-    );
+    it.each(['issue_comment', 'pull_request_review'] as const)('marks a %s a person sent as human', async event => {
+      const wake = await ingestReply(event, { login: 'maintainer', type: 'User' });
+      expect(wake?.actor).toEqual({
+        type: 'github',
+        login: 'maintainer',
+        trusted: true,
+        factoryAuthored: false,
+        human: true,
+      });
+    });
 
     it.each(['issue_comment', 'pull_request_review'] as const)(
       'does not mark a %s a trusted review bot sent as human',
@@ -3712,7 +3763,7 @@ describe('GithubRules', () => {
     expect(cards.find(card => card.id === work.item.id)).toMatchObject({
       board: 'work',
       stages: ['review'],
-      workItem: expect.objectContaining({ metadata: expect.objectContaining({labels: ['bug']}) }),
+      workItem: expect.objectContaining({ metadata: expect.objectContaining({ labels: ['bug'] }) }),
     });
     expect(cards.find(card => card.id === work.item.id)?.stageHistory).toMatchObject([
       { stage: 'execute', exitedBy: 'factory-rule-dispatcher' },
@@ -3765,7 +3816,9 @@ describe('GithubRules', () => {
       }),
     ]);
     // The card must read merged straight away, not only after the next sweep.
-    expect((await workItems.get({ orgId: 'org-1', id: card.item.id }))).toMatchObject({ workItem: { metadata: {state: 'closed', merged: true} } });
+    expect(await workItems.get({ orgId: 'org-1', id: card.item.id })).toMatchObject({
+      workItem: { metadata: { state: 'closed', merged: true } },
+    });
   });
 
   it('closes the merged Review card and the work item it was opened from', async () => {
@@ -4174,10 +4227,7 @@ describe('GithubRules and the shared board list', () => {
       ['issueCommentEdited', issueComment('edited', 'shared-comment-edited')],
       ['issueCommentDeleted', issueComment('deleted', 'shared-comment-deleted')],
       // A trusted author's pull request that closes the issue looks for the card it belongs on.
-      [
-        'pullRequestOpened',
-        pullRequestEvent('opened', 'shared-pr-opened-new', { pull_request: { number: 18 } }),
-      ],
+      ['pullRequestOpened', pullRequestEvent('opened', 'shared-pr-opened-new', { pull_request: { number: 18 } })],
       ['pullRequestOpened', pullRequestEvent('opened', 'shared-pr-opened')],
       ['pullRequestUpdated', pullRequestEvent('synchronize', 'shared-pr-updated')],
       ['pullRequestReopened', pullRequestEvent('reopened', 'shared-pr-reopened')],
@@ -4397,8 +4447,15 @@ describe('GithubRules issue labels', () => {
     {
       case: "a person's change is one work_item.updated per delivery that changed something",
       before: [],
-      deliveries: [['labeled', ['bug'], 'maintainer'], ['labeled', ['bug', 'Ship'], 'maintainer'], ['labeled', ['bug', 'Ship'], 'maintainer']],
-      updates: [{ added: ['bug'], fromCardSession: false }, { added: ['Ship'], fromCardSession: false }],
+      deliveries: [
+        ['labeled', ['bug'], 'maintainer'],
+        ['labeled', ['bug', 'Ship'], 'maintainer'],
+        ['labeled', ['bug', 'Ship'], 'maintainer'],
+      ],
+      updates: [
+        { added: ['bug'], fromCardSession: false },
+        { added: ['Ship'], fromCardSession: false },
+      ],
       labels: ['bug', 'Ship'],
     },
     {
@@ -4409,16 +4466,24 @@ describe('GithubRules issue labels', () => {
       labels: ['bug', 'status: auto-triaged'],
     },
     {
-      case: "a change only to the labels Factory manages is none, whoever makes it",
+      case: 'a change only to the labels Factory manages is none, whoever makes it',
       before: ['bug', 'status: needs approval'],
-      deliveries: [['unlabeled', ['bug'], 'factory-app[bot]'], ['labeled', ['bug', 'Status: Auto-Triaged'], 'maintainer']],
+      deliveries: [
+        ['unlabeled', ['bug'], 'factory-app[bot]'],
+        ['labeled', ['bug', 'Status: Auto-Triaged'], 'maintainer'],
+      ],
       updates: [],
       labels: ['bug', 'Status: Auto-Triaged'],
     },
   ] as const)('$case', async ({ before, deliveries, updates, labels }) => {
     const { service, workItems, project } = await setupRoutes();
     const item = await createLinkedIssue(workItems, project.id);
-    await workItems.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { metadata: { labels: [...before] } } });
+    await workItems.update({
+      orgId: 'org-1',
+      id: item.id,
+      userId: 'user-1',
+      patch: { metadata: { labels: [...before] } },
+    });
     for (const [index, [action, after, sender]] of deliveries.entries()) {
       const delivery = issueLabels(action, [...after], `label-${index}`);
       (delivery.payload.sender as Record<string, unknown>).login = sender;
@@ -4429,7 +4494,10 @@ describe('GithubRules issue labels', () => {
       .map(entry => entry.decision)
       .filter(decision => decision.type === 'routeEvent');
     expect(
-      decisions.map(decision => ({ added: decision.event.labels?.added, fromCardSession: decision.fromCardSession === true })),
+      decisions.map(decision => ({
+        added: decision.event.labels?.added,
+        fromCardSession: decision.fromCardSession === true,
+      })),
     ).toEqual(updates);
     expect((await workItems.get({ orgId: 'org-1', id: item.id }))?.workItem.labels).toEqual(labels);
   });
@@ -4454,7 +4522,11 @@ describe('GithubRules issue labels', () => {
     "hands a pull request's label and assignee changes to its %s as pull_request.updated",
     async where => {
       const { service, workItems, project } = await setupRoutes();
-      const pullRequestSource = { integrationId: 'github', type: 'pull-request', url: 'https://github.com/acme/repo/pull/17' };
+      const pullRequestSource = {
+        integrationId: 'github',
+        type: 'pull-request',
+        url: 'https://github.com/acme/repo/pull/17',
+      };
       const card =
         where === 'own card'
           ? (
@@ -4486,8 +4558,18 @@ describe('GithubRules issue labels', () => {
         labels: labels.map(name => ({ name })),
         assignees: assignees.map(login => ({ login })),
       });
-      await service.ingest(pullRequestChanged('labeled', 'pr-label', { label: { name: 'ready' }, pull_request: current(['bug', 'ready'], ['ada']) }));
-      await service.ingest(pullRequestChanged('unassigned', 'pr-unassign', { assignee: { login: 'ada' }, pull_request: current(['bug', 'ready'], []) }));
+      await service.ingest(
+        pullRequestChanged('labeled', 'pr-label', {
+          label: { name: 'ready' },
+          pull_request: current(['bug', 'ready'], ['ada']),
+        }),
+      );
+      await service.ingest(
+        pullRequestChanged('unassigned', 'pr-unassign', {
+          assignee: { login: 'ada' },
+          pull_request: current(['bug', 'ready'], []),
+        }),
+      );
 
       const events = (await workItems.listDeferredDecisions('org-1', project.id, { workItemId: card.id }))
         .filter(entry => entry.decision.type === 'routeEvent')
@@ -4505,7 +4587,10 @@ describe('GithubRules issue labels', () => {
       if (where === 'own card') {
         // Routes read the card's labels and assignees: they are the pull request's current ones.
         const stored = (await workItems.get({ orgId: 'org-1', id: card.id }))!;
-        expect({ labels: stored.workItem.labels, assignees: stored.workItem.metadata?.assignees }).toEqual({ labels: ['bug', 'ready'], assignees: [] });
+        expect({ labels: stored.workItem.labels, assignees: stored.workItem.metadata?.assignees }).toEqual({
+          labels: ['bug', 'ready'],
+          assignees: [],
+        });
       }
     },
   );
@@ -4538,7 +4623,11 @@ describe('GithubRules issue labels', () => {
         },
         'admin',
       );
-      const boards = new ProjectBoardCache({ codeRegistry: createTriageWorkRegistry(), storage: base.boards, recheckMs: 0 });
+      const boards = new ProjectBoardCache({
+        codeRegistry: createTriageWorkRegistry(),
+        storage: base.boards,
+        recheckMs: 0,
+      });
       const service = new GithubRules({
         github: base.github,
         sourceControl: base.sourceControl,
@@ -4553,7 +4642,11 @@ describe('GithubRules issue labels', () => {
         controller: {} as never,
         storage: base.workItems,
         boards,
-        transitionService: new FactoryTransitionService({ storage: base.workItems, boards, configVersion: 'factory-config-v1' }),
+        transitionService: new FactoryTransitionService({
+          storage: base.workItems,
+          boards,
+          configVersion: 'factory-config-v1',
+        }),
         intakeRoutes: base.boards,
         ownerId: 'pull-request-label-trust',
       });
@@ -4607,7 +4700,9 @@ describe('GithubRules issue labels', () => {
       await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
       await dispatcher.runOnce(new Date('2030-01-01T00:01:01Z'));
 
-      expect((await base.workItems.get({ orgId: 'org-1', id: card.id }))?.stages).toEqual(moves ? ['done'] : card.stages);
+      expect((await base.workItems.get({ orgId: 'org-1', id: card.id }))?.stages).toEqual(
+        moves ? ['done'] : card.stages,
+      );
     },
   );
 
@@ -4624,7 +4719,11 @@ describe('GithubRules issue labels', () => {
       },
       'admin',
     );
-    const boards = new ProjectBoardCache({ codeRegistry: createTriageWorkRegistry(), storage: base.boards, recheckMs: 0 });
+    const boards = new ProjectBoardCache({
+      codeRegistry: createTriageWorkRegistry(),
+      storage: base.boards,
+      recheckMs: 0,
+    });
     const service = new GithubRules({
       github: base.github,
       sourceControl: base.sourceControl,
@@ -4639,7 +4738,11 @@ describe('GithubRules issue labels', () => {
       controller: {} as never,
       storage: base.workItems,
       boards,
-      transitionService: new FactoryTransitionService({ storage: base.workItems, boards, configVersion: 'factory-config-v1' }),
+      transitionService: new FactoryTransitionService({
+        storage: base.workItems,
+        boards,
+        configVersion: 'factory-config-v1',
+      }),
       intakeRoutes: base.boards,
       ownerId: 'pull-request-label-identity',
     });
@@ -4689,7 +4792,11 @@ describe('GithubRules issue labels', () => {
       },
       'admin',
     );
-    const boards = new ProjectBoardCache({ codeRegistry: createTriageWorkRegistry(), storage: base.boards, recheckMs: 0 });
+    const boards = new ProjectBoardCache({
+      codeRegistry: createTriageWorkRegistry(),
+      storage: base.boards,
+      recheckMs: 0,
+    });
     const service = new GithubRules({
       github: base.github,
       sourceControl: base.sourceControl,
@@ -4705,13 +4812,19 @@ describe('GithubRules issue labels', () => {
       controller: {} as never,
       storage: base.workItems,
       boards,
-      transitionService: new FactoryTransitionService({ storage: base.workItems, boards, configVersion: 'factory-config-v1' }),
+      transitionService: new FactoryTransitionService({
+        storage: base.workItems,
+        boards,
+        configVersion: 'factory-config-v1',
+      }),
       intakeRoutes: base.boards,
       intakeEvaluator: 'intake-order',
       ownerId: 'not-routed-labels',
     });
 
-    await service.ingest(kind === 'issue' ? issueOpened('opened-unmatched') : pullRequest('opened', 'opened-unmatched'));
+    await service.ingest(
+      kind === 'issue' ? issueOpened('opened-unmatched') : pullRequest('opened', 'opened-unmatched'),
+    );
     await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
     expect(await base.workItems.list(scope)).toEqual([]);
     expect((await base.boards.listNotRouted(scope)).notRouted).toHaveLength(1);
@@ -4720,30 +4833,57 @@ describe('GithubRules issue labels', () => {
 
   // A label on an item intake turned away runs intake again: open ones only, judged by their own author.
   it.each([
-    { kind: 'issue', state: 'open', author: 'maintainer', filed: [{ board: 'work', source: 'issue', authorTrusted: true }] },
+    {
+      kind: 'issue',
+      state: 'open',
+      author: 'maintainer',
+      filed: [{ board: 'work', source: 'issue', authorTrusted: true }],
+    },
     { kind: 'issue', state: 'closed', author: 'maintainer', filed: [] },
-    { kind: 'issue', state: 'open', author: 'outsider', filed: [{ board: 'work', source: 'issue', authorTrusted: false }] },
-    { kind: 'pull_request', state: 'open', author: 'contributor', filed: [{ board: 'work', source: 'pull-request', authorTrusted: false }] },
+    {
+      kind: 'issue',
+      state: 'open',
+      author: 'outsider',
+      filed: [{ board: 'work', source: 'issue', authorTrusted: false }],
+    },
+    {
+      kind: 'pull_request',
+      state: 'open',
+      author: 'contributor',
+      filed: [{ board: 'work', source: 'pull-request', authorTrusted: false }],
+    },
     { kind: 'pull_request', state: 'closed', author: 'contributor', filed: [] },
-  ] as const)("files a Not routed $kind that is labelled to match a board while $state, by $author", async ({ kind, state, author, filed }) => {
-    const { base, scope, service, dispatcher } = await notRoutedIssue(kind);
-    base.github.getRepositoryCollaboratorPermission.mockImplementation(async (_id: number, _repo: string, login: string) =>
-      login === 'maintainer' ? 'write' : 'read',
-    );
-    const delivery =
-      kind === 'issue' ? issueLabels('labeled', ['ship'], 'labelled-ship', state) : pullRequest('opened', 'labelled-ship');
-    const item = (kind === 'issue' ? delivery.payload.issue : delivery.payload.pull_request) as Record<string, unknown>;
-    Object.assign(delivery.payload, { action: 'labeled', label: { name: 'ship' } });
-    Object.assign(item, { state, labels: [{ name: 'ship' }], user: { login: author } });
-    await service.ingest(delivery);
-    await dispatcher.runOnce(new Date('2030-01-01T00:02:00Z'));
+  ] as const)(
+    'files a Not routed $kind that is labelled to match a board while $state, by $author',
+    async ({ kind, state, author, filed }) => {
+      const { base, scope, service, dispatcher } = await notRoutedIssue(kind);
+      base.github.getRepositoryCollaboratorPermission.mockImplementation(
+        async (_id: number, _repo: string, login: string) => (login === 'maintainer' ? 'write' : 'read'),
+      );
+      const delivery =
+        kind === 'issue'
+          ? issueLabels('labeled', ['ship'], 'labelled-ship', state)
+          : pullRequest('opened', 'labelled-ship');
+      const item = (kind === 'issue' ? delivery.payload.issue : delivery.payload.pull_request) as Record<
+        string,
+        unknown
+      >;
+      Object.assign(delivery.payload, { action: 'labeled', label: { name: 'ship' } });
+      Object.assign(item, { state, labels: [{ name: 'ship' }], user: { login: author } });
+      await service.ingest(delivery);
+      await dispatcher.runOnce(new Date('2030-01-01T00:02:00Z'));
 
-    const cards = await base.workItems.list(scope);
-    expect(
-      cards.map(card => ({ board: card.board, source: card.externalSource?.type, authorTrusted: card.metadata?.authorTrusted })),
-    ).toEqual(filed);
-    expect((await base.boards.listNotRouted(scope)).notRouted).toHaveLength(filed.length === 0 ? 1 : 0);
-  });
+      const cards = await base.workItems.list(scope);
+      expect(
+        cards.map(card => ({
+          board: card.board,
+          source: card.externalSource?.type,
+          authorTrusted: card.metadata?.authorTrusted,
+        })),
+      ).toEqual(filed);
+      expect((await base.boards.listNotRouted(scope)).notRouted).toHaveLength(filed.length === 0 ? 1 : 0);
+    },
+  );
 
   it('leaves a labelled issue with no card alone when intake never turned it away', async () => {
     const { service, workItems, project } = await setupRoutes();
@@ -4759,21 +4899,27 @@ describe('GithubRules issue labels', () => {
     { kind: 'issue', author: 'outsider', authorTrusted: false },
     { kind: 'pull request', author: 'maintainer', authorTrusted: true },
     { kind: 'pull request', author: 'outsider', authorTrusted: false },
-  ] as const)("files a reopened $kind with no card like a new one, by $author", async ({ kind, author, authorTrusted }) => {
-    const { service, workItems, project, github } = await setupRoutes();
-    github.getRepositoryCollaboratorPermission.mockImplementation(async (_id: number, _repo: string, login: string) =>
-      login === 'outsider' ? 'read' : 'write',
-    );
-    const reopened = kind === 'issue' ? issueOpened('reopened-no-card') : pullRequest('opened', 'reopened-no-card');
-    const item = (kind === 'issue' ? reopened.payload.issue : reopened.payload.pull_request) as Record<string, unknown>;
-    Object.assign(reopened.payload, { action: 'reopened', sender: { login: 'maintainer' } });
-    Object.assign(item, { state: 'open', user: { login: author } });
-    await expect(service.ingest(reopened)).resolves.toEqual({ status: 'committed' });
-    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
-    expect(decisions.map(entry => entry.decision)).toEqual([
-      expect.objectContaining({ type: 'upsertLinkedWorkItem', metadata: expect.objectContaining({ authorTrusted }) }),
-    ]);
-  });
+  ] as const)(
+    'files a reopened $kind with no card like a new one, by $author',
+    async ({ kind, author, authorTrusted }) => {
+      const { service, workItems, project, github } = await setupRoutes();
+      github.getRepositoryCollaboratorPermission.mockImplementation(
+        async (_id: number, _repo: string, login: string) => (login === 'outsider' ? 'read' : 'write'),
+      );
+      const reopened = kind === 'issue' ? issueOpened('reopened-no-card') : pullRequest('opened', 'reopened-no-card');
+      const item = (kind === 'issue' ? reopened.payload.issue : reopened.payload.pull_request) as Record<
+        string,
+        unknown
+      >;
+      Object.assign(reopened.payload, { action: 'reopened', sender: { login: 'maintainer' } });
+      Object.assign(item, { state: 'open', user: { login: author } });
+      await expect(service.ingest(reopened)).resolves.toEqual({ status: 'committed' });
+      const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+      expect(decisions.map(entry => entry.decision)).toEqual([
+        expect.objectContaining({ type: 'upsertLinkedWorkItem', metadata: expect.objectContaining({ authorTrusted }) }),
+      ]);
+    },
+  );
 
   it('drops a label delivery older than the last one applied, so a late add never undoes a removal', async () => {
     const { service, workItems, project } = await setupRoutes();
@@ -4836,7 +4982,7 @@ describe('GithubRules issue labels', () => {
       expect(await workItems.get({ orgId: 'org-1', id: item.id })).toMatchObject({
         board: item.board,
         stages: ['planning'],
-        workItem: expect.objectContaining({ metadata: expect.objectContaining({labels: ['release']}) }),
+        workItem: expect.objectContaining({ metadata: expect.objectContaining({ labels: ['release'] }) }),
       });
     },
   );
@@ -4876,7 +5022,7 @@ describe('GithubRules issue labels', () => {
       expect(await workItems.get({ orgId: 'org-1', id: item.id })).toMatchObject({
         board: item.board,
         stages: ['planning'],
-        workItem: expect.objectContaining({ metadata: expect.objectContaining({assignees: [...after]}) }),
+        workItem: expect.objectContaining({ metadata: expect.objectContaining({ assignees: [...after] }) }),
       });
       expect((await workItems.listDeferredDecisions('org-1', project.id)).map(entry => entry.decision)).toEqual([
         {
@@ -4904,7 +5050,9 @@ describe('GithubRules issue labels', () => {
 
     await expect(service.ingest(newer)).resolves.toEqual({ status: 'committed' });
     await expect(service.ingest(older)).resolves.toEqual({ status: 'ignored' });
-    expect((await workItems.get({ orgId: 'org-1', id: created.id }))).toMatchObject({ workItem: { metadata: {assignees: [], githubAssigneesUpdatedAt: '2030-01-01T00:00:02Z'} } });
+    expect(await workItems.get({ orgId: 'org-1', id: created.id })).toMatchObject({
+      workItem: { metadata: { assignees: [], githubAssigneesUpdatedAt: '2030-01-01T00:00:02Z' } },
+    });
   });
 
   it('advances the stored time on a newer no-op so a delayed older unassigned cannot overwrite it', async () => {
@@ -4923,7 +5071,9 @@ describe('GithubRules issue labels', () => {
 
     await expect(service.ingest(newerNoop)).resolves.toEqual({ status: 'committed' });
     await expect(service.ingest(delayed)).resolves.toEqual({ status: 'ignored' });
-    expect((await workItems.get({ orgId: 'org-1', id: created.id }))).toMatchObject({ workItem: { metadata: {assignees: ['alice'], githubAssigneesUpdatedAt: '2030-01-01T00:00:03Z'} } });
+    expect(await workItems.get({ orgId: 'org-1', id: created.id })).toMatchObject({
+      workItem: { metadata: { assignees: ['alice'], githubAssigneesUpdatedAt: '2030-01-01T00:00:03Z' } },
+    });
   });
 
   it('ignores assignee changes for issues without a card and on pull requests', async () => {
@@ -5003,7 +5153,12 @@ describe('GithubRules with intake routes', () => {
     /** The reconcile sweep saw issue 42's labels drift and replays it as "opened". */
     const replayLabels = async (labels: string[]) => {
       const repository = { id: 10, fullName: 'acme/repo', installationId: 7 };
-      const state = { title: 'Issue 42', url: 'https://github.com/acme/repo/issues/42', state: 'open' as const, labels };
+      const state = {
+        title: 'Issue 42',
+        url: 'https://github.com/acme/repo/issues/42',
+        state: 'open' as const,
+        labels,
+      };
       await expect(service.ingest(reconciledIssueRelabeledEvent(repository, 42, state))).resolves.toEqual({
         status: 'committed',
       });
@@ -5089,7 +5244,10 @@ describe('GithubRules with intake routes', () => {
       stages: ['intake'],
       metadata: { authorTrusted: false, intakeRouteId: expect.any(String) },
     });
-    expect(await relabel('outsider-relabelled', ['release', 'bug'])).toMatchObject({ board: 'work', stages: ['intake'] });
+    expect(await relabel('outsider-relabelled', ['release', 'bug'])).toMatchObject({
+      board: 'work',
+      stages: ['intake'],
+    });
   });
 });
 
@@ -5499,7 +5657,7 @@ describe('createGithubPullRequestReconciler', () => {
       orgId: 'org-1',
       factoryProjectId: context.project.id,
       workItemId: card.item.id,
-      ingress: { identity: 'settled-proposal'},
+      ingress: { identity: 'settled-proposal' },
       expectedRevision: card.item.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -5541,7 +5699,7 @@ describe('createGithubPullRequestReconciler', () => {
     await reconcile([repositoryTarget]);
     expect(fetchPullRequest).toHaveBeenCalledTimes(2);
     await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
-      workItem: expect.objectContaining({ metadata: expect.objectContaining({state: 'closed', merged: true}) }),
+      workItem: expect.objectContaining({ metadata: expect.objectContaining({ state: 'closed', merged: true }) }),
     });
     expect(
       (await context.workItems.listDeferredDecisions('org-1', context.project.id)).find(
@@ -5570,7 +5728,7 @@ describe('createGithubPullRequestReconciler', () => {
       orgId: 'org-1',
       factoryProjectId: context.project.id,
       workItemId: card.item.id,
-      ingress: { identity: 'failed-before-settlement'},
+      ingress: { identity: 'failed-before-settlement' },
       expectedRevision: card.item.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -5632,7 +5790,7 @@ describe('createGithubPullRequestReconciler', () => {
       orgId: 'org-1',
       factoryProjectId: context.project.id,
       workItemId: card.item.id,
-      ingress: { identity: 'failed-on-unknown-board'},
+      ingress: { identity: 'failed-on-unknown-board' },
       expectedRevision: card.item.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -5736,7 +5894,16 @@ describe('createGithubPullRequestReconciler', () => {
 
     expect(fetchPullRequest).toHaveBeenCalledTimes(1);
     await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
-      workItem: expect.objectContaining({ metadata: expect.objectContaining({state: 'closed', draft: false, merged: false, assignees: ['assignee'], requestedReviewers: ['reviewer'], labels: ['bug']}) }),
+      workItem: expect.objectContaining({
+        metadata: expect.objectContaining({
+          state: 'closed',
+          draft: false,
+          merged: false,
+          assignees: ['assignee'],
+          requestedReviewers: ['reviewer'],
+          labels: ['bug'],
+        }),
+      }),
     });
   });
 
@@ -5755,7 +5922,16 @@ describe('createGithubPullRequestReconciler', () => {
 
     expect(fetchPullRequest).toHaveBeenCalledTimes(1);
     await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
-      workItem: expect.objectContaining({ metadata: expect.objectContaining({author: 'pr-author', state: 'closed', draft: false, merged: true, assignees: ['assignee'], requestedReviewers: ['reviewer']}) }),
+      workItem: expect.objectContaining({
+        metadata: expect.objectContaining({
+          author: 'pr-author',
+          state: 'closed',
+          draft: false,
+          merged: true,
+          assignees: ['assignee'],
+          requestedReviewers: ['reviewer'],
+        }),
+      }),
     });
   });
 
@@ -5794,10 +5970,30 @@ describe('createGithubPullRequestReconciler', () => {
     });
 
     await expect(context.workItems.get({ orgId: 'org-1', id: missing.item.id })).resolves.toMatchObject({
-      metadata: {repository: 'acme/repo'}, workItem: expect.objectContaining({ metadata: expect.objectContaining({author: 'author-18', state: 'open', draft: false, merged: false, assignees: ['assignee-18'], requestedReviewers: ['reviewer-18']}) }),
+      metadata: { repository: 'acme/repo' },
+      workItem: expect.objectContaining({
+        metadata: expect.objectContaining({
+          author: 'author-18',
+          state: 'open',
+          draft: false,
+          merged: false,
+          assignees: ['assignee-18'],
+          requestedReviewers: ['reviewer-18'],
+        }),
+      }),
     });
     await expect(context.workItems.get({ orgId: 'org-1', id: stale.item.id })).resolves.toMatchObject({
-      metadata: {repository: 'acme/repo'}, workItem: expect.objectContaining({ metadata: expect.objectContaining({author: 'author-19', state: 'open', draft: true, merged: false, assignees: ['assignee-19'], requestedReviewers: ['reviewer-19']}) }),
+      metadata: { repository: 'acme/repo' },
+      workItem: expect.objectContaining({
+        metadata: expect.objectContaining({
+          author: 'author-19',
+          state: 'open',
+          draft: true,
+          merged: false,
+          assignees: ['assignee-19'],
+          requestedReviewers: ['reviewer-19'],
+        }),
+      }),
     });
     expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(0);
   });
@@ -5835,7 +6031,8 @@ describe('createGithubPullRequestReconciler', () => {
       const refreshed = await context.workItems.get({ orgId: 'org-1', id: item.id });
       const clearsSettled = reconciliation === 'merged' || reconciliation === 'closed';
       expect(refreshed!.revision).toBe(item.revision + (clearsSettled ? 1 : 0));
-      if (reconciliation === undefined) expect(refreshed!.metadata).not.toHaveProperty('factoryPullRequestReconciliation');
+      if (reconciliation === undefined)
+        expect(refreshed!.metadata).not.toHaveProperty('factoryPullRequestReconciliation');
       else expect(refreshed!.metadata?.factoryPullRequestReconciliation).toBeNull();
     },
   );
@@ -5927,7 +6124,8 @@ describe('createGithubPullRequestReconciler', () => {
     await createReconciler(context, fetchPullRequest)([repositoryTarget]);
 
     await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
-      metadata: {authorTrusted: true}, workItem: expect.objectContaining({ metadata: expect.objectContaining({merged: true}) }),
+      metadata: { authorTrusted: true },
+      workItem: expect.objectContaining({ metadata: expect.objectContaining({ merged: true }) }),
     });
   });
 
@@ -6401,7 +6599,10 @@ describe('createGithubPullRequestReconciler', () => {
       vi.spyOn(boards, 'load');
     });
 
-    function createDiscovery(context: Awaited<ReturnType<typeof setup>>, listOpenPullRequests: ReturnType<typeof vi.fn>) {
+    function createDiscovery(
+      context: Awaited<ReturnType<typeof setup>>,
+      listOpenPullRequests: ReturnType<typeof vi.fn>,
+    ) {
       const options = {
         github: context.github,
         sourceControl: context.sourceControl,
@@ -7008,7 +7209,11 @@ describe('pull request cards on the Work board', () => {
     await harness.dispatch();
 
     expect(await harness.cards()).toEqual([
-      expect.objectContaining({ board: 'work', stages: ['intake'], metadata: expect.objectContaining({ authorTrusted: false }) }),
+      expect.objectContaining({
+        board: 'work',
+        stages: ['intake'],
+        metadata: expect.objectContaining({ authorTrusted: false }),
+      }),
     ]);
     expect((await harness.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
   });
@@ -7186,9 +7391,10 @@ describe('pull request cards on the Work board', () => {
         board: 'work',
         stages: ['pr-review'],
       });
-      expect(
-        (await harness.decisions()).find(entry => entry.decision.type === 'invokeSkill')?.decision,
-      ).toMatchObject({ role: 'review', skillName: 'factory-review' });
+      expect((await harness.decisions()).find(entry => entry.decision.type === 'invokeSkill')?.decision).toMatchObject({
+        role: 'review',
+        skillName: 'factory-review',
+      });
     },
   );
 
@@ -7307,7 +7513,10 @@ describe('GithubRules board events', () => {
     expect(decisions.map(entry => entry.decision)).toEqual([
       expect.objectContaining({ type: 'routeEvent', event: { type: 'work_item.reopened' } }),
     ]);
-    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['done'], revision: card.revision });
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({
+      stages: ['done'],
+      revision: card.revision,
+    });
   });
 });
 
@@ -7476,11 +7685,16 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('GitHub close an
     expect(card.stageHistory.map(entry => entry.by)).not.toContain(`intake-route:${issueClose.id}`);
   });
 
-  it('moves a reopened pull request\'s own card by a pull_request.reopened route', async () => {
+  it("moves a reopened pull request's own card by a pull_request.reopened route", async () => {
     const { deliver, storedBoards, scope } = await harness({ stages: ['canceled'], pullRequest: true });
     const reopened = await storedBoards.createIntakeRoute(
       scope,
-      { name: 'Reopened pull requests go back to Review', on: ['pull_request.reopened'], when: null, target: { boardKey: 'work', phaseKey: 'pr-review' } },
+      {
+        name: 'Reopened pull requests go back to Review',
+        on: ['pull_request.reopened'],
+        when: null,
+        target: { boardKey: 'work', phaseKey: 'pr-review' },
+      },
       'admin',
     );
     const delivery = pullRequest('opened', 'pr-reopened-routes');
@@ -7595,7 +7809,7 @@ describe('GithubRules activity signals', () => {
     expect(JSON.stringify(decisions)).not.toContain('Issue 42');
   });
 
-  it("marks a comment from someone without write access as untrusted, and points at an edit to the issue", async () => {
+  it('marks a comment from someone without write access as untrusted, and points at an edit to the issue', async () => {
     const env = await service('read');
     await env.rules.ingest(linkedComment('comment-untrusted'));
     await env.rules.ingest(issueEdited('edit-1'));
@@ -7724,11 +7938,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
     const sourceTypes = (card: { workItem: { sources: Array<{ sourceType: string }> } }) =>
       card.workItem.sources.map(source => source.sourceType);
     const reviewsStarted = async (h: Awaited<ReturnType<typeof harness>>, workItemId: string) =>
-      (await h.decisions()).filter(
-        entry => entry.decision.type === 'invokeSkill' && entry.workItemId === workItemId,
-      );
+      (await h.decisions()).filter(entry => entry.decision.type === 'invokeSkill' && entry.workItemId === workItemId);
 
-    it("files a maintainer's \"Fixes #42\" pull request on issue 42's card, which goes to PR review", async () => {
+    it('files a maintainer\'s "Fixes #42" pull request on issue 42\'s card, which goes to PR review', async () => {
       const h = await harness('write');
       const issue = await h.issueCard(42, 'intake');
 
@@ -7744,7 +7956,27 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       ]);
     });
 
-    it("links an outsider's \"Fixes #42\" pull request to issue 42's card, untrusted, and moves or runs nothing", async () => {
+    it("files a pull request fixing two issues on the first one's card and links the other card to it", async () => {
+      const h = await harness('write');
+      const first = await h.issueCard(42, 'intake');
+      const second = await h.issueCard(43, 'intake');
+
+      await h.ingest(openedPullRequest(17, 'Fixes #42\nFixes #43'));
+
+      const cards = await h.cards();
+      const holder = cards.find(card => card.id === first.id)!;
+      const linked = cards.find(card => card.id === second.id)!;
+      expect(sourceTypes(holder)).toEqual(['issue', 'pull-request']);
+      expect(holder.workItem.sources[1]!.metadata).toMatchObject({ closesWorkItemIds: [second.id] });
+      expect(sourceTypes(linked)).toEqual(['issue']);
+      const closing = closingLinksIn(cards);
+      expect(closing.hasPullRequest(linked)).toBe(true);
+      expect(matchesSearch(closing.search(linked), searchTerms('17'))).toBe(true);
+      expect(relatedCardsIn(cards)(linked).map(card => card.id)).toEqual([first.id]);
+      expect(relatedCardsIn(cards)(holder).map(card => card.id)).toEqual([second.id]);
+    });
+
+    it('links an outsider\'s "Fixes #42" pull request to issue 42\'s card, untrusted, and moves or runs nothing', async () => {
       const h = await harness('read');
       const issue = await h.issueCard(42, 'intake');
 
@@ -7813,7 +8045,14 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       ['a maintainer', 'write', 'testing the repository', repositoryIsAcme, false, ['pr-review']],
       ['an outsider', 'read', "testing for an outsider's pull request", outsidersOnly, false, ['pr-review']],
       ['an outsider', 'read', 'testing nothing, stored before rules decided', null, true, ['intake']],
-      ['an outsider', 'read', 'testing the repository, stored before rules decided', repositoryIsAcme, true, ['intake']],
+      [
+        'an outsider',
+        'read',
+        'testing the repository, stored before rules decided',
+        repositoryIsAcme,
+        true,
+        ['intake'],
+      ],
       ['a maintainer', 'write', 'testing nothing, stored before rules decided', null, true, ['pr-review']],
       [
         'an outsider',
@@ -7849,7 +8088,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         expect(cards[0]).toMatchObject({ id: issue.id, stages });
         expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
         // Factory leaves the stored rule as the project has it.
-        const stored = (await h.boards.listIntakeRoutes(scope)).find(route => route.name === PULL_REQUEST_INTAKE_ROUTE.name);
+        const stored = (await h.boards.listIntakeRoutes(scope)).find(
+          route => route.name === PULL_REQUEST_INTAKE_ROUTE.name,
+        );
         expect(stored?.when).toEqual(when);
         expect(stored?.outsiderPullRequestsGated).toBe(legacy ? true : undefined);
       },
@@ -7977,19 +8218,34 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
             payload: {
               ...base,
               action: 'submitted',
-              review: { id: 2, state: 'changes_requested', body: 'Not yet', html_url: `${pullRequest.html_url}#r2`, user: sender },
+              review: {
+                id: 2,
+                state: 'changes_requested',
+                body: 'Not yet',
+                html_url: `${pullRequest.html_url}#r2`,
+                user: sender,
+              },
               pull_request: pullRequest,
             },
           },
           {
             event: 'pull_request',
             deliveryId: 'push',
-            payload: { ...base, action: 'synchronize', pull_request: { ...pullRequest, head: { ref: 'feature-17', sha: 'b'.repeat(40) } } },
+            payload: {
+              ...base,
+              action: 'synchronize',
+              pull_request: { ...pullRequest, head: { ref: 'feature-17', sha: 'b'.repeat(40) } },
+            },
           },
           {
             event: 'pull_request',
             deliveryId: 'review-request',
-            payload: { ...base, action: 'review_requested', requested_reviewer: { login: 'factory-app[bot]' }, pull_request: pullRequest },
+            payload: {
+              ...base,
+              action: 'review_requested',
+              requested_reviewer: { login: 'factory-app[bot]' },
+              pull_request: pullRequest,
+            },
           },
         ]) {
           await h.service.ingest(delivery as never);
@@ -8143,7 +8399,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       const card = (await h.cards()).find(entry => entry.id === issue.id)!;
       expect(card.stages).toEqual(['pr-review']);
       expect(card.metadata?.openPullRequestNumber).toBe(17);
-      expect(card.workItem.sources.find(source => source.sourceType === 'pull-request')).toMatchObject({ state: 'open' });
+      expect(card.workItem.sources.find(source => source.sourceType === 'pull-request')).toMatchObject({
+        state: 'open',
+      });
     });
 
     it('gives a pull request its own card when the issue it fixes is already Done', async () => {
@@ -8176,7 +8434,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
     it("follows the project's card-move rule for linked pull requests: edited, it moves a planned issue; deleted, nothing moves", async () => {
       const h = await harness('write');
       const scope = { orgId: 'org-1', factoryProjectId: h.project.id };
-      const route = (await h.boards.listIntakeRoutes(scope)).find(entry => entry.name === 'Trusted pull requests take a waiting issue to Review')!;
+      const route = (await h.boards.listIntakeRoutes(scope)).find(
+        entry => entry.name === 'Trusted pull requests take a waiting issue to Review',
+      )!;
       await h.boards.updateIntakeRoute(
         scope,
         route.id,
@@ -8235,7 +8495,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       const cards = await h.cards();
       expect(cards).toHaveLength(2);
       expect(sourceTypes(cards.find(card => card.id === first.id)!)).toEqual(['issue', 'pull-request']);
-      expect(cards.find(card => card.id === second.id)).toMatchObject({ stages: ['intake'], revision: second.revision });
+      expect(cards.find(card => card.id === second.id)).toMatchObject({
+        stages: ['intake'],
+        revision: second.revision,
+      });
     });
 
     it('keeps a pull request on its own card when an edit later adds "Fixes #42", and replays add nothing', async () => {
@@ -8362,9 +8625,14 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(await pullRequestStates()).toEqual(['open', 'open']);
     });
 
-    const builderSession = { threadId: 'thread-work', sessionId: 'session-work', branch: 'factory/issue-42-build', startedBy: 'user-1' };
+    const builderSession = {
+      threadId: 'thread-work',
+      sessionId: 'session-work',
+      branch: 'factory/issue-42-build',
+      startedBy: 'user-1',
+    };
 
-    it("links someone else's \"Fixes #42\" pull request to the card once its builder has started, but never as the card's own", async () => {
+    it('links someone else\'s "Fixes #42" pull request to the card once its builder has started, but never as the card\'s own', async () => {
       const h = await harness('write');
       const issue = await h.issueCard(42, 'execute', { work: builderSession });
 
@@ -8426,7 +8694,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           stages: ['execute'],
           sessions: { work: builderSession } as never,
           // How linking records an outside author's pull request on the card.
-          metadata: { ...linked.metadata, [UNTRUSTED_PULL_REQUESTS_KEY]: ['github:pull-request:github:10:pull-request:17'] },
+          metadata: {
+            ...linked.metadata,
+            [UNTRUSTED_PULL_REQUESTS_KEY]: ['github:pull-request:github:10:pull-request:17'],
+          },
         },
       });
       await h.ingest(openedPullRequest(18, 'Implements #42.', undefined, 'opened', false, builderSession.branch));

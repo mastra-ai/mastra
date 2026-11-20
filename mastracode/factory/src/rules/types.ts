@@ -190,12 +190,7 @@ export const FACTORY_VANTA_EVENTS = ['vulnerabilityObserved', 'vulnerabilityClos
 export type FactoryVantaEventName = (typeof FACTORY_VANTA_EVENTS)[number];
 
 export type FactoryRuleJsonValue =
-  | null
-  | boolean
-  | number
-  | string
-  | FactoryRuleJsonValue[]
-  | { [key: string]: FactoryRuleJsonValue };
+  null | boolean | number | string | FactoryRuleJsonValue[] | { [key: string]: FactoryRuleJsonValue };
 
 export interface FactoryRuleItemContext {
   workItem: WorkItemRow;
@@ -755,6 +750,8 @@ export interface FactorySignalActivityDecision extends FactoryCommitDecisionBase
 export interface FactoryPullRequestHome {
   workItemId: string;
   reason: 'authored' | 'closes';
+  /** The other unfinished cards of issues it closes: they link to it without holding it. */
+  alsoCloses?: string[];
 }
 
 export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisionBase {

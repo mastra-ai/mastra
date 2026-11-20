@@ -11,6 +11,7 @@ import { cardFacts } from './card-facts.js';
 import { hasEveryLabel } from './card-labels.js';
 import { BOARD_PERSON_FIELDS, matchesPeople } from './card-people.js';
 import { matchesSourceFilters, matchesYesNo } from './card-source-filters.js';
+import { closingLinksIn } from './closing-pull-requests.js';
 import { relatedCardsIn } from './list-related-cards.js';
 import { matchesSearch, searchTerms } from './search-terms.js';
 
@@ -122,21 +123,22 @@ function ordered(held: PhaseCards, sort: BoardPhasesView['sort']): readonly Plac
 }
 
 /** Whether the view's search and filters keep a card; undefined when the view has none. */
-function viewMatcher(view: BoardPhasesView): ((card: Card) => boolean) | undefined {
+function viewMatcher(view: BoardPhasesView, list: readonly Card[]): ((card: Card) => boolean) | undefined {
   const terms = searchTerms(view.q ?? '');
   const bySource = view.source.size > 0 || view.linearProject.size > 0;
   const byLabel = view.label.size > 0;
   const byPeople = BOARD_PERSON_FIELDS.some(field => view[field].size > 0);
   const byPullRequest = view.pullRequest.size > 0 || view.trust.size > 0;
   if (terms.length === 0 && !bySource && !byLabel && !byPeople && !byPullRequest) return undefined;
+  const closing = closingLinksIn(list);
   return card => {
     const facts = cardFacts(card);
     return (
-      matchesSearch(facts.search, terms) &&
+      matchesSearch(closing.search(card), terms) &&
       (!bySource || matchesSourceFilters(facts, view)) &&
       (!byLabel || hasEveryLabel(facts.labels, view.label)) &&
       (!byPeople || matchesPeople(facts.relations, view)) &&
-      matchesYesNo(view.pullRequest, 'with', 'without', facts.hasPullRequest) &&
+      matchesYesNo(view.pullRequest, 'with', 'without', closing.hasPullRequest(card)) &&
       matchesYesNo(view.trust, 'trusted', 'untrusted', facts.trusted)
     );
   };
@@ -159,7 +161,7 @@ export function boardPhases(
 ): BoardPhases {
   const stamp = (card: Card) => ({ id: card.id, version: version(card) });
   const index = boardIndex(list, board);
-  const matches = viewMatcher(view);
+  const matches = viewMatcher(view, list);
   // `recent-mine` is `recent` read twice: the cards the reader last moved here, then the others.
   const passes =
     view.sort === 'recent-mine'

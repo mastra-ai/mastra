@@ -283,6 +283,49 @@ describe('boardPhases', () => {
     expect(listedIds(list, { source: ['manual'], pullRequest: ['with'] }).intake).toEqual([]);
   });
 
+  it('finds and counts the cards a pull request held by another card closes', () => {
+    const holder = testCard('holder', { externalSource: { integrationId: 'github', type: 'issue', externalId: '42' } });
+    const closed = testCard('closed', { externalSource: { integrationId: 'github', type: 'issue', externalId: '43' } });
+    const other = testCard('other', { externalSource: { integrationId: 'github', type: 'issue', externalId: '44' } });
+    const held: Card = {
+      ...holder,
+      workItem: {
+        ...holder.workItem,
+        sources: [
+          {
+            id: 'pr-source',
+            workItemId: holder.workItemId,
+            provider: 'github',
+            integrationId: 'github',
+            sourceType: 'pull-request',
+            workspaceId: null,
+            externalId: 'acme/app#31036',
+            sourceKey: null,
+            key: 'acme/app#31036',
+            url: 'https://github.com/acme/app/pull/31036',
+            state: 'open',
+            labels: [],
+            author: null,
+            metadata: { githubPullRequestNumber: 31036, closesWorkItemIds: ['closed', 'gone'] },
+            revision: 1,
+            syncedAt: null,
+            createdAt: new Date('2026-03-01T00:00:00.000Z'),
+            updatedAt: new Date('2026-03-01T00:00:00.000Z'),
+          },
+        ],
+      },
+    };
+    const list = [held, closed, other];
+
+    expect(listedIds(list, { q: '31036' }).intake.toSorted()).toEqual(['closed', 'holder']);
+    expect(listedIds(list, { q: 'https://github.com/acme/app/pull/31036' }).intake.toSorted()).toEqual([
+      'closed',
+      'holder',
+    ]);
+    expect(listedIds(list, { pullRequest: ['with'] }).intake.toSorted()).toEqual(['closed', 'holder']);
+    expect(listedIds(list, { pullRequest: ['without'] }).intake).toEqual(['other']);
+  });
+
   it('splits cards by trust the way intake routes read it, counting cards no outsider can file as trusted', () => {
     const github = { integrationId: 'github', type: 'issue', externalId: '7' } as const;
     const list = [
