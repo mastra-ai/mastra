@@ -36,7 +36,14 @@ import { createChatLogger } from './chat-logger';
 import { resolveSlackTopLevelThreadId } from './compat/slack';
 import { ChannelSessionRejectedError } from './errors';
 
-import { formatArgsSummary, formatToolApproved, formatToolDenied, stripToolPrefix } from './formatting';
+import {
+  CONTINUE_RUN_ACTION_ID,
+  CONTINUE_RUN_MESSAGE,
+  formatArgsSummary,
+  formatToolApproved,
+  formatToolDenied,
+  stripToolPrefix,
+} from './formatting';
 import { ChatChannelGenerativeUIProcessor, GENERATIVE_UI_PROCESSOR_ID, RENDER_CARD_TOOL_NAME } from './generative-ui';
 import {
   buildInlineMediaCheck,
@@ -802,6 +809,28 @@ export class AgentChannels {
           // Tool approval buttons — id is "tool_approve:<toolCallId>" or "tool_deny:<toolCallId>"
           const defaultHandler = async () => {
             const { actionId } = event;
+            if (actionId === CONTINUE_RUN_ACTION_ID) {
+              // A retry button on an error card: the clicker asks the agent to continue,
+              // as if they had replied in the thread, so the reply route's gates still apply.
+              const chatThread = event.thread as Thread | null;
+              if (!chatThread || onSubscribedMessage === false) return;
+              const text = CONTINUE_RUN_MESSAGE;
+              const message = new ChatMessage({
+                attachments: [],
+                author: event.user,
+                formatted: {
+                  type: 'root',
+                  children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
+                },
+                id: event.triggerId ?? crypto.randomUUID(),
+                isMention: true,
+                metadata: { dateSent: new Date(), edited: false },
+                raw: event.raw,
+                text,
+                threadId: chatThread.id,
+              });
+              return dispatchBatch(chatThread, message, undefined, onSubscribedMessage, 'subscribed');
+            }
             if (!actionId.startsWith('tool_approve:') && !actionId.startsWith('tool_deny:')) return;
             const platform = event.adapter.name;
             const messageId = event.messageId;

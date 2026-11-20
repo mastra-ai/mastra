@@ -602,6 +602,40 @@ describe('AgentChannels', () => {
       expect(logger.warn).not.toHaveBeenCalled();
     });
 
+    it('sends Continue. from the clicker through onSubscribedMessage on a run_continue click', async () => {
+      const adapter = createMockAdapter('discord');
+      const onSubscribedMessage = vi.fn().mockResolvedValue(undefined);
+      const channels = new AgentChannels({ adapters: { discord: adapter }, handlers: { onSubscribedMessage } });
+      channels.__setAgent(mockAgent);
+      channels.__setLogger({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any);
+      await channels.initialize(makeMastra());
+      const thread = { id: 'channel-1:thread-1', channelId: 'channel-1', isDM: false };
+
+      await (channels.sdk as any).processAction({ ...makeActionEvent(adapter, 'run_continue'), thread });
+
+      expect(onSubscribedMessage).toHaveBeenCalledTimes(1);
+      const [calledThread, message, defaultHandler, ctx] = onSubscribedMessage.mock.calls[0]!;
+      expect(calledThread).toBe(thread);
+      expect(message.text).toBe('Continue.');
+      expect(message.isMention).toBe(true);
+      expect(message.author.userId).toBe('clicker-1');
+      expect(message.threadId).toBe('channel-1:thread-1');
+      expect(defaultHandler).toEqual(expect.any(Function));
+      expect(ctx.requestContext).toBeInstanceOf(RequestContext);
+    });
+
+    it('ignores a run_continue click outside a thread', async () => {
+      const adapter = createMockAdapter('discord');
+      const onSubscribedMessage = vi.fn().mockResolvedValue(undefined);
+      const channels = new AgentChannels({ adapters: { discord: adapter }, handlers: { onSubscribedMessage } });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      await (channels.sdk as any).processAction({ ...makeActionEvent(adapter, 'run_continue'), thread: null });
+
+      expect(onSubscribedMessage).not.toHaveBeenCalled();
+    });
+
     it('passes action events to a custom handler with defaultHandler and context', async () => {
       const chatMod = await getChatModule();
       let registeredHandler: ((event: any) => Promise<void>) | undefined;
