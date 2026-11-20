@@ -44,10 +44,9 @@ export interface KnowledgeImporterContext<TSettings = unknown, TSlot extends str
   /** Values for the definition's slots, supplied by the host at run start. */
   credentials: Readonly<Record<TSlot, string>>;
   /**
-   * The host's fetch: the platform fetch with retries on 429/5xx (`Retry-After` honoured) in a
-   * local app, a relay on hosts that keep the credentials. A source's error status comes back as a
-   * response; throw `KnowledgeImporterSourceError` to fail the run with it. A host failure throws
-   * `KnowledgeImporterHostError`, which never means the source item is gone.
+   * The source fetch, bound to `signal`: the runner's `fetch` option, else the platform fetch. It
+   * doesn't retry; on hosts that keep the credentials it may be a relay. A source's error status
+   * comes back as a response; throw `KnowledgeImporterSourceError` to fail the run with it.
    */
   fetch: (input: string | URL, init?: RequestInit) => Promise<Response>;
   state: KnowledgeImporterStateStore;
