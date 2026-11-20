@@ -86,7 +86,7 @@ overrides:
   jws: ^4.0.1
   '@esbuild-kit/core-utils>esbuild': 0.25.12
   default-browser@4.0.0>bundle-name: 4.1.1
-  client-js-e2e-tests-zod-v3>zod: ^4.6.6
+  client-js-e2e-tests-zod-v3>zod: ^3.25.76
   client-js-e2e-tests-zod-v4>zod: ^4.6.7
   better-auth: ^1.7.22
   glob@<14.0.2: 14.0.4
@@ -1999,8 +1999,8 @@ importers:
   e2e-tests/client-js/zod-v3:
     dependencies:
       zod:
-        specifier: ^4.6.6
-        version: 4.6.7
+        specifier: ^3.25.76
+        version: 3.25.76
     devDependencies:
       '@internal/client-js-test-utils':
         specifier: workspace:*
@@ -4946,8 +4946,8 @@ importers:
         specifier: 'catalog:'
         version: 4.6.7
       zod-v3:
-        specifier: npm:zod@4.6.6
-        version: zod@4.6.6
+        specifier: npm:zod@3.25.76
+        version: zod@3.25.76
 
   packages/create-mastra:
     devDependencies:
@@ -6538,8 +6538,8 @@ importers:
         specifier: ^3.25.2
         version: 3.25.2(zod@4.6.7)
       zod-v3:
-        specifier: npm:zod@^4.6.6
-        version: zod@4.6.7
+        specifier: npm:zod@^3.25.76
+        version: zod@3.25.76
 
   packages/server:
     dependencies:
@@ -32448,9 +32448,6 @@ packages:
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
-  zod@4.6.6:
-    resolution: {integrity: sha512-4UmzQUF5fxvfcYHlbjBmejU+w+hbDnWFx4aS8kBx7nPBHcO2SqPbpAG8snbdg+Xse4pRefR98hgjFgIMCI/UhA==}
-
   zod@4.6.7:
     resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
@@ -58241,8 +58238,6 @@ snapshots:
       zod: 4.6.7
 
   zod@3.25.76: {}
-
-  zod@4.6.6: {}
 
   zod@4.6.7: {}
 
