@@ -521,11 +521,13 @@ describe('storageVersion per run', () => {
     expect(started).toEqual(['a', 'a', 'b']);
   });
 
+  // The restart claims the run, so storage refuses the hung execution's writes whichever ends first,
+  // and the hung execution stops with `waiting`.
   it.each([
     { endsFirst: 'hung', storedLast: { n: 22 } },
-    { endsFirst: 'restarted', storedLast: { n: 12 } },
+    { endsFirst: 'restarted', storedLast: { n: 22 } },
   ] as const)(
-    'stores the writes of a hung execution and the restart that replaced it as they come ($endsFirst ends first), as v1 does',
+    'keeps the writes of the restart over a hung execution it replaced ($endsFirst ends first), as v1 does',
     async ({ endsFirst, storedLast }) => {
       async function restartWhileStepHangs(storageVersion: 1 | 2) {
         const gates: (() => void)[] = [];
@@ -597,6 +599,8 @@ describe('storageVersion per run', () => {
         read: { result: storedLast },
         listed: 1,
       });
+      const statuses = v1.returned.map(result => result.status);
+      expect(statuses).toEqual(endsFirst === 'hung' ? ['waiting', 'success'] : ['success', 'waiting']);
       expect(await restartWhileStepHangs(2)).toEqual(v1);
     },
   );
