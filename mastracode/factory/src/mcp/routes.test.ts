@@ -75,17 +75,21 @@ const USERS: Record<string, { orgId?: string; userId: string }> = {
 /**
  * An OAuth authorization server over real HTTP: RFC 8414 metadata and a JWKS,
  * signing RS256 access tokens the way AuthKit does with Resource Indicators on.
+ * `outage` makes either endpoint answer 503.
  */
 async function startAuthorizationServer() {
   const { publicKey, privateKey } = await generateKeyPair('RS256');
   const jwk = { ...(await exportJWK(publicKey)), kid: 'key-1', alg: 'RS256', use: 'sig' };
   let issuer = '';
+  const outage = { metadata: false, jwks: false };
   const server = createServer((req, res) => {
     res.setHeader('Content-Type', 'application/json');
     if (req.url === '/.well-known/oauth-authorization-server') {
-      res.end(JSON.stringify({ issuer, jwks_uri: `${issuer}/oauth2/jwks` }));
+      if (outage.metadata) res.writeHead(503).end('{}');
+      else res.end(JSON.stringify({ issuer, jwks_uri: `${issuer}/oauth2/jwks` }));
     } else if (req.url === '/oauth2/jwks') {
-      res.end(JSON.stringify({ keys: [jwk] }));
+      if (outage.jwks) res.writeHead(503).end('{}');
+      else res.end(JSON.stringify({ keys: [jwk] }));
     } else {
       res.writeHead(404).end('{}');
     }
@@ -93,7 +97,11 @@ async function startAuthorizationServer() {
   servers.push(server);
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   issuer = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  return { issuer, sign: (claims: JWTPayload, options: SignOptions = {}) => sign(privateKey, issuer, claims, options) };
+  return {
+    issuer,
+    outage,
+    sign: (claims: JWTPayload, options: SignOptions = {}) => sign(privateKey, issuer, claims, options),
+  };
 }
 
 interface SignOptions {
@@ -312,8 +320,9 @@ async function claudeRequest(
 /** A JSON-RPC reply, whether the server answered with JSON or a one-shot SSE stream. */
 async function readJsonRpc(response: Response): Promise<{ result?: any; error?: any } | null> {
   const text = await response.text();
-  if (!text) return null;
-  if (!response.headers.get('Content-Type')?.includes('text/event-stream')) return JSON.parse(text);
+  const contentType = response.headers.get('Content-Type') ?? '';
+  if (!text || !/json|event-stream/.test(contentType)) return null;
+  if (!contentType.includes('text/event-stream')) return JSON.parse(text);
   const messages = text
     .split('\n')
     .filter(line => line.startsWith('data:'))
@@ -327,15 +336,17 @@ function toolText(result: { content: Array<{ type: string; text: string }> }): a
 
 /**
  * WorkOS user management as the resolver calls it: users by id, and each
- * user's active memberships. `members` is mutable so a test can remove someone.
+ * user's active memberships. `members` is mutable so a test can remove someone,
+ * and `status.down` makes every lookup fail with a 500.
  */
-function workosDirectory(members: Record<string, string[]>) {
+function workosDirectory(members: Record<string, string[]>, status = { down: false }) {
   const people: Record<string, { firstName: string; lastName: string; email: string }> = {
     alice: { firstName: 'Alice', lastName: 'Liddell', email: 'alice@example.com' },
     bob: { firstName: 'Bob', lastName: 'Builder', email: 'bob@example.com' },
   };
   const userManagement = {
     getUser: async (userId: string) => {
+      if (status.down) throw Object.assign(new Error('Internal Server Error'), { status: 500 });
       const person = people[userId];
       if (!person) throw Object.assign(new Error('User not found'), { status: 404 });
       return { id: userId, profilePictureUrl: null, ...person };
@@ -421,6 +432,37 @@ describe('Factory MCP server', () => {
     const response = await claudeRequest(url, 'server/discover', {}, 'token-alice');
     expect(response.status).toBe(401);
     expect(response.headers.get('WWW-Authenticate')).toContain('error="invalid_token"');
+  });
+
+  it('an authorization server outage is a server error, not a bad sign-in', async () => {
+    const { url, authServer } = await setup();
+
+    authServer.outage.metadata = true;
+    const noMetadata = await claudeRequest(url, 'server/discover', {}, 'token-alice');
+    expect(noMetadata.status).toBe(500);
+    expect(noMetadata.headers.get('WWW-Authenticate')).toBeNull();
+
+    authServer.outage.metadata = false;
+    authServer.outage.jwks = true;
+    const noKeys = await claudeRequest(url, 'server/discover', {}, 'token-alice');
+    expect(noKeys.status).toBe(500);
+    expect(noKeys.headers.get('WWW-Authenticate')).toBeNull();
+
+    // Once it's back, the next request signs in: the failures weren't cached.
+    authServer.outage.jwks = false;
+    expect((await claudeRequest(url, 'server/discover', {}, 'token-alice')).status).toBe(200);
+  });
+
+  it('a failed membership lookup is a server error, not access', async () => {
+    const status = { down: true };
+    const { url } = await setup({ resolveCaller: workosDirectory({ alice: ['org-1'] }, status) });
+
+    const response = await claudeRequest(url, 'server/discover', {}, 'token-alice');
+    expect(response.status).toBe(500);
+    expect(response.headers.get('WWW-Authenticate')).toBeNull();
+
+    status.down = false;
+    expect((await claudeRequest(url, 'server/discover', {}, 'token-alice')).status).toBe(200);
   });
 
   it('a user who no longer exists is refused', async () => {
