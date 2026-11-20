@@ -3,7 +3,7 @@ import type { Event } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createStep, createWorkflow } from '@mastra/core/workflows/evented';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { RedisStreamsPubSub } from './index';
 
@@ -15,6 +15,15 @@ const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6381';
 describe('workflow.fail publish fails after retry exhaustion', () => {
   let mastra: Mastra | undefined;
   let pubsub: RedisStreamsPubSub | undefined;
+
+  // These cases count deliveries and publishes, not timing. Skip the engine's wait between
+  // retries, which evented-delivery-backoff.test.ts covers.
+  beforeAll(() => {
+    vi.stubEnv('MASTRA_TEST_FAST_WAITS', '1');
+  });
+  afterAll(() => {
+    vi.unstubAllEnvs();
+  });
 
   afterEach(async () => {
     await mastra?.stopWorkers();

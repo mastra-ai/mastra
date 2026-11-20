@@ -23,6 +23,9 @@ describe('localOnly evented workflow redelivery', () => {
     'settles the run after %i injected processing failures',
     async failures => {
       vi.stubEnv('MASTRA_EVENTED_EXECUTION', 'true');
+      // This case times the transport's local backoff; skip the engine's own wait between
+      // retries, which evented-delivery-backoff.test.ts covers.
+      vi.stubEnv('MASTRA_TEST_FAST_WAITS', '1');
       const workflowId = `local-retry-${randomUUID()}`;
       const workflow = createWorkflow({
         id: workflowId,

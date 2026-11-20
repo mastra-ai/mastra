@@ -284,12 +284,13 @@ export class WorkflowEventProcessor extends EventProcessor {
   // so 3 transport-level redeliveries is enough headroom for transient
   // failures without keeping a poisoned event in flight for minutes.
   private static readonly MAX_DELIVERY_ATTEMPTS = 3;
-  // Delay before asking for retry n is DELIVERY_RETRY_BASE_MS * 4^(n-1), scaled by a random
-  // factor in [0.5, 1] so events that failed together don't retry together: about 0.5-1 s,
-  // then 2-4 s. Without it the transports redeliver at once and a dropped connection or a
-  // short outage spends the whole budget in milliseconds.
+  // Delay before asking for retry n (1 or 2 within MAX_DELIVERY_ATTEMPTS) is
+  // BASE * FACTOR^(n-1), scaled by a random factor in [0.5, 1] so events that failed
+  // together don't retry together: about 0.5-1 s, then 2-4 s. Without it the transports
+  // redeliver at once and a dropped connection or a short outage spends the whole budget in
+  // milliseconds.
   private static readonly DELIVERY_RETRY_BASE_MS = 1_000;
-  private static readonly DELIVERY_RETRY_MAX_MS = 4_000;
+  private static readonly DELIVERY_RETRY_FACTOR = 4;
   // Pending retry delays, ended by stopRedeliveryWaits() so a stopping worker hands its
   // events back at once instead of holding them through the drain.
   #redeliveryWaits = new Set<() => void>();
@@ -5153,8 +5154,6 @@ export class WorkflowEventProcessor extends EventProcessor {
       if (error instanceof DurableExecutionFenceError && error.id === EXECUTION_SUPERSEDED_ERROR_ID)
         return { ok: true };
       this.mastra.getLogger()?.warn('WorkflowEventProcessor.handle: durable execution delivery failed', { error });
-      // This path has no processor budget; only the transport's own cap bounds it.
-      await this.#waitBeforeRedelivery(Math.max(1, event.deliveryAttempt ?? 1));
       return { ok: false, retry: true };
     }
   }
@@ -5455,10 +5454,9 @@ export class WorkflowEventProcessor extends EventProcessor {
    */
   async #waitBeforeRedelivery(attempt: number): Promise<void> {
     if (this.#redeliveryWaitsStopped) return;
-    const nominal = Math.min(
-      waitMs(WorkflowEventProcessor.DELIVERY_RETRY_BASE_MS, 0) * 4 ** Math.max(0, attempt - 1),
-      WorkflowEventProcessor.DELIVERY_RETRY_MAX_MS,
-    );
+    const nominal =
+      waitMs(WorkflowEventProcessor.DELIVERY_RETRY_BASE_MS, 0) *
+      WorkflowEventProcessor.DELIVERY_RETRY_FACTOR ** Math.max(0, attempt - 1);
     const delay = nominal * (0.5 + Math.random() / 2);
     if (delay <= 0) return;
     await new Promise<void>(resolve => {
@@ -5467,6 +5465,9 @@ export class WorkflowEventProcessor extends EventProcessor {
         this.#redeliveryWaits.delete(done);
         resolve();
       };
+      // Not unref'd: with an in-process pubsub nothing else may keep the process alive while a
+      // caller awaits the run, and an unref'd timer would let it exit mid-retry.
+      // stopRedeliveryWaits() ends it on shutdown.
       const timer = setTimeout(done, delay);
       this.#redeliveryWaits.add(done);
     });

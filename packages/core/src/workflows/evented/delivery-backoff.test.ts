@@ -211,11 +211,14 @@ describe('evented delivery retries', () => {
         result,
         new Promise<{ status: 'HANG' }>(resolve => setTimeout(() => resolve({ status: 'HANG' }), 15_000)),
       ]);
+      const settledAt = Date.now();
       const failures = failuresOf(run.runId);
       expect(settled.status).toBe('failed');
       expect(failures).toHaveLength(3);
       // Both retry delays were spent before giving up.
       expect(failures[2]! - failures[0]!).toBeGreaterThanOrEqual(2_400);
+      // No wait after the last attempt: the run fails as soon as the budget is spent.
+      expect(settledAt - failures[2]!).toBeLessThan(1_500);
     } finally {
       await mastra.stopWorkers();
     }
