@@ -29,6 +29,7 @@ export interface CrumbProps {
   as: React.ElementType;
   className?: string;
   to?: string;
+  href?: string;
   prefetch?: boolean | null;
   children?: React.ReactNode;
   /** Prefix icon (bare SVG). The crumb wraps it in `<Icon>` and aligns it like a Button adornment. */
@@ -56,6 +57,7 @@ export const Crumb = ({
   className,
   as,
   to,
+  href,
   isCurrent,
   action,
   switcher,
@@ -65,7 +67,7 @@ export const Crumb = ({
   ...props
 }: CrumbProps) => {
   const Root = as || 'span';
-  const switcherCoversCrumb = Boolean(switcher && (isCurrent || !to));
+  const switcherCoversCrumb = Boolean(switcher && (isCurrent || (!to && !href)));
   const crumbRef = React.useRef<HTMLLIElement>(null);
 
   return (
@@ -96,6 +98,7 @@ export const Crumb = ({
             className,
           )}
           to={to}
+          href={href}
           {...props}
         >
           {icon && (

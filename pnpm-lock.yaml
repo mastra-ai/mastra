@@ -5224,8 +5224,8 @@ importers:
   packages/evals:
     dependencies:
       compromise:
-        specifier: ^14.19.0
-        version: 14.19.0
+        specifier: ^14.20.0
+        version: 14.20.0
       keyword-extractor:
         specifier: ^0.0.28
         version: 0.0.28
@@ -6156,6 +6156,9 @@ importers:
       date-fns:
         specifier: 'catalog:'
         version: 4.4.0
+      idb:
+        specifier: ^8.0.4
+        version: 8.0.4
       mdast-util-gfm:
         specifier: ^3.1.0
         version: 3.1.0(supports-color@10.2.2)
@@ -6307,6 +6310,9 @@ importers:
       eslint-plugin-storybook:
         specifier: ^10.6.3
         version: 10.6.5(eslint@10.14.0(jiti@2.7.0)(supports-color@10.2.2))(supports-color@10.2.2)(typescript@7.0.2)
+      fake-indexeddb:
+        specifier: ^6.2.6
+        version: 6.2.7
       jsdom:
         specifier: ^30.1.3
         version: 30.1.3(@noble/hashes@2.4.0)
@@ -23901,9 +23907,10 @@ packages:
     resolution: {integrity: sha512-o8vI5RE5A6EVVOd9o41jKp41aJom+QTEO/Bx8MYNjexMo/Bv2WOjUfZr+aL0WnYSgymUy6zeguqLTsIhV0gMvQ==}
     engines: {node: '>= 0.8.0'}
 
-  compromise@14.19.0:
-    resolution: {integrity: sha512-nA/ClpXt0PaS2Ne389wClhxFBBxV0el3nv6V7XFpoRRQBr8eCnV3Iv4ZY6C5H06UHq1k7bqth73nVc/hv/rrCg==}
+  compromise@14.20.0:
+    resolution: {integrity: sha512-XFtjCI4hs8jde5uY/3KqlKQ12dt4h1mAYVPnss0o91ia0971VdluY4ZN9GlxbV9zI8DW2YP+NzGqpnsFFidenA==}
     engines: {node: '>=18'}
+    hasBin: true
 
   concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
@@ -31083,8 +31090,8 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
-  suffix-thumb@6.0.0:
-    resolution: {integrity: sha512-HsCTMLaupbob5ZG//ZW6PSj446tHT5kSJ1qXS5F/qO2Nt13uAn6ZLPhJQ/H6bN/jVQCb+pcqe2psEwy4Mp5+Vw==}
+  suffix-thumb@6.1.0:
+    resolution: {integrity: sha512-Lh1ZP+tj1TWnlw3RsR6eY/ARhZ3fIPrquE2Xts/wnGB7j1od2OZbCrWYsahkuaLqY7omsNKDUA6JITtE4elhfw==}
     engines: {node: '>=18'}
 
   superagent@10.4.1:
@@ -47876,10 +47883,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  compromise@14.19.0:
+  compromise@14.20.0:
     dependencies:
       efrt: 2.9.0
-      suffix-thumb: 6.0.0
+      suffix-thumb: 6.1.0
 
   concat-map@0.0.1: {}
 
@@ -56898,7 +56905,7 @@ snapshots:
     dependencies:
       commander: 12.1.0
 
-  suffix-thumb@6.0.0: {}
+  suffix-thumb@6.1.0: {}
 
   superagent@10.4.1(supports-color@10.2.2):
     dependencies:

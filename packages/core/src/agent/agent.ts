@@ -13109,6 +13109,7 @@ export class Agent<
         messageList,
         structuredOutput: registryEntry.structuredOutput,
         requestContext: registryEntry.requestContext,
+        tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
         returnScorerData: workflowInput.options?.returnScorerData,
       });
       streamCleanup = stream.cleanup;
@@ -14164,6 +14165,8 @@ export class Agent<
       runId,
       threadId,
       resourceId,
+      traceId: output.traceId,
+      spanId: output.spanId,
       cleanup,
       abort,
     };
@@ -14891,6 +14894,8 @@ export class Agent<
       runId,
       threadId,
       resourceId,
+      traceId: output.traceId,
+      spanId: output.spanId,
       cleanup,
       abort,
     };
@@ -15803,6 +15808,8 @@ export class Agent<
       runId,
       threadId: memoryInfo?.threadId,
       resourceId: memoryInfo?.resourceId,
+      traceId: output.traceId,
+      spanId: output.spanId,
       cleanup,
       abort,
     };
@@ -16720,6 +16727,8 @@ export class Agent<
       runId,
       threadId: memoryInfo?.threadId,
       resourceId: memoryInfo?.resourceId,
+      traceId: output.traceId,
+      spanId: output.spanId,
       cleanup,
       detach,
       abort,

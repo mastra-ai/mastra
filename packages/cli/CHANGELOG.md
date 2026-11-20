@@ -1,5 +1,17 @@
 # mastra
 
+## 1.40.2-alpha.2
+
+### Patch Changes
+
+- `mastra env vars pull`, `mastra server env pull`/`list`, and `mastra deploy` now handle write-only secrets. When an environment stores its secrets encrypted, the platform returns a placeholder in place of each value. Pull now lists these secrets as name-only comments instead of writing the placeholder into your env file, and `mastra server env list` labels them as write-only secrets. The deploy overwrite prompt and preflight checks no longer treat the placeholder as a real value. A deploy with workers enabled is no longer blocked when `REDIS_URL` is stored as a secret. ([#30618](https://github.com/mastra-ai/mastra/pull/30618))
+
+- In Studio, unsent messages are cleared when you sign out, so the next person to sign in no longer sees them. Unsent messages from a signed-out session also stay in that browser session. ([#31002](https://github.com/mastra-ai/mastra/pull/31002))
+
+- Updated dependencies [[`3baa66d`](https://github.com/mastra-ai/mastra/commit/3baa66dfc785c222bb727a6da6012a0f28480b4a), [`d1f0a92`](https://github.com/mastra-ai/mastra/commit/d1f0a92ca41e1b725ed296abeb540908d09b5c64), [`4c71c2e`](https://github.com/mastra-ai/mastra/commit/4c71c2e776563852ef2301d674a1b8c70f511039)]:
+  - @mastra/core@1.86.0-alpha.2
+  - @mastra/deployer@1.86.0-alpha.2
+
 ## 1.40.2-alpha.1
 
 ### Patch Changes
