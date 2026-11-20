@@ -18,4 +18,4 @@ console.log(await output.text)
 output.cleanup?.()
 ```
 
-Native streams retain `MastraModelOutput` APIs and expose durable lifecycle controls. Existing wrapper factories keep their stream result contracts. Release this together with the execution-engine configuration change.
+Native streams retain `MastraModelOutput` APIs and expose durable lifecycle controls. Existing wrapper factories keep their stream result contracts.

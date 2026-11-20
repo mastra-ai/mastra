@@ -66,7 +66,7 @@ console.log(await output.text)
 output.cleanup?.()
 ```
 
-Use `'durable'` for checkpointed execution, `'evented'` for worker-backed execution, or `false` for the plain agent loop. Evented execution falls back to in-process durable execution without a compatible Mastra host and workflow store.
+Use `'durable'` for checkpointed execution, `'evented'` for worker-backed execution, or `false` for the plain agent loop. Evented execution falls back to in-process durable execution when the agent has no Mastra host, or when the host's workflows store doesn't support concurrent updates.
 
 Set `Mastra.durable.executionEngine` to provide a default for agents registered through `agents` or `addAgent()`. An agent's explicit setting takes precedence. The engine selection is fixed at registration or first execution, carries over to editor forks, and remains unchanged when the agent is wrapped.
 

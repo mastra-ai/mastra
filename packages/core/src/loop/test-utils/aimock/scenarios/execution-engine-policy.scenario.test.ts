@@ -184,18 +184,22 @@ describe('Configured native engines preserve Agent outputs', () => {
           model: openai('gpt-4o'),
         });
         const mastra = new Mastra({ agents: { support: agent }, durable: { executionEngine } });
-        const output = await agent[method]('Where is my order?', {});
-        expect(await output.text).toBe('Your order has shipped.');
-        if (method === 'stream') expect(output).toBeInstanceOf(MastraModelOutput);
-        else expect(output).not.toBeInstanceOf(MastraModelOutput);
-        expect(agent.__getExecutionEnginePolicy()).toBe(executionEngine);
-        expect(mastra.getAgent('support')).toBe(agent);
-        expect(isDurableAgentLike(agent)).toBe(false);
-        expect(hasDurableExecution(agent)).toBe(true);
-        await expect(agent.recover('unavailable')).rejects.not.toMatchObject({
-          id: 'AGENT_DURABLE_METHOD_NOT_AVAILABLE',
-        });
-        expect(JSON.stringify(llm.getRequests()[0]?.body)).toContain('Where is my order?');
+        try {
+          const output = await agent[method]('Where is my order?', {});
+          expect(await output.text).toBe('Your order has shipped.');
+          if (method === 'stream') expect(output).toBeInstanceOf(MastraModelOutput);
+          else expect(output).not.toBeInstanceOf(MastraModelOutput);
+          expect(agent.__getExecutionEnginePolicy()).toBe(executionEngine);
+          expect(mastra.getAgent('support')).toBe(agent);
+          expect(isDurableAgentLike(agent)).toBe(false);
+          expect(hasDurableExecution(agent)).toBe(true);
+          await expect(agent.recover('unavailable')).rejects.not.toMatchObject({
+            id: 'AGENT_DURABLE_METHOD_NOT_AVAILABLE',
+          });
+          expect(JSON.stringify(llm.getRequests()[0]?.body)).toContain('Where is my order?');
+        } finally {
+          await mastra.shutdown();
+        }
       });
     }
   }
@@ -315,16 +319,22 @@ describe('Configured native engines preserve Agent outputs', () => {
         });
         const wrap = strategy === 'evented' ? createEventedAgent : createDurableAgent;
         const wrapped = wrap({ agent });
-        new Mastra({ agents: { wrapped }, durable: { executionEngine: 'evented' } });
-        const output = await agent[method]('Where is my order?', {});
-        expect(await output.text).toBe('Your order has shipped.');
-        expect(agent.durable).toEqual(durable);
-        expect(agent.__getExecutionEnginePolicy()).toBe(typeof durable === 'object' ? durable.executionEngine : false);
-        expect(wrapped.__getExecutionEngineStrategy()).toBe(strategy);
-        expect(hasDurableExecution(agent)).toBe(typeof durable === 'object' && durable.executionEngine !== false);
-        if (method === 'stream') expect(output).toBeInstanceOf(MastraModelOutput);
-        else expect(output).not.toBeInstanceOf(MastraModelOutput);
-        expect(JSON.stringify(llm.getRequests()[0]?.body)).toContain('Where is my order?');
+        const mastra = new Mastra({ agents: { wrapped }, durable: { executionEngine: 'evented' } });
+        try {
+          const output = await agent[method]('Where is my order?', {});
+          expect(await output.text).toBe('Your order has shipped.');
+          expect(agent.durable).toEqual(durable);
+          expect(agent.__getExecutionEnginePolicy()).toBe(
+            typeof durable === 'object' ? durable.executionEngine : false,
+          );
+          expect(wrapped.__getExecutionEngineStrategy()).toBe(strategy);
+          expect(hasDurableExecution(agent)).toBe(typeof durable === 'object' && durable.executionEngine !== false);
+          if (method === 'stream') expect(output).toBeInstanceOf(MastraModelOutput);
+          else expect(output).not.toBeInstanceOf(MastraModelOutput);
+          expect(JSON.stringify(llm.getRequests()[0]?.body)).toContain('Where is my order?');
+        } finally {
+          await mastra.shutdown();
+        }
       });
     }
   }
@@ -381,6 +391,7 @@ describe('Configured native engines preserve Agent outputs', () => {
       } finally {
         release.resolve();
         await output.consumeStream();
+        await mastra.shutdown();
       }
     },
   );
@@ -399,7 +410,7 @@ describe('Configured native engines preserve Agent outputs', () => {
         model: openai('gpt-4o'),
         defaultOptions: () => ({ eagerToolExecution: ++calls > 1 }),
       });
-      new Mastra({ agents: { dynamic: agent }, durable: { executionEngine: 'durable' } });
+      const mastra = new Mastra({ agents: { dynamic: agent }, durable: { executionEngine: 'durable' } });
       const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
       try {
         for (let turn = 0; turn < 3; turn++) {
@@ -418,6 +429,7 @@ describe('Configured native engines preserve Agent outputs', () => {
         expect(calls).toBe(3);
       } finally {
         warn.mockRestore();
+        await mastra.shutdown();
       }
     },
   );
@@ -431,11 +443,15 @@ describeForAllEngines('Existing execution survives conflicting host policy regis
     llm.on({}, { content: 'Your order has shipped.' });
     const { agent } = await createSharedAgent(llm, { engine });
     const mastra = new Mastra({ durable: { executionEngine: 'evented' } });
-    mastra.addAgent(agent);
-    const result = await agent[method]('Where is my order?', {});
-    const output = 'output' in result && result.output instanceof MastraModelOutput ? result.output : result;
-    expect(await output.text).toBe('Your order has shipped.');
-    expect(mastra.getAgentById(agent.id)).toBe(agent);
-    expect(JSON.stringify(llm.getRequests()[0]?.body)).toContain('Where is my order?');
+    try {
+      mastra.addAgent(agent);
+      const result = await agent[method]('Where is my order?', {});
+      const output = 'output' in result && result.output instanceof MastraModelOutput ? result.output : result;
+      expect(await output.text).toBe('Your order has shipped.');
+      expect(mastra.getAgentById(agent.id)).toBe(agent);
+      expect(JSON.stringify(llm.getRequests()[0]?.body)).toContain('Where is my order?');
+    } finally {
+      await mastra.shutdown();
+    }
   });
 });

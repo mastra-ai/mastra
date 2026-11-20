@@ -247,9 +247,9 @@ describe('native Agent stored-registration policy', () => {
       new Mastra({ agents: { policy: agent }, durable: { executionEngine: 'evented' } });
       const requestContext = new RequestContext();
       await expect(agent.stream('hello', { requestContext })).rejects.toThrow('Request context validation failed');
-      expect(
-        warn.mock.calls.filter(([message]) => String(message).includes('Native execution activation is deferred')),
-      ).toHaveLength(0);
+      const messages = warn.mock.calls.map(([message]) => String(message));
+      expect(messages.filter(message => message.includes('does not support eagerToolExecution'))).toHaveLength(0);
+      expect(messages.filter(message => message.includes('does not support stopWhen'))).toHaveLength(0);
     },
   );
 });
