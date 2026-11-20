@@ -248,7 +248,6 @@ export async function persistStepUpdate(
     return;
   }
 
-  // Set when this write runs inside a default-engine execution holding a claim on the run.
   const claim = currentWorkflowRunClaim(runId);
 
   const write = async () => {

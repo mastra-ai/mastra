@@ -12,9 +12,9 @@ export const WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS = AGENT_LEASE_RENEW_INTERVAL_M
 export const WORKFLOW_RUN_OWNERSHIP_LOST_ERROR_ID = 'WORKFLOW_RUN_OWNERSHIP_LOST';
 
 /**
- * Thrown inside an execution of a default-engine run once another execution claimed the run: a
- * write of this execution was refused by storage, or the lease could not be renewed. The engine
- * turns it into a `waiting` result; nothing catches it to retry.
+ * @internal Thrown inside an execution of a default-engine run once another execution claimed the
+ * run: a write of this execution was refused by storage, or the lease could not be renewed. The
+ * engine turns it into a `waiting` result, so it never reaches a caller; nothing catches it to retry.
  */
 export class WorkflowRunOwnershipLostError extends MastraError {
   constructor(fence: RunFence, cause?: unknown) {
@@ -32,7 +32,7 @@ export class WorkflowRunOwnershipLostError extends MastraError {
   }
 }
 
-/** Whether `error`, or anything in its cause chain, is a {@link WorkflowRunOwnershipLostError}. */
+/** @internal Whether `error`, or anything in its cause chain, is a {@link WorkflowRunOwnershipLostError}. */
 export function isWorkflowRunOwnershipLostError(error: unknown): boolean {
   let current: unknown = error;
   for (let depth = 0; depth < 8 && current && typeof current === 'object'; depth++) {
@@ -40,21 +40,6 @@ export function isWorkflowRunOwnershipLostError(error: unknown): boolean {
     current = (current as { cause?: unknown }).cause;
   }
   return false;
-}
-
-// Results an execution returned after losing its run, so the Run that started it leaves its
-// in-memory status and cache entry to the execution that took over.
-const lostOwnershipResults = new WeakSet<object>();
-
-/** @internal */
-export function markLostOwnershipResult<T extends object>(result: T): T {
-  lostOwnershipResults.add(result);
-  return result;
-}
-
-/** @internal Whether `result` is what an execution returned after another one took its run over. */
-export function isLostOwnershipResult(result: unknown): boolean {
-  return typeof result === 'object' && result !== null && lostOwnershipResults.has(result);
 }
 
 export interface WorkflowRunOwnership {
@@ -217,6 +202,11 @@ export async function claimWorkflowRunOwnership({
   });
 }
 
+/** Whether a failed renewal found this claim released (by its holder), rather than replaced. */
+function isOwnRelease(record: RunOwnershipRecord | null, fence: RunFence): boolean {
+  return !!record && matchesRunFence(record, fence) && record.leaseExpiresAt === null;
+}
+
 /**
  * A default-engine execution's claim on its run, and the fence scope its writes carry.
  *
@@ -260,7 +250,7 @@ export class WorkflowRunClaim implements WorkflowRunOwnership {
       fence,
       onLost: owner => {
         // A tick in flight when the claim was released finds the claim's own release.
-        if (owner && matchesRunFence(owner, fence) && owner.leaseExpiresAt === null) return;
+        if (isOwnRelease(owner, fence)) return;
         this.markLost(owner);
       },
       onError: error => logger?.warn('Failed to renew workflow run ownership lease', { runId: fence.runId, error }),
@@ -324,10 +314,16 @@ export class WorkflowRunClaim implements WorkflowRunOwnership {
    * lapsed since the last confirmed renewal (a frozen event loop, a renewal stuck on a slow store),
    * so the body never starts on a claim another process may have replaced. A failed renewal is
    * retried rather than taken as a loss, so a storage blip delays the body instead of ending the run.
+   *
+   * With `renew`, renews once even while the lease looks fresh: a forced takeover (a second
+   * `start()` elsewhere) replaces the claim without waiting for the lease to lapse. A failed
+   * renewal then only blocks the body once the lease may have lapsed.
    */
-  async ensureOwned(): Promise<void> {
+  async ensureOwned({ renew = false }: { renew?: boolean } = {}): Promise<void> {
     this.throwIfLost();
-    while (Date.now() >= this.#leaseConfirmedAt + WORKFLOW_RUN_LEASE_TTL_MS - WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS) {
+    let renewNow = renew;
+    while (renewNow || this.#leaseMayHaveLapsed()) {
+      renewNow = false;
       const sentAt = Date.now();
       try {
         const result = await this.#store.renewRunOwnership({ ...this.fence, leaseMs: WORKFLOW_RUN_LEASE_TTL_MS });
@@ -335,9 +331,11 @@ export class WorkflowRunClaim implements WorkflowRunOwnership {
           this.#leaseConfirmedAt = Math.max(this.#leaseConfirmedAt, sentAt);
           break;
         }
+        if (isOwnRelease(result.record, this.fence)) break;
         this.markLost(result.record);
       } catch (error) {
         this.#logger?.warn('Failed to renew workflow run ownership lease before a step', { runId: this.runId, error });
+        if (!this.#leaseMayHaveLapsed()) break;
         await new Promise(resolve => setTimeout(resolve, WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS));
       }
       this.throwIfLost();
@@ -345,11 +343,15 @@ export class WorkflowRunClaim implements WorkflowRunOwnership {
     this.throwIfLost();
   }
 
+  #leaseMayHaveLapsed(): boolean {
+    return Date.now() >= this.#leaseConfirmedAt + WORKFLOW_RUN_LEASE_TTL_MS - WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS;
+  }
+
   /** @internal */
   fenceForWrite(store: object): RunFence {
     if (store !== this.#store && !this.#warnedStoreMismatch) {
       // The claim and the run's writes resolve the same store, so this is a misconfiguration. The
-      // write still carries the claim: a store without its ownership record refuses it, loudly.
+      // write still carries the claim: a fencing store without this run's owner row refuses it.
       this.#warnedStoreMismatch = true;
       this.#logger?.error('A workflow run wrote to a different store than the one holding its ownership claim', {
         runId: this.runId,

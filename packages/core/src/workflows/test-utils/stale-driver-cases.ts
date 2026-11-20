@@ -13,8 +13,9 @@ import type { WorkflowsStorage } from '../../storage/domains/workflows/base';
 import { RUN_FENCE_CONFLICT_ERROR_ID, resolveRunFence } from '../../storage/run-fencing';
 import type { RunFence } from '../../storage/run-fencing';
 import { createWorkflow } from '../create';
-import { WORKFLOW_RUN_LEASE_TTL_MS } from '../run-ownership';
+import { WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS, WORKFLOW_RUN_LEASE_TTL_MS } from '../run-ownership';
 import { createStep } from '../workflow';
+import type { AnyWorkflow } from '../workflow';
 
 const WRITE_METHODS = [
   'persistWorkflowSnapshot',
@@ -32,8 +33,16 @@ type WriteRecord = { method: string; runId?: string; fenced: boolean; refused?: 
 
 const empty = z.object({});
 
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>(done => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 function gate() {
-  const { promise, resolve } = Promise.withResolvers<void>();
+  const { promise, resolve } = deferred();
   return { wait: () => promise, open: () => resolve() };
 }
 
@@ -71,8 +80,8 @@ function recordWrites(store: WorkflowsStorage) {
   return {
     writes,
     holdNext() {
-      const arrived = Promise.withResolvers<void>();
-      const release = Promise.withResolvers<void>();
+      const arrived = deferred();
+      const release = deferred();
       held = { arrived: arrived.resolve, release: release.promise };
       return { arrived: arrived.promise, release: release.resolve };
     },
@@ -92,26 +101,73 @@ export function describeStaleDriverCases({ getStorage }: { getStorage: () => Mas
       vi.restoreAllMocks();
     });
 
-    async function setup(build: (opts: { id: string; options: any }) => any) {
+    /**
+     * `build` returns the workflow the case runs, or that workflow followed by others to register
+     * with it (a nested workflow resumed on its own).
+     */
+    async function setup(
+      build: (opts: { id: string; options: Record<string, any> }) => AnyWorkflow | AnyWorkflow[],
+      extraOptions: Record<string, any> = {},
+    ) {
       const storage = getStorage();
       const store = (await storage.getStore('workflows'))!;
       expect(await store.supportsRunFencing()).toBe(true);
       const callbacks = { onFinish: vi.fn(), onError: vi.fn() };
       const id = `stale-driver-${storageVersion}-${crypto.randomUUID()}`;
-      const workflow = build({ id, options: { storageVersion, ...callbacks } });
+      const built = build({ id, options: { storageVersion, ...callbacks, ...extraOptions } });
+      const workflows = Array.isArray(built) ? built : [built];
       const { logger, lostWarnings } = recordingLogger();
-      const mastra = new Mastra({ logger, storage, workflows: { [id]: workflow } });
+      const mastra = new Mastra({
+        logger,
+        storage,
+        workflows: Object.fromEntries(workflows.map(workflow => [workflow.id, workflow])),
+      });
       const recorder = recordWrites(store);
-      return { store, workflow: mastra.getWorkflow(id), id, callbacks, lostWarnings, ...recorder };
+      return { store, mastra, workflow: mastra.getWorkflow(id), id, callbacks, lostWarnings, ...recorder };
     }
 
-    /** Another process claims the run and finishes it, as the recovery sweep's restart would. */
-    async function takeOverAndFinish(store: WorkflowsStorage, workflowName: string, runId: string) {
+    /** Another process claims the run, as the recovery sweep's restart would, and leaves it running. */
+    async function takeOver(store: WorkflowsStorage, runId: string): Promise<RunFence> {
       const claim = await store.claimRunOwnership({ runId, ownerId: 'other-process', leaseMs: 60_000, force: true });
       expect(claim.acquired).toBe(true);
-      const fence: RunFence = { runId, generation: claim.record!.generation, ownerId: 'other-process' };
+      return { runId, generation: claim.record!.generation, ownerId: 'other-process' };
+    }
+
+    /** Another process claims the run and finishes it. */
+    async function takeOverAndFinish(store: WorkflowsStorage, workflowName: string, runId: string) {
+      const fence = await takeOver(store, runId);
       await store.updateWorkflowState({ workflowName, runId, opts: { status: 'success' }, fence });
       return fence;
+    }
+
+    /** A two-step workflow whose first step waits for `stalled`. */
+    function stalledThenNext(ran: string[], stalled: ReturnType<typeof gate>) {
+      return ({ id, options }: { id: string; options: Record<string, any> }) =>
+        createWorkflow({ id, inputSchema: empty, outputSchema: empty, options })
+          .then(
+            createStep({
+              id: 'a',
+              inputSchema: empty,
+              outputSchema: empty,
+              execute: async () => {
+                ran.push('a');
+                await stalled.wait();
+                return {};
+              },
+            }),
+          )
+          .then(
+            createStep({
+              id: 'b',
+              inputSchema: empty,
+              outputSchema: empty,
+              execute: async () => {
+                ran.push('b');
+                return {};
+              },
+            }),
+          )
+          .commit();
     }
 
     function staleWritesAfter(writes: WriteRecord[], index: number) {
@@ -489,5 +545,193 @@ export function describeStaleDriverCases({ getStorage }: { getStorage: () => Mas
       expect((await newer).status).toBe('success');
       expect((await store.loadWorkflowSnapshot({ workflowName: id, runId: run.runId }))?.status).toBe('success');
     }, 10_000);
+
+    // A forced takeover (a second start() elsewhere) doesn't wait for the lease to lapse, so the
+    // stale process's lease still looks fresh when its step fails: the retry asks storage first.
+    it('does not retry a failed step after a forced takeover while its lease looked fresh', async () => {
+      let attempts = 0;
+      const stalled = gate();
+      const { store, workflow, id, callbacks } = await setup(({ id, options }) =>
+        createWorkflow({ id, inputSchema: empty, outputSchema: empty, options })
+          .then(
+            createStep({
+              id: 'a',
+              inputSchema: empty,
+              outputSchema: empty,
+              retries: 2,
+              execute: async () => {
+                attempts++;
+                await stalled.wait();
+                throw new Error('upstream timeout');
+              },
+            }),
+          )
+          .commit(),
+      );
+
+      const run = await workflow.createRun();
+      const done = run.start({ inputData: {} });
+      await vi.waitFor(() => expect(attempts).toBe(1));
+      await takeOverAndFinish(store, id, run.runId);
+      stalled.open();
+      const result = await done;
+
+      expect(result.status).toBe('waiting');
+      expect(attempts).toBe(1);
+      expect(callbacks.onError).not.toHaveBeenCalled();
+      expect((await store.loadWorkflowSnapshot({ workflowName: id, runId: run.runId }))?.status).toBe('success');
+    });
+
+    // The order of the soak's sleep-long-default-1577: the stalled process learns of the takeover from
+    // its background renewal, before it writes anything, and then writes nothing.
+    it('stops without writing when its background renewal finds the run taken over', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+      const ran: string[] = [];
+      const stalled = gate();
+      const { store, workflow, id, lostWarnings, writes } = await setup(stalledThenNext(ran, stalled));
+
+      const run = await workflow.createRun();
+      const done = run.start({ inputData: {} });
+      await vi.waitFor(() => expect(ran).toEqual(['a']));
+      await takeOverAndFinish(store, id, run.runId);
+      const afterTakeover = writes.length;
+      await vi.advanceTimersByTimeAsync(WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS + 100);
+      await vi.waitFor(() => expect(lostWarnings()).toHaveLength(1));
+      stalled.open();
+      const result = await done;
+
+      expect(result.status).toBe('waiting');
+      expect(ran).toEqual(['a']);
+      expect(staleWritesAfter(writes, afterTakeover)).toEqual([]);
+      expect((await store.loadWorkflowSnapshot({ workflowName: id, runId: run.runId }))?.status).toBe('success');
+    });
+
+    // Cancellation is about the run, not about which process drives it, so a cancel() sent to the
+    // stalled process still lands, and the new owner stops at its next cancellation check.
+    it.each(['while it is still stalled', 'after it stopped'] as const)(
+      'lands a cancel() sent to the stalled process %s',
+      async when => {
+        const ran: string[] = [];
+        const stalled = gate();
+        const { store, workflow, id } = await setup(stalledThenNext(ran, stalled));
+
+        const run = await workflow.createRun();
+        const done = run.start({ inputData: {} });
+        await vi.waitFor(() => expect(ran).toEqual(['a']));
+        await takeOver(store, run.runId);
+        if (when === 'after it stopped') {
+          stalled.open();
+          expect((await done).status).toBe('waiting');
+          await run.cancel();
+        } else {
+          await run.cancel();
+          stalled.open();
+          await done;
+        }
+
+        expect(ran).toEqual(['a']);
+        expect((await store.loadWorkflowSnapshot({ workflowName: id, runId: run.runId }))?.status).toBe('canceled');
+      },
+    );
+
+    // A run that persists no terminal status makes no write storage could refuse at its end, so it
+    // asks storage before it reports success.
+    it('does not report success when the run persists no terminal status', async () => {
+      const ran: string[] = [];
+      const stalled = gate();
+      const { store, workflow, id, callbacks } = await setup(
+        ({ id, options }) =>
+          createWorkflow({ id, inputSchema: empty, outputSchema: empty, options })
+            .then(
+              createStep({
+                id: 'a',
+                inputSchema: empty,
+                outputSchema: empty,
+                execute: async () => {
+                  ran.push('a');
+                  await stalled.wait();
+                  return {};
+                },
+              }),
+            )
+            .commit(),
+        // Persisting `waiting` is what makes the run recoverable, so it still claims the run.
+        { shouldPersistSnapshot: ({ workflowStatus }: { workflowStatus: string }) => workflowStatus === 'waiting' },
+      );
+
+      const run = await workflow.createRun();
+      const done = run.start({ inputData: {} });
+      await vi.waitFor(() => expect(ran).toEqual(['a']));
+      await takeOver(store, run.runId);
+      stalled.open();
+      const result = await done;
+
+      expect(result.status).toBe('waiting');
+      expect(callbacks.onFinish).not.toHaveBeenCalled();
+      expect(callbacks.onError).not.toHaveBeenCalled();
+    });
+
+    // A nested run resumed on its own flips its suspended parent to running and holds the parent's
+    // lease. When it loses that lease, the parent belongs to another process: the child must not set
+    // it back to suspended.
+    it('leaves the parent running when a nested run resumed on its own loses the run', async () => {
+      const ran: string[] = [];
+      const stalled = gate();
+      let childId = '';
+      const { store, mastra, workflow, id } = await setup(({ id, options }) => {
+        childId = `${id}-child`;
+        const child = createWorkflow({
+          id: childId,
+          inputSchema: empty,
+          outputSchema: empty,
+          options: { storageVersion },
+        })
+          .then(
+            createStep({
+              id: 's1',
+              inputSchema: empty,
+              outputSchema: empty,
+              resumeSchema: empty,
+              execute: async ({ resumeData, suspend }) => {
+                if (!resumeData) {
+                  await suspend({});
+                  return {};
+                }
+                ran.push('s1');
+                await stalled.wait();
+                return {};
+              },
+            }),
+          )
+          .then(
+            createStep({
+              id: 's2',
+              inputSchema: empty,
+              outputSchema: empty,
+              execute: async () => {
+                ran.push('s2');
+                return {};
+              },
+            }),
+          )
+          .commit();
+        const parent = createWorkflow({ id, inputSchema: empty, outputSchema: z.any(), options }).then(child).commit();
+        return [parent, child];
+      });
+
+      const run = await workflow.createRun();
+      expect((await run.start({ inputData: {} })).status).toBe('suspended');
+      const childRun = await mastra.getWorkflow(childId).createRun({ runId: run.runId });
+      const resumed = childRun.resume({ step: 's1', resumeData: {} });
+      await vi.waitFor(() => expect(ran).toEqual(['s1']));
+      expect(await store.loadWorkflowRunStatus({ workflowName: id, runId: run.runId })).toBe('running');
+
+      await takeOver(store, run.runId);
+      stalled.open();
+      expect((await resumed).status).toBe('waiting');
+
+      expect(ran).toEqual(['s1']);
+      expect(await store.loadWorkflowRunStatus({ workflowName: id, runId: run.runId })).toBe('running');
+    });
   });
 }
