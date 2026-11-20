@@ -6,6 +6,8 @@ export type {
   MemoryMessageInput,
   MemoryContext,
   MemoryObservationMatch,
+  MemoryObservationRecord,
+  MemoryObservationRecords,
   MemoryObservationRun,
   MemoryThreadConfig,
   MemoryThreadConfigUpdate,

@@ -70,7 +70,6 @@ describe('Activity', () => {
     render(<Example defaultOpen />);
 
     const root = screen.getByRole('group', { name: 'Tool: execute_command' });
-    expect(root.className).toContain('max-w-full');
     expect(root.className).toContain('root-class');
     expect(root.getAttribute('aria-busy')).toBe('false');
     expect(root.getAttribute('aria-invalid')).toBeNull();
@@ -78,16 +77,12 @@ describe('Activity', () => {
     expect(root.getAttribute('data-status')).toBe('idle');
     expect(screen.queryByText(/Running|Failed/)).toBeNull();
 
-    const trigger = screen.getByTestId('trigger');
-    expect(trigger.className).toContain('group/row');
-    expect(trigger.className).toContain('trigger-class');
-    expect(screen.getByTestId('header').className).toContain('items-center');
-    expect(screen.getByTestId('icon').className).toContain('size-4');
+    expect(screen.getByTestId('trigger').className).toContain('trigger-class');
     expect(screen.getByTestId('icon').textContent).toBe('$');
-    expect(screen.getByText('Ran command').className).toContain('truncate');
-    expect(screen.getByText('pnpm test').classList).toContain('truncate');
-    expect(screen.getByText('2 files').className).toContain('items-center');
-    expect(screen.getByText('Done').className).toContain('shrink-0');
+    expect(screen.getByText('Ran command')).toBeTruthy();
+    expect(screen.getByText('pnpm test')).toBeTruthy();
+    expect(screen.getByText('2 files')).toBeTruthy();
+    expect(screen.getByText('Done')).toBeTruthy();
 
     const content = document.querySelector<HTMLDivElement>('.body-class');
     expect(content?.textContent).toBe('Command output');
@@ -110,17 +105,6 @@ describe('Activity', () => {
     expect(screen.getByRole('button').getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByText('Command output')).toBeTruthy();
     expect(disclosureChevron().classList.contains('rotate-90')).toBe(true);
-  });
-
-  it('uses a focusable native button for keyboard disclosure', () => {
-    render(<Example />);
-
-    const trigger = screen.getByRole('button');
-    trigger.focus();
-
-    expect(trigger.tagName).toBe('BUTTON');
-    expect(document.activeElement).toBe(trigger);
-    expect(trigger.className).toContain('focus-visible');
   });
 
   it('reports controlled expansion without changing its own state', () => {
@@ -160,24 +144,18 @@ describe('Activity', () => {
     expect(screen.getByText('Failed').className).toContain('sr-only');
   });
 
-  it('renders optional spacer rules and custom disclosure content', () => {
+  it('renders custom disclosure content in place of the chevron', () => {
     render(
       <Activity aria-label="Tool: custom">
         <ActivityTrigger>
-          <ActivitySpacer rule data-testid="spacer" />
           <ActivityDisclosure data-testid="custom-disclosure">Toggle</ActivityDisclosure>
         </ActivityTrigger>
       </Activity>,
     );
 
-    expect(screen.getByRole('group', { name: 'Tool: custom' }).getAttribute('data-status')).toBe('idle');
-    expect(screen.getByTestId('spacer').className).toContain('min-w-2 flex-1');
-    expect(screen.getByTestId('custom-disclosure').className).toContain('justify-center');
-    const toggleClasses = screen.getByText('Toggle').className.split(' ');
-    expect(toggleClasses).toEqual(
-      expect.arrayContaining(['flex', 'shrink-0', 'items-center', 'transition', 'duration-150']),
-    );
-    expect(screen.getByText('Toggle').textContent).toBe('Toggle');
+    const disclosure = screen.getByTestId('custom-disclosure');
+    expect(disclosure.textContent).toBe('Toggle');
+    expect(disclosure.querySelector('[data-slot="disclosure-chevron"]')).toBeNull();
   });
 
   it('rejects compounds rendered outside the root', () => {

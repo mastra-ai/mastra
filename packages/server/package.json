@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "1.85.0",
+  "version": "1.86.0-alpha.1",
   "description": "",
   "type": "module",
   "files": [
@@ -109,7 +109,7 @@
   "author": "",
   "license": "Apache-2.0",
   "peerDependencies": {
-    "@mastra/core": ">=1.83.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.85.1-0 <2.0.0-0",
     "@mastra/mcp": ">=2.9.0-alpha.3 <3.0.0-0",
     "zod": "^3.25.0 || ^4.0.0",
     "@mastra/mcp-apps-components": ">=0.1.0-0 <1.0.0-0"

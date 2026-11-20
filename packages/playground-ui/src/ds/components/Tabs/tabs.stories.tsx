@@ -278,6 +278,37 @@ export const PillGhostVariant: Story = {
   ),
 };
 
+const BREAKDOWN_VIEWS = ['Projects', 'Agents', 'Workflows', 'Tools', 'Models', 'Threads', 'Environments'];
+
+/**
+ * `overflow="menu"`: tabs that don't fit fold into a "+N" menu after the last one that does, and
+ * the open tab always stays in the row (a metrics card's views). The default scrolls instead.
+ */
+export const OverflowMenu: Story = {
+  render: () => (
+    <div className="flex w-150 flex-col gap-6">
+      {[600, 320].map(width => (
+        <div key={width} style={{ width }}>
+          <Tabs defaultTab="Agents">
+            <TabList variant="pill" size="sm" overflow="menu">
+              {BREAKDOWN_VIEWS.map(view => (
+                <Tab key={view} value={view}>
+                  {view}
+                </Tab>
+              ))}
+            </TabList>
+            {BREAKDOWN_VIEWS.map(view => (
+              <TabContent key={view} value={view}>
+                <div className="p-4 text-foreground">Breakdown by {view.toLowerCase()}</div>
+              </TabContent>
+            ))}
+          </Tabs>
+        </div>
+      ))}
+    </div>
+  ),
+};
+
 /** `size="sm"`: the compact 24px tab with 12px labels, for card toolbars. */
 /**
  * Tabs take the shared control rung: a `pill` track and a `pill-ghost` tab are as tall as a

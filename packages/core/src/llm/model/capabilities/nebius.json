@@ -68,10 +68,22 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
+    "Qwen/Qwen3.8-27B": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
     "zai-org/GLM-5.2": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "zai-org/GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "zai-org/GLM-5.3": [
@@ -80,10 +92,28 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "zai-org/GLM-5.3-Flash": [
+    "MiniMaxAI/MiniMax-M3.1-Flash": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "nvidia/Nemotron-3.5-Super-VL": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "nvidia/Nemotron-3_5-Lightning": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "nvidia/Nemotron-3-Ultra-550b-a55b": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ],
     "deepseek-ai/DeepSeek-V4-Pro-0813": [
@@ -98,40 +128,10 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "meta-models/muse-spark-open": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
     "openai/gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "reflection/beam": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "nvidia/Nemotron-3.5-Super-VL": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "nvidia/Nemotron-3-Ultra-550b-a55b": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "nvidia/Nemotron-3_5-Lightning": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
       }
     ],
     "thinkingmachines/Inkling-2-Small": [
@@ -140,16 +140,16 @@
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "MiniMaxAI/MiniMax-M3.1-Flash": [
+    "meta-models/muse-spark-open": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "Qwen/Qwen3.8-27B": [
+    "reflection/beam": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

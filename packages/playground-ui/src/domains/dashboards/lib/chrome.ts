@@ -4,9 +4,13 @@ import type { DashboardExpand } from '../widget-kind';
 
 /**
  * What a widget's card shows in its top bar: `title`, and `titleMenu` with several views, plus its
- * actions: the drilldown, the alert, the expand link, then the host's.
+ * actions: the drilldown, the alert, the expand link, then the host's. A table's several views are
+ * tabs in its `toolbar` instead.
  */
-export type ViewHeading = Pick<ChartCardProps, 'title' | 'titleMenu' | 'dragHandle' | 'onTitleChange' | 'actions'>;
+export type ViewHeading = Pick<
+  ChartCardProps,
+  'title' | 'titleMenu' | 'dragHandle' | 'onTitleChange' | 'actions' | 'toolbar'
+>;
 
 /** Filters a gate can't apply, named as the filter bar names them. */
 const FILTER_NAMES: Record<string, string> = {

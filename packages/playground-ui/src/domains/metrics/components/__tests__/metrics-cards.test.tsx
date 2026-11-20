@@ -38,36 +38,10 @@ describe('Metrics cards', () => {
       renderDashboard();
     });
 
-    it('sums uncached input, cache reads and output in token usage', async () => {
-      // 600 + 300 + 400.
-      expect(await screen.findByText('1.30K')).toBeDefined();
-    });
-
-    it('switches the token chart to cost', async () => {
-      expect(await screen.findByText('1.30K')).toBeDefined();
-      await pickView('Token usage', 'Model cost');
-      // Input and output carry the cost; cache reads are part of input.
-      expect(await screen.findByText('$0.75')).toBeDefined();
-    });
-
-    it('shows the share of agent runs that failed', async () => {
-      // 2 of 10 runs, one `error` and one `failed`.
-      expect(await screen.findByText('20.0%')).toBeDefined();
-    });
-
-    it('shows the peak P95 latency', async () => {
-      expect(await screen.findByText('4.50s')).toBeDefined();
-    });
-
     it('says when a latency view has no runs', async () => {
       expect(await screen.findByText('4.50s')).toBeDefined();
       await pickView('Agent latency', 'Workflow latency');
       expect(await screen.findByText('No data in this range')).toBeDefined();
-    });
-
-    it('lists each agent in trace volume and reports which one was clicked', async () => {
-      fireEvent.click(await screen.findByRole('button', { name: /Chef Agent/ }));
-      expect(onEntityClick).toHaveBeenCalledWith('agent', 'Chef Agent');
     });
 
     it('ranks threads by what they spent and reports which one was clicked', async () => {

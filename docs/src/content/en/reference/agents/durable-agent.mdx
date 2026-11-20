@@ -383,6 +383,24 @@ const { output } = await durableAgent.observe(runId, {
 
 Ending a run on idle timeout runs the same cleanup as a run that errors (see the warning below), so its cached state is released rather than retained. Both options are opt-in. Omit them for the previous wait-indefinitely behavior.
 
+By default the observed stream stays open when the run suspends, for example at a tool-approval gate, so a later resume can continue on the same reader. Pass `closeOnSuspend: true` to end the observed stream at the suspension boundary so `fullStream`, `text`, and `getFullOutput()` resolve instead of hanging, matching `stream()` with the same option. Closing is scoped to this observer: the run's registry entry and cached events are kept, and you resume it with `resume()` or `resumeStream()`, which return a fresh stream.
+
+Closing needs the observer to receive that run's `SUSPENDED` event, so an observer that attaches after the run suspended depends on replay: omit `offset`, or start before the suspension, and use a transport that retains events. An observer that starts past the suspension, or on a transport that doesn't replay events, never sees the event and stays open until it's detached or ends on `idleTimeoutMs`. In that case read the run's state instead of waiting on the stream. A replayed suspension the run has already been resumed past is still delivered and fires `onSuspended`, but doesn't end the stream, so replaying a run from its start doesn't stop at an approval that was given long ago.
+
+```typescript
+const { output } = await durableAgent.observe(runId, {
+  closeOnSuspend: true,
+})
+
+let pendingToolCallId: string | undefined
+for await (const chunk of output.fullStream) {
+  if (chunk.type === 'tool-call-approval') pendingToolCallId = chunk.payload.toolCallId
+  send(chunk)
+}
+// Stream ended at the suspension boundary; approve and resume when ready:
+await durableAgent.resume(runId, { approved: true }, { toolCallId: pendingToolCallId })
+```
+
 Returns: `Promise<DurableAgentStreamResult>`
 
 :::warning

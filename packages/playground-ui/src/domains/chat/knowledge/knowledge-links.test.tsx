@@ -2,10 +2,12 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { forwardRef } from 'react';
 import type { AnchorHTMLAttributes } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { KnowledgeLinksProvider, KnowledgePageLink } from './knowledge-links';
 import type { UseKnowledgePagePreview } from './knowledge-links';
+import { RecordNavigationContext } from '@/domains/chat/context/record-navigation';
+import type { RecordNavigation } from '@/domains/chat/context/record-navigation';
 
 afterEach(() => cleanup());
 
@@ -79,5 +81,38 @@ describe('KnowledgePageLink hover card', () => {
     fireEvent.mouseEnter(screen.getByRole('link', { name: 'Refunds' }));
     await new Promise(resolve => setTimeout(resolve, 500));
     expect(screen.queryByTestId('knowledge-link-card')).toBeNull();
+  });
+});
+
+describe('KnowledgePageLink read back from a record', () => {
+  // A record (a trace) navigates through the host's callbacks: no Studio route, no link component.
+  const renderReadBack = (navigation: RecordNavigation) =>
+    render(
+      <RecordNavigationContext.Provider value={navigation}>
+        <KnowledgePageLink pageId="page-1">Refunds</KnowledgePageLink>
+      </RecordNavigationContext.Provider>,
+    );
+
+  it('opens the page through the host’s onOpenKnowledgePage', () => {
+    const onOpenKnowledgePage = vi.fn();
+    renderReadBack({ onOpenKnowledgePage });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refunds' }));
+
+    expect(onOpenKnowledgePage).toHaveBeenCalledWith({ pageId: 'page-1' });
+  });
+
+  it('draws no link to a Studio page', () => {
+    const { container } = renderReadBack({ onOpenKnowledgePage: vi.fn() });
+
+    expect(container.querySelector('a')).toBeNull();
+  });
+
+  it('shows the name as text when the host does not navigate', () => {
+    const { container } = renderReadBack({});
+
+    expect(screen.queryByRole('button', { name: 'Refunds' })).toBeNull();
+    expect(container.querySelector('a')).toBeNull();
+    expect(screen.getByText('Refunds')).toBeTruthy();
   });
 });

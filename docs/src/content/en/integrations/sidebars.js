@@ -764,6 +764,15 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'tools/sanity-context',
+          label: 'Sanity Context',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/sanity/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/sanity/white?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
           id: 'tools/tavily',
           label: 'Tavily',
           customProps: { icon: '/img/integrations/tavily.svg', customCSS: 'dark:invert' },

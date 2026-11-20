@@ -7,7 +7,7 @@ description: "Browse Kenari model IDs, capabilities, context windows, and pricin
 
 # <img src="https://models.dev/logos/kenari.svg" alt="Kenari logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Kenari
 
-Access 82 Kenari models through Mastra's model router. Authentication is handled automatically using the `KENARI_API_KEY` environment variable.
+Access 83 Kenari models through Mastra's model router. Authentication is handled automatically using the `KENARI_API_KEY` environment variable.
 
 Learn more in the [Kenari documentation](https://kenari.id/docs).
 
@@ -250,18 +250,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "kenari/gemma-4-31b-it",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 32768,
-    "inputCost": 0.10285714,
-    "outputCost": 0.40571429
-  },
-  {
     "model": "kenari/glm-4-6v-flash:free",
     "imageInput": true,
     "audioInput": false,
@@ -368,6 +356,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 1.14,
     "outputCost": 5.71
+  },
+  {
+    "model": "kenari/gpt-6-2-astra",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 9.14,
+    "outputCost": 45.71
+  },
+  {
+    "model": "kenari/gpt-6-2-sol",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 920000,
+    "maxOutput": 128000,
+    "inputCost": 2.29,
+    "outputCost": 11.43
   },
   {
     "model": "kenari/gpt-6-astra",
@@ -826,18 +838,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 20
   },
   {
-    "model": "kenari/muse-wonder-full-1-0",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 131072,
-    "inputCost": 4.8,
-    "outputCost": 24
-  },
-  {
     "model": "kenari/nano-banana-2",
     "imageInput": true,
     "audioInput": false,
@@ -944,6 +944,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 2.4,
     "outputCost": 6.86
+  },
+  {
+    "model": "kenari/qwen4-max:free",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 262144,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "kenari/solar-mini4:free",

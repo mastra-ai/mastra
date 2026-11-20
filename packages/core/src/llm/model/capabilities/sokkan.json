@@ -9,9 +9,10 @@
   ],
   "structuredOutput": ["openai/gpt-oss-20b", "qwen/qwen3.6-35b-a3b-eu", "qwen/qwen3.8-27b"],
   "reasoning": {
-    "qwen/qwen3.6-35b-a3b-eu": [
+    "qwen/qwen3.8-27b": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ],
     "qwen/qwen3.5-397b-a17b": [
@@ -19,19 +20,18 @@
         "type": "toggle"
       }
     ],
-    "qwen/qwen3.8-27b": [
+    "qwen/qwen3.6-35b-a3b-eu": [
       {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
+        "type": "toggle"
       }
     ],
-    "openai/gpt-oss-120b": [
+    "openai/gpt-oss-20b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "openai/gpt-oss-20b": [
+    "openai/gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]

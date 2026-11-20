@@ -1,8 +1,7 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { CloneThreadControl } from '@mastra/playground-ui/domains/memory/components/clone-thread-control';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
-import { IconFork } from '@mastra/playground-ui/icons/central/IconFork';
 import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
@@ -129,24 +128,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
 
   return (
     <div className="flex min-w-0 flex-col">
-      {/* Clone Thread Section */}
-      {threadId && (
-        <div className="border-b border-border p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <Txt as="h3" variant="subheading" tone="ink">
-                Clone Thread
-              </Txt>
-              <Txt variant="caption" tone="muted" className="mt-1">
-                Create a copy of this conversation
-              </Txt>
-            </div>
-            <Button onClick={handleCloneThread} disabled={isCloning} icon={<IconFork />}>
-              {isCloning ? 'Cloning...' : 'Clone'}
-            </Button>
-          </div>
-        </div>
-      )}
+      {threadId && <CloneThreadControl isCloning={isCloning} onClone={handleCloneThread} />}
 
       <div className="border-b border-border p-4">
         <Txt as="h3" variant="subheading" tone="ink">

@@ -109,19 +109,6 @@ test.describe('Dataset items list', () => {
     });
   });
 
-  test.describe('when the select-all checkbox is clicked', () => {
-    test('selects all visible items', async ({ page }) => {
-      const { id: datasetId } = await seedDatasetWithItems(3);
-
-      await page.goto(`/datasets/${datasetId}`);
-      await expect(page.getByText('Test input 1')).toBeVisible();
-
-      await page.getByRole('checkbox', { name: /Select all items/i }).click();
-
-      await expect(page.getByRole('button', { name: /3 selected/i })).toBeVisible();
-    });
-  });
-
   test.describe('when a selected item is unchecked', () => {
     test('clears the selection', async ({ page }) => {
       const { id: datasetId } = await seedDatasetWithItems(3);

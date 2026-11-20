@@ -21,7 +21,7 @@ import { createWorkflow } from './workflow';
  * `@mastra/core/workflows/evented`, or by declaring `schedule` while
  * `MASTRA_WORKERS` is set. Durable
  * agents resolve to the in-process engine before they get here — see
- * `DurableAgent.resolveWorkflowEngine`, covered by durable-agent-engine-fallback.test.ts.
+ * `DurableExecutionEngine.resolveWorkflowEngine`, covered by durable-agent-engine-fallback.test.ts.
  */
 describe('evented createRun — storage capability gate', () => {
   function buildWorkflow() {

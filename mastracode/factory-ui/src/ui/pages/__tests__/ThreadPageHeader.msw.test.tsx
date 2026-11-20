@@ -203,7 +203,7 @@ afterEach(() => {
 });
 
 describe('ThreadPage header', () => {
-  it('leaves the session and the board to the sidebar, keeping its toggle in a single header', async () => {
+  it('leaves the session to the sidebar, keeping its toggle in a single header', async () => {
     window.localStorage.setItem(SIDEBAR_STATE_KEY, 'collapsed');
     stubThreadRoute();
     renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${SESSION_ID}`);
@@ -215,7 +215,6 @@ describe('ThreadPage header', () => {
     expect(within(header).queryByRole('button', { name: 'Switch session' })).not.toBeInTheDocument();
     expect(within(header).getByRole('button', { name: 'Toggle sidebar' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Open navigation menu')).not.toBeInTheDocument();
-    expect(within(header).queryByRole('link', { name: 'Work' })).not.toBeInTheDocument();
   });
 
   it("opens the next card's session at once, then shows its stage when the card answers", async () => {
@@ -274,7 +273,6 @@ describe('ThreadPage header', () => {
 
     const header = await findPageHeader();
     expect(await within(header).findByRole('heading', { level: 1, name: 'salut ca va ?' })).toBeInTheDocument();
-    expect(within(header).queryByText('User sessions')).not.toBeInTheDocument();
     const panel = screen.getByRole('complementary', { name: 'Session panel' });
     expect(within(panel).getByRole('button', { name: 'Session panel' })).toBeInTheDocument();
   });

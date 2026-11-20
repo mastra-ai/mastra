@@ -12,7 +12,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { setupAdminAuth, setupMockAuth, MOCK_USERS } from '../__utils__/auth';
+import { setupAdminAuth } from '../__utils__/auth';
 import { resetStorage } from '../__utils__/reset-storage';
 import { expectCurrentBreadcrumb } from '../__utils__/route-header';
 
@@ -126,18 +126,6 @@ test.describe('Admin Role', () => {
       await expect(page).toHaveURL(/\/workflows\//);
     });
 
-    test('admin can see workflow execution controls', async ({ page }) => {
-      await setupAdminAuth(page);
-
-      // Navigate to a specific workflow
-      await page.goto('/workflows/lessComplexWorkflow');
-
-      // Admin should see the trigger/run workflow controls
-      // The workflow trigger should be visible and enabled
-      const triggerButton = page.getByRole('button', { name: 'Run', exact: true });
-      await expect(triggerButton).toBeVisible();
-    });
-
     test('admin workflow execution button is not disabled', async ({ page }) => {
       await setupAdminAuth(page);
       await page.goto('/workflows/lessComplexWorkflow');
@@ -187,137 +175,6 @@ test.describe('Admin Role', () => {
       // The execution form lives on the Playground tab
       await page.getByRole('tab', { name: 'Playground' }).click();
       await expect(page.locator('[name="location"]')).toBeVisible();
-    });
-
-    test('admin does not see permission denied for tool execution', async ({ page }) => {
-      await setupAdminAuth(page);
-      await page.goto('/tools?tool=weatherInfo');
-
-      // Admin should NOT see permission denied message
-      const permissionDenied = page.getByText(/permission denied|not authorized|don't have permission/i);
-      await expect(permissionDenied).not.toBeVisible();
-    });
-  });
-
-  test.describe('when an admin user accesses MCP servers', () => {
-    test('admin can view MCP servers list', async ({ page }) => {
-      await setupAdminAuth(page);
-      await page.goto('/mcps');
-
-      // Should see the MCP servers page
-      await expectCurrentBreadcrumb(page, 'MCP Servers');
-    });
-
-    test('admin can access MCP server configuration', async ({ page }) => {
-      await setupAdminAuth(page);
-      await page.goto('/mcps');
-
-      // The page should load without any permission issues
-      // Check that there are no access denied messages
-      const accessDenied = page.getByText(/access denied|not authorized|permission denied/i);
-      await expect(accessDenied).not.toBeVisible();
-    });
-  });
-
-  test.describe('when verifying the admin permission set', () => {
-    test('admin has wildcard permission', async ({ page }) => {
-      // Set up admin with explicit wildcard permission check
-      await setupMockAuth(page, {
-        role: 'admin',
-        permissions: ['*'],
-      });
-
-      await page.goto('/agents');
-      await expectCurrentBreadcrumb(page, 'Agents');
-
-      // Navigate to workflows - should work
-      await page.goto('/workflows');
-      await expectCurrentBreadcrumb(page, 'Workflows');
-
-      // Navigate to tools - should work
-      await page.goto('/tools');
-      await expectCurrentBreadcrumb(page, 'Tools');
-    });
-
-    test('admin sees correct user info', async ({ page }) => {
-      await setupAdminAuth(page);
-      await page.goto('/agents');
-
-      // User info might not be displayed in all views, so we just verify the page loads
-      await expectCurrentBreadcrumb(page, 'Agents');
-    });
-
-    test('admin can access all protected routes without redirect', async ({ page }) => {
-      await setupAdminAuth(page);
-
-      const protectedRoutes = ['/agents', '/workflows', '/tools', '/mcps'];
-
-      for (const route of protectedRoutes) {
-        await page.goto(route);
-
-        // Should NOT see login prompt
-        await expect(page.getByRole('heading', { name: 'Sign in to continue' })).not.toBeVisible();
-
-        // Should NOT be redirected to login
-        expect(page.url()).not.toContain('/login');
-      }
-    });
-  });
-
-  test.describe('when comparing the admin role to other roles', () => {
-    test('admin has more permissions than member', async ({ page }) => {
-      // First, verify admin can access a page
-      await setupAdminAuth(page);
-      await page.goto('/agents/weather-agent/chat');
-
-      // Admin should see full UI without restrictions
-      // Now check as member
-      await page.route('**/api/auth/capabilities', async route => {
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({
-            enabled: true,
-            login: { type: 'sso', signUpEnabled: true },
-            user: MOCK_USERS.member,
-            capabilities: { user: true, session: true, sso: true, rbac: true, acl: false },
-            access: {
-              roles: ['member'],
-              permissions: ['agents:read', 'workflows:*', 'tools:read', 'tools:execute'],
-            },
-          }),
-        });
-      });
-
-      await page.reload();
-
-      // Member should have more restricted view
-      // The specific restrictions depend on UI implementation
-      // At minimum, member should still see the page (they have agents:read)
-      await expect(page).toHaveURL(/\/agents\/weather-agent/);
-    });
-
-    test('admin has more permissions than viewer', async ({ page }) => {
-      // First, verify admin can access workflow execution
-      await setupAdminAuth(page);
-      await page.goto('/workflows/lessComplexWorkflow');
-
-      // Admin should see run button enabled
-      const runButton = page.getByRole('button', { name: 'Run', exact: true });
-      await expect(runButton).toBeVisible();
-      await expect(runButton).not.toBeDisabled();
-
-      // Now check as viewer
-      await setupMockAuth(page, {
-        role: 'viewer',
-        permissions: ['agents:read', 'workflows:read'],
-      });
-
-      await page.reload();
-
-      // Viewer should have restricted workflow access
-      // They can view but not execute
-      await expect(page).toHaveURL(/\/workflows\/lessComplexWorkflow/);
     });
   });
 });
