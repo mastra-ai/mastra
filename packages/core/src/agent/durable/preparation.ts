@@ -32,7 +32,7 @@ import { boundedStringify, deepMerge } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
 import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
-import { convertInstructionsToString, getInitialSignalEchoes } from '../helpers';
+import { convertInstructionsToString, getInitialSignalEchoes, resolveVersionContext } from '../helpers';
 import { assertThreadOwnedByResource } from '../memory-thread-ownership';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
@@ -319,13 +319,14 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 3. Merge version overrides (Mastra defaults < requestContext < call-site)
   const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
-  let mergedVersions = mergeVersionOverrides(mastra?.getVersionOverrides?.(), requestVersions);
-  if ((execOptions as any)?.versions) {
-    mergedVersions = mergeVersionOverrides(mergedVersions, (execOptions as any).versions);
-  }
-  if (mergedVersions) {
-    requestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
-  }
+  resolveVersionContext(
+    requestContext,
+    requestVersions,
+    mastra?.getVersionOverrides?.(),
+    execOptions,
+    // Durable preparation normalizes sole overrides; plain calls preserve their identity.
+    mergeVersionOverrides,
+  );
 
   // Resolve and validate the complete model selection before durable preparation
   // can persist a thread or run user-defined processors, tools, or hooks.
