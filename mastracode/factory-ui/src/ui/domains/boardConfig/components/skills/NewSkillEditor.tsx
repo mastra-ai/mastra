@@ -53,15 +53,16 @@ export function NewSkillEditor({ factoryId, onCreated }: { factoryId: string; on
     <div className="flex flex-col gap-8">
       <div inert={create.isPending} className="flex flex-col gap-8">
         <div className="flex flex-col gap-3">
-          <Txt as="p" variant="display-lg" tone="ink" className="min-w-0 break-words">
+          <Txt as="p" variant="body" tone="ink" className="min-w-0 break-words">
             <InlineText
               value={name}
               label="Name"
               placeholder="skill-name"
               readOnly={false}
               autoFocus
-              variant="display-lg"
+              variant="body"
               tone="ink"
+              className="zoom-safe-text"
               onChange={value => setName(value.trim())}
             />
           </Txt>
