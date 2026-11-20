@@ -52,17 +52,20 @@ async function fixture() {
     PATH: `${dirname(process.execPath)}:${process.env.PATH}`,
     SUPPORT_DATABASE_URL: url,
   };
-  async function cli(options: { dataset?: string; args?: string[]; url?: string; code?: number } = {}) {
+  async function cli(
+    options: { dataset?: string | null; example?: string; args?: string[]; url?: string; code?: number } = {},
+  ) {
     let stdout = '';
     let stderr = '';
     let code = 0;
+    const dataset = options.dataset === null ? [] : ['--dataset', options.dataset ?? 'retail-pos'];
     try {
       const result = await execute(
         join(dirname(process.execPath), 'npm'),
-        ['run', 'knowledge:seed', '--', '--dataset', options.dataset ?? 'retail-pos', ...(options.args ?? [])],
+        ['run', 'knowledge:seed', '--', ...dataset, ...(options.args ?? [])],
         {
           cwd: root,
-          env: { ...environment, SUPPORT_DATABASE_URL: options.url ?? url },
+          env: { ...environment, SUPPORT_DATABASE_URL: options.url ?? url, SUPPORT_EXAMPLE: options.example },
           timeout: 30000,
           maxBuffer: 2_000_000,
         },
@@ -162,6 +165,15 @@ const quote = (text: string) => `'${text.replaceAll("'", "''")}'`;
 test('seed_dry_run_apply_repeat_and_update_preserve_provenance', { timeout: 120000 }, async () => {
   const f = await fixture();
   try {
+    const initial = await f.cli({ dataset: null, args: ['--dry-run'] });
+    assert.equal(initial.report.dataset, 'retail-pos-docs');
+    assert.ok(initial.report.pages.some(item => item.destination === 'docs:retailops#guides/network'));
+    assert.ok(initial.report.pages.every(item => !item.destination.startsWith('customer:')));
+    const alternateInitial = await f.cli({ dataset: null, example: 'software-integration', args: ['--dry-run'] });
+    assert.equal(alternateInitial.report.dataset, 'software-integration');
+    assert.ok(alternateInitial.report.pages.some(item => item.destination === 'docs:software#guides/request-check'));
+    await noFile(f.database);
+
     const manifest = await f.readManifest();
     assert.deepEqual(
       manifest.pages.map(item => item.key),

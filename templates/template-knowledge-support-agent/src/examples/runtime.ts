@@ -12,6 +12,7 @@ export const integrationReviewers: Profile[] = [
 /** Only trusted process configuration selects an example, never a request or model argument. */
 interface RuntimeExample {
   id: string;
+  initialDataset: string;
   profiles: Profile[];
   reviewers: Profile[];
   role: string;
@@ -22,6 +23,7 @@ export function selectExample(name = process.env.SUPPORT_EXAMPLE ?? 'retail-pos'
   if (name === 'retail-pos')
     return {
       id: name,
+      initialDataset: 'retail-pos-docs',
       profiles: [...exampleProfiles, ...retailProfiles],
       reviewers: exampleReviewers,
       role: exampleStudioRole,
@@ -36,6 +38,7 @@ export function selectExample(name = process.env.SUPPORT_EXAMPLE ?? 'retail-pos'
   if (name === 'software-integration')
     return {
       id: name,
+      initialDataset: 'software-integration',
       profiles: integrationProfiles,
       reviewers: integrationReviewers,
       role: exampleStudioRole,
