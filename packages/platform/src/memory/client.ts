@@ -277,6 +277,18 @@ export class PlatformMemoryClient {
     return { record: res.record, history: res.history ?? [] };
   }
 
+  async waitForBuffering(threadId: string): Promise<'idle' | 'completed'> {
+    const result = await this.request<{ status: unknown }>(
+      'GET',
+      `/threads/${encodeURIComponent(threadId)}/observations/buffer-status`,
+      { timeoutMs: 35_000 },
+    );
+    if (result.status !== 'idle' && result.status !== 'completed') {
+      throw new PlatformMemoryApiError(503, 'Hosted buffering returned an invalid status');
+    }
+    return result.status;
+  }
+
   /** Runs the instance's memory processors for one agent phase on a serialized message list. */
   runProcessors(threadId: string, body: RunMemoryProcessorsInput, signal?: AbortSignal) {
     return this.request<MemoryProcessorsResult>('POST', `/threads/${encodeURIComponent(threadId)}/processors`, {

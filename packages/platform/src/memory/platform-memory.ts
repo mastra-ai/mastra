@@ -424,6 +424,13 @@ export class PlatformMemory extends MastraMemory {
     };
   }
 
+  async waitForObservationalMemoryBuffering(args: { threadId: string; resourceId: string }) {
+    const status = await this.client.waitForBuffering(args.threadId);
+    if (status === 'idle') return { record: null };
+    const { record } = await this.getObservationalMemoryRecords(args);
+    return { record };
+  }
+
   /**
    * Reads a thread's hosted record and an optional filtered page of history.
    */

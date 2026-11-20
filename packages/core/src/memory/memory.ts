@@ -1240,6 +1240,14 @@ https://mastra.ai/en/docs/memory/overview`,
     return undefined;
   }
 
+  /** Waits for hosted buffering after thread access has been checked. Undefined means unsupported. */
+  async waitForObservationalMemoryBuffering(_args: {
+    threadId: string;
+    resourceId: string;
+  }): Promise<Pick<ObservationalMemoryRecords, 'record'> | undefined> {
+    return undefined;
+  }
+
   /**
    * Copies a thread and its messages to a new thread without returning the message
    * payloads. Prefer this over `cloneThread` when only the new thread id is needed

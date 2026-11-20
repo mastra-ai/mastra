@@ -1086,6 +1086,11 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
             thread,
             effectiveResourceId,
           });
+          const result = await adapterMemory.waitForObservationalMemoryBuffering?.({
+            threadId: effectiveThreadId,
+            resourceId: effectiveResourceId,
+          });
+          if (result) return result;
         }
         throw new HTTPException(501, {
           message: 'Observational Memory adapter does not support waiting for buffering',

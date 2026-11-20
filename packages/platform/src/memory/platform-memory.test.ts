@@ -530,6 +530,34 @@ describe('PlatformMemory', () => {
       expect(api.requests.length).toBe(before);
     });
 
+    it.each([
+      ['idle', 200],
+      ['completed', 200],
+      ['failed', 503],
+      ['timeout', 504],
+      ['unexpected', 200],
+    ] as const)('reads a snapshot only after a completed hosted wait (%s)', async (status, httpStatus) => {
+      const paths: string[] = [];
+      const memory = new PlatformMemory({
+        accessToken: 'tok_1',
+        instanceId: 'mem_1',
+        apiUrl: 'https://platform.test',
+        fetch: async input => {
+          const path = new URL(input instanceof Request ? input.url : input).pathname;
+          paths.push(path);
+          return path.endsWith('/buffer-status')
+            ? Response.json({ status }, { status: httpStatus })
+            : Response.json({ record: hostedRecord(2) });
+        },
+      });
+      const result = memory.waitForObservationalMemoryBuffering({ threadId: 'thread_1', resourceId: 'user' });
+      if (status === 'idle') await expect(result).resolves.toEqual({ record: null });
+      else if (status === 'completed') await expect(result).resolves.toMatchObject({ record: { id: 'om_2' } });
+      else await expect(result).rejects.toMatchObject({ status: httpStatus === 200 ? 503 : httpStatus });
+      expect(paths[0]).toMatch(/\/threads\/thread_1\/observations\/buffer-status$/);
+      expect(paths).toHaveLength(status === 'completed' ? 2 : 1);
+    });
+
     it('surfaces hosted errors other than a missing thread', async () => {
       const memory = new PlatformMemory({
         accessToken: 'tok_1',
