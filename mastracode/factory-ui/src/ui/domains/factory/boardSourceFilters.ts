@@ -22,6 +22,12 @@ export const BOARD_SOURCE_OPTIONS = [
   { value: 'jira', label: 'Jira', Icon: CARD_SOURCES['jira-issue'].Icon, color: '#1868DB' },
   { value: 'incidentio', label: 'incident.io', Icon: CARD_SOURCES['incidentio-follow-up'].Icon, color: '#F2555A' },
   { value: 'vanta', label: 'Vanta', Icon: CARD_SOURCES['vanta-vulnerability'].Icon, color: '#7B4DFF' },
+  {
+    value: 'platform',
+    label: 'Mastra Alerts',
+    Icon: CARD_SOURCES['platform-alert'].Icon,
+    color: '#E5484D',
+  },
   { value: 'detail', label: 'Detail', Icon: CARD_SOURCES['detail-finding'].Icon, color: 'var(--muted-foreground)' },
   { value: 'manual', label: 'Manual', Icon: CARD_SOURCES.manual.Icon, color: 'var(--muted-foreground)' },
   // Not a provider: any card carrying a pull or merge request, its own or attached to its issue.
