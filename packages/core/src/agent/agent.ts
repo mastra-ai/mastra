@@ -284,6 +284,7 @@ import {
   emitErrorEvent,
   emitFinishEvent,
   emitOwnershipClaimedEvent,
+  newestLogIndex,
 } from './durable/stream-adapter';
 import { toLiveStructuredOutputSchema } from './durable/structured-output-null-transform';
 import type {
@@ -16698,6 +16699,18 @@ export class Agent<
     runId: string,
     options: Parameters<Agent<TAgentId, TTools, TOutput>['observe']>[1],
   ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string; detach: () => void }> {
+    let attachedAt: number | undefined;
+    // Buffer replay until its attachment boundary distinguishes past suspensions from the current tail.
+    const refreshReplayFilter = options?.closeOnSuspend
+      ? async () => {
+          try {
+            const history = await bus.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0);
+            attachedAt = newestLogIndex(history as AgentStreamEvent[]);
+          } catch (error) {
+            this.logger.warn(`Couldn't read the replay boundary of run ${runId}`, { error });
+          }
+        }
+      : undefined;
     const stream = createDurableAgentStream<TOutput>({
       pubsub: bus.pubsub,
       runId,
@@ -16705,6 +16718,8 @@ export class Agent<
       model: { modelId: undefined, provider: undefined, version: 'v3' },
       offset: options?.offset,
       closeOnSuspend: options?.closeOnSuspend,
+      attachedAtLogIndex: () => attachedAt,
+      refreshReplayFilter,
       replayResponseMessagesBeforeOffset: true,
       onChunk: options?.onChunk,
       onStepFinish: options?.onStepFinish,

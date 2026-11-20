@@ -219,13 +219,17 @@ describeForAllEngines('AIMock loop scenario: observe across approval and resume'
         expect(getRunRegistryEntry(run.runId, mastra)).toBe(resumedEntry);
       }
 
-      // A fresh replay of the finished run holds the suspended segment and the resumed one.
-      const replay = await drain((await agent.observe(run.runId)) as Observation, 5_000);
-      expect(replay.timedOut).toBe(false);
-      expect(replay.types).toContain('tool-call-approval');
-      expect(replay.types).toContain('tool-result');
-      expect(textOf(replay.chunks)).toBe('Approved and done.');
-      expect(replay.types.at(-1)).toBe('finish');
+      // Even bounded replays must follow a historical suspension through the resumed segment.
+      for (const closeOnSuspend of [false, true]) {
+        const observation = await agent.observe(run.runId, { closeOnSuspend });
+        const replay = await drain(observation as Observation, 5_000);
+        expect(replay.timedOut).toBe(false);
+        expect(replay.types).toContain('tool-call-approval');
+        expect(replay.types).toContain('tool-result');
+        expect(textOf(replay.chunks)).toBe('Approved and done.');
+        expect(replay.types.at(-1)).toBe('finish');
+        expect((await observation.output.getFullOutput()).finishReason).not.toBe('suspended');
+      }
 
       // Reconnecting just past the transport's suspension index yields the resumed segment once.
       const tail = await drain(
