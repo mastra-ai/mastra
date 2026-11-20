@@ -27,11 +27,19 @@ export const ThreadsPanelProvider = ({ children }: { children: ReactNode }) => {
       }
       if (handle && autoCollapse.current === 'pending') {
         autoCollapse.current = 'collapsed';
-        queueMicrotask(() => panel.current?.collapse());
+        queueMicrotask(() => {
+          if (autoCollapse.current === 'collapsed') panel.current?.collapse();
+        });
       }
     },
-    collapse: () => panel.current?.collapse(),
-    toggle: () => panel.current?.toggle(),
+    collapse: () => {
+      autoCollapse.current = 'done';
+      panel.current?.collapse();
+    },
+    toggle: () => {
+      autoCollapse.current = 'done';
+      panel.current?.toggle();
+    },
     collapseOnce: () => {
       if (autoCollapse.current !== 'idle') return;
       if (!panel.current) {

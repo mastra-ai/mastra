@@ -1,10 +1,7 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
-
-interface ThreadDraftHandle {
-  move: (to: string) => Promise<void>;
-}
+import type { ThreadDraftHandle } from './drafts/ThreadInputContext';
 
 export function useAgentThreadNavigation({
   threadId,
