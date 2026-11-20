@@ -211,7 +211,7 @@ describe('slackRunErrorCard', () => {
 
     expect(card).toContain('Request timed out');
     expect(card).toContain('"id":"run_continue"');
-    expect(card).toContain('Continue the run to try again.');
+    expect(card).toContain('Click Continue or send a message to try again.');
     expect(card).toContain('Open session');
     expect(card).toContain(SLACK_SESSION_URL);
   });
