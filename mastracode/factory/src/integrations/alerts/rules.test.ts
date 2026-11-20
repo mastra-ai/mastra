@@ -347,4 +347,21 @@ describe('PlatformAlertRules', () => {
     await expect(ingest(alert('alert.resolved', 'i2'), T0 + 2 * MIN)).resolves.toMatchObject({ status: 'committed' });
     expect(onRecovered).toHaveBeenCalledTimes(1);
   });
+
+  it('keeps a resolve an older card remembered when the incident opens after a rollover', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: T0 + MIN });
+    onTestFinished(() => vi.useRealTimers());
+    const { seeded, ingest, drain, cards, state } = await setup();
+    await ingest(alert('alert.opened', 'i1'));
+    await drain();
+    const [first] = await cards();
+    await seeded.workItems.update({ orgId: 'org-1', id: first!.id, userId: 'user-1', patch: { stages: ['done'] } });
+    await ingest(alert('alert.resolved', 'b'), T0 + 2 * DAY);
+    await ingest(alert('alert.opened', 'c'), T0 + 12 * DAY);
+    await drain();
+    await ingest(alert('alert.opened', 'b'), T0 + 12 * DAY + MIN);
+    const second = (await cards()).find(card => card.id !== first!.id)!;
+    expect(state(second)).toMatchObject({ fireCount: 2 });
+    expect(state(second).incidents.b?.resolvedAt).toBe(new Date(T0).toISOString());
+  });
 });
