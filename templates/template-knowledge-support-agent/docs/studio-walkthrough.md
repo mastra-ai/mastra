@@ -2,6 +2,8 @@
 
 Complete the Quickstart in the [README](../README.md) with a fresh local database for the documentation-only start. Use a separate browser session for each profile. The private credential file printed by `npm run dev` contains the generated tokens for that launch.
 
+If Studio returns `401`, open a fresh session with the token from the current server launch. If Support reports a missing or unusable policy, check that Studio and the seed use the same database and example profile, then preview and apply the corresponding documentation dataset. See [Datasets and examples](datasets-and-examples.md) for profile and database selection.
+
 | Profile                | Tenant        | Customer   | Actor               |
 | ---------------------- | ------------- | ---------- | ------------------- |
 | `retailops-store-42`   | `retailops`   | `store-42` | `alex`              |

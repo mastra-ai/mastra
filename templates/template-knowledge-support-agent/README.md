@@ -9,18 +9,19 @@ Support teams repeat investigations when manuals, customer history, and confirme
 ## Prerequisites
 
 - Set `OPENAI_API_KEY` for the default `openai/gpt-4o-mini` model. [Get an OpenAI API key](https://platform.openai.com/api-keys)
-- Node.js 24.11 or newer.
 
 ## Quickstart 🚀
 
-1. **Create the project**
+1. **Open the project**
    - Run `npx create-mastra@latest knowledge-support-agent --template knowledge-support-agent`, then `cd knowledge-support-agent`.
+   - If you already have the template in a checkout, open its directory and run `npm ci`. In the monorepo the directory is `templates/template-knowledge-support-agent`.
 2. **Add your API key**
    - Run `cp .env.example .env` and set the key from Prerequisites.
 3. **Load the example Knowledge**
+   - Run `npm run knowledge:seed -- --dry-run` to preview the pages and their scopes.
    - Run `npm run knowledge:seed` to load the retail support guides and policy into the local database.
 4. **Start Studio**
-   - Run `npm run dev` and copy the `retailops-store-42` token from the private file printed by the launcher.
+   - Run `npm run dev` and copy the `retailops-store-42` token from the private credential file whose path the launcher prints.
    - Open [Mastra Studio](http://127.0.0.1:4111) with `?auth_header=Bearer%20YOUR_TOKEN` appended to the URL. Replace `YOUR_TOKEN` with the copied token and keep the resulting URL private.
    - Select **Support**, open a new chat, and ask “My Square Terminal loses Wi-Fi connectivity. What should I check?” Look for a citation to the network guide and a question about which connection indicator is visible.
 
@@ -29,6 +30,8 @@ Support teams repeat investigations when manuals, customer history, and confirme
 - Ask “Can I factory reset while offline payments are pending?” Look for guidance based on the pinned policy to preserve the pending payments.
 - Run `npm run knowledge:seed -- --dataset retail-pos-history`, then ask about Store 42 connectivity in a fresh chat. Look for dated cases and which observations remain open.
 - Use the [Studio walkthrough](docs/studio-walkthrough.md) to approve a fictional finding, then retrieve the approved tenant guidance in another technician's chat.
+
+The default database is `.local/support.db`. It keeps your Knowledge and conversations across restarts. Use the new token from each launch to reopen an existing chat.
 
 ## Customization
 
@@ -39,4 +42,4 @@ Support teams repeat investigations when manuals, customer history, and confirme
 
 This official template is maintained in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and synchronized to a standalone repository.
 
-[Want to contribute?](https://github.com/mastra-ai/mastra/tree/main/templates#how-to-add-a-new-template)
+[Want to contribute?](CONTRIBUTING.md)
