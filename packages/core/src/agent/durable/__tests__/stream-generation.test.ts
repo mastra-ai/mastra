@@ -355,6 +355,74 @@ async function takeOver(workflows: Awaited<ReturnType<typeof observedAgent>>['wo
 }
 
 describe('observe() from an offset', () => {
+  // Technical: step-finish events carry only the response messages that changed, so a reader at
+  // an offset rebuilds the earlier part from the history before it. When that read failed, no
+  // later diff could be placed and onFinish and output messages kept no answer. FINISH carries
+  // the run's whole response list, which the reader now takes.
+  it.each(['readable', 'unreadable'] as const)(
+    'reports the final answer to an observer reconnecting mid-run (%s history)',
+    async history => {
+      const { durable, pubsub, transport } = await observedAgent();
+      const runId = `offset-final-answer-${history}`;
+      const assistant = (text: string) => ({ role: 'assistant' as const, content: [{ type: 'text' as const, text }] });
+      const tool = (id: string) => ({
+        role: 'tool' as const,
+        content: [
+          { type: 'tool-result' as const, toolCallId: id, toolName: 'lookup', output: { type: 'text', value: id } },
+        ],
+      });
+      const call = (id: string) => ({
+        role: 'assistant' as const,
+        content: [{ type: 'tool-call' as const, toolCallId: id, toolName: 'lookup', input: {} }],
+      });
+      // A long first message, so the later step-finish events carry diffs instead of whole lists.
+      const opening = [assistant(`a1 ${'x'.repeat(400)}`), call('t1'), tool('t1')];
+      const lists = [opening, [...opening, assistant('a2'), call('t2'), tool('t2')]];
+      lists.push([...lists[1]!, assistant('a3')]);
+      let cursor: ResponseMessagesCursor | { producer: string } = { producer: 'execution-1' };
+      const stepFinishIndexes: number[] = [];
+      for (const [step, list] of lists.entries()) {
+        const { diff, cursor: next } = diffResponseMessages(cursor, list as any);
+        cursor = next;
+        expect(diff.from > 0).toBe(step > 0);
+        await emitChunkEvent(pubsub, runId, {
+          type: 'step-finish',
+          runId,
+          from: 'AGENT',
+          payload: {
+            stepResult: { reason: 'stop' },
+            output: { usage: {} },
+            metadata: {},
+            _durableResponseMessagesDiff: diff,
+          },
+        } as any);
+        stepFinishIndexes.push((await pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)).length - 1);
+      }
+      await emitFinishEvent(pubsub, runId, {
+        ...finishData,
+        messages: { all: lists[2] as any, user: [], nonUser: lists[2] as any },
+      });
+      if (history === 'unreadable') {
+        vi.spyOn(pubsub, 'getHistory').mockRejectedValue(new Error('cache unavailable'));
+      }
+
+      const finished = Promise.withResolvers<unknown>();
+      // Reconnects after the first step.
+      const observed = await durable.observe(runId, {
+        offset: stepFinishIndexes[0]! + 1,
+        onFinish: event => finished.resolve(event.messages),
+      });
+      const full = await observed.output.getFullOutput();
+      const outputTexts = full.messages.flatMap(message =>
+        message.content.parts.flatMap(part => (part.type === 'text' ? part.text.slice(0, 2) : [])),
+      );
+      expect(outputTexts).toEqual(['a1', 'a2', 'a3']);
+      expect(JSON.stringify(await finished.promise)).toContain('"a3"');
+      observed.cleanup();
+      await transport.close();
+    },
+  );
+
   it.each([undefined, 1])(
     'does not replay abandoned output when a takeover lands during attachment (offset %s)',
     async offset => {

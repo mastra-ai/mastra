@@ -918,6 +918,11 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             terminalRequest = readLocalRequest?.();
           }
           readLocalRequest = undefined;
+          // FINISH carries the run's whole response list, so a reader that missed a diff still ends with it.
+          if (data.messages?.nonUser && listFollowsStream?.()) {
+            messageList.clear.response.db();
+            messageList.add(data.messages.nonUser, 'response');
+          }
 
           if (finishReason === 'abort') {
             safeEnqueue(controller, {
