@@ -71,6 +71,34 @@ describe('transformSpec', () => {
     expect(result.Timestamp).toEqual({ format: 'date-time' })
   })
 
+  test('folds error statuses identical to default into one default response', () => {
+    const source = buildSpec()
+    const error = { $ref: '#/components/responses/Error' }
+    const rateLimited = { description: 'Rate limited.', headers: { 'Retry-After': { schema: { type: 'string' } } } }
+    ;(source.paths['/v1/createVideo'].post as { responses: unknown }).responses = {
+      '200': { description: 'OK' },
+      '400': error,
+      '429': rateLimited,
+      '503': error,
+      default: error,
+    }
+    ;(source.components as Record<string, unknown>).responses = {
+      Error: { description: 'Gateway error.', content: { 'application/json': {} } },
+    }
+    const { spec } = transformSpec(source)
+    expect((spec.paths['/v1/createVideo'].post as { responses: unknown }).responses).toEqual({
+      '200': { description: 'OK' },
+      '429': rateLimited,
+      default: {
+        description: 'Returned for 400, 503 and any other error status. Gateway error.',
+        content: { 'application/json': {} },
+      },
+    })
+    expect((source.components as { responses: { Error: { description: string } } }).responses.Error.description).toBe(
+      'Gateway error.',
+    )
+  })
+
   test('reports operations without a pages.ts entry', () => {
     const source = buildSpec()
     source.paths['/v1/new'] = { post: { operationId: 'createSomethingNew', responses: {} } }

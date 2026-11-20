@@ -268,11 +268,6 @@ const config: Config = {
     mermaid: {
       theme: { light: 'base', dark: 'base' },
     },
-    languageTabs: [
-      { highlight: 'bash', language: 'curl', logoClass: 'curl' },
-      { highlight: 'javascript', language: 'javascript', logoClass: 'javascript', variants: ['fetch'] },
-      { highlight: 'python', language: 'python', logoClass: 'python', variants: ['requests'] },
-    ],
     footer: {
       links: [
         {

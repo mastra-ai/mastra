@@ -198,7 +198,7 @@ patchedDependencies:
   '@verdaccio/core@8.4.0': 8411b52be38c05a039db344d2b5e90f14cbe5c5bb2b19db6bca1b7931494e221
   body-parser@2.4.0: 7d9c103b0e037f8eb979d4cddbfabb13eedde34858ca1168365d426ff8175aa2
   co-body@6.2.0: 1702c49cad650dc4e1f4b928671fb2d06036472e6e5fcd761721b00224ce14c7
-  docusaurus-theme-openapi-docs@5.2.0: bb2c090289bb99721943760766ba9c843ec2bcdd9444a282eb8a60f0780cf8ea
+  docusaurus-theme-openapi-docs@5.2.0: e12dacf2f4214c68a4141a0273eb9c54df289cdb37e6c53d72e5ec1b3fb3de32
   react-docgen-typescript@2.4.0: 72ad9e4cf9a40a5fe81ef734342a161c384244ff341bd04215a405bbea3bbbe6
   read-yaml-file@1.1.0: 834a9a43c1785ff0b4911ae833daf9fc54055df0834080003b572e6cf4131eb9
   zod-to-ts@2.1.0: 4fd3930faeffe118339c6942a03d3eb69e27314979282e96314285c45a89099b
@@ -1777,7 +1777,7 @@ importers:
         version: 5.2.0(@docusaurus/plugin-content-docs@3.10.2(662ebe1314738e370d82a92b2423ed51))(@docusaurus/utils-validation@3.10.2(@swc/core@1.16.21(@swc/helpers@0.5.23))(@swc/html@1.16.21)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.23))(csso@5.0.5)(esbuild@0.28.2)(html-minifier-terser@7.2.0)(lightningcss@1.33.0)(postcss@8.5.23)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(sharp@0.35.5(@types/node@22.19.15))(supports-color@10.2.2)(svgo@3.3.5)(uglify-js@3.19.3))(@docusaurus/utils@3.10.2(@swc/core@1.16.21(@swc/helpers@0.5.23))(@swc/html@1.16.21)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.23))(csso@5.0.5)(esbuild@0.28.2)(html-minifier-terser@7.2.0)(lightningcss@1.33.0)(postcss@8.5.23)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(sharp@0.35.5(@types/node@22.19.15))(supports-color@10.2.2)(svgo@3.3.5)(uglify-js@3.19.3))(@types/json-schema@7.0.15)(encoding@0.1.14)(react@19.3.1)
       docusaurus-theme-openapi-docs:
         specifier: ^5.2.0
-        version: 5.2.0(patch_hash=bb2c090289bb99721943760766ba9c843ec2bcdd9444a282eb8a60f0780cf8ea)(91b04b7007e87e194d316fa3ea1f8575)
+        version: 5.2.0(patch_hash=e12dacf2f4214c68a4141a0273eb9c54df289cdb37e6c53d72e5ec1b3fb3de32)(91b04b7007e87e194d316fa3ea1f8575)
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
@@ -49338,7 +49338,7 @@ snapshots:
       - sass-embedded
       - webpack
 
-  docusaurus-theme-openapi-docs@5.2.0(patch_hash=bb2c090289bb99721943760766ba9c843ec2bcdd9444a282eb8a60f0780cf8ea)(91b04b7007e87e194d316fa3ea1f8575):
+  docusaurus-theme-openapi-docs@5.2.0(patch_hash=e12dacf2f4214c68a4141a0273eb9c54df289cdb37e6c53d72e5ec1b3fb3de32)(91b04b7007e87e194d316fa3ea1f8575):
     dependencies:
       '@docusaurus/theme-common': 3.10.2(@docusaurus/plugin-content-docs@3.10.2(662ebe1314738e370d82a92b2423ed51))(@swc/core@1.16.21(@swc/helpers@0.5.23))(@swc/html@1.16.21)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.23))(csso@5.0.5)(esbuild@0.28.2)(html-minifier-terser@7.2.0)(lightningcss@1.33.0)(postcss@8.5.23)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(sharp@0.35.5(@types/node@22.19.15))(supports-color@10.2.2)(svgo@3.3.5)(uglify-js@3.19.3)
       '@hookform/error-message': 2.0.1(react-dom@19.3.1(react@19.3.1))(react-hook-form@7.91.0(@types/react@19.3.0)(react@19.3.1))(react@19.3.1)

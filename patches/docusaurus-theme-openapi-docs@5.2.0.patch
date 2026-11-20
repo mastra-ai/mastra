@@ -1,34 +1,24 @@
 diff --git a/lib/theme/ApiItem/index.js b/lib/theme/ApiItem/index.js
-index 5d6e1b5cc90e9f5e1c99005ab19dec0baa60f2bd..a2c3c4483170a061e68b9f7cd06828c744f42c9a 100644
+index 5d6e1b5cc90e9f5e1c99005ab19dec0baa60f2bd..234b8f593eb37c188ae0a11716372b993f7025b3 100644
 --- a/lib/theme/ApiItem/index.js
 +++ b/lib/theme/ApiItem/index.js
-@@ -172,31 +172,42 @@ function ApiItem(props) {
+@@ -172,33 +172,11 @@ function ApiItem(props) {
              react_1.default.createElement(
                SchemaExpansion_1.SchemaExpansionProvider,
                null,
-+              // Single column: the reference reads top to bottom and the explorer
-+              // sits collapsed at the end instead of in a second column.
++              // Reference only: no API Explorer column.
                react_1.default.createElement(
                  "div",
 -                { className: (0, clsx_1.default)("row", "theme-api-markdown") },
-+                { className: "theme-api-markdown" },
-                 react_1.default.createElement(
-                   "div",
+-                react_1.default.createElement(
+-                  "div",
 -                  { className: "col col--7 openapi-left-panel__container" },
-+                  { className: "openapi-left-panel__container" },
-                   react_1.default.createElement(MDXComponent, null)
-                 ),
-                 react_1.default.createElement(
+-                  react_1.default.createElement(MDXComponent, null)
+-                ),
+-                react_1.default.createElement(
 -                  "div",
 -                  { className: "col col--5 openapi-right-panel__container" },
-+                  "details",
-+                  { className: "openapi-explorer" },
-+                  react_1.default.createElement(
-+                    "summary",
-+                    { className: "openapi-explorer__summary" },
-+                    "Try it"
-+                  ),
-                   react_1.default.createElement(
+-                  react_1.default.createElement(
 -                    BrowserOnly_1.default,
 -                    {
 -                      fallback: react_1.default.createElement(
@@ -42,26 +32,13 @@ index 5d6e1b5cc90e9f5e1c99005ab19dec0baa60f2bd..a2c3c4483170a061e68b9f7cd06828c7
 -                        infoPath: infoPath,
 -                      });
 -                    }
-+                    "div",
-+                    { className: "openapi-right-panel__container" },
-+                    react_1.default.createElement(
-+                      BrowserOnly_1.default,
-+                      {
-+                        fallback: react_1.default.createElement(
-+                          SkeletonLoader_1.default,
-+                          { size: "lg" }
-+                        ),
-+                      },
-+                      () => {
-+                        return react_1.default.createElement(ApiExplorer, {
-+                          item: api,
-+                          infoPath: infoPath,
-+                        });
-+                      }
-+                    )
-                   )
-                 )
+-                  )
+-                )
++                { className: "theme-api-markdown openapi-left-panel__container" },
++                react_1.default.createElement(MDXComponent, null)
                )
+             )
+           )
 diff --git a/lib/theme/ParamsDetails/index.js b/lib/theme/ParamsDetails/index.js
 index 24069f350ad6892b1f231ef31371cf88c4b5de00..603875c477c632098b03b098e75786170fad112c 100644
 --- a/lib/theme/ParamsDetails/index.js

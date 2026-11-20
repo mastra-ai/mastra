@@ -84,6 +84,36 @@ export interface TransformResult {
 type Schema = { $ref?: string; description?: string; properties?: Record<string, Schema> }
 
 /** Adds the descriptions from `pages.ts` to the operation's request body fields the spec leaves undescribed. */
+/**
+ * The spec lists every error status separately, mostly pointing at the same shared error response, so the
+ * page showed a row of status tabs that all looked the same. Statuses whose response is identical to `default`
+ * are folded into it, and its description lists them. Statuses with their own shape (such as 429 and its
+ * rate-limit headers) keep their own tab.
+ */
+function mergeDefaultResponses(spec: OpenApiDocument, operation: Operation) {
+  const responses = operation.responses as Record<string, Record<string, unknown>> | undefined
+  if (!responses?.default) return
+  const fallback = JSON.stringify(responses.default)
+  const merged = Object.keys(responses).filter(
+    status => status !== 'default' && !status.startsWith('2') && JSON.stringify(responses[status]) === fallback,
+  )
+  if (merged.length === 0) return
+  const response = structuredClone(resolveResponse(spec, responses.default))
+  response.description =
+    `Returned for ${merged.join(', ')} and any other error status. ${response.description ?? ''}`.trim()
+  for (const status of merged) delete responses[status]
+  responses.default = response
+}
+
+function resolveResponse(spec: OpenApiDocument, response: Record<string, unknown>): Record<string, unknown> {
+  if (typeof response.$ref !== 'string') return response
+  const name = response.$ref.replace('#/components/responses/', '')
+  const resolved = (spec.components as { responses?: Record<string, Record<string, unknown>> } | undefined)
+    ?.responses?.[name]
+  if (!resolved) throw new Error(`Response ${response.$ref} is not in components.responses`)
+  return resolved
+}
+
 function describeFields(spec: OpenApiDocument, operation: Operation, fields: Record<string, string> | undefined) {
   if (!fields) return
   const content = (operation.requestBody as { content?: Record<string, { schema?: Schema }> } | undefined)?.content
@@ -127,6 +157,7 @@ export function transformSpec(source: OpenApiDocument): TransformResult {
       }
       if (!missing.delete(id)) unmapped.push(id)
       describeFields(spec, pathItem[method] as Operation, GATEWAY_API_PAGES[id]?.fields)
+      mergeDefaultResponses(spec, pathItem[method] as Operation)
     }
     if (!Object.keys(pathItem).some(key => HTTP_METHODS.includes(key))) delete spec.paths[route]
   }
@@ -147,7 +178,7 @@ export function transformSpec(source: OpenApiDocument): TransformResult {
     }
   }
 
-  // The spec uses a relative server URL, which would send API Explorer requests to the docs site.
+  // The spec uses a relative server URL, which would resolve against the docs site.
   spec.servers = [{ url: API_HOST, description: 'Mastra Gateway' }]
   return { spec, unmapped }
 }
