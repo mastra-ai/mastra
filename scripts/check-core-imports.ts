@@ -276,16 +276,25 @@ function packPublishedCore(version: string, tempDir: string) {
 
 function extractCorePackage(packVersion: string, coreRange: string, tempDir: string) {
   let pack = packPublishedCore(packVersion, tempDir);
+  let packedVersion = packVersion;
 
   if (pack.status !== 0) {
+    const localCoreRoot = packLocalCore(packVersion, tempDir);
+
+    if (localCoreRoot) {
+      return localCoreRoot;
+    }
+
     // The floor can be a stable version that is only published as a prerelease so far (e.g. >=1.85.1-0 before 1.85.1 ships).
+    // Only fall back to an older version, so imports added after the floor can't pass.
     const publishedFloor = findPublishedFloorVersion(coreRange);
 
-    if (publishedFloor && publishedFloor !== packVersion) {
+    if (publishedFloor && semver.lt(publishedFloor, packVersion)) {
       console.info(
         `@mastra/core@${packVersion} is not on npm; using the lowest published version in range, ${publishedFloor}`,
       );
       pack = packPublishedCore(publishedFloor, tempDir);
+      packedVersion = publishedFloor;
     }
   }
 
@@ -293,16 +302,10 @@ function extractCorePackage(packVersion: string, coreRange: string, tempDir: str
     const tarball = pack.stdout.trim().split('\n').at(-1);
 
     if (!tarball) {
-      throw new Error(`npm pack did not return a tarball for @mastra/core@${packVersion}`);
+      throw new Error(`npm pack did not return a tarball for @mastra/core@${packedVersion}`);
     }
 
     return extractTarball(tarball, tempDir);
-  }
-
-  const localCoreRoot = packLocalCore(packVersion, tempDir);
-
-  if (localCoreRoot) {
-    return localCoreRoot;
   }
 
   throw new Error(`Failed to download @mastra/core@${packVersion}${formatCommandFailure(pack)}`);
