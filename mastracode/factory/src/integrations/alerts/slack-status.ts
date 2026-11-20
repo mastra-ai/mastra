@@ -43,6 +43,8 @@ export interface AlertSlackStatusRecord {
   messages: Partial<Record<AlertMessageSlot, PostedMessage>>;
   /** The reaction last put on the alert message. */
   reaction?: string | null;
+  /** Reactions a writer put on the alert and failed to take back; removed on a later write. */
+  staleReactions?: string[];
 }
 
 const CLAIM_STALE_MS = 2 * 60_000;
@@ -387,6 +389,14 @@ export class AlertSlackStatus {
       if (!latest) return;
       const want = reactionFor(latest);
       const have = latest.reaction ?? null;
+      const stale = (latest.staleReactions ?? []).filter(emoji => emoji !== have);
+      if (stale.length > 0) {
+        for (const emoji of stale) {
+          if (await settled(this.#client.unreact(thread, thread.rootTs, emoji), 'no_reaction')) {
+            await this.#setStale(card, list => list.filter(other => other !== emoji));
+          }
+        }
+      }
       if (want === have) return;
       if (have) {
         if (!(await settled(this.#client.unreact(thread, thread.rootTs, have), 'no_reaction'))) return;
@@ -398,9 +408,24 @@ export class AlertSlackStatus {
       // Another writer moved the reaction first: take back ours unless it is the one it recorded.
       const now = await this.#current(card);
       if (want !== (now?.reaction ?? null)) {
-        await this.#client.unreact(thread, thread.rootTs, want).catch(() => undefined);
+        if (!(await settled(this.#client.unreact(thread, thread.rootTs, want), 'no_reaction'))) {
+          // Left for a later write to take back, though the recorded reaction is already right.
+          await this.#setStale(card, list => (list.includes(want) ? list : [...list, want]));
+        }
       }
     }
+  }
+
+  async #setStale(card: Card, change: (stale: string[]) => string[]): Promise<void> {
+    await updateCardMetadata(this.#workItems, { orgId: card.orgId, id: card.id, userId: STATUS_USER_ID }, current => {
+      const status = readAlertSlackStatus(current);
+      if (!status) return null;
+      const before = status.staleReactions ?? [];
+      const after = change(before);
+      if (after.length === before.length && after.every((emoji, i) => emoji === before[i])) return null;
+      const { staleReactions: _, ...rest } = status;
+      return { [ALERT_SLACK_STATUS_KEY]: after.length > 0 ? { ...rest, staleReactions: after } : rest };
+    });
   }
 
   /** Records the alert's reaction moving from `from` to `to`, unless another writer moved it first. */
