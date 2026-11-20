@@ -1,81 +1,115 @@
-[data-slot='message-scroller-button-activity'] {
+/* Shadows only, never a border, matching the composer. Layer counts match so hover transitions. */
+[data-slot='message-scroller-button'] {
+  --scroller-button-drop:
+    inset 0 1px 0 var(--inset-highlight), 0 1px 2px oklch(0% 0 0deg / 30%), 0 4px 12px -2px oklch(0% 0 0deg / 32%),
+    0 12px 28px -8px oklch(0% 0 0deg / 28%);
+  --scroller-button-drop-lifted:
+    inset 0 1px 0 var(--inset-highlight), 0 1px 2px oklch(0% 0 0deg / 34%), 0 6px 16px -2px oklch(0% 0 0deg / 38%),
+    0 16px 36px -8px oklch(0% 0 0deg / 34%);
+
+  background: var(--muted);
+  box-shadow: var(--scroller-button-drop);
+}
+
+html.light [data-slot='message-scroller-button'] {
+  --scroller-button-drop:
+    inset 0 0 0 0 transparent, 0 1px 2px oklch(0% 0 0deg / 6%), 0 4px 12px -2px oklch(0% 0 0deg / 8%),
+    0 12px 28px -8px oklch(0% 0 0deg / 8%);
+  --scroller-button-drop-lifted:
+    inset 0 0 0 0 transparent, 0 1px 2px oklch(0% 0 0deg / 8%), 0 6px 16px -2px oklch(0% 0 0deg / 11%),
+    0 16px 36px -8px oklch(0% 0 0deg / 11%);
+
+  background: var(--card);
+}
+
+@media (hover: hover) {
+  [data-slot='message-scroller-button']:hover {
+    box-shadow: var(--scroller-button-drop-lifted);
+  }
+}
+
+[data-slot='message-scroller-button-glyph'] {
   display: grid;
-  grid-template-columns: 0fr;
+  place-items: center;
+
+  & > * {
+    grid-area: 1 / 1;
+    transition:
+      opacity var(--duration-normal) var(--ease-out-custom),
+      scale var(--duration-normal) var(--ease-out-custom);
+  }
+}
+
+[data-slot='message-scroller-button-activity'] {
+  display: flex;
+  align-items: center;
+  gap: 3px;
   opacity: 0;
-  transition:
-    grid-template-columns var(--duration-normal) var(--ease-out-custom),
-    opacity var(--duration-fast) var(--ease-out-custom);
+  scale: 0.6;
 
   & > span {
-    display: flex;
-    min-width: 0;
-    align-items: center;
-    gap: 2px;
-    overflow: hidden;
-  }
-
-  & > span > span {
-    flex: none;
     width: 4px;
     height: 4px;
     border-radius: 9999px;
     background: currentColor;
-    opacity: 0.4;
   }
 
-  & > span > span:first-child {
-    margin-inline-start: 4px;
+  & > span:nth-child(1) {
+    animation-delay: -0.28s;
   }
 
-  & > span > span:last-child {
-    margin-inline-end: 2px;
-  }
-
-  & > span > span:nth-child(2) {
-    animation-delay: 0.16s;
-  }
-
-  & > span > span:nth-child(3) {
-    animation-delay: 0.32s;
+  & > span:nth-child(2) {
+    animation-delay: -0.14s;
   }
 }
 
-[data-slot='message-scroller-button'][data-busy='true'] [data-slot='message-scroller-button-activity'] {
-  grid-template-columns: 1fr;
-  opacity: 1;
+[data-slot='message-scroller-button'][data-busy='true'] {
+  & [data-slot='message-scroller-button-glyph'] > svg {
+    opacity: 0;
+    scale: 0.6;
+  }
+
+  & [data-slot='message-scroller-button-activity'] {
+    opacity: 1;
+    scale: 1;
+  }
 }
 
 [data-slot='message-scroller-button'][data-busy='true'][data-active='true']
   [data-slot='message-scroller-button-activity']
-  > span
   > span {
-  animation: message-scroller-button-dot 1.2s ease-in-out infinite;
+  animation: message-scroller-button-write 1.1s var(--ease-in-out-custom) infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-slot='message-scroller-button-activity'] {
+  [data-slot='message-scroller-button-glyph'] > * {
+    scale: 1 !important;
     transition: opacity var(--duration-fast) linear;
   }
 
   [data-slot='message-scroller-button'][data-busy='true'][data-active='true']
     [data-slot='message-scroller-button-activity']
-    > span
     > span {
     animation: none;
-    opacity: 0.7;
   }
 }
 
-@keyframes message-scroller-button-dot {
+@media (forced-colors: active) {
+  [data-slot='message-scroller-button'] {
+    outline: 1px solid CanvasText;
+  }
+}
+
+@keyframes message-scroller-button-write {
   0%,
-  80%,
+  60%,
   100% {
-    opacity: 0.4;
-    transform: scale(0.8);
+    opacity: 0.45;
+    translate: 0 0;
   }
 
-  40% {
+  30% {
     opacity: 1;
-    transform: scale(1);
+    translate: 0 -3px;
   }
 }

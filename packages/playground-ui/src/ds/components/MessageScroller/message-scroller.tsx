@@ -38,7 +38,6 @@ import type { TripAnimation } from './message-scroller-trip';
 import { createVisibilityStore } from './message-scroller-visibility-store';
 
 import { IconArrowDown } from '@/ds/icons/central/IconArrowDown';
-import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { mergeRefs } from '@/lib/merge-refs';
 import { cn } from '@/lib/utils';
 
@@ -899,8 +898,7 @@ export const MessageScrollerButton = React.forwardRef<HTMLButtonElement, Message
         data-busy={busy ? 'true' : 'false'}
         tabIndex={active ? tabIndex : -1}
         className={cn(
-          overlaySurfaceStyle,
-          'absolute inset-s-1/2 inline-flex h-control-lg min-w-control-lg -translate-x-1/2 items-center justify-center rounded-full px-1.5 text-foreground transition-[scale,opacity] duration-200 hover:[--surface-tint:var(--fill-subtle)] data-[active=false]:pointer-events-none data-[active=false]:scale-95 data-[active=false]:opacity-0 data-[active=false]:duration-400 data-[active=false]:ease-[cubic-bezier(0.7,0,0.84,0)] data-[active=true]:scale-100 data-[active=true]:opacity-100 data-[active=true]:ease-[cubic-bezier(0.23,1,0.32,1)] data-[direction=end]:bottom-4 data-[direction=start]:top-4 rtl:translate-x-1/2 data-[direction=start]:[&_svg]:rotate-180',
+          'absolute inset-s-1/2 inline-flex size-control-lg -translate-x-1/2 items-center justify-center rounded-full text-muted-foreground transition-[scale,opacity,box-shadow,color] duration-200 hover:text-foreground data-[active=false]:pointer-events-none data-[active=false]:scale-95 data-[active=false]:opacity-0 data-[active=false]:duration-400 data-[active=false]:ease-[cubic-bezier(0.7,0,0.84,0)] data-[active=true]:scale-100 data-[active=true]:opacity-100 data-[active=true]:ease-[cubic-bezier(0.23,1,0.32,1)] data-[direction=end]:bottom-4 data-[direction=start]:top-4 rtl:translate-x-1/2 data-[direction=start]:[&_svg]:rotate-180',
           className,
         )}
         onClick={event => {
@@ -917,9 +915,9 @@ export const MessageScrollerButton = React.forwardRef<HTMLButtonElement, Message
       >
         {children ?? (
           <>
-            <IconArrowDown className="size-icon-md" aria-hidden />
-            <span data-slot="message-scroller-button-activity" aria-hidden>
-              <span>
+            <span data-slot="message-scroller-button-glyph" aria-hidden>
+              <IconArrowDown className="size-icon-sm" />
+              <span data-slot="message-scroller-button-activity">
                 <span />
                 <span />
                 <span />
