@@ -63,7 +63,7 @@ interface HarnessOptions {
 }
 
 async function makeHarness(opts: HarnessOptions) {
-  const storage = new LibSQLStore({ id: 'test-store', url: 'file::memory:?cache=shared' });
+  const storage = new LibSQLStore({ id: 'test-store', url: ':memory:' });
 
   const tools: Record<string, ReturnType<typeof createTool>> = {};
   if (opts.withReadFileTool) {
@@ -120,6 +120,19 @@ async function makeHarness(opts: HarnessOptions) {
 }
 
 describe('runMC', () => {
+  it('keeps independent harnesses from seeing each other’s threads', async () => {
+    const first = await makeHarness({ doStream: async () => ({ stream: textStream('First answer.') }) });
+    const second = await makeHarness({ doStream: async () => ({ stream: textStream('Second answer.') }) });
+
+    const firstThreads = await first.session.thread.list({ allResources: true });
+    const secondThreads = await second.session.thread.list({ allResources: true });
+
+    expect(firstThreads.map(thread => thread.id)).toContain(first.session.thread.getId());
+    expect(firstThreads.map(thread => thread.id)).not.toContain(second.session.thread.getId());
+    expect(secondThreads.map(thread => thread.id)).toContain(second.session.thread.getId());
+    expect(secondThreads.map(thread => thread.id)).not.toContain(first.session.thread.getId());
+  });
+
   it('resolves the final result when awaited without iterating', async () => {
     const { controller, session } = await makeHarness({
       doStream: async () => ({ stream: textStream('The answer is 4.') }),
@@ -133,6 +146,28 @@ describe('runMC', () => {
     expect(result.text).toBe('The answer is 4.');
     expect(result.usage).toEqual({ inputTokens: 10, outputTokens: 20, totalTokens: 30 });
     expect(result.threadId).toBeTruthy();
+  });
+
+  it('reports cumulative usage across tool and answer steps without including earlier runs', async () => {
+    let calls = 0;
+    const { controller, session } = await makeHarness({
+      withReadFileTool: true,
+      doStream: async () => ({ stream: calls++ === 0 ? toolCallStream() : textStream('Done.') }),
+    });
+
+    const result = await runMC({ controller, session, prompt: 'Read the file and summarize it.' }).result;
+    expect(result.status).toBe('completed');
+    expect(result.toolResults).toHaveLength(1);
+    expect(result.usage).toEqual({ inputTokens: 20, outputTokens: 40, totalTokens: 60 });
+
+    const nextResult = await runMC({
+      controller,
+      session,
+      prompt: 'Anything else?',
+      thread: { id: result.threadId },
+    }).result;
+    expect(nextResult.status).toBe('completed');
+    expect(nextResult.usage).toEqual({ inputTokens: 10, outputTokens: 20, totalTokens: 30 });
   });
 
   it('creates a fresh thread when no thread option is provided', async () => {

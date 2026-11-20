@@ -20,6 +20,8 @@
  * `processInput` only and is registered in `inputProcessors`.
  */
 import { TripWire } from '@mastra/core/agent';
+import { classifyProviderError } from '@mastra/core/error';
+import type { ProviderFailureKind } from '@mastra/core/error';
 import type { ProcessAPIErrorArgs, ProcessInputArgs, ProcessInputResult, Processor } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 
@@ -67,9 +69,8 @@ export type RotationCredentialStore = CredentialStore & {
   /**
    * Force one refresh of the active account's tokens regardless of expiry
    * (401/403 path — a rejected-but-unexpired token usually means clock skew
-   * or a refresh race). `AuthStorage` provides it; deployed per-tenant stores
-   * don't, and the auth path degrades to plain rotation (which itself no-ops
-   * without registry methods).
+   * or a refresh race). `AuthStorage` provides it for its active account;
+   * deployed per-tenant stores provide it for their single credential.
    */
   forceRefreshActiveAccount?(providerId: string, accountInstanceId?: string): Promise<string | undefined>;
 };
@@ -87,16 +88,6 @@ const PROVIDER_HOST_PATTERNS: Array<[RegExp, string]> = [
   [/(^|\.)githubcopilot\.com$/i, 'github-copilot'],
   [/(^|\.)api\.github\.com$/i, 'github-copilot'],
 ];
-
-/**
- * Provider usage/quota-limit wording (locked Q7 bucket 1). Statuses 429/402
- * are matched before this; some providers deliver quota errors as plain 400s,
- * which only the message reveals. Deliberately restricted to unambiguous
- * quota phrases — a generic "exceeded your … limit" can appear on non-quota
- * client errors (request size, context length) that must never rotate.
- */
-const USAGE_LIMIT_MESSAGE_PATTERN =
-  /usage (?:limit|cap)|insufficient[_ ]quota|quota (?:exceeded|exhausted|reached)|exceeded (?:your )?current quota|insufficient (?:balance|credits?)|credits? exhausted|rate limit (?:exceeded|reached)|weekly limit|monthly limit/i;
 
 const NETWORK_ERROR_CODES = new Set([
   'ECONNRESET',
@@ -141,7 +132,31 @@ export interface PendingModelFallback {
 export type RotationClassification =
   | { kind: 'rotate'; reason: 'rate-limit' | 'quota-exhausted' | 'auth-failed' }
   | { kind: 'hop' }
+  | { kind: 'stream-cut' }
   | { kind: 'never' };
+
+/**
+ * Same-account retries for a stream the provider cut after accepting the
+ * request. Each one can cost a full stream (900 s on the ChatGPT Codex route),
+ * so the budget is small. This is the whole budget: Mastra Code's
+ * `StreamErrorRetryProcessor` leaves these errors to this processor.
+ */
+export const MAX_STREAM_CUT_RETRIES = 2;
+
+const ROTATION_BY_PROVIDER_KIND: Partial<Record<ProviderFailureKind, RotationClassification>> = {
+  auth: { kind: 'rotate', reason: 'auth-failed' },
+  quota: { kind: 'rotate', reason: 'quota-exhausted' },
+  rate_limited: { kind: 'rotate', reason: 'rate-limit' },
+  unavailable: { kind: 'hop' },
+};
+
+function rotationFromStatus(status: number | undefined): RotationClassification | undefined {
+  if (status === 429) return { kind: 'rotate', reason: 'rate-limit' };
+  if (status === 402) return { kind: 'rotate', reason: 'quota-exhausted' };
+  if (status === 401 || status === 403) return { kind: 'rotate', reason: 'auth-failed' };
+  if (status !== undefined && status >= 500 && status < 600) return { kind: 'hop' };
+  return undefined;
+}
 
 function isErrorWithCode(error: unknown): error is { code?: unknown } {
   return typeof error === 'object' && error !== null && 'code' in error;
@@ -174,25 +189,6 @@ function isProviderAuthRequiredError(error: unknown): boolean {
   return false;
 }
 
-/** Concatenate the error's message with its cause chain (bounded). */
-function collectErrorText(error: unknown): string {
-  const parts: string[] = [];
-  let current: unknown = error;
-  for (let depth = 0; current && depth < MAX_CAUSE_DEPTH; depth++) {
-    if (current instanceof Error) {
-      parts.push(current.message);
-      current = current.cause;
-    } else if (typeof current === 'object' && 'message' in current) {
-      const message = (current as { message?: unknown }).message;
-      if (typeof message === 'string') parts.push(message);
-      current = (current as { cause?: unknown }).cause;
-    } else {
-      break;
-    }
-  }
-  return parts.join(' | ');
-}
-
 function isNetworkErrorLike(error: unknown): boolean {
   let current: unknown = error;
   for (let depth = 0; current && depth < MAX_CAUSE_DEPTH; depth++) {
@@ -215,39 +211,70 @@ function isNetworkErrorLike(error: unknown): boolean {
   return false;
 }
 
+/** The code the ChatGPT Codex backend puts on the error frame it sends when it ends a stream at 900 s. */
+const STREAM_DURATION_LIMIT_CODE = 'request_timeout';
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : undefined;
+}
+
+/** The `error.code` of a stream error frame: the raw frame, or the frame `@ai-sdk/openai` keeps as `data`. */
+function streamErrorFrameCode(value: Record<string, unknown>): unknown {
+  const data = asRecord(value.data);
+  const frame = value.type === 'error' ? value : data?.type === 'error' ? data : undefined;
+  return asRecord(frame?.error)?.code;
+}
+
 /**
- * The locked Q7 taxonomy. 429/402/usage-limit rotate immediately (429 is not
- * covered by any transient matcher, so it arrives here on first occurrence);
- * 401/403 and `ProviderAuthRequiredError` rotate after one forced refresh;
- * 5xx/network hop only when the transient retry budget is already spent (they
- * reach this processor because `StreamErrorRetryProcessor` declined); 400 and
- * everything unknown never touch the registry.
+ * Whether the provider accepted the request and then the response stream died:
+ * the AI SDK reports a body that fails after a 2xx response as
+ * "Failed to process successful response" with the 2xx status, and the ChatGPT
+ * Codex backend ends streams at 900 s, sometimes with a `request_timeout` error
+ * frame first. Either way the account and the provider answered, so this is
+ * not an outage, and another account would be cut the same way.
+ *
+ * `@ai-sdk/openai` raises that frame with `code: 'request_timeout'` and a
+ * derived `statusCode: 504`, so callers must check this before any 5xx rule.
+ * Mastra Code's transient retry matchers call it first so that account
+ * rotation is the only processor that retries these errors.
+ */
+export function isStreamCutAfterResponse(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; current && depth < MAX_CAUSE_DEPTH; depth++) {
+    const record = asRecord(current);
+    if (!record) break;
+    const { statusCode, status, code } = record;
+    const httpStatus = typeof statusCode === 'number' ? statusCode : status;
+    if (typeof httpStatus === 'number' && httpStatus >= 200 && httpStatus < 300) return true;
+    if (code === STREAM_DURATION_LIMIT_CODE || streamErrorFrameCode(record) === STREAM_DURATION_LIMIT_CODE) return true;
+    current = record.cause;
+  }
+  return false;
+}
+
+/**
+ * The locked Q7 taxonomy. Rate limits and exhausted quotas rotate immediately
+ * (429 is not covered by any transient matcher, so it arrives here on first
+ * occurrence); auth failures and `ProviderAuthRequiredError` rotate after one
+ * forced refresh; 5xx/network hop only when the transient retry budget is
+ * already spent (they reach this processor because `StreamErrorRetryProcessor`
+ * declined); everything else never touches the registry.
  */
 export function classifyRotationError(error: unknown): RotationClassification {
   if (isProviderAuthRequiredError(error)) {
     return { kind: 'rotate', reason: 'auth-failed' };
   }
-
+  // Before the status, wording and network checks: the duration-limit frame
+  // carries a derived 504, and a cut body's socket-error cause reads as
+  // network-like. Each of those would hop.
+  if (isStreamCutAfterResponse(error)) return { kind: 'stream-cut' };
   const status = readErrorStatus(error);
-
-  if (status === 429) return { kind: 'rotate', reason: 'rate-limit' };
-  if (status === 402) return { kind: 'rotate', reason: 'quota-exhausted' };
-  if (status === 401 || status === 403) return { kind: 'rotate', reason: 'auth-failed' };
-  if (status !== undefined && status >= 500 && status < 600) return { kind: 'hop' };
-
-  // Quota wording only rotates when it co-occurs with a statusless or 400
-  // error — the shapes providers actually use for message-only quota
-  // failures. Any other status keeps its own classification above (401/403
-  // auth, 5xx outage hop, 404/422 never), so limit-ish text riding a
-  // non-quota client error can no longer burn the whole pool.
-  if (status === undefined || status === 400) {
-    if (USAGE_LIMIT_MESSAGE_PATTERN.test(collectErrorText(error))) {
-      return { kind: 'rotate', reason: 'quota-exhausted' };
-    }
-  }
-  if (isNetworkErrorLike(error)) return { kind: 'hop' };
-
-  return { kind: 'never' };
+  const byStatus = rotationFromStatus(status);
+  if (byStatus) return byStatus;
+  // Wording only speaks for a statusless or 400 failure, where providers put quota and rate-limit text.
+  const byKind =
+    status === undefined || status === 400 ? ROTATION_BY_PROVIDER_KIND[classifyProviderError(error)] : undefined;
+  return byKind ?? (isNetworkErrorLike(error) ? { kind: 'hop' } : { kind: 'never' });
 }
 
 /** Provider id off a router model id: `mastracode/<provider>/<model>` or `<provider>/<model>`. */
@@ -629,6 +656,32 @@ export class AccountRotationProcessor implements Processor {
       return { retry: false };
     }
 
+    // A stream cut after the provider accepted the request (e.g. the ChatGPT
+    // Codex 900 s limit) says nothing about the account: retry it on the same
+    // account a few times, and when that runs out surface the error itself
+    // rather than marking every account unavailable as a persistent outage.
+    if (classification.kind === 'stream-cut') {
+      // The budget belongs to one model step: `state` lives for the whole request, and a
+      // step's retries keep its step number, while the next step starts with a fresh budget.
+      const budget = state.streamCutRetries as { step: number; count: number } | undefined;
+      const cuts = budget?.step === args.stepNumber ? budget.count : 0;
+      if (cuts >= MAX_STREAM_CUT_RETRIES) {
+        await this.gateChainHop(args, error);
+        return { retry: false };
+      }
+      state.streamCutRetries = { step: args.stepNumber, count: cuts + 1 };
+      // The retry replays the request from scratch (Q10), as a rotation does.
+      args.rotateResponseMessageId?.();
+      const controller = args.requestContext?.get('controller') as
+        | { emitEvent?: (event: { type: 'info'; message: string }) => void }
+        | undefined;
+      controller?.emitEvent?.({
+        type: 'info',
+        message: `The provider ended the response stream early (it may have hit a stream duration limit). Retrying (${cuts + 1}/${MAX_STREAM_CUT_RETRIES}).`,
+      });
+      return { retry: true };
+    }
+
     const cascade = await this.getModelRouteCascade(args);
     const currentEntry = cascade?.entries[cascade.position];
     const providerId =
@@ -659,8 +712,15 @@ export class AccountRotationProcessor implements Processor {
     // `ProviderAuthRequiredError` from an empty registry) a refresh can never
     // succeed, so skip it and fall through to the retry:false surface below,
     // which rethrows the original auth error instead of a generic pool
-    // exhaustion message.
-    if (classification.kind === 'rotate' && classification.reason === 'auth-failed' && active) {
+    // exhaustion message. Stores without an account registry (deployed
+    // per-tenant stores) hold one credential per provider, so they refresh
+    // that credential instead.
+    const hasAccountRegistry = typeof store.listAccounts === 'function';
+    if (
+      classification.kind === 'rotate' &&
+      classification.reason === 'auth-failed' &&
+      (active || !hasAccountRegistry)
+    ) {
       const forced = getForcedRefreshInstances(state);
       const refreshKey = `${providerId}:${active?.id ?? 'active'}`;
       if (!forced.has(refreshKey) && typeof store.forceRefreshActiveAccount === 'function') {

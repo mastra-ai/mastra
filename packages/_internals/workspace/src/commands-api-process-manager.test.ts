@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 
 import { MastraSandbox } from '@mastra/core/workspace';
@@ -33,6 +33,8 @@ class HostCommands implements CommandsApi {
   >();
   readonly calls: string[] = [];
   readonly connectTimeouts: Array<number | undefined> = [];
+  /** The `user` each `run` was given, `undefined` when it set none. */
+  readonly runUsers: Array<string | undefined> = [];
   /**
    * Hold `run`/`connect` back until the first output has been delivered, the
    * way the SDK does when output arrives with the start event: its handle
@@ -40,8 +42,12 @@ class HostCommands implements CommandsApi {
    */
   outputBeforeStart = false;
 
-  async run(command: string, opts: Listener & { stdin?: boolean; cwd?: string; envs?: Record<string, string> }) {
+  async run(
+    command: string,
+    opts: Listener & { stdin?: boolean; cwd?: string; envs?: Record<string, string>; user?: string },
+  ) {
     this.calls.push('run');
+    this.runUsers.push(opts.user);
     // Own process group, so kill() takes down what `sh -c` forked too. Killing
     // only `sh` leaves e.g. dash's forked `sleep` holding the pipes open, and
     // `close` (which `done` waits on) never fires.
@@ -87,9 +93,16 @@ class HostCommands implements CommandsApi {
       .map(([pid, entry]) => ({ pid, cmd: 'sh', args: ['-c', entry.cmd] }));
   }
 
+  /** Like envd, signals only the process itself, not what it started. */
   async kill(pid: number) {
     this.calls.push('kill');
-    return this.children.has(pid) ? killGroup(pid) : false;
+    if (!this.children.has(pid)) return false;
+    try {
+      process.kill(pid, 'SIGKILL');
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async sendStdin(pid: number, data: string) {
@@ -130,6 +143,19 @@ class HostCommands implements CommandsApi {
   }
 }
 
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+  } catch {
+    return false;
+  }
+  // A killed process nobody has reaped yet is a zombie: it still takes signals but no longer runs.
+  const state = spawnSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8' }).stdout?.trim();
+  // Without `ps` there's no telling a zombie apart, so trust the signal.
+  if (state === undefined) return true;
+  return state !== '' && !state.startsWith('Z');
+}
+
 function killGroup(pid: number): boolean {
   try {
     process.kill(-pid, 'SIGKILL');
@@ -142,8 +168,11 @@ function killGroup(pid: number): boolean {
 class HostProcessManager extends CommandsApiProcessManager {
   readonly operations: CommandsApiOperation[] = [];
 
-  constructor(readonly commands: HostCommands) {
-    super({ defaultTimeout: 5_000 });
+  constructor(
+    readonly commands: HostCommands,
+    options: { user?: string } = {},
+  ) {
+    super({ defaultTimeout: 5_000, user: options.user });
   }
 
   runCommands<T>(operation: CommandsApiOperation, fn: (commands: CommandsApi) => Promise<T>): Promise<T> {
@@ -167,9 +196,9 @@ class TestSandbox extends MastraSandbox {
 
 let commands: HostCommands;
 
-function setup() {
+function setup(user?: string) {
   commands = new HostCommands();
-  const processes = new HostProcessManager(commands);
+  const processes = new HostProcessManager(commands, { user });
   new TestSandbox(processes);
   return processes;
 }
@@ -213,6 +242,45 @@ describe('CommandsApiProcessManager', () => {
     const kills = commands.calls.filter(call => call === 'kill').length;
     expect(await handle.kill()).toBe(false);
     expect(commands.calls.filter(call => call === 'kill')).toHaveLength(kills);
+  });
+
+  it('stops what a killed process started, so `npm run dev` takes its dev server down with it', async () => {
+    const processes = setup();
+    // Another background process, which must survive: it's a sibling, not a child.
+    const neighbor = await processes.spawn('sleep 300');
+    // Shaped like `npm run dev`: wrapper -> `sh -c` -> server. Prints the
+    // middle shell's pid, then the server's.
+    const handle = await processes.spawn(`sh -c 'echo $$; sleep 300 & echo $!; sleep 300'; true`);
+    await until(() => /^\d+\n\d+\n$/.test(handle.stdout));
+    const [shell, server] = handle.stdout.trim().split('\n').map(Number) as [number, number];
+    expect(isAlive(shell)).toBe(true);
+    expect(isAlive(server)).toBe(true);
+
+    expect(await handle.kill()).toBe(true);
+
+    await until(() => !isAlive(shell) && !isAlive(server));
+    expect((await handle.wait()).exitCode).toBe(137);
+    expect(isAlive(neighbor.pid)).toBe(true);
+    expect(neighbor.exitCode).toBeUndefined();
+  });
+
+  it('runs commands as the configured user, and the kill script as that same user', async () => {
+    const processes = setup('agent');
+    const handle = await processes.spawn('sleep 30');
+    expect(commands.runUsers).toEqual(['agent']);
+
+    // The kill script has to run as the user that started the tree: another
+    // user cannot signal those processes, and they would outlive the kill.
+    await handle.kill();
+    expect(commands.runUsers).toEqual(['agent', 'agent']);
+  });
+
+  it('leaves the user to the provider when no user is configured', async () => {
+    const processes = setup();
+    const handle = await processes.spawn('true');
+
+    await handle.wait();
+    expect(commands.runUsers).toEqual([undefined]);
   });
 
   it('writes stdin through runCommands, and refuses when stdin was detached', async () => {

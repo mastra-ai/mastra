@@ -1,0 +1,48 @@
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { textStyle } from '@mastra/playground-ui/primitives/text';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { ACTIVITY_PERIOD_LABELS } from '../../periodActivity';
+import type { ActivityPeriod } from '../../periodActivity';
+import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
+
+const PERIOD_OPTIONS = (['today', 'week', 'month'] as const).map(value => ({
+  value,
+  label: ACTIVITY_PERIOD_LABELS[value],
+}));
+
+export function ActivityPeriodMenu({
+  period,
+  onPeriodChange,
+}: {
+  period: ActivityPeriod;
+  onPeriodChange: (period: ActivityPeriod) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenu.Trigger
+        render={
+          <button
+            type="button"
+            className={cn(
+              textStyle({ variant: 'caption', tone: 'muted' }),
+              'hover:text-foreground duration-fast ease-out-custom flex cursor-pointer items-center gap-1 rounded-sm transition-colors motion-reduce:transition-none',
+              focusRing,
+            )}
+          />
+        }
+      >
+        {ACTIVITY_PERIOD_LABELS[period]}
+        <IconChevronDownMedium aria-hidden className="size-icon-sm" />
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content align="end">
+        <DropdownMenu.RadioOptions
+          options={PERIOD_OPTIONS}
+          value={period}
+          onValueChange={onPeriodChange}
+          closeOnSelect
+        />
+      </DropdownMenu.Content>
+    </DropdownMenu>
+  );
+}

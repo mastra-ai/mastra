@@ -60,9 +60,9 @@ function stubStoredSession(resourceId: string) {
   return { sessionPaths, createBodies };
 }
 
-function renderSession() {
+function renderSession(initialEntry?: string) {
   renderWithProviders(
-    <OverlayTestProviders>
+    <OverlayTestProviders initialEntry={initialEntry}>
       <SessionAddress />
     </OverlayTestProviders>,
   );
@@ -99,5 +99,31 @@ describe('opening a Factory session', () => {
     );
     await waitFor(() => expect(sessionPaths.length).toBeGreaterThan(0));
     expect(new Set(sessionPaths)).toEqual(new Set([SESSION_ID]));
+  });
+
+  it('keeps a channel deep link on the routed thread instead of using the channel session id', async () => {
+    const channelSessionId = 'channel:slack:C123';
+    const { createBodies } = stubStoredSession(OVERLAY_FACTORY_ID);
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/user-sessions/channel`, () =>
+        HttpResponse.json({ error: 'session_not_found' }, { status: 404 }),
+      ),
+    );
+    window.history.replaceState(null, '', `/?sessionId=${encodeURIComponent(channelSessionId)}`);
+    renderSession(`/factories/${OVERLAY_FACTORY_ID}/workspaces/channel/threads/thread-test`);
+
+    expect(await screen.findByTestId('address')).toHaveTextContent(`${channelSessionId}|${channelSessionId}`);
+    await waitFor(() =>
+      expect(createBodies).toContainEqual(
+        expect.objectContaining({
+          sessionId: channelSessionId,
+          resourceId: channelSessionId,
+        }),
+      ),
+    );
+    const channelCreate = createBodies.find(
+      body => typeof body === 'object' && body !== null && 'sessionId' in body && body.sessionId === channelSessionId,
+    );
+    expect(channelCreate).not.toHaveProperty('threadId');
   });
 });

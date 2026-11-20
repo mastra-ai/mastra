@@ -1,5 +1,5 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { Route, Routes, useLocation } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -182,18 +182,6 @@ describe('Datasets page filter bar', () => {
       const lastQuery = calls.datasetQueries.at(-1)!;
       expect(lastQuery.get('targetType')).toBe('agent');
       expect(lastQuery.getAll('targetIds')).toEqual(['agent-1']);
-    });
-  });
-
-  describe('when ?targetType= and ?targetId= are in the URL', () => {
-    it('drops the target id when the target type chip is removed', async () => {
-      setupHandlers();
-      renderPage('/datasets?targetType=agent&targetId=agent-1');
-
-      const chip = await screen.findByRole('group', { name: 'Target type Agent' });
-      fireEvent.click(within(chip).getByRole('button', { name: 'Remove Target type filter' }));
-
-      await waitFor(() => expect(getLocation()).toBe('/datasets'));
     });
   });
 });

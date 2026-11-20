@@ -1,24 +1,40 @@
 ---
 title: "PostHog | Observability"
-description: "Export Mastra traces to PostHog AI observability as structured events, with project credentials, host configuration, and serverless flushing."
+description: "Give Mastra agents PostHog tools through Mastra Connect, and export Mastra traces to PostHog AI observability with serverless flushing."
 packages:
+  - "@mastra/connect"
   - "@mastra/observability"
   - "@mastra/posthog"
 ---
 
+import PosthogConnectTools from "@site/src/components/connect/generated/posthog.mdx";
+
 # PostHog
 
-[PostHog](https://posthog.com/) is an analytics platform with AI observability features for monitoring LLM applications. The PostHog exporter sends your traces to PostHog as structured events, providing insights into token usage, costs, latency, and conversation flows.
+[PostHog](https://posthog.com/) is an analytics platform with AI observability features for monitoring LLM applications. Use it with Mastra in two ways:
 
-## Installation
+- **Agent tools** let an agent work with PostHog data, such as events, insights, and feature flags, through [Mastra Connect](/docs/mastra-platform/connect).
+- **[Tracing](#tracing)** exports your Mastra traces to PostHog as structured events.
+
+## Connect
+
+Before you start, complete the [Connect setup](/docs/mastra-platform/connect#get-started) to install `@mastra/connect` and configure your platform project.
+
+<PosthogConnectTools />
+
+## Tracing
+
+The PostHog exporter sends your traces to PostHog as structured events, providing insights into token usage, costs, latency, and conversation flows.
+
+### Installation
 
 ```bash npm2yarn
 npm install @mastra/posthog@latest
 ```
 
-## Configuration
+### Configuration
 
-### Prerequisites
+#### Prerequisites
 
 1. **PostHog Account**: Sign up at [posthog.com](https://posthog.com/)
 1. **Project API Key**: Get your project API key from PostHog Settings → Project API Key
@@ -32,7 +48,7 @@ POSTHOG_API_KEY=phc_xxxxxxxxxxxxxxxx
 POSTHOG_HOST=https://us.i.posthog.com  # or eu.i.posthog.com for EU region
 ```
 
-### Zero-Config Setup
+#### Zero-config setup
 
 With environment variables set, use the exporter with no configuration:
 
@@ -53,7 +69,7 @@ export const mastra = new Mastra({
 })
 ```
 
-### Explicit Configuration
+#### Explicit configuration
 
 You can also pass credentials directly (takes precedence over environment variables):
 
@@ -78,9 +94,9 @@ export const mastra = new Mastra({
 })
 ```
 
-## Configuration options
+### Configuration options
 
-### Complete Configuration
+#### Complete configuration
 
 ```typescript
 new PosthogExporter({
@@ -108,7 +124,7 @@ new PosthogExporter({
 })
 ```
 
-### Serverless Mode
+#### Serverless mode
 
 Optimized batching for serverless environments:
 
@@ -119,7 +135,7 @@ new PosthogExporter({
 })
 ```
 
-### Privacy Mode
+#### Privacy mode
 
 Exclude input/output data from generation events while preserving token metrics:
 
@@ -130,7 +146,7 @@ new PosthogExporter({
 })
 ```
 
-### Group analytics
+#### Group analytics
 
 To attach events to a [PostHog group](https://posthog.com/docs/product-analytics/group-analytics), add a `$groups` object to `tracingOptions.metadata`. The exporter sends those values as the top-level `groups` field on the PostHog capture call, so you can slice analytics such as LLM cost by group.
 

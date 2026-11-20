@@ -1,21 +1,27 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { Status } from '@mastra/playground-ui/components/StatusIndicators';
 import type { StatusPresentation } from '@mastra/playground-ui/components/StatusIndicators';
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Status } from '@mastra/playground-ui/components/StatusIndicators';
+import { SettingsItem, SettingsItemIcon } from '@mastra/playground-ui/new/settings';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
-import { Box, MoreHorizontal } from 'lucide-react';
+import { IconDotGrid1x3Horizontal } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Horizontal';
 
-import type { ProviderInfo } from '../../../../../../api/types';
-import { useRemoveProviderKey, useSignOutProviderOAuth } from '../../../../../../hooks/use-providers';
-import { ProviderBrandIcon } from '../../../../workspaces/components/ProviderBrandIcon';
+import type { OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
+import {
+  useRemoveProviderKey,
+  useSignOutProviderOAuth,
+  useStartProviderOAuth,
+} from '../../../../../../hooks/use-providers';
+import { signInRequest } from '../../provider-credential';
 import type { CredentialScope, ProviderCredential } from '../../provider-credential';
+import { ConnectedRow, ProviderIcon } from './ProviderRows';
 
 export interface ProviderConnection {
   provider: ProviderInfo;
   status: StatusPresentation;
   credential: ProviderCredential | undefined;
+  signInExpired: boolean;
 }
 
 const SIGNING_OUT_STATUS: StatusPresentation = {
@@ -28,11 +34,21 @@ const REMOVING_STATUS: StatusPresentation = {
   tone: 'progress',
   description: 'Deleting the saved API key',
 };
+const STARTING_SIGN_IN_STATUS: StatusPresentation = {
+  label: 'Starting sign-in…',
+  tone: 'progress',
+  description: 'Opening the provider sign-in',
+};
 
-function displayedStatus(saved: StatusPresentation, signingOut: boolean, removing: boolean): StatusPresentation {
-  if (signingOut) return SIGNING_OUT_STATUS;
-  if (removing) return REMOVING_STATUS;
-  return saved;
+function pendingStatus(pending: {
+  signingOut: boolean;
+  removing: boolean;
+  startingSignIn: boolean;
+}): StatusPresentation | undefined {
+  if (pending.signingOut) return SIGNING_OUT_STATUS;
+  if (pending.removing) return REMOVING_STATUS;
+  if (pending.startingSignIn) return STARTING_SIGN_IN_STATUS;
+  return undefined;
 }
 
 export function ConnectedProviderRow({
@@ -40,22 +56,40 @@ export function ConnectedProviderRow({
   requestScope,
   disabled,
   onUpdateKey,
+  onOAuthStarted,
+  variant = 'list',
 }: {
+  /** `list`: an `li` of a `ProviderRows` list. `settings`: a `SettingsItem` in a settings card. */
+  variant?: 'list' | 'settings';
   connection: ProviderConnection;
   requestScope: CredentialScope | undefined;
   disabled: boolean;
   onUpdateKey: () => void;
+  onOAuthStarted?: (provider: string, session: OAuthStartResponse) => void;
 }) {
-  const { provider, status, credential } = connection;
+  const { provider, status, credential, signInExpired } = connection;
   const displayName = providerDisplayName(provider.provider);
   const signOutMutation = useSignOutProviderOAuth();
   const removeKeyMutation = useRemoveProviderKey();
+  const startOAuthMutation = useStartProviderOAuth();
+  const pending = pendingStatus({
+    signingOut: signOutMutation.isPending,
+    removing: removeKeyMutation.isPending,
+    startingSignIn: startOAuthMutation.isPending,
+  });
 
   const signOut = () => {
     signOutMutation.mutate(
       { provider: provider.provider, scope: requestScope },
       { onError: error => toast.error(error.message || 'Failed to sign out') },
     );
+  };
+
+  const signInAgain = (onStarted: (provider: string, session: OAuthStartResponse) => void) => {
+    startOAuthMutation.mutate(signInRequest(provider, requestScope), {
+      onSuccess: session => onStarted(provider.provider, session),
+      onError: error => toast.error(error.message || 'Failed to start sign-in'),
+    });
   };
 
   const removeKey = () => {
@@ -65,28 +99,42 @@ export function ConnectedProviderRow({
     );
   };
 
+  const canSignInAgain = signInExpired && provider.oauth?.supported === true && onOAuthStarted !== undefined;
+  const menu = credential ? (
+    <CredentialMenu
+      displayName={displayName}
+      credential={credential}
+      disabled={disabled || pending !== undefined}
+      onSignInAgain={canSignInAgain ? () => signInAgain(onOAuthStarted) : undefined}
+      onSignOut={signOut}
+      onUpdateKey={provider.connectWithMastraAccount ? undefined : onUpdateKey}
+      onRemoveKey={removeKey}
+    />
+  ) : undefined;
+
+  if (variant === 'settings') {
+    return (
+      <SettingsItem
+        media={
+          <SettingsItemIcon>
+            {/* The span keeps each brand icon's own optical size. */}
+            <span className="flex">
+              <ProviderIcon provider={provider.provider} />
+            </span>
+          </SettingsItemIcon>
+        }
+        title={displayName}
+        description={<Status presentation={pending ?? status} />}
+      >
+        {menu}
+      </SettingsItem>
+    );
+  }
+
   return (
-    <li className="flex min-h-10 items-center gap-2.5 py-1.5 pr-1.5 pl-3">
-      <ProviderBrandIcon provider={provider.provider} fallback={<Box className="text-muted-foreground size-4" />} />
-      <Txt as="span" variant="caption" className="min-w-0 flex-1 truncate">
-        {displayName}
-      </Txt>
-      <Txt as="span" variant="meta" tone="muted" className="shrink-0">
-        <Status presentation={displayedStatus(status, signOutMutation.isPending, removeKeyMutation.isPending)} />
-      </Txt>
-      {credential ? (
-        <CredentialMenu
-          displayName={displayName}
-          credential={credential}
-          disabled={disabled || signOutMutation.isPending || removeKeyMutation.isPending}
-          onSignOut={signOut}
-          onUpdateKey={onUpdateKey}
-          onRemoveKey={removeKey}
-        />
-      ) : (
-        <span aria-hidden="true" className="size-control-sm shrink-0" />
-      )}
-    </li>
+    <ConnectedRow icon={<ProviderIcon provider={provider.provider} />} title={displayName} status={pending ?? status}>
+      {menu}
+    </ConnectedRow>
   );
 }
 
@@ -94,6 +142,7 @@ function CredentialMenu({
   displayName,
   credential,
   disabled,
+  onSignInAgain,
   onSignOut,
   onUpdateKey,
   onRemoveKey,
@@ -101,8 +150,9 @@ function CredentialMenu({
   displayName: string;
   credential: ProviderCredential;
   disabled: boolean;
+  onSignInAgain: (() => void) | undefined;
   onSignOut: () => void;
-  onUpdateKey: () => void;
+  onUpdateKey: (() => void) | undefined;
   onRemoveKey: () => void;
 }) {
   return (
@@ -110,16 +160,19 @@ function CredentialMenu({
       <DropdownMenu.Trigger
         render={
           <Button variant="ghost" size="icon-sm" aria-label={`${displayName} actions`} disabled={disabled}>
-            <MoreHorizontal />
+            <IconDotGrid1x3Horizontal />
           </Button>
         }
       />
       <DropdownMenu.Content align="end">
         {credential === 'oauth' ? (
-          <DropdownMenu.Item onClick={onSignOut}>Sign out</DropdownMenu.Item>
+          <>
+            {onSignInAgain && <DropdownMenu.Item onClick={onSignInAgain}>Sign in again</DropdownMenu.Item>}
+            <DropdownMenu.Item onClick={onSignOut}>Sign out</DropdownMenu.Item>
+          </>
         ) : (
           <>
-            <DropdownMenu.Item onClick={onUpdateKey}>Update key</DropdownMenu.Item>
+            {onUpdateKey && <DropdownMenu.Item onClick={onUpdateKey}>Update key</DropdownMenu.Item>}
             <DropdownMenu.Item onClick={onRemoveKey}>Remove key</DropdownMenu.Item>
           </>
         )}

@@ -38,7 +38,7 @@ function waitUntilReady(vectorDB: PineconeVector, indexName: string) {
     const interval = setInterval(async () => {
       try {
         const stats = await vectorDB.describeIndex({ indexName });
-        if (!!stats) {
+        if (stats) {
           clearInterval(interval);
           resolve(true);
         }

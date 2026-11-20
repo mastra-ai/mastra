@@ -19,7 +19,7 @@ export function TraceIntelligenceExplainer({ signalCatalog }: { signalCatalog: r
       </p>
       <ul className="space-y-1.5">
         {enabledSignals.map(signalName => (
-          <li key={signalName} className="text-muted-foreground">
+          <li key={signalName} className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-muted-foreground">
             <Txt
               as="span"
               variant="meta"
@@ -28,8 +28,8 @@ export function TraceIntelligenceExplainer({ signalCatalog }: { signalCatalog: r
               style={{ color: getSignalColor(signalName) }}
             >
               {signalLabel(signalCatalog, signalName)}
-            </Txt>{' '}
-            — {signalDescription(signalCatalog, signalName)}
+            </Txt>
+            <span>{signalDescription(signalCatalog, signalName)}</span>
           </li>
         ))}
       </ul>

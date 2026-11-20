@@ -50,7 +50,7 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
               return true;
             }
           }
-        } catch (e) {
+        } catch {
           // Server not ready yet
         }
         return false;

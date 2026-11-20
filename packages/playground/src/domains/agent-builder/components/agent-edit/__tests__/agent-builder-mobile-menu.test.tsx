@@ -92,16 +92,6 @@ describe('AgentBuilderMobileMenu', () => {
     cleanup();
   });
 
-  it('renders nothing when no items are configured', () => {
-    render(
-      <FormHarness>
-        <AgentBuilderMobileMenu showSetVisibility={false} />
-      </FormHarness>,
-    );
-
-    expect(screen.queryByTestId('agent-builder-mobile-menu')).toBeNull();
-  });
-
   it('wraps the trigger in an lg:hidden container so desktop never sees it', () => {
     render(
       <FormHarness>

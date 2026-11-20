@@ -482,6 +482,23 @@ describe('FilesApiFilesystem', () => {
       expect(await fs.stat(`${W}/dirlink`)).toMatchObject({ type: 'directory' });
     });
 
+    it('infers mimeType from the name for files only, like LocalFilesystem', async () => {
+      await writeFile(join(root, 'w/pic.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+      await writeFile(join(root, 'w/doc.pdf'), '%PDF-1.4');
+      await mkdir(join(root, 'w/album.png'));
+      await writeFile(join(root, 'w/pic.bin'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+      await symlink('pic.bin', join(root, 'w/piclink.png'));
+
+      expect((await fs.stat(`${W}/pic.png`)).mimeType).toBe('image/png');
+      expect((await fs.stat(`${W}/doc.pdf`)).mimeType).toBe('application/pdf');
+      expect((await fs.stat(`${W}/a.txt`)).mimeType).toBe('text/plain');
+      // The type comes from the requested name, not the target's, like LocalFilesystem.
+      expect(await fs.stat(`${W}/piclink.png`)).toMatchObject({ type: 'file', mimeType: 'image/png' });
+      const dir = await fs.stat(`${W}/album.png`);
+      expect(dir.type).toBe('directory');
+      expect(dir).not.toHaveProperty('mimeType');
+    });
+
     it('maps a missing path and a broken link to FileNotFoundError', async () => {
       await expect(fs.stat(`${W}/nope`)).rejects.toBeInstanceOf(FileNotFoundError);
       await expect(fs.stat(`${W}/broken`)).rejects.toBeInstanceOf(FileNotFoundError);

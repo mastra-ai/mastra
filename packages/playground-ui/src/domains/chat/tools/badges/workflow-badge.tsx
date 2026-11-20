@@ -1,6 +1,5 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
 import { useWorkflow } from '@mastra/react/hooks/workflows';
-import { Eye } from 'lucide-react';
 import { useContext, useEffect } from 'react';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import type { MessageMetadata } from '@/domains/chat';
@@ -22,11 +21,15 @@ import {
 import { WorkflowStepDetailContent } from '@/domains/workflows/components/workflow-step-detail';
 import { PlaygroundWorkflowRunProvider } from '@/domains/workflows/context/playground-workflow-run-provider';
 import type { WorkflowRunStreamResult } from '@/domains/workflows/context/workflow-run-context';
+import { agentGlyph } from '@/ds/components/AgentIndicator';
 import { ToolCallMono } from '@/ds/components/ai/tool-call';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
+import { IconEyeOpen } from '@/ds/icons/central/IconEyeOpen';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { useLinkComponent } from '@/lib/framework';
+
+const WorkflowToolIcon = agentGlyph('workflow');
 
 export interface WorkflowBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'> {
   workflowId: string;
@@ -94,7 +97,7 @@ export const WorkflowBadge = ({
         isGenerateMode: metadata?.mode === 'generate',
       }}
       data-testid="workflow-badge"
-      icon={<WorkflowIcon className="text-span-workflow" />}
+      icon={<WorkflowToolIcon className="text-span-workflow" />}
       title={workflow.name}
       initialCollapsed={false}
       extraInfo={
@@ -148,7 +151,7 @@ const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExt
           Go to workflow
         </Button>
         {runId && (
-          <Button icon={<Eye />} render={<Link href={`/workflows/${workflowId}/graph/${runId}`} />}>
+          <Button icon={<IconEyeOpen />} render={<Link href={`/workflows/${workflowId}/graph/${runId}`} />}>
             See run
           </Button>
         )}

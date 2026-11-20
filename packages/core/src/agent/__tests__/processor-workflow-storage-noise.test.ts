@@ -105,6 +105,33 @@ describe('agent processor-workflow storage noise (issue #17137 follow-up to #173
     expect(processorLookups).toEqual([]);
   });
 
+  it.each(['generate', 'stream'] as const)('does not read internal workflow status on %s', async method => {
+    const storage = new InMemoryStore();
+    const agent = new Agent({
+      id: AGENT_ID,
+      name: AGENT_ID,
+      instructions: 'test',
+      model: createDummyModel(),
+      inputProcessors: [
+        noopInputProcessor,
+        { id: 'second-noop-input-processor', processInput: noopInputProcessor.processInput },
+      ],
+      outputProcessors: [{ id: 'noop-output-processor', processOutputResult: async ({ messages }) => messages }],
+    });
+    const mastra = new Mastra({ agents: { [AGENT_ID]: agent }, storage, logger: false });
+    const workflowsStore = await storage.getStore('workflows');
+    const statusSpy = vi.spyOn(workflowsStore!, 'loadWorkflowRunStatus');
+
+    const response = await mastra.getAgent(AGENT_ID)[method]('Hello!');
+    expect(await response.text).toBe('Dummy response');
+
+    const internalWorkflowIds = ['execution-workflow', PROCESSOR_WORKFLOW_ID, `${AGENT_ID}-output-processor`];
+    const internalStatusReads = statusSpy.mock.calls.filter(([{ workflowName }]) =>
+      internalWorkflowIds.includes(workflowName),
+    );
+    expect(internalStatusReads).toEqual([]);
+  });
+
   it('does not persist a snapshot for the internal processor workflow on generate', async () => {
     const { mastra, storage } = buildAgentWithProcessor();
 

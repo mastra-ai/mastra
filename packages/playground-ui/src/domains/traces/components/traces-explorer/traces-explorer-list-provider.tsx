@@ -1,79 +1,45 @@
 import { memo, useMemo } from 'react';
 import type { ReactNode } from 'react';
-import { useTracesListSource } from '../../hooks/use-traces-list-source';
-import { buildTracesLegacyFilters, buildTracesQueryRequest } from './traces-explorer-actions';
-import type { TracesSortDirection } from './traces-explorer-actions';
+import type { TracesSort } from './traces-explorer-actions';
 import {
   TracesListContext,
   TracesListFetchingContext,
+  useTraceUsageColumns,
   useTracesConfig,
-  useTracesFilters,
 } from './traces-explorer-context';
 import type { TracesListContextValue } from './traces-explorer-context';
+import type { TracesExplorerTraces } from './traces-explorer-data';
+import { resolveTracesSort } from './traces-explorer-support';
 
 type TracesListProviderProps = {
-  sortDirection: TracesSortDirection;
-  onSortChange: (direction: TracesSortDirection) => void;
+  traces: TracesExplorerTraces;
+  sort: TracesSort;
+  onSortChange: (next: TracesSort) => void;
   children: ReactNode;
 };
 
 /**
- * Owns the list query and its poll clock. Its own memoized component so a poll tick re-renders
- * only list consumers, and a selection change doesn't re-run the list query hooks.
+ * Hands the host's list to the parts. Its own memoized component so a background fetch re-renders
+ * only list consumers, and a selection change doesn't hand them a fresh value.
  */
 export const TracesListProvider = memo(function TracesListProvider({
-  sortDirection,
+  traces,
+  sort: hostSort,
   onSortChange,
   children,
 }: TracesListProviderProps) {
-  const { withQueryTrace, withRootDuration, withDeltaPolling, isCapabilitiesLoading } = useTracesConfig();
-  const { filters, dateFrom, dateTo } = useTracesFilters();
-  const list = useTracesListSource({
-    rolling: !dateTo,
-    query: now => buildTracesQueryRequest({ filters, dateFrom, dateTo, withRootDuration, now }),
-    orderBy: [{ field: 'startedAt', direction: sortDirection }],
-    withQueryTrace,
-    withDeltaPolling,
-    enabled: !isCapabilitiesLoading,
-    legacyFilters: buildTracesLegacyFilters({ filters, dateFrom, dateTo }),
-  });
+  const { withTimeToFirstChunkSort, withTimeToFirstTokenSort } = useTracesConfig();
+  const { displayedPreferences } = useTraceUsageColumns();
+  const sort = resolveTracesSort(
+    hostSort,
+    { withTimeToFirstChunkSort, withTimeToFirstTokenSort },
+    displayedPreferences,
+  );
 
-  const {
-    rows,
-    isLoading,
-    isFetchingNextPage,
-    hasNextPage,
-    setEndOfListElement,
-    error,
-    refetch,
-    isFetching,
-    autoRefetch,
-  } = list;
+  const { rows, isLoading, isFetchingNextPage, hasNextPage, error, onLoadMore, onRetry, isFetching } = traces;
   const value = useMemo<TracesListContextValue>(
-    () => ({
-      rows,
-      isLoading,
-      isFetchingNextPage,
-      hasNextPage,
-      setEndOfListElement,
-      error,
-      refetch,
-      autoRefetch,
-      sortDirection,
-      onSortChange,
-    }),
-    [
-      rows,
-      isLoading,
-      isFetchingNextPage,
-      hasNextPage,
-      setEndOfListElement,
-      error,
-      refetch,
-      autoRefetch,
-      sortDirection,
-      onSortChange,
-    ],
+    () => ({ rows, isLoading, isFetchingNextPage, hasNextPage, error, onLoadMore, onRetry, sort, onSortChange }),
+    [rows, isLoading, isFetchingNextPage, hasNextPage, error, onLoadMore, onRetry, sort, onSortChange],
   );
 
   return (

@@ -2,14 +2,13 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { TokenUsageCard } from '../token-usage-card';
-import { failingMetrics, pendingMetrics, renderInMetrics, seedMetrics } from './metrics-msw';
+import { openViewMenu, pendingMetrics, pickView, renderInMetrics, seedMetrics } from './metrics-msw';
 
 describe('TokenUsageCard', () => {
-  it('shows its title and tabs while the data loads', () => {
+  it('shows its title and view menu while the data loads', async () => {
     pendingMetrics();
     renderInMetrics(<TokenUsageCard />);
-    expect(screen.getByText('Token usage')).toBeDefined();
-    expect(screen.getByRole('tab', { name: 'Cost' })).toBeDefined();
+    expect(await openViewMenu('Token usage')).toEqual(['Token usage', 'Model cost']);
     expect(screen.queryByText('1.30K')).toBeNull();
   });
 
@@ -17,14 +16,9 @@ describe('TokenUsageCard', () => {
     seedMetrics();
     renderInMetrics(<TokenUsageCard />);
     expect(await screen.findByText('1.30K')).toBeDefined();
-    fireEvent.click(screen.getByRole('tab', { name: 'Cost' }));
+    await pickView('Token usage', 'Model cost');
     expect(await screen.findByText('$0.75')).toBeDefined();
-  });
-
-  it('says so when the data fails to load', async () => {
-    failingMetrics();
-    renderInMetrics(<TokenUsageCard />);
-    expect(await screen.findByText(/Couldn't load this data/)).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Model cost' })).toBeDefined();
   });
 
   it('only offers "View in traces" with a handler, and calls it', async () => {

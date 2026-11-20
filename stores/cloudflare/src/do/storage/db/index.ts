@@ -293,7 +293,8 @@ export class DODB extends MastraBase {
 
         if (!existingColumnNames.has(columnName) && args.ifNotExists.includes(columnName)) {
           const sqlType = this.getSqlType(column.type);
-          const defaultValue = this.getDefaultValue(column.type);
+          // Nullable columns start out NULL; a type default would give existing rows a value they never had.
+          const defaultValue = column.nullable ? 'DEFAULT NULL' : this.getDefaultValue(column.type);
           const sql = `ALTER TABLE ${fullTableName} ADD COLUMN ${columnName} ${sqlType} ${defaultValue}`;
           await this.executeQuery({ sql });
           this.logger.debug(`Added column ${columnName} to table ${fullTableName}`);

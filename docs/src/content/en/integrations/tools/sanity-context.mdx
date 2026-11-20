@@ -1,0 +1,189 @@
+---
+title: 'Sanity Context | Tools'
+description: 'Connect Mastra agents to Sanity Context so they answer from Knowledge Bases built from your content, through a read-only MCP endpoint.'
+packages:
+  - '@mastra/mcp'
+---
+
+# Sanity Context
+
+[Sanity Context](https://www.sanity.io/context) turns your content into knowledge your AI agents can read, wherever that content lives: a Sanity dataset, a website you don't manage in Sanity, or a set of files. Agents connect through a read-only Model Context Protocol (MCP) endpoint, and your team controls what each agent can see.
+
+Connect a Sanity Context endpoint to a Mastra agent with [`MCPClient`](/reference/tools/mcp-client), and the agent looks up answers in your content before it replies.
+
+## Before you begin
+
+- Node.js `v22.13.0` or later
+- A Sanity Context MCP endpoint. In the [Sanity Dashboard](https://www.sanity.io/manage), open **Context**, create an endpoint from a Knowledge Base or a dataset, and copy its URL. You can also use the Sanity CLI. See [Connect Sanity Context with Mastra](https://www.sanity.io/docs/context/connect-mastra).
+- An organization API token with Context access. In [Manage](https://www.sanity.io/manage), create a token under your organization's **API > Tokens** and set **Context** to **Viewer**. Use an organization token, because project tokens don't have Context access.
+- An API key from a supported [model provider](/models)
+- An existing Mastra project. Follow [Get started](/docs) to create one.
+
+## Install packages
+
+Install the Mastra MCP client:
+
+```bash npm2yarn
+npm install @mastra/mcp@latest
+```
+
+## Configure environment variables
+
+Add the endpoint URL and token to the `.env` file in your project root:
+
+```bash title=".env"
+SANITY_CONTEXT_MCP_URL=https://api.sanity.io/v2026-11-03/context/organizations/<organization-id>/mcp/<endpoint-name>
+SANITY_ORGANIZATION_TOKEN=<organization-token>
+```
+
+## Connect Sanity Context to an agent
+
+Create a new agent at `src/mastra/agents/sanity-agent.ts`:
+
+```ts title="src/mastra/agents/sanity-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { MCPClient } from '@mastra/mcp'
+
+const mcpUrl = process.env.SANITY_CONTEXT_MCP_URL
+const token = process.env.SANITY_ORGANIZATION_TOKEN
+if (!mcpUrl || !token) {
+  throw new Error('Set SANITY_CONTEXT_MCP_URL and SANITY_ORGANIZATION_TOKEN')
+}
+const headers = { Authorization: `Bearer ${token}` }
+
+const sanityMcp = new MCPClient({
+  id: 'sanity-context',
+  servers: {
+    sanity: { url: new URL(mcpUrl), requestInit: { headers } },
+  },
+})
+
+const INITIAL_CONTEXT_TTL_MS = 5 * 60_000
+
+async function fetchInitialContext() {
+  const url = new URL(mcpUrl!)
+  url.pathname = url.pathname.replace(/\/$/, '') + '/initial-context'
+  try {
+    const res = await fetch(url, { headers, signal: AbortSignal.timeout(10_000) })
+    if (res.ok) return await res.text()
+    console.warn(`initial-context returned ${res.status}; continuing without it`)
+  } catch (err) {
+    console.warn('Could not fetch initial context; continuing without it:', err)
+  }
+  return undefined
+}
+
+// Cache a successful fetch for 5 minutes. A failed fetch saves nothing, so the next run fetches again.
+let cachedInitialContext: { fetchedAt: number; value: Promise<string | undefined> } | undefined
+function getInitialContext() {
+  if (
+    !cachedInitialContext ||
+    Date.now() - cachedInitialContext.fetchedAt > INITIAL_CONTEXT_TTL_MS
+  ) {
+    const value = fetchInitialContext()
+    cachedInitialContext = { fetchedAt: Date.now(), value }
+    value.then(text => {
+      if (text === undefined && cachedInitialContext?.value === value)
+        cachedInitialContext = undefined
+    })
+  }
+  return cachedInitialContext.value
+}
+
+// Mastra resolves instructions and tools separately. Read the cache once per run so they
+// agree on whether the initial context is inlined.
+const initialContextPerRun = new WeakMap<object, Promise<string | undefined>>()
+function getRunInitialContext(requestContext: object) {
+  let value = initialContextPerRun.get(requestContext)
+  if (!value) initialContextPerRun.set(requestContext, (value = getInitialContext()))
+  return value
+}
+
+export const sanityAgent = new Agent({
+  id: 'sanity-agent',
+  name: 'Sanity Agent',
+  instructions: async ({ requestContext }) => {
+    const context = await getRunInitialContext(requestContext)
+    return [
+      'You answer questions using content from Sanity. Use the available tools to look things up.',
+      context ? `# Data reference\n\n${context}` : '',
+    ].join('\n\n')
+  },
+  model: '__GATEWAY_OPENAI_MODEL__',
+  // Looking up an answer can take several steps
+  defaultOptions: { maxSteps: 10 },
+  tools: async ({ requestContext }) => {
+    const { tools, errors } = await sanityMcp.listToolsWithErrors()
+    if (errors.sanity) {
+      throw new Error(`Could not connect to Sanity Context: ${errors.sanity}`)
+    }
+    // The instructions already include the initial context
+    if (await getRunInitialContext(requestContext)) delete tools['sanity_initial_context']
+    return tools
+  },
+})
+```
+
+Register the agent on your Mastra instance in `src/mastra/index.ts`:
+
+```ts title="src/mastra/index.ts" {2,5}
+import { Mastra } from '@mastra/core'
+import { sanityAgent } from './agents/sanity-agent'
+
+export const mastra = new Mastra({
+  agents: { sanityAgent },
+})
+```
+
+## Test in Studio
+
+Start the dev server and open [Studio](/docs/studio/overview):
+
+```bash npm2yarn
+npm run dev
+```
+
+In Studio, open **Sanity Agent** and ask a question your content covers, for example:
+
+- "What topics does the content cover?"
+- "What does the content say about pricing?"
+
+The agent calls `sanity_` tools and answers from your content.
+
+## How it works
+
+- **Initial context:** The agent fetches the endpoint's initial context and adds it to its instructions. The initial context holds the outline of each Knowledge Base or the dataset schema, plus the instructions your team set on the endpoint. With it, the agent knows what the content covers before its first lookup. The agent caches it for 5 minutes, so endpoint changes show up within that time. Each run reads the cache once, so the instructions and tools agree on whether the initial context is inlined. A failed fetch isn't cached, and the next run tries again.
+- **Tools:** `MCPClient` lists the endpoint's tools on each run and prefixes them with the server key (`sanity_`). Every tool is read-only.
+- **Connection errors:** `listToolsWithErrors()` reports a failed connection, such as a rejected token. The run then fails instead of answering without your content. `listTools()` returns no tools in that case.
+
+What the endpoint serves decides which tools the agent gets:
+
+| Endpoint serves | Initial context | Tools |
+| - | - | - |
+| Knowledge Bases | Outline of each Knowledge Base | `sanity_knowledge_base_search`, `sanity_knowledge_base_read` |
+| A dataset | Schema overview | `sanity_groq_query`, `sanity_schema_explorer`, `sanity_array_field_reader` |
+
+An endpoint with both a dataset and Knowledge Bases gets both sets of tools, and its initial context includes both.
+
+To give each agent different content, create one endpoint per agent and one `MCPClient` per endpoint, each with its own `id`.
+
+## Install Sanity Context agent skills
+
+The [Sanity Context agent skills](https://github.com/sanity-io/context#using-skills) give compatible coding agents guidance on creating the endpoint, writing its instructions, and shaping your agent's system prompt. Install them from your project directory:
+
+```bash
+npx skills add sanity-io/context --all
+```
+
+## Troubleshooting
+
+- **`Could not connect to Sanity Context` with HTTP 401:** The token is missing or invalid, or the organization ID in the URL doesn't match it.
+- **403 `contextGrantRequired` or `knowledgeBaseAccessDenied`:** The token isn't an organization token with Context access. Create an organization token and set **Context** to **Viewer**.
+- **Empty answer after several tool calls:** The agent reached its step limit while searching. Raise `maxSteps`.
+
+## Related
+
+- [Sanity Context documentation](https://www.sanity.io/docs/ai/sanity-context)
+- [Connect Sanity Context with Mastra](https://www.sanity.io/docs/context/connect-mastra): CLI setup, a standalone script, and one agent per endpoint
+- [Build a Knowledge Base for Agents (with Sanity)](https://www.youtube.com/watch?v=SNM36g2t5Wk): Mastra workshop recording
+- [`MCPClient` reference](/reference/tools/mcp-client)

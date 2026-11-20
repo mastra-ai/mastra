@@ -9,9 +9,9 @@ import { focusRingInset } from '@/ds/primitives/transitions';
  */
 export const dataListRowOuterStyles = [
   'group/data-list-row data-list-row col-span-full relative min-h-9',
-  // The row surface is a `before` pseudo at `-z-2` so the root's fluid hover
-  // highlight (`-z-1`) can glide *between* the surface and the row content,
-  // exactly like menu items. The row element itself stays transparent.
+  // The row surface is a `before` pseudo at `-z-2`, under the hover layer
+  // (`after`, `-z-1`) and the row content. The row element itself stays
+  // transparent so tones (error, info) tint on top of both.
   "before:absolute before:inset-0 before:-z-2 before:rounded-[inherit] before:bg-background before:content-['']",
 ] as const;
 
@@ -20,22 +20,25 @@ export const dataListRowOuterStyles = [
  * `RowButton` / `RowLink` and to `RowWrapper`. The `has-*` forms let a wrapper
  * mirror the tone of the interactive row nested inside it.
  *
- * Hover is not painted per row: the root renders one fluid `fill-subtle`
- * highlight under the row content. Rows are sunken wells (`--background`) inside
+ * Hover lights an `after` layer between the row surface and its content, and
+ * switches instantly. Rows are sunken wells (`--background`) inside
  * the card panel, whose material also shows through the 1px gaps between them,
  * so a resting tone steps to `--surface-panel` — the opaque twin of a `--fill`
  * rung over the well — rather than to `--card`, which would make a selected row
  * the exact colour of the separators around it. Pressed rises a full `--fill`
  * rung, the same rung a resting control carries, and error sits on the row
- * element itself so it reads on top of the highlight.
+ * element itself so it reads on top of the hover layer.
  */
 export const dataListRowStateStyles = [
+  // `data-list-row-interactive` lets the root light a hovered row's opaque sticky cell.
+  "data-list-row-interactive after:pointer-events-none after:absolute after:inset-0 after:-z-1 after:rounded-[inherit] after:content-['']",
+  'not-disabled:hover:after:bg-fill-subtle',
   'active:bg-fill',
   'focus-visible:bg-surface-panel has-focus-visible:bg-surface-panel',
   'data-featured:before:bg-surface-panel has-data-featured:before:bg-surface-panel has-data-selected:before:bg-surface-panel',
   'data-[variant=error]:bg-destructive-subtle has-data-[variant=error]:bg-destructive-subtle data-[variant=error]:active:bg-destructive-subtle-active has-data-[variant=error]:active:bg-destructive-subtle-active',
   // Info is a faint translucent tint on the row element, so the surface below it (resting or selected) and the
-  // fluid hover still read through.
+  // hover layer still read through.
   'data-[variant=info]:bg-info-subtle/50 has-data-[variant=info]:bg-info-subtle/50',
 ] as const;
 

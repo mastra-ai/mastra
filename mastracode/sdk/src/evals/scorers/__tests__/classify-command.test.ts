@@ -51,9 +51,19 @@ describe('classify-command', () => {
       expect(getExitCode({ code: 0 })).toBe(0);
     });
 
-    it('extracts from string', () => {
-      expect(getExitCode('exited with code 0')).toBe(0);
+    it('extracts the exit code from execute_command failure output', () => {
+      expect(getExitCode('stderr:\ntests failed\n\nExit code: 1')).toBe(1);
+      expect(getExitCode('Exit code: -1')).toBe(-1);
+    });
+
+    it('continues to extract exit codes from legacy string formats', () => {
+      expect(getExitCode('Process exited with code 0')).toBe(0);
       expect(getExitCode('exit code 1')).toBe(1);
+    });
+
+    it('does not treat command output containing exit-code text as the command status', () => {
+      expect(getExitCode('case logged Exit code: 1 and passed')).toBe(null);
+      expect(getExitCode('Exit code: 1\nbuild completed')).toBe(null);
     });
 
     it('returns null for missing/unknown', () => {
@@ -75,6 +85,16 @@ describe('classify-command', () => {
 
     it('returns false for exitCode 1', () => {
       expect(isSuccessResult({ exitCode: 1 })).toBe(false);
+    });
+
+    it('recognises execute_command output without an exit code as successful', () => {
+      expect(isSuccessResult('Build completed')).toBe(true);
+      expect(isSuccessResult('(no output)')).toBe(true);
+    });
+
+    it('recognises execute_command failure output as unsuccessful', () => {
+      expect(isSuccessResult('stderr:\ntests failed\n\nExit code: 1')).toBe(false);
+      expect(isSuccessResult('Exit code: -1')).toBe(false);
     });
 
     it('returns false for null result', () => {

@@ -218,10 +218,13 @@ describe('modelSupportsTemperature — Bedrock resolution (issue #23319)', () =>
       'us.openai.gpt-6-luna',
       'global.openai.gpt-6-sol',
       'us.openai.gpt-5.6-sol',
+      'us.openai.gpt-4o',
     ]) {
-      expect(modelSupportsTemperature(`amazon-bedrock/${model}`)).toBe(false);
+      expect(modelSupportsTemperature(`amazon-bedrock/${model}`)).toBe(true);
     }
-    expect(modelSupportsTemperature('amazon-bedrock/us.openai.gpt-4o')).toBe(true);
+    // gpt-5-pro is not in the openai temperature list, and Bedrock inherits that.
+    expect(modelSupportsTemperature('amazon-bedrock/us.openai.gpt-5-pro')).toBe(false);
+    expect(modelSupportsTemperature('amazon-bedrock/global.openai.gpt-5-pro')).toBe(false);
     expect(modelSupportsTemperature('amazon-bedrock/us.openai.gpt-oss-120b')).toBeUndefined();
   });
 });
@@ -718,25 +721,24 @@ describe('GatewayRegistry Auto-Refresh', () => {
             gateway: 'models.dev',
           },
         };
-      } else {
-        // Second call - add a new model and a new provider
-        return {
-          'test-provider': {
-            name: 'Test Provider',
-            url: 'https://test.com/v1',
-            apiKeyEnvVar: 'TEST_API_KEY',
-            models: ['model-a', 'model-b', 'model-c'], // Added model-c
-            gateway: 'models.dev',
-          },
-          'new-provider': {
-            name: 'New Provider',
-            url: 'https://new.com/v1',
-            apiKeyEnvVar: 'NEW_API_KEY',
-            models: ['new-model-1', 'new-model-2'],
-            gateway: 'models.dev',
-          },
-        };
       }
+      // Second call - add a new model and a new provider
+      return {
+        'test-provider': {
+          name: 'Test Provider',
+          url: 'https://test.com/v1',
+          apiKeyEnvVar: 'TEST_API_KEY',
+          models: ['model-a', 'model-b', 'model-c'], // Added model-c
+          gateway: 'models.dev',
+        },
+        'new-provider': {
+          name: 'New Provider',
+          url: 'https://new.com/v1',
+          apiKeyEnvVar: 'NEW_API_KEY',
+          models: ['new-model-1', 'new-model-2'],
+          gateway: 'models.dev',
+        },
+      };
     });
 
     // Mock Netlify to return empty

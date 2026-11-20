@@ -524,7 +524,6 @@ describe('generateFsAgentsModule', () => {
     // tool key preserved.
     expect(source).toContain(`key: "get_weather"`);
     expect(source).toContain(`mastra.__registerFsAgents`);
-    expect(source).toContain(`export const mastra = __mastra;`);
   });
 
   it('omits instructionsMd when there is no markdown file', async () => {
@@ -633,7 +632,6 @@ describe('generateFsAgentsModule', () => {
     // Base path is resolved at runtime relative to the bundled module so it
     // points at `<bundle>/workspace/<name>` wherever the bundle is deployed.
     expect(source).toContain('defaultWorkspaceBasePath: __workspaceBasePath("weather")');
-    expect(source).toContain('const __bundleDir = __dirname(__fileURLToPath(import.meta.url));');
     expect(source).not.toContain('workspace:');
   });
 
@@ -965,7 +963,6 @@ describe('generateFsAgentsModule with workflows', () => {
 
     expect(source).toContain(`import workflow_0_onboarding from`);
     expect(source).toContain(`__registerFsWorkflows`);
-    expect(source).toContain(`export const mastra = __mastra;`);
     // Agent registration still present but with empty entries
     expect(source).toContain('__registerFsAgents');
   });

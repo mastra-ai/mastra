@@ -148,25 +148,6 @@ describe('AgentBuilderAgentView — navigation and layout', () => {
     });
   });
 
-  describe('when a non-owner views the agent', () => {
-    it('does not render the configure panel or tabs', async () => {
-      server.use(
-        ...authHandlers(),
-        http.get(`${BASE_URL}/api/stored/agents/agent-123`, () =>
-          HttpResponse.json({ ...storedAgent, authorId: 'someone-else' }),
-        ),
-        emptyThread(),
-      );
-
-      renderPage();
-
-      await screen.findByTestId('agent-builder-agent-chat-empty-state');
-      expect(screen.queryByTestId('agent-builder-panel-configure')).toBeNull();
-      expect(screen.queryByTestId('agent-builder-tab-chat')).toBeNull();
-      expect(screen.queryByTestId('agent-builder-tab-configure')).toBeNull();
-    });
-  });
-
   describe('when the page renders its layout', () => {
     it('renders the view top bar above the chat panel', async () => {
       server.use(

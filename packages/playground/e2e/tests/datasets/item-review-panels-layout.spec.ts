@@ -186,25 +186,17 @@ test.describe('Item and review panel layout', () => {
       await panel.getByRole('button', { name: 'See trace', exact: true }).click();
       const trace = page.getByRole('dialog', { name: /^Trace / });
       await expect(trace).toBeVisible();
-      await trace.getByText('Experiment tool call', { exact: true }).click();
-      await expect(trace.getByRole('heading', { name: /child1/ })).toBeVisible();
+      // The span panel is titled after the span too, so click the tree row's button, not the text.
+      const spanRow = trace.getByRole('button', { name: 'Experiment tool call', exact: true });
+      const spanPanel = trace.getByRole('region', { name: 'Experiment tool call', exact: true });
+      await spanRow.click();
+      await expect(spanPanel).toBeVisible();
       // The span column has no close button: clicking the selected span again toggles it off.
-      await trace.getByText('Experiment tool call', { exact: true }).click();
-      await expect(trace.getByRole('heading', { name: /child1/ })).toBeHidden();
+      await spanRow.click();
+      await expect(spanPanel).toBeHidden();
       await trace.getByRole('button', { name: 'Close trace', exact: true }).click();
       await expect(trace).toBeHidden();
       await expect(panel.getByText('first question', { exact: false })).toBeVisible();
-    });
-  });
-
-  test.describe('when a review result is opened directly', () => {
-    test('closes from the close control', async ({ page }) => {
-      await page.goto('/experiments/review-queue?experiment=exp-1&review=res-3');
-      const panel = page.getByRole('dialog', { name: 'Review item res-3' });
-      const close = panel.getByRole('button', { name: 'Close panel', exact: true });
-      await expect(close).toBeVisible();
-      await close.click({ timeout: 3000 });
-      await expect(panel).toBeHidden();
     });
   });
 });

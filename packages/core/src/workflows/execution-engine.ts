@@ -6,6 +6,7 @@ import { RegisteredLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { Span, SpanType, TracingPolicy } from '../observability';
+import type { StateBase } from './run-journal';
 import type {
   NestedWorkflowParent,
   OutputWriter,
@@ -17,6 +18,7 @@ import type {
   WorkflowErrorCallbackInfo,
   WorkflowStartCallbackInfo,
   WorkflowStateTracingContext,
+  WorkflowStepResults,
 } from './types';
 import type { RestartExecutionParams, StepFlowEntry, TimeTravelExecutionParams } from '.';
 
@@ -54,6 +56,12 @@ export interface ExecutionEngineOptions {
   persistResumeClaim?: boolean;
 
   /**
+   * Skips reading a stored `canceled` status. See `WorkflowOptions.localCancellationOnly`.
+   * @internal
+   */
+  localCancellationOnly?: boolean;
+
+  /**
    * Transforms the run snapshot immediately before it is persisted.
    * Must be pure and return JSON-safe data. Defaults to identity.
    */
@@ -69,13 +77,13 @@ export interface ExecutionEngineOptions {
    * Called when workflow execution completes (success, failed, suspended, or tripwire).
    * Errors thrown in this callback are caught and logged, not propagated.
    */
-  onFinish?: (result: WorkflowFinishCallbackResult) => Promise<void> | void;
+  onFinish?(result: WorkflowFinishCallbackResult<1 | 2>): Promise<void> | void;
 
   /**
    * Called only when workflow execution fails (failed or tripwire status).
    * Errors thrown in this callback are caught and logged, not propagated.
    */
-  onError?: (errorInfo: WorkflowErrorCallbackInfo) => Promise<void> | void;
+  onError?(errorInfo: WorkflowErrorCallbackInfo<1 | 2>): Promise<void> | void;
 }
 /**
  * Execution engine abstract class for building and executing workflow graphs
@@ -155,7 +163,7 @@ export abstract class ExecutionEngine extends MastraBase {
     status: WorkflowRunStatus;
     result?: any;
     error?: any;
-    steps: Record<string, StepResult<any, any, any, any>>;
+    steps: WorkflowStepResults<Record<string, StepResult<any, any, any, any>>, 1 | 2>;
     tripwire?: any;
     runId: string;
     workflowId: string;
@@ -259,5 +267,13 @@ export abstract class ExecutionEngine extends MastraBase {
       includeResumeLabels?: boolean;
     };
     perStep?: boolean;
+    /** How the run is stored. Engines that don't support version 2 ignore it. @experimental */
+    storageVersion?: 1 | 2;
+    /** Called once the run is handed to workers. Engines that execute in-process ignore it. @internal */
+    onDispatched?: () => void;
+    /** For a storage v2 resume or restart, what the store reported for the loaded state. @internal */
+    storedState?: { seq: number; patchBytes: number; patchCount: number };
+    /** For a storage v2 nested start or time travel, the version of the parent's state it starts from. @internal */
+    inheritedState?: StateBase;
   }): Promise<TOutput>;
 }

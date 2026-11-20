@@ -100,4 +100,20 @@ describe('GithubAppOwnerResolver', () => {
     await expect(resolver.getOwner('mastra-platform[bot]', () => false)).resolves.toBeUndefined();
     expect(runGhApi).toHaveBeenCalledTimes(1);
   });
+
+  it('reports a failed lookup so callers can retry, but not an app GitHub says does not exist', async () => {
+    const outage = vi.fn();
+    const outageResolver = new GithubAppOwnerResolver(() =>
+      Promise.reject(Object.assign(new Error('gh: connection reset'), { stderr: 'connection reset' })),
+    );
+    await expect(outageResolver.getOwner('review-app[bot]', undefined, outage)).resolves.toBeUndefined();
+    expect(outage).toHaveBeenCalledTimes(1);
+
+    const missing = vi.fn();
+    const missingResolver = new GithubAppOwnerResolver(() =>
+      Promise.reject(Object.assign(new Error('Command failed'), { stderr: 'gh: Not Found (HTTP 404)' })),
+    );
+    await expect(missingResolver.getOwner('gone-app[bot]', undefined, missing)).resolves.toBeUndefined();
+    expect(missing).not.toHaveBeenCalled();
+  });
 });

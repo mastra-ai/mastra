@@ -143,6 +143,35 @@ describe('SchedulesLibSQL legacy schema migration', () => {
     expect(await second.listTriggers('legacy-schedule')).toHaveLength(1);
   });
 
+  it('tolerates another process adding one timing column mid-migration', async () => {
+    // Return a stale pre-migration snapshot, then let another process add only
+    // the first column before this init attempts the same ALTER. The migration
+    // must tolerate that duplicate and continue with the remaining column.
+    let raced = false;
+    const racingClient = new Proxy(client, {
+      get(target, prop) {
+        if (prop !== 'execute') {
+          const value = Reflect.get(target, prop, target);
+          return typeof value === 'function' ? value.bind(target) : value;
+        }
+        return async (stmt: Parameters<typeof client.execute>[0]) => {
+          const sql = typeof stmt === 'string' ? stmt : stmt.sql;
+          if (!raced && sql === 'PRAGMA table_info("mastra_schedules")') {
+            raced = true;
+            const stale = await target.execute(stmt);
+            await target.execute('ALTER TABLE mastra_schedules ADD COLUMN "run_at" INTEGER DEFAULT NULL');
+            return stale;
+          }
+          return target.execute(stmt);
+        };
+      },
+    });
+
+    const store = new SchedulesLibSQL({ client: racingClient });
+    await expect(store.init()).resolves.toBeUndefined();
+    expect(await columns('mastra_schedules')).toEqual(expect.arrayContaining(['run_at', 'end_at']));
+  });
+
   it('tolerates another process adding the ownership columns mid-migration', async () => {
     // Return the pre-migration column list once, after another "process" has
     // already added the columns, so our ALTER hits a duplicate column.

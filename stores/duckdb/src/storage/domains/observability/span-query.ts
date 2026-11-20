@@ -8,9 +8,9 @@ import type {
 } from '@mastra/core/storage';
 import { DuckDBQueryTimeoutError } from '../../db';
 import type { DuckDBConnection } from '../../db';
-import { timeToFirstChunkSupported } from '../../features';
-import { payloadColumnSql } from './helpers';
-import { buildSpanQueryResponse, missingPreviewSql, readPreview } from './preview-compat';
+import { spanQueryOutcomeFieldsSupported, timeToFirstChunkSupported, timeToFirstTokenSupported } from '../../features';
+import { parseJson, payloadColumnSql, timeRangeOf } from './helpers';
+import { buildSpanQueryResponse, needsPreview, readPreview } from './preview-compat';
 import { compileSpanQueryPredicate } from './trace-query';
 
 const identityFields = ['organizationId', 'resourceId', 'traceId', 'spanId'] as const;
@@ -44,6 +44,9 @@ const fields = [
   'environment',
   'executionSource',
   'timeToFirstChunkMs',
+  'timeToFirstTokenMs',
+  'outcome',
+  'stopReason',
 ];
 
 function keys(rows: SpanQueryIdentity[], values: unknown[], alias = ''): string {
@@ -60,12 +63,20 @@ function keys(rows: SpanQueryIdentity[], values: unknown[], alias = ''): string 
     .join(' OR ');
 }
 
+function sortColumn(plan: TrustedSpanQueryPlan): string {
+  const column = `s.${plan.orderBy.field}`;
+  return plan.orderBy.field === 'model' || plan.orderBy.field === 'provider' ? `${column} COLLATE "C"` : column;
+}
+
 function afterCursor(plan: TrustedSpanQueryPlan): { sql: string; values: unknown[] } {
   if (!plan.cursor) return { sql: 'TRUE', values: [] };
   const cursor = plan.cursor;
-  const sort = `s.${plan.orderBy.field}`;
+  const sort = sortColumn(plan);
   const empty = cursor.sortValue === null;
-  const value = `CAST(? AS ${typeof cursor.sortValue === 'number' ? 'DOUBLE' : 'TIMESTAMP'})`;
+  const stringSort = plan.orderBy.field === 'model' || plan.orderBy.field === 'provider';
+  const value = stringSort
+    ? 'CAST(? AS VARCHAR) COLLATE "C"'
+    : `CAST(? AS ${typeof cursor.sortValue === 'number' ? 'DOUBLE' : 'TIMESTAMP'})`;
   // Empty values sort last: a set cursor is followed by every empty value, an empty cursor only by its ties.
   const comparisons = empty
     ? []
@@ -108,12 +119,8 @@ export function compileDuckDBSpanSelection(plan: Pick<TrustedSpanQueryPlan, 'tim
   values.push(plan.timeRange.from, plan.timeRange.to, ...predicate.values);
   const join = identityFields.map(field => `e.${field} IS NOT DISTINCT FROM c.${field}`).join(' AND ');
   const partition = identityFields.map(field => `e.${field}`).join(', ');
-  // Preserve predicates accepted by older core without adding JSON work to the new contract.
-  const legacyModelFields = coreStorage.SPAN_QUERY_FIELD_REGISTRY
-    ? ''
-    : `CASE WHEN json_type(e.attributes, '$.model') = 'VARCHAR' THEN json_extract_string(e.attributes, '$.model') END AS model,
-       CASE WHEN json_type(e.attributes, '$.provider') = 'VARCHAR' THEN json_extract_string(e.attributes, '$.provider') END AS provider,`;
   // Start timestamps select identities; all events for those identities participate in reconstruction.
+  // `model` and `provider` filters read only their dedicated columns, never span attributes.
   const ctes = [
     `candidates AS MATERIALIZED (
     SELECT ${identities} FROM span_events
@@ -124,7 +131,7 @@ export function compileDuckDBSpanSelection(plan: Pick<TrustedSpanQueryPlan, 'tim
     `span_versions AS (
     SELECT ${fields.map(columnSql).join(', ')},
       min(e.timestamp) FILTER (WHERE e.eventType = 'start') OVER (PARTITION BY ${partition}) AS startedAt, e.endedAt, e.cursorId,
-      ${legacyModelFields}
+      e.model, e.provider,
       date_diff('millisecond', min(e.timestamp) FILTER (WHERE e.eventType = 'start') OVER (PARTITION BY ${partition}), e.endedAt) AS durationMs,
       CASE WHEN e.error IS NULL THEN 'success' ELSE 'error' END AS status,
       CASE WHEN e.error IS NULL THEN NULL ELSE 'error' END AS error,
@@ -145,9 +152,9 @@ export function compileDuckDBSpanQuery(plan: TrustedSpanQueryPlan) {
   const after = afterCursor(plan);
   values.push(...after.values, plan.limit + 1);
   const sql = `WITH ${ctes.join(', ')}
-  SELECT ${[...fields, 'startedAt', 'endedAt', 'durationMs', 'status', 'cursorId'].map(field => `s.${field}`).join(', ')}
+  SELECT ${[...fields, 'startedAt', 'endedAt', 'durationMs', 'status', 'cursorId', 'model', 'provider'].map(field => `s.${field}`).join(', ')}
   FROM selected s WHERE ${after.sql}
-  ORDER BY s.${plan.orderBy.field} ${plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC'} NULLS LAST, ${identityFields.map(field => `s.${field} ASC NULLS LAST`).join(', ')}
+  ORDER BY ${sortColumn(plan)} ${plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC'} NULLS LAST, ${identityFields.map(field => `s.${field} ASC NULLS LAST`).join(', ')}
   LIMIT ?`;
   return { sql, values };
 }
@@ -158,11 +165,24 @@ const previewPayloads = [
   ['errorPreview', 'error'],
 ] as const;
 
-type Selected = Omit<SpanQuerySelectedRow, 'startedAt' | 'endedAt' | 'model' | 'provider'> & {
+type Selected = Omit<SpanQuerySelectedRow, 'startedAt' | 'endedAt'> & {
   startedAt: Date;
   endedAt: Date;
   cursorId: number | null;
 };
+
+type LookupRow = SpanQueryIdentity &
+  Record<(typeof previewPayloads)[number][0] | 'model' | 'provider' | 'stopReasonContext', string | null>;
+
+function eventRowsFilter(rows: Selected[]) {
+  const values: unknown[] = timeRangeOf(rows.map(row => row.endedAt));
+  const conditions = rows.map(row => {
+    const key = keys([row], values);
+    values.push(row.cursorId, row.endedAt);
+    return `(${key} AND cursorId IS NOT DISTINCT FROM ? AND endedAt = ?)`;
+  });
+  return { sql: `endedAt BETWEEN ? AND ? AND (${conditions.join(' OR ')})`, values };
+}
 
 export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPlan) {
   const deadline = performance.now() + coreStorage.TRACE_QUERY_DEFAULT_TIMEOUT_MS;
@@ -180,41 +200,66 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
   };
   const compiled = compileDuckDBSpanQuery(plan);
   const rows = await query<Selected>(compiled.sql, compiled.values);
-  const selected = rows.map(({ cursorId: _cursorId, startedAt, endedAt, timeToFirstChunkMs, ...row }) => ({
-    ...row,
-    startedAt: startedAt.toISOString(),
-    endedAt: endedAt.toISOString(),
-    ...(timeToFirstChunkSupported && {
-      timeToFirstChunkMs: timeToFirstChunkMs == null ? null : Number(timeToFirstChunkMs),
+  const selected = rows.map(
+    ({
+      cursorId: _cursorId,
+      startedAt,
+      endedAt,
+      timeToFirstChunkMs,
+      timeToFirstTokenMs,
+      outcome,
+      stopReason,
+      ...row
+    }) => ({
+      ...row,
+      ...((plan.orderBy.field === 'model' || plan.orderBy.field === 'provider') && {
+        cursorSortValue: row[plan.orderBy.field],
+      }),
+      startedAt: startedAt.toISOString(),
+      endedAt: endedAt.toISOString(),
+      ...(timeToFirstChunkSupported && {
+        timeToFirstChunkMs: timeToFirstChunkMs == null ? null : Number(timeToFirstChunkMs),
+      }),
+      ...(timeToFirstTokenSupported && {
+        timeToFirstTokenMs: timeToFirstTokenMs == null ? null : Number(timeToFirstTokenMs),
+      }),
+      ...(spanQueryOutcomeFieldsSupported && { outcome: outcome ?? null, stopReason: stopReason ?? null }),
     }),
-  }));
+  );
   const page = rows.slice(0, plan.limit);
   if (!page.length) return buildSpanQueryResponse(plan, [], []);
-  const payloadValues: unknown[] = [];
-  const payloadWhere = page
-    .map(row => {
-      const key = keys([row], payloadValues);
-      payloadValues.push(row.cursorId, row.endedAt);
-      return `(${key} AND cursorId IS NOT DISTINCT FROM ? AND endedAt = ?)`;
-    })
-    .join(' OR ');
-  // Stored previews of the selected event row. A row written before previews were stored has NULL
-  // previews, so its payload is read instead (only for that row) and previewed the same way.
-  const previewRows = await query<
-    SpanQueryIdentity & Record<(typeof previewPayloads)[number][0] | 'model' | 'provider', string | null>
-  >(
-    `SELECT DISTINCT ${identities},
-    CASE WHEN json_type(attributes, '$.model') = 'VARCHAR' THEN json_extract_string(attributes, '$.model') END AS model,
-    CASE WHEN json_type(attributes, '$.provider') = 'VARCHAR' THEN json_extract_string(attributes, '$.provider') END AS provider,
-    ${previewPayloads
-      .map(
-        ([preview, payload]) =>
-          `${preview}, CASE WHEN ${missingPreviewSql(preview)} THEN CAST(${payload} AS VARCHAR) END AS ${preview}Payload`,
-      )
-      .join(',\n    ')}
-    FROM span_events WHERE ${payloadWhere}`,
-    payloadValues,
+  // Model and provider fall back to span attributes for rows written before their columns existed;
+  // that fallback is returned, never filtered or sorted on.
+  const lookupColumns = `${identities}, CAST(stopReasonContext AS VARCHAR) AS stopReasonContext,
+    COALESCE(model, CASE WHEN json_type(attributes, '$.model') = 'VARCHAR' THEN json_extract_string(attributes, '$.model') END) AS model,
+    COALESCE(provider, CASE WHEN json_type(attributes, '$.provider') = 'VARCHAR' THEN json_extract_string(attributes, '$.provider') END) AS provider,
+    ${previewPayloads.map(([preview]) => preview).join(', ')}`;
+  const pageFilter = eventRowsFilter(page);
+  const storedRows = await query<LookupRow>(
+    `SELECT DISTINCT ${lookupColumns} FROM span_events WHERE ${pageFilter.sql}`,
+    pageFilter.values,
   );
+  // DuckDB reads every column a query names, even inside a CASE that discards it, so payloads get
+  // their own query.
+  const withoutPreview = new Set(
+    storedRows
+      .filter(row => previewPayloads.some(([preview]) => needsPreview(row[preview])))
+      .map(row => coreStorage.spanQueryIdentityKey(row)),
+  );
+  const rowsWithoutPreview = page.filter(row => withoutPreview.has(coreStorage.spanQueryIdentityKey(row)));
+  let previewRows = storedRows;
+  if (rowsWithoutPreview.length) {
+    const payloadFilter = eventRowsFilter(rowsWithoutPreview);
+    const payloadRows = await query<LookupRow>(
+      `SELECT DISTINCT ${lookupColumns}, ${previewPayloads.map(([preview, payload]) => `CAST(${payload} AS VARCHAR) AS ${preview}Payload`).join(', ')}
+      FROM span_events WHERE ${payloadFilter.sql}`,
+      payloadFilter.values,
+    );
+    previewRows = [
+      ...storedRows.filter(row => !withoutPreview.has(coreStorage.spanQueryIdentityKey(row))),
+      ...payloadRows,
+    ];
+  }
   const payloads: SpanQueryPayload[] = previewRows.map(row => {
     const payload: SpanQueryPayload = {
       organizationId: row.organizationId,
@@ -236,6 +281,10 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
     ...row,
     model: metadata.get(coreStorage.spanQueryIdentityKey(row))?.model ?? null,
     provider: metadata.get(coreStorage.spanQueryIdentityKey(row))?.provider ?? null,
+    ...(spanQueryOutcomeFieldsSupported && {
+      stopReasonContext: (parseJson(metadata.get(coreStorage.spanQueryIdentityKey(row))?.stopReasonContext) ??
+        null) as Record<string, unknown> | null,
+    }),
   }));
   // Preserve costs only for older core contracts that still return them.
   let metrics: SpanQueryCostMetric[] = [];

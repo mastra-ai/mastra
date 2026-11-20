@@ -7,7 +7,7 @@ description: "Browse OpenAI model IDs, capabilities, context windows, and pricin
 
 # <img src="https://models.dev/logos/openai.svg" alt="OpenAI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenAI
 
-Access 51 OpenAI models through Mastra's model router. Authentication is handled automatically using the `OPENAI_API_KEY` environment variable.
+Access 53 OpenAI models through Mastra's model router. Authentication is handled automatically using the `OPENAI_API_KEY` environment variable.
 
 Learn more in the [OpenAI documentation](https://platform.openai.com/docs/models).
 
@@ -39,18 +39,6 @@ for await (const chunk of stream) {
 
 <ProviderModelsTable
   models={[
-  {
-    "model": "openai/chatgpt-image-latest",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": null,
-    "maxOutput": null,
-    "inputCost": null,
-    "outputCost": null
-  },
   {
     "model": "openai/gpt-4.1",
     "imageInput": true,
@@ -400,6 +388,42 @@ for await (const chunk of stream) {
     "outputCost": 10
   },
   {
+    "model": "openai/gpt-6.1-terra",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 1,
+    "outputCost": 5
+  },
+  {
+    "model": "openai/gpt-6.2-astra",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 8,
+    "outputCost": 40
+  },
+  {
+    "model": "openai/gpt-6.2-sol",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
     "model": "openai/gpt-daybreak-blue-latest",
     "imageInput": true,
     "audioInput": false,
@@ -424,30 +448,6 @@ for await (const chunk of stream) {
     "outputCost": 75
   },
   {
-    "model": "openai/gpt-image-1-mini",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": null,
-    "maxOutput": null,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "openai/gpt-image-1.5",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": null,
-    "maxOutput": null,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
     "model": "openai/gpt-image-2",
     "imageInput": true,
     "audioInput": false,
@@ -456,8 +456,8 @@ for await (const chunk of stream) {
     "reasoning": false,
     "contextWindow": null,
     "maxOutput": null,
-    "inputCost": 5,
-    "outputCost": 30
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "openai/gpt-realtime-2.1",
@@ -541,6 +541,8 @@ Model availability, capabilities, context windows, and pricing are sourced from 
 ### Custom headers
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -557,6 +559,8 @@ const agent = new Agent({
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",
@@ -643,7 +647,7 @@ const response = await agent.generate("Hello!", {
     },
     {
         "name": "promptCacheOptions",
-        "type": "{ mode?: \"explicit\" | \"implicit\" | undefined; ttl?: \"30m\" | undefined; } | undefined",
+        "type": "{ mode?: \"explicit\" | \"implicit\" | undefined; ttl?: \"30m\" | \"12h\" | undefined; prewarm?: boolean | undefined; } | undefined",
         "description": "",
         "isOptional": true
     },

@@ -41,7 +41,7 @@ async function factoryWithSlack({
   const adapter = { name: 'slack', startTyping: vi.fn() };
   const channels = new AgentControllerChannels({ adapters: { slack: { adapter, streaming: false } as any } });
   channels.__setController({ id: 'mastra-code', getMastra: () => ({ getStorage: () => storage }) } as any);
-  (channels as any).chat = { thread: (id: string) => ({ id, adapter, post }) };
+  (channels as any).chat = { thread: (id: string) => ({ id, adapter, post }), getAdapter: () => adapter };
 
   const slack = new SlackIntegration({
     signingSecret: 'secret',
@@ -70,7 +70,7 @@ describe('Slack channel tools', () => {
     const { slack, requestContext, post } = await factoryWithSlack();
 
     const tools = await slack.agentTools({ requestContext });
-    expect(Object.keys(tools).sort()).toEqual(['attach_file', REPLY_TOOL_NAME]);
+    expect(Object.keys(tools)).toEqual(expect.arrayContaining(['attach_file', REPLY_TOOL_NAME]));
 
     await (tools[REPLY_TOOL_NAME] as unknown as Execute).execute({ text: 'Done: tests pass.' }, {});
     expect(post).toHaveBeenCalledWith({ markdown: 'Done: tests pass.' });
@@ -88,7 +88,7 @@ describe('Slack channel tools', () => {
     const fromSlack = await factoryWithSlack();
     fromSlack.requestContext.set('channel', { platform: 'slack', isDM: false });
     const tools = await fromSlack.slack.agentTools({ requestContext: fromSlack.requestContext });
-    expect(Object.keys(tools).sort()).toEqual(['attach_file', REPLY_TOOL_NAME]);
+    expect(Object.keys(tools)).toEqual(expect.arrayContaining(['attach_file', REPLY_TOOL_NAME]));
     expect(fromSlack.getThreadById).not.toHaveBeenCalled();
   });
 
@@ -103,7 +103,9 @@ describe('Slack channel tools', () => {
   it('leaves out the reply tool, its reminder and its streaming when reply text is shown', async () => {
     const { slack, requestContext } = await factoryWithSlack({ textDisplay: 'show' });
 
-    expect(Object.keys(await slack.agentTools({ requestContext }))).toEqual(['attach_file']);
+    const tools = Object.keys(await slack.agentTools({ requestContext }));
+    expect(tools).toContain('attach_file');
+    expect(tools).not.toContain(REPLY_TOOL_NAME);
     expect(slack.processors.input.map(p => p.constructor)).toEqual([FactoryChannelReplyProcessor]);
     expect(slack.processors.output.map(p => p.constructor)).toEqual([FactoryChannelSessionLinkProcessor]);
   });

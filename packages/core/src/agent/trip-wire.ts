@@ -38,6 +38,7 @@ export class TripWire<TMetadata = unknown> extends Error {
 
   constructor(reason: string, options: TripWireOptions<TMetadata> = {}, processorId?: string) {
     super(reason);
+    this.name = 'TripWire';
     this.options = options;
     this.processorId = processorId;
     Object.setPrototypeOf(this, new.target.prototype);

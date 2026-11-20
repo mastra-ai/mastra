@@ -7,8 +7,9 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
-import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
 import { MockRegistry } from '../mock-registry';
+import { stepsOf } from '../steps';
+import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
 
 /**
  * Create all workflows needed for foreach tests.
@@ -393,7 +394,7 @@ export function createForeachWorkflows(ctx: WorkflowCreatorContext) {
           outputSchema: z.number(),
           stateSchema: z.object({ output: z.number() }),
           execute: async (ctx: any) => {
-            expect(ctx.state.output).toBe(2);
+            expect((await ctx.getState()).output).toBe(2);
             return ctx.inputData;
           },
         }),
@@ -413,7 +414,7 @@ export function createForeachWorkflows(ctx: WorkflowCreatorContext) {
           outputSchema: z.number(),
           stateSchema: z.object({ output: z.number() }),
           execute: async (ctx: any) => {
-            ctx.setState({ ...ctx.state, output: 2 });
+            await ctx.setState({ ...(await ctx.getState()), output: 2 });
             return ctx.inputData;
           },
         }),
@@ -468,10 +469,11 @@ export function createForeachWorkflows(ctx: WorkflowCreatorContext) {
           outputSchema: z.number(),
           stateSchema: z.object({ output: z.number() }),
           execute: async (ctx: any) => {
-            if (ctx.state.output > 1) {
+            const state = await ctx.getState();
+            if (state.output > 1) {
               return ctx.bail(bailResult);
             }
-            await ctx.setState({ ...ctx.state, output: ctx.inputData });
+            await ctx.setState({ ...state, output: ctx.inputData });
             return ctx.inputData;
           },
         }),
@@ -675,6 +677,33 @@ export function createForeachWorkflows(ctx: WorkflowCreatorContext) {
         item2Attempts = 0;
       },
     };
+  }
+
+  // Test: should fail the run when the concurrency function throws
+  {
+    const item = z.object({ n: z.number() });
+    const double = createStep({
+      id: 'double',
+      inputSchema: item,
+      outputSchema: item,
+      execute: async ({ inputData }) => ({ n: inputData.n * 2 }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'foreach-throwing-concurrency',
+      inputSchema: z.array(item),
+      outputSchema: z.array(item),
+      options: { validateInputs: false },
+    });
+    workflow
+      .foreach(double, {
+        concurrency: () => {
+          throw new Error('concurrency boom');
+        },
+      })
+      .commit();
+
+    workflows['foreach-throwing-concurrency'] = { workflow, mocks: {} };
   }
 
   return workflows;
@@ -1063,7 +1092,7 @@ export function createForeachTests(ctx: WorkflowTestContext, registry?: Workflow
           );
           expect(result.status, 'run status after a foreach iteration failed').toBe('failed');
           expect(result.error?.message).toBe('first failure');
-          expect(result.steps.boom.status).toBe('failed');
+          expect((await stepsOf(result)).boom.status).toBe('failed');
         } finally {
           unwatch();
         }
@@ -1118,7 +1147,7 @@ export function createForeachTests(ctx: WorkflowTestContext, registry?: Workflow
             );
             expect(replay.status, 'time-travel replay status').toBe('failed');
             expect(replay.error?.message).toBe('always fails');
-            expect(replay.steps.boom.status).toBe('failed');
+            expect((await stepsOf(replay)).boom.status).toBe('failed');
 
             await within(item2Succeeded, 'the replayed second iteration was never reported');
             const stored: any = await workflow.getWorkflowRunById(run.runId);
@@ -1136,6 +1165,37 @@ export function createForeachTests(ctx: WorkflowTestContext, registry?: Workflow
           }
         },
       );
+    });
+
+    it('should fail the run when the concurrency function throws', async () => {
+      const { workflow } = registry!['foreach-throwing-concurrency']!;
+      const runId = `foreach-throwing-concurrency-${Date.now()}`;
+
+      const result = await execute(workflow, [{ n: 1 }, { n: 2 }], { runId });
+
+      expect(result.status).toBe('failed');
+      // @ts-expect-error - result type
+      expect(result.error?.message).toBe('concurrency boom');
+      const workflowsStore = await ctx.getStorage?.()?.getStore('workflows');
+      if (workflowsStore) {
+        const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflow.id, runId });
+        expect(snapshot?.status).toBe('failed');
+      }
+    });
+
+    it('should stream a failed run when the concurrency function throws', async () => {
+      const { workflow } = registry!['foreach-throwing-concurrency']!;
+      const { stream } = ctx;
+      if (!stream) return;
+
+      const { events } = await stream(workflow, [{ n: 1 }, { n: 2 }]);
+
+      expect(events.find((event: any) => event.type === 'workflow-finish')).toMatchObject({
+        payload: { workflowStatus: 'failed' },
+      });
+      expect(
+        events.filter((event: any) => event.type === 'workflow-step-result' && event.payload?.id === 'double').at(-1),
+      ).toMatchObject({ payload: { status: 'failed', error: { message: 'concurrency boom' } } });
     });
   });
 }

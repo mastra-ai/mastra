@@ -47,7 +47,7 @@ npx mastra@latest init
 This creates a `src/mastra` folder with an example weather agent and the following files:
 
 - `index.ts`: Mastra config, including memory
-- `tools/weather-tool.ts`: A tool to fetch weather for a given location
+- `tools/weather-tool.ts`: A tool to fetch the weather for a location
 - `agents/weather-agent.ts`: A weather agent with a prompt that uses the tool
 
 You'll pass the `src/mastra/index.ts` file to the NestJS adapter in the next step.
@@ -134,7 +134,7 @@ In a separate terminal window, use `curl` to ask the weather agent:
 curl -X POST http://localhost:3000/api/agents/weather-agent/generate -H "Content-Type: application/json" -d "{\"messages\":[{\"role\":\"user\",\"content\":\"What is the weather like in Seoul?\"}]}"
 ```
 
-## Use Mastra in Your Own Services
+## Use Mastra in your own services
 
 The module exports two ways to access Mastra from your NestJS services: the `MastraService` wrapper and the `MASTRA` injection token.
 

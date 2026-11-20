@@ -3,6 +3,7 @@ import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage';
 import { Agent } from '../../agent';
+import { createDurableAgent } from '../create-durable-agent';
 
 function model(fail: boolean) {
   return {
@@ -46,13 +47,14 @@ describe('DurableAgent cleanup() before the run ends (#25974)', () => {
       storage,
       logger: false,
       agents: {
-        a: new Agent({
-          id: 'a',
-          name: 'a',
-          instructions: 'x',
-          model: model(fail) as any,
-          memory: new MockMemory({ storage }),
-          durable: true,
+        a: createDurableAgent({
+          agent: new Agent({
+            id: 'a',
+            name: 'a',
+            instructions: 'x',
+            model: model(fail) as any,
+            memory: new MockMemory({ storage }),
+          }),
         }),
       },
     }).getAgent('a');

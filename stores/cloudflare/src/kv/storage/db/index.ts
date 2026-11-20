@@ -247,13 +247,12 @@ export class CloudflareKVDB extends MastraBase {
         const result = await binding.getWithMetadata(key, 'text');
         if (!result) return null;
         return JSON.stringify(result);
-      } else {
-        const namespaceId = await this.getNamespaceId(tableName);
-        const response = await this.client!.kv.namespaces.values.get(namespaceId, key, {
-          account_id: this.accountId!,
-        });
-        return await response.text();
       }
+      const namespaceId = await this.getNamespaceId(tableName);
+      const response = await this.client!.kv.namespaces.values.get(namespaceId, key, {
+        account_id: this.accountId!,
+      });
+      return await response.text();
     } catch (error: any) {
       if (error.message && error.message.includes('key not found')) {
         return null;

@@ -55,9 +55,8 @@ describe('planSpanAggregate', () => {
   });
 
   it.each([
-    ['model', 'not a span query field'],
-    ['provider', 'not a span query field'],
     ['metadata.tenant', 'trace-only'],
+    ['stopReasonContext', 'returned only'],
   ])('rejects %s in where (%s)', field => {
     expectIssue({ ...base, where: eq(field, 'x') }, 'field_not_allowed', ['where', 'left', 'path']);
   });
@@ -75,8 +74,7 @@ describe('planSpanAggregate', () => {
     'metadata.tenant',
     'durationMs',
     'attributes.x',
-    'model',
-    'provider',
+    'stopReasonContext',
   ])('rejects %s as a dimension', dimension => {
     expectIssue({ ...base, groupBy: [dimension] }, 'field_not_allowed', ['groupBy', 0]);
   });
@@ -84,27 +82,46 @@ describe('planSpanAggregate', () => {
   it('accepts countDistinct over traceId and span dimensions, normalizing templates', () => {
     const plan = planSpanAggregate({
       ...base,
-      measures: ['count', 'countDistinct.${traceId}', 'countDistinct.rootEntityName'],
+      measures: ['count', 'countDistinct.${traceId}', 'countDistinct.rootEntityName', 'countDistinct.outcome'],
       orderBy: { field: 'countDistinct.traceId', direction: 'desc' },
     });
     expect(plan.measures).toEqual([
       { type: 'canonical', name: 'count' },
       { type: 'countDistinct', name: 'countDistinct.traceId', field: 'traceId' },
       { type: 'countDistinct', name: 'countDistinct.rootEntityName', field: 'rootEntityName' },
+      { type: 'countDistinct', name: 'countDistinct.outcome', field: 'outcome' },
     ]);
     expect(plan.orderBy).toEqual({ target: 'measure', measure: 'countDistinct.traceId', direction: 'desc' });
   });
 
-  it.each(['countDistinct.spanId', 'countDistinct.metadata.tenant', 'timeToFirstChunkMs.avg'])(
-    'rejects the measure %s',
-    measure => {
-      expectIssue(
-        { ...base, measures: [measure] },
-        measure.startsWith('countDistinct') ? 'field_not_allowed' : 'invalid_request',
-        ['measures', 0],
-      );
-    },
-  );
+  it('groups and counts distinct values by model and provider', () => {
+    const plan = planSpanAggregate({
+      ...base,
+      groupBy: ['provider', 'model'],
+      measures: ['count', 'countDistinct.model', 'countDistinct.provider'],
+      orderBy: { field: 'model', direction: 'asc' },
+    });
+    expect(plan.dimensions).toEqual(['provider', 'model']);
+    expect(plan.measures).toEqual([
+      { type: 'canonical', name: 'count' },
+      { type: 'countDistinct', name: 'countDistinct.model', field: 'model' },
+      { type: 'countDistinct', name: 'countDistinct.provider', field: 'provider' },
+    ]);
+    expect(plan.orderBy).toEqual({ target: 'dimension', dimension: 'model', direction: 'asc' });
+  });
+
+  it.each([
+    'countDistinct.spanId',
+    'countDistinct.metadata.tenant',
+    'countDistinct.stopReasonContext',
+    'timeToFirstChunkMs.avg',
+  ])('rejects the measure %s', measure => {
+    expectIssue(
+      { ...base, measures: [measure] },
+      measure.startsWith('countDistinct') ? 'field_not_allowed' : 'invalid_request',
+      ['measures', 0],
+    );
+  });
 
   it('accepts every trace measure, including tokens and cost', () => {
     const measures = Object.keys(TRACE_AGGREGATE_MEASURE_REGISTRY);
@@ -138,7 +155,12 @@ describe('planSpanAggregate', () => {
 
   it('reports every issue at once', () => {
     expect(
-      issues({ ...base, where: eq('model', 'x'), groupBy: ['traceId'], orderBy: { field: 'nope', direction: 'asc' } }),
+      issues({
+        ...base,
+        where: eq('metadata.tenant', 'x'),
+        groupBy: ['traceId'],
+        orderBy: { field: 'nope', direction: 'asc' },
+      }),
     ).toEqual([
       { code: 'field_not_allowed', path: ['where', 'left', 'path'] },
       { code: 'field_not_allowed', path: ['groupBy', 0] },

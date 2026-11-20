@@ -29,6 +29,7 @@ export class StepContentExtractor {
     uiMessages: AIV5Type.UIMessage[],
     stepNumber: number,
     stepContentFn: (message?: AIV5Type.ModelMessage) => AIV5Type.StepResult<any>['content'],
+    stepToolCallIds?: string[],
   ): AIV5Type.StepResult<any>['content'] {
     const uiMessagesParts = uiMessages.flatMap(item => item.parts);
 
@@ -42,7 +43,7 @@ export class StepContentExtractor {
 
     // Handle -1 to get the last step (the current/most recent step)
     if (stepNumber === -1) {
-      return StepContentExtractor.extractLastStep(uiMessagesParts, stepBoundaries, stepContentFn);
+      return StepContentExtractor.extractLastStep(uiMessagesParts, stepBoundaries, stepContentFn, stepToolCallIds);
     }
 
     // Step 1 is everything before the first step-start
@@ -61,21 +62,27 @@ export class StepContentExtractor {
     uiMessagesParts: AIV5Type.UIMessage['parts'],
     stepBoundaries: number[],
     stepContentFn: (message?: AIV5Type.ModelMessage) => AIV5Type.StepResult<any>['content'],
+    stepToolCallIds?: string[],
   ): AIV5Type.StepResult<any>['content'] {
     // For tool-only steps without step-start markers, we need different logic
-    // Each tool part represents a complete step (tool call + result)
     const toolParts = uiMessagesParts.filter(p => p.type?.startsWith('tool-'));
     const hasStepStart = stepBoundaries.length > 0;
 
     if (!hasStepStart && toolParts.length > 0) {
-      // No step-start markers but we have tool parts
-      // Each tool part is a separate step, so return only the last tool
+      // Without markers the parts alone cannot tell one step with several calls
+      // from several one-call steps. When the caller knows the step's calls, the
+      // step starts at its first call; otherwise assume one call per step.
       const lastToolPart = toolParts[toolParts.length - 1];
       if (!lastToolPart) {
         return [];
       }
       const lastToolIndex = uiMessagesParts.indexOf(lastToolPart);
-      const previousToolPart = toolParts[toolParts.length - 2];
+      const stepCallIds = new Set(stepToolCallIds ?? []);
+      const firstStepToolIndex = stepCallIds.size
+        ? toolParts.findIndex(p => stepCallIds.has((p as { toolCallId?: string }).toolCallId ?? ''))
+        : -1;
+      const firstToolIndex = firstStepToolIndex === -1 ? toolParts.length - 1 : firstStepToolIndex;
+      const previousToolPart = toolParts[firstToolIndex - 1];
       const previousToolIndex = previousToolPart ? uiMessagesParts.indexOf(previousToolPart) : -1;
 
       const startIndex = previousToolIndex + 1;
