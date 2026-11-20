@@ -73,11 +73,11 @@ describe('alert triage on the Work board', () => {
     expect(names).toContain(ALERT_TRIAGE_ROUTE.name);
     // Ahead of the catch-all, which must stay last.
     expect(names.indexOf(ALERT_TRIAGE_ROUTE.name)).toBeLessThan(names.length - 1);
-    expect(audits).toEqual(['factory.board.updated']);
+    expect(audits).toEqual(['factory.board.updated', 'factory.intake_route.created']);
 
     // A second bind adds nothing.
     await setUpAlertTriage(setup, scope);
-    expect(audits).toEqual(['factory.board.updated']);
+    expect(audits).toEqual(['factory.board.updated', 'factory.intake_route.created']);
     expect((await routes()).filter(name => name === ALERT_TRIAGE_ROUTE.name)).toHaveLength(1);
   });
 
@@ -121,8 +121,9 @@ describe('alert triage on the Work board', () => {
   });
 
   it('adds one phase and one route when two replicas set the project up at once', async () => {
-    const { setup, scope, work, routes } = await harness();
+    const { setup, scope, work, routes, audits } = await harness();
     await Promise.all([setUpAlertTriage(setup, scope), setUpAlertTriage(setup, scope)]);
+    expect(audits.filter(action => action === 'factory.intake_route.created')).toHaveLength(1);
     expect(Object.keys((await work()).phases).filter(key => key === ALERT_TRIAGE_PHASE_KEY)).toHaveLength(1);
     expect((await routes()).filter(name => name === ALERT_TRIAGE_ROUTE.name)).toHaveLength(1);
   });
