@@ -9,13 +9,13 @@
         "values": ["low", "high"]
       }
     ],
-    "deepseek-v4.1-flash-1017-uncensored": [
+    "deepseek-v4.1-flash-uncensored": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "deepseek-v4.1-flash-uncensored": [
+    "deepseek-v4.1-flash-1017-uncensored": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
