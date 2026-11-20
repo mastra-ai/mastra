@@ -437,6 +437,8 @@ export async function searchMessagesForResource({
   };
   // A search that keeps failing is an operational fault the agent can't fix, so it's logged as an error.
   const logError = (message: string) => (logger ? logger.error(message) : console.error(message));
+  // One budget covers the first search and the deeper one, so a recall never waits longer than searchTimeoutMs.
+  const deadline = Date.now() + searchTimeoutMs;
   let results: RecallSearchResult[];
   try {
     ({ results } = await searchWithTimeout(
@@ -588,12 +590,13 @@ export async function searchMessagesForResource({
       }
     };
     await addCandidates(filteredMatches.slice(limitedMatches.length));
-    if (freshCount < clampedTopK && seen.size < candidateLimit && searchTopK < candidateLimit) {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs > 0 && freshCount < clampedTopK && seen.size < candidateLimit && searchTopK < candidateLimit) {
       // The first search already produced results, so a failed deeper search only means fewer of them.
       const deeper = await searchWithTimeout(
         memory,
         { query, resourceId, topK: candidateLimit, filter },
-        searchTimeoutMs,
+        remainingMs,
         abortSignal,
       ).catch(error => {
         if (abortSignal?.aborted) throw error;
