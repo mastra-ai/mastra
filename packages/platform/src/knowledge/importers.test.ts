@@ -60,6 +60,22 @@ it('keeps the first of two different classes that share an id, and warns through
   expect(duplicateWarnings).toHaveLength(1);
 });
 
+it('warns once for a dropped class listed twice, across repeated logger handovers', () => {
+  const knowledge = new PlatformKnowledge({
+    ...connection,
+    importers: [HelpSpotImporter, OtherHelpSpotImporter, OtherHelpSpotImporter],
+  });
+  expect(knowledge.importerClasses).toEqual([HelpSpotImporter]);
+
+  const warn = vi.spyOn(ConsoleLogger.prototype, 'warn').mockImplementation(() => {});
+  const logger = new ConsoleLogger({ level: LogLevel.WARN });
+  new Mastra({ logger, knowledge: { platform: knowledge } });
+  knowledge.__setLogger(logger);
+
+  const duplicateWarnings = warn.mock.calls.filter(([message]) => String(message).includes('"helpspot"'));
+  expect(duplicateWarnings).toHaveLength(1);
+});
+
 it('refuses an importer instance in place of its class', () => {
   const instance = new UploadsImporter({ id: 'uploads', target: 'org:acme#uploads' });
 

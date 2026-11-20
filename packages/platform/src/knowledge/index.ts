@@ -286,13 +286,16 @@ export class PlatformKnowledge extends Knowledge {
       storage,
     });
     const classes: KnowledgeImporterClass[] = [];
+    const seen = new Set<KnowledgeImporterClass>();
     for (const importer of importers) {
       if (typeof importer !== 'function' || typeof importer.toManifest !== 'function') {
         throw new TypeError(
           'PlatformKnowledge `importers` takes importer classes, e.g. `[HelpSpotImporter]`, not instances: Platform supplies each binding.',
         );
       }
-      if (classes.includes(importer)) continue;
+      // Every class is judged once, so a dropped class listed again doesn't warn again.
+      if (seen.has(importer)) continue;
+      seen.add(importer);
       if (classes.some(known => known.id === importer.id)) {
         this.#importerWarnings.push(
           `PlatformKnowledge has two importer classes with the id "${importer.id}"; keeping the first one listed. Give each class its own id.`,
