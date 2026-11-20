@@ -193,16 +193,18 @@ describe('an interface an agent composes in Studio chat', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
 
-      const email = await screen.findByRole('textbox', { name: 'Email' }, TURN);
+      await screen.findByRole('textbox', { name: 'Email' }, TURN);
       expect(screen.getByText('Join the beta')).toBeTruthy();
       expect(screen.queryByText(/```spec/)).toBeNull();
 
-      const join = await screen.findByRole('button', { name: 'Join' }, TURN);
-      // Controls stay disabled until the reply finishes streaming.
-      await waitFor(() => expect(join.hasAttribute('disabled')).toBe(false), TURN);
+      // Controls stay disabled until the reply has streamed and been drawn in full.
+      await waitFor(
+        () => expect(screen.getByRole('button', { name: 'Join' }).hasAttribute('disabled')).toBe(false),
+        TURN,
+      );
 
-      fireEvent.change(email, { target: { value: 'ada@example.com' } });
-      fireEvent.click(join);
+      fireEvent.change(screen.getByRole('textbox', { name: 'Email' }), { target: { value: 'ada@example.com' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Join' }));
 
       await screen.findByText('You are on the list.', undefined, TURN);
       expect(bodies).toHaveLength(2);
@@ -225,18 +227,18 @@ describe('an interface an agent composes in Studio chat', () => {
       renderChat();
 
       fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
-      const join = await screen.findByRole('button', { name: 'Join' }, TURN);
-      await waitFor(() => expect(join.hasAttribute('disabled')).toBe(false), TURN);
-      fireEvent.click(join);
+      const enabled = (name: string) =>
+        waitFor(() => expect(screen.getByRole('button', { name }).hasAttribute('disabled')).toBe(false), TURN);
+      await enabled('Join');
+      fireEvent.click(screen.getByRole('button', { name: 'Join' }));
 
-      const save = await screen.findByRole('button', { name: 'Save team' }, TURN);
-      await waitFor(() => expect(save.hasAttribute('disabled')).toBe(false), TURN);
+      await enabled('Save team');
       // The signup form is now an earlier interface: it is shown, but can no longer answer.
       expect(screen.getByRole('button', { name: 'Join' }).hasAttribute('disabled')).toBe(true);
       expect(screen.getByRole('textbox', { name: 'Email' }).hasAttribute('disabled')).toBe(true);
 
       fireEvent.change(screen.getByRole('textbox', { name: 'Team' }), { target: { value: 'platform' } });
-      fireEvent.click(save);
+      fireEvent.click(screen.getByRole('button', { name: 'Save team' }));
 
       await screen.findByText('Saved.', undefined, TURN);
       expect(bodies).toHaveLength(3);

@@ -238,6 +238,7 @@ export const MessageRow = memo(function MessageRow({
                 messageId={message.id}
                 parts={specParts}
                 chatRunning={running.isRunning}
+                revealing={revealing}
                 readOnly={readOnly}
               />
             </Arriving>
@@ -257,7 +258,18 @@ export const MessageRow = memo(function MessageRow({
         </Notice>
       ),
     };
-  }, [metadata, dataParts, readOnly, toolGroups, isRunning, renderToolCard, shownParts, message.id, running.isRunning]);
+  }, [
+    metadata,
+    dataParts,
+    readOnly,
+    toolGroups,
+    isRunning,
+    renderToolCard,
+    shownParts,
+    message.id,
+    running.isRunning,
+    revealing,
+  ]);
 
   const userRenderers = useMemo<MessageRenderers>(
     () => ({

@@ -10,6 +10,8 @@ export interface ChatInterfaceProps {
   parts: DataPart[];
   /** Whether the chat is replying, anywhere in the thread. */
   chatRunning: boolean;
+  /** Whether the reply is still being drawn, so the interface's spec parts may not all be shown yet. */
+  revealing?: boolean;
   /** A reply read back (e.g. in a trace) has no chat to answer. */
   readOnly?: boolean;
 }
@@ -19,9 +21,16 @@ const hasInterface = (message: MastraDBMessage) =>
 
 /**
  * A reply's interface, answering the chat it sits in. Only the thread's latest interface can answer,
- * because the agent applies the state it receives to that one. It waits while the chat is replying.
+ * because the agent applies the state it receives to that one. It waits while the chat is replying, and until the reply has been drawn in full: the live interface
+ * reads its state from the spec once, when it mounts.
  */
-export function ChatInterface({ messageId, parts, chatRunning, readOnly = false }: ChatInterfaceProps) {
+export function ChatInterface({
+  messageId,
+  parts,
+  chatRunning,
+  revealing = false,
+  readOnly = false,
+}: ChatInterfaceProps) {
   const send = useChatSend();
   const messages = useChatMessages();
   const isLatest = messages.findLast(hasInterface)?.id === messageId;
@@ -31,7 +40,7 @@ export function ChatInterface({ messageId, parts, chatRunning, readOnly = false 
   return (
     <GenUiInterface
       parts={parts}
-      disabled={chatRunning}
+      disabled={chatRunning || revealing}
       onSend={(message, state) => void send({ message, requestContext: { [JSON_RENDER_STATE]: state } })}
     />
   );
