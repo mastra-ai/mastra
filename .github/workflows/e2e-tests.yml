@@ -215,7 +215,7 @@ jobs:
     needs: publish-e2e-registry
     name: E2E light suites
     runs-on: starsling-ubuntu-26.04
-    timeout-minutes: 220
+    timeout-minutes: 225
     permissions:
       contents: read
       id-token: write
@@ -292,6 +292,59 @@ jobs:
           else
             echo "Only npm import runs; it installs from the E2E registry and needs no build."
           fi
+
+      # Build and the registry download gate every suite below. When either fails, each selected
+      # suite fails a step in its own name, so the tier updater records the prerequisite failure
+      # for that suite only; tiered-out suites stay skipped.
+      - name: 'E2E no-bundling: not run, a prerequisite failed'
+        if: ${{ !cancelled() && !contains(fromJSON(inputs.skip_jobs), 'job:e2e/no-bundling') && (steps.build.outcome != 'success' || steps.registry.outcome != 'success') }}
+        timeout-minutes: 1
+        env:
+          BUILD: ${{ steps.build.outcome }}
+          REGISTRY: ${{ steps.registry.outcome }}
+        run: |
+          echo "::error::E2E no-bundling did not run: Build was $BUILD and the registry download was $REGISTRY."
+          exit 1
+
+      - name: 'E2E create-mastra: not run, a prerequisite failed'
+        if: ${{ !cancelled() && !contains(fromJSON(inputs.skip_jobs), 'job:e2e/create-mastra') && (steps.build.outcome != 'success' || steps.registry.outcome != 'success') }}
+        timeout-minutes: 1
+        env:
+          BUILD: ${{ steps.build.outcome }}
+          REGISTRY: ${{ steps.registry.outcome }}
+        run: |
+          echo "::error::E2E create-mastra did not run: Build was $BUILD and the registry download was $REGISTRY."
+          exit 1
+
+      - name: 'E2E CommonJS: not run, a prerequisite failed'
+        if: ${{ !cancelled() && !contains(fromJSON(inputs.skip_jobs), 'job:e2e/commonjs') && (steps.build.outcome != 'success' || steps.registry.outcome != 'success') }}
+        timeout-minutes: 1
+        env:
+          BUILD: ${{ steps.build.outcome }}
+          REGISTRY: ${{ steps.registry.outcome }}
+        run: |
+          echo "::error::E2E CommonJS did not run: Build was $BUILD and the registry download was $REGISTRY."
+          exit 1
+
+      - name: 'E2E deployers: not run, a prerequisite failed'
+        if: ${{ !cancelled() && !contains(fromJSON(inputs.skip_jobs), 'job:e2e/deployers') && (steps.build.outcome != 'success' || steps.registry.outcome != 'success') }}
+        timeout-minutes: 1
+        env:
+          BUILD: ${{ steps.build.outcome }}
+          REGISTRY: ${{ steps.registry.outcome }}
+        run: |
+          echo "::error::E2E deployers did not run: Build was $BUILD and the registry download was $REGISTRY."
+          exit 1
+
+      - name: 'E2E Type check: not run, a prerequisite failed'
+        if: ${{ !cancelled() && !contains(fromJSON(inputs.skip_jobs), 'job:e2e/type-check') && (steps.build.outcome != 'success' || steps.registry.outcome != 'success') }}
+        timeout-minutes: 1
+        env:
+          BUILD: ${{ steps.build.outcome }}
+          REGISTRY: ${{ steps.registry.outcome }}
+        run: |
+          echo "::error::E2E Type check did not run: Build was $BUILD and the registry download was $REGISTRY."
+          exit 1
 
       - name: 'E2E no-bundling: install e2e test dependencies'
         id: no_bundling_install

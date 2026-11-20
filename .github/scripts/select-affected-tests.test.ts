@@ -237,6 +237,32 @@ describe('Prebuild test tiers', () => {
     }
   });
 
+  // A failed shared Build (or registry download) skips every suite after it, selected or tiered
+  // out alike, so each selected suite gets a step that fails in its name: the tier updater then
+  // records the prerequisite failure for that suite only, and tiered-out suites stay skipped.
+  test('a failed Build or registry download fails each selected light suite by name', () => {
+    type Step = { name?: string; if?: string; run?: string };
+    const workflow = parse(readFileSync(new URL('../workflows/e2e-tests.yml', import.meta.url), 'utf8'));
+    const steps = (workflow.jobs['e2e-light'] as { steps: Step[] }).steps;
+    const names = steps.map(step => step.name);
+    const gated = steps.filter(step => step.name?.endsWith(': install e2e test dependencies') && step.if?.includes('skip_jobs'));
+    expect(gated.length).toBeGreaterThanOrEqual(4);
+    for (const install of steps.filter(step => /^E2E .+: install /.test(step.name ?? '') && step.if?.includes('skip_jobs'))) {
+      const label = /^E2E (.+?): /.exec(install.name!)![1];
+      const key = /'(job:e2e\/[\w-]+)'/.exec(install.if!)![1];
+      const blocked = steps.find(step => step.name === `E2E ${label}: not run, a prerequisite failed`);
+      expect(blocked, label).toBeDefined();
+      expect(names.indexOf(blocked!.name)).toBeGreaterThan(names.indexOf('Build'));
+      expect(blocked!.if).toContain('!cancelled()');
+      expect(blocked!.if).toContain(`!contains(fromJSON(inputs.skip_jobs), '${key}')`);
+      expect(blocked!.if).toContain("steps.build.outcome != 'success'");
+      expect(blocked!.if).toContain("steps.registry.outcome != 'success'");
+      expect(blocked!.run).toMatch(/exit 1/);
+    }
+    // npm import doesn't need the build, so it has no such step.
+    expect(names.some(name => name?.startsWith('E2E npm import: not run'))).toBe(false);
+  });
+
   test('without tiers nothing is dropped', () => {
     const result = route({
       changedFiles: ['packages/core/src/index.ts'],

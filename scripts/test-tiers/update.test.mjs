@@ -362,6 +362,31 @@ test('the merged light E2E job fails only the suite whose step failed', () => {
   assert.deepEqual(jobKeysFor('Prebuild', 'E2E Tests / E2E light suites'), { ran: [], failed: [], passed: [] });
 });
 
+test('a failed shared Build fails the selected light suites it blocked, not the tiered-out ones', () => {
+  // As e2e-light reports a run where Build failed: no-bundling and deployers were selected,
+  // create-mastra was tiered out, and npm import (which needs no build) passed on its own.
+  const steps = [
+    { name: 'Set up job', conclusion: 'success' },
+    { name: 'Download E2E registry artifact', conclusion: 'success' },
+    { name: 'E2E npm import: install e2e test dependencies', conclusion: 'success' },
+    { name: 'E2E npm import', conclusion: 'success' },
+    { name: 'Build', conclusion: 'failure' },
+    { name: 'E2E no-bundling: not run, a prerequisite failed', conclusion: 'failure' },
+    { name: 'E2E no-bundling: install e2e test dependencies', conclusion: 'skipped' },
+    { name: 'E2E no-bundling', conclusion: 'skipped' },
+    { name: 'E2E create-mastra: not run, a prerequisite failed', conclusion: 'skipped' },
+    { name: 'E2E create-mastra: install e2e test dependencies', conclusion: 'skipped' },
+    { name: 'E2E create-mastra', conclusion: 'skipped' },
+    { name: 'E2E deployers: not run, a prerequisite failed', conclusion: 'failure' },
+    { name: 'E2E deployers: install e2e test dependencies', conclusion: 'skipped' },
+    { name: 'E2E deployers', conclusion: 'skipped' },
+  ];
+  const keys = jobKeysFor('Prebuild', 'E2E Tests / E2E light suites', () => '', steps);
+  assert.deepEqual(keys.ran, ['job:e2e/deployers', 'job:e2e/no-bundling']);
+  assert.deepEqual(keys.failed, ['job:e2e/deployers', 'job:e2e/no-bundling']);
+  assert.deepEqual(keys.passed, []);
+});
+
 test('the merged Mastra Code job fails only the suite whose step failed', () => {
   const steps = (e2e, om) => [
     { name: 'Checkout repo', conclusion: 'success' },
