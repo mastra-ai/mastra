@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-11-19",
+  "updated": "2026-11-20",
   "scope": "all",
   "files": {
     ".github/scripts/ci-routing.test.ts": {
@@ -25408,10 +25408,10 @@
       "reason": "seed-rule-b"
     },
     "packages/playground/src/domains/agents/components/__tests__/resizable-layouts.test.tsx": {
-      "tier": "out",
-      "since": "2026-11-14",
-      "last_failure": "2026-09-15",
-      "reason": "seed-rule-b"
+      "tier": "in",
+      "since": "2026-11-20",
+      "last_failure": "2026-11-20",
+      "reason": "versioning-fail"
     },
     "packages/playground/src/domains/agents/components/__tests__/threads-panel-shortcuts.test.tsx": {
       "tier": "out",
