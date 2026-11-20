@@ -17,7 +17,7 @@ import { matchPath, useParams, useLocation, useNavigate } from 'react-router';
 import { useCanCreateAgent } from '@/domains/agent-builder/hooks/use-can-create-agent';
 import { AgentSwitcher } from '@/domains/agents/agent-crumb';
 import { AgentOverviewPanel } from '@/domains/agents/components/agent-overview-panel/agent-overview-panel';
-import { OverviewPanelShortcuts } from '@/domains/agents/components/overview-panel-shortcuts';
+import { OVERVIEW_PANEL_SHORTCUT, OverviewPanelShortcuts } from '@/domains/agents/components/overview-panel-shortcuts';
 import { PlaygroundModelProvider } from '@/domains/agents/context/playground-model-context';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
@@ -129,6 +129,7 @@ export const AgentLayout = ({ children }: { children: ReactNode }) => {
             activeTab === 'versions'
               ? undefined
               : {
+                  shortcut: OVERVIEW_PANEL_SHORTCUT,
                   dock: { open: !sidePanel.isCollapsed, toggle: sidePanel.toggle, Mount: AgentConfigMount },
                   children: () => (
                     <ActivatedSkillsProvider key={agentId}>

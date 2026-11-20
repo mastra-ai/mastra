@@ -3,16 +3,18 @@ import { useState } from 'react';
 import type { AgentPageDock } from './agent-page';
 import { Button } from '@/ds/components/Button';
 import { Drawer, DrawerBackdrop, DrawerPopup, DrawerPortal, DrawerTitle, DrawerViewport } from '@/ds/components/Drawer';
+import { Kbd } from '@/ds/components/Kbd';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { PanelEdgeIcon } from '@/lib/resize/panel-edge-icon';
 
 export interface AgentPageConfigProps {
   dock: AgentPageDock;
+  shortcut?: string;
   children: (onClose: () => void) => ReactNode;
   renderPage: (toggle: ReactNode) => ReactNode;
 }
 
-export function AgentPageConfig({ dock, children, renderPage }: AgentPageConfigProps) {
+export function AgentPageConfig({ dock, shortcut, children, renderPage }: AgentPageConfigProps) {
   const mobile = useIsMobile();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const open = mobile ? drawerOpen : dock.open;
@@ -32,7 +34,12 @@ export function AgentPageConfig({ dock, children, renderPage }: AgentPageConfigP
           type="button"
           aria-label="Config"
           aria-pressed={open}
-          tooltip={open ? 'Hide config panel' : 'Show config panel'}
+          tooltip={
+            <span className="inline-flex items-center gap-1.5">
+              {open ? 'Hide config panel' : 'Show config panel'}
+              {!mobile && shortcut && <Kbd size="xs">{shortcut}</Kbd>}
+            </span>
+          }
           data-testid="agent-overview-panel-toggle"
           onClick={toggle}
         >

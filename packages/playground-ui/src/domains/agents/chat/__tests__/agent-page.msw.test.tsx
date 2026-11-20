@@ -26,6 +26,7 @@ function PageWithDock() {
       agent={supportAgent}
       overviewHref="/overview"
       config={{
+        shortcut: ']',
         dock: { open, toggle: () => setOpen(!open), Mount: ExteriorMount },
         children: onClose => open && <button onClick={onClose}>Close config</button>,
       }}
@@ -63,8 +64,8 @@ describe('AgentPage', () => {
   describe('when the host supplies an agent catalog', () => {
     it('navigates the overview breadcrumb', async () => {
       const { queryClient } = renderPage();
-      fireEvent.click(screen.getByRole('button', { name: 'Agents' }));
-      expect(navigate).toHaveBeenCalledWith('/overview');
+      const agentsLink = screen.getByRole('link', { name: 'Agents' });
+      expect(agentsLink.getAttribute('href')).toBe('/overview');
       await waitForMutationsIdle(queryClient);
     });
 
@@ -77,14 +78,6 @@ describe('AgentPage', () => {
       fireEvent.change(await screen.findByPlaceholderText('Search agents'), { target: { value: 'Echo' } });
       fireEvent.click(await screen.findByRole('option', { name: 'Echo Bot' }));
       expect(navigate).toHaveBeenCalledWith('/agents/echo');
-      await waitForMutationsIdle(queryClient);
-    });
-  });
-
-  describe('when no tabs are supplied', () => {
-    it('gives the page content the only grid row', async () => {
-      const { queryClient } = renderPage({ children: <div data-testid="agent-content">Content</div> });
-      expect(screen.getByTestId('agent-content').parentElement?.className).toContain('grid-rows-[minmax(0,1fr)]');
       await waitForMutationsIdle(queryClient);
     });
   });

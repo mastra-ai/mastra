@@ -20,19 +20,19 @@ export interface AgentPageProps {
   switcher?: ReactNode;
   actions?: Omit<ComponentProps<typeof AgentHeaderActions>, 'configToggle'>;
   tabs?: ComponentProps<typeof AgentPageTabs>;
-  config?: Pick<AgentPageConfigProps, 'dock' | 'children'>;
+  config?: Pick<AgentPageConfigProps, 'dock' | 'children' | 'shortcut'>;
   children?: ReactNode;
 }
 
 /** The agent route composition shared by Studio and its hosts. */
 export function AgentPage({ agent, overviewHref, switcher, actions, tabs, config, children }: AgentPageProps) {
-  const { navigate } = useLinkComponent();
+  const { Link } = useLinkComponent();
   const page = (configToggle?: ReactNode) => (
     <AgentPageFrame
       agentId={agent.id}
       breadcrumbs={
         <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden" listClassName="min-w-0">
-          <Crumb as="button" onClick={() => navigate(overviewHref)} icon={<AgentIcon />}>
+          <Crumb as={Link} href={overviewHref} icon={<AgentIcon />}>
             Agents
           </Crumb>
           <Crumb as="span" isCurrent switcher={switcher}>
@@ -49,7 +49,7 @@ export function AgentPage({ agent, overviewHref, switcher, actions, tabs, config
 
   if (!config) return page();
   return (
-    <AgentPageConfig dock={config.dock} renderPage={page}>
+    <AgentPageConfig dock={config.dock} shortcut={config.shortcut} renderPage={page}>
       {config.children}
     </AgentPageConfig>
   );
