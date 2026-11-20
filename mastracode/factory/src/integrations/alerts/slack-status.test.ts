@@ -46,7 +46,13 @@ function alert(type: PlatformAlertEvent['type'], incidentId: string, at = T0): P
 
 function recordingClient() {
   const calls: Array<{ call: string; ts?: string; text?: string; emoji?: string }> = [];
-  const slack = { covered: true, failPosts: 0 };
+  const slack: {
+    covered: boolean;
+    failPosts: number;
+    failEdits: number;
+    /** Holds a post or edit in flight until the returned promise settles; it lands after that. */
+    hold?: (call: 'post' | 'edit', text: string) => Promise<void> | undefined;
+  } = { covered: true, failPosts: 0, failEdits: 0 };
   let next = 0;
   const client: AlertSlackClient = {
     covers: async () => slack.covered,
@@ -56,10 +62,18 @@ function recordingClient() {
         throw new Error('ratelimited');
       }
       const ts = `1700.${++next + 100}`;
+      await slack.hold?.('post', markdown);
       calls.push({ call: 'post', ts, text: markdown });
       return ts;
     },
-    edit: async (_thread, ts, markdown) => void calls.push({ call: 'edit', ts, text: markdown }),
+    edit: async (_thread, ts, markdown) => {
+      if (slack.failEdits > 0) {
+        slack.failEdits--;
+        throw new Error('ratelimited');
+      }
+      await slack.hold?.('edit', markdown);
+      calls.push({ call: 'edit', ts, text: markdown });
+    },
     react: async (_thread, ts, emoji) => void calls.push({ call: 'react', ts, emoji }),
     unreact: async (_thread, ts, emoji) => void calls.push({ call: 'unreact', ts, emoji }),
   };
@@ -264,6 +278,95 @@ describe('AlertSlackStatus', () => {
     await status.runStarted(await card());
     expect(calls.map(call => call.call)).toEqual(['post', 'react']);
     expect(calls[0]!.text).toContain('looking into this alert');
+  });
+
+  it('posts a status whose post failed when the same stage is written again', async () => {
+    const { ingest, card, calls, slack, status, record } = await setup();
+    await ingest(alert('alert.opened', 'i1'));
+    slack.failPosts = 2;
+    await ingest(alert('alert.thread_linked', 'i1'), T0 + MIN);
+    await expect(status.runStarted(await card())).rejects.toThrow('ratelimited');
+    expect(calls).toEqual([]);
+    expect(await record()).toMatchObject({ stage: 'investigating' });
+    // A run bound once the thread is linked reports the same start again.
+    expect(await status.runStarted(await card())).toBe(false);
+    expect(calls.map(call => call.call)).toEqual(['post', 'react']);
+    expect(calls[0]!.text).toContain('looking into this alert');
+    expect((await record())!.messages.status!.ts).toBe(calls[0]!.ts);
+  });
+
+  it('redoes a failed status edit on the next write, though the stage has not moved since', async () => {
+    const { linked, card, calls, slack, status } = await setup();
+    await linked();
+    await status.runStarted(await card());
+    slack.failEdits = 1;
+    await expect(status.runEnded(await card(), { status: 'failed', reason: 'sandbox crashed' })).rejects.toThrow(
+      'ratelimited',
+    );
+    calls.length = 0;
+    await status.runEnded(await card(), { status: 'failed', reason: 'sandbox crashed' });
+    expect(calls.filter(call => call.call === 'edit').map(call => call.text)).toEqual([
+      expect.stringContaining('Factory triage stopped:* sandbox crashed'),
+    ]);
+    expect(calls).toContainEqual(expect.objectContaining({ call: 'react', emoji: 'warning' }));
+  });
+
+  it('ends on the conclusion when an older "looking" edit lands after it', async () => {
+    const { linked, card, calls, slack, status, post } = await setup();
+    const workItemId = (await linked()).id;
+    let release!: () => void;
+    const held = new Promise<void>(resolve => (release = resolve));
+    let holding = true;
+    slack.hold = (call, text) => {
+      if (call !== 'edit' || !holding || !text.includes('looking into this alert')) return undefined;
+      holding = false;
+      return held;
+    };
+    const started = status.runStarted(await card());
+    await new Promise(resolve => setTimeout(resolve, 20));
+    await post({ workItemId, kind: 'no_fix', markdown: 'Upstream outage' });
+    release();
+    await started;
+
+    const statusTs = (await card()).metadata?.[ALERT_SLACK_STATUS_KEY] as AlertSlackStatusRecord;
+    const edits = calls.filter(call => call.call === 'edit' && call.ts === statusTs.messages.status!.ts);
+    expect(edits.at(-1)!.text).toContain('no code fix from the Factory');
+    const reactions = new Set<string>();
+    for (const call of calls) {
+      if (call.call === 'react') reactions.add(call.emoji!);
+      if (call.call === 'unreact') reactions.delete(call.emoji!);
+    }
+    expect([...reactions]).toEqual(['information_source']);
+  });
+
+  it('shows a diagnosis corrected while its first post was still in flight', async () => {
+    const { linked, card, calls, slack, status, post } = await setup();
+    const workItemId = (await linked()).id;
+    await status.runStarted(await card());
+    calls.length = 0;
+    let release!: () => void;
+    const held = new Promise<void>(resolve => (release = resolve));
+    slack.hold = (call, text) => (call === 'post' && text === 'first take' ? held : undefined);
+    const first = post({ workItemId, kind: 'diagnosis', markdown: 'first take' });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(await post({ workItemId, kind: 'diagnosis', markdown: 'corrected' })).toEqual({ posted: true });
+    release();
+    expect(await first).toEqual({ posted: true });
+
+    const replyTs = calls.find(call => call.call === 'post' && call.text === 'first take')!.ts;
+    expect(calls.filter(call => call.ts === replyTs).at(-1)).toMatchObject({ call: 'edit', text: 'corrected' });
+    expect(calls.filter(call => call.call === 'post')).toHaveLength(1);
+  });
+
+  it('shows a recovery that came before the thread was linked', async () => {
+    const { ingest, calls, record } = await setup();
+    await ingest(alert('alert.opened', 'i1'));
+    await ingest(alert('alert.resolved', 'i1', T0 + 5 * MIN), T0 + 5 * MIN);
+    await ingest(alert('alert.thread_linked', 'i1', T0 + 6 * MIN), T0 + 6 * MIN);
+    expect(calls.map(call => call.call)).toEqual(['post', 'react']);
+    expect(calls[0]!.text).toContain('recovered at 17:05 UTC');
+    expect(calls[1]).toMatchObject({ emoji: 'white_check_mark' });
+    expect(await record()).toMatchObject({ stage: 'filed', recoveredAt: '17:05 UTC' });
   });
 
   it('keeps a mention and a status change that land on the card at the same time', async () => {
