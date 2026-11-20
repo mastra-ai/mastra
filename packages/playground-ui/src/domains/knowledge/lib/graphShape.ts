@@ -490,6 +490,8 @@ export interface LazyGraphInput {
   openGroups: ReadonlySet<string>;
   /** Children drawn past the cap, per parent: what clicks on its "+N more" circle have revealed. */
   revealed?: ReadonlyMap<string, number>;
+  /** More root scopes wait on the server past those loaded, so the roots' "+N more" circle stays to fetch them. */
+  moreRoots?: boolean;
   cap?: number;
 }
 
@@ -557,10 +559,11 @@ export function lazyGraph(input: LazyGraphInput): LazyGraph {
   const rootLimit = SIBLING_ROOT_CAP + (input.revealed?.get(input.rootKey) ?? 0);
   for (const root of siblingRoots.slice(0, rootLimit)) add(root, 1);
   const hiddenRoots = Math.max(0, siblingRoots.length - rootLimit);
-  if (center && hiddenRoots > 0) {
+  if (center && !focus && (hiddenRoots > 0 || input.moreRoots)) {
     const rest = syntheticPage(`${REST_PREFIX}${ROOTS_REST_KEY}${input.rootKey}`, center, {
-      name: `+${hiddenRoots} more scopes`,
-      childCount: hiddenRoots,
+      // Past the loaded roots their number is unknown, so the count says so.
+      name: hiddenRoots > 0 ? `+${hiddenRoots}${input.moreRoots ? '+' : ''} more scopes` : 'More scopes',
+      ...(hiddenRoots > 0 && !input.moreRoots ? { childCount: hiddenRoots } : {}),
     });
     drawn.set(rest.id, rest);
     depth.set(rest.id, 1);

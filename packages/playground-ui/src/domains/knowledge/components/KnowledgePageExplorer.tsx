@@ -874,6 +874,8 @@ function useLazyTree(
   const [more, setMore] = useState<ReadonlyMap<string, string[]>>(() => new Map());
   const requests = useMemo(() => {
     const list: KnowledgeExplorerTreeRequest[] = [{ parentId: null }];
+    // Root scopes past the first chunk, as the tree's or the graph's "more" asks for them.
+    for (const cursor of more.get(KNOWLEDGE_TREE_ROOT) ?? []) list.push({ parentId: null, cursor });
     for (const id of expanded) {
       list.push({ parentId: id });
       for (const cursor of more.get(id) ?? []) list.push({ parentId: id, cursor });
@@ -978,6 +980,7 @@ export function KnowledgePageExplorer({
   const [allLinks, setAllLinks] = useState(false);
   const [dotCounts, setDotCounts] = useState(true);
   const lazy = useLazyTree(source, graph, selected.data, graphOpened);
+  const moreRoots = lazy.loadMore.has(KNOWLEDGE_TREE_ROOT);
   // With tree levels the graph loads like the tree: the focus (or the root scopes) and what sits around
   // it, never the whole instance. Without them it draws the host's bounded graph as it is.
   const drawnGraph = useMemo(
@@ -991,6 +994,7 @@ export function KnowledgePageExplorer({
             focusId: selectedPageId,
             openGroups,
             revealed,
+            moreRoots,
           })
         : {
             pages: graph.pages,
@@ -998,7 +1002,7 @@ export function KnowledgePageExplorer({
             wanted: [],
             hub: null,
           },
-    [lazyMode, lazy.pages, lazy.loaded, selectedPageId, openGroups, revealed, graph.pages],
+    [lazyMode, lazy.pages, lazy.loaded, selectedPageId, openGroups, revealed, moreRoots, graph.pages],
   );
   // The pages the focus needs are in (or failed to load): only then does the graph move to the new focus.
   const graphSettled = !lazyMode || drawnGraph.wanted.every(id => lazy.loaded.has(id) || lazy.failed.has(id));
