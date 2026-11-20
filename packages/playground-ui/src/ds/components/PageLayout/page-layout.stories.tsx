@@ -75,7 +75,7 @@ export const Container: Story = {
   render: () => (
     <StoryFrame>
       <PageLayout breadcrumbs={crumbs} headerActions={headerActions} header={pageHeader}>
-        <div className="mt-6">{resourceList}</div>
+        {resourceList}
       </PageLayout>
     </StoryFrame>
   ),
@@ -130,7 +130,7 @@ export const TopBarSpacingComparison: Story = {
         </Txt>
         <StoryFrame>
           <PageLayout breadcrumbs={crumbs} headerActions={headerActions} header={<ComparisonHeader />}>
-            <div className="mt-6">{resourceList}</div>
+            {resourceList}
           </PageLayout>
         </StoryFrame>
       </div>
@@ -139,9 +139,7 @@ export const TopBarSpacingComparison: Story = {
           No bar + breathing spacing
         </Txt>
         <StoryFrame>
-          <PageLayout header={<ComparisonHeader spacing="breathing" />}>
-            <div className="mt-6">{resourceList}</div>
-          </PageLayout>
+          <PageLayout header={<ComparisonHeader spacing="breathing" />}>{resourceList}</PageLayout>
         </StoryFrame>
       </div>
       <div>
@@ -149,9 +147,7 @@ export const TopBarSpacingComparison: Story = {
           No bar + breathing spacing + Back link
         </Txt>
         <StoryFrame>
-          <PageLayout header={<ComparisonHeader spacing="breathing" eyebrow={backLink} />}>
-            <div className="mt-6">{resourceList}</div>
-          </PageLayout>
+          <PageLayout header={<ComparisonHeader spacing="breathing" eyebrow={backLink} />}>{resourceList}</PageLayout>
         </StoryFrame>
       </div>
       <div>
@@ -159,9 +155,7 @@ export const TopBarSpacingComparison: Story = {
           No bar (default unchanged)
         </Txt>
         <StoryFrame>
-          <PageLayout header={<ComparisonHeader />}>
-            <div className="mt-6">{resourceList}</div>
-          </PageLayout>
+          <PageLayout header={<ComparisonHeader />}>{resourceList}</PageLayout>
         </StoryFrame>
       </div>
     </div>
@@ -229,10 +223,15 @@ export const Grid: Story = {
     const properties = canvas.getByText('Properties').getBoundingClientRect();
     const activity = canvas.getByText('Activity').getBoundingClientRect();
     const gridWidth = canvas.getByText('Details').closest('[data-slot="page-layout-grid"]')?.clientWidth ?? 0;
-    const sideBySide = gridWidth >= 896;
+    const sideBySide = gridWidth >= 768;
 
     await expect(sideBySide ? properties.top === details.top : properties.top > details.top).toBe(true);
     await expect(activity.width).toBeGreaterThanOrEqual(details.width);
+
+    const header = canvasElement.querySelector('[data-slot="page-layout-header"] > *');
+    if (!header) throw new Error('Missing page header');
+    const headerBottom = header.getBoundingClientRect().bottom;
+    await expect(Math.round(details.top - headerBottom)).toBe(24);
   },
 };
 
@@ -262,9 +261,7 @@ export const FullPage: Story = {
 export const WithoutBreadcrumbsAndHeaderActions: Story = {
   render: () => (
     <StoryFrame>
-      <PageLayout header={pageHeader}>
-        <div className="mt-6">{resourceList}</div>
-      </PageLayout>
+      <PageLayout header={pageHeader}>{resourceList}</PageLayout>
     </StoryFrame>
   ),
 };
@@ -285,7 +282,7 @@ export const HeaderWithSectionsAndEmptyState: Story = {
   render: () => (
     <StoryFrame>
       <PageLayout breadcrumbs={crumbs} header={pageHeader}>
-        <section className="mt-6">{resourceList}</section>
+        <section>{resourceList}</section>
         <EmptyState
           variant="fill"
           titleSlot="No activity yet"

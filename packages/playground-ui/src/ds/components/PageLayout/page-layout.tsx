@@ -45,7 +45,11 @@ export function PageLayout({ children, breadcrumbs, headerActions, actionRow, he
             className="p-4 has-[>*>[data-slot=page-layout-workspace]]:p-0"
             contentClassName={cn(bodyContent, header ? bodyWithHeader : bodyWithoutHeader)}
           >
-            {header && <div data-slot="page-layout-header">{header}</div>}
+            {header && (
+              <div data-slot="page-layout-header" className="pb-6">
+                {header}
+              </div>
+            )}
             {children}
           </ScrollAreaViewport>
         </ScrollArea>
@@ -65,7 +69,7 @@ function PageLayoutWorkspace({ children }: { children: ReactNode }) {
 function PageLayoutGrid({ children }: { children: ReactNode }) {
   return (
     <div data-slot="page-layout-grid" className="@container min-w-0">
-      <div className="grid grid-cols-1 gap-6 @max-4xl:*:col-span-full! @4xl:grid-cols-12 [:where(&)>*]:col-span-full">
+      <div className="grid grid-cols-1 gap-4 @max-3xl:*:col-span-full! @3xl:grid-cols-12 [:where(&)>*]:col-span-full">
         {children}
       </div>
     </div>
