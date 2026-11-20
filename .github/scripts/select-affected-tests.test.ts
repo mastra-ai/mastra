@@ -231,6 +231,8 @@ describe('Prebuild test tiers', () => {
     expect(job['timeout-minutes']).toBeGreaterThanOrEqual(total);
     if (jobId === 'e2e-light') {
       const names = job.steps.map(step => step.name);
+      expect(names).toContain('E2E npm import');
+      expect(names).toContain('Build');
       expect(names.indexOf('E2E npm import')).toBeLessThan(names.indexOf('Build'));
     }
   });

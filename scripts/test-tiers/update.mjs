@@ -209,25 +209,32 @@ const MASTRACODE_E2E_STEPS = new Set([
   'Run Mastra Code E2E',
 ]);
 
-/** Keys of a job that runs several tiered suites as steps: a suite ran when one of its steps ran. */
-function stepKeys(steps, keyOf) {
+/**
+ * Keys of a job that runs several tiered suites as steps: a suite ran when one of its steps ran.
+ * `isTest` names each suite's test step.
+ */
+function stepKeys(steps, keyOf, isTest) {
   const ran = new Set();
   const failed = new Set();
   const unfinished = new Set();
-  const seen = new Set();
+  const tested = new Set();
   for (const step of steps) {
     const key = keyOf(step.name);
     if (!key) continue;
-    seen.add(key);
     if (step.conclusion !== 'success') unfinished.add(key);
+    else if (isTest(step.name)) tested.add(key);
     if (!step.conclusion || step.conclusion === 'skipped') continue;
     ran.add(key);
     if (step.conclusion === 'failure') failed.add(key);
   }
-  // A suite passed only when every one of its steps succeeded: skipped or cancelled is not a pass.
-  const passed = [...seen].filter(key => !unfinished.has(key)).sort();
+  // A suite passed only when its test step succeeded and none of its steps (installs, builds)
+  // failed, skipped or was cancelled; an install alone, or a missing test step, is not a pass.
+  const passed = [...tested].filter(key => !unfinished.has(key)).sort();
   return { ran: [...ran].sort(), failed: [...failed].sort(), passed };
 }
+
+/** A job running several tiered suites as steps (its keys carry `passed`). */
+const isMergedSuiteJob = job => Boolean(jobKeysFor(job.workflow_name, job.name, () => '', job.steps ?? []).passed);
 
 /**
  * Whether a failed job's tier key passed on a later attempt of the job or in a later green run of
@@ -256,12 +263,15 @@ export function passedOnRetry(job, key, candidates, keysOf) {
 export function jobKeysFor(workflow, name, log = () => '', steps = []) {
   const one = key => ({ ran: [key], failed: [key] });
   if (workflow === 'Prebuild' && name === 'Mastra Code E2E / Mastra Code E2E' && steps.length)
-    return stepKeys(steps, step =>
-      step.startsWith('Mastra Code web host OM scenarios')
-        ? 'job:mastracode-om'
-        : MASTRACODE_E2E_STEPS.has(step)
-          ? 'job:mastracode-e2e'
-          : null,
+    return stepKeys(
+      steps,
+      step =>
+        step.startsWith('Mastra Code web host OM scenarios')
+          ? 'job:mastracode-om'
+          : MASTRACODE_E2E_STEPS.has(step)
+            ? 'job:mastracode-e2e'
+            : null,
+      step => step === 'Run Mastra Code E2E' || step === 'Mastra Code web host OM scenarios',
     );
   const named = NAMED_JOBS[`${workflow}\t${name}`];
   if (named) return one(named);
@@ -273,10 +283,14 @@ export function jobKeysFor(workflow, name, log = () => '', steps = []) {
   if ((m = /^Workspace Tests \/ test-unit \(([\w-]+)\)$/.exec(name))) return one(`job:workspace-unit/${m[1]}`);
   if ((m = /^Workspace Tests \/ test-docker \(([\w-]+)\)$/.exec(name))) return one(`job:workspace-docker/${m[1]}`);
   if (name === 'E2E Tests / E2E light suites')
-    return stepKeys(steps, step => {
-      const label = E2E_JOB_LABELS[/^E2E (.+?)(?::.*)?$/.exec(step)?.[1]];
-      return label && `job:e2e/${label}`;
-    });
+    return stepKeys(
+      steps,
+      step => {
+        const label = E2E_JOB_LABELS[/^E2E (.+?)(?::.*)?$/.exec(step)?.[1]];
+        return label && `job:e2e/${label}`;
+      },
+      step => !step.includes(':'),
+    );
   if ((m = /^E2E Tests \/ E2E (.+?)(?: \(\d+\/\d+\)| \(optional\))?$/.exec(name)) && E2E_JOB_LABELS[m[1]])
     return one(`job:e2e/${E2E_JOB_LABELS[m[1]]}`);
   const folded =
@@ -349,11 +363,14 @@ export function listRunsByDay(listRange, since, until, cap = RUN_LIST_CAP) {
 }
 
 /**
- * Finished runs that did not pass. A skipped run never started a job, so fetching its jobs
+ * Finished runs that did not pass, and green reattempts: a merged job's earlier attempt may have
+ * failed a suite the green attempt skipped. A skipped run never started a job, so fetching its jobs
  * (one serial API call each, hundreds a day) cannot find a failure.
  */
 export function runsToInspect(runs) {
-  return runs.filter(r => r.conclusion && r.conclusion !== 'success' && r.conclusion !== 'skipped');
+  return runs.filter(
+    r => r.conclusion && r.conclusion !== 'skipped' && (r.conclusion !== 'success' || r.run_attempt > 1),
+  );
 }
 
 /**
@@ -805,6 +822,9 @@ function dailyCommand(tiers, { days, date, budgetMinutes }) {
       laterGreenRun(run);
     for (const job of jobs.filter(j => j.conclusion === 'failure')) {
       const failedOn = job.completed_at?.slice(0, 10) ?? run.created_at.slice(0, 10);
+      // A green reattempt is inspected only for its merged jobs' suites; first-attempt green
+      // policy for everything else is unchanged.
+      if (run.conclusion === 'success' && !isMergedSuiteJob(job)) continue;
       if (!isFileListJob(job.name)) {
         const keys = jobKeysFor(job.workflow_name, job.name, () => jobLog(job.id), job.steps);
         const settled = Date.now() - Date.parse(job.completed_at ?? run.created_at) >= JOB_SETTLE_MS;

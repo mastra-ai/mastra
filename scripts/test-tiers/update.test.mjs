@@ -424,6 +424,52 @@ test('a merged job retry counts as a flake only for the suites whose own steps p
   assert.equal(passedOnRetry(store(1, 1, 'failure'), 'job:store/pg', [store(2, 2, 'cancelled')], keysOf), false);
 });
 
+test('a merged suite passes only when its own test step ran and succeeded', () => {
+  const light = steps => jobKeysFor('Prebuild', 'E2E Tests / E2E light suites', () => '', steps);
+  // The install went green but the CommonJS test step is absent: no test result, so no pass.
+  assert.deepEqual(light([{ name: 'E2E CommonJS: install e2e test dependencies', conclusion: 'success' }]).passed, []);
+  // Skipped and cancelled test steps are not passes either.
+  for (const conclusion of ['skipped', 'cancelled'])
+    assert.deepEqual(
+      light([
+        { name: 'E2E CommonJS: install e2e test dependencies', conclusion: 'success' },
+        { name: 'E2E CommonJS', conclusion },
+      ]).passed,
+      [],
+    );
+  // A red sibling doesn't stop a suite whose test actually passed.
+  assert.deepEqual(
+    light([
+      { name: 'E2E deployers', conclusion: 'failure' },
+      { name: 'E2E CommonJS: install e2e test dependencies', conclusion: 'success' },
+      { name: 'E2E CommonJS', conclusion: 'success' },
+    ]).passed,
+    ['job:e2e/commonjs'],
+  );
+  const mc = steps => jobKeysFor('Prebuild', 'Mastra Code E2E / Mastra Code E2E', () => '', steps);
+  // OM installed and built but its scenario step never reported; E2E built but never tested.
+  assert.deepEqual(
+    mc([
+      { name: 'Build Mastra Code', conclusion: 'success' },
+      { name: 'Mastra Code web host OM scenarios: install web host dependencies', conclusion: 'success' },
+      { name: 'Mastra Code web host OM scenarios: build web host dependencies', conclusion: 'success' },
+    ]).passed,
+    [],
+  );
+});
+
+test('a green reattempt is inspected so an earlier merged-suite failure is still judged', () => {
+  const runs = [
+    { id: 1, conclusion: 'success', run_attempt: 1 },
+    { id: 7, conclusion: 'success', run_attempt: 2 },
+  ];
+  // A first-attempt green run still isn't fetched.
+  assert.deepEqual(
+    runsToInspect(runs).map(r => r.id),
+    [7],
+  );
+});
+
 test('a folded job fails only the packages that started and never finished', () => {
   // Lines as pnpm -r prints them in the light-stores job (run 41359171549).
   const log = [
