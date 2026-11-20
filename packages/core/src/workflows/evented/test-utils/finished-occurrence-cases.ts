@@ -1020,6 +1020,59 @@ export function describeFinishedOccurrenceCases({
       expect((await storedRun(run.runId))?.status).toBe('success');
     }, 20_000);
 
+    // A suspend that declined its snapshot deletes the record it left, unless a cancel replaced it
+    // while the suspend was being published.
+    it('keeps the record of a run canceled while its declined suspend is published', async () => {
+      const suspendHandled = deferred<void>();
+      const processor = WorkflowEventProcessor.prototype as unknown as {
+        processWorkflowSuspend: (...args: unknown[]) => Promise<void>;
+      };
+      const handleSuspend = processor.processWorkflowSuspend;
+      vi.spyOn(processor, 'processWorkflowSuspend').mockImplementation(async function (
+        this: unknown,
+        ...args: unknown[]
+      ) {
+        try {
+          await handleSuspend.apply(this, args);
+        } finally {
+          suspendHandled.resolve();
+        }
+      });
+      let run: { cancel(): Promise<void> } | undefined;
+      const a = await startReplica(
+        createWorkflow({
+          id: 'finished',
+          inputSchema: Num,
+          outputSchema: Num,
+          options: { shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'canceled' },
+        })
+          .then(
+            createStep({
+              id: 'gate',
+              inputSchema: Num,
+              outputSchema: Num,
+              resumeSchema: z.object({ ok: z.boolean() }),
+              execute: async ({ inputData, resumeData, suspend }) => {
+                if (!resumeData) {
+                  await suspend({});
+                }
+                return inputData;
+              },
+            }),
+          )
+          .commit(),
+        undefined,
+        undefined,
+        event => (event.type === 'workflow.suspend' ? run?.cancel() : undefined),
+      );
+      const created = await a.workflow.createRun({ runId: uniqueRunId() });
+      run = created;
+      expect((await created.start({ inputData: { n: 1 } })).status).toBe('suspended');
+      await suspendHandled.promise;
+
+      expect((await storedRun(created.runId))?.status).toBe('canceled');
+    }, 20_000);
+
     // A workflow that skips running snapshots leaves the stored active path at the step that last
     // saved one, here the step that suspended. The check can't tell from it whether the run went
     // past a finished step, so a late delivery runs the step again instead of leaving the run stuck.
