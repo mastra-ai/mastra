@@ -516,35 +516,46 @@ describe('skill_search tool', () => {
 
     const result = await exec(tool, { query: 'blue' });
 
-    expect(result).toContain('[brand-guide] (skills/brand-guide) references/colors.md (lines 3-3) (score: 0.60)');
-    expect(result).toContain('[brand-guide] (skills/brand-guide) (score: 0.40)');
+    expect(result).toContain(
+      '[brand-guide] (skills/brand-guide/SKILL.md) references/colors.md (lines 3-3) (score: 0.60)',
+    );
+    expect(result).toContain('[brand-guide] (skills/brand-guide/SKILL.md) (score: 0.40)');
   });
 
-  it('lists each same-named skill with a path that the skill tool can load', async () => {
+  it('lists each same-named skill with a location the skill tools can load', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-skill-search-'));
 
     try {
-      for (const [root, body] of [
-        ['.claude/skills', 'Claude copy of the label rules.'],
-        ['.agents/skills', 'Agents copy of the label rules.'],
+      // `label-bugs` is a skills path that is itself a skill, so its directory
+      // path is also the ambiguous skill name.
+      for (const [dir, body] of [
+        ['label-bugs', 'Direct copy of the label rules.'],
+        ['other/label-bugs', 'Nested copy of the label rules.'],
       ]) {
-        await fs.mkdir(path.join(tempDir, root, 'label-bugs'), { recursive: true });
+        await fs.mkdir(path.join(tempDir, dir, 'references'), { recursive: true });
         await fs.writeFile(
-          path.join(tempDir, root, 'label-bugs', 'SKILL.md'),
+          path.join(tempDir, dir, 'SKILL.md'),
           `---\nname: label-bugs\ndescription: Label bugs\n---\n\n${body}`,
         );
+        await fs.writeFile(path.join(tempDir, dir, 'references', 'triage.md'), `Triage: ${body}`);
       }
       const skills = new WorkspaceSkillsImpl({
         source: new LocalSkillSource({ basePath: tempDir }),
-        skills: ['.claude/skills', '.agents/skills'],
+        skills: ['label-bugs', 'other'],
       });
-      const { skill_search: search, skill } = createSkillTools(skills);
+      const { skill_search: search, skill, skill_read: read } = createSkillTools(skills);
 
       const result = await exec(search, { query: 'label rules' });
+      const locations = [...new Set([...result.matchAll(/^\[label-bugs\] \(([^)]+)\)/gm)].map(m => m[1]!))];
+      expect(locations.sort()).toEqual(['label-bugs/SKILL.md', 'other/label-bugs/SKILL.md']);
 
-      expect(result).toContain('[label-bugs] (.claude/skills/label-bugs)');
-      expect(result).toContain('[label-bugs] (.agents/skills/label-bugs)');
-      expect(await exec(skill, { name: '.agents/skills/label-bugs' })).toContain('Agents copy of the label rules.');
+      for (const location of locations) {
+        const body = location.startsWith('other/') ? 'Nested copy' : 'Direct copy';
+        expect(await exec(skill, { name: location })).toContain(body);
+        expect(await exec(read, { skillName: location, path: 'references/triage.md' })).toContain(body);
+      }
+
+      await expect(skills.get('label-bugs')).rejects.toThrow('multiple local skills found');
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true });
     }
@@ -683,7 +694,7 @@ describe('skill_read tool', () => {
 
     const result = await exec(tool, { skillName: 'my-skill', path: 'docs/schema.json' });
 
-    expect(getAsset).toHaveBeenCalledWith('skills/my-skill', 'docs/schema.json');
+    expect(getAsset).toHaveBeenCalledWith('skills/my-skill/SKILL.md', 'docs/schema.json');
     expect(result).toBe('{"schema": true}');
   });
 

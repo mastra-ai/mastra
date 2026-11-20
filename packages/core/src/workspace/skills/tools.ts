@@ -187,8 +187,9 @@ function createSkillSearchTool(skills: WorkspaceSkills) {
             // Reference hits name their file so the model can pass it to skill_read
             const file = r.source !== 'SKILL.md' ? ` ${r.source}` : '';
             const location = r.lineRange ? ` (lines ${r.lineRange.start}-${r.lineRange.end})` : '';
-            // The path tells same-named skills apart; pass it to `skill` or `skill_read`.
-            const skillPath = r.skillPath ? ` (${r.skillPath})` : '';
+            // The SKILL.md location tells same-named skills apart and, unlike a bare
+            // directory path, can never be mistaken for a skill name by `skill` or `skill_read`.
+            const skillPath = r.skillPath ? ` (${r.skillPath}/SKILL.md)` : '';
             return `[${r.skillName}]${skillPath}${file}${location} (score: ${r.score.toFixed(2)})\n${preview}`;
           })
           .join('\n\n');
@@ -238,7 +239,9 @@ function createSkillReadTool(skills: WorkspaceSkills) {
           span.end({ success: false });
           return resolved.notFound;
         }
-        const resolvedPath = resolved.skill.path;
+        // Accessors try the name before the path, so address the resolved skill by its
+        // SKILL.md location; a bare directory path can equal an ambiguous skill name.
+        const resolvedPath = `${resolved.skill.path}/SKILL.md`;
 
         // Every accessor resolves the same skill-root-relative path; getAsset is the only one
         // that returns the raw bytes instead of decoding them as UTF-8, so read through it and
