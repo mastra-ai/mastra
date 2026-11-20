@@ -491,6 +491,10 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
   threadId?: string;
   /** Resource ID if using memory */
   resourceId?: string;
+  /** Trace ID of the run, when the run is traced */
+  traceId?: string;
+  /** ID of the agent run span, when the run is traced */
+  spanId?: string;
   /** Cleanup function to call when done (unsubscribes from pubsub) */
   cleanup: () => void;
   /**
@@ -1293,6 +1297,7 @@ export class DurableAgent<
         messageList,
         structuredOutput: registryEntry.structuredOutput,
         requestContext: registryEntry.requestContext,
+        tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
         returnScorerData: workflowInput.options?.returnScorerData,
       });
       streamCleanup = stream.cleanup;
@@ -3308,6 +3313,8 @@ export class DurableAgent<
       runId,
       threadId,
       resourceId,
+      traceId: output.traceId,
+      spanId: output.spanId,
       cleanup,
       abort,
     };
@@ -4173,6 +4180,8 @@ export class DurableAgent<
       runId,
       threadId: memoryInfo?.threadId,
       resourceId: memoryInfo?.resourceId,
+      traceId: output.traceId,
+      spanId: output.spanId,
       cleanup,
       abort,
     };
@@ -4571,6 +4580,8 @@ export class DurableAgent<
       runId,
       threadId,
       resourceId,
+      traceId: output.traceId,
+      spanId: output.spanId,
       cleanup,
       abort,
     };
@@ -6031,6 +6042,8 @@ export class DurableAgent<
       runId,
       threadId: memoryInfo?.threadId,
       resourceId: memoryInfo?.resourceId,
+      traceId: output.traceId,
+      spanId: output.spanId,
       cleanup,
       detach,
       abort,
