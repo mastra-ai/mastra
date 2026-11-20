@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import '@/test/english-locale';
 import type { MastraClient } from '@mastra/client-js';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';

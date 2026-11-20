@@ -42,3 +42,8 @@ export { AddItemsToDatasetDialog } from './components/add-items-to-dataset-dialo
 export { DeleteDatasetDialog } from './components/delete-dataset-dialog';
 export { CSVImportDialog } from './components/csv-import';
 export { JSONImportDialog } from './components/json-import';
+export { DuplicateDatasetDialog } from './components/duplicate-dataset-dialog';
+export { DatasetSchemaDialog } from './components/schema-settings';
+export { EditDatasetForm } from './components/edit-dataset-form';
+export { ScorerSelector } from './components/experiment-trigger/scorer-selector';
+export { DatasetCompareVersionToolbar, DatasetCompareVersionsList } from './components/versions';

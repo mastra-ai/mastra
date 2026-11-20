@@ -1,16 +1,12 @@
-import { Card } from '@mastra/playground-ui/components/Card';
-import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
-import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
-import {
-  JSONSchemaForm,
-  fieldsToJSONSchema,
-  jsonSchemaToFields,
-} from '@mastra/playground-ui/components/JSONSchemaForm';
-import type { SchemaField } from '@mastra/playground-ui/components/JSONSchemaForm';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import { Ajv } from 'ajv';
 import { useRef, useState } from 'react';
+import { Card } from '@/ds/components/Card';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
+import { JSONSchemaForm, fieldsToJSONSchema, jsonSchemaToFields } from '@/ds/components/JSONSchemaForm';
+import type { SchemaField } from '@/ds/components/JSONSchemaForm';
+import { cn } from '@/utils/cn';
+import type { JsonSchema } from '@/utils/json-schema';
 
 type SchemaValue = Record<string, unknown> | null;
 

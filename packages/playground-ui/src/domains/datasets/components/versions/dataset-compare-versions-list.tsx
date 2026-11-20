@@ -1,14 +1,14 @@
 import type { DatasetItem } from '@mastra/client-js';
-import { Badge } from '@mastra/playground-ui/components/Badge';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { IconCircleBanSign } from '@mastra/playground-ui/icons/central/IconCircleBanSign';
-import { IconMathEquals } from '@mastra/playground-ui/icons/central/IconMathEquals';
-import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
-import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
-import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { focusRing, transitions } from '@mastra/playground-ui/primitives/transitions';
-import { cn } from '@mastra/playground-ui/utils/cn';
+import { Badge } from '@/ds/components/Badge';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
+import { IconCircleBanSign } from '@/ds/icons/central/IconCircleBanSign';
+import { IconMathEquals } from '@/ds/icons/central/IconMathEquals';
+import { IconPencil } from '@/ds/icons/central/IconPencil';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
+import { focusRing, transitions } from '@/ds/primitives/transitions';
+import { useLinkComponent } from '@/lib/framework';
+import { cn } from '@/utils/cn';
 
 export interface DatasetCompareVersionsListProps {
   datasetId: string;

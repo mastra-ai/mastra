@@ -1,4 +1,7 @@
 import type { DatasetRecord } from '@mastra/client-js';
+import { useDatasetMutations } from '@mastra/react/hooks/datasets';
+import { Controller, useForm } from 'react-hook-form';
+import { SchemaEditorPane } from './schema-editor-pane';
 import {
   Dialog,
   DialogAction,
@@ -9,13 +12,10 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@mastra/playground-ui/components/Dialog';
-import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
-import { toast } from '@mastra/playground-ui/utils/toast';
-import { useDatasetMutations } from '@mastra/react/hooks/datasets';
-import { Controller, useForm } from 'react-hook-form';
-import { SchemaEditorPane } from './schema-editor-pane';
+} from '@/ds/components/Dialog';
+import { Notice } from '@/ds/components/Notice';
+import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
+import { toast } from '@/utils/toast';
 
 export interface DatasetSchemaDialogProps {
   open: boolean;
@@ -27,11 +27,11 @@ type SchemaKey = 'inputSchema' | 'groundTruthSchema' | 'requestContextSchema';
 type SchemaValue = Record<string, unknown> | null;
 type DatasetSchemaFormValues = Record<SchemaKey, SchemaValue>;
 
-const SCHEMA_TABS: Array<{ key: SchemaKey; label: string }> = [
+const SCHEMA_TABS = [
   { key: 'inputSchema', label: 'Input' },
   { key: 'groundTruthSchema', label: 'Ground truth' },
   { key: 'requestContextSchema', label: 'Request context' },
-];
+] as const satisfies ReadonlyArray<{ key: SchemaKey; label: string }>;
 
 export function DatasetSchemaDialog({ open, onOpenChange, dataset }: DatasetSchemaDialogProps) {
   const { updateDataset } = useDatasetMutations();

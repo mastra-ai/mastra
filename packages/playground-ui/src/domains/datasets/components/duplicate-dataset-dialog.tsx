@@ -1,4 +1,7 @@
 'use client';
+import { useMastraClient } from '@mastra/react';
+import { useDatasetMutations } from '@mastra/react/hooks/datasets';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogAction,
@@ -8,15 +11,12 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@mastra/playground-ui/components/Dialog';
-import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
-import { Form } from '@mastra/playground-ui/components/Form';
-import { Input } from '@mastra/playground-ui/components/Input';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { toast } from '@mastra/playground-ui/utils/toast';
-import { useMastraClient } from '@mastra/react';
-import { useDatasetMutations } from '@mastra/react/hooks/datasets';
-import { useState, useEffect } from 'react';
+} from '@/ds/components/Dialog';
+import { Field, FieldLabel } from '@/ds/components/Field';
+import { Form } from '@/ds/components/Form';
+import { Input } from '@/ds/components/Input';
+import { Txt } from '@/ds/components/Txt';
+import { toast } from '@/utils/toast';
 
 export interface DuplicateDatasetDialogProps {
   open: boolean;
@@ -103,8 +103,7 @@ export function DuplicateDatasetDialog({
       });
 
       setProgress({ phase: 'copying', current: 0, total: allItems.length });
-      for (let i = 0; i < allItems.length; i++) {
-        const item = allItems[i];
+      for (const [i, item] of allItems.entries()) {
         await addItem.mutateAsync({
           datasetId: dataset.id,
           input: item.input,

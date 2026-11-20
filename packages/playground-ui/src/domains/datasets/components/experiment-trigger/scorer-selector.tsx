@@ -1,6 +1,6 @@
-import { Combobox } from '@mastra/playground-ui/components/Combobox';
-import { Field, FieldDescription, FieldLabel } from '@mastra/playground-ui/components/Field';
-import { useScorers } from '@/domains/scores/hooks/use-scorers';
+import { useScorers } from '@/domains/scores/hooks';
+import { Combobox } from '@/ds/components/Combobox';
+import { Field, FieldDescription, FieldLabel } from '@/ds/components/Field';
 
 export interface ScorerSelectorProps {
   selectedScorers: string[];

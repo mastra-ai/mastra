@@ -1,4 +1,4 @@
-import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
+import { ScorersIcon } from '@/ds/icons/ScorersIcon';
 
 export const DEFAULT_SCORERS_LABEL = (
   <span className="flex items-center gap-1.5 [&>svg]:size-icon-sm [&>svg]:shrink-0">

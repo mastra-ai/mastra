@@ -1,12 +1,4 @@
 'use client';
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
-import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
-import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
-import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { useWorkflowSchema } from '@mastra/react/hooks/datasets';
 import { useWorkflows } from '@mastra/react/hooks/workflows';
 import type { JSONSchema7 } from 'json-schema';
@@ -14,6 +6,14 @@ import { useState, useEffect, useRef } from 'react';
 import { useAgentSchema } from '../hooks/use-agent-schema';
 import { useScorerSchema } from '../hooks/use-scorer-schema';
 import { SchemaField } from './schema-settings/schema-field';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
+import { Field, FieldLabel } from '@/ds/components/Field';
+import { Notice } from '@/ds/components/Notice';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
+import { Txt } from '@/ds/components/Txt';
+import { quietTextHover } from '@/ds/primitives/typography';
+import { cn } from '@/utils/cn';
 
 type SourceType = 'custom' | 'agent' | 'workflow' | 'scorer';
 type ScorerTargetType = 'agent' | 'custom';

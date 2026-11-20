@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
@@ -9,9 +10,9 @@ import { getMultiSelectValues, setMultiSelectValues } from '@/test/mock-combobox
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
-vi.mock('@mastra/playground-ui/components/Combobox', () => import('@/test/mock-combobox'));
+vi.mock('@/ds/components/Combobox', () => import('@/test/mock-combobox'));
 
-vi.mock('@mastra/playground-ui/utils/toast', () => ({
+vi.mock('@/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 

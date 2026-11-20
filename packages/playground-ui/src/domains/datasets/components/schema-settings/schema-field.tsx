@@ -1,11 +1,11 @@
 'use client';
 
-import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
-import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
-import { Switch } from '@mastra/playground-ui/components/Switch';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JSONSchema7 } from 'json-schema';
 import { useState, useEffect, useRef } from 'react';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
+import { Switch } from '@/ds/components/Switch';
+import { cn } from '@/utils/cn';
 
 interface SchemaFieldProps {
   label: string;

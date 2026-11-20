@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import type { DatasetRecord, UpdateDatasetParams } from '@mastra/client-js';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -10,7 +11,7 @@ import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 vi.mock('@uiw/react-codemirror', () => import('@/test/mock-code-editor'));
-vi.mock('@mastra/playground-ui/utils/toast', () => ({
+vi.mock('@/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
