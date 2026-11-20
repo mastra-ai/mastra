@@ -1,16 +1,17 @@
+// @vitest-environment jsdom
 import type { CreateDatasetParams } from '@mastra/client-js';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ComponentProps } from 'react';
-import { Route, Routes, useParams } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 
 import { CreateDatasetDialog } from '../create-dataset-dialog';
 import { buildDataset } from './fixtures/datasets';
+import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
-vi.mock('@mastra/playground-ui/utils/toast', () => ({
+vi.mock('@/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
@@ -29,24 +30,18 @@ function setupHandlers() {
   return { createBodies };
 }
 
-function DatasetProbe() {
-  const { datasetId } = useParams();
-  return <div data-testid="dataset-probe">{datasetId}</div>;
-}
-
 type DialogProps = ComponentProps<typeof CreateDatasetDialog>;
 
 async function renderDialog(props: Partial<DialogProps> = {}) {
   const onOpenChange = vi.fn<DialogProps['onOpenChange']>();
+  const navigate = vi.fn();
   renderWithProviders(
-    <Routes>
-      <Route path="/datasets" element={<CreateDatasetDialog open onOpenChange={onOpenChange} {...props} />} />
-      <Route path="/datasets/:datasetId" element={<DatasetProbe />} />
-    </Routes>,
-    { router: { initialEntries: ['/datasets'] } },
+    <TestLinkProvider navigate={navigate}>
+      <CreateDatasetDialog open onOpenChange={onOpenChange} {...props} />
+    </TestLinkProvider>,
   );
   await screen.findByRole('dialog', { name: 'Create new dataset' });
-  return { onOpenChange };
+  return { onOpenChange, navigate };
 }
 
 const nameInput = () => screen.getByLabelText<HTMLInputElement>(/^Name/);
@@ -128,11 +123,11 @@ describe('CreateDatasetDialog', () => {
   describe('when the dataset is created without an onSuccess handler', () => {
     it('navigates to the new dataset', async () => {
       setupHandlers();
-      await renderDialog();
+      const { navigate } = await renderDialog();
 
       submit();
 
-      expect((await screen.findByTestId('dataset-probe')).textContent).toBe('created-dataset');
+      await waitFor(() => expect(navigate).toHaveBeenCalledWith('/datasets/created-dataset'));
     });
 
     it('closes the dialog', async () => {
@@ -159,12 +154,12 @@ describe('CreateDatasetDialog', () => {
     it('does not navigate', async () => {
       setupHandlers();
       const onSuccess = vi.fn<(datasetId: string) => void>();
-      await renderDialog({ onSuccess });
+      const { navigate } = await renderDialog({ onSuccess });
 
       submit();
 
       await waitFor(() => expect(onSuccess).toHaveBeenCalled());
-      expect(screen.queryByTestId('dataset-probe')).toBeNull();
+      expect(navigate).not.toHaveBeenCalled();
     });
 
     it('closes the dialog', async () => {

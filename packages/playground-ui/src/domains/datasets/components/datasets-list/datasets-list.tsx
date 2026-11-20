@@ -1,16 +1,16 @@
 import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
-import { Badge } from '@mastra/playground-ui/components/Badge';
-import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
-import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { useMemo, useRef } from 'react';
 import type { ReactNode, SyntheticEvent } from 'react';
 import { DATASETS_LIST_COLUMNS } from './helpers';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
+import { Badge } from '@/ds/components/Badge';
+import type { BadgeVariant } from '@/ds/components/Badge';
+import { Button } from '@/ds/components/Button';
+import { DataList, useDataListKeyboard } from '@/ds/components/DataList';
+import { Txt } from '@/ds/components/Txt';
+import { useLinkComponent } from '@/lib/framework';
+import type { ListSort } from '@/lib/sort/sort-by';
+import { formatDate } from '@/utils/date-format';
 
 export interface DatasetsListProps {
   datasets: DatasetRecord[];
@@ -159,7 +159,7 @@ function DatasetRow({
 
           variant="ghost"
           size="sm"
-          className="h-full w-full rounded-lg p-0!"
+          className="size-full rounded-lg p-0!"
           onClick={stopPropagation}
         >
           <ExperimentsBadge dataset={ds} />

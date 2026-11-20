@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import type { DatasetRecord } from '@mastra/client-js';
 import { describe, expect, it } from 'vitest';
 

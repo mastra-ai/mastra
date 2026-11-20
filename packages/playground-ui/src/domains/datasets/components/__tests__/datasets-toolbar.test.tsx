@@ -1,10 +1,9 @@
 // @vitest-environment jsdom
-import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { DatasetsToolbar } from '../datasets-toolbar';
+
 import type { DatasetsToolbarProps } from '../datasets-toolbar';
 import {
   agents,
@@ -12,6 +11,7 @@ import {
   noScorers,
   noWorkflows,
 } from '@/domains/experiments/components/__tests__/fixtures/target-registries';
+import { TooltipProvider } from '@/ds/components/Tooltip';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 

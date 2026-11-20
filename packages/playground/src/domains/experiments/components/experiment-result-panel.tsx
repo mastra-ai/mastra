@@ -7,6 +7,7 @@ import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ComputedTag } from '@mastra/playground-ui/domains/observability';
 import { ReviewStatusBadge } from '@mastra/playground-ui/domains/review/components/review-status-badge';
 import { SpanPayloadToolCalls } from '@mastra/playground-ui/domains/traces/components/span-payload/span-payload-primitives';
 import { IconCalendar1 } from '@mastra/playground-ui/icons/central/IconCalendar1';
@@ -40,7 +41,6 @@ import { ComparisonSection, sectionStackClass } from './comparison/comparison-se
 import { itemMetrics } from './comparison/item-metrics';
 import { ExperimentResultsTagPicker } from './experiment-results-tag-picker';
 import { ToolMockReportSection } from './tool-mock-report-section';
-import { ComputedTag } from '@/domains/observability/components/computed-tag';
 
 /**
  * Structural subset of `DatasetExperimentResult` the panel renders. Review-queue

@@ -1,5 +1,9 @@
 'use client';
 
+import { useDatasetMutations } from '@mastra/react/hooks/datasets';
+import { useForm } from 'react-hook-form';
+import { createNameSuffix } from '../utils/default-names';
+import type { DatasetTargetType } from './target-type-options';
 import {
   Dialog,
   DialogAction,
@@ -10,16 +14,12 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@mastra/playground-ui/components/Dialog';
-import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
-import { Form } from '@mastra/playground-ui/components/Form';
-import { Input } from '@mastra/playground-ui/components/Input';
-import { toast } from '@mastra/playground-ui/utils/toast';
-import { useDatasetMutations } from '@mastra/react/hooks/datasets';
-import { useForm } from 'react-hook-form';
-import { useNavigate } from 'react-router';
-import { createNameSuffix } from '../utils/default-names';
-import type { DatasetTargetType } from './target-type-options';
+} from '@/ds/components/Dialog';
+import { Field, FieldLabel } from '@/ds/components/Field';
+import { Form } from '@/ds/components/Form';
+import { Input } from '@/ds/components/Input';
+import { useLinkComponent } from '@/lib/framework';
+import { toast } from '@/utils/toast';
 
 export interface CreateDatasetDialogProps {
   open: boolean;
@@ -42,14 +42,14 @@ export function CreateDatasetDialog({
   onSuccess,
 }: CreateDatasetDialogProps) {
   const { createDataset } = useDatasetMutations();
-  const navigate = useNavigate();
+  const { navigate, paths } = useLinkComponent();
 
   const handleCreated = (datasetId: string) => {
     onOpenChange(false);
     if (onSuccess) {
       onSuccess(datasetId);
     } else {
-      void navigate(`/datasets/${datasetId}`);
+      navigate(paths.datasetLink(datasetId));
     }
   };
 

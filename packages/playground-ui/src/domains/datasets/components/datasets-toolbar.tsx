@@ -1,6 +1,6 @@
-import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { DatasetsFilterBar } from './datasets-filter-bar';
 import type { DatasetsFilters } from './datasets-filter-bar';
+import { ActionRow } from '@/ds/components/ActionRow';
 
 export interface DatasetsToolbarTagOption {
   value: string;

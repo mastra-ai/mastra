@@ -1,14 +1,14 @@
-import type { FilterBarField, FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
-import { IconBox } from '@mastra/playground-ui/icons/central/IconBox';
-import { IconFingerPrint1 } from '@mastra/playground-ui/icons/central/IconFingerPrint1';
-import { hueAccentColor } from '@mastra/playground-ui/utils/colors';
 import { useAgents } from '@mastra/react/hooks/agents';
 import { useProcessors } from '@mastra/react/hooks/processors';
 import { useWorkflows } from '@mastra/react/hooks/workflows';
 import { useMemo } from 'react';
-import { DATASET_TARGET_TYPES, isDatasetTargetType } from '@/domains/datasets/components/target-type-options';
-import type { DatasetTargetType } from '@/domains/datasets/components/target-type-options';
-import { useScorers } from '@/domains/scores/hooks/use-scorers';
+import { DATASET_TARGET_TYPES, isDatasetTargetType } from '../components/target-type-options';
+import type { DatasetTargetType } from '../components/target-type-options';
+import { useScorers } from '@/domains/scores/hooks';
+import type { FilterBarField, FilterBarItem } from '@/ds/components/FilterBar';
+import { IconBox } from '@/ds/icons/central/IconBox';
+import { IconFingerPrint1 } from '@/ds/icons/central/IconFingerPrint1';
+import { hueAccentColor } from '@/utils/colors';
 
 export const TARGET_TYPE_FIELD_ID = 'targetType';
 export const TARGET_ID_FIELD_ID = 'targetId';
@@ -60,7 +60,7 @@ export const targetFromItems = (items: FilterBarItem[]): TargetFilterValue => {
 export function useTargetFilterFields(targetType: DatasetTargetType | ''): FilterBarField[] {
   const { data: agents } = useAgents({ queryOptions: { enabled: targetType === 'agent' } });
   const { data: workflows } = useWorkflows({ queryOptions: { enabled: targetType === 'workflow' } });
-  const { data: scorers } = useScorers({ enabled: targetType === 'scorer' });
+  const { data: scorers } = useScorers({ queryOptions: { enabled: targetType === 'scorer' } });
   const { data: processors } = useProcessors({ queryOptions: { enabled: targetType === 'processor' } });
 
   return useMemo<FilterBarField[]>(() => {

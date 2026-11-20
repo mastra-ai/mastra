@@ -1,13 +1,13 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption } from '@mastra/playground-ui/components/Combobox';
+import { ComputedTag } from '@mastra/playground-ui/domains/observability';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
-import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useDatasetMutations, useDataset, useDatasets } from '@mastra/react/hooks/datasets';
 import { useMemo, useState } from 'react';
 import { getAllDatasetTags } from '../datasets-list/helpers';
-import { ComputedTag } from '@/domains/observability/components/computed-tag';
 
 const CREATE_TAG_VALUE = '__create_tag__';
 

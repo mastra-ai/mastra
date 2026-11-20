@@ -8,3 +8,5 @@ export {
   useDataset,
 } from '@mastra/react/hooks/datasets';
 export type { DatasetItemsOrderBy, DatasetTargetFilter, DatasetsOrderBy } from '@mastra/react/hooks/datasets';
+export * from './hooks/use-target-filter-fields';
+export { buildDefaultExperimentName, createNameSuffix } from './utils/default-names';

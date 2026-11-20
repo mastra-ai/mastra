@@ -1,7 +1,7 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
-import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
+import { Button } from '@/ds/components/Button';
+import { EmptyState } from '@/ds/components/EmptyState';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
+import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
 
 export interface NoDatasetsInfoProps {
   onCreateClick?: () => void;

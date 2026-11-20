@@ -1,6 +1,6 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
-import type { BadgeProps } from '@mastra/playground-ui/components/Badge';
-import { hueForName } from '@mastra/playground-ui/utils/colors';
+import { Badge } from '@/ds/components/Badge';
+import type { BadgeProps } from '@/ds/components/Badge';
+import { hueForName } from '@/utils/colors';
 
 // `BadgeProps` is a union on icon/indicator; tags never use a leading visual, so drop both.
 export type ComputedTagProps = Omit<BadgeProps, 'variant' | 'emphasis' | 'style' | 'icon' | 'indicator'> & {
