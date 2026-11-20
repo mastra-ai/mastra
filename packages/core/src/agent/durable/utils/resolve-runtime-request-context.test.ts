@@ -17,6 +17,7 @@ function makeMastra(agent: unknown) {
 
 function makeAgent() {
   return {
+    getBackgroundTasksConfig: vi.fn().mockReturnValue(undefined),
     getToolsForExecution: vi.fn().mockResolvedValue({}),
     getMemory: vi.fn().mockResolvedValue(undefined),
     getWorkspace: vi.fn().mockResolvedValue(undefined),

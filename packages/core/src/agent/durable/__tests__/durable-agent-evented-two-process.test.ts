@@ -25,7 +25,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 interface ChildMessage {
-  type: 'ready' | 'model-called' | 'tool-called' | 'stream-done' | 'status' | 'error';
+  type: 'ready' | 'model-called' | 'tool-called' | 'stream-done' | 'status' | 'task-status' | 'error';
   data?: any;
 }
 
@@ -60,7 +60,10 @@ import { createEventedAgent } from '${distPath('agent/durable/index.js')}';
 import { createTool } from '${distPath('tools/index.js')}';
 import { InMemoryStore } from '${distPath('storage/index.js')}';
 
-const [socketPath, role] = process.argv.slice(2);
+const [socketPath, role, mode] = process.argv.slice(2);
+const background = mode !== 'foreground';
+let releaseTool;
+const toolGate = new Promise(resolve => { releaseTool = resolve; });
 
 function streamOf(chunks) {
   return new ReadableStream({
@@ -107,13 +110,19 @@ const model = {
 const whereAmI = createTool({
   id: 'whereAmI',
   description: 'Reports which process executed the tool',
-  execute: async () => {
-    process.send({ type: 'tool-called', data: { role } });
+  background: background ? { enabled: true, timeoutMs: 15000 } : undefined,
+  execute: async (_input, context) => {
+    const isBackgroundTask = context?.agent?.isBackgroundTask ?? false;
+    process.send({ type: 'tool-called', data: { role, pid: process.pid, isBackgroundTask } });
+    if (isBackgroundTask) await toolGate;
     return 'executed-in-' + role;
   },
 });
 
-const agent = new Agent({ id: 'two-process-agent', name: 'two-process-agent', instructions: 'Use tools.', model, tools: { whereAmI } });
+const agent = new Agent({
+  id: 'two-process-agent', name: 'two-process-agent', instructions: 'Use tools.', model, tools: { whereAmI },
+  backgroundTasks: background ? (mode === 'agent-disabled' ? { disabled: true } : { tools: { whereAmI: true } }) : undefined,
+});
 const evented = createEventedAgent({ agent });
 const pubsub = new UnixSocketPubSub(socketPath);
 // Each process has its own in-memory store, so storage can't carry the run's
@@ -128,6 +137,7 @@ const mastra = new Mastra({
   storage,
   pubsub,
   agents: { [evented.id]: evented },
+  backgroundTasks: background && mode !== 'no-manager' ? { enabled: true } : undefined,
 });
 
 process.on('message', async msg => {
@@ -145,11 +155,29 @@ process.on('message', async msg => {
         await new Promise(r => setTimeout(r, 10));
       }
       process.send({ type: 'error', data: { message: 'timed out waiting for pubsub status' } });
+    } else if (msg.type === 'task-status') {
+      let task = msg.taskId ? await mastra.backgroundTaskManager?.getTask(msg.taskId) : undefined;
+      if (msg.waitForCompletion) {
+        const deadline = Date.now() + 5000;
+        while (task?.status !== 'completed' && Date.now() < deadline) {
+          await new Promise(resolve => setTimeout(resolve, 10));
+          task = await mastra.backgroundTaskManager.getTask(msg.taskId);
+        }
+      }
+      const tasks = await mastra.backgroundTaskManager?.listTasks();
+      process.send({ type: 'task-status', data: { task, count: tasks?.tasks.length ?? 0 } });
+    } else if (msg.type === 'release-tool') {
+      releaseTool();
     } else if (msg.type === 'stream') {
-      const { output } = await mastra.getAgentById(evented.id).stream('where am I?');
+      const { output } = await mastra.getAgentById(evented.id).stream('where am I?', {
+        disableBackgroundTasks: mode === 'disabled',
+        ...(mode === 'policy-disabled' ? { backgroundTaskPolicy: { allowToolDispatch: false } } : {}),
+      });
+      const chunks = [];
+      for await (const chunk of output.fullStream) chunks.push(chunk);
       const text = await output.text;
       const finishReason = await output.finishReason;
-      process.send({ type: 'stream-done', data: { text, finishReason } });
+      process.send({ type: 'stream-done', data: { text, finishReason, ...(background ? { chunks } : {}) } });
     }
   } catch (err) {
     process.send({ type: 'error', data: { message: err?.stack ?? String(err) } });
@@ -177,11 +205,11 @@ describe('EventedAgent - producer (MASTRA_WORKERS=false) + dedicated worker proc
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  async function spawn(socketPath: string, role: 'producer' | 'worker'): Promise<ChildProcess> {
+  async function spawn(socketPath: string, role: 'producer' | 'worker', mode = 'foreground'): Promise<ChildProcess> {
     const env = { ...process.env };
     if (role === 'producer') env.MASTRA_WORKERS = 'false';
     else delete env.MASTRA_WORKERS;
-    const child = fork(scriptPath, [socketPath, role], { env, stdio: ['pipe', 'pipe', 'pipe', 'ipc'] });
+    const child = fork(scriptPath, [socketPath, role, mode], { env, stdio: ['pipe', 'pipe', 'pipe', 'ipc'] });
     children.push(child);
     await waitForMessage(child, 'ready');
     return child;
@@ -229,6 +257,58 @@ describe('EventedAgent - producer (MASTRA_WORKERS=false) + dedicated worker proc
       expect(workerTools).toEqual(['worker']);
       expect(producerModels).toEqual([]);
       expect(producerTools).toEqual([]);
+    },
+    30_000,
+  );
+
+  // A worker reconstructs the run without the producer's registry. (#31090)
+  it.each(['background', 'disabled', 'policy-disabled', 'agent-disabled', 'no-manager'])(
+    'preserves background dispatch policy across processes: %s',
+    async mode => {
+      const socketPath = join(tempDir, 'pubsub.sock');
+      const worker = await spawn(socketPath, 'worker', mode);
+      const producer = await spawn(socketPath, 'producer', mode);
+      const workerReady = waitForMessage(worker, 'status');
+      worker.send({ type: 'wait-for-status', isBroker: true, remoteClientCount: 1 });
+      await workerReady;
+      const started = waitForMessage(worker, 'ready');
+      worker.send({ type: 'start-workers' });
+      await started;
+
+      const workerTools = record(worker, 'tool-called');
+      const producerTools = record(producer, 'tool-called');
+      const toolCalled = waitForMessage(worker, 'tool-called');
+      const streamDone = waitForMessage(producer, 'stream-done', 15_000);
+      producer.send({ type: 'stream' });
+      const [tool, done] = await Promise.all([toolCalled, streamDone]);
+      expect(tool.data).toEqual({ role: 'worker', pid: worker.pid, isBackgroundTask: mode === 'background' });
+      expect(done.data).toMatchObject({ text: 'All done', finishReason: 'stop' });
+      expect(workerTools).toEqual(['worker']);
+      expect(producerTools).toEqual([]);
+      const backgroundStarts = done.data.chunks.filter(
+        (chunk: { type: string }) => chunk.type === 'background-task-started',
+      );
+      expect(backgroundStarts).toHaveLength(mode === 'background' ? 1 : 0);
+      const taskId = backgroundStarts[0]?.payload.taskId;
+      const pendingStatus = waitForMessage(worker, 'task-status');
+      worker.send({ type: 'task-status', taskId });
+      const pending = await pendingStatus;
+      expect(pending.data.count).toBe(mode === 'background' ? 1 : 0);
+      const producerStatus = waitForMessage(producer, 'task-status');
+      producer.send({ type: 'task-status' });
+      expect((await producerStatus).data.count).toBe(0);
+      if (mode === 'background') {
+        expect(backgroundStarts[0].payload).toMatchObject({ toolName: 'whereAmI', toolCallId: 'call-1' });
+        expect(typeof taskId).toBe('string');
+        // The stream finished even though the background tool has not been released.
+        expect(pending.data.task).toMatchObject({ id: taskId, status: 'running' });
+        const completedStatus = waitForMessage(worker, 'task-status');
+        worker.send({ type: 'release-tool' });
+        worker.send({ type: 'task-status', taskId, waitForCompletion: true });
+        const completed = await completedStatus;
+        expect(completed.data.count).toBe(1);
+        expect(completed.data.task).toMatchObject({ id: taskId, status: 'completed', result: 'executed-in-worker' });
+      }
     },
     30_000,
   );

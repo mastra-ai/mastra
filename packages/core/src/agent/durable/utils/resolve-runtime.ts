@@ -264,6 +264,8 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   let outputProcessors: OutputProcessorOrWorkflow[] | undefined = globalEntry?.outputProcessors;
   let errorProcessors: ErrorProcessorOrWorkflow[] | undefined = globalEntry?.errorProcessors;
   let processorStates: Map<string, ProcessorState> | undefined = globalEntry?.processorStates;
+  let backgroundTaskManager = globalEntry?.backgroundTaskManager;
+  let backgroundTasksConfig = globalEntry?.backgroundTasksConfig;
   let rehydratedFromMastra = false;
   let rebuiltAgent: Agent<any, any, any, any> | undefined;
 
@@ -283,7 +285,12 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       // the same configuration as the original call site.
       const resolveRequestContext = restoreRequestContext(input.requestContextEntries, options.requestContext);
 
-      tools = await agent.getToolsForExecution({
+      backgroundTasksConfig = agent.getBackgroundTasksConfig();
+      backgroundTaskManager =
+        input.options?.disableBackgroundTasks || input.options?.backgroundTaskPolicy?.allowToolDispatch === false
+          ? undefined
+          : mastra.backgroundTaskManager;
+      tools = await rebuiltAgent.getToolsForExecution({
         runId,
         threadId: input.state.threadId,
         resourceId: input.state.resourceId,
@@ -291,6 +298,8 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
         memoryConfig: input.state.memoryConfig,
         autoResumeSuspendedTools: input.options?.autoResumeSuspendedTools,
         clientTools: input.options?.clientTools as ToolsInput | undefined,
+        backgroundTaskEnabled: Boolean(backgroundTaskManager),
+        backgroundTaskPolicy: input.options?.backgroundTaskPolicy,
       });
       assertToolsetToolsAvailable(tools, input.options?.toolsetToolNames, agentId, runId);
 
@@ -372,6 +381,8 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       outputProcessors,
       errorProcessors,
       processorStates,
+      backgroundTaskManager,
+      backgroundTasksConfig,
       agent: rebuiltAgent,
     };
     if (globalEntry) {
@@ -488,7 +499,17 @@ export async function rebuildRunToolsFromMastra(options: {
     // and memory resolve with the same configuration as the original call.
     const resolveRequestContext = restoreRequestContext(requestContextEntries, requestContext);
 
-    const tools = await agent.getToolsForExecution({
+    const existingEntry = getRunRegistryEntry(runId, mastra);
+    const hasHydratedEntry = isHydratedRegistryEntry(existingEntry);
+    const backgroundTasksConfig = hasHydratedEntry
+      ? existingEntry?.backgroundTasksConfig
+      : agent.getBackgroundTasksConfig();
+    const backgroundTaskManager = hasHydratedEntry
+      ? existingEntry?.backgroundTaskManager
+      : execOptions?.disableBackgroundTasks || execOptions?.backgroundTaskPolicy?.allowToolDispatch === false
+        ? undefined
+        : mastra.backgroundTaskManager;
+    const tools = await processorAgent.getToolsForExecution({
       runId,
       threadId: state.threadId,
       resourceId: state.resourceId,
@@ -496,6 +517,8 @@ export async function rebuildRunToolsFromMastra(options: {
       memoryConfig: state.memoryConfig,
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
       clientTools: execOptions?.clientTools as ToolsInput | undefined,
+      backgroundTaskEnabled: Boolean(backgroundTaskManager),
+      backgroundTaskPolicy: execOptions?.backgroundTaskPolicy,
     });
 
     // A hydrated entry means the caller's process still holds the toolset tools
@@ -535,6 +558,8 @@ export async function rebuildRunToolsFromMastra(options: {
       workspace,
       memory,
       saveQueueManager,
+      backgroundTaskManager,
+      backgroundTasksConfig,
       agent: processorAgent,
       ...rebuiltProcessors,
       ...(options.rehydrateProcessors ? { requestContext: resolveRequestContext } : {}),
@@ -556,6 +581,10 @@ export async function rebuildRunToolsFromMastra(options: {
         registryModel.__metadataOnly !== true &&
         (existing.baseTools !== undefined || existing.tools !== undefined);
       if (!hasAuthoritativeToolSnapshot && Object.keys(existing.tools ?? {}).length === 0) existing.tools = tools;
+      if (!isHydratedRegistryEntry(existing)) {
+        existing.backgroundTaskManager = backgroundTaskManager;
+        existing.backgroundTasksConfig = backgroundTasksConfig;
+      }
       existing.workspace ??= workspace;
       existing.memory ??= memory;
       existing.saveQueueManager ??= saveQueueManager;
