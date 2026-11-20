@@ -4,8 +4,15 @@ import { CookieConsent } from '@site/src/components/cookie/cookie-consent'
 import { mountWebMcp } from '@site/src/theme/webmcp'
 import type { AlgoliaPluginData } from '@mastra/docusaurus-plugin-algolia'
 import { DocsChatProvider, KapaChatProvider } from '@mastra/docusaurus-plugin-kapa/client'
+import type { PostHog } from 'posthog-js'
 import { PostHogProvider } from 'posthog-js/react'
 import React, { useEffect } from 'react'
+
+declare global {
+  interface Window {
+    mastraDocsPosthog?: PostHog
+  }
+}
 
 export default function Root({ children }: { children: React.ReactNode }) {
   const { siteConfig } = useDocusaurusContext()
@@ -24,6 +31,10 @@ export default function Root({ children }: { children: React.ReactNode }) {
       apiKey={posthogApiKey}
       options={{
         api_host: posthogHost,
+        loaded: client => {
+          // GTM reads only the visitor and session IDs for the app handoff.
+          window.mastraDocsPosthog = client
+        },
       }}
     >
       <CookieConsent />
