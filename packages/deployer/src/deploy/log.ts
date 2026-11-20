@@ -24,8 +24,9 @@ export const createPinoStream = (logger: IMastraLogger) => {
  * every token into one command line. Plain tokens pass through as-is; anything
  * else (spaces, apostrophes, emoji, `&`, `^`…) is wrapped in double quotes, where
  * cmd.exe treats it literally. Characters cmd.exe still interprets inside quotes
- * (`"`, `%`, `!`, line breaks) are refused; none of them can appear in a
- * Windows file name.
+ * (`"`, `%`, `!`, line breaks) are refused. `"` can never appear in a Windows
+ * path; a project path containing `%` or `!` fails on Windows rather than risk
+ * variable expansion.
  */
 const PLAIN_WINDOWS_ARG = /^[\p{L}\p{M}\p{N}_@+=:,./\\~-]+$/u;
 const UNQUOTABLE_WINDOWS_ARG = /["%!\r\n\0]/;
