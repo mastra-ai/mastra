@@ -548,7 +548,7 @@ export function openaiCodexProvider(
   const promptCacheKeyMiddleware = createPromptCacheKeyMiddleware(getRequestThreadId(headers));
   const useTestApiKey = process.env.NODE_ENV === 'test' || Boolean(process.env.VITEST);
   const middleware = [
-    createCodexMiddleware(reasoningEffort, useTestApiKey ? undefined : { serviceTier: options?.serviceTier }),
+    createCodexMiddleware(reasoningEffort, { serviceTier: options?.serviceTier }),
     ...(promptCacheKeyMiddleware ? [promptCacheKeyMiddleware] : []),
   ];
 
