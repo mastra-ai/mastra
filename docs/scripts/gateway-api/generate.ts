@@ -83,7 +83,6 @@ export interface TransformResult {
 
 type Schema = { $ref?: string; description?: string; properties?: Record<string, Schema> }
 
-/** Adds the descriptions from `pages.ts` to the operation's request body fields the spec leaves undescribed. */
 /**
  * The spec lists every error status separately, mostly pointing at the same shared error response, so the
  * page showed a row of status tabs that all looked the same. Statuses whose response is identical to `default`
@@ -114,6 +113,7 @@ function resolveResponse(spec: OpenApiDocument, response: Record<string, unknown
   return resolved
 }
 
+/** Adds the descriptions from `pages.ts` to the operation's request body fields the spec leaves undescribed. */
 function describeFields(spec: OpenApiDocument, operation: Operation, fields: Record<string, string> | undefined) {
   if (!fields) return
   const content = (operation.requestBody as { content?: Record<string, { schema?: Schema }> } | undefined)?.content
