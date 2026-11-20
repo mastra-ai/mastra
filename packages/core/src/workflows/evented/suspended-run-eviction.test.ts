@@ -210,6 +210,92 @@ describe.each(engines)('$engine engine: suspended run eviction', ({ createWorkfl
     await expect.poll(() => workflow.runs.has(run.runId)).toBe(false);
   });
 
+  it('lets a reopened handle watch a resume driven through a handle held since before eviction', async () => {
+    const { workflow } = await setup();
+    const held = await workflow.createRun();
+    expect((await held.start({ inputData: {} })).status).toBe('suspended');
+    await expect.poll(() => workflow.runs.has(held.runId)).toBe(false);
+
+    const reopened = await workflow.createRun({ runId: held.runId });
+    const events: unknown[] = [];
+    const unwatch = reopened.watch(event => events.push(event));
+    expect((await held.resume({ step: 'approve', resumeData: { by: 'ana' } })).status).toBe('success');
+    await expect.poll(() => events.length).toBeGreaterThan(0);
+    unwatch();
+  });
+
+  it('stops a step running through a reopened handle when a held handle cancels the run', async () => {
+    let started!: () => void;
+    const running = new Promise<void>(resolve => (started = resolve));
+    const approve = createStep({
+      id: 'approve',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      resumeSchema: z.object({}),
+      execute: async ({ resumeData, suspend, abortSignal }: any) => {
+        if (!resumeData) return suspend({});
+        started();
+        await new Promise(resolve => abortSignal.addEventListener('abort', resolve, { once: true }));
+        return {};
+      },
+    });
+    const built = createWorkflow({ id: 'approval', inputSchema: z.object({}), outputSchema: z.object({}) })
+      .then(approve)
+      .commit();
+    mastra = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      ...(evented ? { pubsub: new EventEmitterPubSub() } : {}),
+      workflows: { approval: built },
+    });
+    if (evented) await mastra.startWorkers();
+    const workflow = mastra.getWorkflow('approval');
+    const held = await workflow.createRun();
+    expect((await held.start({ inputData: {} })).status).toBe('suspended');
+    await expect.poll(() => workflow.runs.has(held.runId)).toBe(false);
+
+    const reopened = await workflow.createRun({ runId: held.runId });
+    const resumed = reopened.resume({ step: 'approve', resumeData: {} });
+    await running;
+    await held.cancel();
+    expect((await resumed).status).toBe('canceled');
+  }, 5_000);
+
+  it('keeps a replacement cached while an earlier reopen of the run reads storage', async () => {
+    const { workflow } = await setup();
+    const run = await workflow.createRun();
+    const unwatch = run.watch(() => {});
+    expect((await run.start({ inputData: {} })).status).toBe('suspended');
+
+    // The first reopen finds the watched run cached, then waits in its storage read.
+    const store = (await mastra!.getStorage()!.getStore('workflows'))!;
+    const load = store.loadWorkflowSnapshot.bind(store);
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => (release = resolve));
+    let entered!: () => void;
+    const reading = new Promise<void>(resolve => (entered = resolve));
+    let gated = false;
+    store.loadWorkflowSnapshot = async args => {
+      if (!gated) {
+        gated = true;
+        entered();
+        await gate;
+      }
+      return load(args);
+    };
+    const first = workflow.createRun({ runId: run.runId });
+    await reading;
+
+    // Meanwhile the run is evicted and reopened again.
+    unwatch();
+    await expect.poll(() => workflow.runs.has(run.runId)).toBe(false);
+    const replacement = await workflow.createRun({ runId: run.runId });
+    release();
+    await first;
+
+    expect(workflow.runs.get(run.runId)).toBe(replacement);
+  });
+
   it('evicts a stale handle whose resume is rejected because another handle finished the run', async () => {
     const { workflow } = await setup();
     const stale = await workflow.createRun();

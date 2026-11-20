@@ -2085,6 +2085,23 @@ export class Workflow<
 
   #runs: Map<string, Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion>> = new Map();
 
+  /**
+   * Runs evicted from `#runs`, held weakly: while a caller still holds one, reopening its run id
+   * returns that same instance, so its watchers, events and cancel stay on the one handle.
+   */
+  #evictedRuns = new Map<
+    string,
+    WeakRef<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion>>
+  >();
+  #forgetEvictedRun = new FinalizationRegistry<string>(runId => {
+    if (!this.#evictedRuns.get(runId)?.deref()) this.#evictedRuns.delete(runId);
+  });
+
+  /** The evicted instance of `runId` a caller still holds, if any. */
+  #heldEvictedRun(runId: string) {
+    return this.#evictedRuns.get(runId)?.deref();
+  }
+
   #schedules: WorkflowScheduleConfig[];
 
   constructor({
@@ -3322,7 +3339,7 @@ export class Workflow<
       }) ||
       globalThis.crypto.randomUUID();
 
-    const cachedRun = this.#runs.get(runIdToUse);
+    const cachedRun = this.#runs.get(runIdToUse) ?? this.#heldEvictedRun(runIdToUse);
     const shouldPersistSnapshot = (options?.shouldPersistSnapshot ?? this.#options.shouldPersistSnapshot)({
       workflowStatus: cachedRun?.workflowRunStatus ?? 'pending',
       stepResults: {},
@@ -3344,6 +3361,7 @@ export class Workflow<
     // Return a new Run instance with object parameters
     const run: Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion> =
       this.#runs.get(runIdToUse) ??
+      this.#heldEvictedRun(runIdToUse) ??
       new Run({
         workflowId: this.id,
         stateSchema: this.stateSchema,
@@ -3360,6 +3378,7 @@ export class Workflow<
         serializedStepGraph: this.serializedStepGraph,
         disableScorers: options?.disableScorers,
         cleanup: () => {
+          if (this.#heldEvictedRun(runIdToUse) === run) this.#evictedRuns.delete(runIdToUse);
           // A run evicted while suspended and then resumed through a held reference must
           // not tear down a newer instance created for the same run id.
           const cached = this.#runs.get(runIdToUse);
@@ -3371,7 +3390,10 @@ export class Workflow<
         // finished, and a later resume of it must persist under the same policy.
         registration: {
           evict: () => {
-            if (this.#runs.get(runIdToUse) === run) this.#runs.delete(runIdToUse);
+            if (this.#runs.get(runIdToUse) !== run) return;
+            this.#runs.delete(runIdToUse);
+            this.#evictedRuns.set(runIdToUse, new WeakRef(run));
+            this.#forgetEvictedRun.register(run, runIdToUse);
           },
           reattach: () => {
             if (!this.#runs.has(runIdToUse)) this.#runs.set(runIdToUse, run);
@@ -3388,6 +3410,7 @@ export class Workflow<
       });
 
     this.#runs.set(runIdToUse, run);
+    this.#evictedRuns.delete(runIdToUse);
 
     if (options?.shouldPersistSnapshot) {
       this.executionEngine.setRunPersistenceOverride(runIdToUse, options.shouldPersistSnapshot);

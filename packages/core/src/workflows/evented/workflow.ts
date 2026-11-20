@@ -1864,8 +1864,9 @@ export class EventedWorkflow<
     });
 
     // Return a new Run instance with object parameters
+    // Read again: the run may have been evicted and reopened while storage was read.
     const run: Run<TEngineType, TSteps, TState, TInput, TOutput, unknown, TStorageVersion> =
-      cachedRun ??
+      this.runs.get(runIdToUse) ??
       new EventedRun({
         workflowId: this.id,
         runId: runIdToUse,
