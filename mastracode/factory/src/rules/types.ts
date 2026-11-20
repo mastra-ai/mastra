@@ -190,7 +190,12 @@ export const FACTORY_VANTA_EVENTS = ['vulnerabilityObserved', 'vulnerabilityClos
 export type FactoryVantaEventName = (typeof FACTORY_VANTA_EVENTS)[number];
 
 export type FactoryRuleJsonValue =
-  null | boolean | number | string | FactoryRuleJsonValue[] | { [key: string]: FactoryRuleJsonValue };
+  | null
+  | boolean
+  | number
+  | string
+  | FactoryRuleJsonValue[]
+  | { [key: string]: FactoryRuleJsonValue };
 
 export interface FactoryRuleItemContext {
   workItem: WorkItemRow;

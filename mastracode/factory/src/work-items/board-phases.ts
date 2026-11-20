@@ -135,7 +135,7 @@ function viewMatcher(view: BoardPhasesView, list: readonly Card[]): ((card: Card
     const facts = cardFacts(card);
     return (
       matchesSearch(closing.search(card), terms) &&
-      (!bySource || matchesSourceFilters(facts, view)) &&
+      (!bySource || matchesSourceFilters({ ...facts, hasPullRequest: closing.hasPullRequest(card) }, view)) &&
       (!byLabel || hasEveryLabel(facts.labels, view.label)) &&
       (!byPeople || matchesPeople(facts.relations, view)) &&
       matchesYesNo(view.pullRequest, 'with', 'without', closing.hasPullRequest(card)) &&

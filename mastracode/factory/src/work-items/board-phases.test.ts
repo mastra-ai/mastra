@@ -324,6 +324,7 @@ describe('boardPhases', () => {
     ]);
     expect(listedIds(list, { pullRequest: ['with'] }).intake.toSorted()).toEqual(['closed', 'holder']);
     expect(listedIds(list, { pullRequest: ['without'] }).intake).toEqual(['other']);
+    expect(listedIds(list, { source: ['pull-request'] }).intake.toSorted()).toEqual(['closed', 'holder']);
   });
 
   it('splits cards by trust the way intake routes read it, counting cards no outsider can file as trusted', () => {
