@@ -50,9 +50,11 @@ function recordingClient() {
     covered: boolean;
     failPosts: number;
     failEdits: number;
+    failReacts: number;
+    failUnreacts: number;
     /** Holds a post or edit in flight until the returned promise settles; it lands after that. */
     hold?: (call: 'post' | 'edit', text: string) => Promise<void> | undefined;
-  } = { covered: true, failPosts: 0, failEdits: 0 };
+  } = { covered: true, failPosts: 0, failEdits: 0, failReacts: 0, failUnreacts: 0 };
   let next = 0;
   const client: AlertSlackClient = {
     covers: async () => slack.covered,
@@ -74,8 +76,20 @@ function recordingClient() {
       await slack.hold?.('edit', markdown);
       calls.push({ call: 'edit', ts, text: markdown });
     },
-    react: async (_thread, ts, emoji) => void calls.push({ call: 'react', ts, emoji }),
-    unreact: async (_thread, ts, emoji) => void calls.push({ call: 'unreact', ts, emoji }),
+    react: async (_thread, ts, emoji) => {
+      if (slack.failReacts > 0) {
+        slack.failReacts--;
+        throw new Error('ratelimited');
+      }
+      calls.push({ call: 'react', ts, emoji });
+    },
+    unreact: async (_thread, ts, emoji) => {
+      if (slack.failUnreacts > 0) {
+        slack.failUnreacts--;
+        throw new Error('ratelimited');
+      }
+      calls.push({ call: 'unreact', ts, emoji });
+    },
   };
   return { client, calls, slack };
 }
@@ -309,6 +323,32 @@ describe('AlertSlackStatus', () => {
       expect.stringContaining('Factory triage stopped:* sandbox crashed'),
     ]);
     expect(calls).toContainEqual(expect.objectContaining({ call: 'react', emoji: 'warning' }));
+  });
+
+  it('redoes a refused reaction on the next identical write', async () => {
+    const { linked, card, calls, slack, status } = await setup();
+    await linked();
+    slack.failReacts = 1;
+    await status.runStarted(await card());
+    expect(calls.filter(call => call.call.endsWith('react'))).toEqual([]);
+    calls.length = 0;
+    await status.runStarted(await card());
+    expect(calls).toEqual([{ call: 'react', ts: '1700.1', emoji: 'eyes' }]);
+  });
+
+  it('redoes a refused reaction removal on the next identical write', async () => {
+    const { linked, card, calls, slack, status } = await setup();
+    await linked();
+    await status.runStarted(await card());
+    slack.failUnreacts = 1;
+    await status.runEnded(await card(), { status: 'failed', reason: 'sandbox crashed' });
+    expect(calls.filter(call => call.call.endsWith('react'))).toEqual([{ call: 'react', ts: '1700.1', emoji: 'eyes' }]);
+    calls.length = 0;
+    await status.runEnded(await card(), { status: 'failed', reason: 'sandbox crashed' });
+    expect(calls).toEqual([
+      { call: 'unreact', ts: '1700.1', emoji: 'eyes' },
+      { call: 'react', ts: '1700.1', emoji: 'warning' },
+    ]);
   });
 
   it('ends on the conclusion when an older "looking" edit lands after it', async () => {
