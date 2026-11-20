@@ -168,6 +168,7 @@ async function createHarness(id: string, durable: boolean, { overlap = false, ot
   if (!overlap) await park();
   return {
     session,
+    pubsub,
     park,
     sessionModel,
     otherModel,
@@ -271,16 +272,27 @@ describe.each([false, true])('a message after a parked prompt, durable=%s', dura
 });
 
 describe.each([false, true])('another run that overlaps the prompt, durable=%s', durable => {
-  /** Start the other run while the session's run is still streaming, then let the session's run park. */
+  /**
+   * Start the other run while the session's run is still streaming, then let the session's run park.
+   * The other run finds the thread taken and waits for it. It runs once the session's run has parked.
+   */
   async function overlapThenPark(id: string) {
     const harness = await createHarness(id, durable, { overlap: true });
     const parked = harness.park();
     await vi.waitFor(() => expect(harness.prompts).toHaveLength(1));
+    const leaseRequests = vi.spyOn(harness.pubsub, 'acquireLease');
     const other = runOnThread(harness.otherAgent, 'Is the work done?', {
       thread: harness.threadId,
       resource: harness.resourceId,
     });
-    await vi.waitFor(() => expect(harness.otherPrompts).toHaveLength(1));
+    // The other run has asked for the thread and been refused, so it began before the prompt parked.
+    await vi.waitFor(() =>
+      expect(
+        leaseRequests.mock.settledResults.some(result => result.type === 'fulfilled' && !result.value.acquired),
+      ).toBe(true),
+    );
+    leaseRequests.mockRestore();
+    expect(harness.otherPrompts).toHaveLength(0);
     harness.sessionModel.open();
     await parked;
     harness.otherModel.open();

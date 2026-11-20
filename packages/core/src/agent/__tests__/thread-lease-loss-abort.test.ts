@@ -250,6 +250,78 @@ function threadLeaseLoss(engine: EngineVariant) {
     expect(await oldRun.finishReason).toBe('aborted');
   }, 20_000);
 
+  // A second message can land on another replica behind a load balancer. That replica has no record
+  // of the first replica's run, only the lease they share. (#30069)
+  it('makes a message that lands on another replica wait for the reply in progress', async () => {
+    const thread = 'replica-wait-thread';
+    type Body = { messages?: { role: string; content?: unknown }[] };
+    const asks = (body: unknown, question: string) =>
+      String((body as Body).messages?.filter(message => message.role === 'user').at(-1)?.content).includes(question);
+    const toolResults = (body: unknown) =>
+      (body as Body).messages?.filter(message => message.role === 'tool').length ?? 0;
+    llm.on(
+      { endpoint: 'chat', predicate: body => asks(body, 'first question') && toolResults(body) === 0 },
+      { toolCalls: [{ id: 'call_hold', name: 'hold', arguments: {} }] },
+    );
+    llm.on(
+      { endpoint: 'chat', predicate: body => asks(body, 'first question') && toolResults(body) > 0 },
+      { content: 'first reply' },
+    );
+    llm.on({ endpoint: 'chat', predicate: body => asks(body, 'second question') }, { content: 'second reply' });
+
+    const shared = new SharedLeases();
+    const memory = new MockMemory({ options: { lastMessages: 20 } });
+    let entered!: () => void;
+    const holding = new Promise<void>(resolve => (entered = resolve));
+    let release!: () => void;
+    const released = new Promise<void>(resolve => (release = resolve));
+    const hold = createTool({
+      id: 'hold',
+      description: 'Hold the run',
+      inputSchema: z.object({}),
+      execute: async () => {
+        entered();
+        await released;
+        return 'held';
+      },
+    });
+    const secondPubSub = new ReplicaPubSub(shared);
+    const leaseRequests = vi.spyOn(secondPubSub, 'acquireLease');
+    const firstReplica = replica(shared, memory, { hold });
+    const secondReplica = replica(shared, memory, { hold }, secondPubSub);
+    const options = { maxSteps: 3, memory: { thread, resource: RESOURCE } };
+
+    // Reads a reply to its end. Durable results keep registry entries until cleaned up, which the next test's run ids reuse.
+    const reply = async (result: any) => {
+      const output = isDurableEngineVariant(engine) ? result.output : result;
+      await output.consumeStream();
+      const text = await output.text;
+      result.cleanup?.();
+      return text;
+    };
+    const first = firstReplica.stream('first question', options).then(reply);
+    await holding;
+    const second = secondReplica.stream('second question', options).then(reply);
+    // The second replica has found the thread taken, so its message arrived while the first reply was in progress.
+    await vi.waitFor(
+      () =>
+        expect(
+          leaseRequests.mock.settledResults.some(result => result.type === 'fulfilled' && !result.value.acquired),
+        ).toBe(true),
+      { timeout: 5_000 },
+    );
+    release();
+
+    expect(await first).toBe('first reply');
+    expect(await second).toBe('second reply');
+    // The second request was built after the first run's work was saved: it carries that run's tool result.
+    const secondRequest = llm.getRequests().find(request => asks(request.body, 'second question'));
+    expect(toolResults(secondRequest?.body)).toBe(1);
+    const store = (await memory.storage.getStore('memory'))!;
+    const { messages } = await store.listMessages({ threadId: thread, perPage: false });
+    expect(messages.map(message => message.role)).toEqual(['user', 'assistant', 'user', 'assistant']);
+  }, 20_000);
+
   it('lets a command already running finish, keeps its result, then stops the run that lost its lease', async () => {
     const thread = 'lease-lost-running-command-thread';
     const key = [RESOURCE, thread].join('\u0000');

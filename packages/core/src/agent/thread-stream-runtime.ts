@@ -152,6 +152,7 @@ const AGENT_THREAD_WAKE_OWNER_DISCOVERY_DEADLINE_MS = readPositiveIntEnv(
   1_000,
 );
 const AGENT_THREAD_CLAIM_LEASE_PREFIX = 'thread-claim:';
+const AGENT_THREAD_PARKED_LEASE_PREFIX = 'thread-parked:';
 const AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS = 5_000;
 // Long enough for live subscribers (including cross-process readers polling the
 // topic) to read an unsaved run's output before its entries are deleted.
@@ -1563,6 +1564,42 @@ export class AgentThreadStreamRuntime {
     return { refused };
   }
 
+  /**
+   * The key of a marker kept beside the thread lease while the run holding it is parked on a person's
+   * answer. The lease names a run but not whether it is running, and a process with no record of the run
+   * can't tell either. A new run waits for a running holder and starts beside a parked one. The marker
+   * is refreshed with the lease and expires with it.
+   */
+  #parkedMarkerKey(key: string, runId: string): string {
+    return `${AGENT_THREAD_PARKED_LEASE_PREFIX}${key}${AGENT_THREAD_KEY_SEPARATOR}${runId}`;
+  }
+
+  async #markRunParked(pubsub: PubSub | undefined, key: string, runId: string): Promise<void> {
+    const { provider, isFallback } = this.#resolveLeaseProvider(this.#getPubSub(pubsub));
+    if (isFallback) return;
+    await provider.acquireLease(this.#parkedMarkerKey(key, runId), runId, AGENT_THREAD_LEASE_TTL_MS).catch(() => {});
+  }
+
+  #unmarkRunParked(pubsub: PubSub | undefined, key: string, runId: string): void {
+    const { provider, isFallback } = this.#resolveLeaseProvider(this.#getPubSub(pubsub));
+    if (isFallback) return;
+    void provider.releaseLease(this.#parkedMarkerKey(key, runId), runId).catch(() => {});
+  }
+
+  /** Whether the run holding a thread's lease is parked, as far as this process or its marker can tell. */
+  async #isParkedLeaseHolder(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    holder: string,
+  ): Promise<boolean> {
+    if (this.#isSuspendedRun(state, holder) || this.#isSweptLeaseOwner(state, holder)) return true;
+    const { provider, isFallback } = this.#resolveLeaseProvider(this.#getPubSub(pubsub));
+    if (isFallback) return false;
+    const marker = await provider.getLeaseOwner(this.#parkedMarkerKey(key, holder)).catch(() => undefined);
+    return marker !== undefined;
+  }
+
   #isSweptLeaseOwner(state: AgentThreadRuntimeState, runId: string): boolean {
     const sweptAt = state.sweptLeasedRunIds.get(runId);
     if (sweptAt === undefined || state.threadRunsById.has(runId)) return false;
@@ -1640,6 +1677,11 @@ export class AgentThreadStreamRuntime {
             });
           } else {
             if (state.leaseRenewalTimers.get(runId) === timer) this.#armLeaseDeadline(pubsub, key, runId, sentAt);
+            // A run resumed in another process renews the same lease there and is no longer parked.
+            const record = state.threadRunsById.get(runId);
+            if (record?.lifecycle === 'suspended' && !record.registeredElsewhere) {
+              void this.#markRunParked(pubsub, key, runId);
+            }
             if (state.sweptLeasedRunIds.has(runId)) {
               // A renewal in flight when the sweep stopped this timer still extended the lease.
               state.sweptLeasedRunIds.set(runId, Date.now());
@@ -4986,6 +5028,7 @@ export class AgentThreadStreamRuntime {
     if (resumedToolCallId) this.#clearSuspendedToolCall(state, output.runId, resumedToolCallId);
     else this.#clearSuspendedRun(state, output.runId);
     existing.lifecycle = 'running';
+    this.#unmarkRunParked(pubsub, key, output.runId);
     existing.streamOptions = streamOptions;
     existing.currentSegmentOutput = output;
     if (claim?.generation !== undefined) existing.generation = claim.generation;
@@ -5108,6 +5151,8 @@ export class AgentThreadStreamRuntime {
       broadcastFinished,
     } = this.#withBroadcastStream(output, pubsub, key, streamId, streamSeq > 1, () => record.generation);
     const resumedToolCallId = (streamOptions as AgentExecutionOptions<OUTPUT> & { toolCallId?: string }).toolCallId;
+    // A resumed run is running again.
+    if (resumedToolCallId || this.#isParkedRun(state, output.runId)) this.#unmarkRunParked(pubsub, key, output.runId);
     if (resumedToolCallId) {
       this.#clearSuspendedToolCall(state, output.runId, resumedToolCallId);
     } else {
@@ -5399,6 +5444,8 @@ export class AgentThreadStreamRuntime {
     record.suspendedAt = Date.now();
     // Shutdown announces the runs it hands back itself.
     if (this.#getState(pubsub).shutdownStreams.has(record.streamId)) return;
+    // Marked before the announcement, so a process that reacts to it finds the marker.
+    await this.#markRunParked(pubsub, key, record.runId);
     await this.#publishAndWait(pubsub, key, {
       type: 'run-suspended',
       runId: record.runId,
@@ -6288,6 +6335,24 @@ export class AgentThreadStreamRuntime {
           if (options.runId) {
             state.activeThreadRunIds.set(key, options.runId);
             state.threadKeysByRunId.set(options.runId, key);
+            // The local map only knows this process. Take the cross-process lease too, before the
+            // run reads or writes anything, so a run in another process is waited for (#30069).
+            let holder: string | undefined;
+            try {
+              holder = await this.#takeReservedThreadLease(state, pubsub, key, options.runId);
+            } catch (error) {
+              this.releaseThreadRunReservation(options.runId, pubsub);
+              throw error;
+            }
+            if (holder) {
+              this.releaseThreadRunReservation(options.runId, pubsub);
+              // Also ends when the holder parks. The next pass then finds its marker and starts beside it.
+              const outcome = await this.#waitForRemoteRunToFinish(pubsub, key, holder, true, true);
+              if (options.untilSuspended && outcome === 'suspended') return 'suspended';
+              // A run announces its end before its lease release lands.
+              await new Promise(resolve => setTimeout(resolve, 50));
+              continue;
+            }
             return 'reserved';
           }
           return;
@@ -6344,6 +6409,46 @@ export class AgentThreadStreamRuntime {
   }
 
   /**
+   * Takes the cross-process lease for a thread this process just reserved for `runId`. Returns the
+   * run holding the thread in another process, which the caller waits for, or `undefined` when this
+   * run may start. Rejects when the backend can't answer: a run started without the lease runs beside
+   * whatever holds the thread, and is stopped one lease TTL later anyway.
+   */
+  async #takeReservedThreadLease(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    runId: string,
+  ): Promise<string | undefined> {
+    const resolved = this.#getPubSub(pubsub);
+    const { provider, isFallback } = this.#resolveLeaseProvider(resolved);
+    if (isFallback) return undefined;
+    const owner = this.#threadLeaseOwner(resolved, runId);
+    let lease: { acquired: boolean; owner?: string };
+    try {
+      lease = await this.#waitForRetakeOwner(
+        provider,
+        key,
+        await this.#acquireThreadLease(resolved, key, runId, owner),
+      );
+    } catch (error) {
+      throw new Error(`Cannot start run ${runId}: the thread lease backend did not answer`, { cause: error });
+    }
+    if (lease.acquired) {
+      this.#startLeaseRenewal(resolved, key, runId, owner);
+      return undefined;
+    }
+    // A handover token that outlasted the wait above still stands for the run taking the thread.
+    const holder = lease.owner ? forwardedSignalRunId(lease.owner) : undefined;
+    // Held under this run id, the caller continues a run another process started (a resume).
+    if (!holder || holder === runId) return undefined;
+    // A parked run keeps its lease while it waits on a person. A new run starts beside it without
+    // the lease, as it did before this wait looked at the lease.
+    if (await this.#isParkedLeaseHolder(state, resolved, key, holder)) return undefined;
+    return holder;
+  }
+
+  /**
    * Releases a thread reservation made by `waitForCrossAgentThreadRun` when the
    * run fails before reaching `registerRun`. No-op once the run has registered
    * (registration owns cleanup from then on) or if the reservation was already
@@ -6376,7 +6481,18 @@ export class AgentThreadStreamRuntime {
       const activeRunId = state.activeThreadRunIds.get(key);
       const wasAborted =
         state.abortedRunIds.has(runId) || state.preparedRunsById.get(runId)?.abortController.signal.aborted;
-      if (activeRunId !== runId && (activeRunId || !wasAborted)) return;
+      // A reservation that took the thread lease gives it back unless a queued run takes it over. That holds
+      // when another run displaced the reservation too: the lease would otherwise keep renewing with no run behind it.
+      const heldLease = state.leaseRenewalTimers.has(runId);
+      const giveBackLease = () => {
+        if (heldLease && state.leaseRenewalTimers.has(runId) && !state.threadKeysByRunId.has(runId)) {
+          this.#releaseThreadLease(pubsub, key, runId);
+        }
+      };
+      if (activeRunId !== runId && (activeRunId || !wasAborted)) {
+        giveBackLease();
+        return;
+      }
       state.activeThreadRunIds.delete(key);
       const target = failedRun ? this.#getThreadTarget(failedRun.streamOptions) : undefined;
       if (wasAborted && failedRun && target?.threadId) {
@@ -6387,9 +6503,12 @@ export class AgentThreadStreamRuntime {
           threadId: target.threadId,
           resourceId: target.resourceId,
           runId,
-        });
+        }).then(giveBackLease, giveBackLease);
       } else {
-        void this.#drainPendingIdleSignals(state, pubsub, key);
+        void this.#drainPendingIdleSignals(state, pubsub, key, heldLease ? runId : undefined).then(
+          giveBackLease,
+          giveBackLease,
+        );
       }
     } finally {
       this.#cleanupPreparedRun(state, runId, expectedPreparedRun);
@@ -6402,10 +6521,16 @@ export class AgentThreadStreamRuntime {
     key: string,
     runId: string,
     untilSuspended = false,
+    /**
+     * Read the lease at once and then often. A caller that only learned of the run from its lease may
+     * have missed its last event, and a run that never registered publishes none.
+     */
+    eager = false,
   ): Promise<'ended' | 'suspended'> {
     const resolvedPubSub = this.#getPubSub(pubsub);
     const { provider, isFallback } = this.#resolveLeaseProvider(resolvedPubSub);
     const topic = this.#threadTopic(key);
+    const pollMs = eager ? Math.min(250, AGENT_THREAD_LEASE_TTL_MS) : AGENT_THREAD_LEASE_TTL_MS;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let subscribed = false;
     let settled = false;
@@ -6448,7 +6573,18 @@ export class AgentThreadStreamRuntime {
         finish();
         return;
       }
-      timer = setTimeout(() => void checkLease(), AGENT_THREAD_LEASE_TTL_MS);
+      // The park announcement may have gone out before this wait subscribed.
+      if (
+        untilSuspended &&
+        (await this.#isParkedLeaseHolder(this.#getState(resolvedPubSub), resolvedPubSub, key, runId))
+      ) {
+        if (settled) return;
+        outcome = 'suspended';
+        finish();
+        return;
+      }
+      if (settled) return;
+      timer = setTimeout(() => void checkLease(), pollMs);
     };
     const onEvent: EventCallback = async (event, ack) => {
       const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
@@ -6484,7 +6620,8 @@ export class AgentThreadStreamRuntime {
         outcome = 'suspended';
         finish();
       }
-      if (!isFallback) timer = setTimeout(() => void checkLease(), AGENT_THREAD_LEASE_TTL_MS);
+      if (eager) await checkLease();
+      else if (!isFallback) timer = setTimeout(() => void checkLease(), AGENT_THREAD_LEASE_TTL_MS);
       await wait;
     } catch {
       finish();
