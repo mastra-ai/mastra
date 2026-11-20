@@ -322,6 +322,13 @@ Mastra streams the tool call and returns `{ acknowledged: true }` as its result,
                       },
                     ],
                   },
+                  {
+                    name: 'metrics',
+                    type: 'MetricsContext',
+                    isOptional: true,
+                    description:
+                      "Emits custom metrics correlated with this tool call, such as `context.metrics?.emit('orders_processed', 1, { status: 'ok' })`. A no-op when observability isn't configured. See the [MetricsContext reference](/reference/observability/metrics/metrics-context).",
+                  },
                 ],
               },
             ],
