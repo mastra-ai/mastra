@@ -143,7 +143,7 @@ import {
   MASTRA_THREAD_ID_KEY,
   MASTRA_VERSIONS_KEY,
 } from '../request-context';
-import { getRequestContextInputSource } from '../request-context/input-source';
+import { getRequestContextInputSource, getRequestContextInputValues } from '../request-context/input-source';
 import type { DeclaredAgentSchedule } from '../schedules/define';
 import type { InferStandardSchemaOutput } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
@@ -317,8 +317,6 @@ import {
 } from './goal';
 import {
   convertInstructionsToString,
-  drainAgentOutput,
-  successfulAgentOutput,
   resolveRunId,
   resolveVersionContext,
   recoverySkip,
@@ -330,7 +328,7 @@ import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMes
 import { MessageList } from './message-list';
 import { createStoredMessageLoader } from './message-list/memory-message-refs';
 import { modelSpanAttributes } from './model-span-attributes';
-import { validateAgentRequestContext } from './request-context-validation';
+import { throwAgentRequestContextValidationError } from './request-context-validation';
 import { buildResumeSpanInput } from './resume-span-input';
 import { whenRunStepsSettle } from './run-lease-fence';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from './run-ownership';
@@ -1756,7 +1754,7 @@ export class Agent<
         });
       }
 
-      return executionEngine.loadSuspendedRequestContextValue(workflowsStore, runId, this.id, key);
+      return executionEngine.loadSuspendedRequestContextValue(workflowsStore, runId, this, key);
     }
 
     try {
@@ -10351,15 +10349,24 @@ export class Agent<
     return this.resumeNetwork({ approved: false, ...(reason !== undefined ? { reason } : {}) }, resumeOptions);
   }
 
+  async #validateRequestContext(requestContext?: RequestContext): Promise<void> {
+    if (this.#requestContextSchema) {
+      const contextValues = getRequestContextInputValues(requestContext);
+      const validation = await this.#requestContextSchema['~standard'].validate(contextValues);
+      if (validation.issues) {
+        throwAgentRequestContextValidationError({
+          issues: validation.issues,
+          agentId: this.id,
+          agentName: this.name,
+        });
+      }
+    }
+  }
+
   async #resolvePlainRunOptions<OUTPUT>(
     options?: AgentExecutionOptionsBase<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> },
   ) {
-    await validateAgentRequestContext({
-      requestContextSchema: this.#requestContextSchema,
-      requestContext: options?.requestContext,
-      agentId: this.id,
-      agentName: this.name,
-    });
+    await this.#validateRequestContext(options?.requestContext);
     const defaultOptions = await this.getDefaultOptions({ requestContext: options?.requestContext });
     const { options: mergedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(
       deepMerge(
@@ -10510,7 +10517,12 @@ export class Agent<
         threadStreamPubSub,
       );
 
-      return methodType === 'generate' ? await drainAgentOutput(result.result) : result.result;
+      if (methodType === 'generate') {
+        const fullOutput = await result.result.getFullOutput();
+        if (fullOutput.error) throw fullOutput.error;
+        return fullOutput;
+      }
+      return result.result;
     } catch (error) {
       // Release the thread reservation taken by waitForCrossAgentThreadRun so
       // a failed setup does not block subsequent runs on this thread.
@@ -11962,7 +11974,8 @@ export class Agent<
     });
     let suspended = false;
     try {
-      const fullOutput = await drainAgentOutput(result.output);
+      const fullOutput = await result.output.getFullOutput();
+      if (fullOutput.error) throw fullOutput.error;
       suspended = fullOutput.finishReason === 'suspended';
       if (suspended) {
         await getRunRegistryEntry(result.runId, this.#mastra)?.workflowExecution;
@@ -12175,7 +12188,8 @@ export class Agent<
       throw error;
     }
 
-    return successfulAgentOutput(fullOutput);
+    if (fullOutput.error) throw fullOutput.error;
+    return fullOutput;
   }
 
   /**
@@ -13789,12 +13803,7 @@ export class Agent<
 
     // 1. Validate the persisted durable-agent input before claiming ownership
     //    so obvious caller errors fail fast.
-    let { workflowInput } = await this.executionEngine.loadRecoverableSnapshot(
-      workflowsStore,
-      runId,
-      this.id,
-      this.name,
-    );
+    let { workflowInput } = await this.executionEngine.loadRecoverableSnapshot(workflowsStore, runId, this);
     this.executionEngine.assertRecoveryActive();
 
     // A crashed run that was executing a stored version must recover on
@@ -13858,7 +13867,7 @@ export class Agent<
       // An earlier owner may have completed while this one claimed. Re-read
       // after the claim and recover from that authoritative snapshot, never
       // from the pre-claim copy.
-      const loaded = await this.executionEngine.loadRecoverableSnapshot(workflowsStore, runId, this.id, this.name);
+      const loaded = await this.executionEngine.loadRecoverableSnapshot(workflowsStore, runId, this);
       workflowInput = loaded.workflowInput;
       claimedSnapshot = loaded.snapshot;
       // map-final-output publishes FINISH before saving its result. Restart skips
@@ -14844,7 +14853,8 @@ export class Agent<
 
     let suspended = false;
     try {
-      const fullOutput = (await drainAgentOutput(output)) as FullOutput<TOutput>;
+      const fullOutput = (await output.getFullOutput()) as FullOutput<TOutput>;
+      if (fullOutput.error) throw fullOutput.error;
       suspended = fullOutput.finishReason === 'suspended';
       // On suspend, the SUSPENDED event is emitted from the tool-call step
       // before the workflow engine has persisted the snapshot. Awaiting the

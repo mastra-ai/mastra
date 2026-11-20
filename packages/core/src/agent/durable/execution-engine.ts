@@ -789,8 +789,7 @@ export class DurableExecutionEngine {
   async loadRecoverableSnapshot(
     workflowsStore: WorkflowsStorage,
     runId: string,
-    agentId: string,
-    agentName: string,
+    agent: { id: string; name: string },
   ): Promise<{
     snapshot: WorkflowRunState;
     workflowInput: DurableAgenticWorkflowInput;
@@ -804,9 +803,9 @@ export class DurableExecutionEngine {
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
         text:
-          `DurableAgent "${agentName}" recover(${runId}): no persisted workflow snapshot found. ` +
+          `DurableAgent "${agent.name}" recover(${runId}): no persisted workflow snapshot found. ` +
           `The run may have already completed or been cleaned up.`,
-        details: { agentName, runId },
+        details: { agentName: agent.name, runId },
       });
     }
 
@@ -823,11 +822,11 @@ export class DurableExecutionEngine {
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
         text:
-          `DurableAgent "${agentName}" recover(${runId}): no restartable checkpoint has been persisted yet. ` +
+          `DurableAgent "${agent.name}" recover(${runId}): no restartable checkpoint has been persisted yet. ` +
           `Enable recovery: { durableAgents: 'auto' } or a shouldPersistSnapshot policy that includes ` +
           `"running" before starting the run. Even with persistence enabled, recovery is unavailable ` +
           `until the first running checkpoint is saved.`,
-        details: { agentName, runId, snapshotStatus: snapshot.status },
+        details: { agentName: agent.name, runId, snapshotStatus: snapshot.status },
       });
     }
     const workflowInput = snapshot?.context?.input as DurableAgenticWorkflowInput | undefined;
@@ -836,18 +835,18 @@ export class DurableExecutionEngine {
         id: 'DURABLE_AGENT_RECOVER_INVALID_SNAPSHOT',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.SYSTEM,
-        text: `DurableAgent "${agentName}" recover(${runId}): persisted snapshot does not contain a durable-agent workflow input.`,
-        details: { agentName, runId },
+        text: `DurableAgent "${agent.name}" recover(${runId}): persisted snapshot does not contain a durable-agent workflow input.`,
+        details: { agentName: agent.name, runId },
       });
     }
 
-    if (workflowInput.agentId !== agentId) {
+    if (workflowInput.agentId !== agent.id) {
       throw new MastraError({
         id: 'DURABLE_AGENT_RECOVER_AGENT_MISMATCH',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
-        text: `DurableAgent "${agentName}" recover(${runId}): persisted run belongs to agent "${workflowInput.agentId}", not "${agentId}".`,
-        details: { agentName, runId, ownerAgentId: workflowInput.agentId },
+        text: `DurableAgent "${agent.name}" recover(${runId}): persisted run belongs to agent "${workflowInput.agentId}", not "${agent.id}".`,
+        details: { agentName: agent.name, runId, ownerAgentId: workflowInput.agentId },
       });
     }
 
@@ -876,10 +875,10 @@ export class DurableExecutionEngine {
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
         text:
-          `DurableAgent "${agentName}" recover(${runId}): run status is "${snapshot.status}", ` +
+          `DurableAgent "${agent.name}" recover(${runId}): run status is "${snapshot.status}", ` +
           `so the run cannot be recovered. Runs suspended on a tool call or an approval are ` +
           `continued with resume(${runId}, ...), not recover().`,
-        details: { agentName, runId, snapshotStatus: snapshot.status },
+        details: { agentName: agent.name, runId, snapshotStatus: snapshot.status },
       });
     }
 
@@ -899,13 +898,13 @@ export class DurableExecutionEngine {
   async loadSuspendedRequestContextValue(
     workflowsStore: WorkflowsStorage,
     runId: string,
-    agentId: string,
+    agent: { id: string },
     key: string,
   ): Promise<unknown> {
     const persisted = await this.loadPersistedRunSnapshot(workflowsStore, runId);
     if (!persisted) return undefined;
     const workflowInput = persisted.snapshot?.context?.input as DurableAgenticWorkflowInput | undefined;
-    if (workflowInput?.__workflowKind !== 'durable-agent' || workflowInput.agentId !== agentId) return undefined;
+    if (workflowInput?.__workflowKind !== 'durable-agent' || workflowInput.agentId !== agent.id) return undefined;
     return workflowInput.requestContextEntries?.[key];
   }
 
