@@ -10,8 +10,10 @@ import { GATEWAY_API_PAGES } from './pages'
  * Generates the Gateway API reference pages from the live OpenAPI document.
  *
  * 1. Fetches the spec (override with GATEWAY_OPENAPI_SPEC, a URL or a local file path).
- *    If the fetch fails, it falls back to `openapi.snapshot.json`. Refresh the snapshot with:
- *    curl -s https://gateway-api.mastra.ai/openapi.json > scripts/gateway-api/openapi.snapshot.json
+ *    If the fetch fails, it falls back to `openapi.snapshot.json`. Refresh the snapshot (from `docs/`) with:
+ *    curl -fsS https://gateway-api.mastra.ai/openapi.json -o /tmp/gateway-openapi.json \
+ *      && node -e "if (!JSON.parse(require('fs').readFileSync('/tmp/gateway-openapi.json', 'utf8')).paths) process.exit(1)" \
+ *      && mv /tmp/gateway-openapi.json scripts/gateway-api/openapi.snapshot.json
  * 2. Drops infrastructure operations and points `servers` at the public API host.
  * 3. Runs the `docusaurus-plugin-openapi-docs` CLI, which writes one `*.api.mdx` page per operation.
  *    `markdown.ts` gives each page its slug, title, and guide from `pages.ts`.
