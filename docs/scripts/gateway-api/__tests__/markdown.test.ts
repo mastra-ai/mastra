@@ -31,6 +31,7 @@ describe('createGatewayApiPageMD', () => {
     expect(item.gatewayFrontMatter).toBe(
       [
         `title: ${JSON.stringify(`${page.title} | Gateway`)}`,
+        `pagination_label: ${JSON.stringify(page.title)}`,
         `description: ${JSON.stringify(page.description)}`,
         'slug: "/mastra-platform/gateway/api/videos"',
       ].join('\n'),
@@ -74,7 +75,9 @@ describe('createGatewayApiPageMD', () => {
     const item = apiItem('createSomethingNew', '/v1/new')
     const markdown = createGatewayApiPageMD(item)
     expect(item.title).toBe('Spec summary')
-    expect(item.gatewayFrontMatter).toBe('title: "Spec summary | Gateway"\ndescription: "Spec description"')
+    expect(item.gatewayFrontMatter).toBe(
+      'title: "Spec summary | Gateway"\npagination_label: "Spec summary"\ndescription: "Spec description"',
+    )
     expect(markdown).not.toContain('import Guide')
     expect(markdown).not.toContain('<Guide />')
     expect(markdown).toContain('<Inject>')

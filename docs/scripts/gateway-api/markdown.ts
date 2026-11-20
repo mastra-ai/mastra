@@ -32,6 +32,7 @@ export function createGatewayApiPageMD(item: ApiPageMetadata & { gatewayFrontMat
   item.title = title
   item.gatewayFrontMatter = frontMatter({
     title: `${title} | Gateway`,
+    pagination_label: title,
     description,
     slug: page ? `/${path.posix.join(PAGES_DIR.replace(/^src\/content\/en\/docs\//, ''), page.slug)}` : undefined,
   })
