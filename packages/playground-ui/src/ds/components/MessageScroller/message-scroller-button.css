@@ -41,30 +41,23 @@ html.light [data-slot='message-scroller-button'] {
 }
 
 [data-slot='message-scroller-button-activity'] {
-  display: flex;
-  align-items: center;
-  gap: 3px;
+  width: 20px;
+  height: 16px;
   opacity: 0;
   scale: 0.6;
 
-  & > span {
-    width: 4px;
-    height: 4px;
-    border-radius: 9999px;
-    background: currentColor;
-  }
-
-  & > span:nth-child(1) {
-    animation-delay: -0.28s;
-  }
-
-  & > span:nth-child(2) {
-    animation-delay: -0.14s;
+  & path {
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 1 1.2;
+    stroke-dashoffset: 1.05;
   }
 }
 
 [data-slot='message-scroller-button'][data-busy='true'] {
-  & [data-slot='message-scroller-button-glyph'] > svg {
+  & [data-slot='message-scroller-button-glyph'] > svg:first-child {
     opacity: 0;
     scale: 0.6;
   }
@@ -77,8 +70,8 @@ html.light [data-slot='message-scroller-button'] {
 
 [data-slot='message-scroller-button'][data-busy='true'][data-active='true']
   [data-slot='message-scroller-button-activity']
-  > span {
-  animation: message-scroller-button-write 1.1s var(--ease-in-out-custom) infinite;
+  path {
+  animation: message-scroller-button-write 1.8s var(--ease-in-out-custom) infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -87,10 +80,9 @@ html.light [data-slot='message-scroller-button'] {
     transition: opacity var(--duration-fast) linear;
   }
 
-  [data-slot='message-scroller-button'][data-busy='true'][data-active='true']
-    [data-slot='message-scroller-button-activity']
-    > span {
+  [data-slot='message-scroller-button'][data-busy='true'] [data-slot='message-scroller-button-activity'] path {
     animation: none;
+    stroke-dashoffset: 0;
   }
 }
 
@@ -100,16 +92,17 @@ html.light [data-slot='message-scroller-button'] {
   }
 }
 
+/* The pen writes the stroke in, then its tail chases it off. Offsets overshoot 1 so round caps leave no dot at rest. */
 @keyframes message-scroller-button-write {
-  0%,
-  60%,
-  100% {
-    opacity: 0.45;
-    translate: 0 0;
+  0% {
+    stroke-dashoffset: 1.05;
   }
 
-  30% {
-    opacity: 1;
-    translate: 0 -3px;
+  55% {
+    stroke-dashoffset: 0;
+  }
+
+  100% {
+    stroke-dashoffset: -1.05;
   }
 }

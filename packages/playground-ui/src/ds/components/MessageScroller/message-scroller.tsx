@@ -917,11 +917,12 @@ export const MessageScrollerButton = React.forwardRef<HTMLButtonElement, Message
           <>
             <span data-slot="message-scroller-button-glyph" aria-hidden>
               <IconArrowDown className="size-icon-sm" />
-              <span data-slot="message-scroller-button-activity">
-                <span />
-                <span />
-                <span />
-              </span>
+              <svg data-slot="message-scroller-button-activity" viewBox="0 0 20 16" fill="none">
+                <path
+                  pathLength={1}
+                  d="M2 10.5c1.6-4.2 3.4-4.2 3.6-1.4.2 2.6 1.5 3.4 3-.2 1.4-3.5 3-4.4 3.5-1.6.4 2.4 1.6 3.2 2.9.6.8-1.6 1.7-2.6 3-2.9"
+                />
+              </svg>
             </span>
             <span className="sr-only">{direction === 'end' ? 'Scroll to end' : 'Scroll to start'}</span>
           </>
