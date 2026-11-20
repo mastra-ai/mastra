@@ -2,6 +2,8 @@
 
 Give a support agent your guides, policies, and case history in Mastra Knowledge. When a technician describes a problem in Studio, the agent retrieves evidence it can access, cites the sources, and asks for observations needed to narrow the diagnosis. A reviewer can publish a confirmed finding so another technician can reuse it in a later conversation.
 
+[![Deploy to Mastra](https://img.shields.io/badge/Deploy_to_Mastra-18181B?style=for-the-badge)](https://projects.mastra.ai/~/projects/create/https:/github.com/drantunes/mastra/tree/feat/template-knowledge-support-agent/templates/template-knowledge-support-agent)
+
 ## Why we built this
 
 Support teams repeat investigations when manuals, customer history, and confirmed fixes are scattered across tickets and chats. Mastra Knowledge gives each kind of information a durable home. Scoped access lets teams reuse shared guidance while keeping each customer's case history private.
