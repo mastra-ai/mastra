@@ -142,5 +142,6 @@ export { createKnowledgeTransactionTests, knowledgeStoreThroughTransactions } fr
 export type { KnowledgeTransactionFixture, KnowledgeTransactionImporterRows } from './transaction';
 export { createKnowledgeImportersStorageTests } from './importers';
 export { createKnowledgeImporterHostTests } from './importer-host';
+export { createKnowledgeHostedImporterHostTests } from './hosted-host';
 export type { KnowledgeImporterHostFixture } from './importer-host';
 export type { KnowledgeImportersFixture } from './importers';

@@ -7,6 +7,7 @@ import * as knowledgeCompat from '@internal/core/knowledge-compat';
 import { KNOWLEDGE_PAGES_TABLE_NAMES } from '@internal/core/knowledge-compat';
 import {
   createKnowledgeImporterHostTests,
+  createKnowledgeHostedImporterHostTests,
   createKnowledgeImportersStorageTests,
   createKnowledgeLegacyUpgradeTests,
   createKnowledgeSchemaResetTests,
@@ -303,7 +304,7 @@ createKnowledgeImportersStorageTests(async () => {
   };
 });
 
-createKnowledgeImporterHostTests(async () => {
+const importerHostFixture = async () => {
   const dir = mkdtempSync(join(tmpdir(), 'knowledge-importer-host-'));
   const storage = new LibSQLStore({ id: 'importer-host', url: `file:${join(dir, 'knowledge.db')}` });
   return {
@@ -313,4 +314,6 @@ createKnowledgeImporterHostTests(async () => {
       rmSync(dir, { recursive: true, force: true });
     },
   };
-});
+};
+createKnowledgeImporterHostTests(importerHostFixture);
+createKnowledgeHostedImporterHostTests(importerHostFixture);

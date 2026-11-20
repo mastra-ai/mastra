@@ -3,6 +3,7 @@ import type { ObservabilityStorage } from '@mastra/core/storage';
 import { createMastraStorageCompositionTests } from './composite-tests';
 import {
   createKnowledgeImporterHostTests,
+  createKnowledgeHostedImporterHostTests,
   createKnowledgeImportersStorageTests,
   createKnowledgePageStoreTests,
 } from './domains/knowledge';
@@ -41,3 +42,4 @@ createKnowledgeImportersStorageTests(async () => {
 
 // The local importer host (r347 O3) through Knowledge, on a fresh in-memory store per test.
 createKnowledgeImporterHostTests(async () => ({ storage: new MockStore(), cleanup: async () => {} }));
+createKnowledgeHostedImporterHostTests(async () => ({ storage: new MockStore(), cleanup: async () => {} }));

@@ -153,10 +153,10 @@ export class InMemoryKnowledgeImportersStorage extends KnowledgeImportersStorage
     run.heartbeatAt = new Date();
     return structuredClone(run);
   }
-  async abandonRun(input: { runId: string; finish: unknown }) {
+  async abandonRun(input: { runId: string; finish: unknown; status?: 'failed' | 'canceled' }) {
     const run = this.#s.runs.get(input.runId);
     if (!run || run.status !== 'running') return null;
-    run.status = 'failed';
+    run.status = input.status ?? 'failed';
     run.finish = structuredClone(input.finish);
     run.completedAt = new Date();
     return structuredClone(run);

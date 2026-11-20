@@ -310,13 +310,18 @@ export class PgKnowledgeImporters implements KnowledgeImportersStorage {
     );
     return row ? toRun(row) : null;
   }
-  async abandonRun(input: { runId: string; finish: unknown }) {
+  async abandonRun(input: { runId: string; finish: unknown; status?: 'failed' | 'canceled' }) {
     const row = await this.#client.oneOrNone(
-      `UPDATE ${this.#t.runs} SET status = 'failed', finish = $2::jsonb, completed_at = clock_timestamp()
+      `UPDATE ${this.#t.runs} SET status = $3, finish = $2::jsonb, completed_at = clock_timestamp()
        WHERE id = $1 AND status = 'running' RETURNING *`,
-      [input.runId, JSON.stringify(input.finish)],
+      [input.runId, JSON.stringify(input.finish), input.status ?? 'failed'],
     );
     return row ? toRun(row) : null;
+  }
+  /** The database clock: run timestamps are written with `clock_timestamp()`. */
+  async now() {
+    const row = await this.#client.one<{ now: Date }>('SELECT clock_timestamp() AS now');
+    return row.now;
   }
   async lockRun(runId: string) {
     const row = await this.#client.oneOrNone(`SELECT * FROM ${this.#t.runs} WHERE id = $1 FOR UPDATE`, [runId]);

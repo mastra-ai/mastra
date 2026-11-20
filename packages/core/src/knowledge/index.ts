@@ -41,7 +41,8 @@ import type {
   RunKnowledgeImportResult,
 } from './importers';
 import { createLocalKnowledgeImporterHost } from './importers/local-host';
-import type { LocalKnowledgeImporterHostOptions } from './importers/local-host';
+import type { KnowledgeImporterServiceHost, LocalKnowledgeImporterHostOptions } from './importers/local-host';
+export type { KnowledgeImporterServiceHost, KnowledgeImporterServiceStartOptions } from './importers/local-host';
 
 /** Reads a Knowledge's host writer for {@link createKnowledgeImporterHost}; set in the class's static block. */
 let hostWriterOf: (knowledge: Knowledge) => KnowledgeHostWriter;
@@ -624,7 +625,7 @@ export type KnowledgeImporterHostOptions = LocalKnowledgeImporterHostOptions;
 export function createKnowledgeImporterHost(
   knowledge: Knowledge,
   options: KnowledgeImporterHostOptions,
-): KnowledgeImporterHost {
+): KnowledgeImporterServiceHost {
   return createLocalKnowledgeImporterHost(hostWriterOf(knowledge), options);
 }
 

@@ -173,11 +173,23 @@ export abstract class KnowledgeImportersStorage {
   /** Sets `heartbeatAt` on a running run; returns the run (with any cancel request), or null when it isn't running. */
   abstract heartbeat(runId: string): Promise<KnowledgeImporterRunRecord | null>;
   /**
-   * Ends a running run as `failed` with `finish`, whatever its seq or generation: for a host
-   * reclaiming a run whose runner went away. Returns the run, or null when it wasn't running. Its
-   * later flushes and finish are refused as `not_running`.
+   * Ends a running run as `failed` (or `status`) with `finish`, whatever its seq or generation: for a
+   * host reclaiming a run whose runner went away. Returns the run, or null when it wasn't running.
+   * Its later flushes and finish are refused as `not_running`.
    */
-  abstract abandonRun(input: { runId: string; finish: unknown }): Promise<KnowledgeImporterRunRecord | null>;
+  abstract abandonRun(input: {
+    runId: string;
+    finish: unknown;
+    status?: 'failed' | 'canceled';
+  }): Promise<KnowledgeImporterRunRecord | null>;
+  /**
+   * The store's clock, which every run timestamp it writes (`startedAt`, `heartbeatAt`) comes from:
+   * a host compares leases against it rather than its own clock. Defaults to this process's clock,
+   * which is the store's own for an in-process store.
+   */
+  async now(): Promise<Date> {
+    return new Date();
+  }
   /**
    * Inside a transaction: reads the run and locks its row until commit (take the writer guard lock
    * first). Null when there's no such run.

@@ -1,5 +1,6 @@
 import {
   createKnowledgeImporterHostTests,
+  createKnowledgeHostedImporterHostTests,
   createKnowledgeImportersStorageTests,
   createKnowledgeLegacyUpgradeTests,
   createKnowledgePageStoreTests,
@@ -348,7 +349,7 @@ describe('KnowledgePG transaction: a failure caught outside a savepoint', () => 
 });
 
 let importerHostSchemas = 0;
-createKnowledgeImporterHostTests(async () => {
+const importerHostFixture = async () => {
   const schemaName = `knowledge_importer_host_${process.pid}_${++importerHostSchemas}`;
   await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
   await pool.query(`CREATE SCHEMA "${schemaName}"`);
@@ -358,4 +359,6 @@ createKnowledgeImporterHostTests(async () => {
       await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
     },
   };
-});
+};
+createKnowledgeImporterHostTests(importerHostFixture);
+createKnowledgeHostedImporterHostTests(importerHostFixture);

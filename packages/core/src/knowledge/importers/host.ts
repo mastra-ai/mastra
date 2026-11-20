@@ -122,6 +122,8 @@ export const KNOWLEDGE_IMPORTER_ERROR_CODES = [
   'importer_missing_from_deploy',
   'importer_error',
   'stopped',
+  'lease_expired',
+  'deadline_exceeded',
 ] as const satisfies readonly KnowledgeImporterErrorCode[];
 
 export type NormalizedKnowledgeImporterFinish = Omit<KnowledgeImporterRunReceipt, 'runId' | 'counts' | 'chain'>;

@@ -1,7 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { KnowledgeStorage } from '../../storage/domains/knowledge/base';
 import { KnowledgeImporterRunStateError } from '../../storage/domains/knowledge/importers';
-import type { KnowledgeImportersStorage, KnowledgeImporterRunRecord } from '../../storage/domains/knowledge/importers';
+import type {
+  KnowledgeImportersStorage,
+  KnowledgeImporterRunRecord,
+  KnowledgeImporterRunStatus,
+} from '../../storage/domains/knowledge/importers';
 import type { KnowledgeHostWriter } from '../host-writes';
 import { KnowledgeImporterHostError } from './define';
 import {
@@ -56,6 +60,50 @@ export interface LocalKnowledgeImporterHostOptions {
    * nodes examined and 50 moves per flush.
    */
   settleBudgetMs?: number;
+  /**
+   * Strict liveness for a host whose runners live elsewhere (r352 S1). A run is live only while
+   * `store.now() < (heartbeatAt ?? startedAt) + leaseMs` and before its deadline, by the store's
+   * clock; a heartbeat, a new flush or a finish that finds it otherwise is refused as
+   * `run_not_active` and writes nothing, and a lapsed run is never revived. Each flush transaction
+   * is cut off at the lease end too. Replaces `staleRunAfterMs`. Unset: the in-process rules
+   * (`staleRunAfterMs` reclaim at the next start).
+   */
+  leaseMs?: number;
+}
+
+/** Start options of a service host: a claim admitted in the run's start transaction (r352 S4). @experimental */
+export interface KnowledgeImporterServiceStartOptions extends KnowledgeImporterStartRunOptions {
+  /**
+   * The writer generation the claim was issued for. The start is refused (`stale_generation`)
+   * unless it is the current one and the active write path is `'new'`.
+   */
+  generation?: number;
+  /**
+   * Called inside the start transaction, under the writer guard and before the scope is
+   * materialized and the run row written, with the transaction-bound storage. Throw to refuse the
+   * start: everything rolls back, the caller's own writes through `tx` included. A start that
+   * finds another run of the binding going rolls back the same way and reports `skipped`.
+   */
+  admit?: (tx: KnowledgeStorage) => Promise<void>;
+}
+
+/**
+ * A {@link KnowledgeImporterHost} for a service that applies flushes for runners elsewhere: it can
+ * also cancel runs and end those whose lease or deadline passed. @experimental
+ */
+export interface KnowledgeImporterServiceHost extends KnowledgeImporterHost {
+  startRun(bindingId: string, options?: KnowledgeImporterServiceStartOptions): Promise<KnowledgeImporterRunStart>;
+  /**
+   * Asks a running run to stop: its heartbeat answers `cancel: true` and its new flushes are
+   * refused. A finish admitted afterwards is recorded as canceled. No-op on an ended run.
+   */
+  requestCancel(runId: string): Promise<{ status: KnowledgeImporterRunStatus } | null>;
+  /**
+   * Ends every running run past its lease (`leaseMs`, else `staleRunAfterMs`) or deadline, by the
+   * store's clock: `canceled` when a cancel was requested, otherwise `failed` with
+   * `lease_expired` or `deadline_exceeded`. Safe to call from a schedule and from several workers.
+   */
+  expireRuns(): Promise<{ expired: string[] }>;
 }
 
 const DEFAULT_FLUSH_BUDGET_MS = 45_000;
@@ -91,6 +139,20 @@ const timedOut = (error: unknown): boolean => {
 };
 /** Re-index rounds after a page changed under its embed; a page rewritten faster than this is left to its own writes' jobs. */
 const MAX_REINDEX_ROUNDS = 3;
+
+/** Unwinds a claimed start's transaction when another run of the binding is going (r352 S4). */
+class SkippedClaim extends Error {
+  constructor(readonly runId: string) {
+    super('Another run of the binding is going.');
+  }
+}
+
+/** Carries `admit`'s own error out of the start transaction it rolled back. */
+class AdmitRefusal extends Error {
+  constructor(readonly refusal: unknown) {
+    super('The claim was refused.');
+  }
+}
 
 const conflict = (code: KnowledgeImporterHostConflictError['code'], message: string) =>
   new KnowledgeImporterHostConflictError(code, message);
@@ -139,17 +201,43 @@ const receiptCounts = (counts: Record<string, number>): KnowledgeImportCounts =>
   refused: counts.refused ?? 0,
 });
 
-/** A run's stored finish: the normalized request, compared on replay, and the host's chaining decision. */
-type StoredFinish = NormalizedKnowledgeImporterFinish & { chain: boolean };
+/**
+ * A run's stored finish: the normalized request, compared on replay, and the host's chaining
+ * decision. `by: 'host'` marks a run the host ended (no app finish is accepted for it), and
+ * `canceled` a finish admitted after a cancel, recorded as canceled whatever it reported.
+ */
+type StoredFinish = NormalizedKnowledgeImporterFinish & { chain: boolean; by?: 'host'; canceled?: true };
 
 const runReceipt = (run: KnowledgeImporterRunRecord): KnowledgeImporterRunReceipt => {
-  const { chain, ...finish } = run.finish as StoredFinish;
-  return { runId: run.id, ...finish, counts: receiptCounts(run.counts), chain: chain ?? false };
+  const { chain, by: _by, canceled, ...finish } = run.finish as StoredFinish;
+  const reported = canceled ? { outcome: 'canceled' as const, backlog: false, error: null } : {};
+  return { runId: run.id, ...finish, ...reported, counts: receiptCounts(run.counts), chain: chain ?? false };
 };
 
-const withoutChain = (finish: unknown) => {
-  const { chain: _chain, ...rest } = finish as StoredFinish;
+/** The app's normalized request a stored finish replays against. */
+const replayIdentity = (finish: unknown) => {
+  const { chain: _chain, by: _by, canceled: _canceled, ...rest } = finish as StoredFinish;
   return rest;
+};
+
+/** The finish a host records for a run it ended (r352 S2/S3). */
+const hostFinish = (
+  run: KnowledgeImporterRunRecord,
+  code: 'stopped' | 'lease_expired' | 'deadline_exceeded',
+): StoredFinish => {
+  const canceled = run.cancelRequestedAt !== null;
+  return {
+    ...normalizeKnowledgeImporterFinish({
+      runId: run.id,
+      generation: run.generation,
+      outcome: canceled ? 'canceled' : 'failed',
+      backlog: false,
+      lastSeq: run.lastSeq,
+      ...(canceled ? {} : { error: { code, retryable: true } }),
+    }),
+    chain: false,
+    by: 'host',
+  };
 };
 
 /**
@@ -162,8 +250,23 @@ const withoutChain = (finish: unknown) => {
 export function createLocalKnowledgeImporterHost(
   writer: KnowledgeHostWriter,
   options: LocalKnowledgeImporterHostOptions,
-): KnowledgeImporterHost {
+): KnowledgeImporterServiceHost {
   const author = options.author ?? (binding => `importer:${binding.id}`);
+  const leaseMs = options.leaseMs;
+  /** The clock leases are judged by: the store's under `leaseMs`, else this process's. */
+  const clock = async (importers: KnowledgeImportersStorage) => (leaseMs !== undefined ? importers.now() : new Date());
+  /** Why a running run is no longer live at `now`, or null while it is. */
+  const lapsed = (
+    run: KnowledgeImporterRunRecord,
+    now: Date,
+    after = leaseMs,
+  ): 'lease_expired' | 'deadline_exceeded' | null => {
+    if (run.deadlineAt && run.deadlineAt.getTime() <= now.getTime()) return 'deadline_exceeded';
+    if (after !== undefined && now.getTime() >= (run.heartbeatAt ?? run.startedAt).getTime() + after) {
+      return 'lease_expired';
+    }
+    return null;
+  };
   const listBindings = async () =>
     typeof options.bindings === 'function' ? await options.bindings() : options.bindings;
 
@@ -216,30 +319,26 @@ export function createLocalKnowledgeImporterHost(
    * locked and rechecked so a heartbeat that commits first keeps it alive. Its runner's later
    * flushes and finish are refused as `run_not_active`; exact replays still return receipts.
    */
+  const staleAfter = leaseMs ?? options.staleRunAfterMs ?? DEFAULT_STALE_RUN_AFTER_MS;
+  /** Ends `run` if it isn't live; the caller holds the guard and the run's lock. */
+  const expireLocked = async (importers: KnowledgeImportersStorage, run: KnowledgeImporterRunRecord) => {
+    const why = lapsed(run, await clock(importers), staleAfter);
+    if (!why) return false;
+    // In-process hosts keep their `stopped` code; a service host says why it ended the run.
+    const finish = hostFinish(run, leaseMs !== undefined ? why : 'stopped');
+    await importers.abandonRun({
+      runId: run.id,
+      finish,
+      status: finish.outcome === 'canceled' ? 'canceled' : 'failed',
+    });
+    return true;
+  };
   const reclaimStaleRuns = async (importers: KnowledgeImportersStorage, bindingId: string) => {
-    const staleAfter = options.staleRunAfterMs ?? DEFAULT_STALE_RUN_AFTER_MS;
     for (const candidate of await importers.listRuns(bindingId)) {
       if (candidate.status !== 'running') continue;
       const run = await importers.lockRun(candidate.id);
       if (!run || run.status !== 'running') continue;
-      const now = Date.now();
-      const lastSign = (run.heartbeatAt ?? run.startedAt).getTime();
-      const pastDeadline = run.deadlineAt !== null && run.deadlineAt.getTime() <= now;
-      if (!pastDeadline && now - lastSign < staleAfter) continue;
-      await importers.abandonRun({
-        runId: run.id,
-        finish: {
-          ...normalizeKnowledgeImporterFinish({
-            runId: run.id,
-            generation: run.generation,
-            outcome: 'failed',
-            backlog: false,
-            lastSeq: run.lastSeq,
-            error: { code: 'stopped', retryable: true },
-          }),
-          chain: false,
-        } satisfies StoredFinish,
-      });
+      await expireLocked(importers, run);
     }
   };
 
@@ -265,13 +364,18 @@ export function createLocalKnowledgeImporterHost(
   };
 
   return {
-    async startRun(bindingId: string, start?: KnowledgeImporterStartRunOptions): Promise<KnowledgeImporterRunStart> {
+    async startRun(
+      bindingId: string,
+      start?: KnowledgeImporterServiceStartOptions,
+    ): Promise<KnowledgeImporterRunStart> {
       const { binding, bindings } = await bindingFor(bindingId);
+      const runId = start?.runId ?? randomUUID();
+      const claimed = start?.admit !== undefined || start?.generation !== undefined;
       try {
         const { scope } = parseKnowledgeImportTarget(binding.target);
         const { storage } = await storageAndImporters();
+        // Declarations are read now: inside the transaction the scope is materialized through it alone.
         await writer.runtime.resolve();
-        await writer.runtime.materializeScope(scope, [], { author: author(binding) });
         const others = bindings.filter(b => b.id !== binding.id);
         const overlapping = others.find(b => knowledgeImportTargetsOverlap(b.target, binding.target));
         if (overlapping) {
@@ -282,8 +386,15 @@ export function createLocalKnowledgeImporterHost(
         }
         const result = await storage.transaction(async tx => {
           const importers = tx.importers!;
-          // Registration and the overlap check against stored bindings happen under one lock.
+          // Registration and the overlap check against stored bindings happen under one lock. The
+          // lock is exclusive: this transaction may write the instance's first scope page.
           const guard = await importers.lockWriterGuard('update');
+          if (
+            claimed &&
+            (guard.activePath !== 'new' || (start?.generation !== undefined && guard.generation !== start.generation))
+          ) {
+            throw conflict('stale_generation', 'The claim belongs to another writer generation or write path.');
+          }
           const stored = (await importers.listBindings()).find(
             b => b.id !== binding.id && knowledgeImportTargetsOverlap(b.target, binding.target),
           );
@@ -295,13 +406,24 @@ export function createLocalKnowledgeImporterHost(
           }
           await importers.registerBinding({ id: binding.id, importer: binding.importer, target: binding.target });
           await reclaimStaleRuns(importers, binding.id);
+          // r352 S4: the claim, the scope and the run row commit together or not at all.
+          if (start?.admit) {
+            try {
+              await start.admit(tx);
+            } catch (error) {
+              throw new AdmitRefusal(error);
+            }
+          }
+          const { wrote } = await writer.runtime.materializeScopeIn(tx, scope, { author: author(binding) });
+          if (wrote && !guard.firstWriteAt) await importers.markFirstWrite();
           const run = await importers.startRun({
             bindingId: binding.id,
-            runId: start?.runId ?? randomUUID(),
+            runId,
             generation: guard.generation,
             ...(start?.fireKey !== undefined ? { fireKey: start.fireKey } : {}),
             ...(start?.deadline !== undefined ? { deadlineAt: new Date(start.deadline) } : {}),
           });
+          if (run.status !== 'started' && start?.admit) throw new SkippedClaim(run.run.id);
           const saved: Record<string, string> = run.status === 'started' ? await importers.getState(binding.id) : {};
           const state: Record<string, string> = Object.fromEntries(
             Object.entries(saved).filter(([key]) => !key.startsWith(RESERVED_STATE_PREFIX)),
@@ -318,6 +440,7 @@ export function createLocalKnowledgeImporterHost(
           binding,
         };
       } catch (error) {
+        if (error instanceof SkippedClaim) return { status: 'skipped', runId: error.runId };
         if ((error as Error | undefined)?.name === 'KnowledgeImporterBindingConflictError') {
           throw new KnowledgeImporterHostError(
             `Importer binding "${binding.id}" was recorded with another importer or target.`,
@@ -325,6 +448,8 @@ export function createLocalKnowledgeImporterHost(
           );
         }
         if (error instanceof TypeError) throw new KnowledgeImporterHostError(error.message, 400);
+        // The caller's own refusal reaches it unchanged, not as a storage failure.
+        if (error instanceof AdmitRefusal) throw error.refusal;
         throw hostError(error);
       }
     },
@@ -364,7 +489,7 @@ export function createLocalKnowledgeImporterHost(
       ]).catch(error => {
         throw hostError(error);
       });
-      if (peekRun?.deadlineAt && peekRun.deadlineAt.getTime() <= Date.now()) {
+      if (leaseMs === undefined && peekRun?.deadlineAt && peekRun.deadlineAt.getTime() <= Date.now()) {
         throw conflict('run_not_active', 'The run is past its deadline.');
       }
       // Resolved before the transaction, since a bindings function may do its own I/O, but only
@@ -376,7 +501,19 @@ export function createLocalKnowledgeImporterHost(
             .catch((error: unknown) => ({ error }))
         : { error: conflict('run_not_active', 'The run is not running.') };
       // One absolute deadline for the whole write transaction (O3 §C‴), capped by the run's.
-      const deadlineAt = Math.min(budgetAt, peekRun?.deadlineAt?.getTime() ?? Infinity);
+      let deadlineAt = Math.min(budgetAt, peekRun?.deadlineAt?.getTime() ?? Infinity);
+      if (leaseMs !== undefined && peekRun) {
+        // r352 S1 fence: also cut the transaction off where the lease ends, by the store's clock
+        // mapped onto ours. A heartbeat that lands meanwhile only makes this cutoff early, never late.
+        // A cutoff already past is left to the locked check below, after the receipt recheck.
+        const storeNow = await rootImporters.now().catch(error => {
+          throw hostError(error);
+        });
+        const skew = Date.now() - storeNow.getTime();
+        const leaseEnd = (peekRun.heartbeatAt ?? peekRun.startedAt).getTime() + leaseMs;
+        const cutoff = Math.min(leaseEnd, peekRun.deadlineAt?.getTime() ?? Infinity) + skew;
+        deadlineAt = Math.min(budgetAt, cutoff > Date.now() ? cutoff : Infinity);
+      }
       let embeds: KnowledgeImportEmbedJob[] = [];
       // Only a timeout after the settle slice started counts against settling (O3 §C″).
       let settling = false;
@@ -399,8 +536,8 @@ export function createLocalKnowledgeImporterHost(
               throw conflict('stale_generation', 'The run belongs to an older writer generation.');
             }
             if (run.cancelRequestedAt) throw conflict('run_not_active', 'The run was canceled.');
-            if (run.deadlineAt && run.deadlineAt.getTime() <= Date.now()) {
-              throw conflict('run_not_active', 'The run is past its deadline.');
+            if (lapsed(run, await clock(importers))) {
+              throw conflict('run_not_active', 'The run is past its lease or deadline.');
             }
             if (flush.seq !== run.lastSeq + 1)
               throw conflict('seq_mismatch', 'The flush seq is not the committed seq + 1.');
@@ -475,9 +612,68 @@ export function createLocalKnowledgeImporterHost(
 
     async heartbeat(runId: string, generation: number): Promise<{ cancel: boolean }> {
       try {
-        const { importers } = await storageAndImporters();
-        const run = await importers.heartbeat(runId);
-        return { cancel: !run || run.generation !== generation || run.cancelRequestedAt !== null };
+        const { storage, importers } = await storageAndImporters();
+        if (leaseMs === undefined) {
+          const run = await importers.heartbeat(runId);
+          return { cancel: !run || run.generation !== generation || run.cancelRequestedAt !== null };
+        }
+        // r352 S1: renewed only when admitted under the run's lock, by the store's clock, so a
+        // lapsed run is never revived, even by a heartbeat that takes the lock before the sweep.
+        return await storage.transaction(async tx => {
+          const locked = tx.importers!;
+          const guard = await locked.lockWriterGuard('share');
+          const run = await locked.lockRun(runId);
+          if (!run || run.status !== 'running') throw conflict('run_not_active', 'The run is not running.');
+          if (run.generation !== generation || guard.generation !== generation) {
+            throw conflict('stale_generation', 'The run belongs to an older writer generation.');
+          }
+          if (lapsed(run, await clock(locked)))
+            throw conflict('run_not_active', 'The run is past its lease or deadline.');
+          if (run.cancelRequestedAt) return { cancel: true };
+          await locked.heartbeat(runId);
+          return { cancel: false };
+        });
+      } catch (error) {
+        throw hostError(error);
+      }
+    },
+
+    async requestCancel(runId: string) {
+      const { storage } = await storageAndImporters();
+      try {
+        // r352 S5: the same lock order as finish, so a cancel and a finish serialize.
+        return await storage.transaction(async tx => {
+          const importers = tx.importers!;
+          await importers.lockWriterGuard('share');
+          const run = await importers.lockRun(runId);
+          if (!run) return null;
+          if (run.status !== 'running') return { status: run.status };
+          await importers.requestCancel(runId);
+          return { status: run.status };
+        });
+      } catch (error) {
+        throw hostError(error);
+      }
+    },
+
+    async expireRuns() {
+      const { storage, importers: root } = await storageAndImporters();
+      const expired: string[] = [];
+      try {
+        const candidates: string[] = [];
+        for (const stored of await root.listBindings()) {
+          for (const run of await root.listRuns(stored.id)) if (run.status === 'running') candidates.push(run.id);
+        }
+        for (const runId of candidates) {
+          const ended = await storage.transaction(async tx => {
+            const importers = tx.importers!;
+            await importers.lockWriterGuard('share');
+            const run = await importers.lockRun(runId);
+            return !!run && run.status === 'running' && (await expireLocked(importers, run));
+          });
+          if (ended) expired.push(runId);
+        }
+        return { expired };
       } catch (error) {
         throw hostError(error);
       }
@@ -498,9 +694,13 @@ export function createLocalKnowledgeImporterHost(
           const run = await importers.lockRun(request.runId);
           if (!run) throw conflict('run_not_active', 'No such run.');
           if (run.finish !== null) {
+            // r352 S3: the app never finished a run the host ended, so no app finish matches it.
+            if ((run.finish as StoredFinish).by === 'host') {
+              throw conflict('run_not_active', 'The host ended the run.');
+            }
             if (
               run.generation === request.generation &&
-              canonicalJson(withoutChain(run.finish)) === canonicalJson(normalized)
+              canonicalJson(replayIdentity(run.finish)) === canonicalJson(normalized)
             ) {
               return runReceipt(run);
             }
@@ -510,7 +710,24 @@ export function createLocalKnowledgeImporterHost(
           if (run.generation !== request.generation || guard.generation !== request.generation) {
             throw conflict('stale_generation', 'The run belongs to an older writer generation.');
           }
+          // A service host refuses a finish once the lease or deadline passed (r352 S1/S3); in
+          // process, a runner stopped by its deadline still records `stopped` here.
+          if (leaseMs !== undefined && lapsed(run, await clock(importers))) {
+            throw conflict('run_not_active', 'The run is past its lease or deadline.');
+          }
           if (run.lastSeq !== request.lastSeq) throw conflict('seq_mismatch', 'lastSeq is not the committed seq.');
+          // r352 S5: a finish admitted after a committed cancel is recorded as canceled; its replay
+          // identity stays the request the app sent.
+          if (run.cancelRequestedAt) {
+            const canceled = await importers.finishRun({
+              runId: run.id,
+              generation: request.generation,
+              lastSeq: request.lastSeq,
+              status: 'canceled',
+              finish: { ...normalized, chain: false, canceled: true } satisfies StoredFinish,
+            });
+            return runReceipt(canceled);
+          }
           // Chain on settle work left only when this run's settling made progress and didn't give up,
           // so a parent that never arrives can't chain runs forever (O3 §C′).
           const last = run.lastSeq > 0 ? await importers.getFlush(run.id, run.generation, run.lastSeq) : null;

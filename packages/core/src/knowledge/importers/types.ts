@@ -106,7 +106,11 @@ export type KnowledgeImporterErrorCode =
   | 'importer_missing_from_deploy'
   | 'importer_error'
   /** Hard deadline reached; the cursor stays behind what didn't land. */
-  | 'stopped';
+  | 'stopped'
+  /** Recorded by a host that ended the run: its runner stopped renewing the lease. */
+  | 'lease_expired'
+  /** Recorded by a host that ended the run: the run's deadline passed before it finished. */
+  | 'deadline_exceeded';
 
 export interface KnowledgeImporterRunError {
   code: KnowledgeImporterErrorCode;

@@ -328,11 +328,15 @@ export class LibSQLKnowledgeImporters implements KnowledgeImportersStorage {
       return row ? toRun(row) : null;
     });
   }
-  async abandonRun(input: { runId: string; finish: unknown }) {
+  /** Run timestamps are written with this process's clock (`Date.now()`), so leases compare against it too. */
+  async now() {
+    return new Date();
+  }
+  async abandonRun(input: { runId: string; finish: unknown; status?: 'failed' | 'canceled' }) {
     return this.#transaction(async tx => {
       const result = await tx.execute({
-        sql: `UPDATE "${T.runs}" SET status = 'failed', finish = ?, completedAt = ? WHERE id = ? AND status = 'running'`,
-        args: [JSON.stringify(input.finish), Date.now(), input.runId],
+        sql: `UPDATE "${T.runs}" SET status = ?, finish = ?, completedAt = ? WHERE id = ? AND status = 'running'`,
+        args: [input.status ?? 'failed', JSON.stringify(input.finish), Date.now(), input.runId],
       });
       if (result.rowsAffected !== 1) return null;
       const row = (await tx.execute({ sql: `SELECT * FROM "${T.runs}" WHERE id = ?`, args: [input.runId] })).rows[0];
