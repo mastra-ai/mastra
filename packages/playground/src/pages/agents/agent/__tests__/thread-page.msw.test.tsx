@@ -564,12 +564,24 @@ describe('Standalone thread page', () => {
     );
   });
   describe('when an unauthenticated user returns to an existing thread', () => {
-    it('restores the draft saved before the shared page migration', async () => {
+    it('does not restore an unscoped anonymous draft from a previous session', async () => {
       installHandlers();
       const key = JSON.stringify([BASE_URL, null, null, AGENT_ID, THREAD_ID]);
-      await writeThreadDraft(key, { text: 'My unfinished recipe', attachments: [] });
+      await writeThreadDraft(key, { text: 'Someone else’s unfinished recipe', attachments: [] });
 
       renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+
+      expect((await composerInput()).value).toBe('');
+    });
+
+    it('restores its own draft after reloading in the same browser session', async () => {
+      installHandlers();
+      const path = `/agents/${AGENT_ID}/threads/${THREAD_ID}`;
+      renderAt(path);
+      fireEvent.change(await composerInput(), { target: { value: 'My unfinished recipe' } });
+      cleanup();
+
+      renderAt(path);
 
       expect((await composerInput()).value).toBe('My unfinished recipe');
     });
