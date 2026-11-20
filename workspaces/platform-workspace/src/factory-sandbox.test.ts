@@ -315,6 +315,7 @@ describe('PlatformFactorySandbox', () => {
   it.each([
     ['sends the session owner as the acting user', 'user_owner', 'user_owner'],
     ['sends no acting user for a session without an owner', undefined, null],
+    ['sends no acting user for a rule-dispatched session', 'factory-rule-dispatcher', null],
   ])('%s when the session sandbox is created', async (_name, userId, header) => {
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const fetchMock = vi.fn().mockResolvedValueOnce(

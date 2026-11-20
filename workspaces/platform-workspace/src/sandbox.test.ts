@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 
-import { supportsNetworking } from '@mastra/core/workspace';
+import { SandboxError, supportsNetworking } from '@mastra/core/workspace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { PlatformApiError } from './client.js';
 import type { DirectExecWebSocket, DirectExecWebSocketFactory } from './direct-exec.js';
 import { commandInCwd, PlatformSandbox } from './sandbox.js';
 import type { SandboxAddressRegistry } from './sandbox.js';
@@ -697,6 +698,73 @@ describe('PlatformSandbox', () => {
       for (const [, init] of fetchMock.mock.calls) {
         expect((init.headers as Headers).get('x-acting-user-id')).toBe(header);
       }
+    });
+
+    describe('when the platform refuses a vault create', () => {
+      it.each([
+        [
+          'vault_not_enabled',
+          403,
+          'SANDBOX_VAULT_NOT_ENABLED',
+          'Enable vault at https://platform.test/v1/auth/vault/enable',
+        ],
+        ['vault_user_not_member', 403, 'SANDBOX_VAULT_USER_NOT_MEMBER', 'no longer a member of this organization'],
+        ['vault_user_not_allowed', 403, 'SANDBOX_VAULT_USER_REQUIRED', 'Rule-dispatched and owner-less sessions'],
+        ['acting_user_required', 400, 'SANDBOX_VAULT_USER_REQUIRED', 'Rule-dispatched and owner-less sessions'],
+      ])('maps %s to a clear error without retrying', async (type, status, code, message) => {
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        vi.stubEnv('MASTRA_SHARED_API_URL', 'https://platform.test/v1/');
+        const fetchMock = vi.fn().mockResolvedValue(json({ error: { message: 'refused', type } }, { status }));
+        const sandbox = new PlatformSandbox({
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          actingUserId: 'user_owner',
+          fetch: fetchMock,
+        });
+
+        const error = await sandbox._start().then(
+          () => undefined,
+          (e: unknown) => e,
+        );
+
+        expect(error).toBeInstanceOf(SandboxError);
+        expect(error).toMatchObject({ code, details: { status } });
+        expect((error as Error).message).toContain(message);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+      });
+
+      it('quotes the configured enable link', async () => {
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        const sandbox = new PlatformSandbox({
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          actingUserId: 'user_owner',
+          vaultEnableUrl: 'https://example.test/enable',
+          fetch: vi
+            .fn()
+            .mockResolvedValue(json({ error: { message: 'refused', type: 'vault_not_enabled' } }, { status: 403 })),
+        });
+
+        await expect(sandbox._start()).rejects.toThrow('Enable vault at https://example.test/enable,');
+      });
+
+      it('leaves other create errors as they are', async () => {
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        const sandbox = new PlatformSandbox({
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          fetch: vi
+            .fn()
+            .mockResolvedValue(
+              json({ error: { message: 'Environment not found', type: 'not_found' } }, { status: 404 }),
+            ),
+        });
+
+        await expect(sandbox._start()).rejects.toBeInstanceOf(PlatformApiError);
+      });
     });
 
     const create = (response: Record<string, unknown>, sandboxId?: string, ...later: Record<string, unknown>[]) => {

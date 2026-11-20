@@ -132,6 +132,9 @@ export interface PlatformFactorySandboxOptions extends Omit<
  * {@link PlatformSandbox} whose template is {@link createRepoTemplate} over
  * the session's repositories, sized by the factory's environment settings.
  */
+/** Factory's rule dispatcher identity; it never owns a vault sandbox. */
+const RULE_DISPATCHER_USER_ID = 'factory-rule-dispatcher';
+
 export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandboxSettings> {
   readonly provider = 'platform';
   readonly settings: PublicSchema<PlatformFactorySandboxSettings>;
@@ -189,7 +192,8 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
       ...(env ? { env: typeof env === 'function' ? env(ctx) : env } : {}),
       // The session owner is the acting user: the proxy requires one to create
       // and run a credential-vault sandbox, and binds the vault grant to it.
-      ...(ctx.userId ? { actingUserId: ctx.userId } : {}),
+      // The rule dispatcher acts for rules, not a person, so it is never sent.
+      ...(ctx.userId && ctx.userId !== RULE_DISPATCHER_USER_ID ? { actingUserId: ctx.userId } : {}),
       id: ctx.sessionId,
       sessionId: ctx.sessionId,
       sandboxId: ctx.sandboxId,
