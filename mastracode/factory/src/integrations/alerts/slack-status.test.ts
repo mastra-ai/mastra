@@ -3,6 +3,7 @@ import { createBoardRegistry } from '../../boards/index.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
 import type { PlatformAlertEvent } from '../../rules/types.js';
+import type { FactoryRunBindingRecord } from '../../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { createAlertThreads } from './mention.js';
 import { ALERT_TIMELINE_KEY, PlatformAlertRules } from './rules.js';
@@ -53,7 +54,7 @@ function recordingClient() {
     failReacts: number;
     failUnreacts: number;
     /** Holds a post or edit in flight until the returned promise settles; it lands after that. */
-    hold?: (call: 'post' | 'edit' | 'react', text: string) => Promise<void> | undefined;
+    hold?: (call: 'post' | 'edit' | 'react' | 'unreact', text: string) => Promise<void> | undefined;
   } = { covered: true, failPosts: 0, failEdits: 0, failReacts: 0, failUnreacts: 0 };
   let next = 0;
   const client: AlertSlackClient = {
@@ -89,6 +90,7 @@ function recordingClient() {
         slack.failUnreacts--;
         throw new Error('ratelimited');
       }
+      await slack.hold?.('unreact', emoji);
       calls.push({ call: 'unreact', ts, emoji });
     },
   };
@@ -138,11 +140,20 @@ async function setup() {
       item => item.externalSource?.integrationId === 'mastra-alerts',
     )!;
   const record = async () => (await card()).metadata?.[ALERT_SLACK_STATUS_KEY] as AlertSlackStatusRecord | undefined;
+  /** The card the calling session's run is bound to; the alert card unless a test says otherwise. */
+  const session: { boundTo?: string | null } = {};
   const tool = buildAlertUpdateTool({
     status,
-    workItems: seeded.workItems,
+    workItems: {
+      get: input => seeded.workItems.get(input),
+      findActiveRunBindingForSession: async () => {
+        const workItemId = session.boundTo === undefined ? (await card()).id : session.boundTo;
+        return workItemId ? ({ workItemId } as FactoryRunBindingRecord) : null;
+      },
+    },
     orgId: 'org-1',
     factoryProjectId: project.id,
+    sessionId: 'session-1',
   }).alert_post_update;
   const post = (input: {
     workItemId: string;
@@ -158,7 +169,7 @@ async function setup() {
   const setNow = (at: number) => {
     now = at;
   };
-  return { seeded, ingest, card, record, calls, slack, status, post, linked, setNow };
+  return { seeded, project, ingest, card, record, calls, slack, status, post, linked, setNow, session };
 }
 
 describe('AlertSlackStatus', () => {
@@ -352,6 +363,49 @@ describe('AlertSlackStatus', () => {
     ]);
   });
 
+  it('keeps the reaction a restarted run wants when an older cleanup takes it off', async () => {
+    const { linked, card, calls, slack, status } = await setup();
+    await linked();
+    const gate = () => {
+      let open!: () => void;
+      let reached!: () => void;
+      return { held: new Promise<void>(r => (open = r)), at: new Promise<void>(r => (reached = r)), open: () => open(), reach: () => reached() };
+    };
+    const lateAdd = gate();
+    const lateCleanup = gate();
+    let reacts = 0;
+    let unreacts = 0;
+    slack.hold = (call, emoji) => {
+      if (call === 'react' && emoji === 'eyes' && ++reacts === 1) return lateAdd.reach(), lateAdd.held;
+      if (call === 'unreact' && emoji === 'eyes' && ++unreacts === 1) return lateCleanup.reach(), lateCleanup.held;
+      return undefined;
+    };
+    // The first run's 👀 lands after the run failed, so it takes it back...
+    const first = status.runStarted(await card());
+    await lateAdd.at;
+    await status.runEnded(await card(), { status: 'failed', reason: 'sandbox crashed' });
+    lateAdd.open();
+    await lateCleanup.at;
+    // ...while a restarted run puts 👀 on again; the old cleanup lands after it.
+    await status.runStarted(await card());
+    // Putting it straight back is refused too.
+    slack.failReacts = 1;
+    lateCleanup.open();
+    await first;
+    const reactions = () => {
+      const on = new Set<string>();
+      for (const call of calls) {
+        if (call.call === 'react') on.add(call.emoji!);
+        if (call.call === 'unreact') on.delete(call.emoji!);
+      }
+      return [...on].sort();
+    };
+    expect(reactions()).toEqual([]);
+    // The next write, the same as the last, puts it back.
+    await status.runStarted(await card());
+    expect(reactions()).toEqual(['eyes']);
+  });
+
   it('takes back a late reaction whose cleanup Slack refused, on a later write', async () => {
     const { linked, card, calls, slack, status } = await setup();
     await linked();
@@ -466,5 +520,24 @@ describe('AlertSlackStatus', () => {
     });
     expect(await status.runStarted(await card())).toBe(false);
     expect(calls).toEqual([]);
+  });
+
+  it("won't let a run post to or move another card's alert thread", async () => {
+    const { linked, card, calls, record, post, session, status } = await setup();
+    const a = await linked();
+    await status.runStarted(a);
+    const before = await record();
+    calls.length = 0;
+    session.boundTo = 'some-other-card';
+    await expect(post({ workItemId: (await card()).id, kind: 'diagnosis', markdown: 'not mine' })).resolves.toEqual({
+      posted: false,
+      reason: 'Only the card this run is working on can be updated.',
+    });
+    session.boundTo = null;
+    await expect(post({ workItemId: (await card()).id, kind: 'no_fix', markdown: 'unbound' })).resolves.toMatchObject({
+      posted: false,
+    });
+    expect(calls).toEqual([]);
+    expect(await record()).toEqual(before);
   });
 });
