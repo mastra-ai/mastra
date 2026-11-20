@@ -10,6 +10,8 @@ import { createDurableAgent, createEventedAgent } from '../../../../agent/durabl
 import { AGENT_CONTROL_TOPIC, AgentControlEventTypes } from '../../../../agent/streams/constants';
 import { EventEmitterPubSub } from '../../../../events/event-emitter';
 import { hasDurableExecution } from '../../../../agent/streams/execution-capability';
+import { AGENT_STREAM_TOPIC } from '../../../../agent/streams/constants';
+import { InMemoryServerCache } from '../../../../cache/inmemory';
 import { createTool } from '../../../../tools';
 import { Agent } from '../../../../agent/agent';
 import { isDurableAgentLike } from '../../../../agent/types';
@@ -195,6 +197,100 @@ describe('Configured native engines preserve Agent outputs', () => {
         });
         expect(JSON.stringify(llm.getRequests()[0]?.body)).toContain('Where is my order?');
       });
+    }
+  }
+
+  // COR-1563: observe() can initialize streams before stored registration supplies host defaults.
+  // These selectors all still use native execution in this policy-only PR; wrappers do not inherit them.
+  for (const executionEngine of [false, 'durable', 'evented'] as const) {
+    for (const registration of ['constructor', 'addAgent'] as const) {
+      it.each([false, true])(
+        `${String(executionEngine)}/${registration}: applies inherited replay policy after observation (explicit=%s)`,
+        async explicit => {
+          const llm = getMock();
+          llm.on({ endpoint: 'chat' }, { content: 'Your order has shipped.' });
+          const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url}/v1` });
+          const agent = new Agent({
+            id: 'observed-replay-policy',
+            name: 'Order support',
+            instructions: 'Help with orders.',
+            model: openai('gpt-4o'),
+            durable: explicit ? { shouldCache: () => true } : true,
+          });
+          const earlyObserver = await agent.observe('before-registration');
+          earlyObserver.detach();
+          const mastra = new Mastra({
+            logger: false,
+            serverCache: new InMemoryServerCache(),
+            durable: { executionEngine, shouldCache: () => false, cleanupTimeoutMs: 0 },
+            ...(registration === 'constructor' ? { agents: { agent } } : {}),
+          });
+          if (registration === 'addAgent') mastra.addAgent(agent);
+          const runId = crypto.randomUUID();
+          try {
+            const output = await agent.stream('Where is my order?', { runId });
+            await output.consumeStream();
+            expect(await output.text).toBe('Your order has shipped.');
+            const history = await agent.__getStreamBus()!.pubsub.getHistory(AGENT_STREAM_TOPIC(runId));
+            if (explicit) expect(history.length).toBeGreaterThan(0);
+            else expect(history).toEqual([]);
+            // Re-registering the same instance must not discard its retained log.
+            const bus = agent.__getStreamBus();
+            mastra.addAgent(agent);
+            expect(agent.__getStreamBus()).toBe(bus);
+            expect(await agent.__getStreamBus()!.pubsub.getHistory(AGENT_STREAM_TOPIC(runId))).toEqual(history);
+          } finally {
+            await mastra.shutdown();
+          }
+        },
+      );
+
+      it.each([false, true])(
+        `${String(executionEngine)}/${registration}: applies inherited replay cleanup after observation (explicit=%s)`,
+        async explicit => {
+          const llm = getMock();
+          llm.on({ endpoint: 'chat' }, { content: 'Your order has shipped.' });
+          const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url}/v1` });
+          const agent = new Agent({
+            id: 'observed-cleanup-policy',
+            name: 'Order support',
+            instructions: 'Help with orders.',
+            model: openai('gpt-4o'),
+            durable: explicit ? { cleanupTimeoutMs: 0 } : true,
+          });
+          const earlyObserver = await agent.observe('before-registration');
+          earlyObserver.detach();
+          const mastra = new Mastra({
+            logger: false,
+            serverCache: new InMemoryServerCache(),
+            durable: { executionEngine, cleanupTimeoutMs: 100 },
+            ...(registration === 'constructor' ? { agents: { agent } } : {}),
+          });
+          if (registration === 'addAgent') mastra.addAgent(agent);
+          const runId = crypto.randomUUID();
+          try {
+            const output = await agent.stream('Where is my order?', { runId });
+            await output.consumeStream();
+            expect(await output.text).toBe('Your order has shipped.');
+            const pubsub = agent.__getStreamBus()!.pubsub;
+            if (explicit) {
+              await new Promise(resolve => setTimeout(resolve, 200));
+              const observer = await agent.observe(runId);
+              try {
+                expect(await observer.output.text).toBe('Your order has shipped.');
+              } finally {
+                observer.detach();
+              }
+            } else {
+              await vi.waitFor(async () => {
+                expect(await pubsub.getHistory(AGENT_STREAM_TOPIC(runId))).toEqual([]);
+              });
+            }
+          } finally {
+            await mastra.shutdown();
+          }
+        },
+      );
     }
   }
 

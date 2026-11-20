@@ -45,6 +45,15 @@
     "qwen3.8-max"
   ],
   "reasoning": {
+    "ember-1": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "max"]
+      }
+    ],
     "deepseek-v4.1-flash-original": [
       {
         "type": "toggle"
@@ -54,7 +63,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3": [
+    "minimax-m3": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "deepseek-v4.1-flash-1017": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -66,28 +84,7 @@
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "muse-spark-open": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "glm-5.3-flash-abliterated": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "kimi-k3": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "max"]
-      }
-    ],
-    "ember-1": [
       {
         "type": "toggle"
       },
@@ -108,22 +105,22 @@
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "minimax-m3": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "deepseek-v4.1-flash-1017-ultrafast": [
+    "kimi-k3-fast": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high", "max"]
       }
     ],
-    "glm-5.3-flash": [
+    "muse-spark-open": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "glm-5.3-flash-abliterated": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -138,16 +135,19 @@
         "values": ["low", "medium", "high", "max"]
       }
     ],
-    "kimi-k3-fast": [
-      {
-        "type": "toggle"
-      },
+    "glm-5.3-flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-v4.1-flash-1017": [
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek-v4.1-flash-1017-ultrafast": [
       {
         "type": "toggle"
       },

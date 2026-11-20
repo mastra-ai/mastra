@@ -2432,6 +2432,13 @@ export class WorkflowEventProcessor extends EventProcessor {
       loaded !== undefined
         ? loaded
         : await store.loadWorkflowSnapshot({ workflowName: args.workflowId, runId: args.runId });
+    const entry = args.executionPath.length > 1 ? args.workflow.stepGraph[args.executionPath[0]!] : undefined;
+    const siblings =
+      entry?.type === 'parallel' || entry?.type === 'conditional'
+        ? entry.steps.flatMap((branch, idx) =>
+            idx !== args.executionPath[1] && isSingleStepEntry(branch) ? [getSingleStepEntryId(branch)] : [],
+          )
+        : undefined;
     const outcome = finishedOccurrence({
       step,
       executionPath: args.executionPath,
@@ -2440,6 +2447,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       snapshot,
       stepGuards: store.supportsWorkflowStepGuards(),
       guarded: deferToGuards && this.#guardsStepStart(store, args, step),
+      siblings,
     });
     if (outcome === 'run' || outcome === 'drop') {
       return outcome;
