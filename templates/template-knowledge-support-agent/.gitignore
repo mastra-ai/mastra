@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.mastra/
+coverage/
+.env
+.env.*
+!.env.example
+*.db
+*.db-*

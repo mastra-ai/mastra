@@ -1,0 +1,24 @@
+{
+  "name": "template-knowledge-support-agent",
+  "version": "1.0.0",
+  "description": "A local support agent template powered by Mastra Knowledge.",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": "^22.19.0 || >=24.11.0"
+  },
+  "scripts": {
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check ."
+  },
+  "dependencies": {
+    "@mastra/core": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "mastra": "latest",
+    "oxfmt": "0.59.0",
+    "typescript": "^5.9.3"
+  }
+}
