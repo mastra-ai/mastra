@@ -5,6 +5,7 @@
   --duration-slow: 300ms;
 
   --ease-out-custom: cubic-bezier(0.33, 1, 0.68, 1);
+  --ease-in-out-custom: cubic-bezier(0.77, 0, 0.175, 1);
 }
 
 :root {

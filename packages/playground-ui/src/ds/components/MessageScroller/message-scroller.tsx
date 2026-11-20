@@ -1,5 +1,6 @@
 import * as React from 'react';
 
+import './message-scroller-button.css';
 import {
   AUTO_SCROLL_ATTACH_THRESHOLD,
   DEFAULT_REACH_START_THRESHOLD,
@@ -862,13 +863,25 @@ MessageScrollerItem.displayName = 'MessageScrollerItem';
 
 export type MessageScrollerButtonProps = Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'children'> & {
   behavior?: ScrollBehavior;
+  /** The reply is still streaming in below: the button grows a pulsing "•••" beside its arrow. */
+  busy?: boolean;
   children?: React.ReactNode;
   direction?: MessageScrollerButtonDirection;
 };
 
 export const MessageScrollerButton = React.forwardRef<HTMLButtonElement, MessageScrollerButtonProps>(
   (
-    { behavior = 'smooth', direction = 'end', className, children, onClick, tabIndex, type = 'button', ...props },
+    {
+      behavior = 'smooth',
+      busy = false,
+      direction = 'end',
+      className,
+      children,
+      onClick,
+      tabIndex,
+      type = 'button',
+      ...props
+    },
     ref,
   ) => {
     const { scrollToEnd, scrollToStart } = useRequiredMessageScrollerActionsContext('MessageScrollerButton');
@@ -883,10 +896,11 @@ export const MessageScrollerButton = React.forwardRef<HTMLButtonElement, Message
         data-slot="message-scroller-button"
         data-active={active ? 'true' : 'false'}
         data-direction={direction}
+        data-busy={busy ? 'true' : 'false'}
         tabIndex={active ? tabIndex : -1}
         className={cn(
           overlaySurfaceStyle,
-          'absolute inset-s-1/2 inline-flex min-h-5 min-w-7 -translate-x-1/2 items-center justify-center rounded-full text-foreground transition-[scale,opacity] duration-200 hover:[--surface-tint:var(--fill-subtle)] data-[active=false]:pointer-events-none data-[active=false]:scale-95 data-[active=false]:opacity-0 data-[active=false]:duration-400 data-[active=false]:ease-[cubic-bezier(0.7,0,0.84,0)] data-[active=true]:scale-100 data-[active=true]:opacity-100 data-[active=true]:ease-[cubic-bezier(0.23,1,0.32,1)] data-[direction=end]:bottom-4 data-[direction=start]:top-4 rtl:translate-x-1/2 data-[direction=start]:[&_svg]:rotate-180',
+          'absolute inset-s-1/2 inline-flex h-control-lg min-w-control-lg -translate-x-1/2 items-center justify-center rounded-full px-1.5 text-foreground transition-[scale,opacity] duration-200 hover:[--surface-tint:var(--fill-subtle)] data-[active=false]:pointer-events-none data-[active=false]:scale-95 data-[active=false]:opacity-0 data-[active=false]:duration-400 data-[active=false]:ease-[cubic-bezier(0.7,0,0.84,0)] data-[active=true]:scale-100 data-[active=true]:opacity-100 data-[active=true]:ease-[cubic-bezier(0.23,1,0.32,1)] data-[direction=end]:bottom-4 data-[direction=start]:top-4 rtl:translate-x-1/2 data-[direction=start]:[&_svg]:rotate-180',
           className,
         )}
         onClick={event => {
@@ -904,6 +918,13 @@ export const MessageScrollerButton = React.forwardRef<HTMLButtonElement, Message
         {children ?? (
           <>
             <IconArrowDown className="size-icon-md" aria-hidden />
+            <span data-slot="message-scroller-button-activity" aria-hidden>
+              <span>
+                <span />
+                <span />
+                <span />
+              </span>
+            </span>
             <span className="sr-only">{direction === 'end' ? 'Scroll to end' : 'Scroll to start'}</span>
           </>
         )}

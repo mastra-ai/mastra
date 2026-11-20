@@ -95,12 +95,12 @@ export function ModelPicker({
         <>
           <span className="sr-only">Model: </span>
           {value?.provider ? <span className="flex shrink-0">{renderProviderIcon(value.provider)}</span> : null}
-          <span className="truncate max-sm:max-w-28">
+          <span className="truncate max-sm:max-w-28" data-composer-line-hidden>
             {value?.model ? formatModelName(value.model) : 'Select model'}
           </span>
         </>
       )}
-      <IconChevronDownMedium aria-hidden className="size-icon-xs shrink-0" />
+      <IconChevronDownMedium aria-hidden className="size-icon-xs shrink-0" data-composer-line-hidden />
     </>
   );
 

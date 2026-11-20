@@ -227,18 +227,15 @@ describe("a teammate's Factory session", () => {
       openWardSessionAs('user-damien');
       const user = userEvent.setup();
 
+      const credentialNote = 'Your messages use Ward Peeters’s OpenAI API key.';
       const model = await screen.findByRole('button', {
-        name: `Session model: GPT-4o Mini. Thinking: Medium. ${lockedReason}`,
+        name: `Session model: GPT-4o Mini. Thinking: Medium. ${lockedReason} ${credentialNote}`,
       });
       expect(model).toHaveAttribute('aria-disabled', 'true');
-      expect(
-        screen.getByRole('button', {
-          name: 'OpenAI API key. Ward Peeters (session owner). Your messages use Ward Peeters’s OpenAI API key',
-        }),
-      ).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^OpenAI API key\./ })).not.toBeInTheDocument();
 
       await user.hover(model);
-      expect(await screen.findByRole('tooltip')).toHaveTextContent(lockedReason);
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(`${lockedReason} ${credentialNote}`);
       await user.click(model);
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });

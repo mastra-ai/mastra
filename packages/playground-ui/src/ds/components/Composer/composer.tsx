@@ -1,16 +1,20 @@
 import type { ComponentProps } from 'react';
 import { use } from 'react';
 
+import { ActivityWick } from '../Activity';
 import { ChatShellComposerInputContext } from '../ChatShell/chat-shell-context';
 import { ScrollArea } from '../ScrollArea';
-import { useComposerPointer } from './use-composer-pointer';
+import { useComposerEngagement } from './use-composer-engagement';
+import { useComposerStatusPresence } from './use-composer-status-presence';
 import { textFieldAutofillProps } from '@/ds/primitives/password-manager-autofill';
 import { mergeRefs } from '@/lib/merge-refs';
 import { cn } from '@/lib/utils';
 
 import './composer.css';
+import './composer-line.css';
 import './composer-ring.css';
 import './composer-sending.css';
+import './composer-status.css';
 
 export type ComposerProps = ComponentProps<'form'>;
 
@@ -19,9 +23,24 @@ export interface ComposerInputProps extends ComponentProps<'textarea'> {
   maxHeight?: string;
 }
 
-/** Positioned so an overlay `ComposerHeader` can anchor to its top edge. */
-export function Composer({ className, ...props }: ComposerProps) {
-  return <form data-slot="composer" className={cn('relative', className)} {...props} />;
+/**
+ * One line until the input is focused or holds a draft, then opens a row above the actions for the
+ * input. Positioned so an overlay `ComposerHeader` can anchor to its top edge.
+ */
+export function Composer({ ref, className, onFocus, ...props }: ComposerProps) {
+  const engagement = useComposerEngagement();
+  return (
+    <form
+      ref={mergeRefs(ref, engagement.rootRef)}
+      data-slot="composer"
+      className={cn('relative', className)}
+      onFocus={event => {
+        onFocus?.(event);
+        engagement.onFocus(event);
+      }}
+      {...props}
+    />
+  );
 }
 
 export interface ComposerBoxProps extends ComponentProps<'div'> {
@@ -33,15 +52,16 @@ export function ComposerBox({ children, className, sendingPulseKey = 0, ...props
     <div
       data-slot="composer-box"
       className={cn(
-        // The suggestions list and the input scroll flush with the top corners, so their scrollbars
-        // take the inset for this radius.
-        'composer-box @container relative mx-auto mt-auto w-full max-w-3xl overflow-hidden rounded-[22px] border border-border transition-colors duration-normal scrollbar-inset-[22px] focus-within:border-border-strong',
+        // Content sits on the bottom edge, so the action row stays put while the box grows or shrinks above it.
+        'composer-box @container relative mx-auto mt-auto flex w-full max-w-3xl flex-col justify-end overflow-hidden rounded-(--composer-radius)',
         className,
       )}
       {...props}
     >
       <ComposerSendingPulse pulseKey={sendingPulseKey} />
-      <div className="relative z-10">{children}</div>
+      <div data-slot="composer-box-content" className="relative z-10">
+        {children}
+      </div>
     </div>
   );
 }
@@ -53,34 +73,20 @@ export interface ComposerRingProps extends ComponentProps<'div'> {
   tone?: ComposerTone;
 }
 
-export function ComposerRing({
-  busy = false,
-  tone = 'green',
-  className,
-  style,
-  onPointerEnter,
-  onPointerMove,
-  ...props
-}: ComposerRingProps) {
-  const { trackPointer, pointerStyle } = useComposerPointer(!busy);
-
+export function ComposerRing({ busy = false, tone = 'green', className, children, ...props }: ComposerRingProps) {
   return (
     <div
       data-slot="composer-ring"
       data-composer-tone={tone}
       data-busy={busy ? 'true' : 'false'}
-      className={cn('composer-ring relative mx-auto w-full max-w-3xl rounded-[23px] p-px', className)}
-      style={{ ...pointerStyle, ...style }}
-      onPointerEnter={event => {
-        onPointerEnter?.(event);
-        trackPointer(event);
-      }}
-      onPointerMove={event => {
-        onPointerMove?.(event);
-        trackPointer(event);
-      }}
+      className={cn('composer-ring relative mx-auto w-full max-w-3xl rounded-(--composer-radius)', className)}
       {...props}
-    />
+    >
+      <span aria-hidden="true" className="composer-ring-wick">
+        <ActivityWick status="working" />
+      </span>
+      {children}
+    </div>
   );
 }
 
@@ -109,6 +115,7 @@ export function ComposerInput({
       <textarea
         ref={mergeRefs(ref, shellInputRef)}
         data-slot="composer-input"
+        data-variant={variant}
         className={cn(
           'field-sizing-content w-full resize-none overflow-hidden bg-transparent px-3 pt-2.5 pb-2 text-body zoom-safe-text text-muted-foreground outline-hidden placeholder:text-placeholder focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50',
           variant === 'textarea' ? 'min-h-28' : 'min-h-10',
@@ -126,7 +133,10 @@ export function ComposerActions({ className, ...props }: ComponentProps<'div'>) 
     <div
       role="region"
       data-slot="composer-actions"
-      className={cn('flex w-full flex-wrap items-end justify-between gap-2 px-3 pb-3', className)}
+      className={cn(
+        'flex w-full flex-wrap items-end justify-between gap-2 px-(--composer-inset) pb-(--composer-inset)',
+        className,
+      )}
       {...props}
     />
   );
@@ -143,29 +153,59 @@ export function ComposerActionsStart({ className, ...props }: ComponentProps<'di
   );
 }
 
-/** Trailing actions: model, voice, and the primary Send action last. Stays right-aligned when alone. */
+/** Trailing actions: model, voice, and the primary Send action last. Right-aligned; labels truncate instead of wrapping. */
 export function ComposerActionsEnd({ className, ...props }: ComponentProps<'div'>) {
   return (
     <div
       data-slot="composer-actions-end"
-      className={cn('ml-auto flex max-w-full min-w-0 items-center justify-end gap-1.5', className)}
+      className={cn('flex min-w-0 flex-[1_1_0] items-center justify-end gap-1.5', className)}
       {...props}
     />
   );
 }
 
+/** Actions that only show once the composer opens, such as model settings. */
+export function ComposerActionsDetail({ className, ...props }: ComponentProps<'div'>) {
+  return <div data-slot="composer-actions-detail" className={cn('contents', className)} {...props} />;
+}
+
 /**
- * Session status above the composer, outside the input box: right-aligned, wraps on narrow screens,
- * and takes no space when nothing renders inside it.
+ * Session status footer below the composer, outside the input box. Holds one control's height while
+ * it has something to show and gives the row back when it doesn't. Opening the composer never
+ * changes it, so the composer's bottom edge stays put.
  */
-export function ComposerStatus({ className, ...props }: ComponentProps<'div'>) {
+export function ComposerStatus({ ref, className, ...props }: ComponentProps<'div'>) {
+  const statusRef = useComposerStatusPresence();
   return (
     <div
+      ref={mergeRefs(ref, statusRef)}
       data-slot="composer-status"
       className={cn(
-        'mx-auto flex w-full max-w-3xl min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1 px-3 text-caption text-muted-foreground empty:hidden',
+        'mx-auto flex min-h-control-sm w-full max-w-3xl min-w-0 items-center gap-3 px-3 text-caption text-muted-foreground',
         className,
       )}
+      {...props}
+    />
+  );
+}
+
+/** Who and what the session is doing, such as who is steering it. Truncates before the end group. */
+export function ComposerStatusStart({ className, ...props }: ComponentProps<'div'>) {
+  return (
+    <div
+      data-slot="composer-status-start"
+      className={cn('flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1', className)}
+      {...props}
+    />
+  );
+}
+
+/** Runtime readings, such as token rate and memory budgets. Stays right-aligned when alone. */
+export function ComposerStatusEnd({ className, ...props }: ComponentProps<'div'>) {
+  return (
+    <div
+      data-slot="composer-status-end"
+      className={cn('ml-auto flex shrink-0 items-center gap-3', className)}
       {...props}
     />
   );

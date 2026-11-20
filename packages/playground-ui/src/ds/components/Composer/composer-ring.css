@@ -1,95 +1,93 @@
-@property --composer-ring-angle {
-  syntax: '<angle>';
-  inherits: false;
-  initial-value: 0deg;
+@property --composer-ring-lift {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 0%;
 }
 
-@property --composer-ring-spin {
-  syntax: '<angle>';
-  inherits: false;
-  initial-value: 0deg;
-}
-
-@property --composer-ring-strength {
-  syntax: '<number>';
-  inherits: false;
-  initial-value: 0;
-}
-
+/*
+ * Top-lit rim: a gradient laid on the box's 1px shadow rim, fading out down the sides. Drawn by a
+ * masked pseudo-element rather than a border, so it adds no line and no layout.
+ */
 .composer-ring {
-  --composer-ring-color: var(--composer-tone-color);
-  --composer-ring-edge: color-mix(in oklab, var(--placeholder) 40%, transparent);
-  --composer-spotlight-x: 50%;
-  --composer-spotlight-y: 50%;
-  --composer-spotlight-strength: 0;
+  --composer-ring-lit: var(--foreground);
+  --composer-ring-lift-rest: 5%;
+  --composer-ring-lift-hover: 10%;
+  --composer-ring-lift-focus: 14%;
+  --composer-ring-lift: var(--composer-ring-lift-rest);
 
-  background-color: var(--composer-ring-edge);
-  background-image: conic-gradient(
-    from calc(var(--composer-ring-angle) + var(--composer-ring-spin) - 60deg),
-    transparent 0deg,
-    color-mix(in oklab, var(--composer-ring-color) calc(var(--composer-ring-strength) * 100%), transparent) 60deg,
-    transparent 120deg
-  );
-  transition:
-    --composer-ring-strength 320ms ease-out,
-    box-shadow 320ms ease-out;
-}
+  transition: --composer-ring-lift var(--duration-normal) var(--ease-out-custom);
 
-.composer-ring > [data-slot='composer-box'] {
-  border: 0;
-}
-
-.composer-ring:focus-within {
-  background-color: var(--border-strong);
+  &::before {
+    pointer-events: none;
+    position: absolute;
+    z-index: 1;
+    inset: -1px;
+    padding: 1px;
+    border-radius: calc(var(--composer-radius) + 1px);
+    background: linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--composer-ring-lit) var(--composer-ring-lift), transparent),
+      transparent 70%
+    );
+    mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    content: '';
+  }
 }
 
 @media (hover: hover) {
   .composer-ring:hover {
-    --composer-ring-strength: 0.4;
-  }
-
-  .composer-ring[data-busy='false']:hover {
-    --composer-spotlight-strength: 1;
+    --composer-ring-lift: var(--composer-ring-lift-hover);
   }
 }
 
-.composer-ring[data-busy='true'] {
-  --composer-ring-strength: 0.65;
-
-  animation: composer-ring-spin 2.4s linear infinite;
-  box-shadow: 0 4px 20px -4px color-mix(in oklab, var(--composer-ring-color) 12%, transparent);
+.composer-ring:focus-within {
+  --composer-ring-lift: var(--composer-ring-lift-focus);
 }
 
-@keyframes composer-ring-spin {
-  from {
-    --composer-ring-spin: 0deg;
-  }
+html.light .composer-ring {
+  --composer-ring-lit: var(--border-strong);
+  --composer-ring-lift-rest: 14%;
+  --composer-ring-lift-hover: 24%;
+  --composer-ring-lift-focus: 32%;
+}
 
-  to {
-    --composer-ring-spin: 360deg;
+.composer-ring-wick {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity var(--duration-slow) var(--ease-out-custom);
+
+  & > .session-wick {
+    --belt-hue: var(--composer-tone-color);
+
+    animation-play-state: paused;
+  }
+}
+
+.composer-ring[data-busy='true'] > .composer-ring-wick {
+  opacity: 1;
+
+  & > .session-wick {
+    animation-play-state: running;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .composer-ring {
+  .composer-ring,
+  .composer-ring-wick {
     transition: none;
   }
-
-  .composer-ring[data-busy='true'] {
-    animation: none;
-  }
-}
-
-html.light .composer-ring {
-  --composer-ring-edge: color-mix(in oklab, var(--border-strong) 40%, transparent);
 }
 
 @media (forced-colors: active) {
-  .composer-ring {
-    outline: 1px solid CanvasText;
-  }
-
-  .composer-ring:focus-within {
-    outline: 2px solid Highlight;
+  .composer-ring::before,
+  .composer-ring-wick {
+    display: none;
   }
 }
