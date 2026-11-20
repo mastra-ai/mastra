@@ -52,7 +52,7 @@ function alert(
   };
 }
 
-async function setup(options: Pick<PlatformAlertRulesOptions, 'onThreadAttached'> = {}) {
+async function setup(options: Pick<PlatformAlertRulesOptions, 'onThreadAttached' | 'onRecovered' | 'rules'> = {}) {
   const seeded = await createFactoryStorageForTests();
   const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'acme/app' } });
   const boards = createBoardRegistry();
@@ -63,7 +63,7 @@ async function setup(options: Pick<PlatformAlertRulesOptions, 'onThreadAttached'
     configVersion: 'factory-config-v1',
     boards,
     now: () => new Date(now),
-    ...(options.onThreadAttached ? { onThreadAttached: options.onThreadAttached } : {}),
+    ...options,
   });
   const dispatcher = new FactoryDecisionDispatcher({
     controller: {} as never,
@@ -242,5 +242,89 @@ describe('PlatformAlertRules', () => {
     const [card] = await cards();
     expect(timeline(card!)).toEqual(['fired', 'recovered']);
     expect(state(card!).incidents.i1?.resolvedAt).not.toBeNull();
+  });
+
+  it('keeps both initial fires that raced to file the card', async () => {
+    const { ingest, drain, cards, state, timeline } = await setup();
+    await expect(ingest(alert('alert.opened', 'i1'))).resolves.toEqual({ status: 'pending' });
+    await expect(ingest(alert('alert.opened', 'i2'), T0 + MIN)).resolves.toEqual({ status: 'pending' });
+    await drain();
+    await expect(ingest(alert('alert.opened', 'i1'), T0 + 2 * MIN)).resolves.toMatchObject({ status: 'replayed' });
+    await expect(ingest(alert('alert.opened', 'i2'), T0 + 2 * MIN)).resolves.toMatchObject({
+      status: 'committed',
+      created: false,
+    });
+    await expect(ingest(alert('alert.opened', 'i2'), T0 + 3 * MIN)).resolves.toMatchObject({ status: 'replayed' });
+    const [card, ...rest] = await cards();
+    expect(rest).toHaveLength(0);
+    expect(state(card!)).toMatchObject({ fireCount: 2 });
+    expect(Object.keys(state(card!).incidents).sort()).toEqual(['i1', 'i2']);
+    expect(timeline(card!)).toEqual(['fired', 'flapping']);
+  });
+
+  it("attaches a first fire's Slack thread once its card is filed", async () => {
+    const onThreadAttached = vi.fn(async () => {});
+    const { seeded, ingest, drain, cards } = await setup({ onThreadAttached });
+    const opened = { ...alert('alert.opened', 'i1'), slack: { teamId: 'T1', channelId: 'C1', ts: '1700.1' } };
+    await expect(ingest(opened)).resolves.toEqual({ status: 'pending' });
+    await drain();
+    await expect(ingest(opened, T0 + MIN)).resolves.toMatchObject({ status: 'replayed' });
+    const [card] = await cards();
+    const found = await findAlertCardForThread(seeded.workItems, { teamId: 'T1', threadId: 'slack:C1:1700.1' });
+    expect(found?.id).toBe(card!.id);
+    expect(onThreadAttached).toHaveBeenCalledTimes(1);
+  });
+
+  it('attaches the Slack thread on a redelivery after the attach failed', async () => {
+    const { seeded, ingest, drain } = await setup();
+    await ingest(alert('alert.opened', 'i1'));
+    await drain();
+    vi.spyOn(seeded.workItems, 'attachSource').mockRejectedValueOnce(new Error('database went away'));
+    const linked = { ...alert('alert.thread_linked', 'i1'), slack: { teamId: 'T1', channelId: 'C1', ts: '1700.1' } };
+    await expect(ingest(linked, T0 + MIN)).rejects.toThrow('database went away');
+    expect(await findAlertCardForThread(seeded.workItems, { teamId: 'T1', threadId: 'slack:C1:1700.1' })).toBeNull();
+    await expect(ingest(linked, T0 + 2 * MIN)).resolves.toMatchObject({ status: 'replayed' });
+    expect(await findAlertCardForThread(seeded.workItems, { teamId: 'T1', threadId: 'slack:C1:1700.1' })).not.toBeNull();
+  });
+
+  it('lands a late resolve on the card that filed its incident, not the newer one', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: T0 + MIN });
+    onTestFinished(() => vi.useRealTimers());
+    const { seeded, ingest, drain, cards, timeline } = await setup();
+    await ingest(alert('alert.opened', 'i1'));
+    await drain();
+    const [first] = await cards();
+    await seeded.workItems.update({ orgId: 'org-1', id: first!.id, userId: 'user-1', patch: { stages: ['done'] } });
+    await ingest(alert('alert.opened', 'i2'), T0 + 12 * DAY);
+    await drain();
+
+    await expect(ingest(alert('alert.resolved', 'i1'), T0 + 12 * DAY + MIN)).resolves.toMatchObject({
+      status: 'committed',
+      workItemId: first!.id,
+    });
+    const all = await cards();
+    const second = all.find(card => card.id !== first!.id)!;
+    expect(timeline(all.find(card => card.id === first!.id)!)).toEqual(['fired', 'recovered']);
+    expect(timeline(second)).toEqual(['fired']);
+  });
+
+  it("doesn't hold the event when the rules accept a first fire but file no card", async () => {
+    const { ingest, drain, cards } = await setup({ rules: { alertOpened: () => undefined } });
+    await expect(ingest(alert('alert.opened', 'i1'))).resolves.toEqual({ status: 'rejected', code: 'not_filed' });
+    await drain();
+    await expect(ingest(alert('alert.opened', 'i1'))).resolves.toEqual({ status: 'rejected', code: 'not_filed' });
+    expect(await cards()).toHaveLength(0);
+  });
+
+  it('reports a recovery only for the event that records it, and survives a hook that throws', async () => {
+    const onRecovered = vi.fn((): Promise<void> => {
+      throw new Error('slack down');
+    });
+    const { ingest, drain } = await setup({ onRecovered });
+    await ingest(alert('alert.opened', 'i1'));
+    await drain();
+    await expect(ingest(alert('alert.resolved', 'i1'), T0 + MIN)).resolves.toMatchObject({ status: 'committed' });
+    await expect(ingest(alert('alert.resolved', 'i2'), T0 + 2 * MIN)).resolves.toMatchObject({ status: 'committed' });
+    expect(onRecovered).toHaveBeenCalledTimes(1);
   });
 });

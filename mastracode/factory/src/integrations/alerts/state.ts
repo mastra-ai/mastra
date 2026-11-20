@@ -75,6 +75,8 @@ export type AlertPlan =
       reopen: boolean;
       /** Set when this event first gives the card its Slack thread. */
       bindThread?: AlertSlackThread;
+      /** Set when this event records an incident's recovery. */
+      recovered?: true;
     };
 
 /** `rule:<id>` or `fp:<fingerprint>`. Per-group alerts would extend this (`rule:<id>:g:<hash>`); not built. */
@@ -125,10 +127,15 @@ function firedAt(event: PlatformAlertEvent): number {
   return Date.parse(event.incident.openedAt);
 }
 
-function newCard(input: PlanAlertEventInput, generation: number, previousCardId?: string): AlertPlan {
+function newCard(
+  input: PlanAlertEventInput,
+  generation: number,
+  previous?: { cardId: string; resolvedAt: string | null },
+): AlertPlan {
   const { event, now } = input;
   const at = now.toISOString();
-  const resolvedAt = input.resolvedEarly ?? event.incident.resolvedAt;
+  const resolvedAt = previous?.resolvedAt ?? input.resolvedEarly ?? event.incident.resolvedAt;
+  const previousCardId = previous?.cardId;
   const state: AlertCardState = {
     workKey: alertWorkKey(event.workKey),
     generation,
@@ -251,7 +258,7 @@ export function planAlertEvent(input: PlanAlertEventInput): AlertPlan {
         return { kind: 'reject', code: 'org_hourly_cap', reason: 'Organization passed its hourly alert cap.' };
       }
       const known = card?.state.incidents[event.incident.id];
-      if (event.type === 'alert.severity_raised' && card && known) {
+      if (event.type === 'alert.severity_raised' && card && known?.openedAt) {
         const bind = threadToBind(card, event);
         return {
           kind: 'update',
@@ -287,7 +294,7 @@ export function planAlertEvent(input: PlanAlertEventInput): AlertPlan {
       }
       if (!card) return newCard(input, 1);
       if (known?.openedAt) {
-        // The same incident again (a re-sent `opened`): nothing new happened. (a re-sent `opened`): nothing new happened.
+        // The same incident again (a re-sent `opened`): nothing new happened.
         return {
           kind: 'update',
           state: { ...card.state, seenEventIds: seen(card.state, event.eventId) },
@@ -296,7 +303,8 @@ export function planAlertEvent(input: PlanAlertEventInput): AlertPlan {
         };
       }
       if (card.terminal && card.terminalSince && firedAt(event) - Date.parse(card.terminalSince) > cooldownMs) {
-        return newCard(input, card.state.generation + 1, card.id);
+        // A resolve the closed card held for this incident carries over to the new one.
+        return newCard(input, card.state.generation + 1, { cardId: card.id, resolvedAt: known?.resolvedAt ?? null });
       }
       return fire(input, card);
     }
@@ -334,7 +342,7 @@ export function planAlertEvent(input: PlanAlertEventInput): AlertPlan {
               text: `${label(event)} recovered.`,
               incidentId: event.incident.id,
             });
-      return { kind: 'update', state, timeline, reopen: false };
+      return { kind: 'update', state, timeline, reopen: false, recovered: true };
     }
     case 'alert.thread_linked': {
       if (!card) return { kind: 'noop', reason: 'no_card' };
