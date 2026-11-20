@@ -28,6 +28,7 @@ import type { DefaultExecutionEngine } from '../default';
 import { workflowChildTermination as workflowTermination } from '../execution-outcome';
 import { buildStepResultAccessors } from '../run-journal';
 import type { ParentStateLink } from '../run-journal';
+import { currentWorkflowRunClaim } from '../run-ownership';
 import type { Step, SuspendOptions } from '../step';
 import type {
   ExecutionContext,
@@ -212,6 +213,10 @@ export async function executeStep(
     status: 'running',
     ...(iterationCount ? { metadata: { iterationCount } } : {}),
   };
+
+  // A step body never starts, or announces a start, on a run another process took over. Foreach
+  // items and runs that don't persist `running` write nothing first, so this check is what stops them.
+  await currentWorkflowRunClaim(runId)?.ensureOwned();
 
   executionContext.activeStepsPath[step.id] = executionContext.executionPath;
 
@@ -708,6 +713,9 @@ export async function executeStep(
     },
     { retries, delay, stepSpan, workflowId, runId },
   );
+
+  // The run was taken over while the body ran: publish and record nothing of it.
+  currentWorkflowRunClaim(runId)?.throwIfLost();
 
   // Check if step execution failed
   if (!stepRetryResult.ok) {
