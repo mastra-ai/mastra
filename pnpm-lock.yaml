@@ -6156,6 +6156,9 @@ importers:
       date-fns:
         specifier: 'catalog:'
         version: 4.4.0
+      idb:
+        specifier: ^8.0.4
+        version: 8.0.4
       mdast-util-gfm:
         specifier: ^3.1.0
         version: 3.1.0(supports-color@10.2.2)
