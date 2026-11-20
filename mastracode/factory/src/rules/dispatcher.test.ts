@@ -5464,6 +5464,45 @@ describe('FactoryDecisionDispatcher', () => {
     expect(await provider.counts({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toMatchObject({ open: 0 });
   });
 
+  // A board refusal is deterministic: retrying it with backoff only delayed the person who has to look.
+  it('fails a rule move the board refuses on the first attempt and pages a person', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      ingress: { identity: 'skip-planning' },
+      expectedRevision: item.revision,
+      actor: { type: 'system', id: 'board-rule' },
+      outcome: { status: 'accepted' },
+      // Work declares no edge from Intake straight into Building.
+      decisions: [{ type: 'transition', board: 'work', stage: 'execute', idempotencyKey: 'skip-planning' }],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+    const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(decision).toMatchObject({
+      status: 'failed',
+      attempts: 1,
+      lastError: expect.stringContaining('invalid_transition'),
+    });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['intake']);
+    const provider = new DecisionAttentionProvider({ workItems: storage }, failedDecisionAttentionSpec);
+    expect(await provider.counts({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toMatchObject({ open: 1 });
+  });
+
   // Trust decides only where a card arrives (the default intake route keeps outside work in Intake).
   // Once a person has armed a card, its runs start like any other card's.
   it('runs an externally authored card a person armed, on a board whose phases start on their own', async () => {

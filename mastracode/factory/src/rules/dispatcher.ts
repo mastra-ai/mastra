@@ -1266,7 +1266,8 @@ export class FactoryDecisionDispatcher {
         return;
       }
       const failureCode = factoryDispatchFailureCode(error);
-      const terminal = isTerminalFailure(record.attempts, failureCode);
+      const terminal =
+        isTerminalFailure(record.attempts, failureCode) || (error instanceof FactoryRuleRejectedError && error.settled);
       const failed = await this.#storage.failDeferredDecision({
         ...leaseIdentity(record, this.#ownerId),
         now: new Date(),
@@ -2659,7 +2660,11 @@ export class FactoryDecisionDispatcher {
       // queues waits for a person just as a rule's move does.
       ...(decision.event && untrustedPullRequestEvent(decision.event) ? { untrustedPullRequestEvent: true } : {}),
     });
-    if (result.status === 'rejected') throw new FactoryRuleRejectedError(result.code, result.reason);
+    // The refusal is recorded under this decision's fixed ingress, so a retry replays it
+    // unchanged; only a stale refusal is left unrecorded for a retry at the new revision.
+    if (result.status === 'rejected') {
+      throw new FactoryRuleRejectedError(result.code, result.reason, result.code !== 'stale');
+    }
     const transitionMessage = decision.message;
     if (!transitionMessage) return;
     // The message may wake an idle session and hold it for a whole agent
