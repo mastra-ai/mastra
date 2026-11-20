@@ -15,13 +15,13 @@ export function CookieBanner({ onConsentChange }: { onConsentChange: (consent: b
   const [showBanner, setShowBanner] = useState(null)
   const isBrowser = useIsBrowser()
 
-  // Try to use feature flag, but default to true if undefined
-  // This ensures the banner works even if PostHog isn't properly initialized
   const featureFlag = useFeatureFlagEnabled('cookie-banner')
-  const isInEU = featureFlag !== undefined ? featureFlag : false
+  const isRegionResolved = featureFlag !== undefined
+  const isInEU = featureFlag === true
 
   useEffect(() => {
-    if (!isBrowser) return
+    // Do not grant tracking while the regional flag is still loading.
+    if (!isBrowser || !isRegionResolved) return
 
     if (!isInEU) {
       setShowBanner(false)
@@ -57,7 +57,7 @@ export function CookieBanner({ onConsentChange }: { onConsentChange: (consent: b
     } else {
       setShowBanner(true)
     }
-  }, [isInEU, isBrowser])
+  }, [isInEU, isRegionResolved, isBrowser])
 
   const handleAccept = () => {
     localStorage.setItem('cookie-consent', 'true')
