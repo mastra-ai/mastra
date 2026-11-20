@@ -276,6 +276,10 @@ export interface BackgroundTaskManagerConfig {
    *   consumer group and does **not** register the `__background-task` internal
    *   workflow. Use this on the API tier in Option E (fully split) so the API
    *   can dispatch tasks without competing with the dedicated worker process.
+   *   Only portable tasks without invocation-bound context are accepted. Context
+   *   registration throws before enqueue persists a task; enable a local worker
+   *   for closure-backed execution. Fresh durable-agent dispatch uses its existing
+   *   synchronous fallback when admission fails.
    *
    * - `'worker'`: Subscribes to both topics, identical to `'full'`. Exists for
    *   symmetry and documentation clarity on dedicated worker processes.

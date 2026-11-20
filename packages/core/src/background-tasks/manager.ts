@@ -389,6 +389,7 @@ export class BackgroundTaskManager {
   /**
    * Register per-task hooks (executor, stream emitter, result injector).
    * Called internally by createBackgroundTask or directly for advanced usage.
+   * Throws in producer mode: invocation-bound hooks require a local worker.
    */
   registerTaskContext(taskId: string, context: TaskContext): void {
     if (this.config.mode === 'producer') {
