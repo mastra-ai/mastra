@@ -1,71 +1,76 @@
 ---
 name: playground-snapshot-release
-description: Compatibility entry for the retired Playground UI snapshot release. Snapshots are no longer published. Use when a request says playground snapshot, snapshot release, publish a snapshot, or ship a snapshot, and when getting a mastra-ai/mastra change (`@mastra/playground-ui` and its workspace dependencies) into the platform frontend through the published `alpha` dist-tag.
+description: Get a mastra-ai/mastra change (`@mastra/playground-ui` and its workspace dependencies) into the platform frontend, either through a published `alpha` that already contains it or through a temporary snapshot that Platform later promotes to that alpha. Use when asked to release, publish, or ship a playground or studio UI snapshot, or to bump the platform frontend to a Mastra change.
 ---
 
 <overview>
-Snapshot publication is retired. A change reaches the platform frontend only through the `alpha` dist-tag that the scheduled alpha release publishes from `main`. This skill keeps its old name so existing routers still resolve it. It checks whether a change is in a published alpha and what a bump would need. It authorizes no release, push, PR, dependency change, or deploy.
+A snapshot is a temporary pin. Platform's `Promote Snapshot Pins` workflow (`.github/workflows/promote-snapshot-pins.yml`) replaces it with the first alpha whose npm provenance contains the merged source change, and opens a draft PR. It can only do that for snapshots listed in `frontend/mastra-snapshot-sources.json`. Loading this skill authorizes no publish, push, PR, ticket, dependency change, or deploy.
 </overview>
 
 <constraints>
 
-- MUST NOT publish a snapshot, dispatch `publish_type=playground-snapshot`, publish from a custom branch or tag, or fall back to a snapshot because alpha is unavailable.
-- MUST NOT resolve versions from `latest`; that is the stable channel.
-- MUST NOT assume Mastra packages share one version or bump every `@mastra/*` package. Resolve each package the change needs on its own.
-- MUST NOT dispatch workflows, open release or version PRs, or trigger bot pushes without specific approval for that action.
-- MUST NOT hardcode a version or schedule from memory. Read the workflow files and the registry each time.
-- Loading this skill or choosing a branch does not authorize publishing, pushing, PRs, tickets, deploys, merges, or dependency changes. A later bump follows the target repository's contribution rules, including review of UI changes and a covering ticket.
+- MUST NOT dispatch any publish workflow without the user's explicit confirmation right before the dispatch. Publishing creates immutable npm versions.
+- MUST NOT resolve versions from `latest`; that is the stable channel. Resolve each package on its own and never force Mastra packages to one version.
+- MUST NOT retry a failed run, install, or publish on a timer. Report the failure.
+- MUST NOT hardcode versions or schedules from memory. Read the workflow files and the registry each time.
+- A Platform bump follows the target repository's rules: review of UI changes on localhost and a covering Linear ticket before any PR.
 
 </constraints>
 
 <context>
 
-Why alpha only: the reported policy is to avoid mixing different versions of the same package (for example snapshot and alpha), which can install conflicting copies. Not every snapshot necessarily duplicates a package, and no failure is traced here. Private or object-storage delivery alone would not fix version graph inconsistency.
+Why snapshots need promotion: mixing different versions of the same package, for example a snapshot and an alpha, can install conflicting copies. A snapshot that stays pinned keeps that risk, so it is promoted once an alpha includes the change.
 
-How alpha reaches npm, verified against `mastra-ai/mastra` `main`. Re-read these files before relying on them:
+How alpha reaches npm, verified against `mastra-ai/mastra` `main`. Re-read before relying on it:
 
-- `.github/workflows/cron-alpha-publish.yml` (workflow name Cron Alpha Version) runs on a cron and `workflow_dispatch`, on `main` only. It has no package filter input. It runs the full prebuild suite, then versions pending changesets in alpha pre mode. The bot commits `chore: version packages` and pushes `main`.
-- `.github/workflows/npm-publish.yml` has a `prerelease` job. It reacts to that bot push or a manual `publish_type=prerelease` run, verifies alpha pre mode, runs a plain build, then runs `.github/scripts/publish-packages.mjs --tag alpha`. The publisher skips versions already on the registry and uploads only pending unpublished versions. A manual prerelease publishes already assigned versions and does not version new pending changesets.
-- No current input limits an alpha to `@mastra/playground-ui`. The pipeline is repo-wide: build, tests and any pending changesets of other packages and their dependencies can be included. The publisher has an internal `--pnpm-filter-prod` option; it is not an approved way to run a scoped alpha, and changing the release pipeline needs separate approval.
-- `.github/workflows/version-packages.yml` opens or updates the Changesets version PR on pushes to `main`, using the alpha tag and `changeset-cli version` in pre mode. It does not publish. Stable publication is a separate manual workflow.
-
-Consequences:
-
-- A feature merge does not guarantee an instant publish. The schedule and inputs change, so recheck the workflow files each time instead of trusting a remembered cron.
-- A merge to `main` does not publish. The change is available only once a published alpha is proven to include it.
-- Failing tests or no pending version bumps can prevent a fresh alpha. A run does not publish every package every time.
-- An `alpha` tag in the registry is mutable. It does not update a consumer's pinned dependency.
-- Do not assume consumer pins update automatically. Verify consumer updates in the authorized target repository.
+- `.github/workflows/cron-alpha-publish.yml` (Cron Alpha Version) runs on a cron and `workflow_dispatch`, on `main` only, with no package filter. It runs the full suite, versions pending changesets in alpha pre mode, and pushes `chore: version packages`.
+- `.github/workflows/npm-publish.yml` `prerelease` publishes with `--tag alpha` after that push or a manual `publish_type=prerelease` run. The publisher uploads only versions not yet on the registry. A manual prerelease does not version new changesets.
+- The same workflow's `playground-snapshot` mode publishes `@mastra/playground-ui`, `@mastra/observability`, `@mastra/mcp-apps-components` and their workspace dependencies at `0.0.0-<tag>-<timestamp>`. It refuses `main`.
 
 </context>
 
 <workflow>
 
-## Routing a request
+## 1. Pick the route
 
-1. Snapshot requests (publish, release, or ship a snapshot, from any branch). Reject the snapshot route in one sentence, dispatch nothing, and continue with step 2 if the goal is getting a change into the platform frontend.
-2. Confirm the source change has merged to `mastra-ai/mastra` `main`. If it has not, report that it must merge and wait for a normal alpha release. Do not publish from the branch.
-3. List the packages the change touches and the platform frontend actually consumes. Skip the rest.
-4. For each package, read the alpha version with read-only registry metadata, for example `npm view <package> dist-tags.alpha`, or `https://registry.npmjs.org/<package with / as %2f>/alpha`.
-5. Verify the change is in that version. Map the version to the successful `cron-alpha-publish.yml` and `npm-publish.yml` run that published it (`gh run list`, `gh run view`), take that run's source commit or the package provenance, and confirm the commit contains the merge commit (ancestry, for example `git merge-base --is-ancestor`), not exact SHA equality. A null `gitHead` alone is not a blocker when the run, provenance, or package contents corroborate inclusion. Never invent proof.
-6. If an alpha version was already assigned to the change but never published (its publish run failed or never ran), go to step 7. If no version has been assigned and no published alpha contains the change, go to step 8. If a published version exists but its source inclusion cannot be established from any evidence, report the evidence blocker and stop. Do not invent proof or start a new release as an automatic remedy. A registry that lags is not a reason to invent a version, retry on a timer, or publish a snapshot.
-7. For an assigned but unpublished version, identify the assigned version and the failed publish run. Waiting or a new Cron Alpha Version run publishes nothing unless it creates a new version commit. Only after the user explicitly approves, dispatch the publish-only run: `gh workflow run npm-publish.yml --repo mastra-ai/mastra --ref main -f publish_type=prerelease`. Then verify the publication and that it includes the change (step 5). Report a failed run without retrying it automatically.
-8. If no version has been assigned, first check that a pending changeset, or dependency propagation from one, will version the affected package. If none will, report that the change needs a changeset and that adding one needs separate authorization; do not offer waiting or dispatching. Otherwise either wait for the next scheduled run, or, only after the user explicitly approves starting a release, dispatch Cron Alpha Version on `main`. Do not execute it without that approval, and never use a snapshot or custom branch. With approval the command is `gh workflow run cron-alpha-publish.yml --repo mastra-ai/mastra --ref main`. Tell the user it runs the full suite and versions every pending changeset, so other packages and their dependencies may be included. A manual `publish_type=prerelease` run is not the versioning step. Report a failed run without retrying it automatically.
+1. If the change has merged to `main`, check each needed package's `alpha` (`npm view <package> dist-tags.alpha`). Confirm the alpha's npm provenance (`https://registry.npmjs.org/-/npm/v1/attestations/<package>@<version>`) was built by `npm-publish.yml` on `refs/heads/main` from a commit that contains the merge commit (`gh api repos/mastra-ai/mastra/compare/<merge>...<commit>` returns `ahead` or `identical`). A null `gitHead` does not matter. If every package qualifies, skip to step 4 with those versions.
+2. If it has merged but no alpha contains it, either wait, or with the user's explicit approval run `gh workflow run cron-alpha-publish.yml --repo mastra-ai/mastra --ref main`. That runs the full suite and versions every pending changeset. It releases nothing for a package that no pending changeset versions; report a missing changeset instead. Offer a snapshot as the faster path.
+3. Otherwise publish a snapshot (step 2).
 
-## Bumping the platform frontend
+## 2. Publish the snapshot
 
-Only when the dependency change is separately authorized:
+1. Publish from the source PR's own branch in `mastra-ai/mastra`, with its final commits pushed. Promotion is automatic only when the snapshot commit equals the PR head when it merges; a snapshot from `main`, a custom branch, or an older head goes to manual review.
+2. Record the branch, `head_sha=$(git ls-remote origin "refs/heads/$branch" | awk '{print $1}')`, the PR number, and a short kebab-case tag that is not `latest`, `next`, `alpha`, `beta`, `rc` or `stable`.
+3. Show the branch, SHA, PR, and tag, and ask for confirmation. Then dispatch:
 
-1. Pin the exact resolved version per package, never the `alpha` tag, and keep the lockfile consistent with the pins.
-2. Keep scope minimal: no unrelated package or `admin-portal` updates. A compatibility update that the consumed packages' metadata or the task proves necessary is allowed. Do not force every Mastra package to one version.
-3. Inspect the lockfile and resolved dependency graph with the project's native tools (for example `pnpm why` or `pnpm list`) for conflicting versions of the same `@mastra/*` package, especially mixed snapshot and alpha copies. Align consumer constraints on a compatible release where possible. No blanket upgrades, forced overrides or blind dedupe. If incompatible constraints or conflicting versions of one package remain, report and stop before publication; do not mask checks.
-4. Run the project's own install and checks, then follow the Mastra UI review and Linear ticket gates before any PR.
-5. Add a changeset where the repository policy requires one. Merging a changeset alone does not upgrade dependency consumers.
+```bash
+gh workflow run npm-publish.yml --repo mastra-ai/mastra --ref "$branch" \
+  -f publish_type=playground-snapshot -f tag="$tag"
+```
+
+4. Find the run whose `headSha` equals `$head_sha` (`gh run list --workflow npm-publish.yml --branch "$branch" --event workflow_dispatch --json databaseId,headSha,url`), never just the newest, and watch it with `gh run watch <id> --exit-status`.
+5. Read the published versions from the run log (`gh run view <id> --log | grep "Published package @mastra/"`). The registry can lag behind the log.
+
+## 3. Track it
+
+In the Platform bump, add one entry to `frontend/mastra-snapshot-sources.json` listing every `@mastra/*` snapshot pin the bump adds, in any workspace package:
+
+```json
+{ "sourcePr": 12345, "linearIssue": "PLTFRM-1234", "packages": { "@mastra/playground-ui": "0.0.0-tag-20261120000000" } }
+```
+
+The promotion run fails, so someone is emailed, when a snapshot pin has no entry, an entry is invalid or stale, or a snapshot needs manual review.
+
+## 4. Bump Platform
+
+1. Pin exact versions in every workspace package that uses them, never a dist-tag, and update the version-keyed `@mastra/core` overrides in `pnpm-workspace.yaml` that name the old versions.
+2. Run `pnpm install --lockfile-only`, then check with `pnpm why` or `pnpm list` that no `@mastra/*` package resolves to an extra or leftover version. Stop and report if one does. No blanket upgrades, forced overrides or blind dedupe.
+3. Run the project's checks, get localhost review of any UI change, and open the PR only when the user authorizes it.
 
 </workflow>
 
 <format>
 
-Report: packages checked, resolved alpha version per package, the run or SHA evidence that the change is included (or what is missing), and the one next action for the user.
+Report the route taken, each package and version, the provenance or run evidence, the tracking entry when a snapshot was pinned, and the one next action for the user.
 
 </format>
