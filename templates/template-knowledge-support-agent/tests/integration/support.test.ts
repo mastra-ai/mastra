@@ -256,7 +256,7 @@ test('preflight_precedes_model_and_distinguishes_history_outcomes', { timeout: 1
       const unavailable = await thread(f);
       const unavailableStart = f.model.requests.length;
       await turn(f, unavailable, 'network connectivity');
-      assert.equal(history(f.model.requests[unavailableStart]!).status, 'unavailable');
+      assert.equal(history(f.model.requests[unavailableStart]!).status, 'partial');
     } finally {
       await sql(f, 'UPDATE mastra_knowledge_pages SET createdBy = ? WHERE id = ?', [original, broken.page.id]);
     }
@@ -271,7 +271,8 @@ test('preflight_precedes_model_and_distinguishes_history_outcomes', { timeout: 1
     const invalid = await thread(f);
     const invalidStart = f.model.requests.length;
     await turn(f, invalid, 'network connectivity');
-    assert.equal(history(f.model.requests[invalidStart]!).status, 'unavailable');
+    assert.equal(history(f.model.requests[invalidStart]!).status, 'partial');
+    assert.equal(history(f.model.requests[invalidStart]!).records.length, 3);
   } catch (error) {
     console.error(f.output());
     throw error;

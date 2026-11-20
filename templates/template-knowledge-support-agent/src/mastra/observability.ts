@@ -6,6 +6,7 @@ import type { AnyExportedSpan, CostContext, MetricEvent, TracingEvent } from '@m
 export const operations = [
   'authorization',
   'preflight',
+  'history-retrieval',
   'policy',
   'review-proposal',
   'review-decision',
@@ -24,6 +25,7 @@ export const statuses = [
   'ready',
   'empty',
   'no-relevant-records',
+  'partial',
   'unavailable',
   'missing',
   'suspended',
