@@ -11677,6 +11677,12 @@ export class Agent<
       maxIdleMs?: number;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<any>> {
+    if (!this.#resolveExecutionEngine()) {
+      return runResumeStreamUntilIdle(this, resumeData, streamOptions, {
+        activeStreams: this.activeStreamUntilIdle,
+        bgManager: this.#mastra?.backgroundTaskManager,
+      });
+    }
     const { maxIdleMs, structuredOutput, ...options } = streamOptions ?? {};
     const untilIdle = maxIdleMs === undefined ? true : { maxIdleMs };
     if (structuredOutput) {
@@ -16698,15 +16704,16 @@ export class Agent<
       messageId: globalThis.crypto.randomUUID(),
       model: { modelId: undefined, provider: undefined, version: 'v3' },
       offset: options?.offset,
+      closeOnSuspend: options?.closeOnSuspend,
       replayResponseMessagesBeforeOffset: true,
       onChunk: options?.onChunk,
       onStepFinish: options?.onStepFinish,
       onFinish: options?.onFinish,
       onError: options?.onError ? ({ error }) => options.onError!({ error }) : undefined,
       onSuspended: options?.onSuspended,
-      // Suspension is an event, not the end: the resumed run publishes on the
-      // same topic, so the observation follows it to its finish (as for
-      // DurableAgent). Detach to stop observing a parked run.
+      // By default, suspension is an event, not the end: the resumed run
+      // publishes on the same topic, so the observation follows it to its finish.
+      // closeOnSuspend opts out without canceling the underlying run.
       logger: this.logger,
     });
     const { output, detach } = stream;
