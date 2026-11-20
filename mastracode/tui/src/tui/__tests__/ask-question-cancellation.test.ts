@@ -113,6 +113,27 @@ describe('ask_user prompt retraction on tool_suspension_cancelled', () => {
     expect(state.session.respondToToolSuspension).not.toHaveBeenCalled();
   });
 
+  it('reports the retracted question as a dismissed PermissionResult', async () => {
+    const runPermissionResult = vi.fn().mockResolvedValue(undefined);
+    (state as any).hookManager = { runPermissionResult };
+    const promise = handleAskQuestion(ctx, 'q1', 'Your name?');
+
+    emitSessionEvent({
+      type: 'tool_suspension_cancelled',
+      toolCallId: 'q1',
+      toolName: 'ask_user',
+      reason: 'Invalid string length',
+    });
+    await promise;
+
+    expect(runPermissionResult).toHaveBeenCalledTimes(1);
+    expect(runPermissionResult).toHaveBeenCalledWith('ask_question', 'q1', 'ask_user', 'dismissed', {
+      question: 'Your name?',
+      options: undefined,
+      selectionMode: undefined,
+    });
+  });
+
   it('ignores cancellations for other toolCallIds', async () => {
     const promise = handleAskQuestion(ctx, 'q1', 'Your name?');
     const component = state.activeInlineQuestion!;

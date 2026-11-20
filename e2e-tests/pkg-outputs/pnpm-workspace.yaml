@@ -4,6 +4,11 @@ packages:
 allowBuilds:
   esbuild: true
 
+minimumReleaseAgeExclude:
+  - '@vitest/mocker@5.1.0'
+  - '@vitest/spy@5.1.0'
+  - vitest@5.1.0
+
 overrides:
   '@modelcontextprotocol/sdk@>=1.0.0 <1.32.0': 1.32.1
   # Vanta 2026-09-28: nested-lock security floors

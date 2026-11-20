@@ -1,29 +1,187 @@
-/**
- * Test seam for suites exercising the factory storage domains without a real
- * Postgres: registers the built-in domains on a fresh libsql `:memory:`
- * `FactoryStorage` and returns the typed domain handles.
- */
+/** Registers built-in domains on fresh LibSQL storage or an isolated Postgres schema. */
 
+import { randomUUID } from 'node:crypto';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import type { FactoryStorage } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
+import type { PgFactoryStorage } from '@mastra/pg';
 import { onTestFinished } from 'vitest';
 
 import { createBoardRegistry, workItemPhaseSemantics } from '../boards/index.js';
+import { workItemProviderAdapter } from '../work-items/providers/index.js';
 import { AuditStorage } from './domains/audit/base.js';
+import { StoredBoardsStorage } from './domains/boards/base.js';
 import { ChannelIdentityStorage } from './domains/channel-identity/base.js';
-import { WorkItemCommentsStorage } from './domains/comments/base.js';
 import { ModelCredentialsStorage } from './domains/credentials/base.js';
 import { CustomProvidersStorage } from './domains/custom-providers/base.js';
-import { IntakeStorage } from './domains/intake/base.js';
+import {
+  INTAKE_DATA_MIGRATIONS_SCHEMA,
+  INTAKE_SOURCE_BINDINGS_SCHEMA,
+  IntakeStorage,
+  LEGACY_INTAKE_USER_SETTINGS_SCHEMA,
+} from './domains/intake/base.js';
 import { IntegrationStorage } from './domains/integrations/base.js';
 import { MemorySettingsStorage } from './domains/memory-settings/base.js';
 import { ModelDefaultsStorage } from './domains/model-defaults/base.js';
 import { FactoryProjectsStorage } from './domains/projects/base.js';
 import { QueueHealthStorage } from './domains/queue-health/base.js';
+import { SandboxEnvsStorage } from './domains/sandbox-envs/base.js';
+import { SkillOverridesStorage } from './domains/skill-overrides/base.js';
 import { SourceControlStorage } from './domains/source-control/base.js';
+import { VoiceSettingsStorage } from './domains/voice-settings/base.js';
 import { WorkItemsStorage } from './domains/work-items/base.js';
+import type { ExternalWorkItemSource } from './domains/work-items/base.js';
+import { bumpBoardVersions } from './domains/work-items/board-version.js';
+import { Cards } from './domains/work-items/cards.js';
+import { FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA, WORK_ITEMS_SCHEMA } from './domains/work-items/work-item-schema.js';
+import type { WorkItemRow, WorkItemSourceRow } from './domains/work-items/work-item-schema.js';
 
-export interface FactoryStorageTestSeed {
-  storage: LibSQLFactoryStorage;
+/** Create the pre-split card tables a 0.26 Factory left behind, as on a database being upgraded. */
+export async function createLegacyCardTablesForTests(storage: FactoryStorage): Promise<void> {
+  await storage.ensureCollections([WORK_ITEMS_SCHEMA, FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA]);
+}
+
+/** Create the intake tables earlier releases left behind, as on a database being upgraded. */
+export async function createLegacyIntakeTablesForTests(storage: FactoryStorage): Promise<void> {
+  await storage.ensureCollections([
+    LEGACY_INTAKE_USER_SETTINGS_SCHEMA,
+    INTAKE_SOURCE_BINDINGS_SCHEMA,
+    INTAKE_DATA_MIGRATIONS_SCHEMA,
+  ]);
+}
+
+/**
+ * Leave cards only where a 0.26 Factory wrote them, the legacy table, and restart the work-items
+ * domain so it sees them as not yet copied.
+ */
+export async function demoteCardsToLegacyForTests(storage: FactoryStorage, cardIds: readonly string[]): Promise<void> {
+  await createLegacyCardTablesForTests(storage);
+  for (const id of cardIds) {
+    const legacy = await new Cards(storage.ops).findOne({ id });
+    if (!legacy) throw new Error(`No card ${id} to demote`);
+    const workItemId = (legacy.work_item as { id: string }).id;
+    delete legacy.work_item;
+    delete legacy.work_item_sources;
+    delete legacy.changed_at;
+    await storage.ops.insertOne('work_items', legacy);
+    await storage.ops.deleteMany('factory_board_items', { id });
+    await storage.ops.deleteMany('factory_work_item_sources', { work_item_id: workItemId });
+    await storage.ops.deleteMany('factory_work_items', { id: workItemId });
+    // The rows moved behind the domain's back; drop board lists cached with them.
+    await bumpBoardVersions(storage.ops, [
+      { orgId: legacy.org_id as string, factoryProjectId: legacy.factory_project_id as string },
+    ]);
+  }
+  await storage.ops.deleteMany('factory_work_item_split_state', {});
+  await storage.getDomain<WorkItemsStorage>('work-items').init();
+}
+
+/**
+ * Finish every run queued so far, as a dispatcher would once they ran. A person cannot move a
+ * card into a phase that starts a run while one is queued for it.
+ */
+export async function finishQueuedRunsForTests(workItems: WorkItemsStorage, now = new Date()): Promise<void> {
+  const ownerId = `finish-${randomUUID()}`;
+  const claimed = await workItems.claimDeferredDecisions({
+    ownerId,
+    now,
+    leaseExpiresAt: new Date(now.getTime() + 60_000),
+    limit: 100,
+  });
+  for (const decision of claimed) {
+    await workItems.completeDeferredDecision(
+      { id: decision.id, orgId: decision.orgId, factoryProjectId: decision.factoryProjectId, ownerId },
+      now,
+    );
+  }
+}
+
+export function createProviderWorkItemForTests(input: {
+  id: string;
+  title: string;
+  source: ExternalWorkItemSource | null;
+  metadata: Record<string, unknown> | null;
+}): WorkItemRow {
+  const source = workItemProviderAdapter(input.source).toSource(input.source, input.metadata);
+  const sources: WorkItemSourceRow[] = source
+    ? [
+        {
+          ...source,
+          id: `source-${input.id}`,
+          workItemId: `work-${input.id}`,
+          revision: 1,
+          syncedAt: null,
+          createdAt: new Date(0),
+          updatedAt: new Date(0),
+        },
+      ]
+    : [];
+  return {
+    sources,
+    title: input.title,
+    provider: source?.provider ?? 'factory',
+    externalId: source?.externalId ?? input.id,
+    key: source ? source.key : input.id.slice(0, 8),
+    url: source?.url ?? null,
+    state: source?.state ?? null,
+    labels: source?.labels ?? [],
+    author: source?.author ?? null,
+    metadata: source?.metadata ?? null,
+    id: `work-${input.id}`,
+    orgId: 'org-1',
+    factoryProjectId: 'project-1',
+    parentWorkItemId: null,
+    revision: 1,
+    syncedAt: null,
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  };
+}
+
+async function isolatedPostgresSchemaForTests(connectionString: string): Promise<string> {
+  const { PostgresStore } = await import('@mastra/pg');
+  const admin = new PostgresStore({ id: 'factory-test-admin', connectionString, disableInit: true });
+  const schema = `factory_test_${randomUUID().replaceAll('-', '')}`;
+  await admin.pool.query(`CREATE SCHEMA "${schema}"`);
+  const url = new URL(connectionString);
+  url.searchParams.set('options', `-c search_path=${schema}`);
+  onTestFinished(async () => {
+    await admin.pool.query(`DROP SCHEMA "${schema}" CASCADE`);
+    await admin.close();
+  });
+  return url.toString();
+}
+
+/** Keep migration tests from clearing tables another Postgres test is using. */
+export async function createIsolatedFactoryPostgresForTests(connectionString: string): Promise<PgFactoryStorage> {
+  const { PgFactoryStorage } = await import('@mastra/pg');
+  return new PgFactoryStorage({
+    id: 'factory-test',
+    connectionString: await isolatedPostgresSchemaForTests(connectionString),
+  });
+}
+
+export async function createSharedFactoryDatabaseForTests(): Promise<{
+  connect(id: string): Promise<FactoryStorageTestSeed>;
+}> {
+  if (process.env.FACTORY_TEST_STORAGE_BACKEND === 'postgres') {
+    const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
+    if (!postgresUrl) throw new Error('FACTORY_TEST_POSTGRES_URL is required for the Postgres test backend.');
+    const { PgFactoryStorage } = await import('@mastra/pg');
+    const connectionString = await isolatedPostgresSchemaForTests(postgresUrl);
+    return { connect: id => createFactoryStorageForTests(new PgFactoryStorage({ id, connectionString })) };
+  }
+  const directory = await mkdtemp(join(tmpdir(), 'factory-test-'));
+  onTestFinished(() => rm(directory, { recursive: true, force: true }));
+  const url = `file:${join(directory, 'factory.db')}`;
+  return { connect: id => createFactoryStorageForTests(new LibSQLFactoryStorage({ id, url })) };
+}
+
+export interface FactoryStorageTestSeed<T extends FactoryStorage = FactoryStorage> {
+  storage: T;
   intake: IntakeStorage;
   audit: AuditStorage;
   workItems: WorkItemsStorage;
@@ -34,23 +192,35 @@ export interface FactoryStorageTestSeed {
   modelDefaults: ModelDefaultsStorage;
   memorySettings: MemorySettingsStorage;
   customProviders: CustomProvidersStorage;
+  sandboxEnvs: SandboxEnvsStorage;
   queueHealth: QueueHealthStorage;
   channelIdentity: ChannelIdentityStorage;
-  comments: WorkItemCommentsStorage;
+  boards: StoredBoardsStorage;
+  skillOverrides: SkillOverridesStorage;
+  voiceSettings: VoiceSettingsStorage;
 }
 
 /**
- * Create a fresh libsql `:memory:` `FactoryStorage` with every built-in domain
- * registered. Call per test (state is per-instance). The backend closes
- * automatically when the current test finishes.
+ * Create fresh storage with every built-in domain. Defaults to LibSQL `:memory:`;
+ * `FACTORY_TEST_STORAGE_BACKEND=postgres` uses an isolated schema at `FACTORY_TEST_POSTGRES_URL`.
+ * The backend closes automatically when the current test finishes.
  */
-export async function createFactoryStorageForTests(): Promise<FactoryStorageTestSeed> {
-  const storage = new LibSQLFactoryStorage({ id: 'factory-test', url: ':memory:' });
+export function createFactoryStorageForTests(): Promise<FactoryStorageTestSeed>;
+export function createFactoryStorageForTests<T extends FactoryStorage>(storage: T): Promise<FactoryStorageTestSeed<T>>;
+export async function createFactoryStorageForTests(
+  storage?: FactoryStorage,
+): Promise<FactoryStorageTestSeed<FactoryStorage>> {
+  if (!storage && process.env.FACTORY_TEST_STORAGE_BACKEND === 'postgres') {
+    const url = process.env.FACTORY_TEST_POSTGRES_URL;
+    if (!url) throw new Error('FACTORY_TEST_POSTGRES_URL is required for the Postgres test backend.');
+    storage = await createIsolatedFactoryPostgresForTests(url);
+  }
+  storage ??= new LibSQLFactoryStorage({ id: 'factory-test', url: ':memory:' });
   const intake = storage.registerDomain(new IntakeStorage());
   const audit = storage.registerDomain(new AuditStorage());
   const workItems = storage.registerDomain(new WorkItemsStorage());
-  const boards = createBoardRegistry();
-  workItems.useTerminalPhasePredicate(item => workItemPhaseSemantics(boards, item)?.kind === 'terminal');
+  const boardRegistry = createBoardRegistry();
+  workItems.useTerminalPhasePredicate(item => workItemPhaseSemantics(boardRegistry, item)?.kind === 'terminal');
   const credentials = storage.registerDomain(new ModelCredentialsStorage());
   const integrations = storage.registerDomain(new IntegrationStorage());
   const projects = storage.registerDomain(new FactoryProjectsStorage());
@@ -58,9 +228,12 @@ export async function createFactoryStorageForTests(): Promise<FactoryStorageTest
   const modelDefaults = storage.registerDomain(new ModelDefaultsStorage());
   const memorySettings = storage.registerDomain(new MemorySettingsStorage());
   const customProviders = storage.registerDomain(new CustomProvidersStorage());
+  const sandboxEnvs = storage.registerDomain(new SandboxEnvsStorage());
   const queueHealth = storage.registerDomain(new QueueHealthStorage());
   const channelIdentity = storage.registerDomain(new ChannelIdentityStorage());
-  const comments = storage.registerDomain(new WorkItemCommentsStorage());
+  const boards = storage.registerDomain(new StoredBoardsStorage());
+  const skillOverrides = storage.registerDomain(new SkillOverridesStorage());
+  const voiceSettings = storage.registerDomain(new VoiceSettingsStorage());
   await storage.init();
   onTestFinished(() => storage.close());
   return {
@@ -75,8 +248,27 @@ export async function createFactoryStorageForTests(): Promise<FactoryStorageTest
     modelDefaults,
     memorySettings,
     customProviders,
+    sandboxEnvs,
     queueHealth,
     channelIdentity,
-    comments,
+    boards,
+    skillOverrides,
+    voiceSettings,
   };
+}
+
+/**
+ * Makes a project read as one created before the intake evaluator setting: its lock row carries no
+ * setting, so the project uses `route-list` unless one is forced, and its intake order is derived
+ * from the route list.
+ */
+export async function asProjectFromBeforeIntakeEvaluator(
+  storage: Pick<FactoryStorage, 'ops'>,
+  scope: { orgId: string; factoryProjectId: string },
+): Promise<void> {
+  await storage.ops.updateMany(
+    'factory_intake_route_locks',
+    { org_id: scope.orgId, factory_project_id: scope.factoryProjectId },
+    { intake_evaluator: null, intake_order: null, intake_order_origin: null },
+  );
 }

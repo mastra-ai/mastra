@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractStaticModel, isConditionalStoredModel, storedAgentToFormValues } from '../stored-agent-to-form-values';
+import { extractStaticModel, storedAgentToFormValues } from '../stored-agent-to-form-values';
 
 describe('storedAgentToFormValues', () => {
   it('returns empty defaults when storedAgent is null or undefined', () => {
@@ -167,19 +167,5 @@ describe('extractStaticModel', () => {
       provider: 'openai',
       name: 'gpt-4o',
     });
-  });
-});
-
-describe('isConditionalStoredModel', () => {
-  it('returns true for array input', () => {
-    expect(isConditionalStoredModel([] as never)).toBe(true);
-  });
-
-  it('returns false for object input', () => {
-    expect(isConditionalStoredModel({ provider: 'openai', name: 'gpt-4o' })).toBe(false);
-  });
-
-  it('returns false for undefined', () => {
-    expect(isConditionalStoredModel(undefined)).toBe(false);
   });
 });

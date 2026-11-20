@@ -131,10 +131,7 @@ describe('ThreadSelectorComponent preview caching', () => {
       onMessagePreviewsLoaded,
     });
 
-    const initialLines = ((selector as any).listContainer.children as Array<{ text?: string }>)
-      .map(child => child.text)
-      .filter(Boolean)
-      .join('\n');
+    const initialLines = (selector as any).list.render(100).join('\n');
 
     expect(initialLines).toContain('"Cached preview"');
     expect(getMessagePreviews).not.toHaveBeenCalled();

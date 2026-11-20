@@ -11,6 +11,7 @@ import type {
 import { InMemoryStore } from '../storage/mock';
 import { AgentController } from './agent-controller';
 import { createMockWorkspace } from './test-utils';
+import type { AvailableModel } from './types';
 
 /**
  * Minimal in-memory gateway used to drive the AgentController model catalog without
@@ -47,7 +48,14 @@ function createFakeGateway(options?: {
   };
 }
 
-function createController(gateway: MastraModelGatewayInterface, defaultModelId?: string) {
+function createController(
+  gateway: MastraModelGatewayInterface | MastraModelGatewayInterface[],
+  defaultModelId?: string,
+  useCounts: () => Record<string, number> = () => ({
+    'test-gateway/acme/sonic-fast': 3,
+    'test-gateway/acme/new-model': 11,
+  }),
+) {
   const agent = new Agent({
     name: 'test-agent',
     instructions: 'You are a test agent.',
@@ -59,12 +67,9 @@ function createController(gateway: MastraModelGatewayInterface, defaultModelId?:
     id: 'test-controller',
     storage: new InMemoryStore(),
     modes: [{ id: 'default', name: 'Default', default: true, agent, defaultModelId }],
-    gateways: [gateway],
+    gateways: [gateway].flat(),
     omConfig: defaultModelId ? { defaultObserverModelId: defaultModelId } : undefined,
-    modelUseCountProvider: () => ({
-      'test-gateway/acme/sonic-fast': 3,
-      'test-gateway/acme/new-model': 11,
-    }),
+    modelUseCountProvider: useCounts,
   });
 }
 
@@ -197,5 +202,233 @@ describe('AgentController.listAvailableModels', () => {
 
     const status = await controller.getCurrentModelAuthStatus(session);
     expect(status.hasAuth).toBe(false);
+  });
+});
+
+describe('AgentController.listAvailableModels catalog refresh', () => {
+  // models.dev is a third-party API, so it is stubbed at the wire: the real
+  // router gateways (models.dev, Netlify) parse these responses.
+  const MODELS_DEV_URL = 'https://models.dev/api.json';
+  let modelsDev: { calls: number; respond: () => Promise<Response> };
+  let netlify: { calls: number; respond: () => Promise<Response> };
+
+  function modelsDevCatalog(models: string[]): Response {
+    return Response.json({
+      'acme-cloud': {
+        id: 'acme-cloud',
+        name: 'Acme Cloud',
+        env: ['ACME_CLOUD_API_KEY'],
+        api: 'https://api.acme.test/v1',
+        npm: '@ai-sdk/openai-compatible',
+        models: Object.fromEntries(models.map(id => [id, { id }])),
+      },
+    });
+  }
+
+  const advance = (ms: number) => vi.setSystemTime(new Date(Date.now() + ms));
+  const ids = (models: AvailableModel[]) => models.map(model => model.id);
+  const rocket = (models: AvailableModel[]) => models.find(model => model.id === 'acme-cloud/rocket-1');
+  /** Fails fast instead of hanging when a call waits on a download it should not wait for. */
+  const withinOneSecond = <T>(promise: Promise<T>) =>
+    Promise.race([
+      promise,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('listAvailableModels waited for the models.dev download')), 1000),
+      ),
+    ]);
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-04T09:00:00Z'));
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    modelsDev = { calls: 0, respond: async () => modelsDevCatalog(['rocket-1']) };
+    netlify = { calls: 0, respond: async () => Response.json({ providers: {} }) };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (url === MODELS_DEV_URL) {
+          modelsDev.calls += 1;
+          return modelsDev.respond();
+        }
+        if (url.startsWith('https://api.netlify.com/')) {
+          netlify.calls += 1;
+          return netlify.respond();
+        }
+        throw new Error(`unexpected request in test: ${url}`);
+      }),
+    );
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    delete process.env.ACME_CLOUD_API_KEY;
+  });
+
+  it('reopening the model list later does not download models.dev again', async () => {
+    const gateway = createFakeGateway();
+    const controller = createController(gateway);
+
+    expect(ids(await controller.listAvailableModels())).toContain('acme-cloud/rocket-1');
+    advance(30_000);
+    expect(ids(await controller.listAvailableModels())).toContain('acme-cloud/rocket-1');
+
+    expect(modelsDev.calls).toBe(1);
+    // Configured gateways can read state the app changes at runtime, so they keep refreshing.
+    expect(gateway.fetchProviders).toHaveBeenCalledTimes(2);
+  });
+
+  it('requests that arrive together share one models.dev download', async () => {
+    const controller = createController(createFakeGateway());
+
+    const [first, second] = await Promise.all([controller.listAvailableModels(), controller.listAvailableModels()]);
+
+    expect(ids(first)).toContain('acme-cloud/rocket-1');
+    expect(ids(second)).toContain('acme-cloud/rocket-1');
+    expect(modelsDev.calls).toBe(1);
+  });
+
+  it('answers from the previous models while a newer models.dev catalog downloads', async () => {
+    const controller = createController(createFakeGateway());
+    await controller.listAvailableModels();
+
+    advance(6 * 60_000);
+    let finishDownload!: () => void;
+    modelsDev.respond = () =>
+      new Promise(resolve => {
+        finishDownload = () => resolve(modelsDevCatalog(['rocket-1', 'rocket-2']));
+      });
+
+    const whileDownloading = await withinOneSecond(controller.listAvailableModels());
+    expect(ids(whileDownloading)).toContain('acme-cloud/rocket-1');
+    expect(ids(whileDownloading)).not.toContain('acme-cloud/rocket-2');
+    expect(modelsDev.calls).toBe(2);
+
+    finishDownload();
+    await vi.waitFor(async () => {
+      expect(ids(await controller.listAvailableModels())).toContain('acme-cloud/rocket-2');
+    });
+    expect(modelsDev.calls).toBe(2);
+  });
+
+  it('keeps models.dev models through a models.dev outage and retries a minute later', async () => {
+    const controller = createController(createFakeGateway());
+    await controller.listAvailableModels();
+
+    advance(6 * 60_000);
+    modelsDev.respond = async () => new Response('upstream unavailable', { status: 503 });
+    await controller.listAvailableModels();
+    await vi.waitFor(() =>
+      expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('models.dev'), expect.anything()),
+    );
+
+    advance(30_000);
+    expect(ids(await controller.listAvailableModels())).toContain('acme-cloud/rocket-1');
+    expect(modelsDev.calls).toBe(2);
+
+    modelsDev.respond = async () => modelsDevCatalog(['rocket-1', 'rocket-2']);
+    advance(31_000);
+    await controller.listAvailableModels();
+    await vi.waitFor(async () => {
+      expect(ids(await controller.listAvailableModels())).toContain('acme-cloud/rocket-2');
+    });
+    expect(modelsDev.calls).toBe(3);
+  });
+
+  it('keeps refreshing models.dev while a Netlify download hangs', async () => {
+    const controller = createController(createFakeGateway());
+    await controller.listAvailableModels();
+
+    advance(6 * 60_000);
+    netlify.respond = () => new Promise(() => {});
+    modelsDev.respond = async () => modelsDevCatalog(['rocket-1', 'rocket-2']);
+    await withinOneSecond(controller.listAvailableModels());
+    await vi.waitFor(async () => {
+      expect(ids(await controller.listAvailableModels())).toContain('acme-cloud/rocket-2');
+    });
+
+    advance(6 * 60_000);
+    modelsDev.respond = async () => modelsDevCatalog(['rocket-1', 'rocket-2', 'rocket-3']);
+    await withinOneSecond(controller.listAvailableModels());
+    await vi.waitFor(async () => {
+      expect(ids(await controller.listAvailableModels())).toContain('acme-cloud/rocket-3');
+    });
+    expect(modelsDev.calls).toBe(3);
+    // Still one Netlify download in flight, not a new one per refresh.
+    expect(netlify.calls).toBe(2);
+  });
+
+  it('waits for models.dev while it has never answered, so the first call after an outage lists its models', async () => {
+    modelsDev.respond = async () => new Response('upstream unavailable', { status: 503 });
+    const controller = createController(createFakeGateway());
+    expect(ids(await controller.listAvailableModels())).not.toContain('acme-cloud/rocket-1');
+
+    modelsDev.respond = async () => modelsDevCatalog(['rocket-1']);
+    advance(11_000);
+    expect(ids(await controller.listAvailableModels())).toContain('acme-cloud/rocket-1');
+    expect(modelsDev.calls).toBe(2);
+  });
+
+  it('notices a key set outside the app after the short window, without downloading models.dev again', async () => {
+    const controller = createController(createFakeGateway());
+    expect(rocket(await controller.listAvailableModels())).toMatchObject({
+      hasApiKey: false,
+      apiKeyEnvVar: 'ACME_CLOUD_API_KEY',
+    });
+
+    process.env.ACME_CLOUD_API_KEY = 'sk-acme';
+    advance(11_000);
+    expect(rocket(await controller.listAvailableModels())).toMatchObject({ hasApiKey: true });
+    expect(modelsDev.calls).toBe(1);
+  });
+
+  it('after invalidation, shows a key change right away and downloads models.dev again in the background', async () => {
+    process.env.ACME_CLOUD_API_KEY = 'sk-acme';
+    const controller = createController(createFakeGateway());
+    expect(rocket(await controller.listAvailableModels())).toMatchObject({ hasApiKey: true });
+
+    const download = Promise.withResolvers<Response>();
+    modelsDev.respond = () => download.promise;
+    delete process.env.ACME_CLOUD_API_KEY;
+    controller.invalidateAvailableModelsCache();
+
+    expect(rocket(await withinOneSecond(controller.listAvailableModels()))).toMatchObject({ hasApiKey: false });
+    expect(modelsDev.calls).toBe(2);
+
+    download.resolve(modelsDevCatalog(['rocket-1', 'rocket-2']));
+    await vi.waitFor(async () => {
+      expect(ids(await controller.listAvailableModels())).toContain('acme-cloud/rocket-2');
+    });
+  });
+
+  it('loads configured gateways one after another, so each sees what the previous one wrote', async () => {
+    let credentialWritten = false;
+    const writer = createFakeGateway();
+    writer.fetchProviders.mockImplementation(async () => {
+      await Promise.resolve();
+      credentialWritten = true;
+      return {};
+    });
+    let readAfterWrite: boolean | undefined;
+    const reader = { ...createFakeGateway(), id: 'reader-gateway' };
+    reader.fetchProviders.mockImplementation(async () => {
+      readAfterWrite = credentialWritten;
+      return {};
+    });
+
+    await createController([writer, reader]).listAvailableModels();
+
+    expect(readAfterWrite).toBe(true);
+  });
+
+  it('reports current use counts on every call', async () => {
+    const useCounts: Record<string, number> = { 'acme-cloud/rocket-1': 1 };
+    const controller = createController(createFakeGateway(), undefined, () => useCounts);
+    expect(rocket(await controller.listAvailableModels())?.useCount).toBe(1);
+
+    useCounts['acme-cloud/rocket-1'] = 2;
+    expect(rocket(await controller.listAvailableModels())?.useCount).toBe(2);
   });
 });

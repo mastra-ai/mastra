@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { WORKSPACE_TOOLS } from '../../constants';
-import { PermissionError } from '../../errors';
+import { FileReadRequiredError, PermissionError } from '../../errors';
 import { LocalFilesystem } from '../../filesystem';
 import { Workspace } from '../../workspace';
 import { createWorkspaceTools } from '../tools';
@@ -545,7 +545,10 @@ describe('workspace_apply_patch', () => {
     it('applies nothing when a file changed after it was read', async () => {
       await fs.writeFile(path.join(tempDir, 'a.ts'), 'a\n');
       await fs.writeFile(path.join(tempDir, 'b.ts'), 'b\n');
-      const { tools, workspace } = await setup();
+      const { tools, workspace } = await setup({
+        [APPLY_PATCH]: { enabled: true, requireReadBeforeWrite: true },
+      });
+      await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: 'a.ts' }, { workspace });
       await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: 'b.ts' }, { workspace });
       await new Promise(r => setTimeout(r, 20));
       await fs.writeFile(path.join(tempDir, 'b.ts'), 'b changed\n');
@@ -566,7 +569,9 @@ describe('workspace_apply_patch', () => {
           },
           { workspace },
         ),
-      ).rejects.toThrow(/modified externally/);
+      ).rejects.toThrow(
+        expect.objectContaining({ name: 'FileReadRequiredError', message: expect.stringContaining('b.ts') }),
+      );
 
       expect(await read('a.ts')).toBe('a\n');
       expect(await read('b.ts')).toBe('b changed\n');

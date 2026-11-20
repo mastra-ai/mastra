@@ -11,7 +11,7 @@ export interface DataPanelContentProps {
   className?: string;
 }
 
-const CONTENT_CLASSES = 'min-h-0 flex-1 overflow-y-auto px-2 py-3';
+const CONTENT_CLASSES = 'min-h-0 flex-1 overflow-y-auto p-2';
 
 // In the drawer variant, `DrawerPrimitive.Content` marks the region as swipe-exempt
 // so scrolling or selecting text inside the panel body doesn't start a

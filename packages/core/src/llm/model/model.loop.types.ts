@@ -34,6 +34,8 @@ export type StreamTextOnStepFinishCallback<Tools extends ToolSet> = (
 ) => Promise<void> | void;
 
 export type ModelLoopStreamArgs<TOOLS extends ToolSet, OUTPUT = undefined> = {
+  /** @internal Agent-owner notification; model usage is recorded before this callback. */
+  onTracingTripwire?: (tripwire: import('../../stream/types').StepTripwireData, text: string) => void;
   methodType: ModelMethodType;
   /** Set only by the agent's main loop so its first chunk stamps `completionStartTime` on this run. */
   agentRunSpan?: Span<SpanType.AGENT_RUN>;
@@ -45,6 +47,6 @@ export type ModelLoopStreamArgs<TOOLS extends ToolSet, OUTPUT = undefined> = {
   returnScorerData?: boolean;
   messageList: MessageList;
 } & ObservabilityContext &
-  Omit<LoopOptions<TOOLS, OUTPUT>, 'models' | 'messageList'>;
+  Omit<LoopOptions<TOOLS, OUTPUT>, 'models' | 'messageList' | 'onTracingTripwire'>;
 
 export type ModelMethodType = 'generate' | 'stream';

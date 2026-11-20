@@ -86,7 +86,7 @@ async function setup(build: (helpers: ReturnType<typeof init>) => any) {
   }, 'workflow function was not registered');
 
   // Wrapped because a workflow has a `.then()` step builder, so awaiting it directly never settles.
-  return { workflow };
+  return { workflow, mastra };
 }
 
 async function waitForRunStatus(): Promise<string> {
@@ -264,5 +264,73 @@ describe('Inngest function-level retries', () => {
     expect(await waitForRunStatus()).toBe('COMPLETED');
     expect(firstExecutions).toBe(1);
     expect(secondExecutions).toBe(2);
+  });
+
+  it('marks the snapshot failed when Inngest gives up on a run before it can finalize', async () => {
+    const { workflow, mastra } = await setup(({ createWorkflow, createStep }) => {
+      const dropped = createStep({
+        id: 'dropped',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: async () => {
+          // Every attempt dies with its request, as a worker crash would, so the
+          // handler never reaches the finalize step that writes the terminal row.
+          handlerServer!.closeAllConnections();
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          return {};
+        },
+      });
+      return createWorkflow({
+        id: 'retries-exhausted',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        retries: 1,
+      })
+        .then(dropped)
+        .commit();
+    });
+
+    const run = await workflow.createRun();
+    await run.startAsync({ inputData: {} });
+
+    const store = await mastra.getStorage()!.getStore('workflows');
+    let snapshot: any;
+    await waitFor(async () => {
+      snapshot = await store!.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
+      return snapshot?.status === 'failed';
+    }, 'snapshot was not marked failed');
+    expect(snapshot.error).toBeDefined();
+  });
+
+  it('keeps the snapshot finalize wrote when the run fails in its own code', async () => {
+    const { workflow, mastra } = await setup(({ createWorkflow, createStep }) => {
+      const failing = createStep({
+        id: 'failing',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: async () => {
+          throw new Error('step code failed');
+        },
+      });
+      return createWorkflow({
+        id: 'retries-finalized-failure',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      })
+        .then(failing)
+        .commit();
+    });
+
+    const run = await workflow.createRun();
+    const result = await run.start({ inputData: {} });
+    expect(result.status).toBe('failed');
+    // Give the failure handler time to run, so a rewrite would be visible.
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
+    const store = await mastra.getStorage()!.getStore('workflows');
+    const snapshot: any = await store!.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
+    expect(snapshot.status).toBe('failed');
+    expect(snapshot.context.failing.status).toBe('failed');
+    expect(snapshot.error.message).toContain('step code failed');
   });
 });

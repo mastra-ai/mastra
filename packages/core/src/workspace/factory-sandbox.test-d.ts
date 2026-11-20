@@ -16,4 +16,11 @@ describe('FactorySandbox types', () => {
     >();
     expectTypeOf<FactorySandbox['builds']>().extract<undefined>().toEqualTypeOf<undefined>();
   });
+
+  it('build env fields are optional', () => {
+    expectTypeOf<FactorySandboxContext['buildEnv']>().toEqualTypeOf<Record<string, string> | undefined>();
+    expectTypeOf<FactorySandboxContext['buildEnvRevision']>().toEqualTypeOf<string | undefined>();
+    const ctx: FactorySandboxContext = { sessionId: 's', getRepositoryAccess: undefined };
+    expectTypeOf(ctx).toMatchTypeOf<FactorySandboxContext>();
+  });
 });

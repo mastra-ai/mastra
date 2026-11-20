@@ -267,7 +267,7 @@ describe('MarkdownRenderer', () => {
 
   it('reveals a streamed reply a word at a time', () => {
     vi.useFakeTimers();
-    const { container } = render(<Streamed text={'Two **bold** words here'} />);
+    const { container } = render(<Streamed text="Two **bold** words here" />);
 
     expect(container.textContent).toBe('');
 
@@ -281,7 +281,7 @@ describe('MarkdownRenderer', () => {
   it('never remounts a word that has landed, however far the reply runs past it', () => {
     vi.useFakeTimers();
     const reply = Array.from({ length: 60 }, (_, index) => `word${index}`).join(' ');
-    const { container, rerender } = render(<Streamed text={'word0'} />);
+    const { container, rerender } = render(<Streamed text="word0" />);
     const held = (text: string) => [...container.querySelectorAll('span')].find(node => node.textContent === text);
 
     rerender(<Streamed text={reply} />);
@@ -336,9 +336,9 @@ describe('MarkdownRenderer', () => {
 
   it('stops animating a word once its entrance is over', () => {
     vi.useFakeTimers();
-    const { container, rerender } = render(<Streamed text={''} />);
+    const { container, rerender } = render(<Streamed text="" />);
 
-    rerender(<Streamed text={'Two words here'} />);
+    rerender(<Streamed text="Two words here" />);
     arrive(container, 'here');
 
     expect(container.querySelectorAll('.mastra-arriving').length).toBeGreaterThan(0);
@@ -350,9 +350,9 @@ describe('MarkdownRenderer', () => {
 
   it('never lands a word twice when the markdown around it is rebuilt', () => {
     vi.useFakeTimers();
-    const { container, rerender } = render(<Streamed text={''} />);
+    const { container, rerender } = render(<Streamed text="" />);
 
-    rerender(<Streamed text={'Two words here'} />);
+    rerender(<Streamed text="Two words here" />);
     arrive(container, 'here');
     settle();
 
@@ -365,7 +365,7 @@ describe('MarkdownRenderer', () => {
 
   it('fades inline code in whole rather than a letter at a time', () => {
     vi.useFakeTimers();
-    const { container } = render(<Streamed text={'Run `npm i` now'} />);
+    const { container } = render(<Streamed text="Run `npm i` now" />);
 
     arrive(container, 'now');
 
@@ -428,7 +428,7 @@ describe('MarkdownRenderer', () => {
 
   it('closes a marker the stream has not caught up with', () => {
     vi.useFakeTimers();
-    const { container } = render(<Streamed text={'A **bold wo'} />);
+    const { container } = render(<Streamed text="A **bold wo" />);
 
     arrive(container, 'wo');
 
@@ -437,7 +437,7 @@ describe('MarkdownRenderer', () => {
 
   it('renders a half-written link as its text rather than a dead anchor', () => {
     vi.useFakeTimers();
-    const { container } = render(<Streamed text={'See [the docs](https://mastra'} />);
+    const { container } = render(<Streamed text="See [the docs](https://mastra" />);
 
     arrive(container, 'docs');
 

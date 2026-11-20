@@ -14,6 +14,8 @@ Scorers are automated tests that evaluate Agents outputs using model-graded, rul
 
 Scorers can run in the cloud to capture real-time results. Scorers can also be part of your CI/CD pipeline for testing and monitoring agents over time.
 
+Scorers measure a single output. To improve an agent over time, combine them with [datasets](/docs/evals/datasets), which store versioned test cases, and [experiments](/docs/evals/experiments), which run an agent or workflow against a dataset, optionally score each result, and keep the results for comparison. [Build an eval loop](/docs/guides/build-an-eval-loop) walks through using them together.
+
 :::tip[📹 Watch]
 
 Watch [Mastra evals overview](https://www.youtube.com/watch?v=12WN6u2DrBk) for an introduction to evals and how to reason about agent quality.
@@ -122,6 +124,8 @@ When a run has no trace (observability not configured), the decision is derived 
 **Eligibility filters**: The optional `filter` parameter uses a declarative predicate over the run context to restrict scorer eligibility. Because filtering occurs before sampling, `sampling.rate` applies only to matching runs:
 
 ```typescript title="src/mastra/agents/evaluated-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
 export const myAgent = new Agent({
   // ...
   scorers: {
@@ -204,12 +208,14 @@ const mastra = new Mastra({
 Once registered, you can score traces interactively within Studio under the **Observability** section. Open Studio to manage scorers and review scores, plus run experiments.
 
 - **Scorers list**: Browse all registered scorers with their description, and the number of agents and workflows each scorer is attached to.
-- **Score results**: Select a scorer to see a paginated list of every score it has produced. Click a row to open the detail panel, which shows the score value, reason, input, output, and the prompts used by the judge. From this panel, save any result as a dataset item for future experiments.
+- **Score results**: Select a scorer to see a paginated list of every score it has produced. Select a row to open the detail panel, which shows the score value, reason, input, output, and the prompts used by the judge. From this panel, save any result as a dataset item for future experiments.
 - **Agent Evaluate tab**: Open the Evaluate tab on any agent to manage scorers and datasets. You can also run experiments there. Experiment results display per-item scores alongside pass/fail status and version tags.
 - **Trace scoring**: In the Observability section, run a scorer against any historical trace or span to evaluate past interactions. Filter scores by agent or workflow.
 
 ## Next steps
 
+- Follow [Build an eval loop](/docs/guides/build-an-eval-loop) to compare agent changes with datasets, scorers, and experiments
+- Store test cases in [datasets](/docs/evals/datasets) and run them with [experiments](/docs/evals/experiments)
 - Use [Quick Checks](/docs/evals/quick-checks) for fast, deterministic assertions on text and tool usage
 - Add [gates and verdicts](/docs/evals/gates-and-verdicts) to enforce hard requirements and quality thresholds
 - Test [multi-turn conversations](/docs/evals/multi-turn) where behavior emerges across sequential turns

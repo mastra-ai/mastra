@@ -104,7 +104,7 @@ describe('rotated response message id announcement', () => {
                 toolCallType: 'function',
                 toolCallId: 'call-1',
                 toolName: 'clientTool',
-                args: '{}',
+                input: '{}',
               },
               {
                 type: 'finish',

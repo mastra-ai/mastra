@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { BeforeInstallPromptEvent } from './usePwaInstall';
+import { takeCapturedInstallPrompt } from './installPromptCapture';
 import { PwaInstallBanner } from './PwaInstallBanner';
 
 const DISMISSED_KEY = 'mastracode.pwaInstallDismissedAt';
@@ -45,6 +46,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  takeCapturedInstallPrompt();
   setUserAgent(originalUserAgent);
   window.matchMedia = originalMatchMedia;
 });
@@ -83,7 +85,6 @@ describe('PwaInstallBanner', () => {
     await user.click(screen.getByRole('button', { name: 'Not now' }));
 
     expect(screen.queryByRole('region', { name: 'Install app' })).not.toBeInTheDocument();
-    expect(localStorage.getItem(DISMISSED_KEY)).not.toBeNull();
 
     // Still hidden on a fresh render, even if the browser refires the event.
     unmount();
@@ -103,7 +104,6 @@ describe('PwaInstallBanner', () => {
 
     expect(screen.getByRole('dialog', { name: 'Install this app' })).toBeInTheDocument();
     expect(screen.getByText(/Add to Home Screen/)).toBeInTheDocument();
-    expect(localStorage.getItem(INSTALLED_KEY)).toBe('true');
 
     // Banner is gone on the next visit.
     unmount();

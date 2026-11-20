@@ -2,6 +2,8 @@ import { stepCountIs } from '@internal/ai-sdk-v5';
 import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
+import { SpanType, TracingEventType } from '../../../../observability';
+import { captureOutcomeEvents } from '../outcome-test-utils';
 import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
 /**
@@ -16,54 +18,67 @@ import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '.
 describeForAllEngines('AIMock loop scenario: tool execution errors', engine => {
   const getMock = useLoopScenarioAimock();
 
-  it('feeds a thrown tool error back to the model and lets it recover', async () => {
-    const flakyTool = createTool({
-      id: 'flaky',
-      description: 'A tool that always throws.',
-      inputSchema: z.object({}),
-      outputSchema: z.object({ ok: z.boolean() }),
-      execute: async () => {
-        throw new Error('FLAKY_TOOL_BOOM');
-      },
-    });
+  it.each(['error', 'string'] as const)(
+    'feeds a thrown tool error back to the model and lets it recover (%s)',
+    async kind => {
+      const { observability, events, ended } = captureOutcomeEvents();
+      const flakyTool = createTool({
+        id: 'flaky',
+        description: 'A tool that always throws.',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ ok: z.boolean() }),
+        execute: async () => {
+          if (kind === 'string') throw 'FLAKY_TOOL_BOOM';
+          throw new Error('FLAKY_TOOL_BOOM');
+        },
+      });
 
-    const { output, requests } = await runLoopScenario({
-      engine,
-      llm: getMock(),
-      prompt: 'Call the flaky tool.',
-      tools: { flaky: flakyTool },
-      stopWhen: stepCountIs(5),
-      fixtures: llm => {
-        // Turn 1: call the failing tool.
-        llm.on(
-          { endpoint: 'chat', hasToolResult: false },
-          { toolCalls: [{ id: 'call_flaky', name: 'flaky', arguments: {} }] },
-        );
-        // Turn 2: the error result is fed back -> model recovers with text.
-        llm.on(
-          { endpoint: 'chat', toolCallId: 'call_flaky', hasToolResult: true },
-          { content: 'The tool failed, so I recovered gracefully.' },
-        );
-      },
-    });
+      const { output, requests } = await runLoopScenario({
+        engine,
+        observability,
+        llm: getMock(),
+        prompt: 'Call the flaky tool.',
+        tools: { flaky: flakyTool },
+        stopWhen: stepCountIs(5),
+        fixtures: llm => {
+          // Turn 1: call the failing tool.
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            { toolCalls: [{ id: 'call_flaky', name: 'flaky', arguments: {} }] },
+          );
+          // Turn 2: the error result is fed back -> model recovers with text.
+          llm.on(
+            { endpoint: 'chat', toolCallId: 'call_flaky', hasToolResult: true },
+            { content: 'The tool failed, so I recovered gracefully.' },
+          );
+        },
+      });
 
-    // The run did not crash: it completed with the recovery text.
-    const text = await output.text;
-    expect(text).toContain('recovered gracefully');
+      // The run did not crash: it completed with the recovery text.
+      const text = await output.text;
+      expect(text).toContain('recovered gracefully');
 
-    // Two model turns: the failing tool call, then the recovery turn.
-    expect(requests).toHaveLength(2);
+      // Two model turns: the failing tool call, then the recovery turn.
+      expect(requests).toHaveLength(2);
 
-    // The thrown error was reported as a tool result on the next request, keyed
-    // to the original tool call id.
-    const turn2Messages = requests[1]?.body?.messages ?? [];
-    const toolMessage = turn2Messages.find(message => (message as { role?: string }).role === 'tool') as
-      | { tool_call_id?: string; content?: unknown }
-      | undefined;
-    expect(toolMessage?.tool_call_id).toBe('call_flaky');
-    // The tool result content references the failure (not a success payload).
-    expect(JSON.stringify(toolMessage?.content)).toMatch(/error|fail|boom/i);
-  });
+      // The thrown error was reported as a tool result on the next request, keyed
+      // to the original tool call id.
+      const turn2Messages = requests[1]?.body?.messages ?? [];
+      const toolMessage = turn2Messages.find(message => (message as { role?: string }).role === 'tool') as
+        | { tool_call_id?: string; content?: unknown }
+        | undefined;
+      expect(toolMessage?.tool_call_id).toBe('call_flaky');
+      // The tool result content references the failure (not a success payload).
+      expect(JSON.stringify(toolMessage?.content)).toMatch(/error|fail|boom/i);
+      await expect.poll(() => ended().length).toBeGreaterThan(0);
+      const spans = new Map(
+        events.filter(e => e.type === TracingEventType.SPAN_ENDED).map(e => [e.exportedSpan.id, e.exportedSpan]),
+      );
+      expect(ended(SpanType.TOOL_CALL).map(span => span.errorCount)).toEqual([1]);
+      expect(ended().map(span => span.errorCount)).toEqual([0]);
+      expect([...spans.values()].reduce((sum, span) => sum + (span.errorCount ?? NaN), 0)).toBe(1);
+    },
+  );
 
   it('rejects a call to an unknown tool and reports it back to the model', async () => {
     const realTool = createTool({

@@ -6,7 +6,7 @@ import {
 } from '@mastra/code-sdk/agents/credential-resolver';
 import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 // Mock the SDK OAuth provider registry so refresh/getApiKey behavior is
@@ -142,6 +142,51 @@ describe('TenantCredentialStore', () => {
     await expect(store.getApiKey('anthropic')).resolves.toBeUndefined();
   });
 
+  it('forceRefreshActiveAccount replaces a rejected, unexpired token and persists it', async () => {
+    await seed.credentials.setCredential(USER_TENANT, 'anthropic', FRESH_OAUTH);
+    refreshToken.mockResolvedValue({ refresh: 'r-2', access: 'a-2', expires: Date.now() + 3_600_000 });
+    const store = new TenantCredentialStore(ORG, USER, seed.credentials, 'user');
+    await expect(store.getApiKey('anthropic')).resolves.toBe('a-1');
+
+    await expect(store.forceRefreshActiveAccount('anthropic')).resolves.toBe('a-2');
+    expect(refreshToken).toHaveBeenCalledTimes(1);
+    expect(refreshToken).toHaveBeenCalledWith(expect.objectContaining({ refresh: 'r-1' }));
+    expect(await seed.credentials.getCredential(USER_TENANT, 'anthropic')).toMatchObject({ access: 'a-2' });
+    // A resumed or later session reads the persisted token.
+    const resumed = new TenantCredentialStore(ORG, USER, seed.credentials, 'user');
+    await expect(resumed.getApiKey('anthropic')).resolves.toBe('a-2');
+  });
+
+  it('forceRefreshActiveAccount reuses a token another store already refreshed', async () => {
+    await seed.credentials.setCredential(USER_TENANT, 'anthropic', FRESH_OAUTH);
+    refreshToken.mockResolvedValueOnce({ refresh: 'r-2', access: 'a-2', expires: Date.now() + 3_600_000 });
+    const replicaA = new TenantCredentialStore(ORG, USER, seed.credentials, 'user');
+    const replicaB = new TenantCredentialStore(ORG, USER, seed.credentials, 'user');
+    await replicaA.getApiKey('anthropic');
+    await replicaB.getApiKey('anthropic');
+
+    // Both were served a-1 and both see it rejected; only one refresh may spend r-1.
+    const tokens = await Promise.all([
+      replicaA.forceRefreshActiveAccount('anthropic'),
+      replicaB.forceRefreshActiveAccount('anthropic'),
+    ]);
+    expect(tokens).toEqual(['a-2', 'a-2']);
+    expect(refreshToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('forceRefreshActiveAccount returns undefined when the refresh fails or there is no OAuth credential', async () => {
+    const store = new TenantCredentialStore(ORG, USER, seed.credentials, 'user');
+    await expect(store.forceRefreshActiveAccount('anthropic')).resolves.toBeUndefined();
+
+    await seed.credentials.setCredential(USER_TENANT, 'openai', { type: 'api_key', key: 'user-key' });
+    await expect(store.forceRefreshActiveAccount('openai')).resolves.toBeUndefined();
+
+    await seed.credentials.setCredential(USER_TENANT, 'anthropic', FRESH_OAUTH);
+    refreshToken.mockRejectedValue(new Error('invalid_grant'));
+    await expect(store.forceRefreshActiveAccount('anthropic')).resolves.toBeUndefined();
+    expect(await seed.credentials.getCredential(USER_TENANT, 'anthropic')).toMatchObject({ access: 'a-1' });
+  });
+
   it('getApiKey returns undefined for OAuth credentials of providers without a registered flow', async () => {
     await seed.credentials.setCredential(USER_TENANT, 'unknown-provider', FRESH_OAUTH);
     const store = new TenantCredentialStore(ORG, USER, seed.credentials, 'user');
@@ -166,6 +211,25 @@ describe('TenantCredentialStore', () => {
     await seed.credentials.removeCredential(USER_TENANT, 'openai');
     await expect(store.getApiKey('openai')).resolves.toBeUndefined();
     expect(store.get('openai')).toBeUndefined();
+  });
+
+  it('retries an unavailable credential storage every 15 seconds, not on every request and model call', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    });
+    const ensureReady = vi.spyOn(seed.credentials, 'ensureReady').mockRejectedValue(new Error('no encryption key'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const store = new TenantCredentialStore(ORG, USER, seed.credentials, 'user');
+
+    await store.ensureFresh();
+    await expect(store.getApiKey('openai')).resolves.toBeUndefined();
+    expect(ensureReady).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(Date.now() + 15_000);
+    await store.getApiKey('openai');
+    expect(ensureReady).toHaveBeenCalledTimes(2);
   });
 });
 

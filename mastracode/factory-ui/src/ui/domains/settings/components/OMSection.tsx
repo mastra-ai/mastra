@@ -11,6 +11,7 @@ import {
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
@@ -21,7 +22,6 @@ import {
   useUpdateOMThresholds,
 } from '../../../../hooks/use-om';
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { ModelCombobox } from './ModelCombobox';
 
 type AttachmentChoice = 'auto' | 'on' | 'off';
@@ -102,17 +102,21 @@ function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (va
 export function OMSection({
   sessionId,
   factoryId,
+  threadId,
+  resourceId,
   models,
 }: {
   sessionId?: string;
   factoryId?: string;
+  threadId?: string;
+  resourceId?: string;
   models: AvailableModelOption[];
 }) {
-  const omQuery = useOMQuery(sessionId, factoryId);
-  const observerMutation = useUpdateOMModel(sessionId, 'observer', factoryId);
-  const reflectorMutation = useUpdateOMModel(sessionId, 'reflector', factoryId);
-  const thresholdsMutation = useUpdateOMThresholds(sessionId, factoryId);
-  const attachmentsMutation = useUpdateOMObserveAttachments(sessionId, factoryId);
+  const omQuery = useOMQuery(sessionId, factoryId, threadId, resourceId);
+  const observerMutation = useUpdateOMModel(sessionId, 'observer', factoryId, threadId, resourceId);
+  const reflectorMutation = useUpdateOMModel(sessionId, 'reflector', factoryId, threadId, resourceId);
+  const thresholdsMutation = useUpdateOMThresholds(sessionId, factoryId, threadId, resourceId);
+  const attachmentsMutation = useUpdateOMObserveAttachments(sessionId, factoryId, threadId, resourceId);
 
   const busy =
     observerMutation.isPending ||
@@ -134,7 +138,7 @@ export function OMSection({
   };
 
   if (omQuery.isPending) {
-    return <SkeletonRows label="Loading observational-memory settings" rows={2} rowClassName="h-14 w-full" />;
+    return <SettingsSkeleton label="Loading observational-memory settings" rows={5} />;
   }
 
   if (omQuery.data === undefined) {
@@ -183,7 +187,7 @@ export function OMSection({
               models={models}
               value={config.observer.model}
               auto={{ effectiveModelId: config.observer.effectiveModelId }}
-              placeholder="Select observer model…"
+              placeholder="Select observer model"
               aria-label="Observer model"
               size="sm"
               disabled={busy}
@@ -206,7 +210,7 @@ export function OMSection({
               models={models}
               value={config.reflector.model}
               auto={{ effectiveModelId: config.reflector.effectiveModelId }}
-              placeholder="Select reflector model…"
+              placeholder="Select reflector model"
               aria-label="Reflector model"
               size="sm"
               disabled={busy}

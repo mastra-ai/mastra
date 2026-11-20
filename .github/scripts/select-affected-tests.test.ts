@@ -1,0 +1,259 @@
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { describe, expect, test } from 'vitest';
+import { parse } from 'yaml';
+import selection from './select-affected-tests.cjs';
+
+const { routeTests, diffLockfiles } = selection;
+
+const workspacePackages = [
+  { id: 's3', name: '@mastra/s3', dependencies: {} },
+  { id: 'docker', name: '@mastra/docker', dependencies: {} },
+];
+const route = (input: { changedFiles: string[]; affectedTests?: string[]; fullSuite?: boolean }) =>
+  routeTests({ affectedTests: [], fullSuite: false, workspacePackages, ...input });
+
+describe('Prebuild test routing', () => {
+  test('the full suite runs every suite and carries no test selection', () => {
+    const result = route({ changedFiles: [], affectedTests: ['packages/core/src/a.test.ts'], fullSuite: true });
+
+    expect(result.runFull).toBe(true);
+    expect(result.unitTestFiles).toEqual([]);
+    expect(result.e2eTestFiles).toEqual([]);
+    expect(Object.values(result.flags).every(Boolean)).toBe(true);
+    expect(result.workspaceDockerPackages).toEqual(['s3']);
+  });
+
+  test('splits selected tests between the unit job and the package E2E job', () => {
+    const result = route({
+      changedFiles: ['packages/schema-compat/src/schema.ts'],
+      affectedTests: [
+        'packages/schema-compat/src/schema.test.ts',
+        'packages/schema-compat/src/provider-compats/anthropic.e2e.test.ts',
+        'packages/rag/src/document.test.ts',
+        'client-sdks/ai-sdk/src/chat-route.test.ts',
+        'client-sdks/ai-sdk/src/__tests__/tool-call-approval.e2e.test.ts',
+        'e2e-tests/monorepo/monorepo.test.ts',
+      ],
+    });
+
+    expect(result.unitTestFiles).toEqual([
+      'packages/schema-compat/src/schema.test.ts',
+      'client-sdks/ai-sdk/src/chat-route.test.ts',
+    ]);
+    expect(result.e2eTestFiles).toEqual([
+      'packages/schema-compat/src/provider-compats/anthropic.e2e.test.ts',
+      'packages/rag/src/document.test.ts',
+      'client-sdks/ai-sdk/src/__tests__/tool-call-approval.e2e.test.ts',
+    ]);
+    // An external E2E test reaches the Studio/E2E workflow, not the package E2E job.
+    expect(result.flags.e2e_changed).toBe(true);
+  });
+
+  test('splits 500 or more unit test files across three affected-unit jobs', () => {
+    const unitTests = (count: number) => Array.from({ length: count }, (_, i) => `packages/core/src/t${i}.test.ts`);
+    const changedFiles = ['packages/core/src/index.ts'];
+
+    expect(route({ changedFiles, affectedTests: unitTests(499) }).unitShards).toEqual([1]);
+    expect(route({ changedFiles, affectedTests: unitTests(500) }).unitShards).toEqual([1, 2, 3]);
+    // E2E tests run in their own job, so they don't count toward the split.
+    const mixed = [...unitTests(499), 'packages/core/src/a.e2e.test.ts'];
+    expect(route({ changedFiles, affectedTests: mixed }).unitShards).toEqual([1]);
+    // The full suite shards itself; the affected-unit job doesn't run.
+    expect(route({ changedFiles, affectedTests: unitTests(600), fullSuite: true }).unitShards).toEqual([1]);
+  });
+
+  test('a lockfile-only change starts the suites that install published packages', () => {
+    const { flags } = route({ changedFiles: ['pnpm-lock.yaml'] });
+
+    expect(flags).toMatchObject({
+      e2e_changed: true,
+      mastracode_e2e_changed: true,
+      durable_streams_changed: true,
+      stores_changed: false,
+      memory_changed: false,
+    });
+  });
+
+  test('editing the routing itself runs the suites it gates', () => {
+    for (const file of ['.github/workflows/prebuild.yml', '.github/scripts/select-affected-tests.cjs']) {
+      expect(route({ changedFiles: [file] }).flags).toMatchObject({
+        stores_changed: true,
+        memory_changed: true,
+        durable_streams_changed: true,
+      });
+    }
+  });
+
+  test('docs-only edits inside packages start no suites', () => {
+    const { flags } = route({ changedFiles: ['packages/core/README.md', 'stores/pg/CHANGELOG.md'] });
+
+    expect(Object.values(flags).some(Boolean)).toBe(false);
+  });
+});
+
+describe('Prebuild test tiers', () => {
+  const out = { tier: 'out' };
+  const tierFiles: Record<string, { tier: string }> = {
+    'packages/core/src/quiet.test.ts': out,
+    'packages/core/src/quiet.e2e.test.ts': out,
+    'job:store/pg': out,
+    'job:memory': out,
+    'job:workspace-unit/docker': out,
+  };
+  const tiered = (
+    input: { changedFiles: string[]; affectedTests?: string[]; fullSuite?: boolean },
+    fullTestsLabel = false,
+  ) =>
+    route({ ...input, storeNames: ['pg', 'libsql'], tiers: { tiers: { files: tierFiles }, fullTestsLabel } } as never);
+
+  test('drops quiet files the PR does not edit, before deciding the unit shards', () => {
+    const many = Array.from({ length: 499 }, (_, i) => `packages/core/src/t${i}.test.ts`);
+    const result = tiered({
+      changedFiles: ['packages/core/src/index.ts'],
+      affectedTests: [...many, 'packages/core/src/quiet.test.ts', 'packages/core/src/quiet.e2e.test.ts'],
+    });
+
+    expect(result.unitTestFiles).not.toContain('packages/core/src/quiet.test.ts');
+    expect(result.e2eTestFiles).toEqual([]);
+    expect(result.unitShards).toEqual([1]);
+    expect(result.tiers.droppedFiles).toEqual([
+      'packages/core/src/quiet.test.ts',
+      'packages/core/src/quiet.e2e.test.ts',
+    ]);
+  });
+
+  test('keeps a quiet file the PR edits', () => {
+    const result = tiered({
+      changedFiles: ['packages/core/src/quiet.test.ts'],
+      affectedTests: ['packages/core/src/quiet.test.ts'],
+    });
+
+    expect(result.unitTestFiles).toEqual(['packages/core/src/quiet.test.ts']);
+  });
+
+  test('turns a gate off when every job behind it is quiet and untouched', () => {
+    const memory = tiered({
+      changedFiles: ['packages/core/src/index.ts'],
+      affectedTests: ['packages/memory/integration-tests/a.test.ts'],
+    });
+    expect(memory.flags.memory_changed).toBe(false);
+    expect(memory.tiers.skippedJobs).toContain('job:memory');
+
+    // libsql is not tiered out, so the store workflow still starts and skips only pg.
+    const stores = tiered({ changedFiles: ['stores/_test-utils/src/index.ts'] });
+    expect(stores.flags.stores_changed).toBe(true);
+  });
+
+  test('a quiet job still runs when the PR edits its own paths', () => {
+    const result = tiered({ changedFiles: ['packages/memory/src/index.ts'] });
+
+    expect(result.flags.memory_changed).toBe(true);
+    expect(result.tiers.skippedJobs).not.toContain('job:memory');
+  });
+
+  test('skips quiet workspace packages but keeps the full list for the cloud tests', () => {
+    const result = tiered({
+      changedFiles: ['packages/core/src/index.ts'],
+      affectedTests: ['workspaces/docker/src/a.test.ts', 'workspaces/s3/src/a.test.ts'],
+    });
+
+    expect(result.workspaceSelection.packages).toEqual(expect.arrayContaining(['docker', 's3']));
+    expect(result.workspaceUnitRun).toEqual(['s3']);
+    expect(result.workspaceDockerRun).toEqual(['s3']);
+    expect(result.flags.workspaces_changed).toBe(true);
+  });
+
+  test('the full-tests label and the full suite run everything', () => {
+    const input = { changedFiles: ['packages/core/src/index.ts'], affectedTests: ['packages/core/src/quiet.test.ts'] };
+
+    expect(tiered(input, true).unitTestFiles).toEqual(['packages/core/src/quiet.test.ts']);
+    expect(tiered(input, true).tiers.skippedJobs).toEqual([]);
+    expect(tiered({ ...input, fullSuite: true }).tiers.skippedJobs).toEqual([]);
+  });
+
+  test('the E2E workflow still starts for npm import when every tiered E2E job is quiet', () => {
+    const e2eJobs = Object.fromEntries(
+      [
+        'monorepo',
+        'kitchen-sink',
+        'deployers',
+        'create-mastra',
+        'commonjs',
+        'no-bundling',
+        'mcp-compat',
+        'client-js',
+        'type-check',
+      ].map(name => [`job:e2e/${name}`, out]),
+    );
+    const result = route({
+      changedFiles: ['packages/core/src/mcp/index.ts'],
+      tiers: { tiers: { files: { ...tierFiles, ...e2eJobs } }, fullTestsLabel: false },
+    } as never);
+
+    expect(result.tiers.skippedJobs).toContain('job:e2e/mcp-compat');
+    expect(result.flags.e2e_changed).toBe(true);
+  });
+
+  test('the E2E registry publishes whenever the E2E workflow runs', () => {
+    // e2e-npm-import is not tiered and needs the registry, so its publisher can't be tiered either.
+    const workflow = parse(readFileSync(new URL('../workflows/e2e-tests.yml', import.meta.url), 'utf8'));
+    const consumers = Object.entries(workflow.jobs as Record<string, { needs?: string | string[] }>)
+      .filter(([, job]) => [job.needs ?? []].flat().includes('publish-e2e-registry'))
+      .map(([name]) => name);
+
+    expect(consumers).toContain('e2e-npm-import');
+    expect(workflow.jobs['publish-e2e-registry'].if).toBeUndefined();
+  });
+
+  test('without tiers nothing is dropped', () => {
+    const result = route({
+      changedFiles: ['packages/core/src/index.ts'],
+      affectedTests: ['packages/core/src/quiet.test.ts'],
+    });
+
+    expect(result.unitTestFiles).toEqual(['packages/core/src/quiet.test.ts']);
+    expect(result.tiers.skippedJobs).toEqual([]);
+  });
+});
+
+// Lines kept apart so the branch and main edits merge without a conflict.
+const lockfile = (a: number, b: number) => `a: ${a}\n${'pad: 0\n'.repeat(5)}b: ${b}\n`;
+
+describe('PR lockfile diff', () => {
+  test('ignores lockfile changes main made after the branch point when the merge commit is checked out', () => {
+    const repo = mkdtempSync(join(tmpdir(), 'lockfile-diff-'));
+    const git = (...args: string[]) =>
+      execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args], {
+        cwd: repo,
+        encoding: 'utf-8',
+      });
+    const commit = (text: string, message: string) => {
+      writeFileSync(join(repo, 'pnpm-lock.yaml'), text);
+      git('commit', '-qam', message);
+      return git('rev-parse', 'HEAD').trim();
+    };
+    try {
+      git('init', '-q', '-b', 'main');
+      writeFileSync(join(repo, 'pnpm-lock.yaml'), lockfile(1, 1));
+      git('add', '.');
+      git('commit', '-qm', 'branch point');
+      git('checkout', '-qb', 'pr');
+      const headSha = commit(lockfile(2, 1), 'pr bumps a');
+      git('checkout', '-q', 'main');
+      const baseSha = commit(lockfile(1, 2), 'main bumps b');
+      // actions/checkout on pull_request checks out the merge of the PR into main.
+      git('merge', '-q', '--no-edit', 'pr');
+
+      expect(readFileSync(join(repo, 'pnpm-lock.yaml'), 'utf-8')).toBe(lockfile(2, 2));
+      expect(diffLockfiles(git, { baseSha, headSha, changedFiles: ['pnpm-lock.yaml'] })).toEqual({
+        baseLockfile: lockfile(1, 1),
+        headLockfile: lockfile(2, 1),
+      });
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+});

@@ -40,7 +40,7 @@ describe('EditTopBar', () => {
   it('shows the skeleton placeholder in the current crumb while loading', () => {
     render(
       <FormWrapper>
-        <EditTopBar isLoading={true} />
+        <EditTopBar isLoading />
       </FormWrapper>,
     );
 

@@ -27,7 +27,6 @@ function row(overrides: Partial<SubscriptionSessionRow['data']> = {}, orgId = 'o
     sessionId: 'session-1',
     resourceId: 'factory-1',
     threadId: 'thread-1',
-    sessionScope: '',
     status: 'open',
     data: { projectRepositoryId: 'repo-1', subscribedByUserId: 'user-1', ...overrides },
     createdAt: new Date('2026-09-21T00:00:00Z'),

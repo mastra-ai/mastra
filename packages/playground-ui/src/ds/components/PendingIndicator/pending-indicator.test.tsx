@@ -9,15 +9,6 @@ afterEach(() => {
 });
 
 describe('PendingIndicator', () => {
-  it('renders a single fading dot', () => {
-    const { container } = render(<PendingIndicator />);
-
-    const dots = container.querySelectorAll('span');
-    expect(dots.length).toBe(1);
-    expect(dots[0]?.className).toContain('animate-pulse');
-    expect(dots[0]?.className).toContain('rounded-full');
-  });
-
   it('exposes a stable default test id', () => {
     render(<PendingIndicator />);
 

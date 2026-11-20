@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDate, formatShortDate, formatTimestampPrecise, toDate } from './date-format';
+import { formatDate, formatMoment, formatShortDate, formatTimestampPrecise, toDate } from './date-format';
 
 const NOW = new Date('2026-09-24T18:00:00.000Z');
 const TODAY = new Date('2026-09-24T14:32:00.000Z');
@@ -165,5 +165,19 @@ describe('formatTimestampPrecise', () => {
 
   it('returns undefined when unusable', () => {
     expect(formatTimestampPrecise(null)).toBeUndefined();
+  });
+});
+
+describe('formatMoment', () => {
+  const now = new Date(2026, 9, 28, 9, 0, 0);
+  const at = (month: number, day: number, year = 2026) => new Date(year, month, day, 22, 44, 44);
+
+  it.each([
+    ['earlier today', at(9, 28), 'Today at 10:44:44 PM'],
+    ['just before midnight yesterday', at(9, 27), 'Yesterday at 10:44:44 PM'],
+    ['earlier this year', at(9, 21), 'Oct 21 at 10:44:44 PM'],
+    ['in another year', at(11, 31, 2025), 'Dec 31, 2025 at 10:44:44 PM'],
+  ])('names a moment %s by its day and clock', (_, time, expected) => {
+    expect(formatMoment(time, { now, locale: 'en-US' })?.replace(/\u202f/g, ' ')).toBe(expected);
   });
 });

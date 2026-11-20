@@ -3,13 +3,24 @@ import type { AgentController } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
+import type { InlineSkill } from '@mastra/core/skills';
 import type { Context } from 'hono';
 
-import { listFactorySkills } from '../skills/catalog.js';
+import {
+  createdSkillInfo,
+  hashSkillContent,
+  listFactorySkills,
+  originalSkillInfo,
+  readFactorySkillOriginals,
+} from '../skills/catalog.js';
 import { formatSkillMessage, resolveSkillInvocation, SkillInvocationError } from '../skills/service.js';
+import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import type { SkillOverridesStorage } from '../storage/domains/skill-overrides/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import { FACTORY_ROUTE_CONTRACTS, skillCreateBodySchema, skillOverrideSaveRequestSchema } from './contracts.js';
 import type { RouteDependencies } from './route.js';
-import { Route } from './route.js';
+import { loose, Route } from './route.js';
 
 const MAX_SESSION_ID_LENGTH = 512;
 const MAX_ARGUMENTS_LENGTH = 16_384;
@@ -35,11 +46,20 @@ export interface SkillRoutesDeps extends RouteDependencies {
   sourceControlStorage?: SourceControlStorageHandle;
   ensureSourceControlReady?: () => Promise<void>;
   authorizeSessionAddress?: (context: Context, address: { sessionId: string }) => Promise<SessionAuthorizationResult>;
+  /** App skills from `MastraFactory({ skills })`, listed in the catalog alongside folder and bundled skills. */
+  skills?: readonly InlineSkill[];
+  /** Per-project skill edits. Without it the catalog lists originals only and edit routes are not served. */
+  overrides?: {
+    projects: Pick<FactoryProjectsStorage, 'ensureReady' | 'get'>;
+    storage: Pick<
+      SkillOverridesStorage,
+      'ensureReady' | 'list' | 'get' | 'upsert' | 'create' | 'updateCreated' | 'delete'
+    >;
+    audit: AuditEmitter;
+  };
 }
 
-function loose(context: unknown): Context {
-  return context as Context;
-}
+type ProjectAccess = { orgId: string; userId: string; projectId: string } | { response: Response };
 
 function parseBody(value: unknown): SkillInvocationBody | undefined {
   if (!value || typeof value !== 'object') return undefined;
@@ -104,6 +124,30 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
     return visible.some(session => session.sessionId === address.sessionId) ? { allowed: true } : SESSION_FORBIDDEN;
   }
 
+  /** Resolves the signed-in tenant and a project of its organization, or the error response. */
+  async #projectAccess(c: Context, projectId: string | undefined): Promise<ProjectAccess> {
+    const { auth, overrides } = this.deps;
+    await auth.ensureUser(c);
+    const tenant = auth.tenant(c);
+    if (!tenant) return { response: c.json({ error: 'unauthorized', message: 'Authentication required.' }, 401) };
+    if (!tenant.orgId) {
+      return {
+        response: c.json({ error: 'organization_required', message: 'Factory projects require an organization.' }, 403),
+      };
+    }
+    if (!overrides || !projectId) return { response: c.json({ error: 'Project not found' }, 404) };
+    await overrides.projects.ensureReady();
+    const project = await overrides.projects.get({ orgId: tenant.orgId, id: projectId });
+    if (!project) return { response: c.json({ error: 'Project not found' }, 404) };
+    return { orgId: tenant.orgId, userId: tenant.userId, projectId };
+  }
+
+  /** Org admins edit skills; with auth disabled the single local user does. */
+  async #canEdit(c: Context, orgId: string): Promise<boolean> {
+    const { auth } = this.deps;
+    return !auth.enabled() || (await auth.isOrganizationAdmin(c, orgId));
+  }
+
   routes(): ApiRoute[] {
     const { controllerId, controller, authorizeSessionAddress: customAuthorize } = this.deps;
     const authorize =
@@ -153,22 +197,176 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
 
     const handleFactorySkillsList = async (context: unknown) => {
       const c = loose(context);
-      const { auth } = this.deps;
+      const { auth, overrides } = this.deps;
+      const query = FACTORY_ROUTE_CONTRACTS.skillList.querySchema.safeParse(c.req.query());
+      if (!query.success) return c.json({ error: 'invalid_request', message: 'Invalid project id.' }, 400);
+      const { projectId } = query.data;
+      if (projectId !== undefined) {
+        const access = await this.#projectAccess(c, projectId);
+        if ('response' in access) return access.response;
+        await overrides!.storage.ensureReady();
+        const edits = await overrides!.storage.list(access);
+        return c.json({
+          skills: await listFactorySkills(this.deps.skills, edits),
+          canEdit: await this.#canEdit(c, access.orgId),
+        });
+      }
       if (auth.enabled()) {
         await auth.ensureUser(c);
         if (!auth.tenant(c)) {
           return c.json({ error: 'unauthorized', message: 'Authentication required.' }, 401);
         }
       }
-      return c.json({ skills: await listFactorySkills() });
+      return c.json({ skills: await listFactorySkills(this.deps.skills) });
+    };
+
+    const handleSkillEdit = async (context: unknown, revert: boolean) => {
+      const c = loose(context);
+      const { overrides } = this.deps;
+      const contract = revert ? FACTORY_ROUTE_CONTRACTS.skillOverrideRevert : FACTORY_ROUTE_CONTRACTS.skillOverrideSave;
+      const path = contract.pathSchema.safeParse({ id: c.req.param('id'), name: c.req.param('name') });
+      if (!path.success) return c.json({ error: 'not_found', message: 'Skill not found.' }, 404);
+      const access = await this.#projectAccess(c, path.data.id);
+      if ('response' in access) return access.response;
+      if (!(await this.#canEdit(c, access.orgId))) {
+        return c.json(
+          { error: 'forbidden', message: 'Organization administrator access is required to edit skills.' },
+          403,
+        );
+      }
+      const name = path.data.name;
+      const scope = { orgId: access.orgId, projectId: access.projectId, skillName: name };
+      await overrides!.storage.ensureReady();
+      const original = (await readFactorySkillOriginals(this.deps.skills)).get(name);
+      // Without an original, the name can only be a skill this project created.
+      if (!original && (await overrides!.storage.get(scope))?.kind !== 'created') {
+        return c.json({ error: 'not_found', message: `Skill "${name}" not found.` }, 404);
+      }
+
+      if (revert) {
+        if (await overrides!.storage.delete(scope)) {
+          await overrides!.audit.emit({
+            context: c,
+            input: {
+              action: original ? 'factory.skill.reverted' : 'factory.skill.deleted',
+              targets: [{ type: 'skill', id: name }],
+              factoryProjectId: access.projectId,
+            },
+          });
+        }
+        // The response describes what the delete left, not a reread another write could change.
+        return c.json({ skill: original ? originalSkillInfo(name, original) : null });
+      }
+
+      let body: unknown;
+      try {
+        body = await c.req.json();
+      } catch {
+        return c.json({ error: 'invalid_request', message: 'Invalid JSON body.' }, 400);
+      }
+      const request = skillOverrideSaveRequestSchema.safeParse({
+        ...(body && typeof body === 'object' ? body : {}),
+        ...path.data,
+      });
+      if (!request.success) {
+        return c.json(
+          { error: 'invalid_skill', message: request.error.issues.map(issue => issue.message).join('\n') },
+          400,
+        );
+      }
+      const write = { ...scope, content: request.data.content, updatedBy: access.userId };
+      // A created skill is only updated while it exists, so a save racing a delete doesn't bring it back.
+      const saved = original
+        ? await overrides!.storage.upsert({ ...write, baseHash: hashSkillContent(original.raw), kind: 'edit' })
+        : await overrides!.storage.updateCreated(write);
+      if (!saved) return c.json({ error: 'not_found', message: `Skill "${name}" not found.` }, 404);
+      await overrides!.audit.emit({
+        context: c,
+        input: {
+          action: 'factory.skill.updated',
+          targets: [{ type: 'skill', id: name }],
+          factoryProjectId: access.projectId,
+          metadata: { origin: original?.origin ?? 'project' },
+        },
+      });
+      return c.json({ skill: original ? originalSkillInfo(name, original, saved) : createdSkillInfo(saved) });
+    };
+
+    const handleSkillCreate = async (context: unknown) => {
+      const c = loose(context);
+      const { overrides } = this.deps;
+      const path = FACTORY_ROUTE_CONTRACTS.skillCreate.pathSchema.safeParse({ id: c.req.param('id') });
+      if (!path.success) return c.json({ error: 'Project not found' }, 404);
+      const access = await this.#projectAccess(c, path.data.id);
+      if ('response' in access) return access.response;
+      if (!(await this.#canEdit(c, access.orgId))) {
+        return c.json(
+          { error: 'forbidden', message: 'Organization administrator access is required to create skills.' },
+          403,
+        );
+      }
+
+      let body: unknown;
+      try {
+        body = await c.req.json();
+      } catch {
+        return c.json({ error: 'invalid_request', message: 'Invalid JSON body.' }, 400);
+      }
+      const request = skillCreateBodySchema.safeParse(body);
+      if (!request.success) {
+        return c.json(
+          { error: 'invalid_skill', message: request.error.issues.map(issue => issue.message).join('\n') },
+          400,
+        );
+      }
+      const { name, content } = request.data;
+      const exists = { error: 'skill_exists', message: `A skill named "${name}" already exists. Edit it instead.` };
+      if ((await readFactorySkillOriginals(this.deps.skills)).has(name)) return c.json(exists, 409);
+      await overrides!.storage.ensureReady();
+      const created = await overrides!.storage.create({
+        orgId: access.orgId,
+        projectId: access.projectId,
+        skillName: name,
+        content,
+        updatedBy: access.userId,
+      });
+      if (!created) return c.json(exists, 409);
+      await overrides!.audit.emit({
+        context: c,
+        input: {
+          action: 'factory.skill.created',
+          targets: [{ type: 'skill', id: name }],
+          factoryProjectId: access.projectId,
+        },
+      });
+      return c.json({ skill: createdSkillInfo(created) }, 201);
     };
 
     return [
-      registerApiRoute('/web/factory/skills', {
-        method: 'GET',
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.skillList.path, {
+        method: FACTORY_ROUTE_CONTRACTS.skillList.method,
         requiresAuth: false,
         handler: context => handleFactorySkillsList(context),
       }),
+      ...(this.deps.overrides
+        ? [
+            registerApiRoute(FACTORY_ROUTE_CONTRACTS.skillCreate.path, {
+              method: FACTORY_ROUTE_CONTRACTS.skillCreate.method,
+              requiresAuth: false,
+              handler: context => handleSkillCreate(context),
+            }),
+            registerApiRoute(FACTORY_ROUTE_CONTRACTS.skillOverrideSave.path, {
+              method: FACTORY_ROUTE_CONTRACTS.skillOverrideSave.method,
+              requiresAuth: false,
+              handler: context => handleSkillEdit(context, false),
+            }),
+            registerApiRoute(FACTORY_ROUTE_CONTRACTS.skillOverrideRevert.path, {
+              method: FACTORY_ROUTE_CONTRACTS.skillOverrideRevert.method,
+              requiresAuth: false,
+              handler: context => handleSkillEdit(context, true),
+            }),
+          ]
+        : []),
       registerApiRoute('/web/agent-controller/:controllerId/skills/prepare', {
         method: 'POST',
         requiresAuth: false,

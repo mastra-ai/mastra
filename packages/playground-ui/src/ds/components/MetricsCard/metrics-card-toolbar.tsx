@@ -2,10 +2,10 @@ import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 /**
- * One row under the top bar for a card's controls: small tabs, a legend, list column headers.
+ * One row under the top bar for a card's controls: a legend, list column headers.
  * The first child sits on the left, the last on the right; either side may be omitted. When
- * both don't fit (a narrow card), the right side wraps to its own line, still on the right. At least as
- * tall as `MetricsCard.Tabs`, so a legend-only toolbar matches a card with tabs in the same row.
+ * both don't fit (a narrow card), the right side wraps to its own line, still on the right. At least 24px
+ * tall, so toolbars line up across cards in the same row.
  */
 export function MetricsCardToolbar({ children, className }: { children: ReactNode; className?: string }) {
   return (

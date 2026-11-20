@@ -5,6 +5,7 @@ import type {
   CheckIfRunningPayload,
   CheckIfSuspendedPayload,
   CreateBackgroundTaskOptions,
+  ResumeOptions,
 } from './types';
 
 /**
@@ -118,11 +119,14 @@ export function createBackgroundTask(
       return false;
     },
 
-    async resume(resumeData?: unknown) {
+    async resume(resumeData?: unknown, resumeOptions?: ResumeOptions) {
       if (!taskId) throw new Error('Task has not been dispatched yet');
       manager.registerTaskContext(taskId, context);
       try {
-        return await manager.resume(taskId, resumeData);
+        // Only forward options when given, so existing callers see the same call.
+        return resumeOptions
+          ? await manager.resume(taskId, resumeData, resumeOptions)
+          : await manager.resume(taskId, resumeData);
       } catch (error) {
         manager.deregisterTaskContext(taskId);
         throw error;

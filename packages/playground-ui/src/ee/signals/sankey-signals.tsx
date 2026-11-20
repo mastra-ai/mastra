@@ -1,5 +1,4 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeftRight, ChartNoAxesGantt, Waypoints } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { PendingSignalProgress } from './components/signals-empty-state';
@@ -12,15 +11,11 @@ import { useThemeFlows } from './hooks/use-theme-flows';
 import { useThemePaths } from './hooks/use-theme-paths';
 import { useThemeSnapshots } from './hooks/use-theme-snapshots';
 import { NoiseDetailPanel } from './noise-detail-panel';
-import {
-  buildSignalGraphSummary,
-  selectFlowSnapshotIds,
-  snapshotSummaryLabel,
-  stabilizeThemeFlow,
-} from './sankey-signals-data';
+import { buildSignalGraphSummary, selectFlowSnapshotIds, stabilizeThemeFlow } from './sankey-signals-data';
 import { orderedSignals, signalLabel } from './signal-formatting';
 import { SignalsErrorState } from './signals-error-state';
 import { SignalsFrameLoadingSkeleton, SignalsLoadingSkeleton } from './signals-loading-skeleton';
+import { SnapshotSummary } from './snapshot-summary';
 import { SnapshotTimeline } from './snapshot-timeline';
 import { ThemeCompare } from './theme-compare';
 import { ThemeDetailPanel } from './theme-detail-panel';
@@ -44,6 +39,9 @@ import type { SignalsViewMode } from './view-mode-tab';
 import type { SankeyChartNodeSelection } from '@/ds/components/SankeyChart';
 import { TabList, Tabs } from '@/ds/components/Tabs';
 import { Txt } from '@/ds/components/Txt';
+import { IconAgents } from '@/ds/icons/central/IconAgents';
+import { IconArrowLeftRight } from '@/ds/icons/central/IconArrowLeftRight';
+import { IconGanttChart } from '@/ds/icons/central/IconGanttChart';
 
 export interface SankeySignalsProps {
   entityId: string;
@@ -297,7 +295,7 @@ export function SankeySignals({
           snapshots={snapshots}
           selectedIndex={selectedSnapshotIndex}
           totalSnapshots={totalSnapshots}
-          summary={snapshot ? snapshotSummaryLabel(snapshot, undefined) : ''}
+          summary={snapshot ? <SnapshotSummary snapshot={snapshot} flow={undefined} /> : undefined}
           isPlaying={isPlaying}
           onPlayingChange={handlePlayingChange}
           onSnapshotChange={selectSnapshot}
@@ -352,6 +350,7 @@ export function SankeySignals({
     perspectiveMutation.mutate(mergedSignalNames);
   };
   const filtersResolved = drillStack.length > 0 && drillInAvailable && pathsQuery.data !== undefined;
+  const filterSummaryPrefix = drillInAvailable ? 'Filtered' : 'Filters unavailable';
   const detailStats = filtersResolved ? findSelectionStats(flow, drillStack, detailSelection) : undefined;
   const noiseStats = filtersResolved
     ? findSelectionStats(flow, drillStack, noiseSignalName ? { kind: 'noise', signalName: noiseSignalName } : undefined)
@@ -379,9 +378,9 @@ export function SankeySignals({
               className="w-fit"
             >
               <TabList variant="pill-ghost">
-                <ViewModeTab value="flow" icon={<Waypoints />} label="Flow" />
-                <ViewModeTab value="compare" icon={<ArrowLeftRight />} label="Compare" />
-                <ViewModeTab value="lifelines" icon={<ChartNoAxesGantt />} label="Lifelines" />
+                <ViewModeTab value="flow" icon={<IconAgents />} label="Flow" />
+                <ViewModeTab value="compare" icon={<IconArrowLeftRight />} label="Compare" />
+                <ViewModeTab value="lifelines" icon={<IconGanttChart />} label="Lifelines" />
               </TabList>
             </Tabs>
             <TraceIntelligenceExplainer signalCatalog={effectiveSignalCatalog} />
@@ -418,7 +417,13 @@ export function SankeySignals({
               snapshots={snapshots}
               selectedIndex={selectedSnapshotIndex}
               totalSnapshots={totalSnapshots}
-              summary={`${drillStack.length > 0 ? (drillInAvailable ? 'Filtered · ' : 'Filters unavailable · ') : ''}${snapshotSummaryLabel(snapshot, flow)}`}
+              summary={
+                <SnapshotSummary
+                  snapshot={snapshot}
+                  flow={flow}
+                  prefix={drillStack.length > 0 ? filterSummaryPrefix : undefined}
+                />
+              }
               isPlaying={isPlaying}
               onPlayingChange={handlePlayingChange}
               onSnapshotChange={selectSnapshot}
@@ -454,7 +459,7 @@ export function SankeySignals({
             ) : graphSummary.records.length === 0 ? (
               <section className="rounded-lg border border-border bg-background p-6 text-muted-foreground">
                 <Txt as="span" variant="body" className="block">
-                  No cross-signal flow for this snapshot — its trace signals have not overlapped on shared traces yet.
+                  No cross-signal flow for this snapshot. Its trace signals have not overlapped on shared traces yet.
                   Pick another snapshot from the timeline below.
                 </Txt>
               </section>

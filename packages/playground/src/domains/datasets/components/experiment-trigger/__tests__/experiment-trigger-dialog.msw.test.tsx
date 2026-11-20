@@ -153,7 +153,8 @@ describe('ExperimentTriggerDialog', () => {
       renderDialog();
 
       await waitFor(() => expect(datasetField().value).toBe('Dataset 1'));
-      expect(await screen.findByText('3 items · latest')).toBeDefined();
+      expect(await screen.findByText('3 items')).toBeDefined();
+      expect(screen.getByText('latest')).toBeDefined();
       expect(runButton().disabled).toBe(true);
 
       await pickAgentOne();
@@ -208,7 +209,8 @@ describe('ExperimentTriggerDialog', () => {
 
       await waitFor(() => expect(targetField().value).toBe('Agent One'));
       expect(datasetField().value).toBe('Dataset 1');
-      expect(await screen.findByText('3 items · v11')).toBeDefined();
+      expect(await screen.findByText('3 items')).toBeDefined();
+      expect(screen.getByText('v11')).toBeDefined();
       await waitFor(() => expect(chipLabels()).toEqual(['Quality scorer']));
       // The pinned version shows in the dataset hint; Advanced stays closed.
       expect(advancedToggle().getAttribute('aria-expanded')).toBe('false');
