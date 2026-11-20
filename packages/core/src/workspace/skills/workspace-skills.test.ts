@@ -2504,6 +2504,35 @@ Shadow instructions.`;
       expect(shadow?.instructions).toContain('Shadow instructions.');
     });
 
+    it.each([
+      ['BM25', () => new SearchEngine({ bm25: {} })],
+      ['simple search', () => undefined],
+    ])('search() keeps working with two distinct local skills of the same name (%s)', async (_label, engine) => {
+      const copy = (description: string, body: string) =>
+        `---\nname: label-bugs\ndescription: ${description}\n---\n\n${body}`;
+      const searchEngine = engine();
+      const skills = new WorkspaceSkillsImpl({
+        source: createMockFilesystem({
+          'mastra/.claude/skills/label-bugs/SKILL.md': copy('Label core bugs', 'Apply the core label.'),
+          'mastra/.agents/skills/label-bugs/SKILL.md': copy('Label core bugs again', 'Apply the core label too.'),
+          'skills/pr-review/SKILL.md':
+            '---\nname: pr-review\ndescription: Review pull requests for correctness\n---\n\nRead the diff.',
+        }),
+        skills: ['mastra/.claude/skills', 'mastra/.agents/skills', 'skills'],
+        ...(searchEngine ? { searchEngine } : {}),
+      });
+
+      const [review] = await skills.search('correctness');
+      expect(review?.skillName).toBe('pr-review');
+
+      const labelHits = await skills.search('label');
+      expect(new Set(labelHits.map(r => r.skillPath))).toEqual(
+        new Set(['mastra/.claude/skills/label-bugs', 'mastra/.agents/skills/label-bugs']),
+      );
+
+      await expect(skills.get('label-bugs')).rejects.toThrow('multiple local skills found');
+    });
+
     it('should prefer local skills over external skills with same name', async () => {
       const externalSkillMd = `---
 name: test-skill

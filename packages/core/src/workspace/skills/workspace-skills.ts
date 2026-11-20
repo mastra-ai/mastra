@@ -58,6 +58,18 @@ export const SKILL_SCOPE_DOCUMENT_PREFIX = 'skill-scope:';
 /** Search document ID suffix for a skill's name + description document. */
 const SKILL_METADATA_SOURCE = 'SKILL.md#metadata';
 
+const SOURCE_PRIORITY: Record<string, number> = { local: 0, managed: 1, external: 2 };
+
+/** Same-named skills in tie-break order: local > managed > external, then by path. */
+function sortBySourcePriority(skills: InternalSkill[]): InternalSkill[] {
+  return [...skills].sort((a, b) => {
+    const aPri = SOURCE_PRIORITY[a.source.type] ?? 99;
+    const bPri = SOURCE_PRIORITY[b.source.type] ?? 99;
+    if (aPri !== bPri) return aPri - bPri;
+    return a.path.localeCompare(b.path);
+  });
+}
+
 // =============================================================================
 // WorkspaceSkillsImpl
 // =============================================================================
@@ -421,16 +433,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       canonicalGroups.set(canonicalPath, group);
     }
 
-    const SOURCE_PRIORITY: Record<string, number> = { local: 0, managed: 1, external: 2 };
-    return [...canonicalGroups.values()].map(
-      group =>
-        [...group].sort((a, b) => {
-          const aPri = SOURCE_PRIORITY[a.source.type] ?? 99;
-          const bPri = SOURCE_PRIORITY[b.source.type] ?? 99;
-          if (aPri !== bPri) return aPri - bPri;
-          return a.path.localeCompare(b.path);
-        })[0]!,
-    );
+    return [...canonicalGroups.values()].map(group => sortBySourcePriority(group)[0]!);
   }
 
   /**
@@ -450,13 +453,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
     if (deduped.length === 1) return deduped[0]!;
 
-    const SOURCE_PRIORITY: Record<string, number> = { local: 0, managed: 1, external: 2 };
-    const sorted = [...deduped].sort((a, b) => {
-      const aPri = SOURCE_PRIORITY[a.source.type] ?? 99;
-      const bPri = SOURCE_PRIORITY[b.source.type] ?? 99;
-      if (aPri !== bPri) return aPri - bPri;
-      return a.path.localeCompare(b.path);
-    });
+    const sorted = sortBySourcePriority(deduped);
 
     const winner = sorted[0]!;
     const runnerUp = sorted[1]!;
@@ -483,6 +480,19 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     );
 
     return winner;
+  }
+
+  /**
+   * Same-named candidates for search: the tie-break winner, or every distinct skill of the
+   * winning source type when two of them share the name. `get()` refuses such a name, but
+   * search must not fail over one ambiguous skill, and each result carries its own path.
+   */
+  async #searchCandidates(candidates: InternalSkill[]): Promise<InternalSkill[]> {
+    if (candidates.length <= 1) return candidates;
+
+    const deduped = await this.#dedupeCanonicalCandidates(candidates);
+    const sorted = sortBySourcePriority(deduped);
+    return sorted.filter(s => s.source.type === sorted[0]!.source.type);
   }
 
   async refresh(): Promise<void> {
@@ -767,7 +777,8 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       const matchedSkill = this.#resolveByPath(skillPath);
       if (!matchedSkill) continue;
 
-      const skill = (await this.#resolveByName(matchedSkill.name)) ?? matchedSkill;
+      const winners = await this.#searchCandidates(this.#skills.get(matchedSkill.name) ?? [matchedSkill]);
+      const skill = winners.find(s => s.path === matchedSkill.path) ?? winners[0] ?? matchedSkill;
 
       // Filter by skill names if specified
       if (skillNames && !skillNames.includes(skill.name)) {
@@ -1562,9 +1573,9 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
     const skills: Skill[] = [];
     for (const candidates of this.#skills.values()) {
-      // Use tie-break winner for each name
-      const skill = await this.#tieBreak(candidates);
-      if (skill && (!skillNames || skillNames.includes(skill.name))) skills.push(skill);
+      for (const skill of await this.#searchCandidates(candidates)) {
+        if (!skillNames || skillNames.includes(skill.name)) skills.push(skill);
+      }
     }
 
     // Score by the share of query words found (case-insensitive), so keyword
