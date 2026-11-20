@@ -89,6 +89,16 @@ describe('transformSpec', () => {
     })
   })
 
+  test('keeps the spec description of a referenced request field', () => {
+    const source = buildSpec()
+    requestSchema(source, 'createVideo').properties.resolution = {
+      $ref: '#/components/schemas/Resolution',
+      description: 'From the spec.',
+    }
+    const { spec } = transformSpec(source)
+    expect(requestSchema(spec, 'createVideo').properties.resolution.description).toBe('From the spec.')
+  })
+
   test('fails when pages.ts describes a request field the spec no longer has', () => {
     const source = buildSpec()
     delete requestSchema(source, 'createVideo').properties.seed

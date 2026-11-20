@@ -82,8 +82,9 @@ function describeFields(spec: OpenApiDocument, operation: Operation, fields: Rec
         throw new Error(`${operation.operationId} (${contentType}) has no request field "${field}". Update pages.ts.`)
       }
       // A `$ref` sibling would be ignored by some tools, so wrap referenced properties.
-      if (property.$ref) schema!.properties![field] = { allOf: [property], description } as Schema
-      else property.description ??= description
+      if (property.$ref) {
+        schema!.properties![field] = { allOf: [property], description: property.description ?? description } as Schema
+      } else property.description ??= description
     }
   }
 }
