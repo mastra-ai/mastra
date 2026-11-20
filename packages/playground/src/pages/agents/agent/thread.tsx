@@ -4,7 +4,7 @@ import {
   ThreadsPanelContext,
   useAgentThreadPage,
 } from '@mastra/playground-ui/domains/agents/chat';
-import type { AgentThreadPageState } from '@mastra/playground-ui/domains/agents/chat';
+import type { ChatProps } from '@mastra/playground-ui/domains/agents/chat';
 import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/context/activated-skills-context';
 import { BrowserToolCallsProvider } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
@@ -119,7 +119,11 @@ function AgentThread() {
                     agentId={agentId!}
                     state={state}
                     canPersistDraft={canPersistDraft}
-                    agent={agent}
+                    agentName={agent.name}
+                    modelVersion={agent.modelVersion}
+                    supportsMemory={agent.supportsMemory}
+                    modelList={agent.modelList}
+                    suggestedPrompts={getAgentSuggestedPrompts(agent.metadata)}
                     requestContext={requestContext}
                     messageId={searchParams.get('messageId') ?? undefined}
                   />
@@ -137,14 +141,22 @@ function StudioThreadPage({
   agentId,
   state,
   canPersistDraft,
-  agent,
+  agentName,
+  modelVersion,
+  supportsMemory,
+  modelList,
+  suggestedPrompts,
   requestContext,
   messageId,
 }: {
   agentId: string;
-  state: AgentThreadPageState;
+  state: ReturnType<typeof useAgentThreadPage>;
   canPersistDraft: boolean;
-  agent: NonNullable<ReturnType<typeof useAgent>['data']>;
+  agentName: string;
+  modelVersion?: ChatProps['modelVersion'];
+  supportsMemory?: ChatProps['supportsMemory'];
+  modelList?: ChatProps['modelList'];
+  suggestedPrompts?: string[];
   requestContext: Record<string, unknown>;
   messageId?: string;
 }) {
@@ -182,12 +194,12 @@ function StudioThreadPage({
           />
         )}
         chat={{
-          agentName: agent.name,
-          modelVersion: agent.modelVersion,
-          supportsMemory: agent.supportsMemory,
-          modelList: agent.modelList,
+          agentName,
+          modelVersion,
+          supportsMemory,
+          modelList,
           messageId,
-          suggestedPrompts: getAgentSuggestedPrompts(agent.metadata),
+          suggestedPrompts,
           requestContext,
           runOptionsSlot: <AgentRunActions agentId={agentId} />,
           RuntimeFeatures: StudioRuntimeFeatures,
