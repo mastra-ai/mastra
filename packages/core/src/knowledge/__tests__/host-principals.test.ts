@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { InMemoryStore } from '../../storage/mock';
 import { KnowledgeDeclarationError, knowledgeMemoryScopes } from '../declarations';
 import { Knowledge } from '../index';
@@ -75,9 +75,10 @@ describe('createTools({ principals }) for hosts acting outside an agent run', ()
     ).rejects.toThrow();
   });
 
-  it('refuses an undeclared principal when the tools are created', () => {
+  it('refuses an undeclared principal on the first call', async () => {
     const knowledge = new Knowledge({ id: 'kb', storage: new InMemoryStore(), scopes });
-    expect(() => knowledge.createTools({ principals: ['vendor:x'] })).toThrow(KnowledgeDeclarationError);
+    const tools = knowledge.createTools({ read: true, principals: ['vendor:x'] }) as ToolMap;
+    await expect(call(tools, 'knowledge_search', { query: 'anything' })).rejects.toThrow(KnowledgeDeclarationError);
   });
 
   it('refuses an empty principal list', () => {
@@ -134,5 +135,41 @@ describe('getPinnedContext({ principals })', () => {
     const knowledge = await setup();
     await expect(knowledge.getPinnedContext({ principals: ['vendor:x'] })).rejects.toThrow(KnowledgeDeclarationError);
     await expect(knowledge.getPinnedContext({ principals: [] })).rejects.toThrow(/at least one/);
+  });
+});
+
+describe('principals of a scope type only the store declares', () => {
+  // `partner:$orgId` exists only in the store's declarations, which load when the runtime first resolves.
+  async function storeDeclared() {
+    const storage = new InMemoryStore();
+    const knowledgeStore = await storage.getStore('knowledge');
+    vi.spyOn(knowledgeStore!, 'getScopeDeclarations').mockResolvedValue({
+      'partner:$orgId': { access: [{ principal: 'self', role: 'owner' }] },
+    });
+    const writer = new Knowledge({ id: 'kb', storage, scopes });
+    const { page } = await writer.upsertPage({
+      scope: 'partner:acme',
+      path: 'brief',
+      name: 'Brief',
+      body: 'partner brief',
+    });
+    await (
+      await writer.getStorage()
+    ).addPinAudience({ pageId: page.id, audience: ['partner:acme'], createdBy: 'host' });
+    // A fresh instance over the same store: nothing has resolved its declarations yet.
+    return new Knowledge({ id: 'kb', storage, scopes });
+  }
+
+  it('createTools accepts them on a cold instance and reads under them', async () => {
+    const knowledge = await storeDeclared();
+    const tools = knowledge.createTools({ read: true, principals: ['partner:acme'] }) as ToolMap;
+    const page = await call(tools, 'knowledge_read', { page: 'partner:acme#brief' });
+    expect(JSON.stringify(page)).toContain('partner brief');
+  });
+
+  it('getPinnedContext accepts them on a cold instance', async () => {
+    const knowledge = await storeDeclared();
+    const pins = await knowledge.getPinnedContext({ principals: ['partner:acme'] });
+    expect(pins.map(pin => pin.name)).toEqual(['Brief']);
   });
 });

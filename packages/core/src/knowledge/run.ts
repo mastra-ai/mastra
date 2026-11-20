@@ -59,7 +59,7 @@ export class KnowledgeRun {
     await runtime.resolve();
     let principals: string[];
     if (options.principals) {
-      // Host-vouched: checked again against declarations the store may have changed since.
+      // Host-vouched: checked against the declarations just resolved, the store's included.
       principals = [...options.principals];
       runtime.validatePrincipals(principals);
     } else {

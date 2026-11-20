@@ -65,7 +65,7 @@ type KnowledgeToolSelection = { read?: boolean; write?: boolean; pinnedContext?:
 export type KnowledgeCreateToolsOptions = KnowledgeToolSelection & {
   /**
    * **Host-only.** Fixed principals for every call, for hosts that run the tools outside an agent run
-   * (an MCP server acting for an external agent). Each must match a declared scope type. When set, the
+   * (an MCP server acting for an external agent). Each must match a declared scope type (checked at each call, once the store's declarations have loaded). When set, the
    * call's own run scopes and Memory ids are ignored, and access follows the scope rules for these
    * principals. Never take them from the request.
    */
@@ -389,10 +389,11 @@ export class Knowledge extends MastraBase {
     return knowledgeDeliveredPins(run, budget);
   }
 
+  // Only the shape is checked here: whether each principal matches a declared scope type is checked
+  // when a call starts its run, after the store's declarations have loaded.
   #hostPrincipals(principals: readonly string[]): string[] {
     const unique = [...new Set(principals)];
     if (unique.length === 0) throw new Error('Knowledge `principals` needs at least one scope address.');
-    this.#runtime.validatePrincipals(unique);
     return unique;
   }
 

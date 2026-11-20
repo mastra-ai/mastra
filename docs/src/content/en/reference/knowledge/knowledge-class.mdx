@@ -143,7 +143,7 @@ const tools = knowledge.createTools({ write: false })
 // knowledge_list, knowledge_search, knowledge_read
 ```
 
-`principals` fixes the scope addresses every call acts as, for a host that runs the tools outside an agent run, such as an MCP server acting for an external agent. Each address must match a declared scope type, or `createTools()` throws. The call's own run scopes are then ignored, and access follows the scope rules for these principals. Set them from the host's own authentication, never from the request. `author` is recorded on writes made through these tools.
+`principals` fixes the scope addresses every call acts as, for a host that runs the tools outside an agent run, such as an MCP server acting for an external agent. Each address must match a declared scope type, the store's declarations included; a call made with one that doesn't is refused. `createTools()` throws only for an empty list. The call's own run scopes are then ignored, and access follows the scope rules for these principals. Set them from the host's own authentication, never from the request. `author` is recorded on writes made through these tools.
 
 ```typescript
 const tools = knowledge.createTools({
