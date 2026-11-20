@@ -355,4 +355,35 @@ describe('recall search with the local fastembed embedder', () => {
     const { results } = await memory.searchMessages({ query: 'tabs indentation', resourceId: 'resource' });
     expect(results.map(result => result.groupId)).toEqual(['indent']);
   });
+
+  it('does not embed a search that was cancelled while waiting for the first fastembed embed', async () => {
+    const embedded: string[][] = [];
+    const fastembed = {
+      specificationVersion: 'v2' as const,
+      provider: 'fastembed',
+      modelId: 'bge-small-en-v1.5',
+      maxEmbeddingsPerCall: 256,
+      supportsParallelCalls: false,
+      doEmbed: async ({ values }: { values: string[] }) => {
+        embedded.push(values);
+        // The first embed stands in for the model download.
+        if (embedded.length === 1) await new Promise(resolve => setTimeout(resolve, 200));
+        return { embeddings: values.map(embed) };
+      },
+    };
+    const memory = new Memory({ storage, vector, embedder: fastembed, embeddingDimension: DIMENSIONS });
+
+    const first = memory.searchMessages({ query: 'tabs indentation', resourceId: 'resource' });
+    const cancel = new AbortController();
+    const queued = memory.searchMessages({
+      query: 'deploy schedule',
+      resourceId: 'resource',
+      abortSignal: cancel.signal,
+    });
+    cancel.abort(new Error('recall gave up'));
+
+    await expect(queued).rejects.toThrow('recall gave up');
+    await first;
+    expect(embedded).toEqual([['tabs indentation']]);
+  });
 });
