@@ -651,6 +651,8 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             source: context.req.queries('source'),
             linearProject: context.req.queries('linearProject'),
             label: context.req.queries('label'),
+            pullRequest: context.req.queries('pullRequest'),
+            trust: context.req.queries('trust'),
             teammate: context.req.queries('teammate'),
             author: context.req.queries('author'),
             assignee: context.req.queries('assignee'),

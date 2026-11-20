@@ -10,7 +10,7 @@ import type { Card } from '../storage/domains/work-items/base.js';
 import { cardFacts } from './card-facts.js';
 import { hasEveryLabel } from './card-labels.js';
 import { BOARD_PERSON_FIELDS, matchesPeople } from './card-people.js';
-import { matchesSourceFilters } from './card-source-filters.js';
+import { matchesSourceFilters, matchesYesNo } from './card-source-filters.js';
 import { relatedCardsIn } from './list-related-cards.js';
 import { matchesSearch, searchTerms } from './search-terms.js';
 
@@ -127,14 +127,17 @@ function viewMatcher(view: BoardPhasesView): ((card: Card) => boolean) | undefin
   const bySource = view.source.size > 0 || view.linearProject.size > 0;
   const byLabel = view.label.size > 0;
   const byPeople = BOARD_PERSON_FIELDS.some(field => view[field].size > 0);
-  if (terms.length === 0 && !bySource && !byLabel && !byPeople) return undefined;
+  const byPullRequest = view.pullRequest.size > 0 || view.trust.size > 0;
+  if (terms.length === 0 && !bySource && !byLabel && !byPeople && !byPullRequest) return undefined;
   return card => {
     const facts = cardFacts(card);
     return (
       matchesSearch(facts.search, terms) &&
       (!bySource || matchesSourceFilters(facts, view)) &&
       (!byLabel || hasEveryLabel(facts.labels, view.label)) &&
-      (!byPeople || matchesPeople(facts.relations, view))
+      (!byPeople || matchesPeople(facts.relations, view)) &&
+      matchesYesNo(view.pullRequest, 'with', 'without', facts.hasPullRequest) &&
+      matchesYesNo(view.trust, 'trusted', 'untrusted', facts.trusted)
     );
   };
 }
