@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 
 import { isSignalProvider } from '@mastra/core/signals';
 import type { SignalProvider } from '@mastra/core/signals';
+import { Extractor } from '@mastra/memory';
 
 import type {
   MastraCodePlugin,
@@ -16,6 +17,7 @@ import type {
   MastraCodePluginToolEntries,
   MastraCodePluginTools,
   MastraCodeToolRenderConfig,
+  MastraCodePluginExtractor,
 } from '../plugin.js';
 import { getPluginRoot } from './paths.js';
 import type { PluginPathOptions } from './paths.js';
@@ -271,18 +273,22 @@ async function resolvePluginExtractors(
   if (!Array.isArray(observation) || !Array.isArray(reflection)) {
     throw new Error('Plugin extractor lanes must be arrays');
   }
-  for (const extractor of [...observation, ...reflection]) {
-    // Structural, like signal providers: a plugin may bundle its own @mastra/memory copy.
-    if (
-      !extractor ||
-      typeof extractor !== 'object' ||
-      typeof extractor.slug !== 'string' ||
-      typeof extractor.name !== 'string'
-    ) {
-      throw new Error('Plugin extractors must be Extractor instances (objects with a name and slug)');
+  // A config is built with Mastra Code's own @mastra/memory, so a plugin needs no copy of it.
+  // The same config in both lanes becomes one extractor.
+  const built = new Map<object, Extractor<any>>();
+  const toExtractor = (entry: MastraCodePluginExtractor): Extractor<any> => {
+    if (!entry || typeof entry !== 'object' || typeof entry.name !== 'string') {
+      throw new Error('Plugin extractors must be Extractor instances or extractor configs with a name');
     }
-  }
-  return { observation, reflection };
+    if (entry instanceof Extractor) return entry;
+    let extractor = built.get(entry);
+    if (!extractor) {
+      extractor = new Extractor(entry);
+      built.set(entry, extractor);
+    }
+    return extractor;
+  };
+  return { observation: observation.map(toExtractor), reflection: reflection.map(toExtractor) };
 }
 
 async function resolvePluginSignalProviders(

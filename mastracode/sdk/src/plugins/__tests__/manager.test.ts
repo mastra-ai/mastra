@@ -300,10 +300,11 @@ describe('PluginManager', () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
     const projectRoot = path.join(tempDir, 'project');
     const homeDir = path.join(tempDir, 'home');
-    const write = (dir: string, id: string, observation: string[], reflection: string[]) => {
+    // Instances, or plain configs Mastra Code builds itself (no @mastra/memory import needed).
+    const write = (dir: string, id: string, observation: string[], reflection: string[], asConfig = false) => {
       fs.mkdirSync(path.join(dir, 'src'), { recursive: true });
       const make = (names: string[]) =>
-        `[${names.map(n => `new Extractor({ name: '${n}', instructions: 'test' })`).join(', ')}]`;
+        `[${names.map(n => (asConfig ? `{ name: '${n}', instructions: 'test' }` : `new Extractor({ name: '${n}', instructions: 'test' })`)).join(', ')}]`;
       fs.writeFileSync(
         path.join(dir, 'src/index.ts'),
         `import { Extractor } from '@mastra/memory';
@@ -314,7 +315,7 @@ describe('PluginManager', () => {
     const second = makeResolvableDir('extractors-b');
     write(first, 'acme.vis', ['vis state'], ['vis state']);
     // 'vis-state' is already taken by acme.vis.
-    write(second, 'acme.other', ['vis state', 'other notes'], []);
+    write(second, 'acme.other', ['vis state', 'other notes'], [], true);
 
     const manager = new PluginManager({ projectRoot, homeDir });
     const errors: string[] = [];
@@ -323,6 +324,7 @@ describe('PluginManager', () => {
     await manager.installLocal(second, 'project');
 
     const set = manager.getPluginExtractors();
+    expect(set.observation.every(e => typeof e.slug === 'string' && 'internal' in e)).toBe(true);
     expect(set.observation.map(e => e.slug)).toEqual(['vis-state', 'other-notes']);
     expect(set.reflection.map(e => e.slug)).toEqual(['vis-state']);
     expect(errors.some(e => e.includes('"vis state"') && e.includes('Duplicate'))).toBe(true);

@@ -4,7 +4,7 @@ import type { SignalProvider } from '@mastra/core/signals';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { Tool, ToolAction, ToolExecutionContext } from '@mastra/core/tools';
 import type { MastraVector } from '@mastra/core/vector';
-import type { Extractor } from '@mastra/memory';
+import type { Extractor, ExtractorConfig } from '@mastra/memory';
 
 import type { MastraCodeState } from './schema.js';
 
@@ -178,7 +178,8 @@ export type MastraCodePluginProcessorEntries =
     };
 
 /**
- * Observational Memory extractors a plugin contributes.
+ * Observational Memory extractors a plugin contributes: `Extractor` instances or
+ * plain extractor configs, which Mastra Code builds with its own `@mastra/memory`.
  *
  * `observation` extractors run with the observer, `reflection` extractors with
  * the reflector; an extractor may sit in both lanes. They join Mastra Code's
@@ -188,9 +189,11 @@ export type MastraCodePluginProcessorEntries =
  *
  * @experimental Extractors are experimental in Observational Memory.
  */
+export type MastraCodePluginExtractor = Extractor<any> | ExtractorConfig<any>;
+
 export type MastraCodePluginExtractorEntries = {
-  observation?: Extractor<any>[];
-  reflection?: Extractor<any>[];
+  observation?: MastraCodePluginExtractor[];
+  reflection?: MastraCodePluginExtractor[];
 };
 
 /**
