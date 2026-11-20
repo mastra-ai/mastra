@@ -71,7 +71,6 @@ import { withDefaultToolCallConcurrencyLimit } from '../loop/workflows/agentic-e
 import type { Mastra } from '../mastra';
 import { mastraCtorHolder } from '../mastra/mastra-ctor-holder';
 import type { VersionOverrides } from '../mastra/types';
-import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import { normalizeMessageHistoryConfig } from '../memory/message-history-config';
 import { getMemoryRunState } from '../memory/run-state';
@@ -227,7 +226,7 @@ import { detachFullStreamOnEnd } from './durable/observe-full-stream';
 import { createDurableAgentStream } from './durable/stream-adapter';
 import type { AgentSuspendedEventData, DurableAgentStepFinishResult } from './durable/types';
 import { GoalSignalProvider, resolveGoalStore, readObjective, writeObjective, clearObjective } from './goal';
-import { convertInstructionsToString, resolveRunId } from './helpers';
+import { convertInstructionsToString, resolveRunId, resolveVersionContext } from './helpers';
 import { buildMcpServerGuidance } from './mcp-guidance';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
@@ -9067,16 +9066,12 @@ export class Agent<
 
     // Build version overrides by merging: Mastra defaults < requestContext < call-site
     const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
-    let mergedVersions = mergeVersionOverrides(this.#mastra?.getVersionOverrides(), requestVersions);
-
-    // Merge call-site version overrides on top (call-site wins over request + Mastra defaults)
-    if (options.versions) {
-      mergedVersions = mergeVersionOverrides(mergedVersions, options.versions);
-    }
-
-    if (mergedVersions) {
-      requestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
-    }
+    const mergedVersions = resolveVersionContext(
+      requestContext,
+      requestVersions,
+      this.#mastra?.getVersionOverrides(),
+      options,
+    );
 
     // A run that suspended while executing a stored version must resume on *that* version.
     // The exact id was persisted into the suspend payload, so prefer it over any status
