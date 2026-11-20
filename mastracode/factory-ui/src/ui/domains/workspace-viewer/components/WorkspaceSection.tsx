@@ -1,23 +1,20 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { DiffStat } from '@mastra/playground-ui/components/DiffStat';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { pluralize } from '@mastra/playground-ui/utils/string';
-import { useId } from 'react';
+import type { PullRequestStatus } from '@mastra/factory/work-items/change-requests';
 import type { ReactNode } from 'react';
 
-import { SkeletonRows } from '../../../ui/SkeletonRows';
+import type { WorkspaceChangeRequest } from '../context/WorkspacePanelContext';
 import type { RepositoryProvider } from './changes/tree/change-tree';
+import { WorkspaceChangesCard } from './WorkspaceChangesCard';
+import type { WorkspaceChangesSummary } from './WorkspaceChangesCard';
 import { REPOSITORY_PROVIDER_ICONS } from './repositoryProviderIcons';
+import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
 import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
-import { IconChanges } from '@mastra/playground-ui/icons/central/IconChanges';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconSquareBehindSquare1 } from '@mastra/playground-ui/icons/central/IconSquareBehindSquare1';
-import { IconChevronRightMedium } from '@mastra/playground-ui/icons/central/IconChevronRightMedium';
-import { IconMerged } from '@mastra/playground-ui/icons/central/IconMerged';
 
 interface WorkspaceBranch {
   branch: string;
@@ -26,46 +23,16 @@ interface WorkspaceBranch {
   provider?: RepositoryProvider;
 }
 
-interface WorkspaceRepositoryCounts {
-  total: number;
-  changed: number;
-  unreadable: number;
+/** Keeps a branch's tail readable: generated branches differ at the end, not the start. */
+function MiddleTruncate({ text, tail }: { text: string; tail: number }) {
+  if (text.length <= tail + 4) return <span className="min-w-0 truncate">{text}</span>;
+  return (
+    <span className="flex min-w-0">
+      <span className="min-w-0 truncate">{text.slice(0, -tail)}</span>
+      <span className="shrink-0">{text.slice(-tail)}</span>
+    </span>
+  );
 }
-
-interface WorkspaceChangeStats {
-  files: number;
-  additions?: number;
-  deletions?: number;
-  repositories?: WorkspaceRepositoryCounts;
-}
-
-export type WorkspaceChangesSummary =
-  | { state: 'unread' }
-  | { state: 'loading' }
-  | { state: 'failed' }
-  | { state: 'read'; stats: WorkspaceChangeStats };
-
-function filesLabel({ files, repositories }: WorkspaceChangeStats): string {
-  const label = pluralize(files, 'file');
-  if (!repositories || files === 0) return label;
-  return `${label} in ${repositories.changed} of ${repositories.total} repos`;
-}
-
-function unreadableLabel({ repositories }: WorkspaceChangeStats): string | undefined {
-  return repositories?.unreadable ? `${pluralize(repositories.unreadable, 'repo')} unreadable` : undefined;
-}
-
-function changesName(changes: WorkspaceChangesSummary): string {
-  if (changes.state === 'loading') return 'Changes, loading';
-  if (changes.state === 'failed') return 'Changes, unavailable';
-  if (changes.state === 'read')
-    return ['Changes', filesLabel(changes.stats), unreadableLabel(changes.stats)].filter(Boolean).join(', ');
-  return 'Changes';
-}
-
-const rowClass = 'flex h-control-sm min-w-0 items-center gap-1.5';
-
-const branchIcon = <IconBranch aria-hidden className="text-muted-foreground size-icon-sm shrink-0" />;
 
 function BranchCopyButton({ branch }: { branch: string }) {
   const { isCopied, handleCopy } = useCopyToClipboard({ text: branch });
@@ -74,24 +41,94 @@ function BranchCopyButton({ branch }: { branch: string }) {
     <button
       type="button"
       aria-label={`Copy branch ${branch}`}
+      title={branch}
       onClick={handleCopy}
-      className={cn(
-        'group/branch relative flex min-w-0 cursor-pointer items-center gap-1.5 rounded-sm pr-5',
-        focusRing,
-      )}
+      className={cn('group/branch flex min-w-0 cursor-pointer items-center gap-1.5 rounded-sm', focusRing)}
     >
-      {branchIcon}
-      <Txt as="span" variant="body-sm" tone="ink" className="min-w-0 truncate">
-        {branch}
+      <Txt as="span" variant="body-sm" tone="ink" className="flex min-w-0">
+        <MiddleTruncate text={branch} tail={12} />
       </Txt>
       <CopyIcon
         aria-hidden
         className={cn(
-          'text-muted-foreground absolute right-0 size-3.5',
+          'text-muted-foreground size-icon-xs shrink-0',
           !isCopied && 'pointer-fine:opacity-0 group-hover/branch:opacity-100 group-focus-visible/branch:opacity-100',
         )}
       />
     </button>
+  );
+}
+
+function RepositoryName({ slug, provider }: { slug: string; provider?: RepositoryProvider }) {
+  const ProviderIcon = provider && REPOSITORY_PROVIDER_ICONS[provider];
+  const owner = slug.includes('/') ? slug.slice(0, slug.lastIndexOf('/') + 1) : '';
+  return (
+    <div className="flex h-6 min-w-0 items-center gap-1.5 pl-2" title={slug}>
+      <span aria-hidden className="text-muted-foreground flex shrink-0 [&>svg]:size-icon-xs">
+        {ProviderIcon ? <ProviderIcon /> : <IconBranch />}
+      </span>
+      <Txt as="span" variant="caption" tone="muted" className="min-w-0 truncate">
+        {owner}
+        <span className="text-foreground">{slug.slice(owner.length)}</span>
+      </Txt>
+    </div>
+  );
+}
+
+const ELBOW_TONES: Record<PullRequestStatus | 'none', string> = {
+  open: 'text-success-indicator',
+  merged: 'text-badge-purple-indicator',
+  closed: 'text-destructive-foreground',
+  draft: 'text-muted-foreground',
+  none: 'text-border-strong',
+};
+
+/** Drops from the head branch and turns toward its base, tinted by the pull request joining them. */
+function Elbow({ status }: { status: PullRequestStatus | 'none' }) {
+  return (
+    <svg
+      aria-hidden
+      width={14}
+      height={22}
+      viewBox="0 0 14 22"
+      fill="none"
+      className={cn('shrink-0', ELBOW_TONES[status])}
+    >
+      <path d="M3.5 0.75V5Q3.5 11.75 9.25 11.75H13.25" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function BranchEdge({ baseBranch, changeRequest }: { baseBranch: string; changeRequest?: WorkspaceChangeRequest }) {
+  return (
+    <div className="flex h-6 min-w-0 items-center gap-1.5 pl-2">
+      <Elbow status={changeRequest ? (changeRequest.status ?? 'draft') : 'none'} />
+      {changeRequest?.badge}
+      <IconArrowRight aria-hidden className="text-muted-foreground size-icon-xs shrink-0" />
+      <Txt as="span" variant="caption" tone="muted" className="flex min-w-0" title={baseBranch}>
+        <span className="sr-only">into </span>
+        <MiddleTruncate text={baseBranch} tail={10} />
+      </Txt>
+    </div>
+  );
+}
+
+function BranchUnavailable({ loading }: { loading: boolean }) {
+  if (loading) {
+    return (
+      <div role="status" aria-label="Loading workspace details" className="flex flex-col gap-2 py-1.5 pl-2">
+        <Skeleton aria-hidden className="h-3 w-48 motion-reduce:before:animate-none" />
+        <Skeleton aria-hidden className="h-3 w-26 motion-reduce:before:animate-none" />
+      </div>
+    );
+  }
+  return (
+    <div className="flex h-7 min-w-0 items-center gap-1.5 pl-2">
+      <IconBranch aria-hidden className="text-muted-foreground size-icon-sm shrink-0" />
+      <Txt as="span" variant="caption" tone="muted" className="min-w-0 truncate">
+        Branch details unavailable
+      </Txt>
+    </div>
   );
 }
 
@@ -108,93 +145,30 @@ export function WorkspaceSection({
   workspace?: WorkspaceBranch;
   changes: WorkspaceChangesSummary;
   action?: ReactNode;
-  changeRequest?: ReactNode;
+  changeRequest?: WorkspaceChangeRequest;
   onOpen: () => void;
   autoFocus?: boolean;
 }) {
-  const linesId = useId();
-  const stats = changes.state === 'read' ? changes.stats : undefined;
-  const unreadable = stats && unreadableLabel(stats);
-  const lines =
-    stats && stats.files > 0 && stats.additions !== undefined && stats.deletions !== undefined
-      ? { additions: stats.additions, deletions: stats.deletions }
-      : undefined;
-  const ProviderIcon = workspace?.provider && REPOSITORY_PROVIDER_ICONS[workspace.provider];
   return (
-    <section aria-label="Workspace" className="flex min-w-0 shrink-0 flex-col p-1.5">
-      <div className={cn(rowClass, 'pl-2')}>
-        {loading ? (
-          <>
-            {branchIcon}
-            <SkeletonRows label="Loading workspace details" rows={1} rowClassName="h-3 w-48" className="grow" />
-          </>
-        ) : workspace ? (
-          <BranchCopyButton branch={workspace.branch} />
-        ) : (
-          <>
-            {branchIcon}
-            <Txt as="span" variant="caption" tone="muted" className="min-w-0 truncate">
-              Branch details unavailable
-            </Txt>
-          </>
-        )}
-        <span className="ml-auto flex shrink-0">{action}</span>
-      </div>
-      {workspace ? (
-        <div className={cn(rowClass, 'gap-3 px-2')}>
-          {workspace.repository ? (
-            <Txt as="span" variant="caption" tone="muted" className="flex min-w-0 items-center gap-1.5">
-              {ProviderIcon ? (
-                <span aria-hidden className="flex shrink-0">
-                  <ProviderIcon className="size-3.5" />
-                </span>
-              ) : null}
-              <span className="truncate">{workspace.repository}</span>
-            </Txt>
-          ) : null}
-          <Txt as="span" variant="caption" tone="muted" className="flex shrink-0 items-center gap-1.5">
-            <IconMerged aria-hidden className="size-icon-sm" />
-            into {workspace.baseBranch}
-          </Txt>
+    <section aria-label="Workspace" className="flex min-w-0 shrink-0 flex-col gap-1.5 p-1.5">
+      <div className="flex min-w-0 items-start gap-1.5">
+        <div className="flex min-w-0 grow flex-col">
+          {workspace?.repository ? <RepositoryName slug={workspace.repository} provider={workspace.provider} /> : null}
+          {workspace && !loading ? (
+            <>
+              <div className="flex h-7 min-w-0 items-center gap-1.5 pl-2">
+                <IconBranch aria-hidden className="text-muted-foreground size-icon-xs shrink-0" />
+                <BranchCopyButton branch={workspace.branch} />
+              </div>
+              <BranchEdge baseBranch={workspace.baseBranch} changeRequest={changeRequest} />
+            </>
+          ) : (
+            <BranchUnavailable loading={loading} />
+          )}
         </div>
-      ) : null}
-      {changeRequest}
-      <Button
-        variant="ghost"
-        size="sm"
-        className="w-full justify-start"
-        autoFocus={autoFocus}
-        aria-label={changesName(changes)}
-        aria-describedby={lines ? linesId : undefined}
-        onClick={onOpen}
-      >
-        <IconChanges aria-hidden />
-        Changes
-        {changes.state === 'loading' ? (
-          <Skeleton aria-hidden className="h-3 w-12 motion-reduce:before:animate-none" />
-        ) : null}
-        {changes.state === 'failed' ? (
-          <Txt as="span" variant="caption" tone="muted">
-            Unavailable
-          </Txt>
-        ) : null}
-        {stats ? (
-          <Txt as="span" variant="caption" tone="muted" className="tabular-nums">
-            {filesLabel(stats)}
-          </Txt>
-        ) : null}
-        {unreadable ? (
-          <Txt as="span" variant="caption" tone="muted">
-            {unreadable}
-          </Txt>
-        ) : null}
-        {lines ? (
-          <Txt as="span" variant="caption" id={linesId}>
-            <DiffStat additions={lines.additions} deletions={lines.deletions} />
-          </Txt>
-        ) : null}
-        <IconChevronRightMedium aria-hidden className="ml-auto" />
-      </Button>
+        {action ? <span className="flex shrink-0 items-center">{action}</span> : null}
+      </div>
+      <WorkspaceChangesCard changes={changes} onOpen={onOpen} autoFocus={autoFocus} />
     </section>
   );
 }

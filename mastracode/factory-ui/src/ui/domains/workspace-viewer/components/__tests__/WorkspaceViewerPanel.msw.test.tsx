@@ -218,13 +218,29 @@ describe('WorkspaceViewerPanel', () => {
     });
   });
 
-  describe('when the viewer moves between the overview and a view by keyboard', () => {
-    it('takes focus into the changes, switches to the files in place, and returns to the row that opened them', async () => {
+  describe('when the sandbox is asleep and the overview may not read changes', () => {
+    it('reads the changes in place when asked, listing the files without leaving the overview', async () => {
       installHandlers();
+      server.use(pendingChangesHandler());
       const user = userEvent.setup();
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} readsChanges={false} />);
 
-      (await screen.findByRole('button', { name: 'Changes' })).focus();
+      await user.click(await screen.findByRole('button', { name: 'Show changes' }));
+
+      const changes = await screen.findByRole('button', { name: 'Changes, 1 file' });
+      expect(changes).toHaveTextContent(AGENT_CHANGE.path.split('/').at(-1) ?? '');
+      expect(screen.queryByRole('button', { name: 'Back to overview' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('when the viewer moves between the overview and a view by keyboard', () => {
+    it('takes focus into the changes, switches to the files in place, and returns to the row that opened them', async () => {
+      installHandlers();
+      server.use(pendingChangesHandler());
+      const user = userEvent.setup();
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
+
+      (await screen.findByRole('button', { name: 'Changes, 1 file' })).focus();
       await user.keyboard('{Enter}');
       expect(screen.getByRole('button', { name: 'Back to overview' })).toHaveFocus();
 
@@ -236,7 +252,7 @@ describe('WorkspaceViewerPanel', () => {
 
       screen.getByRole('button', { name: 'Back to overview' }).focus();
       await user.keyboard('{Enter}');
-      expect(await screen.findByRole('button', { name: 'Changes, 0 files' })).toHaveFocus();
+      expect(await screen.findByRole('button', { name: 'Changes, 1 file' })).toHaveFocus();
     });
   });
 
@@ -490,8 +506,7 @@ describe('WorkspaceViewerPanel', () => {
 
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
 
-      await screen.findByText('+4');
-      const changesButton = screen.getByRole('button', { name: /Changes/ });
+      const changesButton = await screen.findByRole('button', { name: /^Changes, \d/ });
       expect(changesButton).toHaveTextContent('−1');
       await user.click(changesButton);
 
@@ -660,8 +675,7 @@ describe('WorkspaceViewerPanel', () => {
       const user = userEvent.setup();
 
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
-      const changesButton = await screen.findByRole('button', { name: /Changes/ });
-      await screen.findByText('+4');
+      const changesButton = await screen.findByRole('button', { name: /^Changes, \d/ });
       await user.click(changesButton);
       const changesPanel = await screen.findByTestId('workspace-changes-panel');
       await within(changesPanel).findByRole('button', { name: 'Jump to file, 1 file' });
@@ -677,7 +691,7 @@ describe('WorkspaceViewerPanel', () => {
       expect(within(changesPanel).queryByText('+4')).not.toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: 'Back to overview' }));
 
-      expect(await screen.findByText('Unavailable')).toBeInTheDocument();
+      expect(await screen.findByText('Changes unavailable')).toBeInTheDocument();
       expect(screen.queryByText('+4')).not.toBeInTheDocument();
     });
 
@@ -736,7 +750,7 @@ describe('WorkspaceViewerPanel', () => {
 
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
 
-      await user.click(await screen.findByRole('button', { name: 'Changes' }));
+      await user.click(await screen.findByRole('button', { name: 'Changes, sandbox not running' }));
 
       expect(await screen.findByText(/The sandbox isn.t running/)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Wake sandbox' })).toBeInTheDocument();
