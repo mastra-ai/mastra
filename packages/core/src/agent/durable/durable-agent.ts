@@ -784,6 +784,17 @@ export class DurableAgent<
     return true;
   }
 
+  /**
+   * prepare() rebuilt a cold run's registry entry from the resuming caller's request context.
+   * When that resume is rejected before it runs, drop the entry so a corrected retry
+   * rehydrates from the snapshot instead of inheriting the rejected caller's context.
+   */
+  #dropRejectedColdEntry(runId: string, entry: RunRegistryEntry): void {
+    if (this.#runRegistry.get(runId) !== entry) return;
+    this.#runRegistry.cleanup(runId);
+    deleteRunRegistryEntry(runId, this.#mastra);
+  }
+
   #hasRecoveryAttempt(runId: string): boolean {
     return this.#recoveryAttempts.has(runId);
   }
@@ -3648,12 +3659,6 @@ export class DurableAgent<
     // Scoped runs execute on a run-scoped copy of the request context.
     resumeRequestContext = (resolvedOptions.requestContext as typeof resumeRequestContext) ?? resumeRequestContext;
 
-    entry.requestContext = resumeRequestContext;
-    const globalEntryForContext = getRunRegistryEntry(runId, this.#mastra);
-    if (globalEntryForContext) {
-      globalEntryForContext.requestContext = resumeRequestContext;
-    }
-
     // Delegate to the idle-loop wrapper when `untilIdle` is set. Strip
     // `untilIdle` before passing to the wrapper so the inner agent.resume()
     // call (and subsequent agent.stream([]) continuations) don't recurse.
@@ -3674,16 +3679,24 @@ export class DurableAgent<
         stream: (innerMessages: MessageListInput, innerOptions?: DurableAgentStreamOptions<TOutput>) =>
           this.stream(innerMessages, innerOptions),
       } as unknown as DurableAgent<any, any, TOutput>;
-      return runResumeDurableStreamUntilIdle<TOutput>(
-        resolvedOptionsAgent,
-        runId,
-        resumeData,
-        { ...rest, maxIdleMs } as DurableAgentStreamOptions<TOutput> & { maxIdleMs?: number },
-        {
-          activeStreams: this.#activeStreamUntilIdle,
-          bgManager: this.#mastra?.backgroundTaskManager,
-        },
-      );
+      try {
+        return await runResumeDurableStreamUntilIdle<TOutput>(
+          resolvedOptionsAgent,
+          runId,
+          resumeData,
+          { ...rest, maxIdleMs } as DurableAgentStreamOptions<TOutput> & { maxIdleMs?: number },
+          {
+            activeStreams: this.#activeStreamUntilIdle,
+            bgManager: this.#mastra?.backgroundTaskManager,
+          },
+        );
+      } catch (error) {
+        // The inner resume() found this call's rebuilt entry warm, so it cannot drop it itself.
+        if (coldSnapshot && error instanceof MastraError && error.id === 'AGENT_RESUME_INVALID_DATA') {
+          this.#dropRejectedColdEntry(runId, entry);
+        }
+        throw error;
+      }
     }
 
     await this.requireAgentExecutionFGA({
@@ -3710,16 +3723,28 @@ export class DurableAgent<
       runId,
     });
     if (resumeSnapshot) {
-      await this.#wrappedAgent.__validateToolResumeData({
-        snapshot: resumeSnapshot,
-        toolCallId: resolvedOptions.toolCallId,
-        resumeData,
-        requestContext: resumeRequestContext,
-        toolsets: resolvedOptions.toolsets,
-        clientTools: resolvedOptions.clientTools,
-        runId,
-        method: 'resume',
-      });
+      try {
+        await this.#wrappedAgent.__validateToolResumeData({
+          snapshot: resumeSnapshot,
+          toolCallId: resolvedOptions.toolCallId,
+          resumeData,
+          requestContext: resumeRequestContext,
+          toolsets: resolvedOptions.toolsets,
+          clientTools: resolvedOptions.clientTools,
+          runId,
+          method: 'resume',
+        });
+      } catch (error) {
+        if (coldSnapshot) this.#dropRejectedColdEntry(runId, entry);
+        throw error;
+      }
+    }
+    // Only an accepted resume may change the suspended run's request context: it carries
+    // the caller's identity and per-request tool configuration into the next resume.
+    entry.requestContext = resumeRequestContext;
+    const globalEntryForContext = getRunRegistryEntry(runId, this.#mastra);
+    if (globalEntryForContext) {
+      globalEntryForContext.requestContext = resumeRequestContext;
     }
     // A warm resume reuses the tools built for the first request, which close
     // over its request context, delegation hooks, and tool hooks (#25960). Rebuild them for
