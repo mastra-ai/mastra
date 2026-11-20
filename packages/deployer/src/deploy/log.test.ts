@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { noopLogger } from '@mastra/core/logger';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createChildProcessLogger, isSafeShellArg } from './log';
+import { createChildProcessLogger, toWindowsShellArg } from './log';
 
 describe.skipIf(process.platform === 'win32')('createChildProcessLogger', () => {
   const dirs: string[] = [];
@@ -42,15 +42,31 @@ describe.skipIf(process.platform === 'win32')('createChildProcessLogger', () => 
   });
 });
 
-describe('isSafeShellArg', () => {
-  it.each(['C:\\Users\\José\\repo\\output', '/home/zoë/プロジェクト/out', '--pack-destination', '@scope/pkg@^1.2.3'])(
-    'allows %s',
+describe('toWindowsShellArg', () => {
+  it.each(['C:\\Users\\José\\repo\\output', '/home/zoë/プロジェクト/out', '--pack-destination', '@scope/pkg@1.2.3'])(
+    'passes plain %s through unquoted',
     arg => {
-      expect(isSafeShellArg(arg)).toBe(true);
+      expect(toWindowsShellArg(arg)).toBe(arg);
     },
   );
 
-  it.each(['out dir', 'a;b', '$(x)', '\x60x\x60', 'a&b', 'a|b', 'a>b', '"a"', '%PATH%!', 'a\nb'])('rejects %j', arg => {
-    expect(isSafeShellArg(arg)).toBe(false);
+  it.each([
+    'C:\\Users\\John Smith\\out',
+    "C:\\Users\\O'Brien\\out",
+    'C:\\out\\🚀',
+    'C:\\out\\€',
+    'a;b',
+    'a&b',
+    'a|b',
+    'a>b',
+    '$(x)',
+    '\x60x\x60',
+    '^1.2.3',
+  ])('quotes %j so cmd.exe reads it literally', arg => {
+    expect(toWindowsShellArg(arg)).toBe(`"${arg}"`);
+  });
+
+  it.each(['"a"', '%PATH%', 'a!b', 'a\nb', 'a\rb'])('refuses %j, which cmd.exe expands even inside quotes', arg => {
+    expect(() => toWindowsShellArg(arg)).toThrow('Refusing to pass unsafe argument');
   });
 });
