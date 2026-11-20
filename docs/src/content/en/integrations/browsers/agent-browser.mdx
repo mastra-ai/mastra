@@ -90,6 +90,29 @@ const browser = new AgentBrowser({
 
 This adds `browser_record` and `browser_record_caption` to the agent's toolset. See [Browser recording (Beta)](/docs/browser#record-browser-sessions) for details. See [AgentBrowser reference](/reference/browser/agent-browser) for all configuration options and tool details.
 
+## Block local and private addresses
+
+When agents browse from a server, the browser can reach whatever that server can: local files, `localhost` services, internal networks, and cloud metadata endpoints. Set `blockPrivateNetwork` to keep the browser on public sites:
+
+```typescript
+const browser = new AgentBrowser({
+  headless: true,
+  blockPrivateNetwork: true,
+})
+```
+
+The browser then refuses `file:` URLs, `localhost`, and private and link-local addresses such as `10.0.0.0/8`, `192.168.0.0/16`, and `169.254.169.254`. The block also covers redirects, `fetch()` calls, service workers, WebSockets, and hostnames whose DNS points at a private address. When the agent tries to open a blocked URL, `browser_goto` returns an error that says why.
+
+To let specific private hosts through, list them as `host` or `host:port`:
+
+```typescript
+const browser = new AgentBrowser({
+  blockPrivateNetwork: { allow: ['localhost:3000'] },
+})
+```
+
+`blockPrivateNetwork` only works on browsers that `AgentBrowser` launches, so it can't be combined with `cdpUrl`.
+
 ## Related
 
 - [Browser overview](/docs/browser)

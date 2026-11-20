@@ -44,6 +44,32 @@ export interface AgentBrowserConfigExtensions {
    * ```
    */
   excludeTools?: BrowserToolName[];
+
+  /**
+   * Keep the browser off the machine it runs on and off private networks.
+   * Use this when agents browse from a server that holds secrets or sits next
+   * to internal services.
+   *
+   * Blocks `file:` URLs, localhost, private and link-local addresses (including
+   * cloud metadata at `169.254.169.254`), whether the page opens them directly,
+   * through a redirect, from a service worker or WebSocket, or through a
+   * hostname whose DNS points at one of them. Public sites work as usual.
+   *
+   * Pass `{ allow }` to let specific private hosts through, as `host` or
+   * `host:port` (for example `localhost:3000`).
+   *
+   * Only browsers AgentBrowser launches itself can be protected, so this can't
+   * be combined with `cdpUrl` or `createThreadManager`.
+   *
+   * @default false
+   *
+   * @example
+   * ```ts
+   * new AgentBrowser({ blockPrivateNetwork: true })
+   * new AgentBrowser({ blockPrivateNetwork: { allow: ['localhost:3000'] } })
+   * ```
+   */
+  blockPrivateNetwork?: boolean | { allow: string[] };
 }
 
 /**
