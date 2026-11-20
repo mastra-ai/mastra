@@ -75,7 +75,7 @@ describe('Composer voice dictation', () => {
     expect(screen.getByRole('button', { name: 'Dictate' })).toBeEnabled();
   });
 
-  it('uses the preferred Gateway model through the existing microphone when access is enabled', async () => {
+  it('uses the preferred Gateway model through the existing microphone when Gateway audio is available', async () => {
     window.MASTRA_PLATFORM_PROJECT_ID = 'project-1';
     stubVoiceSettings(null, { provider: 'mastra-gateway', model: 'mistral/voxtral' });
     const legacyBodies = acceptTranscribe(() => HttpResponse.json({ text: 'unused' }));
@@ -125,7 +125,7 @@ describe('Composer voice dictation', () => {
     expect(legacyBodies).toHaveLength(1);
   });
 
-  it('does not show Gateway choices when the deployed user is denied access', async () => {
+  it('does not show Gateway choices when Gateway audio is unavailable', async () => {
     window.MASTRA_PLATFORM_PROJECT_ID = 'project-1';
     const checked = vi.fn(() => new HttpResponse(null, { status: 403 }));
     server.use(http.get(`${TEST_BASE_URL}/api/system/gateway-audio/models`, checked));

@@ -68,7 +68,7 @@ Settings navigation groups pages by topic: **Account**, **Agent** (Models, Memor
 
 ## Voice input
 
-Factory's web composer uses its existing microphone for speech-to-text. In deployments with an injected Gateway V2 key, users enabled for Gateway audio see **Mastra Gateway** as the preferred voice source and can choose among the transcription models available to that key. They can switch back to their configured speech provider beside the microphone. The Gateway choice is absent when the deployment key or user feature flag is unavailable.
+Factory's web composer uses its existing microphone for speech-to-text. In deployments with an injected Gateway V2 key, users see **Mastra Gateway** as the preferred voice source and can choose among the transcription models available to that key. They can switch back to their configured speech provider beside the microphone. The Gateway choice is absent when the deployment has no Gateway V2 key.
 
 ## Tests
 
