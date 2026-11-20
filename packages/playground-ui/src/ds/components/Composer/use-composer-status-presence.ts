@@ -2,13 +2,13 @@ import { useLayoutEffect, useRef } from 'react';
 
 import { glideComposerStatus } from './composer-line-motion';
 
-const GROUP_SLOTS = new Set(['composer-status-start', 'composer-status-end']);
 const COLLAPSE_DELAY_MS = 600;
+const GRAPHICS = 'img, svg, canvas, video, [role="img"]';
 
 function shows(node: Node): boolean {
   if (node.nodeType === Node.TEXT_NODE) return (node.textContent ?? '').trim() !== '';
   if (!(node instanceof Element) || node.classList.contains('sr-only')) return false;
-  return GROUP_SLOTS.has(node.getAttribute('data-slot') ?? '') ? Array.from(node.childNodes).some(shows) : true;
+  return node.matches(GRAPHICS) || Array.from(node.childNodes).some(shows);
 }
 
 const isEmpty = (status: HTMLElement) => !Array.from(status.childNodes).some(shows);
@@ -30,21 +30,29 @@ export function useComposerStatusPresence() {
     let collapseTimer: number | undefined;
 
     mark(isEmpty(status));
-    const observer = new MutationObserver(() => {
+    const cancelCollapse = () => {
       window.clearTimeout(collapseTimer);
+      collapseTimer = undefined;
+    };
+    const glide = (empty: boolean) => {
+      glides = glideComposerStatus(status, () => mark(empty), glides);
+    };
+    const observer = new MutationObserver(() => {
       const empty = isEmpty(status);
-      if (empty === status.hasAttribute('data-empty')) return;
-      const glide = () => {
-        glides = glideComposerStatus(status, () => mark(empty), glides);
-      };
-      if (empty) collapseTimer = window.setTimeout(glide, COLLAPSE_DELAY_MS);
-      else glide();
+      if (!empty) cancelCollapse();
+      // A pending collapse keeps its deadline, so a stream of hidden announcements cannot hold the row open.
+      if (empty === status.hasAttribute('data-empty') || collapseTimer !== undefined) return;
+      if (!empty) return glide(false);
+      collapseTimer = window.setTimeout(() => {
+        collapseTimer = undefined;
+        glide(true);
+      }, COLLAPSE_DELAY_MS);
     });
     observer.observe(status, { childList: true, subtree: true, characterData: true });
 
     return () => {
       observer.disconnect();
-      window.clearTimeout(collapseTimer);
+      cancelCollapse();
       for (const animation of glides) animation.cancel();
     };
   }, []);

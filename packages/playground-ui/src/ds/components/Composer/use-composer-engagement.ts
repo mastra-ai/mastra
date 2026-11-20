@@ -3,11 +3,15 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { morphComposerLine } from './composer-line-motion';
 
-/** Settles pointer presses on click, not blur: a layout shift mid-press would swallow the click. */
+/**
+ * Settles pointer presses on click, not blur: a layout shift mid-press would swallow the click.
+ * A press counts as the composer's own when React bubbles it here, which covers its portaled pickers.
+ */
 export function useComposerEngagement() {
   const rootRef = useRef<HTMLFormElement>(null);
   const [engaged, setEngaged] = useState(false);
   const glidesRef = useRef<Animation[]>([]);
+  const pressOwnedRef = useRef(false);
 
   // Set here rather than rendered: the glide reads the layout before the attribute flips it.
   useLayoutEffect(() => {
@@ -24,18 +28,20 @@ export function useComposerEngagement() {
     const owns = (target: EventTarget | null) => target instanceof Node && root.contains(target);
     const holdsPopup = () => root.querySelector('[aria-expanded="true"]') !== null;
     let pointerDown = false;
-    let pressedOutside = false;
+    let pressed = false;
 
-    const onPointerDown = (event: PointerEvent) => {
+    // Capture on the document runs before React's root listener marks the press as owned.
+    const onPointerDown = () => {
       pointerDown = true;
-      pressedOutside = !owns(event.target) && !holdsPopup();
+      pressed = true;
+      pressOwnedRef.current = false;
     };
     const onPointerUp = () => {
       pointerDown = false;
     };
     const onClick = () => {
-      if (pressedOutside) setEngaged(false);
-      pressedOutside = false;
+      if (pressed && !pressOwnedRef.current) setEngaged(false);
+      pressed = false;
     };
     const onFocusOut = (event: globalThis.FocusEvent) => {
       if (pointerDown || owns(event.relatedTarget) || holdsPopup()) return;
@@ -60,5 +66,9 @@ export function useComposerEngagement() {
     if (event.target instanceof HTMLElement && event.target.dataset.slot === 'composer-input') setEngaged(true);
   };
 
-  return { rootRef, onFocus };
+  const onPointerDownCapture = () => {
+    pressOwnedRef.current = true;
+  };
+
+  return { rootRef, onFocus, onPointerDownCapture };
 }

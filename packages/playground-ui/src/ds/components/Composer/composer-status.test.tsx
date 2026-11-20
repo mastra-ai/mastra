@@ -18,13 +18,19 @@ interface SessionStatus {
   steering?: string;
   announcement?: string;
   tokenRate?: string;
+  emptyWrapper?: boolean;
 }
 
-function StatusFooter({ steering, announcement, tokenRate }: SessionStatus) {
+function StatusFooter({ steering, announcement, tokenRate, emptyWrapper }: SessionStatus) {
   return (
     <ComposerStatus aria-label="Session status">
       <ComposerStatusStart>
         {steering && <span>{steering}</span>}
+        {emptyWrapper && (
+          <span>
+            <span> </span>
+          </span>
+        )}
         {announcement && (
           <span className="sr-only" role="status">
             {announcement}
@@ -54,6 +60,12 @@ describe('Composer status footer', () => {
     expect(screen.getByRole('status')).toHaveProperty('textContent', 'Working…');
   });
 
+  it('gives its row back when a status renders only an empty wrapper', () => {
+    render(<StatusFooter emptyWrapper />);
+
+    expect(isCollapsed()).toBe(true);
+  });
+
   it('shows plain text dropped straight into a group', () => {
     render(<StatusFooter tokenRate="42 tok/s" />);
 
@@ -81,6 +93,20 @@ describe('Composer status footer', () => {
     await flushMutations();
     act(() => vi.advanceTimersByTime(1000));
     expect(isCollapsed()).toBe(false);
+  });
+
+  it('closes on time while hidden announcements keep arriving', async () => {
+    const { rerender } = render(<StatusFooter tokenRate="42 tok/s" />);
+
+    rerender(<StatusFooter announcement="Working" />);
+    await flushMutations();
+    for (const announcement of ['Working.', 'Working..', 'Working...']) {
+      act(() => vi.advanceTimersByTime(200));
+      rerender(<StatusFooter announcement={announcement} />);
+      await flushMutations();
+    }
+
+    expect(isCollapsed()).toBe(true);
   });
 
   it('closes once status has stayed gone', async () => {

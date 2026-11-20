@@ -1,4 +1,5 @@
-@theme {
+/* Static: JS glides read these off computed style, so they must exist even when no utility uses them. */
+@theme static {
   /* State colour on a control — the only thing a hover is allowed to animate. */
   --duration-fast: 150ms;
   --duration-normal: 200ms;

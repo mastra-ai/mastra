@@ -12,6 +12,12 @@ import { resetStorage } from '../../__utils__/reset-storage';
 
 const box = (page: Page) => page.locator('[data-slot="composer-box"]');
 const height = async (page: Page) => (await box(page).boundingBox())?.height ?? 0;
+const settledHeight = async (page: Page) => {
+  await expect
+    .poll(() => page.locator('[data-slot="composer"]').evaluate(root => root.getAnimations({ subtree: true }).length))
+    .toBe(0);
+  return height(page);
+};
 const sendPosition = async (page: Page) => {
   const rect = await page.getByRole('button', { name: 'Send' }).boundingBox();
   return { x: Math.round(rect?.x ?? 0), y: Math.round(rect?.y ?? 0) };
@@ -48,8 +54,11 @@ test.describe('One-line composer', () => {
       const idleHeight = await height(page);
 
       await input.fill('What is the weather in Paris?');
+      const openHeight = await settledHeight(page);
+      expect(openHeight).toBeGreaterThan(idleHeight);
+
       await input.blur();
-      await expect.poll(() => height(page)).toBeGreaterThan(idleHeight);
+      expect(await settledHeight(page)).toBe(openHeight);
     });
   });
 });

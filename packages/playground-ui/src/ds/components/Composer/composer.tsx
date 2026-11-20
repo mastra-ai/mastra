@@ -26,7 +26,7 @@ export interface ComposerInputProps extends ComponentProps<'textarea'> {
  * One line until the input is focused or holds a draft, then opens a row above the actions for the
  * input. Positioned so an overlay `ComposerHeader` can anchor to its top edge.
  */
-export function Composer({ ref, className, onFocus, ...props }: ComposerProps) {
+export function Composer({ ref, className, onFocus, onPointerDownCapture, ...props }: ComposerProps) {
   const engagement = useComposerEngagement();
   return (
     <form
@@ -36,6 +36,10 @@ export function Composer({ ref, className, onFocus, ...props }: ComposerProps) {
       onFocus={event => {
         onFocus?.(event);
         engagement.onFocus(event);
+      }}
+      onPointerDownCapture={event => {
+        onPointerDownCapture?.(event);
+        engagement.onPointerDownCapture();
       }}
       {...props}
     />
@@ -115,6 +119,7 @@ export function ComposerInput({
   variant = 'inline',
   maxHeight,
   autoComplete,
+  placeholder,
   ...props
 }: ComposerInputProps) {
   const shellInputRef = use(ChatShellComposerInputContext);
@@ -129,6 +134,8 @@ export function ComposerInput({
           variant === 'textarea' ? 'min-h-28' : 'min-h-10',
           className,
         )}
+        // A blank placeholder keeps `:placeholder-shown`, which the one-line layout reads as "no draft".
+        placeholder={placeholder || ' '}
         {...props}
         {...textFieldAutofillProps(autoComplete)}
       />

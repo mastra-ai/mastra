@@ -2,7 +2,8 @@
 
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { Composer, ComposerActions, ComposerActionsDetail, ComposerBox, ComposerInput } from './composer';
@@ -11,8 +12,32 @@ afterEach(() => {
   cleanup();
 });
 
+function ModelPicker() {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const dismissOutside = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!listRef.current?.contains(target) && !triggerRef.current?.contains(target)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', dismissOutside);
+    return () => document.removeEventListener('pointerdown', dismissOutside);
+  }, [open]);
+
+  return (
+    <>
+      <button ref={triggerRef} type="button" aria-expanded={open} onClick={() => setOpen(value => !value)}>
+        Model
+      </button>
+      {open && createPortal(<div ref={listRef} role="listbox" aria-label="Models" tabIndex={-1} />, document.body)}
+    </>
+  );
+}
+
 function ChatScreen() {
-  const [pickerOpen, setPickerOpen] = useState(false);
   return (
     <>
       <p>Transcript</p>
@@ -23,14 +48,11 @@ function ChatScreen() {
           <ComposerActions>
             <button type="button">Attach</button>
             <ComposerActionsDetail>
-              <button type="button" aria-expanded={pickerOpen} onClick={() => setPickerOpen(open => !open)}>
-                Model
-              </button>
+              <ModelPicker />
             </ComposerActionsDetail>
           </ComposerActions>
         </ComposerBox>
       </Composer>
-      {pickerOpen && <div role="listbox" aria-label="Models" tabIndex={-1} />}
     </>
   );
 }
@@ -81,6 +103,17 @@ describe('Composer engagement', () => {
     await userEvent.click(screen.getByRole('listbox', { name: 'Models' }));
 
     expect(composer().dataset.engaged).toBe('true');
+  });
+
+  it('closes when a click outside also dismisses its open picker', async () => {
+    render(<ChatScreen />);
+    await userEvent.click(screen.getByRole('textbox', { name: 'Message' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Model' }));
+
+    await userEvent.click(screen.getByText('Transcript'));
+
+    expect(screen.queryByRole('listbox', { name: 'Models' })).toBeNull();
+    expect(composer().dataset.engaged).toBeUndefined();
   });
 
   it('closes when focus leaves by keyboard', async () => {

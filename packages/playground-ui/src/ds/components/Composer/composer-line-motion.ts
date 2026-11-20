@@ -101,6 +101,18 @@ function glideTiming(element: HTMLElement) {
   return { timing, glides: !window.matchMedia('(prefers-reduced-motion: reduce)').matches };
 }
 
+const styleHolders = new WeakMap<HTMLElement, Animation>();
+
+/** Drops a style held for a glide once it ends. Cancel fires a task later, so a newer glide's hold is left alone. */
+function releaseWhenDone(element: HTMLElement, property: string, animation: Animation) {
+  styleHolders.set(element, animation);
+  const release = () => {
+    if (styleHolders.get(element) === animation) element.style.removeProperty(property);
+  };
+  animation.addEventListener('finish', release);
+  animation.addEventListener('cancel', release);
+}
+
 function animateStatus(
   status: HTMLElement,
   first: Presence,
@@ -119,9 +131,7 @@ function animateStatus(
   }
   status.style.overflow = 'hidden';
   const animation = status.animate(keyframes, timing);
-  const release = () => status.style.removeProperty('overflow');
-  animation.addEventListener('finish', release);
-  animation.addEventListener('cancel', release);
+  releaseWhenDone(status, 'overflow', animation);
   return animation;
 }
 
@@ -155,9 +165,7 @@ function glideLineHidden(
 
   element.style.display = from.display;
   const animation = element.animate(keyframes, timing);
-  const release = () => element.style.removeProperty('display');
-  animation.addEventListener('finish', release);
-  animation.addEventListener('cancel', release);
+  releaseWhenDone(element, 'display', animation);
   return animation;
 }
 

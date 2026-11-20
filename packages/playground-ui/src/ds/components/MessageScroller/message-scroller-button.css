@@ -80,7 +80,9 @@ html.light [data-slot='message-scroller-button'] {
     transition: opacity var(--duration-fast) linear;
   }
 
-  [data-slot='message-scroller-button'][data-busy='true'] [data-slot='message-scroller-button-activity'] path {
+  [data-slot='message-scroller-button'][data-busy='true'][data-active='true']
+    [data-slot='message-scroller-button-activity']
+    path {
     animation: none;
     stroke-dashoffset: 0;
   }
