@@ -1,5 +1,21 @@
 # mastra
 
+## 1.40.2-alpha.3
+
+### Patch Changes
+
+- Share dataset edit, duplicate, schema and version-compare views from `@mastra/playground-ui/domains/datasets` (`EditDatasetForm`, `DuplicateDatasetDialog`, `DatasetSchemaDialog`, `DatasetCompareVersionToolbar`, `DatasetCompareVersionsList`, `ScorerSelector`), so apps other than Studio can render them. ([#31087](https://github.com/mastra-ai/mastra/pull/31087))
+
+- Shared the dataset detail views (items list, item panel, add/import/export dialogs, version history) and experiment comparison components from `@mastra/playground-ui`, so apps other than Studio can render a dataset's items. These components take URL state (`searchParams`, `setSearchParams`, `currentItemId`) as props and navigate through the app's `paths.datasetLink`/`paths.datasetItemLink`. ([#31087](https://github.com/mastra-ai/mastra/pull/31087))
+
+- Added `DatasetPage` to `@mastra/playground-ui/domains/datasets`: the full dataset detail page (dataset and version switcher crumbs, Schema and Edit/Duplicate/Delete actions, items list, dialogs). Studio now renders it, so other apps get the same page. `DatasetCombobox` and `DatasetVersions` also moved to playground-ui. ([#31087](https://github.com/mastra-ai/mastra/pull/31087))
+
+- Share the dataset edit page, version compare pages and item side panel from `@mastra/playground-ui/domains/datasets`, so every app shows the same dataset screens. Item and version links now use the app's `paths.datasetItemLink` instead of hardcoded `/datasets` URLs. ([#31087](https://github.com/mastra-ai/mastra/pull/31087))
+
+- Updated dependencies [[`4d43c97`](https://github.com/mastra-ai/mastra/commit/4d43c970244262267277295cc4bde3561bd298fe), [`f35fac5`](https://github.com/mastra-ai/mastra/commit/f35fac5b216214a6fc6407558f94fc2f4cbcc610), [`f2c23af`](https://github.com/mastra-ai/mastra/commit/f2c23af7f751a3e195d7bd52bd0377edb5f9072b), [`50e318b`](https://github.com/mastra-ai/mastra/commit/50e318bd77cc72ac0a148c900bb48b8f0b759b75), [`b008c95`](https://github.com/mastra-ai/mastra/commit/b008c95fa93c5a73ae08c4f86e99d7bd55bf3e78), [`6507fdc`](https://github.com/mastra-ai/mastra/commit/6507fdc6343363bc33eef8e30e83f50c50fc90ab), [`f77bcb1`](https://github.com/mastra-ai/mastra/commit/f77bcb1a5bcdfebda3df4b4adec8e6ac5f5f4e18)]:
+  - @mastra/deployer@1.86.0-alpha.3
+  - @mastra/core@1.86.0-alpha.3
+
 ## 1.40.2-alpha.2
 
 ### Patch Changes

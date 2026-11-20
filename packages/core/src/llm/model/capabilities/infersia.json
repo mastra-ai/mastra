@@ -27,15 +27,16 @@
         "values": ["none", "low", "high"]
       }
     ],
+    "deepseek/deepseek-v4.1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
     "reflection/beam-1.0-501b-a23b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "xiaomi/mimo-v2.6-flash": [
-      {
-        "type": "toggle"
       }
     ],
     "xiaomi/mimo-v2.6-pro": [
@@ -43,10 +44,9 @@
         "type": "toggle"
       }
     ],
-    "deepseek/deepseek-v4.1-flash-1017": [
+    "xiaomi/mimo-v2.6-flash": [
       {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "type": "toggle"
       }
     ],
     "minimax/minimax-m3.1-flash": [

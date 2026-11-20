@@ -4,6 +4,8 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { getShortId } from '@mastra/playground-ui/components/Text';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { ComparisonMetricList, ComparisonSection, ScorerLabel } from '@mastra/playground-ui/domains/experiments';
+import type { ComparisonMetric } from '@mastra/playground-ui/domains/experiments';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { IconCalendar1 } from '@mastra/playground-ui/icons/central/IconCalendar1';
 import { IconChainLink3 } from '@mastra/playground-ui/icons/central/IconChainLink3';
@@ -35,9 +37,6 @@ import {
   formatScore,
   formatTokenCount,
 } from './comparison-metric-format';
-import { ComparisonMetricList, ScorerLabel } from './comparison-metric-list';
-import type { ComparisonMetric } from './comparison-metric-list';
-import { ComparisonSection } from './comparison-section';
 import { sideVariant } from './constants';
 import { useCompareMetricPreferences } from './use-compare-metric-preferences';
 
