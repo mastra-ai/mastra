@@ -234,6 +234,32 @@ describe('token limits on huge output (#30951)', () => {
     }
   });
 
+  it('a cut through a segment whose language changes when trimmed is recounted to fit the budget', async () => {
+    // With ж in the segment tokenx counts it as Russian (4 chars/token) and keeps 8,000 漢;
+    // without ж the kept text counts as CJK, 1 token per char.
+    // Outputs within the size cap keep tokenx's own cut, exactly as before; these are past it.
+    const cases = [
+      { output: '漢'.repeat(30_000) + 'ж' + '漢'.repeat(35_000), side: 'end' as const },
+      { output: '漢'.repeat(35_000) + 'ж' + '漢'.repeat(30_000), side: 'start' as const },
+      { output: 'x '.repeat(10_000) + '漢'.repeat(5_000) + 'ж' + '漢'.repeat(40_000), side: 'start' as const },
+      { output: '漢'.repeat(40_000) + 'ж' + '漢'.repeat(5_000) + ' x'.repeat(10_000), side: 'end' as const },
+    ];
+    for (const { output, side } of cases) {
+      const result = await applyTokenLimit(output, LIMIT, side);
+      const kept =
+        side === 'start' ? result.slice(result.indexOf('\n') + 1) : result.slice(0, result.lastIndexOf('\n'));
+      expect(side === 'start' ? output.endsWith(kept) : output.startsWith(kept)).toBe(true);
+      expect(kept.length).toBeGreaterThan(0);
+      expect(estimateTokenCount(kept)).toBeLessThanOrEqual(LIMIT);
+    }
+    const output = cases[0]!.output;
+    const sandwich = await applyTokenLimitSandwich(output, LIMIT);
+    const [head, , tail] = sandwich.split(/\n(\[\.\.\.output truncated[^\n]*)\n/);
+    expect(output.startsWith(head!)).toBe(true);
+    expect(output.endsWith(tail!)).toBe(true);
+    expect(estimateTokenCount(head!) + estimateTokenCount(tail!)).toBeLessThanOrEqual(LIMIT);
+  });
+
   it('cuts match tokenx slicing the whole output when segments are short, across mixed text and whitespace', async () => {
     let seed = 7;
     const rnd = (n: number) => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) % n;

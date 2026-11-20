@@ -264,8 +264,29 @@ function sliceEdge(output: string, budget: number, limit: number, side: 'head' |
     return index + shift;
   };
 
-  if (side === 'head') return sliceSafe(window, 0, toWindowIndex(sliceByTokensSafe(collapsed, 0, budget).length));
-  return sliceSafe(window, toWindowIndex(collapsed.length - sliceByTokensSafe(collapsed, -budget).length));
+  if (side === 'head') {
+    const kept = fitBudget(sliceByTokensSafe(collapsed, 0, budget), budget, side);
+    return sliceSafe(window, 0, toWindowIndex(kept.length));
+  }
+  const kept = fitBudget(sliceByTokensSafe(collapsed, -budget), budget, side);
+  return sliceSafe(window, toWindowIndex(collapsed.length - kept.length));
+}
+
+/**
+ * tokenx slices a segment by the chars-per-token of its language, picked from the
+ * chars it contains, so a cut that drops the char that picked it (a lone 'ж' in a run
+ * of CJK) can count several times over `budget` on its own. Recount the kept text,
+ * which is no longer than the bounded input it was cut from, and cut it again until
+ * it fits.
+ */
+function fitBudget(kept: string, budget: number, side: 'head' | 'tail'): string {
+  for (let tokens = estimateTokenCount(kept); tokens > budget; tokens = estimateTokenCount(kept)) {
+    const next = side === 'head' ? sliceByTokensSafe(kept, 0, budget) : sliceByTokensSafe(kept, -budget);
+    // tokenx can't trim it any further: drop chars in proportion to the overshoot instead.
+    const length = next.length < kept.length ? next.length : Math.floor((kept.length * budget) / tokens);
+    kept = side === 'head' ? sliceSafe(kept, 0, length) : sliceSafe(kept, kept.length - length);
+  }
+  return kept;
 }
 
 /**
