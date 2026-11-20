@@ -1,7 +1,18 @@
 import { posix as posixPath } from 'node:path';
 
+const SAFE_SHELL_WORD = /^[a-zA-Z0-9._\-/=:@]+$/;
+
+/** Quote a shell word. Values made only of safe characters stay bare, matching existing command lines. */
 export function shellQuote(arg: string): string {
-  // Single-quote every value so it is one shell word, including quotes in the value.
+  if (SAFE_SHELL_WORD.test(arg)) return arg;
+  return quoteShellWord(arg);
+}
+
+/**
+ * Always single-quote. Directory paths use this so a raw path never flows into the script,
+ * including paths that contain only safe characters.
+ */
+function quoteShellWord(arg: string): string {
   return `'${arg.replace(/'/g, `'\\''`)}'`;
 }
 
@@ -34,8 +45,8 @@ export function commandInCwd(command: string, cwd: string | undefined, workingDi
   const fallbackDir = candidates[1];
   const alsoTried = fallbackDir ? ' (also tried $_mastra_d2)' : '';
   return (
-    `_mastra_d1=${shellQuote(primaryDir)}\n` +
-    `_mastra_d2=${fallbackDir ? shellQuote(fallbackDir) : `''`}\n` +
+    `_mastra_d1=${quoteShellWord(primaryDir)}\n` +
+    `_mastra_d2=${fallbackDir ? quoteShellWord(fallbackDir) : `''`}\n` +
     `if [ -d "$_mastra_d1" ]; then cd -- "$_mastra_d1" || exit 1\n` +
     `elif [ -n "$_mastra_d2" ] && [ -d "$_mastra_d2" ]; then cd -- "$_mastra_d2" || exit 1\n` +
     `else echo "Working directory not found: $_mastra_d1${alsoTried}" >&2; exit 1\n` +
