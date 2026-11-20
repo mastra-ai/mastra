@@ -167,11 +167,13 @@ async function getWorkspaceById(
   if (typeof mastra.getWorkspaceById === 'function') {
     let workspace: Workspace | undefined;
     try {
-      workspace = mastra.getWorkspaceById(workspaceId);
+      // `optional` skips the error log on a miss; older cores ignore it and throw instead.
+      workspace = mastra.getWorkspaceById(workspaceId, { optional: true });
     } catch {
       // Workspace not found in registry
       return undefined;
     }
+    if (!workspace) return undefined;
     // A stored agent's workspace is as private as the agent: treat it as missing for callers who can't see the agent.
     const entry = typeof mastra.listWorkspaces === 'function' ? mastra.listWorkspaces()[workspaceId] : undefined;
     if (entry?.source === 'agent' && entry.agentId) {

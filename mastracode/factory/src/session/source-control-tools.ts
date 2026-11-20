@@ -182,11 +182,11 @@ async function resolveSessionTarget(
  * then describe the default without naming it.
  */
 async function describeSessionRepositories(
-  sessionId: string,
-  providers: readonly SourceControlToolProvider[],
+  match: { provider: SourceControlToolProvider; session: SourceControlSession } | undefined,
 ): Promise<{ slugs: string[]; own: string | undefined } | undefined> {
+  if (!match) return undefined;
+  const { provider, session } = match;
   try {
-    const { provider, session } = await resolveProviderSession(sessionId, providers);
     const repositories = await resolveSessionRepositories({ sourceControl: provider.storage, session });
     const own = repositories.find(candidate => candidate.link.id === session.projectRepositoryId);
     return { slugs: environmentSlugs(repositories), own: own?.repository.slug };
@@ -266,9 +266,13 @@ export async function createSourceControlTools({
   const identity = authIdentity(requestContext);
   if (!controller?.sessionId || !identity.orgId || !identity.userId || providers.length === 0) return {};
 
-  const repositoryArgument = repositoryArgumentDescription(
-    await describeSessionRepositories(controller.sessionId, providers),
-  );
+  // Resolved once for the tool descriptions and to decide which tools to offer;
+  // execute re-resolves, so a failure here only drops the descriptions' detail.
+  const sessionMatch = await resolveProviderSession(controller.sessionId, providers).catch(() => undefined);
+  const repositoryArgument = repositoryArgumentDescription(await describeSessionRepositories(sessionMatch));
+  // Checkout refresh only works in a GitLab merge-request review session.
+  const offersCheckoutRefresh =
+    sessionMatch?.provider.id === 'gitlab' && mergeRequestNumberFromBranch(sessionMatch.session.branch) !== undefined;
   const withTarget = (options?: { repository?: string }) => resolveSessionTarget(requestContext, providers, options);
   const targetFor = (input: { repository?: string }) =>
     withTarget(input.repository !== undefined ? { repository: input.repository } : undefined);
@@ -279,9 +283,9 @@ export async function createSourceControlTools({
     })),
     actingUserId: target.userId,
   });
-
-  return {
-    source_control_refresh_change_request_checkout: createTool({
+  // Gated by `offersCheckoutRefresh`; execute still checks the binding it resolves at call time.
+  const createRefreshCheckoutTool = () =>
+    createTool({
       id: 'source_control_refresh_change_request_checkout',
       description:
         'Refresh the active GitLab review session checkout to its current MR head. The MR, repository, branch, and credential are resolved server-side; no provider credentials enter the agent workspace.',
@@ -306,15 +310,17 @@ export async function createSourceControlTools({
           orgId: target.orgId,
           repositoryId: target.repository.id,
         });
-        const result = await refreshMergeRequestCheckout(sandbox, workdir, {
+        return refreshMergeRequestCheckout(sandbox, workdir, {
           branch: target.session.branch,
           mergeRequestNumber,
           expectedHeadSha: mergeRequest.headSha,
           access,
         });
-        return result;
       },
-    }),
+    });
+
+  return {
+    ...(offersCheckoutRefresh ? { source_control_refresh_change_request_checkout: createRefreshCheckoutTool() } : {}),
     source_control_push_branch: createTool({
       id: 'source_control_push_branch',
       description: `Push the active Factory session branch to its connected source-control provider. Credentials are resolved and scrubbed server-side; this tool takes no token, remote, or branch arguments. Returns the pushed \`commit\`; \`upToDate: true\` means the remote already had it and nothing new was pushed, so check that commit is the one you meant to push. Commit before pushing, not in parallel with it. ${repositoryArgument}`,

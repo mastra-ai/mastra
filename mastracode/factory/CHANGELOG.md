@@ -1,5 +1,18 @@
 # @mastra/factory
 
+## 0.31.0-alpha.3
+
+### Patch Changes
+
+- Factory now links every comment and change request it publishes back to the session that wrote it. The pull request "Reviewing…" status comment shows the session link from the moment the review starts and keeps it after the review ends. GitHub triage comments get the link added automatically. Triage on Linear and Jira, build, and self-review end what they publish with the same link, taken from a new `Your session` line in the work item signal. Session links appear only when `MASTRACODE_PUBLIC_URL` is set. ([#29948](https://github.com/mastra-ai/mastra/pull/29948))
+
+- Factory automations whose board move is refused now fail at once and reach a person. Before, the dispatcher retried the same refusal four more times over about fifteen seconds before giving up, because a retry only replays the refusal already recorded for that move. Moves refused because the card changed concurrently are still retried. ([#31038](https://github.com/mastra-ai/mastra/pull/31038))
+
+- Updated dependencies [[`3fd3f08`](https://github.com/mastra-ai/mastra/commit/3fd3f0878dca9ba8ed27b0e9f59cdfe65f4202ba), [`f35fac5`](https://github.com/mastra-ai/mastra/commit/f35fac5b216214a6fc6407558f94fc2f4cbcc610), [`b008c95`](https://github.com/mastra-ai/mastra/commit/b008c95fa93c5a73ae08c4f86e99d7bd55bf3e78), [`f2c23af`](https://github.com/mastra-ai/mastra/commit/f2c23af7f751a3e195d7bd52bd0377edb5f9072b), [`50e318b`](https://github.com/mastra-ai/mastra/commit/50e318bd77cc72ac0a148c900bb48b8f0b759b75), [`b008c95`](https://github.com/mastra-ai/mastra/commit/b008c95fa93c5a73ae08c4f86e99d7bd55bf3e78), [`6507fdc`](https://github.com/mastra-ai/mastra/commit/6507fdc6343363bc33eef8e30e83f50c50fc90ab), [`f77bcb1`](https://github.com/mastra-ai/mastra/commit/f77bcb1a5bcdfebda3df4b4adec8e6ac5f5f4e18), [`3fd3f08`](https://github.com/mastra-ai/mastra/commit/3fd3f0878dca9ba8ed27b0e9f59cdfe65f4202ba)]:
+  - @mastra/auth-workos@1.7.0-alpha.0
+  - @mastra/core@1.86.0-alpha.3
+  - @mastra/code-sdk@1.21.0-alpha.3
+
 ## 0.31.0-alpha.2
 
 ### Patch Changes
