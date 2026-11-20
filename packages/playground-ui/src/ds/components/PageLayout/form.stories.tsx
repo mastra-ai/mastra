@@ -7,39 +7,13 @@ import { Input } from '../Input/input';
 import { Kbd } from '../Kbd/kbd';
 import { Switch } from '../Switch/switch';
 import { Txt } from '../Txt/Txt';
-import { FormFrame } from './form-frame';
 import { PageLayout } from './index';
+import type { PageLayoutFormProps } from './index';
 import { MainCard } from '@/ds/new/layout/app-shell/main-card';
 import { SettingsContainer } from '@/ds/new/settings/settings-container';
 import { SettingsGroup, SettingsTitle } from '@/ds/new/settings/settings-header';
 import { SettingsRow } from '@/ds/new/settings/settings-row';
 import { SettingsSkeleton } from '@/ds/new/settings/settings-skeleton';
-
-const meta = {
-  title: 'Layout/PageLayout/Form',
-  component: FormFrame,
-  parameters: {
-    layout: 'fullscreen',
-    docs: {
-      description: {
-        component: [
-          'The frame for any create or edit form page, such as New alert, New project or Edit destination. It is `<PageLayout kind="form">`: no breadcrumb bar, holding a centered 640px column (the settings width) under a back link and the page title.',
-          'The back link, the title, each `SettingsTitle` and the field labels share one left edge, and sections sit 28px apart. The back link is the only way out, so there is no breadcrumb to show the same thing twice. Pass the app router link as `LinkComponent`.',
-          'Use `kind="settings"` for a settings page that someone browses to and changes in place. Use `kind="page"` for every other page: lists, dashboards, detail pages and explorers.',
-        ].join('\n\n'),
-      },
-    },
-  },
-  args: {
-    backHref: '#alerts',
-    backLabel: 'Alerts',
-    title: 'New alert',
-    children: null,
-  },
-} satisfies Meta<typeof FormFrame>;
-
-export default meta;
-type Story = StoryObj<typeof meta>;
 
 function StoryFrame({ children }: { children: ReactNode }) {
   return (
@@ -79,15 +53,56 @@ function AlertSections() {
   );
 }
 
+const meta = {
+  title: 'Layout/PageLayout/Form',
+  component: PageLayout,
+  tags: ['autodocs'],
+  parameters: {
+    layout: 'fullscreen',
+    controls: {
+      include: ['kind', 'backHref', 'backLabel', 'title', 'isLoading', 'LinkComponent', 'aside', 'children'],
+    },
+    docs: {
+      description: {
+        component: [
+          'The frame for any create or edit form page, such as New alert, New project or Edit destination. It is `<PageLayout kind="form">`: no breadcrumb bar, holding a centered 640px column (the settings width) under a back link and the page title.',
+          'The back link, the title, each `SettingsTitle` and the field labels share one left edge, and sections sit 28px apart. The back link is the only way out, so there is no breadcrumb to show the same thing twice. Pass the app router link as `LinkComponent`.',
+          'Use `kind="settings"` for a settings page that someone browses to and changes in place. Use `kind="page"` for every other page: lists, dashboards, detail pages and explorers.',
+        ].join('\n\n'),
+      },
+    },
+  },
+  decorators: [
+    (Story, { parameters }) =>
+      parameters.frame === false ? (
+        <Story />
+      ) : (
+        <StoryFrame>
+          <Story />
+        </StoryFrame>
+      ),
+  ],
+  args: {
+    kind: 'form',
+    backHref: '#alerts',
+    backLabel: 'Alerts',
+    title: 'New alert',
+    children: <AlertSections />,
+  },
+  argTypes: {
+    kind: { control: false },
+    title: { control: 'text' },
+    aside: { control: false },
+    children: { control: false },
+    LinkComponent: { control: false },
+  },
+} satisfies Meta<PageLayoutFormProps>;
+
+export default meta;
+type Story = StoryObj<typeof meta>;
+
 /** A create form: a back link to where the user came from, the title, then the form's sections. */
 export const Create: Story = {
-  render: args => (
-    <StoryFrame>
-      <PageLayout kind="form" {...args}>
-        <AlertSections />
-      </PageLayout>
-    </StoryFrame>
-  ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const back = canvas.getByRole('link', { name: 'Back to Alerts' });
@@ -113,19 +128,20 @@ export const Create: Story = {
 
 /** An edit form while its record loads: the title holds its place and the sections show skeleton rows. */
 export const Loading: Story = {
-  args: { backHref: '#alerts/deploy-failed', backLabel: 'Deploy failed', title: 'Edit alert', isLoading: true },
-  render: args => (
-    <StoryFrame>
-      <PageLayout kind="form" {...args}>
-        <SettingsGroup>
-          <SettingsTitle>Details</SettingsTitle>
-          <SettingsContainer>
-            <SettingsSkeleton label="Loading alert" rows={2} />
-          </SettingsContainer>
-        </SettingsGroup>
-      </PageLayout>
-    </StoryFrame>
-  ),
+  args: {
+    backHref: '#alerts/deploy-failed',
+    backLabel: 'Deploy failed',
+    title: 'Edit alert',
+    isLoading: true,
+    children: (
+      <SettingsGroup>
+        <SettingsTitle>Details</SettingsTitle>
+        <SettingsContainer>
+          <SettingsSkeleton label="Loading alert" rows={2} />
+        </SettingsContainer>
+      </SettingsGroup>
+    ),
+  },
 };
 
 /** A long back label and title wrap inside the column instead of widening it. */
@@ -135,44 +151,45 @@ export const LongText: Story = {
     backLabel: 'Production on-call escalation channel for the platform infrastructure team',
     title: 'Edit destination for the production on-call escalation channel of the platform infrastructure team',
   },
-  render: args => (
-    <StoryFrame>
-      <PageLayout kind="form" {...args}>
-        <AlertSections />
-      </PageLayout>
-    </StoryFrame>
-  ),
 };
 
 export const WithAside: Story = {
-  render: args => (
-    <StoryFrame>
-      <PageLayout
-        kind="form"
-        {...args}
-        aside={
-          <SettingsGroup>
-            <SettingsTitle>Preview</SettingsTitle>
-            <SettingsContainer>
-              <SettingsRow label="Would have fired" description="Three times in the last 7 days.">
-                <Button size="sm">Refresh</Button>
-              </SettingsRow>
-            </SettingsContainer>
-          </SettingsGroup>
-        }
-      >
-        <AlertSections />
-      </PageLayout>
-    </StoryFrame>
-  ),
+  args: {
+    aside: (
+      <SettingsGroup>
+        <SettingsTitle>Preview</SettingsTitle>
+        <SettingsContainer>
+          <SettingsRow label="Would have fired" description="Three times in the last 7 days.">
+            <Button size="sm">Refresh</Button>
+          </SettingsRow>
+        </SettingsContainer>
+      </SettingsGroup>
+    ),
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A live preview in `aside` sits beside the form when the column is wide enough, and above the fields otherwise.',
+      },
+    },
+  },
 };
 
 export const PhoneWidth: Story = {
   args: { backHref: '#factory', backLabel: 'Factory', title: 'New Factory' },
+  parameters: {
+    frame: false,
+    docs: {
+      description: {
+        story: 'At phone width a row whose label must truncate keeps the form column inside the screen.',
+      },
+    },
+  },
   render: args => (
     <div className="flex h-200 w-80 bg-sidebar p-2">
       <MainCard>
-        <PageLayout kind="form" {...args}>
+        <PageLayout {...args}>
           <div className="flex items-center gap-3">
             <Txt as="span" className="truncate">
               acme-platform/payments-billing-reliability-service-monorepo

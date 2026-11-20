@@ -9,20 +9,12 @@ import { EmptyState } from '../EmptyState';
 import { Input } from '../Input';
 import { Txt } from '../Txt';
 import { PageLayout } from './index';
+import type { PageLayoutPageProps } from './index';
 import { IconArrowLeft } from '@/ds/icons/central/IconArrowLeft';
 import { IconBox2 } from '@/ds/icons/central/IconBox2';
 import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { MainCard } from '@/ds/new/layout/app-shell';
 import { PageHeader } from '@/ds/new/layout/page-header';
-
-const meta: Meta<typeof PageLayout> = {
-  title: 'Layout/PageLayout',
-  component: PageLayout,
-  parameters: { layout: 'fullscreen' },
-};
-
-export default meta;
-type Story = StoryObj<typeof PageLayout>;
 
 function StoryFrame({ children }: { children: ReactNode }) {
   return (
@@ -71,14 +63,168 @@ const resourceList = (
   </ul>
 );
 
-export const Container: Story = {
-  render: () => (
-    <StoryFrame>
-      <PageLayout kind="page" breadcrumbs={crumbs} headerActions={headerActions} header={pageHeader}>
-        {resourceList}
-      </PageLayout>
-    </StoryFrame>
-  ),
+const workspacePanels = (
+  <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_16rem]">
+    <ul className="grid content-start gap-2 overflow-y-auto border-r border-border p-4">
+      {Array.from({ length: 40 }, (_, index) => (
+        <li key={index} className="rounded border border-border px-3 py-2">
+          Message {index + 1}
+        </li>
+      ))}
+    </ul>
+    <div className="p-4 text-placeholder">Side panel</div>
+  </div>
+);
+
+const slotArg = { control: false } as const;
+
+const meta = {
+  title: 'Layout/PageLayout',
+  component: PageLayout,
+  tags: ['autodocs'],
+  parameters: {
+    layout: 'fullscreen',
+    controls: { include: ['kind', 'breadcrumbs', 'headerActions', 'actionRow', 'header', 'body', 'children'] },
+    docs: {
+      description: {
+        component: [
+          'The frame of every page: its width, gutter, scrolling and way back. Pick the `kind` that matches the page, and each kind takes only the props that make sense for it.',
+          '- `kind="page"`: lists, dashboards, detail pages and explorers. Full width with the standard gutter, up to 1536px on very wide screens. Add `body="workspace"` when the body is panels that scroll on their own (chat, board, editor, graph): it fills the rest of the page edge to edge.',
+          '- `kind="settings"`: a settings page. Breadcrumbs and a title over a 640px column of `SettingsGroup`s. See Layout/PageLayout/Settings.',
+          '- `kind="form"`: a create or edit form. A back link and the title over a 640px column, and no breadcrumbs. See Layout/PageLayout/Form.',
+          'The frame is configured, not composed: what goes inside (`PageHeader`, `SettingsGroup`, `EmptyState`, `DashboardGrid`, panels) stays free.',
+        ].join('\n\n'),
+      },
+    },
+  },
+  decorators: [
+    (Story, { parameters }) =>
+      parameters.frame === false ? (
+        <Story />
+      ) : (
+        <StoryFrame>
+          <Story />
+        </StoryFrame>
+      ),
+  ],
+  args: { kind: 'page', breadcrumbs: crumbs, headerActions, children: resourceList },
+  argTypes: {
+    kind: { control: false },
+    body: { control: 'inline-radio', options: ['scroll', 'workspace'] },
+    breadcrumbs: slotArg,
+    headerActions: slotArg,
+    actionRow: slotArg,
+    header: slotArg,
+    children: slotArg,
+  },
+} satisfies Meta<PageLayoutPageProps>;
+
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const Page: Story = {
+  args: { header: pageHeader },
+  parameters: {
+    docs: {
+      description: {
+        story: 'A list page: breadcrumbs and actions in the top bar, a `PageHeader`, then the content, 24px below it.',
+      },
+    },
+  },
+};
+
+export const Workspace: Story = {
+  args: { body: 'workspace', children: workspacePanels },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A body of panels that scroll on their own, like agent chat or a board. It fills the page edge to edge and the page itself never scrolls.',
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const list = within(canvasElement).getByText('Message 1').closest('ul');
+    const body = list?.closest<HTMLElement>('[style*="overflow"]');
+    await expect(list && list.scrollHeight > list.clientHeight).toBe(true);
+    await expect(body && body.scrollHeight <= body.clientHeight).toBe(true);
+  },
+};
+
+export const PageWithActionRow: Story = {
+  args: {
+    actionRow: (
+      <ActionRow>
+        <ActionRow.Start>
+          <Input placeholder="Filter resources" className="max-w-120" />
+        </ActionRow.Start>
+        <ActionRow.End>
+          <Button>Sort</Button>
+        </ActionRow.End>
+      </ActionRow>
+    ),
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Search and filters in `actionRow` stay pinned under the top bar while the content scrolls.',
+      },
+    },
+  },
+};
+
+export const PageWithoutTopBar: Story = {
+  args: { breadcrumbs: undefined, headerActions: undefined, header: pageHeader },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'With no breadcrumbs and no header actions, the top bar is not drawn and the page starts with its header.',
+      },
+    },
+  },
+};
+
+export const PageEmpty: Story = {
+  args: {
+    children: (
+      <div className="flex h-full items-center justify-center">
+        <EmptyState titleSlot="No resources yet" descriptionSlot="Create a resource to get started." />
+      </div>
+    ),
+  },
+};
+
+export const PageWithSectionsAndEmptyState: Story = {
+  args: {
+    header: pageHeader,
+    children: (
+      <>
+        <section>{resourceList}</section>
+        <EmptyState
+          variant="fill"
+          titleSlot="No activity yet"
+          descriptionSlot="Runs show up here once a resource is used."
+        />
+      </>
+    ),
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A fill `EmptyState` as the last child takes the rest of the page height, so it centers below the content.',
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const list = within(canvasElement).getByText('Research agent').closest('section');
+    const fill = canvasElement.querySelector<HTMLElement>('[data-slot="empty-state-fill"]');
+    const body = fill?.closest<HTMLElement>('[style*="overflow"]');
+    if (!list || !fill || !body) throw new Error('Missing the page parts');
+    await expect(fill.getBoundingClientRect().top).toBeCloseTo(list.getBoundingClientRect().bottom, 0);
+    await expect(body.scrollHeight).toBeLessThanOrEqual(body.clientHeight);
+  },
 };
 
 function ComparisonHeader({
@@ -110,8 +256,8 @@ const backLink = (
 );
 
 export const TopBarSpacingComparison: Story = {
-  tags: ['autodocs'],
   parameters: {
+    frame: false,
     docs: {
       description: {
         story: [
@@ -181,99 +327,5 @@ export const TopBarSpacingComparison: Story = {
 
     await expect(offsets.map(offset => offset.title)).toEqual([60, 60, 60, 20]);
     await expect(offsets.map(offset => offset.body)).toEqual([134, 134, 134, 94]);
-  },
-};
-
-export const Workspace: Story = {
-  render: () => (
-    <StoryFrame>
-      <PageLayout kind="page" body="workspace" breadcrumbs={crumbs} headerActions={headerActions}>
-        <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_16rem]">
-          <ul className="grid content-start gap-2 overflow-y-auto border-r border-border p-4">
-            {Array.from({ length: 40 }, (_, index) => (
-              <li key={index} className="rounded border border-border px-3 py-2">
-                Message {index + 1}
-              </li>
-            ))}
-          </ul>
-          <div className="p-4 text-placeholder">Side panel</div>
-        </div>
-      </PageLayout>
-    </StoryFrame>
-  ),
-  play: async ({ canvasElement }) => {
-    const list = within(canvasElement).getByText('Message 1').closest('ul');
-    const body = list?.closest<HTMLElement>('[style*="overflow"]');
-    await expect(list && list.scrollHeight > list.clientHeight).toBe(true);
-    await expect(body && body.scrollHeight <= body.clientHeight).toBe(true);
-  },
-};
-
-export const FullPage: Story = {
-  render: () => (
-    <StoryFrame>
-      <PageLayout
-        kind="page"
-        breadcrumbs={crumbs}
-        headerActions={headerActions}
-        actionRow={
-          <ActionRow>
-            <ActionRow.Start>
-              <Input placeholder="Filter resources" className="max-w-120" />
-            </ActionRow.Start>
-            <ActionRow.End>
-              <Button>Sort</Button>
-            </ActionRow.End>
-          </ActionRow>
-        }
-      >
-        {resourceList}
-      </PageLayout>
-    </StoryFrame>
-  ),
-};
-
-export const WithoutBreadcrumbsAndHeaderActions: Story = {
-  render: () => (
-    <StoryFrame>
-      <PageLayout kind="page" header={pageHeader}>
-        {resourceList}
-      </PageLayout>
-    </StoryFrame>
-  ),
-};
-
-export const Empty: Story = {
-  render: () => (
-    <StoryFrame>
-      <PageLayout kind="page" breadcrumbs={crumbs}>
-        <div className="flex h-full items-center justify-center">
-          <EmptyState titleSlot="No resources yet" descriptionSlot="Create a resource to get started." />
-        </div>
-      </PageLayout>
-    </StoryFrame>
-  ),
-};
-
-export const HeaderWithSectionsAndEmptyState: Story = {
-  render: () => (
-    <StoryFrame>
-      <PageLayout kind="page" breadcrumbs={crumbs} header={pageHeader}>
-        <section>{resourceList}</section>
-        <EmptyState
-          variant="fill"
-          titleSlot="No activity yet"
-          descriptionSlot="Runs show up here once a resource is used."
-        />
-      </PageLayout>
-    </StoryFrame>
-  ),
-  play: async ({ canvasElement }) => {
-    const list = within(canvasElement).getByText('Research agent').closest('section');
-    const fill = canvasElement.querySelector<HTMLElement>('[data-slot="empty-state-fill"]');
-    const body = fill?.closest<HTMLElement>('[style*="overflow"]');
-    if (!list || !fill || !body) throw new Error('Missing the page parts');
-    await expect(fill.getBoundingClientRect().top).toBeCloseTo(list.getBoundingClientRect().bottom, 0);
-    await expect(body.scrollHeight).toBeLessThanOrEqual(body.clientHeight);
   },
 };

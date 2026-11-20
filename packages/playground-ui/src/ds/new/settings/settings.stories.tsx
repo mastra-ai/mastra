@@ -16,7 +16,7 @@ import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { Input } from '@/ds/components/Input';
 import { PageLayout } from '@/ds/components/PageLayout';
-import { SettingsFrame } from '@/ds/components/PageLayout/settings-frame';
+import type { PageLayoutSettingsProps } from '@/ds/components/PageLayout';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { Switch } from '@/ds/components/Switch';
 import { ThemeProvider } from '@/ds/components/ThemeProvider';
@@ -27,9 +27,12 @@ import { MainCard } from '@/ds/new/layout/app-shell';
 
 const meta = {
   title: 'New/Settings',
-  component: SettingsFrame,
+  component: PageLayout,
   parameters: {
     layout: 'padded',
+    controls: {
+      include: ['kind', 'breadcrumbs', 'headerActions', 'title', 'titleAccessory', 'action', 'header', 'children'],
+    },
     docs: {
       description: {
         component:
@@ -44,7 +47,8 @@ const meta = {
       </ThemeProvider>
     ),
   ],
-} satisfies Meta<typeof SettingsFrame>;
+  args: { kind: 'settings', children: null },
+} satisfies Meta<PageLayoutSettingsProps>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -66,7 +70,7 @@ function JoinPolicySelect() {
 
 /** Settings rows, a list with a header, and an empty list, on one page. */
 export const Page: Story = {
-  args: { title: 'General', children: null },
+  args: { title: 'General' },
   render: args => (
     <div className="flex h-152 bg-sidebar p-2">
       <MainCard>
@@ -157,7 +161,6 @@ export const Page: Story = {
 
 /** A view-only value, a row whose control takes the full width, and a fieldset of switches. */
 export const Controls: Story = {
-  args: { children: null },
   render: () => (
     <PageLayout kind="settings">
       <SettingsGroup>
@@ -187,7 +190,6 @@ export const Controls: Story = {
 
 /** Loading states: `SettingsSkeleton` in place of rows (`row`) or list items (`item`), inside the same card. */
 export const Loading: Story = {
-  args: { children: null },
   render: () => (
     <PageLayout kind="settings" title="General">
       <SettingsGroup>
