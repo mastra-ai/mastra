@@ -10,7 +10,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const providerRegistryMock: Record<string, unknown> = {};
+const providerRegistryMock = vi.hoisted((): Record<string, unknown> => ({}));
 const mastraCodeGatewayMock = {
   id: 'mastracode',
   name: 'MastraCode Gateway',

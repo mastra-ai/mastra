@@ -14,6 +14,8 @@ import { rejectionOf, take } from './helpers';
 vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
 
 const tsxCli = path.join(path.dirname(require.resolve('tsx/package.json')), 'dist', 'cli.mjs');
+// Stdio servers inherit only a curated env; forward NODE_OPTIONS so fixtures resolve workspace packages like this test does.
+const fixtureEnv = { NODE_OPTIONS: process.env.NODE_OPTIONS ?? '' };
 const fixture = (name: string) => path.join(__dirname, name);
 const fastPoll = { minPollIntervalMs: POLL_INTERVAL_MS } satisfies MCPEventSubscribeOptions;
 
@@ -31,7 +33,9 @@ interface Harness {
 
 /** Server in a child process; occurrences are caused by calling its tools through the same client. */
 async function stdioHarness(): Promise<Harness> {
-  const mcp = newClient({ events: { command: process.execPath, args: [tsxCli, fixture('stdio-server.fixture.ts')] } });
+  const mcp = newClient({
+    events: { command: process.execPath, args: [tsxCli, fixture('stdio-server.fixture.ts')], env: fixtureEnv },
+  });
   const tools = (await mcp.listToolsets()).events!;
   const call = async (tool: string, input: Record<string, unknown>) => {
     await tools[tool]!.execute!(input, { observe: noopObserve });
@@ -280,7 +284,7 @@ describe('MCPClient ↔ MCPServer without events', () => {
       plain: {
         command: process.execPath,
         args: [tsxCli, fixture('plain-server.fixture.ts')],
-        env: { EVENTS_INTEROP_METHOD_LOG: methodLog },
+        env: { ...fixtureEnv, EVENTS_INTEROP_METHOD_LOG: methodLog },
       },
     });
     // Positive control: the same recorder on the events server does see events/* requests.
@@ -289,7 +293,7 @@ describe('MCPClient ↔ MCPServer without events', () => {
       events: {
         command: process.execPath,
         args: [tsxCli, fixture('stdio-server.fixture.ts')],
-        env: { EVENTS_INTEROP_METHOD_LOG: controlLog },
+        env: { ...fixtureEnv, EVENTS_INTEROP_METHOD_LOG: controlLog },
       },
     });
     try {

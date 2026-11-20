@@ -628,12 +628,14 @@ describe('MCP tool call that reconnects to a 2025-11-25 server (issue #29531)', 
 describe('hydrated MCP tool against a stdio server (issue #29531)', () => {
   const require = createRequire(import.meta.url);
   const tsxCli = join(dirname(require.resolve('tsx/package.json')), 'dist', 'cli.mjs');
+  // Stdio servers inherit only a curated env; forward NODE_OPTIONS so fixtures resolve workspace packages like this test does.
+  const fixtureEnv = { NODE_OPTIONS: process.env.NODE_OPTIONS ?? '' };
   const fixturePath = fileURLToPath(new URL('../__fixtures__/logging-echo-server.ts', import.meta.url));
 
   it("does not label a later call's server logs with the first caller's requestContext", async () => {
     const lister = new MCPClient({
       id: `stdio-lister-${++clientId}`,
-      servers: { logging: { command: process.execPath, args: [tsxCli, fixturePath] } },
+      servers: { logging: { command: process.execPath, args: [tsxCli, fixturePath], env: fixtureEnv } },
     });
     clients.push(lister);
     const catalog = await lister.listToolDefinitions();
@@ -642,7 +644,7 @@ describe('hydrated MCP tool against a stdio server (issue #29531)', () => {
     const serverLogs = recordServerLogs();
     const client = new MCPClient({
       id: `stdio-caller-${++clientId}`,
-      servers: { logging: { command: process.execPath, args: [tsxCli, fixturePath], logger: serverLogs.logger } },
+      servers: { logging: { command: process.execPath, args: [tsxCli, fixturePath], env: fixtureEnv, logger: serverLogs.logger } },
     });
     clients.push(client);
     const tools = await client.toolsFromDefinitions({ definitions: catalog });
@@ -665,7 +667,7 @@ describe('hydrated MCP tool against a stdio server (issue #29531)', () => {
     };
     const client = new MCPClient({
       id: `stdio-respawn-${++clientId}`,
-      servers: { logging: { command: process.execPath, args: [tsxCli, fixturePath], logger } },
+      servers: { logging: { command: process.execPath, args: [tsxCli, fixturePath], env: fixtureEnv, logger } },
     });
     clients.push(client);
     // Tools from listTools() run on the connection it opened; a call that finds it gone reconnects.
