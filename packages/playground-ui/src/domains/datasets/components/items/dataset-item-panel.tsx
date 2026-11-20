@@ -110,7 +110,7 @@ type DatasetItemPanelBodyProps = Omit<DatasetItemPanelProps, 'item' | 'itemId' |
 };
 
 function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }: DatasetItemPanelBodyProps) {
-  const { navigate } = useLinkComponent();
+  const { navigate, paths } = useLinkComponent();
   const { updateItem, deleteItem } = useDatasetMutations();
 
   // Edit mode state
@@ -304,7 +304,7 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
               <DropdownMenu.Content align="end" className="w-48">
                 <DropdownMenu.Item
                   onSelect={() =>
-                    navigate(`/datasets/${datasetId}/items/${item.id}/versions?version=${item.datasetVersion}`)
+                    navigate(`${paths.datasetItemLink(datasetId, item.id)}/versions?version=${item.datasetVersion}`)
                   }
                 >
                   <IconHistory />

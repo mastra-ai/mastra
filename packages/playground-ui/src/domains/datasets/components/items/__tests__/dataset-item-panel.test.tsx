@@ -32,7 +32,11 @@ const renderPanel = (item: DatasetItem, navigate: (path: string) => void = () =>
   return render(
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
-        <LinkComponentProvider Link={StubLink as never} navigate={navigate} paths={{} as never}>
+        <LinkComponentProvider
+          Link={StubLink as never}
+          navigate={navigate}
+          paths={{ datasetItemLink: (d: string, i: string) => `/datasets/${d}/items/${i}` } as never}
+        >
           <MemoryRouter>
             <DatasetItemPanel datasetId="ds-1" item={item} items={[item]} onItemChange={() => {}} onClose={() => {}} />
           </MemoryRouter>

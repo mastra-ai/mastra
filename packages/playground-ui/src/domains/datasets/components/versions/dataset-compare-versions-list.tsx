@@ -152,6 +152,7 @@ export function DatasetCompareVersionsList({
   itemsAMap,
   itemsBMap,
 }: DatasetCompareVersionsListProps) {
+  const { paths } = useLinkComponent();
   const isANewer = versionA > versionB;
   return (
     <div className="overflow-y-auto">
@@ -187,7 +188,7 @@ export function DatasetCompareVersionsList({
                 <>
                   {itemA?.datasetVersion ? (
                     <LinkCell
-                      href={`/datasets/${datasetId}/items/${id}`}
+                      href={paths.datasetItemLink(datasetId, id)}
                       className="gap-2"
                       tooltip={versionAVariant ? versionInfoConfig[versionAVariant].tooltip : undefined}
                     >
@@ -203,7 +204,7 @@ export function DatasetCompareVersionsList({
                   )}
                   {itemB?.datasetVersion ? (
                     <LinkCell
-                      href={`/datasets/${datasetId}/items/${id}`}
+                      href={paths.datasetItemLink(datasetId, id)}
                       className="gap-2"
                       tooltip={versionBVariant ? versionInfoConfig[versionBVariant].tooltip : undefined}
                     >
@@ -220,7 +221,7 @@ export function DatasetCompareVersionsList({
                 </>
               ) : (
                 <LinkCell
-                  href={`/datasets/${datasetId}/items/${id}`}
+                  href={paths.datasetItemLink(datasetId, id)}
                   className="col-span-2 gap-2"
                   tooltip={versionInfoConfig.same.tooltip}
                 >
@@ -230,7 +231,7 @@ export function DatasetCompareVersionsList({
 
               {status === 'changed' ? (
                 <LinkCell
-                  href={`/datasets/${datasetId}/items/${id}/versions?version=${itemA?.datasetVersion}&compare=${itemB?.datasetVersion}`}
+                  href={`${paths.datasetItemLink(datasetId, id)}/versions?version=${itemA?.datasetVersion}&compare=${itemB?.datasetVersion}`}
                 >
                   Compare
                 </LinkCell>

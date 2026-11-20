@@ -19,5 +19,13 @@ export { DATASET_TARGET_TYPES, isDatasetTargetType, type DatasetTargetType } fro
 export { DatasetCombobox } from './dataset-combobox';
 export type { DatasetComboboxProps } from './dataset-combobox';
 export { DatasetVersions } from './dataset-versions';
-export { DatasetPage } from './dataset-page';
-export type { DatasetPageProps } from './dataset-page';
+export { DatasetBreadcrumbs, DatasetPage } from './dataset-page';
+export type { DatasetBreadcrumbsProps, DatasetPageProps } from './dataset-page';
+export { EditDatasetPage } from './edit-dataset-page';
+export type { EditDatasetPageProps } from './edit-dataset-page';
+export { DatasetVersionsPage } from './dataset-versions-page';
+export type { DatasetVersionsPageProps } from './dataset-versions-page';
+export { DatasetItemVersionsPage } from './dataset-item-versions-page';
+export type { DatasetItemVersionsPageProps } from './dataset-item-versions-page';
+export { DatasetItemSidePanel } from './items/dataset-item-side-panel';
+export type { DatasetItemSidePanelProps } from './items/dataset-item-side-panel';

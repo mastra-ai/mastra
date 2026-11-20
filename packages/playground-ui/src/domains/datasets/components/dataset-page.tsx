@@ -55,18 +55,23 @@ function DatasetsCrumb({ href, isCurrent }: { href: string; isCurrent?: boolean 
   );
 }
 
-function DatasetBreadcrumbs({
-  datasetId,
-  datasetsHref,
-  searchParams,
-  setSearchParams,
-  showVersion,
-}: {
+export interface DatasetBreadcrumbsProps {
   datasetId: string;
   datasetsHref: string;
+  /** Adds the version switcher crumb; needs the page's URL state. */
+  version?: { searchParams: URLSearchParams; setSearchParams: SetURLSearchParamsLike };
+  /** Crumbs after the dataset crumb, e.g. "Edit dataset". */
+  children?: ReactNode;
+}
+
+function VersionCrumb({
+  datasetId,
+  searchParams,
+  setSearchParams,
+}: {
+  datasetId: string;
   searchParams: URLSearchParams;
   setSearchParams: SetURLSearchParamsLike;
-  showVersion: boolean;
 }) {
   const { activeVersion, handleVersionChange } = useDatasetItemsUrlState(searchParams, setSearchParams);
   const { data: dataset, isLoading } = useDataset({ datasetId, queryOptions: { enabled: Boolean(datasetId) } });
@@ -75,36 +80,43 @@ function DatasetBreadcrumbs({
     activeVersion == null || activeVersion === latestVersion ? `Latest (v${latestVersion ?? 0})` : `v${activeVersion}`;
 
   return (
+    <Crumb
+      as="span"
+      isCurrent
+      isLoading={isLoading}
+      switcher={
+        <DatasetVersions
+          datasetId={datasetId}
+          value={activeVersion}
+          onValueChange={handleVersionChange}
+          currentVersion={latestVersion}
+          datasetCreatedAt={dataset?.createdAt}
+          {...crumbSwitcherTriggerProps}
+          aria-label="Switch dataset version"
+        />
+      }
+    >
+      {versionLabel}
+    </Crumb>
+  );
+}
+
+/** "Datasets / <dataset switcher> [/ version] [/ ...children]", shared by every dataset page. */
+export function DatasetBreadcrumbs({ datasetId, datasetsHref, version, children }: DatasetBreadcrumbsProps) {
+  const { data: dataset, isLoading } = useDataset({ datasetId, queryOptions: { enabled: Boolean(datasetId) } });
+  return (
     <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden" listClassName="min-w-0">
       <DatasetsCrumb href={datasetsHref} />
       <Crumb
         as="span"
-        isCurrent={!showVersion}
+        isCurrent={!version && !children}
         isLoading={isLoading}
         switcher={<DatasetCombobox value={datasetId} {...crumbSwitcherTriggerProps} aria-label="Switch dataset" />}
       >
         {dataset?.name ?? datasetId}
       </Crumb>
-      {showVersion ? (
-        <Crumb
-          as="span"
-          isCurrent
-          isLoading={isLoading}
-          switcher={
-            <DatasetVersions
-              datasetId={datasetId}
-              value={activeVersion}
-              onValueChange={handleVersionChange}
-              currentVersion={latestVersion}
-              datasetCreatedAt={dataset?.createdAt}
-              {...crumbSwitcherTriggerProps}
-              aria-label="Switch dataset version"
-            />
-          }
-        >
-          {versionLabel}
-        </Crumb>
-      ) : null}
+      {version ? <VersionCrumb datasetId={datasetId} {...version} /> : null}
+      {children}
     </Breadcrumb>
   );
 }
@@ -141,17 +153,7 @@ export function DatasetPage({
   if (isLoading) return null;
 
   const shell = (content: ReactNode) => (
-    <PageLayout
-      breadcrumbs={
-        <DatasetBreadcrumbs
-          datasetId={datasetId}
-          datasetsHref={datasetsHref}
-          searchParams={searchParams}
-          setSearchParams={setSearchParams}
-          showVersion={false}
-        />
-      }
-    >
+    <PageLayout breadcrumbs={<DatasetBreadcrumbs datasetId={datasetId} datasetsHref={datasetsHref} />}>
       <h1 className="sr-only">Dataset</h1>
       <div />
       <div className="flex h-full items-center justify-center">{content}</div>
@@ -227,9 +229,7 @@ export function DatasetPage({
               <DatasetBreadcrumbs
                 datasetId={datasetId}
                 datasetsHref={datasetsHref}
-                searchParams={searchParams}
-                setSearchParams={setSearchParams}
-                showVersion
+                version={{ searchParams, setSearchParams }}
               />
             }
             headerActions={headerActions}
