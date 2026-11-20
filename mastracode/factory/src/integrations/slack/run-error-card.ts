@@ -20,7 +20,7 @@ export function slackRunErrorCard(error: Error, { requestContext }: ChannelError
   const links = requestContext ? recoveryLinks(requestContext, recoveries) : [];
   // A click continues the run as if the clicker had replied in the thread.
   const retry = recoveries.includes('continue')
-    ? [Button({ id: CONTINUE_RUN_ACTION_ID, label: 'Retry', style: 'primary' })]
+    ? [Button({ id: CONTINUE_RUN_ACTION_ID, label: 'Continue', style: 'primary' })]
     : [];
   const buttons = [...retry, ...links.map(link => LinkButton(link))];
   return Card({
