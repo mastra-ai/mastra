@@ -66,7 +66,7 @@ export class PlatformAlertsIntegration implements FactoryIntegration {
   readonly #pollIntervalMs: number;
   readonly #reader: AlertReadClient;
   #projects: Pick<FactoryProjectsStorage, 'listAll'> | undefined;
-  #workItems: Pick<WorkItemsStorage, 'get' | 'update'> | undefined;
+  #workItems: Pick<WorkItemsStorage, 'get' | 'update' | 'findActiveRunBindingForSession'> | undefined;
   #status: AlertSlackStatus | undefined;
 
   readonly intake: Intake = {
@@ -122,7 +122,7 @@ export class PlatformAlertsIntegration implements FactoryIntegration {
 
   async agentTools({ requestContext }: { requestContext: RequestContext }): Promise<IntegrationTools> {
     const controller = requestContext.get('controller') as
-      { getState(): { factoryProjectId?: string }; resourceId?: string } | undefined;
+      { getState(): { factoryProjectId?: string }; resourceId?: string; sessionId?: string } | undefined;
     const projectId = controller?.getState().factoryProjectId ?? controller?.resourceId;
     if (!projectId || !this.#projects) return {};
     const project = (await this.#projects.listAll()).find(p => p.id === projectId);
@@ -131,12 +131,13 @@ export class PlatformAlertsIntegration implements FactoryIntegration {
     if (!project || !connection || connection.organizationId !== project.orgId) return {};
     return {
       ...buildAlertReadTools(this.#reader, connection.organizationId),
-      ...(this.#status && this.#workItems
+      ...(this.#status && this.#workItems && controller?.sessionId
         ? buildAlertUpdateTool({
             status: this.#status,
             workItems: this.#workItems,
             orgId: project.orgId,
             factoryProjectId: project.id,
+            sessionId: controller.sessionId,
           })
         : {}),
     };

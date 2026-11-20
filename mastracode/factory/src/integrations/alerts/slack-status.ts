@@ -381,7 +381,8 @@ export class AlertSlackStatus {
 
   /**
    * Puts the latest stage's reaction on the alert, removing a stale one another writer added. Only
-   * a reaction change Slack confirmed is recorded, so a refused one is redone on the next write.
+   * a reaction change Slack confirmed is recorded, so a refused one is redone on the next write. A
+   * cleanup that took off the recorded reaction clears the record, so it is put back.
    */
   async #syncReaction(card: Card, thread: AlertThreadRef): Promise<void> {
     for (let pass = 0; pass < SYNC_PASSES; pass++) {
@@ -389,12 +390,13 @@ export class AlertSlackStatus {
       if (!latest) return;
       const want = reactionFor(latest);
       const have = latest.reaction ?? null;
-      const stale = (latest.staleReactions ?? []).filter(emoji => emoji !== have);
-      if (stale.length > 0) {
-        for (const emoji of stale) {
-          if (await settled(this.#client.unreact(thread, thread.rootTs, emoji), 'no_reaction')) {
-            await this.#setStale(card, list => list.filter(other => other !== emoji));
-          }
+      for (const emoji of latest.staleReactions ?? []) {
+        if (
+          emoji === have ||
+          emoji === want ||
+          (await settled(this.#client.unreact(thread, thread.rootTs, emoji), 'no_reaction'))
+        ) {
+          await this.#setStale(card, list => list.filter(other => other !== emoji));
         }
       }
       if (want === have) return;
@@ -407,10 +409,14 @@ export class AlertSlackStatus {
       if (await this.#recordReaction(card, null, want)) continue;
       // Another writer moved the reaction first: take back ours unless it is the one it recorded.
       const now = await this.#current(card);
-      if (want !== (now?.reaction ?? null)) {
+      if (want !== (now?.reaction ?? null) && want !== reactionFor(now)) {
         if (!(await settled(this.#client.unreact(thread, thread.rootTs, want), 'no_reaction'))) {
           // Left for a later write to take back, though the recorded reaction is already right.
           await this.#setStale(card, list => (list.includes(want) ? list : [...list, want]));
+        } else {
+          // A newer stage may have put it on and recorded it meanwhile: it is off now, so say so
+          // and let the next pass (or write) put it back.
+          await this.#recordReaction(card, want, null);
         }
       }
     }
@@ -468,9 +474,11 @@ export class AlertSlackStatus {
  */
 export function buildAlertUpdateTool(input: {
   status: AlertSlackStatus;
-  workItems: Pick<WorkItemsStorage, 'get'>;
+  workItems: Pick<WorkItemsStorage, 'get' | 'findActiveRunBindingForSession'>;
   orgId: string;
   factoryProjectId: string;
+  /** The calling session: the tool only speaks for the card this session's run is bound to. */
+  sessionId: string;
 }) {
   return {
     alert_post_update: createTool({
@@ -479,7 +487,8 @@ export function buildAlertUpdateTool(input: {
         "Post to the alert's Slack thread and update the Factory's status message there. " +
         "Use kind 'diagnosis' once you know the cause (before writing code), 'fix' once the pull request is open " +
         "(pass pullRequestUrl), or 'no_fix' when no code change from you is right. Calling a kind again edits " +
-        'its earlier reply. Returns posted:false when the card has no linked Slack thread.',
+        "its earlier reply. Only for the card this run is working on. Returns posted:false when the card has no " +
+        'linked Slack thread.',
       inputSchema: z.object({
         workItemId: z.string().min(1),
         kind: z.enum(['diagnosis', 'fix', 'no_fix']),
@@ -487,6 +496,14 @@ export function buildAlertUpdateTool(input: {
         pullRequestUrl: z.string().url().optional(),
       }),
       execute: async ({ workItemId, kind, markdown, pullRequestUrl }) => {
+        const binding = await input.workItems.findActiveRunBindingForSession({
+          orgId: input.orgId,
+          factoryProjectId: input.factoryProjectId,
+          sessionId: input.sessionId,
+        });
+        if (binding?.workItemId !== workItemId) {
+          return { posted: false, reason: "Only the card this run is working on can be updated." };
+        }
         const card = await input.workItems.get({ orgId: input.orgId, id: workItemId });
         if (!card || card.factoryProjectId !== input.factoryProjectId) {
           return { posted: false, reason: 'No such work item in this Factory project.' };
