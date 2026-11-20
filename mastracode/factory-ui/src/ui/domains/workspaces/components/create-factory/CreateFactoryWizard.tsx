@@ -1,5 +1,5 @@
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../../api/config';
@@ -55,6 +55,13 @@ function errorMessage(error: unknown): string {
  */
 export function CreateFactoryWizard() {
   const navigate = useNavigate();
+  const onPage = useRef(true);
+  useEffect(() => {
+    onPage.current = true;
+    return () => {
+      onPage.current = false;
+    };
+  }, []);
   const location = useLocation();
   const { factoryId } = useParams<{ factoryId: string }>();
   const { baseUrl } = useApiConfig();
@@ -73,7 +80,7 @@ export function CreateFactoryWizard() {
     onRepositoryLinked: linkedRepositoryId => flow.rememberLinkedRepository(linkedRepositoryId),
     onCreated: async factory => {
       await flow.clear();
-      void navigate(factoryHomePath(factory));
+      if (onPage.current) void navigate(factoryHomePath(factory));
     },
   });
 
