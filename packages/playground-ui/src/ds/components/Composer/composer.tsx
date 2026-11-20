@@ -81,10 +81,17 @@ export function ComposerRing({ busy = false, tone = 'green', className, children
       className={cn('composer-ring relative mx-auto w-full max-w-3xl rounded-(--composer-radius)', className)}
       {...props}
     >
-      <span aria-hidden="true" className="composer-ring-beam">
-        <span />
-        <span />
-        <span />
+      <span aria-hidden="true" className="composer-ring-drift">
+        <span className="composer-ring-drift-haze">
+          <span />
+          <span />
+          <span />
+        </span>
+        <span className="composer-ring-drift-rim">
+          <span />
+          <span />
+          <span />
+        </span>
       </span>
       {children}
     </div>

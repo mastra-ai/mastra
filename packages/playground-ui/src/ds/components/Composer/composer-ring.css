@@ -54,157 +54,202 @@ html.light .composer-ring {
   --composer-ring-lift-focus: 32%;
 }
 
-.composer-ring-beam {
-  --beam-mono: var(--foreground);
-  --beam-tone: var(--composer-tone-color);
-  --beam-glow: 28%;
+.composer-ring-drift {
+  --drift-ink: var(--foreground);
+  --drift-rim: 60%;
+  --drift-haze: 8%;
 
   pointer-events: none;
   position: absolute;
   inset: 0;
   z-index: 20;
-  overflow: clip;
   border-radius: inherit;
   opacity: 0;
-  transition: opacity var(--duration-slow) var(--ease-out-custom);
+  transition: opacity calc(var(--duration-slow) * 3) var(--ease-in-out-custom);
+}
 
-  & > span {
-    position: absolute;
-    bottom: 0;
-    width: 40%;
-    height: 2.5rem;
-    background: radial-gradient(
-      ellipse 50% 100% at 50% 100%,
-      color-mix(in oklab, var(--beam-color) var(--beam-glow), transparent),
-      transparent 70%
-    );
-    mix-blend-mode: screen;
-    transform-origin: 50% 100%;
-    animation: 6.1s var(--ease-in-out-custom) infinite paused;
+html.light .composer-ring-drift {
+  --drift-rim: 42%;
+  --drift-haze: 4%;
+}
 
-    &::after {
-      content: '';
-      position: absolute;
-      inset-inline: 10%;
-      bottom: 0;
-      height: 1px;
-      background: linear-gradient(90deg, transparent, var(--beam-color), transparent);
-    }
+.composer-ring-drift-rim,
+.composer-ring-drift-haze {
+  position: absolute;
+  container-type: inline-size;
+}
+
+/* Lights the box's 1px shadow rim rather than drawing a second edge. */
+.composer-ring-drift-rim {
+  inset: -1px;
+  padding: 1px;
+  border-radius: calc(var(--composer-radius) + 1px);
+  opacity: var(--drift-rim);
+  mask:
+    linear-gradient(to bottom, #000 20%, transparent 60%),
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: intersect, exclude;
+}
+
+.composer-ring-drift-haze {
+  inset: 0 0 auto;
+  height: min(60%, 1.5rem);
+  overflow: clip;
+  border-radius: var(--composer-radius) var(--composer-radius) 0 0;
+  opacity: var(--drift-haze);
+  mask-image: linear-gradient(to bottom, #000, transparent);
+}
+
+.composer-ring-drift-rim > span,
+.composer-ring-drift-haze > span {
+  --drift-width: clamp(3rem, 22cqw, 12rem);
+
+  position: absolute;
+  inset-block: 0;
+  left: 50%;
+  width: var(--drift-width);
+  margin-left: calc(var(--drift-width) / -2);
+  animation: composer-ring-drift-a 6.3s cubic-bezier(0.45, 0, 0.55, 1) infinite paused;
+
+  &:nth-child(2) {
+    --drift-width: clamp(2rem, 13cqw, 7rem);
+
+    animation-name: composer-ring-drift-b;
+    animation-duration: 8.9s;
+    animation-delay: -2.7s;
   }
 
-  & > span:nth-child(1) {
-    --beam-color: var(--beam-mono);
+  &:nth-child(3) {
+    --drift-width: clamp(4rem, 30cqw, 16rem);
 
-    left: 8%;
-    animation-name: composer-ring-beam-a;
-  }
-
-  & > span:nth-child(2) {
-    --beam-color: color-mix(in oklab, var(--beam-tone) 70%, var(--beam-mono));
-
-    left: 34%;
-    animation-name: composer-ring-beam-b;
-    animation-duration: 7.7s;
-  }
-
-  & > span:nth-child(3) {
-    --beam-color: color-mix(in oklab, var(--beam-mono) 60%, var(--beam-tone));
-
-    left: 55%;
-    animation-name: composer-ring-beam-c;
-    animation-duration: 5.3s;
-    animation-direction: alternate;
+    animation-name: composer-ring-drift-c;
+    animation-duration: 11.3s;
+    animation-delay: -6.1s;
   }
 }
 
-html.light .composer-ring-beam {
-  --beam-mono: var(--muted-foreground);
-  --beam-glow: 8%;
-
-  & > span {
-    mix-blend-mode: normal;
-  }
+.composer-ring-drift-rim > span {
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--drift-ink) 70%, transparent) 40%,
+    var(--drift-ink),
+    color-mix(in oklab, var(--drift-ink) 70%, transparent) 60%,
+    transparent
+  );
 }
 
-.composer-ring[data-busy='true'] > .composer-ring-beam {
+.composer-ring-drift-haze > span {
+  background-image: radial-gradient(50% 100% at 50% 0%, var(--drift-ink), transparent);
+}
+
+.composer-ring[data-busy='true'] > .composer-ring-drift {
   opacity: 1;
 
-  & > span {
+  & span > span {
     animation-play-state: running;
   }
 }
 
-/* Three lights on co-prime periods wander, swell and fade on their own, so the edge never repeats a pattern. */
-@keyframes composer-ring-beam-a {
+/* Co-prime periods with uneven stops, so the pattern takes minutes to repeat; the first light never fades below half. */
+@keyframes composer-ring-drift-a {
   0%,
   100% {
-    translate: 0 0;
-    scale: 0.7 0.8;
-    opacity: 0.5;
-  }
-
-  35% {
-    translate: 55% 0;
-    scale: 1.15 1.1;
-    opacity: 1;
-  }
-
-  70% {
-    translate: 15% 0;
-    scale: 0.85 0.9;
-    opacity: 0.35;
-  }
-}
-
-@keyframes composer-ring-beam-b {
-  0%,
-  100% {
-    translate: 0 0;
-    scale: 1 1;
+    translate: -6cqw 0;
     opacity: 0.9;
   }
 
-  40% {
-    translate: -45% 0;
-    scale: 0.75 0.85;
-    opacity: 0.3;
+  23% {
+    translate: 14cqw 0;
+    opacity: 0.55;
   }
 
-  75% {
-    translate: 40% 0;
-    scale: 1.25 1.15;
+  41% {
+    translate: 4cqw 0;
     opacity: 1;
+  }
+
+  67% {
+    translate: -19cqw 0;
+    opacity: 0.6;
+  }
+
+  84% {
+    translate: -11cqw 0;
+    opacity: 0.85;
   }
 }
 
-@keyframes composer-ring-beam-c {
-  from {
-    translate: 30% 0;
-    scale: 0.8 0.9;
-    opacity: 0.2;
+@keyframes composer-ring-drift-b {
+  0%,
+  100% {
+    translate: 22cqw 0;
+    opacity: 0;
   }
 
-  to {
-    translate: -25% 0;
-    scale: 1.2 1.1;
-    opacity: 0.85;
+  18% {
+    translate: 9cqw 0;
+    opacity: 0.7;
+  }
+
+  46% {
+    translate: -14cqw 0;
+    opacity: 0.45;
+  }
+
+  61% {
+    translate: -26cqw 0;
+    opacity: 0.75;
+  }
+
+  82% {
+    translate: -31cqw 0;
+    opacity: 0;
+  }
+}
+
+@keyframes composer-ring-drift-c {
+  0%,
+  100% {
+    translate: -24cqw 0;
+    opacity: 0;
+  }
+
+  29% {
+    translate: -3cqw 0;
+    opacity: 0.35;
+  }
+
+  53% {
+    translate: 17cqw 0;
+    opacity: 0.5;
+  }
+
+  78% {
+    translate: 28cqw 0;
+    opacity: 0.2;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .composer-ring,
-  .composer-ring-beam {
+  .composer-ring-drift {
     transition: none;
   }
 
-  .composer-ring-beam > span {
+  .composer-ring-drift span > span {
     animation: none;
+
+    &:not(:first-child) {
+      display: none;
+    }
   }
 }
 
 @media (forced-colors: active) {
   .composer-ring::before,
-  .composer-ring-beam {
+  .composer-ring-drift {
     display: none;
   }
 }
