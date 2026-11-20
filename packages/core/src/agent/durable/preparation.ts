@@ -33,7 +33,7 @@ import { boundedStringify, deepMerge } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
 import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
-import { resolveVersionContext, convertInstructionsToString, getInitialSignalEchoes } from '../helpers';
+import { convertInstructionsToString, getInitialSignalEchoes, resolveVersionContext } from '../helpers';
 import { assertThreadOwnedByResource } from '../memory-thread-ownership';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
@@ -334,7 +334,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     requestContext,
     requestVersions,
     mastra?.getVersionOverrides?.(),
-    (execOptions as any)?.versions,
+    execOptions,
     // Durable preparation normalizes sole overrides; plain calls preserve their identity.
     mergeVersionOverrides,
   );

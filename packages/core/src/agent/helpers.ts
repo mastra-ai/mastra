@@ -14,12 +14,12 @@ export function resolveVersionContext(
   requestContext: RequestContext,
   requestVersions: VersionOverrides | undefined,
   defaultVersions: VersionOverrides | undefined,
-  callVersions: VersionOverrides | undefined,
+  callOptions: { versions?: VersionOverrides } | undefined,
   mergeVersions = mergeVersionOverrides,
 ): VersionOverrides | undefined {
   let versions = mergeVersions(defaultVersions, requestVersions);
-  if (callVersions) {
-    versions = mergeVersions(versions, callVersions);
+  if (callOptions?.versions) {
+    versions = mergeVersions(versions, callOptions.versions);
   }
   if (versions) {
     requestContext.set(MASTRA_VERSIONS_KEY, versions);

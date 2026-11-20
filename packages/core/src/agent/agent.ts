@@ -9357,7 +9357,7 @@ export class Agent<
       requestContext,
       requestVersions,
       this.#mastra?.getVersionOverrides(),
-      options.versions,
+      options,
     );
 
     // A run that suspended while executing a stored version must resume on *that* version.

@@ -18,7 +18,7 @@ describe('version context', () => {
         agents: { shared: { versionId: 'host' }, hostOnly: { status: 'published' } },
         defaultStatus: 'published',
       },
-      { agents: { shared: { versionId: 'call' } } },
+      { versions: { agents: { shared: { versionId: 'call' } } } },
     );
     expect(resolved).toEqual({
       agents: {
@@ -42,22 +42,31 @@ describe('version context', () => {
       context,
       source === 'request' ? versions : undefined,
       source === 'host' ? versions : undefined,
-      source === 'call' ? versions : undefined,
+      { versions: source === 'call' ? versions : undefined },
     );
     expect(resolved).toBe(versions);
     expect(context.get(MASTRA_VERSIONS_KEY)).toBe(versions);
     expect(resolved).not.toHaveProperty('agents');
   });
 
-  it('keeps durable preparation normalization without mutating the caller override', () => {
-    const context = new RequestContext();
-    const versions: VersionOverrides = { defaultStatus: 'draft' };
-    const resolved = resolveVersionContext(context, versions, undefined, undefined, mergeVersionOverrides);
-    expect(resolved).not.toBe(versions);
-    expect(resolved).toEqual({ defaultStatus: 'draft', agents: {} });
-    expect(versions).toEqual({ defaultStatus: 'draft' });
-    expect(context.get(MASTRA_VERSIONS_KEY)).toBe(resolved);
-  });
+  it.each(['host', 'request', 'call'] as const)(
+    'keeps durable preparation normalization without mutating the sole %s override',
+    source => {
+      const context = new RequestContext();
+      const versions: VersionOverrides = { defaultStatus: 'draft' };
+      const resolved = resolveVersionContext(
+        context,
+        source === 'request' ? versions : undefined,
+        source === 'host' ? versions : undefined,
+        { versions: source === 'call' ? versions : undefined },
+        mergeVersionOverrides,
+      );
+      expect(resolved).not.toBe(versions);
+      expect(resolved).toEqual({ defaultStatus: 'draft', agents: {} });
+      expect(versions).toEqual({ defaultStatus: 'draft' });
+      expect(context.get(MASTRA_VERSIONS_KEY)).toBe(resolved);
+    },
+  );
 
   it('does not introduce a selector when none was configured', () => {
     const context = new RequestContext();
