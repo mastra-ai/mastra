@@ -1,9 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { LLMock } from '@copilotkit/aimock';
 import { Agent, MessageList } from '@mastra/core/agent';
-import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
-import { EventEmitterPubSub } from '@mastra/core/events';
-import { Mastra } from '@mastra/core/mastra';
 import type { MemoryConfig, WorkingMemoryTemplate } from '@mastra/core/memory';
 import { WorkingMemory as WorkingMemoryProcessor } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
@@ -16,6 +13,13 @@ import { Memory } from './index';
 // Technical: agents get working memory from the core `WorkingMemory` input processor, which kept a private
 // copy of the instruction text. Overriding the protected instruction methods on a `Memory` subclass changed
 // `memory.getSystemMessage()` but never what the model received. (#29752)
+//
+// This file covers what is specific to `Memory`: its protected instruction methods feed
+// `getWorkingMemoryInstruction()`, `getSystemMessage()` matches what the agent sends, and the defaults equal
+// core's built-in text. That the processor uses the memory instance's instruction on every engine (normal,
+// durable, evented, fs) is covered by core's shared scenario
+// `loop/test-utils/aimock/scenarios/working-memory-instruction-override.scenario.test.ts`, which can't import
+// @mastra/memory and uses a `MastraMemory` subclass instead.
 
 const BUILT_IN_STORE_EVERYTHING = "If you're unsure whether to store something, store it";
 const RESOURCE = 'user-1';
@@ -187,64 +191,6 @@ describe('Memory subclass working memory instruction reaches the agent (#29752)'
       expect(system).toContain(fromMemory!);
     },
   );
-
-  it('agent.stream sends the overridden instruction to the model', async () => {
-    llm.on({ endpoint: 'chat' }, { content: 'ok' });
-    const memory = createMemory(DurableFactsMemory, configs.markdown) as DurableFactsMemory;
-    const stored = '# Profile\n- Name: Ada';
-    await seedWorkingMemory(memory, 'thread-stream', stored);
-
-    const stream = await createAgent(memory).stream('hello', {
-      memory: { thread: 'thread-stream', resource: RESOURCE },
-    });
-    await stream.consumeStream();
-
-    const system = systemPromptSentToModel();
-    expect(system).toContain('CUSTOM_WM (markdown)');
-    expect(system).toContain(stored);
-    expect(system).not.toContain(BUILT_IN_STORE_EVERYTHING);
-    expect(memory.seen).toContainEqual(expect.objectContaining({ kind: 'tool', format: 'markdown', data: stored }));
-  });
-
-  it.each(
-    (['durable', 'evented'] as const).flatMap(engine =>
-      (Object.keys(configs) as Case[]).map(name => [engine, name] as const),
-    ),
-  )('a %s agent sends the overridden instruction to the model (%s working memory)', async (engine, name) => {
-    llm.on({ endpoint: 'chat' }, { content: 'ok' });
-    const memory = createMemory(DurableFactsMemory, configs[name]) as DurableFactsMemory;
-    const threadId = `thread-${engine}-${name}`;
-    const stored = name === 'schema' ? '{"name":"Ada"}' : '# Profile\n- Name: Ada';
-    await seedWorkingMemory(memory, threadId, stored);
-    const agent = createAgent(memory);
-    const durable =
-      engine === 'evented'
-        ? createEventedAgent({ agent, pubsub: new EventEmitterPubSub() })
-        : createDurableAgent({ agent });
-    const mastra = new Mastra({ storage: new InMemoryStore(), logger: false, agents: { agent: durable } });
-    try {
-      const stream = await durable.stream('hello', { memory: { thread: threadId, resource: RESOURCE } });
-      for await (const _event of stream.fullStream) {
-        // drain
-      }
-
-      const system = systemPromptSentToModel();
-      const expected = overrideMarkers[name];
-      expect(system).toContain(expected.marker);
-      expect(system).toContain(stored);
-      expect(system).not.toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
-      expect(memory.seen).toContainEqual(
-        expect.objectContaining({ kind: expected.kind, format: expected.format, data: stored }),
-      );
-      if (expected.kind === 'read-only') {
-        expect(memory.seen.find(call => call.kind === 'read-only')?.autoUpdated ?? false).toBe(
-          expected.autoUpdated ?? false,
-        );
-      }
-    } finally {
-      await mastra.stopWorkers();
-    }
-  });
 
   it.each(Object.keys(configs) as Case[])(
     'without an override, the agent sends the same instruction memory.getSystemMessage() renders (%s working memory)',
