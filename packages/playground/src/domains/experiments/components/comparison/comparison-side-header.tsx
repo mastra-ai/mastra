@@ -6,6 +6,15 @@ import { getShortId } from '@mastra/playground-ui/components/Text';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { ComparisonMetricList, ComparisonSection, ScorerLabel } from '@mastra/playground-ui/domains/experiments';
 import type { ComparisonMetric } from '@mastra/playground-ui/domains/experiments';
+import {
+  costDeltaFormatter,
+  diff,
+  formatCostValue,
+  formatDurationDelta,
+  formatScore,
+  formatTokenCount,
+} from '@mastra/playground-ui/domains/experiments/components/comparison/comparison-metric-format';
+import { sideVariant } from '@mastra/playground-ui/domains/experiments/components/comparison/constants';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { IconCalendar1 } from '@mastra/playground-ui/icons/central/IconCalendar1';
 import { IconChainLink3 } from '@mastra/playground-ui/icons/central/IconChainLink3';
@@ -29,15 +38,6 @@ import { useState } from 'react';
 import { RenameExperimentDialog } from '../rename-experiment-dialog';
 import type { ComparisonRole } from './build-comparison-rows';
 import { ComparisonDatasetVersion } from './comparison-dataset-version';
-import {
-  costDeltaFormatter,
-  diff,
-  formatCostValue,
-  formatDurationDelta,
-  formatScore,
-  formatTokenCount,
-} from './comparison-metric-format';
-import { sideVariant } from './constants';
 import { useCompareMetricPreferences } from './use-compare-metric-preferences';
 
 export interface ScorerSummary {

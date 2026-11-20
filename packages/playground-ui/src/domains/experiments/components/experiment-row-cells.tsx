@@ -1,20 +1,18 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { Badge } from '@mastra/playground-ui/components/Badge';
-import { DataList } from '@mastra/playground-ui/components/DataList';
-import {
-  resolveTargetName,
-  TARGET_ICON,
-  TARGET_LABEL,
-} from '@mastra/playground-ui/domains/experiments/utils/target-name';
-import { formatCompactNumber } from '@mastra/playground-ui/utils/cost';
-import { formatDate } from '@mastra/playground-ui/utils/date-format';
-import { formatDuration } from '@mastra/playground-ui/utils/duration';
 import type { ExperimentListMetrics } from '@mastra/react/hooks/experiments';
 import { formatCostValue, totalTokens } from './comparison/comparison-metric-format';
 import type { sideVariant } from './comparison/constants';
 import { STATUS_LABEL, STATUS_VARIANT } from './experiment-columns';
 import { ExperimentDescriptionLabel, ExperimentNameLabel } from './experiment-name-label';
-import { useTargetRegistries } from '@/domains/experiments/hooks/use-target-registries';
+import { resolveTargetName, TARGET_ICON, TARGET_LABEL } from '@/domains/experiments/utils/target-name';
+import type { TargetRegistries } from '@/domains/experiments/utils/target-name';
+import { Badge } from '@/ds/components/Badge';
+import { DataList } from '@/ds/components/DataList';
+import { formatCompactNumber } from '@/utils/cost';
+import { formatDate } from '@/utils/date-format';
+import { formatDuration } from '@/utils/duration';
+
+const NO_REGISTRIES: TargetRegistries = {};
 
 export interface ExperimentReviewSummary {
   needsReview: number;
@@ -31,6 +29,8 @@ export interface ExperimentRowCellsProps {
   /** Renders the avg duration, tokens and cost cells; leave off when the store cannot serve metrics. */
   showUsage?: boolean;
   metrics?: ExperimentListMetrics;
+  /** Agents, workflows, scorers and processors used to name the target; unknown targets show their id. */
+  targetRegistries?: TargetRegistries;
 }
 
 export interface ExperimentSelectionRole {
@@ -45,6 +45,7 @@ export function ExperimentRowCells({
   selectionRole,
   showUsage = false,
   metrics,
+  targetRegistries = NO_REGISTRIES,
 }: ExperimentRowCellsProps) {
   const status = exp.status ?? 'pending';
   const succeeded = exp.succeededCount ?? 0;
@@ -70,7 +71,7 @@ export function ExperimentRowCells({
       </DataList.Cell>
       {datasetName !== undefined && <DataList.TextCell>{datasetName}</DataList.TextCell>}
       <DataList.Cell>
-        <ExperimentTargetCell experiment={exp} />
+        <ExperimentTargetCell experiment={exp} targetRegistries={targetRegistries} />
       </DataList.Cell>
       <DataList.Cell>
         <Badge variant={STATUS_VARIANT[status] ?? 'neutral'} indicator="dot">
@@ -117,16 +118,21 @@ function MetricCell({ value, format }: { value?: number; format: (value: number)
   );
 }
 
-function ExperimentTargetCell({ experiment }: { experiment: DatasetExperiment }) {
-  const registries = useTargetRegistries();
-  const name = resolveTargetName(experiment, registries);
-  const targetType = experiment.targetId ? experiment.targetType : null;
-  const TargetIcon = targetType ? TARGET_ICON[targetType] : null;
+function ExperimentTargetCell({
+  experiment,
+  targetRegistries,
+}: {
+  experiment: DatasetExperiment;
+  targetRegistries: TargetRegistries;
+}) {
+  const name = resolveTargetName(experiment, targetRegistries);
+  const targetType = experiment.targetId ? (experiment.targetType ?? undefined) : undefined;
+  const TargetIcon = targetType ? TARGET_ICON[targetType] : undefined;
 
   return (
     <span className="flex min-w-0 items-center gap-1.5 [&_svg]:size-icon-sm [&_svg]:shrink-0">
-      {TargetIcon && (
-        <span className="flex text-muted-foreground" role="img" aria-label={TARGET_LABEL[targetType!]}>
+      {targetType && TargetIcon && (
+        <span className="flex text-muted-foreground" role="img" aria-label={TARGET_LABEL[targetType]}>
           <TargetIcon />
         </span>
       )}

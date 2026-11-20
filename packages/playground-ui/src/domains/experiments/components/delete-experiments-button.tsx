@@ -1,27 +1,31 @@
-import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
-import { toast } from '@mastra/playground-ui/utils/toast';
-import { useDatasetMutations } from '@mastra/react/hooks/datasets';
 import { useState } from 'react';
+import { AlertDialog } from '@/ds/components/AlertDialog';
+import { Button } from '@/ds/components/Button';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
+import { toast } from '@/utils/toast';
 
 export interface DeleteExperimentsButtonProps {
   experimentIds: string[];
+  /** Deletes one experiment; called once per selected id. */
+  onDeleteExperiment: (experimentId: string) => Promise<void>;
   onDeleted: () => void;
 }
 
 const pluralize = (count: number) => `${count} experiment${count === 1 ? '' : 's'}`;
 
 /** Deletes every given experiment after confirmation. On a partial failure the dialog stays open for a retry. */
-export function DeleteExperimentsButton({ experimentIds, onDeleted }: DeleteExperimentsButtonProps) {
+export function DeleteExperimentsButton({
+  experimentIds,
+  onDeleteExperiment,
+  onDeleted,
+}: DeleteExperimentsButtonProps) {
   const [open, setOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const { deleteExperiment } = useDatasetMutations();
   const count = experimentIds.length;
 
   const handleDelete = async () => {
     setIsDeleting(true);
-    const outcomes = await Promise.allSettled(experimentIds.map(id => deleteExperiment.mutateAsync(id)));
+    const outcomes = await Promise.allSettled(experimentIds.map(id => onDeleteExperiment(id)));
     setIsDeleting(false);
 
     const failed = outcomes.filter(outcome => outcome.status === 'rejected').length;

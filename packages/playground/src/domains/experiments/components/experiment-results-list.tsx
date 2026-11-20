@@ -3,6 +3,11 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
+  formatCostValue,
+  formatTokenCount,
+  totalTokens,
+} from '@mastra/playground-ui/domains/experiments/components/comparison/comparison-metric-format';
+import {
   getResultErrorMessage,
   getResultOutputPreview,
 } from '@mastra/playground-ui/domains/experiments/utils/result-output';
@@ -13,7 +18,6 @@ import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
-import { formatCostValue, formatTokenCount, totalTokens } from './comparison/comparison-metric-format';
 import { ScoreReasonHoverCard } from './comparison/score-reason-hover-card';
 
 /**

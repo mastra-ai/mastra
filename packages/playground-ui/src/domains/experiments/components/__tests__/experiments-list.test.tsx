@@ -1,29 +1,17 @@
-import { cleanup, screen, within } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+// @vitest-environment jsdom
+import { cleanup, render, screen, within } from '@testing-library/react';
 import type { ReactElement } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ExperimentsList } from '../experiments-list';
-import { experiments, noAgents, noProcessors, noScorers, noWorkflows } from './fixtures/experiments';
+import { experiments } from './fixtures/experiments';
 import { TestLinkProvider } from '@/test/link-provider';
-import { server } from '@/test/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 function renderList(ui: ReactElement) {
-  return renderWithProviders(<TestLinkProvider>{ui}</TestLinkProvider>);
+  return render(<TestLinkProvider>{ui}</TestLinkProvider>);
 }
 
 describe('ExperimentsList', () => {
   afterEach(cleanup);
-
-  // The target column resolves names through the registries; empty ones fall back to ids.
-  beforeEach(() => {
-    server.use(
-      http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(noAgents)),
-      http.get(`${TEST_BASE_URL}/api/processors`, () => HttpResponse.json(noProcessors)),
-      http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
-      http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(noScorers)),
-    );
-  });
 
   describe('when experiments have names', () => {
     it('shows each experiment name as the primary label', () => {
@@ -45,7 +33,7 @@ describe('ExperimentsList', () => {
 
       const link = screen.getByRole('link', { name: /entity-extraction \/ model-a/ });
       expect(link.getAttribute('href')).toBe('/experiments/a1b2c3d4-0000-0000-0000-000000000001');
-      expect(within(link).getByText(experiments[0].description!)).toBeDefined();
+      expect(within(link).getByText('Entity extraction evaluation using Model A')).toBeDefined();
     });
   });
 

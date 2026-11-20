@@ -1,10 +1,10 @@
-import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { ExperimentsBulkActions } from './experiments-bulk-actions';
 import type { ExperimentsBulkActionsProps } from './experiments-bulk-actions';
 import { ExperimentsComparableLegend } from './experiments-comparable-legend';
 import type { ExperimentsComparableLegendProps } from './experiments-comparable-legend';
 import { ExperimentsFilterBar } from './experiments-filter-bar';
 import type { ExperimentsFilters } from './experiments-filter-bar';
+import { ActionRow } from '@/ds/components/ActionRow';
 
 export interface ExperimentsToolbarDatasetOption {
   value: string;

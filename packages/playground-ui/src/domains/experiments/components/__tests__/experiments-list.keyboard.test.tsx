@@ -1,25 +1,14 @@
-import { fireEvent, screen } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+// @vitest-environment jsdom
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 
 import { ExperimentsList } from '../experiments-list';
-import { experiments, noAgents, noProcessors, noScorers, noWorkflows } from './fixtures/experiments';
+import { experiments } from './fixtures/experiments';
 import { expectArrowNavigation, expectRovingTabindex, interactiveRows } from '@/test/keyboard';
 import { TestLinkProvider } from '@/test/link-provider';
-import { server } from '@/test/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
-
-beforeEach(() => {
-  server.use(
-    http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(noAgents)),
-    http.get(`${TEST_BASE_URL}/api/processors`, () => HttpResponse.json(noProcessors)),
-    http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
-    http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(noScorers)),
-  );
-});
 
 const renderList = (props?: Partial<Parameters<typeof ExperimentsList>[0]>) =>
-  renderWithProviders(
+  render(
     <TestLinkProvider>
       <ExperimentsList experiments={experiments} isLoading={false} {...props} />
     </TestLinkProvider>,

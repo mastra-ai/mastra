@@ -1,4 +1,4 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Txt } from '@/ds/components/Txt';
 
 export interface ExperimentsComparableLegendProps {
   /** Dataset of the first selected experiment. Omitted before any selection. */

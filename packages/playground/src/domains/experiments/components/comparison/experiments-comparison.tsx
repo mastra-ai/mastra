@@ -3,6 +3,8 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
 import { sectionStackClass } from '@mastra/playground-ui/domains/experiments';
+import { totalTokens } from '@mastra/playground-ui/domains/experiments/components/comparison/comparison-metric-format';
+import { columnLabel } from '@mastra/playground-ui/domains/experiments/components/comparison/constants';
 import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import {
@@ -18,12 +20,10 @@ import { buildComparisonRows, sideDurationMs } from './build-comparison-rows';
 import type { ComparisonRow } from './build-comparison-rows';
 import { ComparisonItemPanel } from './comparison-item-panel';
 import { ComparisonItemPayload } from './comparison-item-payload';
-import { totalTokens } from './comparison-metric-format';
 import { ComparisonSideCell } from './comparison-side-cell';
 import { ComparisonSideSummary, ComparisonSideTitle } from './comparison-side-header';
 import type { ComparisonSideMetrics, ScorerSummary } from './comparison-side-header';
 import { ComparisonTracePanel } from './comparison-trace-panel';
-import { columnLabel } from './constants';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 
 interface ExperimentsComparisonProps {

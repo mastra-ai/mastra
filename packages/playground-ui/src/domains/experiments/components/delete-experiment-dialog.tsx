@@ -1,16 +1,18 @@
 'use client';
 
-import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
-import { toast } from '@mastra/playground-ui/utils/toast';
-import { useDatasetMutations } from '@mastra/react/hooks/datasets';
+import { useState } from 'react';
+import { AlertDialog } from '@/ds/components/AlertDialog';
+import { Button } from '@/ds/components/Button';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
+import { toast } from '@/utils/toast';
 
 export interface DeleteExperimentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   experimentId: string;
   experimentName?: string;
+  /** Deletes the experiment; reject to keep the dialog open for a retry. */
+  onDelete: () => Promise<void>;
   onSuccess?: () => void;
 }
 
@@ -19,18 +21,22 @@ export function DeleteExperimentDialog({
   onOpenChange,
   experimentId,
   experimentName,
+  onDelete,
   onSuccess,
 }: DeleteExperimentDialogProps) {
-  const { deleteExperiment } = useDatasetMutations();
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDelete = async () => {
+    setIsDeleting(true);
     try {
-      await deleteExperiment.mutateAsync(experimentId);
+      await onDelete();
       toast.success('Experiment deleted successfully');
       onOpenChange(false);
       onSuccess?.();
     } catch (error) {
       toast.error(`Failed to delete experiment: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -47,8 +53,8 @@ export function DeleteExperimentDialog({
         </AlertDialog.Header>
         <AlertDialog.Footer>
           <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-          <Button icon={<TrashIcon />} variant="primary" onClick={handleDelete} disabled={deleteExperiment.isPending}>
-            {deleteExperiment.isPending ? 'Deleting...' : 'Delete'}
+          <Button icon={<TrashIcon />} variant="primary" onClick={handleDelete} disabled={isDeleting}>
+            {isDeleting ? 'Deleting...' : 'Delete'}
           </Button>
         </AlertDialog.Footer>
       </AlertDialog.Content>

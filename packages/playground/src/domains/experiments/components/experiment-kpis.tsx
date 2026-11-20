@@ -1,6 +1,11 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { MetricsCardGroup } from '@mastra/playground-ui/components/MetricsCardGroup';
+import {
+  formatCostValue,
+  formatTokenCount,
+  totalTokens,
+} from '@mastra/playground-ui/domains/experiments/components/comparison/comparison-metric-format';
 import { KpiCard } from '@mastra/playground-ui/domains/metrics/components';
 import { IconCoins } from '@mastra/playground-ui/icons/central/IconCoins';
 import { IconGauge } from '@mastra/playground-ui/icons/central/IconGauge';
@@ -12,7 +17,6 @@ import { useScoresByExperimentId } from '@mastra/react/hooks/datasets';
 import { useExperimentsItemUsage } from '@mastra/react/hooks/experiments';
 import type { ExperimentMetrics } from '@mastra/react/hooks/experiments';
 import { useMemo } from 'react';
-import { formatCostValue, formatTokenCount, totalTokens } from './comparison/comparison-metric-format';
 
 export interface ExperimentKpisProps {
   experiment: DatasetExperiment;

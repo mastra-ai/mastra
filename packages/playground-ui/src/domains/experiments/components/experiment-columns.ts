@@ -1,4 +1,4 @@
-import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
+import type { BadgeVariant } from '@/ds/components/Badge';
 
 // experiment name is free-form — an `auto` track would let it starve its neighbours
 export const EXPERIMENT_NAME_COLUMN = 'minmax(9rem,1fr)';

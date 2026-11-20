@@ -1,19 +1,19 @@
-import { FilterBar } from '@mastra/playground-ui/components/FilterBar';
-import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@mastra/playground-ui/components/FilterBar';
+import { useMemo } from 'react';
+import { EXPERIMENT_STATUS_OPTIONS } from './experiments-list-options';
 import {
   filterBarItem,
   getFilterBarItemValue,
   targetFromItems,
   targetToItems,
   useTargetFilterFields,
-} from '@mastra/playground-ui/domains/datasets';
-import type { TargetFilterValue } from '@mastra/playground-ui/domains/datasets';
-import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
-import { IconMagnifyingGlass } from '@mastra/playground-ui/icons/central/IconMagnifyingGlass';
-import { IconServer1 } from '@mastra/playground-ui/icons/central/IconServer1';
-import { hueAccentColor } from '@mastra/playground-ui/utils/colors';
-import { useMemo } from 'react';
-import { EXPERIMENT_STATUS_OPTIONS } from './experiments-list-options';
+} from '@/domains/datasets';
+import type { TargetFilterValue } from '@/domains/datasets';
+import { FilterBar } from '@/ds/components/FilterBar';
+import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@/ds/components/FilterBar';
+import { IconCircleCheck } from '@/ds/icons/central/IconCircleCheck';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
+import { IconServer1 } from '@/ds/icons/central/IconServer1';
+import { hueAccentColor } from '@/utils/colors';
 
 const SEARCH_FIELD_ID = 'search';
 const STATUS_FIELD_ID = 'status';

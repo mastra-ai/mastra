@@ -1,13 +1,8 @@
 import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
-import { getShortId } from '@mastra/playground-ui/components/Text';
-import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
-import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import type { ExperimentListMetrics } from '@mastra/react/hooks/experiments';
 import type { MouseEvent, ReactNode, SyntheticEvent } from 'react';
 import { useMemo, useRef, useState } from 'react';
+import type { TargetRegistries } from '../utils/target-name';
 import { columnLabel, sideVariant } from './comparison/constants';
 import { DeleteExperimentDialog } from './delete-experiment-dialog';
 import {
@@ -19,6 +14,12 @@ import {
   experimentColumnLabels,
 } from './experiment-columns';
 import { ExperimentRowCells } from './experiment-row-cells';
+import { Button } from '@/ds/components/Button';
+import { DataList, DataListSkeleton, useDataListKeyboard } from '@/ds/components/DataList';
+import { getShortId } from '@/ds/components/Text';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
+import { useLinkComponent } from '@/lib/framework';
+import type { ListSort } from '@/lib/sort/sort-by';
 
 export interface ExperimentsListProps {
   experiments: DatasetExperiment[];
@@ -50,6 +51,10 @@ export interface ExperimentsListProps {
    */
   sort?: ListSort<ExperimentsSortKey>;
   onSortChange?: (direction: 'asc' | 'desc', key: ExperimentsSortKey) => void;
+  /** Agents, workflows, scorers and processors used to name each target; unknown targets show their id. */
+  targetRegistries?: TargetRegistries;
+  /** Deletes one experiment after the row's confirmation dialog. Rows get no delete button without it. */
+  onDeleteExperiment?: (experimentId: string) => Promise<void>;
 }
 
 export type ExperimentsSortKey = 'createdAt' | 'status';
@@ -111,7 +116,7 @@ function ExperimentRow({
   rowProps: ReturnType<ReturnType<typeof useDataListKeyboard>['getRowProps']>;
   onSelect?: () => void;
   featured?: boolean;
-  onDelete: () => void;
+  onDelete?: () => void;
   /** Rendered in the first column (e.g. a selection checkbox); shifts the row content one column right. */
   leadingCell?: ReactNode;
   children: ReactNode;
@@ -151,19 +156,21 @@ function ExperimentRow({
         </DataList.RowLink>
       )}
       <DataList.ActionsCell className="pl-2">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          tooltip="Delete experiment"
-          aria-label={`Delete experiment ${exp.name ?? exp.id}`}
-          onClick={(e: MouseEvent) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-        >
-          <TrashIcon />
-        </Button>
+        {onDelete && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            tooltip="Delete experiment"
+            aria-label={`Delete experiment ${exp.name ?? exp.id}`}
+            onClick={(e: MouseEvent) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+          >
+            <TrashIcon />
+          </Button>
+        )}
       </DataList.ActionsCell>
     </DataList.RowWrapper>
   );
@@ -187,6 +194,8 @@ export function ExperimentsList({
   setEndOfListElement,
   sort,
   onSortChange,
+  targetRegistries,
+  onDeleteExperiment,
 }: ExperimentsListProps) {
   const datasetMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -221,7 +230,7 @@ export function ExperimentsList({
 
   const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length, global: keyboardGlobal });
 
-  const [experimentToDelete, setExperimentToDelete] = useState<DatasetExperiment | null>(null);
+  const [experimentToDelete, setExperimentToDelete] = useState<DatasetExperiment>();
 
   const showUsage = metricsByExperiment !== undefined;
   const columns = showUsage ? COLUMNS_WITH_USAGE : COLUMNS;
@@ -300,6 +309,7 @@ export function ExperimentsList({
             review={reviewByExperiment?.get(exp.id)}
             showUsage={showUsage}
             metrics={metricsByExperiment?.get(exp.id)}
+            targetRegistries={targetRegistries}
             selectionRole={
               isSelected
                 ? {
@@ -318,7 +328,7 @@ export function ExperimentsList({
             rowProps={getRowProps(index)}
             onSelect={onSelectExperiment ? () => onSelectExperiment(exp) : undefined}
             featured={isSelected || selectedExperimentId === exp.id}
-            onDelete={() => setExperimentToDelete(exp)}
+            onDelete={onDeleteExperiment ? () => setExperimentToDelete(exp) : undefined}
             leadingCell={
               selection && (
                 <DataList.SelectCell
@@ -341,14 +351,15 @@ export function ExperimentsList({
         setEndOfListElement={setEndOfListElement}
       />
 
-      {experimentToDelete && (
+      {experimentToDelete && onDeleteExperiment && (
         <DeleteExperimentDialog
           open
           onOpenChange={open => {
-            if (!open) setExperimentToDelete(null);
+            if (!open) setExperimentToDelete(undefined);
           }}
           experimentId={experimentToDelete.id}
           experimentName={experimentToDelete.name ?? undefined}
+          onDelete={() => onDeleteExperiment(experimentToDelete.id)}
         />
       )}
     </DataList>

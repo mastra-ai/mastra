@@ -1,6 +1,6 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { getExperimentDisplayName } from '@mastra/playground-ui/domains/experiments/utils/experiment-display-name';
+import { getExperimentDisplayName } from '@/domains/experiments/utils/experiment-display-name';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 
 const LONG_DESCRIPTION = 60;
 

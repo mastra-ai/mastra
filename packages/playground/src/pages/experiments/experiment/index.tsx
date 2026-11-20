@@ -4,16 +4,21 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
+import { DeleteExperimentDialog } from '@mastra/playground-ui/domains/experiments';
 import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
-import { useDatasetExperiment, useDatasetExperimentResults, useExperiment } from '@mastra/react/hooks/datasets';
+import {
+  useDatasetExperiment,
+  useDatasetExperimentResults,
+  useDatasetMutations,
+  useExperiment,
+} from '@mastra/react/hooks/datasets';
 import { useExperimentMetrics } from '@mastra/react/hooks/experiments';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
-import { DeleteExperimentDialog } from '@/domains/experiments/components/delete-experiment-dialog';
 import { ExperimentHeaderActions } from '@/domains/experiments/components/experiment-header-actions';
 import { ExperimentItemSidePanel } from '@/domains/experiments/components/experiment-item-side-panel';
 import { ExperimentKpis } from '@/domains/experiments/components/experiment-kpis';
@@ -52,6 +57,7 @@ function ExperimentPage() {
   ];
   const navigate = useNavigate();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const { deleteExperiment } = useDatasetMutations();
   // Servers without the trace-query API don't expose feedback either.
   const traceQuery = useTraceQueryAvailable();
 
@@ -209,6 +215,9 @@ function ExperimentPage() {
           onOpenChange={setDeleteDialogOpen}
           experimentId={experimentId}
           experimentName={experiment.name ?? undefined}
+          onDelete={async () => {
+            await deleteExperiment.mutateAsync(experimentId);
+          }}
           onSuccess={() => navigate('/experiments')}
         />
       </div>

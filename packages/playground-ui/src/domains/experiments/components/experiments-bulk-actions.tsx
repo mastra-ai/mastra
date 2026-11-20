@@ -1,8 +1,8 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { IconChanges } from '@mastra/playground-ui/icons/central/IconChanges';
-import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { DeleteExperimentsButton } from './delete-experiments-button';
+import { Button } from '@/ds/components/Button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { IconChanges } from '@/ds/icons/central/IconChanges';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 
 export interface ExperimentsBulkActionsProps {
   selectedIds: string[];
@@ -10,14 +10,17 @@ export interface ExperimentsBulkActionsProps {
   onCompare: () => void;
   /** When set, Compare is disabled and this reason is shown in its tooltip. */
   compareDisabledReason?: string;
+  /** Deletes one experiment; the bulk Delete button is hidden without it. */
+  onDeleteExperiment?: (experimentId: string) => Promise<void>;
 }
 
-/** Selection count (a button clearing the selection once non-empty), plus Delete and Compare — always shown, Compare explained when disabled. */
+/** Selection count (a button clearing the selection once non-empty), plus Delete (when the call site can delete) and Compare, explained when disabled. */
 export function ExperimentsBulkActions({
   selectedIds,
   onClearSelection,
   onCompare,
   compareDisabledReason,
+  onDeleteExperiment,
 }: ExperimentsBulkActionsProps) {
   const selectedCount = selectedIds.length;
   const isEmpty = selectedCount === 0;
@@ -35,7 +38,13 @@ export function ExperimentsBulkActions({
       >
         {selectedCount} selected
       </Button>
-      <DeleteExperimentsButton experimentIds={selectedIds} onDeleted={onClearSelection} />
+      {onDeleteExperiment && (
+        <DeleteExperimentsButton
+          experimentIds={selectedIds}
+          onDeleteExperiment={onDeleteExperiment}
+          onDeleted={onClearSelection}
+        />
+      )}
       {compareDisabledReason ? (
         // A disabled button swallows pointer and focus events, so the wrapper owns the tooltip.
         <Tooltip>

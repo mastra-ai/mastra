@@ -1,4 +1,4 @@
-import { formatDuration } from '@mastra/playground-ui/utils/duration';
+import { formatDuration } from '@/utils/duration';
 
 export const formatScore = (value: number | null) => (value != null ? value.toFixed(2) : '-');
 

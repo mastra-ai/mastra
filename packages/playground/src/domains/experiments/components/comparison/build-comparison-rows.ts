@@ -1,6 +1,6 @@
 import type { ClientScoreRowData, CompareExperimentsResponse, DatasetExperimentResult } from '@mastra/client-js';
+import { totalTokens } from '@mastra/playground-ui/domains/experiments/components/comparison/comparison-metric-format';
 import type { ExperimentItemUsage, ExperimentUsage } from '@mastra/react/hooks/experiments';
-import { totalTokens } from './comparison-metric-format';
 
 export interface ComparisonScore {
   scorerId: string;

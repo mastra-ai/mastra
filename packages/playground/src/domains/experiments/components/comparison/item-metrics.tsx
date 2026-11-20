@@ -1,5 +1,13 @@
 import { ScorerLabel } from '@mastra/playground-ui/domains/experiments';
 import type { ComparisonMetric } from '@mastra/playground-ui/domains/experiments';
+import {
+  costDeltaFormatter,
+  formatCostValue,
+  formatDurationDelta,
+  formatScore,
+  formatTokenCount,
+  totalTokens,
+} from '@mastra/playground-ui/domains/experiments/components/comparison/comparison-metric-format';
 import { IconClock } from '@mastra/playground-ui/icons/central/IconClock';
 import { IconCoins } from '@mastra/playground-ui/icons/central/IconCoins';
 import { IconGauge } from '@mastra/playground-ui/icons/central/IconGauge';
@@ -8,14 +16,6 @@ import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
 import type { ExperimentItemUsage } from '@mastra/react/hooks/experiments';
 import type { ReactNode } from 'react';
-import {
-  costDeltaFormatter,
-  formatCostValue,
-  formatDurationDelta,
-  formatScore,
-  formatTokenCount,
-  totalTokens,
-} from './comparison-metric-format';
 import { ScoreReasonHoverCard } from './score-reason-hover-card';
 
 export interface ItemMetricScore {
