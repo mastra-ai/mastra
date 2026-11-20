@@ -60,3 +60,5 @@ Added the `playground-ui/no-page-width` rule and a `pageRules` preset. Turn it o
 ```ts
 overrides: [{ files: ['src/pages/**/*.tsx'], rules: pageRules }]
 ```
+
+Added `playground-ui/page-layout-props` to the `recommended` preset. It flags the removed `variant` and `mask` props on `PageLayout` and says which layout to use instead.

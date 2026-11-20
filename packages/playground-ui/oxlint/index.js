@@ -326,6 +326,18 @@ const PAGE_WIDTH_MESSAGE =
 const centredPageColumn = classStrings('^(?=.*(^|\\s)mx-auto(\\s|$))(?=.*(^|\\s)max-w-)');
 const noPageWidth = selectorRule(() => centredPageColumn.map(selector => ({ selector, message: PAGE_WIDTH_MESSAGE })));
 
+const PAGE_LAYOUT_PROP_MESSAGES = {
+  variant:
+    'PageLayout has no variant. Put a body whose panels scroll on their own in <PageLayout.Workspace>, use FormLayout for a form and SettingsLayout for a settings page, and drop the prop otherwise.',
+  mask: 'PageLayout has no mask. Drop the prop.',
+};
+const pageLayoutProps = selectorRule(() =>
+  Object.entries(PAGE_LAYOUT_PROP_MESSAGES).map(([prop, message]) => ({
+    selector: `JSXOpeningElement[name.name='PageLayout'] > JSXAttribute[name.name='${prop}']`,
+    message,
+  })),
+);
+
 const plugin = {
   meta: { name: 'playground-ui' },
   rules: {
@@ -339,6 +351,7 @@ const plugin = {
     'no-text-separators': noTextSeparators,
     'no-text-layout-spacing': noTextLayoutSpacing,
     'no-page-width': { meta: { type: 'suggestion', schema: false }, create: noPageWidth },
+    'page-layout-props': { meta: { type: 'problem', schema: false }, create: pageLayoutProps },
   },
 };
 
@@ -366,6 +379,7 @@ export const recommended = {
   'playground-ui/font-mono': 'error',
   'playground-ui/no-barrel-imports': 'error',
   'playground-ui/placeholder-text': 'error',
+  'playground-ui/page-layout-props': 'error',
   ...copyRules,
 };
 

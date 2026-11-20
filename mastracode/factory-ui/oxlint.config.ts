@@ -12,6 +12,7 @@ export default defineConfig({
     'playground-ui/icon-button-size': 'error',
     'playground-ui/placeholder-text': 'error',
     'playground-ui/icon-size-from-parent': 'error',
+    'playground-ui/page-layout-props': 'error',
     'mastra/import-order': 'off',
     'typescript/no-unnecessary-type-assertion': 'error',
     'typescript/no-unnecessary-template-expression': 'error',
