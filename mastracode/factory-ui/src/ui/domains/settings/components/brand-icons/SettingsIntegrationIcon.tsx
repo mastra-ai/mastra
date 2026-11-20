@@ -12,7 +12,14 @@ import linear from './linear.svg';
 const brandAssets = { gitlab, incidentio, jira, linear };
 
 type SettingsIntegrationProvider =
-  'github' | 'gitlab' | 'linear' | 'jira' | 'incidentio' | 'vanta' | 'slack' | 'mastra-alerts';
+  | 'github'
+  | 'gitlab'
+  | 'linear'
+  | 'jira'
+  | 'incidentio'
+  | 'vanta'
+  | 'slack'
+  | 'mastra-alerts';
 
 export function SettingsIntegrationIcon({
   provider,
