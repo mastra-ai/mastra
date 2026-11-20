@@ -72,6 +72,12 @@ import {
 } from '../loop/timeout';
 import type { AgentLoopResumeClaim } from '../loop/types';
 import { withDefaultToolCallConcurrencyLimit } from '../loop/workflows/agentic-execution/tool-call-concurrency';
+// `Mastra` is imported type-only here: a runtime import would create an ESM
+// init cycle (agent → mastra → agent/durable → agent) that breaks
+// `class DurableAgent extends Agent` with a TDZ error. The constructor is read
+// from `mastraCtorHolder` (populated by `mastra/index.ts` at load), with an
+// `await import('../mastra')` fallback for the standalone-agent case where the
+// Mastra module was never loaded. See `#getOrCreateEphemeralMastra`.
 import type { Mastra } from '../mastra';
 import { mastraCtorHolder } from '../mastra/mastra-ctor-holder';
 import { createRunScope } from '../mastra/run-scope';
@@ -220,6 +226,9 @@ import type {
 import type { DelegationRefInput, DelegationRefRegistry } from './delegation-refs';
 import { createDelegationRefRegistry, resolveDelegationRefs } from './delegation-refs';
 import { releaseRemoteAbortListener } from './durable/abort-transport';
+// Value import of durable constants is safe: constants.ts is a leaf module
+// with no imports, so it cannot create the runtime cycle `agent →
+// agent/durable → agent`.
 import {
   AgentStreamEventTypes,
   DurableStepIds,
@@ -229,6 +238,8 @@ import {
   RECOVER_RUN_SUSPENDED_ERROR_ID,
   shouldRejectStream,
 } from './durable/constants';
+// Type-only imports from the durable module: erased at build time so they
+// don't create the runtime cycle `agent → agent/durable → agent`.
 import type {
   DurableAgentRecoveredRun,
   DurableAgentListActiveRunsOptions,
@@ -497,20 +508,6 @@ function rebindRecoveredModelList(
     unbound: persisted.length - modelList.length,
   };
 }
-
-// `Mastra` is imported type-only here: a runtime import would create an ESM
-// init cycle (agent → mastra → agent/durable → agent) that breaks
-// `class DurableAgent extends Agent` with a TDZ error. The constructor is read
-// from `mastraCtorHolder` (populated by `mastra/index.ts` at load), with an
-// `await import('../mastra')` fallback for the standalone-agent case where the
-// Mastra module was never loaded. See `#getOrCreateEphemeralMastra`.
-
-// Value import of durable constants is safe: constants.ts is a leaf module
-// with no imports, so it cannot create the runtime cycle `agent →
-// agent/durable → agent`.
-
-// Type-only imports from the durable module: erased at build time so they
-// don't create the runtime cycle `agent → agent/durable → agent`.
 
 const OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS = 5_000;
 
