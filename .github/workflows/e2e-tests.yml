@@ -208,12 +208,14 @@ jobs:
   # The small E2E suites share one runner: setup and build once, then one install and one test
   # step per suite. Each suite's steps run even when an earlier suite failed, and each tiered
   # suite still skips on its own job:e2e/<key> (scripts/test-tiers/update.mjs reads the step
-  # results). Step names match the old job names so a failure reads the same.
+  # results). Step names match the old job names so a failure reads the same. Every step has its
+  # own timeout and the job allows their sum, so a stalled build or suite can't use up the time
+  # of the suites after it; the suites normally finish in about 4 minutes together.
   e2e-light:
     needs: publish-e2e-registry
     name: E2E light suites
     runs-on: starsling-ubuntu-26.04
-    timeout-minutes: 45
+    timeout-minutes: 220
     permissions:
       contents: read
       id-token: write
@@ -231,11 +233,42 @@ jobs:
           persist-credentials: false
 
       - name: Setup pnpm and Node.js
+        timeout-minutes: 10
         uses: ./.github/actions/setup-pnpm-node
+
+      # npm import needs only the registry, not the build, so it runs first.
+      - name: Download E2E registry artifact
+        id: registry
+        if: ${{ !cancelled() }}
+        timeout-minutes: 5
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: e2e-verdaccio-registry
+          path: ${{ runner.temp }}/mastra-e2e-registry
+
+      - name: 'E2E npm import: install e2e test dependencies'
+        id: npm_import_install
+        # Installs from the E2E registry only; it needs no build.
+        if: ${{ !cancelled() && steps.registry.outcome == 'success' }}
+        working-directory: ./e2e-tests/npm-import
+        timeout-minutes: 10
+        run: pnpm install
+
+      - name: E2E npm import
+        if: ${{ !cancelled() && steps.npm_import_install.outcome == 'success' }}
+        timeout-minutes: 15
+        working-directory: ./e2e-tests/npm-import
+        run: pnpm test
+        env:
+          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
+          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
+          MASTRA_E2E_REGISTRY_PORT: '4873'
 
       # deployers and Type check need every package built; the others need a few.
       - name: Build
         id: build
+        if: ${{ !cancelled() }}
+        timeout-minutes: 25
         env:
           FULL: ${{ !contains(fromJSON(inputs.skip_jobs), 'job:e2e/deployers') || !contains(fromJSON(inputs.skip_jobs), 'job:e2e/type-check') }}
           NO_BUNDLING: ${{ !contains(fromJSON(inputs.skip_jobs), 'job:e2e/no-bundling') }}
@@ -260,19 +293,11 @@ jobs:
             echo "Only npm import runs; it installs from the E2E registry and needs no build."
           fi
 
-      # npm import needs only the registry, so fetch it even when Build failed.
-      - name: Download E2E registry artifact
-        id: registry
-        if: ${{ !cancelled() }}
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
-        with:
-          name: e2e-verdaccio-registry
-          path: ${{ runner.temp }}/mastra-e2e-registry
-
       - name: 'E2E no-bundling: install e2e test dependencies'
         id: no_bundling_install
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.registry.outcome == 'success' && !contains(fromJSON(inputs.skip_jobs), 'job:e2e/no-bundling') }}
         working-directory: ./e2e-tests/no-bundling
+        timeout-minutes: 10
         run: pnpm install
 
       - name: E2E no-bundling
@@ -290,6 +315,7 @@ jobs:
         id: create_mastra_install
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.registry.outcome == 'success' && !contains(fromJSON(inputs.skip_jobs), 'job:e2e/create-mastra') }}
         working-directory: ./e2e-tests/create-mastra
+        timeout-minutes: 10
         run: pnpm install
 
       - name: E2E create-mastra
@@ -307,6 +333,7 @@ jobs:
         id: commonjs_install
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.registry.outcome == 'success' && !contains(fromJSON(inputs.skip_jobs), 'job:e2e/commonjs') }}
         working-directory: ./e2e-tests/commonjs
+        timeout-minutes: 10
         run: pnpm install
 
       - name: E2E CommonJS
@@ -319,32 +346,16 @@ jobs:
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
           MASTRA_E2E_REGISTRY_PORT: '4873'
 
-      - name: 'E2E npm import: install e2e test dependencies'
-        id: npm_import_install
-        # Installs from the E2E registry only, so it runs even when Build failed.
-        if: ${{ !cancelled() && steps.registry.outcome == 'success' }}
-        working-directory: ./e2e-tests/npm-import
-        run: pnpm install
-
-      - name: E2E npm import
-        if: ${{ !cancelled() && steps.npm_import_install.outcome == 'success' }}
-        timeout-minutes: 15
-        working-directory: ./e2e-tests/npm-import
-        run: pnpm test
-        env:
-          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
-          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
-          MASTRA_E2E_REGISTRY_PORT: '4873'
-
       - name: 'E2E deployers: install e2e test dependencies'
         id: deployers_install
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.registry.outcome == 'success' && !contains(fromJSON(inputs.skip_jobs), 'job:e2e/deployers') }}
         working-directory: ./e2e-tests/deployers
+        timeout-minutes: 10
         run: pnpm install
 
       - name: E2E deployers
         if: ${{ !cancelled() && steps.deployers_install.outcome == 'success' }}
-        timeout-minutes: 15
+        timeout-minutes: 20
         working-directory: ./e2e-tests/deployers
         run: pnpm test
         env:
@@ -357,11 +368,12 @@ jobs:
         id: type_check_install
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.registry.outcome == 'success' && !contains(fromJSON(inputs.skip_jobs), 'job:e2e/type-check') }}
         working-directory: ./e2e-tests/type-check
+        timeout-minutes: 10
         run: pnpm install
 
       - name: E2E Type check
         if: ${{ !cancelled() && steps.type_check_install.outcome == 'success' }}
-        timeout-minutes: 15
+        timeout-minutes: 20
         working-directory: ./e2e-tests/type-check
         run: pnpm test
         env:

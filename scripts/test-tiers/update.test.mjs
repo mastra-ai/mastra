@@ -6,6 +6,7 @@ import path from 'node:path';
 import test from 'node:test';
 import {
   addJobKeys,
+  passedOnRetry,
   boundedGh,
   applyCatches,
   applyVersioningFailures,
@@ -356,8 +357,9 @@ test('the merged light E2E job fails only the suite whose step failed', () => {
   const keys = jobKeysFor('Prebuild', 'E2E Tests / E2E light suites', () => '', steps);
   assert.deepEqual(keys.ran, ['job:e2e/commonjs', 'job:e2e/deployers', 'job:e2e/no-bundling', 'job:e2e/type-check']);
   assert.deepEqual(keys.failed, ['job:e2e/commonjs', 'job:e2e/no-bundling']);
+  assert.deepEqual(keys.passed, ['job:e2e/deployers', 'job:e2e/type-check']);
   // A job the API returned without steps names no key rather than guessing.
-  assert.deepEqual(jobKeysFor('Prebuild', 'E2E Tests / E2E light suites'), { ran: [], failed: [] });
+  assert.deepEqual(jobKeysFor('Prebuild', 'E2E Tests / E2E light suites'), { ran: [], failed: [], passed: [] });
 });
 
 test('the merged Mastra Code job fails only the suite whose step failed', () => {
@@ -373,14 +375,53 @@ test('the merged Mastra Code job fails only the suite whose step failed', () => 
   assert.deepEqual(keys(steps('success', 'failure')), {
     ran: ['job:mastracode-e2e', 'job:mastracode-om'],
     failed: ['job:mastracode-om'],
+    passed: ['job:mastracode-e2e'],
   });
   assert.deepEqual(keys(steps('failure', 'success')).failed, ['job:mastracode-e2e']);
   // Runs from before the merge: the job held only the Mastra Code E2E steps.
   assert.deepEqual(keys(steps('failure', 'skipped').slice(0, 4)), {
     ran: ['job:mastracode-e2e'],
     failed: ['job:mastracode-e2e'],
+    passed: [],
   });
   assert.deepEqual(keys(), { ran: ['job:mastracode-e2e'], failed: ['job:mastracode-e2e'] });
+});
+
+test('a merged job retry counts as a flake only for the suites whose own steps passed again', () => {
+  const name = 'E2E Tests / E2E light suites';
+  const job = (id, attempt, runId, conclusion, suites) => ({
+    id,
+    name,
+    run_id: runId,
+    run_attempt: attempt,
+    conclusion,
+    steps: Object.entries(suites).flatMap(([label, c]) => [
+      { name: `E2E ${label}: install e2e test dependencies`, conclusion: c === 'failure' ? 'success' : c },
+      { name: `E2E ${label}`, conclusion: c },
+    ]),
+  });
+  const keysOf = j => jobKeysFor('Prebuild', j.name, () => '', j.steps);
+  const failed = job(1, 1, 10, 'failure', { 'no-bundling': 'failure', CommonJS: 'failure', deployers: 'failure' });
+  const retry = job(2, 2, 10, 'success', { 'no-bundling': 'success', CommonJS: 'skipped', deployers: 'cancelled' });
+  assert.equal(passedOnRetry(failed, 'job:e2e/no-bundling', [failed, retry], keysOf), true);
+  // The job went green, but CommonJS was skipped and deployers cancelled: neither passed.
+  assert.equal(passedOnRetry(failed, 'job:e2e/commonjs', [failed, retry], keysOf), false);
+  assert.equal(passedOnRetry(failed, 'job:e2e/deployers', [failed, retry], keysOf), false);
+  // A later green run of the same head counts only if the suite ran and passed in it.
+  const laterRun = job(3, 1, 11, 'success', { CommonJS: 'success', deployers: 'skipped' });
+  assert.equal(passedOnRetry(failed, 'job:e2e/commonjs', [failed, retry, laterRun], keysOf), true);
+  assert.equal(passedOnRetry(failed, 'job:e2e/deployers', [failed, retry, laterRun], keysOf), false);
+  // An earlier attempt never counts, and whole-job keys still go by the job's conclusion.
+  assert.equal(passedOnRetry(retry, 'job:e2e/no-bundling', [failed, retry], keysOf), false);
+  const store = (id, attempt, conclusion) => ({
+    id,
+    name: 'Combined Store Tests / test (pg)',
+    run_id: 10,
+    run_attempt: attempt,
+    conclusion,
+  });
+  assert.equal(passedOnRetry(store(1, 1, 'failure'), 'job:store/pg', [store(2, 2, 'success')], keysOf), true);
+  assert.equal(passedOnRetry(store(1, 1, 'failure'), 'job:store/pg', [store(2, 2, 'cancelled')], keysOf), false);
 });
 
 test('a folded job fails only the packages that started and never finished', () => {

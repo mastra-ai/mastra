@@ -213,13 +213,35 @@ const MASTRACODE_E2E_STEPS = new Set([
 function stepKeys(steps, keyOf) {
   const ran = new Set();
   const failed = new Set();
+  const unfinished = new Set();
+  const seen = new Set();
   for (const step of steps) {
     const key = keyOf(step.name);
-    if (!key || !step.conclusion || step.conclusion === 'skipped') continue;
+    if (!key) continue;
+    seen.add(key);
+    if (step.conclusion !== 'success') unfinished.add(key);
+    if (!step.conclusion || step.conclusion === 'skipped') continue;
     ran.add(key);
     if (step.conclusion === 'failure') failed.add(key);
   }
-  return { ran: [...ran].sort(), failed: [...failed].sort() };
+  // A suite passed only when every one of its steps succeeded: skipped or cancelled is not a pass.
+  const passed = [...seen].filter(key => !unfinished.has(key)).sort();
+  return { ran: [...ran].sort(), failed: [...failed].sort(), passed };
+}
+
+/**
+ * Whether a failed job's tier key passed on a later attempt of the job or in a later green run of
+ * the same head (`candidates` holds those runs' jobs). Merged jobs are judged by the key's own
+ * steps, so a retry that went green while skipping or cancelling the suite is not a flake; jobs
+ * tiered as a whole go by the job's conclusion.
+ */
+export function passedOnRetry(job, key, candidates, keysOf) {
+  return candidates.some(j => {
+    if (j === job || j.name !== job.name) return false;
+    if (j.run_id === job.run_id && !(j.run_attempt > job.run_attempt)) return false;
+    const { passed } = keysOf(j);
+    return passed ? passed.includes(key) : j.conclusion === 'success';
+  });
 }
 
 /**
@@ -749,6 +771,24 @@ function dailyCommand(tiers, { days, date, budgetMinutes }) {
         r.conclusion === 'success',
     );
 
+  const laterGreenJobsCache = new Map();
+  const laterGreenJobs = run => {
+    if (!laterGreenJobsCache.has(run.id))
+      laterGreenJobsCache.set(
+        run.id,
+        runs
+          .filter(
+            r =>
+              r.id !== run.id &&
+              r.workflow_id === run.workflow_id &&
+              r.head_sha === run.head_sha &&
+              r.created_at > run.created_at &&
+              r.conclusion === 'success',
+          )
+          .flatMap(r => runJobs(r.id)),
+      );
+    return laterGreenJobsCache.get(run.id);
+  };
   const compareCache = new Map();
   const toInspect = runsToInspect(runs);
   const ready = (run, seen) => waitingRunReady(runs, run, seen);
@@ -766,12 +806,17 @@ function dailyCommand(tiers, { days, date, budgetMinutes }) {
     for (const job of jobs.filter(j => j.conclusion === 'failure')) {
       const failedOn = job.completed_at?.slice(0, 10) ?? run.created_at.slice(0, 10);
       if (!isFileListJob(job.name)) {
-        const { failed } = jobKeysFor(job.workflow_name, job.name, () => jobLog(job.id), job.steps);
+        const keys = jobKeysFor(job.workflow_name, job.name, () => jobLog(job.id), job.steps);
         const settled = Date.now() - Date.parse(job.completed_at ?? run.created_at) >= JOB_SETTLE_MS;
-        const verdict = passedLater(job) ? 'flake' : settled ? 'fail' : 'unresolved';
         const settlesAt = new Date(Date.parse(job.completed_at ?? run.created_at) + JOB_SETTLE_MS).toISOString();
-        for (const key of failed)
+        const keysOf = j => jobKeysFor(j.workflow_name, j.name, () => '', j.steps);
+        const flaked = keys.passed
+          ? key => passedOnRetry(job, key, [...jobs, ...laterGreenJobs(run)], keysOf)
+          : () => passedLater(job);
+        for (const key of keys.failed) {
+          const verdict = flaked(key) ? 'flake' : settled ? 'fail' : 'unresolved';
           failures.push({ file: key, jobId: String(job.id), date: failedOn, verdict, settlesAt });
+        }
         continue;
       }
       const rerunPassed = passedLater(job);

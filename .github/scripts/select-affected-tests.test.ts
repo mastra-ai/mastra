@@ -215,6 +215,26 @@ describe('Prebuild test tiers', () => {
     expect(workflow.jobs['publish-e2e-registry'].if).toBeUndefined();
   });
 
+  // Suites that share a runner must not share a time budget: every step has its own timeout and
+  // the job allows all of them, so a stalled build or suite can't run out the clock on the suites
+  // after it. npm import needs no build, so it runs before Build.
+  test.each([
+    ['e2e-tests.yml', 'e2e-light'],
+    ['mastracode-e2e.yml', 'mastracode-e2e'],
+  ])('%s %s gives every step its own budget', (file, jobId) => {
+    type Step = { name?: string; uses?: string; 'timeout-minutes'?: number };
+    const workflow = parse(readFileSync(new URL(`../workflows/${file}`, import.meta.url), 'utf8'));
+    const job = workflow.jobs[jobId] as { 'timeout-minutes': number; steps: Step[] };
+    const unbounded = job.steps.filter(step => !step['timeout-minutes']).map(step => step.name ?? step.uses);
+    expect(unbounded).toEqual([]);
+    const total = job.steps.reduce((sum, step) => sum + (step['timeout-minutes'] ?? 0), 0);
+    expect(job['timeout-minutes']).toBeGreaterThanOrEqual(total);
+    if (jobId === 'e2e-light') {
+      const names = job.steps.map(step => step.name);
+      expect(names.indexOf('E2E npm import')).toBeLessThan(names.indexOf('Build'));
+    }
+  });
+
   test('without tiers nothing is dropped', () => {
     const result = route({
       changedFiles: ['packages/core/src/index.ts'],
