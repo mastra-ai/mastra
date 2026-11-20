@@ -2643,6 +2643,46 @@ describe('MastraFactory.prepare', () => {
     });
   });
 
+  it('refuses tokens issued for the MCP endpoint on every other route', async () => {
+    // Like self-managed WorkOS, this provider checks a bearer's signature and issuer but not its audience.
+    const provider = fakeProvider({
+      authenticateToken: vi.fn(async (token: string) =>
+        token ? { id: 'user_1', email: 'a@b.com', organizationId: 'org_1' } : null,
+      ),
+    });
+    const config = await prepareFactory({
+      storage: fakeStorage(),
+      auth: provider,
+      publicUrl: 'https://factory.example.com',
+      mcp: { authorizationServers: ['https://auth.example.com'] },
+    });
+    const server = (config.buildServerConfig as () => ServerConfig)();
+    const apiRoutes = (config.buildApiRoutes as (deps: object) => ApiRoute[])({
+      controller: sessionNotifierStub,
+      authStorage: {},
+    });
+    const app = await createHonoServer(new Mastra({ server: { ...server, apiRoutes } }), { tools: {} });
+    const jwt = (claims: object) =>
+      ['{"alg":"none"}', JSON.stringify({ sub: 'user_1', ...claims }), 'sig']
+        .map(part => Buffer.from(part).toString('base64url'))
+        .join('.');
+    const status = async (path: string, token: string) =>
+      (await app.request(`http://localhost${path}`, { headers: { Authorization: `Bearer ${token}` } })).status;
+
+    const mcpTokens = [
+      jwt({ aud: 'https://factory.example.com/mcp' }),
+      jwt({ aud: ['https://factory.example.com/mcp', 'https://other.example.com'] }),
+    ];
+    const otherToken = jwt({ aud: 'https://other.example.com' });
+    for (const path of ['/web/factory/projects', '/api/agents']) {
+      expect(await status(path, otherToken)).toBe(200);
+      for (const token of mcpTokens) expect(await status(path, token)).toBe(401);
+    }
+    // `/auth/me` is ungated, so it authenticates for itself.
+    const me = await app.request('http://localhost/auth/me', { headers: { Authorization: `Bearer ${mcpTokens[0]}` } });
+    expect(await me.json()).toMatchObject({ authenticated: false });
+  });
+
   it('registers the per-tenant credential resolver when auth is configured', async () => {
     registerTenantCredentialResolverMock.mockClear();
     await prepareFactory({ storage: fakeStorage(), auth: fakeProvider() });

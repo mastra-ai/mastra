@@ -900,7 +900,9 @@ export class MastraFactory {
     const deploymentModelProviders = resolveDeploymentModelProviders(this.#config.deploymentModelProviders);
     // One RouteAuth seam per boot, closed over the resolved provider. Every
     // factory route module receives this handle — no service locator.
-    const routeAuth = createFactoryRouteAuth(auth);
+    // Tokens issued for the MCP endpoint are refused on every other route.
+    const authOptions = { mcpResource: factoryMcpResource(publicOrigin) };
+    const routeAuth = createFactoryRouteAuth(auth, authOptions);
     const mcpConfig = this.#config.mcp;
     const mcpAuthorizationServers =
       mcpConfig === false || mcpConfig?.enabled === false ? [] : resolveMcpAuthorizationServers(auth?.name, mcpConfig);
@@ -2287,12 +2289,12 @@ export class MastraFactory {
           // `apiRoutes` (not plain Hono routes) because the entry can't touch the
           // Hono app the deployer generates. `requiresAuth: false`; the gate
           // skips `/auth/*`. Auth-disabled mode still answers `/auth/me` (404).
-          ...(auth ? buildAuthRoutes(auth, { publicUrl: publicOrigin }) : buildAuthDisabledRoutes()),
+          ...(auth ? buildAuthRoutes(auth, { ...authOptions, publicUrl: publicOrigin }) : buildAuthDisabledRoutes()),
           ...(mcpEnabled
             ? buildFactoryMcpRoutes({
                 verifyAccessToken: createMcpTokenVerifier({
                   authorizationServers: mcpAuthorizationServers,
-                  resource: factoryMcpResource(publicOrigin),
+                  resource: authOptions.mcpResource,
                   ...(isWorkOSAuth(auth)
                     ? {
                         resolveCaller: createWorkosMcpCallerResolver(
@@ -2543,7 +2545,7 @@ export class MastraFactory {
             auth,
             middleware: [
               ...timing,
-              createFactoryAuthGate(auth),
+              createFactoryAuthGate(auth, authOptions),
               createSessionAccessGuard({
                 auth: routeAuth,
                 sessions: sourceControlSessions,
