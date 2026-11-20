@@ -5499,7 +5499,10 @@ describe('FactoryDecisionDispatcher', () => {
       lastError: expect.stringContaining('invalid_transition'),
     });
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['intake']);
-    const provider = new DecisionAttentionProvider({ workItems: storage }, failedDecisionAttentionSpec);
+    const provider = new DecisionAttentionProvider(
+      { workItems: storage, boards: createBoardRegistry() },
+      failedDecisionAttentionSpec,
+    );
     expect(await provider.counts({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toMatchObject({ open: 1 });
   });
 
