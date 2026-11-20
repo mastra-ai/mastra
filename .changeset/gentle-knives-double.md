@@ -1,5 +1,5 @@
 ---
-'@mastra/playground-ui': major
+'@mastra/playground-ui': minor
 ---
 
 Simplified page frames to three choices, one per kind of page: `PageLayout` for lists, dashboards, detail pages and explorers, `FormLayout` for create and edit forms, and `SettingsLayout` for settings pages. A page no longer picks a width, gutter or scroll mode.
