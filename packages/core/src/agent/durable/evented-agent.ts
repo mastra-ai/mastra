@@ -117,6 +117,12 @@ export class EventedAgent<
     return false;
   }
 
+  // Workers elsewhere run the steps when this instance runs none (e.g. `MASTRA_WORKERS=false`).
+  // Read after the run started its local workers, if it has any.
+  protected override get executesStepsLocally(): boolean {
+    return this.getMastraInstance()?.__hasLocalWorkflowExecution() ?? true;
+  }
+
   /**
    * Execute the durable workflow using the evented engine.
    *
