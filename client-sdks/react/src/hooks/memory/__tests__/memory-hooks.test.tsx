@@ -131,6 +131,31 @@ describe('useMemoryThreadMessages', () => {
       expect(capturedUrl?.searchParams.get('page')).toBe('2');
       expect(capturedUrl?.searchParams.get('perPage')).toBe('25');
     });
+
+    it('does not show another agent’s messages when switching agents on the same thread', async () => {
+      const requestedAgents: string[] = [];
+      server.use(
+        http.get(`${ROOT}/memory/threads/:threadId/messages`, ({ request }) => {
+          const agentId = new URL(request.url).searchParams.get('agentId') ?? '';
+          requestedAgents.push(agentId);
+          return HttpResponse.json({
+            ...threadMessagesResponse,
+            messages: threadMessagesResponse.messages.map(message => ({ ...message, id: `message-for-${agentId}` })),
+          } satisfies ListMemoryThreadMessagesResponse);
+        }),
+      );
+
+      const { result, rerender } = renderHook(
+        ({ agentId }) => useMemoryThreadMessages({ threadId: 'thread-1', agentId }),
+        { wrapper: makeWrapper(), initialProps: { agentId: 'agent-1' } },
+      );
+      await waitFor(() => expect(result.current.data?.messages[0]?.id).toBe('message-for-agent-1'));
+
+      rerender({ agentId: 'agent-2' });
+      await waitFor(() => expect(result.current.data?.messages[0]?.id).toBe('message-for-agent-2'));
+      expect(requestedAgents).toContain('agent-1');
+      expect(requestedAgents).toContain('agent-2');
+    });
   });
 
   describe('when threadId is undefined', () => {

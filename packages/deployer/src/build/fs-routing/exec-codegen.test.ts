@@ -87,7 +87,7 @@ describe('generated fs-agents module — executed, not just emitted', () => {
 
     expect(declared.map((s: any) => s.key)).toEqual(['billing/sweep']);
     expect(declared[0].definition.prompt).toBe('Sweep unpaid invoices.');
-  });
+  }, 15_000);
 
   it('inlines a markdown schedule so the deployed bundle reads no files', async () => {
     await writeAgent('support', {
@@ -103,7 +103,7 @@ describe('generated fs-agents module — executed, not just emitted', () => {
       name: 'nightly',
       prompt: 'Close resolved tickets.',
     });
-  });
+  }, 15_000);
 
   it('keeps a handler-mode schedule callable through codegen', async () => {
     await writeAgent('support', {

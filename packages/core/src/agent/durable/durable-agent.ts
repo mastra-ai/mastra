@@ -214,6 +214,10 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
   threadId?: string;
   /** Resource ID if using memory */
   resourceId?: string;
+  /** Trace ID of the run, when the run is traced */
+  traceId?: string;
+  /** ID of the agent run span, when the run is traced */
+  spanId?: string;
   /** Cleanup function to call when done (unsubscribes from pubsub) */
   cleanup: () => void;
   /**

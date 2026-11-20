@@ -1,5 +1,59 @@
 # @mastra/playground-ui
 
+## 71.0.0-alpha.2
+
+### Minor Changes
+
+- Hosts other than Studio can now build an agent page from the same parts Studio uses: ([#31002](https://github.com/mastra-ai/mastra/pull/31002))
+
+  - Agent list and page: `AgentPage`, `AgentCombobox` and `AgentPageTabs`.
+  - Threads panel: `ThreadsPanelProvider` and `useThreadsPanel`.
+  - The agent thread page and chat integration.
+  - The memory sidebar (Observational Memory, memory details, thread cloning).
+  - The Config panel (memory settings, metadata badges, workspace tools).
+  - The skill create dialog.
+
+  Two options let a host fit the page to its own layout:
+
+  ```tsx
+  // Put your own close or collapse control in the Config panel header
+  <AgentConfigSurface actions={<Button onClick={close}>Close</Button>}>{children}</AgentConfigSurface>
+
+  // Hide the memory capability icons in the thread sidebar (shown by default)
+  <AgentThreadPage {...pageProps} sidebarExtensions={{ showConfigBadges: false }} />
+  ```
+
+  To clear saved drafts after a user signs out, await `clearDraftsOnLogout` with the API and user scope:
+
+  ```ts
+  import { clearDraftsOnLogout } from '@mastra/playground-ui/domains/agents/chat';
+
+  await clearDraftsOnLogout(JSON.stringify([client.options.baseUrl, client.options.apiPrefix, userId]));
+  ```
+
+- Add an optional `onEdit` callback to `StoredSkillsPicker` so hosts can open their own editor for an available skill without changing its selection. The Edit action appears only when the callback is provided. ([#31002](https://github.com/mastra-ai/mastra/pull/31002))
+
+  ```tsx
+  <StoredSkillsPicker
+    availableSkills={skills}
+    selectedSkillIds={selectedSkillIds}
+    onAttach={attachSkill}
+    onRemove={removeSkill}
+    onEdit={skillId => openSkillEditor(skillId)}
+  />
+  ```
+
+### Patch Changes
+
+- Fixed `Table.RowLink` and `Table.RowButton` in inset tables blocking clicks on other controls in Safari. The whole-row click area no longer comes from an overlay stretched over the row, which Safari let escape the row and cover the rest of the page. The row now hands plain clicks to its link or button itself. Tab and Enter still reach the real link, Cmd-click and middle-click on the link still open a new tab, and buttons, links, inputs and menus in the row keep their own clicks. ([#30985](https://github.com/mastra-ai/mastra/pull/30985))
+
+- A Traces explorer scoped to one entity, such as an agent's Traces tab, now shows its empty state when that entity has no runs. Before, it showed "No traces found for applied filters" because the hidden scope counted as an applied filter. ([#31002](https://github.com/mastra-ai/mastra/pull/31002))
+
+- Updated dependencies [[`3baa66d`](https://github.com/mastra-ai/mastra/commit/3baa66dfc785c222bb727a6da6012a0f28480b4a), [`2f85a55`](https://github.com/mastra-ai/mastra/commit/2f85a551a9fe308179bd96da49032259275cd850), [`d1f0a92`](https://github.com/mastra-ai/mastra/commit/d1f0a92ca41e1b725ed296abeb540908d09b5c64), [`4c71c2e`](https://github.com/mastra-ai/mastra/commit/4c71c2e776563852ef2301d674a1b8c70f511039)]:
+  - @mastra/core@1.86.0-alpha.2
+  - @mastra/react@1.16.0-alpha.2
+  - @mastra/client-js@1.61.2-alpha.2
+
 ## 71.0.0-alpha.1
 
 ### Patch Changes
