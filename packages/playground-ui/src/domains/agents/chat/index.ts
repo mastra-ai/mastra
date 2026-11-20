@@ -1,6 +1,7 @@
 export { AgentPage } from './agent-page';
 export type { AgentPageDock, AgentPageProps } from './agent-page';
 export { AgentThreadPage } from './agent-thread-page';
+export { clearDraftsOnLogout } from './drafts/thread-draft-state';
 export { ThreadsPanelProvider } from './threads-panel-context';
 export { useThreadsPanel } from './use-threads-panel';
 export { useAgentThreadPage } from './use-agent-thread-page';

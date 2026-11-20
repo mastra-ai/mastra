@@ -9,7 +9,7 @@ export interface AgentThreadPageOptions {
   resourceId: string;
   threadId?: string;
   requestContext?: Record<string, unknown>;
-  draftScope: [string | undefined, string | undefined, string, string];
+  draftScope: [string | undefined, string | undefined, string | undefined, string];
   canPersistDraft: boolean;
   navigateToThread: (threadId: string) => void;
   navigateToNewThread: () => void;

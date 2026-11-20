@@ -60,7 +60,7 @@ function AgentThread() {
     resourceId: agentId!,
     threadId,
     requestContext,
-    draftScope: [client.options.baseUrl, client.options.apiPrefix, userId ?? 'anonymous', agentId!],
+    draftScope: [client.options.baseUrl, client.options.apiPrefix, userId, agentId!],
     canPersistDraft,
     navigateToThread: id => void navigate(`/agents/${agentId}/threads/${id}`, { replace: true }),
     navigateToNewThread: () => void navigate(`/agents/${agentId}/threads/new`),

@@ -32,7 +32,7 @@ import {
 import { emptyHistory, liveChunks, staleHistory } from './fixtures/thread-recovery';
 import { emptyThreadTracesList } from './fixtures/thread-traces';
 import { AgentLayout } from '@/domains/agents/agent-layout';
-import { readThreadDraft } from '@/domains/conversation/context/thread-draft-storage';
+import { readThreadDraft, writeThreadDraft } from '@/domains/conversation/context/thread-draft-storage';
 import { agentIndexLoader, agentThreadsIndexLoader, legacyAgentChatLoader, paths } from '@/lib/app-routing';
 import { Link } from '@/lib/link';
 import { server } from '@/test/msw-server';
@@ -560,6 +560,18 @@ describe('Standalone thread page', () => {
       },
     );
   });
+  describe('when an unauthenticated user returns to an existing thread', () => {
+    it('restores the draft saved before the shared page migration', async () => {
+      installHandlers();
+      const key = JSON.stringify([BASE_URL, null, null, AGENT_ID, THREAD_ID]);
+      await writeThreadDraft(key, { text: 'My unfinished recipe', attachments: [] });
+
+      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+
+      expect((await composerInput()).value).toBe('My unfinished recipe');
+    });
+  });
+
   describe('when a saved draft cannot be decoded', () => {
     it('starts empty and saves subsequent edits without recovery controls', async () => {
       installHandlers();

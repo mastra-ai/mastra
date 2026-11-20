@@ -16,7 +16,7 @@ export function useAgentThreadNavigation({
   refreshThreads,
 }: {
   threadId?: string;
-  draftScope: [string | undefined, string | undefined, string, string];
+  draftScope: [string | undefined, string | undefined, string | undefined, string];
   canPersistDraft: boolean;
   draftHandle: RefObject<ThreadDraftHandle | null>;
   navigateToThread: (threadId: string) => void;
