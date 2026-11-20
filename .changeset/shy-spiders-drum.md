@@ -2,6 +2,13 @@
 '@mastra/core': minor
 ---
 
-Added staged execution-engine policy configuration and registered defaults, including precedence, lifetime locking, and wrapper isolation. Configuration naming and API remain provisional while the implementation stack is completed.
+Added execution-engine configuration with `Agent.durable.executionEngine` and `Mastra.durable` defaults. Explicit agent settings take precedence over registered defaults, the engine selection locks at registration or first execution, and editor forks preserve the selected policy without changing a wrapped agent's engine.
 
-Native execution, output types, and recovery remain unchanged. Continue using the existing durable or evented wrappers for durable execution. Public documentation will follow in a separate final PR once naming and API settle.
+```typescript
+const mastra = new Mastra({
+  durable: { executionEngine: 'durable' },
+  agents: { support: agent },
+})
+```
+
+This change provides configuration and policy resolution; native engine dispatch is supplied by the companion execution change. Release the two changes together.
