@@ -259,17 +259,14 @@ describe('background tasks in library mode (no startWorkers)', () => {
     const manager = mastra.backgroundTaskManager!;
 
     const executeFn = vi.fn().mockResolvedValue('never');
-    const { task } = await manager.enqueue(
-      { toolName: 't', toolCallId: 'c1', args: {}, agentId: 'a1', runId: 'r1' },
-      ctx(executeFn),
-    );
-    await tick(500);
+    await expect(
+      manager.enqueue({ toolName: 't', toolCallId: 'c1', args: {}, agentId: 'a1', runId: 'r1' }, ctx(executeFn)),
+    ).rejects.toThrow(/producer.*local.*worker/i);
 
-    // With orchestration/backgroundTasks filtered out, the task's evented
-    // workflow has no local consumer — a separate worker process is expected
-    // to pick it up, so this instance must not execute it.
+    // Invocation-bound work cannot move to a remote worker. Refuse it rather
+    // than start excluded workers or leave a pending row with no consumer.
     expect(executeFn).not.toHaveBeenCalled();
-    expect((await manager.getTask(task.id))?.status).not.toBe('completed');
+    expect(await manager.listTasks({})).toMatchObject({ tasks: [], total: 0 });
 
     await mastra.stopWorkers();
   });

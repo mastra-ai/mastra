@@ -391,6 +391,11 @@ export class BackgroundTaskManager {
    * Called internally by createBackgroundTask or directly for advanced usage.
    */
   registerTaskContext(taskId: string, context: TaskContext): void {
+    if (this.config.mode === 'producer') {
+      throw new Error(
+        'BackgroundTaskManager in producer mode cannot register invocation-bound task context. Enable a local background task worker or enqueue a portable task without context.',
+      );
+    }
     this.taskContexts.set(taskId, context);
   }
 
