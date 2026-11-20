@@ -79,13 +79,13 @@ async function setup(options: Pick<PlatformAlertRulesOptions, 'onThreadAttached'
   });
   const drain = () => dispatcher.runOnce(new Date(now + 60_000));
   // An opened incident opens when it is ingested; the polled-late case lives in state.test.ts.
-  const ingest = (event: PlatformAlertEvent, at = now) => {
+  const ingest = (event: PlatformAlertEvent, at = now, extra: { createCards?: boolean } = {}) => {
     now = at;
     const fired =
       event.type === 'alert.opened'
         ? { ...event, incident: { ...event.incident, openedAt: new Date(at).toISOString() } }
         : event;
-    return rules.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, event: fired });
+    return rules.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, event: fired, ...extra });
   };
   const cards = async () =>
     (await seeded.workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).filter(
@@ -232,6 +232,26 @@ describe('PlatformAlertRules', () => {
     const [card] = await cards();
     expect(timeline(card!)).toEqual(['fired', 'severity_raised']);
     expect(card!.workItem.labels).toContain('severity:critical');
+  });
+
+  it("files no card for a raise the project's binding doesn't take, but still updates its own card", async () => {
+    const { ingest, drain, cards, timeline } = await setup();
+    const keep = { createCards: false };
+    await expect(ingest(alert('alert.severity_raised', 'i1', 'critical'), T0, keep)).resolves.toEqual({
+      status: 'missing',
+    });
+    await drain();
+    expect(await cards()).toHaveLength(0);
+
+    await ingest(alert('alert.opened', 'i2'), T0 + MIN);
+    await drain();
+    await expect(ingest(alert('alert.severity_raised', 'i2', 'critical'), T0 + 2 * MIN, keep)).resolves.toMatchObject({
+      status: 'committed',
+      created: false,
+    });
+    const [card, ...rest] = await cards();
+    expect(rest).toHaveLength(0);
+    expect(timeline(card!)).toEqual(['fired', 'severity_raised']);
   });
 
   it('settles on recovered when the resolve arrives before its opened', async () => {
