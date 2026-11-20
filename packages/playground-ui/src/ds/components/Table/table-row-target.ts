@@ -10,7 +10,7 @@ export function tableRowTargetStyles(variant: TableVariant) {
 
 // Things in a row that take their own clicks.
 const ROW_CONTROLS = [
-  'a[href],button,input,select,textarea,label,summary,[contenteditable=""],[contenteditable="true"]',
+  'a[href],button,input,select,textarea,label,summary,[contenteditable]:not([contenteditable="false"])',
   '[role="button"],[role="link"],[role="checkbox"],[role="switch"],[role="menuitem"]',
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');

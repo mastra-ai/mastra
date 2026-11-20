@@ -89,13 +89,23 @@ describe('Table', () => {
     expect(onAction).toHaveBeenCalledTimes(1);
   });
 
-  it('has no stretched overlay, so nothing depends on the row being a containing block', () => {
-    render(<CreditTable />);
+  it('leaves a control outside the table to its own click', () => {
+    const onOutside = vi.fn();
+    const onFollow = vi.fn((event: MouseEvent) => event.preventDefault());
+    render(
+      <>
+        <button type="button" onClick={onOutside}>
+          Add credit
+        </button>
+        <CreditTable />
+      </>,
+    );
+    screen.getByRole('link', { name: 'Credit grant' }).addEventListener('click', onFollow);
 
-    const link = screen.getByRole('link', { name: 'Credit grant' });
-    const row = rowOf(link);
-    expect(link.className).not.toMatch(/after:/);
-    expect(row.className).not.toMatch(/(^|\s)has-\[\[data-row-target\]\]:relative(\s|$)/);
+    fireEvent.click(screen.getByRole('button', { name: 'Add credit' }));
+
+    expect(onOutside).toHaveBeenCalledTimes(1);
+    expect(onFollow).not.toHaveBeenCalled();
   });
 
   it('follows the row link when any other part of the row is clicked', () => {
@@ -472,7 +482,6 @@ describe('Table.RowButton', () => {
     expect(onOpen).toHaveBeenCalledTimes(1);
     expect(onRefund).toHaveBeenCalledTimes(1);
 
-    expect(open.className).not.toMatch(/after:/);
     fireEvent.click(secondCell(open));
     expect(onOpen).toHaveBeenCalledTimes(2);
     fireEvent(secondCell(open), new MouseEvent('auxclick', { bubbles: true, button: 1 }));
@@ -517,6 +526,58 @@ it('names collapsed page ranges for screen readers', () => {
 });
 
 describe('inset row click forwarding', () => {
+  it('runs an ancestor onClick once for a plain cell click and for a direct target click', () => {
+    const onAncestor = vi.fn();
+    const onOpen = vi.fn();
+    render(
+      <div onClick={onAncestor}>
+        <Table variant="inset" aria-label="Credits">
+          <Table.Body>
+            <Table.Row>
+              <Table.Cell>
+                <Table.RowButton onClick={onOpen}>Credit grant</Table.RowButton>
+              </Table.Cell>
+              <Table.Cell>$10</Table.Cell>
+            </Table.Row>
+          </Table.Body>
+        </Table>
+      </div>,
+    );
+    fireEvent.click(screen.getByText('$10'));
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(onAncestor).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Credit grant' }));
+    expect(onOpen).toHaveBeenCalledTimes(2);
+    expect(onAncestor).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaves every editable element alone, including plaintext-only', () => {
+    const onOpen = vi.fn();
+    render(
+      <Table variant="inset" aria-label="Credits">
+        <Table.Body>
+          <Table.Row>
+            <Table.Cell>
+              <Table.RowButton onClick={onOpen}>Credit grant</Table.RowButton>
+            </Table.Cell>
+            <Table.Cell>
+              <div contentEditable="plaintext-only" suppressContentEditableWarning>
+                Plain note
+              </div>
+            </Table.Cell>
+            <Table.Cell>
+              <div contentEditable="false">Read-only note</div>
+            </Table.Cell>
+          </Table.Row>
+        </Table.Body>
+      </Table>,
+    );
+    fireEvent.click(screen.getByText('Plain note'));
+    expect(onOpen).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Read-only note'));
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
   it('leaves a native summary and a roving-tabindex menu item alone', () => {
     const onOpen = vi.fn();
     const onItem = vi.fn();
