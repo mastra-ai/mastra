@@ -3,12 +3,14 @@ import { once } from 'node:events';
 
 export interface ScriptedReply {
   content?: string;
+  httpError?: { status: 503; message: string };
   tool?: { name: string; arguments: Record<string, unknown> };
 }
 export type ModelScript = (body: Record<string, unknown>) => ScriptedReply;
 
 export async function startModelServer(script?: ModelScript) {
   const requests: Record<string, unknown>[] = [];
+  const failures: { status: number; message: string }[] = [];
   const server = createServer(async (request, response) => {
     let raw = '';
     for await (const chunk of request) raw += chunk;
@@ -46,6 +48,14 @@ export async function startModelServer(script?: ModelScript) {
             type: 'fixture_assertion',
           },
         }),
+      );
+      return;
+    }
+    if (scripted?.httpError) {
+      failures.push(scripted.httpError);
+      response.writeHead(scripted.httpError.status, { 'content-type': 'application/json' });
+      response.end(
+        JSON.stringify({ error: { message: scripted.httpError.message, type: 'synthetic_provider_failure' } }),
       );
       return;
     }
@@ -105,6 +115,7 @@ export async function startModelServer(script?: ModelScript) {
   return {
     url: `http://127.0.0.1:${address.port}/v1`,
     requests,
+    failures,
     close: () => new Promise<void>(resolve => server.close(() => resolve())),
   };
 }

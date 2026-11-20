@@ -1,3 +1,4 @@
+import { observability } from './observability.ts';
 import { resolve } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
@@ -33,6 +34,7 @@ const auth = createAuth(credentials, memory, review);
 
 export const mastra = new Mastra({
   logger: false,
+  observability,
   storage,
   knowledge: { support: supportKnowledge },
   agents: { support },

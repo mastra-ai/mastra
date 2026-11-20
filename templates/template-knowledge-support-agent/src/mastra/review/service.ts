@@ -1,3 +1,4 @@
+import type { Mastra } from '@mastra/core/mastra';
 import { createHash, randomUUID } from 'node:crypto';
 import { knowledgeScopeAddress, type Knowledge, type KnowledgePage } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
@@ -246,11 +247,12 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
     return false;
   }
 
-  async function prepare(profile: Profile | undefined, input: ReviewInput): Promise<Proposal> {
+  async function prepare(profile: Profile | undefined, input: ReviewInput, mastra?: Mastra): Promise<Proposal> {
     const current = reviewer(profile);
     const selected = await confirmation(current, input);
     const customerScope = customer(current);
     const curator = createCuratorAgent(knowledge, customerScope);
+    if (mastra) curator.__registerMastra(mastra);
     const response = await curator.generate(
       JSON.stringify({
         audience: input.audience,

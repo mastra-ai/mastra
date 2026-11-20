@@ -241,7 +241,7 @@ async function snapshot(f: Fixture) {
 }
 async function sql(f: Fixture, query: string, parameters: string[] = []) {
   // Separate processes avoid loading Node SQLite beside the LibSQL native library.
-  const script = `import { DatabaseSync } from 'node:sqlite'; const db = new DatabaseSync(process.env.PROOF_DATABASE); try { console.log(JSON.stringify(db.prepare(process.env.PROOF_SQL).all(...JSON.parse(process.env.PROOF_PARAMETERS)))); } finally { db.close(); }`;
+  const script = `import { DatabaseSync } from 'node:sqlite'; const db = new DatabaseSync(process.env.PROOF_DATABASE); db.exec('PRAGMA busy_timeout = 5000'); try { console.log(JSON.stringify(db.prepare(process.env.PROOF_SQL).all(...JSON.parse(process.env.PROOF_PARAMETERS)))); } finally { db.close(); }`;
   const result = await execute(process.execPath, ['--input-type=module', '-e', script], {
     env: {
       ...process.env,

@@ -6,21 +6,31 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { exampleProfiles, exampleStudioRole } from '../../src/examples/retail-pos/profiles.ts';
+import type { Profile } from '../../src/mastra/identity.ts';
 import { principals, resourceId } from '../../src/mastra/identity.ts';
 import type { KnowledgePage } from '@mastra/core/knowledge';
 import { startModelServer, type ModelScript } from './model-server.ts';
 
 export async function runtimeFixture(
-  options: { generatedCredentials?: boolean; studioRole?: string; modelScript?: ModelScript } = {},
+  options: {
+    generatedCredentials?: boolean;
+    studioRole?: string;
+    modelScript?: ModelScript;
+    profiles?: (Profile & { review?: boolean })[];
+    syntheticKnowledge?: boolean;
+    example?: 'retail-pos' | 'software-integration';
+  } = {},
 ) {
   const directory = await mkdtemp(join(tmpdir(), 'knowledge-support-'));
   const model = await startModelServer(options.modelScript);
   const studioRole = options.studioRole ?? exampleStudioRole;
-  const credentials = [
-    ...exampleProfiles,
-    { ...exampleProfiles[0]!, id: 'literal', customerId: 'store:1' },
-    { ...exampleProfiles[0]!, id: 'encoded', customerId: 'store%3A1' },
-  ].map(profile => ({
+  const credentials = (
+    options.profiles ?? [
+      ...exampleProfiles,
+      { ...exampleProfiles[0]!, id: 'literal', customerId: 'store:1' },
+      { ...exampleProfiles[0]!, id: 'encoded', customerId: 'store%3A1' },
+    ]
+  ).map(profile => ({
     profile: { ...profile, role: studioRole },
     token: randomBytes(32).toString('base64url'),
     expiresAt: Date.now() + 60 * 60 * 1000,
@@ -39,55 +49,61 @@ export async function runtimeFixture(
     `../../src/mastra/index.ts?fixture=${randomBytes(6).toString('hex')}`
   )) as typeof import('../../src/mastra/index.ts');
   const pages: KnowledgePage[] = [];
-  for (const [index, credential] of credentials.entries()) {
-    if (index === 3) {
-      pages.push(pages[0]!);
-      continue;
+  if (options.syntheticKnowledge !== false) {
+    for (const [index, credential] of credentials.entries()) {
+      if (index === 3) {
+        pages.push(pages[0]!);
+        continue;
+      }
+      const scope = principals(credential.profile)[1]!;
+      const { page } = await runtime.supportKnowledge.upsertPage({
+        scope,
+        path: 'cases/synthetic',
+        name: `SYNTHETIC case ${index}`,
+        body: `SYNTHETIC_PRIVATE_${index}`,
+        author: 'synthetic-fixture',
+      });
+      await runtime.supportKnowledge.addNote({
+        scope,
+        path: 'cases/synthetic',
+        text: `SYNTHETIC_NOTE_${index}`,
+        author: 'synthetic-fixture',
+      });
+      await runtime.supportKnowledge.upsertPage({
+        scope: `docs:${credential.profile.tenantId}`,
+        path: 'manual',
+        name: 'SYNTHETIC documentation',
+        body: `SYNTHETIC_DOC_${credential.profile.tenantId}`,
+        author: 'synthetic-fixture',
+      });
+      pages.push(page);
     }
-    const scope = principals(credential.profile)[1]!;
-    const { page } = await runtime.supportKnowledge.upsertPage({
-      scope,
-      path: 'cases/synthetic',
-      name: `SYNTHETIC case ${index}`,
-      body: `SYNTHETIC_PRIVATE_${index}`,
-      author: 'synthetic-fixture',
-    });
     await runtime.supportKnowledge.addNote({
-      scope,
-      path: 'cases/synthetic',
-      text: `SYNTHETIC_NOTE_${index}`,
-      author: 'synthetic-fixture',
-    });
-    await runtime.supportKnowledge.upsertPage({
-      scope: `docs:${credential.profile.tenantId}`,
+      scope: 'docs:north',
       path: 'manual',
-      name: 'SYNTHETIC documentation',
-      body: `SYNTHETIC_DOC_${credential.profile.tenantId}`,
+      text: 'SYNTHETIC_FOREIGN_STAMP_1',
+      stamps: ['customer:north:store-2'],
       author: 'synthetic-fixture',
     });
-    pages.push(page);
-  }
-  await runtime.supportKnowledge.addNote({
-    scope: 'docs:north',
-    path: 'manual',
-    text: 'SYNTHETIC_FOREIGN_STAMP_1',
-    stamps: ['customer:north:store-2'],
-    author: 'synthetic-fixture',
-  });
-  for (const tenant of ['north', 'south']) {
-    await runtime.supportKnowledge.upsertPage({
-      scope: `tenant:${tenant}`,
-      path: 'policies/safe-changes',
-      name: 'Synthetic safety policy',
-      body: 'Preserve pending work. Obtain authorization before any disruptive change. Do not reset while offline payments are pending.',
-      author: 'synthetic-fixture',
-    });
+    for (const tenant of ['north', 'south']) {
+      await runtime.supportKnowledge.upsertPage({
+        scope: `tenant:${tenant}`,
+        path: 'policies/safe-changes',
+        name: 'Synthetic safety policy',
+        body: 'Preserve pending work. Obtain authorization before any disruptive change. Do not reset while offline payments are pending.',
+        author: 'synthetic-fixture',
+      });
+    }
   }
   let child: ReturnType<typeof spawn> | undefined;
   let output = '';
   let activeCredentialFile: string | undefined;
   function launchEnvironment(generated: boolean) {
-    const environment: NodeJS.ProcessEnv = { ...process.env, PORT: String(port) };
+    const environment: NodeJS.ProcessEnv = {
+      ...process.env,
+      PORT: String(port),
+      ...(options.example ? { SUPPORT_EXAMPLE: options.example } : {}),
+    };
     if (generated) delete environment.SUPPORT_CREDENTIALS_FILE;
     if (generated && options.studioRole === undefined) delete environment.SUPPORT_STUDIO_ROLE;
     return environment;

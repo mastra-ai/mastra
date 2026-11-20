@@ -1,7 +1,8 @@
 import { fileURLToPath } from 'node:url';
 import type { DatasetConfiguration } from '../mastra/knowledge/seed-manifest.ts';
 import { policyReference, supportConfiguration } from './support.ts';
-import { exampleProfiles } from './retail-pos/profiles.ts';
+import { integrationProfiles } from './runtime.ts';
+import { retailProfiles, exampleProfiles } from './retail-pos/profiles.ts';
 
 const directory = (name: string) => fileURLToPath(new URL(`../../knowledge-datasets/${name}/`, import.meta.url));
 
@@ -19,10 +20,28 @@ export const datasets: Record<string, DatasetConfiguration> = {
       },
     ],
   },
+  'retail-pos-docs': {
+    id: 'retail-pos-docs',
+    directory: directory('retail-pos'),
+    manifestFile: 'docs-manifest.json',
+    profiles: retailProfiles,
+    mandatoryPolicies: [0, 2].map(index => ({
+      profileId: retailProfiles[index]!.id,
+      pageKey: `safety-policy-${index}`,
+      ref: policyReference(retailProfiles[index]!),
+    })),
+  },
+  'retail-pos-history': {
+    id: 'retail-pos-history',
+    directory: directory('retail-pos'),
+    manifestFile: 'history-manifest.json',
+    profiles: retailProfiles,
+    mandatoryPolicies: [],
+  },
   'software-integration': {
     id: 'software-integration',
     directory: directory('software-integration'),
-    profiles: [{ id: 'integration-team', actorId: 'morgan', tenantId: 'software', customerId: 'example-app' }],
+    profiles: integrationProfiles,
     mandatoryPolicies: [
       {
         profileId: 'integration-team',

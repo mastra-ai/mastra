@@ -13,6 +13,8 @@ import { validateProfile, type Profile } from '../identity.ts';
 export interface DatasetConfiguration {
   id: string;
   directory: string;
+  /** Trusted relative manifest filename; content cannot select another root or authority. */
+  manifestFile?: string;
   profiles: Profile[];
   mandatoryPolicies: { profileId: string; pageKey: string; ref?: string }[];
 }
@@ -196,8 +198,10 @@ export async function prepareDataset(config: DatasetConfiguration): Promise<Prep
     profiles.set(profile.id, profile);
   }
   const root = await realpath(config.directory);
-  const manifestPath = await realpath(resolve(root, 'manifest.json'));
-  if (relative(root, manifestPath) !== 'manifest.json') throw new Error('Manifest escapes the dataset');
+  const manifestFile = config.manifestFile ?? 'manifest.json';
+  if (!/^[a-z0-9-]+\.json$/u.test(manifestFile)) throw new Error('Invalid configured manifest filename');
+  const manifestPath = await realpath(resolve(root, manifestFile));
+  if (relative(root, manifestPath) !== manifestFile) throw new Error('Manifest escapes the dataset');
   const manifest = object(
     JSON.parse(await readFile(manifestPath, 'utf8')),
     ['schemaVersion', 'id', 'version', 'pages'],

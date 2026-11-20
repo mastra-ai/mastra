@@ -1,3 +1,4 @@
+import { recordOperation } from '../observability.ts';
 import { readFileSync } from 'node:fs';
 import type { MastraAuthConfig } from '@mastra/core/server';
 import { getWebRequest } from '@mastra/core/server';
@@ -61,7 +62,11 @@ export function createAuth(credentials: CredentialSource, memory: Memory, review
     context,
   ) => {
     const request = getWebRequest(context.req);
-    if (!profile || !request) return false;
+    const started = performance.now();
+    if (!profile || !request) {
+      recordOperation('authorization', 'denied', started);
+      return false;
+    }
 
     const owner = resourceId(profile);
     const requestContext = context.get('requestContext');
@@ -69,7 +74,9 @@ export function createAuth(credentials: CredentialSource, memory: Memory, review
     requestContext.set(MASTRA_KNOWLEDGE_PRINCIPALS_KEY, principals(profile));
 
     const review = await authorizeReviewRoute?.(path, method, request, owner, profile);
-    return review ?? authorizeStudioRoute(path, method, request, owner);
+    const allowed = review ?? (await authorizeStudioRoute(path, method, request, owner));
+    recordOperation('authorization', allowed ? 'success' : 'denied', started);
+    return allowed;
   };
 
   return {

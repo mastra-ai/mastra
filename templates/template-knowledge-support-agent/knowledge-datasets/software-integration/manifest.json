@@ -1,25 +1,39 @@
 {
   "schemaVersion": 1,
   "id": "software-integration",
-  "version": "1",
+  "version": "2026-11-20.1",
   "pages": [
     {
       "key": "request-guide",
       "path": "guides/request-check",
-      "title": "Example request checks",
+      "title": "HTTP 401 authentication checks",
       "file": "request.md",
-      "scope": { "kind": "docs", "profile": "integration-team" },
-      "source": { "kind": "original synthetic fixture", "license": "Apache-2.0" },
-      "links": ["change-policy"]
+      "scope": {
+        "kind": "docs",
+        "profile": "integration-team"
+      },
+      "source": {
+        "kind": "original summary of public HTTP specification",
+        "url": "https://www.rfc-editor.org/rfc/rfc9110.html#name-401-unauthorized",
+        "verifiedOn": "2026-11-20"
+      },
+      "links": ["change-policy"],
+      "kind": "reference"
     },
     {
       "key": "change-policy",
       "path": "policies/safe-changes",
       "title": "Example integration change policy",
       "file": "policy.md",
-      "scope": { "kind": "tenant", "profile": "integration-team" },
+      "scope": {
+        "kind": "tenant",
+        "profile": "integration-team"
+      },
       "kind": "policy",
-      "source": { "kind": "original synthetic fixture", "license": "Apache-2.0" },
+      "source": {
+        "kind": "original synthetic fixture",
+        "license": "Apache-2.0"
+      },
       "links": ["request-guide"]
     },
     {
@@ -27,21 +41,22 @@
       "path": "cases/request-check",
       "title": "Fictional request check",
       "file": "case.md",
-      "scope": { "kind": "customer", "profile": "integration-team" },
+      "scope": {
+        "kind": "customer",
+        "profile": "integration-team"
+      },
       "kind": "case",
       "record": {
         "topicTags": ["requests"],
-        "observedOn": "2026-02-03",
-        "state": "open",
-        "summary": "A fictional integration still needs a response-code check."
+        "observedOn": "2026-11-14",
+        "state": "approved",
+        "summary": "Fictional omitted authentication was corrected; an authorized test returned 200.",
+        "applicability": "Confirmed omitted authentication only, never inferred from a 401 alone."
       },
-      "notes": [
-        {
-          "key": "next-check",
-          "text": "Fictional next step: inspect the example response code using [[request-guide]].",
-          "author": "Example developer"
-        }
-      ]
+      "source": {
+        "kind": "fictional service record",
+        "license": "Apache-2.0"
+      }
     }
   ]
 }

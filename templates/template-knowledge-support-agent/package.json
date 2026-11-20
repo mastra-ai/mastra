@@ -19,9 +19,10 @@
   },
   "dependencies": {
     "@mastra/core": "latest",
-    "@mastra/server": "latest",
     "@mastra/libsql": "latest",
     "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
+    "@mastra/server": "latest",
     "zod": "^4.6.7"
   },
   "devDependencies": {

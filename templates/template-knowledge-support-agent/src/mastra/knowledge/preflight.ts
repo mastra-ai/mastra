@@ -1,3 +1,4 @@
+import { recordOperation } from '../observability.ts';
 import { mastraDBMessageToSignal } from '@mastra/core/agent';
 import { knowledgeScopeAddress } from '@mastra/core/knowledge';
 import type { Knowledge, KnowledgePage } from '@mastra/core/knowledge';
@@ -135,16 +136,21 @@ export function supportPreflight(knowledge: Knowledge): InputProcessor {
     async processInput({ messages, messageList, requestContext, state, abort }) {
       const profile = requestContext?.get('mastra__user') as Profile | undefined;
       if (!profile) return abort('Authenticated profile required');
+      const started = performance.now();
       let policyReady: Awaited<ReturnType<typeof requiredPolicyReady>>;
       try {
         policyReady = await requiredPolicyReady(knowledge, profile);
       } catch {
+        recordOperation('policy', 'unavailable', started);
         return abort('Required safety policy is unavailable. Restore it before requesting actionable guidance.');
       }
-      if (!policyReady)
+      if (!policyReady) {
+        recordOperation('policy', 'missing', started);
         return abort(
           'Required safety policy is missing or unusable. Restore it before requesting actionable guidance.',
         );
+      }
+      recordOperation('policy', 'ready', started);
       state.requiredPolicy = policyReady;
       const latest = [...messages].reverse().find(message => message.role === 'user');
       const question =
@@ -152,7 +158,16 @@ export function supportPreflight(knowledge: Knowledge): InputProcessor {
           .filter(part => part.type === 'text')
           .map(part => part.text)
           .join('\n') ?? '';
-      state.history = await prepareHistory(knowledge, profile, question);
+      const history = await prepareHistory(knowledge, profile, question);
+      state.history = history;
+      recordOperation('preflight', history.status, started, history.records.length);
+      if (history.records.some(record => record.state === 'approved'))
+        recordOperation(
+          'resolution-reuse',
+          'ready',
+          started,
+          history.records.filter(record => record.state === 'approved').length,
+        );
       return messageList;
     },
     processLLMRequest({ prompt, state, messageList, abort }) {

@@ -2,7 +2,9 @@ import { randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mkdir, writeFile, chmod, rm } from 'node:fs/promises';
 import { resolve, dirname, delimiter } from 'node:path';
-import { exampleProfiles, exampleReviewers, exampleStudioRole } from '../src/examples/retail-pos/profiles.ts';
+import { runtimeExample } from '../src/examples/runtime.ts';
+
+const { profiles: exampleProfiles, reviewers: exampleReviewers, role: exampleStudioRole } = runtimeExample;
 import { localDatabaseUrl } from '../src/mastra/database.ts';
 
 const studioRole = process.env.SUPPORT_STUDIO_ROLE ?? exampleStudioRole;
