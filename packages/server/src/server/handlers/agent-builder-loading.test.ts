@@ -23,7 +23,7 @@ describe('agent builder route loading', () => {
 
   it('registers agent builder routes without loading @mastra/agent-builder', { timeout: 10_000 }, async () => {
     const loadAgentBuilder = vi.fn(() => ({
-      agentBuilderWorkflows: {},
+      createAgentBuilderWorkflows: () => ({}),
     }));
 
     vi.doMock('@mastra/agent-builder', loadAgentBuilder);
@@ -36,7 +36,7 @@ describe('agent builder route loading', () => {
 
   it('loads agent builder when an agent builder route is handled', async () => {
     const loadAgentBuilder = vi.fn(() => ({
-      agentBuilderWorkflows: {},
+      createAgentBuilderWorkflows: () => ({}),
     }));
 
     vi.doMock('@mastra/agent-builder', loadAgentBuilder);

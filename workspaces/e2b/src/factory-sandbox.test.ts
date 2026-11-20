@@ -152,6 +152,45 @@ describe('E2BFactorySandbox', () => {
     expect(advertised(new E2BFactorySandbox({}))).toBe(5);
   });
 
+  it('resolves an env function per session so a credential reaches one factory only', () => {
+    const sandbox = new E2BFactorySandbox({
+      env: ctx => (ctx.factoryId === 'fac-platform' ? { TOKEN: 't' } : {}),
+    });
+    const envOf = (factoryId: string) =>
+      (sandbox.create({ ...context(), factoryId }, {}) as any)._constructorOptions.env;
+    expect(envOf('fac-platform')).toEqual({ TOKEN: 't' });
+    expect(envOf('fac-mastra')).toEqual({});
+  });
+
+  describe('Factory build env from the context', () => {
+    const withBuild = (buildEnv: Record<string, string>, buildEnvRevision?: string): FactorySandboxContext => ({
+      ...context(),
+      buildEnv,
+      ...(buildEnvRevision ? { buildEnvRevision } : {}),
+    });
+
+    it('names the template by the revision and keeps values out of the name and runtime env', async () => {
+      const sandbox = new E2BFactorySandbox({ env: { HOST: 'h' } });
+      const refOf = async (ctx: FactorySandboxContext) => (await sandbox.template(ctx, {})!.resolveSpec()).ref;
+      const plain = await refOf(context());
+      const a = await refOf(withBuild({ NPM_TOKEN: 'sentinel-one' }, 'rev-a'));
+      expect(await refOf(withBuild({ NPM_TOKEN: 'sentinel-two' }, 'rev-a'))).toBe(a);
+      expect(await refOf(withBuild({ NPM_TOKEN: 'sentinel-one' }, 'rev-b'))).not.toBe(a);
+      expect(a).not.toBe(plain);
+      expect(a).toBe(
+        repoTemplateRef({ cloneUrl: CLONE_URL, setupCommand: SETUP, sha: SHA, buildEnvRevision: 'rev-a' }),
+      );
+      // Without a revision the value alone must not rename the template.
+      expect(await refOf(withBuild({ NPM_TOKEN: 'sentinel-one' }))).toBe(plain);
+
+      const spec = await sandbox.template(withBuild({ NPM_TOKEN: 'sentinel-one' }, 'rev-a'), {})!.resolveSpec();
+      expect(await Template.toJSON(spec.template as never, false)).toContain('sentinel-one');
+      const runtimeEnv = (sandbox.create(withBuild({ NPM_TOKEN: 'sentinel-one' }, 'rev-a'), {}) as any)
+        ._constructorOptions.env;
+      expect(runtimeEnv).toEqual({ HOST: 'h' });
+    });
+  });
+
   describe('builds', () => {
     const sandbox = new E2BFactorySandbox({ apiKey: 'e2b_test' });
     const ref = repoTemplateRef({ cloneUrl: CLONE_URL, setupCommand: SETUP, sha: SHA });
@@ -282,6 +321,24 @@ describe('E2BFactorySandbox', () => {
 
       sdk.templatesGet.mockResolvedValue({ error: { code: 401, message: 'nope' } });
       await expect(sandbox.builds.list!(context(), {})).rejects.toThrow(/E2B template listing failed/);
+    });
+
+    it('list looks up the template named by the build env revision', async () => {
+      const revisioned = repoTemplateRef({
+        cloneUrl: CLONE_URL,
+        setupCommand: SETUP,
+        sha: SHA,
+        buildEnvRevision: 'rev-a',
+      });
+      const name = revisioned.slice(0, revisioned.lastIndexOf(':'));
+      sdk.templatesGet.mockImplementation(async (path: string) =>
+        path === '/templates'
+          ? { data: [{ templateID: 'tpl_rev', names: [name], aliases: [] }] }
+          : { data: { templateID: 'tpl_rev', builds: [{ buildID: 'bld_1', status: 'ready', createdAt: 'x' }] } },
+      );
+      const ctx = { ...context(), buildEnv: { NPM_TOKEN: 'v' }, buildEnvRevision: 'rev-a' };
+      expect((await sandbox.builds.list!(ctx, {})).map(b => b.buildId)).toEqual(['tpl_rev:bld_1']);
+      expect(await sandbox.builds.list!(context(), {})).toEqual([]);
     });
   });
 });

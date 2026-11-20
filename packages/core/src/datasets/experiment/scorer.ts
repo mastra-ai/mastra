@@ -598,7 +598,7 @@ export async function runStepScorersForItem(
                 input: stepInput,
                 output: stepOutput,
                 additionalContext: { ...item.metadata, stepId },
-                entityType: 'WORKFLOW_STEP',
+                entityType: 'STEP',
                 entityId: itemId,
                 source: 'TEST',
                 runId,

@@ -916,3 +916,74 @@ describe('AuthStorage multi-account registry', () => {
     expect(storage.listAccounts(CODEX)[0]!.id).toBe(legacyId);
   });
 });
+
+describe('AuthStorage.removeStoredApiKey', () => {
+  const ENV = 'ACME_CLOUD_API_KEY';
+
+  afterEach(() => {
+    delete process.env[ENV];
+  });
+
+  it('unsets the variable a saved key was exported to', () => {
+    const { storage } = makeStorage();
+    storage.setStoredApiKey('acme-cloud', 'sk-saved', ENV);
+    expect(process.env[ENV]).toBe('sk-saved');
+
+    storage.removeStoredApiKey('acme-cloud');
+
+    expect(storage.getStoredApiKey('acme-cloud')).toBeUndefined();
+    expect(process.env[ENV]).toBeUndefined();
+  });
+
+  it('gives back the key the process was started with', () => {
+    process.env[ENV] = 'sk-server';
+    const { storage } = makeStorage();
+    storage.setStoredApiKey('acme-cloud', 'sk-first', ENV);
+    storage.setStoredApiKey('acme-cloud', 'sk-second', ENV);
+    expect(process.env[ENV]).toBe('sk-second');
+
+    storage.removeStoredApiKey('acme-cloud');
+
+    expect(process.env[ENV]).toBe('sk-server');
+  });
+
+  it('gives back the server key even when the saved key has the same value', () => {
+    process.env[ENV] = 'sk-same';
+    const { storage } = makeStorage();
+    storage.setStoredApiKey('acme-cloud', 'sk-same', ENV);
+
+    storage.removeStoredApiKey('acme-cloud');
+
+    expect(process.env[ENV]).toBe('sk-same');
+  });
+
+  it('unsets a key loaded into the environment at startup', () => {
+    const { storage } = makeStorage({ 'apikey:acme-cloud': { type: 'api_key', key: 'sk-saved' } });
+    storage.loadStoredApiKeysIntoEnv({ 'acme-cloud': ENV });
+    expect(process.env[ENV]).toBe('sk-saved');
+
+    storage.removeStoredApiKey('acme-cloud');
+
+    expect(process.env[ENV]).toBeUndefined();
+  });
+
+  it('unsets a key that replaced one loaded at startup, instead of restoring the replaced key', () => {
+    const { storage } = makeStorage({ 'apikey:acme-cloud': { type: 'api_key', key: 'sk-old' } });
+    storage.loadStoredApiKeysIntoEnv({ 'acme-cloud': ENV });
+    storage.setStoredApiKey('acme-cloud', 'sk-new', ENV);
+
+    storage.removeStoredApiKey('acme-cloud');
+
+    expect(process.env[ENV]).toBeUndefined();
+  });
+
+  it('leaves a variable that changed after the export', () => {
+    const { storage } = makeStorage();
+    storage.setStoredApiKey('acme-cloud', 'sk-saved', ENV);
+    process.env[ENV] = 'sk-set-elsewhere';
+
+    storage.removeStoredApiKey('acme-cloud');
+
+    expect(process.env[ENV]).toBe('sk-set-elsewhere');
+  });
+});

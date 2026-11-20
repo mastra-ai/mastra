@@ -24,8 +24,8 @@ describe('getIntegrationItems', () => {
     expect(mastra).toBeDefined()
     if (!mastra) return
 
-    expect(getIntegrationItemKey(mastra)).toBe('/docs/mastra-platform/deploy')
-    expect(getIntegrationItemHref(mastra)).toBe('/docs/mastra-platform/deploy')
+    expect(getIntegrationItemKey(mastra)).toBe('/docs/mastra-platform/deploy/overview')
+    expect(getIntegrationItemHref(mastra)).toBe('/docs/mastra-platform/deploy/overview')
   })
 
   it('inserts additional items into the section label order', () => {

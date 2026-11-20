@@ -115,8 +115,12 @@ async function measureRun(engine: 'default' | 'evented', toolIterations: number)
     tools: { echoTool },
   });
 
+  // Measures v1 writes. The default engine's v1 and v2 writes are compared in
+  // workflows/__tests__/snapshot-write-amplification.test.ts.
   const durableAgent =
-    engine === 'evented' ? createEventedAgent({ agent: baseAgent }) : createDurableAgent({ agent: baseAgent });
+    engine === 'evented'
+      ? createEventedAgent({ agent: baseAgent, storageVersion: 1 })
+      : createDurableAgent({ agent: baseAgent, storageVersion: 1 });
 
   const store = new InMemoryStore();
   const mastra = new Mastra({

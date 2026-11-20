@@ -215,7 +215,6 @@ describe('cross-process workflow event guard', () => {
           stepResults: {},
           resume: false,
           stepId: 'stream',
-          stepGraph: [],
         },
       },
     } as Event;

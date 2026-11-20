@@ -1,25 +1,15 @@
 /**
  * Neon Auth RBAC provider for Mastra.
  *
- * Maps Neon Auth organization roles (via Better Auth's Organization plugin)
+ * Maps Neon Auth organization roles (from the Organization plugin)
  * to Mastra permissions using a configurable role mapping.
  */
 
 import type { IRBACProvider, RoleMapping } from '@mastra/core/auth/ee';
 import { resolvePermissionsFromMapping, matchesPermission } from '@mastra/core/auth/ee';
 
+import { getLinkedNeonUser, getRememberedSessionCookie, stripTrailingSlashes } from './session-cookie';
 import type { NeonAuthUser } from './index';
-
-/**
- * Response shape from the Neon Auth organization member endpoint.
- */
-interface NeonOrgMember {
-  id: string;
-  organizationId: string;
-  userId: string;
-  role: string;
-  createdAt: string;
-}
 
 export interface NeonRoleMappingOptions {
   /** Cache TTL in milliseconds (default: 60_000) */
@@ -30,12 +20,12 @@ export interface NeonRoleMappingOptions {
 
 export interface MastraRBACNeonOptions {
   /**
-   * Base URL for the Neon Auth service.
-   * Falls back to `NEON_AUTH_BASE_URL` env var.
+   * The Neon Auth URL.
+   * Falls back to the `NEON_AUTH_BASE_URL` environment variable.
    */
   baseUrl?: string;
   /**
-   * Map provider role slugs to arrays of Mastra permission patterns.
+   * Map Neon Auth role names to arrays of Mastra permission patterns.
    * Use `_default` for roles not explicitly listed.
    *
    * @example
@@ -50,15 +40,16 @@ export interface MastraRBACNeonOptions {
    */
   roleMapping: RoleMapping;
   /**
-   * Specific organization ID to scope role lookups to.
-   * If omitted, roles from all organizations are merged.
+   * Organization whose membership role is used.
+   * When omitted, the session's active organization is used.
    */
   organizationId?: string;
   /** Caching options for role lookups. */
   cache?: NeonRoleMappingOptions;
   /**
-   * Custom function to extract roles from the NeonAuthUser object.
-   * Useful when JWT claims already contain role info.
+   * Custom function to resolve roles for a user.
+   * Use this for bearer JWT requests when roles live outside Neon Auth organizations,
+   * since Neon Auth JWTs don't carry organization roles.
    */
   getUserRoles?: (user: NeonAuthUser) => string[] | Promise<string[]>;
 }
@@ -71,14 +62,28 @@ interface CacheEntry {
   expiresAt: number;
 }
 
+function splitRoles(role: string | null | undefined): string[] {
+  if (!role) return [];
+  return role
+    .split(',')
+    .map(r => r.trim())
+    .filter(Boolean);
+}
+
 /**
  * RBAC provider for Neon Auth that maps organization roles to Mastra permissions.
  *
- * Neon Auth uses Better Auth's Organization plugin which provides `owner`,
- * `admin`, and `member` roles. This provider maps those roles to Mastra
- * permission patterns via a configurable `roleMapping`.
+ * Roles are resolved in this order:
+ * 1. `getUserRoles`, when provided.
+ * 2. When `organizationId` is set or the session has an active organization:
+ *    the user's role in that organization, read from Neon Auth with the
+ *    user's session cookie. Non-members get no roles.
+ * 3. Otherwise: the user's Neon Auth role (for example `user` or `admin`).
  *
- * @example Static mapping
+ * Bearer JWT requests carry no session, so no roles resolve (and no
+ * permissions are granted) unless `getUserRoles` is provided.
+ *
+ * @example
  * ```typescript
  * import { MastraRBACNeon } from '@mastra/auth-neon';
  *
@@ -88,20 +93,6 @@ interface CacheEntry {
  *     admin: ['*'],
  *     member: ['agents:read', 'workflows:*'],
  *     _default: [],
- *   },
- * });
- * ```
- *
- * @example With custom role extraction from JWT claims
- * ```typescript
- * const rbac = new MastraRBACNeon({
- *   roleMapping: {
- *     admin: ['*'],
- *     member: ['agents:read'],
- *   },
- *   getUserRoles: (user) => {
- *     const role = user.jwt?.role as string;
- *     return role ? [role] : [];
  *   },
  * });
  * ```
@@ -119,49 +110,33 @@ export class MastraRBACNeon implements IRBACProvider<NeonAuthUser> {
 
   constructor(options: MastraRBACNeonOptions) {
     this.options = options;
-    const rawUrl = options.baseUrl ?? process.env.NEON_AUTH_BASE_URL ?? '';
-    let end = rawUrl.length;
-    while (end > 0 && rawUrl[end - 1] === '/') {
-      end--;
-    }
-    this.baseUrl = rawUrl.slice(0, end);
+    this.baseUrl = stripTrailingSlashes(options.baseUrl ?? process.env.NEON_AUTH_BASE_URL ?? '');
     this.cacheTtlMs = options.cache?.ttlMs ?? DEFAULT_CACHE_TTL_MS;
     this.cacheMaxSize = options.cache?.maxSize ?? DEFAULT_CACHE_MAX_SIZE;
   }
 
-  async getRoles(user: NeonAuthUser): Promise<string[]> {
+  async getRoles(input: NeonAuthUser): Promise<string[]> {
+    // `GET /auth/me` passes the EEUser returned by getCurrentUser().
+    const user = (input && 'user' in input ? input : getLinkedNeonUser(input)) as NeonAuthUser | undefined;
+    if (!user) return [];
+
     if (this.options.getUserRoles) {
       return this.options.getUserRoles(user);
-    }
-
-    // Try extracting role from JWT claims first (fast path).
-    if (user.jwt) {
-      const role = user.jwt.role as string | undefined;
-      if (role) return [role];
     }
 
     const userId = user.user?.id;
     if (!userId) return [];
 
-    // Check cache (promote on hit for LRU eviction).
-    const cached = this.rolesCache.get(userId);
-    if (cached && cached.expiresAt > Date.now()) {
-      this.rolesCache.delete(userId);
-      this.rolesCache.set(userId, cached);
-      return cached.roles;
+    const organizationId = this.options.organizationId ?? user.session?.activeOrganizationId ?? undefined;
+    const sessionCookie = getRememberedSessionCookie(user);
+
+    if (organizationId) {
+      // Organization-scoped: only the membership role counts, so a non-member
+      // never inherits permissions from their app-wide Neon Auth role.
+      return sessionCookie ? this.getOrganizationRoles(userId, organizationId, sessionCookie) : [];
     }
 
-    // Fetch organization memberships from Neon Auth.
-    const roles = await this.fetchRolesFromNeonAuth(userId);
-
-    // Cache the result.
-    if (this.rolesCache.size >= this.cacheMaxSize) {
-      const firstKey = this.rolesCache.keys().next().value;
-      if (firstKey) this.rolesCache.delete(firstKey);
-    }
-    this.rolesCache.set(userId, { roles, expiresAt: Date.now() + this.cacheTtlMs });
-
-    return roles;
+    return splitRoles(user.user.role);
   }
 
   async hasRole(user: NeonAuthUser, role: string): Promise<boolean> {
@@ -199,34 +174,49 @@ export class MastraRBACNeon implements IRBACProvider<NeonAuthUser> {
     return resolvePermissionsFromMapping([roleId], this.options.roleMapping);
   }
 
+  private async getOrganizationRoles(userId: string, organizationId: string, sessionCookie: string): Promise<string[]> {
+    const cacheKey = `${userId}:${organizationId}`;
+    const cached = this.rolesCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      // Promote on hit for LRU eviction.
+      this.rolesCache.delete(cacheKey);
+      this.rolesCache.set(cacheKey, cached);
+      return cached.roles;
+    }
+
+    const roles = await this.fetchOrganizationRoles(organizationId, sessionCookie);
+    if (roles === null) return [];
+
+    if (this.rolesCache.size >= this.cacheMaxSize) {
+      const firstKey = this.rolesCache.keys().next().value;
+      if (firstKey) this.rolesCache.delete(firstKey);
+    }
+    this.rolesCache.set(cacheKey, { roles, expiresAt: Date.now() + this.cacheTtlMs });
+    return roles;
+  }
+
   /**
-   * Fetch organization membership roles from Neon Auth.
-   *
-   * Uses Better Auth's `organization/list-memberships` admin API.
-   * Falls back to empty roles on error (default permissions will apply).
+   * Reads the signed-in user's role in an organization from Neon Auth.
+   * Returns `[]` when the user is not a member, or `null` when the lookup
+   * failed and the result should not be cached.
    */
-  private async fetchRolesFromNeonAuth(userId: string): Promise<string[]> {
-    if (!this.baseUrl) return [];
+  private async fetchOrganizationRoles(organizationId: string, sessionCookie: string): Promise<string[] | null> {
+    if (!this.baseUrl) return null;
 
     try {
-      const response = await fetch(`${this.baseUrl}/auth/api/organization/list-memberships`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId }),
-      });
+      const url = new URL(`${this.baseUrl}/organization/get-active-member-role`);
+      url.searchParams.set('organizationId', organizationId);
+      const response = await fetch(url, { headers: { Cookie: sessionCookie } });
 
-      if (!response.ok) return [];
+      // 403 means "not a member" and is safe to cache. Anything else (expired
+      // session, rate limit, outage) is transient and must not be cached.
+      if (response.status === 403) return [];
+      if (!response.ok) return null;
 
-      const data = (await response.json()) as NeonOrgMember[] | { data?: NeonOrgMember[] };
-      const memberships = Array.isArray(data) ? data : (data.data ?? []);
-
-      const relevant = this.options.organizationId
-        ? memberships.filter(m => m.organizationId === this.options.organizationId)
-        : memberships;
-
-      return relevant.map(m => m.role);
+      const data = (await response.json()) as { role?: string | null } | null;
+      return splitRoles(data?.role);
     } catch {
-      return [];
+      return null;
     }
   }
 }

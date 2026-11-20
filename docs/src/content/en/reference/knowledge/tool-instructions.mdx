@@ -1,0 +1,58 @@
+---
+title: 'Reference: Tool instructions | Knowledge'
+description: 'The usage instructions Knowledge adds to agents with its tools, and how to change or turn them off.'
+packages:
+  - '@mastra/core'
+---
+
+# Tool instructions
+
+When Knowledge attaches tools to an agent, it also adds a short instruction block that explains how to use them. Each part is included only when its tools are on:
+
+- **Read** tells the agent to:
+  - Search with `knowledge_search` before answering, and read a page with `knowledge_read` before relying on it.
+  - List a scope or section with `knowledge_list` to see how it's organized.
+  - Read a long page whole first, then the section it needs from the headings shown.
+  - Follow `more` instead of assuming a result was complete.
+  - Cite the page or note it used, and say so when nothing is found.
+  - Show both notes with their dates when they disagree.
+- **Write** tells the agent to:
+  - Add one durable fact per note with `knowledge_note`, on the page it's about.
+  - Add to an existing page before creating one.
+  - Put long-form text, such as runbooks, in a page body with `knowledge_page`.
+  - Record a change as a new dated note, and remove only notes that are wrong.
+- **Pins** tells the agent to:
+  - Pin only standing instructions, durable preferences and firm constraints that apply without being asked for.
+  - Keep pinned pages short, and unpin a page once it stops being true.
+
+The text depends only on which tools are on and on your override. It never depends on the run's scopes, pinned pages or search results, so it doesn't break prompt caching.
+
+:::alpha
+
+Knowledge is in alpha. Its API may change between releases.
+
+:::
+
+## Override the instructions
+
+```typescript
+import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge'
+
+const knowledge = new Knowledge({
+  id: 'company',
+  tools: true,
+  scopes: { ...knowledgeMemoryScopes() },
+  // instructions: false, to remove the block
+  // instructions: 'Your own text', to replace it
+  instructions: ({ read, write, pins }) => `${read}\n${write}\n${pins}\nAlways answer in French.`,
+})
+```
+
+The function receives the default text for each part as `read`, `write` and `pins`, with an empty string for parts that are off. Return the same string for the same inputs, or the prompt cache stops working.
+
+To add the block when you wire tools yourself, call `knowledge.getInstructions({ read: true, write: true, pinnedContext: false })`.
+
+## Related
+
+- [Knowledge tools](/reference/knowledge/knowledge-tools)
+- [`getInstructions()`](/reference/knowledge/knowledge-class#getinstructions)

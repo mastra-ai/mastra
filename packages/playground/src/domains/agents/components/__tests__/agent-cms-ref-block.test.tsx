@@ -89,7 +89,7 @@ describe('AgentCMSRefBlock', () => {
       expect(await screen.findByText('Live Block')).not.toBeNull();
       expect(screen.queryByText('Draft')).toBeNull();
       expect(screen.queryByText('Unpublished edits')).toBeNull();
-      expect(screen.queryByText(/skips it at runtime/)).toBeNull();
+      expect(screen.queryByText(/skipped at runtime/)).toBeNull();
     });
   });
 

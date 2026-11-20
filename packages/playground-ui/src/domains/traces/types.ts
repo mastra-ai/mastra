@@ -1,8 +1,11 @@
 import type { EntityType } from '@mastra/core/observability';
-import type { LightSpanRecord } from '@mastra/react/hooks/traces';
+import type { LightSpanRecord, TraceSpansData } from '@mastra/react/hooks/traces';
 import type { ReactNode } from 'react';
 
 export type { LightSpanRecord, SpanRecord } from '@mastra/react/hooks/traces';
+
+/** A span of a whole trace with its payload, as `getTrace` returns it (the light record plus input, output, attributes…). */
+export type TraceSpanRecord = TraceSpansData['spans'][number];
 
 /**
  * A light span carrying a precomputed haystack of everything it holds.
@@ -54,8 +57,13 @@ export type EntityOptions =
 
 export type TraceDatePreset = 'all' | 'last-24h' | 'last-3d' | 'last-7d' | 'last-14d' | 'last-30d' | 'custom';
 
+/** Tabs of SpanDataPanelView, in display order. */
+export const SPAN_TABS = ['details', 'input', 'output', 'feedback'] as const;
+
 /** Tab identifier for SpanDataPanelView. */
-export type SpanTab = 'details' | 'feedback';
+export type SpanTab = (typeof SPAN_TABS)[number];
+
+export const isSpanTab = (value: unknown): value is SpanTab => SPAN_TABS.includes(value as SpanTab);
 
 /** Canonical list of context field IDs used for trace filtering and value extraction */
 export const CONTEXT_FIELD_IDS = [

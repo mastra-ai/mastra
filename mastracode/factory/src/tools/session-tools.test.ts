@@ -7,15 +7,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry } from '../boards/index.js';
 import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.js';
 import { fakeRouteAuth } from '../routes/test-utils.js';
-import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { resolveFactoryCredentialTenant } from '../session/credential-policy.js';
 import { createSourceControlSessionLookup } from '../session/factory-session.js';
-import {
-  FACTORY_OPEN_RUN_STALE_MS,
-  FACTORY_OPEN_RUNS_SETTING,
-  isOpenRunLiveElsewhere,
-  listSessionOpenRuns,
-} from '../session/run-audit.js';
+import { FACTORY_OPEN_RUNS_SETTING } from '../session/run-audit.js';
 import { AuditDomain } from '../storage/domains/audit/domain.js';
 import type { SourceControlSessionVisibility } from '../storage/domains/source-control/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -25,7 +19,7 @@ import { createSessionRunEndReporter } from './reports.js';
 import { observeSessionRunReports } from './run-watch.js';
 import { FACTORY_INTERACTIVE_KEY, resolveFactoryToolScope } from './scope.js';
 import type { FactoryToolScope } from './scope.js';
-import { FACTORY_TOOLS_OWNER_ID, createFactorySessionTools } from './session-tools.js';
+import { createFactorySessionTools } from './session-tools.js';
 import { createFactoryTools } from './index.js';
 import type { FactoryToolDependencies } from './index.js';
 
@@ -61,9 +55,6 @@ async function seedFactory(parentVisibility: SourceControlSessionVisibility = 'o
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    createdByUserId: 'owner',
-    sandboxProvider: 'local',
-    sandboxWorkdir: '/sandbox/mastra',
   });
   await sourceControl.sessions.create({
     sessionId: 'parent-session',
@@ -196,21 +187,16 @@ function fakeController(calls: string[], onSessionCreated: (session: FakeSession
 }
 
 type FakeSession = Awaited<ReturnType<ReturnType<typeof fakeController>['controller']['createSession']>>;
-type Prepare = FactoryStartCoordinator['prepare'];
 
 async function setup(
   parentVisibility: SourceControlSessionVisibility = 'org',
   {
-    coordinator: coordinatorOption = 'real',
-    wrapPrepare,
     deploymentProviders,
     tenantCredentials = false,
     interactive = true,
   }: {
     /** False for a turn nobody signed in started: a notification wake, webhook, or rule notice. */
     interactive?: boolean;
-    coordinator?: 'real' | 'none';
-    wrapPrepare?: (prepare: Prepare) => Prepare;
     /** Deployed mode: model switches check the target session's stored credentials. */
     tenantCredentials?: boolean;
     deploymentProviders?: ReadonlySet<string>;
@@ -230,19 +216,6 @@ async function setup(
       }),
     ),
   );
-  const transition = vi.fn(async () => {
-    throw new Error('a work-item start must not commit a transition');
-  });
-  const realCoordinator = new FactoryStartCoordinator(
-    controller as never,
-    seeded.seed.workItems,
-    { transition },
-    seeded.sourceControl,
-    undefined,
-    { projects: seeded.seed.projects, modelDefaults: seeded.seed.modelDefaults },
-  );
-  const realPrepare: Prepare = request => realCoordinator.prepare(request);
-  const prepare = vi.fn<Prepare>(wrapPrepare ? wrapPrepare(realPrepare) : realPrepare);
   const audit = new AuditDomain({ auth: fakeRouteAuth(), audit: seeded.seed.audit, projects: seeded.seed.projects });
   // Reports land through the real delivery helper into a real notifications store; every session is live.
   const notifications = new InMemoryNotificationsStorage();
@@ -306,7 +279,6 @@ async function setup(
     workItems: seeded.seed.workItems,
     boards: createBoardRegistry(),
     auditRecorder: audit,
-    startCoordinator: () => (coordinatorOption === 'none' ? undefined : { prepare }),
   };
   const toolsFor = (scope: FactoryToolScope) => {
     const tools = createFactorySessionTools(scope, deps);
@@ -335,8 +307,6 @@ async function setup(
     start,
     switchModel,
     tool,
-    prepare,
-    transition,
     notifications,
     reports,
   };
@@ -471,13 +441,50 @@ describe('factory_switch_session_model with stored credentials', () => {
     expect(env.controller.setThreadModel).toHaveBeenCalledTimes(1);
   });
 
+  /** An organization-wide endpoint, the session owner's own, and another member's. */
+  async function seedCustomProviders(env: Awaited<ReturnType<typeof tenantSetup>>) {
+    const endpoint = (id: string) => ({
+      providerId: id,
+      name: id,
+      url: `https://llm.${id}.test/v1`,
+      apiKey: id,
+      models: [`${id}-1`],
+    });
+    await env.seed.customProviders.create({ owner: { orgId: 'org-1' }, createdBy: 'owner', input: endpoint('acme') });
+    await env.seed.customProviders.create({
+      owner: { orgId: 'org-1', userId: 'user-1' },
+      createdBy: 'user-1',
+      input: endpoint('mine'),
+    });
+    await env.seed.customProviders.create({
+      owner: { orgId: 'org-1', userId: 'someone-else' },
+      createdBy: 'someone-else',
+      input: endpoint('theirs'),
+    });
+  }
+
+  it("lets a user-scoped session use its owner's custom providers, not the Factory's or another member's", async () => {
+    const env = await tenantSetup('user');
+    await seedCustomProviders(env);
+
+    await expect(env.switchModel({ sessionId: env.sessionId })).resolves.toEqual({
+      sessionId: env.sessionId,
+      models: ['anthropic/claude-opus-5-5', 'mine/mine-1'],
+    });
+    await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'mine/mine-1' })).resolves.toMatchObject({
+      modelId: 'mine/mine-1',
+    });
+    await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'acme/acme-1' })).rejects.toThrow(
+      'Unknown model acme/acme-1.',
+    );
+    await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'theirs/theirs-1' })).rejects.toThrow(
+      'Unknown model theirs/theirs-1.',
+    );
+  });
+
   it('lets a Factory-scoped session use the Factory credentials and its custom providers, not the owner credentials', async () => {
     const env = await tenantSetup('factory');
-    await env.seed.customProviders.upsert({
-      orgId: 'org-1',
-      userId: 'owner',
-      input: { providerId: 'acme', name: 'Acme', url: 'https://llm.acme.test/v1', apiKey: 'acme', models: ['acme-1'] },
-    });
+    await seedCustomProviders(env);
     env.controller.getSession.mockResolvedValue(null);
 
     await expect(env.switchModel({ sessionId: env.sessionId })).resolves.toEqual({
@@ -652,11 +659,14 @@ describe('factory_start_session in side mode', () => {
     expect(page.events).toEqual([]);
   });
 
-  it('rejects a role without a work item', async () => {
+  // Starting a card's role here skipped the board's rules (its phase, a busy card), so card work goes
+  // through factory_transition_work_item, as the board's buttons do.
+  it("refuses to start a role on a card, which only the board's moves start", async () => {
     const { tool } = await setup();
     const schema = (tool as unknown as { inputSchema: { safeParse: (input: unknown) => { success: boolean } } })
       .inputSchema;
-    expect(schema.safeParse({ prompt: 'Go.', role: 'work' }).success).toBe(false);
+    expect(schema.safeParse({ prompt: 'Review it.', workItem: '#1', role: 'review' }).success).toBe(false);
+    expect(schema.safeParse({ prompt: 'Review it.', workItem: '#1' }).success).toBe(false);
     expect(schema.safeParse({ prompt: 'Go.' }).success).toBe(true);
   });
 
@@ -933,400 +943,6 @@ describe('the side session it starts', () => {
   });
 });
 
-describe('factory_start_session in work-item mode', () => {
-  type Started = {
-    mode: string;
-    workItem: { id: string; number?: number };
-    role: string;
-    sessionId: string;
-    threadId: string;
-    bindingId: string;
-    replacedSessionId?: string;
-  };
-
-  async function withItem(...args: Parameters<typeof setup>) {
-    const env = await setup(...args);
-    const { item } = await env.seed.workItems.upsert({
-      orgId: 'org-1',
-      userId: 'someone-else',
-      factoryProjectId: env.scope.factoryProjectId,
-      input: { title: 'Speed up the nightly build', stages: ['intake'], metadata: {} },
-    });
-    const subscriptions = () =>
-      env.seed.workItems.listSessionSubscriptions({
-        orgId: 'org-1',
-        factoryProjectId: env.scope.factoryProjectId,
-        sessionId: env.scope.sessionId,
-      });
-    const sessionRows = () =>
-      env.sourceControl.sessions.list({ projectRepositoryId: env.projectRepository.id, viewerUserId: 'user-1' });
-    const bindings = () => env.seed.workItems.listRunBindings('org-1', env.scope.factoryProjectId, item.id);
-    const bindOther = (sessionId: string) =>
-      env.seed.workItems.prepareRunStart({
-        orgId: 'org-1',
-        userId: 'someone-else',
-        factoryProjectId: env.scope.factoryProjectId,
-        workItem: { id: item.id, input: { title: item.title, stages: item.stages } },
-        role: 'work',
-        session: { sessionId, branch: `factory/${sessionId}`, threadId: `${sessionId}-thread` },
-        resourceId: sessionId,
-        kickoffKey: `kickoff-${sessionId}`,
-        kickoffMessage: null,
-      });
-    return { ...env, item, subscriptions, sessionRows, bindings, bindOther };
-  }
-
-  it("binds the role to a new session owned by the caller, kicks it off with the prompt, and doesn't move the card", async () => {
-    const { start, item, seed, sessions, created, transition, bindings, scope } = await withItem();
-
-    const result = (await start({ prompt: 'Profile the build.', workItem: item.id, role: 'work' })) as Started;
-
-    expect(result).toMatchObject({ mode: 'work-item', workItem: { id: item.id }, role: 'work' });
-    await expect(sessions.getBySessionId(result.sessionId)).resolves.toMatchObject({
-      userId: 'user-1',
-      visibility: 'org',
-      originSessionId: null,
-      factoryProjectId: scope.factoryProjectId,
-    });
-    const session = created.find(entry => entry.options.id === result.sessionId)!.session;
-    expect(session.state.get()).toMatchObject({ factoryOwnerUserId: 'user-1' });
-    expect(session.sendSignal).toHaveBeenCalledTimes(1);
-    expect(session.sendSignal.mock.calls[0]![0]).toMatchObject({ type: 'user', contents: 'Profile the build.' });
-    const kickoff = session.sendSignal.mock.calls[0]![1].requestContext;
-    expect([...kickoff.keys()]).toEqual(['user']);
-    expect(kickoff.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
-
-    expect(await bindings()).toEqual([
-      expect.objectContaining({ id: result.bindingId, role: 'work', sessionId: result.sessionId, status: 'active' }),
-    ]);
-    expect(transition).not.toHaveBeenCalled();
-    const after = (await seed.workItems.get({ orgId: 'org-1', id: item.id }))!;
-    expect(after.stages).toEqual(item.stages);
-    expect(after.autonomyArmedAt).toEqual(item.autonomyArmedAt);
-    expect(after.sessions.work).toMatchObject({ sessionId: result.sessionId });
-  });
-
-  it('starts a work-item run shared with the org even from a private session', async () => {
-    const { start, item, sessions, sourceControl } = await withItem('private');
-
-    const result = (await start({ prompt: 'Profile the build.', workItem: item.id, role: 'work' })) as Started;
-
-    await expect(sessions.getBySessionId(result.sessionId)).resolves.toMatchObject({ visibility: 'org' });
-    const teammateSees = await sourceControl.sessions.list({
-      projectRepositoryId: (await sessions.getBySessionId(result.sessionId))!.projectRepositoryId,
-      viewerUserId: 'user-2',
-    });
-    expect(teammateSees.map(row => row.sessionId)).toContain(result.sessionId);
-  });
-
-  it("calls the coordinator with no destination stage and the project's model scope", async () => {
-    const { start, item, prepare, scope } = await withItem();
-    const result = (await start({ prompt: 'Go.', workItem: item.id, role: 'work' })) as Started;
-
-    expect(prepare).toHaveBeenCalledTimes(1);
-    const request = prepare.mock.calls[0]![0];
-    expect(request).toMatchObject({
-      orgId: 'org-1',
-      userId: 'user-1',
-      factoryProjectId: scope.factoryProjectId,
-      sessionId: result.sessionId,
-      threadTitle: '"Speed up the nightly build" work',
-      modelScope: 'user',
-      workItem: { id: item.id, role: 'work', input: { title: item.title } },
-    });
-    expect(request).not.toHaveProperty('destinationStage');
-    expect(request.requestContext).toBeUndefined();
-  });
-
-  it("starts a work-item role in a hybrid Factory on the Factory's scope, like the Start route", async () => {
-    const env = await withItem();
-    await env.seed.projects.update({ orgId: 'org-1', id: env.scope.factoryProjectId, input: { modelScope: 'hybrid' } });
-    await env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' });
-
-    expect(env.prepare.mock.calls[0]![0]).toMatchObject({ modelScope: 'factory' });
-  });
-
-  it("bills the work-item session to the caller's credential tenant", async () => {
-    const { start, item, seed, sessions } = await withItem();
-    const result = (await start({ prompt: 'Go.', workItem: item.id, role: 'work' })) as Started;
-
-    const tenantFor = (resourceId: string, threadId: string) => {
-      const requestContext = new RequestContext();
-      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
-      requestContext.set('controller', { sessionId: resourceId, resourceId, threadId });
-      return resolveFactoryCredentialTenant(requestContext, {
-        projects: seed.projects,
-        sourceControl: sessions,
-        workItems: seed.workItems,
-      });
-    };
-    const parent = await tenantFor('parent-session', 'parent-thread');
-    expect(parent).toEqual({ orgId: 'org-1', userId: 'user-1', credentialScope: 'user' });
-    await expect(tenantFor(result.sessionId, result.threadId)).resolves.toEqual(parent);
-  });
-
-  it('follows the item with reason "started" before the coordinator runs', async () => {
-    const { start, item, subscriptions, wrapped } = await (async () => {
-      let seenAtPrepare: unknown[] = [];
-      const env = await withItem('org', {
-        wrapPrepare: prepare => async request => {
-          seenAtPrepare = await env_.subscriptions();
-          return prepare(request);
-        },
-      });
-      const env_ = env;
-      return { ...env, wrapped: () => seenAtPrepare };
-    })();
-
-    await start({ prompt: 'Go.', workItem: item.id, role: 'work' });
-    expect(wrapped()).toEqual([expect.objectContaining({ workItemId: item.id, reason: 'started' })]);
-    expect(await subscriptions()).toEqual([expect.objectContaining({ workItemId: item.id, reason: 'started' })]);
-  });
-
-  it('records the run start as the person, with an open-run entry this process heartbeats until the run ends', async () => {
-    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
-    try {
-      vi.setSystemTime(new Date('2026-10-14T12:00:00Z'));
-      const { start, item, seed, created, scope } = await withItem();
-      const result = (await start({ prompt: 'Go.', workItem: item.id, role: 'work' })) as Started;
-      const session = created.find(entry => entry.options.id === result.sessionId)!.session;
-
-      const page = await seed.audit.list({ orgId: 'org-1', factoryProjectId: scope.factoryProjectId });
-      const started = page.events.filter(event => event.action === 'factory.run.started');
-      expect(started).toEqual([expect.objectContaining({ actorType: 'human', actorId: 'user-1' })]);
-
-      const [entry] = await listSessionOpenRuns(session);
-      expect(entry).toMatchObject({
-        bindingId: result.bindingId,
-        role: 'work',
-        workItemId: item.id,
-        startedBy: 'user-1',
-        ownerId: FACTORY_TOOLS_OWNER_ID,
-        heartbeatAt: Date.parse('2026-10-14T12:00:00Z'),
-      });
-      expect(FACTORY_TOOLS_OWNER_ID).toMatch(/^factory-tools:/);
-      expect(isOpenRunLiveElsewhere(entry!, 'factory-rule-dispatcher:other')).toBe(true);
-
-      await vi.advanceTimersByTimeAsync(FACTORY_OPEN_RUN_STALE_MS);
-      const renewed = (await listSessionOpenRuns(session))[0]!;
-      expect(renewed.heartbeatAt).toBeGreaterThan(entry!.heartbeatAt!);
-      expect(isOpenRunLiveElsewhere(renewed, 'factory-rule-dispatcher:other')).toBe(true);
-
-      session.emit({ type: 'agent_end', reason: 'suspended' } as AgentControllerEvent);
-      // A parked run waits for an answer: the heartbeat stops; only the session's report listener remains.
-      expect(session.listenerCount()).toBe(1);
-      const parked = (await listSessionOpenRuns(session))[0]!;
-      await vi.advanceTimersByTimeAsync(FACTORY_OPEN_RUN_STALE_MS * 2);
-      expect((await listSessionOpenRuns(session))[0]!.heartbeatAt).toBe(parked.heartbeatAt);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('reports a binding for the role that a racing start replaced', async () => {
-    let env: Awaited<ReturnType<typeof withItem>>;
-    env = await withItem('org', {
-      wrapPrepare: prepare => async request => {
-        // A dispatcher bind lands between the pre-check and the coordinator.
-        await env.bindOther('raced-session');
-        return prepare(request);
-      },
-    });
-    const result = (await env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })) as Started;
-    expect(result.replacedSessionId).toBe('raced-session');
-  });
-
-  it('refuses a role that already has a session, active or revoked, naming it and creating nothing', async () => {
-    for (const revoke of [false, true]) {
-      const env = await withItem();
-      const { binding } = await env.bindOther('existing-session');
-      if (revoke) {
-        await env.seed.workItems.revokeRunBinding({
-          orgId: 'org-1',
-          factoryProjectId: env.scope.factoryProjectId,
-          bindingId: binding.id,
-          revokedAt: new Date(),
-        });
-      }
-      const rowsBefore = await env.sessionRows();
-      const bindingsBefore = await env.bindings();
-
-      await expect(env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })).rejects.toThrow(
-        '"Speed up the nightly build" already has a work session existing-session; message it with factory_signal_session.',
-      );
-      expect(env.prepare).not.toHaveBeenCalled();
-      expect(await env.sessionRows()).toEqual(rowsBefore);
-      expect(await env.bindings()).toEqual(bindingsBefore);
-      expect((await env.seed.workItems.get({ orgId: 'org-1', id: env.item.id }))!.sessions.work).toMatchObject({
-        sessionId: 'existing-session',
-      });
-      expect(await env.subscriptions()).toEqual([]);
-    }
-  });
-
-  it("refuses a role the item's board doesn't seat", async () => {
-    const { start, item, prepare } = await withItem();
-    await expect(start({ prompt: 'Go.', workItem: item.id, role: 'deploy' })).rejects.toThrow(
-      `"Speed up the nightly build"'s board has no deploy role.`,
-    );
-    expect(prepare).not.toHaveBeenCalled();
-  });
-
-  it('refuses an item from another Factory', async () => {
-    const env = await withItem();
-    const other = await env.seed.projects.create({ orgId: 'org-1', userId: 'owner', input: { name: 'Other' } });
-    const { item: foreign } = await env.seed.workItems.upsert({
-      orgId: 'org-1',
-      userId: 'owner',
-      factoryProjectId: other.id,
-      input: { title: 'Elsewhere', stages: ['intake'], metadata: {} },
-    });
-    await expect(env.start({ prompt: 'Go.', workItem: foreign.id, role: 'work' })).rejects.toThrow(
-      `No work item ${foreign.id} was found in this Factory.`,
-    );
-    expect(env.prepare).not.toHaveBeenCalled();
-  });
-
-  it('refuses an item with several repositories, listing them and creating nothing', async () => {
-    const env = await withItem();
-    const second = await env.sourceControl.repositories.upsert({
-      orgId: 'org-1',
-      input: { installationId: env.installation.id, externalId: '3', slug: 'mastra-ai/docs', defaultBranch: 'main' },
-    });
-    await env.sourceControl.projectRepositories.link({
-      orgId: 'org-1',
-      connectionId: env.connection.id,
-      repositoryId: second.id,
-      createdByUserId: 'owner',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/docs',
-    });
-    const rowsBefore = await env.sessionRows();
-
-    await expect(env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })).rejects.toThrow(
-      /several repositories \(.*mastra-ai\/mastra.*\); v1 can't choose one/,
-    );
-    await expect(env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })).rejects.toThrow(/mastra-ai\/docs/);
-    expect(env.prepare).not.toHaveBeenCalled();
-    expect(await env.sessionRows()).toEqual(rowsBefore);
-    expect(await env.bindings()).toEqual([]);
-  });
-
-  it("refuses while the Factory runtime's coordinator isn't ready", async () => {
-    const { start, item, sessionRows } = await withItem('org', { coordinator: 'none' });
-    const before = await sessionRows();
-    await expect(start({ prompt: 'Go.', workItem: item.id, role: 'work' })).rejects.toThrow(
-      "Factory sessions can't be started yet; try again shortly.",
-    );
-    expect(await sessionRows()).toEqual(before);
-  });
-
-  it('removes the subscription it added when prepare fails, but keeps one that already existed', async () => {
-    const failing = () =>
-      withItem('org', {
-        wrapPrepare: () => async () => {
-          throw new Error('sandbox unavailable');
-        },
-      });
-
-    const fresh = await failing();
-    await expect(fresh.start({ prompt: 'Go.', workItem: fresh.item.id, role: 'work' })).rejects.toThrow(
-      'sandbox unavailable',
-    );
-    expect(await fresh.subscriptions()).toEqual([]);
-
-    const following = await failing();
-    await following.seed.workItems.subscribeToWorkItem({
-      orgId: 'org-1',
-      factoryProjectId: following.scope.factoryProjectId,
-      workItemId: following.item.id,
-      sessionId: following.scope.sessionId,
-      threadId: following.scope.threadId,
-      resourceId: following.scope.resourceId,
-      userId: 'user-1',
-      reason: 'subscribed',
-    });
-    await expect(following.start({ prompt: 'Go.', workItem: following.item.id, role: 'work' })).rejects.toThrow(
-      'sandbox unavailable',
-    );
-    expect(await following.subscriptions()).toEqual([
-      expect.objectContaining({ workItemId: following.item.id, reason: 'subscribed' }),
-    ]);
-  });
-
-  it('tells everyone following the item when the run finishes without a report', async () => {
-    const { start, item, created, reports, scope } = await withItem();
-    const result = (await start({ prompt: 'Go.', workItem: item.id, role: 'work' })) as Started;
-    const session = created.find(entry => entry.options.id === result.sessionId)!.session;
-
-    session.emit({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
-
-    await vi.waitFor(() => expect(reports).toHaveLength(1));
-    expect(reports[0]!.target).toEqual({ resourceId: scope.sessionId, threadId: scope.threadId });
-    expect(reports[0]!.input).toMatchObject({
-      kind: 'done',
-      summary: 'The work session for "Speed up the nightly build" finished.',
-      attributes: { backstop: 'true', role: 'work', 'work-item': item.id, 'from-session': result.sessionId },
-    });
-  });
-
-  it('reports a failed run to every follower and skips one that already has the agent’s report', async () => {
-    const env = await withItem();
-    const result = (await env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })) as Started;
-    const follow = (sessionId: string) =>
-      env.seed.workItems.subscribeToWorkItem({
-        orgId: 'org-1',
-        factoryProjectId: env.scope.factoryProjectId,
-        workItemId: env.item.id,
-        sessionId,
-        threadId: sessionId,
-        resourceId: sessionId,
-        userId: 'user-2',
-        reason: 'subscribed',
-      });
-    await follow('teammate');
-    await follow('reviewer');
-    await env.notifications.createNotification({
-      source: 'factory-session',
-      kind: 'failed',
-      priority: 'urgent',
-      summary: 'gave up',
-      threadId: 'reviewer',
-      resourceId: 'reviewer',
-      attributes: { 'from-session': result.sessionId },
-    });
-    const session = env.created.find(entry => entry.options.id === result.sessionId)!.session;
-
-    session.emit({ type: 'agent_end', reason: 'error' } as AgentControllerEvent);
-
-    await vi.waitFor(() => expect(env.reports).toHaveLength(2));
-    expect(env.reports.map(report => report.target.threadId).sort()).toEqual([env.scope.threadId, 'teammate'].sort());
-    for (const report of env.reports) {
-      expect(report.input).toMatchObject({ kind: 'failed', priority: 'urgent', attributes: { backstop: 'true' } });
-    }
-  });
-
-  it('lets the spawned session report with factory_message_origin without approval', async () => {
-    const { start, item, sessions } = await withItem();
-    const result = (await start({ prompt: 'Go.', workItem: item.id, role: 'work' })) as Started;
-    let rules: PermissionRules = { categories: {}, tools: {} };
-    await applyFactoryToolPermissions(
-      {
-        identity: { getId: () => result.sessionId, getResourceId: () => result.sessionId },
-        permissions: {
-          getRules: () => structuredClone(rules),
-          setForTool: async ({ toolName, policy }: { toolName: string; policy: 'allow' | 'ask' | 'deny' }) => {
-            rules = { ...rules, tools: { ...rules.tools, [toolName]: policy } };
-          },
-        },
-      },
-      { sessions },
-    );
-    expect(rules.tools.factory_message_origin).toBe('allow');
-    expect(FACTORY_TOOLS_WITHOUT_APPROVAL).toContain('factory_message_origin');
-  });
-});
-
 describe('session tools on a turn nobody signed in started', () => {
   // A notification wake runs as the session owner but carries other people's text.
   const wake = { interactive: false };
@@ -1389,18 +1005,9 @@ describe('session tools on a turn nobody signed in started', () => {
     expect(env.created[0]!.session.model.switch).toHaveBeenCalledWith('openai/gpt-5.6');
   });
 
-  it('refuses to seat a role on a work item, which records a run as the person', async () => {
-    const env = await setup('org', wake);
-    await expect(env.start({ prompt: 'Plan it.', workItem: '#1', role: 'plan' })).rejects.toThrow(
-      'Starting a role on a work item needs a person in this turn',
-    );
-    expect(env.prepare).not.toHaveBeenCalled();
-    expect(env.created).toHaveLength(0);
-  });
-
   it('mounts every user tool but refuses to answer an approval', async () => {
     const env = await setup('org', wake);
-    const deps = { ...env.deps, comments: {} } as unknown as FactoryToolDependencies;
+    const deps = env.deps as unknown as FactoryToolDependencies;
     const answer = (scope: FactoryToolScope) =>
       (
         createFactoryTools({ scope, deps }).factory_answer_approval as unknown as {

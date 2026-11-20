@@ -9,10 +9,10 @@ import {
   DialogDescription,
 } from '@mastra/playground-ui/components/Dialog';
 import { RuleBuilder } from '@mastra/playground-ui/components/RuleBuilder';
+import { IconRuler } from '@mastra/playground-ui/icons/central/IconRuler';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
 import { countLeafRules } from '@mastra/playground-ui/utils/rule-engine';
-import { Ruler } from 'lucide-react';
 
 interface DisplayConditionsDialogProps {
   entityName: string;
@@ -40,7 +40,7 @@ export function DisplayConditionsDialog({ entityName, schema, rules, onRulesChan
             variant="ghost"
             className="relative"
           >
-            <Ruler />
+            <IconRuler />
             {ruleCount > 0 && <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-foreground" />}
           </Button>
         }

@@ -1,0 +1,61 @@
+name: Affected graph seed
+
+# Seeds the cache that "Detect affected tests" in prebuild.yml restores. A PR
+# can only restore caches saved on its own ref or its base branch, and Prebuild
+# never runs on main, so main has to save one for PRs to start warm.
+on:
+  push:
+    branches: [main]
+
+# A burst of merges only needs the newest seed.
+concurrency:
+  group: affected-graph-seed
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  seed:
+    name: Seed affected-test extraction cache
+    if: github.repository == 'mastra-ai/mastra'
+    runs-on: starsling-ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          persist-credentials: false
+          # Detection lists test files with git ls-files; it needs no history.
+          fetch-depth: 1
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+        with:
+          install-dependencies: false
+
+      - name: Install affected-test dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts --filter mastra-turbo
+
+      # Start from the previous seed so only files changed since then are parsed.
+      - name: Restore previous seed
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ runner.temp }}/affected-graph.json
+          key: affected-graph-v1-${{ runner.os }}-${{ github.sha }}
+          restore-keys: affected-graph-v1-${{ runner.os }}-
+
+      # Detection walks the graph of every test file whatever the input, so any
+      # one source file fills the whole cache.
+      - name: Build the extraction cache
+        env:
+          AFFECTED_TESTS_CACHE: ${{ runner.temp }}/affected-graph.json
+        run: node scripts/affected-tests.mjs --json packages/core/src/index.ts > /dev/null
+
+      - name: Save seed
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ runner.temp }}/affected-graph.json
+          key: affected-graph-v1-${{ runner.os }}-${{ github.sha }}

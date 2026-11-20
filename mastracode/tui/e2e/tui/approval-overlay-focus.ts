@@ -128,7 +128,7 @@ export const approvalOverlayFocusScenario = {
     await waitForScreenGone(terminal, /Switch model pack/i, 5_000);
 
     // With the overlay gone the pending approval takes focus; Enter approves.
-    await runtime.waitForScreenText(/Use as \/goal/i, terminal, 10_000);
+    await runtime.waitForScreenText(/Approve\s+switch to Build mode and pursue this plan as a goal/i, terminal, 10_000);
     terminal.write('\r');
     await runtime.waitForScreenText(/✓\s+Approved/i, terminal, 10_000);
 

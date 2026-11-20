@@ -19,6 +19,14 @@ Mastra's RAG system provides:
 - Chunking and embedding strategies for optimal retrieval
 - Observability for tracking embedding and retrieval performance
 
+:::note
+
+For agents that answer from your docs, policies or other content, use [Knowledge](/docs/knowledge/overview). You [load your content](/docs/knowledge/load-your-content) into it, agents [search it](/docs/knowledge/search) by keyword and, with a vector store and embedder, by meaning, and [scopes](/docs/knowledge/scopes-and-access) decide which customer's or team's content each run can read. Knowledge was added in `@mastra/core@1.82.0` and is in alpha, so its API may change between releases.
+
+Use the RAG APIs when you need direct control over chunking, embedding, vector stores and retrieval.
+
+:::
+
 ## Example
 
 To implement RAG, you process your documents into chunks, create embeddings, store them in a vector database, and then retrieve relevant context at query time.

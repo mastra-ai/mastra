@@ -24,6 +24,29 @@ export class MastraTimeoutError extends Error {
   }
 }
 
+/**
+ * How long a total deadline's memory save may hold back the deadline error. A save that takes longer
+ * (a hung store) finishes in the background; the caller still sees the deadline on time.
+ */
+export const DEADLINE_SAVE_WAIT_MS = 1_000;
+
+/** How long a durable run keeps its claim waiting for that save, so a hung store cannot block a later run with the same ID. */
+export const DEADLINE_SAVE_CLAIM_HOLD_MS = 30_000;
+
+/** Resolves when `promise` settles or `ms` passes, whichever is first. Never rejects. */
+export function settledOrElapsed(promise: Promise<unknown>, ms: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    promise.then(
+      () => {},
+      () => {},
+    ),
+    new Promise<void>(resolve => {
+      timer = setTimeout(resolve, ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
 export function isMastraTimeoutError(error: unknown): error is MastraTimeoutError {
   return error instanceof MastraTimeoutError;
 }

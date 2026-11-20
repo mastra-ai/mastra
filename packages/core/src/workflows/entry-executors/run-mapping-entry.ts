@@ -1,4 +1,5 @@
-import { resolveTemplate, traverseMappingPath } from '../mapping-template';
+import { resolveTemplate, templateReadsState, traverseMappingPath } from '../mapping-template';
+import { collectMappingStepRefs, resolveStepOutputs, stepRefId } from '../step-refs';
 import type { MappingStepEntry } from '../types';
 import type { EntryExecuteContext } from './types';
 
@@ -6,6 +7,9 @@ import type { EntryExecuteContext } from './types';
  * Runs a declarative `mapping` entry. Function configs are invoked directly;
  * object configs are interpreted key-by-key (`value` / `fn` / `template` /
  * `requestContextPath` / `step`+`path` / `initData`+`path`).
+ *
+ * Object configs resolve every step they read up front, so no key evaluation
+ * goes through the sync `getStepResult`.
  */
 export async function runMappingEntry(entry: MappingStepEntry, ctx: EntryExecuteContext): Promise<unknown> {
   const { mapConfig } = entry;
@@ -13,7 +17,23 @@ export async function runMappingEntry(entry: MappingStepEntry, ctx: EntryExecute
     return mapConfig(ctx);
   }
 
-  const { getStepResult, getInitData, requestContext } = ctx;
+  const { getInitData, requestContext } = ctx;
+  const stepOutputs = await resolveStepOutputs(collectMappingStepRefs(mapConfig), id => ctx.getStepResultAsync(id));
+  // Same contract as getStepResult: the step's output when it succeeded, null otherwise.
+  const outputOf = (step: unknown): unknown => {
+    const id = stepRefId(step);
+    return id !== undefined && stepOutputs.has(id) ? stepOutputs.get(id) : null;
+  };
+  // Storage v2 runs serve the state through getState only, so templates get it loaded up front.
+  const readsState = Object.values(mapConfig).some(
+    (m: any) => typeof m?.template === 'string' && templateReadsState(m.template),
+  );
+  const templateCtx = {
+    inputData: ctx.inputData,
+    getInitData,
+    requestContext,
+    state: readsState ? await ctx.getState() : undefined,
+  };
 
   const result: Record<string, any> = {};
   for (const [key, mapping] of Object.entries(mapConfig)) {
@@ -30,7 +50,7 @@ export async function runMappingEntry(entry: MappingStepEntry, ctx: EntryExecute
     }
 
     if (typeof m.template === 'string') {
-      result[key] = resolveTemplate(m.template, ctx);
+      result[key] = resolveTemplate(m.template, templateCtx, stepOutputs);
       continue;
     }
 
@@ -41,13 +61,13 @@ export async function runMappingEntry(entry: MappingStepEntry, ctx: EntryExecute
 
     const stepResult = m.initData
       ? getInitData()
-      : getStepResult(
+      : outputOf(
           Array.isArray(m.step)
-            ? // getStepResult returns null for any arm that did not run successfully,
-              // and the arm's real output (including {}, 0, false, '') for the one that
-              // did. So `!== null` is the correct "which arm executed" test; a
-              // truthiness/emptiness check drops valid falsy outputs. See #20894.
-              m.step.find((s: any) => getStepResult(s) !== null)
+            ? // An arm resolves to null when it did not run successfully, and to its
+              // real output (including {}, 0, false, '') when it did. So `!== null`
+              // is the correct "which arm executed" test; a truthiness/emptiness
+              // check drops valid falsy outputs. See #20894.
+              m.step.find((s: any) => outputOf(s) !== null)
             : m.step,
         );
 

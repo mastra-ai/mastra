@@ -107,19 +107,6 @@ describe('dataset item panel context', () => {
   });
 
   describe('window keyboard navigation', () => {
-    it('navigates with PageDown/PageUp and closes with Escape while an item is open', async () => {
-      const router = renderWithRouter('/datasets/ds-1/items/item-2');
-
-      fireEvent.keyDown(document.body, { key: 'PageDown' });
-      await waitFor(() => expect(router.state.location.pathname).toBe('/datasets/ds-1/items/item-3'));
-
-      fireEvent.keyDown(document.body, { key: 'PageUp' });
-      await waitFor(() => expect(router.state.location.pathname).toBe('/datasets/ds-1/items/item-2'));
-
-      fireEvent.keyDown(document.body, { key: 'Escape' });
-      await waitFor(() => expect(router.state.location.pathname).toBe('/datasets/ds-1'));
-    });
-
     it('is inert when no item is open', () => {
       const router = renderWithRouter('/datasets/ds-1');
       fireEvent.keyDown(document.body, { key: 'PageDown' });

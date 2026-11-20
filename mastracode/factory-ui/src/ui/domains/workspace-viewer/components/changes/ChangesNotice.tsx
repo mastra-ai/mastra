@@ -1,11 +1,7 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import type { WorkspaceChangePatches } from '../../../../../api/types';
-
-function unreadableRepositories(changes: WorkspaceChangePatches): string[] {
-  if (!changes.available) return [];
-  return (changes.repositories ?? []).filter(repository => !repository.available).map(repository => repository.slug);
-}
+import { unreadableRepositories } from './unreadable-repositories';
 
 export function ChangesNotice({ changes }: { changes: WorkspaceChangePatches }) {
   const unreadable = unreadableRepositories(changes);

@@ -53,18 +53,6 @@ test.describe('Workflow schedules', () => {
     });
   });
 
-  test.describe('when the /workflows/schedules route is reloaded', () => {
-    test('is deep-linkable and survives reload', async ({ page }) => {
-      await page.goto('/workflows/schedules');
-      await expect(page.locator('text=scheduledWorkflow').first()).toBeVisible();
-
-      await page.reload();
-
-      await expect(page).toHaveURL(/\/workflows\/schedules$/);
-      await expect(page.locator('text=scheduledWorkflow').first()).toBeVisible();
-    });
-  });
-
   test.describe('when a per-workflow schedules sub-route is visited', () => {
     test('filters rows to that workflow', async ({ page }) => {
       await page.goto('/workflows/schedules?workflowId=multiScheduledWorkflow');

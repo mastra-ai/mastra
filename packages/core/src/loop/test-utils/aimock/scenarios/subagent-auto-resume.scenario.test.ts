@@ -26,7 +26,6 @@ describeForAllEngines(
   'AIMock loop scenario: subagent auto-resume',
   engine => {
     const getMock = useLoopScenarioAimock();
-    const itFailsOnInngest = engine === 'inngest' ? it.fails : it;
 
     async function setup(mock: LLMock) {
       const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${mock.url.replace(/\/+$/, '')}/v1` });
@@ -141,8 +140,7 @@ describeForAllEngines(
       return { first, second, resumeAges };
     }
 
-    // Diverges on Inngest; not yet investigated.
-    itFailsOnInngest('resumes the subagent with the answer the customer sends on the same thread', async () => {
+    it('resumes the subagent with the answer the customer sends on the same thread', async () => {
       const mock = getMock();
       const { first, second, resumeAges } = await lookUpThenAnswer(mock);
 

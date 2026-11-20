@@ -26,7 +26,7 @@ export const Kbd = ({ children, size = 'default', className }: KbdProps) => {
       )}
     >
       {/* Trim to cap height so the letters center in the fixed height whatever the font: a system mono
-          (an app without CommitMono) sits them high. An inline box, since trim doesn't apply to the flex box */}
+          (an app without Commit Mono) sits them high. An inline box, since trim doesn't apply to the flex box */}
       <span className="[text-box:trim-both_cap_alphabetic]">{children}</span>
     </kbd>
   );

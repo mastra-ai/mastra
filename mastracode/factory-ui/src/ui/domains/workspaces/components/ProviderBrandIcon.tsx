@@ -2,6 +2,7 @@ import { AnthropicMessagesIcon } from '@mastra/playground-ui/icons/AnthropicMess
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { GoogleIcon } from '@mastra/playground-ui/icons/GoogleIcon';
 import { GroqIcon } from '@mastra/playground-ui/icons/GroqIcon';
+import { MastraIcon } from '@mastra/playground-ui/icons/MastraIcon';
 import { MistralIcon } from '@mastra/playground-ui/icons/MistralIcon';
 import { OpenAIIcon } from '@mastra/playground-ui/icons/OpenAIIcon';
 import { XGroqIcon } from '@mastra/playground-ui/icons/XGroqIcon';
@@ -21,6 +22,7 @@ const PROVIDER_ICON_CONFIG: Record<string, ProviderIconConfig> = {
   google: { icon: GoogleIcon, className: 'size-4 shrink-0' },
   groq: { icon: GroqIcon, className: 'size-4 shrink-0' },
   mistral: { icon: MistralIcon, className: 'size-4 shrink-0' },
+  mastra: { icon: MastraIcon, className: 'w-4 shrink-0' },
 };
 
 export interface ProviderBrandIconProps {

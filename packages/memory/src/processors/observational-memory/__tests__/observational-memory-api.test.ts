@@ -862,7 +862,10 @@ name: Tyler
       });
       const omResource = createOM(storage, {
         scope: 'resource',
-        observerModel: createMockObserverModel(undefined, gatewayMetadata),
+        observerModel: createMockObserverModel(
+          `<observations>\n<thread id="${threadId}">\n* User discussed various topics in the conversation\n</thread>\n</observations>`,
+          gatewayMetadata,
+        ),
       });
       const messages = createBulkMessages(10, threadId);
       const hooks = {
@@ -2790,6 +2793,83 @@ describe('buildContextSystemMessage()', () => {
       // value keeps flowing until reflection disables it too.
       expect(result).toContain('<suggested-response>\nAsk about the deadline\n</suggested-response>');
       expect(result).toContain('<current-task>\nShip the report\n</current-task>');
+    });
+  });
+
+  describe('observations block boundaries', () => {
+    const resourceId = 'ctx-resource';
+    const twoChunks =
+      '- 🔴 Fact one' + ObservationalMemory.createMessageBoundary(new Date('2025-01-01T10:00:00Z')) + '- 🔴 Fact two';
+
+    const seed = async (target: ObservationalMemory, observations: string) => {
+      await storage.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Context thread',
+          metadata: setThreadOMMetadata({}, { currentTask: 'Ship the report', suggestedResponse: 'Ask about it' }),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+      const record = await target.getOrCreateRecord(threadId, resourceId);
+      await storage.updateActiveObservations({
+        id: record.id,
+        observations,
+        tokenCount: 10,
+        lastObservedAt: new Date('2025-01-02T00:00:00Z'),
+      });
+    };
+
+    const expectClosedBlock = (messages: string[], facts: string[]) => {
+      const open = messages.indexOf('<observations>');
+      const close = messages.indexOf('</observations>');
+      expect(open).toBeGreaterThanOrEqual(0);
+      expect(close).toBe(open + facts.length + 1);
+      facts.forEach((fact, i) => expect(messages[open + 1 + i]).toContain(fact));
+      expect(messages.filter(m => m === '</observations>')).toHaveLength(1);
+
+      const task = messages.findIndex(m => m.startsWith('<current-task>'));
+      const suggested = messages.findIndex(m => m.startsWith('<suggested-response>'));
+      expect(task).toBeGreaterThan(close);
+      expect(suggested).toBeGreaterThan(close);
+    };
+
+    it('closes a single-chunk block before the continuation hints (thread scope)', async () => {
+      await seed(om, '- 🔴 Fact one');
+
+      const messages = await om.buildContextSystemMessages({ threadId, resourceId });
+
+      expectClosedBlock(messages!, ['Fact one']);
+    });
+
+    it('closes a multi-chunk block before the continuation hints (thread scope)', async () => {
+      await seed(om, twoChunks);
+
+      const messages = await om.buildContextSystemMessages({ threadId, resourceId });
+
+      expectClosedBlock(messages!, ['Fact one', 'Fact two']);
+    });
+
+    it('closes a multi-chunk block before the continuation hints (resource scope)', async () => {
+      om = createOM(storage, { scope: 'resource' });
+      await seed(om, twoChunks);
+
+      const messages = await om.buildContextSystemMessages({ threadId, resourceId });
+
+      expectClosedBlock(messages!, ['Fact one', 'Fact two']);
+    });
+
+    it('closes the block in the joined single-string form', async () => {
+      await seed(om, twoChunks);
+
+      const result = (await om.buildContextSystemMessage({ threadId, resourceId }))!;
+
+      const close = result.indexOf('</observations>');
+      expect(result.split('</observations>')).toHaveLength(2);
+      expect(close).toBeGreaterThan(result.indexOf('Fact two'));
+      expect(close).toBeLessThan(result.indexOf('<current-task>'));
+      expect(close).toBeLessThan(result.indexOf('<suggested-response>'));
     });
   });
 });

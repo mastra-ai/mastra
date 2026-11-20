@@ -277,6 +277,9 @@ export class LocalFilesystem extends MastraFilesystem {
           continue;
         }
         currentIsDirectory = stat.isDirectory();
+        // Resolve natively so Windows 8.3 short names expand the same way the root does.
+        currentPath = realpathSync.native(candidate);
+        continue;
       } catch (error: unknown) {
         if (!isEnoentError(error)) throw error;
         currentIsDirectory = undefined;

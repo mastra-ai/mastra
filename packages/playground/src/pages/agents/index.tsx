@@ -1,7 +1,15 @@
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
+import { AgentsCompactGrid } from '@mastra/playground-ui/domains/agents/agent-list/agents-compact-grid';
+import { AgentsList } from '@mastra/playground-ui/domains/agents/agent-list/agents-list';
+import { sortAgents } from '@mastra/playground-ui/domains/agents/agent-list/agents-sort';
+import type { AgentsSort } from '@mastra/playground-ui/domains/agents/agent-list/agents-sort';
+import { AgentsViewToggle } from '@mastra/playground-ui/domains/agents/agent-list/agents-view-toggle';
+import type { AgentsView } from '@mastra/playground-ui/domains/agents/agent-list/agents-view-toggle';
+import { NoAgentsInfo } from '@mastra/playground-ui/domains/agents/agent-list/no-agents-info';
+import { extractPrompt } from '@mastra/playground-ui/domains/agents/extract-prompt';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
@@ -9,14 +17,6 @@ import { useAgents } from '@mastra/react/hooks/agents';
 import { useState } from 'react';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { AgentHeaderCreateAction } from '@/domains/agents/agent-header-actions';
-import { AgentsCompactGrid } from '@/domains/agents/components/agent-list/agents-compact-grid';
-import { AgentsList } from '@/domains/agents/components/agent-list/agents-list';
-import { sortAgents } from '@/domains/agents/components/agent-list/agents-sort';
-import type { AgentsSort } from '@/domains/agents/components/agent-list/agents-sort';
-import { AgentsViewToggle } from '@/domains/agents/components/agent-list/agents-view-toggle';
-import type { AgentsView } from '@/domains/agents/components/agent-list/agents-view-toggle';
-import { NoAgentsInfo } from '@/domains/agents/components/agent-list/no-agents-info';
-import { extractPrompt } from '@/domains/agents/utils/extractPrompt';
 import { navCrumb } from '@/domains/navigation/crumbs';
 
 const crumbs = [navCrumb('/agents')];
@@ -91,7 +91,12 @@ function Agents() {
         <ActionRow>
           <ActionRow.Start>
             <div className="max-w-120 flex-1">
-              <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or instructions" />
+              <SearchInput
+                {...listSearchProps}
+                onValueChange={setSearch}
+                label="Search agents"
+                placeholder="Search by name or instructions"
+              />
             </div>
           </ActionRow.Start>
           <ActionRow.End>

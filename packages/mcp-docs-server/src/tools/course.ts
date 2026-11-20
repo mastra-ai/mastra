@@ -547,9 +547,8 @@ export const startMastraCourse = {
           await saveCourseState(courseState, deviceId);
 
           return `${statusMessage}🎉 You've completed the "${currentLessonName}" lesson!\n\nMoving on to the next lesson: "${nextLesson.name}".\n\nUse the \`nextMastraCourseStep\` tool to start the first step of this lesson.`;
-        } else {
-          return `${statusMessage}🎉 Congratulations! You've completed all available lessons in the Mastra Course!\n\nIf you'd like to review any lesson, use the \`startMastraCourseLesson\` tool with the lesson name.`;
         }
+        return `${statusMessage}🎉 Congratulations! You've completed all available lessons in the Mastra Course!\n\nIf you'd like to review any lesson, use the \`startMastraCourseLesson\` tool with the lesson name.`;
       }
 
       if (!currentStep) {

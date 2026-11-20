@@ -6,14 +6,14 @@ import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  TRACES_LIST_DELTA_HORIZON_MS,
-  TRACES_LIST_DELTA_POLL_INTERVAL_MS,
-  TRACES_LIST_REFETCH_INTERVAL_MS,
-  useTracesListSource,
-} from '../use-traces-list-source';
+import { useTracesListSource } from '../use-traces-list-source';
 import { freshTrace, lastTraceQueryPage, traceQueryDeltaBatch } from './fixtures/trace-query';
 import { lastLegacyTracePage } from './fixtures/trace-query-legacy';
+import {
+  OBSERVABILITY_LIST_HORIZON_MS,
+  OBSERVABILITY_LIST_POLL_INTERVAL_MS,
+  OBSERVABILITY_LIST_REFETCH_INTERVAL_MS,
+} from '@/domains/observability/list-polling';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -221,7 +221,7 @@ describe('useTracesListSource', () => {
 
     const nextTick = () =>
       act(async () => {
-        await vi.advanceTimersByTimeAsync(TRACES_LIST_DELTA_POLL_INTERVAL_MS);
+        await vi.advanceTimersByTimeAsync(OBSERVABILITY_LIST_POLL_INTERVAL_MS);
       });
 
     const refocus = () =>
@@ -230,6 +230,53 @@ describe('useTracesListSource', () => {
         focusManager.setFocused(true);
         await new Promise(resolve => setTimeout(resolve, 100));
       });
+
+    describe('when search disables delta polling after the page has been open', () => {
+      it('uses the current time on the first search request and continues refreshing', async () => {
+        const requests = deltaHandlers();
+        vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'], shouldAdvanceTime: true });
+        vi.setSystemTime(new Date('2026-09-01T10:00:00.000Z'));
+        const { rerender } = renderHook(
+          ({ searchTerm }: { searchTerm?: string }) =>
+            useTracesListSource({
+              query: now => ({
+                ...query(now),
+                ...(searchTerm
+                  ? {
+                      where: {
+                        spans: {
+                          some: {
+                            op: 'hasAllTokens' as const,
+                            left: { path: 'all' as const },
+                            right: { literal: searchTerm },
+                          },
+                        },
+                      },
+                    }
+                  : {}),
+              }),
+              withDeltaPolling: !searchTerm,
+            }),
+          { wrapper: Wrapper, initialProps: { searchTerm: undefined } },
+        );
+        await waitFor(() => expect(requests.listRequests).toHaveLength(1));
+        await waitFor(() => expect(requests.deltaRequests).toHaveLength(1));
+        vi.setSystemTime(new Date('2026-09-01T12:00:00.000Z'));
+        rerender({ searchTerm: 'needle' });
+        await waitFor(() => expect(requests.listRequests).toHaveLength(2));
+        expect(Date.parse(requests.listRequests[1]?.timeRange.to ?? '')).toBeGreaterThanOrEqual(
+          Date.parse('2026-09-01T12:00:00.000Z'),
+        );
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(OBSERVABILITY_LIST_REFETCH_INTERVAL_MS);
+        });
+        await waitFor(() => expect(requests.listRequests).toHaveLength(3));
+        expect(Date.parse(requests.listRequests[2]?.timeRange.to ?? '')).toBeGreaterThan(
+          Date.parse(requests.listRequests[1]?.timeRange.to ?? ''),
+        );
+        expect(requests.deltaRequests).toHaveLength(1);
+      });
+    });
 
     it('merges new traces from delta polls without reloading the list', async () => {
       const requests = deltaHandlers();
@@ -259,7 +306,7 @@ describe('useTracesListSource', () => {
       const ranges = [...requests.listRequests, ...requests.deltaRequests].map(body => body.timeRange);
       expect(new Set(ranges.map(range => JSON.stringify(range))).size).toBe(1);
       for (const range of ranges) {
-        expect(Date.parse(range.to)).toBeGreaterThan(mountedAt + TRACES_LIST_DELTA_POLL_INTERVAL_MS * 2);
+        expect(Date.parse(range.to)).toBeGreaterThan(mountedAt + OBSERVABILITY_LIST_POLL_INTERVAL_MS * 2);
       }
     });
 
@@ -335,7 +382,7 @@ describe('useTracesListSource', () => {
           await waitFor(() => expect(result.current.error).toBeTruthy());
 
           await act(async () => {
-            await vi.advanceTimersByTimeAsync(TRACES_LIST_REFETCH_INTERVAL_MS);
+            await vi.advanceTimersByTimeAsync(OBSERVABILITY_LIST_REFETCH_INTERVAL_MS);
           });
 
           await waitFor(() => expect(result.current.rows.map(row => row.spanId)).toEqual(['span-b']));
@@ -352,12 +399,12 @@ describe('useTracesListSource', () => {
         });
         await waitFor(() => expect(result.current.error).toBeTruthy());
         await act(async () => {
-          await vi.advanceTimersByTimeAsync(TRACES_LIST_REFETCH_INTERVAL_MS);
+          await vi.advanceTimersByTimeAsync(OBSERVABILITY_LIST_REFETCH_INTERVAL_MS);
         });
         await waitFor(() => expect(result.current.rows).toHaveLength(1));
 
         await act(async () => {
-          await vi.advanceTimersByTimeAsync(TRACES_LIST_REFETCH_INTERVAL_MS * 3);
+          await vi.advanceTimersByTimeAsync(OBSERVABILITY_LIST_REFETCH_INTERVAL_MS * 3);
         });
 
         expect(requests.listRequests).toHaveLength(2);
@@ -372,7 +419,7 @@ describe('useTracesListSource', () => {
         await waitFor(() => expect(result.current.error).toBeTruthy());
 
         await act(async () => {
-          await vi.advanceTimersByTimeAsync(TRACES_LIST_REFETCH_INTERVAL_MS * 3);
+          await vi.advanceTimersByTimeAsync(OBSERVABILITY_LIST_REFETCH_INTERVAL_MS * 3);
         });
 
         expect(requests.listRequests).toHaveLength(1);
@@ -402,7 +449,7 @@ describe('useTracesListSource', () => {
 
         await waitFor(() => expect(requests.deltaRequests).toHaveLength(2));
         await waitFor(() => expect(requests.listRequests).toHaveLength(2));
-        const horizon = (at: Date) => new Date(at.getTime() + TRACES_LIST_DELTA_HORIZON_MS).toISOString();
+        const horizon = (at: Date) => new Date(at.getTime() + OBSERVABILITY_LIST_HORIZON_MS).toISOString();
         expect(requests.listRequests.map(body => body.timeRange.to)).toEqual([horizon(mountedAt), horizon(changedAt)]);
         expect(requests.deltaRequests.map(body => [body.after, body.timeRange.to])).toEqual([
           [undefined, horizon(mountedAt)],

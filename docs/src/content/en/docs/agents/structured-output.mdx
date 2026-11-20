@@ -134,6 +134,17 @@ Visit [`.generate()`](/reference/agents/generate) for a full list of configurati
 ]
 ```
 
+## Read the result
+
+The schema is input, the object is output. You pass the shape you want in `structuredOutput.schema`, and read the validated result from `response.object`. That field holds the parsed, schema-validated value, so you don't parse or validate it yourself. The exception is `errorStrategy: 'fallback'`: when validation fails, `response.object` is your configured `fallbackValue`, which never went through the schema. Check `response.usedFallbackValue` to tell the two cases apart.
+
+```typescript
+const response = await testAgent.generate('Help me plan my day.', { structuredOutput: { schema } })
+const plan = response.object // typed from the schema you passed in
+```
+
+With `agent.stream()` and structured output, read `stream.object` once the stream finishes.
+
 ## Stream structured output
 
 Streaming also supports structured output. The final structured object is available on `stream.fullStream` and after the stream completes on `stream.object`. Text stream chunks are still emitted, but they contain natural language text rather than structured data.

@@ -318,6 +318,35 @@ describe('DurableAgent.listActiveRuns', () => {
     }
   });
 
+  it('pages filtered results across storage batches while counting matches beyond the requested page', async () => {
+    for (let i = 0; i < 250; i++) {
+      await seed(
+        store,
+        makeSnapshot(`run-${i}`, 'running', {
+          agentId: i % 5 === 0 ? 'agent-B' : 'agent-A',
+          threadId: i % 3 === 0 ? 'other-thread' : 'target-thread',
+          resourceId: 'r',
+        }),
+        'r',
+      );
+    }
+
+    const all = await agent.listActiveRuns({ threadId: 'target-thread', resourceId: 'r' });
+    expect(all.total).toBe(133);
+    const seen: string[] = [];
+    for (let page = 0; page < 9; page++) {
+      const result = await agent.listActiveRuns({ threadId: 'target-thread', resourceId: 'r', perPage: 17, page });
+      expect(result.total).toBe(all.total);
+      expect(result.runs).toEqual(all.runs.slice(page * 17, (page + 1) * 17));
+      seen.push(...result.runs.map(run => run.runId));
+    }
+    expect(seen).toEqual(all.runs.map(run => run.runId));
+
+    // Pagination is enabled only when both options are present.
+    expect(await agent.listActiveRuns({ threadId: 'target-thread', perPage: 17 })).toEqual(all);
+    expect(await agent.listActiveRuns({ threadId: 'target-thread', page: 2 })).toEqual(all);
+  });
+
   it('does not loop when the storage adapter ignores pagination', async () => {
     for (let i = 0; i < 150; i++) {
       await seed(

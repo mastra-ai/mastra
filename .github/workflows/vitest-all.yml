@@ -78,6 +78,8 @@ jobs:
         project:
           # Core packages
           - packages/*
+          # Client SDKs
+          - client-sdks/*
           # Stores (external API required)
           - stores/*
           # Voice packages
@@ -176,4 +178,4 @@ jobs:
           merge-multiple: true
 
       - name: Merge reports
-        run: pnpm vitest --merge-reports --reporter=default --reporter=github-actions --passWithNoTests
+        run: pnpm vitest --merge-reports=.vitest-reports --reporter=default --reporter=github-actions --passWithNoTests
