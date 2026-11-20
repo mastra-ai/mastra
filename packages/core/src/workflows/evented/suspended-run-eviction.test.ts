@@ -155,14 +155,20 @@ describe.each(engines)('$engine engine: suspended run eviction', ({ createWorkfl
 
   it('releases a run by the status its executions leave when their results arrive out of order', async () => {
     let validate!: () => void;
-    let gate: Promise<void> | undefined = new Promise<void>(resolve => (validate = resolve));
-    const { workflow } = await setup(async () => gate);
+    let entered!: () => void;
+    const olderValidating = new Promise<void>(resolve => (entered = resolve));
+    let gate: Promise<void> | undefined;
+    const { workflow } = await setup(async () => {
+      entered();
+      await gate;
+    });
     const run = await workflow.createRun();
     expect((await run.start({ inputData: {} })).status).toBe('suspended');
 
     // The older resume waits in validation while a newer one suspends the run again.
+    gate = new Promise<void>(resolve => (validate = resolve));
     const older = run.resume({ step: 'approve', resumeData: { by: 'ana' } });
-    await new Promise(resolve => setTimeout(resolve, 20));
+    await olderValidating;
     gate = undefined;
     expect((await run.resume({ step: 'approve', resumeData: { by: 'again' } })).status).toBe('suspended');
 

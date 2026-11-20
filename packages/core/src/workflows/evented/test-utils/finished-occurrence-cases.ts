@@ -1008,13 +1008,18 @@ export function describeFinishedOccurrenceCases({
       const run = await a.workflow.createRun({ runId: uniqueRunId() });
       expect((await run.start({ inputData: { n: 1 } })).status).toBe('suspended');
       const resuming = run.resume({ step: 'gate', resumeData: { ok: true } });
-      await lastStarted.promise;
-      expect((await storedRun(run.runId))?.status).toBe('running');
-      // The suspend's handler goes on while the resumed run is still running.
-      resumed.resolve();
-      await suspendHandled.promise;
-      expect((await storedRun(run.runId))?.status).toBe('running');
-      lastReleased.resolve();
+      try {
+        // A resume that rejects before it reaches `last` fails the test with its own error.
+        await Promise.race([lastStarted.promise, resuming.then(() => {})]);
+        expect((await storedRun(run.runId))?.status).toBe('running');
+        // The suspend's handler goes on while the resumed run is still running.
+        resumed.resolve();
+        await suspendHandled.promise;
+        expect((await storedRun(run.runId))?.status).toBe('running');
+      } finally {
+        resumed.resolve();
+        lastReleased.resolve();
+      }
 
       expect((await resuming).status).toBe('success');
       expect((await storedRun(run.runId))?.status).toBe('success');
