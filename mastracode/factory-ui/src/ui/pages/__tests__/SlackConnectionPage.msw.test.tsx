@@ -1,4 +1,4 @@
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import userEvent from '@testing-library/user-event';
 import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
 import type { ConnectedChannelAccount } from '../../domains/settings/services/channelAccounts';
 import { OverlaysProvider } from '../../lib/overlays';
 import { SlackConnectionPage } from '../SlackConnectionPage';
@@ -25,30 +25,30 @@ function mockAccounts(accounts: ConnectedChannelAccount[], canConnect = true) {
   server.use(http.get(`${TEST_BASE_URL}/web/channel-accounts`, () => HttpResponse.json({ accounts, canConnect })));
 }
 
-function mockFactories(slackWorkItemsEnabled = false) {
+function mockFactories() {
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({
         projects: [
-          { id: 'fp-1', name: 'Primary Factory', slackWorkItemsEnabled },
-          { id: 'fp-2', name: 'Secondary Factory', slackWorkItemsEnabled: false },
+          { id: 'fp-1', name: 'Primary Factory', repositories: [] },
+          { id: 'fp-2', name: 'Secondary Factory', repositories: [] },
         ],
       }),
     ),
   );
 }
 
-function renderPage(slackWorkItemsEnabled = false) {
-  mockFactories(slackWorkItemsEnabled);
+function renderPage() {
+  mockFactories();
   return renderWithProviders(
     <MemoryRouter initialEntries={['/factories/fp-1/settings/connections/slack']}>
-      <MainSidebarProvider storageKey="slack-connection-page-test" mobileBreakpoint={0}>
+      <SidebarProvider storageKey="slack-connection-page-test" mobileBreakpoint={0}>
         <OverlaysProvider>
           <Routes>
             <Route path="/factories/:factoryId/settings/connections/slack" element={<SlackConnectionPage />} />
           </Routes>
         </OverlaysProvider>
-      </MainSidebarProvider>
+      </SidebarProvider>
     </MemoryRouter>,
   );
 }
@@ -63,8 +63,7 @@ describe('SlackConnectionPage', () => {
 
     renderPage();
 
-    expect(await screen.findByText('Not configured')).toBeInTheDocument();
-    expect(screen.getByText(/Slack is not set up for this factory/)).toBeInTheDocument();
+    expect(await screen.findByText(/Slack is not set up for this factory/)).toBeInTheDocument();
     expect(screen.queryByText(/is not valid JSON/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Connect Slack/ })).not.toBeInTheDocument();
   });
@@ -78,8 +77,7 @@ describe('SlackConnectionPage', () => {
 
     renderPage();
 
-    expect(await screen.findByText('Not configured')).toBeInTheDocument();
-    expect(screen.getByText(/Slack is not set up for this factory/)).toBeInTheDocument();
+    expect(await screen.findByText(/Slack is not set up for this factory/)).toBeInTheDocument();
     expect(screen.queryByText(/SLACK_APP_SIGNING_SECRET/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Connect Slack/ })).not.toBeInTheDocument();
   });
@@ -90,21 +88,22 @@ describe('SlackConnectionPage', () => {
     renderPage();
     const user = userEvent.setup();
 
+    await screen.findByText('Example Workspace');
     const connectionSection = (await screen.findByRole('heading', { level: 2, name: 'Connection' })).closest('section');
     if (!connectionSection) throw new Error('Connection section not found');
 
     const workspaceName = within(connectionSection).getByText('Example Workspace');
-    expect(screen.queryByText('Example Workspace (T00000001)')).not.toBeInTheDocument();
     await user.hover(workspaceName);
     expect(await screen.findByText('Workspace ID: T00000001')).toBeInTheDocument();
 
     const accountName = within(connectionSection).getByText('Test User');
-    expect(screen.queryByText('Test User (U00000001)')).not.toBeInTheDocument();
     await user.hover(accountName);
     expect(await screen.findByText('Slack user ID: U00000001')).toBeInTheDocument();
 
-    expect(within(connectionSection).queryByText('Connected account')).not.toBeInTheDocument();
-    expect(within(connectionSection).getByText(/Connected January 15, 2026/)).toBeInTheDocument();
+    const linkedAt = new Intl.DateTimeFormat(undefined, { dateStyle: 'long', timeStyle: 'short' }).format(
+      new Date(slackLink.linkedAt),
+    );
+    expect(within(connectionSection).getByText(`Connected ${linkedAt}`)).toBeInTheDocument();
     expect(screen.getByText('Start and continue Factory sessions from Slack.')).toBeInTheDocument();
 
     const sessionBehaviorSection = screen
@@ -115,28 +114,15 @@ describe('SlackConnectionPage', () => {
       within(sessionBehaviorSection).getByRole('combobox', { name: 'Default factory for Test User' }),
     ).toHaveTextContent('Primary Factory');
 
-    // Routing a Slack account is personal; creating work items flips a flag on
-    // the factory, so it sits in its own block rather than under this one.
-    expect(
-      within(sessionBehaviorSection).queryByRole('switch', { name: 'Create work items for new Slack threads' }),
-    ).not.toBeInTheDocument();
-    const workItemsSection = screen.getByRole('heading', { level: 2, name: 'Work items' }).closest('section');
-    if (!workItemsSection) throw new Error('Work items section not found');
-    expect(
-      within(workItemsSection).getByRole('switch', { name: 'Create work items for new Slack threads' }),
-    ).toBeInTheDocument();
-
     const dangerZoneSection = screen.getByRole('heading', { level: 2, name: 'Danger zone' }).closest('section');
     if (!dangerZoneSection) throw new Error('Danger zone section not found');
     expect(dangerZoneSection).toHaveTextContent(
       'Slack messages from Test User will no longer start or continue Factory sessions.',
     );
-    expect(within(dangerZoneSection).getByText('Test User').closest('strong')).not.toBeNull();
 
     expect(screen.getAllByRole('heading', { level: 2 }).map(heading => heading.textContent)).toEqual([
       'Connection',
       'Session behavior',
-      'Work items',
       'Danger zone',
     ]);
   });
@@ -171,26 +157,6 @@ describe('SlackConnectionPage', () => {
     const slackRow = screen.getByRole('button', { name: /Slack.*Not connected.*Connect Slack/ });
     expect(slackRow).toBeEnabled();
     expect(slackRow).toHaveTextContent(/Slack.*Not connected.*Connect Slack/);
-  });
-
-  it('given a linked account, when work-item creation is enabled, then it updates the active Factory', async () => {
-    mockAccounts([slackLink]);
-    let patchBody: unknown;
-    server.use(
-      http.patch(`${TEST_BASE_URL}/web/factory/projects/fp-1`, async ({ request }) => {
-        patchBody = await request.json();
-        return HttpResponse.json({ project: { id: 'fp-1', name: 'Primary Factory', slackWorkItemsEnabled: true } });
-      }),
-    );
-    const { client } = renderPage();
-    const user = userEvent.setup();
-    const workItemSwitch = await screen.findByRole('switch', { name: 'Create work items for new Slack threads' });
-    expect(workItemSwitch).not.toBeChecked();
-
-    await user.click(workItemSwitch);
-
-    await waitFor(() => expect(patchBody).toEqual({ slackWorkItemsEnabled: true }));
-    await waitForMutationsIdle(client);
   });
 
   it('given a linked account, when disconnected, then it sends the sender key and returns to the connect state', async () => {

@@ -1,224 +1,194 @@
 // @vitest-environment jsdom
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { render } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { createElement } from 'react';
-import type { ToasterProps } from 'sonner';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { toast as sonnerToast } from 'sonner';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const { sonnerDefault, sonnerMock, ToasterMock } = vi.hoisted(() => {
-  const ToasterMock = vi.fn<(props: ToasterProps) => null>(() => null);
-  return {
-    // Sonner's own callable export, so tests can see what is handed to it.
-    sonnerDefault: vi.fn((..._args: unknown[]) => undefined),
-    sonnerMock: {
-      success: vi.fn(),
-      error: vi.fn(),
-      warning: vi.fn(),
-      info: vi.fn(),
-      dismiss: vi.fn(),
-      promise: vi.fn(),
-    },
-    ToasterMock,
-  };
-});
-
-vi.mock('sonner', () => ({
-  toast: Object.assign(sonnerDefault, sonnerMock),
-  Toaster: ToasterMock,
-}));
-
+import '@/test/inert-resize-observer';
 import { Toaster, toast } from './toast';
 
-beforeEach(() => {
-  Object.values(sonnerMock).forEach(fn => fn.mockClear());
-  sonnerDefault.mockClear();
-  ToasterMock.mockClear();
+function latestToast() {
+  const notification = sonnerToast.getHistory().at(-1);
+  if (!notification || !('title' in notification)) throw new Error('Missing toast');
+  return notification;
+}
+
+afterEach(() => {
+  cleanup();
+  sonnerToast.dismiss();
+  vi.useRealTimers();
 });
 
-const lastToasterProps = (): ToasterProps => {
-  const call = ToasterMock.mock.calls[0];
-  if (!call) throw new Error('Toaster not rendered');
-  return call[0];
-};
+describe('Toaster', () => {
+  describe('when callers override its presentation', () => {
+    it('keeps a working native close button', async () => {
+      const user = userEvent.setup();
+      render(createElement(Toaster, { closeButton: false }));
+      act(() => {
+        toast.success('Saved');
+      });
+      await screen.findByText('Saved');
+      screen.getByRole('button', { name: 'Close toast' }).focus();
+      await user.keyboard('{Enter}');
+      await waitFor(() => expect(screen.queryByText('Saved')).toBeNull());
+    });
 
-describe('Toaster wrapper', () => {
-  it('enables sonner native closeButton + richColors', () => {
-    render(createElement(Toaster));
-    const props = lastToasterProps();
-    expect(props.closeButton).toBe(true);
-    expect(props.richColors).toBe(true);
-  });
-
-  it('applies the mastra-toaster theme class so sonner picks up our CSS variables', () => {
-    render(createElement(Toaster));
-    expect(lastToasterProps().className).toContain('mastra-toaster');
-  });
-
-  it('preserves caller className alongside the theme class', () => {
-    render(createElement(Toaster, { className: 'my-extra' }));
-    const className = lastToasterProps().className ?? '';
-    expect(className).toContain('mastra-toaster');
-    expect(className).toContain('my-extra');
-  });
-
-  it('forwards caller props (position) and merges toastOptions over defaults', () => {
-    render(createElement(Toaster, { position: 'top-right', toastOptions: { duration: 9000 } }));
-    const props = lastToasterProps();
-    expect(props.position).toBe('top-right');
-    expect(props.toastOptions?.duration).toBe(9000);
+    it('uses the caller duration instead of the default', async () => {
+      vi.useFakeTimers();
+      render(createElement(Toaster, { toastOptions: { duration: 9000 } }));
+      act(() => {
+        toast.info('Timed notification');
+      });
+      await act(() => vi.advanceTimersByTimeAsync(0));
+      await act(() => vi.advanceTimersByTimeAsync(5001));
+      expect(screen.queryByText('Timed notification')).not.toBeNull();
+      await act(() => vi.advanceTimersByTimeAsync(4200));
+      expect(screen.queryByText('Timed notification')).toBeNull();
+    });
   });
 });
 
 describe('toast variant helpers', () => {
-  const variants = ['success', 'error', 'warning', 'info'] as const;
-
-  it.each(variants)('%s forwards a single message to sonnerToast.%s', method => {
-    toast[method]('hello');
-    expect(sonnerMock[method]).toHaveBeenCalledTimes(1);
-    expect(sonnerMock[method].mock.calls[0][0]).toBe('hello');
-  });
-
-  it.each(variants)('%s emits one sonner call per array item', method => {
-    toast[method](['one', 'two', 'three']);
-    expect(sonnerMock[method]).toHaveBeenCalledTimes(3);
-  });
-});
-
-describe('mastra-toaster CSS theming', () => {
-  // Lock-in: sonner's richColors mode reads --{type}-{slot} for bg/text/border per variant.
-  // These mappings must remain wired to our notice tokens, otherwise toasts fall back to sonner's
-  // built-in palette and lose visual parity with the Notice component.
-  const css = readFileSync(resolve(__dirname, './toast.css'), 'utf8');
-  const rule = css.match(/\[data-sonner-toaster\]\[data-sonner-theme\]\.mastra-toaster\s*\{[^}]+\}/)?.[0];
-
-  it('declares a .mastra-toaster rule with selector specificity that beats sonner defaults', () => {
-    // Sonner's own per-theme block sits at (0,2,0). Our selector adds the .mastra-toaster
-    // class for (0,3,0) — this regex breaks if anyone weakens the selector back to .mastra-toaster.
-    expect(rule).toBeDefined();
-  });
-
-  const expectedMappings: Array<[string, string]> = [
-    ['--normal-bg', 'var(--surface3)'],
-    ['--normal-text', 'var(--neutral5)'],
-    ['--normal-border', 'var(--border1)'],
-    ['--success-bg', 'var(--toast-success-bg)'],
-    ['--success-text', 'var(--notice-success-fg)'],
-    ['--success-border', 'var(--toast-success-border)'],
-    ['--error-bg', 'var(--toast-destructive-bg)'],
-    ['--error-text', 'var(--notice-destructive-fg)'],
-    ['--error-border', 'var(--toast-destructive-border)'],
-    ['--warning-bg', 'var(--toast-warning-bg)'],
-    ['--warning-text', 'var(--notice-warning-fg)'],
-    ['--warning-border', 'var(--toast-warning-border)'],
-    ['--info-bg', 'var(--toast-info-bg)'],
-    ['--info-text', 'var(--notice-info-fg)'],
-    ['--info-border', 'var(--toast-info-border)'],
-  ];
-
-  // Full regex escape — `expected` is a known CSS literal (`var(--…)`) but using a complete escape
-  // keeps the helper safe if anyone widens the mapping list later.
-  const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-  it.each(expectedMappings)('maps %s to %s', (cssVar, expected) => {
-    expect(rule).toMatch(new RegExp(`${escapeRegex(cssVar)}:\\s*${escapeRegex(expected)}`));
-  });
-
-  it('applies our toast shadow to each rendered toast', () => {
-    expect(css).toMatch(
-      /\[data-sonner-toaster\]\.mastra-toaster\s+\[data-sonner-toast\]\s*\{[^}]*box-shadow:\s*var\(--toast-shadow\)/,
-    );
-  });
-});
-
-describe('toast.promise wrapper', () => {
-  it('translates loadingMessage / successMessage / errorMessage to sonner shape', () => {
-    const promise = Promise.resolve({ id: 1 });
-    toast.promise({
-      myPromise: promise,
-      loadingMessage: 'Saving…',
-      successMessage: 'Saved',
-      errorMessage: 'Failed',
+  describe.each(['success', 'error', 'warning', 'info'] as const)('when the tone is %s', method => {
+    it('emits the message with the requested tone', () => {
+      const id = toast[method]('hello');
+      expect(latestToast()).toMatchObject({ id, title: 'hello', type: method });
     });
 
-    expect(sonnerMock.promise).toHaveBeenCalledTimes(1);
-    const [passedPromise, opts] = sonnerMock.promise.mock.calls[0];
-    expect(passedPromise).toBe(promise);
-    expect(opts.loading).toBe('Saving…');
-    expect(opts.success({ id: 1 })).toBe('Saved');
-    expect(opts.error(new Error('boom'))).toBe('Failed');
-  });
-
-  it('falls back to err.message when no errorMessage is provided', () => {
-    toast.promise({
-      myPromise: Promise.resolve(null),
-      successMessage: 'ok',
+    it('returns one matching toast ID per message in an array', () => {
+      const start = sonnerToast.getHistory().length;
+      const ids = toast[method](['one', 'two', 'three']);
+      const emitted = sonnerToast.getHistory().slice(start);
+      expect(emitted.map(notification => notification.id)).toEqual(ids);
+      expect(emitted).toMatchObject([
+        { title: 'one', type: method },
+        { title: 'two', type: method },
+        { title: 'three', type: method },
+      ]);
     });
-    const opts = sonnerMock.promise.mock.calls[0][1];
-    expect(opts.error(new Error('boom'))).toBe('boom');
   });
 });
 
 describe('toast entry point', () => {
-  it('emits one sonner call per array item', () => {
-    const result = toast(['one', 'two']);
-
-    expect(Array.isArray(result)).toBe(true);
-    expect(result).toHaveLength(2);
-    expect(sonnerDefault).toHaveBeenCalledTimes(2);
-    expect(sonnerDefault).toHaveBeenNthCalledWith(1, 'one', {});
-    expect(sonnerDefault).toHaveBeenNthCalledWith(2, 'two', {});
+  it('returns one matching toast ID per message in an array', () => {
+    const start = sonnerToast.getHistory().length;
+    const ids = toast(['one', 'two']);
+    const emitted = sonnerToast.getHistory().slice(start);
+    expect(emitted.map(notification => notification.id)).toEqual(ids);
+    expect(emitted).toMatchObject([{ title: 'one' }, { title: 'two' }]);
   });
 
-  it('accepts a React element', () => {
-    expect(() => toast(createElement('span', null, 'hi'))).not.toThrow();
+  it('preserves a React element message', () => {
+    const node = createElement('span', undefined, 'hi');
+    const id = toast(node);
+    expect(latestToast()).toMatchObject({ id, title: node });
   });
 
-  it('rejects a message it cannot render', () => {
-    expect(() => toast(42 as unknown as string)).toThrow('Invalid message type');
-    expect(() => toast(null)).toThrow('Invalid message type');
+  it.each([42, null])('rejects the unsupported message %s', message => {
+    expect(() => toast(message)).toThrow('Invalid message type');
   });
 
-  it('forwards a custom node and a dismiss id', () => {
-    const node = createElement('span', null, 'custom');
-    toast.custom(node);
-    toast.dismiss('toast-1');
+  it('runs the retry action from the keyboard and closes the toast', async () => {
+    const retry = vi.fn();
+    const user = userEvent.setup();
+    render(createElement(Toaster));
+    act(() => {
+      toast.error('Couldn’t save settings', { action: { label: 'Retry', onClick: retry } });
+    });
+    const action = await screen.findByRole('button', { name: 'Retry' });
+    action.focus();
+    await user.keyboard('{Enter}');
+    expect(retry).toHaveBeenCalledOnce();
+    await waitFor(() => expect(screen.queryByText('Couldn’t save settings')).toBeNull());
+  });
 
-    // `custom` goes straight through sonner's callable export.
-    expect(sonnerDefault).toHaveBeenCalledWith(node, {});
-    expect(sonnerMock.dismiss).toHaveBeenCalledWith('toast-1');
+  describe('when updating an existing toast without changing its actions', () => {
+    it('preserves the original React-node action', () => {
+      const action = createElement('button', { type: 'button' }, 'Apply');
+      toast.info('Preparing', { id: 'action-update', action });
+      toast.info('Ready', { id: 'action-update' });
+      expect(latestToast().action).toBe(action);
+    });
+
+    it('preserves the original cancel action', () => {
+      const cancel = { label: 'Cancel', onClick: vi.fn() };
+      toast.info('Preparing', { id: 'cancel-update', cancel });
+      const original = latestToast().cancel;
+      toast.info('Ready', { id: 'cancel-update' });
+      expect(latestToast().cancel).toBe(original);
+    });
   });
 });
 
-describe('toast.promise fallbacks', () => {
-  it('defaults the loading message', () => {
-    toast.promise({ myPromise: Promise.resolve(null), successMessage: 'ok' });
-
-    expect(sonnerMock.promise.mock.calls[0][1].loading).toBe('Loading...');
+describe('toast.promise', () => {
+  it.each(['success', 'error'])('starts the %s timeout only after the loading operation settles', async outcome => {
+    vi.useFakeTimers();
+    const operation = Promise.withResolvers<number>();
+    const onAutoClose = vi.fn();
+    render(createElement(Toaster));
+    act(() => {
+      toast.promise({
+        myPromise: operation.promise,
+        loadingMessage: 'Saving changes',
+        successMessage: 'Changes saved',
+        errorMessage: 'Couldn’t save changes',
+        options: { duration: 1000, onAutoClose },
+      });
+    });
+    await act(() => vi.advanceTimersByTimeAsync(5000));
+    expect(screen.queryByText('Saving changes')).not.toBeNull();
+    expect(onAutoClose).not.toHaveBeenCalled();
+    await act(async () => {
+      if (outcome === 'success') operation.resolve(42);
+      else operation.reject(new Error('Connection interrupted'));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    const result = outcome === 'success' ? 'Changes saved' : 'Couldn’t save changes';
+    expect(screen.queryByText(result)).not.toBeNull();
+    await act(() => vi.advanceTimersByTimeAsync(999));
+    expect(screen.queryByText(result)).not.toBeNull();
+    await act(() => vi.advanceTimersByTimeAsync(202));
+    expect(screen.queryByText(result)).toBeNull();
+    expect(onAutoClose).toHaveBeenCalledOnce();
   });
 
-  it('falls back to a generic message for a non-Error rejection', () => {
-    toast.promise({ myPromise: Promise.resolve(null), successMessage: 'ok' });
-
-    expect(sonnerMock.promise.mock.calls[0][1].error('a string reason')).toBe('Error...');
+  describe('when the operation succeeds', () => {
+    it('passes the resolved data to the caller', async () => {
+      const onSuccess = vi.fn();
+      toast.promise({ myPromise: Promise.resolve({ id: 1 }), successMessage: 'Saved', onSuccess });
+      await waitFor(() => expect(onSuccess).toHaveBeenCalledExactlyOnceWith({ id: 1 }));
+    });
   });
 
-  it('runs the caller callbacks alongside the messages', () => {
-    const onSuccess = vi.fn();
-    const onError = vi.fn();
-    toast.promise({ myPromise: Promise.resolve({ id: 1 }), successMessage: 'ok', onSuccess, onError });
+  describe('when the operation rejects', () => {
+    it('uses the Error message when no error message is supplied', async () => {
+      toast.promise({ myPromise: Promise.reject(new Error('boom')), successMessage: 'Saved' });
+      await waitFor(() => expect(latestToast()).toMatchObject({ title: 'boom', type: 'error' }));
+    });
 
-    const opts = sonnerMock.promise.mock.calls[0][1];
-    opts.success({ id: 1 });
-    opts.error(new Error('boom'));
+    it('uses the generic message for a non-Error rejection', async () => {
+      toast.promise({ myPromise: Promise.reject('a string reason'), successMessage: 'Saved' });
+      await waitFor(() => expect(latestToast()).toMatchObject({ title: 'Error...', type: 'error' }));
+    });
 
-    expect(onSuccess).toHaveBeenCalledWith({ id: 1 });
-    expect(onError).toHaveBeenCalledWith(new Error('boom'));
+    it('passes the original rejection to the caller', async () => {
+      const onError = vi.fn();
+      const error = new Error('boom');
+      toast.promise({ myPromise: Promise.reject(error), successMessage: 'Saved', onError });
+      await waitFor(() => expect(onError).toHaveBeenCalledExactlyOnceWith(error));
+    });
   });
 
-  it('lets caller options override the derived shape', () => {
-    toast.promise({ myPromise: Promise.resolve(null), successMessage: 'ok', options: { loading: 'Mine' } });
+  it('supplies the default loading message', async () => {
+    toast.promise({ myPromise: Promise.resolve({ id: 1 }), successMessage: 'Saved' });
+    expect(latestToast()).toMatchObject({ title: 'Loading...', type: 'loading' });
+    await waitFor(() => expect(latestToast().title).toBe('Saved'));
+  });
 
-    expect(sonnerMock.promise.mock.calls[0][1].loading).toBe('Mine');
+  it('lets caller options override the loading message', async () => {
+    toast.promise({ myPromise: Promise.resolve({ id: 1 }), successMessage: 'Saved', options: { loading: 'Mine' } });
+    expect(latestToast()).toMatchObject({ title: 'Mine', type: 'loading' });
+    await waitFor(() => expect(latestToast().title).toBe('Saved'));
   });
 });

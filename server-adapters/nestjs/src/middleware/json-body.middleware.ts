@@ -11,7 +11,7 @@ import { DEFAULT_MAX_BODY_SIZE } from '../utils/constants';
  * Middleware that parses JSON request bodies.
  * Uses express.json() with size limits from configuration.
  *
- * This middleware is essential for POST/PUT/PATCH requests to work properly.
+ * This middleware is essential for JSON request bodies to work properly.
  * NestJS does not automatically parse JSON bodies unless body-parser is configured.
  */
 @Injectable()
@@ -23,14 +23,21 @@ export class JsonBodyMiddleware implements NestMiddleware {
 
     this.jsonParser = express.json({
       limit: maxSize,
+      strict: false,
       // Only parse JSON content types
       type: ['application/json', 'application/*+json'],
+      // Record how many bytes were read so route-level maxBodySize can reject padded
+      // chunked bodies that shrink after JSON.parse / JSON.stringify. Store only the
+      // count: keeping the buffer would hold the whole body for the life of the request.
+      verify: (req, _res, buf) => {
+        (req as Request & { mastraRawBodySize?: number }).mastraRawBodySize = buf.length;
+      },
     });
   }
 
   use(req: Request, res: Response, next: NextFunction): void {
     // Skip if body is already parsed (e.g., by another middleware)
-    if (req.body !== undefined && Object.keys(req.body).length > 0) {
+    if (req.body !== undefined) {
       next();
       return;
     }

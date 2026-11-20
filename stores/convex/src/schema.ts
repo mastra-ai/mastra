@@ -159,6 +159,8 @@ export const mastraSchedulesTable = defineTable({
   metadata: v.optional(v.union(v.string(), v.null())),
   owner_type: v.optional(v.union(v.string(), v.null())),
   owner_id: v.optional(v.union(v.string(), v.null())),
+  run_at: v.optional(v.union(v.number(), v.null())),
+  end_at: v.optional(v.union(v.number(), v.null())),
   workflow_id: v.optional(v.union(v.string(), v.null())),
 })
   .index('by_record_id', ['id'])
@@ -263,6 +265,15 @@ export const mastraBackgroundTasksTable = defineTable({
   startedAt: v.union(v.string(), v.null()),
   suspendedAt: v.union(v.string(), v.null()),
   completedAt: v.union(v.string(), v.null()),
+  // Optional so that documents written before execution leases existed, which
+  // have no `ownerId`/`leaseExpiresAt` key at all, still validate. Convex
+  // checks every existing document against the schema on push, and a required
+  // field would reject those documents and fail `convex deploy`.
+  ownerId: v.optional(v.union(v.string(), v.null())),
+  leaseExpiresAt: v.optional(v.union(v.string(), v.null())),
+  // Optional for the same reason: rows written before these fields existed.
+  expiresAt: v.optional(v.union(v.string(), v.null())),
+  metadata: v.optional(v.union(v.string(), v.null())),
 })
   .index('by_record_id', ['id'])
   .index('by_status_created', ['status', 'createdAt'])
@@ -327,6 +338,8 @@ export const mastraObservationalMemoryTable = defineTable({
   lastBufferedAtTokens: v.number(),
   lastBufferedAtTime: v.optional(v.union(v.string(), v.null())),
   metadata: v.optional(v.union(v.string(), v.null())),
+  // Set to the successor's id when a reflection retires this generation; never cleared.
+  supersededBy: v.optional(v.union(v.string(), v.null())),
   createdAt: v.string(),
   updatedAt: v.string(),
 })

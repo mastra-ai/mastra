@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { WorkflowConditionCard } from '../cards/workflow-condition-card';
+import { WorkflowConditionCard } from '../cards/condition/workflow-condition-card';
 
 const meta = {
   title: 'Workflows/Condition card',
@@ -10,7 +10,6 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
-export const Collapsed: Story = { args: { initiallyOpen: false } };
 export const BranchesAndLoops: Story = {
   render: () => (
     <div className="flex flex-wrap gap-6">
@@ -39,6 +38,26 @@ export const LongFunction: Story = {
         type: 'when',
         fnString:
           '({ inputData }) => {\n  const hasCompleteProfile = inputData.customer.email && inputData.customer.address;\n  return hasCompleteProfile && inputData.order.total > 100;\n}',
+      },
+    ],
+  },
+};
+
+export const UnavailableExpression: Story = {
+  args: { conditions: [{ type: 'when', fnString: '' }] },
+};
+
+export const UnparseableSource: Story = {
+  args: { conditions: [{ type: 'when', fnString: 'custom predicate: [native code]' }] },
+};
+
+export const CompoundExpression: Story = {
+  args: {
+    conditions: [
+      {
+        type: 'when',
+        fnString:
+          'async ({ inputData }) => { const message = "a=>b && c"; return await allowed(inputData) && inputData.note === message; }',
       },
     ],
   },

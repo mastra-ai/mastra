@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
+import { expect, within } from 'storybook/test';
 
 import { Button } from '../Button';
 import {
@@ -74,7 +75,7 @@ function MessageScrollerDemo({ autoScroll = false }: { autoScroll?: boolean }) {
         </Button>
       </div>
       <MessageScrollerProvider autoScroll={autoScroll} defaultScrollPosition="end" preserveScrollOnPrepend>
-        <MessageScroller className="border-border1 bg-surface2 h-96 rounded-xl border">
+        <MessageScroller className="h-96 rounded-xl border border-border bg-background">
           <MessageScrollerViewport aria-label="Conversation messages">
             <MessageScrollerContent className="gap-4 p-4">
               {messages.map(message => (
@@ -82,9 +83,9 @@ function MessageScrollerDemo({ autoScroll = false }: { autoScroll?: boolean }) {
                   key={message.id}
                   messageId={message.id}
                   scrollAnchor={message.role === 'user'}
-                  className={message.role === 'user' ? 'bg-surface4 ml-12 rounded-xl p-3' : 'mr-12 p-3'}
+                  className={message.role === 'user' ? 'ml-12 rounded-xl bg-muted p-3' : 'mr-12 p-3'}
                 >
-                  <p className="text-ui-sm text-neutral5">{message.text}</p>
+                  <p className="text-caption text-foreground">{message.text}</p>
                 </MessageScrollerItem>
               ))}
             </MessageScrollerContent>
@@ -98,8 +99,46 @@ function MessageScrollerDemo({ autoScroll = false }: { autoScroll?: boolean }) {
 
 export const Conversation: Story = {
   render: () => <MessageScrollerDemo />,
+  play: async ({ canvasElement }) => {
+    const viewport = canvasElement.querySelector<HTMLElement>('[data-slot="message-scroller-viewport"]');
+    if (!viewport) throw new Error('Expected the conversation scroll viewport');
+    const style = getComputedStyle(viewport);
+    await expect(style.overscrollBehaviorX).toBe('auto');
+    await expect(style.overscrollBehaviorY).toBe('contain');
+  },
 };
 
 export const AutoFollow: Story = {
   render: () => <MessageScrollerDemo autoScroll />,
+};
+
+export const InactiveControls: Story = {
+  render: () => (
+    <MessageScrollerProvider>
+      <MessageScroller className="h-80 w-64">
+        <MessageScrollerViewport>
+          <MessageScrollerContent>
+            <p className="p-4 text-body">A short conversation fits without scrolling.</p>
+          </MessageScrollerContent>
+        </MessageScrollerViewport>
+        <MessageScrollerButton direction="start" />
+        <MessageScrollerButton />
+      </MessageScroller>
+    </MessageScrollerProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const stage = canvasElement.querySelector('[data-slot="message-scroller"]');
+    if (!stage) throw new Error('Conversation must render inside a stage');
+    const bounds = stage.getBoundingClientRect();
+    await expect(getComputedStyle(stage).overflow).toBe('visible');
+    for (const name of ['Scroll to start', 'Scroll to end']) {
+      const button = within(canvasElement).getByRole('button', { name });
+      const buttonBounds = button.getBoundingClientRect();
+      await expect(button).toHaveAttribute('data-active', 'false');
+      await expect(buttonBounds.top).toBeGreaterThanOrEqual(bounds.top);
+      await expect(buttonBounds.bottom).toBeLessThanOrEqual(bounds.bottom);
+      await expect(buttonBounds.left).toBeGreaterThanOrEqual(bounds.left);
+      await expect(buttonBounds.right).toBeLessThanOrEqual(bounds.right);
+    }
+  },
 };

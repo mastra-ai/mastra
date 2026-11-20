@@ -1,32 +1,43 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import type { ReactNode } from 'react';
 
-import type { BoardKind } from '../boardStages';
-import { stageLabel } from '../stages';
-import type { BoardStageId } from '../stages';
+import type { BoardLayout } from '../boardLayout';
+import type { BoardStage } from '../stages';
+
+/** What the initial phase is missing before cards can arrive: a connected source, or a route to this board. */
+export type IntakeSetup = 'source' | 'route';
 
 interface BoardColumnEmptyCopy {
   title: string;
   description: string;
 }
 
-function boardColumnEmptyCopy(stage: BoardStageId, kind: BoardKind, hasIntakeSource: boolean): BoardColumnEmptyCopy {
-  switch (stage) {
-    case 'intake':
-      if (!hasIntakeSource) {
-        return {
-          title: 'No intake sources',
-          description: 'Choose GitHub or Linear in Settings to feed this column.',
-        };
-      }
-      return kind === 'review'
-        ? {
-            title: 'No pull requests waiting',
-            description: 'Open pull requests from this repository appear here.',
-          }
-        : {
-            title: 'Intake is clear',
-            description: 'New issues from your connected sources appear here.',
-          };
+function boardColumnEmptyCopy(
+  stage: BoardStage,
+  intakeSetup: IntakeSetup | undefined,
+  isInitialPhase: boolean,
+): BoardColumnEmptyCopy {
+  if (isInitialPhase) {
+    if (intakeSetup === 'source') {
+      return {
+        title: 'No intake sources',
+        description: 'Create a card or connect an issue source in Work Intake settings.',
+      };
+    }
+    if (intakeSetup === 'route') {
+      return {
+        title: 'No rule files new issues here',
+        description:
+          'Your connected sources file onto other boards. Create a card, or add a rule for new issues and pull requests.',
+      };
+    }
+    return {
+      title: 'Intake is clear',
+      description: 'New issues from your connected sources appear here.',
+    };
+  }
+  switch (stage.id) {
     case 'triage':
       return {
         title: 'Nothing to triage',
@@ -43,25 +54,20 @@ function boardColumnEmptyCopy(stage: BoardStageId, kind: BoardKind, hasIntakeSou
         description: 'Drag planned work here when implementation starts.',
       };
     case 'review':
-      return kind === 'review'
-        ? {
-            title: 'No active reviews',
-            description: 'Drag a pull request here when review starts.',
-          }
-        : {
-            title: 'Nothing awaiting review',
-            description: 'Drag built work here when it is ready for review.',
-          };
+      return {
+        title: 'Nothing awaiting review',
+        description: 'Drag built work here when it is ready for review.',
+      };
+    case 'pr-review':
+      return {
+        title: 'No pull requests in review',
+        description: 'Press Review on a pull request card in Intake to start a review.',
+      };
     case 'done':
-      return kind === 'review'
-        ? {
-            title: 'No completed reviews',
-            description: 'Drag a reviewed pull request here when it is complete.',
-          }
-        : {
-            title: 'Nothing completed yet',
-            description: 'Drag finished work here to close it out.',
-          };
+      return {
+        title: 'Nothing completed yet',
+        description: 'Drag finished work here to close it out.',
+      };
     case 'canceled':
       return {
         title: 'Nothing canceled',
@@ -69,45 +75,69 @@ function boardColumnEmptyCopy(stage: BoardStageId, kind: BoardKind, hasIntakeSou
       };
     default:
       return {
-        title: `Nothing in ${stageLabel(stage)}`,
+        title: `Nothing in ${stage.label}`,
         description: 'Drag work here when it reaches this stage.',
       };
   }
 }
 
+function boardEmptyCopy(
+  stage: BoardStage,
+  intakeSetup: IntakeSetup | undefined,
+  filtersExcludeAll: boolean,
+  isInitialPhase: boolean,
+): BoardColumnEmptyCopy {
+  if (filtersExcludeAll) {
+    return {
+      title: 'No work items match filters',
+      description: 'Try adjusting or clearing your filters.',
+    };
+  }
+  return boardColumnEmptyCopy(stage, intakeSetup, isInitialPhase);
+}
+
 export function BoardColumnEmptyState({
   stage,
-  kind,
-  hasIntakeSource,
+  isInitialPhase,
+  intakeSetup,
   filtersExcludeAll = false,
-  alreadyMaterialized = 0,
+  layout,
+  actionSlot,
 }: {
-  stage: BoardStageId;
-  kind: BoardKind;
-  hasIntakeSource: boolean;
+  stage: BoardStage;
+  isInitialPhase: boolean;
+  intakeSetup?: IntakeSetup;
   filtersExcludeAll?: boolean;
-  /** Feed items withheld because their card sits on another board in this Factory. */
-  alreadyMaterialized?: number;
+  layout: BoardLayout;
+  actionSlot?: ReactNode;
 }) {
-  const copy = filtersExcludeAll
-    ? {
-        title: kind === 'review' ? 'No pull requests match filters' : 'No work items match filters',
-        description: 'Try another teammate or relevance type.',
-      }
-    : alreadyMaterialized > 0
-      ? {
-          title: boardColumnEmptyCopy(stage, kind, hasIntakeSource).title,
-          description: `${alreadyMaterialized} ${alreadyMaterialized === 1 ? 'item from this source already has' : 'items from this source already have'} a card on another board, so the feed only offers new ones.`,
-        }
-      : boardColumnEmptyCopy(stage, kind, hasIntakeSource);
+  const copy = boardEmptyCopy(stage, intakeSetup, filtersExcludeAll, isInitialPhase);
+  if (layout === 'list') {
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+        <Txt as="p" variant="meta" tone="muted" className="m-0">
+          <Metadata>
+            <Metadata.Item>{copy.title}</Metadata.Item>
+            <Metadata.Item>
+              <Txt as="span" variant="meta" tone="faint">
+                {copy.description}
+              </Txt>
+            </Metadata.Item>
+          </Metadata>
+        </Txt>
+        {actionSlot && <div className="flex flex-wrap gap-2">{actionSlot}</div>}
+      </div>
+    );
+  }
   return (
-    <div className="border-border1 rounded-card flex min-h-24 flex-col justify-center border border-dashed px-4 py-4">
-      <Txt as="p" variant="ui-sm" className="text-icon4 m-0 font-medium">
+    <div className="border-border rounded-card flex min-h-24 flex-col justify-center border border-dashed px-4 py-4">
+      <Txt tone="muted" as="p" variant="column" className="m-0">
         {copy.title}
       </Txt>
-      <Txt as="p" variant="ui-xs" className="text-icon3 mt-1 mb-0 max-w-60 leading-5">
+      <Txt tone="muted" as="p" variant="meta" className="mt-1 mb-0 max-w-60">
         {copy.description}
       </Txt>
+      {actionSlot && <div className="mt-3 flex flex-wrap gap-2">{actionSlot}</div>}
     </div>
   );
 }

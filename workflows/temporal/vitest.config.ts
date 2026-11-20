@@ -2,6 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
+    name: 'unit:workflows/temporal',
     globals: true,
     testTimeout: 60000,
     retry: 2,

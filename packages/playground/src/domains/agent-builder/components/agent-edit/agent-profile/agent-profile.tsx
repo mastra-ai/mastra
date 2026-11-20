@@ -1,3 +1,5 @@
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
 
 export interface AgentProfileProps {
@@ -7,7 +9,7 @@ export interface AgentProfileProps {
 export const AgentProfile = ({ children }: AgentProfileProps) => {
   return (
     <div
-      className="border-border1 bg-surface3 grid h-full min-h-0 grid-rows-[auto_1fr] overflow-hidden rounded-3xl border"
+      className={cn(raisedSurfaceStyle, 'grid h-full min-h-0 grid-rows-[auto_1fr] overflow-hidden rounded-3xl')}
       data-testid="agent-profile"
     >
       {children}

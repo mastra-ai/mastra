@@ -1,6 +1,7 @@
 import type { MastraClient } from '@mastra/client-js';
 import type { Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
+import { mockTraceQueryCapabilities } from '../__utils__/mock-trace-query-capabilities';
 import { resetStorage } from '../__utils__/reset-storage';
 
 const TRACE_ID = 'partial-thread-trace';
@@ -98,6 +99,7 @@ async function mockPartialThread(page: Page) {
 }
 
 async function openPartialThread(page: Page) {
+  await mockTraceQueryCapabilities(page);
   await mockPartialThread(page);
   await page.goto(`/traces?traceId=${TRACE_ID}`);
   await expect(page.getByTestId('messages-panel')).toBeVisible();
@@ -106,8 +108,9 @@ async function openPartialThread(page: Page) {
 /**
  * FEATURE: Messages trace column
  * USER STORY: A trace reviewer can inspect an agent turn as chat beside its trace and leave a trace comment.
- * BEHAVIOR UNDER TEST: Stored spans become a read-only chat column to the left of the timeline (no tab click
- * required), the side panel widens to fit it, while feedback stays in its dedicated tab.
+ * BEHAVIOR UNDER TEST: Stored spans become a read-only chat column beside the span tree, shown by default in the
+ * side column's Messages tab (no tab click required), the side panel widens to fit it, while feedback stays in
+ * its dedicated tab.
  */
 test.describe('Messages trace column', () => {
   test.afterEach(async () => {
@@ -118,7 +121,7 @@ test.describe('Messages trace column', () => {
     test('renders the user input, assistant response, and tool execution beside the trace', async ({ page }) => {
       await openPartialThread(page);
 
-      await expect(page.getByRole('tab', { name: 'Messages' })).toHaveCount(0);
+      await expect(page.getByRole('tab', { name: 'Messages' })).toHaveAttribute('aria-selected', 'true');
       await expect(page.getByRole('dialog', { name: 'Trace details' })).toHaveClass(/w-4\/5/);
       await expect(page.getByText(USER_INPUT)).toBeVisible();
       await expect(page.getByText(ASSISTANT_OUTPUT)).toBeVisible();
@@ -128,9 +131,9 @@ test.describe('Messages trace column', () => {
     test('keeps feedback submission in the dedicated Feedback tab', async ({ page }) => {
       await openPartialThread(page);
 
-      await expect(page.getByPlaceholder('Leave feedback...')).toHaveCount(0);
+      await expect(page.getByPlaceholder('Leave feedback')).toHaveCount(0);
       await page.getByRole('tab', { name: /^Feedback/ }).click();
-      await page.getByPlaceholder('Leave feedback...').fill(COMMENT);
+      await page.getByPlaceholder('Leave feedback').fill(COMMENT);
       await page.getByRole('button', { name: 'Send feedback' }).click();
 
       await expect(page.getByText(COMMENT)).toBeVisible();

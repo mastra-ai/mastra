@@ -1,6 +1,9 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createStorageErrorId, ObservabilityStorage } from '@mastra/core/storage';
+import * as coreStorage from '@mastra/core/storage';
 import type {
+  SpanQueryResponse,
+  TrustedSpanQueryPlan,
   CreateSpanArgs,
   GetSpanArgs,
   GetSpanResponse,
@@ -84,23 +87,43 @@ import type {
   QueryThreadsResult,
   RetentionTablesDescriptor,
   TableRetentionPolicy,
+  SpanAggregateResponse,
+  TraceAggregateResponse,
   TraceQueryObservedFieldsResult,
   TraceQueryResponse,
   TrustedThreadQueryPlan,
+  TrustedSpanAggregatePlan,
+  TrustedTraceAggregatePlan,
   TrustedTraceQueryObservedFieldsPlan,
   TrustedTraceQueryPlan,
   TrustedTraceQueryValuesPlan,
 } from '@mastra/core/storage';
 import type { DuckDBConnection } from '../../db/index';
+import {
+  aggregateTimeToFirstFeatures,
+  contextFieldFeatures,
+  outcomeFeatures,
+  spanAggregateFeatures,
+  spanQueryFeatures,
+  timingFeatures,
+} from '../../features';
 import { resolveTargets, runPrune } from '../../retention';
 import { ALL_DDL, ALL_MIGRATIONS } from './ddl';
 import * as discoveryOps from './discovery';
 import * as feedbackOps from './feedback';
 import * as logOps from './logs';
 import * as metricOps from './metrics';
-import { checkSignalTablesMigrationStatus, dropLegacyCursorIdDefaults, migrateSignalTables } from './migration';
+import {
+  checkSignalTablesMigrationStatus,
+  dropLegacyCursorIdDefaults,
+  hasPrimaryKey,
+  migrateSignalTables,
+} from './migration';
 import { deltaPollingFeatureEnabled } from './polling';
 import * as scoreOps from './scores';
+import * as spanQueryOps from './span-query';
+import * as threadQueryOps from './thread-query';
+import * as traceAggregateOps from './trace-aggregate';
 import * as traceQueryOps from './trace-query';
 import * as tracingOps from './tracing';
 
@@ -144,6 +167,10 @@ export interface ObservabilityDuckDBConfig {
  * Uses an append-only event-sourced model with SQL-based reconstruction for spans.
  */
 export class ObservabilityStorageDuckDB extends ObservabilityStorage {
+  override get persistenceLocation(): 'local' {
+    return 'local';
+  }
+
   static override readonly retentionTables: RetentionTablesDescriptor = {
     spans: { table: 'span_events', column: 'timestamp', indexed: false },
     metrics: { table: 'metric_events', column: 'timestamp', indexed: false },
@@ -151,6 +178,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
     scores: { table: 'score_events', column: 'timestamp', indexed: false },
     feedback: { table: 'feedback_events', column: 'timestamp', indexed: false },
   };
+
+  /** Set by `init()`; until then aggregate queries dedupe metric rows on `metricId`. */
+  private metricIdsUnique = false;
 
   private db: DuckDBConnection;
 
@@ -185,6 +215,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
 
     await this.db.executeBatch([...ALL_DDL, ...ALL_MIGRATIONS]);
     await dropLegacyCursorIdDefaults(this.db);
+    this.metricIdsUnique = await hasPrimaryKey(this.db, 'metric_events');
   }
 
   /**
@@ -238,10 +269,65 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
 
   override getFeatures() {
     if (!deltaPollingFeatureEnabled()) {
-      return ['metrics', 'logs', 'trace-query', 'trace-query-discovery', 'thread-query'] as const;
+      return [
+        'metrics',
+        'logs',
+        'entity-type-discovery',
+        'entity-name-discovery',
+        'service-name-discovery',
+        'environment-discovery',
+        'tag-discovery',
+        'metric-discovery',
+        'trace-query',
+        'trace-aggregate',
+        ...aggregateTimeToFirstFeatures,
+        ...spanQueryFeatures,
+        ...spanAggregateFeatures,
+        ...(typeof coreStorage.planThreadRowsQuery === 'function' ? (['thread-query-rows'] as const) : []),
+        'trace-query-root-duration',
+        'trace-query-discovery',
+        'thread-query',
+        'trace-query-tenant-scope',
+        'feedback',
+        'feedback-replacement',
+        'trace-query-context-ids',
+        ...contextFieldFeatures,
+        ...timingFeatures,
+        ...outcomeFeatures,
+        'trace-query-root-span-fields',
+        'trace-query-root-entity-id',
+      ] as const;
     }
 
-    return ['metrics', 'logs', 'delta-polling', 'trace-query', 'trace-query-discovery', 'thread-query'] as const;
+    return [
+      'metrics',
+      'logs',
+      'entity-type-discovery',
+      'entity-name-discovery',
+      'service-name-discovery',
+      'environment-discovery',
+      'tag-discovery',
+      'metric-discovery',
+      'delta-polling',
+      'trace-query',
+      'trace-aggregate',
+      ...aggregateTimeToFirstFeatures,
+      ...spanQueryFeatures,
+      ...spanAggregateFeatures,
+      ...(typeof coreStorage.planThreadRowsQuery === 'function' ? (['thread-query-rows'] as const) : []),
+      'trace-query-root-duration',
+      'trace-query-discovery',
+      'thread-query',
+      'trace-query-tenant-scope',
+      'feedback',
+      'feedback-replacement',
+      'trace-query-context-ids',
+      ...contextFieldFeatures,
+      ...timingFeatures,
+      ...outcomeFeatures,
+      'trace-query-root-span-fields',
+      'trace-query-root-entity-id',
+    ] as const;
   }
 
   // Tracing
@@ -272,8 +358,20 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     return tracingOps.listTraces(this.db, args);
   }
+
+  override async querySpans(plan: TrustedSpanQueryPlan): Promise<SpanQueryResponse> {
+    return spanQueryOps.querySpans(this.db, plan);
+  }
+
   override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
     return traceQueryOps.queryTraces(this.db, plan);
+  }
+  override async aggregateTraces(plan: TrustedTraceAggregatePlan): Promise<TraceAggregateResponse> {
+    return traceAggregateOps.aggregateTraces(this.db, plan, { metricIdsUnique: this.metricIdsUnique });
+  }
+
+  override async aggregateSpans(plan: TrustedSpanAggregatePlan): Promise<SpanAggregateResponse> {
+    return traceAggregateOps.aggregateSpans(this.db, plan, { metricIdsUnique: this.metricIdsUnique });
   }
   override async getTraceQueryObservedFields(
     plan: TrustedTraceQueryObservedFieldsPlan,
@@ -283,7 +381,15 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   override async getTraceQueryValues(plan: TrustedTraceQueryValuesPlan): Promise<GetTraceQueryValuesResponse> {
     return traceQueryOps.getTraceQueryValues(this.db, plan);
   }
-  override async queryThreads(plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult> {
+  override async queryThreads(plan: coreStorage.TrustedThreadRowsQueryPlan): Promise<coreStorage.ThreadQueryResponse>;
+  override async queryThreads(plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult>;
+  override async queryThreads(
+    plan: TrustedThreadQueryPlan | coreStorage.TrustedThreadRowsQueryPlan,
+  ): Promise<QueryThreadsResult | coreStorage.ThreadQueryResponse>;
+  override async queryThreads(
+    plan: TrustedThreadQueryPlan | coreStorage.TrustedThreadRowsQueryPlan,
+  ): Promise<QueryThreadsResult | coreStorage.ThreadQueryResponse> {
+    if (plan.result === 'threadRows') return threadQueryOps.queryThreadRows(this.db, plan);
     return traceQueryOps.queryThreads(this.db, plan);
   }
   async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {
@@ -367,6 +473,10 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   async getScoreById(scoreId: string): Promise<ScoreRecord | null> {
     return scoreOps.getScoreById(this.db, scoreId);
   }
+
+  async getFeedbackById(feedbackId: string): Promise<FeedbackRecord | null> {
+    return feedbackOps.getFeedbackById(this.db, feedbackId);
+  }
   async getScoreAggregate(args: GetScoreAggregateArgs): Promise<GetScoreAggregateResponse> {
     return scoreOps.getScoreAggregate(this.db, args);
   }
@@ -381,6 +491,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   }
 
   // Feedback
+  protected override async writeFeedbackReplacement(args: CreateFeedbackArgs): Promise<void> {
+    return feedbackOps.createFeedback(this.db, { feedback: args.feedback, onConflict: 'replace' }, true);
+  }
   async createFeedback(args: CreateFeedbackArgs): Promise<void> {
     return feedbackOps.createFeedback(this.db, args);
   }

@@ -1,9 +1,20 @@
 'use client';
+
 import { Button, CreateButton } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
-import { Upload, FileJson, Download, FolderPlus, FolderOutput, Trash2, ChevronDown } from 'lucide-react';
+import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconArrowInbox } from '@mastra/playground-ui/icons/central/IconArrowInbox';
+import { IconArrowOutOfBox } from '@mastra/playground-ui/icons/central/IconArrowOutOfBox';
+import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
+import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
+import { IconFolderAddRight } from '@mastra/playground-ui/icons/central/IconFolderAddRight';
+import { IconMoveFolder } from '@mastra/playground-ui/icons/central/IconMoveFolder';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { cn } from '@mastra/playground-ui/utils/cn';
 
 export type DatasetItemsToolbarProps = {
   // Normal mode actions
@@ -11,10 +22,6 @@ export type DatasetItemsToolbarProps = {
   onImportClick: () => void;
   onImportJsonClick: () => void;
   hasItems: boolean;
-  /** Page-level content rendered before the list actions (e.g. created date). */
-  leftSlot?: React.ReactNode;
-  /** Page-level actions rendered after the list actions, on the same row. */
-  rightSlot?: React.ReactNode;
 
   // Search props
   searchQuery?: string;
@@ -32,6 +39,9 @@ export type DatasetItemsToolbarProps = {
   isViewingOldVersion?: boolean;
   activeDatasetVersion?: number | null;
   onReturnToLatestVersion?: () => void;
+
+  /** Extra actions rendered before the "New item" action. */
+  actionsSlot?: React.ReactNode;
 };
 
 export function DatasetItemsToolbar({
@@ -39,8 +49,6 @@ export function DatasetItemsToolbar({
   onImportClick,
   onImportJsonClick,
   hasItems,
-  leftSlot,
-  rightSlot,
   searchQuery,
   onSearchChange,
   selectedCount,
@@ -53,17 +61,22 @@ export function DatasetItemsToolbar({
   isViewingOldVersion,
   activeDatasetVersion,
   onReturnToLatestVersion,
+  actionsSlot,
 }: DatasetItemsToolbarProps) {
   const oldVersionNotice = isViewingOldVersion && activeDatasetVersion != null && (
-    <div className="text-accent6 text-ui-sm flex min-w-0 items-center gap-3">
-      <span className="truncate">You are seeing v{activeDatasetVersion}, which is an older version of the dataset</span>
+    <div className="flex min-w-0 items-center gap-3 text-warning-foreground">
+      <Txt as="span" variant="caption" className="truncate">
+        You are seeing v{activeDatasetVersion}, which is an older version of the dataset
+      </Txt>
       {onReturnToLatestVersion && (
         <button
           type="button"
           onClick={onReturnToLatestVersion}
-          className="text-ui-sm text-icon3 hover:text-icon6 shrink-0 underline underline-offset-2 transition-colors"
+          className={cn(quietTextHover, controlStateColorTransition, 'shrink-0 underline underline-offset-2')}
         >
-          Return to latest
+          <Txt as="span" variant="caption" className="block">
+            Return to latest
+          </Txt>
         </button>
       )}
     </div>
@@ -74,12 +87,13 @@ export function DatasetItemsToolbar({
   const showItemActions = hasItems || Boolean(searchQuery);
 
   const searchField = showItemActions && (
-    <div className="max-w-120 min-w-64 flex-1">
-      <ListSearch
+    <div className="max-w-120 flex-1">
+      <SearchInput
+        {...listSearchProps}
         label="Search items"
-        placeholder="Search items..."
+        placeholder="Search items"
         value={searchQuery ?? ''}
-        onSearch={query => onSearchChange?.(query)}
+        onValueChange={query => onSearchChange?.(query)}
       />
     </div>
   );
@@ -88,37 +102,37 @@ export function DatasetItemsToolbar({
     <DropdownMenu>
       <DropdownMenu.Trigger asChild>
         <Button>
-          {selectedCount} selected <ChevronDown />
+          {selectedCount} selected <IconChevronDownMedium />
         </Button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" className="w-72">
         {onExportClick && (
           <DropdownMenu.Item onSelect={onExportClick}>
-            <Download /> Export CSV
+            <IconArrowInbox /> Export CSV
           </DropdownMenu.Item>
         )}
         {onExportJsonClick && (
           <DropdownMenu.Item onSelect={onExportJsonClick}>
-            <Download /> Export JSON
+            <IconArrowInbox /> Export JSON
           </DropdownMenu.Item>
         )}
         {onCreateDatasetClick && (
           <DropdownMenu.Item onSelect={onCreateDatasetClick}>
-            <FolderPlus />
-            <span>Create Dataset from Items</span>
+            <IconFolderAddRight />
+            <span>Create dataset from items</span>
           </DropdownMenu.Item>
         )}
         {onAddToDatasetClick && (
           <DropdownMenu.Item onSelect={onAddToDatasetClick}>
-            <FolderOutput />
-            <span>Copy Items to Dataset</span>
+            <IconMoveFolder />
+            <span>Copy items to dataset</span>
           </DropdownMenu.Item>
         )}
         {onDeleteClick && (
           <>
             <DropdownMenu.Separator />
-            <DropdownMenu.Item onSelect={onDeleteClick} className="text-red-500 focus:text-red-400">
-              <Trash2 /> Delete Items
+            <DropdownMenu.Item onSelect={onDeleteClick} variant="destructive">
+              <TrashIcon /> Delete items
             </DropdownMenu.Item>
           </>
         )}
@@ -138,33 +152,32 @@ export function DatasetItemsToolbar({
         {oldVersionNotice}
       </div>
 
-      <ButtonsGroup className="ml-auto flex-wrap justify-end">
-        {leftSlot}
+      <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
         {selectionDropdown}
+        {actionsSlot}
         {showItemActions && !isItemPanelOpen && !isViewingOldVersion && (
-          <ButtonsGroup spacing="close">
+          <ButtonsGroup>
             <CreateButton onClick={onAddClick} tooltip="Add an item">
               New item
             </CreateButton>
             <DropdownMenu>
               <DropdownMenu.Trigger asChild>
-                <Button aria-label="Dataset actions menu">
-                  <ChevronDown />
+                <Button size="icon-md" aria-label="Dataset actions menu">
+                  <IconChevronDownMedium />
                 </Button>
               </DropdownMenu.Trigger>
               <DropdownMenu.Content align="end">
                 <DropdownMenu.Item onSelect={onImportClick}>
-                  <Upload /> Import CSV
+                  <IconArrowOutOfBox /> Import CSV
                 </DropdownMenu.Item>
                 <DropdownMenu.Item onSelect={onImportJsonClick}>
-                  <FileJson /> Import JSON
+                  <IconFileText /> Import JSON
                 </DropdownMenu.Item>
               </DropdownMenu.Content>
             </DropdownMenu>
           </ButtonsGroup>
         )}
-        {rightSlot}
-      </ButtonsGroup>
+      </div>
     </div>
   );
 }

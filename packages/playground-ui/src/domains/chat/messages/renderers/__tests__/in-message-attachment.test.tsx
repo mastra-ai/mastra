@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { InMessageAttachment } from '../in-message-attachment';
@@ -20,22 +20,20 @@ describe('InMessageAttachment', () => {
       const { container } = render(<InMessageAttachment type="file" name="clip.mp4" contentType="video/mp4" />);
 
       expect(container.querySelector('[title="clip.mp4"]')).not.toBeNull();
-      expect(container.querySelector('[aria-label="Video file"]')).not.toBeNull();
+      expect(screen.getByText('MP4')).toBeTruthy();
       expect(container.querySelector('button')).toBeNull();
     });
 
-    it('falls back to the src as label when there is no name', () => {
+    it('uses the URL filename as a readable label when there is no name', () => {
       const { container } = render(<InMessageAttachment type="file" src="https://example.com/a.bin" />);
 
-      expect(container.querySelector('a[title="https://example.com/a.bin"]')?.getAttribute('href')).toBe(
-        'https://example.com/a.bin',
-      );
+      expect(container.querySelector('a[title="a.bin"]')?.getAttribute('href')).toBe('https://example.com/a.bin');
     });
 
-    it('falls back to "file" when neither name, src nor data is provided', () => {
+    it('falls back to "File" when neither name, src nor data is provided', () => {
       const { container } = render(<InMessageAttachment type="file" />);
 
-      expect(container.querySelector('[title="file"]')).not.toBeNull();
+      expect(container.querySelector('[title="File"]')).not.toBeNull();
     });
   });
 
@@ -47,15 +45,19 @@ describe('InMessageAttachment', () => {
 
       fireEvent.click(screen.getByRole('button'));
 
-      expect(screen.getByRole('dialog').textContent).toContain('PDF preview');
+      expect(screen.getByRole('dialog').textContent).toContain('PDF document');
     });
 
-    it('links out instead when a URL is available', () => {
-      const { container } = render(
-        <InMessageAttachment type="document" contentType="application/pdf" src="https://example.com/doc.pdf" />,
-      );
+    it('previews a remote PDF and offers the original URL as a fallback', () => {
+      render(<InMessageAttachment type="document" contentType="application/pdf" src="https://example.com/doc.pdf" />);
 
-      expect(container.querySelector('a')?.getAttribute('href')).toBe('https://example.com/doc.pdf');
+      fireEvent.click(screen.getByRole('button', { name: 'Preview doc.pdf' }));
+      expect(within(screen.getByRole('dialog')).getByTitle('doc.pdf').getAttribute('src')).toBe(
+        'https://example.com/doc.pdf',
+      );
+      expect(screen.getByRole('link', { name: 'Open PDF in a new tab' }).getAttribute('href')).toBe(
+        'https://example.com/doc.pdf',
+      );
     });
   });
 

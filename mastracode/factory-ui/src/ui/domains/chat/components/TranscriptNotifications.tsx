@@ -1,20 +1,52 @@
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import {
+  Activity,
+  ActivityHeader,
+  ActivityIcon,
+  ActivityLabel,
+  NotificationActivity,
+} from '@mastra/playground-ui/components/ai/activity';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Bell, CircleDot, ExternalLink } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { CircleDotIcon } from '@mastra/playground-ui/icons/CircleDotIcon';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { Link, useParams } from 'react-router';
+
+import { useApiConfig } from '../../../../api/config';
+import { queryKeys } from '../../../../api/keys';
+import { useSessionActivityQuery } from '../../../../hooks/useSessionRows';
+import { invalidateSessionQueries } from '../../../../hooks/useWorkspaces';
+import { threadPath } from '../../workspaces/services/factoryPaths';
+import { answerParkedApproval } from '../../workspaces/services/user-sessions';
 
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import type { MessageEntry, NotificationEntry, NotificationSummaryEntry } from '../services/transcript';
-import { parseSkillActivation } from './SkillMessage';
-import { isRecord, truncate } from './transcript-shared';
+import { parseSkillActivation } from '@mastra/playground-ui/domains/chat/messages/skill-activation';
+import { isRecord } from './transcript-shared';
 import { signalPartsText } from './TranscriptSignals';
-import { ROW_RAIL, ROW_TRIGGER, TranscriptRow } from './TranscriptRow';
+import { IconBell2 } from '@mastra/playground-ui/icons/central/IconBell2';
 
-function notificationUrl(entry: NotificationEntry): string | undefined {
+/** Where a notification's "Open on …" link points; GitHub and GitLab name the provider. */
+export function notificationLinkLabel(entry: Pick<NotificationEntry, 'source'>): string {
+  if (entry.source === 'gitlab') return 'Open on GitLab';
+  if (entry.source === 'github') return 'Open on GitHub';
+  return 'Open notification target';
+}
+
+export function notificationUrl(entry: Pick<NotificationEntry, 'source' | 'metadata'>): string | undefined {
   const targetUrl = entry.metadata?.targetUrl;
   if (typeof targetUrl === 'string' && /^https:\/\/github\.com\//.test(targetUrl)) return targetUrl;
+  // GitLab instances live on any host, so the server-supplied target is trusted
+  // only when it is an https merge-request or issue page.
+  if (
+    entry.source === 'gitlab' &&
+    typeof targetUrl === 'string' &&
+    /^https:\/\/[^/\s]+\/.+\/-\/(merge_requests|issues)\/\d+/.test(targetUrl)
+  ) {
+    return targetUrl;
+  }
 
   const repository = entry.metadata?.repository;
   if (typeof repository !== 'string' || !/^[^/]+\/[^/]+$/.test(repository)) return undefined;
@@ -28,86 +60,154 @@ function notificationUrl(entry: NotificationEntry): string | undefined {
 function notificationPresentation(entry: NotificationEntry): { state: string; icon: ReactNode; className?: string } {
   const action = entry.metadata?.action;
   if (entry.notifKind === 'pull-request-merged') {
-    return { state: 'merged', icon: <PullRequestStatusIcon status="merged" size={13} decorative /> };
+    return { state: 'merged', icon: <PullRequestStatusIcon status="merged" decorative /> };
   }
   if (entry.notifKind === 'pull-request-closed') {
-    return { state: 'closed', icon: <PullRequestStatusIcon status="closed" size={13} decorative /> };
+    return { state: 'closed', icon: <PullRequestStatusIcon status="closed" decorative /> };
   }
   if (action === 'opened' || action === 'reopened') {
-    return { state: 'open', icon: <CircleDot size={13} />, className: 'text-accent1' };
+    return { state: 'open', icon: <CircleDotIcon />, className: 'text-success-indicator' };
   }
-  return { state: 'notification', icon: <Bell size={13} />, className: 'text-warning1' };
-}
-
-/** Collapsible row mirroring the ToolCard shape: chevron + label + preview + state icon. */
-function NotificationRow({
-  state,
-  label,
-  message,
-  icon,
-  url,
-}: {
-  state: string;
-  label: string;
-  message: string;
-  icon: ReactNode;
-  url?: string;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <Collapsible
-      open={expanded}
-      onOpenChange={setExpanded}
-      className="max-w-full min-w-0"
-      data-notification-state={state}
-      role="group"
-      aria-label={`Notification: ${label}`}
-    >
-      <CollapsibleTrigger className={ROW_TRIGGER}>
-        <TranscriptRow icon={icon} label={label} detail={truncate(message, 72)} expanded={expanded} />
-      </CollapsibleTrigger>
-      <CollapsibleContent className="max-w-full min-w-0">
-        <div className={cn(ROW_RAIL, 'flex flex-col gap-2')}>
-          <Txt variant="ui-sm">{message}</Txt>
-          {url && (
-            <a
-              href={url}
-              target="_blank"
-              rel="noreferrer"
-              aria-label={`Open notification target: ${message}`}
-              className="text-ui-xs text-icon3 hover:text-icon5 flex w-fit items-center gap-1"
-            >
-              Open on GitHub
-              <ExternalLink size={12} aria-hidden />
-            </a>
-          )}
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
-  );
+  return { state: 'notification', icon: <IconBell2 />, className: 'text-warning-foreground' };
 }
 
 export function NotificationCard({ entry }: { entry: NotificationEntry }) {
   const presentation = notificationPresentation(entry);
-  return (
-    <NotificationRow
+  const url = notificationUrl(entry);
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const waiting = waitingSession(entry);
+  const activity = (
+    <NotificationActivity
       state={presentation.state}
       label={entry.source ?? 'notification'}
       message={entry.message}
       icon={<span className={cn('flex items-center', presentation.className)}>{presentation.icon}</span>}
-      url={notificationUrl(entry)}
+      link={url ? { href: url, label: notificationLinkLabel(entry) } : undefined}
     />
+  );
+  if (!waiting || !factoryId) return activity;
+  return (
+    <div className="flex flex-col gap-1.5">
+      {activity}
+      <WaitingSessionActions factoryId={factoryId} waiting={waiting} />
+    </div>
   );
 }
 
-export function NotificationSummaryCard({ entry }: { entry: NotificationSummaryEntry }) {
+/** The session a notification says is waiting on someone, and the call a yes or no would answer. */
+interface WaitingSession {
+  sessionId: string;
+  threadId: string;
+  /** Set when the session waits on a bare yes or no; a typed answer is given in the session itself. */
+  toolCallId?: string;
+}
+
+function waitingSession(entry: NotificationEntry): WaitingSession | undefined {
+  if (entry.notifKind !== 'approval' && entry.notifKind !== 'blocked') return undefined;
+  const sessionId = entry.attributes?.['from-session'];
+  if (typeof sessionId !== 'string' || !sessionId) return undefined;
+  const threadId = entry.attributes?.['from-thread'];
+  const toolCallId = entry.attributes?.['tool-call-id'];
+  return {
+    sessionId,
+    threadId: typeof threadId === 'string' && threadId ? threadId : sessionId,
+    ...(entry.attributes?.['waiting-for'] === 'approval' && typeof toolCallId === 'string' && toolCallId
+      ? { toolCallId }
+      : {}),
+  };
+}
+
+/**
+ * Opens the waiting session, and answers its call from here where a yes or no is all it needs.
+ * The server decides who may answer; its refusal is shown in place of the buttons.
+ */
+function WaitingSessionActions({ factoryId, waiting }: { factoryId: string; waiting: WaitingSession }) {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  const parked = useSessionActivityQuery(factoryId).data?.parkedSessionIds.includes(waiting.sessionId);
+  const { toolCallId } = waiting;
+  const answer = useMutation({
+    mutationKey: ['answer-parked-approval', waiting.sessionId, toolCallId],
+    mutationFn: (decision: 'approve' | 'decline') =>
+      answerParkedApproval(baseUrl, waiting.sessionId, decision, toolCallId),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryId) });
+      void invalidateSessionQueries(queryClient, factoryId);
+    },
+  });
+  const outcome = answer.isSuccess
+    ? answer.variables === 'approve'
+      ? 'Approved'
+      : 'Declined'
+    : answer.isError
+      ? answer.error.message
+      : parked === false
+        ? 'Answered'
+        : undefined;
+
   return (
-    <NotificationRow
-      state="summary"
-      label="Notification summary"
-      message={entry.message}
-      icon={<Bell size={13} className="text-warning1" />}
-    />
+    <div role="group" aria-label="Waiting session" className="flex flex-wrap items-center gap-2 pl-6">
+      {toolCallId && !outcome && parked && (
+        <>
+          <Button size="sm" variant="primary" disabled={answer.isPending} onClick={() => answer.mutate('approve')}>
+            Approve
+          </Button>
+          <Button size="sm" disabled={answer.isPending} onClick={() => answer.mutate('decline')}>
+            Decline
+          </Button>
+        </>
+      )}
+      {toolCallId && outcome && (
+        <Txt variant="caption" tone="muted" role="status">
+          {outcome}
+        </Txt>
+      )}
+      <Button size="sm" variant="ghost" render={<Link to={threadPath(factoryId, waiting)} />}>
+        Open session
+      </Button>
+    </div>
+  );
+}
+
+const NOTIFICATION_SOURCE_NAMES: Record<string, string> = {
+  'factory-session': 'Factory session',
+  github: 'GitHub',
+  gitlab: 'GitLab',
+  linear: 'Linear',
+  jira: 'Jira',
+  slack: 'Slack',
+};
+
+/** A readable name for a notification source; unknown sources fall back to their id in sentence case. */
+export function notificationSourceName(source: string): string {
+  if (Object.hasOwn(NOTIFICATION_SOURCE_NAMES, source)) return NOTIFICATION_SOURCE_NAMES[source];
+  const words = source.replace(/[-_]+/g, ' ').trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : source;
+}
+
+export function NotificationSummaryCard({ entry }: { entry: NotificationSummaryEntry }) {
+  const sources = Object.entries(entry.bySource).filter(([, count]) => count > 0);
+  const counted = entry.pending > 0 && sources.length > 0;
+  const urgent = (entry.byPriority.urgent ?? 0) > 0 || (entry.byPriority.high ?? 0) > 0;
+
+  return (
+    <Activity foldable={false} appearance="inline" data-notification-state="summary" aria-label="Notification summary">
+      <ActivityHeader>
+        <ActivityIcon className="[&_svg]:size-icon-md">
+          <IconBell2 className={cn(urgent && 'text-warning-foreground')} aria-hidden />
+        </ActivityIcon>
+        <ActivityLabel className="text-subheading">Notifications</ActivityLabel>
+        <ActivityLabel wrap className="text-body">
+          {counted ? `${entry.pending} new` : entry.message}
+        </ActivityLabel>
+        {counted &&
+          sources.map(([source, count]) => (
+            <Badge key={source} size="xs">
+              {sources.length > 1 ? `${notificationSourceName(source)} ${count}` : notificationSourceName(source)}
+            </Badge>
+          ))}
+      </ActivityHeader>
+    </Activity>
   );
 }
 
@@ -158,12 +258,6 @@ export function notificationMetadata(entry: MessageEntry): Array<NotificationEnt
   return notifications;
 }
 
-/**
- * Persisted notification signals are DB-native `role: 'signal'` rows whose
- * original signal payload lives under `content.metadata.signal` (see
- * `signalToDBMessage` in @mastra/core). Rebuild notification cards from it so
- * they survive transcript hydration.
- */
 export function isSkillNotificationSignal(entry: MessageEntry): boolean {
   if (entry.message.role !== 'signal') return false;
   const signal = entry.message.content.metadata?.signal;
@@ -206,6 +300,7 @@ function signalNotifications(entry: MessageEntry): Array<NotificationEntry | Not
       notifKind: typeof attributes.kind === 'string' ? attributes.kind : undefined,
       priority: typeof attributes.priority === 'string' ? attributes.priority : undefined,
       metadata,
+      attributes,
     },
   ];
 }

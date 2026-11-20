@@ -1,11 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { resetStorage } from '../../__utils__/reset-storage';
-
-// FEATURE: View nested graph from a workflow step
-// USER STORY: As a Studio user, I want to click "View nested graph" on a nested
-// workflow step so I can inspect the nested workflow's graph without leaving the page.
-// BEHAVIOR UNDER TEST: Triggering "View nested graph" mounts the step detail panel
-// showing the nested workflow.
+import { topLevelWorkflowNodes } from '../../__utils__/workflow-nodes';
 
 test.describe('Workflow nested graph', () => {
   test.afterEach(async () => {
@@ -18,10 +13,10 @@ test.describe('Workflow nested graph', () => {
 
   test.describe('when "View nested graph" is selected on a nested step', () => {
     test.beforeEach(async ({ page }) => {
-      const nestedNode = page.locator('[data-workflow-node]').filter({ hasText: 'nested-text-processor' });
+      const nestedNode = topLevelWorkflowNodes(page).filter({ hasText: 'nested-text-processor' });
       await expect(nestedNode).toBeVisible();
 
-      await nestedNode.getByRole('button', { name: 'Step actions' }).click();
+      await nestedNode.getByRole('button', { name: 'Step actions' }).first().click();
       await page.getByRole('menuitem', { name: 'View nested graph' }).click();
     });
 
@@ -35,12 +30,12 @@ test.describe('Workflow nested graph', () => {
       const panel = page.getByTestId('workflow-step-detail-panel');
       await expect(panel).toBeVisible({ timeout: 15000 });
 
-      const initialWidth = await panel.evaluate(element => element.getBoundingClientRect().width);
       const separator = page.locator('[role="separator"][aria-controls="workflow-graph"]');
+      await separator.locator('span').first().hover();
+      const initialWidth = await panel.evaluate(element => element.getBoundingClientRect().width);
       const separatorBox = await separator.boundingBox();
       if (!separatorBox) throw new Error('Nested graph resize handle is not visible');
 
-      await page.mouse.move(separatorBox.x, separatorBox.y + separatorBox.height / 2);
       await page.mouse.down();
       await page.mouse.move(separatorBox.x - 180, separatorBox.y + separatorBox.height / 2, { steps: 5 });
       await page.mouse.up();

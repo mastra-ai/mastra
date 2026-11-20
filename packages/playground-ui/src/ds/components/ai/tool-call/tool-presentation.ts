@@ -1,26 +1,24 @@
-import {
-  BookOpen,
-  Braces,
-  CircleStop,
-  Eye,
-  FileSearch,
-  FolderPlus,
-  FolderSearch,
-  Globe,
-  ScrollText,
-  Search,
-  SquarePen,
-  SquareTerminal,
-  Trash2,
-  Wrench,
-} from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
+import { canonicalToolName, resolveToolStyle } from './tool-styles';
+import { agentGlyph } from '@/ds/components/AgentIndicator';
+import type { AgentIndicatorState } from '@/ds/components/AgentIndicator';
+import { humanize } from '@/lib/string';
+
 export interface ToolPresentation {
+  /** What the agent indicator turns into while this call runs. */
+  pose: AgentIndicatorState;
+  /** The pose held still, so the call's row and the live indicator draw the same thing. */
   icon: LucideIcon;
+  /** Stable name of the kind of tool, e.g. "Run"; also groups calls by kind. */
   label: string;
   /** Salient argument shown next to the label: command, path, pattern… */
   detail?: string;
+  /**
+   * What a command does, in the agent's words. `ActivityHeadline` shows it alone in place of
+   * label and detail; both stay set for consumers that render them directly.
+   */
+  description?: string;
   /** Shell command, when the tool is terminal-style. Drives the expanded body. */
   command?: string;
 }
@@ -54,59 +52,23 @@ function firstStringArg(args: unknown, keys: string[]): string | undefined {
   return undefined;
 }
 
-interface ToolStyle {
-  icon: LucideIcon;
-  label: string;
-  detailKeys?: string[];
-  isCommand?: boolean;
-}
-
-const TOOL_STYLES: Record<string, ToolStyle> = {
-  view: { icon: Eye, label: 'Read', detailKeys: ['path'] },
-  read_file: { icon: Eye, label: 'Read', detailKeys: ['path'] },
-  write_file: { icon: SquarePen, label: 'Write', detailKeys: ['path'] },
-  create_file: { icon: SquarePen, label: 'Write', detailKeys: ['path'] },
-  edit_file: { icon: SquarePen, label: 'Edit', detailKeys: ['path'] },
-  string_replace: { icon: SquarePen, label: 'Edit', detailKeys: ['path'] },
-  str_replace: { icon: SquarePen, label: 'Edit', detailKeys: ['path'] },
-  ast_edit: { icon: SquarePen, label: 'Edit', detailKeys: ['path'] },
-  execute_command: { icon: SquareTerminal, label: 'Run', detailKeys: ['command'], isCommand: true },
-  get_process_output: { icon: ScrollText, label: 'Process output', detailKeys: ['pid'] },
-  kill_process: { icon: CircleStop, label: 'Stop process', detailKeys: ['pid'] },
-  find_files: { icon: FolderSearch, label: 'Find files', detailKeys: ['pattern', 'path'] },
-  list_files: { icon: FolderSearch, label: 'List files', detailKeys: ['pattern', 'path'] },
-  grep: { icon: Search, label: 'Search', detailKeys: ['pattern', 'path'] },
-  search_content: { icon: Search, label: 'Search', detailKeys: ['pattern', 'query'] },
-  search: { icon: Search, label: 'Search', detailKeys: ['query'] },
-  web_search: { icon: Globe, label: 'Search the web', detailKeys: ['query'] },
-  lsp_inspect: { icon: Braces, label: 'Inspect code', detailKeys: ['path'] },
-  file_stat: { icon: FileSearch, label: 'File info', detailKeys: ['path'] },
-  delete: { icon: Trash2, label: 'Delete', detailKeys: ['path'] },
-  delete_file: { icon: Trash2, label: 'Delete', detailKeys: ['path'] },
-  mkdir: { icon: FolderPlus, label: 'New folder', detailKeys: ['path'] },
-  skill: { icon: BookOpen, label: 'Skill', detailKeys: ['name'] },
-  skill_search: { icon: BookOpen, label: 'Search skills', detailKeys: ['query'] },
-  skill_read: { icon: BookOpen, label: 'Skill file', detailKeys: ['path'] },
-};
-
-function prettifyToolName(toolName: string): string {
-  const words = toolName.replace(/[_-]+/g, ' ').trim();
-  return words ? words.charAt(0).toUpperCase() + words.slice(1) : toolName;
-}
-
 /** Agents prefix commands with `cd <workspace> &&`, which crowds out the command itself on a one-line row. */
 function withoutCdPrefix(command: string): string {
   return command.replace(/^\s*cd\s+(?:'[^']*'|"[^"]*"|[^\s&|;]+)\s*&&\s*/, '') || command;
 }
 
 export function presentTool(toolName: string, args: unknown): ToolPresentation {
-  const style = TOOL_STYLES[toolName.replace(/^mastra_workspace_/, '')];
-  if (!style) return { icon: Wrench, label: prettifyToolName(toolName) };
+  const style = resolveToolStyle(toolName, stringArg(args, 'op') ?? stringArg(args, 'action'));
+  if (!style) return { pose: 'tool', icon: agentGlyph('tool'), label: humanize(toolName) };
 
+  const dressed = { pose: style.pose, icon: agentGlyph(style.pose), label: style.label };
   const detail = style.detailKeys ? firstStringArg(args, style.detailKeys) : undefined;
-  if (!detail) return { icon: style.icon, label: style.label };
-  if (!style.isCommand) return { icon: style.icon, label: style.label, detail };
-  return { icon: style.icon, label: style.label, detail: withoutCdPrefix(detail), command: detail };
+  if (!detail) return dressed;
+  if (!style.isCommand) return { ...dressed, detail };
+  // Workspaces with `requireDescription` have the agent say what a command does; that reads better
+  // on a one-line row than "Run" and the command, which stays in the expanded body.
+  const description = stringArg(args, 'description')?.replace(/\s+/g, ' ').trim() || undefined;
+  return { ...dressed, detail: withoutCdPrefix(detail), description, command: detail };
 }
 
 export type ToolEdit = { path?: string } & ({ oldText: string; newText: string } | { content: string });
@@ -117,14 +79,40 @@ function stringField(args: unknown, key: string): string | undefined {
 }
 
 export function toolEdit(toolName: string, args: unknown): ToolEdit | undefined {
-  const path = stringField(args, 'path');
+  const name = canonicalToolName(toolName);
+  const path = stringField(args, 'path') ?? stringField(args, 'file_path');
   const newText = stringField(args, 'new_string');
-  if (/string_replace|str_replace|edit_file/i.test(toolName) && newText !== undefined) {
+  if (/string_replace|str_replace|edit_file/i.test(name) && newText !== undefined) {
     return { path, oldText: stringField(args, 'old_string') ?? '', newText };
   }
   const content = stringField(args, 'content');
-  if (/write_file|create_file/i.test(toolName) && content !== undefined) return { path, content };
+  if (/write_file|create_file/i.test(name) && content !== undefined) return { path, content };
   return undefined;
+}
+
+export interface ToolArgumentsInput {
+  toolName: string;
+  args?: unknown;
+  argsText?: string;
+  hideArguments?: boolean;
+}
+
+function isEmptyObject(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && Object.keys(value).length === 0;
+}
+
+export function visibleToolArgumentsText({ args, argsText, hideArguments }: ToolArgumentsInput): string | undefined {
+  if (hideArguments || isEmptyObject(args)) return undefined;
+  return args === undefined ? argsText : stringifyToolValue(args);
+}
+
+export function hasToolArguments(input: ToolArgumentsInput): boolean {
+  return Boolean(toolEdit(input.toolName, input.args) || visibleToolArgumentsText(input));
+}
+
+/** Only a command's own exit is its outcome: `kill_process` and `get_process_output` report another process's. */
+export function exitedWithFailure(toolName: string, exitCode: number | undefined): boolean {
+  return resolveToolStyle(toolName)?.isCommand === true && exitCode !== undefined && exitCode !== 0;
 }
 
 /** Task tools draw in the docked task list, never as a transcript row. */

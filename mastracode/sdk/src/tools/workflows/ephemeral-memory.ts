@@ -19,7 +19,6 @@
  * Callers can override the ephemeral thread id (e.g. for tests) via
  * `options.threadId`.
  */
-import { randomUUID } from 'node:crypto';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 
 interface EphemeralMemoryOptions {
@@ -38,7 +37,7 @@ export async function withEphemeralMemory<T>(
     | { thread?: { id?: string }; resourceId?: string; memoryConfig?: unknown }
     | undefined;
   const resourceId = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
-  const ephemeralThreadId = options.threadId ?? randomUUID();
+  const ephemeralThreadId = options.threadId ?? globalThis.crypto.randomUUID();
   const parentResourceId = mastraMemory?.resourceId ?? resourceId ?? '';
 
   childRequestContext.set('MastraMemory', {

@@ -1,0 +1,40 @@
+import { Button } from '@/ds/components/Button';
+import { IconLoadingCircle } from '@/ds/icons/central/IconLoadingCircle';
+import { IconStop } from '@/ds/icons/central/IconStop';
+
+export interface WorkflowCancelButtonProps {
+  status?: string;
+  cancelMessage: string | null;
+  isCancelling: boolean;
+  onCancel: () => void;
+  disabled?: boolean;
+}
+
+const VISIBLE_STATUSES = ['running', 'suspended', 'paused'];
+
+export function WorkflowCancelButton({
+  status,
+  cancelMessage,
+  isCancelling,
+  onCancel,
+  disabled,
+}: WorkflowCancelButtonProps) {
+  if (!status || !VISIBLE_STATUSES.includes(status)) {
+    return null;
+  }
+
+  const label = isCancelling ? 'Cancelling run…' : cancelMessage || 'Cancel workflow run';
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-md"
+      tooltip={label}
+      onClick={onCancel}
+      disabled={disabled || !!cancelMessage || isCancelling}
+    >
+      {isCancelling ? <IconLoadingCircle className="motion-safe:animate-spin" /> : <IconStop />}
+    </Button>
+  );
+}

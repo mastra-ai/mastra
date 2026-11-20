@@ -1,10 +1,8 @@
 import type { Server } from 'node:http';
-import type {
-  AdapterTestContext,
-  AdapterSetupOptions,
-  HttpRequest,
-  HttpResponse,
-} from '@internal/server-adapter-test-utils';
+import { Mastra } from '@mastra/core';
+import { registerApiRoute } from '@mastra/core/server';
+import { MASTRA_IS_STUDIO_KEY } from '@mastra/server/server-adapter';
+import type { ServerRoute } from '@mastra/server/server-adapter';
 import {
   createRouteAdapterTestSuite,
   createDefaultTestContext,
@@ -14,11 +12,13 @@ import {
   consumeSSEStream,
   createMultipartTestSuite,
   createBodyLimitTestSuite,
-} from '@internal/server-adapter-test-utils';
-import { Mastra } from '@mastra/core';
-import { registerApiRoute } from '@mastra/core/server';
-import { MASTRA_IS_STUDIO_KEY } from '@mastra/server/server-adapter';
-import type { ServerRoute } from '@mastra/server/server-adapter';
+} from '@mastra/server-adapters-test-suite';
+import type {
+  AdapterTestContext,
+  AdapterSetupOptions,
+  HttpRequest,
+  HttpResponse,
+} from '@mastra/server-adapters-test-suite';
 import { Elysia } from 'elysia';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MastraServer } from '../index';
@@ -125,24 +125,23 @@ describe('Elysia Server Adapter', () => {
           stream: response.body ?? undefined,
           headers,
         };
-      } else {
-        // Read the body exactly once; parsing JSON from text avoids consuming
-        // the body twice when the payload is not valid JSON.
-        const rawText = await response.text();
-        let data: unknown;
-        try {
-          data = JSON.parse(rawText);
-        } catch {
-          data = rawText;
-        }
-
-        return {
-          status: response.status,
-          type: 'json',
-          data,
-          headers,
-        };
       }
+      // Read the body exactly once; parsing JSON from text avoids consuming
+      // the body twice when the payload is not valid JSON.
+      const rawText = await response.text();
+      let data: unknown;
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        data = rawText;
+      }
+
+      return {
+        status: response.status,
+        type: 'json',
+        data,
+        headers,
+      };
     },
   });
 

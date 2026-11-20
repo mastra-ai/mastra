@@ -9,6 +9,7 @@ import {
   ExperimentsStorage,
   calculatePagination,
   normalizePerPage,
+  resolveListOrderBy,
   safelyParseJSON,
   ensureDate,
 } from '@mastra/core/storage';
@@ -70,7 +71,12 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
     super();
     const client = resolveClient(config);
     this.#client = client;
-    this.#db = new LibSQLDB({ client, maxRetries: config.maxRetries, initialBackoffMs: config.initialBackoffMs });
+    this.#db = new LibSQLDB({
+      client,
+      maxRetries: config.maxRetries,
+      initialBackoffMs: config.initialBackoffMs,
+      getLogger: () => this.logger,
+    });
   }
 
   async #withPurgeBarrier<T>(
@@ -494,6 +500,10 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
 
   async listExperiments(args: ListExperimentsInput): Promise<ListExperimentsOutput> {
     try {
+      const orderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'status'], {
+        field: 'createdAt',
+        direction: 'DESC',
+      });
       const { page, perPage: perPageInput } = args.pagination;
 
       // Build WHERE clause
@@ -570,7 +580,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_EXPERIMENTS)} FROM ${TABLE_EXPERIMENTS} ${whereClause} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+        sql: `SELECT ${buildSelectColumns(TABLE_EXPERIMENTS)} FROM ${TABLE_EXPERIMENTS} ${whereClause} ORDER BY ${orderBy.field} ${orderBy.direction}, id ASC LIMIT ? OFFSET ?`,
         args: [...queryParams, limitValue, start],
       });
 
@@ -861,6 +871,10 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
 
   async listExperimentResults(args: ListExperimentResultsInput): Promise<ListExperimentResultsOutput> {
     try {
+      const orderBy = resolveListOrderBy(args.orderBy, ['startedAt', 'createdAt'], {
+        field: 'startedAt',
+        direction: 'ASC',
+      });
       const { page, perPage: perPageInput } = args.pagination;
 
       // Build WHERE clause
@@ -917,7 +931,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_EXPERIMENT_RESULTS)} FROM ${TABLE_EXPERIMENT_RESULTS} ${whereClause} ORDER BY startedAt ASC LIMIT ? OFFSET ?`,
+        sql: `SELECT ${buildSelectColumns(TABLE_EXPERIMENT_RESULTS)} FROM ${TABLE_EXPERIMENT_RESULTS} ${whereClause} ORDER BY ${orderBy.field} ${orderBy.direction}, id ASC LIMIT ? OFFSET ?`,
         args: [...queryParams, limitValue, start],
       });
 

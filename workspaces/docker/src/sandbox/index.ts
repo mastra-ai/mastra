@@ -18,6 +18,7 @@ import type {
   MastraSandboxOptions,
   SandboxCloneOptions,
   SandboxFileInput,
+  SandboxStartOptions,
   WriteFilesOptions,
 } from '@mastra/core/workspace';
 import {
@@ -30,13 +31,23 @@ import {
 import Docker from 'dockerode';
 import type { Container, ContainerInfo } from 'dockerode';
 import { pack as tarPack } from 'tar-stream';
+import { normalizeAbortError, throwIfAborted } from '../abort';
+import type { DockerTemplateBuildEvent } from '../template/build-progress';
+import type { DockerRepoTemplateResolveOptions } from '../template/repo-template';
 import type { DockerTemplate } from '../template/template';
 import { DockerProcessManager } from './process-manager';
 
 const LOG_PREFIX = '[DockerSandbox]';
 
+export interface DockerSandboxStartOptions extends SandboxStartOptions {
+  /** Cancel repository-template resolution or a lazy template build. */
+  abortSignal?: AbortSignal;
+}
+
 /** A prepared template, or a resolver producing one (see `DockerSandboxOptions.template`). */
-export type DockerTemplateSpec = DockerTemplate | (() => DockerTemplate | Promise<DockerTemplate>);
+export type DockerTemplateSpec =
+  | DockerTemplate
+  | ((options?: DockerRepoTemplateResolveOptions) => DockerTemplate | Promise<DockerTemplate>);
 
 /**
  * Inlined from `@mastra/core/workspace` to avoid requiring a newer core peer dep.
@@ -148,6 +159,12 @@ export interface DockerSandboxOptions extends Omit<MastraSandboxOptions, 'proces
    * becomes the sandbox working directory. Mutually exclusive with `image`.
    */
   template?: DockerTemplateSpec;
+  /**
+   * Receive progress while `start()` builds or reuses `template`. Same
+   * contract as `DockerTemplateBuildOptions.onProgress`; `output` events
+   * carry raw command output.
+   */
+  onTemplateBuildProgress?: (event: DockerTemplateBuildEvent) => void;
   /** Container entrypoint command. Must keep the container alive.
    * @default ['sleep', 'infinity']
    */
@@ -282,6 +299,7 @@ export class DockerSandbox extends MastraSandbox {
   /** Image the container boots from; rewritten by a template resolution on `start()`. */
   private _image: string;
   private readonly _templateSpec?: DockerTemplateSpec;
+  private readonly _onTemplateBuildProgress?: (event: DockerTemplateBuildEvent) => void;
   private readonly _workingDirectoryWasSet: boolean;
   private readonly _command: string[];
   private readonly _env: Record<string, string>;
@@ -333,6 +351,7 @@ export class DockerSandbox extends MastraSandbox {
       throw new TypeError('DockerSandbox: `image` and `template` are mutually exclusive');
     }
     this._templateSpec = options.template;
+    this._onTemplateBuildProgress = options.onTemplateBuildProgress;
     this._image = options.image ?? 'node:22-slim';
     this._workingDirectoryWasSet = options.workingDirectory !== undefined || options.workingDir !== undefined;
     this._command = options.command ?? ['sleep', 'infinity'];
@@ -405,7 +424,9 @@ export class DockerSandbox extends MastraSandbox {
   // Lifecycle
   // ---------------------------------------------------------------------------
 
-  async start(): Promise<void> {
+  async start(options: DockerSandboxStartOptions = {}): Promise<void> {
+    const { abortSignal } = options;
+    throwIfAborted(abortSignal, 'start Docker sandbox');
     this.logger.debug(`${LOG_PREFIX} Starting sandbox ${this.id}...`);
 
     // Try to reconnect to existing container
@@ -435,6 +456,11 @@ export class DockerSandbox extends MastraSandbox {
         this.setWorkingDirectory(reconnectedWorkingDir);
       }
 
+      // Report the image the existing container actually runs, not this instance's default.
+      if (info.Config?.Image) {
+        this._image = info.Config.Image;
+      }
+
       // Provide container reference to process manager
       this.processes.setContainer(this._container);
 
@@ -444,7 +470,7 @@ export class DockerSandbox extends MastraSandbox {
 
     this._warnOnPrivilegedHardeningConflict(this._privileged);
 
-    await this._resolveTemplate();
+    await this._resolveTemplate(abortSignal);
 
     // Pull image if not available locally
     await this._ensureImage();
@@ -688,7 +714,9 @@ export class DockerSandbox extends MastraSandbox {
     if (signal) signal.addEventListener('abort', onAbort, { once: true });
 
     try {
-      await container.putArchive(pack, { path: '/', abortSignal: signal });
+      // tar-stream's bundled types describe a streamx Readable, which dockerode
+      // pipes fine at runtime but doesn't match NodeJS.ReadableStream structurally.
+      await container.putArchive(pack as unknown as NodeJS.ReadableStream, { path: '/', abortSignal: signal });
     } catch (error) {
       if (signal?.aborted) throw new SandboxAbortError('writeFiles');
       throw new SandboxError(
@@ -802,11 +830,23 @@ export class DockerSandbox extends MastraSandbox {
    * creates a container, so a resolver-form template re-resolves each time.
    * Adopts the template's workdir unless the sandbox was given one explicitly.
    */
-  private async _resolveTemplate(): Promise<void> {
+  private async _resolveTemplate(abortSignal?: AbortSignal): Promise<void> {
     if (!this._templateSpec) return;
-    const template = typeof this._templateSpec === 'function' ? await this._templateSpec() : this._templateSpec;
+    throwIfAborted(abortSignal, 'start Docker sandbox');
+    let template: DockerTemplate;
+    try {
+      template =
+        typeof this._templateSpec === 'function' ? await this._templateSpec({ abortSignal }) : this._templateSpec;
+    } catch (error) {
+      throw normalizeAbortError(error, 'start Docker sandbox');
+    }
+    throwIfAborted(abortSignal, 'start Docker sandbox');
     // Build on this sandbox's daemon, which may differ from the template's default.
-    const result = await template.build({ docker: this._docker });
+    const result = await template.build({
+      docker: this._docker,
+      abortSignal,
+      ...(this._onTemplateBuildProgress && { onProgress: this._onTemplateBuildProgress }),
+    });
     if (result.status !== 'ready') {
       throw new SandboxError(`Docker template build failed: ${result.error ?? 'unknown error'}`, 'START_FAILED', {
         templateId: result.templateId,

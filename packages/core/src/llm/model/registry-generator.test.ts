@@ -160,5 +160,27 @@ describe('registry-generator', () => {
       await expect(fs.stat(capabilityPath)).rejects.toMatchObject({ code: 'ENOENT' });
       await expect(fs.stat(capabilityDir)).rejects.toMatchObject({ code: 'ENOENT' });
     });
+
+    it('writes reasoning options next to the other capability data', async () => {
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-capabilities-'));
+      tempDirs.push(dir);
+      const reasoning = { 'gpt-5.5': [{ type: 'effort' as const, values: ['low', 'high'] }] };
+
+      await writeRegistryFiles(
+        path.join(dir, 'provider-registry.json'),
+        path.join(dir, 'provider-types.generated.d.ts'),
+        {},
+        {},
+        { openai: ['gpt-5.5'] },
+        undefined,
+        undefined,
+        { openai: reasoning, groq: { 'qwen3-32b': [{ type: 'toggle' }] } },
+      );
+
+      const openai = JSON.parse(await fs.readFile(path.join(dir, 'capabilities', 'openai.json'), 'utf8'));
+      const groq = JSON.parse(await fs.readFile(path.join(dir, 'capabilities', 'groq.json'), 'utf8'));
+      expect(openai).toEqual({ attachment: ['gpt-5.5'], reasoning });
+      expect(groq).toEqual({ reasoning: { 'qwen3-32b': [{ type: 'toggle' }] } });
+    });
   });
 });

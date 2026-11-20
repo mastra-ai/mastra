@@ -1,6 +1,6 @@
 import type { PermissionPolicy, ToolCategory } from '@mastra/client-js';
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
 
 import { useAgentControllerPermissions } from '../../../../hooks/useAgentControllerPermissions';
 import { useSetPermissionForCategoryMutation } from '../../../../hooks/useAgentControllerPermissionMutations';
@@ -14,13 +14,11 @@ interface ChatPermissionsProviderProps {
 }
 
 export function ChatPermissionsProvider({ children }: ChatPermissionsProviderProps) {
-  const { resourceId, projectPath, baseUrl, sessionEnabled, resourceReady, resourceEnabled, sandboxPreparing } =
+  const { sessionId, baseUrl, sessionEnabled, resourceReady, resourceEnabled, sandboxPreparing } =
     useChatSessionContext();
-  const [pendingPermissionCategory, setPendingPermissionCategory] = useState<ToolCategory | null>(null);
   const commonArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
+    sessionId,
     baseUrl,
   };
   // Read permissions as soon as the resource is addressable — the read is
@@ -28,29 +26,27 @@ export function ChatPermissionsProvider({ children }: ChatPermissionsProviderPro
   // surfaces (routed Settings pages) still address the factory-level session.
   const permissionsQuery = useAgentControllerPermissions({
     ...commonArgs,
-    enabled: resourceReady || (resourceEnabled && Boolean(resourceId)),
+    enabled: resourceReady || (resourceEnabled && Boolean(sessionId)),
   });
   // In-session writes wait for sandboxReady (= sessionEnabled). Sessionless
   // Settings pages keep the factory-level resource path, which has no sandbox
   // preparation window to wait for.
   const setPermissionForCategoryMutation = useSetPermissionForCategoryMutation({
     ...commonArgs,
-    enabled: sessionEnabled || (resourceEnabled && Boolean(resourceId) && !sandboxPreparing),
+    enabled: sessionEnabled || (resourceEnabled && Boolean(sessionId) && !sandboxPreparing),
   });
 
   const setPermissionForCategory = async (category: ToolCategory, policy: PermissionPolicy) => {
-    setPendingPermissionCategory(category);
     try {
       await setPermissionForCategoryMutation.mutateAsync({ category, policy });
-    } finally {
-      setPendingPermissionCategory(null);
+    } catch {
+      toast.error('Could not update the permission. Please try again.');
     }
   };
 
   const value: ChatPermissionsApi = {
     permissions: permissionsQuery.data,
     permissionsLoading: permissionsQuery.isLoading,
-    pendingPermissionCategory,
     setPermissionForCategory,
   };
 

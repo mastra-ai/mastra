@@ -2,9 +2,9 @@
 
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { Trash2 } from 'lucide-react';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
+import { useDatasetMutations } from '@mastra/react/hooks/datasets';
 
 export interface DeleteExperimentDialogProps {
   open: boolean;
@@ -30,8 +30,6 @@ export function DeleteExperimentDialog({
       onOpenChange(false);
       onSuccess?.();
     } catch (error) {
-      // Leave the dialog open so the failure stays attached to the action that
-      // caused it and the user can retry without reopening it.
       toast.error(`Failed to delete experiment: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
@@ -48,19 +46,10 @@ export function DeleteExperimentDialog({
           </AlertDialog.Description>
         </AlertDialog.Header>
         <AlertDialog.Footer>
-          {/* Deliberately a Button rather than AlertDialog.Action: Action is a
-              Close, which would dismiss the dialog before the request settles
-              and hide a failed deletion behind a toast. */}
-          <Button
-            icon={<Trash2 />}
-            variant="primary"
-            size="lg"
-            onClick={handleDelete}
-            disabled={deleteExperiment.isPending}
-          >
+          <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+          <Button icon={<TrashIcon />} variant="primary" onClick={handleDelete} disabled={deleteExperiment.isPending}>
             {deleteExperiment.isPending ? 'Deleting...' : 'Delete'}
           </Button>
-          <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
         </AlertDialog.Footer>
       </AlertDialog.Content>
     </AlertDialog>

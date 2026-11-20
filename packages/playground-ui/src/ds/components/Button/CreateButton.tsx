@@ -1,9 +1,10 @@
-import { Plus } from 'lucide-react';
 import React, { useRef } from 'react';
 import { Button } from './Button';
 import type { ButtonProps } from './Button';
 import { Kbd } from '@/ds/components/Kbd';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { useKeydown } from '@/lib/keyboard';
+import { mergeRefs } from '@/lib/merge-refs';
 
 export const CREATE_BUTTON_SHORTCUT = 'c';
 
@@ -19,9 +20,9 @@ export interface CreateButtonProps extends Omit<ButtonProps, 'icon' | 'tooltip'>
  * its click. Mount at most one per view — several instances would compete for
  * the same shortcut.
  */
-export const CreateButton = React.forwardRef<HTMLButtonElement, CreateButtonProps>(
+export const CreateButton = React.forwardRef<HTMLElement, CreateButtonProps>(
   ({ tooltip, shortcutEnabled = true, disabled, children, ...props }, forwardedRef) => {
-    const buttonRef = useRef<HTMLButtonElement>(null);
+    const buttonRef = useRef<HTMLElement>(null);
 
     useKeydown(
       { [CREATE_BUTTON_SHORTCUT]: () => buttonRef.current?.click() },
@@ -31,7 +32,7 @@ export const CreateButton = React.forwardRef<HTMLButtonElement, CreateButtonProp
     return (
       <Button
         ref={mergeRefs(buttonRef, forwardedRef)}
-        icon={<Plus />}
+        icon={<IconPlusMedium />}
         disabled={disabled}
         tooltip={
           <span className="inline-flex items-center gap-1.5">
@@ -47,16 +48,3 @@ export const CreateButton = React.forwardRef<HTMLButtonElement, CreateButtonProp
   },
 );
 CreateButton.displayName = 'CreateButton';
-
-const mergeRefs =
-  <TElement,>(...refs: Array<React.Ref<TElement> | undefined>) =>
-  (element: TElement | null) => {
-    refs.forEach(ref => {
-      if (!ref) return;
-      if (typeof ref === 'function') {
-        ref(element);
-        return;
-      }
-      ref.current = element;
-    });
-  };

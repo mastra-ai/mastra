@@ -1,13 +1,12 @@
 import type { DatasetItem } from '@mastra/client-js';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useState } from 'react';
+import { useDatasetMutations, useDataset, useDatasetItems } from '@mastra/react/hooks/datasets';
+import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useDebounce } from 'use-debounce';
-import { useDatasetItems } from '../../hooks/use-dataset-items';
 import { useDatasetItemsUrlState } from '../../hooks/use-dataset-items-url-state';
-import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
-import { useDataset } from '../../hooks/use-datasets';
 import { AddItemsToDatasetDialog } from '../add-items-to-dataset-dialog';
 import { CreateDatasetFromItemsDialog } from '../create-dataset-from-items-dialog';
 import { CSVImportDialog } from '../csv-import';
@@ -19,21 +18,27 @@ export interface DatasetItemsViewProps {
   datasetId: string;
   onAddItemClick?: () => void;
   onNavigateToDataset?: (datasetId: string) => void;
-  leftSlot?: React.ReactNode;
-  rightSlot?: React.ReactNode;
-  belowToolbarSlot?: React.ReactNode;
+  toolbarActionsSlot?: React.ReactNode;
 }
+
+const DATASET_ITEMS_SORT_KEYS = ['createdAt'] as const;
 
 export function DatasetItemsView({
   datasetId,
   onAddItemClick,
   onNavigateToDataset,
-  leftSlot,
-  rightSlot,
-  belowToolbarSlot,
+  toolbarActionsSlot,
 }: DatasetItemsViewProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const { activeVersion: activeDatasetVersion } = useDatasetItemsUrlState(searchParams, setSearchParams);
+  const { sort, onSortChange } = useUrlSort({ searchParams, setSearchParams, allowedKeys: DATASET_ITEMS_SORT_KEYS });
+  const orderBy = useMemo(
+    () =>
+      sort
+        ? { field: sort.key, direction: sort.direction === 'asc' ? ('ASC' as const) : ('DESC' as const) }
+        : undefined,
+    [sort],
+  );
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importJsonDialogOpen, setImportJsonDialogOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -46,14 +51,20 @@ export function DatasetItemsView({
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch] = useDebounce(searchQuery, 300);
 
-  const { data: dataset } = useDataset(datasetId);
+  const { data: dataset } = useDataset({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
   const {
     data: items = [],
     isLoading: isItemsLoading,
     setEndOfListElement,
     isFetchingNextPage,
     hasNextPage,
-  } = useDatasetItems(datasetId, debouncedSearch || undefined, activeDatasetVersion);
+  } = useDatasetItems({
+    datasetId: datasetId,
+    search: debouncedSearch || undefined,
+    version: activeDatasetVersion,
+    orderBy: orderBy,
+    queryOptions: { enabled: Boolean(datasetId) },
+  });
   const { deleteItems } = useDatasetMutations();
 
   // Clicking the already-open item closes the URL-driven panel.
@@ -117,9 +128,7 @@ export function DatasetItemsView({
       <div className="grid h-full overflow-auto">
         <DatasetItems
           items={items}
-          leftSlot={leftSlot}
-          rightSlot={rightSlot}
-          belowToolbarSlot={belowToolbarSlot}
+          toolbarActionsSlot={toolbarActionsSlot}
           isLoading={isItemsLoading}
           onItemClick={handleItemClick}
           featuredItemId={currentItemId}
@@ -137,6 +146,8 @@ export function DatasetItemsView({
           searchQuery={searchQuery}
           activeSearchQuery={debouncedSearch}
           onSearchChange={setSearchQuery}
+          sort={sort}
+          onSortChange={onSortChange}
           currentDatasetVersion={dataset?.version}
         />
       </div>

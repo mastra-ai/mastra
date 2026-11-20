@@ -109,15 +109,7 @@ export interface IncidentioAlert {
 export interface IncidentioEscalation {
   id: string;
   status:
-    | 'pending'
-    | 'triggered'
-    | 'acked'
-    | 'resolved'
-    | 'expired'
-    | 'cancelled'
-    | 'snoozed'
-    | 'delayed'
-    | 'pending_repeat';
+    'pending' | 'triggered' | 'acked' | 'resolved' | 'expired' | 'cancelled' | 'snoozed' | 'delayed' | 'pending_repeat';
   title: string;
   description: string;
   priority: { name: string };
@@ -344,6 +336,15 @@ export class IncidentioApiError extends Error {
 export interface IncidentioApiClientConfig {
   baseUrl: string;
   accessToken: string;
+  /**
+   * Mastra project id sent as `x-mastra-project-id` when the base URL is a
+   * Mastra Platform connection proxy, so the platform can attribute proxied
+   * incident.io activity to the project. When omitted, falls back to the
+   * `MASTRA_PROJECT_ID` environment variable; the platform strips the header
+   * before forwarding the request upstream. Pass `null` for direct
+   * api.incident.io access so the header never reaches incident.io.
+   */
+  projectId?: string | null;
   fetchImpl?: typeof fetch;
 }
 
@@ -355,6 +356,7 @@ interface IncidentioPaginationMeta {
 export class IncidentioApiClient {
   readonly #baseUrl: string;
   readonly #accessToken: string;
+  readonly #projectId: string | null;
   readonly #fetch: typeof fetch;
 
   constructor(config: IncidentioApiClientConfig) {
@@ -365,6 +367,8 @@ export class IncidentioApiClient {
     }
     this.#baseUrl = baseUrl.replace(/\/+$/, '');
     this.#accessToken = accessToken;
+    this.#projectId =
+      config.projectId === null ? null : (config.projectId ?? process.env.MASTRA_PROJECT_ID)?.trim() || null;
     this.#fetch = config.fetchImpl ?? globalThis.fetch;
   }
 
@@ -402,7 +406,10 @@ export class IncidentioApiClient {
     return result.follow_up;
   }
 
-  async updateFollowUp(followUp: IncidentioFollowUp, status: IncidentioFollowUp['status']): Promise<IncidentioFollowUp> {
+  async updateFollowUp(
+    followUp: IncidentioFollowUp,
+    status: IncidentioFollowUp['status'],
+  ): Promise<IncidentioFollowUp> {
     const result = await this.#request<{ follow_up: IncidentioFollowUp }>(
       'PUT',
       `/v3/follow_ups/${encodeURIComponent(followUp.id)}`,
@@ -598,6 +605,9 @@ export class IncidentioApiClient {
         headers: {
           accept: 'application/json',
           authorization: `Bearer ${this.#accessToken}`,
+          // Project attribution for the Mastra platform proxy; stripped by
+          // the platform before the request reaches incident.io.
+          ...(this.#projectId ? { 'x-mastra-project-id': this.#projectId } : {}),
           ...(options.body === undefined ? {} : { 'content-type': 'application/json' }),
         },
         ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),

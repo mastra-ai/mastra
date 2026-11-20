@@ -1,8 +1,8 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-
-import { ArrowRightIcon } from 'lucide-react';
 import { AgentStepContainer } from './agent-step-container';
 import { Tools } from './tools';
 import { useEditPage } from '@/domains/agent-builder/contexts/edit-page-context';
@@ -29,7 +29,9 @@ export const AgentProfileToolsStep = () => {
         <div className="flex items-center gap-2">
           Selected tools:{' '}
           <Badge>
-            <strong className="text-neutral6 font-semibold">{selectedToolsCount}</strong>
+            <Txt as="strong" variant="label" tone="ink">
+              {selectedToolsCount}
+            </Txt>
           </Badge>
         </div>
       }
@@ -38,7 +40,7 @@ export const AgentProfileToolsStep = () => {
         <Button onClick={handleContinue} disabled={isStreaming}>
           Continue{' '}
           <Icon>
-            <ArrowRightIcon />
+            <IconArrowRight />
           </Icon>
         </Button>
       }

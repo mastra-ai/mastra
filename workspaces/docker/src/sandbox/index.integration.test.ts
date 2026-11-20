@@ -8,11 +8,54 @@
  * - Docker daemon running locally
  */
 
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
 import { createSandboxTestSuite } from '@internal/workspace-test-utils';
 import { SandboxAbortError } from '@mastra/core/workspace';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { DockerSandbox } from './index';
+
+const killHelperExitFixture = fileURLToPath(new URL('./kill-helper-exit.fixture.ts', import.meta.url));
+
+async function runKillHelperExitFixture(stdinMode: 'open' | 'closed'): Promise<void> {
+  const child = spawn(process.execPath, ['--import', 'tsx', killHelperExitFixture, stdinMode], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let stdout = '';
+  let stderr = '';
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
+  child.stdout.on('data', chunk => (stdout += chunk));
+  child.stderr.on('data', chunk => (stderr += chunk));
+
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      child.kill('SIGKILL');
+      reject(
+        new Error(`Fixture did not exit naturally with stdin ${stdinMode}.\nstdout:\n${stdout}\nstderr:\n${stderr}`),
+      );
+    }, 60000);
+
+    child.once('error', error => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.once('exit', (code, signal) => {
+      clearTimeout(timeout);
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(
+          new Error(
+            `Fixture exited with code ${code} and signal ${signal} with stdin ${stdinMode}.\nstdout:\n${stdout}\nstderr:\n${stderr}`,
+          ),
+        );
+      }
+    });
+  });
+}
 
 /**
  * Conformance test suite — validates DockerSandbox against the shared sandbox contract.
@@ -273,4 +316,9 @@ describe('DockerSandbox process kill (integration)', () => {
     expect(settled).toBeLessThanOrEqual(baseline + 1);
     expect(settled).toBeLessThan(duringPids);
   }, 120000);
+
+  it('releases kill-helper responses so subprocesses exit naturally with stdin open or closed', async () => {
+    await runKillHelperExitFixture('open');
+    await runKillHelperExitFixture('closed');
+  }, 130000);
 });

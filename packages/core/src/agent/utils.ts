@@ -23,7 +23,9 @@ function isStructuredOutputFormatError(error: unknown): boolean {
     NoObjectGeneratedError.isInstance(error) ||
     TypeValidationError.isInstance(error) ||
     (error instanceof MastraError &&
-      (error.id === 'STRUCTURED_OUTPUT_OBJECT_UNDEFINED' || error.id === 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED'))
+      (error.id === 'STRUCTURED_OUTPUT_OBJECT_UNDEFINED' ||
+        error.id === 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED' ||
+        error.id === 'STRUCTURED_OUTPUT_TRUNCATED'))
   );
 }
 
@@ -68,7 +70,7 @@ export async function tryGenerateWithJsonFallback<OUTPUT>(
   } catch (error) {
     if (!isStructuredOutputFormatError(error)) throw error;
 
-    console.warn('Error in tryGenerateWithJsonFallback. Attempting fallback.', error);
+    agent.__getLogger().warn('Error in tryGenerateWithJsonFallback. Attempting fallback.', error);
     const result = await agent.generate(prompt, {
       ...options,
       structuredOutput: {
@@ -138,7 +140,7 @@ export async function tryStreamWithJsonFallback<OUTPUT extends {}>(
   } catch (error) {
     if (!isStructuredOutputFormatError(error)) throw error;
 
-    console.warn('Error in tryStreamWithJsonFallback. Attempting fallback.', error);
+    agent.__getLogger().warn('Error in tryStreamWithJsonFallback. Attempting fallback.', error);
     await onStreamAttempt?.();
     const result = await agent.stream(prompt, {
       ...streamOptions,

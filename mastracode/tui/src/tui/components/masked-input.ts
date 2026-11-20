@@ -8,6 +8,7 @@ import type { Component, Focusable } from '@earendil-works/pi-tui';
 
 export class MaskedInput implements Component, Focusable {
   private input: Input;
+  private masked = true;
 
   get focused(): boolean {
     return this.input.focused;
@@ -36,6 +37,15 @@ export class MaskedInput implements Component, Focusable {
     this.input.setValue(value);
   }
 
+  /**
+   * Toggle masking. The OAuth code prompt masks; non-secret prompts (the
+   * post-login account-name prompt) must show the typed text.
+   */
+  setMasked(masked: boolean): void {
+    this.masked = masked;
+    this.input.invalidate();
+  }
+
   handleInput(data: string): void {
     this.input.handleInput(data);
   }
@@ -45,6 +55,9 @@ export class MaskedInput implements Component, Focusable {
   }
 
   render(width: number): string[] {
+    if (!this.masked) {
+      return this.input.render(width);
+    }
     // Temporarily swap the value to masked characters, render, then restore.
     const real = this.input.getValue();
     try {

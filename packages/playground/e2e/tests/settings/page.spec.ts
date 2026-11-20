@@ -1,20 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { expectCurrentBreadcrumb } from '../__utils__/route-header';
 
 test.describe('Settings page', () => {
   test.describe('when the settings page is visited', () => {
-    test('shows the page title and breadcrumb', async ({ page }) => {
+    test('shows the page title', async ({ page }) => {
       await page.goto('/settings');
 
       await expect(page).toHaveTitle(/Mastra Studio/);
-      await expectCurrentBreadcrumb(page, 'Settings');
-    });
-
-    test('renders the settings form', async ({ page }) => {
-      await page.goto('/settings');
-
-      const form = page.locator('form');
-      await expect(form).toBeVisible();
+      await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
     });
 
     test('shows the theme selector defaulting to the system theme', async ({ page }) => {

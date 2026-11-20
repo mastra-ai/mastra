@@ -1,7 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { MockMemory } from '../../../../memory';
 import { createTool } from '../../../../tools';
-import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import {
+  createSharedAgent,
+  describeForAllEngines,
+  isDurableEngineVariant,
+  runLoopScenario,
+  useLoopScenarioAimock,
+} from '../aimock-scenario';
 
 /**
  * Runtime tool suspension with `suspend()`.
@@ -16,6 +23,7 @@ import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '.
  * - `tool-call-suspended` chunk emitted with suspend data
  * - Loop pauses and resumes via `resumeStream()`
  * - Resume data flows back into tool execution
+ * - A readOnly run does not flush messages to memory on suspension
  */
 describeForAllEngines('AIMock loop scenario: tool runtime suspension', engine => {
   const getMock = useLoopScenarioAimock();
@@ -160,5 +168,61 @@ describeForAllEngines('AIMock loop scenario: tool runtime suspension', engine =>
 
     // Assert: loop completed despite tool error (error handled gracefully)
     expect(output).toBeDefined();
+  });
+
+  // Suspension flushes pending messages to memory so a resumed run can rebuild
+  // the conversation. A readOnly run must skip that flush.
+  it('does not flush messages to memory when a readOnly run suspends', async () => {
+    const memory = new MockMemory();
+    const saveMessages = vi.spyOn(memory, 'saveMessages');
+    // suspend() runs the pre-suspension flush before it returns, while the
+    // tool-call-suspended chunk is emitted ahead of it. Wait on this instead of the chunk.
+    let suspendReturned!: () => void;
+    const suspendSettled = new Promise<void>(resolve => (suspendReturned = resolve));
+    const confirmTool = createTool({
+      id: 'ask-confirmation',
+      description: 'Asks the user to confirm before proceeding',
+      inputSchema: z.object({ question: z.string() }),
+      suspendSchema: z.object({ prompt: z.string() }),
+      resumeSchema: z.object({ confirmed: z.boolean() }),
+      execute: async (inputData, context) => {
+        if (!context?.agent?.resumeData) {
+          const suspended = await context?.agent?.suspend?.({ prompt: inputData.question });
+          suspendReturned();
+          return suspended;
+        }
+        return { confirmed: context.agent.resumeData.confirmed };
+      },
+    });
+
+    const llm = getMock();
+    llm.onMessage(/confirm/i, {
+      toolCalls: [{ id: 'call_confirm_ro', name: 'ask-confirmation', arguments: { question: 'Proceed?' } }],
+    });
+
+    const { agent } = await createSharedAgent(llm, { tools: { confirmTool }, memory, engine });
+    const threadId = globalThis.crypto.randomUUID();
+    const resourceId = globalThis.crypto.randomUUID();
+
+    // DurableAgent.stream() returns { fullStream, cleanup }; a regular agent returns the output itself.
+    const result: any = await agent.stream('Please confirm this action', {
+      memory: { thread: threadId, resource: resourceId, options: { readOnly: true } },
+    });
+
+    // A suspended durable stream stays open until resume, so stop at the suspension chunk.
+    const chunkTypes: string[] = [];
+    for await (const chunk of result.fullStream) {
+      chunkTypes.push(chunk.type);
+      if (chunk.type === 'tool-call-suspended' && isDurableEngineVariant(engine)) break;
+    }
+    await suspendSettled;
+    result.cleanup?.();
+
+    expect(chunkTypes).toContain('tool-call-suspended');
+    // Assert on writes, not recall: on engines that skip thread creation for readOnly
+    // runs, leaked messages are stored but hidden from recall.
+    expect(saveMessages.mock.calls.flatMap(([args]) => args.messages)).toEqual([]);
+    const { messages } = await memory.recall({ threadId, resourceId });
+    expect(messages).toEqual([]);
   });
 });

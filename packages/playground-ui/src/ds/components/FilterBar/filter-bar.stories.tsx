@@ -3,13 +3,26 @@ import { useState } from 'react';
 import { userEvent, within } from 'storybook/test';
 import { DEFAULT_FILTER_OPERATORS } from './default-operators';
 import { FilterBar } from './filter-bar';
-import type { FilterBarField, FilterBarItem } from './types';
+import type { FilterBarExpression, FilterBarField, FilterBarItem } from './types';
+import { Avatar } from '@/ds/components/Avatar/Avatar';
 import { Txt } from '@/ds/components/Txt';
+import { IconExclamationTriangle } from '@/ds/icons/central/IconExclamationTriangle';
+import { IconFormCircle } from '@/ds/icons/central/IconFormCircle';
+import { IconGlobe } from '@/ds/icons/central/IconGlobe';
+import { IconHashtag } from '@/ds/icons/central/IconHashtag';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
+import { IconPlay } from '@/ds/icons/central/IconPlay';
+import { IconStopwatch } from '@/ds/icons/central/IconStopwatch';
+import { IconTag } from '@/ds/icons/central/IconTag';
+import { IconUser } from '@/ds/icons/central/IconUser';
+import { hueAccentColor } from '@/lib/colors';
 
 const FIELDS: FilterBarField[] = [
   {
     id: 'status',
     label: 'Status',
+    icon: IconFormCircle,
+    color: hueAccentColor('orange'),
     operators: ['is', 'is-not', 'in', 'is-empty', 'is-not-empty'],
     suggestions: [
       { value: 'running', label: 'Running' },
@@ -20,20 +33,44 @@ const FIELDS: FilterBarField[] = [
   {
     id: 'environment',
     label: 'Environment',
+    icon: IconGlobe,
+    color: hueAccentColor('green'),
     operators: ['is', 'is-not', 'in'],
     suggestions: [{ value: 'prod' }, { value: 'staging' }, { value: 'dev' }],
   },
   {
     id: 'tags',
     label: 'Tags',
+    icon: IconTag,
+    color: hueAccentColor('purple'),
     operators: ['in'],
     strict: true,
     suggestions: [{ value: 'production' }, { value: 'experiment' }, { value: 'regression' }, { value: 'canary' }],
   },
-  { id: 'traceId', label: 'Trace ID', operators: ['is', 'contains', 'starts-with'] },
-  { id: 'runId', label: 'Run ID', operators: ['is', 'contains'] },
-  { id: 'duration', label: 'Duration (ms)', type: 'number', operators: ['gt', 'gte', 'lt', 'lte'] },
-  { id: 'hasError', label: 'Has error', type: 'boolean', operators: ['is'] },
+  {
+    id: 'traceId',
+    label: 'Trace ID',
+    icon: IconHashtag,
+    color: hueAccentColor('blue'),
+    operators: ['is', 'contains', 'starts-with'],
+  },
+  { id: 'runId', label: 'Run ID', icon: IconPlay, color: hueAccentColor('cyan'), operators: ['is', 'contains'] },
+  {
+    id: 'duration',
+    label: 'Duration (ms)',
+    icon: IconStopwatch,
+    color: hueAccentColor('orange'),
+    type: 'number',
+    operators: ['gt', 'gte', 'lt', 'lte'],
+  },
+  {
+    id: 'hasError',
+    label: 'Has error',
+    icon: IconExclamationTriangle,
+    color: hueAccentColor('pink'),
+    type: 'boolean',
+    operators: ['is'],
+  },
 ];
 
 const meta: Meta = {
@@ -48,6 +85,8 @@ const meta: Meta = {
           '**Keyboard**: `↑/↓` move the highlight, `Enter`/`Tab` pick, `Esc`/`Backspace` step back. Empty input: `←` focuses the last chip, `Backspace` removes it. On a chip: `←/→` move across segments and chips, `Enter` edits, `Delete` removes. Multi-value (`in`): `Enter` toggles, `Ctrl/⌘+Enter` or **Done** commits.',
           '',
           'Values are plain strings; the component has no business typing. `suggestions` can be a static list or a lazy resolver invoked only once the value step opens.',
+          '',
+          '**Groups**: pass a `FilterBarExpression` (`{ logic, nodes }`) instead of a flat array to get Linear-style filter groups — chips holding sub-chips joined with `and` / `or` — and connectors between top-level nodes. See *With groups*.',
         ].join('\n'),
       },
     },
@@ -71,11 +110,10 @@ function Demo({
     <div className="grid w-full max-w-3xl gap-3">
       <FilterBar fields={fields} operators={DEFAULT_FILTER_OPERATORS} value={items} onValueChange={setItems}>
         <FilterBar.Chips />
-        <FilterBar.Input placeholder="Filter traces…" />
-        <FilterBar.Clear />
+        <FilterBar.Input placeholder="Filter traces" />
       </FilterBar>
       {children?.(items)}
-      <pre className="bg-surface3 text-ui-xs text-neutral4 rounded-lg p-3">{JSON.stringify(items, null, 2)}</pre>
+      <pre className="rounded-lg bg-card p-3 text-meta text-muted-foreground">{JSON.stringify(items, null, 2)}</pre>
     </div>
   );
 }
@@ -95,6 +133,36 @@ export const WithPrefilledFilters: Story = {
       ]}
     />
   ),
+};
+
+const TEAMMATES = [
+  { id: 'github:ada', name: 'Ada' },
+  { id: 'github:grace', name: 'Grace' },
+  { id: 'github:linus', name: 'Linus' },
+];
+
+export const FreeText: Story = {
+  name: 'Free text (search field) and option avatars',
+  render: function FreeTextStory() {
+    const fields: FilterBarField[] = [
+      { id: 'text', label: 'Text', icon: IconMagnifyingGlass, search: true, operators: ['contains'] },
+      {
+        id: 'teammate',
+        label: 'Teammate',
+        icon: IconUser,
+        color: hueAccentColor('blue'),
+        operators: ['is'],
+        strict: true,
+        suggestions: TEAMMATES.map(teammate => ({
+          value: teammate.id,
+          label: teammate.name,
+          start: <Avatar name={teammate.name} />,
+        })),
+      },
+      ...FIELDS,
+    ];
+    return <Demo fields={fields} />;
+  },
 };
 
 const SLOW_MODELS = ['gpt-4o', 'gpt-4o-mini', 'claude-sonnet-4', 'claude-opus-4', 'gemini-2.5-pro', 'llama-3.3-70b'];
@@ -136,11 +204,11 @@ export const LazyValues: Story = {
     return (
       <Demo fields={fields}>
         {() => (
-          <div className="border-border1 rounded-lg border p-3">
-            <Txt variant="ui-xs" className="text-neutral3">
+          <div className="rounded-lg border border-border p-3">
+            <Txt variant="meta" tone="muted">
               Resolver calls ({calls.length}) — none until a field and operator are chosen:
             </Txt>
-            <ul className="text-ui-sm text-neutral5 mt-1">
+            <ul className="mt-1 text-caption text-foreground">
               {calls.map((c, i) => (
                 <li key={i}>{c}</li>
               ))}
@@ -165,7 +233,6 @@ export const LockedChip: Story = {
           <FilterBar.Chip key={item.id} item={item} readOnly={item.id === 'scope'} />
         ))}
         <FilterBar.Input />
-        <FilterBar.Clear />
       </FilterBar>
     );
   },
@@ -186,7 +253,7 @@ export const CustomLayout: Story = {
           onValueChange={setItems}
           className="rounded-lg"
         >
-          <FilterBar.Input placeholder="Add a filter…" />
+          <FilterBar.Input placeholder="Add a filter" />
         </FilterBar>
         <div className="flex flex-wrap items-center gap-1">
           {items.map(item => (
@@ -221,10 +288,104 @@ export const KeyboardOnly: Story = {
     await user.keyboard('{ArrowDown}{Enter}');
     await user.type(input, 'abc');
     await user.keyboard('{Enter}');
-    // Walk back into the chips, open the last value editor, close it, then remove that chip.
+    // Walk back into the chips (remove button, then value), open the last value editor, close it, then remove that chip.
+    await user.keyboard('{ArrowLeft}');
     await user.keyboard('{ArrowLeft}');
     await user.keyboard('{Enter}');
     await user.keyboard('{Escape}');
     await user.keyboard('{Backspace}');
+  },
+};
+
+function ExpressionDemo({ initial }: { initial: FilterBarExpression }) {
+  const [expression, setExpression] = useState<FilterBarExpression>(initial);
+  return (
+    <div className="grid w-full max-w-3xl gap-3">
+      <FilterBar fields={FIELDS} operators={DEFAULT_FILTER_OPERATORS} value={expression} onValueChange={setExpression}>
+        <FilterBar.Chips />
+        <FilterBar.Input placeholder="Filter traces" />
+      </FilterBar>
+      <pre className="rounded-lg bg-card p-3 text-meta text-muted-foreground">
+        {JSON.stringify(expression, null, 2)}
+      </pre>
+    </div>
+  );
+}
+
+export const WithAdvancedFilter: Story = {
+  name: 'With an advanced filter (popover)',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Pass a `FilterBarExpression` as `value` to enable Linear-style advanced filters. Root chips are implicitly joined with `and`; every root-level group renders as one **Advanced filter** chip whose popover holds a recursive rule builder (rows, `and` / `or` connector, `+ Filter`, `+ Group`). Empty groups are pruned when the popover closes.',
+      },
+    },
+  },
+  render: () => (
+    <ExpressionDemo
+      initial={{
+        logic: 'and',
+        nodes: [
+          { id: '1', fieldId: 'status', operatorId: 'is', value: 'error' },
+          {
+            id: 'g1',
+            kind: 'group',
+            logic: 'or',
+            nodes: [
+              { id: '2', fieldId: 'environment', operatorId: 'is', value: 'prod' },
+              {
+                id: 'g2',
+                kind: 'group',
+                logic: 'and',
+                nodes: [
+                  { id: '3', fieldId: 'environment', operatorId: 'is', value: 'staging' },
+                  { id: '4', fieldId: 'duration', operatorId: 'gt', value: '1500' },
+                ],
+              },
+            ],
+          },
+        ],
+      }}
+    />
+  ),
+  play: async ({ canvasElement }) => {
+    const user = userEvent.setup({ delay: 80 });
+    await user.click(within(canvasElement).getByRole('button', { name: /Advanced filter/ }));
+  },
+};
+
+export const BuildAdvancedFilterFromKeyboard: Story = {
+  name: 'Build an advanced filter from the keyboard (play)',
+  render: () => <ExpressionDemo initial={{ logic: 'and', nodes: [] }} />,
+  play: async ({ canvasElement }) => {
+    const user = userEvent.setup({ delay: 80 });
+    const body = within(document.body);
+    const input = within(canvasElement).getByRole('combobox', { name: 'Add filter' });
+    await user.click(input);
+    // Status › is › Error
+    await user.type(input, 'stat');
+    await user.keyboard('{Enter}');
+    await user.keyboard('{Enter}');
+    await user.keyboard('{ArrowDown}{ArrowDown}{Enter}');
+    // Open an advanced filter; the popover input is now the active one.
+    await user.type(input, 'advanced');
+    await user.keyboard('{Enter}');
+    const popoverInput = await body.findByRole('combobox', { name: 'Add filter' });
+    // Environment is prod, Environment is staging
+    await user.type(popoverInput, 'env');
+    await user.keyboard('{Enter}');
+    await user.keyboard('{Enter}');
+    await user.keyboard('{Enter}');
+    await user.type(popoverInput, 'env');
+    await user.keyboard('{Enter}');
+    await user.keyboard('{Enter}');
+    await user.keyboard('{ArrowDown}{Enter}');
+    // Flip the connector, then nest a group and close the popover.
+    await user.click(body.getByRole('button', { name: 'Joined with or, switch to and' }));
+    await user.keyboard('{Escape}');
+    await user.click(body.getByRole('button', { name: 'Group' }));
+    await user.keyboard('{Escape}');
+    await user.keyboard('{Escape}');
   },
 };

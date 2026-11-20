@@ -2,14 +2,10 @@ import type { StorageThreadType } from '@mastra/core/memory';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useObservationalMemory } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
-import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { ChevronDown, ChevronUp, Eye, MessageSquare, NotebookPen, Search, ExternalLink } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { MemorySidebarView } from '@mastra/playground-ui/domains/memory/components/memory-sidebar-view';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
+import { useObservationalMemory, useMemoryConfig, useThread, useMemory } from '@mastra/react/hooks/memory';
 import { AgentCapabilitiesFooter } from './agent-capabilities-footer';
 import { AgentMemory } from './agent-memory';
 import { getObservationWindowTokens } from './lib/observation-window';
@@ -22,9 +18,6 @@ import { ChatThreads } from '@/domains/agents/components/chat-threads';
 import { SidebarPanel } from '@/domains/agents/components/sidebar-panel';
 import { useMemoryTimeline, useObservationalMemoryContext } from '@/domains/agents/context';
 
-import { useMemoryConfig, useThread } from '@/domains/memory/hooks';
-import { useMemory } from '@/domains/memory/hooks/use-memory';
-
 export interface MemorySidebarProps {
   agentId: string;
   threadId: string;
@@ -32,60 +25,20 @@ export interface MemorySidebarProps {
   onDelete?: (threadId: string) => void;
   /** When provided, rendered as the thread layer instead of the built-in ChatThreads list. */
   threadsSlot?: React.ReactNode;
-  /** Forwarded to ChatThreads; renders the "Hide threads panel" control when set. */
-  onHidePanel?: () => void;
-}
-
-const barColor = (percent: number): string => {
-  if (percent >= 85) return 'bg-orange-400';
-  if (percent >= 60) return 'bg-blue-500';
-  return 'bg-green-500';
-};
-
-type ConfigBadgeProps = {
-  icon: LucideIcon;
-  tooltip: string;
-  enabled: boolean;
-  value?: number;
-};
-
-function ConfigBadge({ icon: Icon, tooltip, enabled, value }: ConfigBadgeProps) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span
-          className={cn(
-            'inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 transition-colors duration-normal',
-            enabled ? 'border-border1 bg-surface4 text-neutral6' : 'border-border1/40 text-neutral3/50',
-          )}
-        >
-          <Icon className="h-3 w-3 shrink-0" />
-          {value !== undefined && (
-            <Txt as="span" variant="ui-xs" className="leading-none font-medium tabular-nums">
-              {value}
-            </Txt>
-          )}
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>{tooltip}</TooltipContent>
-    </Tooltip>
-  );
-}
-
-function MemorySidebarSkeleton() {
-  return (
-    <div data-testid="memory-sidebar-skeleton" className="flex h-full min-h-0 w-full flex-col gap-2.5 p-3">
-      <Skeleton className="h-3 w-28" />
-      <Skeleton className="h-3 w-20" />
-      <Skeleton className="h-3 w-24" />
-      <Skeleton className="h-3 w-16" />
-    </div>
-  );
+  /** Forwarded to ChatThreads; keeps its header in place while the list loads. */
+  isThreadsLoading?: boolean;
 }
 
 // SidebarPanel is the single layout shell; the body picks the view with guard
 // clauses and returns bare content — see structure-early-return-render-branches.
-export function MemorySidebar({ agentId, threadId, threads, onDelete, onHidePanel }: MemorySidebarProps) {
+export function MemorySidebar({
+  agentId,
+  threadId,
+  threads,
+  onDelete,
+  threadsSlot,
+  isThreadsLoading,
+}: MemorySidebarProps) {
   return (
     <SidebarPanel>
       <MemorySidebarBody
@@ -93,7 +46,8 @@ export function MemorySidebar({ agentId, threadId, threads, onDelete, onHidePane
         threadId={threadId}
         threads={threads}
         onDelete={onDelete}
-        onHidePanel={onHidePanel}
+        threadsSlot={threadsSlot}
+        isThreadsLoading={isThreadsLoading}
       />
     </SidebarPanel>
   );
@@ -105,11 +59,15 @@ export function MemorySidebarBody({
   threads,
   onDelete,
   threadsSlot,
-  onHidePanel,
+  isThreadsLoading,
 }: MemorySidebarProps) {
   // Derive memory state from the shared (React Query deduped) hook instead of
   // accepting it as props — see structure-derive-dont-duplicate.
-  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
+  const { data: memory, isLoading: isMemoryLoading } = useMemory({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const hasMemory = Boolean(memory?.result);
   const memoryType = memory?.memoryType;
 
@@ -119,10 +77,6 @@ export function MemorySidebarBody({
   const { recentMessages, semanticRecallOn, workingMemoryOn, observationalOn } = useMemoryFeatureFlags(agentId);
 
   const showMemory = selectedTab === 'memory';
-  const memoryCardShellRef = useRef<HTMLDivElement>(null);
-  const memoryCardButtonRef = useRef<HTMLButtonElement>(null);
-  const [collapsedCardSize, setCollapsedCardSize] = useState({ height: 0, offset: 0 });
-
   const showMemoryDetail = observationalOn && isPanelOpen;
 
   // streamProgress is intentionally retained across thread switches (for reload
@@ -132,13 +86,22 @@ export function MemorySidebarBody({
   // Status parts are streamed but not persisted, so on a fresh load there is no live
   // progress yet. Fall back to the durable OM record the same way the expanded OM
   // section and the timeline panel do, otherwise the bar stays empty after a reload.
-  const { data: thread } = useThread({ threadId, agentId });
-  const { data: memoryConfigData } = useMemoryConfig(agentId);
-  const { data: omData } = useObservationalMemory(
-    observationalOn ? agentId : undefined,
-    observationalOn ? threadId : undefined,
-    thread?.resourceId ?? agentId,
-  );
+  const { data: thread } = useThread({
+    threadId: threadId,
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(threadId) && threadId !== 'new' && Boolean(agentId) },
+  });
+  const { data: memoryConfigData } = useMemoryConfig({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
+  const { data: omData } = useObservationalMemory({
+    agentId: observationalOn ? agentId : undefined,
+    threadId: observationalOn ? threadId : undefined,
+    resourceId: thread?.resourceId ?? agentId,
+  });
   const omAgentConfig = (memoryConfigData?.config as { observationalMemory?: OmAgentConfig } | undefined)
     ?.observationalMemory;
   const { messageTokens, messageThreshold } = getObservationWindowTokens({
@@ -151,45 +114,6 @@ export function MemorySidebarBody({
     hasObservationWindow && messageThreshold > 0
       ? Math.min(100, Math.round((messageTokens / messageThreshold) * 100))
       : undefined;
-
-  useLayoutEffect(() => {
-    if (showMemory || showMemoryDetail || !hasMemory) return;
-
-    const shell = memoryCardShellRef.current;
-    const button = memoryCardButtonRef.current;
-    if (!shell || !button) return;
-
-    const updateCollapsedSize = () => {
-      const shellStyles = getComputedStyle(shell);
-      const borderTop = Number.parseFloat(shellStyles.borderTopWidth) || 0;
-      const borderBottom = Number.parseFloat(shellStyles.borderBottomWidth) || 0;
-      const marginTop = Number.parseFloat(shellStyles.marginTop) || 0;
-      const marginBottom = Number.parseFloat(shellStyles.marginBottom) || 0;
-      const height = Math.ceil(button.getBoundingClientRect().height + borderTop + borderBottom);
-      const offset = Math.ceil(height + marginTop + marginBottom);
-
-      setCollapsedCardSize(current =>
-        current.height === height && current.offset === offset ? current : { height, offset },
-      );
-    };
-
-    updateCollapsedSize();
-
-    if (typeof ResizeObserver === 'undefined') return;
-
-    const observer = new ResizeObserver(updateCollapsedSize);
-    observer.observe(button);
-    return () => observer.disconnect();
-  }, [
-    hasMemory,
-    recentMessages.description,
-    observationPercent,
-    observationalOn,
-    semanticRecallOn,
-    showMemory,
-    showMemoryDetail,
-    workingMemoryOn,
-  ]);
 
   // Mutually exclusive views, each an early return of bare content.
   if (isMemoryLoading) {
@@ -205,157 +129,56 @@ export function MemorySidebarBody({
   }
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
-      <div className="relative min-h-0 flex-1 overflow-hidden">
-        <div
-          aria-hidden={showMemory && hasMemory}
-          inert={showMemory && hasMemory ? true : undefined}
-          data-testid="memory-sidebar-thread-layer"
-          className={cn(
-            'memory-sidebar-thread-layer absolute inset-0 flex min-h-0 flex-col overflow-hidden',
-            showMemory && hasMemory ? 'pointer-events-none opacity-0' : 'opacity-100',
-          )}
-        >
-          <div
-            className="min-h-0 flex-1 overflow-hidden"
-            style={{ paddingBottom: hasMemory ? collapsedCardSize.offset || undefined : undefined }}
-          >
-            {threadsSlot ? (
-              threadsSlot
-            ) : hasMemory ? (
-              <ChatThreads
-                resourceId={agentId}
-                resourceType="agent"
-                threads={threads ?? []}
-                threadId={threadId}
-                onDelete={onDelete ?? (() => {})}
-                embedded
-                onHidePanel={onHidePanel}
-              />
-            ) : (
-              <EmptyState
-                iconSlot={null}
-                titleSlot="Memory not enabled"
-                descriptionSlot="Conversations are only saved as threads when the agent has memory configured."
-                actionSlot={
-                  <Button
-                    icon={<ExternalLink />}
-                    as="a"
-                    href="https://mastra.ai/docs/memory/overview"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    variant="outline"
-                  >
-                    View documentation
-                  </Button>
-                }
-              />
-            )}
-          </div>
-        </div>
+    <MemorySidebarView
+      hasMemory={hasMemory}
+      showMemory={showMemory}
+      recentMessages={recentMessages}
+      semanticRecallOn={semanticRecallOn}
+      workingMemoryOn={workingMemoryOn}
+      observationalOn={observationalOn}
+      observationPercent={observationPercent}
+      onTabChange={handleTabChange}
+      threadsSlot={
+        threadsSlot ||
+        (hasMemory ? (
+          <ChatThreads
+            key={agentId}
+            resourceId={agentId}
+            resourceType="agent"
+            threads={threads ?? []}
+            threadId={threadId}
+            onDelete={onDelete ?? (() => {})}
+            embedded
+            isLoading={isThreadsLoading}
+          />
+        ) : (
+          <EmptyState
+            titleSlot="Memory not enabled"
+            descriptionSlot="Conversations are only saved as threads when the agent has memory configured."
+            actionSlot={
+              <Button
+                icon={<IconSquareArrowTopRight />}
+                render={<a href="https://mastra.ai/docs/memory/overview" target="_blank" rel="noopener noreferrer" />}
+              >
+                View documentation
+              </Button>
+            }
+          />
+        ))
+      }
+      memorySlot={<AgentMemory agentId={agentId} threadId={threadId} memoryType={memoryType} />}
+      footerSlot={<AgentCapabilitiesFooter agentId={agentId} />}
+    />
+  );
+}
 
-        {hasMemory ? (
-          <div
-            ref={memoryCardShellRef}
-            data-testid="memory-sidebar-overlay"
-            className={cn(
-              'memory-sidebar-overlay absolute inset-x-0 bottom-0 z-10 box-border flex min-h-0 flex-col overflow-hidden border',
-              showMemory
-                ? 'top-1 m-1 rounded-xl border-border1/40 bg-surface3 shadow-none'
-                : 'm-1 rounded-xl border-border1/40 bg-surface4 hover:bg-surface5 active:bg-surface4',
-            )}
-            style={{ height: showMemory ? undefined : collapsedCardSize.height || undefined }}
-          >
-            <button
-              ref={memoryCardButtonRef}
-              type="button"
-              onClick={() => handleTabChange(showMemory ? 'threads' : 'memory')}
-              aria-pressed={showMemory}
-              data-testid="memory-sidebar-card"
-              className="group/memory-card w-full shrink-0 cursor-pointer bg-transparent px-3 py-2.5 text-left"
-            >
-              <span className="flex items-center justify-between gap-2">
-                <span className="text-neutral6 flex min-w-0 items-center gap-1.5">
-                  <MemoryIcon className="h-4 w-4 shrink-0" />
-                  <Txt as="span" variant="ui-sm" className="font-medium">
-                    Memory
-                  </Txt>
-                </span>
-                {showMemory ? (
-                  <ChevronDown className="text-neutral3 h-4 w-4 shrink-0" />
-                ) : (
-                  <ChevronUp className="text-neutral3 h-4 w-4 shrink-0" />
-                )}
-              </span>
-
-              {!showMemory ? (
-                <TooltipProvider delay={150} timeout={400}>
-                  {/* Memory setup at a glance: filled badge = on, faded = off */}
-                  <span data-testid="memory-config-badges" className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                    <ConfigBadge
-                      icon={MessageSquare}
-                      tooltip={recentMessages.description}
-                      enabled={recentMessages.enabled}
-                      value={recentMessages.maxMessages}
-                    />
-                    <ConfigBadge
-                      icon={Search}
-                      tooltip={
-                        semanticRecallOn
-                          ? 'Semantic recall is on - retrieves relevant past messages'
-                          : 'Semantic recall is off'
-                      }
-                      enabled={semanticRecallOn}
-                    />
-                    <ConfigBadge
-                      icon={NotebookPen}
-                      tooltip={
-                        workingMemoryOn
-                          ? 'Working memory is on - persists notes across the conversation'
-                          : 'Working memory is off'
-                      }
-                      enabled={workingMemoryOn}
-                    />
-                    <ConfigBadge
-                      icon={Eye}
-                      tooltip={
-                        observationalOn
-                          ? 'Observational memory is on - learns from the conversation'
-                          : 'Observational memory is off'
-                      }
-                      enabled={observationalOn}
-                    />
-                  </span>
-                </TooltipProvider>
-              ) : null}
-
-              {observationPercent !== undefined ? (
-                <span
-                  data-testid="memory-card-observation-bar"
-                  data-percent={observationPercent}
-                  className="bg-surface5 mt-2 block h-1 w-full overflow-hidden rounded-full"
-                >
-                  <span
-                    className={cn(
-                      'block h-full rounded-full transition-all duration-normal',
-                      barColor(observationPercent),
-                    )}
-                    style={{ width: `${observationPercent}%` }}
-                  />
-                </span>
-              ) : null}
-            </button>
-
-            {showMemory && (
-              <div className="memory-card-content border-border1 min-h-0 flex-1 overflow-y-auto border-t">
-                <AgentMemory agentId={agentId} threadId={threadId} memoryType={memoryType} />
-              </div>
-            )}
-          </div>
-        ) : null}
-      </div>
-
-      <AgentCapabilitiesFooter agentId={agentId} />
+function MemorySidebarSkeleton() {
+  return (
+    <div data-testid="memory-sidebar-skeleton" className="flex h-full min-h-0 w-full flex-col gap-2.5 p-3">
+      <Skeleton className="h-3 w-28" />
+      <Skeleton className="h-3 w-20" />
+      <Skeleton className="h-3 w-24" />
+      <Skeleton className="h-3 w-16" />
     </div>
   );
 }

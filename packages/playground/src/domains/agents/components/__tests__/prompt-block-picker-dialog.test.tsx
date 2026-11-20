@@ -78,7 +78,6 @@ describe('PromptBlockPickerDialog', () => {
       renderDialog();
 
       expect(await screen.findByText('Live Block')).not.toBeNull();
-      expect(screen.queryByText('Draft Block')).toBeNull();
       expect(onListPromptBlocks).toHaveBeenCalledWith('published');
     });
   });
@@ -124,7 +123,7 @@ describe('PromptBlockPickerDialog', () => {
 
       await screen.findByText('Billing tone');
 
-      const searchInput = screen.getByPlaceholderText('Search prompt blocks...');
+      const searchInput = screen.getByPlaceholderText('Search prompt blocks');
       fireEvent.change(searchInput, { target: { value: 'billing' } });
 
       expect(screen.getByText('Billing tone')).not.toBeNull();

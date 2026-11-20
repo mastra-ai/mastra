@@ -1,15 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  INSTALL_BANNER_DISMISS_DURATION_MS,
-  isManuallyInstalled,
-  markDismissed,
-  markManuallyInstalled,
-  wasRecentlyDismissed,
-} from './persistence';
+import { isManuallyInstalled, markDismissed, markManuallyInstalled, wasRecentlyDismissed } from './persistence';
 
 const DISMISSED_KEY = 'mastracode.pwaInstallDismissedAt';
-const INSTALLED_KEY = 'mastracode.pwaInstalledManually';
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 function stubLocalStorage() {
   const store = new Map<string, string>();
@@ -39,13 +33,13 @@ describe('wasRecentlyDismissed', () => {
 
   it('is true within the dismiss window', () => {
     const store = stubLocalStorage();
-    store.set(DISMISSED_KEY, String(Date.now() - INSTALL_BANNER_DISMISS_DURATION_MS + 60_000));
+    store.set(DISMISSED_KEY, String(Date.now() - SEVEN_DAYS_MS + 60_000));
     expect(wasRecentlyDismissed()).toBe(true);
   });
 
   it('is false once the dismiss window has expired', () => {
     const store = stubLocalStorage();
-    store.set(DISMISSED_KEY, String(Date.now() - INSTALL_BANNER_DISMISS_DURATION_MS - 1));
+    store.set(DISMISSED_KEY, String(Date.now() - SEVEN_DAYS_MS - 1));
     expect(wasRecentlyDismissed()).toBe(false);
   });
 
@@ -66,10 +60,9 @@ describe('wasRecentlyDismissed', () => {
 });
 
 describe('markDismissed', () => {
-  it('stores the current timestamp', () => {
-    const store = stubLocalStorage();
+  it('counts as a recent dismissal right away', () => {
+    stubLocalStorage();
     markDismissed();
-    expect(store.get(DISMISSED_KEY)).toBe(String(Date.now()));
     expect(wasRecentlyDismissed()).toBe(true);
   });
 
@@ -90,9 +83,8 @@ describe('manual install flag', () => {
   });
 
   it('round-trips through markManuallyInstalled', () => {
-    const store = stubLocalStorage();
+    stubLocalStorage();
     markManuallyInstalled();
-    expect(store.get(INSTALLED_KEY)).toBe('true');
     expect(isManuallyInstalled()).toBe(true);
   });
 
@@ -107,11 +99,5 @@ describe('manual install flag', () => {
     });
     expect(() => markManuallyInstalled()).not.toThrow();
     expect(isManuallyInstalled()).toBe(false);
-  });
-});
-
-describe('INSTALL_BANNER_DISMISS_DURATION_MS', () => {
-  it('is 7 days', () => {
-    expect(INSTALL_BANNER_DISMISS_DURATION_MS).toBe(7 * 24 * 60 * 60 * 1000);
   });
 });

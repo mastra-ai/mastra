@@ -10,6 +10,7 @@ export interface WorkflowDataEdgeData {
   conditionNode?: boolean;
   boundaryPayload?: 'workflow-input' | 'workflow-output';
   edgeStatus?: 'success' | 'idle';
+  dataLabelPlacement?: 'source' | 'hidden';
 }
 
 export type WorkflowDataEdgeModel = Edge<WorkflowDataEdgeData, typeof WORKFLOW_DATA_EDGE_TYPE>;

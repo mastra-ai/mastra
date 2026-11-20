@@ -1,69 +1,125 @@
 import type { BaseUIEvent } from '@base-ui/react/types';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
+import { flushSync } from 'react-dom';
+import { FILTER_BAR_CONTROL_SIZE, FilterBarFieldLabel, alwaysHighlightProps } from './filter-bar-chip';
 import { useFilterBarContext } from './filter-bar-context';
-import { FilterBarDraftChip } from './filter-bar-draft-chip';
-import { FilterBarOptionList } from './filter-bar-option-list';
+import { FilterBarOptionLabel, FilterBarOptionList } from './filter-bar-option-list';
+import { findGroup } from './filter-bar-tree';
 import { matchesQueryFilter } from './match-query';
-import type { FilterBarField, FilterBarOperator, FilterBarOption, FilterBarValue } from './types';
+import type { FilterBarDraft, FilterBarField, FilterBarOperator, FilterBarOption, FilterBarValue } from './types';
+import { parseFieldValue } from './types';
 import { useValueStep } from './use-value-step';
 import { Button } from '@/ds/components/Button/Button';
 import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
+import { comboboxTriggerClass } from '@/ds/components/Combobox/combobox-styles';
 import { Kbd } from '@/ds/components/Kbd/kbd';
 import { Txt } from '@/ds/components/Txt';
+import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
+import { IconFilter2 } from '@/ds/icons/central/IconFilter2';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { unstyledFormElementStyle } from '@/ds/primitives/form-element';
+import { inputFocusBorderWithin, unstyledFormElementStyle } from '@/ds/primitives/form-element';
 import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
+import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { useIsApplePlatform } from '@/hooks/use-keyboard-shortcut-label';
 import { cn } from '@/lib/utils';
 
 type Step = 'field' | 'operator' | 'value';
 
-type Draft = {
-  step: Step;
-  fieldId?: string;
-  operatorId?: string;
-};
-
 type Item = FilterBarField | FilterBarOperator | FilterBarOption;
 
-const INITIAL_DRAFT: Draft = { step: 'field' };
-
 const getItemLabel = (item: Item) => ('label' in item && item.label ? item.label : 'value' in item ? item.value : '');
+
+const EMPTY_ITEMS: readonly Item[] = [];
+/** Pinned last entry of the field list that spawns an advanced filter (an `or` group) instead of a filter. */
+const ADVANCED_FIELD_ID = '__filter-bar-advanced__';
+const ADVANCED_FIELD: FilterBarField = {
+  id: ADVANCED_FIELD_ID,
+  label: 'Advanced filter…',
+  icon: IconCodeBrackets,
+  operators: [],
+};
 
 export type FilterBarInputProps = {
   placeholder?: string;
   className?: string;
   'aria-label'?: string;
+  /**
+   * Group this instance commits into; omit for the bar's own input. Only the instance whose
+   * `groupId` matches the provider's `inputTarget` renders, so a single input is ever mounted.
+   */
+  groupId?: string;
+  /** Called when Escape is pressed on an empty query inside a group, after the input hands back to the bar. */
+  onLeave?: () => void;
 };
 
 /**
  * Typeahead entry point: type to pick a field, then an operator, then a value.
  * Focus never leaves the input; the popup is driven with the arrow keys.
  */
-export function FilterBarInput({
-  placeholder = 'Filter…',
+export function FilterBarInput(props: FilterBarInputProps) {
+  const ctx = useFilterBarContext();
+  if (ctx.inputTarget !== props.groupId) return null;
+  return <FilterBarInputImpl {...props} />;
+}
+
+function FilterBarInputImpl({
+  placeholder = 'Filter',
   className,
   'aria-label': ariaLabel = 'Add filter',
+  groupId,
+  onLeave,
 }: FilterBarInputProps) {
   const ctx = useFilterBarContext();
   const container = usePortalContainer();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [draft, setDraft] = useState<Draft>(INITIAL_DRAFT);
   const [highlighted, setHighlighted] = useState<Item | null>(null);
+  const [emptyForStepChange, setEmptyForStepChange] = useState(false);
   const modEnterLabel = useIsApplePlatform() ? '⌘↵' : 'Ctrl ↵';
 
-  const field = draft.fieldId ? ctx.getField(draft.fieldId) : undefined;
-  const operator = draft.operatorId ? ctx.getOperator(draft.operatorId) : undefined;
+  // The draft lives in the provider so the chip list can render it; the step follows from it.
+  const { draft, setDraft: setDraftState, commitDraft } = ctx;
+  const step: Step = !draft ? 'field' : !draft.operatorId ? 'operator' : 'value';
+  const field = draft ? ctx.getField(draft.fieldId) : undefined;
   const fieldOperators = useMemo(() => (field ? ctx.getFieldOperators(field) : []), [ctx, field]);
+  const operator = draft?.operatorId
+    ? (fieldOperators.find(o => o.id === draft.operatorId) ?? ctx.getOperator(draft.operatorId))
+    : undefined;
+  // The advanced option lives in the bar only; inside a popover, nesting is the editor's `+ Group`.
+  const offerAdvanced = ctx.groupsEnabled && groupId === undefined;
+  const visibleFields = useMemo(() => {
+    const fields = ctx.fields.filter(f => !f.hidden && (!f.rootOnly || groupId === undefined));
+    return offerAdvanced ? [...fields, ADVANCED_FIELD] : fields;
+  }, [ctx.fields, offerAdvanced, groupId]);
+  const targetGroup = groupId ? findGroup(ctx.expression, groupId) : undefined;
+
+  // A group's input mounts on demand (see `openGroupInput`) and takes focus itself.
+  useEffect(() => {
+    if (groupId) inputRef.current?.focus();
+  }, [groupId]);
+
+  // Base UI owns the highlight index and keeps it when the list content changes, so a row
+  // reached with ArrowDown would carry over into the step that follows. An empty list committed
+  // first drops that index, and `autoHighlight` re-anchors on the first row of the new step.
+  const withHighlightReset = useCallback((change: () => void) => {
+    flushSync(() => setEmptyForStepChange(true));
+    change();
+    setEmptyForStepChange(false);
+  }, []);
+
+  const setDraft = useCallback(
+    (next: Omit<FilterBarDraft, 'id' | 'from'> | null) => withHighlightReset(() => setDraftState(next)),
+    [withHighlightReset, setDraftState],
+  );
 
   const reset = useCallback(() => {
-    setDraft(INITIAL_DRAFT);
+    setDraftState(null);
     setQuery('');
-  }, []);
+  }, [setDraftState]);
 
   const close = useCallback(() => {
     setOpen(false);
@@ -72,52 +128,88 @@ export function FilterBarInput({
 
   const commit = useCallback(
     (fieldId: string, operatorId: string, value: FilterBarValue) => {
-      ctx.addItem({ fieldId, operatorId, value });
-      reset();
+      withHighlightReset(() => commitDraft({ fieldId, operatorId }, value));
+      setQuery('');
       inputRef.current?.focus();
     },
-    [ctx, reset],
+    [withHighlightReset, commitDraft],
   );
 
-  const selectField = useCallback((next: FilterBarField) => {
-    setDraft({ step: 'operator', fieldId: next.id });
-    setQuery('');
-  }, []);
-
   const selectOperator = useCallback(
-    (next: FilterBarOperator) => {
-      if (!draft.fieldId) return;
+    (fieldId: string, next: FilterBarOperator) => {
       if (next.arity === 'none') {
-        commit(draft.fieldId, next.id, '');
+        commit(fieldId, next.id, '');
         return;
       }
-      setDraft({ step: 'value', fieldId: draft.fieldId, operatorId: next.id });
+      setDraft({ fieldId, operatorId: next.id });
       setQuery('');
     },
-    [draft.fieldId, commit],
+    [commit, setDraft],
+  );
+
+  const selectField = useCallback(
+    (next: FilterBarField) => {
+      if (next.id === ADVANCED_FIELD_ID) {
+        // `or` is the useful default: an `and` group is indistinguishable from the root.
+        const id = ctx.addGroup(undefined, 'or');
+        ctx.setOpenGroup(id);
+        ctx.openGroupInput(id);
+        setQuery('');
+        setOpen(false);
+        return;
+      }
+      const [only, ...rest] = ctx.getFieldOperators(next);
+      // Free-text entry with text already typed: that text is the value, so neither the
+      // operator nor the value step has anything left to ask.
+      if (next.search && only && query.trim() !== '') {
+        commit(next.id, only.id, parseFieldValue(next.type, query));
+        return;
+      }
+      // A single allowed operator is implied: skip straight to the value step.
+      if (only && rest.length === 0) {
+        selectOperator(next.id, only);
+        return;
+      }
+      setDraft({ fieldId: next.id });
+      setQuery('');
+    },
+    [ctx, commit, query, selectOperator, setDraft],
   );
 
   const valueStep = useValueStep({
     field,
     operator,
     query,
-    enabled: open && draft.step === 'value',
+    enabled: open && step === 'value',
+    setQuery,
     onCommit: value => {
-      if (draft.fieldId && draft.operatorId) commit(draft.fieldId, draft.operatorId, value);
+      if (draft?.operatorId) commit(draft.fieldId, draft.operatorId, value);
     },
   });
 
+  // Leaving a group's input hands the target back to the bar; empty groups are pruned when the
+  // popover closes, never here.
+  const leaveGroup = useCallback(() => {
+    if (!groupId) return false;
+    ctx.openGroupInput(undefined);
+    onLeave?.();
+    return true;
+  }, [ctx, groupId, onLeave]);
+
   const stepBack = useCallback(() => {
-    if (draft.step === 'value') setDraft({ step: 'operator', fieldId: draft.fieldId });
-    else if (draft.step === 'operator') setDraft(INITIAL_DRAFT);
-    else setOpen(false);
+    if (step === 'value' && draft) {
+      // Back to the field step when the operator was implied (single operator).
+      const skipOperator = field ? fieldOperators.length === 1 : false;
+      setDraft(skipOperator ? null : { fieldId: draft.fieldId });
+    } else if (step === 'operator') setDraft(null);
+    else if (!leaveGroup()) setOpen(false);
     setQuery('');
-  }, [draft]);
+  }, [step, draft, field, fieldOperators, setDraft, leaveGroup]);
 
   // Selection is routed per step and never kept by Base UI (`value` stays null).
   const handleSelect = (item: Item) => {
-    if (draft.step === 'field') selectField(item as FilterBarField);
-    else if (draft.step === 'operator') selectOperator(item as FilterBarOperator);
+    if (step === 'field') selectField(item as FilterBarField);
+    else if (step === 'operator' && draft) selectOperator(draft.fieldId, item as FilterBarOperator);
     else valueStep.handleSelect(item as FilterBarOption);
   };
 
@@ -125,6 +217,8 @@ export function FilterBarInput({
   const handleKeyDown = (event: BaseUIEvent<KeyboardEvent<HTMLInputElement>>) => {
     if (event.key === 'Escape') {
       event.preventDefault();
+      // Consumed here: an enclosing popover (advanced filter) must not close on it.
+      event.stopPropagation();
       event.preventBaseUIHandler();
       stepBack();
       return;
@@ -139,27 +233,33 @@ export function FilterBarInput({
       if (event.key === 'Backspace') {
         event.preventDefault();
         event.preventBaseUIHandler();
-        if (draft.step !== 'field') stepBack();
-        else {
-          const last = ctx.items[ctx.items.length - 1];
+        if (step !== 'field') stepBack();
+        else if (targetGroup) {
+          // Inside a group: eat its last chip, or drop the group once it is empty.
+          const last = targetGroup.nodes.findLast(node => !ctx.leaving.has(node.id));
+          if (last) ctx.removeItem(last.id);
+          else leaveGroup();
+        } else {
+          // Chips still animating out are already gone from the value: skip them.
+          const last = ctx.items.findLast(item => !ctx.leaving.has(item.id));
           if (last) ctx.removeItem(last.id);
         }
         return;
       }
-      if (event.key === 'ArrowLeft' && draft.step === 'field') {
-        if (ctx.focusChip(ctx.items.length - 1, -1, 'value')) event.preventDefault();
+      if (event.key === 'ArrowLeft' && step === 'field') {
+        if (ctx.focusChip(ctx.items.length - 1, -1, 'remove')) event.preventDefault();
         return;
       }
     }
     if (!open) return;
 
-    if (event.key === 'Tab' && highlighted && draft.step !== 'value' && (draft.step === 'operator' || query !== '')) {
+    if (event.key === 'Tab' && highlighted && step !== 'value' && (step === 'operator' || query !== '')) {
       event.preventDefault();
       event.preventBaseUIHandler();
       handleSelect(highlighted);
       return;
     }
-    if (draft.step === 'value') {
+    if (step === 'value') {
       const highlightedOption = valueStep.hasSuggestions ? (highlighted as FilterBarOption | null) : null;
       const handled = valueStep.handleKeyDown(event, highlightedOption);
       // Base UI closes on Enter when nothing is highlighted (form submission); the draft must stay open.
@@ -167,28 +267,39 @@ export function FilterBarInput({
     }
   };
 
-  const items: readonly Item[] =
-    draft.step === 'field' ? ctx.fields : draft.step === 'operator' ? fieldOperators : valueStep.options;
+  const optionsForStep: Record<Step, readonly Item[]> = {
+    field: visibleFields,
+    operator: fieldOperators,
+    value: valueStep.options,
+  };
+  const items: readonly Item[] = emptyForStepChange ? EMPTY_ITEMS : optionsForStep[step];
+
+  // A search field is the way out for text that names no field, so it survives the field
+  // step's own filtering whatever was typed; every other item matches on its label.
+  const filterItem = useCallback(
+    (item: Item, text: string, itemToString?: (item: Item) => string) =>
+      ('search' in item && item.search === true) || matchesQueryFilter(item, text, itemToString),
+    [],
+  );
 
   const inputPlaceholder =
-    draft.step === 'field'
+    step === 'field'
       ? placeholder
-      : draft.step === 'operator'
-        ? 'Operator…'
+      : step === 'operator'
+        ? 'Operator'
         : valueStep.hasSuggestions && valueStep.allowFreeText
-          ? 'Search or type a value…'
+          ? 'Search or type a value'
           : field?.type === 'number'
-            ? 'Number…'
-            : 'Value…';
+            ? 'Number'
+            : 'Value';
 
   return (
     <>
-      <FilterBarDraftChip field={field} operator={operator} />
       <ComboboxPrimitive.Root<Item>
         items={items}
         itemToStringLabel={getItemLabel}
         // The value step is already filtered (locally or server-side) by useValueSuggestions.
-        filter={draft.step === 'value' ? null : matchesQueryFilter}
+        filter={step === 'value' ? null : filterItem}
         value={null}
         onValueChange={(item, details) => {
           // Never let Base UI keep the selection, fill the input or close: each step routes it.
@@ -218,50 +329,79 @@ export function FilterBarInput({
           if (next) setOpen(true);
           else close();
         }}
-        // ComboboxRoot's typings narrow `autoHighlight` to boolean, but the runtime (shared with
-        // AutocompleteRoot) supports 'always': highlight the first item as soon as the list opens.
-        autoHighlight={'always' as unknown as boolean}
+        {...alwaysHighlightProps}
         modal={false}
       >
-        <ComboboxPrimitive.Input
-          ref={el => {
-            inputRef.current = el;
-            ctx.registerInput(el);
-          }}
-          aria-label={ariaLabel}
-          spellCheck={false}
-          data-slot="filter-bar-input"
-          data-step={draft.step}
-          inputMode={draft.step === 'value' && field?.type === 'number' ? 'decimal' : undefined}
-          placeholder={inputPlaceholder}
+        <div
+          ref={anchorRef}
+          data-slot="filter-bar-input-trigger"
           className={cn(
-            // Naked control inside the styled FilterBar surface — same baseline as the DS Input `unstyled` variant.
-            unstyledFormElementStyle,
-            'h-form-sm flex-1 px-1 text-ui-smd leading-ui-sm text-neutral6',
-            'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal focus:placeholder:opacity-70',
-            draft.step === 'field' ? 'min-w-32' : 'min-w-24 pl-0',
+            // Same trigger recipe as every other DS Combobox (fill, radius, `[&>svg]` icon sizing
+            // and the Button icon offset); the bar itself has no chrome. Focus lives on the
+            // nested input, so the recipe's `focus-visible` border becomes `focus-within`.
+            comboboxTriggerClass({ variant: 'default', size: FILTER_BAR_CONTROL_SIZE }),
+            'w-auto cursor-text',
+            groupId === undefined && 'max-w-80 grow basis-32',
+            'focus-within:bg-fill-hover',
+            inputFocusBorderWithin,
+            step === 'field' ? 'min-w-32' : 'min-w-24',
             className,
           )}
-          onFocus={() => setOpen(true)}
-          onKeyDown={handleKeyDown}
-        />
+        >
+          <IconFilter2 aria-hidden className="shrink-0" />
+          <ComboboxPrimitive.Input
+            ref={el => {
+              inputRef.current = el;
+              ctx.registerInput(el);
+            }}
+            aria-label={ariaLabel}
+            spellCheck={false}
+            {...passwordManagerOptOutProps}
+            data-slot="filter-bar-input"
+            data-step={step}
+            data-target={targetGroup?.id}
+            inputMode={step === 'value' && field?.type === 'number' ? 'decimal' : undefined}
+            placeholder={inputPlaceholder}
+            className={cn(
+              unstyledFormElementStyle,
+              'min-w-0 flex-1 bg-transparent zoom-safe-text',
+              'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal focus:placeholder:opacity-70',
+            )}
+            onFocus={() => setOpen(true)}
+            onKeyDown={handleKeyDown}
+          />
+        </div>
         <ComboboxPrimitive.Portal container={container}>
           <ComboboxPrimitive.Positioner
+            // Base UI anchors to the input, which starts after the filter icon; align with the pill instead.
+            anchor={anchorRef}
             align="start"
             sideOffset={MENU_SIDE_OFFSET}
             positionMethod={FLOATING_POSITION_METHOD}
             className={comboboxStyles.positioner}
           >
-            <ComboboxPrimitive.Popup className={cn(comboboxStyles.popup, 'w-64')} data-slot="filter-bar-editor">
-              {draft.step === 'field' && (
+            <ComboboxPrimitive.Popup // Match the pill, with the DS Combobox's 11rem floor (replaces the menu's anchor-width minimum).
+              className={cn(comboboxStyles.popup, 'w-(--anchor-width) min-w-44')}
+              data-slot="filter-bar-editor"
+            >
+              {step === 'field' && (
                 <FilterBarOptionList<FilterBarField>
                   aria-label="Fields"
                   getKey={f => f.id}
-                  renderOption={f => f.label}
+                  renderOption={f => (
+                    <>
+                      <FilterBarFieldLabel field={f} />
+                      {f.search && query !== '' && (
+                        <span className="min-w-0 truncate text-muted-foreground">
+                          {ctx.getFieldOperators(f)[0]?.label} "{query}"
+                        </span>
+                      )}
+                    </>
+                  )}
                   emptyText="No matching field."
                 />
               )}
-              {draft.step === 'operator' && (
+              {step === 'operator' && (
                 <FilterBarOptionList<FilterBarOperator>
                   aria-label="Operators"
                   getKey={o => o.id}
@@ -269,44 +409,44 @@ export function FilterBarInput({
                   emptyText="No matching operator."
                 />
               )}
-              {draft.step === 'value' && valueStep.hasSuggestions && (
+              {step === 'value' && valueStep.hasOptions && (
                 <FilterBarOptionList<FilterBarOption>
                   aria-label="Values"
                   aria-multiselectable={valueStep.isMany || undefined}
                   getKey={o => o.value}
-                  renderOption={o => o.label ?? o.value}
+                  renderOption={option => <FilterBarOptionLabel option={option} />}
                   isSelected={o => valueStep.isMany && valueStep.selected.includes(o.value)}
                   isLoading={valueStep.isLoading}
                   error={valueStep.error}
                   emptyText={
-                    valueStep.allowFreeText ? 'No suggestions — press Enter to use your text.' : 'No matching value.'
+                    valueStep.allowFreeText ? 'No suggestions. Press Enter to use your text.' : 'No matching value.'
                   }
                 />
               )}
-              {draft.step === 'value' && !valueStep.hasSuggestions && (
+              {step === 'value' && !valueStep.hasSuggestions && (
                 <div className="flex items-center justify-between gap-2 py-1 pr-1 pl-[.9em]">
-                  <Txt variant="ui-sm" className="text-neutral3">
-                    Type a value
+                  <Txt variant="caption" tone="muted">
+                    {valueStep.validationMessage ?? 'Type a value'}
                   </Txt>
                   <Button
-                    size="xs"
+                    size="sm"
                     variant="default"
                     disabled={!valueStep.canCommitQuery}
                     onMouseDown={e => e.preventDefault()}
-                    onClick={() => valueStep.commitFreeText()}
+                    onClick={() => valueStep.submitFreeText()}
                   >
                     Apply
                     <Kbd size="xs">↵</Kbd>
                   </Button>
                 </div>
               )}
-              {draft.step === 'value' && valueStep.isMany && (
-                <div className="border-border1 flex items-center justify-end gap-1 border-t p-1">
+              {step === 'value' && valueStep.isMany && (
+                <div className="flex items-center justify-end gap-1 border-t border-border p-1">
                   <Button
-                    size="xs"
+                    size="sm"
                     variant="default"
                     onMouseDown={e => e.preventDefault()}
-                    onClick={() => valueStep.commitSelection() || valueStep.commitFreeText()}
+                    onClick={() => valueStep.commitDone()}
                   >
                     Done
                     <Kbd size="xs">{modEnterLabel}</Kbd>

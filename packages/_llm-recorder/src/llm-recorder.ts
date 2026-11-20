@@ -351,6 +351,8 @@ const SKIP_HEADERS = [
   // Account metadata that should not end up in committed fixtures
   'openai-organization',
   'openai-project',
+  'anthropic-organization-id',
+  'anthropic-workspace-id',
 ];
 
 /**
@@ -910,82 +912,81 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
             });
 
             return createStreamingResponse(recordings[recordings.length - 1]!, options);
-          } else {
-            const headers = filterHeaders(realResponse.headers);
-            const responseContentType = realResponse.headers.get('content-type')?.toLowerCase() || '';
-            const requestBinaryArtifact = parsedRequest.binary
-              ? writeBinaryArtifact({
-                  recordingsDir,
-                  hash,
-                  kind: 'request',
-                  contentType: parsedRequest.binary.contentType,
-                  bytes: parsedRequest.binary.bytes,
-                })
-              : undefined;
-
-            let responseBody: unknown;
-            let responseBinaryArtifact: LLMBinaryArtifact | undefined;
-
-            if (responseContentType.includes('application/json') || responseContentType.includes('+json')) {
-              const responseText = await realResponse.text();
-              try {
-                responseBody = JSON.parse(responseText);
-              } catch {
-                responseBody = responseText;
-              }
-            } else if (responseContentType.startsWith('text/')) {
-              responseBody = await realResponse.text();
-            } else {
-              const responseBuffer = await realResponse.arrayBuffer();
-              const responseBytes = new Uint8Array(responseBuffer);
-              responseBinaryArtifact = writeBinaryArtifact({
+          }
+          const headers = filterHeaders(realResponse.headers);
+          const responseContentType = realResponse.headers.get('content-type')?.toLowerCase() || '';
+          const requestBinaryArtifact = parsedRequest.binary
+            ? writeBinaryArtifact({
                 recordingsDir,
                 hash,
-                kind: 'response',
-                contentType: responseContentType || 'application/octet-stream',
-                bytes: responseBytes,
-              });
-              responseBody = {
-                __binary: true,
-                contentType: responseBinaryArtifact.contentType,
-                size: responseBinaryArtifact.size,
-              };
-            }
+                kind: 'request',
+                contentType: parsedRequest.binary.contentType,
+                bytes: parsedRequest.binary.bytes,
+              })
+            : undefined;
 
-            recordings.push({
+          let responseBody: unknown;
+          let responseBinaryArtifact: LLMBinaryArtifact | undefined;
+
+          if (responseContentType.includes('application/json') || responseContentType.includes('+json')) {
+            const responseText = await realResponse.text();
+            try {
+              responseBody = JSON.parse(responseText);
+            } catch {
+              responseBody = responseText;
+            }
+          } else if (responseContentType.startsWith('text/')) {
+            responseBody = await realResponse.text();
+          } else {
+            const responseBuffer = await realResponse.arrayBuffer();
+            const responseBytes = new Uint8Array(responseBuffer);
+            responseBinaryArtifact = writeBinaryArtifact({
+              recordingsDir,
               hash,
-              request: {
-                url,
-                method: 'POST',
-                body,
-                timestamp: currentDate,
-                ...(requestBinaryArtifact ? { binaryArtifact: requestBinaryArtifact } : {}),
-              },
-              response: {
-                status: realResponse.status,
-                statusText: realResponse.statusText,
-                headers,
-                body: responseBody,
-                ...(responseBinaryArtifact ? { binaryArtifact: responseBinaryArtifact } : {}),
-                isStreaming: false,
-              },
+              kind: 'response',
+              contentType: responseContentType || 'application/octet-stream',
+              bytes: responseBytes,
             });
+            responseBody = {
+              __binary: true,
+              contentType: responseBinaryArtifact.contentType,
+              size: responseBinaryArtifact.size,
+            };
+          }
 
-            if (responseBinaryArtifact) {
-              return new HttpResponse(readBinaryArtifact(recordingsDir, responseBinaryArtifact), {
-                status: realResponse.status,
-                statusText: realResponse.statusText,
-                headers,
-              });
-            }
+          recordings.push({
+            hash,
+            request: {
+              url,
+              method: 'POST',
+              body,
+              timestamp: currentDate,
+              ...(requestBinaryArtifact ? { binaryArtifact: requestBinaryArtifact } : {}),
+            },
+            response: {
+              status: realResponse.status,
+              statusText: realResponse.statusText,
+              headers,
+              body: responseBody,
+              ...(responseBinaryArtifact ? { binaryArtifact: responseBinaryArtifact } : {}),
+              isStreaming: false,
+            },
+          });
 
-            const responseText = typeof responseBody === 'string' ? responseBody : JSON.stringify(responseBody);
-            return new HttpResponse(responseText, {
+          if (responseBinaryArtifact) {
+            return new HttpResponse(readBinaryArtifact(recordingsDir, responseBinaryArtifact), {
               status: realResponse.status,
               statusText: realResponse.statusText,
               headers,
             });
           }
+
+          const responseText = typeof responseBody === 'string' ? responseBody : JSON.stringify(responseBody);
+          return new HttpResponse(responseText, {
+            status: realResponse.status,
+            statusText: realResponse.statusText,
+            headers,
+          });
         } catch (error) {
           console.error(`[llm-recorder] Error recording:`, error);
           throw error;
@@ -1051,7 +1052,9 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
 
         if (recording.response.isStreaming) {
           return createStreamingResponse(recording, options);
-        } else {
+        }
+        // Keep the response body scoped away from the request body used above.
+        {
           if (recording.response.binaryArtifact) {
             return new HttpResponse(readBinaryArtifact(recordingsDir, recording.response.binaryArtifact), {
               status: recording.response.status,

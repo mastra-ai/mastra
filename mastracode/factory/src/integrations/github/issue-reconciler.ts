@@ -1,15 +1,26 @@
 import { workItemPhaseSemantics } from '../../boards/index.js';
+import { toBoardSource } from '../../boards/project-boards.js';
 import type { IntegrationContext } from '../base.js';
+import { githubIssueIntakeSelected } from './issue-intake.js';
 import {
+  githubItemSources,
   githubRulesOptions,
   reconcilableIssueNumber,
   reconciledIssueClosedEvent,
+  reconciledIssueOpenedEvent,
+  reconciledIssueRelabeledEvent,
   RECONCILE_ERROR_SAMPLE_LIMIT,
   sameStrings,
   sweepTrustLookup,
   GithubRules,
 } from './rules.js';
-import type { GithubIssueFetcher, GithubRulesIntegration, GithubRulesOptions, ReconcileRepository } from './rules.js';
+import type {
+  GithubIssueFetcher,
+  GithubOpenIssueLister,
+  GithubRulesIntegration,
+  GithubRulesOptions,
+  ReconcileRepository,
+} from './rules.js';
 
 export interface GithubIssueReconcileSummary {
   /** Repositories included in the sweep. */
@@ -20,6 +31,10 @@ export interface GithubIssueReconcileSummary {
   updated: number;
   /** Closed issues replayed through the rules ingress. */
   closed: number;
+  /** Open issues whose changed labels were replayed through the rules ingress. */
+  relabeled: number;
+  /** Open issues with no Work card replayed as `opened` through the rules ingress. */
+  created: number;
   /** Errors encountered during the sweep. */
   failed: number;
   /** Error samples with context. */
@@ -31,6 +46,7 @@ export type GithubIssueReconciler = (repositories: ReconcileRepository[]) => Pro
 export function createGithubIssueReconciler(
   options: GithubRulesOptions,
   fetchIssue: GithubIssueFetcher,
+  listOpenIssues?: GithubOpenIssueLister,
 ): GithubIssueReconciler {
   const rules = new GithubRules(options);
   return async repositories => {
@@ -39,6 +55,8 @@ export function createGithubIssueReconciler(
       checked: 0,
       updated: 0,
       closed: 0,
+      relabeled: 0,
+      created: 0,
       failed: 0,
       errors: [],
     };
@@ -50,6 +68,19 @@ export function createGithubIssueReconciler(
           ...(issueNumber === undefined ? {} : { issueNumber }),
           error: error instanceof Error ? error.message : String(error),
         });
+      }
+    };
+
+    // A failed selection read skips discovery only; the cards already filed still reconcile.
+    const anyProjectSelects = async (repository: ReconcileRepository, projects: readonly { orgId: string }[]) => {
+      try {
+        const selected = await Promise.all(
+          projects.map(project => githubIssueIntakeSelected(options.intake, project.orgId, repository.fullName)),
+        );
+        return selected.includes(true);
+      } catch (error) {
+        recordFailure(repository, error);
+        return false;
       }
     };
 
@@ -65,23 +96,70 @@ export function createGithubIssueReconciler(
         if (projects.length === 0) continue;
 
         // Collect issue cards: number -> items (skip terminal stages)
-        const itemsByNumber = new Map<number, import('../../storage/domains/work-items/base.js').WorkItemRow[]>();
+        const itemsByNumber = new Map<number, import('../../storage/domains/work-items/base.js').Card[]>();
+        // Every issue with any card, terminal included: a finished card must
+        // not be re-minted by missed-open discovery.
+        const carded = new Set<number>();
 
         for (const project of projects) {
-          const items = await options.storage.list({
+          await rules.loadBoards(project);
+          const items = await options.storage.listShared({
             orgId: project.orgId,
             factoryProjectId: project.factoryProjectId,
           });
           for (const item of items) {
             const issueNumber = reconcilableIssueNumber(item, repository);
             if (!issueNumber) continue;
-            if (workItemPhaseSemantics(options.boards, item)?.kind === 'terminal') continue;
+            carded.add(issueNumber);
+            if (workItemPhaseSemantics(toBoardSource(options.boards).forProject(item), item)?.kind === 'terminal') continue;
             let list = itemsByNumber.get(issueNumber);
             if (!list) {
               list = [];
               itemsByNumber.set(issueNumber, list);
             }
             list.push(item);
+          }
+        }
+
+        // Missed-open discovery: an `opened` delivery that never reached the
+        // ingress leaves no card for the sweeps above to repair. Only issues
+        // filed after the repository was linked are replayed, so linking a
+        // repository never backfills its existing backlog.
+        if (listOpenIssues && (await anyProjectSelects(repository, projects))) {
+          const linkedAt = Math.min(...projects.map(project => project.projectRepository.createdAt.getTime()));
+          const openIssues = await listOpenIssues({
+            installationId: repository.installationId,
+            repository: repository.fullName,
+          });
+          // A finished card may still be only in the legacy table; copy it so it counts.
+          const uncarded = openIssues.filter(issue => !carded.has(issue.number));
+          if (uncarded.length && options.storage.legacyBackfillPending) {
+            for (const project of projects) {
+              await options.storage.copyLegacyCards({
+                orgId: project.orgId,
+                factoryProjectId: project.factoryProjectId,
+                sources: uncarded.flatMap(issue => githubItemSources(repository.id, 'issue', issue.number)),
+              });
+              const items = await options.storage.listShared({
+                orgId: project.orgId,
+                factoryProjectId: project.factoryProjectId,
+              });
+              for (const item of items) {
+                const issueNumber = reconcilableIssueNumber(item, repository);
+                if (issueNumber) carded.add(issueNumber);
+              }
+            }
+          }
+          for (const issue of openIssues) {
+            if (carded.has(issue.number)) continue;
+            const createdAt = issue.createdAt ? Date.parse(issue.createdAt) : Number.NaN;
+            if (!Number.isFinite(createdAt) || createdAt < linkedAt) continue;
+            try {
+              const result = await rules.ingest(reconciledIssueOpenedEvent(repository, issue.number, issue));
+              if (result.status === 'committed') summary.created += 1;
+            } catch (error) {
+              recordFailure(repository, error, issue.number);
+            }
           }
         }
 
@@ -123,8 +201,23 @@ export function createGithubIssueReconciler(
               }
             }
 
+            // Label drift decides where the card belongs, and the rule that owns
+            // that decision has to run again — mirrored from the `labeled` /
+            // `unlabeled` webhook, replayed here so a label Factory never saw a
+            // delivery for still re-places the card. Replayed before the
+            // metadata patch, so the ingress sees the drift it acts on.
+            if (
+              state.labels !== undefined &&
+              items.some(
+                item => Array.isArray(item.workItem.metadata?.labels) && !sameStrings(item.workItem.labels, state.labels),
+              )
+            ) {
+              await rules.ingest(reconciledIssueRelabeledEvent(repository, issueNumber, state));
+              summary.relabeled += 1;
+            }
+
             for (const item of items) {
-              const current = item.metadata ?? {};
+              const current = { ...item.workItem.metadata, ...item.metadata };
               const trustStale = authorTrusted !== undefined && current.authorTrusted !== authorTrusted;
               const metadataChanged =
                 trustStale ||
@@ -137,11 +230,11 @@ export function createGithubIssueReconciler(
 
               if (!metadataChanged) continue;
 
-              await options.storage.update({
+              await options.storage.syncCard({
                 orgId: item.orgId,
                 id: item.id,
                 userId: 'factory-rule-dispatcher',
-                patch: { metadata: { ...current, ...desiredMetadata, ...(trustStale ? { authorTrusted } : {}) } },
+                patch: { metadata: { ...desiredMetadata, ...(trustStale ? { authorTrusted } : {}) } },
               });
               summary.updated += 1;
             }
@@ -162,9 +255,10 @@ export function attachGithubIssueReconciler(
   github: GithubRulesIntegration,
   context: IntegrationContext,
   fetchIssue: GithubIssueFetcher,
+  listOpenIssues?: GithubOpenIssueLister,
 ): GithubIssueReconciler | undefined {
   if (!context.runtime) return undefined;
   const options = githubRulesOptions(github, context);
   if (!options) return undefined;
-  return createGithubIssueReconciler(options, fetchIssue);
+  return createGithubIssueReconciler(options, fetchIssue, listOpenIssues);
 }

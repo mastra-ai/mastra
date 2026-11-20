@@ -1,3 +1,4 @@
+import { useRender } from '@base-ui/react/use-render';
 import { cva } from 'class-variance-authority';
 import type { ComponentPropsWithoutRef, HTMLAttributes } from 'react';
 import { forwardRef } from 'react';
@@ -6,13 +7,15 @@ import { CommentContext, useCommentVariant } from './comment-context';
 import type { CommentVariant } from './comment-context';
 import { Txt } from '@/ds/components/Txt';
 import type { TxtProps } from '@/ds/components/Txt';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { textStyle } from '@/ds/primitives/text';
 import { cn } from '@/lib/utils';
 
 const commentVariants = cva('flex flex-col', {
   variants: {
     variant: {
       default: 'gap-2',
-      embed: 'gap-1 rounded-xl border border-border1 bg-surface3 p-3',
+      embed: cn(raisedSurfaceStyle, 'gap-1 rounded-xl p-3'),
       thread: '',
     },
   },
@@ -63,7 +66,7 @@ CommentList.displayName = 'CommentList';
 const commentItemLayout: Record<CommentVariant, string> = {
   default: 'flex flex-col gap-1',
   embed: 'flex flex-col gap-1',
-  thread: 'relative flex gap-2 rounded-lg px-2 hover:bg-surface3/60',
+  thread: 'relative flex gap-2 rounded-lg px-2 hover:bg-fill-subtle',
 };
 
 export interface CommentItemProps extends HTMLAttributes<HTMLElement> {
@@ -88,7 +91,7 @@ export const CommentItem = forwardRef<HTMLElement, CommentItemProps>(
           'group/comment-item',
           commentItemLayout[variant],
           variant === 'thread' && (continued ? 'py-0.5' : 'py-1.5'),
-          highlighted && 'bg-accent1/10',
+          highlighted && 'bg-info-subtle',
           className,
         )}
         {...props}
@@ -139,15 +142,15 @@ export const CommentItemHeader = forwardRef<HTMLDivElement, CommentItemHeaderPro
 CommentItemHeader.displayName = 'CommentItemHeader';
 
 const commentItemAuthorSize: Record<CommentVariant, TxtProps['variant']> = {
-  default: 'ui-md',
-  embed: 'ui-md',
-  thread: 'ui-sm',
+  default: 'subheading',
+  embed: 'subheading',
+  thread: 'column',
 };
 
 const commentItemAuthorTone: Record<CommentVariant, string> = {
-  default: 'font-medium text-neutral6',
-  embed: 'font-medium text-neutral6',
-  thread: 'truncate font-medium text-neutral6',
+  default: 'text-foreground',
+  embed: 'text-foreground',
+  thread: 'truncate text-foreground',
 };
 
 export type CommentItemAuthorProps = ComponentPropsWithoutRef<'span'>;
@@ -169,9 +172,9 @@ export const CommentItemAuthor = forwardRef<HTMLElement, CommentItemAuthorProps>
 CommentItemAuthor.displayName = 'CommentItemAuthor';
 
 const commentItemTimestampTone: Record<CommentVariant, string> = {
-  default: 'text-ui-sm leading-ui-sm text-neutral3',
-  embed: 'text-ui-sm leading-ui-sm text-neutral3',
-  thread: 'text-ui-xs leading-ui-xs text-neutral2 shrink-0',
+  default: 'text-caption text-muted-foreground',
+  embed: 'text-caption text-muted-foreground',
+  thread: 'text-meta text-placeholder shrink-0',
 };
 
 export type CommentItemTimestampProps = ComponentPropsWithoutRef<'time'>;
@@ -193,14 +196,14 @@ export const CommentItemTimestamp = forwardRef<HTMLTimeElement, CommentItemTimes
 CommentItemTimestamp.displayName = 'CommentItemTimestamp';
 
 const commentItemBodySize: Record<CommentVariant, TxtProps['variant']> = {
-  default: 'ui-md',
-  embed: 'ui-md',
-  thread: 'ui-sm',
+  default: 'body',
+  embed: 'body',
+  thread: 'caption',
 };
 
 const commentItemBodyTone: Record<CommentVariant, string> = {
-  default: 'whitespace-pre-wrap text-neutral6 border-l border-border1 pl-3',
-  embed: 'whitespace-pre-wrap text-neutral6',
+  default: 'whitespace-pre-wrap text-foreground border-l border-border pl-3',
+  embed: 'whitespace-pre-wrap text-foreground',
   thread: '',
 };
 
@@ -209,17 +212,16 @@ export type CommentItemBodyProps = ComponentPropsWithoutRef<'p'>;
 export const CommentItemBody = forwardRef<HTMLElement, CommentItemBodyProps>(({ className, ...props }, ref) => {
   const variant = useCommentVariant();
 
-  return (
-    <Txt
-      ref={ref}
-      // Rendered markdown brings its own blocks, which a paragraph cannot hold.
-      as={variant === 'thread' ? 'div' : 'p'}
-      variant={commentItemBodySize[variant]}
-      data-slot="comment-item-body"
-      className={cn(commentItemBodyTone[variant], className)}
-      {...props}
-    />
-  );
+  // Rendered markdown brings its own blocks, which a paragraph cannot hold.
+  return useRender({
+    defaultTagName: variant === 'thread' ? 'div' : 'p',
+    props: {
+      ...props,
+      ref,
+      'data-slot': 'comment-item-body',
+      className: cn(textStyle({ variant: commentItemBodySize[variant] }), commentItemBodyTone[variant], className),
+    },
+  });
 });
 CommentItemBody.displayName = 'CommentItemBody';
 
@@ -227,10 +229,10 @@ const commentItemActionsLayout: Record<CommentVariant, string> = {
   default:
     'flex items-center gap-1 opacity-0 group-focus-within/comment-item:opacity-100 group-hover/comment-item:opacity-100 motion-safe:transition-opacity',
   embed: '',
-  // Hung over the row's own top edge, so it never reflows the body it floats above.
+  // Inline at the end of the header row, revealed on hover/focus.
   // `pointer-fine` only: a touch screen has no hover to reveal it with.
   thread:
-    'bg-surface2 border-border1 absolute -top-2 right-2 flex items-center gap-0.5 rounded-lg border px-0.5 transition-opacity duration-200 ease-out motion-reduce:transition-none pointer-fine:opacity-0 pointer-fine:group-focus-within/comment-item:opacity-100 pointer-fine:group-hover/comment-item:opacity-100',
+    'ml-auto flex shrink-0 items-center gap-0.5 self-center transition-opacity duration-200 ease-out motion-reduce:transition-none pointer-fine:opacity-0 pointer-fine:group-focus-within/comment-item:opacity-100 pointer-fine:group-hover/comment-item:opacity-100',
 };
 
 export type CommentItemActionsProps = ComponentPropsWithoutRef<'div'>;

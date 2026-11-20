@@ -305,6 +305,147 @@ describe('OM internal agent request contexts', () => {
   });
 });
 
+describe('multi-thread observer failure state', () => {
+  it('keeps failed messages eligible for a later observation cycle', async () => {
+    const observedMessageIds = new Set<string>(['previously-observed']);
+    const observer = new ObserverRunner({
+      observationConfig: {
+        model: 'mock/model',
+        messageTokens: 1000,
+        bufferTokens: false,
+        previousObserverTokens: 1000,
+        observeAttachments: false,
+        maxRetries: 0,
+        failurePolicy: 'continue',
+      } as any,
+      observedMessageIds,
+      resolveModel: () => ({ model: 'mock/model' as any }),
+      tokenCounter: { countMessages: () => 1 } as any,
+    });
+
+    vi.spyOn(observer as any, 'createAgent').mockReturnValue({
+      id: 'observational-memory-observer',
+      stream: vi.fn().mockRejectedValue(new TypeError('fetch failed')),
+    });
+
+    const messagesByThread = new Map([
+      ['thread-1', [createMessage('message-1', 'thread-1')]],
+      ['thread-2', [createMessage('message-2', 'thread-2')]],
+    ]);
+
+    await expect(
+      (observer as any).callMultiThreadObserver(undefined, messagesByThread, ['thread-1', 'thread-2']),
+    ).rejects.toMatchObject({ name: 'OmModelExecutionError', failureKind: 'observer-model' });
+    expect([...observedMessageIds]).toEqual(['previously-observed']);
+  });
+
+  // Same retention under the default ('abort') policy: marking happens after a
+  // successful observer parse, so a failure leaves the messages unobserved.
+  it('keeps failed messages eligible under the default failure policy', async () => {
+    const observedMessageIds = new Set<string>(['previously-observed']);
+    const observer = new ObserverRunner({
+      observationConfig: {
+        model: 'mock/model',
+        messageTokens: 1000,
+        bufferTokens: false,
+        previousObserverTokens: 1000,
+        observeAttachments: false,
+        maxRetries: 0,
+      } as any,
+      observedMessageIds,
+      resolveModel: () => ({ model: 'mock/model' as any }),
+      tokenCounter: { countMessages: () => 1 } as any,
+    });
+
+    vi.spyOn(observer as any, 'createAgent').mockReturnValue({
+      id: 'observational-memory-observer',
+      stream: vi.fn().mockRejectedValue(new TypeError('fetch failed')),
+    });
+
+    const messagesByThread = new Map([
+      ['thread-1', [createMessage('message-1', 'thread-1')]],
+      ['thread-2', [createMessage('message-2', 'thread-2')]],
+    ]);
+
+    await expect(
+      (observer as any).callMultiThreadObserver(undefined, messagesByThread, ['thread-1', 'thread-2']),
+    ).rejects.toThrow();
+    expect([...observedMessageIds]).toEqual(['previously-observed']);
+  });
+});
+
+describe('multi-thread structured-extractor branch', () => {
+  it('marks observed messages after a successful per-thread observer pass', async () => {
+    const observedMessageIds = new Set<string>();
+    const observer = new ObserverRunner({
+      observationConfig: {
+        model: 'mock/model',
+        messageTokens: 1000,
+        bufferTokens: false,
+        previousObserverTokens: 1000,
+        observeAttachments: false,
+        maxRetries: 0,
+        extractors: [
+          new Extractor({ name: 'Support profile', instructions: 'Extract the profile.', schema: z.string() }),
+        ],
+      } as any,
+      observedMessageIds,
+      resolveModel: () => ({ model: 'mock/model' as any }),
+      tokenCounter: { countMessages: () => 1 } as any,
+    });
+
+    const callObserver = vi
+      .spyOn(observer as any, 'callObserver')
+      .mockResolvedValue({ observations: '- observed', extractedValues: {}, extractionFailures: [] });
+
+    const messagesByThread = new Map([
+      ['thread-1', [createMessage('message-1', 'thread-1')]],
+      ['thread-2', [createMessage('message-2', 'thread-2')]],
+    ]);
+
+    await (observer as any).callMultiThreadObserver(undefined, messagesByThread, ['thread-1', 'thread-2']);
+
+    expect(callObserver).toHaveBeenCalledTimes(2);
+    expect([...observedMessageIds].sort()).toEqual(['message-1', 'message-2']);
+  });
+
+  it('leaves messages eligible when a per-thread observer pass fails', async () => {
+    const observedMessageIds = new Set<string>();
+    const observer = new ObserverRunner({
+      observationConfig: {
+        model: 'mock/model',
+        messageTokens: 1000,
+        bufferTokens: false,
+        previousObserverTokens: 1000,
+        observeAttachments: false,
+        maxRetries: 0,
+        extractors: [
+          new Extractor({ name: 'Support profile', instructions: 'Extract the profile.', schema: z.string() }),
+        ],
+      } as any,
+      observedMessageIds,
+      resolveModel: () => ({ model: 'mock/model' as any }),
+      tokenCounter: { countMessages: () => 1 } as any,
+    });
+
+    // First thread succeeds, second fails: marking is deferred until every
+    // thread lands, so nothing may be marked.
+    vi.spyOn(observer as any, 'callObserver')
+      .mockResolvedValueOnce({ observations: '- observed', extractedValues: {}, extractionFailures: [] })
+      .mockRejectedValueOnce(new TypeError('fetch failed'));
+
+    const messagesByThread = new Map([
+      ['thread-1', [createMessage('message-1', 'thread-1')]],
+      ['thread-2', [createMessage('message-2', 'thread-2')]],
+    ]);
+
+    await expect(
+      (observer as any).callMultiThreadObserver(undefined, messagesByThread, ['thread-1', 'thread-2']),
+    ).rejects.toThrow();
+    expect([...observedMessageIds]).toEqual([]);
+  });
+});
+
 describe('schema-backed extraction does not leak the temporary observer identity', () => {
   function createStructuredExtractor() {
     return new Extractor({

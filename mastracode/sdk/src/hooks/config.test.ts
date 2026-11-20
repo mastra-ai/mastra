@@ -65,6 +65,36 @@ describe('loadHooksConfig', () => {
     expect(config).not.toHaveProperty('UnknownEvent');
   });
 
+  it('loads the global hooks file once when the project directory is the home directory', () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-hooks-'));
+    const homeDir = path.join(tempDir, 'home');
+    mockHomeDir.value = homeDir;
+
+    fs.mkdirSync(path.join(homeDir, '.mastracode'), { recursive: true });
+    fs.writeFileSync(
+      path.join(homeDir, '.mastracode', 'hooks.json'),
+      JSON.stringify({ Notification: [{ type: 'command', command: 'echo notify' }] }),
+    );
+
+    expect(loadHooksConfig(homeDir).Notification?.map(hook => hook.command)).toEqual(['echo notify']);
+  });
+
+  it('loads the global hooks file once when the project directory is a symlink to the home directory', () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-hooks-'));
+    const homeDir = path.join(tempDir, 'home');
+    const linkedDir = path.join(tempDir, 'linked-home');
+    mockHomeDir.value = homeDir;
+
+    fs.mkdirSync(path.join(homeDir, '.mastracode'), { recursive: true });
+    fs.writeFileSync(
+      path.join(homeDir, '.mastracode', 'hooks.json'),
+      JSON.stringify({ Notification: [{ type: 'command', command: 'echo notify' }] }),
+    );
+    fs.symlinkSync(homeDir, linkedDir);
+
+    expect(loadHooksConfig(linkedDir).Notification?.map(hook => hook.command)).toEqual(['echo notify']);
+  });
+
   it('returns an empty config when hook files contain invalid JSON', () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-hooks-'));
     const homeDir = path.join(tempDir, 'home');

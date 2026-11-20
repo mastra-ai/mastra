@@ -17,11 +17,12 @@ import { migrate } from './commands/actions/migrate';
 import { startDevServer } from './commands/actions/start-dev-server';
 import { startProject } from './commands/actions/start-project';
 import { startStudio } from './commands/actions/start-studio';
-import { registerApiCommand } from './commands/api/index';
+import { collect, registerApiCommand } from './commands/api/index';
 import { loginAction, logoutAction } from './commands/auth/login';
 import { listOrgsAction, switchOrgAction } from './commands/auth/orgs';
 import { createTokenAction, listTokensAction, revokeTokenAction } from './commands/auth/tokens';
 import { whoamiAction } from './commands/auth/whoami';
+import { connectProviderAction, listProvidersAction, removeConnectionAction } from './commands/connect/connect.js';
 import { configureCreateCommand } from './commands/create/create';
 import { registerEnvDbCommands } from './commands/db/index.js';
 import { unifiedDeployAction } from './commands/deploy/index.js';
@@ -39,6 +40,8 @@ import { logsAction } from './commands/studio/deploy-logs';
 import { statusAction } from './commands/studio/deploy-status';
 import { suggestionsAction } from './commands/studio/deploy-suggestions';
 import { listProjectsAction, createProjectAction } from './commands/studio/projects';
+import { traceImportAction } from './commands/traces/import/action.js';
+import { configureTraceImportCommand } from './commands/traces/import/command.js';
 import { parseComponents, parseLlmProvider, parseMcp, wrapAction } from './commands/utils';
 import { buildWorker } from './commands/worker/build';
 import { devWorker } from './commands/worker/dev';
@@ -102,6 +105,11 @@ program
   .action(initProject);
 
 registerApiCommand(program);
+
+const tracesCommand = program.command('traces').description('Manage observability traces');
+const traceImportCommand = tracesCommand.command('import');
+configureTraceImportCommand(traceImportCommand);
+traceImportCommand.action(wrapAction(traceImportAction));
 
 program
   .command('lint')
@@ -347,6 +355,34 @@ scorersCommand
 
 scorersCommand.command('list').description('List available scorer templates').action(listScorers);
 
+// ---- Connect commands ----
+
+const PROJECT_OPTION_ARGS = ['--project <project>', 'Project name, slug, or ID (default: linked project)'] as const;
+
+const connectCommand = program.command('connect').description('Manage provider integrations for your Mastra project');
+
+connectCommand
+  .command('list')
+  .description('List available providers and their connection status')
+  .option(...PROJECT_OPTION_ARGS)
+  .action(wrapAction(listProvidersAction));
+
+connectCommand
+  .command('add <provider>')
+  .description('Connect a provider to the project')
+  .option(...PROJECT_OPTION_ARGS)
+  .option('-y, --yes', 'Skip confirmation prompts')
+  .action(wrapAction(connectProviderAction));
+
+connectCommand
+  .command('remove <provider>')
+  .description('Unlink a provider connection from the project')
+  .option(...PROJECT_OPTION_ARGS)
+  .option('--connection <id>', 'Remove only the connection with this id')
+  .option('--all', "Remove all of the provider's connections")
+  .option('-y, --yes', 'Skip confirmation prompts')
+  .action(wrapAction(removeConnectionAction));
+
 // ---- Auth commands ----
 
 const authCommand = program.command('auth').description('Manage authentication');
@@ -363,7 +399,11 @@ authOrgs.command('switch').description('Switch current organization').action(wra
 
 const authTokens = authCommand.command('tokens').description('Manage API tokens').action(wrapAction(listTokensAction));
 
-authTokens.command('create <name>').description('Create a new API token').action(wrapAction(createTokenAction));
+authTokens
+  .command('create <name>')
+  .description('Create a new API token')
+  .option('--permission <permission>', 'grant a permission, e.g. databases:write (repeatable)', collect, [])
+  .action(wrapAction(createTokenAction));
 
 authTokens.command('revoke <token-id>').description('Revoke an API token').action(wrapAction(revokeTokenAction));
 
@@ -414,7 +454,7 @@ serverCommand
   .command('pause')
   .description('Pause the linked Mastra Server project instance')
   .option('--org <id>', 'Organization ID')
-  .option('--project <id>', 'Project ID or slug (overrides linked project when MASTRA_PROJECT_ID is unset)')
+  .option('--project <id>', 'Project ID or slug (takes precedence over MASTRA_PROJECT_ID and the linked project)')
   .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
   .action(wrapAction(serverPauseAction));
 
@@ -422,7 +462,7 @@ serverCommand
   .command('restart')
   .description('Restart the linked Mastra Server project instance')
   .option('--org <id>', 'Organization ID')
-  .option('--project <id>', 'Project ID or slug (overrides linked project when MASTRA_PROJECT_ID is unset)')
+  .option('--project <id>', 'Project ID or slug (takes precedence over MASTRA_PROJECT_ID and the linked project)')
   .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
   .action(wrapAction(serverRestartAction));
 
@@ -458,7 +498,7 @@ serverEnvCommand
     'Pull project-level environment variables into a local .env file (default: .env) — use `mastra env vars pull` to include environment-scoped vars',
   )
   .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
-  .option('--project <id>', 'Project ID or slug (overrides linked project when MASTRA_PROJECT_ID is unset)')
+  .option('--project <id>', 'Project ID or slug (takes precedence over MASTRA_PROJECT_ID and the linked project)')
   .action(wrapAction(envPullAction));
 
 await program.parseAsync(process.argv);

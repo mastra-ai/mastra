@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createVectorErrorId } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
@@ -22,6 +21,8 @@ import xxhash from 'xxhash-wasm';
 import { validateConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
 import type { PgVectorConfig } from '../shared/config';
 import { buildConnectionStringPoolConfig } from '../shared/pool-config';
+import { guardCheckedOutClientErrors } from '../shared/pool-error-guard';
+import { parseSchemaName } from '../shared/schema-name';
 import { PGFilterTranslator } from './filter';
 import type { PGVectorFilter } from './filter';
 import { buildFilterQuery, buildDeleteFilterQuery } from './sql-builder';
@@ -146,6 +147,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
    * (cache warmup, query, upsert, updateVector, setupIndex). Also memoizes the promise.
    */
   private indexMetadataCache: Map<string, Promise<PGIndexMetadata>> = new Map();
+  /** Indexes invalidated while the startup cache warmup runs; `null` once it has settled. */
+  private warmupInvalidations: Set<string> | null = null;
   private createdIndexes = new Map<string, number>();
   private namespaceReadyIndexes = new Set<string>();
   /** In-flight lazy namespace migrations, keyed by index name (see {@link ensureNamespaceReady}). */
@@ -205,6 +208,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       }
 
       this.pool = new pg.Pool(poolConfig);
+      guardCheckedOutClientErrors(this.pool, message => this.logger?.warn?.(message));
 
       // pg emits 'error' on the pool when an idle client's connection drops
       // (backend restart, network partition, cloud proxies reaping idle
@@ -222,11 +226,18 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
       // Warm the created indexes cache in background so we don't need to check if indexes exist every time
       // Store the promise so we can wait for it during disconnect to avoid "pool already closed" errors
+      // deleteIndex() or an index rebuild can run while the warmup's listing or metadata reads are in
+      // flight; caching what the warmup read for an index invalidated since then would hand later
+      // calls the old table's metadata.
+      const invalidated = new Set<string>();
+      this.warmupInvalidations = invalidated;
       this.cacheWarmupPromise = (async () => {
+        const reads: Promise<void>[] = [];
         try {
           const existingIndexes = await this.listIndexes();
-          await Promise.all(
-            existingIndexes.map(async indexName => {
+          reads.push(
+            ...existingIndexes.map(async indexName => {
+              if (invalidated.has(indexName)) return;
               const info = await this.getIndexMetadata({ indexName });
               const key = await this.getIndexCacheKey({
                 indexName,
@@ -235,14 +246,20 @@ export class PgVector extends MastraVector<PGVectorFilter> {
                 type: info.type,
                 vectorType: info.vectorType,
               });
+              if (invalidated.has(indexName)) return;
               this.createdIndexes.set(indexName, key);
               this.indexVectorTypes.set(indexName, info.vectorType);
             }),
           );
+          await Promise.all(reads);
         } catch (error) {
           // Don't throw - cache warming is optional optimization
           // If it fails (e.g., pool closed early), just log and continue
           this.logger?.debug('Cache warming skipped or failed', { error });
+        } finally {
+          // One rejected read ends Promise.all early; keep recording until every read has settled.
+          await Promise.allSettled(reads);
+          this.warmupInvalidations = null;
         }
       })();
     } catch (error) {
@@ -321,11 +338,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     }
   }
 
-  /**
-   * Checks if the installed pgvector version supports halfvec type.
-   * halfvec was introduced in pgvector 0.7.0.
-   */
-  private supportsHalfvec(): boolean {
+  /** Checks if the installed pgvector version is at least the given major.minor version. */
+  private isVectorExtensionAtLeast(minMajor: number, minMinor: number): boolean {
     if (!this.vectorExtensionVersion) {
       return false;
     }
@@ -333,12 +347,24 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     const parts = this.vectorExtensionVersion.split('.');
     const major = parseInt(parts[0] ?? '', 10);
     const minor = parseInt(parts[1] ?? '', 10);
-    // If parsing failed (NaN), assume version doesn't support halfvec
+    // If parsing failed (NaN), assume the version is too old
     if (isNaN(major) || isNaN(minor)) {
       return false;
     }
-    // halfvec was introduced in pgvector 0.7.0
-    return major > 0 || (major === 0 && minor >= 7);
+    return major > minMajor || (major === minMajor && minor >= minMinor);
+  }
+
+  /**
+   * Checks if the installed pgvector version supports halfvec type.
+   * halfvec was introduced in pgvector 0.7.0.
+   */
+  private supportsHalfvec(): boolean {
+    return this.isVectorExtensionAtLeast(0, 7);
+  }
+
+  /** Checks if pgvector >= 0.8.0 (required for the hnsw.iterative_scan setting). */
+  private supportsIterativeScan(): boolean {
+    return this.isVectorExtensionAtLeast(0, 8);
   }
 
   /** Checks if pgvector >= 0.7.0 (required for bit type). */
@@ -371,8 +397,10 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       }
       // Issue #10061: Always qualify with schema where vector extension is installed
       // This ensures the type is found regardless of the session's search_path
-      const validatedSchema = parseSqlIdentifier(this.vectorExtensionSchema, 'vector extension schema');
-      return `${validatedSchema}.${vectorType}`;
+      // Plain identifiers stay unquoted; other names (e.g. `my-tenant`) must be quoted.
+      const extensionSchema = parseSchemaName(this.vectorExtensionSchema, 'vector extension schema');
+      const qualifier = /^[A-Za-z_][A-Za-z0-9_]*$/.test(extensionSchema) ? extensionSchema : `"${extensionSchema}"`;
+      return `${qualifier}.${vectorType}`;
     }
 
     // Fallback to unqualified (will use search_path)
@@ -475,7 +503,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   }
 
   private getSchemaName() {
-    return this.schema ? `"${parseSqlIdentifier(this.schema, 'schema name')}"` : undefined;
+    return this.schema ? `"${parseSchemaName(this.schema)}"` : undefined;
   }
 
   private async ensureNamespaceSchema(indexName: string, client: pg.PoolClient): Promise<void> {
@@ -501,7 +529,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
     const state = await this.getNamespaceSchemaState(tableName, client);
     if (!state.composite_index) {
-      const namespaceIndexName = this.getNamespaceIndexName(parsedIndexName);
+      const namespaceIndexName = await this.getNamespaceIndexName(parsedIndexName);
       await client.query(
         `CREATE UNIQUE INDEX IF NOT EXISTS "${namespaceIndexName}" ON ${tableName} (namespace, vector_id)`,
       );
@@ -522,12 +550,16 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     }
   }
 
-  private getNamespaceIndexName(parsedIndexName: string): string {
+  private async getNamespaceIndexName(parsedIndexName: string): Promise<string> {
     const fullName = `${parsedIndexName}_namespace_vector_id_idx`;
     if (fullName.length <= 63) {
       return fullName;
     }
-    const hash = createHash('sha256').update(parsedIndexName).digest('hex').slice(0, 32);
+    const hash = Buffer.from(
+      await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(parsedIndexName)),
+    )
+      .toString('hex')
+      .slice(0, 32);
     const suffix = `_ns_${hash}_idx`;
     return `${parsedIndexName.slice(0, 63 - suffix.length)}${suffix}`;
   }
@@ -687,6 +719,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   private invalidateIndexCaches(indexName: string) {
     this.describeIndexCache.delete(indexName);
     this.indexMetadataCache.delete(indexName);
+    this.warmupInvalidations?.add(indexName);
   }
 
   async query({
@@ -731,6 +764,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       let client;
       try {
         await this.ensureNamespaceReady(indexName);
+        // Load metadata before holding a connection so a cold cache cannot exhaust the pool.
+        const indexInfo = includeVector ? await this.getIndexMetadata({ indexName }) : undefined;
+        const ops = indexInfo && this.getVectorOps(indexInfo.vectorType, indexInfo.metric ?? 'cosine');
         client = await this.pool.connect();
         const translatedFilter = this.transformFilter(filter);
         const { sql: filterQuery, values: filterValues } = buildDeleteFilterQuery(translatedFilter);
@@ -754,7 +790,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           id,
           score: 0,
           metadata,
-          ...(includeVector && embedding && { vector: JSON.parse(embedding) }),
+          ...(ops && embedding && { vector: ops.parseEmbedding(embedding) }),
         }));
       } catch (error) {
         if (error instanceof MastraError) {
@@ -804,7 +840,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         const calculatedEf = ef ?? Math.max(topK, (indexInfo?.config?.m ?? 16) * topK);
         const searchEf = Math.min(1000, Math.max(1, calculatedEf));
         await client.query(`SET LOCAL hnsw.ef_search = ${searchEf}`);
-        await client.query(`SET LOCAL hnsw.iterative_scan = strict_order`);
+        if (this.supportsIterativeScan()) {
+          await client.query(`SET LOCAL hnsw.iterative_scan = strict_order`);
+        }
       }
 
       if (indexInfo.type === 'ivfflat' && probes) {
@@ -820,53 +858,58 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const distanceExpr = `embedding ${ops.distanceOperator} '${vectorStr}'::${qualifiedVectorType}`;
       const scoreExpr = ops.scoreExpr(distanceExpr);
 
-      // Move ORDER BY and LIMIT inside the CTE for HNSW indexes without filters to enable index usage.
-      // Only safe when minScore won't filter out candidates (minScore <= 0), otherwise the inner LIMIT
-      // cuts off the candidate set before the score threshold is applied, potentially returning fewer rows.
-      // IVFFlat is excluded because with default probes=1, it only searches one cluster and can miss
-      // vectors in other clusters, returning fewer results than expected.
       const filterClause = filterQuery.trim().replace(/^WHERE\s+/i, '');
       const hasFilter = filterClause.length > 0;
-      const useIndexedOrder = indexInfo.type === 'hnsw' && !hasFilter && minScore <= 0;
       const namespaceParam = filterValues.length + 1;
+      const queryValues = [...filterValues, namespace];
+      const selectColumns = `vector_id as id, ${scoreExpr} as score, metadata${includeVector ? ', embedding' : ''}`;
+      const whereClause = `WHERE namespace = $${namespaceParam}${filterClause ? ` AND (${filterClause})` : ''}`;
 
-      const query = useIndexedOrder
-        ? `
+      // IVFFlat stays on the exact query because Mastra builds it on an empty table, so its lists don't
+      // match the data (#28949). Filtered HNSW searches need pgvector >= 0.8 iterative scans to find enough rows.
+      const useIndexedOrder = indexInfo.type === 'hnsw' && (!hasFilter || this.supportsIterativeScan());
+
+      let rows: any[] | undefined;
+      if (useIndexedOrder) {
+        // Rows are ordered best-first and minScore keeps the best side, so applying it after LIMIT
+        // returns the same rows as applying it before.
+        const indexedQuery = `
         WITH vector_scores AS (
-          SELECT
-            vector_id as id,
-            ${scoreExpr} as score,
-            metadata
-            ${includeVector ? ', embedding' : ''}
+          SELECT ${selectColumns}
           FROM ${tableName}
-          WHERE namespace = $${namespaceParam}
+          ${whereClause}
           ORDER BY ${distanceExpr}
           LIMIT $2
         )
-        SELECT *
+        SELECT *, score > $1 AS above_min_score
         FROM vector_scores
-        WHERE score > $1
-        ORDER BY score DESC`
-        : `
+        ORDER BY score DESC`;
+        const candidates = (await client.query(indexedQuery, queryValues)).rows;
+
+        // Fewer than topK candidates means fewer rows match or the index walk stopped early
+        // (hnsw.max_scan_tuples). The exact query is correct in both cases and cheap in the first (#28949).
+        if (candidates.length >= topK) {
+          rows = candidates.filter(row => row.above_min_score);
+        }
+      }
+
+      if (!rows) {
+        const exactQuery = `
         WITH vector_scores AS (
-          SELECT
-            vector_id as id,
-            ${scoreExpr} as score,
-            metadata
-            ${includeVector ? ', embedding' : ''}
+          SELECT ${selectColumns}
           FROM ${tableName}
-          WHERE namespace = $${namespaceParam}
-          ${filterClause ? `AND (${filterClause})` : ''}
+          ${whereClause}
         )
         SELECT *
         FROM vector_scores
         WHERE score > $1
         ORDER BY score DESC
         LIMIT $2`;
-      const result = await client.query(query, [...filterValues, namespace]);
+        rows = (await client.query(exactQuery, queryValues)).rows;
+      }
       await client.query('COMMIT');
 
-      return result.rows.map(({ id, score, metadata, embedding }) => ({
+      return rows.map(({ id, score, metadata, embedding }) => ({
         id,
         score,
         metadata,
@@ -1298,7 +1341,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           }
 
           if (metadataIndexes?.length) {
-            await this.createMetadataIndexes(tableName, indexName, metadataIndexes);
+            await this.createMetadataIndexes(client, tableName, indexName, metadataIndexes);
           }
         } catch (error: any) {
           this.createdIndexes.delete(indexName);
@@ -1505,7 +1548,12 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     });
   }
 
-  private async createMetadataIndexes(tableName: string, indexName: string, metadataFields: string[]) {
+  private async createMetadataIndexes(
+    client: pg.PoolClient,
+    tableName: string,
+    indexName: string,
+    metadataFields: string[],
+  ) {
     const hasher = await this.hasher;
     for (const field of metadataFields) {
       // Hash the field to produce a safe, fixed-length suffix for the index name.
@@ -1517,9 +1565,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // DDL statements don't support bind parameters, so we must interpolate
       // the field name as a literal. Escape single quotes to prevent SQL injection.
       const escapedField = field.replace(/'/g, "''");
-      // Use CONCURRENTLY to avoid blocking writers on large existing tables.
-      // This must run outside a transaction, so we use pool.query() directly.
-      await this.pool.query(
+      // CONCURRENTLY avoids blocking writers on large tables. It can't run inside a transaction, and the
+      // caller's client isn't in one. Reusing it keeps a single-connection pool from deadlocking.
+      await client.query(
         `
         CREATE INDEX CONCURRENTLY IF NOT EXISTS ${metadataIdxName}
         ON ${tableName} ((metadata->>'${escapedField}'))

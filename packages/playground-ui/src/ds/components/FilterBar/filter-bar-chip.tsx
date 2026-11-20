@@ -1,13 +1,13 @@
 /* eslint-disable react-refresh/only-export-components */
 import type { BaseUIEvent } from '@base-ui/react/types';
-import { LockIcon, PencilIcon, SearchIcon, XIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
-import type { ComponentProps, KeyboardEvent, MouseEvent, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import type { AnimationEvent, CSSProperties, ComponentProps, KeyboardEvent, MouseEvent, ReactNode } from 'react';
 import { emptyValueFor, useFilterBarContext } from './filter-bar-context';
-import { FilterBarOptionList } from './filter-bar-option-list';
+import { FilterBarOptionLabel, FilterBarOptionList } from './filter-bar-option-list';
 import { matchesQueryFilter } from './match-query';
 import type {
+  DraftStage,
   FilterBarField,
   FilterBarFieldType,
   FilterBarItem,
@@ -17,33 +17,115 @@ import type {
   FilterBarSegment,
   FilterBarValue,
 } from './types';
+import { useFilterBarItemKeys } from './use-filter-bar-item-keys';
 import { useValueStep } from './use-value-step';
 import { getFieldSuggestions } from './use-value-suggestions';
 import { Button } from '@/ds/components/Button/Button';
 import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
 import { Kbd } from '@/ds/components/Kbd/kbd';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconExclamationTriangle } from '@/ds/icons/central/IconExclamationTriangle';
+import { IconLock } from '@/ds/icons/central/IconLock';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
+import { IconPencil } from '@/ds/icons/central/IconPencil';
+import { iconSizeClasses } from '@/ds/icons/icon-size-classes';
+import { controlIconOnly, controlIconState } from '@/ds/primitives/control-icon';
+import { controlHeight, controlSpacing } from '@/ds/primitives/control-size';
+import type { ControlSize } from '@/ds/primitives/control-size';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
+import { fieldErrorRim, inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
+import './filter-bar-chip.css';
 import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
+import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { useIsApplePlatform } from '@/hooks/use-keyboard-shortcut-label';
 import { cn } from '@/lib/utils';
 
+// A filter bar is a dense row: it sits above a list, carries many chips at once, and never
+// competes with the page's own controls. Chip and typeahead pill read this one rung so they
+// stay the same height by construction rather than by two call sites agreeing.
+export const FILTER_BAR_CONTROL_SIZE: ControlSize = 'sm';
+
+// `filter-bar-segment` carries the left-to-right entrance (see filter-bar-chip.css).
+// No `first:`/`last:` rounding here: a segment is not reliably the first or last child.
+// Base UI interleaves a hidden input after every combobox and wraps an open trigger in
+// focus guards, so the rounded end would silently drop the moment a popup opened and the
+// segment's own state fill — the one state a chip has — would paint square corners
+// straight through the chip's pill edge. The chip clips instead (see `chipClass`).
+// Icons inherit the bar's rung from the segment, as they do from a Button, instead of each
+// sizing itself.
 export const segmentClass = cn(
-  'flex max-w-48 min-w-0 items-center gap-1 px-2 text-ui-sm leading-ui-sm whitespace-nowrap outline-none',
-  'first:rounded-l-full last:rounded-r-full',
+  'filter-bar-segment flex max-w-48 min-w-0 items-center gap-(--control-gap) overflow-hidden px-2 text-label whitespace-nowrap outline-none',
+  iconSizeClasses[FILTER_BAR_CONTROL_SIZE],
+  '[&>svg]:shrink-0',
 );
 
-const editableSegmentClass = cn(
-  segmentClass,
-  'cursor-pointer transition-colors hover:bg-neutral6/5 hover:text-neutral6',
-  'focus-visible:bg-neutral6/10 focus-visible:text-neutral6 data-[popup-open]:bg-neutral6/10 data-[popup-open]:text-neutral6',
+// Typed out of ComboboxRoot but honoured at runtime; keepHighlight stops Base UI re-lighting row 0 when the pointer reaches a row's text.
+export const alwaysHighlightProps = { autoHighlight: 'always', keepHighlight: true } as unknown as {
+  autoHighlight: boolean;
+};
+
+// A chip is a field whose value is edited in place, so it wears the field material rather than a
+// fill rung: on a light canvas a `bg-fill` chip read as a grey slab beside the white typeahead
+// pill it belongs to. The segments layer their own state over that card, which is why the chip
+// keeps `divide-border` for the internal seams and takes its outer edge from the material's rim.
+// `overflow-hidden` is what gives every segment its end cap: the chip is the only node that
+// knows where the pill ends, and it keeps knowing it while a framework injects children.
+// `p-px` reserves the rim on every side: both colours are translucent, so a divider crossing the
+// rim stacks its alpha and the joint reads brighter, and a trailing × sits centred between its
+// divider and the rim. `--control-border` gives that pixel back to the outer insets (see
+// filter-bar-chip.css), as a bordered Button does, so the label keeps a Button's distance from the edge.
+export const chipClass = cn(
+  'filter-bar-chip relative flex max-w-full items-stretch divide-x divide-border overflow-hidden rounded-full p-px [--control-border:1px]',
+  inputSurfaceAndFocusWithinStyle,
+  fieldErrorRim,
+  controlHeight[FILTER_BAR_CONTROL_SIZE],
+  controlSpacing[FILTER_BAR_CONTROL_SIZE],
 );
+
+export const editableSegmentClass = cn(
+  segmentClass,
+  controlIconState,
+  'cursor-pointer hover:bg-fill-subtle hover:text-foreground',
+  'focus-visible:bg-fill-hover focus-visible:text-foreground data-[popup-open]:bg-fill-hover data-[popup-open]:text-foreground',
+);
+
+/** Field label with its optional leading icon — used by chips, the draft chip and field option lists. */
+export function FilterBarFieldLabel({ field, label }: { field: FilterBarField | undefined; label?: string }) {
+  const Icon = field?.icon;
+  return (
+    <>
+      {Icon && <Icon aria-hidden />}
+      <span className="truncate">{label ?? field?.label}</span>
+    </>
+  );
+}
+
+type AccentStyle = CSSProperties & { '--control-icon-rest': string; '--control-icon-hover': string };
+
+/** Inline style carrying a field's accent onto its field segment: text and icon, at rest and on hover. */
+export const fieldSegmentAccentStyle = (field: FilterBarField | undefined): AccentStyle | undefined =>
+  field?.color
+    ? { color: field.color, '--control-icon-rest': field.color, '--control-icon-hover': field.color }
+    : undefined;
+
+/** Segments a chip already showed before its latest step, given how far its draft had got. */
+const settledSegments = (from: DraftStage, operatorImplied: boolean): number => {
+  if (from === 'none') return 0;
+  if (from === 'field' || operatorImplied) return 1;
+  return 2;
+};
 
 export const formatValue = (value: FilterBarValue, field: FilterBarField | undefined): string => {
   const suggestions = getFieldSuggestions(field);
   const options = Array.isArray(suggestions) ? suggestions : undefined;
   const label = (v: FilterBarScalar) => options?.find(o => o.value === String(v))?.label ?? String(v);
   return Array.isArray(value) ? value.map(label).join(', ') : label(value);
+};
+
+const formatValueCompact = (value: FilterBarValue, field: FilterBarField | undefined): string => {
+  if (!Array.isArray(value) || value.length < 2) return formatValue(value, field);
+  return `${formatValue(value.slice(0, 1), field)} +${value.length - 1}`;
 };
 
 type ChipContext = {
@@ -54,6 +136,12 @@ type ChipContext = {
   openSegment: FilterBarSegment | null;
   setOpenSegment: (segment: FilterBarSegment | null) => void;
   readOnly: boolean;
+  /** Filter still being built in the input: segments are inert labels. */
+  draft: boolean;
+  /** Filter already removed from the value, playing its exit: segments are inert labels. */
+  leaving: boolean;
+  /** The field allows a single operator and does not require its label to stay visible. */
+  operatorImplied: boolean;
 };
 
 const ChipContext = createContext<ChipContext | null>(null);
@@ -67,70 +155,103 @@ export type FilterBarChipProps = {
   item: FilterBarItem;
   /** Locked chip: plain labels, no editors, no remove button. */
   readOnly?: boolean;
+  /** `false` keeps the chip editable but drops the remove button and ignores Backspace/Delete. */
+  removable?: boolean;
+  /**
+   * Render the filter being built in the input (see `FilterBarContextValue.draft`): only
+   * the picked segments show, as inert labels. Keyed by the draft id, the same element
+   * carries on as the editable chip once the value is committed.
+   */
+  draft?: boolean;
   className?: string;
   /** Custom segment composition; defaults to Field · Operator · Value · Remove. */
   children?: ReactNode;
 };
 
-function isInsidePopup(target: EventTarget | null) {
-  return target instanceof Element && Boolean(target.closest('[data-slot="filter-bar-editor"]'));
-}
-
-export function FilterBarChip({ item, readOnly = false, className, children }: FilterBarChipProps) {
+export function FilterBarChip({
+  item,
+  readOnly = false,
+  removable = true,
+  draft = false,
+  className,
+  children,
+}: FilterBarChipProps) {
   const ctx = useFilterBarContext();
+  const [initial] = useState(() => !ctx.mounted);
   const [openSegment, setOpenSegment] = useState<FilterBarSegment | null>(null);
   const field = ctx.getField(item.fieldId);
-  const operator = ctx.getOperator(item.operatorId);
-  const index = ctx.items.findIndex(i => i.id === item.id);
+  const operator =
+    (field && ctx.getFieldOperators(field).find(o => o.id === item.operatorId)) ?? ctx.getOperator(item.operatorId);
   const rootRef = useRef<HTMLDivElement>(null);
+  const leaving = ctx.leaving.has(item.id);
+  const { index, onKeyDown } = useFilterBarItemKeys({
+    item,
+    rootRef,
+    pinned: !draft && (readOnly || !removable),
+    removable,
+    inert: readOnly || draft || leaving,
+  });
 
-  const label = [field?.label ?? item.fieldId, operator?.label ?? item.operatorId, formatValue(item.value, field)]
+  const { settleRemove } = ctx;
+
+  // A leaving chip is released once its exit animation has finished. With nothing to
+  // animate (no `interpolate-size`, reduced motion, jsdom) it is released straight away.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!leaving || !root) return;
+    const animations = typeof root.getAnimations === 'function' ? root.getAnimations({ subtree: true }) : [];
+    if (animations.length === 0) {
+      settleRemove(item.id);
+      return;
+    }
+    let cancelled = false;
+    Promise.all(animations.map(animation => animation.finished))
+      .then(() => {
+        if (!cancelled) settleRemove(item.id);
+      })
+      // Animations cancelled by an unmount reject `finished`; nothing left to settle.
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [leaving, item.id, settleRemove]);
+
+  const validationMessage =
+    !draft && operator?.arity !== 'none' && typeof item.value === 'string'
+      ? field?.validateInput?.(item.value)
+      : undefined;
+  const operatorImplied = field ? !field.alwaysShowOperator && ctx.getFieldOperators(field).length === 1 : false;
+  const label = [
+    field?.label ?? item.fieldId,
+    operatorImplied ? '' : (operator?.label ?? item.operatorId),
+    draft ? '' : formatValue(item.value, field),
+  ]
     .filter(Boolean)
     .join(' ');
 
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
-      if (readOnly || isInsidePopup(event.target)) return;
-      const segments = Array.from(rootRef.current?.querySelectorAll<HTMLElement>('[data-filter-bar-segment]') ?? []);
-      const current = segments.findIndex(el => el === event.target);
-
-      switch (event.key) {
-        case 'ArrowRight': {
-          event.preventDefault();
-          const next = segments[current + 1];
-          if (next) next.focus();
-          else if (!ctx.focusChip(index + 1, 1, 'field')) ctx.focusInput();
-          return;
-        }
-        case 'ArrowLeft': {
-          event.preventDefault();
-          const prev = segments[current - 1];
-          if (prev) prev.focus();
-          else ctx.focusChip(index - 1, -1, 'remove');
-          return;
-        }
-        case 'Delete':
-        case 'Backspace':
-          event.preventDefault();
-          ctx.removeItem(item.id);
-          ctx.focusAfterRemove(index);
-          return;
-        default:
-      }
-    },
-    [readOnly, ctx, index, item.id],
-  );
+  // The provider records where each draft step (and the final commit) started from, so
+  // the entrance stagger resumes after the segments already on screen and the chip
+  // glints once when it lands as a filter (see filter-bar-chip.css).
+  const commit = !draft && ctx.lastCommit?.item.id === item.id ? ctx.lastCommit : null;
+  const from = draft ? (ctx.draft?.from ?? 'none') : (commit?.from ?? 'none');
+  const settled = settledSegments(from, operatorImplied);
+  const shine = commit?.glint ?? false;
 
   const chipValue = useMemo<ChipContext>(
-    () => ({ item, index, field, operator, openSegment, setOpenSegment, readOnly }),
-    [item, index, field, operator, openSegment, readOnly],
+    () => ({ item, index, field, operator, openSegment, setOpenSegment, readOnly, draft, leaving, operatorImplied }),
+    [item, index, field, operator, openSegment, readOnly, draft, leaving, operatorImplied],
   );
   const content = children ?? (
     <>
       <FilterBarChipField />
       <FilterBarChipOperator />
       <FilterBarChipValue />
-      <FilterBarChipRemove />
+      {validationMessage && (
+        <span className={cn(segmentClass, 'text-destructive-foreground')} title={validationMessage}>
+          <IconExclamationTriangle aria-hidden="true" />
+        </span>
+      )}
+      {removable && <FilterBarChipRemove />}
     </>
   );
   return (
@@ -139,18 +260,35 @@ export function FilterBarChip({ item, readOnly = false, className, children }: F
         ref={rootRef}
         role="group"
         aria-label={label}
+        aria-invalid={!!validationMessage || undefined}
+        aria-description={validationMessage}
+        // The input already announces the draft's progress through its placeholder.
+        aria-hidden={draft || leaving || undefined}
         data-slot="filter-bar-chip"
+        data-draft={draft || undefined}
+        data-initial={initial || undefined}
         data-readonly={readOnly || undefined}
-        className={cn(
-          'flex h-form-sm max-w-full items-stretch divide-x divide-border1 rounded-full border border-border1 bg-surface3 text-neutral5',
-          className,
-        )}
-        onKeyDown={handleKeyDown}
+        data-leaving={leaving || undefined}
+        data-shine={(shine && !leaving) || undefined}
+        className={cn(chipClass, leaving && 'pointer-events-none', className)}
+        style={
+          {
+            '--filter-bar-segments-settled': settled,
+            '--filter-bar-chip-shine': field?.color ?? 'currentColor',
+          } as CSSProperties
+        }
+        onKeyDown={onKeyDown}
         onClick={(event: MouseEvent) => event.stopPropagation()}
+        onAnimationEnd={(event: AnimationEvent) => {
+          if (event.animationName === 'filter-bar-chip-shine') ctx.settleCommit();
+        }}
       >
         {readOnly && (
-          <span className={cn(segmentClass, 'pr-0 text-neutral3')} title="This filter is locked">
-            <LockIcon className="size-[1.1em]" />
+          <span
+            className={cn(segmentClass, 'pr-0 text-muted-foreground [--filter-bar-segment-padding:0.5rem_0]')}
+            title="This filter is locked"
+          >
+            <IconLock />
           </span>
         )}
         {content}
@@ -162,6 +300,7 @@ export function FilterBarChip({ item, readOnly = false, className, children }: F
 type SegmentComboboxProps<T> = {
   segment: Exclude<FilterBarSegment, 'remove'>;
   label: string;
+  fullLabel?: string;
   ariaLabel: string;
   items: readonly T[];
   itemToString: (item: T) => string;
@@ -191,7 +330,7 @@ type SegmentSearchInputProps<T> = {
 /** The search/free-text input at the top of a segment popup. */
 function SegmentSearchInput<T>({
   placeholder,
-  icon: Icon = SearchIcon,
+  icon: Icon = IconMagnifyingGlass,
   inputMode,
   onKeyDown,
 }: SegmentSearchInputProps<T>) {
@@ -203,6 +342,7 @@ function SegmentSearchInput<T>({
         className={comboboxStyles.searchInput}
         placeholder={placeholder}
         inputMode={inputMode}
+        {...passwordManagerOptOutProps}
         onKeyDown={event => onKeyDown?.(event, highlighted as T | null)}
       />
     </div>
@@ -217,6 +357,7 @@ function SegmentSearchInput<T>({
 function SegmentCombobox<T>({
   segment,
   label,
+  fullLabel = label,
   ariaLabel,
   items,
   itemToString,
@@ -234,10 +375,25 @@ function SegmentCombobox<T>({
   const open = chip.openSegment === segment;
   const [highlighted, setHighlighted] = useState<T | null>(null);
 
-  if (chip.readOnly) {
+  const isField = segment === 'field';
+  const content = isField ? (
+    <FilterBarFieldLabel field={chip.field} label={label} />
+  ) : (
+    <span className="truncate">{label}</span>
+  );
+
+  if (chip.readOnly || chip.draft || chip.leaving) {
     return (
-      <span className={cn(segmentClass, segment === 'field' && 'text-neutral6')} title={label}>
-        <span className="truncate">{label}</span>
+      <span
+        className={cn(
+          segmentClass,
+          isField && 'text-foreground',
+          segment === 'operator' && chip.field?.alwaysShowOperator && 'shrink-0',
+        )}
+        style={isField ? fieldSegmentAccentStyle(chip.field) : undefined}
+        title={fullLabel}
+      >
+        {content}
       </span>
     );
   }
@@ -246,6 +402,7 @@ function SegmentCombobox<T>({
     <ComboboxPrimitive.Root<T>
       items={items}
       itemToStringLabel={itemToString}
+      itemToStringValue={itemToString}
       filter={filter}
       value={value}
       onValueChange={(item, details) => {
@@ -264,8 +421,7 @@ function SegmentCombobox<T>({
         else onQueryChange('');
         chip.setOpenSegment(next ? segment : null);
       }}
-      // See FilterBarInput: the runtime supports 'always' although ComboboxRoot types it as boolean.
-      autoHighlight={'always' as unknown as boolean}
+      {...alwaysHighlightProps}
       modal={false}
     >
       <ComboboxPrimitive.Trigger
@@ -275,13 +431,18 @@ function SegmentCombobox<T>({
             type="button"
             data-filter-bar-segment=""
             tabIndex={segment === 'value' ? 0 : -1}
-            aria-label={`${ariaLabel}: ${label}`}
-            title={label}
-            className={cn(editableSegmentClass, segment === 'field' && 'text-neutral6')}
+            aria-label={`${ariaLabel}: ${fullLabel}`}
+            title={fullLabel}
+            className={cn(
+              editableSegmentClass,
+              isField && 'text-foreground',
+              segment === 'operator' && chip.field?.alwaysShowOperator && 'shrink-0',
+            )}
+            style={isField ? fieldSegmentAccentStyle(chip.field) : undefined}
           />
         }
       >
-        <span className="truncate">{label}</span>
+        {content}
       </ComboboxPrimitive.Trigger>
       <ComboboxPrimitive.Portal container={container}>
         <ComboboxPrimitive.Positioner
@@ -290,7 +451,7 @@ function SegmentCombobox<T>({
           positionMethod={FLOATING_POSITION_METHOD}
           className={comboboxStyles.positioner}
         >
-          <ComboboxPrimitive.Popup className={cn(comboboxStyles.popup, 'w-56')} data-slot="filter-bar-editor">
+          <ComboboxPrimitive.Popup className={cn(comboboxStyles.popup, 'min-w-44')} data-slot="filter-bar-editor">
             <SegmentPopupContext.Provider value={{ highlighted }}>{children}</SegmentPopupContext.Provider>
           </ComboboxPrimitive.Popup>
         </ComboboxPrimitive.Positioner>
@@ -307,6 +468,12 @@ function FieldEditor() {
   const ctx = useFilterBarContext();
   const chip = useChip();
   const [query, setQuery] = useState('');
+
+  const isRoot = ctx.expression.nodes.some(node => node.id === chip.item.id);
+  const fields = ctx.fields.filter(field => {
+    if (field.rootOnly && !isRoot) return false;
+    return !field.singleton || !ctx.items.some(item => item.id !== chip.item.id && item.fieldId === field.id);
+  });
 
   const onSelect = useCallback(
     (field: FilterBarField) => {
@@ -328,7 +495,7 @@ function FieldEditor() {
       segment="field"
       ariaLabel="Field"
       label={chip.field?.label ?? chip.item.fieldId}
-      items={ctx.fields}
+      items={fields}
       itemToString={fieldLabel}
       filter={matchesQueryFilter}
       value={chip.field}
@@ -336,11 +503,11 @@ function FieldEditor() {
       onQueryChange={setQuery}
       onSelect={onSelect}
     >
-      <SegmentSearchInput placeholder="Change field…" />
+      <SegmentSearchInput placeholder="Change field" />
       <FilterBarOptionList<FilterBarField>
         aria-label="Fields"
         getKey={f => f.id}
-        renderOption={f => f.label}
+        renderOption={f => <FilterBarFieldLabel field={f} />}
         emptyText="No matching field."
       />
     </SegmentCombobox>
@@ -378,7 +545,7 @@ function OperatorEditor() {
       onQueryChange={setQuery}
       onSelect={onSelect}
     >
-      <SegmentSearchInput placeholder="Change operator…" />
+      <SegmentSearchInput placeholder="Change operator" />
       <FilterBarOptionList<FilterBarOperator>
         aria-label="Operators"
         getKey={o => o.id}
@@ -410,6 +577,7 @@ function ValueEditor() {
     query,
     enabled: open,
     initialValue: chip.item.value,
+    setQuery,
     onCommit,
   });
 
@@ -419,7 +587,8 @@ function ValueEditor() {
     <SegmentCombobox<FilterBarOption>
       segment="value"
       ariaLabel="Value"
-      label={formatValue(chip.item.value, chip.field) || '…'}
+      label={formatValueCompact(chip.item.value, chip.field) || '…'}
+      fullLabel={formatValue(chip.item.value, chip.field) || '…'}
       items={step.options}
       itemToString={optionLabel}
       filter={null}
@@ -447,24 +616,27 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
   const modEnterLabel = useIsApplePlatform() ? '⌘↵' : 'Ctrl ↵';
   return (
     <>
-      {step.hasSuggestions && (
+      {step.validationMessage && (
+        <ComboboxPrimitive.Status className={comboboxStyles.empty}>{step.validationMessage}</ComboboxPrimitive.Status>
+      )}
+      {step.hasOptions && (
         <FilterBarOptionList<FilterBarOption>
           aria-label="Values"
           aria-multiselectable={step.isMany || undefined}
           getKey={o => o.value}
-          renderOption={o => o.label ?? o.value}
+          renderOption={option => <FilterBarOptionLabel option={option} />}
           isSelected={o => (step.isMany ? step.selected.includes(o.value) : String(chip.item.value) === o.value)}
           isLoading={step.isLoading}
           error={step.error}
-          emptyText={step.allowFreeText ? 'No suggestions — press Enter to use your text.' : 'No matching value.'}
+          emptyText={step.allowFreeText ? 'No suggestions. Press Enter to use your text.' : 'No matching value.'}
         />
       )}
       {step.isMany && (
-        <div className="border-border1 flex items-center justify-end gap-1 border-t p-1">
-          <Button size="xs" variant="ghost" onClick={onCancel}>
+        <div className="flex items-center justify-end gap-1 border-t border-border p-1">
+          <Button size="sm" variant="ghost" onClick={onCancel}>
             Cancel
           </Button>
-          <Button size="xs" variant="default" onClick={() => step.commitSelection() || step.commitFreeText()}>
+          <Button size="sm" variant="default" onClick={() => step.commitDone()}>
             Done
             <Kbd size="xs">{modEnterLabel}</Kbd>
           </Button>
@@ -472,6 +644,12 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
       )}
     </>
   );
+}
+
+function freeTextPlaceholder(step: ValueInputProps['step'], noun: string) {
+  if (!step.hasSuggestions) return `Type a ${noun}…`;
+  if (step.allowFreeText) return `Search or type a ${noun}…`;
+  return `Search ${noun}s…`;
 }
 
 /** Free-text (optionally suggestion-backed) value input; text and number share it. */
@@ -484,15 +662,9 @@ function FreeTextValueInput({
   return (
     <>
       <SegmentSearchInput<FilterBarOption>
-        icon={step.hasSuggestions ? SearchIcon : PencilIcon}
+        icon={step.hasSuggestions ? IconMagnifyingGlass : IconPencil}
         inputMode={inputMode}
-        placeholder={
-          step.hasSuggestions
-            ? step.allowFreeText
-              ? `Search or type a ${noun}…`
-              : `Search ${noun}s…`
-            : `Type a ${noun}…`
-        }
+        placeholder={freeTextPlaceholder(step, noun)}
         onKeyDown={(event, highlighted) => {
           const highlightedOption = step.hasSuggestions ? highlighted : null;
           const handled = step.handleKeyDown(event, highlightedOption);
@@ -529,19 +701,37 @@ export function FilterBarChipField() {
 }
 
 export function FilterBarChipOperator() {
+  const chip = useChip();
+  if (chip.operatorImplied) return null;
+  if (chip.draft && !chip.operator) return null;
   return <OperatorEditor />;
 }
 
 export function FilterBarChipValue() {
   const chip = useChip();
-  if ((chip.operator?.arity ?? 'one') === 'none') return null;
+  if (chip.draft || (chip.operator?.arity ?? 'one') === 'none') return null;
   return <ValueEditor />;
 }
+
+/** The trailing × segment of a chip: its own cell, so it keeps an even inset instead of the pill's outer one. */
+export const removeSegmentClass = cn(
+  editableSegmentClass,
+  controlIconOnly,
+  'filter-bar-segment-remove px-1.5 text-muted-foreground [--filter-bar-segment-padding:0.375rem]',
+);
 
 export function FilterBarChipRemove() {
   const ctx = useFilterBarContext();
   const chip = useChip();
-  if (chip.readOnly) return null;
+  if (chip.readOnly || chip.draft) return null;
+  if (chip.leaving) {
+    // Keep the × on screen so it folds away with the other segments.
+    return (
+      <span className={removeSegmentClass}>
+        <IconCrossMedium />
+      </span>
+    );
+  }
   const label = `Remove ${chip.field?.label ?? chip.item.fieldId} filter`;
   return (
     <button
@@ -551,13 +741,13 @@ export function FilterBarChipRemove() {
       aria-label={label}
       title={label}
       ref={el => ctx.registerSegment(chip.item.id, 'remove', el)}
-      className={cn(editableSegmentClass, 'px-1.5 text-neutral3')}
+      className={removeSegmentClass}
       onClick={() => {
         ctx.removeItem(chip.item.id);
         ctx.focusAfterRemove(chip.index);
       }}
     >
-      <XIcon className="size-[1.1em]" />
+      <IconCrossMedium />
     </button>
   );
 }

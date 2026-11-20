@@ -1,15 +1,14 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Plug, Settings2 } from 'lucide-react';
+import { IconPlugin1 } from '@mastra/playground-ui/icons/central/IconPlugin1';
+import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
+import { useChannelInstallations, useChannelPlatforms } from '@mastra/react/hooks/agents';
 import { useState } from 'react';
 import { ChannelDialog } from './publish-channel-dialogs/channel-dialog';
 import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';
-import {
-  useChannelInstallations,
-  useChannelPlatforms,
-  useConnectChannelAction,
-} from '@/domains/agents/hooks/use-channels';
+import { useConnectChannelAction } from '@/domains/agents/hooks/use-connect-channel-action';
+import { useReconcilePendingInstallOnFocus } from '@/domains/agents/hooks/use-reconcile-pending-install-on-focus';
 
 export interface ConnectChannelMessageProps {
   platformId: string;
@@ -19,8 +18,14 @@ export interface ConnectChannelMessageProps {
 export function ConnectChannelMessage({ platformId, agentId }: ConnectChannelMessageProps) {
   const { data: platforms = [], isLoading: arePlatformsLoading } = useChannelPlatforms();
   const platform = platforms.find(p => p.id === platformId);
-  const { data: installations = [] } = useChannelInstallations(platformId, agentId ?? '');
+  const { data: installations = [] } = useChannelInstallations({
+    platform: platformId,
+    agentId: agentId ?? '',
+    queryOptions: { enabled: Boolean(platformId && agentId) },
+  });
   const installation = installations.find(i => i.status === 'active');
+  const hasPendingInstall = installations.some(i => i.status === 'pending');
+  useReconcilePendingInstallOnFocus({ platform: platformId, agentId: agentId ?? '', hasPendingInstall });
   const { connect, isConnecting } = useConnectChannelAction(platformId);
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -39,22 +44,22 @@ export function ConnectChannelMessage({ platformId, agentId }: ConnectChannelMes
         data-testid={`agent-builder-chat-connect-channel-${platformId}`}
       >
         <PlatformIcon platform={platform.id} className="h-5 w-5 shrink-0" />
-        <Txt variant="ui-md" className="text-neutral4 flex-1" as="div">
+        <Txt as="p" variant="body" tone="muted" className="flex-1">
           {platform.name}
         </Txt>
         {!platform.isConfigured ? (
-          <Badge variant="yellow" size="sm" indicator="dot">
+          <Badge variant="warning" size="sm" indicator="dot">
             Not configured
           </Badge>
         ) : installation ? (
-          <Badge variant="green" size="sm" indicator="dot">
+          <Badge variant="success" size="sm" indicator="dot">
             Connected
           </Badge>
         ) : null}
 
         {!platform.isConfigured ? (
           <Button
-            icon={<Settings2 />}
+            icon={<IconSettingsSliderHor />}
             size="sm"
             variant="ghost"
             disabled
@@ -64,7 +69,7 @@ export function ConnectChannelMessage({ platformId, agentId }: ConnectChannelMes
           </Button>
         ) : installation ? (
           <Button
-            icon={<Settings2 />}
+            icon={<IconSettingsSliderHor />}
             size="sm"
             variant="default"
             onClick={() => setDialogOpen(true)}
@@ -74,7 +79,7 @@ export function ConnectChannelMessage({ platformId, agentId }: ConnectChannelMes
           </Button>
         ) : (
           <Button
-            icon={<Plug />}
+            icon={<IconPlugin1 />}
             size="sm"
             variant="default"
             onClick={handleConnect}

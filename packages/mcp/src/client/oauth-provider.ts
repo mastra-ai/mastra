@@ -4,21 +4,25 @@
  * Provides a ready-to-use OAuthClientProvider implementation that can be used
  * with Mastra's MCPClient for connecting to OAuth-protected MCP servers.
  *
- * @see https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization
+ * Client identity is configured, never registered at runtime: the provider is
+ * given either pre-registered client information or a Client ID Metadata
+ * Document URL (SEP-991), and it never performs dynamic client registration.
  */
 
+import { validateClientMetadataUrl } from '@modelcontextprotocol/client';
 import type {
   OAuthClientProvider,
   OAuthClientMetadata,
   OAuthClientInformation,
-  OAuthClientInformationFull,
-  OAuthTokens,
+  OAuthClientInformationContext,
+  OAuthDiscoveryState,
+  StoredOAuthTokens,
 } from '../shared/oauth-types.js';
 
 /**
  * Storage interface for persisting OAuth data.
  *
- * Implement this interface to persist OAuth data across sessions.
+ * Implement this interface to persist OAuth data across processes.
  * For simple in-memory usage, use InMemoryOAuthStorage.
  */
 export interface OAuthStorage {
@@ -66,7 +70,20 @@ export class InMemoryOAuthStorage implements OAuthStorage {
 
 /**
  * Options for creating a MCPOAuthClientProvider.
+ *
+ * Exactly one client identity source is required: `clientInformation` for a
+ * client pre-registered with the authorization server, or `clientMetadataUrl`
+ * for a Client ID Metadata Document the authorization server fetches.
  */
+export interface MCPClientMetadata extends OAuthClientMetadata {
+  /**
+   * The `client_id` published in a Client ID Metadata Document. When present it
+   * must equal `clientMetadataUrl`; the provider never sends it to the
+   * authorization server itself.
+   */
+  client_id?: string;
+}
+
 export interface MCPOAuthClientProviderOptions {
   /**
    * The redirect URL for the OAuth callback.
@@ -78,21 +95,35 @@ export interface MCPOAuthClientProviderOptions {
   redirectUrl: string | URL;
 
   /**
-   * OAuth client metadata for registration.
-   * If the client is not pre-registered with the authorization server,
-   * this metadata will be used for dynamic client registration.
+   * OAuth client metadata (name, redirect URIs, grant types, scope).
+   *
+   * Used for scope selection and as the description of this client; it is
+   * never posted to a registration endpoint. With `clientMetadataUrl` it must
+   * mirror the hosted document: `client_name` and at least one redirect URI.
    */
-  clientMetadata: OAuthClientMetadata;
+  clientMetadata: MCPClientMetadata;
 
   /**
-   * Pre-registered client information.
-   * If provided, skips dynamic client registration.
+   * Client information for a client pre-registered with the authorization server.
    */
   clientInformation?: OAuthClientInformation;
 
   /**
-   * Storage for persisting OAuth data (tokens, client info, etc.).
-   * Defaults to InMemoryOAuthStorage if not provided.
+   * HTTPS URL of this client's Client ID Metadata Document (SEP-991).
+   *
+   * The URL is used as the `client_id`; the authorization server fetches the
+   * document to learn the client's metadata. Must be an HTTPS URL with a
+   * non-root pathname.
+   */
+  clientMetadataUrl?: string;
+
+  /**
+   * Storage for persisting OAuth data (tokens, discovery state and the PKCE
+   * verifier). Defaults to InMemoryOAuthStorage if not provided.
+   *
+   * Tokens are keyed by the authorization server's validated `issuer`, and
+   * mutation ordering is coordinated only within one provider instance, so
+   * give each provider its own storage namespace.
    */
   storage?: OAuthStorage;
 
@@ -116,19 +147,19 @@ export interface MCPOAuthClientProviderOptions {
 /**
  * Mastra's OAuth Client Provider implementation.
  *
- * This provider handles the OAuth 2.1 flow for connecting to OAuth-protected
- * MCP servers, including:
- * - Dynamic client registration (RFC 7591)
+ * This provider handles the OAuth 2.1 authorization-code flow for connecting to
+ * OAuth-protected MCP servers, including:
+ * - Pre-registered or URL-based (Client ID Metadata Document) client identity
  * - PKCE (Proof Key for Code Exchange)
  * - Token storage and refresh
  *
  * @example
  * ```typescript
- * import { MCPClient, MCPOAuthClientProvider, InMemoryOAuthStorage } from '@mastra/mcp';
+ * import { MCPClient, MCPOAuthClientProvider } from '@mastra/mcp';
  *
- * // Create the OAuth provider
  * const oauthProvider = new MCPOAuthClientProvider({
  *   redirectUrl: 'http://localhost:3000/oauth/callback',
+ *   clientMetadataUrl: 'https://my-app.example.com/oauth/client-metadata.json',
  *   clientMetadata: {
  *     redirect_uris: ['http://localhost:3000/oauth/callback'],
  *     client_name: 'My MCP Client',
@@ -136,38 +167,57 @@ export interface MCPOAuthClientProviderOptions {
  *     response_types: ['code'],
  *   },
  *   onRedirectToAuthorization: (url) => {
- *     // Open URL in browser for CLI, or redirect response for web
  *     console.log(`Please visit: ${url}`);
  *   },
  * });
  *
- * // Create the MCP client with OAuth
  * const client = new MCPClient({
  *   servers: {
  *     'protected-server': {
- *       url: 'https://mcp.example.com/mcp',
+ *       url: new URL('https://mcp.example.com/mcp'),
  *       authProvider: oauthProvider,
  *     },
  *   },
  * });
- *
- * await client.connect();
  * ```
  */
 export class MCPOAuthClientProvider implements OAuthClientProvider {
   private _redirectUrl: string | URL;
-  private _clientMetadata: OAuthClientMetadata;
+  private readonly _clientMetadata: OAuthClientMetadata;
+  private readonly _clientMetadataUrl?: string;
+  private readonly _clientInfo?: OAuthClientInformation;
   private readonly storage: OAuthStorage;
   private readonly onRedirect?: (url: URL) => void | Promise<void>;
   private readonly generateState: () => string | Promise<string>;
 
-  private _clientInfo?: OAuthClientInformation;
   private _sessionState?: string;
   private _sessionRedirectUrl?: string | URL;
+  private credentialMutation: Promise<unknown> = Promise.resolve();
 
   constructor(options: MCPOAuthClientProviderOptions) {
+    if (!options.clientInformation && !options.clientMetadataUrl) {
+      throw new Error(
+        'MCPOAuthClientProvider requires a client identity: pass clientInformation for a pre-registered client or clientMetadataUrl for a Client ID Metadata Document. Dynamic client registration is not supported.',
+      );
+    }
+    if (options.clientInformation && options.clientMetadataUrl) {
+      throw new Error(
+        'MCPOAuthClientProvider accepts one client identity: pass either clientInformation or clientMetadataUrl, not both.',
+      );
+    }
+    if (options.clientMetadataUrl) {
+      validateClientMetadataUrl(options.clientMetadataUrl);
+      if (options.clientMetadata.client_id !== undefined && options.clientMetadata.client_id !== options.clientMetadataUrl) {
+        throw new Error('clientMetadataUrl must match clientMetadata.client_id');
+      }
+      if (!options.clientMetadata.client_name || options.clientMetadata.redirect_uris.length === 0) {
+        throw new Error('Client ID Metadata Documents require client_name and at least one redirect_uri');
+      }
+    }
+    const { client_id: _clientId, ...clientMetadata } = options.clientMetadata;
     this._redirectUrl = options.redirectUrl;
-    this._clientMetadata = options.clientMetadata;
+    this._clientMetadata = clientMetadata;
+    this._clientMetadataUrl = options.clientMetadataUrl;
     this._clientInfo = options.clientInformation;
     this.storage = options.storage ?? new InMemoryOAuthStorage();
     this.onRedirect = options.onRedirectToAuthorization;
@@ -186,6 +236,13 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
    */
   get clientMetadata(): OAuthClientMetadata {
     return this._clientMetadata;
+  }
+
+  /**
+   * URL of this client's Client ID Metadata Document, when identity is URL-based.
+   */
+  get clientMetadataUrl(): string | undefined {
+    return this._clientMetadataUrl;
   }
 
   /**
@@ -233,71 +290,103 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
    *
    * Loopback callback servers may bind a fallback port when the preferred one
    * is in use. Call this before triggering authorization so the authorization
-   * request's redirect_uri matches the listening server, and so dynamic client
-   * registration registers every candidate callback URL (see
-   * getCallbackUrlCandidates) rather than only the preferred one.
+   * request's redirect_uri matches the listening server. The bound URL must be
+   * one of the redirect URIs the client is registered with (or lists in its
+   * metadata document).
    *
    * @param redirectUrl - The callback URL that is actually bound
-   * @param registeredRedirectUris - The redirect URIs to register during dynamic client registration
    */
-  applyResolvedRedirectUrl(redirectUrl: string | URL, registeredRedirectUris: (string | URL)[]): void {
+  applyResolvedRedirectUrl(redirectUrl: string | URL): void {
     this._redirectUrl = redirectUrl;
-    this._clientMetadata = {
-      ...this._clientMetadata,
-      redirect_uris: registeredRedirectUris.map(uri => uri.toString()),
-    };
   }
 
   /**
-   * Loads information about this OAuth client.
+   * The client's identity: pre-registered information, or the metadata
+   * document URL used as `client_id`.
    */
-  async clientInformation(): Promise<OAuthClientInformation | undefined> {
-    // Check if we have pre-registered client info
-    if (this._clientInfo) {
-      return this._clientInfo;
-    }
+  clientInformation(): OAuthClientInformation {
+    return this._clientInfo ?? { client_id: this._clientMetadataUrl! };
+  }
 
-    // Check storage for dynamically registered client info
-    const stored = await this.storage.get('client_info');
-    if (stored) {
-      try {
-        return JSON.parse(stored) as OAuthClientInformation;
-      } catch {
-        // Invalid stored data, ignore
-      }
-    }
-
-    return undefined;
+  private tokensKey(ctx?: OAuthClientInformationContext): string {
+    return ctx ? `tokens:${encodeURIComponent(ctx.issuer)}` : 'tokens';
   }
 
   /**
-   * Saves dynamically registered client information.
+   * Serializes storage mutations so concurrent writes and invalidations settle
+   * in call order: a write started before `invalidateCredentials` cannot land
+   * after it completes.
    */
-  async saveClientInformation(clientInformation: OAuthClientInformationFull): Promise<void> {
-    this._clientInfo = clientInformation;
-    await this.storage.set('client_info', JSON.stringify(clientInformation));
+  private enqueueCredentialMutation<T>(mutation: () => Promise<T>): Promise<T> {
+    const operation = this.credentialMutation.catch(() => {}).then(mutation);
+    this.credentialMutation = operation;
+    return operation;
+  }
+
+  private async readStored<T>(key: string, expectedIssuer?: string): Promise<T | undefined> {
+    const stored = await this.storage.get(key);
+    if (!stored) return undefined;
+    try {
+      const value = JSON.parse(stored) as T;
+      if (expectedIssuer && (value as { issuer?: unknown }).issuer !== expectedIssuer) return undefined;
+      return value;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async readIssuerIndex(): Promise<string[]> {
+    return (await this.readStored<string[]>('credential_issuers')) ?? [];
+  }
+
+  private async rememberIssuer(issuer: string): Promise<void> {
+    const issuers = await this.readIssuerIndex();
+    if (!issuers.includes(issuer)) {
+      issuers.push(issuer);
+      await this.storage.set('credential_issuers', JSON.stringify(issuers));
+    }
   }
 
   /**
    * Loads existing OAuth tokens.
+   *
+   * With an issuer context, only tokens minted by that authorization server are
+   * returned; without one, the most recently saved token set is returned for
+   * the transport's bearer-token read.
    */
-  async tokens(): Promise<OAuthTokens | undefined> {
-    const stored = await this.storage.get('tokens');
-    if (stored) {
-      try {
-        return JSON.parse(stored) as OAuthTokens;
-      } catch {
-        // Invalid stored data, ignore
-      }
-    }
-    return undefined;
+  async tokens(ctx?: OAuthClientInformationContext): Promise<StoredOAuthTokens | undefined> {
+    return this.readStored<StoredOAuthTokens>(this.tokensKey(ctx), ctx?.issuer);
   }
 
   /**
-   * Stores new OAuth tokens after successful authorization.
+   * Stores new OAuth tokens after successful authorization, bound to the
+   * authorization server's issuer when known.
    */
-  async saveTokens(tokens: OAuthTokens): Promise<void> {
-    await this.storage.set('tokens', JSON.stringify(tokens));
+  async saveTokens(tokens: StoredOAuthTokens, ctx?: OAuthClientInformationContext): Promise<void> {
+    await this.enqueueCredentialMutation(async () => {
+      if (ctx) {
+        await this.rememberIssuer(ctx.issuer);
+        await this.storage.set(this.tokensKey(ctx), JSON.stringify(tokens));
+      }
+      await this.storage.set('tokens', JSON.stringify(tokens));
+    });
+  }
+
+  /**
+   * Persists authorization-server discovery state so the callback leg can
+   * verify the code is exchanged with the server that issued the redirect.
+   */
+  async saveDiscoveryState(state: OAuthDiscoveryState): Promise<void> {
+    await this.enqueueCredentialMutation(async () => {
+      await this.storage.set('discovery_state', JSON.stringify(state));
+    });
+  }
+
+  /**
+   * Loads persisted authorization-server discovery state.
+   */
+  async discoveryState(): Promise<OAuthDiscoveryState | undefined> {
+    return this.readStored<OAuthDiscoveryState>('discovery_state');
   }
 
   /**
@@ -316,7 +405,9 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
    * Saves a PKCE code verifier before redirecting to authorization.
    */
   async saveCodeVerifier(codeVerifier: string): Promise<void> {
-    await this.storage.set('code_verifier', codeVerifier);
+    await this.enqueueCredentialMutation(async () => {
+      await this.storage.set('code_verifier', codeVerifier);
+    });
   }
 
   /**
@@ -331,27 +422,37 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
   }
 
   /**
-   * Invalidate credentials when server indicates they're no longer valid.
+   * Invalidate stored credentials when the server indicates they're no longer valid.
+   * Client identity is configuration, so the `client` scope has nothing to discard.
    */
-  async invalidateCredentials(scope: 'all' | 'client' | 'tokens' | 'verifier'): Promise<void> {
-    switch (scope) {
-      case 'all':
+  async invalidateCredentials(scope: 'all' | 'client' | 'tokens' | 'verifier' | 'discovery'): Promise<void> {
+    await this.enqueueCredentialMutation(async () => {
+      const deleteTokens = async () => {
+        const issuers = await this.readIssuerIndex();
         await this.storage.delete('tokens');
-        await this.storage.delete('client_info');
-        await this.storage.delete('code_verifier');
-        this._clientInfo = undefined;
-        break;
-      case 'client':
-        await this.storage.delete('client_info');
-        this._clientInfo = undefined;
-        break;
-      case 'tokens':
-        await this.storage.delete('tokens');
-        break;
-      case 'verifier':
-        await this.storage.delete('code_verifier');
-        break;
-    }
+        await Promise.all(issuers.map(issuer => this.storage.delete(this.tokensKey({ issuer }))));
+      };
+
+      switch (scope) {
+        case 'all':
+          await deleteTokens();
+          await this.storage.delete('code_verifier');
+          await this.storage.delete('discovery_state');
+          await this.storage.delete('credential_issuers');
+          break;
+        case 'tokens':
+          await deleteTokens();
+          break;
+        case 'verifier':
+          await this.storage.delete('code_verifier');
+          break;
+        case 'discovery':
+          await this.storage.delete('discovery_state');
+          break;
+        case 'client':
+          break;
+      }
+    });
   }
 
   /**
@@ -363,19 +464,11 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
   }
 
   /**
-   * Check if the provider has valid (non-expired) tokens.
+   * Check if the provider has tokens with an access token.
    */
   async hasValidTokens(): Promise<boolean> {
     const currentTokens = await this.tokens();
-    if (!currentTokens) return false;
-
-    // Check if we have an access token
-    if (!currentTokens.access_token) return false;
-
-    // Note: Token expiration checking would require parsing the JWT
-    // or tracking when we received the token. The MCP client handles
-    // token refresh automatically when needed.
-    return true;
+    return !!currentTokens?.access_token;
   }
 }
 
@@ -397,12 +490,7 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
  *     redirect_uris: ['http://localhost:3000/callback'],
  *     client_name: 'Test Client',
  *   },
- * });
- *
- * const client = new MCPClient({
- *   servers: {
- *     test: { url: 'https://mcp.example.com', authProvider: provider }
- *   },
+ *   clientInformation: { client_id: 'test-client' },
  * });
  * ```
  */
@@ -411,14 +499,15 @@ export function createSimpleTokenProvider(
   options: {
     redirectUrl: string | URL;
     clientMetadata: OAuthClientMetadata;
-    clientInformation?: OAuthClientInformation;
+    /** Client identity used if the token must be refreshed. */
+    clientInformation: OAuthClientInformation;
     tokenType?: string;
     refreshToken?: string;
     expiresIn?: number;
     scope?: string;
   },
 ): OAuthClientProvider {
-  const tokens: OAuthTokens = {
+  const tokens: StoredOAuthTokens = {
     access_token: accessToken,
     token_type: options.tokenType ?? 'Bearer',
     refresh_token: options.refreshToken,
@@ -428,10 +517,6 @@ export function createSimpleTokenProvider(
 
   const storage = new InMemoryOAuthStorage();
   storage.set('tokens', JSON.stringify(tokens));
-
-  if (options.clientInformation) {
-    storage.set('client_info', JSON.stringify(options.clientInformation));
-  }
 
   return new MCPOAuthClientProvider({
     redirectUrl: options.redirectUrl,

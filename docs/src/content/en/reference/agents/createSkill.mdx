@@ -107,12 +107,11 @@ The skill is assigned a synthetic path of `inline/<name>` (e.g., `inline/code-re
 
 - `name` is required and must be a valid slug
 - `description` is required
-- `instructions` is required and non-empty
 
 If validation fails, an `Error` is thrown with details about the invalid fields.
 
 ```typescript
-// Throws: Invalid skill "": name is required
+// Throws: Invalid skill "": name: Skill name cannot be empty
 createSkill({ name: '', description: 'test', instructions: 'test' })
 ```
 

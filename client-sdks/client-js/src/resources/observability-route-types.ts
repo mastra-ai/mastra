@@ -13,6 +13,8 @@ type ListArgs<T extends object> = Simplify<
   }
 >;
 
+export type { TracePageRequest, GetTracePageArgs, TracePageResponse, TracePageNode } from './trace-page-types';
+
 export type TraceRecord = Response<'GET /observability/traces/:traceId'>;
 export type GetTraceLightResponse = Response<'GET /observability/traces/:traceId/light'>;
 export type GetSpanResponse = Response<'GET /observability/traces/:traceId/spans/:spanId'>;
@@ -20,7 +22,30 @@ export type ListTracesArgs = ListArgs<Query<'GET /observability/traces'>>;
 export type ListTracesResponse = Response<'GET /observability/traces'>;
 export type ListTracesLightResponse = Response<'GET /observability/traces/light'>;
 export type TraceQueryRequest = Body<'POST /observability/traces/query'>;
-export type TraceQueryResponse = Extract<Response<'POST /observability/traces/query'>, { traces: unknown[] }>;
+export type TraceQueryResponse = Response<'POST /observability/traces/query'>;
+export type TraceQueryTraceResponse = Extract<TraceQueryResponse, { traces: unknown[] }>;
+export type TraceQueryKeysetTraceResponse = Extract<TraceQueryTraceResponse, { page: { next: string | null } }>;
+export type TraceQueryGroupResponse = Extract<TraceQueryResponse, { groups: unknown[] }>;
+export type AggregateTracesArgs = Body<'POST /observability/traces/aggregate'>;
+export type AggregateTracesResponse = Response<'POST /observability/traces/aggregate'>;
+export type AggregateSpansArgs = Body<'POST /observability/spans/aggregate'>;
+export type AggregateSpansResponse = Response<'POST /observability/spans/aggregate'>;
+export type GetTraceQueryFieldsArgs = Body<'POST /observability/traces/query/fields'>;
+export type GetTraceQueryFieldsResponse = Extract<
+  Response<'POST /observability/traces/query/fields'>,
+  { canonicalFields: unknown[] }
+>;
+export type GetTraceQueryValuesArgs = Body<'POST /observability/traces/query/values'>;
+export type GetTraceQueryValuesResponse = Extract<
+  Response<'POST /observability/traces/query/values'>,
+  { values: unknown[] }
+>;
+export type TraceQueryCanonicalFieldDescriptor = GetTraceQueryFieldsResponse['canonicalFields'][number];
+export type TraceQueryObservedFieldDescriptor = GetTraceQueryFieldsResponse['observedFields'][number];
+export type TraceQueryOperator = TraceQueryCanonicalFieldDescriptor['operators'][number];
+export type TraceQueryPredicateScope = GetTraceQueryFieldsArgs['predicateScope'];
+export type TraceAggregateDiscovery = NonNullable<GetTraceQueryFieldsResponse['aggregate']>;
+export type TraceQueryValueKind = TraceQueryCanonicalFieldDescriptor['valueKind'];
 export type ListBranchesArgs = ListArgs<Query<'GET /observability/branches'>>;
 export type ListBranchesResponse = Response<'GET /observability/branches'>;
 export type GetBranchArgs = PathParams<'GET /observability/traces/:traceId/branches/:spanId'> &
@@ -33,7 +58,9 @@ export type PaginationInfo = NonNullable<ListTracesResponse['pagination']>;
 export type ScoreTracesRequest = Body<'POST /observability/traces/score'>;
 export type ScoreTracesResponse = Response<'POST /observability/traces/score'>;
 export type DeleteTracesRequest = Body<'POST /observability/traces/delete'>;
-export type DeleteTracesResponse = Response<'POST /observability/traces/delete'>;
+// Platform can acknowledge durable cleanup before records disappear from reads.
+type AcceptedDeletionResponse = { accepted: true };
+export type DeleteTracesResponse = Response<'POST /observability/traces/delete'> | AcceptedDeletionResponse;
 export type ListScoresResponse = Response<'GET /observability/traces/:traceId/:spanId/scores'>;
 export type Trajectory = Omit<Response<'GET /observability/traces/:traceId/trajectory'>, 'steps'> &
   Pick<CoreTrajectory, 'steps'>;
@@ -44,7 +71,7 @@ export type ListScoresResponseNew = Response<'GET /observability/scores'>;
 export type CreateScoreBody = Body<'POST /observability/scores'>;
 export type CreateScoreResponse = Response<'POST /observability/scores'>;
 export type DeleteScoresArgs = Body<'DELETE /observability/scores'>;
-export type DeleteScoresResponse = Response<'DELETE /observability/scores'>;
+export type DeleteScoresResponse = Response<'DELETE /observability/scores'> | AcceptedDeletionResponse;
 export type GetScoreAggregateArgs = Body<'POST /observability/scores/aggregate'>;
 export type GetScoreAggregateResponse = Response<'POST /observability/scores/aggregate'>;
 export type GetScoreBreakdownArgs = Body<'POST /observability/scores/breakdown'>;
@@ -57,7 +84,7 @@ export type ListFeedbackArgs = ListArgs<Query<'GET /observability/feedback'>>;
 export type CreateFeedbackBody = Body<'POST /observability/feedback'>;
 export type CreateFeedbackResponse = Response<'POST /observability/feedback'>;
 export type DeleteFeedbackArgs = Body<'DELETE /observability/feedback'>;
-export type DeleteFeedbackResponse = Response<'DELETE /observability/feedback'>;
+export type DeleteFeedbackResponse = Response<'DELETE /observability/feedback'> | AcceptedDeletionResponse;
 export type UpdateFeedbackReviewStatusArgs = PathParams<'PATCH /observability/feedback/:feedbackId/review-status'> &
   Body<'PATCH /observability/feedback/:feedbackId/review-status'>;
 export type FeedbackRecord = Response<'PATCH /observability/feedback/:feedbackId/review-status'>;
@@ -90,3 +117,6 @@ export type GetServiceNamesResponse = Response<'GET /observability/discovery/ser
 export type GetEnvironmentsResponse = Response<'GET /observability/discovery/environments'>;
 export type GetTagsArgs = Query<'GET /observability/discovery/tags'>;
 export type GetTagsResponse = Response<'GET /observability/discovery/tags'>;
+
+/** Full replacement retaining the original feedback identity. */
+export type ReplaceFeedbackBody = Body<'PUT /observability/feedback/:feedbackId'>;

@@ -1,5 +1,5 @@
 import { APICallError, JSONParseError, NoObjectGeneratedError, TypeValidationError } from '@internal/ai-sdk-v5';
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import type { Agent } from './agent';
 import {
@@ -10,12 +10,12 @@ import {
   resolveSuspendedToolRunId,
 } from './utils';
 
-function makeAgent(generate: ReturnType<typeof vi.fn>): Agent {
-  return { generate } as unknown as Agent;
+function makeAgent(generate: ReturnType<typeof vi.fn>, warn = vi.fn()): Agent {
+  return { generate, __getLogger: () => ({ warn }) } as unknown as Agent;
 }
 
-function makeStreamAgent(stream: ReturnType<typeof vi.fn>): Agent {
-  return { stream } as unknown as Agent;
+function makeStreamAgent(stream: ReturnType<typeof vi.fn>, warn = vi.fn()): Agent {
+  return { stream, __getLogger: () => ({ warn }) } as unknown as Agent;
 }
 
 function makeAPICallError(isRetryable: boolean): APICallError {
@@ -32,6 +32,10 @@ const baseOptions = {
   structuredOutput: { schema: z.object({ decision: z.string() }) },
 } as any;
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe('agent/utils', () => {
   describe('tryGenerateWithJsonFallback', () => {
     it('returns the first result without retrying when it has a valid object', async () => {
@@ -44,16 +48,22 @@ describe('agent/utils', () => {
     });
 
     it('retries with jsonPromptInjection for a structured-output parse error', async () => {
+      const error = new JSONParseError({ text: 'not json', cause: new SyntaxError('Unexpected token') });
       const generate = vi
         .fn()
-        .mockRejectedValueOnce(new JSONParseError({ text: 'not json', cause: new SyntaxError('Unexpected token') }))
+        .mockRejectedValueOnce(error)
         .mockResolvedValueOnce({ object: { decision: 'continue' } });
+      const warn = vi.fn();
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      const result = await tryGenerateWithJsonFallback(makeAgent(generate), 'prompt', baseOptions);
+      const result = await tryGenerateWithJsonFallback(makeAgent(generate, warn), 'prompt', baseOptions);
 
       expect(result).toEqual({ object: { decision: 'continue' } });
       expect(generate).toHaveBeenCalledTimes(2);
       expect(generate.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe(true);
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn).toHaveBeenCalledWith('Error in tryGenerateWithJsonFallback. Attempting fallback.', error);
+      expect(consoleWarn).not.toHaveBeenCalled();
     });
 
     it('retries with jsonPromptInjection when no object is generated', async () => {
@@ -155,14 +165,14 @@ describe('agent/utils', () => {
 
     it('records both stream attempts for a structured-output fallback', async () => {
       const fallbackResult = { object: Promise.resolve({ decision: 'continue' }) };
-      const stream = vi
-        .fn()
-        .mockRejectedValueOnce(new JSONParseError({ text: 'not json', cause: new SyntaxError('Unexpected token') }))
-        .mockResolvedValueOnce(fallbackResult);
+      const error = new JSONParseError({ text: 'not json', cause: new SyntaxError('Unexpected token') });
+      const stream = vi.fn().mockRejectedValueOnce(error).mockResolvedValueOnce(fallbackResult);
       const onStreamAttempt = vi.fn();
+      const warn = vi.fn();
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       await expect(
-        tryStreamWithJsonFallback(makeStreamAgent(stream), 'prompt', {
+        tryStreamWithJsonFallback(makeStreamAgent(stream, warn), 'prompt', {
           ...baseOptions,
           onStreamAttempt,
         } as any),
@@ -170,6 +180,9 @@ describe('agent/utils', () => {
 
       expect(onStreamAttempt).toHaveBeenCalledTimes(2);
       expect(stream).toHaveBeenCalledTimes(2);
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn).toHaveBeenCalledWith('Error in tryStreamWithJsonFallback. Attempting fallback.', error);
+      expect(consoleWarn).not.toHaveBeenCalled();
     });
 
     it('records a stream attempt before the provider rejects', async () => {

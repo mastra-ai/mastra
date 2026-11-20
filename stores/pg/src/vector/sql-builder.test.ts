@@ -93,3 +93,179 @@ describe('buildFilterQuery - numeric range operators', () => {
     expect(sql).not.toContain(`metadata->'price'`);
   });
 });
+
+describe('$elemMatch with multiple operators on one field', () => {
+  const filter = { reviews: { $elemMatch: { score: { $gte: 4, $lte: 4 } } } };
+
+  it('keeps both range bounds on the same array element when querying', () => {
+    const { sql, values } = buildFilterQuery(filter, 0, 10);
+
+    expect(values).toEqual([0, 10, 4, 4]);
+    expect(sql).toContain(`(elem->>'score')::numeric >= $3::numeric`);
+    expect(sql).toContain(`(elem->>'score')::numeric <= $4::numeric`);
+    expect(sql).toMatch(/>= \$3::numeric.*AND.*<= \$4::numeric/s);
+  });
+
+  it('keeps both range bounds on the same array element when deleting', () => {
+    const { sql, values } = buildDeleteFilterQuery(filter);
+
+    expect(values).toEqual([4, 4]);
+    expect(sql).toContain(`(elem->>'score')::numeric >= $1::numeric`);
+    expect(sql).toContain(`(elem->>'score')::numeric <= $2::numeric`);
+  });
+
+  it('advances placeholders only for operators that bind values', () => {
+    const { sql, values } = buildFilterQuery(
+      { reviews: { $elemMatch: { score: { $exists: true, $gte: 4, $lte: 5 }, author: 'user4' } } },
+      0,
+      10,
+    );
+
+    expect(values).toEqual([0, 10, 4, 5, 'user4']);
+    expect(sql).toContain(`elem ? 'score'`);
+    expect(sql).toContain(`(elem->>'score')::numeric >= $3::numeric`);
+    expect(sql).toContain(`(elem->>'score')::numeric <= $4::numeric`);
+    expect(sql).toContain(`elem->>'author' = $5`);
+  });
+
+  it('rejects a nested field with no operators instead of matching every element', () => {
+    expect(() => buildDeleteFilterQuery({ reviews: { $elemMatch: { score: {} } } })).toThrow(
+      '$elemMatch field score requires at least one operator',
+    );
+  });
+
+  it('compares scalar array elements directly in search and delete', () => {
+    const filter = { scores: { $elemMatch: { $gte: 4, $lte: 5 } } };
+    const search = buildFilterQuery(filter, 0, 10);
+    const del = buildDeleteFilterQuery(filter);
+
+    expect(search.values).toEqual([0, 10, 4, 5]);
+    expect(search.sql).toContain("jsonb_typeof(elem) = 'number'");
+    expect(search.sql).toContain(`(elem #>> '{}')::numeric >= $3::numeric`);
+    expect(search.sql).toContain(`(elem #>> '{}')::numeric <= $4::numeric`);
+    expect(del.values).toEqual([4, 5]);
+    expect(del.sql).toContain(`(elem #>> '{}')::numeric >= $1::numeric`);
+    expect(del.sql).toContain(`(elem #>> '{}')::numeric <= $2::numeric`);
+  });
+
+  it('negates a nested range while keeping subsequent placeholders', () => {
+    const filter = { reviews: { $elemMatch: { score: { $gte: 4, $not: { $gt: 5 } }, author: 'user4' } } };
+    const search = buildFilterQuery(filter, 0, 10);
+    const del = buildDeleteFilterQuery(filter);
+
+    expect(search.values).toEqual([0, 10, 4, 5, 'user4']);
+    expect(search.sql).toContain(`NOT (`);
+    expect(search.sql).toContain(`(elem->>'score')::numeric > $4::numeric`);
+    expect(search.sql).toContain(`elem->>'author' = $5`);
+    expect(del.values).toEqual([4, 5, 'user4']);
+    expect(del.sql).toContain(`(elem->>'score')::numeric > $2::numeric`);
+    expect(del.sql).toContain(`elem->>'author' = $3`);
+  });
+
+  it('negates missing and non-numeric nested fields as non-matches', () => {
+    const filter = { reviews: { $elemMatch: { score: { $not: { $gt: 5 } } } } };
+    const search = buildFilterQuery(filter, 0, 10);
+    const del = buildDeleteFilterQuery(filter);
+
+    // The numeric guard returns NULL for missing/non-numeric scores; negation must treat NULL as false.
+    expect(search.sql).toContain(`NOT (COALESCE((CASE WHEN jsonb_typeof(elem->'score') = 'number'`);
+    expect(search.sql).toContain(`> $3::numeric ELSE NULL END), FALSE))`);
+    expect(search.values).toEqual([0, 10, 5]);
+    expect(del.sql).toContain(`NOT (COALESCE((CASE WHEN jsonb_typeof(elem->'score') = 'number'`);
+    expect(del.sql).toContain(`> $1::numeric ELSE NULL END), FALSE))`);
+    expect(del.values).toEqual([5]);
+  });
+
+  it('escapes wildcard characters in nested contains values', () => {
+    const filter = { reviews: { $elemMatch: { author: { $ne: 'blocked', $contains: 'user_' } } } };
+    expect(buildFilterQuery(filter, 0, 10).values).toEqual([0, 10, 'blocked', 'user\\_']);
+    expect(buildDeleteFilterQuery(filter).values).toEqual(['blocked', 'user\\_']);
+  });
+
+  it('binds every value from nested elemMatch before the following field', () => {
+    const filter = {
+      groups: { $elemMatch: { reviews: { $elemMatch: { score: { $gte: 4, $lte: 5 } } }, label: 'x' } },
+    };
+    const search = buildFilterQuery(filter, 0, 10);
+    const del = buildDeleteFilterQuery(filter);
+
+    expect(search.values).toEqual([0, 10, 4, 5, 'x']);
+    expect(search.sql).toContain(`(elem->>'score')::numeric <= $4::numeric`);
+    expect(search.sql).toContain(`elem->>'label' = $5`);
+    expect(del.values).toEqual([4, 5, 'x']);
+    expect(del.sql).toContain(`elem->>'label' = $3`);
+  });
+});
+
+describe('buildFilterQuery - multi-key branches inside logical operators', () => {
+  // Each object in an $or/$nor array is one branch, and the keys of a branch
+  // are an implicit AND (same as at the top level of a filter).
+  it('ANDs the keys of one $or branch', () => {
+    const filter = { $or: [{ category: 'electronics', available: true }, { price: 5 }] };
+
+    const search = buildFilterQuery(filter, 0, 10);
+    expect(search.values).toEqual([0, 10, 'electronics', true, 5]);
+    expect(search.sql).toBe(
+      `WHERE ((metadata->>'category' = $3 AND metadata->>'available' = $4) OR metadata->>'price' = $5)`,
+    );
+
+    const del = buildDeleteFilterQuery(filter);
+    expect(del.values).toEqual(['electronics', true, 5]);
+    expect(del.sql).toBe(
+      `WHERE ((metadata->>'category' = $1 AND metadata->>'available' = $2) OR metadata->>'price' = $3)`,
+    );
+  });
+
+  it('negates the whole branch for $nor', () => {
+    const filter = { $nor: [{ status: 'archived', pinned: false }] };
+
+    expect(buildFilterQuery(filter, 0, 10).sql).toBe(
+      `WHERE NOT ((metadata->>'status' = $3 AND metadata->>'pinned' = $4))`,
+    );
+    expect(buildDeleteFilterQuery(filter).sql).toBe(
+      `WHERE NOT ((metadata->>'status' = $1 AND metadata->>'pinned' = $2))`,
+    );
+  });
+
+  it('keeps field keys that sit next to a nested logical operator', () => {
+    const filter = { $or: [{ $and: [{ a: 1 }], c: 2 }, { d: 3 }] };
+
+    const search = buildFilterQuery(filter, 0, 10);
+    expect(search.values).toEqual([0, 10, 1, 2, 3]);
+    expect(search.sql).toBe(`WHERE (((metadata->>'a' = $3) AND metadata->>'c' = $4) OR metadata->>'d' = $5)`);
+
+    const del = buildDeleteFilterQuery(filter);
+    expect(del.values).toEqual([1, 2, 3]);
+    expect(del.sql).toBe(`WHERE (((metadata->>'a' = $1) AND metadata->>'c' = $2) OR metadata->>'d' = $3)`);
+  });
+});
+
+describe('buildFilterQuery - $exists on nested metadata keys', () => {
+  it('checks the nested path with #> instead of a literal top-level key', () => {
+    const { sql } = buildFilterQuery({ 'doc.lang': { $exists: true } }, 0, 10);
+    expect(sql).toContain(`WHERE metadata#>'{doc,lang}' IS NOT NULL`);
+    expect(sql).not.toContain('?');
+  });
+
+  it('negates the nested path check for $exists: false in delete filters', () => {
+    const { sql, values } = buildDeleteFilterQuery({ 'doc.lang': { $exists: false } });
+    expect(values).toEqual([]);
+    expect(sql).toBe(`WHERE NOT (metadata#>'{doc,lang}' IS NOT NULL)`);
+  });
+
+  it('handles deeply nested keys', () => {
+    const { sql } = buildDeleteFilterQuery({ 'a.b.c': { $exists: true } });
+    expect(sql).toBe(`WHERE metadata#>'{a,b,c}' IS NOT NULL`);
+  });
+
+  it('keeps the ? operator for top-level keys', () => {
+    expect(buildDeleteFilterQuery({ tags: { $exists: true } }).sql).toBe(`WHERE metadata ? 'tags'`);
+    expect(buildDeleteFilterQuery({ tags: { $exists: false } }).sql).toBe(`WHERE NOT (metadata ? 'tags')`);
+  });
+
+  it('rewrites nested $exists to the element alias inside $elemMatch', () => {
+    const { sql } = buildFilterQuery({ items: { $elemMatch: { 'meta.lang': { $exists: true } } } }, 0, 10);
+    expect(sql).toContain(`elem#>'{meta,lang}' IS NOT NULL`);
+    expect(sql).not.toContain(`metadata#>'{meta,lang}'`);
+  });
+});

@@ -1,8 +1,8 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useDeleteSkill } from '@/domains/agent-builder/hooks/use-delete-skill';
@@ -57,8 +57,8 @@ const DeleteSkillDialog = ({ open, onOpenChange, skillName, isPending, onConfirm
           Cancel
         </AlertDialog.Cancel>
         <Button
-          icon={<Trash2 />}
-          variant="primary"
+          icon={<TrashIcon />}
+          variant="destructive"
           data-testid="skill-builder-delete-skill-confirm"
           disabled={isPending}
           onClick={() => {
@@ -92,7 +92,7 @@ export const DeleteSkillPanelButton = ({ skillId, skillName, disabled = false }:
         disabled={disabled || isPending}
         className="w-full"
         data-testid="skill-builder-delete-skill"
-        icon={<Trash2 />}
+        icon={<TrashIcon />}
       >
         <span>Delete skill</span>
       </Button>
@@ -115,13 +115,13 @@ export const DeleteSkillMenuItem = ({ skillId, skillName, disabled = false }: De
       <DropdownMenu.Item
         data-testid="skill-builder-mobile-menu-delete"
         disabled={disabled}
-        className="text-red-500 focus:text-red-400"
+        variant="destructive"
         onSelect={event => {
           event.preventDefault();
           setOpen(true);
         }}
       >
-        <Trash2 />
+        <TrashIcon />
         <span>Delete skill</span>
       </DropdownMenu.Item>
       <DeleteSkillDialog

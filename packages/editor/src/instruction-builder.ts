@@ -4,7 +4,7 @@
  *
  * For each block:
  *  - `{ type: 'text', content }` → render template with context
- *  - `{ type: 'prompt_block_ref', id }` → fetch from storage, evaluate rules, render template
+ *  - `{ type: 'prompt_block_ref', id, rules? }` → evaluate ref rules, fetch from storage, evaluate stored block rules, render template
  *  - `{ type: 'prompt_block', content, rules? }` → inline block, evaluate rules, render template
  *
  * Blocks that fail rule evaluation are excluded.
@@ -37,10 +37,13 @@ export async function resolveInstructionBlocks(
 ): Promise<string> {
   const segments: string[] = [];
 
-  // Batch-fetch all prompt block ref IDs to avoid N+1 queries
+  // Batch-fetch the referenced blocks to avoid N+1 queries. Skip references gated off by their own rules.
   const blockIds = Array.from(
     new Set(
-      blocks.filter((b): b is { type: 'prompt_block_ref'; id: string } => b.type === 'prompt_block_ref').map(b => b.id),
+      blocks
+        .filter((b): b is Extract<AgentInstructionBlock, { type: 'prompt_block_ref' }> => b.type === 'prompt_block_ref')
+        .filter(b => !b.rules || evaluateRuleGroup(b.rules, context))
+        .map(b => b.id),
     ),
   );
 
@@ -87,6 +90,11 @@ export async function resolveInstructionBlocks(
     }
 
     // Prompt block reference (prompt_block_ref)
+    // Per-usage rules on the ref gate this placement of the shared block (e.g. as a fallback)
+    if (block.rules && !evaluateRuleGroup(block.rules, context)) {
+      continue;
+    }
+
     const resolved = resolvedBlocksMap.get(block.id);
     if (!resolved) {
       // Block not found in storage — skip silently
@@ -98,7 +106,7 @@ export async function resolveInstructionBlocks(
       continue;
     }
 
-    // Evaluate rules if present
+    // The stored block's own rules must also pass
     if (resolved.rules) {
       const passes = evaluateRuleGroup(resolved.rules, context);
       if (!passes) {

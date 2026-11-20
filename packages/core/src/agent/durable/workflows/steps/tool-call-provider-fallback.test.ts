@@ -77,6 +77,7 @@ describe('durable tool-call provider-tool fallback', () => {
 
     const step = createDurableToolCallStep();
     const result = await (step as any).execute({
+      getState: async () => ({}),
       inputData: {
         toolCallId: 'call-1',
         toolName: 'web_search',
@@ -95,7 +96,7 @@ describe('durable tool-call provider-tool fallback', () => {
     expect(result.result).toEqual({ snippet: 'result' });
   });
 
-  it('falls back to resolveTool() against the Mastra-wide registry when not in run registry', async () => {
+  it('falls back to resolveTool() when a recovered registry entry has no per-step snapshot', async () => {
     const executeMock = vi.fn().mockResolvedValue({ ok: true });
     const mastraTool = {
       id: 'mastraTool',
@@ -104,14 +105,14 @@ describe('durable tool-call provider-tool fallback', () => {
     };
     vi.mocked(resolveRuntime.resolveTool).mockReturnValueOnce(mastraTool as any);
 
-    // Run registry has no matching tool — resolveTool() should be consulted.
+    // Recovery can hydrate the model before an LLM step writes the current tool snapshot.
     globalRunRegistry.set(RUN_ID, {
-      tools: {},
       model: {} as any,
     } as any);
 
     const step = createDurableToolCallStep();
     const result = await (step as any).execute({
+      getState: async () => ({}),
       inputData: {
         toolCallId: 'call-mastra',
         toolName: 'mastraTool',
@@ -143,12 +144,14 @@ describe('durable tool-call provider-tool fallback', () => {
     vi.mocked(resolveRuntime.resolveTool).mockReturnValueOnce(undefined as any);
 
     globalRunRegistry.set(RUN_ID, {
+      isPlaceholder: true,
       tools: {},
-      model: {} as any,
+      model: undefined as any,
     } as any);
 
     const step = createDurableToolCallStep();
     const result = await (step as any).execute({
+      getState: async () => ({}),
       inputData: {
         toolCallId: 'call-provider-mastra',
         toolName: 'web_search',
@@ -181,6 +184,7 @@ describe('durable tool-call provider-tool fallback', () => {
 
     const step = createDurableToolCallStep();
     const result = await (step as any).execute({
+      getState: async () => ({}),
       inputData: {
         toolCallId: 'call-1',
         toolName: 'definitely_not_a_tool',

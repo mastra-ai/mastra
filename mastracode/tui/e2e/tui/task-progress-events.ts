@@ -13,7 +13,7 @@ export const taskProgressEventsScenario: McE2eScenario = {
     await (expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })) as any).toBeVisible();
     terminal.submit('Create a visible task list using the task tool.');
 
-    await runtime.waitForScreenText(/Tasks\s+\[1\/2 completed\]/i, terminal, 8_000);
+    await runtime.waitForScreenText(/1\/2\s+✓ Plan task progress e2e\s+▶ Verifying task progress e2e/, terminal, 8_000);
     await runtime.waitForScreenText(/Plan task progress e2e/i, terminal, 8_000);
     await runtime.waitForScreenText(/Verifying task progress e2e/i, terminal, 8_000);
     await runtime.waitForScreenText(/Task tool progress e2e complete\./i, terminal, 8_000);

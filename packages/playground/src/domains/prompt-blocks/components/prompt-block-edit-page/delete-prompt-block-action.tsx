@@ -1,11 +1,10 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { Trash2 } from 'lucide-react';
+import { useStoredPromptBlockMutations } from '@mastra/react/hooks/prompt-blocks';
 import { useState } from 'react';
-
-import { useStoredPromptBlockMutations } from '../../hooks/use-stored-prompt-blocks';
-import { useLinkComponent } from '@/lib/framework';
 
 interface DeletePromptBlockActionProps {
   blockId: string;
@@ -16,7 +15,7 @@ interface DeletePromptBlockActionProps {
 export function DeletePromptBlockAction({ blockId, blockName, disabled = false }: DeletePromptBlockActionProps) {
   const [open, setOpen] = useState(false);
   const { navigate, paths } = useLinkComponent();
-  const { deleteStoredPromptBlock } = useStoredPromptBlockMutations(blockId);
+  const { deleteStoredPromptBlock } = useStoredPromptBlockMutations({ blockId: blockId });
 
   const isPending = deleteStoredPromptBlock.isPending;
 
@@ -40,7 +39,7 @@ export function DeletePromptBlockAction({ blockId, blockName, disabled = false }
         variant="ghost"
         size="sm"
       >
-        <Trash2 />
+        <TrashIcon />
         Delete
       </Button>
       <AlertDialog open={open} onOpenChange={setOpen}>

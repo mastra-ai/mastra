@@ -24,7 +24,6 @@ export const modelSelectionApiKeyPromptScenario = {
       completedAt: new Date(0).toISOString(),
       skippedAt: null,
       version: 1,
-      quietModePreferenceSelected: true,
     };
     settings.customModelPacks = [
       {
@@ -56,6 +55,7 @@ export const modelSelectionApiKeyPromptScenario = {
     await runtime.waitForScreenText(/Custom pack: Missing Key Prompt E2E/i, terminal, 8_000);
     await runtime.waitForScreenText(/Edit\s+Update this pack/i, terminal, 8_000);
 
+    // Rows: [Activate, Edit, Share, Set subscription routing…, Set fallback…, Delete].
     terminal.write('\x1b[B');
     terminal.write('\r');
     await runtime.waitForScreenText(/Edit custom pack: Missing Key Prompt E2E/i, terminal, 8_000);
@@ -82,7 +82,8 @@ export const modelSelectionApiKeyPromptScenario = {
     await runtime.waitForScreenText(/Edit custom pack: Missing Key Prompt E2E/i, terminal, 8_000);
     await runtime.waitForScreenText(/302ai\/keyprompt-e2e-model/i, terminal, 8_000);
 
-    terminal.write('\x1b[B\x1b[B\x1b[B\x1b[B');
+    // Edit rows: [rename, plan, build, fast, memory, Use Auto memory model, Save] — six downs lands on Save.
+    terminal.write('\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B');
     terminal.write('\r');
     await runtime.waitForScreenText(/302ai\/keyprompt-e2e-model/i, terminal, 8_000);
     terminal.write('\x1b');

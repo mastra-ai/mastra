@@ -9,7 +9,7 @@ packages:
 
 `BlobStoreProvider` is the interface a package implements to register a blob store with [`MastraEditor`](/reference/editor/mastra-editor). Blob stores hold content-addressable skill blobs and other large artifacts produced by the editor.
 
-The built-in `storage` provider uses the configured storage backend's `blobs` domain. External providers (for example, S3) are supplied via `MastraEditorConfig.blobStores`.
+The editor doesn't register a built-in blob store provider. When no provider ID is given, it falls back to the configured storage backend's `blobs` domain. External providers (for example, S3) are supplied via `MastraEditorConfig.blobStores`.
 
 ## Usage example
 
@@ -31,7 +31,7 @@ new MastraEditor({
   {
     name: 'id',
     type: 'string',
-    description: 'Unique provider identifier (for example, `"storage"`, `"s3"`).',
+    description: 'Unique provider identifier (for example, `"s3"`).',
   },
   {
     name: 'name',
@@ -62,7 +62,8 @@ new MastraEditor({
 ## Implementing a provider
 
 ```typescript title="src/providers/my-blob-store.ts"
-import type { BlobStore, BlobStoreProvider } from '@mastra/core/editor'
+import type { BlobStoreProvider } from '@mastra/core/editor'
+import type { BlobStore } from '@mastra/core/storage'
 
 export const myBlobStoreProvider: BlobStoreProvider<{ bucket: string; region: string }> = {
   id: 'my-blob-store',

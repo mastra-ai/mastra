@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeNextFireAt, validateCron } from './cron';
+import { computeInitialFire, computeNextFire, computeNextFireAt, validateCron, validateScheduleTiming } from './cron';
 
 describe('validateCron', () => {
   it('accepts valid 5-part patterns', () => {
@@ -11,6 +11,10 @@ describe('validateCron', () => {
   it('accepts valid 6-part patterns (with seconds)', () => {
     expect(() => validateCron('*/10 * * * * *')).not.toThrow();
     expect(() => validateCron('0 0 * * * *')).not.toThrow();
+  });
+
+  it('accepts valid 7-part patterns (with year)', () => {
+    expect(() => validateCron('0 0 10 23 9 * 2026', 'UTC')).not.toThrow();
   });
 
   it('accepts a valid IANA timezone', () => {
@@ -71,7 +75,105 @@ describe('computeNextFireAt', () => {
     expect(next).toBe(new Date('2026-01-02T14:00:00Z').getTime());
   });
 
+  it('returns a year-pinned occurrence and reports when it is exhausted', () => {
+    const cron = '0 0 10 23 9 * 2026';
+    const occurrence = new Date('2026-09-23T10:00:00Z').getTime();
+
+    expect(computeNextFireAt(cron, { after: new Date('2026-09-23T09:59:59Z').getTime(), timezone: 'UTC' })).toBe(
+      occurrence,
+    );
+    expect(() =>
+      computeNextFireAt(cron, { after: new Date('2026-09-23T10:00:01Z').getTime(), timezone: 'UTC' }),
+    ).toThrow('has no future occurrence');
+  });
+
   it('throws on invalid pattern', () => {
     expect(() => computeNextFireAt('not a cron')).toThrow();
+  });
+});
+
+describe('validateScheduleTiming', () => {
+  it('requires exactly one of cron or runAt', () => {
+    expect(() => validateScheduleTiming({})).toThrow(/exactly one/);
+    expect(() => validateScheduleTiming({ cron: '* * * * *', runAt: Date.now() + 1000 })).toThrow(/exactly one/);
+    expect(() => validateScheduleTiming({ runAt: new Date(Date.now() + 1000) })).not.toThrow();
+  });
+
+  it('only allows a future endAt together with cron', () => {
+    expect(() => validateScheduleTiming({ runAt: Date.now() + 1000, endAt: Date.now() + 2000 })).toThrow(
+      /only allowed/,
+    );
+    expect(() => validateScheduleTiming({ cron: '* * * * *', endAt: Date.now() - 1000 })).toThrow(/future/);
+    expect(() => validateScheduleTiming({ cron: '* * * * *', endAt: Date.now() + 60_000 })).not.toThrow();
+  });
+
+  it('rejects invalid dates', () => {
+    expect(() => validateScheduleTiming({ runAt: new Date('nope') })).toThrow(/runAt/);
+    expect(() => validateScheduleTiming({ runAt: Date.now() - 1000 })).toThrow(/future/);
+  });
+});
+
+describe('computeInitialFire / computeNextFire', () => {
+  it('fires a one-off at runAt and completes it on claim', () => {
+    const runAt = Date.now() + 10_000;
+    expect(computeInitialFire({ runAt })).toEqual({ nextFireAt: runAt, completed: false });
+    expect(computeNextFire({ cron: '', runAt, nextFireAt: runAt }, runAt)).toEqual({
+      nextFireAt: runAt,
+      completed: true,
+    });
+  });
+
+  it('completes a bounded cron once the next occurrence passes endAt', () => {
+    const now = Date.UTC(2030, 0, 1, 0, 0, 0);
+    const endAt = now + 90_000;
+    const first = computeNextFire({ cron: '* * * * *', endAt, nextFireAt: now }, now);
+    expect(first.completed).toBe(false);
+    const second = computeNextFire({ cron: '* * * * *', endAt, nextFireAt: first.nextFireAt }, first.nextFireAt);
+    expect(second.completed).toBe(true);
+  });
+
+  it('completes a cron with no future occurrence without advancing nextFireAt', () => {
+    const nextFireAt = new Date('2026-09-23T10:00:00Z').getTime();
+    expect(
+      computeNextFire(
+        { cron: '0 0 10 23 9 * 2026', timezone: 'UTC', nextFireAt },
+        new Date('2026-09-23T10:00:01Z').getTime(),
+      ),
+    ).toEqual({ nextFireAt, completed: true });
+  });
+
+  it('respects the timezone before completing a year-pinned cron', () => {
+    const previousFireAt = new Date('2026-09-22T14:00:00Z').getTime();
+    const finalFireAt = new Date('2026-09-23T14:00:00Z').getTime();
+    const schedule = {
+      cron: '0 0 10 23 9 * 2026',
+      timezone: 'America/New_York',
+      nextFireAt: previousFireAt,
+    };
+
+    expect(computeNextFire(schedule, previousFireAt)).toEqual({
+      nextFireAt: finalFireAt,
+      completed: false,
+    });
+    expect(computeNextFire({ ...schedule, nextFireAt: finalFireAt }, finalFireAt)).toEqual({
+      nextFireAt: finalFireAt,
+      completed: true,
+    });
+  });
+
+  it('keeps a year-pinned cron active while occurrences remain', () => {
+    const nextFireAt = new Date('2026-09-23T10:00:00Z').getTime();
+    expect(computeNextFire({ cron: '0 0 10 * * * 2026', timezone: 'UTC', nextFireAt }, nextFireAt)).toEqual({
+      nextFireAt: new Date('2026-09-24T10:00:00Z').getTime(),
+      completed: false,
+    });
+  });
+
+  it('still throws when the cron expression is malformed', () => {
+    expect(() => computeNextFire({ cron: 'not a cron', nextFireAt: 0 }, Date.now())).toThrow();
+  });
+
+  it('never completes an unbounded cron', () => {
+    expect(computeNextFire({ cron: '* * * * *', nextFireAt: 0 }, Date.now()).completed).toBe(false);
   });
 });

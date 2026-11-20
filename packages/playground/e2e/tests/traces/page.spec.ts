@@ -15,53 +15,11 @@ test.describe('Traces page', () => {
       await expectCurrentBreadcrumb(page, 'Traces');
     });
 
-    test('shows the filter dropdown', async ({ page }) => {
+    test('shows the filter bar', async ({ page }) => {
       await page.goto('/traces');
 
-      // The unified filter dropdown button should be present
-      const filterButton = page.getByRole('button', { name: 'Filter' });
-      await expect(filterButton).toBeVisible();
-    });
-
-    test('renders the empty state or traces list with the default date preset', async ({ page }) => {
-      await page.goto('/traces');
-
-      // We check that the page has loaded and the traces tools are visible
-      await expect(page.getByRole('button', { name: 'Last 7 days' })).toBeVisible();
-    });
-  });
-
-  test.describe('when a scorer link is followed from a trace', () => {
-    test.skip('opens the scorer detail page focused on the selected score', async ({ page }) => {
-      await page.goto('/traces');
-
-      const firstTraceRow = page.locator('main li button').first();
-      await expect(firstTraceRow).toBeVisible();
-      await firstTraceRow.click();
-
-      await expect(page.getByRole('dialog')).toBeVisible();
-
-      const scoringButton = page.getByRole('button', { name: 'Scoring' });
-      await expect(scoringButton).toBeVisible();
-      await scoringButton.click();
-
-      const firstScoreRow = page.locator('[role="dialog"] li button').first();
-      await expect(firstScoreRow).toBeVisible();
-      await firstScoreRow.click();
-
-      const scoreDialog = page.getByRole('dialog', { name: 'Scorer Score' });
-      await expect(scoreDialog).toBeVisible();
-
-      const scoreId = await scoreDialog.getByText(/^scr_/).first().textContent();
-      expect(scoreId).toBeTruthy();
-
-      await scoreDialog.getByRole('link', { name: 'Response Quality Scorer' }).click();
-
-      const escapedScoreId = scoreId!.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const expectedUrl = new RegExp(`/scorers/response-quality\\?entity=.*&scoreId=${escapedScoreId}`);
-      await expect(page).toHaveURL(expectedUrl);
-      await expect(page.getByRole('dialog', { name: 'Scorer Score' })).toBeVisible();
-      await expect(page.getByText(scoreId!, { exact: true })).toBeVisible();
+      // The typeahead filter input should be present against a real server.
+      await expect(page.getByRole('combobox', { name: 'Add filter' })).toBeVisible();
     });
   });
 });

@@ -41,8 +41,6 @@ function edge(source: string, target: string, output?: unknown): StoryDataEdge {
     type: WORKFLOW_DATA_EDGE_TYPE,
     source,
     target,
-    animated: output === undefined,
-    style: { stroke: output === undefined ? '#8e8e8e' : '#22c55e' },
     data: { previousStepId: source, nextStepId: target, edgeStatus: output === undefined ? 'idle' : 'success', output },
   };
 }
@@ -116,13 +114,14 @@ export const loopNodes: Node[] = [
 export const loopEdges = [edge('start', 'enrich', { customers: 5 }), edge('enrich', 'until'), edge('until', 'end')];
 
 export const nestedNodes: Node[] = [
-  start,
+  { ...start, position: { x: 288, y: 0 } },
   step('nested', 'Customer enrichment', 0, 220, {
     nested: true,
     isNestedWorkflowStep: true,
+    initiallyOpen: true,
     stepGraph: [],
     displayStatus: 'running',
   }),
-  end,
+  { ...end, position: { x: 288, y: 1200 } },
 ];
 export const nestedEdges = [edge('start', 'nested', { customerId: 'customer-42' }), edge('nested', 'end')];

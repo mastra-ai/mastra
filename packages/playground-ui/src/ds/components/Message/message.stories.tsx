@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { AudioLinesIcon, FocusIcon, StopCircleIcon } from 'lucide-react';
 import { useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import { Avatar } from '../Avatar';
@@ -8,6 +7,9 @@ import { MarkdownRenderer } from '../MarkdownRenderer';
 import { Message, MessageActions, MessageMetadata } from './message';
 import { MessageCopyButton } from './message-copy-button';
 import { MessageTimestamp } from './message-timestamp';
+import { IconFocusSquare } from '@/ds/icons/central/IconFocusSquare';
+import { IconStopCircle } from '@/ds/icons/central/IconStopCircle';
+import { IconVoiceSimple } from '@/ds/icons/central/IconVoiceSimple';
 
 const question = 'Can you review the keyboard behavior before we ship this change?';
 const answer =
@@ -93,25 +95,25 @@ function StudioConversation() {
           <MessageActions visibility="always">
             <MessageMetadata>openai/gpt-5-mini</MessageMetadata>
             <Button
-              size="icon-xs"
+              size="icon-sm"
               variant="ghost"
               aria-label={speaking ? 'Stop' : 'Read aloud'}
               tooltip={speaking ? 'Stop' : 'Read aloud'}
               onClick={() => setSpeaking(!speaking)}
             >
-              {speaking ? <StopCircleIcon /> : <AudioLinesIcon />}
+              {speaking ? <IconStopCircle /> : <IconVoiceSimple />}
             </Button>
             <MessageCopyButton text={answer} />
             <MessageActions>
               <Button
-                size="icon-xs"
+                size="icon-sm"
                 variant="ghost"
                 aria-label="Highlight spans"
                 aria-pressed={highlighted}
                 tooltip="Highlight spans"
                 onClick={() => setHighlighted(!highlighted)}
               >
-                <FocusIcon />
+                <IconFocusSquare />
               </Button>
             </MessageActions>
           </MessageActions>

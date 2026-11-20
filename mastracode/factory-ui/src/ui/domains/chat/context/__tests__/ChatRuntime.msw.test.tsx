@@ -1,5 +1,5 @@
 import type { AgentControllerEvent } from '@mastra/client-js';
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -83,13 +83,13 @@ function renderRuntime(resetState?: SessionStateSnapshot) {
         <Route
           path="/factories/:factoryId/user/threads/:threadId"
           element={
-            <MainSidebarProvider storageKey="runtime-test">
+            <SidebarProvider storageKey="runtime-test">
               <ChatSessionTestProvider threadId={SESSION_ID} userScoped deferUntilMessagesReady={false}>
                 <OverlaysProvider>
                   <RuntimeSurface resetState={resetState} />
                 </OverlaysProvider>
               </ChatSessionTestProvider>
-            </MainSidebarProvider>
+            </SidebarProvider>
           }
         />
       </Routes>
@@ -105,7 +105,7 @@ describe('chat runtime consumers', () => {
     const user = userEvent.setup();
     await screen.findByRole('button', { name: /Memory budgets/ });
     await user.click(screen.getByRole('button', { name: 'Cost' }));
-    expect(await screen.findByText('Tokens — prompt: 21, completion: 34, total: 55')).toBeInTheDocument();
+    expect(await screen.findByText('Used 55 tokens (21 prompt, 34 completion).')).toBeInTheDocument();
 
     await session.emit({
       type: 'display_state_changed',
@@ -124,7 +124,7 @@ describe('chat runtime consumers', () => {
     expect(await screen.findByText('2 queued')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Consolidating observations in the background/ })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Cost' }));
-    expect(await screen.findByText('Tokens — prompt: 30, completion: 45, total: 75')).toBeInTheDocument();
+    expect(await screen.findByText('Used 75 tokens (30 prompt, 45 completion).')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Memory phase' }));
     expect(await screen.findByText('Observational memory phase: buffering')).toBeInTheDocument();
   });
@@ -161,7 +161,7 @@ describe('chat runtime consumers', () => {
     await user.click(screen.getByRole('button', { name: 'Cost' }));
     expect(
       await screen.findByText(
-        restoreSnapshot ? 'Tokens — prompt: 21, completion: 34, total: 55' : 'No token usage recorded yet.',
+        restoreSnapshot ? 'Used 55 tokens (21 prompt, 34 completion).' : 'No token usage recorded yet.',
       ),
     ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Memory budgets/ }) !== null).toBe(restoreSnapshot);

@@ -1,6 +1,8 @@
-import { File, Folder } from 'lucide-react';
 import * as React from 'react';
 import { useTreeDepth } from './tree-context';
+import { IconFileBend } from '@/ds/icons/central/IconFileBend';
+import { IconFolder1 } from '@/ds/icons/central/IconFolder1';
+import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -58,7 +60,7 @@ export const TreeInput = React.forwardRef<HTMLLIElement, TreeInputProps>(
       e.currentTarget.select();
     }, []);
 
-    const Icon = type === 'folder' ? Folder : File;
+    const Icon = type === 'folder' ? IconFolder1 : IconFileBend;
 
     return (
       <li
@@ -69,13 +71,13 @@ export const TreeInput = React.forwardRef<HTMLLIElement, TreeInputProps>(
         className={cn(
           'group flex h-7 min-w-0 items-center gap-1.5 rounded-sm px-1',
           transitions.colors,
-          'focus-within:bg-surface4 focus-within:text-neutral6 focus-within:outline-hidden',
+          'focus-within:bg-fill-subtle focus-within:text-foreground focus-within:outline-hidden',
           className,
         )}
         style={{ paddingLeft: depth * 12 + 18 }}
       >
-        <span className="flex shrink-0 items-center [&>svg]:size-3.5">
-          <Icon className="text-neutral3" />
+        <span className="flex shrink-0 items-center [&>svg]:size-icon-sm">
+          <Icon className="text-muted-foreground" />
         </span>
         <input
           ref={inputRef}
@@ -86,7 +88,8 @@ export const TreeInput = React.forwardRef<HTMLLIElement, TreeInputProps>(
           onKeyDown={handleKeyDown}
           onBlur={handleBlur}
           onFocus={handleFocus}
-          className="text-neutral5 placeholder:text-neutral3 text-ui-sm min-w-0 flex-1 border-none bg-transparent outline-hidden"
+          {...passwordManagerOptOutProps}
+          className="min-w-0 flex-1 border-none bg-transparent text-caption zoom-safe-text text-foreground outline-hidden placeholder:text-muted-foreground"
         />
       </li>
     );

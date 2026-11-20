@@ -1,4 +1,4 @@
-import type { MessageFactoryPart, ToolInvocationPart } from '@mastra/react';
+import type { MessageFactoryPart, ToolInvocationPart } from '@mastra/react/ui';
 import { describe, expect, it } from 'vitest';
 
 import { isToolPart, readToolPart } from '../tool-part';
@@ -151,6 +151,32 @@ describe('readToolPart', () => {
       );
 
       expect(readToolPart(part).modelOutput).toBeUndefined();
+    });
+  });
+
+  describe('when the call was deferred to a background task', () => {
+    it('reads the background task id from a persisted invocation', () => {
+      const part = Object.assign(invocation({ state: 'result', result: 'started' }), {
+        providerMetadata: { mastra: { backgroundTask: { taskId: 'bg-1', status: 'running' } } },
+      });
+
+      expect(readToolPart(part).backgroundTaskId).toBe('bg-1');
+    });
+
+    it('reads the background task id from a streamed part', () => {
+      const part = Object.assign(
+        {
+          type: 'dynamic-tool' as const,
+          toolName: 'reports_slow_report',
+          toolCallId: 'call-1',
+          state: 'output-available',
+          input: {},
+          output: [],
+        },
+        { callProviderMetadata: { mastra: { backgroundTask: { taskId: 'bg-2' } } } },
+      );
+
+      expect(readToolPart(part).backgroundTaskId).toBe('bg-2');
     });
   });
 

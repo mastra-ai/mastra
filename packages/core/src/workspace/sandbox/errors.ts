@@ -71,9 +71,10 @@ export class SandboxUnsupportedFeatureError extends SandboxError {
  * Carries a stable `code` of `ABORTED` so callers can reliably detect cancellation.
  */
 export class SandboxAbortError extends SandboxError {
-  constructor(operation: string = 'operation') {
-    super(`Sandbox operation aborted: ${operation}`, 'ABORTED', { operation });
+  constructor(operation: string = 'operation', reason?: unknown) {
+    super(`Sandbox operation aborted: ${operation}`, 'ABORTED', { operation, reason });
     this.name = 'SandboxAbortError';
+    this.cause = reason;
   }
 }
 

@@ -1,4 +1,10 @@
-import { Pencil, Check, X } from 'lucide-react';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { useState, useRef, useEffect } from 'react';
 
 export function ProposalTag({
@@ -31,8 +37,9 @@ export function ProposalTag({
 
   if (isEditing) {
     return (
-      <span className="bg-surface3 border-border1 inline-flex items-center gap-0.5 rounded-md border px-1">
-        <input
+      <span className="inline-flex items-center gap-0.5 rounded-md border border-border bg-card px-1">
+        <Input
+          variant="unstyled"
           ref={inputRef}
           value={editValue}
           onChange={e => setEditValue(e.target.value)}
@@ -47,7 +54,7 @@ export function ProposalTag({
             }
           }}
           onBlur={handleConfirm}
-          className="text-neutral4 text-ui-sm w-20 bg-transparent py-0.5 outline-hidden"
+          className="h-auto w-20 bg-transparent px-0 py-0.5 text-caption text-muted-foreground outline-hidden"
         />
         <button
           type="button"
@@ -55,35 +62,37 @@ export function ProposalTag({
             e.preventDefault();
             handleConfirm();
           }}
-          className="text-positive1 hover:text-positive2 p-0.5"
+          className={cn(quietTextHover, 'p-0.5')}
         >
-          <Check className="h-3 w-3" />
+          <IconCheckmark2Medium className="size-icon-xs" />
         </button>
       </span>
     );
   }
 
   return (
-    <span className="bg-surface3 border-border1 text-neutral4 group text-ui-sm inline-flex items-center gap-0.5 rounded-md border px-1.5 py-0.5">
-      {tag}
+    <span className="group inline-flex items-center gap-0.5 rounded-md border border-border bg-card px-1.5 py-0.5 text-muted-foreground">
+      <Txt as="span" variant="caption">
+        {tag}
+      </Txt>
       <button
         type="button"
         onClick={() => {
           setEditValue(tag);
           setIsEditing(true);
         }}
-        className="text-neutral2 hover:text-neutral4 p-0.5 opacity-0 transition-opacity group-hover:opacity-100"
+        className={cn(quietTextHover, 'p-0.5 opacity-0 transition-opacity group-hover:opacity-100')}
         title="Edit tag"
       >
-        <Pencil className="h-3 w-3" />
+        <IconPencil className="size-icon-xs" />
       </button>
       <button
         type="button"
         onClick={onRemove}
-        className="text-neutral2 hover:text-negative1 p-0.5 opacity-0 transition-opacity group-hover:opacity-100"
+        className="p-0.5 text-placeholder opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive-foreground"
         title="Remove tag"
       >
-        <X className="h-3 w-3" />
+        <IconCrossMedium className="size-icon-xs" />
       </button>
     </span>
   );

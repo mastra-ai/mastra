@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../events';
@@ -90,25 +89,24 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
                   },
                 ]),
               };
-            } else {
-              // Second call (after approval): return text response
-              return {
-                rawCall: { rawPrompt: null, rawSettings: {} },
-                warnings: [],
-                stream: convertArrayToReadableStream([
-                  { type: 'stream-start', warnings: [] },
-                  { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
-                  { type: 'text-start', id: 'text-1' },
-                  { type: 'text-delta', id: 'text-1', delta: 'User name is Dero Israel' },
-                  { type: 'text-end', id: 'text-1' },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-                  },
-                ]),
-              };
             }
+            // Second call (after approval): return text response
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'User name is Dero Israel' },
+                { type: 'text-end', id: 'text-1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ]),
+            };
           },
         });
 
@@ -137,8 +135,8 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         try {
           const agentOne = mastra.getAgent('userAgent');
           const memory = {
-            thread: randomUUID(),
-            resource: randomUUID(),
+            thread: globalThis.crypto.randomUUID(),
+            resource: globalThis.crypto.randomUUID(),
           };
           await agentOne.setObjective('Find the user', {
             threadId: memory.thread,
@@ -229,7 +227,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         const approveAll = vi.fn().mockReturnValue(true);
         const suspendingAgent = makeAgent();
         const suspendStream = await suspendingAgent.stream('Find the user with name - Dero Israel', {
-          memory: { thread: randomUUID(), resource: randomUUID() },
+          memory: { thread: globalThis.crypto.randomUUID(), resource: globalThis.crypto.randomUUID() },
           requireToolApproval: approveAll,
         });
         let approvedToolName = '';
@@ -248,7 +246,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         const denyApproval = vi.fn().mockReturnValue(false);
         const runningAgent = makeAgent();
         const runStream = await runningAgent.stream('Find the user with name - Dero Israel', {
-          memory: { thread: randomUUID(), resource: randomUUID() },
+          memory: { thread: globalThis.crypto.randomUUID(), resource: globalThis.crypto.randomUUID() },
           requireToolApproval: denyApproval,
         });
         let sawApproval = false;
@@ -333,7 +331,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
 
         const mastra = new Mastra({ agents: { resumeAgent }, logger: false, storage: mockStorage });
         const agent = mastra.getAgent('resumeAgent');
-        const memory = { thread: randomUUID(), resource: randomUUID() };
+        const memory = { thread: globalThis.crypto.randomUUID(), resource: globalThis.crypto.randomUUID() };
         const requireToolApproval = vi.fn().mockReturnValue(true);
 
         mockFindUser.mockClear();
@@ -418,7 +416,7 @@ describe('goal activity at tool approval', () => {
     });
     const mastra = new Mastra({ agents: { rawAgent }, storage, logger: false });
     const agent = mastra.getAgent('rawAgent');
-    const memory = { thread: randomUUID(), resource: randomUUID() };
+    const memory = { thread: globalThis.crypto.randomUUID(), resource: globalThis.crypto.randomUUID() };
     await agent.setObjective('Finish after approval', { threadId: memory.thread, resourceId: memory.resource });
 
     const result = await agent.stream('Use the approval tool', { memory });

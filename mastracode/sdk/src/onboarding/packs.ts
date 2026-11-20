@@ -4,6 +4,7 @@
  * Each pack assigns a default model to the build, plan, and fast modes,
  * plus an OM (observational memory) model.
  */
+import { resolveAutoModelId } from '@mastra/memory';
 import { DEFAULT_OM_MODEL_ID } from '../constants.js';
 
 // ---------------------------------------------------------------------------
@@ -18,6 +19,12 @@ export interface ModePack {
     build: string;
     plan: string;
     fast: string;
+    /**
+     * Optional observational-memory model for both roles while the pack is
+     * active: a concrete model ID (with the pack fallback chain), `'auto'`, or
+     * unset to follow the per-role `/om` settings.
+     */
+    memory?: string;
   };
 }
 
@@ -110,6 +117,110 @@ export function getBuiltinModePack(packId: string): (ModePack & { providerId: st
 }
 
 /**
+ * All builtin mode packs regardless of provider access (descriptions use the
+ * apikey variant). For resolution-time lookups — fallback chains must resolve
+ * even when an access probe is stale; actual auth failures surface through
+ * the provider call itself.
+ */
+export function listBuiltinModePacks(): ModePack[] {
+  return BUILTIN_MODE_PACKS.map(pack => ({
+    id: pack.id,
+    name: pack.name,
+    description: pack.description('apikey'),
+    models: { ...pack.models },
+  }));
+}
+
+/** A pack id is known when it is a builtin mode pack or a saved custom pack. */
+export function isKnownModePackId(packId: string, savedCustomPacks: Array<{ name: string }> = []): boolean {
+  if (BUILTIN_MODE_PACKS.some(pack => pack.id === packId)) return true;
+  if (!packId.startsWith('custom:')) return false;
+  // Settings files are user-editable: a malformed entry (null, or an element
+  // without `name`) would throw on `pack.name` and the loader's catch-all would
+  // replace the whole saved settings object with defaults. An unusable entry is
+  // simply not a known pack id.
+  return savedCustomPacks.some(pack => typeof pack?.name === 'string' && `custom:${pack.name}` === packId);
+}
+
+/**
+ * Drop pack-fallback entries whose source or target pack no longer exists
+ * (e.g. a deleted custom pack). Shape validation happens before this; here we
+ * only prune dangling references, with the same tolerance the rest of settings
+ * parsing uses.
+ */
+export function pruneUnknownModePackFallbacks(
+  fallbacks: Record<string, string>,
+  savedCustomPacks: Array<{ name: string }> = [],
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [packId, fallbackId] of Object.entries(fallbacks)) {
+    if (isKnownModePackId(packId, savedCustomPacks) && isKnownModePackId(fallbackId, savedCustomPacks)) {
+      result[packId] = fallbackId;
+    }
+  }
+  return result;
+}
+
+/** Drop preferred-account bindings for missing packs or models no longer used by that pack. */
+export function pruneUnknownPackAccountPreferences(
+  preferences: Record<string, Record<string, string>>,
+  savedCustomPacks: Array<{ name: string; models: Record<string, string> }> = [],
+  modePackOverrides: Record<string, Record<string, string>> = {},
+): Record<string, Record<string, string>> {
+  const packModels = new Map<string, Set<string>>();
+  for (const pack of listBuiltinModePacks()) {
+    packModels.set(pack.id, new Set(Object.values({ ...pack.models, ...modePackOverrides[pack.id] })));
+  }
+  for (const pack of savedCustomPacks) {
+    // Settings files are user-editable: a malformed entry without `models`
+    // would otherwise throw here, and the loader's catch-all would replace the
+    // whole saved settings object with defaults. Treat it as having no models.
+    const models = pack?.models && typeof pack.models === 'object' ? pack.models : {};
+    packModels.set(`custom:${pack.name}`, new Set(Object.values(models)));
+  }
+
+  const result: Record<string, Record<string, string>> = {};
+  for (const [packId, modelPreferences] of Object.entries(preferences)) {
+    const models = packModels.get(packId);
+    if (!models) continue;
+    const validEntries = Object.entries(modelPreferences).filter(([modelId]) => models.has(modelId));
+    if (validEntries.length > 0) result[packId] = Object.fromEntries(validEntries);
+  }
+  return result;
+}
+
+/**
+ * Walk `settings.models.packFallbacks` from `startPackId`, returning the pack
+ * ids in cascade order starting with the pack itself. Cycles are allowed but
+ * the cascade gets exactly one revisit total (Q15: "full circle then one
+ * revisit then surface"): the walk stops when the next link would add a pack
+ * already in the chain after the revisit was consumed, or when a link
+ * dangles at an unknown pack. An A⇄B cycle therefore yields [A, B, A#2] and
+ * stops. This cap is the cycle handling for both the fallback model chain
+ * (request time) and the /models picker's chain display.
+ */
+export function resolveModePackFallbackChain(
+  fallbacks: Record<string, string>,
+  startPackId: string,
+  savedCustomPacks: Array<{ name: string }> = [],
+): string[] {
+  const chain = [startPackId];
+  let revisitUsed = false;
+  let current = startPackId;
+  while (true) {
+    const next = fallbacks[current];
+    if (!next || !isKnownModePackId(next, savedCustomPacks)) break;
+    if (chain.includes(next)) {
+      if (revisitUsed) break;
+      revisitUsed = true;
+    }
+    chain.push(next);
+    current = next;
+  }
+  return chain;
+}
+
+/**
  * Build the list of available mode packs based on which providers the user
  * can actually reach (API key or OAuth login).
  *
@@ -143,6 +254,7 @@ export function getAvailableModePacks(
         build: cp.models.build ?? '',
         plan: cp.models.plan ?? '',
         fast: cp.models.fast ?? '',
+        ...(typeof cp.models.memory === 'string' && cp.models.memory.length > 0 ? { memory: cp.models.memory } : {}),
       },
     });
   }
@@ -182,7 +294,7 @@ const BUILTIN_OM_PACKS: BuiltinOMPack[] = [
     id: 'openai',
     providerId: 'openai',
     name: 'OpenAI Mini',
-    modelId: 'openai/gpt-5.4-mini',
+    modelId: 'openai/gpt-6-luna',
     description: access => (access === 'oauth' ? 'Via Codex subscription' : 'Via OpenAI API key'),
   },
   {
@@ -217,6 +329,35 @@ export function resolveProviderOMDefault(providerId: string, fallbackModelId = D
     description: 'Uses the selected provider model',
     modelId: fallbackModelId || DEFAULT_OM_MODEL_ID,
   };
+}
+
+/**
+ * Mastra Code's overrides for `@mastra/memory`'s auto model table. Memory owns
+ * the auto policy; Mastra Code only keeps its newer Gemini Flash default.
+ */
+export const MASTRACODE_AUTO_OM_MODELS: Readonly<Record<string, string>> = { google: DEFAULT_OM_MODEL_ID };
+
+const CUSTOM_PROVIDER_PREFIX = 'mastracode/';
+
+/** The model ID Memory reports for a main-session model ID (without Mastra Code's custom-provider prefix). */
+export function toMemoryModelId(modelId: string): string {
+  return modelId.startsWith(CUSTOM_PROVIDER_PREFIX) ? modelId.slice(CUSTOM_PROVIDER_PREFIX.length) : modelId;
+}
+
+/**
+ * Preview the concrete model Memory's `'auto'` resolves to for a main-session model ID.
+ * Pass `canUseProvider` when credentials are not the server's environment (Factory), so
+ * the preview matches what runs pick.
+ */
+export function resolveAutoOMModelId(
+  currentModelId?: string,
+  canUseProvider?: (providerId: string) => boolean,
+): string {
+  const options = { autoModels: MASTRACODE_AUTO_OM_MODELS, canUseProvider };
+  if (!currentModelId) return resolveAutoModelId(undefined, options) ?? DEFAULT_OM_MODEL_ID;
+  const memoryModelId = toMemoryModelId(currentModelId);
+  const picked = resolveAutoModelId(memoryModelId, options);
+  return !picked || picked === memoryModelId ? currentModelId : picked;
 }
 
 export function getAvailableOmPacks(access: ProviderAccess): OMPack[] {

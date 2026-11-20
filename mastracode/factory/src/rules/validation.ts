@@ -1,9 +1,13 @@
+import { ACTIVITY_EVENTS, CLOSE_REASONS, isUpdateEvent, STATUS_EVENTS } from '../boards/board-events.js';
+import type { BoardEventFacts, ItemChange } from '../boards/board-events.js';
 import type { BoardRegistry } from '../boards/registry.js';
 import type {
   FactoryCommitDecision,
   FactoryRuleDecision,
   FactoryRuleJsonValue,
   FactoryRuleRejectionCode,
+  FactoryRouteEventDecision,
+  FactoryTransitionDecision,
   WorkItemSource,
 } from './types.js';
 
@@ -13,11 +17,12 @@ const MAX_VERSION_LENGTH = 128;
 const MAX_IDEMPOTENCY_KEY_LENGTH = 256;
 const MAX_REASON_LENGTH = 512;
 const MAX_TITLE_LENGTH = 512;
+const MAX_DESCRIPTION_LENGTH = 8000;
 const MAX_MESSAGE_LENGTH = 8_192;
 const MAX_ARGUMENTS_LENGTH = 4_096;
 export const MAX_ROLE_LENGTH = 32;
 export const MAX_TOOL_NAME_LENGTH = 128;
-const MAX_SKILL_NAME_LENGTH = 128;
+export const MAX_SKILL_NAME_LENGTH = 128;
 const MAX_SOURCE_KEY_LENGTH = 256;
 const MAX_URL_LENGTH = 2_048;
 const MAX_METADATA_JSON_LENGTH = 16_384;
@@ -25,11 +30,28 @@ const MAX_JSON_DEPTH = 8;
 const MAX_JSON_COLLECTION_SIZE = 100;
 
 export const MAX_BOARD_IDENTIFIER_LENGTH = 128;
+/** A source reference such as `acme/app#12` or `group/sub/project#3`. */
+const SOURCE_REFERENCE_RE = /^[a-z0-9_][a-z0-9_.\/-]*#\d+$/i;
+/** A provider login such as `octocat`, `dependabot[bot]`, `jane.doe` or GitLab's `_jane`. */
+const LOGIN_RE = /^[a-z0-9_][a-z0-9_.-]*(\[bot\])?$/i;
+const MAX_LOGIN_LENGTH = 100;
 export const IDENTIFIER_RE = /^[a-z0-9][a-z0-9_-]*$/i;
 export const BOARD_IDENTIFIER_RE = IDENTIFIER_RE;
-const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+export const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const SENSITIVE_KEY_RE = /(?:authorization|cookie|credential|password|secret|token)/i;
-const WORK_ITEM_SOURCES: readonly WorkItemSource[] = ['github-issue', 'github-pr', 'linear-issue', 'manual'];
+const WORK_ITEM_SOURCES: readonly WorkItemSource[] = [
+  'github-issue',
+  'github-pr',
+  'gitlab-issue',
+  'gitlab-pr',
+  'linear-issue',
+  'jira-issue',
+  'incidentio-follow-up',
+  'github-dependabot-alert',
+  'vanta-vulnerability',
+  'detail-finding',
+  'manual',
+];
 const REJECTION_CODES: readonly FactoryRuleRejectionCode[] = [
   'forbidden',
   'invalid_transition',
@@ -83,6 +105,80 @@ function boardIdentifier(value: unknown, label: string): string {
   return value;
 }
 
+function boardEvent(value: unknown, label: string): BoardEventFacts {
+  if (!isPlainObject(value)) throw new FactoryRuleValidationError(`${label} event must be an object.`);
+  assertExactKeys(
+    value,
+    ['type', 'reason', 'labels', 'assignees', 'pullRequest', 'pullRequestTrusted', 'actorTrusted', 'closedIssue'],
+    `${label} event`,
+  );
+  const type = enumValue(value.type, STATUS_EVENTS, `${label} event type`);
+  const reason =
+    value.reason === undefined ? undefined : enumValue(value.reason, CLOSE_REASONS, `${label} event reason`);
+  if ((value.labels !== undefined || value.assignees !== undefined) && !isUpdateEvent(type)) {
+    throw new FactoryRuleValidationError(`${label} event only carries changes on an update.`);
+  }
+  const labels = itemChange(value.labels, `${label} event labels`);
+  const assignees = itemChange(value.assignees, `${label} event assignees`);
+  if (value.pullRequestTrusted !== undefined && typeof value.pullRequestTrusted !== 'boolean') {
+    throw new FactoryRuleValidationError(`${label} event pullRequestTrusted must be a boolean.`);
+  }
+  if (value.actorTrusted !== undefined && typeof value.actorTrusted !== 'boolean') {
+    throw new FactoryRuleValidationError(`${label} event actorTrusted must be a boolean.`);
+  }
+  if (value.pullRequest !== undefined && (typeof value.pullRequest !== 'string' || value.pullRequest.length === 0)) {
+    throw new FactoryRuleValidationError(`${label} event pullRequest must be a non-empty string.`);
+  }
+  return {
+    type,
+    ...(reason ? { reason } : {}),
+    ...(labels ? { labels } : {}),
+    ...(assignees ? { assignees } : {}),
+    ...(typeof value.pullRequest === 'string' ? { pullRequest: value.pullRequest } : {}),
+    ...(typeof value.pullRequestTrusted === 'boolean' ? { pullRequestTrusted: value.pullRequestTrusted } : {}),
+    ...(typeof value.actorTrusted === 'boolean' ? { actorTrusted: value.actorTrusted } : {}),
+    ...(value.closedIssue !== undefined ? { closedIssue: closedIssueFacts(value.closedIssue, label) } : {}),
+  };
+}
+
+const MAX_CHANGED_NAMES = 100;
+const MAX_CHANGED_NAME_LENGTH = 500;
+
+function itemChange(value: unknown, label: string): ItemChange | undefined {
+  if (value === undefined) return undefined;
+  if (!isPlainObject(value)) throw new FactoryRuleValidationError(`${label} must be an object.`);
+  assertExactKeys(value, ['added', 'removed'], label);
+  const names = (list: unknown, side: string) => {
+    if (!Array.isArray(list) || list.length > MAX_CHANGED_NAMES) {
+      throw new FactoryRuleValidationError(`${label} ${side} must be a list of at most ${MAX_CHANGED_NAMES} names.`);
+    }
+    return list.map(name => boundedString(name, `${label} ${side}`, MAX_CHANGED_NAME_LENGTH));
+  };
+  return { added: names(value.added, 'added'), removed: names(value.removed, 'removed') };
+}
+
+function closedIssueFacts(value: unknown, label: string): NonNullable<BoardEventFacts['closedIssue']> {
+  if (!isPlainObject(value)) throw new FactoryRuleValidationError(`${label} event closedIssue must be an object.`);
+  assertExactKeys(value, ['phase', 'hasPullRequest'], `${label} event closedIssue`);
+  if (value.phase !== null && !isBoardIdentifier(value.phase)) {
+    throw new FactoryRuleValidationError(`${label} event closedIssue.phase is invalid.`);
+  }
+  if (typeof value.hasPullRequest !== 'boolean') {
+    throw new FactoryRuleValidationError(`${label} event closedIssue.hasPullRequest must be a boolean.`);
+  }
+  return { phase: value.phase, hasPullRequest: value.hasPullRequest };
+}
+
+function linkedItemReference(value: unknown, field: 'attachTo' | 'closesIssue'): { workItemId: string } | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new FactoryRuleValidationError(`Factory linked work item ${field} must be an object.`);
+  }
+  assertExactKeys(value as Record<string, unknown>, ['workItemId'], `Factory linked work item ${field}`);
+  const { workItemId } = value as Record<string, unknown>;
+  return { workItemId: boundedString(workItemId, `Factory linked work item ${field}.workItemId`, 128) };
+}
+
 export function assertFactoryDecisionTarget(
   decision: FactoryRuleDecision,
   boards: BoardRegistry,
@@ -97,6 +193,24 @@ export function assertFactoryDecisionTarget(
   if (decision.type === 'transition' && itemBoard !== undefined && itemBoard !== decision.board) {
     throw new FactoryRuleValidationError('Factory transition cannot change the item board.');
   }
+}
+
+const MAX_GOAL_OBJECTIVE_LENGTH = 2_000;
+const MAX_GOAL_RUNS = 50;
+
+function invokeSkillGoal(value: unknown): { objective: string; maxRuns?: number } | undefined {
+  if (value === undefined) return undefined;
+  if (!isPlainObject(value)) throw new FactoryRuleValidationError('Factory skill goal must be an object.');
+  assertExactKeys(value, ['objective', 'maxRuns'], 'Factory skill goal');
+  const objective = boundedString(value.objective, 'Factory skill goal objective', MAX_GOAL_OBJECTIVE_LENGTH);
+  const { maxRuns } = value;
+  if (
+    maxRuns !== undefined &&
+    (typeof maxRuns !== 'number' || !Number.isInteger(maxRuns) || maxRuns < 1 || maxRuns > MAX_GOAL_RUNS)
+  ) {
+    throw new FactoryRuleValidationError('Factory skill goal maxRuns is invalid.');
+  }
+  return { objective, ...(maxRuns !== undefined ? { maxRuns } : {}) };
 }
 
 function optionalBoundedString(value: unknown, label: string, max: number): string | undefined {
@@ -194,7 +308,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
     case 'transition': {
       assertExactKeys(
         value,
-        ['type', 'idempotencyKey', 'board', 'stage', 'message', 'reenter'],
+        ['type', 'idempotencyKey', 'board', 'stage', 'message', 'reenter', 'event'],
         'Factory transition decision',
       );
       if (value.reenter !== undefined && typeof value.reenter !== 'boolean') {
@@ -222,34 +336,111 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         stage: boardIdentifier(value.stage, 'Factory transition stage'),
         ...(message ? { message } : {}),
         ...(value.reenter === true ? { reenter: true } : {}),
+        ...(value.event !== undefined ? { event: boardEvent(value.event, 'Factory transition') } : {}),
+      };
+    }
+    case 'routeEvent': {
+      assertExactKeys(value, ['type', 'idempotencyKey', 'event', 'fromCardSession'], 'Factory routeEvent decision');
+      const event = boardEvent(value.event, 'Factory routeEvent');
+      if (value.fromCardSession !== undefined && (value.fromCardSession !== true || !isUpdateEvent(event.type))) {
+        throw new FactoryRuleValidationError('Factory routeEvent fromCardSession is only true, on an update.');
+      }
+      return { type, ...commonCommitFields(value), event, ...(value.fromCardSession ? { fromCardSession: true } : {}) };
+    }
+    case 'signalActivity': {
+      assertExactKeys(
+        value,
+        ['type', 'idempotencyKey', 'event', 'reference', 'url', 'author', 'authorTrusted', 'idleBehavior'],
+        'Factory signalActivity decision',
+      );
+      const url = value.url;
+      if (typeof url !== 'string' || url.length > MAX_URL_LENGTH || !/^https?:\/\/\S+$/.test(url)) {
+        throw new FactoryRuleValidationError('Factory signalActivity url must be an http(s) URL.');
+      }
+      if (typeof value.authorTrusted !== 'boolean') {
+        throw new FactoryRuleValidationError('Factory signalActivity authorTrusted must be a boolean.');
+      }
+      const author =
+        value.author === undefined
+          ? undefined
+          : boundedString(value.author, 'Factory signalActivity author', MAX_LOGIN_LENGTH, LOGIN_RE);
+      return {
+        type,
+        ...commonCommitFields(value),
+        event: enumValue(value.event, ACTIVITY_EVENTS, 'Factory signalActivity event'),
+        reference: boundedString(
+          value.reference,
+          'Factory signalActivity reference',
+          MAX_SOURCE_KEY_LENGTH,
+          SOURCE_REFERENCE_RE,
+        ),
+        url,
+        ...(author ? { author } : {}),
+        authorTrusted: value.authorTrusted,
+        ...(value.idleBehavior === undefined
+          ? {}
+          : {
+              idleBehavior: enumValue(
+                value.idleBehavior,
+                ['wake', 'persist'] as const,
+                'Factory signalActivity idleBehavior',
+              ),
+            }),
       };
     }
     case 'upsertLinkedWorkItem': {
       assertExactKeys(
         value,
-        ['type', 'idempotencyKey', 'board', 'source', 'sourceKey', 'claimKey', 'title', 'url', 'stage', 'metadata'],
+        [
+          'type',
+          'idempotencyKey',
+          'board',
+          'source',
+          'sourceKey',
+          // Decisions saved before claims were dropped still carry it; it is ignored.
+          'claimKey',
+          'title',
+          'description',
+          'url',
+          'stage',
+          'skipRules',
+          'attachTo',
+          'closesIssue',
+          'metadata',
+        ],
         'Factory linked work item decision',
       );
-      const claimKey = optionalBoundedString(
-        value.claimKey,
-        'Factory linked work item claimKey',
-        MAX_SOURCE_KEY_LENGTH,
-      );
+      if (value.skipRules !== undefined && typeof value.skipRules !== 'boolean') {
+        throw new FactoryRuleValidationError('Factory linked work item skipRules must be a boolean.');
+      }
       const url = value.url;
       if (url !== null && (typeof url !== 'string' || url.length > MAX_URL_LENGTH || !/^https?:\/\//.test(url))) {
         throw new FactoryRuleValidationError('Factory linked work item URL is invalid.');
       }
       const metadata = sanitizeMetadata(value.metadata);
+      const attachTo = linkedItemReference(value.attachTo, 'attachTo');
+      const closesIssue = linkedItemReference(value.closesIssue, 'closesIssue');
       return {
         type,
         ...commonCommitFields(value),
         board: boardIdentifier(value.board, 'Factory linked work item board'),
         source: enumValue(value.source, WORK_ITEM_SOURCES, 'Factory linked work item source'),
         sourceKey: boundedString(value.sourceKey, 'Factory linked work item sourceKey', MAX_SOURCE_KEY_LENGTH),
-        ...(claimKey ? { claimKey } : {}),
         title: boundedString(value.title, 'Factory linked work item title', MAX_TITLE_LENGTH),
+        ...(value.description === undefined
+          ? {}
+          : {
+              description: boundedString(
+                value.description,
+                'Factory linked work item description',
+                MAX_DESCRIPTION_LENGTH,
+              ),
+            }),
         url,
         stage: boardIdentifier(value.stage, 'Factory linked work item stage'),
+        ...(value.skipRules === true ? { skipRules: true } : {}),
+        ...(attachTo ? { attachTo } : {}),
+        ...(closesIssue ? { closesIssue } : {}),
         ...(metadata ? { metadata } : {}),
       };
     }
@@ -265,7 +456,10 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
           'arguments',
           'precedingMessage',
           'cancelInFlight',
+          'startsAfterOwnMove',
+          'untrustedPullRequestEvent',
           'resume',
+          'goal',
         ],
         'Factory invoke skill decision',
       );
@@ -284,6 +478,12 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
       if (value.cancelInFlight !== undefined && typeof value.cancelInFlight !== 'boolean') {
         throw new FactoryRuleValidationError('Factory skill cancelInFlight must be a boolean.');
       }
+      if (value.startsAfterOwnMove !== undefined && typeof value.startsAfterOwnMove !== 'boolean') {
+        throw new FactoryRuleValidationError('Factory skill startsAfterOwnMove must be a boolean.');
+      }
+      if (value.untrustedPullRequestEvent !== undefined && typeof value.untrustedPullRequestEvent !== 'boolean') {
+        throw new FactoryRuleValidationError('Factory skill untrustedPullRequestEvent must be a boolean.');
+      }
       if (value.resume !== undefined && typeof value.resume !== 'boolean') {
         throw new FactoryRuleValidationError('Factory skill resume must be a boolean.');
       }
@@ -292,6 +492,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
       if (value.resume === true && value.skillName === undefined) {
         throw new FactoryRuleValidationError('Factory skill resume requires skillName.');
       }
+      const goal = invokeSkillGoal(value.goal);
       return {
         type,
         ...commonCommitFields(value),
@@ -305,12 +506,24 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         ...(args ? { arguments: args } : {}),
         ...(precedingMessage ? { precedingMessage } : {}),
         ...(value.cancelInFlight === true ? { cancelInFlight: true } : {}),
+        ...(value.startsAfterOwnMove === true ? { startsAfterOwnMove: true } : {}),
+        ...(value.untrustedPullRequestEvent === true ? { untrustedPullRequestEvent: true } : {}),
+        ...(goal ? { goal } : {}),
       };
     }
     case 'sendMessage': {
       assertExactKeys(
         value,
-        ['type', 'idempotencyKey', 'role', 'message', 'priority', 'idleBehavior', 'prepareBinding'],
+        [
+          'type',
+          'idempotencyKey',
+          'role',
+          'message',
+          'priority',
+          'idleBehavior',
+          'prepareBinding',
+          'untrustedPullRequestEvent',
+        ],
         'Factory send message decision',
       );
       const priority =
@@ -323,6 +536,9 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
           : enumValue(value.idleBehavior, ['persist', 'wake'] as const, 'Factory message idle behavior');
       if (value.prepareBinding !== undefined && typeof value.prepareBinding !== 'boolean') {
         throw new FactoryRuleValidationError('Factory message prepareBinding must be a boolean.');
+      }
+      if (value.untrustedPullRequestEvent !== undefined && typeof value.untrustedPullRequestEvent !== 'boolean') {
+        throw new FactoryRuleValidationError('Factory message untrustedPullRequestEvent must be a boolean.');
       }
       if (value.prepareBinding === true && value.role === undefined) {
         throw new FactoryRuleValidationError('Factory message prepareBinding requires a role.');
@@ -339,6 +555,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         ...(priority ? { priority } : {}),
         ...(idleBehavior ? { idleBehavior } : {}),
         ...(value.prepareBinding === true ? { prepareBinding: true } : {}),
+        ...(value.untrustedPullRequestEvent === true ? { untrustedPullRequestEvent: true } : {}),
       };
     }
     case 'notify': {
@@ -354,6 +571,35 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         title: boundedString(value.title, 'Factory notification title', MAX_TITLE_LENGTH),
         ...(body ? { body } : {}),
         ...(level ? { level } : {}),
+      };
+    }
+    case 'dismissStaleReviews': {
+      assertExactKeys(
+        value,
+        [
+          'type',
+          'idempotencyKey',
+          'installationId',
+          'repository',
+          'pullRequestNumber',
+          'approvingReviewId',
+          'approvingAuthor',
+        ],
+        'Factory dismiss stale reviews decision',
+      );
+      for (const key of ['installationId', 'pullRequestNumber'] as const) {
+        if (!Number.isSafeInteger(value[key]) || (value[key] as number) <= 0) {
+          throw new FactoryRuleValidationError(`Factory dismiss stale reviews ${key} must be a positive integer.`);
+        }
+      }
+      return {
+        type,
+        ...commonCommitFields(value),
+        installationId: value.installationId as number,
+        repository: boundedString(value.repository, 'Factory dismiss stale reviews repository', MAX_TITLE_LENGTH),
+        pullRequestNumber: value.pullRequestNumber as number,
+        approvingReviewId: boundedString(value.approvingReviewId, 'Factory approving review id', MAX_TITLE_LENGTH),
+        approvingAuthor: boundedString(value.approvingAuthor, 'Factory approving review author', MAX_TITLE_LENGTH),
       };
     }
     default:

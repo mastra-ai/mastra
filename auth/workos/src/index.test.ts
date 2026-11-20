@@ -207,6 +207,89 @@ describe('MastraAuthWorkos', () => {
       });
     });
 
+    describe('session organization inference', () => {
+      const createAuth = (fetchMemberships: boolean) =>
+        new MastraAuthWorkos({
+          apiKey: mockApiKey,
+          clientId: mockClientId,
+          redirectUri: mockRedirectUri,
+          session: { cookiePassword: mockCookiePassword },
+          fetchMemberships,
+        });
+
+      const mockSession = (organizationId?: string) =>
+        mockWithAuth.mockResolvedValueOnce({
+          auth: { user: { id: 'user123', email: 'test@example.com' }, organizationId },
+        });
+
+      const mockMemberships = (memberships: unknown[]) =>
+        mockListOrganizationMemberships.mockResolvedValueOnce({
+          data: memberships,
+          autoPagination: vi.fn().mockResolvedValue(memberships),
+        });
+
+      it('should infer organizationId from a single membership when the session has none', async () => {
+        mockSession();
+        const memberships = [{ id: 'om-1', organizationId: 'org-1', role: { slug: 'member' } }];
+        mockMemberships(memberships);
+
+        const result = await createAuth(true).authenticateToken('', mockRequest);
+
+        expect(result?.organizationId).toBe('org-1');
+        expect(result?.memberships).toEqual(memberships);
+      });
+
+      it('should not infer organizationId from multiple memberships', async () => {
+        mockSession();
+        mockMemberships([
+          { id: 'om-1', organizationId: 'org-1', role: { slug: 'admin' } },
+          { id: 'om-2', organizationId: 'org-2', role: { slug: 'member' } },
+        ]);
+
+        const result = await createAuth(true).authenticateToken('', mockRequest);
+
+        expect(result?.organizationId).toBeUndefined();
+      });
+
+      it('should not infer organizationId when there are no memberships', async () => {
+        mockSession();
+        mockMemberships([]);
+
+        const result = await createAuth(true).authenticateToken('', mockRequest);
+
+        expect(result?.organizationId).toBeUndefined();
+      });
+
+      it('should keep the session user without organizationId when the membership fetch fails', async () => {
+        mockSession();
+        mockListOrganizationMemberships.mockRejectedValueOnce(new Error('membership API unavailable'));
+
+        const result = await createAuth(true).authenticateToken('', mockRequest);
+
+        expect(result).toMatchObject({ workosId: 'user123' });
+        expect(result?.organizationId).toBeUndefined();
+        expect(result?.memberships).toBeUndefined();
+      });
+
+      it('should keep the session organizationId over a single membership', async () => {
+        mockSession('org-explicit');
+        mockMemberships([{ id: 'om-1', organizationId: 'org-1', role: { slug: 'member' } }]);
+
+        const result = await createAuth(true).authenticateToken('', mockRequest);
+
+        expect(result?.organizationId).toBe('org-explicit');
+      });
+
+      it('should not fetch memberships or infer organizationId when fetchMemberships is disabled', async () => {
+        mockSession();
+
+        const result = await createAuth(false).authenticateToken('', mockRequest);
+
+        expect(mockListOrganizationMemberships).not.toHaveBeenCalled();
+        expect(result?.organizationId).toBeUndefined();
+      });
+    });
+
     it('should fall back to JWT verification when session is not available', async () => {
       // Mock session-based auth returning no user
       mockWithAuth.mockResolvedValueOnce({

@@ -15,7 +15,7 @@ vi.mock('@mastra/playground-ui/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
-const SCORERS_PLACEHOLDER = 'Select scorers...';
+const SCORERS_PLACEHOLDER = 'Select scorers';
 
 function setupHandlers() {
   const updateBodies: Array<Record<string, unknown>> = [];
@@ -42,7 +42,7 @@ async function renderForm(scorerIds: string[]) {
   return { onSuccess };
 }
 
-const save = () => fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+const save = () => fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
 describe('EditDatasetForm', () => {
   describe('given a dataset that already has default scorers', () => {

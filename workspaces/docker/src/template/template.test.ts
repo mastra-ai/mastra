@@ -7,6 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { DockerTemplateBuildEvent } from './build-progress';
 import { DockerTemplate } from './template';
 
 const { mockImage, mockDocker, mockOpenBuildSession, mockSession, resetMockDefaults } = vi.hoisted(() => {
@@ -22,7 +23,11 @@ const { mockImage, mockDocker, mockOpenBuildSession, mockSession, resetMockDefau
   });
 
   const mockFollowProgress = vi.fn(
-    (_stream: unknown, onFinish: (err: Error | null, output: Array<Record<string, unknown>>) => void) => {
+    (
+      _stream: unknown,
+      onFinish: (err: Error | null, output: Array<Record<string, unknown>>) => void,
+      _onProgress?: (event: unknown) => void,
+    ) => {
       onFinish(null, []);
     },
   );
@@ -84,6 +89,30 @@ describe('DockerTemplate builder', () => {
     expect(new DockerTemplate().from('ubuntu:24.04').dockerfile).toBe('FROM ubuntu:24.04 AS mastra-main-0\n');
   });
 
+  it('chowns secret-step output to the given owner without changing the default identity', () => {
+    const plain = new DockerTemplate().runWithSecrets('git clone x /w/app', { secrets: [], output: '/w/app' });
+    const owned = new DockerTemplate().runWithSecrets('git clone x /w/app', {
+      secrets: [],
+      output: '/w/app',
+      owner: 'node:node',
+    });
+    expect(owned.dockerfile).toContain('COPY --chown=node:node --from=mastra-secret-0 /w/app /w/app');
+    expect(plain.dockerfile).toContain('COPY --from=mastra-secret-0 /w/app /w/app');
+    expect(owned.templateId).not.toBe(plain.templateId);
+    const unset = new DockerTemplate().runWithSecrets('git clone x /w/app', {
+      secrets: [],
+      output: '/w/app',
+      owner: undefined,
+    });
+    expect(unset.templateId).toBe(plain.templateId);
+  });
+
+  it('rejects owners that are not user[:group] or uid[:gid]', () => {
+    for (const owner of ['', 'node node', 'node\nRUN x', 'a:b:c']) {
+      expect(() => new DockerTemplate().runWithSecrets('x', { secrets: [], output: '/o', owner })).toThrow();
+    }
+  });
+
   it('runs secret steps in a throwaway stage and keeps values out of the Dockerfile', () => {
     const template = new DockerTemplate().runWithSecrets('git clone x /workspace/app', {
       secrets: ['GIT_TOKEN'],
@@ -141,6 +170,7 @@ describe('DockerTemplate.build', () => {
     expect(mockDocker.buildImage).toHaveBeenCalledTimes(1);
     const [, opts] = mockDocker.buildImage.mock.calls[0];
     expect(opts.t).toBe(template.templateId);
+    expect(opts.forcerm).toBe(true);
   });
 
   it('shares one in-flight build across concurrent callers', async () => {
@@ -149,6 +179,52 @@ describe('DockerTemplate.build', () => {
     const results = await Promise.all([template.build(), template.build(), template.build()]);
     expect(results.every(r => r.status === 'ready')).toBe(true);
     expect(mockDocker.buildImage).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels one shared waiter without interrupting the other caller', async () => {
+    mockImage.inspect.mockRejectedValue(new Error('no such image'));
+    let release!: () => void;
+    mockDocker.modem.followProgress.mockImplementationOnce((_stream, onFinish) => {
+      release = () => onFinish(null, []);
+    });
+    const controller = new AbortController();
+    const template = new DockerTemplate().runCmd('echo hi');
+    const cancelled = template.build({ abortSignal: controller.signal });
+    const remaining = template.build();
+    await new Promise(r => setImmediate(r));
+
+    controller.abort();
+    await expect(cancelled).rejects.toMatchObject({ code: 'ABORTED' });
+    expect(mockDocker.buildImage).toHaveBeenCalledTimes(1);
+    release();
+    await expect(remaining).resolves.toMatchObject({ status: 'ready' });
+  });
+
+  it('cancels the underlying stream when the last shared waiter aborts and remains retryable', async () => {
+    mockImage.inspect.mockRejectedValue(new Error('no such image'));
+    const stream = { destroy: vi.fn() };
+    mockDocker.buildImage.mockResolvedValueOnce(stream);
+    mockDocker.modem.followProgress.mockImplementationOnce(() => undefined);
+    const controller = new AbortController();
+    const template = new DockerTemplate().runCmd('echo hi');
+    const build = template.build({ abortSignal: controller.signal });
+    await new Promise(r => setImmediate(r));
+
+    controller.abort();
+    await expect(build).rejects.toMatchObject({ code: 'ABORTED' });
+    expect(stream.destroy).toHaveBeenCalledTimes(1);
+    await expect(template.build()).resolves.toMatchObject({ status: 'ready' });
+    expect(mockDocker.buildImage).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects pre-aborted builds without inspecting or building', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    await expect(new DockerTemplate().build({ abortSignal: controller.signal })).rejects.toMatchObject({
+      code: 'ABORTED',
+    });
+    expect(mockDocker.getImage).not.toHaveBeenCalled();
+    expect(mockDocker.buildImage).not.toHaveBeenCalled();
   });
 
   it('queues a build with different options behind the in-flight one instead of sharing it', async () => {
@@ -174,6 +250,32 @@ describe('DockerTemplate.build', () => {
     expect(mockDocker.buildImage).toHaveBeenCalledTimes(2);
   });
 
+  it('lets plain callers join the active plain build while an option-specific build is queued', async () => {
+    mockImage.inspect.mockRejectedValue(new Error('no such image'));
+    const releases: Array<() => void> = [];
+    mockDocker.modem.followProgress.mockImplementation((_stream, onFinish) => {
+      releases.push(() => onFinish(null, []));
+    });
+    const template = new DockerTemplate().runCmd('echo hi');
+
+    const firstPlain = template.build();
+    const forced = template.build({ force: true });
+    const secondPlain = template.build();
+    await new Promise(r => setImmediate(r));
+
+    expect(mockDocker.buildImage).toHaveBeenCalledTimes(1);
+    releases[0]!();
+    await expect(Promise.all([firstPlain, secondPlain])).resolves.toEqual([
+      { status: 'ready', templateId: template.templateId },
+      { status: 'ready', templateId: template.templateId },
+    ]);
+
+    await new Promise(r => setImmediate(r));
+    expect(mockDocker.buildImage).toHaveBeenCalledTimes(2);
+    releases[1]!();
+    await expect(forced).resolves.toMatchObject({ status: 'ready' });
+  });
+
   it('builds on the docker client passed in options', async () => {
     const other = {
       getImage: vi.fn(() => ({ inspect: vi.fn().mockRejectedValue(new Error('no such image')) })),
@@ -189,7 +291,7 @@ describe('DockerTemplate.build', () => {
     const template = new DockerTemplate().runCmd('echo hi');
     await template.build({ force: true });
     expect(mockDocker.buildImage).toHaveBeenCalledTimes(1);
-    expect(mockDocker.buildImage.mock.calls[0]![1]).toEqual({ t: template.templateId, nocache: true });
+    expect(mockDocker.buildImage.mock.calls[0]![1]).toEqual({ t: template.templateId, nocache: true, forcerm: true });
   });
 
   const sessionSecrets = (call = 0) => mockOpenBuildSession.mock.calls[call]![1];
@@ -300,6 +402,52 @@ describe('DockerTemplate.build', () => {
     const template = new DockerTemplate().runCmd('echo hi');
     await expect(template.build()).rejects.toThrow('daemon unreachable');
   });
+
+  it('cancels a pending buildImage acquisition and remains retryable', async () => {
+    mockImage.inspect.mockRejectedValue(new Error('no such image'));
+    let resolveBuild!: (stream: { destroy: ReturnType<typeof vi.fn> }) => void;
+    const lateStream = { destroy: vi.fn() };
+    mockDocker.buildImage.mockImplementationOnce(
+      () => new Promise(resolve => (resolveBuild = resolve)) as ReturnType<typeof mockDocker.buildImage>,
+    );
+    const controller = new AbortController();
+    const template = new DockerTemplate().runCmd('echo hi');
+    const build = template.build({ abortSignal: controller.signal });
+    await vi.waitFor(() => expect(mockDocker.buildImage).toHaveBeenCalledTimes(1));
+
+    controller.abort(new Error('cancel acquisition'));
+    await expect(build).rejects.toMatchObject({ code: 'ABORTED', cause: controller.signal.reason });
+    resolveBuild(lateStream);
+    await vi.waitFor(() => expect(lateStream.destroy).toHaveBeenCalledTimes(1));
+
+    await expect(template.build()).resolves.toMatchObject({ status: 'ready' });
+    expect(mockDocker.buildImage).toHaveBeenCalledTimes(2);
+  });
+
+  it('cancels a pending secret build acquisition and closes late resources', async () => {
+    mockImage.inspect.mockRejectedValue(new Error('no such image'));
+    let dialCallback!: (error: Error | null, stream?: unknown) => void;
+    const request = { destroy: vi.fn() };
+    const lateStream = { destroy: vi.fn() };
+    mockDocker.modem.dial.mockImplementationOnce((_options, callback) => {
+      dialCallback = callback;
+      return request;
+    });
+    const controller = new AbortController();
+    const template = new DockerTemplate({ secrets: { TOKEN: 'value' } }).runWithSecrets('echo hi', {
+      secrets: ['TOKEN'],
+      output: '/out',
+    });
+    const build = template.build({ abortSignal: controller.signal });
+    await vi.waitFor(() => expect(mockDocker.modem.dial).toHaveBeenCalledTimes(1));
+
+    controller.abort(new Error('cancel secret acquisition'));
+    await expect(build).rejects.toMatchObject({ code: 'ABORTED', cause: controller.signal.reason });
+    expect(request.destroy).toHaveBeenCalledTimes(1);
+    expect(mockSession.close).toHaveBeenCalled();
+    dialCallback(null, lateStream);
+    expect(lateStream.destroy).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('DockerTemplate.createSandbox', () => {
@@ -339,6 +487,168 @@ describe('DockerTemplate.createSandbox', () => {
     mockDocker.modem.followProgress.mockImplementationOnce((_stream, onFinish) => onFinish(null, [{ error: 'boom' }]));
     const template = new DockerTemplate().runCmd('false');
     await expect(template.createSandbox()).rejects.toThrow('boom');
+  });
+});
+
+describe('DockerTemplate.build progress', () => {
+  type Raw = Record<string, unknown>;
+  /** Make the next followProgress replay `events` through onProgress, then finish. */
+  const replay = (events: Raw[]) =>
+    mockDocker.modem.followProgress.mockImplementationOnce((_stream, onFinish, onProgress) => {
+      for (const event of events) onProgress?.(event);
+      onFinish(null, events);
+    });
+  const collect = () => {
+    const events: DockerTemplateBuildEvent[] = [];
+    return { events, onProgress: (event: DockerTemplateBuildEvent) => void events.push(event) };
+  };
+
+  it('reports a reused image without starting a build', async () => {
+    const { events, onProgress } = collect();
+    const template = new DockerTemplate().runCmd('echo hi');
+    await expect(template.build({ onProgress })).resolves.toEqual({ status: 'ready', templateId: template.templateId });
+    expect(events).toEqual([{ type: 'reused', templateId: template.templateId }]);
+    expect(mockDocker.buildImage).not.toHaveBeenCalled();
+  });
+
+  it('streams multi-step progress, cache hits, and output while the build runs', async () => {
+    mockImage.inspect.mockRejectedValueOnce(new Error('no such image'));
+    const { events, onProgress } = collect();
+    let seenBeforeFinish = 0;
+    mockDocker.modem.followProgress.mockImplementationOnce((_stream, onFinish, onProgress) => {
+      onProgress?.({ stream: 'Step 1/2 : RUN apt-get update\n ---> Using cache\n' });
+      onProgress?.({ stream: 'Step 2/2 : RUN npm ci\n ---> Running in abc\n' });
+      onProgress?.({ stream: 'added 3 packages\n' });
+      seenBeforeFinish = events.length;
+      onFinish(null, []);
+    });
+    const template = new DockerTemplate().runCmd('apt-get update').runCmd('npm ci');
+    const result = await template.build({ onProgress });
+
+    expect(result).toEqual({ status: 'ready', templateId: template.templateId });
+    expect(seenBeforeFinish).toBeGreaterThan(1);
+    expect(events.map(e => e.type)).toEqual([
+      'build-start',
+      'step-start',
+      'output',
+      'step-complete',
+      'step-start',
+      'output',
+      'output',
+      'step-complete',
+      'build-complete',
+    ]);
+    expect(events[0]).toEqual({ type: 'build-start', templateId: template.templateId, builder: 'legacy' });
+    expect(events[3]).toMatchObject({ type: 'step-complete', step: { index: 1, cached: true } });
+    expect(events[7]).toMatchObject({ type: 'step-complete', step: { index: 2, name: 'RUN npm ci', cached: false } });
+    expect(events[6]).toEqual({ type: 'output', stepId: '2', text: 'added 3 packages\n' });
+    expect(events.at(-1)).toEqual({ type: 'build-complete', status: 'ready' });
+  });
+
+  it('returns the failing step and recent output on failure', async () => {
+    mockImage.inspect.mockRejectedValueOnce(new Error('no such image'));
+    replay([
+      { stream: 'Step 1/1 : RUN npm ci\n ---> Running in abc\n' },
+      { stream: 'npm ERR! missing package.json\n' },
+      { errorDetail: { message: 'returned a non-zero code: 1' }, error: 'returned a non-zero code: 1' },
+    ]);
+    const { events, onProgress } = collect();
+    const result = await new DockerTemplate().runCmd('npm ci').build({ onProgress });
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: 'returned a non-zero code: 1',
+      failedStep: { id: '1', name: 'RUN npm ci', index: 1, total: 1 },
+      output: ' ---> Running in abc\nnpm ERR! missing package.json\n',
+      outputTruncated: false,
+    });
+    expect(events.at(-1)).toEqual({ type: 'build-complete', status: 'failed' });
+  });
+
+  it('bounds retained output to maxOutputBytes and flags truncation', async () => {
+    mockImage.inspect.mockRejectedValueOnce(new Error('no such image'));
+    const lines = Array.from({ length: 2000 }, (_, i) => ({ stream: `line ${i}\n` }));
+    replay([{ stream: 'Step 1/1 : RUN big\n' }, ...lines, { error: 'failed' }]);
+    const result = await new DockerTemplate().runCmd('big').build({ maxOutputBytes: 64 });
+    expect(result.status).toBe('failed');
+    expect(Buffer.byteLength(result.output!)).toBeLessThanOrEqual(64);
+    expect(result.output!.endsWith('line 1999\n')).toBe(true);
+    expect(result.outputTruncated).toBe(true);
+  });
+
+  it('rejects an invalid maxOutputBytes', async () => {
+    for (const maxOutputBytes of [0, -1, 1.5, Number.NaN]) {
+      await expect(new DockerTemplate().build({ maxOutputBytes })).rejects.toThrow(RangeError);
+    }
+  });
+
+  it('ignores errors thrown by onProgress', async () => {
+    mockImage.inspect.mockRejectedValueOnce(new Error('no such image'));
+    replay([{ stream: 'Step 1/1 : RUN echo hi\n' }, { stream: 'hi\n' }]);
+    const onProgress = vi.fn(() => {
+      throw new Error('listener bug');
+    });
+    await expect(new DockerTemplate().runCmd('echo hi').build({ onProgress })).resolves.toMatchObject({
+      status: 'ready',
+    });
+    expect(onProgress).toHaveBeenCalled();
+  });
+
+  it('delivers shared-build events to each caller and stops for a caller that aborts', async () => {
+    mockImage.inspect.mockRejectedValue(new Error('no such image'));
+    let progress!: (event: Raw) => void;
+    let release!: () => void;
+    mockDocker.modem.followProgress.mockImplementationOnce((_stream, onFinish, onProgress) => {
+      progress = event => onProgress?.(event);
+      release = () => onFinish(null, []);
+    });
+    const template = new DockerTemplate().runCmd('echo hi');
+    const first = collect();
+    const second = collect();
+    const controller = new AbortController();
+    const cancelled = template.build({ onProgress: first.onProgress, abortSignal: controller.signal });
+    const remaining = template.build({ onProgress: second.onProgress });
+    await new Promise(r => setImmediate(r));
+
+    progress({ stream: 'Step 1/1 : RUN echo hi\n' });
+    controller.abort();
+    await expect(cancelled).rejects.toMatchObject({ code: 'ABORTED' });
+    progress({ stream: 'hi\n' });
+    release();
+    await expect(remaining).resolves.toMatchObject({ status: 'ready' });
+
+    expect(first.events.map(e => e.type)).toEqual(['build-start', 'step-start']);
+    expect(second.events.map(e => e.type)).toEqual([
+      'build-start',
+      'step-start',
+      'output',
+      'step-complete',
+      'build-complete',
+    ]);
+    expect(mockDocker.buildImage).toHaveBeenCalledTimes(1);
+  });
+
+  it('normalizes BuildKit progress for builds with secrets', async () => {
+    mockImage.inspect.mockRejectedValueOnce(new Error('no such image'));
+    const field = (n: number, value: Buffer) => Buffer.concat([Buffer.from([(n << 3) | 2, value.length]), value]);
+    const vertex = Buffer.concat([
+      field(1, Buffer.from('sha256:v')),
+      field(3, Buffer.from('[1/1] RUN install')),
+      Buffer.from([4 << 3, 1]),
+      field(6, Buffer.from([8, 1])),
+    ]);
+    replay([{ id: 'moby.buildkit.trace', aux: field(1, vertex).toString('base64') }]);
+    const { events, onProgress } = collect();
+    const template = new DockerTemplate({ secrets: { T: 'v' } }).runWithSecrets('install', {
+      secrets: ['T'],
+      output: '/o',
+    });
+    await expect(template.build({ onProgress })).resolves.toMatchObject({ status: 'ready' });
+    expect(events).toEqual([
+      { type: 'build-start', templateId: template.templateId, builder: 'buildkit' },
+      { type: 'step-start', step: { id: 'sha256:v', name: '[1/1] RUN install', cached: true } },
+      { type: 'step-complete', step: { id: 'sha256:v', name: '[1/1] RUN install', cached: true } },
+      { type: 'build-complete', status: 'ready' },
+    ]);
   });
 });
 

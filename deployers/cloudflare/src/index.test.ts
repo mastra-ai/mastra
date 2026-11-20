@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm } from 'node:fs/promises';
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -189,6 +189,63 @@ describe('CloudflareDeployer', () => {
         const wranglerConfig = JSON.parse(await readFile(wranglerConfigPath, 'utf-8'));
 
         expect(wranglerConfig.alias['readable-stream']).toBe('./custom-stream.js');
+      });
+    });
+
+    describe('@opentelemetry/api stub for the optional posthog-node peer', () => {
+      // Lay out a project so wrangler.jsonc lands inside the test directory: <project>/.mastra/output
+      const projectDir = () => join(tempDir, 'project');
+      const mastraDir = () => join(projectDir(), '.mastra');
+      const readJsonc = async () =>
+        JSON.parse((await readFile(join(projectDir(), 'wrangler.jsonc'), 'utf-8')).replace(/\/\*.*?\*\//, ''));
+
+      beforeEach(async () => {
+        await mkdir(join(mastraDir(), 'output'), { recursive: true });
+      });
+
+      it('aliases @opentelemetry/api to a module that fails to load when the project does not install it', async () => {
+        deployer = new CloudflareDeployer({ name: 'test-worker' });
+        vi.spyOn(deployer, 'loadEnvVars').mockResolvedValue(new Map());
+
+        await deployer.writeFiles(mastraDir());
+
+        const stubPath = join(mastraDir(), 'output', 'opentelemetry-api-stub.mjs');
+        await expect(import(stubPath)).rejects.toThrow('@opentelemetry/api is not installed');
+
+        const wranglerConfig = JSON.parse(await readFile(join(mastraDir(), 'output', 'wrangler.json'), 'utf-8'));
+        expect(wranglerConfig.alias['@opentelemetry/api']).toBe('./opentelemetry-api-stub.mjs');
+        expect((await readJsonc()).alias['@opentelemetry/api']).toBe('./.mastra/output/opentelemetry-api-stub.mjs');
+      });
+
+      it('leaves @opentelemetry/api alone when the project installs it', async () => {
+        const otelDir = join(projectDir(), 'node_modules', '@opentelemetry', 'api');
+        await mkdir(otelDir, { recursive: true });
+        await writeFile(
+          join(otelDir, 'package.json'),
+          JSON.stringify({ name: '@opentelemetry/api', main: 'index.js' }),
+        );
+        await writeFile(join(otelDir, 'index.js'), 'module.exports = {};');
+        deployer = new CloudflareDeployer({ name: 'test-worker' });
+        vi.spyOn(deployer, 'loadEnvVars').mockResolvedValue(new Map());
+
+        await deployer.writeFiles(mastraDir());
+
+        await expect(stat(join(mastraDir(), 'output', 'opentelemetry-api-stub.mjs'))).rejects.toThrow();
+        const wranglerConfig = JSON.parse(await readFile(join(mastraDir(), 'output', 'wrangler.json'), 'utf-8'));
+        expect(wranglerConfig.alias).not.toHaveProperty('@opentelemetry/api');
+        expect((await readJsonc()).alias).not.toHaveProperty('@opentelemetry/api');
+      });
+
+      it('keeps a user-provided @opentelemetry/api alias', async () => {
+        deployer = new CloudflareDeployer({ name: 'test-worker', alias: { '@opentelemetry/api': './my-otel.mjs' } });
+        vi.spyOn(deployer, 'loadEnvVars').mockResolvedValue(new Map());
+
+        await deployer.writeFiles(mastraDir());
+
+        await expect(stat(join(mastraDir(), 'output', 'opentelemetry-api-stub.mjs'))).rejects.toThrow();
+        const wranglerConfig = JSON.parse(await readFile(join(mastraDir(), 'output', 'wrangler.json'), 'utf-8'));
+        expect(wranglerConfig.alias['@opentelemetry/api']).toBe('./my-otel.mjs');
+        expect((await readJsonc()).alias['@opentelemetry/api']).toBe('./my-otel.mjs');
       });
     });
   });

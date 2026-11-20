@@ -1,30 +1,18 @@
-import { XIcon } from 'lucide-react';
 import { useFilterBarContext } from './filter-bar-context';
-import { Button } from '@/ds/components/Button/Button';
+import { ClearFiltersButton } from '@/ds/components/ClearFiltersButton/clear-filters-button';
 
-export type FilterBarClearProps = {
-  label?: string;
-  className?: string;
-};
-
-/** Removes every filter. Renders nothing while the bar is empty. */
-export function FilterBarClear({ label = 'Clear filters', className }: FilterBarClearProps) {
+/** Removes every removable filter. Rendered by FilterBar at its trailing edge; hidden while nothing can be removed. */
+export function FilterBarClear({ label }: { label: string }) {
   const ctx = useFilterBarContext();
-  if (ctx.items.length === 0) return null;
+  if (!ctx.hasRemovableItems) return null;
   return (
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      aria-label={label}
-      tooltip={label}
-      className={className}
+    <ClearFiltersButton
+      label={label}
       onClick={event => {
         event.stopPropagation();
         ctx.clear();
         ctx.focusInput();
       }}
-    >
-      <XIcon />
-    </Button>
+    />
   );
 }

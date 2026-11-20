@@ -1,15 +1,18 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { isAuditAction } from '@mastra/factory/storage/domains/audit/actions';
 import type { AuditAction } from '@mastra/factory/storage/domains/audit/actions';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { History } from 'lucide-react';
-
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { SYSTEM_ACTOR_NAME } from '../auditPresentation';
+import type { BoardInfo } from '../boardFlow';
 import type { AuditActorProfile, AuditEvent } from '../services/audit';
 import { ASSIGNED_ACTION, CREATED_ACTION } from '../workItemActivity';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconHistory } from '@mastra/playground-ui/icons/central/IconHistory';
 
 const timestampFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: 'medium',
@@ -20,6 +23,7 @@ const ACTION_LABELS: Partial<Record<AuditAction | typeof ASSIGNED_ACTION, string
   [ASSIGNED_ACTION]: 'Assigned the item',
   'factory.work_item.updated': 'Updated the item',
   'factory.work_item.stage_moved': 'Moved the item',
+  'factory.work_item.transition_rejected': 'A move was rejected',
   'factory.work_item.deleted': 'Removed the item',
   'factory.run.started': 'Started a run',
   'factory.run.ended': 'Run ended',
@@ -47,6 +51,29 @@ function metadataString(event: AuditEvent, key: string): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined;
 }
 
+/** Actor id prefix of a session agent, whose moves carry the machine cause `factory_tools`. */
+const SESSION_AGENT_PREFIX = 'agent:session:';
+
+/** A bound agent's move carries its rationale as the cause; everyone else's cause is a machine code. */
+function agentRationale(event: AuditEvent): string | undefined {
+  if (event.actorType !== 'agent' || event.actorId.startsWith(SESSION_AGENT_PREFIX)) return undefined;
+  return metadataString(event, 'cause');
+}
+
+/** "Move to Review rejected: <reason>", naming the phase from the card's own board: phase ids repeat across boards. */
+function RejectedMove({ event, board }: { event: AuditEvent; board: BoardInfo | undefined }) {
+  const to = metadataString(event, 'to');
+  const phase = to === undefined ? undefined : board?.phases.find(phase => phase.id === to);
+  const reason = metadataString(event, 'reason') ?? metadataString(event, 'code');
+  const text = `Move to ${phase?.name ?? phase?.title ?? to ?? 'another phase'} rejected${reason ? `: ${reason}` : ''}`;
+  const rationale = agentRationale(event);
+  return (
+    <span className="min-w-0 truncate" title={rationale ? `${text}\n\nWhy it was asked: ${rationale}` : text}>
+      {text}
+    </span>
+  );
+}
+
 function eventActor(event: AuditEvent, actors: Record<string, AuditActorProfile>): AuditActorProfile | undefined {
   if (event.actorType === 'agent') {
     return { id: event.actorId, name: metadataString(event, 'agentName') ?? 'Factory agent' };
@@ -58,10 +85,13 @@ function eventActor(event: AuditEvent, actors: Record<string, AuditActorProfile>
 export function ActivityEvent({
   event,
   actors,
+  board,
   className,
 }: {
   event: AuditEvent;
   actors: Record<string, AuditActorProfile>;
+  /** The card's board, which names the phases its events mention. */
+  board: BoardInfo | undefined;
   className?: string;
 }) {
   const actor = eventActor(event, actors);
@@ -72,16 +102,26 @@ export function ActivityEvent({
     <div className={cn('flex items-start gap-2', className)}>
       <Avatar src={actor.avatarUrl} name={actor.name} size="sm" />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="text-ui-xs text-icon5 truncate font-medium">
-          {actor.name}
-          {modelId ? <span className="text-icon3 font-normal"> · {modelId}</span> : null}
-        </span>
-        <span className="text-ui-xs text-icon3 flex items-baseline justify-between gap-3">
+        <Txt as="span" variant="meta" tone="ink" className="truncate">
+          <Metadata singleLine>
+            <Metadata.Item>{actor.name}</Metadata.Item>
+            {modelId && (
+              <Metadata.Item>
+                <Txt as="span" variant="meta" tone="muted">
+                  {modelId}
+                </Txt>
+              </Metadata.Item>
+            )}
+          </Metadata>
+        </Txt>
+        <Txt as="span" variant="meta" tone="muted" className="flex items-baseline justify-between gap-3">
           <span className={cn('min-w-0', isCreated ? 'normal-case' : 'truncate first-letter:uppercase')}>
             {isCreated ? (
               <time dateTime={event.occurredAt}>
                 Created at: {timestampFormatter.format(new Date(event.occurredAt))}
               </time>
+            ) : event.action === 'factory.work_item.transition_rejected' ? (
+              <RejectedMove event={event} board={board} />
             ) : (
               actionLabel(event.action)
             )}
@@ -91,7 +131,7 @@ export function ActivityEvent({
               {relativeTime(event.occurredAt)}
             </time>
           )}
-        </span>
+        </Txt>
       </div>
     </div>
   );
@@ -100,9 +140,13 @@ export function ActivityEvent({
 export function WorkItemActivity({
   activity,
   actors,
+  board,
+  showName = true,
 }: {
   activity: WorkItemActivityData;
   actors: Record<string, AuditActorProfile>;
+  board: BoardInfo | undefined;
+  showName?: boolean;
 }) {
   const worker = activity.lastWorker;
   const timeline = activity.events.slice(0, 8);
@@ -118,11 +162,18 @@ export function WorkItemActivity({
           <button
             type="button"
             draggable={false}
-            className="text-ui-xs text-icon4 hover:text-icon6 focus-visible:outline-accent1 relative flex min-w-0 items-center gap-1.5 rounded-full outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
             aria-label={`View activity by ${worker.name}`}
             onPointerDown={event => event.stopPropagation()}
+            className={cn(
+              'text-muted-foreground',
+              `hover:text-foreground relative flex min-w-0 items-center gap-1.5 rounded-full ${focusRing}`,
+            )}
           >
-            <span className="max-w-32 truncate">{worker.name}</span>
+            {showName && (
+              <Txt as="span" variant="meta" className="max-w-32 truncate">
+                {worker.name}
+              </Txt>
+            )}
             <Avatar src={worker.avatarUrl} name={worker.name} size="sm" interactive />
           </button>
         }
@@ -138,22 +189,28 @@ export function WorkItemActivity({
       >
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
-            <History size={14} className="text-icon3" aria-hidden />
+            <IconHistory className="text-muted-foreground size-icon-sm" aria-hidden />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="text-ui-sm text-icon6 font-medium">Activity</span>
-              <span className="text-ui-xs text-icon3 truncate">Last worked on by {worker.name}</span>
+              <Txt as="span" variant="column" tone="ink">
+                Activity
+              </Txt>
+              <Txt as="span" variant="meta" tone="muted" className="truncate">
+                Last worked on by {worker.name}
+              </Txt>
             </div>
           </div>
           {timeline.length > 0 ? (
             <ol className="flex flex-col gap-2.5">
               {timeline.map(event => (
                 <li key={event.id}>
-                  <ActivityEvent event={event} actors={mergedActors} />
+                  <ActivityEvent event={event} actors={mergedActors} board={board} />
                 </li>
               ))}
             </ol>
           ) : (
-            <span className="text-ui-xs text-icon3">No recorded activity yet.</span>
+            <Txt as="span" variant="meta" tone="muted">
+              No recorded activity yet.
+            </Txt>
           )}
         </div>
       </HoverCardContent>

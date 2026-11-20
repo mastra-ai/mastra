@@ -1,7 +1,11 @@
 'use client';
 
+import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+
+import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
+import { IconExclamationTriangle } from '@mastra/playground-ui/icons/central/IconExclamationTriangle';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { AlertTriangleIcon, CheckCircleIcon } from 'lucide-react';
 import type { CsvValidationResult, RowValidationResult } from '../../utils/csv-validation';
 
 interface ValidationReportProps {
@@ -19,9 +23,11 @@ export function ValidationReport({ result, className }: ValidationReportProps) {
   // All rows valid
   if (invalidCount === 0) {
     return (
-      <div className={cn('flex items-center gap-2 text-ui-md text-success', className)}>
-        <CheckCircleIcon className="h-4 w-4" />
-        All {totalRows} row{totalRows !== 1 ? 's' : ''} valid
+      <div className={cn('flex items-center gap-2 text-success-indicator', className)}>
+        <IconCircleCheck className="size-icon-md" />
+        <Txt as="span" variant="body" className="block">
+          All {totalRows} row{totalRows !== 1 ? 's' : ''} valid
+        </Txt>
       </div>
     );
   }
@@ -29,21 +35,39 @@ export function ValidationReport({ result, className }: ValidationReportProps) {
   return (
     <div className={cn('space-y-3', className)}>
       {/* Summary warning */}
-      <div className="text-warning text-ui-md flex items-center gap-2">
-        <AlertTriangleIcon className="h-4 w-4" />
-        {invalidCount} of {totalRows} rows will be skipped (validation failed)
+      <div className="flex items-center gap-2 text-warning-foreground">
+        <IconExclamationTriangle className="size-icon-md" />
+        <Txt as="span" variant="body" className="block">
+          {invalidCount} of {totalRows} rows will be skipped (validation failed)
+        </Txt>
       </div>
 
-      {validCount > 0 && <div className="text-muted-foreground text-ui-md">{validCount} rows will be imported</div>}
+      {validCount > 0 && (
+        <Txt as="p" variant="body" tone="muted">
+          {validCount} rows will be imported
+        </Txt>
+      )}
 
       {/* Failing rows table */}
       <div className="max-h-48 overflow-y-auto rounded-md border">
-        <table className="text-ui-sm w-full">
-          <thead className="bg-muted sticky top-0">
+        <table className="w-full">
+          <thead className="sticky top-0 bg-muted">
             <tr>
-              <th className="px-2 py-1 text-left font-medium">Row</th>
-              <th className="px-2 py-1 text-left font-medium">Field</th>
-              <th className="px-2 py-1 text-left font-medium">Error</th>
+              <th className="px-2 py-1 text-left">
+                <Txt as="span" variant="column" className="block">
+                  Row
+                </Txt>
+              </th>
+              <th className="px-2 py-1 text-left">
+                <Txt as="span" variant="column" className="block">
+                  Field
+                </Txt>
+              </th>
+              <th className="px-2 py-1 text-left">
+                <Txt as="span" variant="column" className="block">
+                  Error
+                </Txt>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -52,8 +76,10 @@ export function ValidationReport({ result, className }: ValidationReportProps) {
             ))}
             {invalidCount > invalidRows.length && (
               <tr>
-                <td colSpan={3} className="text-muted-foreground px-2 py-1 italic">
-                  ... and {invalidCount - invalidRows.length} more
+                <td colSpan={3} className="px-2 py-1 text-muted-foreground italic">
+                  <Txt as="span" variant="caption" className="block">
+                    ... and {invalidCount - invalidRows.length} more
+                  </Txt>
                 </td>
               </tr>
             )}
@@ -73,14 +99,14 @@ function ValidationRow({ row }: { row: RowValidationResult }) {
 
   return (
     <tr className="border-t">
-      <td className="text-muted-foreground px-2 py-1">{row.rowNumber}</td>
+      <td className="px-2 py-1 text-muted-foreground">{row.rowNumber}</td>
       <td className="px-2 py-1">
-        <code className="bg-muted text-ui-sm rounded px-1">
+        <InlineCode className="rounded bg-muted px-1 text-caption">
           {row.field}
           {errorPath !== '/' ? errorPath : ''}
-        </code>
+        </InlineCode>
       </td>
-      <td className="text-destructive px-2 py-1">{errorMessage}</td>
+      <td className="px-2 py-1 text-destructive-foreground">{errorMessage}</td>
     </tr>
   );
 }

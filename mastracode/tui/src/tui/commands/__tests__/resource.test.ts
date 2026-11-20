@@ -78,12 +78,13 @@ function createMockCtx(controller: ReturnType<typeof createMockAgentController>)
         assistantSegment,
         pendingNewThread: false,
         chatContainer: { clear: vi.fn() },
-        pendingTools: { clear: vi.fn() },
+        pendingTools: new Map(),
         allToolComponents: [] as any[],
         allSystemReminderComponents: [] as any[],
         allShellComponents: [] as any[],
         messageComponentsById: new Map<string, any>(),
         session: (controller as any).session,
+        local: { controller, session: (controller as any).session },
         ui: { requestRender: vi.fn() },
       },
       controller: controller as any,
@@ -164,7 +165,7 @@ describe('handleResourceCommand', () => {
       await handleResourceCommand(ctx, ['other-resource']);
 
       expect(ctx.state.chatContainer.clear).toHaveBeenCalled();
-      expect(ctx.state.pendingTools.clear).toHaveBeenCalled();
+      expect(ctx.state.pendingTools.size).toBe(0);
       expect(ctx.state.allToolComponents).toEqual([]);
       expect(ctx.state.assistantRenderRegistry.size).toBe(0);
       expect((ctx.state as any).assistantSegment.component.disposeRenderState).toHaveBeenCalledOnce();

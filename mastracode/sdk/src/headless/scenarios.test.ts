@@ -17,13 +17,19 @@ import { LibSQLStore } from '@mastra/libsql';
 import { describe, it, expect, vi } from 'vitest';
 import z from 'zod';
 
+import { requestSandboxAccessTool } from '../tools/request-sandbox-access.js';
+
 import { createHumanFormatState, formatHuman, formatJsonl, renderJsonResult, renderTextResult } from './format.js';
+import { autoApprovePolicy } from './policy.js';
 import { runMC } from './run-mc.js';
 import type { ResolutionPolicy } from './types.js';
 
 vi.setConfig({ testTimeout: 30_000 });
 
-function textStream(text: string, finishReason: 'stop' | 'tool-calls' = 'stop') {
+type StreamUsage = { inputTokens: number; outputTokens: number; totalTokens: number };
+const DEFAULT_USAGE: StreamUsage = { inputTokens: 10, outputTokens: 20, totalTokens: 30 };
+
+function textStream(text: string, finishReason: 'stop' | 'tool-calls' = 'stop', usage: StreamUsage = DEFAULT_USAGE) {
   return new ReadableStream({
     start(controller) {
       controller.enqueue({ type: 'stream-start', warnings: [] });
@@ -34,14 +40,14 @@ function textStream(text: string, finishReason: 'stop' | 'tool-calls' = 'stop') 
       controller.enqueue({
         type: 'finish',
         finishReason,
-        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        usage,
       });
       controller.close();
     },
   });
 }
 
-function toolCallStream(toolName: string, input: string) {
+function toolCallStream(toolName: string, input: string, usage: StreamUsage = DEFAULT_USAGE) {
   return new ReadableStream({
     start(controller) {
       controller.enqueue({ type: 'stream-start', warnings: [] });
@@ -50,7 +56,7 @@ function toolCallStream(toolName: string, input: string) {
       controller.enqueue({
         type: 'finish',
         finishReason: 'tool-calls',
-        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        usage,
       });
       controller.close();
     },
@@ -61,12 +67,14 @@ interface HarnessOptions {
   doStream: () => Promise<{ stream: ReadableStream }>;
   withReadFileTool?: boolean;
   readFileNeedsApproval?: boolean;
+  withRequestAccessTool?: boolean;
 }
 
 async function makeHarness(opts: HarnessOptions) {
-  const storage = new LibSQLStore({ id: 'test-store', url: 'file::memory:?cache=shared' });
+  const storage = new LibSQLStore({ id: 'test-store', url: ':memory:' });
 
   const tools: Record<string, ReturnType<typeof createTool>> = {};
+  if (opts.withRequestAccessTool) tools.request_access = requestSandboxAccessTool;
   if (opts.withReadFileTool) {
     tools.readFile = createTool({
       id: 'readFile',
@@ -114,6 +122,77 @@ async function makeHarness(opts: HarnessOptions) {
 }
 
 describe('headless scenarios', () => {
+  it('auto-approves a request_access suspension and returns the post-resume answer', async () => {
+    let calls = 0;
+    const { controller, session } = await makeHarness({
+      withRequestAccessTool: true,
+      doStream: async () => ({
+        stream:
+          ++calls === 1
+            ? toolCallStream('request_access', '{"path":"/shared","reason":"Read shared notes"}')
+            : textStream('Access granted. I can read the shared notes.'),
+      }),
+    });
+
+    const run = runMC({
+      controller,
+      session,
+      prompt: 'Request access to /shared',
+      policy: autoApprovePolicy,
+    });
+    const events: AgentControllerEvent[] = [];
+    for await (const event of run) events.push(event);
+    const result = await run.result;
+
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'tool_suspended', toolName: 'request_access' }),
+        expect.objectContaining({ type: 'agent_end', reason: 'suspended' }),
+      ]),
+    );
+    expect(result.status).toBe('completed');
+    expect(result.text).toBe('Access granted. I can read the shared notes.');
+    expect(calls).toBe(2);
+  });
+
+  it('counts each step once across a suspension and resume', async () => {
+    // The resumed run must not replay usage for the step that suspended.
+    let calls = 0;
+    const { controller, session } = await makeHarness({
+      withRequestAccessTool: true,
+      doStream: async () => ({
+        stream:
+          ++calls === 1
+            ? toolCallStream('request_access', '{"path":"/shared","reason":"Read shared notes"}', {
+                inputTokens: 10,
+                outputTokens: 20,
+                totalTokens: 30,
+              })
+            : textStream('Access granted.', 'stop', { inputTokens: 7, outputTokens: 11, totalTokens: 18 }),
+      }),
+    });
+
+    const run = runMC({ controller, session, prompt: 'Request access to /shared', policy: autoApprovePolicy });
+    const events: AgentControllerEvent[] = [];
+    for await (const event of run) events.push(event);
+    const result = await run.result;
+
+    expect(result.status).toBe('completed');
+    expect(events).toContainEqual(expect.objectContaining({ type: 'agent_end', reason: 'suspended' }));
+    expect(
+      events.flatMap(event =>
+        event.type === 'usage_update'
+          ? [[event.usage.promptTokens, event.usage.completionTokens, event.usage.totalTokens]]
+          : [],
+      ),
+    ).toEqual([
+      [10, 20, 30],
+      [7, 11, 18],
+    ]);
+    expect(result.usage).toEqual({ inputTokens: 17, outputTokens: 31, totalTokens: 48 });
+    expect(JSON.parse(renderJsonResult(result)).usage).toEqual({ inputTokens: 17, outputTokens: 31, totalTokens: 48 });
+  });
+
   it('streams a turn to human stdout/stderr and renders a final text result', async () => {
     // A CLI user runs `mastracode --prompt ... --output human`: assistant text
     // streams to stdout as it arrives, then the final result is rendered.
@@ -163,7 +242,8 @@ describe('headless scenarios', () => {
     const json = JSON.parse(renderJsonResult(result));
     expect(json.text).toBe('Read the notes.');
     expect(json.toolCalls[0].name).toBe('readFile');
-    expect(json.usage).toEqual({ inputTokens: 10, outputTokens: 20, totalTokens: 30 });
+    // Usage sums both steps (tool call, then final text), each reporting 10/20/30.
+    expect(json.usage).toEqual({ inputTokens: 20, outputTokens: 40, totalTokens: 60 });
     expect(json.threadId).toBeTruthy();
   });
 

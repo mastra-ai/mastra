@@ -1,8 +1,12 @@
 /**
  * Factory function to create an EventedAgent that wraps an existing Agent.
  *
- * This creates a durable agent that uses fire-and-forget execution via
- * the built-in workflow engine with startAsync().
+ * This creates a durable agent that runs its agentic loop on the built-in
+ * evented workflow engine: execution is fire-and-forget (the run is started
+ * without being awaited) and driven by events on the Mastra host's pubsub.
+ *
+ * The returned agent must be registered on a `Mastra` instance (with storage)
+ * before use; calling it unregistered fails with a clear `MastraError`.
  *
  * @example
  * ```typescript
@@ -83,16 +87,26 @@ export interface CreateEventedAgentOptions<
    * multi-worker coordination build on.
    */
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
+
+  /**
+   * How the agent's new runs are stored (`1` or `2`). Defaults to `1`. See
+   * {@link DurableAgentConfig.storageVersion}.
+   *
+   * @experimental
+   */
+  storageVersion?: 1 | 2;
 }
 
 /**
  * Create an EventedAgent that wraps an existing Agent.
  *
  * This factory function creates an EventedAgent instance with fire-and-forget
- * execution via the built-in workflow engine.
+ * execution via the built-in evented workflow engine. Runs survive process
+ * death: over the same storage, a fresh process can resume in-flight runs via
+ * `recover(runId)` / `recoverActiveRuns()`.
  *
  * @param options - Configuration options
- * @returns An EventedAgent instance
+ * @returns An EventedAgent instance (register it on a `Mastra` host before use)
  *
  * @example
  * ```typescript
@@ -114,7 +128,7 @@ export function createEventedAgent<
   TTools extends Record<string, any> = Record<string, any>,
   TOutput = undefined,
 >(options: CreateEventedAgentOptions<TAgentId, TTools, TOutput>): EventedAgent<TAgentId, TTools, TOutput> {
-  const { agent, pubsub, cache, maxSteps, shouldCache, shouldPersistSnapshot } = options;
+  const { agent, pubsub, cache, maxSteps, shouldCache, shouldPersistSnapshot, storageVersion } = options;
 
   return new EventedAgent({
     agent,
@@ -123,6 +137,7 @@ export function createEventedAgent<
     maxSteps,
     shouldCache,
     shouldPersistSnapshot,
+    storageVersion,
   } as EventedAgentConfig<TAgentId, TTools, TOutput>);
 }
 

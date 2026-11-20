@@ -1,7 +1,10 @@
-import { CheckIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useFilterBarContext } from './filter-bar-context';
+import type { FilterBarOption } from './types';
 import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
 import { Spinner } from '@/ds/components/Spinner/spinner';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { iconSizeClasses } from '@/ds/icons/icon-size-classes';
 import { cn } from '@/lib/utils';
 
 export type FilterBarOptionListProps<T> = {
@@ -16,9 +19,20 @@ export type FilterBarOptionListProps<T> = {
   'aria-multiselectable'?: boolean;
 };
 
+/** Default value row: the option's leading node (avatar, swatch…) followed by its label. */
+export function FilterBarOptionLabel({ option }: { option: FilterBarOption }) {
+  return (
+    <>
+      {option.start}
+      <span className="min-w-0 truncate">{option.label ?? option.value}</span>
+    </>
+  );
+}
+
 /**
- * List/status/empty rows for a `ComboboxPrimitive.Root`. Items come from the
- * root's `items`; highlight and keyboard navigation are owned by Base UI.
+ * List/status/empty rows for a `ComboboxPrimitive.Root`, laid out like the DS
+ * `Combobox` popup (scroller around the list). Items come
+ * from the root's `items`; highlight and keyboard navigation are owned by Base UI.
  */
 export function FilterBarOptionList<T>({
   getKey,
@@ -30,6 +44,7 @@ export function FilterBarOptionList<T>({
   'aria-label': ariaLabel,
   'aria-multiselectable': multiselectable,
 }: FilterBarOptionListProps<T>) {
+  const { describeSuggestionsError } = useFilterBarContext();
   const idle = !isLoading && error === undefined;
   return (
     <>
@@ -40,37 +55,52 @@ export function FilterBarOptionList<T>({
         </ComboboxPrimitive.Status>
       )}
       {!isLoading && error !== undefined && (
-        <ComboboxPrimitive.Status className={comboboxStyles.empty}>Couldn't load values.</ComboboxPrimitive.Status>
+        <ComboboxPrimitive.Status className={comboboxStyles.empty}>
+          {describeSuggestionsError?.(error) ?? "Couldn't load values."}
+        </ComboboxPrimitive.Status>
       )}
       <ComboboxPrimitive.Empty className={comboboxStyles.empty}>{idle ? emptyText : null}</ComboboxPrimitive.Empty>
-      <ComboboxPrimitive.List
-        aria-label={ariaLabel}
-        aria-multiselectable={multiselectable}
-        className={cn(comboboxStyles.list, 'max-h-[min(var(--max-height-dropdown-max-height),60dvh)]')}
-      >
-        {(option: T) => {
-          const selected = isSelected?.(option) ?? false;
-          return (
-            <ComboboxPrimitive.Item
-              key={getKey(option)}
-              value={option}
-              data-selected={selected || undefined}
-              className={cn(comboboxStyles.item, 'min-w-0')}
-            >
-              <span className="min-w-0 flex-1 truncate">{renderOption(option)}</span>
-              <span className={comboboxStyles.checkContainer}>
-                {isSelected ? (
-                  selected && <CheckIcon className={comboboxStyles.checkIcon} />
-                ) : (
-                  <ComboboxPrimitive.ItemIndicator>
-                    <CheckIcon className={comboboxStyles.checkIcon} />
-                  </ComboboxPrimitive.ItemIndicator>
-                )}
-              </span>
-            </ComboboxPrimitive.Item>
-          );
-        }}
-      </ComboboxPrimitive.List>
+      <div className={cn(comboboxStyles.listScroller, 'max-h-[min(var(--spacing-dropdown),60dvh)]')}>
+        <ComboboxPrimitive.List
+          aria-label={ariaLabel}
+          aria-multiselectable={multiselectable}
+          className={comboboxStyles.list}
+        >
+          {(option: T) => {
+            const selected = isSelected?.(option) ?? false;
+            return (
+              <ComboboxPrimitive.Item
+                key={getKey(option)}
+                value={option}
+                data-selected={selected || undefined}
+                className={cn(comboboxStyles.item, 'min-w-0')}
+              >
+                {/* The row's rung, which the wrapper would otherwise hide from a leading icon. */}
+                <span
+                  className={cn(
+                    'flex min-w-0 flex-1 items-center gap-1.5 truncate',
+                    iconSizeClasses.md,
+                    '[&>svg]:shrink-0',
+                  )}
+                >
+                  {renderOption(option)}
+                </span>
+                <span className={comboboxStyles.itemRightSlot}>
+                  <span className={comboboxStyles.checkContainer}>
+                    {isSelected ? (
+                      selected && <IconCheckmark2Medium className={comboboxStyles.checkIcon} />
+                    ) : (
+                      <ComboboxPrimitive.ItemIndicator>
+                        <IconCheckmark2Medium className={comboboxStyles.checkIcon} />
+                      </ComboboxPrimitive.ItemIndicator>
+                    )}
+                  </span>
+                </span>
+              </ComboboxPrimitive.Item>
+            );
+          }}
+        </ComboboxPrimitive.List>
+      </div>
     </>
   );
 }

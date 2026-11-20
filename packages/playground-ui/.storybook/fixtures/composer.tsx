@@ -1,4 +1,3 @@
-import { ArrowUp, Hammer, Map, Mic, Paperclip, Square, Zap } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
@@ -7,18 +6,24 @@ import {
   ComposerActions,
   ComposerBox,
   ComposerInput,
-  type ComposerInputProps,
-  type ComposerTone,
   ComposerToneLabel,
   ComposerRing,
 } from '@/ds/components/Composer';
+import type { ComposerInputProps, ComposerTone } from '@/ds/components/Composer';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/ds/components/Select';
+import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
+import { IconHammer } from '@/ds/icons/central/IconHammer';
+import { IconMap } from '@/ds/icons/central/IconMap';
+import { IconMicrophone } from '@/ds/icons/central/IconMicrophone';
+import { IconPaperclip1 } from '@/ds/icons/central/IconPaperclip1';
+import { IconStop } from '@/ds/icons/central/IconStop';
+import { IconZap } from '@/ds/icons/central/IconZap';
 
 const modes = [
-  { id: 'build', label: 'Build', Icon: Hammer, tone: 'green' },
-  { id: 'plan', label: 'Plan', Icon: Map, tone: 'purple' },
-  { id: 'fast', label: 'Fast', Icon: Zap, tone: 'orange' },
-] satisfies { id: string; label: string; Icon: typeof Hammer; tone: ComposerTone }[];
+  { id: 'build', label: 'Build', Icon: IconHammer, tone: 'green' },
+  { id: 'plan', label: 'Plan', Icon: IconMap, tone: 'purple' },
+  { id: 'fast', label: 'Fast', Icon: IconZap, tone: 'orange' },
+] satisfies { id: string; label: string; Icon: typeof IconHammer; tone: ComposerTone }[];
 
 export interface ComposerPreviewProps {
   mode?: string;
@@ -62,7 +67,7 @@ export function ComposerPreview({
           <ComposerInput
             ref={inputRef}
             aria-label="Message"
-            placeholder="Ask a question…"
+            placeholder="Ask a question"
             variant={variant}
             disabled={disabled}
             value={text}
@@ -77,7 +82,7 @@ export function ComposerPreview({
           <ComposerActions>
             {controls === 'mode' ? (
               <Select value={selectedMode} onValueChange={setSelectedMode} disabled={disabled}>
-                <SelectTrigger variant="ghost" size="xs" aria-label="Session mode" className="w-auto">
+                <SelectTrigger variant="ghost" size="sm" aria-label="Session mode" className="w-auto">
                   <ComposerToneLabel tone={tone} className="inline-flex items-center gap-1.5">
                     {modeOption && <modeOption.Icon size={12} aria-hidden />}
                     {modeOption?.label ?? selectedMode}
@@ -92,15 +97,15 @@ export function ComposerPreview({
                 </SelectContent>
               </Select>
             ) : (
-              <ButtonsGroup spacing="close" aria-label="Input controls">
-                <Button type="button" size="icon-md" aria-label="Attach file" disabled={disabled}>
-                  <Paperclip />
+              <ButtonsGroup size="sm" aria-label="Input controls">
+                <Button type="button" size="icon-sm" aria-label="Attach file" disabled={disabled}>
+                  <IconPaperclip1 />
                 </Button>
-                <Button type="button" size="icon-md" aria-label="Voice input" disabled={disabled}>
-                  <Mic />
+                <Button type="button" size="icon-sm" aria-label="Voice input" disabled={disabled}>
+                  <IconMicrophone />
                 </Button>
                 <Select defaultValue="default" disabled={disabled}>
-                  <SelectTrigger size="sm" aria-label="Model" className="w-auto">
+                  <SelectTrigger aria-label="Model" className="w-auto">
                     Default model
                   </SelectTrigger>
                   <SelectContent>
@@ -114,7 +119,6 @@ export function ComposerPreview({
               {running ? (
                 <Button
                   type="button"
-                  variant="outline"
                   size="icon-sm"
                   aria-label="Stop response"
                   onClick={() => {
@@ -122,17 +126,11 @@ export function ComposerPreview({
                     inputRef.current?.focus();
                   }}
                 >
-                  <Square />
+                  <IconStop />
                 </Button>
               ) : (
-                <Button
-                  type="submit"
-                  variant="outline"
-                  size="icon-sm"
-                  aria-label="Send message"
-                  disabled={disabled || !text.trim()}
-                >
-                  <ArrowUp />
+                <Button type="submit" size="icon-sm" aria-label="Send message" disabled={disabled || !text.trim()}>
+                  <IconArrowUp />
                 </Button>
               )}
             </div>
@@ -148,7 +146,7 @@ export function ComposerModeStates() {
     <div className="mx-auto grid max-w-3xl gap-6">
       {modes.map(mode => (
         <section key={mode.id} aria-label={mode.label} className="grid gap-3">
-          <h2 className="text-ui-md text-neutral4">{mode.label}</h2>
+          <h2 className="text-ui-md text-muted-foreground">{mode.label}</h2>
           <ComposerPreview mode={mode.id} />
           <ComposerPreview mode={mode.id} busy />
         </section>

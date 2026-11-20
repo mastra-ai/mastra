@@ -32,13 +32,15 @@ Mount one Mesa repo and pass the filesystem to a workspace:
 ```typescript title="src/mastra/workspace.ts"
 import { Agent } from '@mastra/core/agent'
 import { Workspace } from '@mastra/core/workspace'
-import { MesaFilesystem } from '@mastra/mesa'
+import { MesaFilesystem, repo } from '@mastra/mesa'
 
 const workspace = new Workspace({
   filesystem: new MesaFilesystem({
-    apiKey: process.env.MESA_API_KEY,
-    org: 'acme',
-    repos: [{ name: 'docs', bookmark: 'main' }],
+    privateKey: process.env.MESA_PRIVATE_KEY,
+    authors: [{ name: 'File Agent', email: 'agent@example.com' }],
+    layout: {
+      '/docs': repo('docs', { mode: 'rw', at: { bookmark: 'main' } }),
+    },
   }),
 })
 
@@ -50,28 +52,27 @@ const agent = new Agent({
 })
 ```
 
-`apiKey` falls back to `MESA_API_KEY` when omitted.
+`privateKey` falls back to `MESA_PRIVATE_KEY` when omitted. The layout uses `repo()`, re-exported from the [Mesa SDK](https://docs.mesa.dev/content/getting-started/introduction), to declare which repos to mount and where.
 
 ## Constructor parameters
 
 <PropertiesTable
   content={[
   {
-    name: 'apiKey',
+    name: 'privateKey',
     type: 'string',
-    description: 'Mesa API key. Falls back to `MESA_API_KEY` when omitted.',
+    description: 'Mesa private key. Falls back to `MESA_PRIVATE_KEY` when omitted.',
     isOptional: true,
   },
   {
-    name: 'org',
-    type: 'string',
-    description: 'Mesa org slug. When omitted, the Mesa SDK resolves the default org.',
-    isOptional: true,
+    name: 'authors',
+    type: '[Author, ...Author[]]',
+    description: 'Commit authors attributed to writes made through this filesystem.',
   },
   {
-    name: 'repos',
-    type: 'RepoConfig[]',
-    description: 'Mesa repos to mount.',
+    name: 'layout',
+    type: 'Layout',
+    description: 'Mesa mount layout mapping absolute paths to repos, built with `repo()`.',
   },
   {
     name: 'cache',
@@ -88,7 +89,7 @@ const agent = new Agent({
   {
     name: 'readOnly',
     type: 'boolean',
-    description: 'Mount all repos as read-only.',
+    description: 'Mount every repo in the layout as read-only.',
     isOptional: true,
     defaultValue: 'false',
   },
@@ -153,7 +154,7 @@ const agent = new Agent({
 Reads a file from Mesa.
 
 ```typescript
-const content = await filesystem.readFile('/acme/docs/README.md', {
+const content = await filesystem.readFile('/docs/README.md', {
   encoding: 'utf-8',
 })
 ```
@@ -165,7 +166,7 @@ Returns: `Promise<string | Buffer>`
 Writes a file to Mesa.
 
 ```typescript
-await filesystem.writeFile('/acme/docs/report.md', '# Report')
+await filesystem.writeFile('/docs/report.md', '# Report')
 ```
 
 Returns: `Promise<void>`
@@ -175,7 +176,7 @@ Returns: `Promise<void>`
 Appends content to a file.
 
 ```typescript
-await filesystem.appendFile('/acme/docs/log.txt', 'new line\n')
+await filesystem.appendFile('/docs/log.txt', 'new line\n')
 ```
 
 Returns: `Promise<void>`
@@ -185,7 +186,7 @@ Returns: `Promise<void>`
 Deletes a file.
 
 ```typescript
-await filesystem.deleteFile('/acme/docs/old-report.md')
+await filesystem.deleteFile('/docs/old-report.md')
 ```
 
 Returns: `Promise<void>`
@@ -195,7 +196,7 @@ Returns: `Promise<void>`
 Copies a file.
 
 ```typescript
-await filesystem.copyFile('/acme/docs/report.md', '/acme/docs/archive/report.md')
+await filesystem.copyFile('/docs/report.md', '/docs/archive/report.md')
 ```
 
 Returns: `Promise<void>`
@@ -205,7 +206,7 @@ Returns: `Promise<void>`
 Moves or renames a file.
 
 ```typescript
-await filesystem.moveFile('/acme/docs/draft.md', '/acme/docs/final.md')
+await filesystem.moveFile('/docs/draft.md', '/docs/final.md')
 ```
 
 Returns: `Promise<void>`
@@ -217,7 +218,7 @@ Returns: `Promise<void>`
 Creates a directory.
 
 ```typescript
-await filesystem.mkdir('/acme/docs/reports', { recursive: true })
+await filesystem.mkdir('/docs/reports', { recursive: true })
 ```
 
 Returns: `Promise<void>`
@@ -227,7 +228,7 @@ Returns: `Promise<void>`
 Removes a directory.
 
 ```typescript
-await filesystem.rmdir('/acme/docs/reports', { recursive: true })
+await filesystem.rmdir('/docs/reports', { recursive: true })
 ```
 
 Returns: `Promise<void>`
@@ -237,7 +238,7 @@ Returns: `Promise<void>`
 Lists directory entries.
 
 ```typescript
-const entries = await filesystem.readdir('/acme/docs', {
+const entries = await filesystem.readdir('/docs', {
   recursive: true,
   extension: '.md',
 })
@@ -252,7 +253,7 @@ Returns: `Promise<FileEntry[]>`
 Checks whether a path exists.
 
 ```typescript
-const exists = await filesystem.exists('/acme/docs/README.md')
+const exists = await filesystem.exists('/docs/README.md')
 ```
 
 Returns: `Promise<boolean>`
@@ -262,7 +263,7 @@ Returns: `Promise<boolean>`
 Returns file or directory metadata.
 
 ```typescript
-const stat = await filesystem.stat('/acme/docs/README.md')
+const stat = await filesystem.stat('/docs/README.md')
 ```
 
 Returns: `Promise<FileStat>`
@@ -272,7 +273,7 @@ Returns: `Promise<FileStat>`
 Returns the canonical path from Mesa.
 
 ```typescript
-const realPath = await filesystem.realpath('/acme/docs/README.md')
+const realPath = await filesystem.realpath('/docs/README.md')
 ```
 
 Returns: `Promise<string>`
@@ -285,7 +286,7 @@ Creates a Mesa-backed Bash runtime for this filesystem.
 
 ```typescript
 const bash = await filesystem.bash({
-  cwd: '/acme/docs',
+  cwd: '/docs',
 })
 ```
 
@@ -293,34 +294,32 @@ Returns: `Promise<Bash>`
 
 ## Path semantics
 
-Methods expect absolute paths. For `MesaFilesystem`, paths are rooted at the Mesa mount and must include the org slug and repo name:
+Methods expect absolute paths. For `MesaFilesystem`, paths are rooted at the Mesa mount and start with a path from the layout:
 
 ```typescript
-await filesystem.readFile('/acme/docs/README.md')
+await filesystem.readFile('/docs/README.md')
 ```
 
 Don't omit the leading slash:
 
 ```typescript
-await filesystem.readFile('acme/docs/README.md') // Incorrect
-await filesystem.readFile('/acme/docs/README.md') // Correct
+await filesystem.readFile('docs/README.md') // Incorrect
+await filesystem.readFile('/docs/README.md') // Correct
 ```
 
-The org comes from `org` in the constructor, or from the Mesa SDK's default org inference when `org` is omitted. It remains the first path segment.
-
-When you mount multiple repos, each repo is available under the org segment:
+When you mount multiple repos, each repo is available under its layout path:
 
 ```typescript
 const filesystem = new MesaFilesystem({
-  org: 'acme',
-  repos: [
-    { name: 'docs', bookmark: 'main' },
-    { name: 'website', bookmark: 'main' },
-  ],
+  authors: [{ name: 'File Agent' }],
+  layout: {
+    '/docs': repo('docs', { mode: 'rw', at: { bookmark: 'main' } }),
+    '/website': repo('website', { mode: 'rw', at: { bookmark: 'main' } }),
+  },
 })
 
-await filesystem.readFile('/acme/docs/README.md')
-await filesystem.readFile('/acme/website/package.json')
+await filesystem.readFile('/docs/README.md')
+await filesystem.readFile('/website/package.json')
 ```
 
 ## Mesa versioning APIs
@@ -328,7 +327,7 @@ await filesystem.readFile('/acme/website/package.json')
 Access the underlying Mesa filesystem for Mesa-specific change and bookmark operations:
 
 ```typescript
-await filesystem.writeFile('/acme/docs/draft.md', 'Draft')
+await filesystem.writeFile('/docs/draft.md', 'Draft')
 
 const current = await filesystem.change.current({
   repo: 'docs',
@@ -345,11 +344,12 @@ More details on versioning semantics can be found in [Mesa's docs](https://docs.
 
 ## Read-only mode
 
-Set `readOnly: true` to block write operations through Mastra:
+Set `readOnly: true` to mount every repo in the layout read-only and block write operations through Mastra:
 
 ```typescript
 const filesystem = new MesaFilesystem({
-  repos: [{ name: 'docs', bookmark: 'main' }],
+  authors: [{ name: 'File Agent' }],
+  layout: { '/docs': repo('docs', { mode: 'ro', at: { bookmark: 'main' } }) },
   readOnly: true,
 })
 ```

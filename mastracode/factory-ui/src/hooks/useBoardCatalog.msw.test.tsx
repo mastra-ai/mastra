@@ -11,11 +11,28 @@ const catalog: BoardCatalogResponse = {
   boards: [
     {
       id: 'release',
+      name: 'Release Preview',
       title: 'Release Preview',
       initialPhase: 'queued',
       phases: [
-        { id: 'queued', title: 'Queued', kind: 'resting', transitions: [{ outcome: null, to: 'shipping' }] },
-        { id: 'shipping', title: 'Shipping', kind: 'working', role: 'publisher', transitions: [] },
+        {
+          id: 'queued',
+          name: 'Queued',
+          title: 'Queued',
+          kind: 'resting',
+          nextPhases: ['shipping'],
+          transitions: [{ outcome: null, to: 'shipping' }],
+        },
+        {
+          id: 'shipping',
+          name: 'Shipping',
+          title: 'Shipping',
+          kind: 'working',
+          nextPhases: [],
+          context: 'publisher',
+          role: 'publisher',
+          transitions: [],
+        },
       ],
     },
   ],

@@ -3,13 +3,27 @@
     "MiniMaxAI/MiniMax-M2.5",
     "meta-llama/Llama-3.3-70B-Instruct",
     "openai/gpt-oss-120b",
-    "speakleash/Bielik-11B-v2.6-Instruct",
-    "speakleash/Bielik-11B-v3.0-Instruct"
+    "speakleash/Bielik-11B-v3.0-Instruct",
+    "zai-org/GLM-5.3"
   ],
   "structuredOutput": [
     "MiniMaxAI/MiniMax-M2.5",
     "openai/gpt-oss-120b",
-    "speakleash/Bielik-11B-v2.6-Instruct",
-    "speakleash/Bielik-11B-v3.0-Instruct"
-  ]
+    "speakleash/Bielik-11B-v3.0-Instruct",
+    "zai-org/GLM-5.3"
+  ],
+  "reasoning": {
+    "zai-org/GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high"]
+      }
+    ],
+    "openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ]
+  }
 }

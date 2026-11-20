@@ -47,6 +47,7 @@ export const goalJudgeOmModelIsolationScenario = {
   name: 'goal-judge-om-model-isolation',
   description: 'Keeps the main OM model state isolated across a distinct-model goal judge waiting checkpoint.',
   testName: 'does not activate OM for the goal judge model after waiting and a user follow-up',
+  enableObservationalMemory: true,
   useOpenAIModel: true,
   aimockFixture: 'goal-judge-om-model-isolation.json',
   env() {
@@ -108,9 +109,12 @@ export const goalJudgeOmModelIsolationScenario = {
     const history = stripAnsi(
       (terminal as unknown as { serializeHistory(): { output: string } }).serializeHistory().output,
     );
-    completedObservationCycle = /Buffered observation/i.test(history) && /Activated observations/i.test(history);
+    // Buffering markers are hidden; the activation marker is the visible end of the observation cycle.
+    completedObservationCycle = /Activated observations/i.test(history) && !/Buffered observation/i.test(history);
     if (!completedObservationCycle) {
-      throw new Error('Expected the TUI history to show both buffered and activated observational-memory markers');
+      throw new Error(
+        'Expected the TUI history to show the activated observational-memory marker and no buffering marker',
+      );
     }
     const markerCount = history.split(PROVIDER_CHANGE_MARKER).length - 1;
     observedMarkerCount = markerCount;
@@ -149,10 +153,12 @@ export const goalJudgeOmModelIsolationScenario = {
     const doneJudge = typedRequests.filter(request =>
       matchesFixture(request, 'gpt-5.5', `Goal: ${OBJECTIVE}`, DONE_REASON),
     );
+    // Observational memory compacts the oversized objective before the follow-up,
+    // so the approval is the latest user message on the follow-up request.
     const followUpMain = typedRequests.filter(
       request =>
-        matchesFixture(request, 'gpt-5.4-mini', OBJECTIVE, FOLLOW_UP_RESPONSE) &&
-        JSON.stringify(request.body).includes(FOLLOW_UP),
+        matchesFixture(request, 'gpt-5.4-mini', FOLLOW_UP, FOLLOW_UP_RESPONSE) &&
+        JSON.stringify(request.body).includes(OBJECTIVE_PREFIX),
     );
 
     if (observerRequests.length < 1) {

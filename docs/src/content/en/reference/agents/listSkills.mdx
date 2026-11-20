@@ -58,12 +58,8 @@ interface SkillMetadata {
   name: string
   description: string
   path: string
-  source: { type: string; projectPath: string }
-  references: string[]
-  scripts: string[]
-  assets: string[]
   license?: string
-  compatibility?: string[]
+  compatibility?: unknown
   'user-invocable'?: boolean
   metadata?: Record<string, unknown>
 }

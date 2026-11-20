@@ -2,7 +2,7 @@
  * Regression test for #23815 / #22450: durable finish side effects in serve/HTTP topology.
  *
  * The terminal `map-final-output` mapping already executes inside the engine's durable
- * boundary (`wrapDurableOperation` -> `inngestStep.run`). Wrapping the finish side
+ * step boundary (`inngestStep.run`). Wrapping the finish side
  * effects in a second `params.engine.step.run(...)` created a nested Inngest step,
  * which the Inngest protocol does not support: the nested callback never executes and
  * its promise never settles. In serve/HTTP topology (step discovery/checkpointing per

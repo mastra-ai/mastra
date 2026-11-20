@@ -1,5 +1,3 @@
-import { randomBytes } from 'node:crypto';
-
 export interface ObservationGroup {
   id: string;
   range: string;
@@ -58,6 +56,8 @@ function scanObservationGroupTags(observations: string): ObservationGroupScan {
   // Known closing tag at or after the cursor. Reusing it for successive openings stops malformed
   // input from re-walking the tail of the string once per opening.
   let closeFloor = 0;
+  // Next line-started opening at or after the cursor, cached for the same reason.
+  let nestedFloor = -1;
 
   while (cursor < observations.length) {
     const start = observations.indexOf(OBSERVATION_GROUP_OPEN, cursor);
@@ -87,8 +87,13 @@ function scanObservationGroupTags(observations: string): ObservationGroupScan {
 
     // Only a line-started opening can be a nested group: the producer always writes tags on their
     // own lines, so anything else is observation content that happens to mention the tag name.
-    const nestedStart = observations.indexOf(OBSERVATION_GROUP_OPEN, openEnd + 1);
-    if (nestedStart !== -1 && nestedStart < closeStart && isLineStart(observations, nestedStart)) {
+    // Skip inline mentions so a quoted tag cannot hide a later line-started group.
+    if (nestedFloor <= openEnd) {
+      const lineOpen = observations.indexOf(`\n${OBSERVATION_GROUP_OPEN}`, openEnd);
+      nestedFloor = lineOpen === -1 ? observations.length : lineOpen + 1;
+    }
+    const nestedStart = nestedFloor;
+    if (nestedStart < closeStart) {
       incompleteOpenings.push({ start, end: openEnd + 1 });
       closeFloor = closeStart;
       cursor = nestedStart;
@@ -166,7 +171,7 @@ function stripReflectionGroupMetadata(body: string): string {
 }
 
 export function generateAnchorId(): string {
-  return randomBytes(8).toString('hex');
+  return Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(8))).toString('hex');
 }
 
 export function wrapInObservationGroup(
@@ -179,6 +184,41 @@ export function wrapInObservationGroup(
   const content = observations.trim();
   const kindAttr = kind ? ` kind="${kind}"` : '';
   return `<observation-group id="${id}" range="${range}"${kindAttr}>\n${content}\n</observation-group>`;
+}
+
+function isObservationGroupOpeningLine(line: string): boolean {
+  const trimmed = line.trimStart();
+  return trimmed.startsWith(OBSERVATION_GROUP_OPEN) && /\s/.test(trimmed[OBSERVATION_GROUP_OPEN.length] ?? '');
+}
+
+/**
+ * Moves a cut of `cut` leading lines so it never splits an observation group. A cut inside a group
+ * moves back to just before the group's opening tag (and the blank lines that separate it from the
+ * previous group). When nothing precedes that group, the cut moves forward to just after its closing
+ * tag instead, so the whole group is cut. A cut outside every group, and observations without group
+ * tags, are returned unchanged.
+ */
+export function alignLineCutToObservationGroups(lines: readonly string[], cut: number): number {
+  let openingLine = -1;
+  for (let i = 0; i < cut; i++) {
+    const line = lines[i]!;
+    if (isObservationGroupOpeningLine(line)) {
+      openingLine = i;
+    } else if (line.trim() === OBSERVATION_GROUP_CLOSE) {
+      openingLine = -1;
+    }
+  }
+  if (openingLine === -1) return cut;
+
+  let before = openingLine;
+  while (before > 0 && lines[before - 1]!.trim() === '') before--;
+  if (before > 0) return before;
+
+  for (let i = cut; i < lines.length; i++) {
+    if (lines[i]!.trim() === OBSERVATION_GROUP_CLOSE) return i + 1;
+  }
+  // The group never closes, so there is no boundary after the cut either.
+  return cut;
 }
 
 export function parseObservationGroups(observations: string): ObservationGroup[] {
@@ -286,7 +326,10 @@ export function combineObservationGroupRanges(groups: ObservationGroup[]): strin
   return `${first.start.label}:${last.end.label}`;
 }
 
-export function renderObservationGroupsForReflection(observations: string): string | null {
+export function renderObservationGroupsForReflection(
+  observations: string,
+  options?: { includeReflectionKind?: boolean },
+): string | null {
   const groups = parseObservationGroups(observations);
   if (groups.length === 0) {
     return null;
@@ -295,7 +338,8 @@ export function renderObservationGroupsForReflection(observations: string): stri
   const result = replaceObservationGroupTags(observations, tag => {
     const attributes = parseObservationGroupAttributes(tag.attributeString);
     if (!attributes.id || !attributes.range) return tag.content.trim();
-    return `## Group \`${attributes.id}\`\n_range: \`${attributes.range}\`_\n\n${tag.content.trim()}`;
+    const kind = options?.includeReflectionKind && attributes.kind === 'reflection' ? '\n_kind: reflection_' : '';
+    return `## Group \`${attributes.id}\`${kind}\n_range: \`${attributes.range}\`_\n\n${tag.content.trim()}`;
   });
 
   return result.replace(/\n{3,}/g, '\n\n').trim();

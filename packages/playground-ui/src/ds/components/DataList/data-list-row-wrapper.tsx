@@ -2,6 +2,7 @@ import { forwardRef } from 'react';
 import type { ComponentPropsWithoutRef, KeyboardEvent, MouseEvent } from 'react';
 import { DataListRowWrapperContext } from './data-list-row-wrapper-context';
 import { dataListRowOuterStyles, dataListRowStateStyles } from './shared';
+import { focusRingInset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 export type DataListRowWrapperProps = ComponentPropsWithoutRef<'div'> & {
@@ -58,8 +59,7 @@ export const DataListRowWrapper = forwardRef<HTMLDivElement, DataListRowWrapperP
             'grid grid-cols-subgrid gap-0',
             ...dataListRowOuterStyles,
             ...dataListRowStateStyles,
-            isSelectable &&
-              'cursor-pointer outline-none focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:ring-inset',
+            isSelectable && cn('cursor-pointer', focusRingInset),
             className,
           )}
           onClick={handleClick}

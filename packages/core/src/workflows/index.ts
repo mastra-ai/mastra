@@ -1,6 +1,7 @@
 export {
   createMappingStep,
   createStepFromAgent,
+  createStepFromClassifier,
   createStepFromTool,
   predicateToCondition,
   mapVariable,
@@ -10,7 +11,7 @@ export {
   Workflow,
   Run,
 } from './workflow';
-export type { AgentStepOptions, AnyWorkflow } from './workflow';
+export type { AgentStepOptions, AnyWorkflow, ClassifierStepOptions, ClassifierStepOutput } from './workflow';
 export { getEntryId, getEntryWorkflow } from './step-entry';
 export * from './execution-engine';
 export * from './default';
@@ -22,3 +23,6 @@ export * from './state-reader';
 export * from './create';
 export * from './dynamic';
 export * from './predicate';
+
+/** @internal Framework outcome classification; custom spans may use their own values. */
+export { workflowTermination } from './execution-outcome';

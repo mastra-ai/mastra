@@ -41,13 +41,17 @@ function makeFakeMastra() {
   return { mastra, store };
 }
 
-function makeEngine(shouldPersistSnapshot: (params: { workflowStatus: WorkflowRunStatus }) => boolean) {
+function makeEngine(
+  shouldPersistSnapshot: (params: { workflowStatus: WorkflowRunStatus }) => boolean,
+  options: { evaluatePersistencePredicateBeforeDurableOperation?: boolean } = {},
+) {
   const { mastra, store } = makeFakeMastra();
   const engine = new DefaultExecutionEngine({
     mastra,
     options: {
       validateInputs: false,
       shouldPersistSnapshot: shouldPersistSnapshot as any,
+      ...options,
     },
   });
   return { engine, store };
@@ -238,5 +242,121 @@ describe('DefaultExecutionEngine — lastPersistedStatus accessors', () => {
     engine.setLastPersistedStatus('run-1', 'suspended');
     // Execute loop deliberately does NOT clear on suspended.
     expect(engine.getLastPersistedStatus('run-1')).toBe('suspended');
+  });
+});
+
+describe('persistStepUpdate — durable predicate evaluation', () => {
+  it('enters a durable operation when the snapshot predicate declines', async () => {
+    const { engine, store } = makeEngine(({ workflowStatus }) => workflowStatus === 'suspended');
+    const wrapSpy = vi.spyOn(engine, 'wrapDurableOperation');
+
+    await persist(engine, 'run-1', 'running');
+
+    expect(wrapSpy).toHaveBeenCalledTimes(1);
+    expect(store.calls).toHaveLength(0);
+  });
+
+  it('enters a durable operation when the snapshot predicate accepts', async () => {
+    const { engine, store } = makeEngine(({ workflowStatus }) => workflowStatus === 'suspended');
+    const wrapSpy = vi.spyOn(engine, 'wrapDurableOperation');
+
+    await persist(engine, 'run-1', 'suspended');
+
+    expect(wrapSpy).toHaveBeenCalledTimes(1);
+    expect(store.calls).toHaveLength(1);
+  });
+
+  it('reuses the memoized predicate verdict during replay', async () => {
+    const predicate = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
+    const { engine, store } = makeEngine(predicate);
+    const results = new Map<string, unknown>();
+
+    vi.spyOn(engine, 'wrapDurableOperation').mockImplementation(async (operationId, operationFn) => {
+      if (results.has(operationId)) {
+        return results.get(operationId) as any;
+      }
+      const result = await operationFn();
+      results.set(operationId, result);
+      return result;
+    });
+
+    await persist(engine, 'run-1', 'running');
+    await persist(engine, 'run-1', 'running');
+
+    expect(predicate).toHaveBeenCalledTimes(1);
+    expect(store.calls).toHaveLength(0);
+  });
+
+  it('skips the durable operation for an opted-in deterministic predicate that declines', async () => {
+    const predicate = vi.fn(() => false);
+    const { engine, store } = makeEngine(predicate, {
+      evaluatePersistencePredicateBeforeDurableOperation: true,
+    });
+    const wrapSpy = vi.spyOn(engine, 'wrapDurableOperation');
+
+    await persist(engine, 'run-1', 'running');
+
+    expect(predicate).toHaveBeenCalledTimes(1);
+    expect(wrapSpy).not.toHaveBeenCalled();
+    expect(store.calls).toHaveLength(0);
+  });
+
+  it('keeps run-scoped predicate overrides inside the durable operation', async () => {
+    const workflowPredicate = vi.fn(() => false);
+    const runPredicate = vi.fn(() => false);
+    const { engine, store } = makeEngine(workflowPredicate, {
+      evaluatePersistencePredicateBeforeDurableOperation: true,
+    });
+    engine.setRunPersistenceOverride('run-1', runPredicate as any);
+    const wrapSpy = vi.spyOn(engine, 'wrapDurableOperation');
+
+    await persist(engine, 'run-1', 'running');
+
+    expect(workflowPredicate).not.toHaveBeenCalled();
+    expect(runPredicate).toHaveBeenCalledTimes(1);
+    expect(wrapSpy).toHaveBeenCalledTimes(1);
+    expect(store.calls).toHaveLength(0);
+  });
+});
+
+describe('onStepExecutionStart — durable operation skipping (#24731)', () => {
+  function startParams(skipEmits: boolean) {
+    const pubsub = { publish: vi.fn(async () => {}) } as any;
+    return {
+      pubsub,
+      params: {
+        step: { id: 'step-1' } as any,
+        inputData: {},
+        pubsub,
+        executionContext: baseExecutionContext(),
+        stepCallId: 'call-1',
+        stepInfo: {},
+        operationId: 'op',
+        skipEmits,
+      },
+    };
+  }
+
+  it('returns a timestamp without a durable operation when emits are skipped', async () => {
+    const { engine } = makeEngine(() => false);
+    const wrapSpy = vi.spyOn(engine, 'wrapDurableOperation');
+    const { params, pubsub } = startParams(true);
+
+    const startedAt = await engine.onStepExecutionStart(params);
+
+    expect(typeof startedAt).toBe('number');
+    expect(wrapSpy).not.toHaveBeenCalled();
+    expect(pubsub.publish).not.toHaveBeenCalled();
+  });
+
+  it('publishes inside a durable operation when emits are enabled', async () => {
+    const { engine } = makeEngine(() => false);
+    const wrapSpy = vi.spyOn(engine, 'wrapDurableOperation');
+    const { params, pubsub } = startParams(false);
+
+    await engine.onStepExecutionStart(params);
+
+    expect(wrapSpy).toHaveBeenCalledTimes(1);
+    expect(pubsub.publish).toHaveBeenCalledTimes(1);
   });
 });

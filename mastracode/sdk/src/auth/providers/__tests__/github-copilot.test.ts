@@ -328,7 +328,7 @@ describe('GitHub Copilot OAuth device flow', () => {
     await expect(loginPromise).rejects.toThrow(/Invalid GitHub Enterprise URL\/domain/);
   });
 
-  it('passes the AbortSignal into the underlying fetch calls', async () => {
+  it('composes the caller AbortSignal with provider timeouts for fetch calls', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-03-09T00:00:00Z'));
 
@@ -366,11 +366,12 @@ describe('GitHub Copilot OAuth device flow', () => {
     await vi.advanceTimersByTimeAsync(20_000);
     await loginPromise;
 
-    // Device code, access token, and copilot token requests should all carry the signal.
+    // Device code, access token, and copilot token requests should all carry a
+    // provider timeout composed with the caller's cancellation signal.
     expect(seenSignals.length).toBeGreaterThanOrEqual(3);
-    for (const signal of seenSignals) {
-      expect(signal).toBe(controller.signal);
-    }
+    expect(seenSignals.every(signal => signal && signal !== controller.signal)).toBe(true);
+    controller.abort();
+    expect(seenSignals.every(signal => signal?.aborted)).toBe(true);
   });
 
   it('honors AbortSignal cancellation between polls', async () => {
@@ -736,5 +737,47 @@ describe('githubCopilotOAuthProvider', () => {
 
     expect(next.access).toBe('new-bearer');
     expect(next.refresh).toBe('ghu_x');
+  });
+});
+
+describe('githubCopilotOAuthProvider.getAccountLabel', () => {
+  it('resolves the GitHub login from api.github.com/user with the long-lived token', async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValueOnce(jsonResponse({ login: 'octocat' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      githubCopilotOAuthProvider.getAccountLabel?.({ access: 'bearer', refresh: 'ghu_x', expires: 0 }),
+    ).resolves.toBe('octocat');
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(getUrl(url)).toBe('https://api.github.com/user');
+    expect((init as RequestInit).headers).toMatchObject({ Authorization: 'Bearer ghu_x' });
+  });
+
+  it('returns undefined when the GitHub API call fails', async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValueOnce(new Response('nope', { status: 401 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      githubCopilotOAuthProvider.getAccountLabel?.({ access: 'bearer', refresh: 'ghu_x', expires: 0 }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('never sends an enterprise token to api.github.com', async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      githubCopilotOAuthProvider.getAccountLabel?.({
+        access: 'bearer',
+        refresh: 'ghu_enterprise',
+        expires: 0,
+        enterpriseUrl: 'https://ghe.example.com',
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

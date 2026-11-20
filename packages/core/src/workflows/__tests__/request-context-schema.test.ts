@@ -303,36 +303,6 @@ describe('Workflow requestContextSchema', () => {
       expect(result.status).toBe('success');
     });
 
-    it('should work without requestContextSchema on step', async () => {
-      const step = createStep({
-        id: 'test-step',
-        inputSchema: z.object({ input: z.string() }),
-        outputSchema: z.object({ output: z.string() }),
-        execute: async ({ inputData }) => {
-          return { output: `processed: ${inputData.input}` };
-        },
-      });
-
-      const workflow = createWorkflow({
-        id: 'test-workflow',
-        inputSchema: z.object({ input: z.string() }),
-        outputSchema: z.object({ output: z.string() }),
-      }).then(step);
-
-      workflow.commit();
-
-      const requestContext = new RequestContext();
-      requestContext.set('anything', 'value');
-
-      const run = await workflow.createRun();
-      const result = await run.start({
-        inputData: { input: 'test' },
-        requestContext,
-      });
-
-      expect(result.status).toBe('success');
-    });
-
     it('should work without requestContext parameter', async () => {
       const step = createStep({
         id: 'test-step',

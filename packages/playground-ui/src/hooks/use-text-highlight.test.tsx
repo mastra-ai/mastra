@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, act } from '@testing-library/react';
+import { cleanup, render, act } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { useTextHighlight } from './use-text-highlight';
@@ -58,6 +58,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  cleanup();
   harness.restore();
   Object.assign(globalThis, originalFrameApi);
 });

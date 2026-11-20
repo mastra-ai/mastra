@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI restatement: '%s'. Delete it and trust your original phrasing. If a second case needs the point, name both cases in the sentence that makes it."
+message: "AI restatement: '%s'. Delete it and trust your original phrasing. If a second case needs the point, put both cases in the sentence that makes it."
 level: error
 ignorecase: true
 # The restatement: a sentence whose content is the previous sentence

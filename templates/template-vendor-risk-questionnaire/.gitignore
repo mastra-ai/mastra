@@ -1,0 +1,15 @@
+node_modules/
+.mastra/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+*.db
+*.db-shm
+*.db-wal
+.DS_Store
+package-lock.json
+pnpm-lock.yaml
+
+.runtime/

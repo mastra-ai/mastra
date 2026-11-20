@@ -1,8 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { CircleSlashIcon, ExternalLinkIcon, Plus } from 'lucide-react';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
-import { useLinkComponent } from '@/lib/framework';
 
 export const NoPromptBlocksInfo = () => {
   const { Link, paths } = useLinkComponent();
@@ -10,43 +11,49 @@ export const NoPromptBlocksInfo = () => {
   const canCreate = !isLoading && isCmsAvailable;
 
   return (
-    <div className="flex h-full items-center justify-center">
-      <EmptyState
-        iconSlot={<CircleSlashIcon />}
-        titleSlot="No Prompts yet"
-        descriptionSlot={
-          canCreate ? (
-            <>
-              Create a reusable prompt block and reference it <br />
-              in your agent instructions.
-            </>
-          ) : (
-            <>
-              There are no prompt blocks yet. Prompt blocks are reusable <br />
-              content that can be referenced in your agent instructions.
-            </>
-          )
-        }
-        actionSlot={
-          <div className="flex flex-col items-center gap-2">
-            {canCreate && (
-              <Button as={Link} to={paths.cmsPromptBlockCreateLink()} variant="primary" icon={<Plus />}>
-                Create Prompt
-              </Button>
-            )}
+    <EmptyState
+      titleSlot="No Prompts yet"
+      descriptionSlot={
+        canCreate ? (
+          <>
+            Create a reusable prompt block and reference it <br />
+            in your agent instructions.
+          </>
+        ) : (
+          <>
+            There are no prompt blocks yet. Prompt blocks are reusable <br />
+            content that can be referenced in your agent instructions.
+          </>
+        )
+      }
+      actionSlot={
+        <div className="flex flex-col items-center gap-2">
+          {canCreate && (
             <Button
-              variant="ghost"
-              as="a"
-              href="https://mastra.ai/docs/editor/overview#prompt-blocks"
-              target="_blank"
-              rel="noopener noreferrer"
-              icon={<ExternalLinkIcon />}
+              render={<Link href={paths.cmsPromptBlockCreateLink()} />}
+              variant="primary"
+              icon={<IconPlusMedium />}
             >
-              Prompts Documentation
+              Create prompt
             </Button>
-          </div>
-        }
-      />
-    </div>
+          )}
+          <Button
+            variant="ghost"
+            render={
+              <a
+                href="https://mastra.ai/docs/editor/overview#prompt-blocks"
+                target="_blank"
+                rel="noopener noreferrer"
+              />
+            }
+
+            icon={<IconSquareArrowTopRight />}
+          >
+            Prompts documentation
+          </Button>
+        </div>
+      }
+      variant="fill"
+    />
   );
 };

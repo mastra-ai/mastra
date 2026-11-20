@@ -1,4 +1,5 @@
 import type { BuiltInTraceSignalName, SignalCatalogEntry, TraceSignalName } from '@mastra/client-js';
+import { formatDate, formatDateRange, formatShortDate } from '@/utils/date-format';
 
 /** Catalog used with older servers that do not return signal metadata. */
 export const BUILT_IN_SIGNAL_CATALOG: SignalCatalogEntry[] = [
@@ -110,51 +111,18 @@ export function shareSentence(traceCount: number, coverage: number) {
   return `${traceCount} of ${stageTotal} traces in this snapshot (${Math.round(coverage * 100)}%)`;
 }
 
-// Hoisted: TimelineTrack formats every tick on each render.
-const SNAPSHOT_CUTOFF_FORMAT = new Intl.DateTimeFormat('en-US', {
-  month: 'short',
-  day: 'numeric',
-  year: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
-  timeZone: 'UTC',
-});
-
-const SNAPSHOT_DATE_FORMAT = new Intl.DateTimeFormat('en-US', {
-  month: 'short',
-  day: 'numeric',
-  year: 'numeric',
-  timeZone: 'UTC',
-});
+// Snapshots are bucketed in UTC, so their dates are shown in UTC too.
+const UTC = { timeZone: 'UTC' };
 
 export function formatSnapshotDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return SNAPSHOT_DATE_FORMAT.format(date);
+  // `now: 0` makes the year always visible, since snapshots span years.
+  return formatShortDate(value, { ...UTC, now: 0 }) ?? value;
 }
 
 export function formatSnapshotCutoff(cutoffAt: string) {
-  const date = new Date(cutoffAt);
-  // Fall back to the raw server value instead of letting Intl throw on Invalid Date.
-  if (Number.isNaN(date.getTime())) return cutoffAt;
-  return SNAPSHOT_CUTOFF_FORMAT.format(date);
+  return formatDate(cutoffAt, 'date-time', UTC) ?? cutoffAt;
 }
 
 export function formatSnapshotWindow(startedAt: string, endedAt: string) {
-  const start = new Date(startedAt);
-  const end = new Date(endedAt);
-  // Fall back to the raw server values instead of letting Intl throw on Invalid Date.
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return `${startedAt}–${endedAt}`;
-  const monthDay = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
-  const day = new Intl.DateTimeFormat('en-US', { day: 'numeric', timeZone: 'UTC' });
-  const year = new Intl.DateTimeFormat('en-US', { year: 'numeric', timeZone: 'UTC' });
-  const sameYear = start.getUTCFullYear() === end.getUTCFullYear();
-  const sameMonth = sameYear && start.getUTCMonth() === end.getUTCMonth();
-  const sameDay = sameMonth && start.getUTCDate() === end.getUTCDate();
-
-  if (sameDay) return `${monthDay.format(start)}, ${year.format(start)}`;
-  if (sameMonth) return `${monthDay.format(start)}–${day.format(end)}, ${year.format(end)}`;
-  if (sameYear) return `${monthDay.format(start)}–${monthDay.format(end)}, ${year.format(end)}`;
-  return `${monthDay.format(start)}, ${year.format(start)}–${monthDay.format(end)}, ${year.format(end)}`;
+  return formatDateRange(startedAt, endedAt, UTC) ?? `${startedAt}–${endedAt}`;
 }

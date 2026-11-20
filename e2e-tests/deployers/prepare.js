@@ -27,6 +27,7 @@ export async function setupDeployerProject(pathToStoreFiles, tag, pkgManager, de
   const installArgs = pkgManager === 'pnpm' ? ['install', '--config.minimum-release-age=0'] : ['install'];
   const env = {
     ...process.env,
+    PNPM_CONFIG_MINIMUM_RELEASE_AGE: '0',
     pnpm_config_minimum_release_age: '0',
   };
 

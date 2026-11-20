@@ -1,4 +1,4 @@
-export type IndexType = 'ivfflat' | 'hnsw';
+export type IndexType = 'ivfflat' | 'ivfpq' | 'hnsw';
 
 interface IVFConfig {
   lists?: number;

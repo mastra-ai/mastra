@@ -22,13 +22,15 @@ import type {
   ListBranchesArgs,
   ListBranchesResponse,
   ListTracesArgs,
+  ListTracesLightResponse,
   ListTracesResponse,
   SpanRecord,
 } from '@mastra/core/storage';
 
 import type { DbClient } from '../../../client';
+import { toPgJson } from '../../../db/sanitize-json';
 import { qualifiedTable, TABLE_SPAN_EVENTS } from './ddl';
-import { rowToSpanRecord } from './helpers';
+import { rowToLightTraceRecord, rowToSpanRecord } from './helpers';
 import {
   assertDeltaPollingEnabled,
   decodeDeltaCursor,
@@ -36,6 +38,8 @@ import {
   encodeDeltaCursor,
   readSafeXactHorizon,
 } from './polling';
+import { needsPreview, readPreview } from './preview-compat';
+import { SPAN_LIGHT_SELECT_COLUMN_NAMES } from './signal-schema';
 import { SPAN_SELECT_COLUMNS } from './sql';
 
 function asIsoTimestamp(value: unknown): string {
@@ -197,7 +201,7 @@ function buildListTracesFilters(
   }
   if (filters.metadata != null) {
     conditions.push(`r."metadataSearch" @> $${i++}::jsonb`);
-    params.push(JSON.stringify(filters.metadata));
+    params.push(toPgJson(filters.metadata));
   }
   if (filters.tags != null && filters.tags.length > 0) {
     conditions.push(`r."tags" @> $${i++}::text[]`);
@@ -243,27 +247,123 @@ const SPAN_SELECT_COLUMNS_ALIASED = SPAN_SELECT_COLUMNS.replace(/\n/g, ' ')
   .map(c => `r.${c.trim()}`)
   .join(', ');
 
+/** Columns a trace list projects and the mapper for its rows. */
+type TraceListProjection<TSpan> = {
+  columns: string;
+  mapRows: (client: DbClient, span: string, rows: Record<string, any>[]) => TSpan[] | Promise<TSpan[]>;
+};
+
+const FULL_PROJECTION: TraceListProjection<ListTracesResponse['spans'][number]> = {
+  columns: SPAN_SELECT_COLUMNS_ALIASED,
+  mapRows: (_client, _span, rows) => toTraceSpans(rows.map(rowToSpanRecord)),
+};
+
+/**
+ * Columns a light trace list renders: the timeline fields, memory context, metadata and the stored
+ * previews. The `input` / `output` payloads stay off the read path; rows written before the
+ * previews were stored get theirs from the payloads, read for just those rows.
+ */
+const TRACE_LIGHT_SELECT_COLUMNS = [
+  ...SPAN_LIGHT_SELECT_COLUMN_NAMES,
+  'threadId',
+  'resourceId',
+  'metadataRaw',
+  'inputPreview',
+  'outputPreview',
+  'errorPreview',
+]
+  .map(column => `r."${column}"`)
+  .join(', ');
+
+const PREVIEW_PAYLOADS = [
+  ['inputPreview', 'input'],
+  ['outputPreview', 'output'],
+  ['errorPreview', 'error'],
+] as const;
+
+/**
+ * Builds the previews of rows written before previews were stored (NULL preview) from those rows'
+ * payloads. Only the flagged rows' payloads are read, so this fades out as old rows age out.
+ *
+ * `jsonb` comes back decoded with its keys reordered, so a compact-JSON preview built here can
+ * differ in key order from the one the writer would have stored. Acceptable for old rows.
+ */
+async function fillMissingPreviews(client: DbClient, span: string, rows: Record<string, any>[]): Promise<void> {
+  const missing = rows.filter(row => PREVIEW_PAYLOADS.some(([preview]) => needsPreview(row[preview])));
+  if (!missing.length) return;
+  const payloads = await client.manyOrNone<Record<string, unknown>>(
+    `SELECT e."cursorId"::text AS "cursorId",
+      ${PREVIEW_PAYLOADS.map(([preview, payload]) => `${missing.some(row => needsPreview(row[preview])) ? `e."${payload}"` : 'NULL'} AS "${payload}"`).join(',\n      ')}
+     FROM ${span} e
+     WHERE (e."traceId", e."cursorId") IN (SELECT * FROM unnest($1::text[], $2::bigint[]))`,
+    [missing.map(row => String(row.traceId)), missing.map(row => String(row.cursorId))],
+  );
+  const byCursor = new Map(payloads.map(payload => [String(payload.cursorId), payload]));
+  for (const row of missing) {
+    const payload = byCursor.get(String(row.cursorId));
+    for (const [preview, column] of PREVIEW_PAYLOADS) {
+      if (needsPreview(row[preview])) row[preview] = readPreview(row[preview], payload?.[column]);
+    }
+  }
+}
+
+const LIGHT_PROJECTION: TraceListProjection<ListTracesLightResponse['spans'][number]> = {
+  columns: TRACE_LIGHT_SELECT_COLUMNS,
+  mapRows: async (client, span, rows) => {
+    await fillMissingPreviews(client, span, rows);
+    return rows.map(rowToLightTraceRecord);
+  },
+};
+
 export async function listTraces(client: DbClient, schema: string, args: ListTracesArgs): Promise<ListTracesResponse> {
+  return listTraceRows(client, schema, args, FULL_PROJECTION);
+}
+
+/** Trace list projecting only the columns a list renders, with stored previews instead of payloads. */
+export async function listTracesLight(
+  client: DbClient,
+  schema: string,
+  args: ListTracesArgs,
+): Promise<ListTracesLightResponse> {
+  return listTraceRows(client, schema, args, LIGHT_PROJECTION);
+}
+
+async function listTraceRows<TSpan>(
+  client: DbClient,
+  schema: string,
+  args: ListTracesArgs,
+  projection: TraceListProjection<TSpan>,
+) {
   const { mode, filters, pagination, orderBy, after, limit } = listTracesArgsSchema.parse(args);
   const span = qualifiedTable(schema, TABLE_SPAN_EVENTS);
 
   if (mode === 'delta') {
     assertDeltaPollingEnabled();
-    return listTracesDelta(client, span, filters, after, limit);
+    return listTracesDelta(client, span, projection, filters, after, limit);
   }
 
-  return listTracesPage(client, span, filters, pagination.page, pagination.perPage, orderBy.field, orderBy.direction);
+  return listTracesPage(
+    client,
+    span,
+    projection,
+    filters,
+    pagination.page,
+    pagination.perPage,
+    orderBy.field,
+    orderBy.direction,
+  );
 }
 
-async function listTracesPage(
+async function listTracesPage<TSpan>(
   client: DbClient,
   span: string,
+  projection: TraceListProjection<TSpan>,
   filters: ListTracesArgs['filters'],
   page: number,
   perPage: number,
   orderField: 'startedAt' | 'endedAt',
   orderDir: 'ASC' | 'DESC',
-): Promise<ListTracesResponse> {
+) {
   const { conditions, params, nextParamIdx } = buildListTracesFilters(filters, span, 1);
   let i = nextParamIdx;
   const whereClause = `WHERE ${conditions.join(' AND ')}`;
@@ -278,17 +378,17 @@ async function listTracesPage(
   );
   const count = Number(countRow?.count ?? 0);
 
-  let spans: SpanRecord[] = [];
+  let spans: TSpan[] = [];
   if (count > 0) {
     const rows = await client.manyOrNone<Record<string, any>>(
-      `SELECT ${SPAN_SELECT_COLUMNS_ALIASED}
+      `SELECT ${projection.columns}
        FROM ${span} r
        ${whereClause}
        ${orderClause}
        LIMIT $${i++} OFFSET $${i++}`,
       [...params, perPage, page * perPage],
     );
-    spans = rows.map(rowToSpanRecord);
+    spans = await projection.mapRows(client, span, rows);
   }
 
   const deltaCursor = deltaPollingFeatureEnabled()
@@ -297,21 +397,22 @@ async function listTracesPage(
 
   return {
     pagination: { total: count, page, perPage, hasMore: (page + 1) * perPage < count },
-    spans: toTraceSpans(spans),
+    spans,
     ...(deltaCursor !== undefined ? { deltaCursor } : {}),
   };
 }
 
-async function listTracesDelta(
+async function listTracesDelta<TSpan>(
   client: DbClient,
   span: string,
+  projection: TraceListProjection<TSpan>,
   filters: ListTracesArgs['filters'],
   after: string | undefined,
   limit: number,
-): Promise<ListTracesResponse> {
+) {
   if (after === undefined) {
     const deltaCursor = await readTracesStreamHeadCursor(client, span, filters);
-    return { spans: [], delta: { limit, hasMore: false }, deltaCursor };
+    return { spans: [] as TSpan[], delta: { limit, hasMore: false }, deltaCursor };
   }
 
   const afterCursor = decodeDeltaCursor(after);
@@ -324,7 +425,7 @@ async function listTracesDelta(
   params.push(safeHorizon);
 
   const rows = await client.manyOrNone<Record<string, any>>(
-    `SELECT ${SPAN_SELECT_COLUMNS_ALIASED}
+    `SELECT ${projection.columns}
      FROM ${span} r
      WHERE ${conditions.join(' AND ')}
      ORDER BY r."xactId" ASC, r."cursorId" ASC
@@ -340,7 +441,7 @@ async function listTracesDelta(
       : encodeDeltaCursor(safeHorizon, 0);
 
   return {
-    spans: toTraceSpans(visible.map(rowToSpanRecord)),
+    spans: await projection.mapRows(client, span, visible),
     delta: { limit, hasMore },
     deltaCursor,
   };
@@ -527,7 +628,7 @@ function buildListBranchesFilters(
   }
   if (filters.metadata != null) {
     conditions.push(`r."metadataSearch" @> $${i++}::jsonb`);
-    params.push(JSON.stringify(filters.metadata));
+    params.push(toPgJson(filters.metadata));
   }
   if (filters.tags != null && filters.tags.length > 0) {
     conditions.push(`r."tags" @> $${i++}::text[]`);

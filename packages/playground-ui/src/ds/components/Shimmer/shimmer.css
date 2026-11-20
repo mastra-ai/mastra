@@ -23,7 +23,7 @@
 
 .shimmer-text {
   --shimmer-travel: 300%;
-  --shimmer-dim: color-mix(in oklab, currentcolor 55%, transparent);
+  --shimmer-dim: var(--placeholder);
 
   background-image: linear-gradient(90deg, var(--shimmer-dim) 42%, currentcolor 50%, var(--shimmer-dim) 58%);
   background-size: var(--shimmer-travel) 100%;
@@ -40,6 +40,13 @@
 .shimmer-settled {
   --shimmer-dim: currentcolor;
   animation-play-state: paused;
+}
+
+/* A shimmer inside another owns its text: the outer one would paint the same glyphs twice,
+ * and paints none of them while the inner one moves on a layer of its own. */
+.shimmer-text:has(.shimmer-text) {
+  background-image: none;
+  -webkit-text-fill-color: currentcolor;
 }
 
 @keyframes shimmer-text {

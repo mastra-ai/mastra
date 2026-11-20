@@ -15,7 +15,7 @@ export default defineConfig({
   format: ['esm'],
   fixedExtension: false,
   nodeProtocol: 'strip',
-  bundle: false,
+  unbundle: true,
   clean: true,
   dts: false,
   sourcemap: true,

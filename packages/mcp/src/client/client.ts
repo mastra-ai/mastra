@@ -1,69 +1,110 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createRequire } from 'node:module';
 import type { Stream } from 'node:stream';
+import type { ToolBackgroundConfig } from '@mastra/core/background-tasks';
 import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { createTool, validateToolOutput } from '@mastra/core/tools';
+import type { AnySpan, TracingContext } from '@mastra/core/observability';
+import { createTool, getValidationIssuePaths, validateToolOutput } from '@mastra/core/tools';
 import type { NeedsApprovalFn, Tool } from '@mastra/core/tools';
 import { toStandardSchema } from '@mastra/schema-compat';
 import type { JSONSchema7, StandardSchemaWithJSON } from '@mastra/schema-compat';
 import {
   Client,
-  SdkHttpError,
-  SSEClientTransport,
+  LOG_LEVEL_META_KEY,
   StreamableHTTPClientTransport,
   DEFAULT_REQUEST_TIMEOUT_MSEC,
 } from '@modelcontextprotocol/client';
 import type {
   Transport,
-  EmptyResult,
+  CallToolResult,
   GetPromptResult,
   ListPromptsResult,
   ListResourcesResult,
   ListResourceTemplatesResult,
   LoggingLevel,
+  McpSubscription,
   ReadResourceResult,
   ClientCapabilities,
+  PriorDiscovery,
+  SubscriptionFilter,
+  VersionNegotiationMode,
+  jsonSchemaValidator,
 } from '@modelcontextprotocol/client';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { asyncExitHook, gracefulExit } from 'exit-hook';
+import { z } from 'zod/v4';
+import {
+  EVENTS_METHODS,
+  ListEventsResultSchema,
+  PollEventsResultSchema,
+  StreamEventsResultSchema,
+  SubscribeEventsResultSchema,
+  UnsubscribeEventsResultSchema,
+  getEventsCapability,
+} from '../shared/events';
+import type {
+  EventsCapability,
+  ListEventsResult,
+  PollEventsRequestParams,
+  PollEventsResult,
+  SubscribeEventsRequestParams,
+  SubscribeEventsResult,
+  UnsubscribeEventsRequestParams,
+} from '../shared/events';
+import { JSON_SCHEMA_2020_12, jsonSchemaComplexity, toJsonSchema2020 } from '../shared/json-schema-dialect';
 import { getMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { UnauthorizedError } from '../shared/oauth-types';
-import { ElicitationClientActions } from './actions/elicitation';
+import { DEFAULT_TASK_TTL_MS, taskKeyOf, tasksCapabilityEntry } from '../shared/tasks';
+import type { MCPTask, MCPTaskInputResponses } from '../shared/tasks';
+import { takeServerTraceContext, traceContextFromSpan, traceContextToMeta } from '../shared/trace-context';
+import { EventClientActions } from './actions/events';
 import { ProgressClientActions } from './actions/progress';
 import { PromptClientActions } from './actions/prompt';
 import { ResourceClientActions } from './actions/resource';
-import { isReconnectableMCPError } from './error-utils';
+import { isReconnectableMCPError, isRecoverableTaskPollError, isUnsentRequestError } from './error-utils';
+import type { DeliveryDriver } from './events/mode';
+import { EventStreamRouter } from './events/stream-router';
+import { EventSubscription } from './events/subscription';
+import type { EventsPort, EventsWebhookSetup, MCPEventSubscribeOptions, MCPEventSubscription } from './events/types';
+import { getInputSchemaError, loadInputSchemaMetaValidator } from './input-schema-meta-schema';
+import { interceptTaskResults, takeTaskHandle } from './tasks/intercept';
+import { resolveTasksOptions } from './tasks/options';
+import { TaskRequester } from './tasks/requester';
+import { MCP_INPUT_REQUEST_SUSPEND_TYPE, readInputRequestResume } from './tasks/suspend';
+import type { ToolSuspendHost } from './tasks/suspend';
+import { TaskWaitError, waitForTask } from './tasks/wait';
+import type { MCPInputRequiredTask, MCPTerminalTask } from './tasks/wait';
+import { MCP_CLIENT_PROTOCOL_VERSION } from './types';
 import type {
   FetchLike,
   LogHandler,
-  ElicitationHandler,
   ProgressHandler,
   MastraMCPServerDefinition,
   InternalMastraMCPClientOptions,
-  Root,
+  MCPClientProtocolVersion,
+  MCPClientTasksOptions,
+  MCPServerImplementation,
+  MCPTaskProgress,
   RequireToolApproval,
   SerializableMCPToolDefinition,
 } from './types';
-import {
-  assertHostAllowed,
-  fetchFollowingAllowedRedirects,
-  isUrlPolicyError,
-  wrapFetchWithHostPolicy,
-} from './url-policy';
+import { assertHostAllowed, fetchFollowingAllowedRedirects, wrapFetchWithHostPolicy } from './url-policy';
 
 // Re-export types for convenience
 export type {
   LoggingLevel,
   LogMessage,
   LogHandler,
-  ElicitationHandler,
   ProgressHandler,
   MastraFetchLike,
   MastraMCPServerDefinition,
+  MCPClientCapabilities,
+  MCPClientProtocolVersion,
+  MCPInputRequest,
+  MCPInputRequestHandler,
   InternalMastraMCPClientOptions,
-  Root,
   RequireToolApproval,
   RequireToolApprovalFn,
   RequireToolApprovalContext,
@@ -74,7 +115,26 @@ export type {
 type MCPToolListEntry = Awaited<ReturnType<Client['listTools']>>['tools'][0];
 
 const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
+
+const SUPPORTED_DIALECTS = new Set([
+  JSON_SCHEMA_2020_12,
+  `${JSON_SCHEMA_2020_12}#`,
+  'http://json-schema.org/draft-07/schema',
+  'http://json-schema.org/draft-07/schema#',
+]);
+
+/**
+ * MCP 2026-07-28 schemas default to JSON Schema 2020-12 when they declare no dialect.
+ * 2019-09 schemas (e.g. from zod v3 servers) are converted to 2020-12 when that can be done
+ * faithfully, so tool calls are not rejected before they run.
+ */
+function withDefaultDialect(schema: JSONSchema7): JSONSchema7 {
+  if (!schema.$schema) return { ...schema, $schema: JSON_SCHEMA_2020_12 };
+  if (SUPPORTED_DIALECTS.has(schema.$schema)) return schema;
+  return toJsonSchema2020(schema) ?? schema;
+}
 const DEFAULT_INSTRUCTIONS_MAX_LENGTH = 512;
+const DEFAULT_SERVER_LOG_LEVEL: LoggingLevel = 'info';
 
 /**
  * OAuth authorization state of an MCP server connection.
@@ -87,8 +147,6 @@ const DEFAULT_INSTRUCTIONS_MAX_LENGTH = 512;
  */
 export type MCPServerAuthState = 'needs-auth' | 'authorized';
 
-// Per MCP spec, only fallback to SSE for these status codes
-const SSE_FALLBACK_STATUS_CODES = [400, 404, 405];
 const DATADOG_TRACER_TEST_SYMBOL = Symbol.for('mastra.mcp.dd-trace-test-tracer');
 
 type DatadogScopeLike = {
@@ -102,8 +160,69 @@ type DatadogTracerLike = {
   };
 };
 
+const PERSISTENT_REQUEST_METHODS = ['subscriptions/listen', EVENTS_METHODS.stream];
+
+/**
+ * 2026-07-28 Streamable HTTP has no standalone GET stream; the long-lived requests are the
+ * `subscriptions/listen` POST and each MCP Events `events/stream` POST, whose responses stay
+ * open for the life of the subscription and must not hold the caller's active Datadog span
+ * open with them.
+ */
 function shouldDetachPersistentTransportRequest(init?: RequestInit): boolean {
-  return (init?.method ?? 'GET').toUpperCase() === 'GET';
+  const body = init?.body;
+  if (typeof body !== 'string' || !PERSISTENT_REQUEST_METHODS.some(method => body.includes(method))) return false;
+  try {
+    const message: unknown = JSON.parse(body);
+    return (
+      typeof message === 'object' &&
+      message !== null &&
+      'method' in message &&
+      typeof message.method === 'string' &&
+      PERSISTENT_REQUEST_METHODS.includes(message.method)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Whether a request body is a single JSON-RPC response: the client's reply to a server request. */
+function isJsonRpcResponseBody(body: RequestInit['body']): boolean {
+  if (typeof body !== 'string') return false;
+  try {
+    const message: unknown = JSON.parse(body);
+    return (
+      typeof message === 'object' &&
+      message !== null &&
+      !Array.isArray(message) &&
+      !('method' in message) &&
+      'id' in message &&
+      ('result' in message || 'error' in message)
+    );
+  } catch {
+    return false;
+  }
+}
+
+const TASK_WAIT_ERROR_IDS = {
+  timeout: 'MCP_CLIENT_TOOL_TASK_TIMEOUT',
+  expired: 'MCP_CLIENT_TOOL_TASK_EXPIRED',
+  input_unhandled: 'MCP_CLIENT_TOOL_TASK_INPUT_UNHANDLED',
+  input_unsupported: 'MCP_CLIENT_TOOL_TASK_INPUT_UNSUPPORTED',
+  unreachable: 'MCP_CLIENT_TOOL_TASK_POLL_FAILED',
+} as const satisfies Record<TaskWaitError['reason'], Uppercase<string>>;
+
+/**
+ * Reports the JSON-RPC id of each `events/stream` request as it goes out on `transport`. The
+ * server identifies a push stream by that id, and the SDK doesn't return it to the caller.
+ */
+function observeEventStreamRequests(transport: Transport, onSent: (id: string) => void): void {
+  const send = transport.send.bind(transport);
+  transport.send = (message, options) => {
+    if ('method' in message && message.method === EVENTS_METHODS.stream && 'id' in message) {
+      onSent(String(message.id));
+    }
+    return send(message, options);
+  };
 }
 
 /**
@@ -125,11 +244,16 @@ function extractToolErrorText(content: unknown): string {
  */
 function extractModelTextFromToolContent(content: unknown): string | undefined {
   if (!Array.isArray(content)) return undefined;
+  // Embedded resources are part of the model-facing channel too (e.g. GitHub's get_file_contents body).
   const text = content
-    .filter((part): part is { type: 'text'; text: string } => {
-      return !!part && typeof part === 'object' && (part as { type?: unknown }).type === 'text';
+    .map(part => {
+      if (!part || typeof part !== 'object') return undefined;
+      const p = part as { type?: unknown; text?: unknown; resource?: { text?: unknown } };
+      if (p.type === 'text' && typeof p.text === 'string') return p.text;
+      if (p.type === 'resource' && typeof p.resource?.text === 'string') return p.resource.text;
+      return undefined;
     })
-    .map(part => part.text)
+    .filter((t): t is string => t !== undefined)
     .join('\n')
     .trim();
   return text || undefined;
@@ -196,9 +320,9 @@ export function getMcpCallToolMeta(output: unknown): Record<string, unknown> | u
   return (output as Record<PropertyKey, unknown>)[MCP_CALL_TOOL_META] as Record<string, unknown> | undefined;
 }
 
-function createStructuredToolToModelOutput(): (output: unknown) =>
-  | { type: 'text'; value: string }
-  | { type: 'json'; value: unknown } {
+function createStructuredToolToModelOutput(): (
+  output: unknown,
+) => { type: 'text'; value: string } | { type: 'json'; value: unknown } {
   return output => {
     const modelText = extractModelTextFromToolContent(getMcpCallToolContent(output));
     if (modelText !== undefined) {
@@ -268,6 +392,56 @@ function runOutsideDatadogTraceScope<T>(callback: () => T): T {
   return scope.activate(null, callback);
 }
 
+const LOGGABLE_ERROR_NAMES = new Set([
+  'Error',
+  'TypeError',
+  'RangeError',
+  'SyntaxError',
+  'AbortError',
+  'TimeoutError',
+  'McpError',
+  'ProtocolError',
+  'SdkError',
+  'SdkHttpError',
+  'SseError',
+  'StreamableHTTPError',
+  'UnauthorizedError',
+  'OAuthError',
+  'UnsupportedProtocolVersionError',
+]);
+
+const LOGGABLE_ERROR_CODES = new Set([
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'ECONNABORTED',
+  'ETIMEDOUT',
+  'ENOTFOUND',
+  'EPIPE',
+  'EAI_AGAIN',
+  'ABORT_ERR',
+  'UND_ERR_SOCKET',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_HEADERS_TIMEOUT',
+  'UND_ERR_BODY_TIMEOUT',
+]);
+
+/**
+ * Names a tool-call failure for logs without its message: server error text can echo the submitted
+ * arguments back (Issue #29318). The full error still reaches the caller.
+ */
+function errorKind(error: unknown): string {
+  if (error instanceof MastraError) return error.id;
+  if (error instanceof Error) {
+    // `name` and `code` can be set to anything, so only log known names and codes (plus numeric
+    // JSON-RPC codes).
+    const name = LOGGABLE_ERROR_NAMES.has(error.name) ? error.name : 'Error';
+    const code = (error as { code?: unknown }).code;
+    const isKnownCode = typeof code === 'number' || (typeof code === 'string' && LOGGABLE_ERROR_CODES.has(code));
+    return isKnownCode ? `${name} (${code})` : name;
+  }
+  return typeof error;
+}
+
 /**
  * Convert an MCP LoggingLevel to a logger method name that exists in our logger
  */
@@ -286,16 +460,25 @@ function convertLogLevelToLoggerMethod(level: LoggingLevel): 'debug' | 'info' | 
     case 'emergency':
       return 'error';
     default:
-      // For any other levels, default to info
       return 'info';
   }
+}
+
+/** Maps the per-server `protocolVersion` option onto the SDK negotiation mode. */
+function negotiationMode(protocolVersion: MCPClientProtocolVersion | undefined): VersionNegotiationMode {
+  if (protocolVersion === undefined) return 'auto';
+  return protocolVersion === 'legacy' ? 'legacy' : { pin: protocolVersion };
 }
 
 /**
  * Internal MCP client implementation for connecting to a single MCP server.
  *
- * This class handles the low-level connection, transport management, and protocol
- * communication with an MCP server. Most users should use MCPClient instead.
+ * Probes the server with `server/discover` unless `protocolVersion` pins a
+ * revision, then speaks whichever revision was negotiated. On 2026-07-28 there is
+ * no session, embedded input requests are answered through the configured
+ * `inputRequests` handler, and change notifications arrive on one managed
+ * `subscriptions/listen` stream (see {@link subscribeResource}). Those two
+ * facilities fail on a legacy negotiation; everything else works on either revision.
  *
  * @internal
  */
@@ -303,33 +486,56 @@ export class InternalMastraMCPClient extends MastraBase {
   name: string;
   private client: Client;
   private readonly timeout: number;
+  private readonly processHooks: boolean;
   private logHandler?: LogHandler;
-  private enableServerLogs?: boolean;
-  private enableProgressTracking?: boolean;
+  private readonly serverLogLevel?: LoggingLevel;
+  private enableProgressTracking: boolean;
   private serverConfig: MastraMCPServerDefinition;
   private transport?: Transport;
-  private pendingAuthTransport?: StreamableHTTPClientTransport | SSEClientTransport;
+  private pendingAuthTransport?: StreamableHTTPClientTransport;
   private clientBaseOnClose?: () => void;
   private clientConnectionOnClose?: () => void;
   private _authState?: MCPServerAuthState;
   private operationContextStore = new AsyncLocalStorage<RequestContext | null>();
+  /**
+   * The requestContext of the tool call whose execution opened the connection. Only the
+   * transport's fetch reads it, so the handshake and the streams the connection keeps open are
+   * sent as that call. Messages arriving on those streams are delivered outside it, so server logs
+   * are not labelled with it and requests their handlers send are not sent as that call.
+   */
+  private connectionContextStore = new AsyncLocalStorage<RequestContext | null>();
+  /**
+   * The connection context of the transport a server message arrived on, as it was when that
+   * transport was created, set while the message is delivered. The transport's fetch reads it only for the client's replies to server requests,
+   * which belong to the connection rather than to the handler that produced them.
+   */
+  private replyContextStore = new AsyncLocalStorage<RequestContext | null>();
   private exitHookUnsubscribe?: () => void;
   private sigTermHandler?: () => void;
   private sigHupHandler?: () => void;
   private serverInstructions?: string;
-  private _roots: Root[];
-  private hasElicitationCapability: boolean;
+  private serverImplementation?: MCPServerImplementation;
+  /** The verdict of the last successful probe, reused so reconnects skip it. */
+  private priorDiscovery?: PriorDiscovery;
   private readonly requireToolApproval: RequireToolApproval | undefined;
   private readonly onToolError: 'throw' | 'return';
+  private readonly taskOptions: MCPClientTasksOptions | undefined;
+  private readonly taskRequester: TaskRequester;
+  private jsonSchemaValidator?: jsonSchemaValidator;
+  private jsonSchemaValidatorPromise?: Promise<jsonSchemaValidator>;
 
-  /** Provides access to resource operations (list, read, subscribe, etc.) */
+  /** Provides access to resource operations (list, read, notifications) */
   public readonly resources: ResourceClientActions;
   /** Provides access to prompt operations (list, get, notifications) */
   public readonly prompts: PromptClientActions;
-  /** Provides access to elicitation operations (request handling) */
-  public readonly elicitation: ElicitationClientActions;
   /** Provides access to progress operations (notifications) */
   public readonly progress: ProgressClientActions;
+  /**
+   * Provides access to MCP Events (list, subscribe, list-changed notifications).
+   *
+   * @experimental SEP-3415 is a draft; this API may change.
+   */
+  public readonly events: EventClientActions;
 
   /**
    * @internal
@@ -337,91 +543,102 @@ export class InternalMastraMCPClient extends MastraBase {
   constructor({
     name,
     version = '1.0.0',
+    clientInfo,
     server,
-    capabilities = {},
     timeout = DEFAULT_REQUEST_TIMEOUT_MSEC,
+    registerProcessHooks = true,
+    webhook,
   }: InternalMastraMCPClientOptions) {
     super({ name: 'MastraMCPClient' });
+    this.webhook = webhook;
+    // Started early so the sync toolFromDefinition() normally has the input schema check ready.
+    void loadInputSchemaMetaValidator();
     this.name = name;
     this.timeout = timeout;
+    this.processHooks = registerProcessHooks;
     this.logHandler = server.logger;
-    this.enableServerLogs = server.enableServerLogs ?? true;
+    this.serverLogLevel =
+      (server.enableServerLogs ?? true) ? (server.serverLogLevel ?? DEFAULT_SERVER_LOG_LEVEL) : undefined;
     this.serverConfig = server;
     this.enableProgressTracking = !!server.enableProgressTracking;
     this.requireToolApproval = server.requireToolApproval;
     this.onToolError = server.onToolError ?? 'throw';
+    this.jsonSchemaValidator = server.jsonSchemaValidator;
+    this.taskOptions = resolveTasksOptions(name, server.tasks);
 
-    // Initialize roots from server config
-    this._roots = server.roots ?? [];
-    this.hasElicitationCapability = capabilities.elicitation !== undefined;
-
-    // Build client capabilities, automatically enabling roots if configured
-    const hasRoots = this._roots.length > 0 || !!capabilities.roots;
+    const configured = server.capabilities ?? {};
+    if (configured.elicitation !== undefined && !server.inputRequests) {
+      throw new Error(
+        `MCP server '${name}' advertises the elicitation capability without an inputRequests handler. Configure inputRequests or remove capabilities.elicitation.`,
+      );
+    }
     const clientCapabilities: ClientCapabilities = {
-      ...capabilities,
-      // Only advertise elicitation when explicitly configured or when a handler
-      // registers it before connect(). `elicitation: {}` is legacy form support.
-      ...(capabilities.elicitation !== undefined ? { elicitation: { ...capabilities.elicitation } } : {}),
-      // Auto-enable roots capability if roots are provided
-      ...(hasRoots ? { roots: { listChanged: true, ...(capabilities.roots ?? {}) } } : {}),
+      ...(server.inputRequests ? { elicitation: configured.elicitation ?? { form: {} } } : {}),
       // Advertise MCP Apps extension support so servers know we can render UI resources
       extensions: {
-        ...(capabilities.extensions ?? {}),
+        ...(configured.extensions ?? {}),
         'io.modelcontextprotocol/ui': {},
+        ...(this.taskOptions ? tasksCapabilityEntry() : {}),
       },
     };
 
-    // Opt-in protocol version negotiation. Omitted keeps the SDK default
-    // ('legacy'): the plain 2025 connect sequence, byte-identical to today.
-    // 'auto' probes with server/discover and falls back to initialize;
-    // '2026-07-28' pins that revision and fails loudly when unavailable.
-    const versionNegotiation =
-      server.protocolVersion === undefined
-        ? undefined
-        : { mode: server.protocolVersion === 'auto' ? ('auto' as const) : { pin: server.protocolVersion } };
-
     this.client = new Client(
-      {
-        name,
-        version,
-      },
+      { name: clientInfo?.name ?? name, version: clientInfo?.version ?? version },
       {
         capabilities: clientCapabilities,
         ...(server.jsonSchemaValidator ? { jsonSchemaValidator: server.jsonSchemaValidator } : {}),
-        ...(versionNegotiation ? { versionNegotiation } : {}),
+        versionNegotiation: { mode: negotiationMode(server.protocolVersion) },
       },
     );
+    this.taskRequester = new TaskRequester(this.client, { timeout: this.timeout, meta: () => this.requestMeta() });
 
-    // Set up log message capturing
-    this.setupLogging();
+    if (server.inputRequests) {
+      const handler = server.inputRequests;
+      this.client.setRequestHandler('elicitation/create', async (request, ctx) => {
+        this.log('debug', `Answering input request '${String(ctx.mcpReq.id)}'`);
+        return handler({ key: String(ctx.mcpReq.id), params: request.params, signal: ctx.mcpReq.signal });
+      });
+    }
 
-    // Set up roots/list request handler if roots capability is enabled
-    if (hasRoots) {
-      this.setupRootsHandler();
+    if (this.serverLogLevel) {
+      this.client.setNotificationHandler('notifications/message', notification => {
+        const { level, ...params } = notification.params;
+        this.log(level, '[MCP SERVER LOG]', params);
+      });
     }
 
     this.resources = new ResourceClientActions({ client: this, logger: this.logger });
     this.prompts = new PromptClientActions({ client: this, logger: this.logger });
-    this.elicitation = new ElicitationClientActions({ client: this, logger: this.logger });
     this.progress = new ProgressClientActions({ client: this, logger: this.logger });
+    this.events = new EventClientActions({ client: this, logger: this.logger });
+    this.eventStreamRouter = new EventStreamRouter(
+      {
+        request: (params, signal, onSent) => {
+          // The router serializes opens, so the next events/stream sent is this one.
+          this.onEventStreamSent = onSent;
+          return this.client.request(
+            { method: EVENTS_METHODS.stream, params: { ...params, _meta: this.requestMeta(params._meta) } },
+            StreamEventsResultSchema,
+            // The stream lives as long as the subscription; only cancel() or a failure ends it.
+            { timeout: 0x7fffffff, signal },
+          );
+        },
+        onNotification: (method, handler) =>
+          this.client.setNotificationHandler(method, { params: z.looseObject({}) }, params => handler(params)),
+      },
+      (level, message, details) => this.log(level, message, details),
+    );
   }
 
   /**
    * Log a message at the specified level
-   * @param level Log level
-   * @param message Log message
-   * @param details Optional additional details
    */
   private log(level: LoggingLevel, message: string, details?: Record<string, any>): void {
-    // Convert MCP logging level to our logger method
     const loggerMethod = convertLogLevelToLoggerMethod(level);
-
     const msg = `[${this.name}] ${message}`;
 
-    // Log to internal logger
     this.logger[loggerMethod](msg, details);
 
-    // Send to registered handler if available
     if (this.logHandler) {
       this.logHandler({
         level,
@@ -434,74 +651,20 @@ export class InternalMastraMCPClient extends MastraBase {
     }
   }
 
-  private setupLogging(): void {
-    if (this.enableServerLogs) {
-      this.client.setNotificationHandler('notifications/message', (notification: any) => {
-        const { level, ...params } = notification.params;
-        this.log(level as LoggingLevel, '[MCP SERVER LOG]', params);
-      });
-    }
-  }
-
   /**
-   * Set up handler for roots/list requests from the server.
-   *
-   * Per MCP spec (https://modelcontextprotocol.io/specification/2025-11-25/client/roots):
-   * When a server sends a roots/list request, the client responds with the configured roots.
+   * Request metadata every outgoing request carries: the per-request log-level
+   * opt-in (when enabled) and the W3C trace fields resolved for this request,
+   * merged under caller-supplied keys. A configured `traceContext` provider owns
+   * the trace fields; without one they name `span`, the span making the request.
    */
-  private setupRootsHandler(): void {
-    this.log('debug', 'Setting up roots/list request handler');
-    this.client.setRequestHandler('roots/list', async () => {
-      this.log('debug', `Responding to roots/list request with ${this._roots.length} roots`);
-      return { roots: this._roots };
-    });
-  }
-
-  /**
-   * Get the currently configured roots.
-   *
-   * @returns Array of configured filesystem roots
-   */
-  get roots(): Root[] {
-    return [...this._roots];
-  }
-
-  /**
-   * Update the list of filesystem roots and notify the server.
-   *
-   * Per MCP spec, when roots change, the client sends a `notifications/roots/list_changed`
-   * notification to inform the server that it should re-fetch the roots list.
-   *
-   * @param roots - New list of filesystem roots
-   *
-   * @example
-   * ```typescript
-   * await client.setRoots([
-   *   { uri: 'file:///home/user/projects', name: 'Projects' },
-   *   { uri: 'file:///tmp', name: 'Temp' }
-   * ]);
-   * ```
-   */
-  async setRoots(roots: Root[]): Promise<void> {
-    this.log('debug', `Updating roots to ${roots.length} entries`);
-    this._roots = [...roots];
-    await this.sendRootsListChanged();
-  }
-
-  /**
-   * Send a roots/list_changed notification to the server.
-   *
-   * Per MCP spec, clients that support `listChanged` MUST send this notification
-   * when the list of roots changes. The server will then call roots/list to get
-   * the updated list.
-   */
-  async sendRootsListChanged(): Promise<void> {
-    if (!this.transport) {
-      this.log('debug', 'Cannot send roots/list_changed: not connected');
-      return;
-    }
-    this.log('debug', 'Sending notifications/roots/list_changed');
-    await this.client.notification({ method: 'notifications/roots/list_changed' });
+  private requestMeta(meta?: Record<string, unknown>, span?: AnySpan): Record<string, unknown> | undefined {
+    const traceContext = this.serverConfig.traceContext ? this.serverConfig.traceContext() : traceContextFromSpan(span);
+    const merged = {
+      ...(this.serverLogLevel ? { [LOG_LEVEL_META_KEY]: this.serverLogLevel } : {}),
+      ...(traceContext ? traceContextToMeta(traceContext) : {}),
+      ...meta,
+    };
+    return Object.keys(merged).length > 0 ? merged : undefined;
   }
 
   private buildStdioEnv(): Record<string, string> {
@@ -521,27 +684,43 @@ export class InternalMastraMCPClient extends MastraBase {
     return { ...getDefaultEnvironment(), ...configured };
   }
 
-  private async connectStdio(command: string) {
+  private async connectStdio(command: string, generation: number) {
     this.log('debug', `Using Stdio transport for command: ${command}`);
+    // Held locally until the connect succeeds, mirroring connectHttp, so a failed
+    // attempt leaves `this.transport` unset. connect()'s failure branch keys the
+    // process-hook release on that, and a lingering transport would suppress it.
+    const transport = new StdioClientTransport({
+      command,
+      args: this.serverConfig.args,
+      env: this.buildStdioEnv(),
+      stderr: this.serverConfig.stderr,
+      cwd: this.serverConfig.cwd,
+    });
+    observeEventStreamRequests(transport, this.noteEventStreamSent);
+    this.connectingTransport = transport;
     try {
-      this.transport = new StdioClientTransport({
-        command,
-        args: this.serverConfig.args,
-        env: this.buildStdioEnv(),
-        stderr: this.serverConfig.stderr,
-        cwd: this.serverConfig.cwd,
+      this.assertSameLifecycle(generation);
+      await this.client.connect(transport, {
+        timeout: this.serverConfig.timeout ?? this.timeout,
+        prior: this.priorDiscovery,
       });
-      await this.client.connect(this.transport, { timeout: this.serverConfig.timeout ?? this.timeout });
+      if (this.taskOptions) interceptTaskResults(transport);
+      this.transport = transport;
       this.log('debug', `Successfully connected to MCP server via Stdio`);
     } catch (e) {
       this.log('error', e instanceof Error ? e.stack || e.message : JSON.stringify(e));
+      // client.connect() may already have spawned the child before throwing, and
+      // nothing else holds this transport now, so close it here or the subprocess
+      // outlives the failed attempt.
+      await transport.close().catch(() => {});
       throw e;
+    } finally {
+      if (this.connectingTransport === transport) this.connectingTransport = undefined;
     }
   }
 
-  private async connectHttp(url: URL) {
-    const { requestInit, eventSourceInit, authProvider, connectTimeout, fetch: userFetch, allowedHosts } =
-      this.serverConfig;
+  private async connectHttp(url: URL, generation: number) {
+    const { requestInit, authProvider, connectTimeout, fetch: userFetch, allowedHosts } = this.serverConfig;
 
     // Fail fast with a clear error before any transport is constructed.
     if (allowedHosts !== undefined) {
@@ -549,14 +728,14 @@ export class InternalMastraMCPClient extends MastraBase {
     }
 
     // Wrap fetch so request-scoped metadata still flows through normal MCP POSTs, while
-    // the long-lived Streamable HTTP event stream does not inherit the active Datadog span.
-    // When allowedHosts is set, the same wrapper enforces the host policy: on the default
-    // path via manual redirect following (hops blocked before being sent), and on the
-    // custom-fetch path via a pre-request check plus post-hoc response validation.
+    // long-lived streams do not inherit the active Datadog span. When allowedHosts is
+    // set, the same wrapper enforces the host policy: on the default path via manual
+    // redirect following (hops blocked before being sent), and on the custom-fetch path
+    // via a pre-request check plus post-hoc response validation.
     const policyUserFetch =
       userFetch && allowedHosts !== undefined ? wrapFetchWithHostPolicy(userFetch, allowedHosts) : undefined;
     const fetch: FetchLike = (requestUrl: string | URL, init?: RequestInit) => {
-      const requestContext = this.operationContextStore.getStore() ?? null;
+      const requestContext = this.fetchRequestContext(init);
       const executeFetch = (): Promise<Response> => {
         if (allowedHosts === undefined) {
           return userFetch ? userFetch(requestUrl, init, requestContext) : globalThis.fetch(requestUrl, init);
@@ -575,129 +754,108 @@ export class InternalMastraMCPClient extends MastraBase {
       return shouldDetachPersistentTransportRequest(init) ? runOutsideDatadogTraceScope(executeFetch) : executeFetch();
     };
 
-    this.log('debug', `Attempting to connect to URL: ${url}`);
+    this.log('debug', `Connecting to URL: ${url}`);
 
-    // Assume /sse means sse.
-    let shouldTrySSE = url.pathname.endsWith(`/sse`);
-
-    if (!shouldTrySSE) {
-      // Constructed outside the try so an UnauthorizedError can keep a handle on the
-      // transport that started the authorization flow (finishAuth must run on it).
-      const streamableTransport = new StreamableHTTPClientTransport(url, {
-        requestInit,
-        reconnectionOptions: this.serverConfig.reconnectionOptions,
-        authProvider: authProvider,
-        fetch,
+    // Constructed outside the try so an UnauthorizedError can keep a handle on the
+    // transport that started the authorization flow (finishAuth must run on it).
+    const transport = new StreamableHTTPClientTransport(url, { requestInit, authProvider, fetch });
+    observeEventStreamRequests(transport, this.noteEventStreamSent);
+    this.deliverOutsideConnectionContext(transport);
+    this.connectingTransport = transport;
+    try {
+      this.assertSameLifecycle(generation);
+      await this.client.connect(transport, {
+        timeout: connectTimeout ?? DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC,
+        prior: this.priorDiscovery,
       });
-      try {
-        // Try Streamable HTTP transport first
-        this.log('debug', 'Trying Streamable HTTP transport...');
-        await this.client.connect(streamableTransport, {
-          timeout: connectTimeout ?? DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC,
-        });
-        this.transport = streamableTransport;
-        this.log('debug', 'Successfully connected using Streamable HTTP transport.');
-      } catch (error: any) {
-        this.log('debug', `Streamable HTTP transport failed: ${error}`);
-
-        // A 401 means the flow continues on this transport via finishAuth, not on a
-        // fallback: the SDK has already run discovery and redirected to authorization.
-        // Guarded on authProvider so servers without one never carry an auth state.
-        if (authProvider && error instanceof UnauthorizedError) {
-          this.markNeedsAuth(streamableTransport);
-          throw error;
-        }
-
-        // Policy violations and pinned protocol negotiation failures are final:
-        // retrying over legacy SSE cannot succeed and would bury the typed error.
-        if (isUrlPolicyError(error) || this.serverConfig.protocolVersion === '2026-07-28') {
-          throw error;
-        }
-
-        // The Streamable HTTP transport reports non-OK responses as SdkHttpError, which
-        // carries the HTTP status on `status` (`code` is a string SdkErrorCode, not a
-        // status). Servers that only speak the deprecated HTTP+SSE transport answer the
-        // initial POST with 400/404/405, which is the signal to retry over SSE; any other
-        // status is a real failure. Non-HTTP failures (network, timeout) keep the legacy
-        // behavior of attempting the SSE fallback.
-        const status = error instanceof SdkHttpError ? error.status : undefined;
-        if (status !== undefined && !SSE_FALLBACK_STATUS_CODES.includes(status)) {
-          throw error;
-        }
-        shouldTrySSE = true;
+      if (this.taskOptions) interceptTaskResults(transport);
+      this.transport = transport;
+      this.log('debug', 'Successfully connected using Streamable HTTP transport.');
+      // Close any transport left pending from an earlier 401: authorization is satisfied.
+      this.closePendingAuthTransport();
+      if (authProvider) {
+        this._authState = 'authorized';
       }
-    }
-
-    if (shouldTrySSE) {
-      // The SDK's cleanup after a failed streamable initialize is fire-and-forget,
-      // so the streamable transport may still be attached; detach it or the SSE
-      // attempt is rejected with "Already connected to a transport".
-      await this.detachStaleClientTransport();
-
-      this.log('debug', 'Falling back to deprecated HTTP+SSE transport...');
-      // Fallback to SSE transport
-      // The top-level fetch is used for POST requests, but eventSourceInit.fetch is needed for the SSE stream.
-      // Only supply our span-detaching fetch when the caller hasn't provided one, so an explicit
-      // eventSourceInit.fetch is preserved rather than overwritten. When allowedHosts is set, a
-      // caller-supplied eventSourceInit.fetch is wrapped with the same policy check + post-hoc
-      // redirect validation as the custom-fetch path — otherwise it would bypass the policy.
-      const callerSseFetch = eventSourceInit?.fetch;
-      const sseEventSourceInit = {
-        ...eventSourceInit,
-        fetch:
-          callerSseFetch && allowedHosts !== undefined
-            ? wrapFetchWithHostPolicy(callerSseFetch, allowedHosts)
-            : (callerSseFetch ?? fetch),
-      };
-
-      const sseTransport = new SSEClientTransport(url, {
-        requestInit,
-        eventSourceInit: sseEventSourceInit,
-        authProvider,
-        fetch,
-      });
-      try {
-        await this.client.connect(sseTransport, { timeout: this.serverConfig.timeout ?? this.timeout });
-        this.transport = sseTransport;
-        this.log('debug', 'Successfully connected using deprecated HTTP+SSE transport.');
-      } catch (sseError) {
-        if (authProvider && sseError instanceof UnauthorizedError) {
-          this.markNeedsAuth(sseTransport);
-          throw sseError;
-        }
-        // Surface policy violations directly instead of the generic connect error.
-        if (isUrlPolicyError(sseError)) {
-          throw sseError;
-        }
-        this.log(
-          'error',
-          `Failed to connect with SSE transport after failing to connect to Streamable HTTP transport first. SSE error: ${sseError}`,
-        );
-        throw new Error('Could not connect to server with any available HTTP transport');
+    } catch (error) {
+      this.log('debug', `Streamable HTTP transport failed: ${error}`);
+      // A 401 means the flow continues on this transport via finishAuth: the SDK has
+      // already run discovery and redirected to authorization. Guarded on authProvider
+      // so servers without one never carry an auth state.
+      if (authProvider && error instanceof UnauthorizedError) {
+        this.markNeedsAuth(transport);
       }
+      throw error;
+    } finally {
+      if (this.connectingTransport === transport) this.connectingTransport = undefined;
     }
+  }
 
-    // Reaching here means a transport connected; any earlier authorization requirement is satisfied.
-    // Close, don't just drop, any transport left pending from an earlier 401 so its event stream
-    // and session resources are released rather than abandoned.
-    this.closePendingAuthTransport();
-    if (authProvider) {
-      this._authState = 'authorized';
-    }
+  /**
+   * Connects as a tool call: the handshake and the streams the connection keeps open reach the
+   * transport's fetch with the call's requestContext, through the connection context. Any enclosing
+   * operation scope is exited first. It would take priority in fetch, and the new streams and stdio
+   * child would deliver every later server message in it.
+   */
+  private connectAsCall<T>(requestContext: RequestContext | null, connect: () => Promise<T>): Promise<T> {
+    return this.operationContextStore.exit(() => this.connectionContextStore.run(requestContext, connect));
+  }
+
+  /**
+   * The requestContext the transport's fetch passes on for an outgoing request. An operation scope
+   * owns its requests, even when its requestContext is null. Outside one, the handshake and the
+   * streams the connection keeps open use the connection context, and a reply to a server request
+   * uses the context of the connection that delivered the request.
+   */
+  private fetchRequestContext(init?: RequestInit): RequestContext | null {
+    const operationContext = this.operationContextStore.getStore();
+    if (operationContext !== undefined) return operationContext;
+    const connectionContext = this.connectionContextStore.getStore();
+    if (connectionContext !== undefined) return connectionContext;
+    const replyContext = this.replyContextStore.getStore();
+    if (replyContext !== undefined && isJsonRpcResponseBody(init?.body)) return replyContext;
+    return null;
+  }
+
+  /**
+   * Delivers every message the server sends outside the connection context, from the handshake on.
+   * A server log, notification or request arriving on a stream the opening call started belongs to
+   * no call, so a request its handler sends must not be sent as that call. The client's reply to a
+   * server request still is, through `replyContextStore`.
+   *
+   * The reply context is the connection context this transport was created in, captured once. Read
+   * at delivery time, it would carry over to a connection that a handler of an older connection's
+   * message opens, such as a `reconnectServer()` from a server log callback.
+   *
+   * The SDK assigns `onmessage` during `connect()` and swaps it while probing the server, so every
+   * assignment is wrapped. A handler that wraps an already wrapped one (`interceptTaskResults`, or
+   * the probe restoring its saved handler) runs with the same reply context.
+   */
+  private deliverOutsideConnectionContext(transport: Transport): void {
+    const replyContext = this.connectionContextStore.getStore() ?? null;
+    let deliver: Transport['onmessage'];
+    Object.defineProperty(transport, 'onmessage', {
+      configurable: true,
+      enumerable: true,
+      get: () => deliver,
+      set: (handler: Transport['onmessage']) => {
+        deliver =
+          handler &&
+          ((message, extra) => {
+            const dispatch = () => handler.call(transport, message, extra);
+            this.connectionContextStore.exit(() => this.replyContextStore.run(replyContext, dispatch));
+          });
+      },
+    });
   }
 
   /**
    * Detaches whatever transport is still attached to the underlying SDK Client.
    *
    * The SDK assigns its internal `_transport` before `transport.start()` and never
-   * clears it when `start()` throws, and its cleanup after a failed initialize is a
-   * fire-and-forget `void this.close()`. Either way a stale transport can remain
-   * attached, making every subsequent `client.connect()` throw "Already connected
-   * to a transport" and permanently wedging this client (issue #19862). Mastra's
-   * own `this.transport` is only assigned after a successful connect, so
-   * disconnect/forceReconnect never see the stale one. Calling this before every
-   * connect attempt restores the invariant that a connect starts from a detached
-   * SDK client.
+   * clears it when `start()` throws, so a stale transport can remain attached and
+   * make every subsequent `client.connect()` throw "Already connected to a
+   * transport". Mastra's own `this.transport` is only assigned after a successful
+   * connect, so disconnect/forceReconnect never see the stale one.
    */
   private async detachStaleClientTransport(): Promise<void> {
     const stale = this.client.transport;
@@ -712,23 +870,19 @@ export class InternalMastraMCPClient extends MastraBase {
     }
     this.log('debug', 'Closing stale SDK client transport before connect attempt');
     try {
-      // Close fires the SDK's onclose chain, which rejects in-flight requests and
-      // clears the SDK client's transport reference.
       await stale.close();
     } catch (e) {
       this.log('debug', 'Error closing stale SDK client transport (ignored)', {
         error: e instanceof Error ? e.message : String(e),
       });
     }
-    // Safety net in case close() did not fire the onclose chain.
     this.severClientTransportLink(stale);
   }
 
   /**
    * Severs the mutual references between the SDK client and a stale transport
-   * without closing it. Clearing the transport's callbacks ensures a later
-   * close() of the stale transport cannot reach into the SDK client and clear
-   * the state of a newer live connection.
+   * without closing it, so a later close() of the stale transport cannot reach
+   * into the SDK client and clear the state of a newer live connection.
    */
   private severClientTransportLink(stale: Transport): void {
     stale.onclose = undefined;
@@ -736,15 +890,16 @@ export class InternalMastraMCPClient extends MastraBase {
     stale.onmessage = undefined;
     if (this.client.transport === stale) {
       (this.client as unknown as { _transport?: Transport })._transport = undefined;
+      // The listen stream rode on this transport; connect() reopens it from interest.
+      this.subscriptionStream = undefined;
     }
   }
 
   /**
    * Closes and clears any transport retained from an unfinished authorization
-   * flow. Safe to call when nothing is pending. Centralizes the cleanup so
-   * success, disconnect, and forceReconnect all release the same resource.
+   * flow. Safe to call when nothing is pending.
    */
-  private closePendingAuthTransport(replacement?: StreamableHTTPClientTransport | SSEClientTransport): void {
+  private closePendingAuthTransport(replacement?: StreamableHTTPClientTransport): void {
     const pending = this.pendingAuthTransport;
     this.pendingAuthTransport = replacement;
     if (pending && pending !== replacement) {
@@ -756,10 +911,7 @@ export class InternalMastraMCPClient extends MastraBase {
    * Records that the server rejected the connection with a 401 and keeps the
    * transport that started the authorization flow so finishAuth can complete it.
    */
-  private markNeedsAuth(transport: StreamableHTTPClientTransport | SSEClientTransport): void {
-    // A prior connect() may have left a pending transport that never completed
-    // finishAuth. Close the superseded one before replacing it so its event
-    // stream and session resources are released rather than abandoned.
+  private markNeedsAuth(transport: StreamableHTTPClientTransport): void {
     this.closePendingAuthTransport(transport);
     this._authState = 'needs-auth';
     this.log('debug', 'Server requires OAuth authorization before connecting.');
@@ -779,20 +931,19 @@ export class InternalMastraMCPClient extends MastraBase {
    *
    * Exchanges the authorization code captured at the redirect URI on the same
    * transport that started the flow, then leaves the client ready to connect().
-   *
-   * @param authorizationCode - The authorization code captured at the redirect URI
-   * @throws {Error} If no authorization flow is pending for this server
+   * The RFC 9207 `iss` captured at the redirect is validated against the
+   * discovered authorization server before the code is exchanged.
    *
    * @internal
    */
-  async finishAuth(authorizationCode: string): Promise<void> {
+  async finishAuth(authorizationCode: string, issuer?: string): Promise<void> {
     const pending = this.pendingAuthTransport;
     if (!pending) {
       throw new Error('No OAuth authorization is pending for this server. Call connect() first.');
     }
     this.pendingAuthTransport = undefined;
     try {
-      await pending.finishAuth(authorizationCode);
+      await pending.finishAuth(authorizationCode, issuer);
     } finally {
       // The pending transport only ran the token exchange; the next connect() builds a fresh one.
       void pending.close().catch(() => {});
@@ -801,43 +952,114 @@ export class InternalMastraMCPClient extends MastraBase {
 
   private isConnected: Promise<boolean> | null = null;
   private reconnectPromise: Promise<void> | null = null;
+  /**
+   * Transport of the connect attempt still in flight. The SDK only attaches it to
+   * the client once version negotiation finishes, so a server that never answers
+   * would otherwise leave nothing that disconnect() or a newer attempt can close.
+   */
+  private connectingTransport?: Transport;
+
+  /**
+   * Closes the transport of an unfinished connect attempt. Closing makes the SDK
+   * reject that attempt and reap the child (and any negotiation probe) it spawned.
+   */
+  private async abandonPendingConnect(): Promise<void> {
+    const pending = this.connectingTransport;
+    if (!pending) return;
+    this.connectingTransport = undefined;
+    await pending.close().catch(() => {});
+  }
+
+  /**
+   * Whether a connect or reconnect is still running on this client. A failed attempt
+   * that a newer one replaced reports true here, since the newer attempt owns the client.
+   *
+   * @internal
+   */
+  hasPendingConnect(): boolean {
+    return this.isConnected !== null || this.reconnectPromise !== null;
+  }
+
+  private assertSameLifecycle(generation: number): void {
+    if (this.lifecycleGeneration !== generation) {
+      throw new Error('MCP client was disconnected while connecting');
+    }
+  }
+
+  /**
+   * Change notifications the caller has asked for. The client keeps exactly one
+   * `subscriptions/listen` stream open for this interest set, replaces it when the
+   * set changes and reopens it after a reconnect.
+   */
+  private subscriptionInterest = {
+    toolsListChanged: false,
+    promptsListChanged: false,
+    resourcesListChanged: false,
+    resourceSubscriptions: new Set<string>(),
+  };
+  private subscriptionStream?: McpSubscription;
+  private subscriptionUpdate: Promise<unknown> = Promise.resolve();
   private lifecycleGeneration = 0;
+  private readonly eventStreamRouter: EventStreamRouter;
+  private onEventStreamSent?: (id: string) => void;
+
+  private readonly noteEventStreamSent = (id: string): void => {
+    const onSent = this.onEventStreamSent;
+    this.onEventStreamSent = undefined;
+    onSent?.(id);
+  };
+  /** Live MCP Events subscriptions, restored after a reconnect and cancelled on disconnect. */
+  private readonly eventSubscriptions = new Set<EventSubscription>();
+  /** Webhook settings and receiver shared with the owning `MCPClient`, when configured. */
+  readonly webhook?: EventsWebhookSetup;
 
   /**
    * Connects to the MCP server using the configured transport.
    *
-   * Automatically detects transport type based on configuration (stdio vs HTTP).
    * Safe to call multiple times - returns existing connection if already connected.
-   *
-   * @returns Promise resolving to true when connected
-   * @throws {MastraError} If connection fails
    *
    * @internal
    */
-  async connect() {
+  async connect(generation = this.lifecycleGeneration) {
     if (this.isConnected) {
       return this.isConnected;
     }
 
-    this.isConnected = new Promise<boolean>(async (resolve, reject) => {
+    const attempt: Promise<boolean> = new Promise<boolean>(async (resolve, reject) => {
       try {
-        // A previous failed connect attempt can leave a stale transport attached
-        // to the SDK client; release it or every reconnect fails (issue #19862).
+        // An attempt that a reconnect replaced must not keep its child running.
+        await this.abandonPendingConnect();
         await this.detachStaleClientTransport();
 
         const { command, url } = this.serverConfig;
 
         if (command) {
-          await this.connectStdio(command);
+          await this.connectStdio(command, generation);
         } else if (url) {
-          await this.connectHttp(url);
+          await this.connectHttp(url, generation);
         } else {
           throw new Error('Server configuration must include either a command or a url.');
         }
 
-        this.refreshServerInstructions();
+        this.serverInstructions = this.client.getInstructions();
+        this.serverImplementation = this.client.getServerVersion();
+        this.rememberNegotiation();
+        // The new server may offer different event types.
+        this.events.invalidate();
+
+        if (this.hasSubscriptionInterest()) {
+          try {
+            await this.enqueueSubscriptionUpdate(() => this.replaceSubscriptionStream());
+          } catch (error) {
+            // The connection stays usable; the next subscribe/handler registration retries.
+            this.log('error', 'Failed to restore subscriptions/listen after connecting', {
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
 
         resolve(true);
+        for (const subscription of this.eventSubscriptions) subscription.onReconnected();
 
         // Scope the reset to this connection so an older handler retained across
         // reconnects cannot clear the state of a replacement connection.
@@ -849,18 +1071,15 @@ export class InternalMastraMCPClient extends MastraBase {
         const connectionOnClose = () => {
           if (this.transport === connectedTransport) {
             this.log('debug', `MCP server connection closed`);
-            // Close the stale transport before any reconnect so its EventSource/session
-            // can't keep retrying and leak server-side sessions (issue #16693). Clear
-            // synchronously first so a concurrent connect() sees a clean slate.
             const staleTransport = this.transport;
             this.transport = undefined;
             if (this.isConnected === connectionPromise) {
               this.isConnected = null;
             }
             this.serverInstructions = undefined;
+            this.serverImplementation = undefined;
+            this.subscriptionStream = undefined;
             if (staleTransport) {
-              // Prevent a duplicate late close signal from this transport from
-              // reaching the SDK client after a replacement connection is attached.
               this.severClientTransportLink(staleTransport);
               void staleTransport.close().catch(() => {});
             }
@@ -870,12 +1089,47 @@ export class InternalMastraMCPClient extends MastraBase {
         this.clientConnectionOnClose = connectionOnClose;
         this.client.onclose = connectionOnClose;
       } catch (e) {
-        this.isConnected = null;
+        // Deliver the connect failure first: the cleanup below can fail in a host that
+        // refuses it, and it must not leave the caller's connect() pending forever with the
+        // connect error lost to an unhandled rejection (#30820).
         reject(e);
+        // A newer attempt that abandoned this one already owns the connection state
+        // and the process hooks, so leave both to it.
+        if (this.isConnected === attempt) {
+          // Drop the rejected attempt before the release, because the release can fail and a
+          // host logger can throw while it is reported. A cached rejected attempt would answer
+          // the next connect() with the old rejection instead of a fresh connection (#30820).
+          this.isConnected = null;
+          // A connect that never reached a transport leaves nothing for disconnect() to tear
+          // down, so the process hooks must not outlive the failed attempt. A live transport
+          // means an earlier connection still owns them. The release reports a refusal itself
+          // and never throws, so it cannot undo the rejection above.
+          if (!this.transport) {
+            this.unregisterProcessHooks();
+          }
+        }
+        // A failed connect invalidates the cached verdict so a legacy verdict cannot stick.
+        this.priorDiscovery = undefined;
       }
     });
+    this.isConnected = attempt;
 
-    // Only register exit hooks if not already registered
+    // Registered before the connection settles so an exit during a connect attempt still
+    // tears down anything the transport already started (a spawned stdio child, say).
+    // The failure path inside the promise removes them again. Hosts that own shutdown must
+    // skip even the first registration: exit-hook's global signal listeners outlive unsubscribe.
+    if (this.processHooks) {
+      this.registerProcessHooks();
+    }
+
+    return this.isConnected;
+  }
+
+  /**
+   * Installs the process-exit and signal handlers that tear this client down when the
+   * host process goes away. Idempotent, so repeated connects add at most one of each.
+   */
+  private registerProcessHooks() {
     if (!this.exitHookUnsubscribe) {
       this.exitHookUnsubscribe = asyncExitHook(
         async () => {
@@ -895,31 +1149,62 @@ export class InternalMastraMCPClient extends MastraBase {
       this.sigHupHandler = () => gracefulExit();
       process.on('SIGHUP', this.sigHupHandler);
     }
-
-    this.log('debug', `Successfully connected to MCP server`);
-    return this.isConnected;
   }
 
   /**
-   * Gets the current session ID if using Streamable HTTP transport.
+   * Removes whatever {@link registerProcessHooks} installed. Keyed on the handlers this
+   * client actually registered rather than on connection state, so a client that never
+   * reached a transport still releases its process listeners.
    *
-   * Returns undefined if not connected or not using Streamable HTTP transport.
-   *
-   * @returns Session ID string or undefined
-   *
-   * @internal
+   * Each release is attempted on its own: a host that refuses one `process.off` call must not
+   * keep the other listeners installed, and must not make this throw at its callers (#30820).
+   * A handler whose listener could not be removed stays tracked, so a later connect registers
+   * no duplicate of it.
    */
-  get sessionId(): string | undefined {
-    if (this.transport instanceof StreamableHTTPClientTransport) {
-      return this.transport.sessionId;
+  private unregisterProcessHooks() {
+    if (this.exitHookUnsubscribe) {
+      try {
+        this.exitHookUnsubscribe();
+        this.exitHookUnsubscribe = undefined;
+      } catch (error) {
+        this.reportHookReleaseFailure('process exit hook', error);
+      }
     }
-    return undefined;
+    if (this.sigTermHandler) {
+      try {
+        process.off('SIGTERM', this.sigTermHandler);
+        this.sigTermHandler = undefined;
+      } catch (error) {
+        this.reportHookReleaseFailure('SIGTERM handler', error);
+      }
+    }
+    if (this.sigHupHandler) {
+      try {
+        process.off('SIGHUP', this.sigHupHandler);
+        this.sigHupHandler = undefined;
+      } catch (error) {
+        this.reportHookReleaseFailure('SIGHUP handler', error);
+      }
+    }
+  }
+
+  /**
+   * Reports a process hook that could not be released. The report is guarded because the host
+   * supplies the logger: a logger that throws while receiving this message must not turn a
+   * failed release into a thrown one (#30820).
+   */
+  private reportHookReleaseFailure(hook: string, error: unknown) {
+    try {
+      this.log('error', `Failed to release the MCP client process hooks (${hook})`, {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } catch {
+      // The host logger is the thing that failed, so there is nowhere left to report it.
+    }
   }
 
   /**
    * Gets the stderr stream of the child process, if using stdio transport with `stderr: 'pipe'`.
-   *
-   * Returns null if not connected, not using stdio transport, or stderr is not piped.
    *
    * @internal
    */
@@ -934,6 +1219,34 @@ export class InternalMastraMCPClient extends MastraBase {
     return this.serverInstructions;
   }
 
+  /** The identity (`serverInfo`) the server announced on connect; `undefined` until connected or if the server announced none. */
+  get serverInfo(): MCPServerImplementation | undefined {
+    return this.serverImplementation;
+  }
+
+  /** The protocol revision negotiated with the server; `undefined` until connected. */
+  get negotiatedProtocolVersion(): string | undefined {
+    return this.client.getNegotiatedProtocolVersion();
+  }
+
+  private rememberNegotiation(): void {
+    if (this.serverConfig.protocolVersion !== undefined) return;
+    const discover = this.client.getDiscoverResult();
+    this.priorDiscovery =
+      this.client.getProtocolEra() === 'modern' && discover ? { kind: 'modern', discover } : { kind: 'legacy' };
+    this.log('debug', `Negotiated protocol revision ${this.negotiatedProtocolVersion}`);
+  }
+
+  /** Fails a call that only the 2026-07-28 revision supports when the server negotiated an older one. */
+  private assertCurrentRevision(feature: string): void {
+    const negotiated = this.negotiatedProtocolVersion;
+    if (negotiated !== undefined && negotiated !== MCP_CLIENT_PROTOCOL_VERSION) {
+      throw new Error(
+        `${feature} needs MCP ${MCP_CLIENT_PROTOCOL_VERSION}, but server '${this.name}' negotiated ${negotiated}`,
+      );
+    }
+  }
+
   get forwardInstructions(): boolean {
     return this.serverConfig.forwardInstructions ?? false;
   }
@@ -942,36 +1255,32 @@ export class InternalMastraMCPClient extends MastraBase {
     return this.serverConfig.instructionsMaxLength ?? DEFAULT_INSTRUCTIONS_MAX_LENGTH;
   }
 
-  private refreshServerInstructions(): void {
-    this.serverInstructions = this.client.getInstructions();
-  }
-
   async disconnect() {
     // Invalidate tool calls that started before this explicit teardown. Their
     // recovery path must not establish a replacement connection afterwards.
     this.lifecycleGeneration++;
 
-    // A reconnect that started first may publish a replacement transport.
-    // Wait for it, then tear down whichever transport is current.
+    // A connect that never finishes would otherwise hold the reconnect awaited below forever.
+    await this.abandonPendingConnect();
     const reconnectPromise = this.reconnectPromise;
     if (reconnectPromise) {
       await reconnectPromise.catch(() => {});
     }
 
-    // Release any transport left pending from an unfinished authorization flow,
-    // even when there is no live transport to tear down.
     this.closePendingAuthTransport();
+    await this.cancelEventSubscriptions();
     if (!this.transport) {
-      // Even without a live transport, a failed connect attempt may have left a
-      // stale transport attached to the SDK client; release it so a future
-      // connect starts clean (issue #19862).
       await this.detachStaleClientTransport();
+      // A client whose connect() failed still holds process hooks; there is simply no
+      // transport to close. Release them here or they outlive the client entirely.
+      this.unregisterProcessHooks();
       this.log('debug', 'Disconnect called but no transport was connected.');
       return;
     }
     this.log('debug', `Disconnecting from MCP server`);
     const disconnectedTransport = this.transport;
     try {
+      await this.closeSubscriptionStream();
       await disconnectedTransport.close();
       this.log('debug', 'Successfully disconnected from MCP server');
     } catch (e) {
@@ -984,31 +1293,14 @@ export class InternalMastraMCPClient extends MastraBase {
       this.transport = undefined;
       this.isConnected = null;
       this.serverInstructions = undefined;
+      this.serverImplementation = undefined;
 
-      // Clean up exit hooks to prevent memory leaks
-      if (this.exitHookUnsubscribe) {
-        this.exitHookUnsubscribe();
-        this.exitHookUnsubscribe = undefined;
-      }
-      if (this.sigTermHandler) {
-        process.off('SIGTERM', this.sigTermHandler);
-        this.sigTermHandler = undefined;
-      }
-      if (this.sigHupHandler) {
-        process.off('SIGHUP', this.sigHupHandler);
-        this.sigHupHandler = undefined;
-      }
+      this.unregisterProcessHooks();
     }
   }
 
   /**
    * Forces a reconnection to the MCP server by disconnecting and reconnecting.
-   *
-   * This is useful when the session becomes invalid (e.g., after server restart)
-   * and the client needs to establish a fresh connection.
-   *
-   * @returns Promise resolving when reconnection is complete
-   * @throws {Error} If reconnection fails
    *
    * @internal
    */
@@ -1018,14 +1310,12 @@ export class InternalMastraMCPClient extends MastraBase {
       return await this.reconnectPromise;
     }
 
+    const generation = this.lifecycleGeneration;
     const reconnectPromise = (async () => {
       this.log('debug', 'Forcing reconnection to MCP server...');
 
-      // Release any transport left pending from an unfinished authorization flow
-      // before rebuilding the connection.
       this.closePendingAuthTransport();
 
-      // Disconnect current connection (ignore errors as connection may already be broken)
       const disconnectedTransport = this.transport;
       try {
         if (disconnectedTransport) {
@@ -1042,15 +1332,21 @@ export class InternalMastraMCPClient extends MastraBase {
       }
 
       // Reset connection state only when it still belongs to the transport that
-      // this reconnect attempt disconnected. A close callback may have already
-      // cleared it, but must not let us erase a replacement transport.
+      // this reconnect attempt disconnected.
       if (!disconnectedTransport || this.transport === disconnectedTransport) {
         this.transport = undefined;
         this.isConnected = null;
         this.serverInstructions = undefined;
+        this.serverImplementation = undefined;
       }
 
-      await this.connect();
+      this.assertSameLifecycle(generation);
+      // A reconnect inside a tool call opens the connection as that call, like a hydrated tool's
+      // first connect.
+      const callContext = this.operationContextStore.getStore();
+      await (callContext === undefined
+        ? this.connect(generation)
+        : this.connectAsCall(callContext, () => this.connect(generation)));
       this.log('debug', 'Successfully reconnected to MCP server');
     })();
     this.reconnectPromise = reconnectPromise;
@@ -1073,8 +1369,6 @@ export class InternalMastraMCPClient extends MastraBase {
       const reconnectPromise = this.reconnectPromise;
       if (reconnectPromise) {
         await reconnectPromise;
-        // Re-evaluate after the owner clears the settled promise. The transport
-        // that failed may itself be the replacement created by that reconnect.
         continue;
       }
 
@@ -1094,52 +1388,17 @@ export class InternalMastraMCPClient extends MastraBase {
 
   async listResources(): Promise<ListResourcesResult> {
     this.log('debug', `Requesting resources from MCP server`);
-    return await this.client.request(
-      { method: 'resources/list' },
-      {
-        timeout: this.timeout,
-      },
-    );
+    return await this.client.listResources({ _meta: this.requestMeta() }, { timeout: this.timeout });
   }
 
   async readResource(uri: string): Promise<ReadResourceResult> {
     this.log('debug', `Reading resource from MCP server: ${uri}`);
-    return await this.client.request(
-      { method: 'resources/read', params: { uri } },
-      {
-        timeout: this.timeout,
-      },
-    );
-  }
-
-  async subscribeResource(uri: string): Promise<EmptyResult> {
-    this.log('debug', `Subscribing to resource on MCP server: ${uri}`);
-    return await this.client.request(
-      { method: 'resources/subscribe', params: { uri } },
-      {
-        timeout: this.timeout,
-      },
-    );
-  }
-
-  async unsubscribeResource(uri: string): Promise<EmptyResult> {
-    this.log('debug', `Unsubscribing from resource on MCP server: ${uri}`);
-    return await this.client.request(
-      { method: 'resources/unsubscribe', params: { uri } },
-      {
-        timeout: this.timeout,
-      },
-    );
+    return await this.client.readResource({ uri, _meta: this.requestMeta() }, { timeout: this.timeout });
   }
 
   async listResourceTemplates(): Promise<ListResourceTemplatesResult> {
     this.log('debug', `Requesting resource templates from MCP server`);
-    return await this.client.request(
-      { method: 'resources/templates/list' },
-      {
-        timeout: this.timeout,
-      },
-    );
+    return await this.client.listResourceTemplates({ _meta: this.requestMeta() }, { timeout: this.timeout });
   }
 
   /**
@@ -1147,99 +1406,302 @@ export class InternalMastraMCPClient extends MastraBase {
    */
   async listPrompts(): Promise<ListPromptsResult> {
     this.log('debug', `Requesting prompts from MCP server`);
-    return await this.client.request(
-      { method: 'prompts/list' },
-      {
-        timeout: this.timeout,
-      },
-    );
+    return await this.client.listPrompts({ _meta: this.requestMeta() }, { timeout: this.timeout });
   }
 
   /**
    * Get a prompt and its dynamic messages from the server.
-   * @param name The prompt name
-   * @param args Arguments for the prompt
    */
   async getPrompt({ name, args }: { name: string; args?: Record<string, any> }): Promise<GetPromptResult> {
     this.log('debug', `Requesting prompt from MCP server: ${name}`);
-    return await this.client.request(
-      { method: 'prompts/get', params: { name, arguments: args } },
-      { timeout: this.timeout },
+    return await this.client.getPrompt({ name, arguments: args, _meta: this.requestMeta() }, { timeout: this.timeout });
+  }
+
+  private hasSubscriptionInterest(): boolean {
+    const interest = this.subscriptionInterest;
+    return (
+      interest.toolsListChanged ||
+      interest.promptsListChanged ||
+      interest.resourcesListChanged ||
+      interest.resourceSubscriptions.size > 0
     );
   }
 
+  private subscriptionFilter(): SubscriptionFilter {
+    const interest = this.subscriptionInterest;
+    return {
+      ...(interest.toolsListChanged ? { toolsListChanged: true } : {}),
+      ...(interest.promptsListChanged ? { promptsListChanged: true } : {}),
+      ...(interest.resourcesListChanged ? { resourcesListChanged: true } : {}),
+      ...(interest.resourceSubscriptions.size > 0
+        ? { resourceSubscriptions: [...interest.resourceSubscriptions].sort() }
+        : {}),
+    };
+  }
+
+  /** Serializes stream replacements so concurrent mutations apply in order. */
+  private enqueueSubscriptionUpdate<T>(update: () => Promise<T>): Promise<T> {
+    const operation = this.subscriptionUpdate.catch(() => {}).then(update);
+    this.subscriptionUpdate = operation;
+    return operation;
+  }
+
   /**
-   * Register a handler to be called when the prompt list changes on the server.
-   * Use this to refresh cached prompt lists in the client/UI if needed.
+   * Opens a `subscriptions/listen` stream for the current interest set, then closes the
+   * previous one so no notification is lost between filters. Resource subscriptions the
+   * server declines are an error; declined list-changed bits only mean the server has
+   * nothing to announce. Older revisions push list-changed notifications unprompted, so
+   * they need no stream unless resource subscriptions are requested.
    */
-  setPromptListChangedNotificationHandler(handler: () => void): void {
-    this.log('debug', 'Setting prompt list changed notification handler');
+  private async replaceSubscriptionStream(): Promise<void> {
+    const negotiated = this.negotiatedProtocolVersion;
+    if (
+      negotiated !== undefined &&
+      negotiated !== MCP_CLIENT_PROTOCOL_VERSION &&
+      this.subscriptionInterest.resourceSubscriptions.size === 0
+    ) {
+      const previous = this.subscriptionStream;
+      this.subscriptionStream = undefined;
+      await previous?.close();
+      return;
+    }
+    this.assertCurrentRevision('subscriptions/listen');
+    const previous = this.subscriptionStream;
+    const filter = this.subscriptionFilter();
+    this.log('debug', 'Opening subscriptions/listen stream', { filter });
+    const replacement = this.hasSubscriptionInterest()
+      ? await this.client.listen(filter, { timeout: this.timeout })
+      : undefined;
+
+    if (replacement && filter.resourceSubscriptions) {
+      const honored = new Set(replacement.honoredFilter.resourceSubscriptions ?? []);
+      const declined = filter.resourceSubscriptions.filter(uri => !honored.has(uri));
+      if (declined.length > 0) {
+        await replacement.close();
+        throw new Error(`Server declined resource subscriptions for: ${declined.join(', ')}`);
+      }
+    }
+
+    this.subscriptionStream = replacement;
+    if (replacement) {
+      void replacement.closed.then(() => {
+        if (this.subscriptionStream === replacement) this.subscriptionStream = undefined;
+      });
+    }
+    await previous?.close();
+  }
+
+  private async closeSubscriptionStream(): Promise<void> {
+    await this.subscriptionUpdate.catch(() => {});
+    const stream = this.subscriptionStream;
+    this.subscriptionStream = undefined;
+    await stream?.close();
+  }
+
+  /** Applies an interest change to the live stream when connected; otherwise connect() opens it. */
+  private async applySubscriptionInterest(): Promise<void> {
+    if (!this.transport) return;
+    await this.enqueueSubscriptionUpdate(() => this.replaceSubscriptionStream());
+  }
+
+  /**
+   * Subscribes to `notifications/resources/updated` for a resource. The subscription is
+   * carried on the client's single `subscriptions/listen` stream and survives reconnects.
+   */
+  async subscribeResource(uri: string): Promise<void> {
+    this.log('debug', `Subscribing to resource: ${uri}`);
+    await this.enqueueSubscriptionUpdate(async () => {
+      if (this.subscriptionInterest.resourceSubscriptions.has(uri) && this.subscriptionStream) return;
+      const next = new Set(this.subscriptionInterest.resourceSubscriptions);
+      next.add(uri);
+      await this.updateResourceSubscriptions(next);
+    });
+  }
+
+  async unsubscribeResource(uri: string): Promise<void> {
+    this.log('debug', `Unsubscribing from resource: ${uri}`);
+    await this.enqueueSubscriptionUpdate(async () => {
+      if (!this.subscriptionInterest.resourceSubscriptions.has(uri)) return;
+      const next = new Set(this.subscriptionInterest.resourceSubscriptions);
+      next.delete(uri);
+      await this.updateResourceSubscriptions(next);
+    });
+  }
+
+  private async updateResourceSubscriptions(next: Set<string>): Promise<void> {
+    const previous = this.subscriptionInterest.resourceSubscriptions;
+    this.subscriptionInterest.resourceSubscriptions = next;
+    if (!this.transport) return;
+    try {
+      await this.replaceSubscriptionStream();
+    } catch (error) {
+      this.subscriptionInterest.resourceSubscriptions = previous;
+      throw error;
+    }
+  }
+
+  async setPromptListChangedNotificationHandler(handler: () => void): Promise<void> {
     this.client.setNotificationHandler('notifications/prompts/list_changed', () => {
       handler();
     });
+    this.subscriptionInterest.promptsListChanged = true;
+    await this.applySubscriptionInterest();
   }
 
-  /**
-   * Register a handler to be called when the tool list changes on the server.
-   * Use this to re-fetch tools via `tools()` when notified.
-   */
-  setToolListChangedNotificationHandler(handler: () => void): void {
-    this.log('debug', 'Setting tool list changed notification handler');
+  async setToolListChangedNotificationHandler(handler: () => void): Promise<void> {
     this.client.setNotificationHandler('notifications/tools/list_changed', () => {
       handler();
     });
+    this.subscriptionInterest.toolsListChanged = true;
+    await this.applySubscriptionInterest();
   }
 
-  setResourceUpdatedNotificationHandler(handler: (params: any) => void): void {
-    this.log('debug', 'Setting resource updated notification handler');
-    this.client.setNotificationHandler('notifications/resources/updated', (notification: any) => {
+  setResourceUpdatedNotificationHandler(handler: (params: { uri: string }) => void): void {
+    this.client.setNotificationHandler('notifications/resources/updated', notification => {
       handler(notification.params);
     });
   }
 
-  setResourceListChangedNotificationHandler(handler: () => void): void {
-    this.log('debug', 'Setting resource list changed notification handler');
+  async setResourceListChangedNotificationHandler(handler: () => void): Promise<void> {
     this.client.setNotificationHandler('notifications/resources/list_changed', () => {
       handler();
     });
-  }
-
-  setElicitationRequestHandler(handler: ElicitationHandler): void {
-    this.log('debug', 'Setting elicitation request handler');
-    // The handler serves both protocol eras: on legacy (2025-era) connections it
-    // answers elicitation/create wire requests; on negotiated 2026-07-28
-    // connections the SDK's multi-round-trip driver dispatches embedded
-    // elicitation requests from input_required results through the same
-    // registered handler and retries the originating call automatically.
-    if (!this.hasElicitationCapability) {
-      try {
-        this.client.registerCapabilities({ elicitation: { form: {} } });
-        this.hasElicitationCapability = true;
-      } catch (error) {
-        throw new Error(
-          'Cannot register an elicitation handler after connecting unless elicitation capability was configured before initialization.',
-          { cause: error },
-        );
-      }
-    }
-
-    this.client.setRequestHandler('elicitation/create', async request => {
-      this.log('debug', `Received elicitation request: ${request.params.message}`);
-      return handler(request.params);
-    });
+    this.subscriptionInterest.resourcesListChanged = true;
+    await this.applySubscriptionInterest();
   }
 
   setProgressNotificationHandler(handler: ProgressHandler): void {
-    this.log('debug', 'Setting progress notification handler');
     this.client.setNotificationHandler('notifications/progress', notification => {
       handler(notification.params);
     });
   }
 
-  private convertInputSchema(
-    inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'],
-  ): JSONSchema7 {
-    return ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
+  /**
+   * The server's MCP Events capability, or `undefined` when it does not advertise the extension.
+   *
+   * @experimental SEP-3415 is a draft; this API may change.
+   */
+  getEventsCapability(): EventsCapability | undefined {
+    return getEventsCapability(this.client.getServerCapabilities());
+  }
+
+  /**
+   * Fetches one page of `events/list`.
+   *
+   * @experimental SEP-3415 is a draft; this API may change.
+   */
+  async listEvents(cursor?: string): Promise<ListEventsResult> {
+    this.log('debug', 'Requesting events from MCP server');
+    return await this.client.request(
+      { method: EVENTS_METHODS.list, params: { ...(cursor ? { cursor } : {}), _meta: this.requestMeta() } },
+      ListEventsResultSchema,
+      { timeout: this.timeout },
+    );
+  }
+
+  /**
+   * Sends one `events/poll` request.
+   *
+   * @experimental SEP-3415 is a draft; this API may change.
+   */
+  async pollEvents(params: PollEventsRequestParams, signal?: AbortSignal): Promise<PollEventsResult> {
+    return await this.client.request(
+      { method: EVENTS_METHODS.poll, params: { ...params, _meta: this.requestMeta(params._meta) } },
+      PollEventsResultSchema,
+      { timeout: this.timeout, signal },
+    );
+  }
+
+  /**
+   * Sends one `events/subscribe` request (webhook delivery).
+   *
+   * @experimental SEP-3415 is a draft; this API may change.
+   */
+  async subscribeEvents(params: SubscribeEventsRequestParams, signal?: AbortSignal): Promise<SubscribeEventsResult> {
+    return await this.client.request(
+      { method: EVENTS_METHODS.subscribe, params: { ...params, _meta: this.requestMeta(params._meta) } },
+      SubscribeEventsResultSchema,
+      { timeout: this.timeout, signal },
+    );
+  }
+
+  /**
+   * Sends one `events/unsubscribe` request (webhook delivery).
+   *
+   * @experimental SEP-3415 is a draft; this API may change.
+   */
+  async unsubscribeEvents(params: UnsubscribeEventsRequestParams): Promise<void> {
+    await this.client.request(
+      { method: EVENTS_METHODS.unsubscribe, params: { ...params, _meta: this.requestMeta(params._meta) } },
+      UnsubscribeEventsResultSchema,
+      { timeout: this.timeout },
+    );
+  }
+
+  /**
+   * Starts a subscription driven by `driver` and tracks it so reconnects restore it.
+   *
+   * @internal
+   */
+  async startEventSubscription(config: {
+    name: string;
+    arguments?: Record<string, unknown>;
+    driver: DeliveryDriver;
+    options?: MCPEventSubscribeOptions;
+    notice?: MastraError;
+  }): Promise<MCPEventSubscription> {
+    return await EventSubscription.start({
+      port: this.eventsPort,
+      serverName: this.name,
+      name: config.name,
+      arguments: config.arguments,
+      driver: config.driver,
+      options: config.options,
+      notice: config.notice,
+      defaultStreamOpenTimeoutMs: this.timeout,
+      onOpen: opened => {
+        this.eventSubscriptions.add(opened);
+      },
+      onClose: closed => {
+        this.eventSubscriptions.delete(closed);
+      },
+    });
+  }
+
+  private async cancelEventSubscriptions(): Promise<void> {
+    const subscriptions = [...this.eventSubscriptions];
+    this.eventSubscriptions.clear();
+    await Promise.all(subscriptions.map(subscription => subscription.cancel()));
+  }
+
+  private readonly eventsPort: EventsPort = {
+    poll: (params, signal) => this.pollEvents(params, signal),
+    openStream: (params, sink, options) => this.eventStreamRouter.open(params, sink, options),
+    subscribe: (params, signal) => this.subscribeEvents(params, signal),
+    unsubscribe: params => this.unsubscribeEvents(params),
+    webhook: () => this.webhook,
+    ensureConnected: async () => {
+      await this.reconnectPromise?.catch(() => {});
+      await this.connect();
+    },
+    log: (level, message, details) => this.log(level, message, details),
+  };
+
+  private async getJsonSchemaValidator(): Promise<jsonSchemaValidator> {
+    if (this.jsonSchemaValidator) return this.jsonSchemaValidator;
+
+    this.jsonSchemaValidatorPromise ??= import('@modelcontextprotocol/client/validators/ajv').then(
+      ({ AjvJsonSchemaValidator }) => new AjvJsonSchemaValidator(),
+    );
+    this.jsonSchemaValidator = await this.jsonSchemaValidatorPromise;
+    return this.jsonSchemaValidator;
+  }
+
+  private convertInputSchema(inputSchema: MCPToolListEntry['inputSchema']): StandardSchemaWithJSON {
+    const schema = withDefaultDialect(
+      ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7,
+    );
+    return toStandardSchema(schema);
   }
 
   /**
@@ -1250,11 +1712,11 @@ export class InternalMastraMCPClient extends MastraBase {
    * structuredContent path (see buildToolFromListEntry). The JSON schema is surfaced here
    * for documentation.
    */
-  private convertOutputSchema(
-    outputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['outputSchema'],
-  ): StandardSchemaWithJSON | undefined {
+  private convertOutputSchema(outputSchema: MCPToolListEntry['outputSchema']): StandardSchemaWithJSON | undefined {
     if (!outputSchema) return outputSchema;
-    const schema = ('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema7;
+    const schema = withDefaultDialect(
+      ('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema7,
+    );
     const standardSchema = toStandardSchema(schema)['~standard'];
     return {
       '~standard': {
@@ -1266,14 +1728,10 @@ export class InternalMastraMCPClient extends MastraBase {
 
   /**
    * Returns the server's tool catalog as plain, serializable definitions.
-   *
-   * Unlike {@link tools}, this performs no schema conversion and creates no executable
-   * wrappers, so the result can be cached and reused by other processes. Pass a definition
-   * back to {@link toolFromDefinition} to rebuild the executable tool without rediscovery.
    */
   async toolDefinitions(): Promise<Record<string, SerializableMCPToolDefinition>> {
     this.log('debug', `Requesting tool definitions from MCP server`);
-    const { tools } = await this.client.listTools({}, { timeout: this.timeout });
+    const { tools } = await this.client.listTools({ _meta: this.requestMeta() }, { timeout: this.timeout });
 
     const definitions: Record<string, SerializableMCPToolDefinition> = {};
     for (const tool of tools) {
@@ -1283,16 +1741,13 @@ export class InternalMastraMCPClient extends MastraBase {
     return definitions;
   }
 
-  /**
-   * Captures a `tools/list` entry plus the server metadata that is only reachable from a live
-   * connection, so a hydrated tool is indistinguishable from a freshly discovered one.
-   */
   private toSerializableDefinition(tool: MCPToolListEntry): SerializableMCPToolDefinition {
     const annotations = tool.annotations;
     const rawMeta = (tool as { _meta?: Record<string, unknown> })._meta;
 
     return {
       name: tool.name,
+      ...(tool.title ? { title: tool.title } : {}),
       ...(tool.description ? { description: tool.description } : {}),
       inputSchema: tool.inputSchema,
       ...(tool.outputSchema ? { outputSchema: tool.outputSchema } : {}),
@@ -1308,13 +1763,12 @@ export class InternalMastraMCPClient extends MastraBase {
 
   /**
    * Rebuilds an executable Mastra tool from a cached {@link SerializableMCPToolDefinition}.
-   *
-   * No connection is opened here. The client connects lazily, the first time the returned tool
-   * is actually executed, which is what makes a cached catalog useful for cold starts.
+   * The client connects lazily on the first execution.
    */
   toolFromDefinition({ definition }: { definition: SerializableMCPToolDefinition }): Tool<any, any, any, any> {
     const tool = {
       name: definition.name,
+      title: definition.title,
       description: definition.description,
       inputSchema: definition.inputSchema,
       outputSchema: definition.outputSchema,
@@ -1343,10 +1797,10 @@ export class InternalMastraMCPClient extends MastraBase {
 
   async tools(): Promise<Record<string, Tool<any, any, any, any>>> {
     this.log('debug', `Requesting tools from MCP server`);
-    const { tools } = await this.client.listTools({}, { timeout: this.timeout });
+    const { tools } = await this.client.listTools({ _meta: this.requestMeta() }, { timeout: this.timeout });
+    await loadInputSchemaMetaValidator();
     const toolsRes: Record<string, Tool<any, any, any, any>> = {};
     for (const tool of tools) {
-      this.log('debug', `Processing tool: ${tool.name}`);
       const mastraTool = this.buildToolFromListEntry(tool, {
         version: this.client.getServerVersion()?.version,
         instructions: this.serverInstructions,
@@ -1361,236 +1815,478 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   /**
-   * Single conversion path shared by live discovery and cached hydration.
-   *
-   * Keeping both callers on this one method is what guarantees the issue's requirement that
-   * hydrated tools behave identically to discovered ones: strict-mode metadata, approval
-   * policies, structured content, in-band tool errors, progress metadata, abort signals and
-   * reconnect/retry all come from here rather than being reimplemented per call site.
+   * Single conversion path shared by live discovery and cached hydration, so hydrated
+   * tools behave identically to discovered ones.
    */
   private buildToolFromListEntry(
     tool: MCPToolListEntry,
     serverMeta: { version?: string; instructions?: string; connectFirst?: boolean },
   ): Tool<any, any, any, any> | undefined {
-    {
-      try {
-        // Resolve requireToolApproval for this tool
-        let requireApproval: boolean | undefined;
-        let needsApprovalFn: NeedsApprovalFn | undefined;
+    // A malformed input schema makes strict providers reject the whole tools array, so the
+    // tool is dropped here instead of breaking every request that includes its siblings.
+    const rawInputSchema: unknown = tool.inputSchema;
+    const inputSchema =
+      rawInputSchema && typeof rawInputSchema === 'object' && 'jsonSchema' in rawInputSchema
+        ? rawInputSchema.jsonSchema
+        : rawInputSchema;
+    // Oversized schemas are dropped too: every call to them fails anyway, and the meta-schema
+    // validator cannot walk them safely.
+    const inputSchemaError = jsonSchemaComplexity(inputSchema).error ?? getInputSchemaError(inputSchema);
+    if (inputSchemaError) {
+      const details = { serverName: this.name, toolName: tool.name, reason: inputSchemaError };
+      this.log(
+        'warning',
+        `Skipping MCP tool "${tool.name}" with an invalid input schema: ${inputSchemaError}`,
+        details,
+      );
+      if (serverMeta.connectFirst) {
+        throw new MastraError({
+          id: 'MCP_CLIENT_INVALID_TOOL_INPUT_SCHEMA',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Invalid input schema for MCP tool "${tool.name}": ${inputSchemaError}`,
+          details,
+        });
+      }
+      return undefined;
+    }
 
-        // Capture server-advertised annotations (title, readOnlyHint, destructiveHint, ...).
-        // These are exposed on the tool's `mcp.annotations` field and forwarded to the
-        // requireToolApproval callback so consumers can write annotation-driven policies.
-        const annotations = tool.annotations;
+    try {
+      let requireApproval: boolean | undefined;
+      let needsApprovalFn: NeedsApprovalFn | undefined;
 
-        if (typeof this.requireToolApproval === 'function') {
-          // Wrap the server-level function to match the per-tool needsApprovalFn signature.
-          // Note: ctx may be undefined when called via network/index.ts (which only passes args).
-          // We default ctx to {} so the spread doesn't fail and approval fn receives partial context.
-          const serverApprovalFn = this.requireToolApproval;
-          const toolName = tool.name;
-          requireApproval = true; // Signal that approval check is needed
-          needsApprovalFn = (args: Record<string, unknown>, ctx: Record<string, unknown> = {}) => {
-            // Server-supplied annotations are placed AFTER the ctx spread so a
-            // caller can't accidentally (or maliciously) override them by
-            // injecting an `annotations` key into ctx — the value the
-            // requireToolApproval policy sees always reflects what came back
-            // from the MCP server's tools/list response.
-            return serverApprovalFn({ toolName, args, ...ctx, annotations });
-          };
-        } else if (this.requireToolApproval === true) {
-          requireApproval = true;
-        }
-        // When requireToolApproval is false/undefined, requireApproval stays undefined
-        // and createTool defaults it to false
+      // Server-advertised annotations are exposed on `mcp.annotations` and forwarded to
+      // the requireToolApproval callback so consumers can write annotation-driven policies.
+      const annotations = tool.annotations;
+      const title = tool.title || annotations?.title;
 
-        const rawMeta = (tool as { _meta?: Record<string, unknown> })._meta;
-        // Stamp serverId into _meta.ui so consumers can resolve app resources
-        // back to the originating MCP server without scanning all servers.
-        const toolMeta = rawMeta ? this.stampServerIdInMeta(rawMeta) : undefined;
-        const mcpToolProps =
-          toolMeta || annotations
-            ? {
-                mcp: {
-                  ...(toolMeta ? { _meta: toolMeta } : {}),
-                  ...(annotations ? { annotations } : {}),
-                },
-              }
-            : {};
-        // Real validator for structuredContent. Kept separate from the Tool's outputSchema
-        // (whose validator is a no-op — see convertOutputSchema) because only the
-        // structuredContent success path should be validated, not envelope returns.
-        const rawOutputSchema = tool.outputSchema
-          ? (('jsonSchema' in tool.outputSchema ? tool.outputSchema.jsonSchema : tool.outputSchema) as JSONSchema7)
-          : undefined;
-        const outputValidator = rawOutputSchema ? toStandardSchema(rawOutputSchema) : undefined;
-        const mastraTool = createTool({
-          id: `${this.name}_${tool.name}`,
-          description: tool.description || '',
-          inputSchema: this.convertInputSchema(tool.inputSchema),
-          outputSchema: this.convertOutputSchema(tool.outputSchema),
-          strict: getMastraToolStrictMeta(toolMeta),
-          // Preserve the full _meta from the remote MCP server (including ui.resourceUri
-          // for MCP Apps) so downstream consumers (e.g. Studio) can detect app tools.
-          // Also propagate MCP tool annotations so listTools() / listToolsets() consumers
-          // can read them via `tool.mcp.annotations`.
-          ...mcpToolProps,
-          requireApproval,
-          mcpMetadata: {
-            serverName: this.name,
-            serverVersion: serverMeta.version,
-            serverInstructions: serverMeta.instructions,
-            forwardInstructions: this.forwardInstructions,
-            instructionsMaxLength: this.instructionsMaxLength,
-          },
-          ...(tool.outputSchema ? { toModelOutput: createStructuredToolToModelOutput() } : {}),
-          execute: async (
-            input: any,
-            context?: {
-              requestContext?: RequestContext | null;
-              runId?: string;
-              abortSignal?: AbortSignal;
-              _meta?: Record<string, unknown>;
-            },
-          ) => {
-            // A hydrated tool was rebuilt from cache without ever opening a connection, so the
-            // first execution is what establishes it. `connect()` is memoised, making this a
-            // no-op for tools that came from live discovery.
-            if (serverMeta.connectFirst) {
-              await this.connect();
+      if (typeof this.requireToolApproval === 'function') {
+        const serverApprovalFn = this.requireToolApproval;
+        const toolName = tool.name;
+        requireApproval = true;
+        needsApprovalFn = (args: Record<string, unknown>, ctx: Record<string, unknown> = {}) => {
+          // Server-supplied annotations are placed AFTER the ctx spread so a caller
+          // cannot override them by injecting an `annotations` key into ctx.
+          return serverApprovalFn({ toolName, args, ...ctx, annotations });
+        };
+      } else if (this.requireToolApproval === true) {
+        requireApproval = true;
+      }
+
+      const rawMeta = (tool as { _meta?: Record<string, unknown> })._meta;
+      // Stamp serverId into _meta.ui so consumers can resolve app resources
+      // back to the originating MCP server without scanning all servers.
+      const toolMeta = rawMeta ? this.stampServerIdInMeta(rawMeta) : undefined;
+      const mcpToolProps =
+        toolMeta || annotations
+          ? {
+              mcp: {
+                ...(toolMeta ? { _meta: toolMeta } : {}),
+                ...(annotations ? { annotations } : {}),
+              },
             }
+          : {};
+      // Real validator for structuredContent. Kept separate from the Tool's outputSchema
+      // (whose validator is a no-op — see convertOutputSchema) because only the
+      // structuredContent success path should be validated, not envelope returns. It uses
+      // the SDK validator so live and cache-hydrated tools enforce the same dialect.
+      const outputSchema = tool.outputSchema
+        ? withDefaultDialect(
+            ('jsonSchema' in tool.outputSchema ? tool.outputSchema.jsonSchema : tool.outputSchema) as JSONSchema7,
+          )
+        : undefined;
+      const outputSchemaComplexityError = outputSchema ? jsonSchemaComplexity(outputSchema).error : undefined;
+      let outputValidationSchema: StandardSchemaWithJSON | undefined;
+      const getOutputValidationSchema = async () => {
+        if (!outputSchema) return undefined;
+        if (outputSchemaComplexityError) {
+          throw new MastraError({
+            id: 'MCP_CLIENT_OUTPUT_SCHEMA_TOO_COMPLEX',
+            domain: ErrorDomain.MCP,
+            category: ErrorCategory.THIRD_PARTY,
+            text: `MCP tool "${tool.name}" has a schema that is too complex: ${outputSchemaComplexityError}`,
+            details: { toolName: tool.name, serverName: this.name },
+          });
+        }
+        if (!outputValidationSchema) {
+          const validator = (await this.getJsonSchemaValidator()).getValidator(outputSchema);
+          const standardSchema = toStandardSchema(outputSchema)['~standard'];
+          outputValidationSchema = {
+            '~standard': {
+              ...standardSchema,
+              validate: value => {
+                const result = validator(value);
+                return result.valid ? { value: result.data } : { issues: [{ message: result.errorMessage }] };
+              },
+            },
+          };
+        }
+        return outputValidationSchema;
+      };
+      const mastraTool = createTool({
+        id: `${this.name}_${tool.name}`,
+        title,
+        description: tool.description || '',
+        inputSchema: this.convertInputSchema(tool.inputSchema),
+        outputSchema: this.convertOutputSchema(tool.outputSchema),
+        strict: getMastraToolStrictMeta(toolMeta),
+        ...mcpToolProps,
+        requireApproval,
+        ...(this.taskOptions ? { background: this.taskToolBackgroundConfig() } : {}),
+        mcpMetadata: {
+          serverName: this.name,
+          serverVersion: serverMeta.version,
+          serverInstructions: serverMeta.instructions,
+          forwardInstructions: this.forwardInstructions,
+          instructionsMaxLength: this.instructionsMaxLength,
+        },
+        ...(tool.outputSchema ? { toModelOutput: createStructuredToolToModelOutput() } : {}),
+        execute: async (
+          input: any,
+          context?: {
+            requestContext?: RequestContext | null;
+            runId?: string;
+            abortSignal?: AbortSignal;
+            _meta?: Record<string, unknown>;
+            tracingContext?: TracingContext;
+            writer?: { write(data: unknown): Promise<void> };
+            agent?: ToolSuspendHost;
+            workflow?: ToolSuspendHost;
+          },
+        ) => {
+          const operationContext = context?.requestContext ?? null;
 
-            const operationContext = context?.requestContext ?? null;
+          // A hydrated tool was rebuilt from cache without ever opening a connection, so the
+          // first execution is what establishes it. The connection context lets a custom fetch
+          // authenticate that handshake, and the streams the connection keeps open, as this call.
+          // `connect()` is memoised: concurrent first calls share the handshake of the first one.
+          if (serverMeta.connectFirst) {
+            await this.connectAsCall(operationContext, () => this.connect());
+          }
 
-            return this.operationContextStore.run(operationContext, async () => {
-              const executeToolCall = async () => {
-                this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: input, runId: context?.runId });
-                const userMeta = context?._meta;
-                // progressMeta spreads last so Mastra-managed progressToken takes precedence over any user-supplied one
-                const progressMeta = this.enableProgressTracking
-                  ? { progressToken: context?.runId || crypto.randomUUID() }
-                  : undefined;
-                const combinedMeta = userMeta || progressMeta ? { ...userMeta, ...progressMeta } : undefined;
+          return this.operationContextStore.run(operationContext, async () => {
+            const suspendHost = context?.agent ?? context?.workflow;
+            const toolCallSpan = context?.tracingContext?.currentSpan;
 
-                const res = await this.client.callTool(
-                  {
-                    name: tool.name,
-                    arguments: input,
-                    ...(combinedMeta ? { _meta: combinedMeta } : {}),
-                  },
-                  {
-                    timeout: this.timeout,
-                    signal: context?.abortSignal,
-                  },
-                );
-
-                // Per the MCP spec, tool *execution* failures are reported in-band:
-                // the server returns a normal CallToolResult with `isError: true` and
-                // the failure details in `content`. Map that onto Mastra's failed-tool-call
-                // path (unless the consumer opted into the legacy `'return'` behaviour) so
-                // tool spans, stream chunks, scorers, and persisted message parts reflect the
-                // failure, and the model sees the error text so it can self-correct.
-                if (res.isError && this.onToolError === 'throw') {
-                  const errorText = extractToolErrorText(res.content);
-                  this.log('debug', `Tool reported an error: ${tool.name}`, { error: errorText });
+            const executeToolCall = async () => {
+              // A call that suspended on MCP task input resumes on that task: never call the tool again.
+              const resume = this.taskOptions
+                ? readInputRequestResume(suspendHost, { serverName: this.name, toolName: tool.name })
+                : undefined;
+              if (resume) {
+                if (!resume.ok) {
                   throw new MastraError({
-                    id: 'MCP_CLIENT_TOOL_EXECUTION_FAILED',
+                    id: 'MCP_CLIENT_TOOL_TASK_RESUME_INVALID',
                     domain: ErrorDomain.MCP,
-                    category: ErrorCategory.THIRD_PARTY,
-                    text: errorText,
+                    category: ErrorCategory.USER,
+                    text: `Can't resume MCP tool ${tool.name}: ${resume.reason}`,
                     details: { toolName: tool.name, serverName: this.name },
                   });
                 }
-
-                this.log('debug', `Tool executed successfully: ${tool.name}`);
-
-                if (res.structuredContent !== undefined) {
-                  // Enforce the server-advertised outputSchema before the result reaches the
-                  // model. This covers both live-discovered tools and tools hydrated from a
-                  // cached catalog (which never populate the MCP SDK's tools/list output-schema
-                  // cache, so the SDK's own AJV check does not fire for them). On mismatch,
-                  // return the same structured ValidationError shape createTool produces so
-                  // the model can self-correct. Skipped for isError results, which are handled
-                  // above / by the `onToolError: 'return'` envelope path.
-                  if (!res.isError && outputValidator) {
-                    const validation = validateToolOutput(outputValidator, res.structuredContent, tool.name);
-                    if (validation.error) {
-                      this.log('debug', `Tool output failed schema validation: ${tool.name}`, {
-                        message: validation.error.message,
-                      });
-                      return validation.error;
-                    }
-                  }
-                  // Attach content metadata to the original structuredContent reference so the
-                  // hidden symbol channels (content/_meta) are preserved.
-                  return attachMcpCallToolContent(
-                    res.structuredContent,
-                    res.content,
-                    res._meta ? this.stampServerIdInMeta(res._meta) : undefined,
-                  );
-                }
-
-                return res;
-              };
-
-              const failedTransport = this.transport;
-              const lifecycleGeneration = this.lifecycleGeneration;
-              try {
-                return await executeToolCall();
-              } catch (e) {
-                // Tool-execution errors (isError: true from the MCP server) are semantic
-                // failures, not transport issues. Don't misclassify them as reconnectable
-                // just because their text happens to contain "session", "404", etc.
-                const isToolExecutionError =
-                  e instanceof MastraError && e.id === 'MCP_CLIENT_TOOL_EXECUTION_FAILED';
-
-                if (!isToolExecutionError && isReconnectableMCPError(e)) {
-                  this.log('debug', `Session error detected for tool ${tool.name}, attempting reconnection...`, {
-                    error: e instanceof Error ? e.message : String(e),
-                  });
-
-                  try {
-                    // Force reconnection
-                    await this.reconnectAfterTransportFailure(failedTransport, lifecycleGeneration);
-
-                    // Retry the tool call with fresh connection
-                    this.log('debug', `Retrying tool ${tool.name} after reconnection...`);
-                    return await executeToolCall();
-                  } catch (reconnectError) {
-                    this.log('error', `Reconnection or retry failed for tool ${tool.name}`, {
-                      originalError: e instanceof Error ? e.message : String(e),
-                      reconnectError: reconnectError instanceof Error ? reconnectError.stack : String(reconnectError),
-                      toolArgs: input,
-                    });
-                    throw reconnectError;
-                  }
-                }
-
-                // For non-session errors, log and rethrow
-                this.log('error', `Error calling tool: ${tool.name}`, {
-                  error: e instanceof Error ? e.stack : JSON.stringify(e, null, 2),
-                  toolArgs: input,
+                const { payload, inputResponses } = resume;
+                this.log('debug', `Resuming tool ${tool.name} on MCP task ${payload.taskId}`);
+                toolCallSpan?.update({ metadata: { mcpTaskKey: taskKeyOf(payload.taskId) } });
+                const waiting: MCPInputRequiredTask = {
+                  taskId: payload.taskId,
+                  status: 'input_required',
+                  createdAt: payload.createdAt,
+                  lastUpdatedAt: payload.createdAt,
+                  ttlMs: null,
+                  inputRequests: payload.requests,
+                };
+                const res = await this.awaitToolTask(tool.name, waiting, {
+                  signal: context?.abortSignal,
+                  writer: context?.writer,
+                  suspend: suspendHost?.suspend,
+                  inputResponses,
                 });
-                throw e;
+                return res && finishToolCall(res);
               }
-            });
+
+              this.log('debug', `Executing tool: ${tool.name}`, { runId: context?.runId });
+              // progressToken spreads last so the Mastra-managed token takes precedence.
+              const progressMeta = this.enableProgressTracking
+                ? { progressToken: context?.runId || crypto.randomUUID() }
+                : undefined;
+              const _meta = this.requestMeta(
+                { ...context?._meta, ...progressMeta },
+                context?.tracingContext?.currentSpan,
+              );
+
+              const { result: res, serverSpan } = takeServerTraceContext(
+                await this.client.callTool(
+                  { name: tool.name, arguments: input, ...(_meta ? { _meta } : {}) },
+                  { timeout: this.timeout, signal: context?.abortSignal },
+                ),
+              );
+              // A Mastra server names the span that served the call. The tool call span ends
+              // after this returns, and its end export carries the link.
+              if (toolCallSpan && serverSpan) toolCallSpan.links = [...(toolCallSpan.links ?? []), serverSpan];
+
+              const task = this.taskOptions ? takeTaskHandle(res) : undefined;
+              if (!task) return finishToolCall(res);
+
+              this.log('debug', `Tool ${tool.name} continues as MCP task ${task.taskId}`);
+              // The server tags its task spans with the same key, so both sides can be matched
+              // without the task id (a bearer credential) reaching either trace.
+              toolCallSpan?.update({ metadata: { mcpTaskKey: taskKeyOf(task.taskId) } });
+              // Agents with background tasks run this executor off the agent loop (see
+              // `taskToolBackgroundConfig`), so waiting here doesn't block the agent.
+              const taskResult = await this.awaitToolTask(tool.name, task, {
+                signal: context?.abortSignal,
+                writer: context?.writer,
+                suspend: suspendHost?.suspend,
+              });
+              return taskResult && finishToolCall(taskResult);
+            };
+
+            const finishToolCall = async (res: CallToolResult) => {
+              // Per the MCP spec, tool *execution* failures are reported in-band with
+              // `isError: true`. Map that onto Mastra's failed-tool-call path unless the
+              // consumer opted into `'return'`.
+              if (res.isError && this.onToolError === 'throw') {
+                const errorText = extractToolErrorText(res.content);
+                this.log('debug', `Tool reported an error: ${tool.name}`);
+                throw new MastraError({
+                  id: 'MCP_CLIENT_TOOL_EXECUTION_FAILED',
+                  domain: ErrorDomain.MCP,
+                  category: ErrorCategory.THIRD_PARTY,
+                  text: errorText,
+                  details: {
+                    toolName: tool.name,
+                    serverName: this.name,
+                    // details only holds scalars, so the structured reason travels as JSON.
+                    ...(res.structuredContent !== undefined
+                      ? { structuredContent: JSON.stringify(res.structuredContent) }
+                      : {}),
+                  },
+                });
+              }
+
+              this.log('debug', `Tool executed successfully: ${tool.name}`);
+
+              // In-band errors keep the full envelope so `isError` reaches the caller and the model.
+              if (res.structuredContent !== undefined && !res.isError) {
+                // Enforce the server-advertised outputSchema before the result reaches the
+                // model. Covers hydrated tools too, which never populate the SDK's tools/list
+                // output-schema cache. On mismatch, return the structured ValidationError
+                // shape createTool produces so the model can self-correct.
+                if (outputSchema) {
+                  const validationSchema = await getOutputValidationSchema();
+                  const validation = validateToolOutput(validationSchema, res.structuredContent, tool.name);
+                  if (validation.error) {
+                    this.log('debug', `Tool output failed schema validation: ${tool.name}`, {
+                      issuePaths: getValidationIssuePaths(validation.error, validationSchema, 'output'),
+                    });
+                    return validation.error;
+                  }
+                }
+                return attachMcpCallToolContent(
+                  res.structuredContent,
+                  res.content,
+                  res._meta ? this.stampServerIdInMeta(res._meta) : undefined,
+                );
+              }
+
+              return res;
+            };
+
+            const failedTransport = this.transport;
+            const lifecycleGeneration = this.lifecycleGeneration;
+            try {
+              return await executeToolCall();
+            } catch (e) {
+              // In-band tool errors are semantic failures, never transport issues.
+              // So are task failures: retrying would start a second remote task.
+              const isToolExecutionError =
+                e instanceof MastraError &&
+                (e.id === 'MCP_CLIENT_TOOL_EXECUTION_FAILED' || e.id.startsWith('MCP_CLIENT_TOOL_TASK_'));
+
+              if (!isToolExecutionError && isReconnectableMCPError(e) && !isUnsentRequestError(e)) {
+                // Closing a transport that is still open would abort healthy calls in flight on
+                // it, so only reconnect when this failure already closed or replaced it.
+                if (annotations?.readOnlyHint === true || annotations?.idempotentHint === true) {
+                  this.log('debug', `Retrying replay-safe tool ${tool.name} after a transport error`, {
+                    error: errorKind(e),
+                  });
+                  // A reconnect already in flight is closing this transport, so wait for its replacement.
+                  if (this.transport !== failedTransport || this.reconnectPromise) {
+                    await this.reconnectAfterTransportFailure(failedTransport, lifecycleGeneration);
+                  }
+                  return await executeToolCall();
+                }
+
+                // The server may already have run the tool, so sending it again could repeat a write.
+                this.log('error', `Lost the connection during tool ${tool.name}; it may have run`, {
+                  error: errorKind(e),
+                });
+                throw new MastraError(
+                  {
+                    id: 'MCP_CLIENT_TOOL_CALL_OUTCOME_UNKNOWN',
+                    domain: ErrorDomain.MCP,
+                    category: ErrorCategory.THIRD_PARTY,
+                    text: `The connection to MCP server "${this.name}" failed before tool "${tool.name}" returned a result. The tool may have run on the server, so it was not called again.`,
+                    details: { toolName: tool.name, serverName: this.name },
+                  },
+                  e,
+                );
+              }
+
+              if (!isToolExecutionError && isReconnectableMCPError(e)) {
+                this.log('debug', `Transport error detected for tool ${tool.name}, attempting reconnection...`, {
+                  error: errorKind(e),
+                });
+
+                try {
+                  await this.reconnectAfterTransportFailure(failedTransport, lifecycleGeneration);
+                  this.log('debug', `Retrying tool ${tool.name} after reconnection...`);
+                  return await executeToolCall();
+                } catch (reconnectError) {
+                  this.log('error', `Reconnection or retry failed for tool ${tool.name}`, {
+                    originalError: errorKind(e),
+                    reconnectError: errorKind(reconnectError),
+                  });
+                  throw reconnectError;
+                }
+              }
+
+              this.log('error', `Error calling tool: ${tool.name}`, {
+                error: errorKind(e),
+              });
+              throw e;
+            }
+          });
+        },
+      });
+
+      // The agent runtime reads this back via the typed `getNeedsApprovalFn` helper.
+      if (needsApprovalFn) {
+        mastraTool.needsApprovalFn = needsApprovalFn;
+      }
+
+      return mastraTool;
+    } catch (toolCreationError: unknown) {
+      this.log('error', `Failed to create Mastra tool wrapper for MCP tool: ${tool.name}`, {
+        error: toolCreationError instanceof Error ? toolCreationError.stack : String(toolCreationError),
+        mcpToolDefinition: tool,
+      });
+      return undefined;
+    }
+  }
+
+  /** Reads, answers and cancels this server's tasks (SEP-2663). */
+  get tasks(): Pick<TaskRequester, 'get' | 'update' | 'cancel'> {
+    return this.taskRequester;
+  }
+
+  /**
+   * Background settings for tools of a tasks-enabled server: they may run for as long as the
+   * remote task, and must never be retried, as a retry would start a second task.
+   */
+  private taskToolBackgroundConfig(): ToolBackgroundConfig {
+    return {
+      enabled: true,
+      defaultDisposition: 'deferred',
+      timeoutMs: this.taskOptions?.maxWaitMs ?? DEFAULT_TASK_TTL_MS,
+      maxRetries: 0,
+    };
+  }
+
+  /**
+   * Waits for a remote task created by a tool call and returns its `CallToolResult`.
+   *
+   * When the task needs input that no `inputRequests` handler answers and the caller can `suspend`,
+   * suspends with the requests and returns `undefined`, leaving the task open for the answers.
+   */
+  private async awaitToolTask(
+    toolName: string,
+    task: MCPTask,
+    {
+      signal,
+      writer,
+      suspend,
+      inputResponses,
+    }: {
+      signal?: AbortSignal;
+      writer?: { write(data: unknown): Promise<void> };
+      suspend?: ToolSuspendHost['suspend'];
+      inputResponses?: MCPTaskInputResponses;
+    },
+  ): Promise<CallToolResult | undefined> {
+    const details = { toolName, serverName: this.name, taskId: task.taskId };
+    // Studio's tool-call card shows the MCP task (id, status, elapsed time) from these progress
+    // writes. They are live only: tool progress isn't saved with the conversation.
+    const onStatus = (current: MCPTask) => {
+      const progress: MCPTaskProgress = {
+        type: 'mcp-task',
+        taskId: current.taskId,
+        status: current.status,
+        createdAt: current.createdAt,
+        serverName: this.name,
+      };
+      void writer?.write(progress).catch(() => {});
+    };
+    const fail = (id: Uppercase<string>, text: string, cause?: unknown) =>
+      new MastraError({ id, domain: ErrorDomain.MCP, category: ErrorCategory.THIRD_PARTY, text, details }, cause);
+
+    // Captured once, like the tool-call path: a disconnect during the wait must not reconnect, and a
+    // recovery must compare against the transport the failed poll used, not whatever is current.
+    const lifecycleGeneration = this.lifecycleGeneration;
+    let polledTransport: Transport | undefined;
+    let terminal: MCPTerminalTask | MCPInputRequiredTask;
+    try {
+      terminal = await waitForTask(
+        {
+          get: (taskId, options) => {
+            polledTransport = this.transport;
+            return this.taskRequester.get(taskId, options);
           },
-        });
+          update: (taskId, responses, options) => this.taskRequester.update(taskId, responses, options),
+          cancel: taskId => this.taskRequester.cancel(taskId),
+          isRecoverable: isRecoverableTaskPollError,
+          recover: () => this.reconnectAfterTransportFailure(polledTransport, lifecycleGeneration),
+        },
+        task,
+        {
+          signal,
+          inputRequests: this.serverConfig.inputRequests,
+          stopAtInput: !this.serverConfig.inputRequests && suspend !== undefined,
+          inputResponses,
+          pollIntervalMs: this.taskOptions?.pollIntervalMs,
+          maxWaitMs: this.taskOptions?.maxWaitMs,
+          onStatus,
+        },
+      );
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      if (error instanceof TaskWaitError) throw fail(TASK_WAIT_ERROR_IDS[error.reason], error.message, error.cause);
+      const reason = error instanceof Error ? error.message : String(error);
+      throw fail('MCP_CLIENT_TOOL_TASK_POLL_FAILED', `Polling MCP task ${task.taskId} failed: ${reason}`, error);
+    }
 
-        // Set needsApprovalFn directly on the tool instance (same pattern as tool-builder).
-        // The agent runtime reads it back via the typed `getNeedsApprovalFn` helper.
-        if (needsApprovalFn) {
-          mastraTool.needsApprovalFn = needsApprovalFn;
-        }
-
-        return mastraTool;
-      } catch (toolCreationError: unknown) {
-        // Catch errors during tool creation itself (e.g., if createTool has issues)
-        this.log('error', `Failed to create Mastra tool wrapper for MCP tool: ${tool.name}`, {
-          error: toolCreationError instanceof Error ? toolCreationError.stack : String(toolCreationError),
-          mcpToolDefinition: tool,
+    switch (terminal.status) {
+      case 'input_required':
+        // The remote task stays open; resuming the call answers it (see `readInputRequestResume`).
+        await suspend!({
+          type: MCP_INPUT_REQUEST_SUSPEND_TYPE,
+          serverName: this.name,
+          toolName,
+          taskId: terminal.taskId,
+          createdAt: terminal.createdAt,
+          requestedAt: new Date().toISOString(),
+          requests: terminal.inputRequests,
         });
         return undefined;
+      case 'completed':
+        return terminal.result as CallToolResult;
+      case 'cancelled':
+        throw fail('MCP_CLIENT_TOOL_TASK_CANCELLED', terminal.statusMessage ?? `MCP task ${task.taskId} was cancelled`);
+      case 'failed': {
+        const message = typeof terminal.error.message === 'string' ? terminal.error.message : undefined;
+        throw fail(
+          'MCP_CLIENT_TOOL_TASK_FAILED',
+          message ?? terminal.statusMessage ?? `MCP task ${task.taskId} failed`,
+        );
       }
     }
   }

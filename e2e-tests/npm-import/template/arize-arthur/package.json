@@ -1,0 +1,10 @@
+{
+  "name": "npm-import-arize-arthur",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mastra/arize": "e2e-test",
+    "@mastra/arthur": "e2e-test",
+    "@mastra/core": "e2e-test"
+  }
+}

@@ -1,0 +1,792 @@
+import http from 'node:http';
+import { Mastra } from '@mastra/core/mastra';
+import { SimpleAuth } from '@mastra/core/server';
+import { createTool } from '@mastra/core/tools';
+import { MCPServer, MCPClient } from '@mastra/mcp';
+import type { SetMcpRequestAuth } from '@mastra/server/server-adapter';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { z } from 'zod';
+import { LegacySSEFixture } from './legacy-sse-fixture';
+import { NativeMCPFixture } from './native-mcp-fixture';
+
+/**
+ * Configuration for MCP transport test suite
+ */
+export interface MCPTransportTestConfig {
+  /** Name for the test suite */
+  suiteName?: string;
+  /**
+   * Creates an HTTP server for the given Mastra instance.
+   * Returns the server and port for testing.
+   */
+  createServer: (mastra: Mastra) => Promise<{
+    /** The HTTP server instance (will be closed in afterAll) */
+    server: { close: (callback?: (err?: Error) => void) => unknown };
+    /** The port the server is listening on */
+    port: number;
+  }>;
+}
+
+/**
+ * Creates a standardized integration test suite for MCP transport routes
+ *
+ * Tests MCP protocol transport endpoints using MCPClient:
+ * - HTTP Transport (POST /api/mcp/:serverId/mcp)
+ * - Legacy SSE routes (GET /api/mcp/:serverId/sse, POST /api/mcp/:serverId/messages)
+ *   are only served for MCP 1.x servers; MCP 2.x instances answer 404.
+ *
+ * These tests require a real HTTP server because MCPClient drives the
+ * self-contained 2026-07-28 request lifecycle over real Streamable HTTP.
+ *
+ * Usage:
+ * ```ts
+ * // Hono adapter
+ * createMCPTransportTestSuite({
+ *   suiteName: 'Hono MCP Transport',
+ *   createServer: async (mastra) => {
+ *     const app = await createHonoServer(mastra, { tools: {} });
+ *     const server = serve({ fetch: app.fetch, port: 0 });
+ *     const address = server.address();
+ *     const port = typeof address === 'object' ? address.port : 9999;
+ *     return { server, port };
+ *   },
+ * });
+ *
+ * // Express adapter
+ * createMCPTransportTestSuite({
+ *   suiteName: 'Express MCP Transport',
+ *   createServer: async (mastra) => {
+ *     const app = express();
+ *     const adapter = new MastraServer({ mastra });
+ *     adapter.mount(app);
+ *     const server = app.listen(0);
+ *     const address = server.address();
+ *     const port = typeof address === 'object' ? address.port : 9999;
+ *     return { server, port };
+ *   },
+ * });
+ * ```
+ */
+export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
+  const { suiteName = 'MCP Transport Routes', createServer } = config;
+
+  const expectTextToolResult = (result: any, expectedPayload: unknown) => {
+    expect(result).toBeDefined();
+    expect(result).toMatchObject({
+      isError: false,
+      content: [
+        {
+          type: 'text',
+        },
+      ],
+    });
+    expect(result.content).toHaveLength(1);
+    expect(JSON.parse(result.content[0].text)).toEqual(expectedPayload);
+  };
+
+  describe(suiteName, () => {
+    // Test tools - no outputSchema to avoid MCP validation conflicts
+    const weatherTool = createTool({
+      id: 'getWeather',
+      description: 'Gets the current weather for a location',
+      inputSchema: z.object({
+        location: z.string().describe('The location to get weather for'),
+      }),
+      execute: async ({ location }) => ({
+        temperature: 72,
+        condition: `Sunny in ${location}`,
+      }),
+    });
+
+    const calculatorTool = createTool({
+      id: 'calculate',
+      description: 'Performs basic calculations',
+      inputSchema: z.object({
+        operation: z.enum(['add', 'subtract', 'multiply', 'divide']),
+        a: z.number(),
+        b: z.number(),
+      }),
+      execute: async ({ operation, a, b }) => {
+        let result = 0;
+        switch (operation) {
+          case 'add':
+            result = a + b;
+            break;
+          case 'subtract':
+            result = a - b;
+            break;
+          case 'multiply':
+            result = a * b;
+            break;
+          case 'divide':
+            result = a / b;
+            break;
+        }
+        return { result };
+      },
+    });
+
+    // Waits until its abort signal fires (or 5s pass), recording when each happened.
+    const slowToolRuns: Array<{ abortedAt?: number; finishedAt?: number }> = [];
+    const slowTool = createTool({
+      id: 'slow',
+      description: 'Waits until aborted, optionally streaming a log notification first',
+      inputSchema: z.object({ streamFirst: z.boolean() }),
+      execute: async ({ streamFirst }, context) => {
+        const signal = context?.abortSignal;
+        const run: (typeof slowToolRuns)[number] = {};
+        slowToolRuns.push(run);
+        signal?.addEventListener('abort', () => (run.abortedAt = Date.now()), { once: true });
+        if (streamFirst) await context?.mcp?.log?.('info', 'started');
+        await new Promise<void>(resolve => {
+          const timer = setTimeout(resolve, 5000);
+          signal?.addEventListener('abort', () => (clearTimeout(timer), resolve()), { once: true });
+        });
+        run.finishedAt = Date.now();
+        return { aborted: !!signal?.aborted };
+      },
+    });
+
+    // Reports who the MCP tool thinks is calling: the transport's auth info and the
+    // user the MCPServer mapped from it.
+    const createWhoamiTool = () =>
+      createTool({
+        id: 'whoami',
+        description: 'Returns the caller as seen by the tool',
+        inputSchema: z.object({}),
+        execute: async (_input, context) => ({
+          authInfo: context?.mcp?.extra?.authInfo ?? null,
+          user: context?.requestContext?.get('user') ?? null,
+        }),
+      });
+
+    let httpServer: { close: () => void };
+    let port: number;
+    let mcpServer1: MCPServer;
+    let mcpServer2: MCPServer;
+    let slowServer: MCPServer;
+    let mcpClient: MCPClient;
+    let mastra: Mastra;
+
+    beforeAll(async () => {
+      // Create MCP servers with tools
+      mcpServer1 = new MCPServer({
+        name: 'server1',
+        version: '1.0.0',
+        description: 'Test MCP Server 1',
+        tools: {
+          getWeather: weatherTool,
+          calculate: calculatorTool,
+          whoami: createWhoamiTool(),
+        },
+      });
+
+      mcpServer2 = new MCPServer({
+        name: 'server2',
+        version: '1.1.0',
+        description: 'Test MCP Server 2',
+        tools: {},
+      });
+
+      slowServer = new MCPServer({ name: 'slow-server', version: '1.0.0', tools: { slow: slowTool } });
+
+      // Create Mastra instance
+      mastra = new Mastra({
+        mcpServers: {
+          'test-server-1': mcpServer1,
+          'test-server-2': mcpServer2,
+          'slow-server': slowServer,
+          'native-fixture': new NativeMCPFixture(),
+        },
+      });
+
+      // Create HTTP server using adapter-specific implementation
+      const serverSetup = await createServer(mastra);
+      httpServer = serverSetup.server;
+      port = serverSetup.port;
+
+      // Create MCPClient for transport tests
+      mcpClient = new MCPClient({
+        servers: {
+          server1: {
+            url: new URL(`http://localhost:${port}/api/mcp/${mcpServer1.id}/mcp`),
+          },
+          server2: {
+            url: new URL(`http://localhost:${port}/api/mcp/${mcpServer2.id}/mcp`),
+          },
+        },
+      });
+    }, 30000);
+
+    afterAll(async () => {
+      await mcpClient?.disconnect();
+      httpServer?.close();
+      await mcpServer1?.close();
+      await mcpServer2?.close();
+      await slowServer?.close();
+    }, 30000);
+
+    describe('native MCP v2 adapter dispatch', () => {
+      it('dispatches HTTP through the shared adapter path', async () => {
+        const response = await fetch(`http://localhost:${port}/api/mcp/native-fixture/mcp`, { method: 'POST' });
+        expect(response.status).toBe(200);
+        expect(await response.json()).toEqual({ native: true, httpPath: '/api/mcp/native-fixture/mcp' });
+      });
+
+      it.each([
+        { path: 'sse', method: 'GET' },
+        { path: 'messages', method: 'POST' },
+      ])('rejects the legacy $path route for a native server', async ({ path, method }) => {
+        const response = await fetch(`http://localhost:${port}/api/mcp/native-fixture/${path}`, { method });
+        expect(response.status).toBe(404);
+      });
+
+      it('executes ordinary tools with the v2 request context and reports a suspended tool truthfully', async () => {
+        const base = `http://localhost:${port}/api/mcp/native-fixture/tools`;
+        const init = {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: {} }),
+        };
+        const ordinary = await fetch(`${base}/ordinary/execute`, init);
+        expect(ordinary.status).toBe(200);
+        expect(await ordinary.json()).toEqual({
+          result: {
+            protocolVersion: '2026-07-28',
+            elicitation: 'elicitation.sendRequest is not available on a 2026-07-28 server',
+          },
+        });
+        const suspended = await fetch(`${base}/interaction/execute`, init);
+        expect(suspended.status).toBe(200);
+        expect(await suspended.json()).toEqual({
+          status: 'suspended',
+          suspendPayload: { phase: 'confirm' },
+          resumeSchema: expect.objectContaining({ type: 'object', properties: { confirmed: { type: 'boolean' } } }),
+        });
+      });
+
+      it('continues a suspended tool over REST with resumeData and the echoed suspendPayload', async () => {
+        const base = `http://localhost:${port}/api/mcp/native-fixture/tools/interaction/execute`;
+        const post = (body: unknown) =>
+          fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+        const resumed = await post({ data: {}, resumeData: { confirmed: true }, suspendPayload: { phase: 'confirm' } });
+        expect(resumed.status).toBe(200);
+        expect(await resumed.json()).toEqual({ result: 1 });
+
+        // An answer that fails resumeSchema is a failed call, never a completed one.
+        const invalid = await post({
+          data: {},
+          resumeData: { confirmed: 'yes' },
+          suspendPayload: { phase: 'confirm' },
+        });
+        expect(invalid.status).toBe(500);
+        expect(await invalid.json()).not.toMatchObject({ status: 'completed' });
+      });
+    });
+
+    describe('HTTP Transport (/api/mcp/:serverId/mcp)', () => {
+      describe('Error handling (raw HTTP)', () => {
+        it('should return 404 for non-existent server', async () => {
+          const res = await fetch(`http://localhost:${port}/api/mcp/non-existent/mcp`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json, text/event-stream',
+            },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              method: 'initialize',
+              params: {
+                protocolVersion: '2024-11-05',
+                capabilities: {},
+                clientInfo: { name: 'test-client', version: '1.0.0' },
+              },
+              id: 1,
+            }),
+          });
+
+          expect(res.status).toBe(404);
+        });
+      });
+
+      describe('Protocol operations (MCPClient)', () => {
+        it('should list tools via MCPClient', async () => {
+          const tools = await mcpClient.listTools();
+
+          // MCPClient prefixes tool names with server name
+          expect(tools['server1_getWeather']).toBeDefined();
+          expect(tools['server1_calculate']).toBeDefined();
+        });
+
+        it('should execute tool via MCPClient', async () => {
+          const tools = await mcpClient.listTools();
+          const calculateTool = tools['server1_calculate'];
+
+          expect(calculateTool).toBeDefined();
+          if (!calculateTool) {
+            throw new Error('Expected server1_calculate tool');
+          }
+          expect(calculateTool.execute).toBeDefined();
+
+          const result = await calculateTool.execute!({ operation: 'multiply', a: 6, b: 7 }, {} as any);
+
+          expectTextToolResult(result, { result: 42 });
+        });
+
+        it('should execute weather tool via MCPClient', async () => {
+          const tools = await mcpClient.listTools();
+          const weatherToolInstance = tools['server1_getWeather'];
+
+          expect(weatherToolInstance).toBeDefined();
+          if (!weatherToolInstance) {
+            throw new Error('Expected server1_getWeather tool');
+          }
+          expect(weatherToolInstance.execute).toBeDefined();
+
+          const result = await weatherToolInstance.execute!({ location: 'Austin' }, {} as any);
+
+          expectTextToolResult(result, {
+            temperature: 72,
+            condition: 'Sunny in Austin',
+          });
+        });
+
+        it('should handle multiple MCP servers', async () => {
+          const tools = await mcpClient.listTools();
+
+          // Server 1 has 2 tools
+          expect(tools['server1_getWeather']).toBeDefined();
+          expect(tools['server1_calculate']).toBeDefined();
+
+          // Server 2 has 0 tools
+          const server2Tools = Object.keys(tools).filter(k => k.startsWith('server2_'));
+          expect(server2Tools).toHaveLength(0);
+        });
+
+        it('gives tools no caller identity when the server has no auth configured', async () => {
+          const tools = await mcpClient.listTools();
+          const result = await tools['server1_whoami']!.execute!({}, {} as any);
+          expectTextToolResult(result, { authInfo: null, user: null });
+        });
+      });
+
+      // A tool served by a user-built MCPServer must see the same caller that `server.auth`
+      // authenticated for the HTTP request. Every adapter has to bridge the principal onto
+      // the Node request the MCP transport reads (`req.auth` → `extra.authInfo`).
+      describe('Authenticated MCP callers', () => {
+        const users = {
+          'alice-token': { id: 'alice', name: 'Alice' },
+          'bob-token': { id: 'bob', name: 'Bob' },
+        };
+
+        // `mcpOptions` go only into the Mastra server config. Adapters must pick them up from there
+        // even when the app does not pass them to the adapter itself.
+        const startAuthenticatedApp = async (mcpOptions?: {
+          serverless?: boolean;
+          setRequestAuth?: SetMcpRequestAuth;
+        }) => {
+          const whoamiServer = new MCPServer({
+            name: 'whoami-server',
+            version: '1.0.0',
+            tools: { whoami: createWhoamiTool() },
+            mapAuthInfoToUser: ({ authInfo }) => (authInfo as { extra?: { user?: { id: string } } }).extra?.user,
+          });
+          const authMastra = new Mastra({
+            logger: false,
+            mcpServers: { whoami: whoamiServer },
+            server: { auth: new SimpleAuth({ tokens: users }), ...(mcpOptions ? { mcpOptions } : {}) },
+          });
+          const { server, port: authPort } = await createServer(authMastra);
+          const url = new URL(`http://localhost:${authPort}/api/mcp/${whoamiServer.id}/mcp`);
+          const clients: MCPClient[] = [];
+          const callWhoami = async (token: string) => {
+            const client = new MCPClient({
+              id: `whoami-${token}-${authPort}`,
+              servers: { app: { url, requestInit: { headers: { Authorization: `Bearer ${token}` } } } },
+            });
+            clients.push(client);
+            const tools = await client.listTools();
+            const result: any = await tools['app_whoami']!.execute!({}, {} as any);
+            return JSON.parse(result.content[0].text);
+          };
+          const close = async () => {
+            await Promise.all(clients.map(client => client.disconnect()));
+            await new Promise<void>(resolve => server.close(() => resolve()));
+            await whoamiServer.close();
+          };
+          return { callWhoami, close };
+        };
+
+        it('lets an MCP tool see the user who authenticated with the server', async () => {
+          const app = await startAuthenticatedApp();
+          try {
+            expect(await app.callWhoami('alice-token')).toEqual({
+              authInfo: {
+                token: 'alice-token',
+                clientId: 'alice',
+                scopes: [],
+                extra: { user: { id: 'alice', name: 'Alice' } },
+              },
+              user: { id: 'alice', name: 'Alice' },
+            });
+            // A second caller sees only their own identity.
+            expect(await app.callWhoami('bob-token')).toMatchObject({
+              authInfo: { token: 'bob-token', clientId: 'bob' },
+              user: { id: 'bob', name: 'Bob' },
+            });
+          } finally {
+            await app.close();
+          }
+        }, 30000);
+
+        it('keeps the authenticated caller in serverless mode', async () => {
+          const app = await startAuthenticatedApp({ serverless: true });
+          try {
+            expect(await app.callWhoami('alice-token')).toMatchObject({
+              authInfo: { token: 'alice-token', clientId: 'alice' },
+              user: { id: 'alice', name: 'Alice' },
+            });
+          } finally {
+            await app.close();
+          }
+        }, 30000);
+
+        it('lets a setRequestAuth hook in the Mastra server config decide what the MCP tool sees', async () => {
+          // A hook that redacts the bearer token and narrows the user. It must replace the default
+          // bridge, otherwise the raw token and full user would reach the tool.
+          const app = await startAuthenticatedApp({
+            setRequestAuth: (req, requestContext) => {
+              const user = requestContext.get('mastra__user') as { id: string };
+              (req as typeof req & { auth?: unknown }).auth = {
+                token: '',
+                clientId: `custom:${user.id}`,
+                scopes: ['mcp:custom'],
+                extra: { user: { id: user.id } },
+              };
+            },
+          });
+          try {
+            expect(await app.callWhoami('alice-token')).toEqual({
+              authInfo: {
+                token: '',
+                clientId: 'custom:alice',
+                scopes: ['mcp:custom'],
+                extra: { user: { id: 'alice' } },
+              },
+              user: { id: 'alice' },
+            });
+          } finally {
+            await app.close();
+          }
+        }, 30000);
+      });
+
+      describe('Tool execution errors (MCPClient)', () => {
+        let failingClient: MCPClient;
+        let failingServer: MCPServer;
+        let failingMastra: Mastra;
+        let failingHttpServer: { close: () => void };
+
+        beforeAll(async () => {
+          const failingTool = createTool({
+            id: 'failingTool',
+            description: 'A tool that always throws an error',
+            inputSchema: z.object({}),
+            execute: async () => {
+              throw new Error('Tool execution failed intentionally');
+            },
+          });
+
+          failingServer = new MCPServer({
+            name: 'failingServer',
+            version: '1.0.0',
+            tools: { failingTool },
+          });
+
+          failingMastra = new Mastra({
+            mcpServers: { 'failing-server': failingServer },
+          });
+
+          const serverSetup = await createServer(failingMastra);
+          failingHttpServer = serverSetup.server;
+          const failingPort = serverSetup.port;
+
+          failingClient = new MCPClient({
+            servers: {
+              failing: {
+                url: new URL(`http://localhost:${failingPort}/api/mcp/${failingServer.id}/mcp`),
+                // This test asserts the shape of the server's isError envelope
+                // (result.content carries the serialized error), so opt out of the
+                // default throw-on-error behavior and resolve with the raw result.
+                onToolError: 'return',
+              },
+            },
+          });
+        }, 30000);
+
+        afterAll(async () => {
+          await failingClient?.disconnect();
+          failingHttpServer?.close();
+          await failingServer?.close();
+        }, 30000);
+
+        it('should return error when tool execution fails', async () => {
+          const tools = await failingClient.listTools();
+          const failingTool = tools['failing_failingTool'];
+
+          expect(failingTool).toBeDefined();
+          if (!failingTool) {
+            throw new Error('Expected failing_failingTool tool');
+          }
+
+          const result = await failingTool.execute!({}, {} as any);
+
+          expect(result).toBeDefined();
+          expect(result.content).toBeInstanceOf(Array);
+          expect(result.content.length).toBeGreaterThan(0);
+
+          const errorOutput = result.content[0];
+          expect(errorOutput.type).toBe('text');
+
+          const errorData = JSON.parse(errorOutput.text);
+          expect(errorData.message).toContain('Tool execution failed intentionally');
+          expect(errorData.code).toBe('TOOL_EXECUTION_FAILED');
+        });
+      });
+    });
+
+    describe('HTTP Transport with server auth', () => {
+      // Reports what an MCP tool can see of the caller, so the test can check it
+      // matches what Mastra server auth resolved for the HTTP request.
+      const whoamiTool = createTool({
+        id: 'whoami',
+        description: 'Reports the caller identity the tool sees',
+        inputSchema: z.object({}),
+        execute: async (_input, context) => {
+          const requestContext = context?.requestContext;
+          const user = requestContext?.get('user') as { id?: string } | undefined;
+          return {
+            userId: user?.id ?? null,
+            permissions: requestContext?.get('mastra__userPermissions') ?? null,
+          };
+        },
+      });
+
+      let authedHttpServer: { close: () => void };
+      let authedPort: number;
+      let authedMcpServer: MCPServer;
+      let authedClient: MCPClient;
+      const legacySseServer = new LegacySSEFixture();
+      const users: Record<string, { id: string }> = {
+        'reader-token': { id: 'user-reader' },
+        'blocked-token': { id: 'user-blocked' },
+      };
+
+      beforeAll(async () => {
+        authedMcpServer = new MCPServer({ name: 'authed', version: '1.0.0', tools: { whoami: whoamiTool } });
+        const authedMastra = new Mastra({
+          mcpServers: { authed: authedMcpServer, legacySse: legacySseServer },
+          server: {
+            auth: {
+              authenticateToken: async (token: string) => users[token] ?? null,
+              // Server auth's own authorization decides before any MCP transport starts.
+              authorize: async (_path: string, _method: string, user: { id: string }) => user.id !== 'user-blocked',
+            },
+            rbac: {
+              getPermissions: async () => ['observability:read'],
+              getRoles: async () => ['reader'],
+            } as any,
+          },
+        });
+        const setup = await createServer(authedMastra);
+        authedHttpServer = setup.server;
+        authedPort = setup.port;
+        authedClient = new MCPClient({
+          servers: {
+            authed: {
+              url: new URL(`http://localhost:${authedPort}/api/mcp/${authedMcpServer.id}/mcp`),
+              requestInit: { headers: { Authorization: 'Bearer reader-token' } },
+            },
+          },
+        });
+      }, 30000);
+
+      afterAll(async () => {
+        await authedClient?.disconnect();
+        authedHttpServer?.close();
+        await authedMcpServer?.close();
+      }, 30000);
+
+      it('gives MCP tools the user and permissions server auth resolved', async () => {
+        const tools = await authedClient.listTools();
+        const whoami = tools['authed_whoami'];
+        if (!whoami?.execute) throw new Error('Expected authed_whoami tool');
+
+        const result = await whoami.execute({}, {} as any);
+
+        expectTextToolResult(result, { userId: 'user-reader', permissions: ['observability:read'] });
+      });
+
+      it('rejects MCP requests without credentials', async () => {
+        const response = await fetch(`http://localhost:${authedPort}/api/mcp/${authedMcpServer.id}/mcp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+        });
+        expect(response.status).toBe(401);
+      });
+
+      it('refuses MCP requests server auth does not authorize', async () => {
+        const response = await fetch(`http://localhost:${authedPort}/api/mcp/${authedMcpServer.id}/mcp`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json, text/event-stream',
+            Authorization: 'Bearer blocked-token',
+          },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+        });
+        expect(response.status).toBe(403);
+      });
+
+      it('hands the SSE transport the user and permissions server auth resolved', async () => {
+        const response = await fetch(`http://localhost:${authedPort}/api/mcp/${legacySseServer.id}/sse`, {
+          headers: { Authorization: 'Bearer reader-token' },
+        });
+
+        expect(response.status).toBe(200);
+        expect(await response.json()).toEqual({
+          clientId: 'user-reader',
+          userId: 'user-reader',
+          permissions: ['observability:read'],
+        });
+      });
+
+      it('refuses SSE requests server auth does not authorize', async () => {
+        const response = await fetch(`http://localhost:${authedPort}/api/mcp/${legacySseServer.id}/sse`, {
+          headers: { Authorization: 'Bearer blocked-token' },
+        });
+        expect(response.status).toBe(403);
+      });
+    });
+
+    describe('HTTP Transport client disconnect', () => {
+      // Sends a raw tools/call and destroys the socket while the tool is running. The tool
+      // must observe the abort promptly, not only after it has run to completion.
+      it.each([
+        { name: 'before any response bytes are sent', streamFirst: false },
+        { name: 'after the response has started streaming', streamFirst: true },
+      ])(
+        'aborts the in-flight tool call when the client disconnects $name',
+        async ({ streamFirst }) => {
+          const runsBefore = slowToolRuns.length;
+          const body = JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'tools/call',
+            params: {
+              name: 'slow',
+              arguments: { streamFirst },
+              _meta: {
+                'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+                'io.modelcontextprotocol/clientInfo': { name: 'disconnect-test', version: '1.0.0' },
+                'io.modelcontextprotocol/clientCapabilities': {},
+                'io.modelcontextprotocol/logLevel': 'info',
+              },
+            },
+          });
+          let responseBytes = 0;
+          const req = http.request({
+            host: 'localhost',
+            port,
+            method: 'POST',
+            path: `/api/mcp/${slowServer.id}/mcp`,
+            headers: {
+              'content-type': 'application/json',
+              accept: 'application/json, text/event-stream',
+              'mcp-protocol-version': '2026-07-28',
+              'mcp-method': 'tools/call',
+              'mcp-name': 'slow',
+              'content-length': Buffer.byteLength(body),
+            },
+          });
+          req.on('response', res => {
+            res.on('data', chunk => (responseBytes += chunk.length));
+            res.on('error', () => {});
+          });
+          req.on('error', () => {});
+          req.end(body);
+
+          await expect.poll(() => slowToolRuns.length, { timeout: 5000 }).toBe(runsBefore + 1);
+          if (streamFirst) await expect.poll(() => responseBytes, { timeout: 5000 }).toBeGreaterThan(0);
+          else expect(responseBytes).toBe(0);
+
+          const run = slowToolRuns[runsBefore]!;
+          const disconnectedAt = Date.now();
+          req.destroy();
+
+          await expect.poll(() => run.finishedAt, { timeout: 6000 }).toBeDefined();
+          expect(run.abortedAt).toBeDefined();
+          expect(run.abortedAt! - disconnectedAt).toBeLessThan(1000);
+        },
+        15000,
+      );
+    });
+
+    describe('SSE Transport (/api/mcp/:serverId/sse)', () => {
+      describe('Error handling (raw HTTP)', () => {
+        it('should return 404 for non-existent server on GET /sse', async () => {
+          const res = await fetch(`http://localhost:${port}/api/mcp/non-existent/sse`);
+          expect(res.status).toBe(404);
+        });
+
+        it('should return 404 for non-existent server on POST /messages', async () => {
+          const res = await fetch(`http://localhost:${port}/api/mcp/non-existent/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              method: 'test',
+              id: 1,
+            }),
+          });
+
+          expect(res.status).toBe(404);
+        });
+      });
+
+      describe('MCP 2.x servers (MCPClient)', () => {
+        it('does not serve the legacy SSE transport for a 2.x MCPServer', async ctx => {
+          if ((mcpServer1 as { mcpVersion?: number }).mcpVersion !== 2) ctx.skip();
+          const res = await fetch(`http://localhost:${port}/api/mcp/${mcpServer1.id}/sse`);
+          expect(res.status).toBe(404);
+
+          const messages = await fetch(`http://localhost:${port}/api/mcp/${mcpServer1.id}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', method: 'tools/list', id: 1 }),
+          });
+          expect(messages.status).toBe(404);
+        });
+
+        it('fails to connect through the SSE URL without downgrading', async ctx => {
+          if ((mcpServer1 as { mcpVersion?: number }).mcpVersion !== 2) ctx.skip();
+          const sseClient = new MCPClient({
+            id: `sse-rejection-${port}`,
+            servers: {
+              server1: { url: new URL(`http://localhost:${port}/api/mcp/${mcpServer1.id}/sse`) },
+            },
+          });
+          try {
+            const { tools, errors } = await sseClient.listToolsWithErrors();
+            expect(tools).toEqual({});
+            expect(errors.server1).toContain('Failed to connect to MCP server server1');
+          } finally {
+            await sseClient.disconnect();
+          }
+        });
+      });
+    });
+  });
+}

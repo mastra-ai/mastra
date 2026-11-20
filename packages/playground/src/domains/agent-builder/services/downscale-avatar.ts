@@ -22,7 +22,7 @@ export function estimateDataUrlBytes(dataUrl: string): number {
   const commaIdx = dataUrl.indexOf(',');
   if (commaIdx < 0) return 0;
   const base64 = dataUrl.slice(commaIdx + 1);
-  const padding = (base64.match(/=+$/) ?? [''])[0]!.length;
+  const padding = (base64.match(/=+$/) ?? [''])[0].length;
   return Math.floor((base64.length * 3) / 4) - padding;
 }
 

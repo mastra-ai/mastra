@@ -44,7 +44,7 @@ export const setupNestedModelSelectorScenario: McE2eScenario = {
     runtime.printScreen('nested model selector', terminal);
 
     terminal.write('\x1b');
-    await runtime.waitForScreenText(/Observational Memory/i, terminal);
+    await runtime.waitForScreenText(/Tool Approval/i, terminal);
     runtime.printScreen('returned to setup overlay', terminal);
 
     const afterCancel = terminal.serialize().view;
@@ -53,16 +53,10 @@ export const setupNestedModelSelectorScenario: McE2eScenario = {
     }
 
     terminal.write('\x1b');
-    await runtime.waitForScreenText(/Tool Approval/i, terminal);
-    terminal.write('\x1b');
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
 
     const afterSetup = terminal.serialize().view;
-    if (
-      /Welcome to Mastra Code|Model Packs|Observational Memory|Tool Approval|Select model for plan mode/i.test(
-        afterSetup,
-      )
-    ) {
+    if (/Welcome to Mastra Code|Model Packs|Tool Approval|Select model for plan mode/i.test(afterSetup)) {
       throw new Error('Expected setup overlay to be dismissed after finishing defaults');
     }
 

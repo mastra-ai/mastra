@@ -1,41 +1,38 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { CircleSlashIcon, ExternalLinkIcon, Plus } from 'lucide-react';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 
 export interface NoDatasetsInfoProps {
   onCreateClick?: () => void;
 }
 
 export const NoDatasetsInfo = ({ onCreateClick }: NoDatasetsInfoProps = {}) => (
-  <div className="flex h-full items-center justify-center">
-    <EmptyState
-      iconSlot={<CircleSlashIcon />}
-      titleSlot="No Datasets yet"
-      descriptionSlot={
-        <>
-          Create your first dataset to start evaluating <br />
-          your agents and workflows.
-        </>
-      }
-      actionSlot={
-        <div className="flex flex-col items-center gap-2">
-          {onCreateClick && (
-            <Button variant="primary" onClick={onCreateClick} icon={<Plus />}>
-              Create Dataset
-            </Button>
-          )}
-          <Button
-            variant="ghost"
-            as="a"
-            href="https://mastra.ai/docs/evals/datasets"
-            target="_blank"
-            rel="noopener noreferrer"
-            icon={<ExternalLinkIcon />}
-          >
-            Datasets Documentation
+  <EmptyState
+    titleSlot="No Datasets yet"
+    descriptionSlot={
+      <>
+        Create your first dataset to start evaluating <br />
+        your agents and workflows.
+      </>
+    }
+    actionSlot={
+      <div className="flex flex-col items-center gap-2">
+        {onCreateClick && (
+          <Button variant="primary" onClick={onCreateClick} icon={<IconPlusMedium />}>
+            New dataset
           </Button>
-        </div>
-      }
-    />
-  </div>
+        )}
+        <Button
+          variant="ghost"
+          render={<a href="https://mastra.ai/docs/evals/datasets" target="_blank" rel="noopener noreferrer" />}
+
+          icon={<IconSquareArrowTopRight />}
+        >
+          Datasets documentation
+        </Button>
+      </div>
+    }
+    variant="fill"
+  />
 );

@@ -8,7 +8,7 @@ import type ts from 'typescript-classic';
 import type * as z4 from 'zod/v4/core';
 import { printNode, zodToTs } from 'zod-to-ts';
 
-import { SERVER_ROUTES } from '../src/server/server-adapter/routes/index.js';
+import { ALL_SERVER_ROUTES } from '../src/server/server-adapter/routes/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -124,6 +124,40 @@ const MIN_SHARED_TYPE_LENGTH = 160;
  */
 const UNREPRESENTABLE_SCHEMA_TYPES = new Set(['transform', 'custom']);
 
+const INDEX_SIGNATURE_KEY_TYPES = new Set(['string', 'number', 'symbol']);
+
+/**
+ * zod-to-ts renders every record as an index signature, but TypeScript rejects index
+ * signatures keyed by literal or template-literal unions (TS1337). Render those as a
+ * mapped type instead, optional unless the key is an exhaustive enum (mirroring Zod).
+ */
+function renderLiteralKeyedRecord(schema: z4.$ZodType, tsLib: typeof ts, io: ZodIo): ts.TypeNode | undefined {
+  const def = schema._zod.def as z4.$ZodRecordDef;
+  if (def.type !== 'record' || INDEX_SIGNATURE_KEY_TYPES.has(def.keyType._zod.def.type)) {
+    return undefined;
+  }
+
+  const convert = (child: z4.$ZodType) =>
+    zodToTs(child, {
+      auxiliaryTypeStore: renderStates[io].auxiliaryTypeStore,
+      io,
+      overrideFunction: createSchemaOverrideFunction(io),
+    }).node;
+  const exhaustive =
+    def.keyType._zod.values !== undefined &&
+    !def.partial &&
+    !(io === 'input' && def.valueType._zod.optin !== undefined);
+
+  return tsLib.factory.createMappedTypeNode(
+    undefined,
+    tsLib.factory.createTypeParameterDeclaration(undefined, 'K', convert(def.keyType)),
+    undefined,
+    exhaustive ? undefined : tsLib.factory.createToken(tsLib.SyntaxKind.QuestionToken),
+    convert(def.valueType),
+    undefined,
+  );
+}
+
 function createSchemaOverrideFunction(io: ZodIo) {
   const state = renderStates[io];
 
@@ -140,11 +174,11 @@ function createSchemaOverrideFunction(io: ZodIo) {
     // While a schema's own shared declaration is being rendered, let the default
     // conversion (and the auxiliary store, for recursive schemas) handle it.
     if (state.promotionInProgress.has(schema)) {
-      return undefined;
+      return renderLiteralKeyedRecord(schema, tsLib, io);
     }
 
     if ((state.nestedOccurrenceCounts.get(schema) ?? 0) < 2) {
-      return undefined;
+      return renderLiteralKeyedRecord(schema, tsLib, io);
     }
 
     let sharedName = state.promotedSchemaNames.get(schema);
@@ -174,7 +208,7 @@ function createSchemaOverrideFunction(io: ZodIo) {
     }
 
     if (!sharedName) {
-      return undefined;
+      return renderLiteralKeyedRecord(schema, tsLib, io);
     }
 
     return tsLib.factory.createTypeReferenceNode(sharedName);
@@ -264,7 +298,7 @@ function renderRequestType(
 >;`;
 }
 
-export type RouteDefinition = (typeof SERVER_ROUTES)[number];
+export type RouteDefinition = (typeof ALL_SERVER_ROUTES)[number];
 
 function renderRouteBlock(route: RouteDefinition): string {
   const baseName = getRouteBaseName(route.method, route.path);
@@ -427,7 +461,7 @@ async function formatGeneratedFileContent(fileContent: string): Promise<string> 
   return result.code;
 }
 
-export function renderRouteTypesFileContent(routes: readonly RouteDefinition[] = SERVER_ROUTES): string {
+export function renderRouteTypesFileContent(routes: readonly RouteDefinition[] = ALL_SERVER_ROUTES): string {
   // Pass 1: convert everything once purely to count nested schema instance reuse.
   renderStates = createRenderStates();
   countingPass = true;
@@ -457,7 +491,7 @@ async function main(): Promise<void> {
   }
 
   console.info(`✓ Generated ${OUTPUT_PATH}`);
-  console.info(`  - ${SERVER_ROUTES.length} routes`);
+  console.info(`  - ${ALL_SERVER_ROUTES.length} routes`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {

@@ -226,6 +226,41 @@ describe('processMastraStream', () => {
     expect(mockOnChunk).toHaveBeenCalledWith(testChunk);
   });
 
+  it('should deliver transient data-thread-title chunks before finish', async () => {
+    // Wire shape emitted by agent stream runs with
+    // memory.options.generateTitle.emitEvent: true — the title chunk is written
+    // while `finish` is assembled, so it must arrive before it on the SSE stream
+    const titleChunk = {
+      type: 'data-thread-title',
+      data: { threadId: 'thread-1', title: 'Generated Title' },
+      transient: true,
+    };
+    const finishChunk: ChunkType = {
+      type: 'finish',
+      runId: 'run-123',
+      from: ChunkFrom.AGENT,
+      payload: { stepResult: { reason: 'stop' } },
+    };
+
+    const received: any[] = [];
+    const sseData = `data: ${JSON.stringify(titleChunk)}\n\ndata: ${JSON.stringify(finishChunk)}\n\n`;
+    const stream = createMockStream(sseData);
+
+    await processMastraStream({
+      stream,
+      onChunk: chunk => {
+        received.push(chunk);
+      },
+    });
+
+    const titleIndex = received.findIndex(chunk => chunk.type === 'data-thread-title');
+    const finishIndex = received.findIndex(chunk => chunk.type === 'finish');
+
+    expect(titleIndex).toBeGreaterThanOrEqual(0);
+    expect(finishIndex).toBeGreaterThan(titleIndex);
+    expect(received[titleIndex]).toEqual(titleChunk);
+  });
+
   it('should properly clean up stream reader resources', async () => {
     const testChunk: ChunkType = {
       type: 'message',

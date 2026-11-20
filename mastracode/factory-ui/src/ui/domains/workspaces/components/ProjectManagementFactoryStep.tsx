@@ -1,54 +1,72 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
-
-import { useLinearStatusQuery } from '../../../../hooks/useLinearData';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { useWorkSourceConnections } from '../hooks/useWorkSourceConnections';
+import type { BoardSource } from '../hooks/useWorkSourceConnections';
+import type { SourceControlRepository } from '../services/github';
+import { repositoryHost } from '../services/sourceControlHosts';
+import { OnboardingCodeHostRow } from './onboarding/OnboardingCodeHostRow';
+import { OnboardingInset } from './onboarding/OnboardingInset';
+import { OnboardingLinearConnection } from './onboarding/OnboardingLinearConnection';
+import { OnboardingPlatformConnection } from './onboarding/OnboardingPlatformConnection';
+import { OnboardingStepCard } from './onboarding/OnboardingStepCard';
 
 export interface ProjectManagementFactoryStepProps {
   onConnect: () => void;
   onContinue: () => void;
+  onPreviewSource?: (source: BoardSource) => void;
+  /** The codebase step's repository, listed as an issue source once it has been picked. */
+  repository?: SourceControlRepository;
+  /** Whether that repository feeds the board; only an explicit `false` turns it off. */
+  codeHostSync?: boolean;
+  onCodeHostSyncChange?: (enabled: boolean) => void;
 }
 
-export function ProjectManagementFactoryStep({ onConnect, onContinue }: ProjectManagementFactoryStepProps) {
-  const linearStatus = useLinearStatusQuery();
-
+export function ProjectManagementFactoryStep({
+  onConnect,
+  onContinue,
+  onPreviewSource,
+  repository,
+  codeHostSync,
+  onCodeHostSyncChange,
+}: ProjectManagementFactoryStepProps) {
+  const trackersConnected = Object.values(useWorkSourceConnections()).some(Boolean);
+  const codeHostOn = repository !== undefined && codeHostSync !== false;
+  const anyConnected = trackersConnected || codeHostOn;
+  const codeHost = repository && (
+    <div
+      onMouseEnter={() => onPreviewSource?.(repositoryHost(repository))}
+      onFocus={() => onPreviewSource?.(repositoryHost(repository))}
+    >
+      <OnboardingCodeHostRow repository={repository} enabled={codeHostOn} onEnabledChange={onCodeHostSyncChange} />
+    </div>
+  );
   return (
-    <section aria-label="Linear connection" className="border-border1 bg-surface2/80 max-w-xl rounded-2xl border p-5">
-      {linearStatus.isPending ? (
-        <SkeletonRows label="Loading Linear status" rows={2} rowClassName="h-12 w-full rounded-xl" />
-      ) : linearStatus.data?.connected ? (
-        <div className="flex flex-col gap-4">
-          <Txt as="p" variant="ui-md" className="text-icon5 m-0">
-            Connected to {linearStatus.data.workspace?.name ?? 'Linear'}.
-          </Txt>
-          <Button variant="primary" onClick={onContinue}>
-            Continue
-          </Button>
+    <OnboardingStepCard
+      section="project-management"
+      headerEnd={
+        <Txt variant="meta" tone="muted">
+          Where new issues come from
+        </Txt>
+      }
+      note={anyConnected ? 'You’ll choose which issues to bring in after setup' : undefined}
+      primary={
+        <Button variant={anyConnected ? 'primary' : 'ghost'} onClick={onContinue}>
+          {anyConnected ? 'Continue' : 'Skip for now'}
+        </Button>
+      }
+    >
+      <OnboardingInset>
+        {codeHost}
+        <div onMouseEnter={() => onPreviewSource?.('linear')} onFocus={() => onPreviewSource?.('linear')}>
+          <OnboardingLinearConnection onConnect={onConnect} />
         </div>
-      ) : (
-        <EmptyState
-          className="py-8"
-          iconSlot={<LinearIcon className="text-icon3 size-10" />}
-          titleSlot="Connect Linear"
-          descriptionSlot="Give your Factory the issue context and priorities behind your code."
-          actionSlot={
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              {linearStatus.data?.reason !== 'missing_config' &&
-                linearStatus.data?.reason !== 'organization_required' && (
-                  <Button variant="primary" onClick={onConnect}>
-                    <LinearIcon className="size-4" />
-                    {linearStatus.data?.reason === 'not_connected' ? 'Connect Linear' : 'Reconnect Linear'}
-                  </Button>
-                )}
-              <Button variant="ghost" onClick={onContinue}>
-                Skip for now
-              </Button>
-            </div>
-          }
-        />
-      )}
-    </section>
+        <div onMouseEnter={() => onPreviewSource?.('jira')} onFocus={() => onPreviewSource?.('jira')}>
+          <OnboardingPlatformConnection provider="jira" />
+        </div>
+        <div onMouseEnter={() => onPreviewSource?.('incident-io')} onFocus={() => onPreviewSource?.('incident-io')}>
+          <OnboardingPlatformConnection provider="incident-io" />
+        </div>
+      </OnboardingInset>
+    </OnboardingStepCard>
   );
 }

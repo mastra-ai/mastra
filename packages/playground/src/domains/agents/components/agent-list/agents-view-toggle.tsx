@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
-import { Columns2, List } from 'lucide-react';
+import { IconLayoutColumn } from '@mastra/playground-ui/icons/central/IconLayoutColumn';
+import { IconListBullets } from '@mastra/playground-ui/icons/central/IconListBullets';
 
 export type AgentsView = 'compact' | 'list';
 
@@ -11,7 +12,7 @@ export interface AgentsViewToggleProps {
 
 export function AgentsViewToggle({ view, onViewChange }: AgentsViewToggleProps) {
   return (
-    <ButtonsGroup spacing="close" aria-label="Agents view">
+    <ButtonsGroup aria-label="Agents view">
       <Button
         type="button"
         variant={view === 'list' ? 'default' : 'ghost'}
@@ -20,7 +21,7 @@ export function AgentsViewToggle({ view, onViewChange }: AgentsViewToggleProps) 
         aria-pressed={view === 'list'}
         onClick={() => onViewChange('list')}
       >
-        <List />
+        <IconListBullets />
       </Button>
       <Button
         type="button"
@@ -30,7 +31,7 @@ export function AgentsViewToggle({ view, onViewChange }: AgentsViewToggleProps) 
         aria-pressed={view === 'compact'}
         onClick={() => onViewChange('compact')}
       >
-        <Columns2 />
+        <IconLayoutColumn />
       </Button>
     </ButtonsGroup>
   );

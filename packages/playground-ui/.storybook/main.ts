@@ -18,16 +18,32 @@ const config: StorybookConfig = {
     reactDocgen: 'react-docgen-typescript',
   },
   viteFinal: config =>
-    mergeConfig(config, {
-      resolve: {
-        alias: [
-          {
-            find: /^@mastra\/react$/,
-            replacement: fileURLToPath(new URL('./mocks/mastra-react.ts', import.meta.url)),
-          },
-        ],
+    mergeConfig(
+      {
+        ...config,
+        // Components are TypeScript: keep their docgen plugin, but skip the JS
+        // fallback, which otherwise parses workspace dependencies' generated dist.
+        plugins: config.plugins?.filter(
+          plugin => !plugin || !('name' in plugin) || plugin.name !== 'storybook:react-docgen-plugin',
+        ),
       },
-    }),
+      {
+        resolve: {
+          alias: [
+            // The real package, for the mock to mount its provider: hooks under `@mastra/react/hooks/*`
+            // read the client from it.
+            {
+              find: /^@mastra\/react\/provider$/,
+              replacement: fileURLToPath(import.meta.resolve('@mastra/react')),
+            },
+            {
+              find: /^@mastra\/react$/,
+              replacement: fileURLToPath(new URL('./mocks/mastra-react.ts', import.meta.url)),
+            },
+          ],
+        },
+      },
+    ),
 };
 
 export default config;

@@ -1,9 +1,9 @@
 import type { BuilderSettingsResponse } from '@mastra/client-js';
+import type { AuthCapabilities } from '@mastra/react/hooks/auth';
 import { cleanup, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { authHandler, builderHandler, renderSidebar, systemPackagesHandler } from './render-sidebar';
-import type { AuthCapabilities } from '@/domains/auth/types';
 import { server } from '@/test/msw-server';
 
 const unauthenticatedCapabilities = {
@@ -246,15 +246,6 @@ describe('AppSidebar — RBAC link gating while permission data loads', () => {
     resolveCapabilities();
 
     // Once permissions resolve, the gated link is allowed to appear.
-    const agentsLink = await screen.findByRole('link', { name: /agents/i });
-    expect(agentsLink.getAttribute('href')).toBe('/agents');
-  });
-
-  it('shows permission-gated links the user is allowed once permissions are loaded', async () => {
-    server.use(authHandler(wildcardCapabilities), builderHandler(builderDisabled), systemPackagesHandler());
-
-    renderSidebar();
-
     const agentsLink = await screen.findByRole('link', { name: /agents/i });
     expect(agentsLink.getAttribute('href')).toBe('/agents');
   });

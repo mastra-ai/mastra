@@ -29,19 +29,6 @@ export const Default: Story = {
   ],
 };
 
-export const ExtraSmall: Story = {
-  args: {
-    size: 'xs',
-  },
-  decorators: [
-    Story => (
-      <ThemeProvider storageKey="storybook-theme-extra-small">
-        <Story />
-      </ThemeProvider>
-    ),
-  ],
-};
-
 export const Small: Story = {
   args: {
     size: 'sm',
@@ -65,9 +52,9 @@ export const Sizes: Story = {
   ],
   render: () => (
     <div className="flex items-center gap-4">
-      <ThemeToggle size="xs" />
       <ThemeToggle size="sm" />
       <ThemeToggle size="md" />
+      <ThemeToggle size="lg" />
     </div>
   ),
 };

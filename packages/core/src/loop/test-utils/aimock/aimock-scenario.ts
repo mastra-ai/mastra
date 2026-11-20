@@ -1,16 +1,36 @@
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { LLMock } from '@copilotkit/aimock';
+import type { ChatCompletionRequest } from '@copilotkit/aimock';
 import { afterAll, afterEach, beforeAll, describe } from 'vitest';
 import { Agent } from '../../../agent';
-import { createDurableAgent } from '../../../agent/durable';
+import { createDurableAgent, createEventedAgent } from '../../../agent/durable';
 import { assembleAgentFromFsEntry } from '../../../agent/fs-routing';
 import { isDurableAgentLike } from '../../../agent/types';
+import { EventEmitterPubSub } from '../../../events';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
 import type { MastraModelOutput } from '../../../stream/base/output';
 import type { ChunkType } from '../../../stream/types';
-import type { EngineVariant, LoopScenarioResult, RunApprovalScenarioOptions, RunLoopScenarioOptions } from './types';
-import { ALL_ENGINE_VARIANTS, SCENARIO_MODEL_ID } from './types';
+import type {
+  EngineVariant,
+  LoopScenarioResult,
+  RunApprovalScenarioOptions,
+  RunLoopScenarioOptions,
+  ScenarioEngineHost,
+} from './types';
+import { ALL_ENGINE_VARIANTS, isDurableEngineVariant, SCENARIO_MODEL_ID } from './types';
+
+export { isDurableEngineVariant } from './types';
+
+/**
+ * Whether a tool result appears anywhere in the request. AIMock's `hasToolResult`
+ * only looks at messages after the last `user` message, so scenarios that add a
+ * user-role message after a tool round (signals, queued messages, request
+ * processors) must match on the whole conversation instead.
+ */
+export function anyToolResult(req: ChatCompletionRequest): boolean {
+  return req.messages.some(message => message.role === 'tool');
+}
 
 /**
  * Start a shared AIMock server for the lifetime of a test suite and wire its
@@ -54,6 +74,29 @@ export function useLoopScenarioAimock(): () => LLMock {
 
 let scenarioAgentCounter = 0;
 
+let engineHost: ScenarioEngineHost | undefined;
+
+/**
+ * Run every `describeForAllEngines` scenario on an engine that lives outside core (e.g. Inngest).
+ * Call from a vitest setup file in the package that provides the engine.
+ */
+export function setScenarioEngineHost(host: ScenarioEngineHost | undefined): void {
+  engineHost = host;
+}
+
+/** The external engine host registered by {@link setScenarioEngineHost}, if any. */
+export function getScenarioEngineHost(): ScenarioEngineHost | undefined {
+  return engineHost;
+}
+
+function wrapForEngine(agent: any, engine: EngineVariant, pubsub?: any, streamReplay?: false): any {
+  const replay = streamReplay === false ? { cache: false as const } : {};
+  if (engine === 'durable') return createDurableAgent({ agent, ...replay });
+  if (engine === 'evented') return createEventedAgent({ agent, pubsub, ...replay });
+  if (engineHost && engine === engineHost.engine) return engineHost.wrapAgent(agent);
+  return agent;
+}
+
 /**
  * Create a shared agent/mastra pair that persists across multiple
  * `runLoopScenario` calls. Use for suspend/resume scenarios where the same
@@ -84,10 +127,16 @@ export async function createSharedAgent(
     | 'errorProcessors'
     | 'defaultOptions'
     | 'pubsub'
+    | 'cache'
+    | 'streamReplay'
+    | 'observability'
     | 'engine'
+    | 'inputProcessors'
   > = {},
 ): Promise<{ agent: Agent; mastra: any }> {
-  return buildScenarioAgent({ llm, ...opts });
+  // Shared agents are resumed across calls, and a resumed run only sees
+  // processors registered on the agent, so always put inputProcessors there.
+  return buildScenarioAgent({ llm, ...opts, inputProcessorsOnAgent: true });
 }
 
 /**
@@ -110,14 +159,22 @@ async function buildScenarioAgent({
   agentBackgroundTasks,
   goal,
   backgroundTasks,
+  startWorkers,
   model,
   errorProcessors,
   defaultOptions,
   pubsub,
+  cache,
+  streamReplay,
+  observability,
+  server,
   engine,
   inputProcessors,
   fsRouted,
-}: Pick<
+  maxRetries,
+  inputProcessorsOnAgent,
+  agentOutputProcessors,
+}: { inputProcessorsOnAgent?: boolean } & Pick<
   RunLoopScenarioOptions,
   | 'llm'
   | 'tools'
@@ -130,13 +187,20 @@ async function buildScenarioAgent({
   | 'agentBackgroundTasks'
   | 'goal'
   | 'backgroundTasks'
+  | 'startWorkers'
   | 'model'
   | 'errorProcessors'
   | 'defaultOptions'
   | 'pubsub'
+  | 'cache'
+  | 'streamReplay'
+  | 'observability'
+  | 'server'
   | 'engine'
   | 'inputProcessors'
   | 'fsRouted'
+  | 'maxRetries'
+  | 'agentOutputProcessors'
 >): Promise<{ agent: any; mastra: any }> {
   const openai = createOpenAI({
     apiKey: 'aimock-test-key',
@@ -181,6 +245,10 @@ async function buildScenarioAgent({
         ...(goal ? { goal } : {}),
         ...(errorProcessors ? { errorProcessors } : {}),
         ...(defaultOptions ? { defaultOptions } : {}),
+        ...(maxRetries === undefined ? {} : { maxRetries }),
+        ...(inputProcessorsOnAgent && inputProcessors ? { inputProcessors } : {}),
+        ...(agentOutputProcessors ? { outputProcessors: agentOutputProcessors } : {}),
+        ...(streamReplay === false && !isDurableEngineVariant(engine) ? { durable: { cache: false } } : {}),
       },
       instructionsMd: (instructions as string | undefined) ?? defaultInstructions,
       ...(fsTools ? { tools: fsTools } : {}),
@@ -201,15 +269,46 @@ async function buildScenarioAgent({
       ...(goal ? { goal } : {}),
       ...(errorProcessors ? { errorProcessors } : {}),
       ...(defaultOptions ? { defaultOptions } : {}),
-      // For durable engine, inputProcessors must be on the agent constructor
+      ...(maxRetries === undefined ? {} : { maxRetries }),
+      ...(agentOutputProcessors ? { outputProcessors: agentOutputProcessors } : {}),
+      ...(streamReplay === false && !isDurableEngineVariant(engine) ? { durable: { cache: false } } : {}),
+      // For durable engines, inputProcessors must be on the agent constructor
       // (not yet supported as call-time options for durable); outputProcessors
       // are forwarded at call-time via preparation.ts.
-      ...(engine === 'durable' && inputProcessors ? { inputProcessors } : {}),
+      ...((isDurableEngineVariant(engine) || inputProcessorsOnAgent) && inputProcessors ? { inputProcessors } : {}),
     });
   }
 
-  // Wrap with DurableAgent for the durable engine variant
-  const registrableAgent = engine === 'durable' ? createDurableAgent({ agent }) : agent;
+  // The evented engine publishes on `mastra.pubsub` and the agent's stream
+  // follows it (source-follower wiring at registration). Share one bus between
+  // the agent and the Mastra host, mirroring the evented conformance leg.
+  const eventedPubsub = engine === 'evented' ? (pubsub ?? new EventEmitterPubSub()) : undefined;
+
+  // Wrap with the durable/evented wrapper for those engine variants
+  const registrableAgent = wrapForEngine(agent, engine ?? 'normal', eventedPubsub, streamReplay);
+
+  // An external engine's worker resolves agents from the host's Mastra, so register there.
+  if (engineHost && engine === engineHost.engine) {
+    const hostMastra = engineHost.getMastra();
+    // Remote-engine scenarios execute against the host, including their real exporters.
+    const instance = observability?.getDefaultInstance();
+    const exporter = instance?.getExporters()[0];
+    if (instance && exporter && observability) {
+      if (!hostMastra.observability.getDefaultInstance()) {
+        // registerExporter bootstraps a no-op host by registering its own
+        // "default" name. Free that alias on the supplied entrypoint first.
+        observability.unregisterInstance('default');
+        hostMastra.registerExporter(exporter, instance, observability);
+      } else {
+        hostMastra.observability.registerInstance(agentId, instance, true);
+      }
+      // Registration above may happen after the host's initial context setup.
+      // Initialize the scenario's exporters against the actual worker storage.
+      observability.setMastraContext({ mastra: hostMastra });
+    }
+    hostMastra.addAgent(registrableAgent, agentId);
+    return { agent: hostMastra.getAgent(agentId), mastra: hostMastra };
+  }
 
   // Registering the agent on a Mastra instance with storage is required for the
   // suspended snapshot rows that approveToolCall/declineToolCall resume from.
@@ -221,15 +320,19 @@ async function buildScenarioAgent({
     logger: false,
     storage: new InMemoryStore(),
     ...(backgroundTasks ? { backgroundTasks } : {}),
-    ...(pubsub ? { pubsub } : {}),
+    ...(eventedPubsub ? { pubsub: eventedPubsub } : pubsub ? { pubsub } : {}),
+    ...(cache ? { cache } : {}),
+    ...(observability ? { observability } : {}),
+    ...(server ? { server } : {}),
   });
 
   if (isFs) {
     mastra.__registerFsAgents({ [agentId]: registrableAgent as any });
   }
 
-  // Start workers if background tasks are enabled
-  if (backgroundTasks?.enabled) {
+  // Start workers if background tasks are enabled (unless the scenario opts
+  // out to keep dispatched tasks deterministically pending).
+  if (backgroundTasks?.enabled && startWorkers !== false) {
     await mastra.startWorkers();
   }
 
@@ -262,19 +365,26 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     structuredOutput,
     activeTools,
     outputProcessors,
+    maxProcessorRetries,
+    requireToolApproval,
+    closeOnSuspend,
     inputProcessors,
     prepareStep,
+    transform,
     memory,
     threadId,
     resourceId,
     memoryOptions,
+    onTitleGenerated,
     workspace,
     agents,
     workflows,
     requestContext,
     collectChunks,
+    expectStreamError,
     manualStreamConsumption,
     backgroundTasks,
+    startWorkers,
     streamUntilIdle,
     agentBackgroundTasks,
     goal,
@@ -287,6 +397,8 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     abortSignal,
     providerOptions,
     modelSettings,
+    maxRetries,
+    agentOutputProcessors,
     toolsets,
     errorProcessors,
     onError,
@@ -296,8 +408,12 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     savePerStep,
     actor,
     defaultOptions,
+    hooks,
     sharedAgent,
     pubsub,
+    cache,
+    observability,
+    server,
     engine = 'normal',
     fsRouted,
   } = opts;
@@ -314,14 +430,16 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     // wrapper by checking `agent.agent !== agent`. See `Mastra.addAgent`.
     const sharedIsRealDurableWrapper =
       isDurableAgentLike(sharedAgent.agent) && (sharedAgent.agent as any).agent !== sharedAgent.agent;
-    if (engine === 'durable' && !sharedIsRealDurableWrapper) {
+    if (isDurableEngineVariant(engine) && !sharedIsRealDurableWrapper) {
       // sharedAgent provides a regular Agent on the first call; wrap it for
-      // the durable engine and re-register on the Mastra instance so
-      // .getAgent() returns the DurableAgent wrapper.  On subsequent calls
+      // the durable/evented engine and re-register on the Mastra instance so
+      // .getAgent() returns the wrapper.  On subsequent calls
       // (e.g. resume), the agent is already wrapped — skip re-wrapping to
       // preserve the run registry across calls.
-      const durableWrapper = createDurableAgent({ agent: sharedAgent.agent as any });
+      const durableWrapper = wrapForEngine(sharedAgent.agent, engine);
       const agentId = sharedAgent.agent.name;
+      // An external engine's worker looks the agent up on the host's Mastra, so move it there.
+      if (engineHost && engine === engineHost.engine) sharedAgent.mastra = engineHost.getMastra();
       sharedAgent.mastra.removeAgent(agentId);
       sharedAgent.mastra.addAgent(durableWrapper as any, agentId);
       agent = sharedAgent.mastra.getAgent(agentId);
@@ -345,13 +463,19 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
       agentBackgroundTasks,
       goal,
       backgroundTasks,
+      startWorkers,
       model,
       errorProcessors,
       defaultOptions,
       pubsub,
+      cache,
+      observability,
+      server,
       engine,
       inputProcessors,
       fsRouted,
+      maxRetries,
+      agentOutputProcessors,
     });
     agent = built.agent;
     mastra = built.mastra;
@@ -369,13 +493,15 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
             thread: threadId,
             ...(resourceId ? { resource: resourceId } : {}),
             ...(memoryOptions ? { options: memoryOptions } : {}),
+            ...(onTitleGenerated ? { onTitleGenerated } : {}),
           },
         }
       : {};
 
-  // For durable engine, only pass options that DurableAgentStreamOptions supports.
-  // inputProcessors are on the agent constructor, not call-time options.
-  const isDurable = engine === 'durable';
+  // For durable engines (durable/evented), only pass options that
+  // DurableAgentStreamOptions supports. inputProcessors are on the agent
+  // constructor, not call-time options.
+  const isDurable = isDurableEngineVariant(engine);
 
   const streamOptions = {
     ...(stopWhen ? { stopWhen } : {}),
@@ -386,10 +512,20 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     ...(structuredOutput ? { structuredOutput } : {}),
     ...(activeTools ? { activeTools } : {}),
     ...(outputProcessors ? { outputProcessors } : {}),
+    ...(maxProcessorRetries !== undefined ? { maxProcessorRetries } : {}),
+    ...(requireToolApproval !== undefined ? { requireToolApproval } : {}),
+    ...(closeOnSuspend !== undefined && isDurable ? { closeOnSuspend } : {}),
     ...(inputProcessors && !isDurable ? { inputProcessors } : {}),
+    // Pass the scenario's error processors at call time so they form the complete list. Without
+    // this, the agent's constructor list is the base and the shared stability defaults are added
+    // after it, which would add retries these scenarios do not expect.
+    ...(errorProcessors ? { errorProcessors } : {}),
     ...(prepareStep ? { prepareStep } : {}),
+    ...(transform ? { transform } : {}),
     ...(requestContext ? { requestContext } : {}),
+    ...(opts.tracingOptions ? { tracingOptions: opts.tracingOptions } : {}),
     ...(delegation ? { delegation } : {}),
+    ...(hooks ? { hooks } : {}),
     ...(onIterationComplete ? { onIterationComplete } : {}),
     ...(onStepFinish ? { onStepFinish } : {}),
     ...(onFinish ? { onFinish } : {}),
@@ -429,6 +565,8 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
   // before we hand back the captured journal.
   let chunks: ChunkType[] | undefined;
   let suspendedDuringDrain = false;
+  let streamError: unknown;
+  let streamErrored = false;
   if (manualStreamConsumption) {
     // Skip consumption — test will manually drain the stream after publishing events.
   } else if (collectChunks) {
@@ -443,8 +581,9 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
           break;
         }
       }
-    } catch {
-      // Stream may error (e.g. provider errors) — we still want the chunks collected so far
+    } catch (error) {
+      streamError = error;
+      streamErrored = true;
     }
   } else if (isDurable) {
     // Durable: drain via fullStream iteration
@@ -456,22 +595,34 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
           break;
         }
       }
-    } catch {
-      // Stream may error on provider failures — swallow so runLoopScenario still returns
+    } catch (error) {
+      streamError = error;
+      streamErrored = true;
     }
   } else {
-    await output.consumeStream();
+    // consumeStream resolves on a failed drain and only reports it through onError.
+    await output.consumeStream({
+      onError: error => {
+        streamError = error;
+        streamErrored = true;
+      },
+    });
   }
+
+  if (!suspendedDuringDrain && !manualStreamConsumption) await opts.afterStream?.();
 
   // Clean up durable resources — but NOT when the stream was suspended or
   // the test wants to consume the stream manually (e.g. streamUntilIdle tests
   // that publish bg-task events after runLoopScenario returns).
   if (isDurable && rawResult.cleanup && !suspendedDuringDrain && !manualStreamConsumption) {
-    try {
-      rawResult.cleanup();
-    } catch {
-      // cleanup may race
-    }
+    rawResult.cleanup();
+  }
+
+  if (streamErrored && !expectStreamError) {
+    throw new Error(
+      `runLoopScenario: stream failed while draining (set expectStreamError if the scenario triggers this on purpose): ${String(streamError)}`,
+      { cause: streamError },
+    );
   }
 
   return {
@@ -479,6 +630,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     requests: llm.getRequests(),
     llm,
     ...(chunks ? { chunks } : {}),
+    ...(streamErrored ? { streamError } : {}),
     agent,
     mastra,
   };
@@ -513,9 +665,13 @@ export function describeForAllEngines(
   factory: (engine: EngineVariant) => void,
   options?: EngineSkipOptions,
 ): void {
-  const variants = ALL_ENGINE_VARIANTS.filter(v => !options?.skip?.includes(v));
-  for (const engine of variants) {
-    describe(`${name} [${engine}]`, () => {
+  const skip = options?.skip ?? [];
+  const isSkipped = (engine: EngineVariant) =>
+    skip.includes(engine) || (engine === 'inngest' && skip.includes('durable'));
+  // Skipped engines are still registered (as skipped) so the report shows them and a file
+  // skipped on an external host's engine isn't reported as having no tests.
+  for (const engine of engineHost ? [engineHost.engine] : ALL_ENGINE_VARIANTS) {
+    (isSkipped(engine) ? describe.skip : describe)(`${name} [${engine}]`, () => {
       factory(engine);
     });
   }
@@ -541,29 +697,62 @@ export async function runApprovalScenario({
   stopWhen,
   decision,
   requireToolApproval = true,
+  engine,
+  observability,
+  tracingOptions,
+  afterStream,
+  agentOutputProcessors,
+  memory,
+  threadId,
+  resourceId,
+  resumeOptions,
+  defaultOptions,
 }: RunApprovalScenarioOptions): Promise<LoopScenarioResult & { chunks: ChunkType[]; approvals: string[] }> {
   fixtures(llm);
 
-  const { agent } = await buildScenarioAgent({ llm, tools, instructions });
+  const { agent } = await buildScenarioAgent({
+    llm,
+    tools,
+    instructions,
+    engine,
+    observability,
+    agentOutputProcessors,
+    memory,
+    defaultOptions,
+  });
+  const isDurable = isDurableEngineVariant(engine);
+  const memoryOption =
+    memory && threadId ? { memory: { thread: threadId, ...(resourceId ? { resource: resourceId } : {}) } } : {};
 
   const chunks: ChunkType[] = [];
   const approvals: string[] = [];
 
-  let output = (await agent.stream(prompt, {
+  // DurableAgent.stream()/approveToolCall() return { output, fullStream, runId };
+  // the plain Agent returns MastraModelOutput, which carries fullStream itself.
+  type RunHandle = { output?: MastraModelOutput<unknown>; fullStream: AsyncIterable<ChunkType>; runId: string };
+  const outputOf = (run: RunHandle) => (run.output ?? run) as MastraModelOutput<unknown>;
+
+  let run = (await agent.stream(prompt, {
+    tracingOptions,
+    ...memoryOption,
     ...(requireToolApproval !== false ? { requireToolApproval } : {}),
     ...(stopWhen ? { stopWhen } : {}),
-  })) as unknown as MastraModelOutput<unknown>;
-  const runId = (output as unknown as { runId: string }).runId;
+    // Durable needs maxSteps as a fallback when stopWhen is the only bound.
+    ...(stopWhen && isDurable ? { maxSteps: 10 } : {}),
+  })) as unknown as RunHandle;
+  const runId = run.runId;
 
   // Resume loop: drain the stream, collect any approval requests, resolve them,
   // and resume. Continue until a run completes without suspending.
   // The bound guards against an accidental infinite approval loop in a test.
   for (let iterations = 0; iterations < 50; iterations++) {
     const pendingApprovals: string[] = [];
-    for await (const chunk of output.fullStream as AsyncIterable<ChunkType>) {
+    for await (const chunk of run.fullStream) {
       chunks.push(chunk);
       if (chunk.type === 'tool-call-approval') {
         pendingApprovals.push((chunk.payload as { toolCallId: string }).toolCallId);
+        // Durable streams stay open while suspended; stop at the approval.
+        if (isDurable) break;
       }
     }
 
@@ -575,13 +764,15 @@ export async function runApprovalScenario({
     const approve = decision({ toolCallId, approvalIndex: approvals.length });
     approvals.push(`${approve ? 'approve' : 'decline'}:${toolCallId}`);
 
-    output = (await (approve
-      ? agent.approveToolCall({ runId, toolCallId })
-      : agent.declineToolCall({ runId, toolCallId }))) as unknown as MastraModelOutput<unknown>;
+    run = (await (approve
+      ? agent.approveToolCall({ runId, toolCallId, ...resumeOptions })
+      : agent.declineToolCall({ runId, toolCallId, ...resumeOptions }))) as unknown as RunHandle;
   }
 
+  await afterStream?.();
+
   return {
-    output,
+    output: outputOf(run),
     chunks,
     approvals,
     llm,

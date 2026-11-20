@@ -4,12 +4,14 @@ import type { Processor } from '..';
 import { MessageList, isMastraSignalMessage } from '../../agent';
 import type { IMastraLogger } from '../../logger';
 import { parseMemoryRequestContext } from '../../memory';
-import type { MastraDBMessage } from '../../memory';
+import type { MastraDBMessage, StorageThreadType } from '../../memory';
+import { buildMessageEmbeddingRows, resolveMaxChunkChars, upsertMessageVectors } from '../../memory/message-embeddings';
 import type { ObservabilityContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
-import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../../vector';
+import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector, VectorFilter } from '../../vector';
 import { globalEmbeddingCache } from './embedding-cache';
+import { assertEmbeddingDimension, isEmbeddingDimensionMismatchError } from './embedding-dimension';
 
 const DEFAULT_TOP_K = 4;
 const DEFAULT_MESSAGE_RANGE = 1; // Will be used for both before and after
@@ -26,9 +28,10 @@ export interface SemanticRecallOptions {
   vector: MastraVector;
 
   /**
-   * Embedder for generating query embeddings
+   * Embedder for generating query embeddings. Optional only when `vector` is self-embedding,
+   * where the store takes text and produces the vectors itself.
    */
-  embedder: MastraEmbeddingModel<string>;
+  embedder?: MastraEmbeddingModel<string>;
 
   /**
    * Number of most similar messages to retrieve
@@ -58,6 +61,17 @@ export interface SemanticRecallOptions {
   threshold?: number;
 
   /**
+   * Metadata filter for semantic search queries, combined with the scope filter using `$and`.
+   * Messages are embedded with their thread's metadata, so it can match thread metadata.
+   *
+   * @example
+   * ```typescript
+   * filter: { projectId: { $eq: 'project-a' } }
+   * ```
+   */
+  filter?: VectorFilter;
+
+  /**
    * Index name for the vector store
    * If not provided, will be auto-generated based on embedder model
    */
@@ -85,6 +99,25 @@ export interface SemanticRecallOptions {
    * ```
    */
   embedderOptions?: MastraEmbeddingOptions;
+
+  /**
+   * Expected embedding dimension. When set, an embedding of any other length throws
+   * before the vector index is created or queried.
+   */
+  embeddingDimension?: number;
+
+  /**
+   * Largest number of characters of message text sent to the embedder in one input. Longer
+   * messages are split into chunks, each stored as its own vector row.
+   *
+   * Characters, not tokens: no single tokenizer matches every embedder. The default of 16,384
+   * is about 4096 English tokens. Lower it for Chinese, Japanese or Korean text, or code, which
+   * use more tokens per character. When unset and the embedder declares `maxInputTokens`, the
+   * ceiling is derived from that instead.
+   *
+   * @default 16384
+   */
+  maxChunkChars?: number;
 }
 
 /**
@@ -119,14 +152,17 @@ export class SemanticRecall implements Processor {
 
   private storage: MemoryStorage;
   private vector: MastraVector;
-  private embedder: MastraEmbeddingModel<string>;
+  private embedder?: MastraEmbeddingModel<string>;
   private topK: number;
   private messageRange: { before: number; after: number };
   private scope: 'thread' | 'resource';
   private threshold?: number;
+  private filter?: VectorFilter;
   private indexName?: string;
   private logger?: IMastraLogger;
   private embedderOptions?: MastraEmbeddingOptions;
+  private embeddingDimension?: number;
+  private maxChunkChars: number;
 
   // xxhash-wasm hasher instance (initialized as a promise)
   private hasher = xxhash();
@@ -135,6 +171,14 @@ export class SemanticRecall implements Processor {
   // Prevents redundant API calls when index already validated
   private indexValidationCache = new Map<string, { dimension: number }>();
 
+  /**
+   * True when the store embeds text itself, so this processor sends it text. False for every
+   * store that expects the caller to supply vectors.
+   */
+  private get isSelfEmbedding(): boolean {
+    return !this.embedder && this.vector.isSelfEmbedding;
+  }
+
   constructor(options: SemanticRecallOptions) {
     this.storage = options.storage;
     this.vector = options.vector;
@@ -142,9 +186,12 @@ export class SemanticRecall implements Processor {
     this.topK = options.topK ?? DEFAULT_TOP_K;
     this.scope = options.scope ?? 'resource'; // Default to 'resource' to match main's behavior
     this.threshold = options.threshold;
+    this.filter = options.filter;
     this.indexName = options.indexName;
     this.logger = options.logger;
     this.embedderOptions = options.embedderOptions;
+    this.embeddingDimension = options.embeddingDimension;
+    this.maxChunkChars = resolveMaxChunkChars({ maxChunkChars: options.maxChunkChars, embedder: options.embedder });
 
     // Normalize messageRange to object format
     if (typeof options.messageRange === 'number') {
@@ -238,6 +285,7 @@ export class SemanticRecall implements Processor {
       }
       return messageList;
     } catch (error) {
+      if (isEmbeddingDimensionMismatchError(error)) throw error;
       // Log error but don't fail the request
       this.logger?.error('[SemanticRecall] Error during semantic search:', { error });
       return messageList;
@@ -313,12 +361,12 @@ export class SemanticRecall implements Processor {
         contentText = textParts.map((p: any) => p.text).join(' ');
       }
 
-      result += `Message ${msg.threadId && msg.threadId !== currentThreadId ? 'from previous conversation' : ''} at ${timeofday}: ${roleLabel}: ${contentText}`;
+      result += `Message ${msg.threadId && msg.threadId !== currentThreadId ? 'from previous conversation' : ''} at ${timeofday}: ${roleLabel}: ${contentText}\n`;
 
       lastYmd = ymd;
     }
 
-    const formattedContent = `The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n${result}\n<end_remembered_from_other_conversation>`;
+    const formattedContent = `The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n${result}<end_remembered_from_other_conversation>`;
 
     return {
       role: 'system',
@@ -394,8 +442,11 @@ export class SemanticRecall implements Processor {
     // Ensure vector index exists
     const indexName = this.indexName || this.getDefaultIndexName();
 
-    // Generate embeddings for the query
-    const { embeddings, dimension } = await this.embedMessageContent(query, indexName);
+    // On a self-embedding store there is nothing to embed and no dimension to validate:
+    // the query text goes to the database as text.
+    const { embeddings, dimension } = this.isSelfEmbedding
+      ? { embeddings: [], dimension: undefined }
+      : await this.embedMessageContent(query, indexName);
     await this.ensureVectorIndex(indexName, dimension);
 
     // Perform vector search for each embedding
@@ -405,15 +456,25 @@ export class SemanticRecall implements Processor {
       metadata?: Record<string, any>;
     }> = [];
 
-    for (const embedding of embeddings) {
-      const results = await this.vector.query({
-        indexName,
-        queryVector: embedding,
-        topK: this.topK,
-        filter: this.scope === 'resource' && resourceId ? { resource_id: resourceId } : { thread_id: threadId },
-      });
-
+    const scopeFilter = this.scope === 'resource' && resourceId ? { resource_id: resourceId } : { thread_id: threadId };
+    // Same combination as Memory.recall(), so agent runs and direct recall return the same messages.
+    const filter = this.filter ? { $and: [scopeFilter, this.filter] } : scopeFilter;
+    if (this.isSelfEmbedding) {
+      // `queryText` is not on the shared QueryVectorParams; only self-embedding stores accept
+      // it, and they are the only ones reached here.
+      const results = await this.vector.query({ indexName, queryText: query, topK: this.topK, filter } as never);
       vectorResults.push(...results);
+    } else {
+      for (const embedding of embeddings) {
+        const results = await this.vector.query({
+          indexName,
+          queryVector: embedding,
+          topK: this.topK,
+          filter,
+        });
+
+        vectorResults.push(...results);
+      }
     }
     // Filter by threshold if specified
     const filteredResults =
@@ -474,6 +535,11 @@ export class SemanticRecall implements Processor {
     // Note: embedderOptions may contain providerOptions for controlling embedding behavior
     // (e.g., outputDimensionality for Google models). The user is responsible for providing
     // options compatible with their embedder's SDK version.
+    if (!this.embedder) {
+      throw new Error(
+        'SemanticRecall was asked to embed text but has no embedder, and its vector store does not embed server-side.',
+      );
+    }
     const result = await this.embedder.doEmbed({
       values: [content],
       ...(this.embedderOptions as any),
@@ -491,10 +557,68 @@ export class SemanticRecall implements Processor {
   }
 
   /**
+   * Embeds the chunks of one message, reusing cached embeddings. The cache misses go out in one
+   * `doEmbed` call (split only by the model's `maxEmbeddingsPerCall`), so a long message doesn't
+   * fan out into one request per chunk.
+   *
+   * @returns One embedding per chunk, in order.
+   */
+  private async embedChunks(chunks: string[], indexName: string): Promise<number[][]> {
+    const keys = await Promise.all(chunks.map(chunk => this.hashContent(chunk, indexName)));
+    const embeddings = keys.map(key => globalEmbeddingCache.get(key));
+    const missing = embeddings.flatMap((embedding, i) => (embedding ? [] : [i]));
+    if (missing.length === 0) return embeddings as number[][];
+
+    if (!this.embedder) {
+      throw new Error(
+        'SemanticRecall was asked to embed text but has no embedder, and its vector store does not embed server-side.',
+      );
+    }
+    const declaredLimit = Number(await this.embedder.maxEmbeddingsPerCall);
+    const perCall = Number.isFinite(declaredLimit) && declaredLimit > 0 ? declaredLimit : missing.length;
+    for (let start = 0; start < missing.length; start += perCall) {
+      const batch = missing.slice(start, start + perCall);
+      const result = await this.embedder.doEmbed({
+        values: batch.map(i => chunks[i]!),
+        ...(this.embedderOptions as any),
+      });
+      batch.forEach((chunkIndex, i) => {
+        const embedding = result.embeddings[i];
+        if (!embedding) return;
+        embeddings[chunkIndex] = embedding;
+        globalEmbeddingCache.set(keys[chunkIndex]!, embedding);
+      });
+    }
+    return embeddings.filter(embedding => embedding !== undefined);
+  }
+
+  /**
+   * Metadata of the threads messages are written for. The run's thread carries its metadata when
+   * the agent loaded it; storage is read only for threads that arrive without it, such as a
+   * durable finalize step that rebuilt the request context from an id.
+   */
+  private async loadThreadMetadata(
+    threadIds: string[],
+    runThread: Partial<StorageThreadType> | undefined,
+  ): Promise<Map<string, Record<string, unknown>>> {
+    const metadataByThread = new Map<string, Record<string, unknown>>();
+    await Promise.all(
+      threadIds.map(async threadId => {
+        const thread =
+          runThread?.id === threadId && runThread.metadata !== undefined
+            ? runThread
+            : await this.storage.getThreadById({ threadId });
+        if (thread?.metadata) metadataByThread.set(threadId, thread.metadata);
+      }),
+    );
+    return metadataByThread;
+  }
+
+  /**
    * Get default index name based on embedder model
    */
   private getDefaultIndexName(): string {
-    const model = this.embedder.modelId || 'default';
+    const model = this.embedder?.modelId || (this.vector.isSelfEmbedding ? 'server' : 'default');
     // Sanitize model ID to create valid SQL identifier:
     // - Replace hyphens, periods, and other special chars with underscores
     // - Ensure it starts with a letter or underscore
@@ -508,7 +632,18 @@ export class SemanticRecall implements Processor {
    * Ensure vector index exists with correct dimensions
    * Uses in-memory cache to avoid redundant validation calls
    */
-  private async ensureVectorIndex(indexName: string, dimension: number): Promise<void> {
+  private async ensureVectorIndex(indexName: string, dimension?: number): Promise<void> {
+    if (dimension === undefined) {
+      // A self-embedding store derives the dimension from its own model, so there is nothing
+      // to pass or to validate. Creating the index is left to the store's own configuration.
+      if (this.indexValidationCache.has(indexName)) return;
+      await this.vector.createIndex({ indexName } as never);
+      this.indexValidationCache.set(indexName, { dimension: 0 });
+      return;
+    }
+
+    assertEmbeddingDimension(this.embeddingDimension, dimension);
+
     // Check cache first - if already validated in this process, skip
     const cached = this.indexValidationCache.get(indexName);
     if (cached?.dimension === dimension) {
@@ -541,7 +676,8 @@ export class SemanticRecall implements Processor {
   ): Promise<MessageList | MastraDBMessage[]> {
     const { messages, messageList, requestContext } = args;
 
-    if (!this.vector || !this.embedder || !this.storage) {
+    // An embedder is only required when this processor has to produce the vectors itself.
+    if (!this.vector || !this.storage || (!this.embedder && !this.isSelfEmbedding)) {
       // Return messageList if available to signal no transformation occurred
       return messageList || messages;
     }
@@ -566,94 +702,46 @@ export class SemanticRecall implements Processor {
 
       const indexName = this.indexName || this.getDefaultIndexName();
 
-      // Collect all embeddings first
-      const vectors: number[][] = [];
-      const ids: string[] = [];
-      const metadataList: Record<string, any>[] = [];
-      let vectorDimension = 0;
-
-      // Get all new messages that need embeddings (both user and response messages)
-      // The 'messages' argument only contains response messages, so we also need
-      // to get user messages from the messageList for embedding
-      let messagesToEmbed = [...messages];
+      // `messages` holds only the response, so the run's new user messages are added from the
+      // list. Messages a save-queue flush already drained are no longer "new": that flush
+      // embedded them through Memory.saveMessages.
+      const messagesToEmbed = [...messages];
       if (messageList) {
-        const newUserMessages = messageList.get.input.db().filter(m => messageList.isNewMessage(m));
-        // Combine user and response messages, avoiding duplicates
-        const existingIds = new Set(messagesToEmbed.map(m => m.id));
-        for (const userMsg of newUserMessages) {
-          if (!existingIds.has(userMsg.id)) {
-            messagesToEmbed.push(userMsg);
-          }
-        }
+        const responseIds = new Set(messagesToEmbed.map(m => m.id));
+        messagesToEmbed.push(...messageList.get.input.db().filter(m => !responseIds.has(m.id)));
+      }
+      const items = messagesToEmbed
+        .filter(message => !messageList || messageList.isNewMessage(message))
+        .map(message => ({ message }));
+      if (items.length === 0) {
+        return messageList || messages;
       }
 
-      for (const message of messagesToEmbed) {
-        // Skip system messages - they're instructions, not user content
-        if (message.role === 'system') {
-          continue;
-        }
-
-        // Skip messages without valid IDs
-        if (!message.id || typeof message.id !== 'string') {
-          continue;
-        }
-
-        // Only embed new user messages and new response messages
-        // Skip context messages and memory messages
-        if (messageList) {
-          const isNewMessage = messageList.isNewMessage(message);
-          if (!isNewMessage) {
-            continue;
-          }
-        }
-
-        // Extract text content from the message
-        const textContent = this.extractTextContent(message);
-        if (!textContent) {
-          continue;
-        }
-
-        try {
-          // Create embedding for the message
-          const { embeddings, dimension } = await this.embedMessageContent(textContent, indexName);
-
-          if (embeddings.length === 0) {
-            continue;
-          }
-
-          const embedding = embeddings[0];
-          if (!embedding) {
-            continue;
-          }
-
-          vectors.push(embedding);
-          ids.push(message.id);
-          metadataList.push({
-            message_id: message.id,
-            thread_id: threadId,
-            resource_id: resourceId || '',
-            role: message.role,
-            content: textContent,
-            created_at: message.createdAt.toISOString(),
-          });
-          vectorDimension = dimension;
-        } catch (error) {
-          // Log error but don't fail the entire operation
+      const embeddedMessages = messageList?.getEmbeddedMessages();
+      const rows = await buildMessageEmbeddingRows({
+        items,
+        embed: this.isSelfEmbedding
+          ? undefined
+          : async chunks => ({ embeddings: await this.embedChunks(chunks, indexName) }),
+        // A message whose embedding fails is logged and skipped while the others are written. It
+        // stays out of the record, so a later save-queue flush (savePerStep, the durable finalize)
+        // can still embed it; a plain agent without such a flush leaves it unembedded.
+        onEmbedError: (error, message) => {
           this.logger?.error(`[SemanticRecall] Error creating embedding for message ${message.id}:`, { error });
-        }
-      }
+        },
+        maxChunkChars: this.maxChunkChars,
+        loadThreadMetadata: threadIds => this.loadThreadMetadata(threadIds, thread),
+        defaults: { threadId, resourceId },
+        embeddedMessages,
+        indexName,
+      });
 
-      // If we have embeddings, ensure index exists and upsert them
-      if (vectors.length > 0) {
-        await this.ensureVectorIndex(indexName, vectorDimension);
-        await this.vector.upsert({
-          indexName,
-          vectors,
-          ids,
-          metadata: metadataList,
-        });
+      if (rows.ids.length > 0) {
+        await this.ensureVectorIndex(indexName, rows.dimension);
+        await upsertMessageVectors(this.vector, indexName, rows, embeddedMessages);
       }
     } catch (error) {
+      if (isEmbeddingDimensionMismatchError(error)) throw error;
       // Log error but don't fail the entire operation
       this.logger?.error('[SemanticRecall] Error in processOutputResult:', { error });
     }
@@ -661,31 +749,5 @@ export class SemanticRecall implements Processor {
     // Return messageList to signal no message transformation occurred
     // (we only created embeddings as a side effect)
     return messageList || messages;
-  }
-
-  /**
-   * Extract text content from a MastraDBMessage
-   */
-  private extractTextContent(message: MastraDBMessage): string {
-    if (typeof message.content === 'string') {
-      return message.content;
-    }
-
-    if (typeof message.content === 'object' && message.content !== null) {
-      const { content, parts } = message.content as { content?: string; parts?: any[] };
-
-      if (content) {
-        return content;
-      }
-
-      if (Array.isArray(parts)) {
-        return parts
-          .filter(part => part.type === 'text')
-          .map(part => part.text || '')
-          .join('\n');
-      }
-    }
-
-    return '';
   }
 }

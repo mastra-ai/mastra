@@ -1,8 +1,8 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
-import { runApprovalScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { describeForAllEngines, runApprovalScenario, useLoopScenarioAimock } from '../aimock-scenario';
 
 /**
  * Regression class: conditional `requireToolApproval` function.
@@ -11,7 +11,7 @@ import { runApprovalScenario, useLoopScenarioAimock } from '../aimock-scenario';
  * approval is required. This scenario proves pattern-based gating works:
  * only tools matching the pattern suspend, others execute freely.
  */
-describe('AIMock loop scenario: conditional requireToolApproval function', () => {
+describeForAllEngines('AIMock loop scenario: conditional requireToolApproval function', engine => {
   const getMock = useLoopScenarioAimock();
 
   // Tools that should NOT require approval (don't match pattern).
@@ -62,6 +62,7 @@ describe('AIMock loop scenario: conditional requireToolApproval function', () =>
       requests: _requests,
     } = await runApprovalScenario({
       llm: getMock(),
+      engine,
       prompt: 'Read files, list them, then delete file.txt and all others.',
       tools: {
         read_file: makeReadTool(),
@@ -109,9 +110,71 @@ describe('AIMock loop scenario: conditional requireToolApproval function', () =>
     expect(text).toBeTruthy();
   });
 
+  // A registered tool that can suspend makes the calls run one at a time, so `delete_all`
+  // first starts inside the run resumed by `delete_file`'s approval.
+  it('each pattern-matched call asks for its own approval when the calls run one at a time', async () => {
+    // Approvals and executions in the order they happened.
+    const log: string[] = [];
+    const { output } = await runApprovalScenario({
+      llm: getMock(),
+      engine,
+      prompt: 'Delete file.txt and then all other files.',
+      tools: {
+        delete_file: createTool({
+          id: 'delete_file',
+          description: 'Delete a file.',
+          inputSchema: z.object({ path: z.string() }),
+          execute: async () => {
+            log.push('ran:delete_file');
+            return { deleted: true };
+          },
+        }),
+        delete_all: createTool({
+          id: 'delete_all',
+          description: 'Delete all files.',
+          inputSchema: z.object({}),
+          execute: async () => {
+            log.push('ran:delete_all');
+            return { count: 5 };
+          },
+        }),
+        ask_user: createTool({
+          id: 'ask_user',
+          description: 'Ask the user a question.',
+          inputSchema: z.object({}),
+          suspendSchema: z.object({ question: z.string() }),
+          resumeSchema: z.object({ answer: z.string() }),
+          execute: async () => ({ answer: 'unused' }),
+        }),
+      },
+      stopWhen: stepCountIs(5),
+      decision: ({ toolCallId }: { toolCallId: string }) => {
+        log.push(`approve:${toolCallId}`);
+        return true;
+      },
+      requireToolApproval: ({ toolName }: { toolName: string }) => /^delete_/.test(toolName),
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            toolCalls: [
+              { id: 'call_delete', name: 'delete_file', arguments: { path: 'file.txt' } },
+              { id: 'call_delete_all', name: 'delete_all', arguments: {} },
+            ],
+          },
+        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Deleted everything.' });
+      },
+    });
+
+    expect(log).toEqual(['approve:call_delete', 'ran:delete_file', 'approve:call_delete_all', 'ran:delete_all']);
+    expect(await output.text).toBe('Deleted everything.');
+  });
+
   it('declining a pattern-matched tool still allows non-matching tools to complete', async () => {
     const { output, approvals } = await runApprovalScenario({
       llm: getMock(),
+      engine,
       prompt: 'Read config.yaml and delete it.',
       tools: {
         read_file: makeReadTool(),

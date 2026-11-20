@@ -352,7 +352,8 @@ function structuredOutputTests({ version }: { version: 'v1' | 'v2' | 'v3' }) {
   });
 
   describe(`structured output ${version}`, () => {
-    it('should support ZodSchema structured output type', async () => {
+    // v2/v3 are covered by structured-output-schema-types.scenario; only the legacy path stays here.
+    it.runIf(version === 'v1')('should support ZodSchema structured output type', async () => {
       const electionAgent = new Agent({
         id: 'us-election-agent',
         name: 'US Election agent',
@@ -403,7 +404,7 @@ function structuredOutputTests({ version }: { version: 'v1' | 'v2' | 'v3' }) {
       ]);
     });
 
-    it('should support JSONSchema7 structured output type', async () => {
+    it.runIf(version === 'v1')('should support JSONSchema7 structured output type', async () => {
       const electionAgent = new Agent({
         id: 'us-election-agent',
         name: 'US Election agent',
@@ -1015,7 +1016,11 @@ describe('separate-model structured output logging', () => {
         expect.objectContaining({
           model,
           toolChoice: 'none',
-          memory: { thread: 'structured-thread', resource: 'structured-resource', options: { readOnly: true } },
+          memory: {
+            thread: 'structured-thread',
+            resource: 'structured-resource',
+            options: { readOnly: true, retainFullInput: true },
+          },
         }),
       );
       expect(logger.warn).toHaveBeenCalledTimes(errorStrategy === 'warn' ? 1 : 0);

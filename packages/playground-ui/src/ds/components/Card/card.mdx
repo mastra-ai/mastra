@@ -1,0 +1,85 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as CardStories from './card.stories';
+
+<Meta of={CardStories} />
+
+# Card
+
+`Card` is a raised surface for one piece of content. `CardLink` and `<Card interactive>` make the whole card one click target. `CardIllustration` puts a small drawing at the top of a card, on the same framed plate the illustrated `InfoTooltip` uses.
+
+```tsx
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardIllustration,
+  CardLink,
+  CardTitle,
+} from '@mastra/playground-ui/components/Card';
+```
+
+## Illustrated cards
+
+<Canvas of={CardStories.Illustrated} />
+
+```tsx
+<ul className="grid gap-3 sm:grid-cols-2">
+  {templates.map(template => (
+    <li key={template.id} className="min-w-0">
+      <CardLink
+        href={template.href}
+        aria-current={template.id === current ? 'true' : undefined}
+        className="block h-full"
+      >
+        <CardContent className="flex flex-col gap-3">
+          <CardIllustration>
+            <TemplateDrawing id={template.id} />
+          </CardIllustration>
+          <span className="flex flex-col gap-0.5">
+            <CardTitle>{template.title}</CardTitle>
+            <CardDescription>{template.description}</CardDescription>
+          </span>
+        </CardContent>
+      </CardLink>
+    </li>
+  ))}
+</ul>
+```
+
+`Card` owns the surface, the plate, and the states. The drawing is yours: keep it in the feature it explains, next to the cards that show it.
+
+Every plate in a set is the same size, so the eye compares the drawings and not their boxes. Draw each one in the same fixed box, and use the same box for every card in the set, so the drawings share their left and right edges.
+
+The plate is hidden from screen readers. The card's title and description name the link, so they have to say what the card is without the drawing.
+
+## Tone
+
+The part that breaks the rule takes one accent color from the plate. `tone` picks it: `destructive` (the default), `warning`, `info`, or `success`, each the matching status indicator. A drawing never names a status color itself. It paints its accent with `bg-(--illustration-accent)`, `border-(--illustration-accent)`, or `text-(--illustration-accent)` for an icon, so one prop changes every drawing in a set.
+
+<Canvas of={CardStories.IllustrationTones} />
+
+Pick the tone for what the drawing shows, not for variety. Alert templates use `destructive` because an open alert is red everywhere else in the product. Labels stay in a text role whatever the tone, because indicator colors are too light to read as small text.
+
+## One hover rule
+
+Hover and keyboard focus do the same two things on every card. The state layer washes the card's surface, and the part of the drawing tagged `data-emphasis` moves over the normal duration, then settles back when the pointer or focus leaves. Focus also lights the rim. Nothing else in the drawing moves.
+
+Tag one part per drawing: the mark that breaks the rule, such as the spend past the budget or the agent over its error rate. The value of `data-emphasis` says which way it moves, and the way follows the axis the value is measured on:
+
+| Value    | For                                                            | Moves                            |
+| -------- | -------------------------------------------------------------- | -------------------------------- |
+| `grow-x` | a horizontal bar, or the part of one past a threshold          | gets longer from its left edge   |
+| `grow-y` | a vertical bar, or the top of a stack                          | gets taller from its bottom edge |
+| `pop`    | a counted item with no axis: an agent, a user, a call, a badge | grows slightly in place          |
+
+Tag the value, never its track: in a bar drawn as a fill inside a track, the fill grows and the track stays put.
+
+A bar that jumps up, or an item that slides sideways, moves in a direction the drawing doesn't measure. `Card` owns the motion, so a drawing never adds its own transition, transform, or animation. Nothing moves with reduced motion, on touch screens, or on cards that can't be clicked, including links and buttons marked `aria-disabled`.
+
+## Drawing rules
+
+Follow the Drawing checklist in the Tooltip docs. It covers the words first, illustrative data, marks from roles, color repeating position, and stable geometry. A card drawing differs in three ways:
+
+1. **One drawing per card, and no titles in the plate.** The card's title and description sit under the plate and do that job.
+2. **The accent comes from the plate.** Paint the part that breaks the rule with `--illustration-accent`, never a status color, so `tone` can change it. A value or threshold label stays `text-foreground` or `text-muted-foreground`: a small label in an indicator color fails contrast, and the accent mark beside it already shows what is over the limit.
+3. **Motion comes only from the card.** Tag the one part that breaks the rule with `data-emphasis="grow-x"`, `"grow-y"`, or `"pop"`, and add no motion of your own. A tagged part grows by a quarter, so leave it that much room: a parent with `overflow-hidden` cuts off whatever doesn't fit. Draw a horizontal bar as separate segments over a track and tag only the segment past the threshold, and keep a vertical fill below four fifths of its track.

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { Database } from '@google-cloud/spanner';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
@@ -45,6 +44,8 @@ function rowToSchedule(row: Record<string, any>): Schedule {
   if (transformed.metadata != null) schedule.metadata = transformed.metadata as Record<string, unknown>;
   if (transformed.owner_type != null) schedule.ownerType = String(transformed.owner_type) as Schedule['ownerType'];
   if (transformed.owner_id != null) schedule.ownerId = String(transformed.owner_id);
+  if (transformed.run_at != null) schedule.runAt = Number(transformed.run_at);
+  if (transformed.end_at != null) schedule.endAt = Number(transformed.end_at);
   return schedule;
 }
 
@@ -94,6 +95,11 @@ export class SchedulesSpanner extends SchedulesStorage {
 
   async init(): Promise<void> {
     await this.db.createTable({ tableName: TABLE_SCHEDULES, schema: TABLE_SCHEMAS[TABLE_SCHEDULES] });
+    await this.db.alterTable({
+      tableName: TABLE_SCHEDULES,
+      schema: TABLE_SCHEMAS[TABLE_SCHEDULES],
+      ifNotExists: ['run_at', 'end_at'],
+    });
     await this.db.createTable({
       tableName: TABLE_SCHEDULE_TRIGGERS,
       schema: TABLE_SCHEMAS[TABLE_SCHEDULE_TRIGGERS],
@@ -239,6 +245,8 @@ export class SchedulesSpanner extends SchedulesStorage {
                 metadata: schedule.metadata ?? null,
                 owner_type: schedule.ownerType ?? null,
                 owner_id: schedule.ownerId ?? null,
+                run_at: schedule.runAt ?? null,
+                end_at: schedule.endAt ?? null,
               },
               transaction: tx,
             });
@@ -379,6 +387,8 @@ export class SchedulesSpanner extends SchedulesStorage {
       if ('metadata' in patch) data.metadata = patch.metadata ?? null;
       if ('ownerType' in patch) data.owner_type = patch.ownerType ?? null;
       if ('ownerId' in patch) data.owner_id = patch.ownerId ?? null;
+      if ('runAt' in patch) data.run_at = patch.runAt ?? null;
+      if ('endAt' in patch) data.end_at = patch.endAt ?? null;
 
       if (Object.keys(data).length === 0) {
         // Nothing meaningful to patch; just confirm existence.
@@ -429,13 +439,15 @@ export class SchedulesSpanner extends SchedulesStorage {
     newNextFireAt: number,
     lastFireAt: number,
     lastRunId: string,
+    newStatus?: ScheduleStatus,
   ): Promise<boolean> {
     try {
       const sql = `UPDATE ${quoteIdent(TABLE_SCHEDULES, 'table name')}
                    SET ${quoteIdent('next_fire_at', 'column name')} = @newNext,
                        ${quoteIdent('last_fire_at', 'column name')} = @lastFire,
                        ${quoteIdent('last_run_id', 'column name')} = @lastRun,
-                       ${quoteIdent('updated_at', 'column name')} = @updatedAt
+                       ${quoteIdent('updated_at', 'column name')} = @updatedAt,
+                       ${quoteIdent('status', 'column name')} = @newStatus
                    WHERE ${quoteIdent('id', 'column name')} = @id
                      AND ${quoteIdent('next_fire_at', 'column name')} = @expected
                      AND ${quoteIdent('status', 'column name')} = @status`;
@@ -449,6 +461,7 @@ export class SchedulesSpanner extends SchedulesStorage {
           lastRun: lastRunId,
           updatedAt: Date.now(),
           status: 'active',
+          newStatus: newStatus ?? 'active',
         },
         types: {
           expected: 'int64',
@@ -513,7 +526,7 @@ export class SchedulesSpanner extends SchedulesStorage {
       await this.db.insert({
         tableName: TABLE_SCHEDULE_TRIGGERS,
         record: {
-          id: trigger.id ?? randomUUID(),
+          id: trigger.id ?? globalThis.crypto.randomUUID(),
           schedule_id: trigger.scheduleId,
           run_id: trigger.runId ?? null,
           scheduled_fire_at: trigger.scheduledFireAt,

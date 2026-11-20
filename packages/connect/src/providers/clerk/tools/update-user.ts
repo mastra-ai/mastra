@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ 8b75595da34c — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ 23df553a789b — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -6,14 +6,14 @@ import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
 export const updateUserInputSchema = z.object({
   user_id: z.string().min(1),
-  first_name: z.string().optional(),
-  last_name: z.string().optional(),
-  username: z.string().optional(),
+  first_name: z.string().nullable().optional().describe('Pass null to clear the first name.'),
+  last_name: z.string().nullable().optional().describe('Pass null to clear the last name.'),
+  username: z.string().nullable().optional().describe('Pass null to clear the username.'),
   password: z.string().min(8).optional(),
   skip_password_checks: z.boolean().optional(),
   sign_out_of_other_sessions: z.boolean().optional(),
-  external_id: z.string().optional(),
-  locale: z.string().optional(),
+  external_id: z.string().nullable().optional().describe('Pass null to clear the external ID.'),
+  locale: z.string().nullable().optional().describe('Pass null to clear the locale.'),
 });
 
 const UserSchema = z

@@ -11,6 +11,7 @@ import type { WorkspacePackageInfo } from '../bundler/workspaceDependencies';
 import { esbuild } from './plugins/esbuild';
 import { esmShim } from './plugins/esm-shim';
 import { localStorageDetector } from './plugins/local-storage-detector';
+import { moduleAlias } from './plugins/module-alias';
 import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
 import { protocolExternalResolver } from './plugins/protocol-external-resolver';
 import { removeDeployer } from './plugins/remove-deployer';
@@ -76,6 +77,9 @@ export async function getInputOptions(
     workspaceRoot = undefined,
     enableEsmShim = true,
     externalsPreset = false,
+    explicitExternals = [],
+    alias = {},
+    configEntryFile = entryFile,
   }: {
     sourcemap?: boolean;
     minify?: boolean;
@@ -84,21 +88,32 @@ export async function getInputOptions(
     projectRoot: string;
     enableEsmShim?: boolean;
     externalsPreset?: boolean;
+    explicitExternals?: string[];
+    alias?: Record<string, string>;
+    /** File holding `new Mastra({...})`, when `entryFile` is a generated wrapper that imports it */
+    configEntryFile?: string;
   },
 ): Promise<InputOptions> {
-  const nodeResolvePlugin = nodeResolve(getNodeResolveOptions(platform));
+  const nodeResolvePlugin = nodeResolve({
+    ...getNodeResolveOptions(platform),
+    rootDir: projectRoot,
+    modulePaths: workspaceRoot ? [join(workspaceRoot, 'node_modules')] : [],
+  });
 
   const externalsCopy = new Set<string>(analyzedBundleInfo.externalDependencies.keys());
-  const externals = externalsPreset ? [] : Array.from(externalsCopy);
+  const externals = externalsPreset ? explicitExternals : Array.from(externalsCopy);
+  const aliasSources = new Set(Object.keys(alias));
+  const rollupExternals = externals.filter(external => !aliasSources.has(external));
 
   return {
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     treeshake: 'smallest',
     preserveSymlinks: true,
-    external: externals,
+    external: externalsPreset ? [] : rollupExternals,
     plugins: [
       protocolExternalResolver(),
-      subpathExternalsResolver(externals),
+      moduleAlias(alias, entryFile, platform),
+      subpathExternalsResolver(externals, analyzedBundleInfo.workspaceMap),
       {
         name: 'alias-optimized-deps',
         resolveId(id: string) {
@@ -125,7 +140,7 @@ export async function getInputOptions(
         },
       } satisfies Plugin,
       mastraInternalAliasPlugin(entryFile),
-      tsConfigPaths(),
+      tsConfigPaths({ cwd: projectRoot }),
       mastraToolsAliasPlugin(),
       esbuild({
         platform,
@@ -134,15 +149,13 @@ export async function getInputOptions(
       optimizeLodashImports({
         include: '**/*.{js,ts,mjs,cjs}',
       }),
-      externalsPreset
-        ? null
-        : commonjs({
-            extensions: ['.js', '.ts'],
-            transformMixedEsModules: true,
-            esmExternals(id) {
-              return externals.includes(id);
-            },
-          }),
+      commonjs({
+        extensions: ['.js', '.ts', '.cjs'],
+        transformMixedEsModules: true,
+        esmExternals(id) {
+          return externals.includes(id);
+        },
+      }),
       enableEsmShim ? esmShim() : undefined,
       externalsPreset ? nodeModulesExtensionResolver() : nodeResolvePlugin,
       // for debugging
@@ -161,10 +174,10 @@ export async function getInputOptions(
       // },
       json(),
       localStorageDetector(workspaceRoot || projectRoot),
-      removeDeployer(entryFile, { sourcemap }),
+      removeDeployer(configEntryFile, { sourcemap }),
       // treeshake unused imports
       esbuild({
-        include: entryFile,
+        include: configEntryFile,
         platform,
       }),
       // Runs at renderChunk, so the emitted chunks are minified as a whole rather

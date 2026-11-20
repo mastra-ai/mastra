@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "source": "reference-auth",
+  "sourceEventId": "role-change",
+  "kind": "unauthorized_privilege_change",
+  "occurredAt": "2026-09-01T12:00:00.000Z",
+  "tenantId": "org_reference",
+  "subjectId": "user_reference",
+  "actor": { "id": "user_security_admin", "type": "user" },
+  "target": { "id": "user_reference", "type": "user" },
+  "changes": { "previousRole": "member", "nextRole": "admin" }
+}

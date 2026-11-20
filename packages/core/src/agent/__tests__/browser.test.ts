@@ -2,7 +2,8 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import type { MastraBrowser } from '../../browser';
+import { MastraBrowser } from '../../browser';
+import { MockMemory } from '../../memory/mock';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
 
@@ -172,6 +173,53 @@ describe('Agent browser integration', () => {
 
       // Verify the result completed successfully
       expect(result.text).toBe('OK');
+    });
+
+    it('runs a memory-less agent with the real browser-context processor', async () => {
+      const browser = createMockBrowser(['browser_navigate']);
+      const getInputProcessors = vi.fn((configured, options) =>
+        MastraBrowser.prototype.getInputProcessors.call(browser, configured, options),
+      );
+      browser.getInputProcessors = getInputProcessors;
+
+      const model = createMockModel();
+      const agent = new Agent({
+        id: 'stateless-browser-agent' as const,
+        name: 'stateless-browser-agent',
+        instructions: 'test',
+        model,
+        browser,
+      });
+
+      // Previously threw: computeStateSignal requires Mastra memory
+      const result = await agent.generate('Hello');
+      expect(result.text).toBe('OK');
+      expect(JSON.stringify(model.doGenerateCalls[0]!.prompt)).toContain('You have access to a browser (mock).');
+
+      const [browserProcessor] = getInputProcessors.mock.results[0]!.value;
+      expect(browserProcessor.id).toBe('browser-context');
+      expect(browserProcessor.computeStateSignal).toBeUndefined();
+    });
+
+    it('keeps the browser state signal when the agent has memory', async () => {
+      const browser = createMockBrowser(['browser_navigate']);
+      const getInputProcessors = vi.fn((configured, options) =>
+        MastraBrowser.prototype.getInputProcessors.call(browser, configured, options),
+      );
+      browser.getInputProcessors = getInputProcessors;
+
+      const agent = new Agent({
+        id: 'memory-browser-agent' as const,
+        name: 'memory-browser-agent',
+        instructions: 'test',
+        model: createMockModel(),
+        memory: new MockMemory(),
+        browser,
+      });
+
+      await agent.listInputProcessors();
+      const [browserProcessor] = getInputProcessors.mock.results[0]!.value;
+      expect(typeof browserProcessor.computeStateSignal).toBe('function');
     });
 
     it('uses thread-aware browser context when threadId is provided', async () => {

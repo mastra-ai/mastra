@@ -1,4 +1,4 @@
-import type { MessageFactoryPart, ToolInvocationPart } from '@mastra/react';
+import type { MessageFactoryPart, ToolInvocationPart } from '@mastra/react/ui';
 import { describe, expect, it } from 'vitest';
 
 import { collectToolGroups } from '../tool-groups';

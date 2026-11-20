@@ -9,10 +9,10 @@ import {
   DialogDescription,
 } from '@mastra/playground-ui/components/Dialog';
 import { RuleBuilder } from '@mastra/playground-ui/components/RuleBuilder';
+import { IconRuler } from '@mastra/playground-ui/icons/central/IconRuler';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
 import { countLeafRules } from '@mastra/playground-ui/utils/rule-engine';
-import { Ruler } from 'lucide-react';
 
 interface DisplayConditionsDialogProps {
   entityName: string;
@@ -32,18 +32,20 @@ export function DisplayConditionsDialog({ entityName, schema, rules, onRulesChan
 
   return (
     <Dialog>
-      <DialogTrigger asChild>
-        <Button
-          tooltip={ruleCount > 0 ? `${ruleCount} rules` : 'Display Conditions'}
-          size="icon-sm"
-          variant="ghost"
-          className="relative"
-        >
-          <Ruler className="text-accent6" />
-          {ruleCount > 0 && <span className="bg-accent1 absolute -top-0.5 -right-0.5 size-2 rounded-full" />}
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="w-full max-w-5xl">
+      <DialogTrigger
+        render={
+          <Button
+            tooltip={ruleCount > 0 ? `${ruleCount} rules` : 'Display Conditions'}
+            size="icon-sm"
+            variant="ghost"
+            className="relative"
+          >
+            <IconRuler />
+            {ruleCount > 0 && <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-foreground" />}
+          </Button>
+        }
+      />
+      <DialogContent size="xl">
         <DialogHeader>
           <DialogTitle>Display Conditions for {entityName}</DialogTitle>
           <DialogDescription>

@@ -1,12 +1,12 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption } from '@mastra/playground-ui/components/Combobox';
-import { toast } from '@mastra/playground-ui/utils/toast';
-import { Check, Tag, X } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 
+import { toast } from '@mastra/playground-ui/utils/toast';
+import { useDatasetMutations, useDataset, useDatasets } from '@mastra/react/hooks/datasets';
+import { useMemo, useState } from 'react';
 import { getAllDatasetTags } from '../datasets-list/helpers';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
-import { useDataset, useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
 
 const CREATE_TAG_VALUE = '__create_tag__';
@@ -22,7 +22,7 @@ export interface DatasetTagsEditorProps {
  * change persists immediately; removal is via the badge only.
  */
 export function DatasetTagsEditor({ datasetId }: DatasetTagsEditorProps) {
-  const { data: dataset } = useDataset(datasetId);
+  const { data: dataset } = useDataset({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
   const { data: datasetsData } = useDatasets();
   const { updateDataset } = useDatasetMutations();
   const [search, setSearch] = useState('');
@@ -34,7 +34,9 @@ export function DatasetTagsEditor({ datasetId }: DatasetTagsEditorProps) {
     const existing = allTags.map(tag => ({
       label: tag,
       value: tag,
-      end: currentTags.includes(tag) ? <Check data-testid="tag-applied" className="size-3.5" /> : undefined,
+      end: currentTags.includes(tag) ? (
+        <IconCheckmark2Medium data-testid="tag-applied" className="size-icon-sm" />
+      ) : undefined,
     }));
     const trimmed = search.trim();
     const canCreate = trimmed.length > 0 && !allTags.includes(trimmed) && !currentTags.includes(trimmed);
@@ -67,7 +69,7 @@ export function DatasetTagsEditor({ datasetId }: DatasetTagsEditorProps) {
             onClick={() => handleRemove(tag)}
             className="cursor-pointer rounded-sm hover:opacity-70 disabled:opacity-50"
           >
-            <X className="size-3" />
+            <IconCrossMedium className="size-icon-xs" />
           </button>
         </ComputedTag>
       ))}
@@ -76,16 +78,11 @@ export function DatasetTagsEditor({ datasetId }: DatasetTagsEditorProps) {
         value={undefined}
         onValueChange={handleAdd}
         onInputValueChange={setSearch}
-        placeholder={
-          <span className="flex items-center gap-1.5">
-            <Tag className="size-3.5" />
-            Add tag
-          </span>
-        }
-        searchPlaceholder="Search or create tag..."
+        placeholder="Add tag"
+        searchPlaceholder="Search or create tag"
         emptyText="Type to create a tag"
         variant="ghost"
-        size="xs"
+        size="sm"
         className="w-auto min-w-0"
         disabled={updateDataset.isPending}
       />

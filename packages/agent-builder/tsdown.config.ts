@@ -4,7 +4,7 @@ import { defineConfig } from 'tsdown';
 export default defineConfig({
   entry: ['src/index.ts'],
   treeshake: true,
-  format: ['esm'],
+  format: ['esm', 'cjs'],
   fixedExtension: false,
   nodeProtocol: 'strip',
   dts: false,

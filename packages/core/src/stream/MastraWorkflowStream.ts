@@ -3,19 +3,26 @@ import type { Run, Step, WorkflowRunStatus } from '../workflows';
 import type { ChunkType } from './types';
 import { ChunkFrom } from './types';
 
+const primaryUsageKeys = ['inputTokens', 'outputTokens', 'totalTokens'] as const;
+
 export class MastraWorkflowStream<
   TState,
   TInput,
   TOutput,
   TSteps extends Step<string, any, any>[],
 > extends ReadableStream<ChunkType> {
-  #usageCount = {
-    inputTokens: 0,
-    outputTokens: 0,
-    totalTokens: 0,
-    cachedInputTokens: 0,
-    cacheCreationInputTokens: 0,
+  #usageCount: {
+    inputTokens: number | undefined;
+    outputTokens: number | undefined;
+    totalTokens: number | undefined;
+    cachedInputTokens?: number;
+    cacheCreationInputTokens?: number;
+  } = {
+    inputTokens: undefined,
+    outputTokens: undefined,
+    totalTokens: undefined,
   };
+  #usageCountMissing = new Set<(typeof primaryUsageKeys)[number]>();
   #streamPromise: {
     promise: Promise<void>;
     resolve: (value: void) => void;
@@ -61,17 +68,34 @@ export class MastraWorkflowStream<
             cacheCreationInputTokens?: `${number}` | number;
           },
     ) => {
-      if ('inputTokens' in usage) {
-        this.#usageCount.inputTokens += parseInt(usage?.inputTokens?.toString() ?? '0', 10);
-        this.#usageCount.outputTokens += parseInt(usage?.outputTokens?.toString() ?? '0', 10);
-        // we need to handle both formats because you can use a V1 model inside a stream workflow
-      } else if ('promptTokens' in usage) {
-        this.#usageCount.inputTokens += parseInt(usage?.promptTokens?.toString() ?? '0', 10);
-        this.#usageCount.outputTokens += parseInt(usage?.completionTokens?.toString() ?? '0', 10);
+      const primaryUsage = {
+        inputTokens:
+          'inputTokens' in usage ? usage.inputTokens : 'promptTokens' in usage ? usage.promptTokens : undefined,
+        outputTokens:
+          'outputTokens' in usage
+            ? usage.outputTokens
+            : 'completionTokens' in usage
+              ? usage.completionTokens
+              : undefined,
+        totalTokens: usage.totalTokens,
+      };
+
+      for (const key of primaryUsageKeys) {
+        const value = primaryUsage[key] === undefined ? undefined : Number(primaryUsage[key]);
+        if (value === undefined) {
+          this.#usageCountMissing.add(key);
+          this.#usageCount[key] = undefined;
+        } else if (!this.#usageCountMissing.has(key)) {
+          this.#usageCount[key] = (this.#usageCount[key] ?? 0) + value;
+        }
       }
-      this.#usageCount.totalTokens += parseInt(usage?.totalTokens?.toString() ?? '0', 10);
-      this.#usageCount.cachedInputTokens += parseInt(usage?.cachedInputTokens?.toString() ?? '0', 10);
-      this.#usageCount.cacheCreationInputTokens += parseInt(usage?.cacheCreationInputTokens?.toString() ?? '0', 10);
+
+      for (const key of ['cachedInputTokens', 'cacheCreationInputTokens'] as const) {
+        const value = usage[key] === undefined ? undefined : Number(usage[key]);
+        if (value !== undefined) {
+          this.#usageCount[key] = (this.#usageCount[key] ?? 0) + value;
+        }
+      }
     };
 
     super({

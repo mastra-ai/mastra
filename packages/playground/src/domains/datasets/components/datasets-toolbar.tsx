@@ -1,91 +1,39 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
-import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
-import { XIcon } from 'lucide-react';
-import { DATASET_EXPERIMENT_OPTIONS } from './datasets-list/helpers';
-import type { DatasetTargetType } from './target-type-options';
-import { TargetFilter } from '@/domains/shared/components/target-filter';
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
+import { DatasetsFilterBar } from './datasets-filter-bar';
+import type { DatasetsFilters } from './datasets-filter-bar';
 
 export interface DatasetsToolbarTagOption {
   value: string;
   label: string;
 }
 
-export interface DatasetsToolbarProps {
-  search: string;
-  onSearchChange: (query: string) => void;
-  experimentFilter: string;
-  onExperimentFilterChange: (value: string) => void;
-  tagFilter: string;
-  onTagFilterChange: (value: string) => void;
+export interface DatasetsToolbarProps extends DatasetsFilters {
+  onFiltersChange: (next: DatasetsFilters) => void;
   tagOptions: DatasetsToolbarTagOption[];
-  targetType: DatasetTargetType | '';
-  onTargetTypeChange: (type: DatasetTargetType | '') => void;
-  targetId: string;
-  onTargetIdChange: (id: string) => void;
-  onReset?: () => void;
-  hasActiveFilters?: boolean;
 }
 
 export function DatasetsToolbar({
   search,
-  onSearchChange,
   experimentFilter,
-  onExperimentFilterChange,
   tagFilter,
-  onTagFilterChange,
   tagOptions,
   targetType,
-  onTargetTypeChange,
   targetId,
-  onTargetIdChange,
-  onReset,
-  hasActiveFilters,
+  onFiltersChange,
 }: DatasetsToolbarProps) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="max-w-120 min-w-64 flex-1">
-        <ListSearch
-          label="Search datasets"
-          placeholder="Filter by dataset name"
-          value={search}
-          onSearch={onSearchChange}
-        />
-      </div>
-      <ButtonsGroup>
-        <TargetFilter
+    <ActionRow>
+      <ActionRow.Start>
+        <DatasetsFilterBar
+          search={search}
+          experimentFilter={experimentFilter}
+          tagFilter={tagFilter}
+          tagOptions={tagOptions}
           targetType={targetType}
           targetId={targetId}
-          onTargetTypeChange={onTargetTypeChange}
-          onTargetIdChange={onTargetIdChange}
+          onChange={onFiltersChange}
         />
-        <SelectFieldBlock
-          label="Experiments"
-          labelIsHidden
-          name="filter-experiments"
-          options={[...DATASET_EXPERIMENT_OPTIONS]}
-          value={experimentFilter}
-          onValueChange={onExperimentFilterChange}
-          className="whitespace-nowrap"
-        />
-        {tagOptions.length > 1 && (
-          <SelectFieldBlock
-            label="Tags"
-            labelIsHidden
-            name="filter-tags"
-            options={tagOptions}
-            value={tagFilter}
-            onValueChange={onTagFilterChange}
-            className="whitespace-nowrap"
-          />
-        )}
-        {onReset && hasActiveFilters && (
-          <Button onClick={onReset} size="sm" variant="default" icon={<XIcon />}>
-            Reset
-          </Button>
-        )}
-      </ButtonsGroup>
-    </div>
+      </ActionRow.Start>
+    </ActionRow>
   );
 }

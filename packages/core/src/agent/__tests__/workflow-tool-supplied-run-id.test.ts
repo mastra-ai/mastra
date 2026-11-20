@@ -16,11 +16,11 @@ import { Agent } from '../agent';
  * the literal string "null" for it on fresh calls. "null" is truthy, so it used to
  * defeat the `randomUUID()` fallback: two independent calls then shared one cached
  * Run instance keyed by runId "null", and one request was silently lost. A model can
- * also echo a stale-but-valid-looking run id from earlier conversation turns, which
- * collides the same way. Fresh calls must always get a unique run id; a supplied id
- * is only honored alongside resumeData.
+ * also pair arbitrary `resumeData` with a stale or hallucinated run ID, which collides
+ * the same way. Fresh calls must always get a unique run ID; only framework-persisted
+ * suspension state may select an existing run.
  *
- * Related: https://github.com/mastra-ai/mastra/issues/23739
+ * Related: https://github.com/mastra-ai/mastra/issues/23811
  */
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
@@ -145,8 +145,14 @@ describe('workflow tool with model-supplied suspendedToolRunId on fresh calls', 
 
   it('ignores an echoed stale run id on fresh calls so both calls get unique run ids', async () => {
     const { agent, createRunSpy, completedTickets } = setup([
-      { toolCallId: 'call-a', input: { inputData: { ticket: 'A' }, suspendedToolRunId: 'stale-run-id' } },
-      { toolCallId: 'call-b', input: { inputData: { ticket: 'B' }, suspendedToolRunId: 'stale-run-id' } },
+      {
+        toolCallId: 'call-a',
+        input: { inputData: { ticket: 'A' }, resumeData: { approved: true }, suspendedToolRunId: 'stale-run-id' },
+      },
+      {
+        toolCallId: 'call-b',
+        input: { inputData: { ticket: 'B' }, resumeData: { approved: true }, suspendedToolRunId: 'stale-run-id' },
+      },
     ]);
 
     await agent.generate('Run ticket A and ticket B.', { maxSteps: 3 });

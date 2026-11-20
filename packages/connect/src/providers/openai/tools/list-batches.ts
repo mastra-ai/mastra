@@ -35,16 +35,9 @@ const BatchSchema = z.object({
     .nullable(),
   input_file_id: z.string(),
   completion_window: z.string(),
-  status: z.enum([
-    'validating',
-    'failed',
-    'in_progress',
-    'finalizing',
-    'completed',
-    'expired',
-    'cancelling',
-    'cancelled',
-  ]),
+  status: z
+    .enum(['validating', 'failed', 'in_progress', 'finalizing', 'completed', 'expired', 'cancelling', 'cancelled'])
+    .or(z.string()),
   output_file_id: z.string().nullable(),
   error_file_id: z.string().nullable(),
   created_at: z.number(),

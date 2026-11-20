@@ -5,7 +5,7 @@ packages:
   - "@mastra/apple-container"
 ---
 
-# Apple Container
+# Apple container
 
 Executes commands inside local OCI Linux containers through Apple's [`container`](https://github.com/apple/container) CLI. The provider starts a long-lived container and uses `container exec` for workspace commands. For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
 
@@ -359,8 +359,8 @@ const sandbox = new AppleContainerSandbox({
 ```
 
 These options are only applied when a new container is created. If the sandbox reconnects to an existing container with the same name, destroy and recreate the sandbox to apply changed runtime options.
-Apple `--tmpfs` accepts container paths only, such as `/tmp`; it doesn't accept Docker-style option specs like `/tmp:rw,size=256m`.
-When `readonlyRootfs` is enabled, make sure `workingDirectory` points to a path supplied by the image or a bind mount. A writable tmpfs is also supported.
+Apple `--tmpfs` accepts container paths only, such as `/tmp`. It doesn't accept Docker-style option specs like `/tmp:rw,size=256m`.
+When `readonlyRootfs` is enabled, ensure `workingDirectory` points to a path supplied by the image or a bind mount. A writable tmpfs is also supported.
 
 ## Security model
 

@@ -3,6 +3,7 @@ title: "Reference: Configuration | Observability"
 description: "Configure Mastra observability instances, tracing exporters, sampling, propagation, span filters, and the global observability registry."
 packages:
   - "@mastra/core"
+  - "@mastra/observability"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -58,6 +59,7 @@ interface ObservabilityInstanceConfig {
   serviceName: string
   sampling?: SamplingStrategy
   exporters?: ObservabilityExporter[]
+  retainStorageExporterOnPlatform?: boolean
   spanOutputProcessors?: SpanOutputProcessor[]
   includeInternalSpans?: boolean
   excludeSpanTypes?: SpanType[]
@@ -92,6 +94,13 @@ interface ObservabilityInstanceConfig {
     name: 'exporters',
     type: 'ObservabilityExporter[]',
     description: 'Trace data exporters',
+    required: false,
+  },
+  {
+    name: 'retainStorageExporterOnPlatform',
+    type: 'boolean',
+    description:
+      'Defaults to `false`. Retains configured `MastraStorageExporter` instances on Platform, including later registration. Known local storage remains blocked, and deprecated `DefaultExporter` remains disabled. See [storage export on Platform](/docs/observability/integrations/exporters/mastra-storage#export-to-storage-and-platform) for configuration, adapter requirements, and restrictions.',
     required: false,
   },
   {
@@ -200,7 +209,16 @@ type SamplingStrategy =
   | { type: 'always' }
   | { type: 'never' }
   | { type: 'ratio'; probability: number }
-  | { type: 'custom'; sampler: (options?: TracingOptions) => boolean }
+  | { type: 'custom'; sampler: (options?: CustomSamplerOptions) => boolean }
+```
+
+## `CustomSamplerOptions`
+
+```typescript
+interface CustomSamplerOptions {
+  requestContext?: RequestContext
+  metadata?: Record<string, any>
+}
 ```
 
 ## `ConfigSelector`

@@ -1,12 +1,15 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
+import { EventEmitterPubSub } from '../../events/event-emitter';
 import { ConsoleLogger } from '../../logger';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
+import { createDurableAgent } from '../durable/create-durable-agent';
+import { globalRunRegistry } from '../durable/run-registry';
 
 /**
  * Regression tests for #22217: delegated (supervisor) resume dropped sub-agent
@@ -20,13 +23,13 @@ import { Agent } from '../agent';
 
 const ORDER = 'ord_AAA';
 
-function buildLeafTool() {
+function buildLeafTool({ requireApproval = true } = {}) {
   return createTool({
     id: 'process-order',
     description: 'Process the given order. Requires human approval.',
     inputSchema: z.object({ orderId: z.string() }),
     outputSchema: z.object({ orderId: z.string(), processed: z.boolean() }),
-    requireApproval: true,
+    requireApproval,
     execute: async (input: { orderId: string }, context: any) => {
       await context?.writer?.custom({
         type: 'data-progress',
@@ -71,14 +74,14 @@ function buildSubAgentModel() {
   });
 }
 
-function buildSubAgent() {
+function buildSubAgent(options?: { requireApproval?: boolean }) {
   return new Agent({
     id: 'sub-agent',
     name: 'Sub Agent',
     description: 'Processes a single order.',
     instructions: 'Process the order by calling process-order.',
     model: buildSubAgentModel(),
-    tools: { processOrderTool: buildLeafTool() },
+    tools: { processOrderTool: buildLeafTool(options) },
   });
 }
 
@@ -232,5 +235,26 @@ describe('delegated resume custom frames (#22217)', () => {
     const resumedChunks = await collectChunks(resumed);
     expectNoErrors(resumedChunks);
     expect(resumedChunks.map(c => c.type)).toContain('data-progress');
+  });
+});
+
+describe('data-* frames bubbled from a durable sub-agent', () => {
+  afterEach(() => {
+    globalRunRegistry.clear();
+  });
+
+  // A durable sub-agent's chunks carry its own run-log index. That index is not a
+  // position in the parent's run log, so it must not reach a plain parent's stream.
+  it('reach a plain parent stream without the sub-agent index', async () => {
+    const subAgent = createDurableAgent({
+      agent: buildSubAgent({ requireApproval: false }),
+      pubsub: new EventEmitterPubSub(),
+    });
+    const supervisor = buildSupervisor(subAgent as any);
+
+    const chunks = await collectChunks(await supervisor.stream('Process the order.', { maxSteps: 6 }));
+    const progress = chunks.filter(c => c.type === 'data-progress');
+    expect(progress).not.toEqual([]);
+    for (const chunk of progress) expect(chunk).not.toHaveProperty('index');
   });
 });

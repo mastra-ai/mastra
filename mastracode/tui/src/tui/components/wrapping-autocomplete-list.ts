@@ -36,6 +36,9 @@ export class WrappingAutocompleteList implements Component {
   private maxVisible: number;
   private theme: SelectListTheme;
   private layout: WrappingAutocompleteListLayout;
+  // Item index for each row of the last render (-1 for non-item rows), so a
+  // click on any wrapped row of an item resolves to that item.
+  private rowItems: number[] = [];
 
   onSelect?: (item: SelectItem) => void;
   onCancel?: () => void;
@@ -65,9 +68,11 @@ export class WrappingAutocompleteList implements Component {
 
   render(width: number): string[] {
     const lines: string[] = [];
+    this.rowItems = [];
 
     if (this.filteredItems.length === 0) {
       lines.push(this.theme.noMatch('  No matching commands'));
+      this.rowItems.push(-1);
       return lines;
     }
 
@@ -85,15 +90,35 @@ export class WrappingAutocompleteList implements Component {
       const description = item.description ? normalizeToSingleLine(item.description) : undefined;
       for (const row of this.renderItem(item, isSelected, width, description, primaryColumnWidth)) {
         lines.push(row);
+        this.rowItems.push(i);
       }
     }
 
     if (startIndex > 0 || endIndex < this.filteredItems.length) {
       const scrollText = `  (${this.selectedIndex + 1}/${this.filteredItems.length})`;
       lines.push(this.theme.scrollInfo(truncateToWidth(scrollText, width - 2, '')));
+      this.rowItems.push(-1);
     }
 
     return lines;
+  }
+
+  /** Item index rendered at `row` of the last render, if that row belongs to an item. */
+  itemIndexAtRow(row: number): number | undefined {
+    const index = this.rowItems[row];
+    return index === undefined || index < 0 ? undefined : index;
+  }
+
+  /** First row and row count of `index` in the last render (the highlighted item can wrap). */
+  rowsOfItem(index: number): { first: number; count: number } | undefined {
+    const first = this.rowItems.indexOf(index);
+    if (first < 0) return undefined;
+    return { first, count: this.rowItems.lastIndexOf(index) - first + 1 };
+  }
+
+  /** Number of rows produced by the last render. */
+  get renderedRowCount(): number {
+    return this.rowItems.length;
   }
 
   handleInput(keyData: string): void {

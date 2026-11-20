@@ -2,7 +2,7 @@
 
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useDatasetMutations } from '../hooks/use-dataset-mutations';
+import { useDatasetMutations } from '@mastra/react/hooks/datasets';
 
 export interface DeleteDatasetDialogProps {
   open: boolean;
@@ -43,10 +43,10 @@ export function DeleteDatasetDialog({
           </AlertDialog.Description>
         </AlertDialog.Header>
         <AlertDialog.Footer>
+          <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
           <AlertDialog.Action onClick={handleDelete} disabled={deleteDataset.isPending}>
             {deleteDataset.isPending ? 'Deleting...' : 'Delete'}
           </AlertDialog.Action>
-          <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
         </AlertDialog.Footer>
       </AlertDialog.Content>
     </AlertDialog>

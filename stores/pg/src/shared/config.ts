@@ -8,6 +8,12 @@ import type { ClientConfig, Pool, PoolConfig } from 'pg';
 export interface PostgresBaseConfig {
   id: string;
   schemaName?: string;
+  /**
+   * Identifies the database and schema this store's Knowledge tables live in. `Mastra` rejects two Knowledge
+   * runtimes with the same key. Set it when two stores reach different database and schemas that Mastra
+   * cannot tell apart, or the same database and schema through different connection settings.
+   */
+  storageIsolationKey?: string;
   /** Optional read-replica pool. Falls back to the writer pool when omitted. */
   readPool?: Pool;
   /**

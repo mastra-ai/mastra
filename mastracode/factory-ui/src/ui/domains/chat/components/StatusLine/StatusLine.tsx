@@ -1,53 +1,26 @@
-import { useParams } from 'react-router';
+import { ComposerStatus } from '@mastra/playground-ui/components/Composer';
+import type { ReactNode } from 'react';
 
-import { useFactoryQuery } from '../../../../../hooks/useFactories';
-import { useWorkItemsQuery } from '../../../../../hooks/useWorkItems';
-import { useChatSessionContext } from '../../context/useChatSessionContext';
-import { PullRequestLinks } from '../PullRequestLinks';
-import { ModelPicker } from './ModelPicker';
 import { ConnectionActivity } from './ConnectionActivity';
 import { GoalStatus } from './GoalStatus';
-import { ModesSelection } from './ModesSelection';
 import { OperationalMemoryStatus } from './OperationalMemoryStatus';
 import { QueuedFollowUps } from './QueuedFollowUps';
 import { RuntimeActivity } from './RuntimeActivity';
 
 /**
- * Session status strip below the composer. Pure composition root: each child
- * reads its own slice of the existing chat/session context.
+ * Session status row above the composer, right-aligned and hidden when empty. Pure
+ * composition root: each child reads its own slice of the existing chat/session context.
+ * The model picker lives in the composer actions instead.
  */
-export function StatusLine() {
-  const { factoryId, threadId } = useParams<{ factoryId: string; threadId: string }>();
-  const { projectPath, factorySessionState } = useChatSessionContext();
-  const { data: factory } = useFactoryQuery(factoryId);
-  const repository = factory?.repositories.find(
-    repo => repo.projectRepositoryId === factorySessionState?.projectRepositoryId,
-  );
-  const factoryProjectId = factorySessionState?.factoryProjectId;
-  const factoryProjectKey = typeof factoryProjectId === 'string' ? factoryProjectId : undefined;
-  const workItems = useWorkItemsQuery(factoryProjectKey);
-  const currentItem = workItems.data?.find(item =>
-    Object.values(item.sessions).some(
-      session => session.threadId === threadId && (!projectPath || session.sessionId === projectPath),
-    ),
-  );
-  const workItemsPending = Boolean(factoryProjectKey) && workItems.isPending;
-
+export function StatusLine({ children }: { children?: ReactNode }) {
   return (
-    <div
-      aria-label="Session status line"
-      className="text-ui-sm text-icon3 flex h-fit shrink-0 flex-wrap items-center gap-x-1.5 gap-y-1"
-    >
-      <ModesSelection />
-      <ModelPicker />
+    <ComposerStatus aria-label="Session status line">
+      {children}
       <OperationalMemoryStatus />
       <RuntimeActivity />
       <ConnectionActivity />
       <QueuedFollowUps />
       <GoalStatus />
-      {!workItemsPending && currentItem?.source !== 'github-pr' ? (
-        <PullRequestLinks repository={repository} threadId={threadId} />
-      ) : null}
-    </div>
+    </ComposerStatus>
   );
 }

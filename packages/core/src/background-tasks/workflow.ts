@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { resolveSuspendedToolRunId } from '../agent/utils';
 import { InternalSpans } from '../observability';
+import { slimProgressChunk } from '../stream/strip-model-snapshots';
 import { createStep, createWorkflow } from '../workflows';
 import type { SuspendOptions } from '../workflows';
 import type { BackgroundTaskManager } from './manager';
@@ -87,11 +88,25 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
             `Register the tool on Mastra (so workers can resolve it cross-process) ` +
             `or run the task in the same process as the producer.`,
         };
-        await storage.updateTask(taskId, { status: 'failed', error: errorInfo, completedAt: new Date() });
-        const failedTask = await storage.getTask(taskId);
-        if (failedTask) {
-          await manager.runLocalCompletionHooks(failedTask, 'failed', { error: errorInfo });
-          await manager.publishLifecycleEvent('task.failed', failedTask);
+        // Fenced on ownership: a worker whose lease was superseded must not
+        // commit a terminal state for a task another worker now owns.
+        const markedFailed = await storage.updateTask(
+          taskId,
+          {
+            status: 'failed',
+            error: errorInfo,
+            completedAt: new Date(),
+            ownerId: undefined,
+            leaseExpiresAt: undefined,
+          },
+          { expectedOwnerId: manager.ownerId },
+        );
+        if (markedFailed) {
+          const failedTask = await storage.getTask(taskId);
+          if (failedTask) {
+            await manager.runLocalCompletionHooks(failedTask, 'failed', { error: errorInfo });
+            await manager.publishLifecycleEvent('task.failed', failedTask);
+          }
         }
         manager.deregisterTaskContext(taskId);
         throw new Error(errorInfo.message);
@@ -108,7 +123,7 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
           if (lastProgressEmitMs !== undefined && now - lastProgressEmitMs < progressThrottleMs) return;
           lastProgressEmitMs = now;
         }
-        await manager.publishLifecycleEvent('task.output', { ...task, chunk });
+        await manager.publishLifecycleEvent('task.output', { ...task, chunk: slimProgressChunk(chunk) });
       };
 
       const abortController = new AbortController();
@@ -124,9 +139,12 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
       } else {
         workflowAbortSignal.addEventListener('abort', onWorkflowAbort, { once: true });
       }
-      const timeoutHandle = setTimeout(() => {
-        abortController.abort(new Error(`Task timed out after ${task.timeoutMs}ms`));
-      }, task.timeoutMs);
+      const timeoutHandle =
+        task.timeoutMs === 0
+          ? undefined
+          : setTimeout(() => {
+              abortController.abort(new Error(`Task timed out after ${task.timeoutMs}ms`));
+            }, task.timeoutMs);
 
       // Wrap the workflow runtime's `suspend` so we persist
       // `status: 'suspended'` + `suspendPayload`, fire the per-task
@@ -140,11 +158,21 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
       // tool's call.
       let pendingSuspend: { data?: unknown; suspendOptions?: SuspendOptions } | undefined;
       const wrappedSuspend = async (data?: unknown, suspendOptions?: SuspendOptions) => {
-        await storage.updateTask(taskId, {
-          status: 'suspended',
-          suspendPayload: data,
-          suspendedAt: new Date(),
-        });
+        // Suspend is non-terminal but still fenced on ownership: a superseded
+        // worker must not park a task another worker is now running. Clearing
+        // the lease marks the task unowned while it waits to be resumed.
+        const suspended = await storage.updateTask(
+          taskId,
+          {
+            status: 'suspended',
+            suspendPayload: data,
+            suspendedAt: new Date(),
+            ownerId: undefined,
+            leaseExpiresAt: undefined,
+          },
+          { expectedStatus: 'running', expectedOwnerId: manager.ownerId },
+        );
+        if (!suspended) return;
         const suspendedTask = await storage.getTask(taskId);
         if (suspendedTask) {
           // Suspend is non-terminal — DO NOT use `runLocalCompletionHooks`
@@ -159,19 +187,20 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
 
       try {
         const args = { ...task.args };
-        // The model authors the optional `suspendedToolRunId` arg, and some models emit
-        // sentinel strings like "null" for it. Drop sentinels so the framework-persisted
-        // id from `suspendData` back-fills on resume (#23739). The suspendData-side value
-        // is framework-written and stays unfiltered.
-        const resolvedArgsSuspendedToolRunId = resolveSuspendedToolRunId(args.suspendedToolRunId);
-        if (resolvedArgsSuspendedToolRunId === undefined) {
-          delete args.suspendedToolRunId;
-        } else {
-          args.suspendedToolRunId = resolvedArgsSuspendedToolRunId;
-        }
-        const suspendedToolRunId = (suspendData as { suspendedToolRunId?: unknown } | undefined)?.suspendedToolRunId;
-        if (resumeData !== undefined && !args.suspendedToolRunId && typeof suspendedToolRunId === 'string') {
+        delete args.suspendedToolRunId;
+        const suspendedToolRunId = resolveSuspendedToolRunId(
+          (suspendData as { suspendedToolRunId?: unknown } | undefined)?.suspendedToolRunId,
+        );
+        if (resumeData !== undefined && suspendedToolRunId) {
           args.suspendedToolRunId = suspendedToolRunId;
+        }
+        // The payload this task suspended with, so the resumed tool knows which
+        // request it is answering. The step's suspend data may carry the internal
+        // `suspendedToolRunId` bridge (see below); strip it back off.
+        let suspendPayload: unknown = suspendData;
+        if (suspendPayload && typeof suspendPayload === 'object' && 'suspendedToolRunId' in suspendPayload) {
+          const { suspendedToolRunId: _bridge, ...rest } = suspendPayload as Record<string, unknown>;
+          suspendPayload = Object.keys(rest).length > 0 ? rest : undefined;
         }
 
         const result = await executor.execute(args, {
@@ -181,6 +210,8 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
           // On resume the runtime populates `resumeData`; undefined on
           // the initial run.
           resumeData,
+          suspendedToolRunId: resumeData !== undefined ? suspendedToolRunId : undefined,
+          suspendPayload: resumeData !== undefined ? suspendPayload : undefined,
         });
 
         if (pendingSuspend) {
@@ -218,12 +249,11 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
 
         // Treat any aborted-signal exit as a timeout. The cancel path is
         // already handled by the storage-status check above, so if we reach
-        // here with `signal.aborted`, it's the timeout abort. The
-        // `AbortError` / message checks are belt-and-braces for executors
-        // that throw their own abort error instead of propagating ours.
+        // here with `signal.aborted`, it's the timeout abort. The message
+        // checks cover executors that rethrow our abort reason. An executor's
+        // own `AbortError` while our signal is live is an ordinary failure.
         if (
           abortController.signal.aborted ||
-          error?.name === 'AbortError' ||
           error?.message === 'Task cancelled' ||
           error?.message?.startsWith('Task timed out after ')
         ) {
@@ -271,13 +301,21 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
       if (outcome === 'timed_out') {
         const status = task.status as string;
         if (status !== 'timed_out' && status !== 'cancelled') {
-          await storage.updateTask(taskId, {
-            status: 'timed_out',
-            error: { message: `Task timed out after ${task.timeoutMs}ms` },
-            completedAt: new Date(),
-          });
-          const timedOutTask = await storage.getTask(taskId);
-          if (timedOutTask) await manager.publishLifecycleEvent('task.failed', timedOutTask);
+          const marked = await storage.updateTask(
+            taskId,
+            {
+              status: 'timed_out',
+              error: { message: `Task timed out after ${task.timeoutMs}ms` },
+              completedAt: new Date(),
+              ownerId: undefined,
+              leaseExpiresAt: undefined,
+            },
+            { expectedStatus: 'running', expectedOwnerId: manager.ownerId },
+          );
+          if (marked) {
+            const timedOutTask = await storage.getTask(taskId);
+            if (timedOutTask) await manager.publishLifecycleEvent('task.failed', timedOutTask);
+          }
         }
         return { taskId, done: true };
       }
@@ -287,22 +325,41 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
           manager.deregisterTaskContext(taskId);
           return { taskId, done: true };
         }
-        await storage.updateTask(taskId, { status: 'completed', result, completedAt: new Date() });
-        const completedTask = await storage.getTask(taskId);
-        if (completedTask) {
-          await manager.runLocalCompletionHooks(completedTask, 'completed', { result });
-          await manager.publishLifecycleEvent('task.completed', completedTask);
+        const completed = await storage.updateTask(
+          taskId,
+          {
+            status: 'completed',
+            result,
+            completedAt: new Date(),
+            ownerId: undefined,
+            leaseExpiresAt: undefined,
+          },
+          { expectedStatus: 'running', expectedOwnerId: manager.ownerId },
+        );
+        if (completed) {
+          const completedTask = await storage.getTask(taskId);
+          if (completedTask) {
+            await manager.runLocalCompletionHooks(completedTask, 'completed', { result });
+            await manager.publishLifecycleEvent('task.completed', completedTask);
+          }
         }
         return { taskId, done: true, result };
       }
 
       // outcome === 'retry' | 'failed'
       if (outcome === 'retry' && task.retryCount < task.maxRetries) {
-        await storage.updateTask(taskId, {
-          retryCount: task.retryCount + 1,
-          error: undefined,
-          startedAt: new Date(),
-        });
+        // Still `running` and still ours — fence so a superseded worker stops
+        // looping instead of racing the current owner's retries.
+        const advanced = await storage.updateTask(
+          taskId,
+          {
+            retryCount: task.retryCount + 1,
+            error: undefined,
+            startedAt: new Date(),
+          },
+          { expectedStatus: 'running', expectedOwnerId: manager.ownerId },
+        );
+        if (!advanced) return { taskId, done: true };
         return { taskId, done: false };
       }
 
@@ -311,11 +368,23 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
       // in `failed` rather than completing cleanly. Throw matches the prior
       // single-step behavior — workflow-run history stays accurate.
       const errorInfo = error ?? { message: 'Unknown error' };
-      await storage.updateTask(taskId, { status: 'failed', error: errorInfo, completedAt: new Date() });
-      const failedTask = await storage.getTask(taskId);
-      if (failedTask) {
-        await manager.runLocalCompletionHooks(failedTask, 'failed', { error: errorInfo });
-        await manager.publishLifecycleEvent('task.failed', failedTask);
+      const marked = await storage.updateTask(
+        taskId,
+        {
+          status: 'failed',
+          error: errorInfo,
+          completedAt: new Date(),
+          ownerId: undefined,
+          leaseExpiresAt: undefined,
+        },
+        { expectedStatus: 'running', expectedOwnerId: manager.ownerId },
+      );
+      if (marked) {
+        const failedTask = await storage.getTask(taskId);
+        if (failedTask) {
+          await manager.runLocalCompletionHooks(failedTask, 'failed', { error: errorInfo });
+          await manager.publishLifecycleEvent('task.failed', failedTask);
+        }
       }
       const thrown = new Error(errorInfo.message);
       if (errorInfo.name) thrown.name = errorInfo.name;

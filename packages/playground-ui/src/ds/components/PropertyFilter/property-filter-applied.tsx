@@ -1,4 +1,3 @@
-import { LockIcon, XIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '../Button';
@@ -8,6 +7,8 @@ import { PickMultiPanel } from './pick-multi-panel';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
 import { Input } from '@/ds/components/Input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconLock } from '@/ds/icons/central/IconLock';
 import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
 
 export type PropertyFilterAppliedProps = {
@@ -64,17 +65,16 @@ function LockedTokenPill({ field, value, tooltipContent }: LockedTokenPillProps)
       <Tooltip>
         <TooltipTrigger asChild>
           <ButtonsGroup
-            spacing="close"
             data-locked-field-id={field.id}
             data-property-filter-pill="locked"
             tabIndex={0}
             aria-label={lockA11yLabel}
           >
-            <ButtonsGroupText size="md">{field.label}</ButtonsGroupText>
-            <ButtonsGroupText size="md">is</ButtonsGroupText>
-            <ButtonsGroupText size="md">{display}</ButtonsGroupText>
-            <ButtonsGroupText size="md">
-              <LockIcon />
+            <ButtonsGroupText>{field.label}</ButtonsGroupText>
+            <ButtonsGroupText>is</ButtonsGroupText>
+            <ButtonsGroupText>{display}</ButtonsGroupText>
+            <ButtonsGroupText>
+              <IconLock />
             </ButtonsGroupText>
           </ButtonsGroup>
         </TooltipTrigger>
@@ -110,12 +110,11 @@ function TextTokenPill({ field, value, onChange, onRemove, disabled, autoFocus }
   }, [autoFocus]);
 
   return (
-    <ButtonsGroup spacing="close">
-      <ButtonsGroupText size="md">{field.label}</ButtonsGroupText>
-      <ButtonsGroupText size="md">is</ButtonsGroupText>
+    <ButtonsGroup>
+      <ButtonsGroupText>{field.label}</ButtonsGroupText>
+      <ButtonsGroupText>is</ButtonsGroupText>
       <Input
         ref={inputRef}
-        size="md"
         disabled={disabled}
         value={draft}
         placeholder={field.placeholder ?? `Enter ${field.label}`}
@@ -134,19 +133,19 @@ function TextTokenPill({ field, value, onChange, onRemove, disabled, autoFocus }
           } else if (e.key === 'Escape') {
             e.preventDefault();
             setDraft(value);
-            (e.target as HTMLInputElement).blur();
+            e.currentTarget.blur();
           }
         }}
       />
       <Button
+        size="icon-md"
         type="button"
         disabled={disabled}
         aria-label={`Remove ${field.label} filter`}
-        size="md"
         onMouseDown={e => e.preventDefault()}
         onClick={onRemove}
       >
-        <XIcon />
+        <IconCrossMedium />
       </Button>
     </ButtonsGroup>
   );
@@ -165,12 +164,12 @@ function PickMultiTokenPill({ field, token, tokens, onChange, onRemove, disabled
   const [open, setOpen] = useState(false);
 
   return (
-    <ButtonsGroup spacing="close">
-      <ButtonsGroupText size="md">{field.label}</ButtonsGroupText>
-      <ButtonsGroupText size="md">is</ButtonsGroupText>
+    <ButtonsGroup>
+      <ButtonsGroupText>{field.label}</ButtonsGroupText>
+      <ButtonsGroupText>is</ButtonsGroupText>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button type="button" disabled={disabled} size="md">
+          <Button type="button" disabled={disabled}>
             {stringifyTokenValue(token.value)}
           </Button>
         </PopoverTrigger>
@@ -179,13 +178,13 @@ function PickMultiTokenPill({ field, token, tokens, onChange, onRemove, disabled
         </PopoverContent>
       </Popover>
       <Button
+        size="icon-md"
         type="button"
         disabled={disabled}
         aria-label={`Remove ${field.label} filter`}
-        size="md"
         onClick={onRemove}
       >
-        <XIcon />
+        <IconCrossMedium />
       </Button>
     </ButtonsGroup>
   );
@@ -239,7 +238,7 @@ export function PropertyFilterApplied({
           );
         }
 
-        if (field.kind === 'text' && typeof token.value === 'string') {
+        if (field.kind === 'text' && !Array.isArray(token.value)) {
           return (
             <TextTokenPill
               key={`${token.fieldId}-${index}`}
@@ -271,18 +270,18 @@ export function PropertyFilterApplied({
         }
 
         return (
-          <ButtonsGroup spacing="close" key={`${token.fieldId}-${index}`}>
-            <ButtonsGroupText size="md">{field.label}</ButtonsGroupText>
-            <ButtonsGroupText size="md">is</ButtonsGroupText>
-            <ButtonsGroupText size="md">{stringifyTokenValue(token.value)}</ButtonsGroupText>
+          <ButtonsGroup key={`${token.fieldId}-${index}`}>
+            <ButtonsGroupText>{field.label}</ButtonsGroupText>
+            <ButtonsGroupText>is</ButtonsGroupText>
+            <ButtonsGroupText>{stringifyTokenValue(token.value)}</ButtonsGroupText>
             <Button
+              size="icon-md"
               type="button"
               disabled={disabled}
-              size="md"
               aria-label={`Remove ${field.label} filter`}
               onClick={() => removeTokenAt(index)}
             >
-              <XIcon />
+              <IconCrossMedium />
             </Button>
           </ButtonsGroup>
         );
