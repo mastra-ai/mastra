@@ -1,6 +1,7 @@
 import type { KnowledgeScopeDeclarations } from '../../../knowledge/declarations';
 import { StorageDomain } from '../base';
 import type { KnowledgeImportersStorage } from './importers';
+import { KnowledgeMoveTooLargeError, MAX_KNOWLEDGE_MOVE_PAGES } from './pages';
 import type { KnowledgePageStore } from './pages';
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
@@ -236,6 +237,35 @@ export abstract class KnowledgeStorage extends StorageDomain implements Knowledg
    */
   lockPages(_ids: string[]): Promise<void> {
     return Promise.resolve();
+  }
+
+  /**
+   * On a {@link transaction} view: the ids of the live pages under `rootId` (not the root itself),
+   * locked so no page can be added under, moved out of or removed from that subtree until commit.
+   * A later {@link movePage} of `rootId` in the same transaction moves exactly these pages. Throws
+   * {@link KnowledgeMoveTooLargeError} past {@link MAX_KNOWLEDGE_MOVE_PAGES}. The default walks the
+   * children without locking, which holds on stores whose transactions exclude every other writer.
+   *
+   * @experimental
+   */
+  async lockSubtree(rootId: string): Promise<string[]> {
+    const ids: string[] = [];
+    const parents = [rootId];
+    while (parents.length) {
+      const parentId = parents.shift()!;
+      let cursor: string | undefined;
+      do {
+        const page = await this.listChildPages({ parentId, read: 'all', ...(cursor ? { cursor } : {}) });
+        for (const child of page.pages) {
+          ids.push(child.id);
+          parents.push(child.id);
+        }
+        // With the root, MAX_KNOWLEDGE_MOVE_PAGES descendants are already one page too many.
+        if (ids.length >= MAX_KNOWLEDGE_MOVE_PAGES) throw new KnowledgeMoveTooLargeError(rootId, ids.length + 1);
+        cursor = page.nextCursor ?? undefined;
+      } while (cursor);
+    }
+    return ids;
   }
 
   /**

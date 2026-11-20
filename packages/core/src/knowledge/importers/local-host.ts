@@ -34,7 +34,16 @@ export interface LocalKnowledgeImporterHostOptions {
   bindings: readonly KnowledgeImporterRunBinding[] | (() => Promise<readonly KnowledgeImporterRunBinding[]>);
   /** Recorded as the writer of imported pages. Default `importer:<bindingId>`. */
   author?: (binding: KnowledgeImporterRunBinding) => string;
+  /**
+   * How long one flush may spend in its transaction, from the wait for a connection to the last
+   * statement, before it rolls back and the runner resends it. Also capped by the run's deadline.
+   * Enforced only on stores with `enforcesTransactionDeadline` (PostgreSQL); COMMIT itself isn't
+   * bounded. Default 45 seconds, under the runner's 60-second host-call timeout.
+   */
+  flushBudgetMs?: number;
 }
+
+const DEFAULT_FLUSH_BUDGET_MS = 45_000;
 
 const conflict = (code: KnowledgeImporterHostConflictError['code'], message: string) =>
   new KnowledgeImporterHostConflictError(code, message);
@@ -211,68 +220,79 @@ export function createLocalKnowledgeImporterHost(
       if (digest !== flush.digest) throw conflict('digest_mismatch', 'The digest does not match the flush content.');
 
       const { storage, importers: rootImporters } = await storageAndImporters();
-      const peek = await rootImporters.readWriterGuard().catch(error => {
+      const flushStarted = Date.now();
+      const [peek, peekRun] = await Promise.all([
+        rootImporters.readWriterGuard(),
+        rootImporters.getRun(flush.runId),
+      ]).catch(error => {
         throw hostError(error);
       });
+      // One absolute deadline for the whole flush transaction (O3 §C‴).
+      const deadlineAt = Math.min(
+        flushStarted + (options.flushBudgetMs ?? DEFAULT_FLUSH_BUDGET_MS),
+        peekRun?.deadlineAt?.getTime() ?? Infinity,
+      );
       let embeds: KnowledgeImportEmbedJob[] = [];
       try {
-        const receipt = await storage.transaction(async tx => {
-          const importers = tx.importers!;
-          // Guard before run (O2 lock order); exclusive only until the first write is marked.
-          const guard = await importers.lockWriterGuard(peek.firstWriteAt ? 'share' : 'update');
-          const run = await importers.lockRun(flush.runId);
-          const stored = await importers.getFlush(flush.runId, flush.generation, flush.seq);
-          if (stored) {
-            if (stored.digest !== digest) {
-              throw conflict('digest_mismatch', 'This seq was committed with other content.');
+        const receipt = await storage.transaction(
+          async tx => {
+            const importers = tx.importers!;
+            // Guard before run (O2 lock order); exclusive only until the first write is marked.
+            const guard = await importers.lockWriterGuard(peek.firstWriteAt ? 'share' : 'update');
+            const run = await importers.lockRun(flush.runId);
+            const stored = await importers.getFlush(flush.runId, flush.generation, flush.seq);
+            if (stored) {
+              if (stored.digest !== digest) {
+                throw conflict('digest_mismatch', 'This seq was committed with other content.');
+              }
+              return stored.receipt as KnowledgeImporterFlushReceipt;
             }
-            return stored.receipt as KnowledgeImporterFlushReceipt;
-          }
-          if (!run || run.status !== 'running') throw conflict('run_not_active', 'The run is not running.');
-          if (run.generation !== flush.generation || guard.generation !== flush.generation) {
-            throw conflict('stale_generation', 'The run belongs to an older writer generation.');
-          }
-          if (run.cancelRequestedAt) throw conflict('run_not_active', 'The run was canceled.');
-          if (run.deadlineAt && run.deadlineAt.getTime() <= Date.now()) {
-            throw conflict('run_not_active', 'The run is past its deadline.');
-          }
-          if (flush.seq !== run.lastSeq + 1)
-            throw conflict('seq_mismatch', 'The flush seq is not the committed seq + 1.');
+            if (!run || run.status !== 'running') throw conflict('run_not_active', 'The run is not running.');
+            if (run.generation !== flush.generation || guard.generation !== flush.generation) {
+              throw conflict('stale_generation', 'The run belongs to an older writer generation.');
+            }
+            if (run.cancelRequestedAt) throw conflict('run_not_active', 'The run was canceled.');
+            if (run.deadlineAt && run.deadlineAt.getTime() <= Date.now()) {
+              throw conflict('run_not_active', 'The run is past its deadline.');
+            }
+            if (flush.seq !== run.lastSeq + 1)
+              throw conflict('seq_mismatch', 'The flush seq is not the committed seq + 1.');
 
-          const binding = await importers.getBinding(run.bindingId);
-          const runBinding = await bindingFor(run.bindingId);
-          if (!binding) throw conflict('run_not_active', 'The run has no binding.');
-          const [scope] = await tx.getScopesByAddress([parseKnowledgeImportTarget(binding.target).scope]);
-          if (!scope) throw new KnowledgeImporterHostError('The binding target scope does not exist.', 503);
-          const applied = await applyKnowledgeImportFlush({
-            storage: tx,
-            importers,
-            binding,
-            scope,
-            runId: run.id,
-            ops: body.ops,
-            provenance: { author: author(runBinding) },
-            warn: writer.warn,
-          });
-          if (body.state) await importers.setState(binding.id, body.state);
-          for (const change of applied.changes) await importers.recordRunChange({ runId: run.id, ...change });
-          const receipt: KnowledgeImporterFlushReceipt = {
-            seq: flush.seq,
-            ...applied.counts,
-            refused: applied.refused,
-          };
-          await importers.recordFlush({
-            runId: run.id,
-            generation: flush.generation,
-            seq: flush.seq,
-            digest,
-            receipt,
-            counts: { ...applied.counts, refused: applied.refused.length },
-          });
-          if (applied.applied && !guard.firstWriteAt) await importers.markFirstWrite();
-          embeds = applied.embeds;
-          return receipt;
-        });
+            const binding = await importers.getBinding(run.bindingId);
+            const runBinding = await bindingFor(run.bindingId);
+            if (!binding) throw conflict('run_not_active', 'The run has no binding.');
+            const [scope] = await tx.getScopesByAddress([parseKnowledgeImportTarget(binding.target).scope]);
+            if (!scope) throw new KnowledgeImporterHostError('The binding target scope does not exist.', 503);
+            const applied = await applyKnowledgeImportFlush({
+              storage: tx,
+              importers,
+              binding,
+              scope,
+              runId: run.id,
+              ops: body.ops,
+              provenance: { author: author(runBinding) },
+            });
+            if (body.state) await importers.setState(binding.id, body.state);
+            for (const change of applied.changes) await importers.recordRunChange({ runId: run.id, ...change });
+            const receipt: KnowledgeImporterFlushReceipt = {
+              seq: flush.seq,
+              ...applied.counts,
+              refused: applied.refused,
+            };
+            await importers.recordFlush({
+              runId: run.id,
+              generation: flush.generation,
+              seq: flush.seq,
+              digest,
+              receipt,
+              counts: { ...applied.counts, refused: applied.refused.length },
+            });
+            if (applied.applied && !guard.firstWriteAt) await importers.markFirstWrite();
+            embeds = applied.embeds;
+            return receipt;
+          },
+          { deadlineAt },
+        );
         await runEmbeds(storage, embeds);
         return receipt;
       } catch (error) {

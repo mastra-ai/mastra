@@ -6,7 +6,7 @@ import {
 } from '@mastra/core/knowledge';
 import type { KnowledgeImporterHost, KnowledgeImportItem, KnowledgeImporterOp } from '@mastra/core/knowledge';
 import type { MastraCompositeStore } from '@mastra/core/storage';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 export interface KnowledgeImporterHostFixture {
   /** A store whose Knowledge domain is provisioned (pages and importer tables) and empty. */
@@ -231,6 +231,63 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       });
       const next = await host.startRun('b1');
       expect(next).toMatchObject({ status: 'started', state: { cursor: 'c1' }, lastSeq: 0 });
+    });
+
+    it("refuses to move or stub a page whose subtree holds another binding's page, and moves human children", async () => {
+      const { knowledge, run, page } = setup([
+        { id: 'b1', target: 'docs:acme#notion' },
+        { id: 'b2', target: 'docs:acme#linear' },
+      ]);
+      await run([upsert({ sourceId: 'l1' })], 'b2');
+      await run([upsert({ sourceId: 'p1' }), upsert({ sourceId: 'p2' }), upsert({ sourceId: 'p3' })]);
+      // A human puts b2's page under b1's p1, and their own page under p3.
+      await knowledge.movePage({ scope: 'docs:acme', path: 'linear/l1', parent: 'notion/p1' });
+      await knowledge.upsertPage({ scope: 'docs:acme', path: 'notion/p3/mine', name: 'Mine', body: 'human' });
+
+      const move = await run([upsert({ sourceId: 'p1', parent: 'p2' })]);
+      expect(move).toMatchObject({ counts: { moved: 0, refused: 1 } });
+      expect(await page('notion/p1/l1')).toBeTruthy();
+      expect(await page('notion/p2/p1')).toBeNull();
+
+      const remove = await run([{ op: 'remove', sourceId: 'p1' }]);
+      expect(remove).toMatchObject({ counts: { stubbed: 0, removed: 0, refused: 1 } });
+      expect((await page('notion/p1'))?.body).toBe('body of p1');
+
+      const human = await run([upsert({ sourceId: 'p3', parent: 'p2' })]);
+      expect(human).toMatchObject({ counts: { moved: 1, refused: 0 } });
+      expect((await page('notion/p2/p3/mine'))?.body).toBe('human');
+    });
+
+    it('rolls the whole flush back, receipt included, when the sink fails unexpectedly', async () => {
+      const { knowledge, page } = setup();
+      const host = knowledge.importers!.host;
+      const started = await host.startRun('b1');
+      if (started.status !== 'started') throw new Error('not started');
+      const ops = [upsert({ sourceId: 'p1' }), upsert({ sourceId: 'p2' })];
+
+      // Every transaction view shares the store's prototype, so this reaches the flush's writes.
+      const proto = Object.getPrototypeOf(await knowledge.getStorage()) as {
+        replacePageBodyLinks: (...args: unknown[]) => Promise<void>;
+      };
+      const original = proto.replacePageBodyLinks;
+      let calls = 0;
+      const spy = vi.spyOn(proto, 'replacePageBodyLinks').mockImplementation(function (this: unknown, ...args) {
+        if (++calls === 2) return Promise.reject(new Error('link index is down'));
+        return original.apply(this, args);
+      });
+      try {
+        await expect(flushOnce(host, started.runId, started.generation, 1, ops)).rejects.toThrow();
+      } finally {
+        spy.mockRestore();
+      }
+      expect(calls).toBe(2);
+      expect(await page('notion')).toBeNull();
+      expect(await page('notion/p1')).toBeNull();
+
+      // Nothing was recorded for seq 1, so the resend applies it rather than replaying a receipt.
+      const resent = await flushOnce(host, started.runId, started.generation, 1, ops);
+      expect(resent).toMatchObject({ seq: 1, created: 2 });
+      expect(await page('notion/p2')).toBeTruthy();
     });
 
     it('refuses a binding whose target nests inside another', async () => {

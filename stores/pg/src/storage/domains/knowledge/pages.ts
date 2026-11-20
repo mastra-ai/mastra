@@ -857,6 +857,11 @@ export class PgKnowledgePages implements KnowledgePageStore {
     ]);
   }
 
+  async lockSubtree(rootId: string): Promise<string[]> {
+    const core = await loadPagesCore();
+    return this.#lockStableSubtree(this.#client, rootId, core.MAX_KNOWLEDGE_MOVE_PAGES);
+  }
+
   async getPage(input: { id: string; read: KnowledgeReadScope }): Promise<KnowledgePage | null> {
     const params = new Params();
     const id = params.add(input.id);

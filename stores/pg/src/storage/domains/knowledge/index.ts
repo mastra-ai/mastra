@@ -284,6 +284,10 @@ export class KnowledgePG extends KnowledgeStorage {
     return this.#pages.lockPages(ids);
   }
 
+  override lockSubtree(rootId: string): Promise<string[]> {
+    return this.#pages.lockSubtree(rootId);
+  }
+
   override getPage(input: Parameters<KnowledgePageStore['getPage']>[0]): ReturnType<KnowledgePageStore['getPage']> {
     return this.#pages.getPage(input);
   }
