@@ -55,6 +55,10 @@ html.light .composer-ring {
 }
 
 .composer-ring-beam {
+  --beam-mono: var(--foreground);
+  --beam-tone: var(--composer-tone-color);
+  --beam-glow: 28%;
+
   pointer-events: none;
   position: absolute;
   inset: 0;
@@ -67,42 +71,58 @@ html.light .composer-ring {
   & > span {
     position: absolute;
     bottom: 0;
-    left: 0;
-    width: 45%;
+    width: 40%;
     height: 2.5rem;
     background: radial-gradient(
       ellipse 50% 100% at 50% 100%,
-      color-mix(in oklch, var(--composer-tone-color) 30%, transparent),
+      color-mix(in oklab, var(--beam-color) var(--beam-glow), transparent),
       transparent 70%
     );
-    translate: -20% 0;
-    animation: composer-ring-beam 3.2s var(--ease-in-out-custom) infinite alternate paused;
+    mix-blend-mode: screen;
+    transform-origin: 50% 100%;
+    animation: 6.1s var(--ease-in-out-custom) infinite paused;
 
     &::after {
       content: '';
       position: absolute;
-      inset-inline: 8%;
+      inset-inline: 10%;
       bottom: 0;
       height: 1px;
-      background: linear-gradient(
-        90deg,
-        transparent,
-        color-mix(in oklch, var(--composer-tone-color), white 35%),
-        transparent
-      );
+      background: linear-gradient(90deg, transparent, var(--beam-color), transparent);
     }
+  }
+
+  & > span:nth-child(1) {
+    --beam-color: var(--beam-mono);
+
+    left: 8%;
+    animation-name: composer-ring-beam-a;
+  }
+
+  & > span:nth-child(2) {
+    --beam-color: color-mix(in oklab, var(--beam-tone) 70%, var(--beam-mono));
+
+    left: 34%;
+    animation-name: composer-ring-beam-b;
+    animation-duration: 7.7s;
+  }
+
+  & > span:nth-child(3) {
+    --beam-color: color-mix(in oklab, var(--beam-mono) 60%, var(--beam-tone));
+
+    left: 55%;
+    animation-name: composer-ring-beam-c;
+    animation-duration: 5.3s;
+    animation-direction: alternate;
   }
 }
 
-html.light .composer-ring-beam > span {
-  background: radial-gradient(
-    ellipse 50% 100% at 50% 100%,
-    color-mix(in oklch, var(--composer-tone-color) 16%, transparent),
-    transparent 70%
-  );
+html.light .composer-ring-beam {
+  --beam-mono: var(--muted-foreground);
+  --beam-glow: 8%;
 
-  &::after {
-    background: linear-gradient(90deg, transparent, var(--composer-tone-color), transparent);
+  & > span {
+    mix-blend-mode: normal;
   }
 }
 
@@ -114,10 +134,60 @@ html.light .composer-ring-beam > span {
   }
 }
 
-/* Sweeps the 45% beam from just past the left end to just past the right. */
-@keyframes composer-ring-beam {
+/* Three lights on co-prime periods wander, swell and fade on their own, so the edge never repeats a pattern. */
+@keyframes composer-ring-beam-a {
+  0%,
+  100% {
+    translate: 0 0;
+    scale: 0.7 0.8;
+    opacity: 0.5;
+  }
+
+  35% {
+    translate: 55% 0;
+    scale: 1.15 1.1;
+    opacity: 1;
+  }
+
+  70% {
+    translate: 15% 0;
+    scale: 0.85 0.9;
+    opacity: 0.35;
+  }
+}
+
+@keyframes composer-ring-beam-b {
+  0%,
+  100% {
+    translate: 0 0;
+    scale: 1 1;
+    opacity: 0.9;
+  }
+
+  40% {
+    translate: -45% 0;
+    scale: 0.75 0.85;
+    opacity: 0.3;
+  }
+
+  75% {
+    translate: 40% 0;
+    scale: 1.25 1.15;
+    opacity: 1;
+  }
+}
+
+@keyframes composer-ring-beam-c {
+  from {
+    translate: 30% 0;
+    scale: 0.8 0.9;
+    opacity: 0.2;
+  }
+
   to {
-    translate: 142% 0;
+    translate: -25% 0;
+    scale: 1.2 1.1;
+    opacity: 0.85;
   }
 }
 
@@ -129,7 +199,6 @@ html.light .composer-ring-beam > span {
 
   .composer-ring-beam > span {
     animation: none;
-    translate: 61% 0;
   }
 }
 

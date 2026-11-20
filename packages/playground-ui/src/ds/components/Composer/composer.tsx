@@ -83,6 +83,8 @@ export function ComposerRing({ busy = false, tone = 'green', className, children
     >
       <span aria-hidden="true" className="composer-ring-beam">
         <span />
+        <span />
+        <span />
       </span>
       {children}
     </div>
