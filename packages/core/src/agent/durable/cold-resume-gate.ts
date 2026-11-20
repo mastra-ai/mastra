@@ -6,11 +6,13 @@
  */
 const undecidedColdResumes = new Map<string, Promise<void>>();
 
-/** Resolves once no cold resume of `runId` in this process is still deciding whether to accept. */
-export async function waitForUndecidedColdResume(runId: string): Promise<void> {
-  for (let pending = undecidedColdResumes.get(runId); pending; pending = undecidedColdResumes.get(runId)) {
-    await pending;
-  }
+/**
+ * The decision a cold resume of `runId` in this process is still making, if any. Callers loop on
+ * this in their own async function and claim the run in the same tick the loop ends: awaiting a
+ * helper that waits for them would let another resume claim the run in between.
+ */
+export function undecidedColdResume(runId: string): Promise<void> | undefined {
+  return undecidedColdResumes.get(runId);
 }
 
 /** One resume() call's hold on a run it is rebuilding from storage. Every method is idempotent. */

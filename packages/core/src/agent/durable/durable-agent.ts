@@ -80,7 +80,7 @@ import type { AgentAbortThreadOptions, AgentDurableOption, AgentModelManagerConf
 import { isDurableAgentLike } from '../types';
 
 import { publishAbortRequest, releaseRemoteAbortListener, requestAcknowledgedAbort } from './abort-transport';
-import { ColdResumeAttempt, waitForUndecidedColdResume } from './cold-resume-gate';
+import { ColdResumeAttempt, undecidedColdResume } from './cold-resume-gate';
 import {
   AGENT_STREAM_TOPIC,
   AgentStreamEventTypes,
@@ -765,6 +765,21 @@ export interface DurableAgentRecoverOptions<OUTPUT = undefined> {
    * `DURABLE_AGENT_RUN_ACTIVE` for a live run.
    */
   force?: boolean;
+}
+
+/**
+ * Set by the untilIdle wrapper on the resume() it re-enters: the outer call already authorized and
+ * validated this resume and accepted it, so the inner call must not check again and fail after
+ * acceptance, when the run already carries the caller's request context.
+ */
+const RESUME_ALREADY_ACCEPTED = Symbol('durable-agent.resume-already-accepted');
+
+function markResumeAccepted<T extends object>(options: T): T {
+  return Object.assign(options, { [RESUME_ALREADY_ACCEPTED]: true });
+}
+
+function isAcceptedResume(options: object | undefined): boolean {
+  return options !== undefined && RESUME_ALREADY_ACCEPTED in options;
 }
 
 export class DurableAgent<
@@ -3417,14 +3432,18 @@ export class DurableAgent<
     releaseResumeMarker: () => void,
     coldAttempt: ColdResumeAttempt,
   ): Promise<DurableAgentStreamResult<TOutput>> {
-    await waitForUndecidedColdResume(runId);
+    // Wait out any cold resume of this run that is still deciding, then read the registry and claim
+    // a cold run in the same tick, so two resumes can never both rebuild it.
+    for (let pending = undecidedColdResume(runId); pending; pending = undecidedColdResume(runId)) {
+      await pending;
+    }
     let entry = this.#runRegistry.get(runId);
     // Scopes persisted with a run rebuilt from storage. They are the suspended run's set even when
     // the caller passes its own request context.
     let rehydratedScopes: unknown;
     let coldSnapshot: WorkflowRunState | undefined;
     if (!entry) {
-      // Same tick as the read above: other resumes of this run wait until this one decides.
+      // Same tick as the loop above: other resumes of this run wait until this one decides.
       coldAttempt.begin();
       // A persisted durable run can outlive this process (or the registry TTL).
       // Rebuild the non-serializable runtime state before resuming the stored
@@ -3669,13 +3688,16 @@ export class DurableAgent<
     // Scoped runs execute on a run-scoped copy of the request context.
     resumeRequestContext = (resolvedOptions.requestContext as typeof resumeRequestContext) ?? resumeRequestContext;
 
-    await this.requireAgentExecutionFGA({
-      requestContext: resolvedOptions.requestContext,
-      memory: resolvedOptions.memory,
-      runId,
-      snapshotMemoryInfo: memoryInfo,
-      actor: resolvedOptions.actor,
-    });
+    const alreadyAccepted = isAcceptedResume(options);
+    if (!alreadyAccepted) {
+      await this.requireAgentExecutionFGA({
+        requestContext: resolvedOptions.requestContext,
+        memory: resolvedOptions.memory,
+        runId,
+        snapshotMemoryInfo: memoryInfo,
+        actor: resolvedOptions.actor,
+      });
+    }
 
     // Settle the prior segment before claiming the run and reading its snapshot
     // and event offset. The suspension chunk can arrive before the suspended
@@ -3692,7 +3714,7 @@ export class DurableAgent<
       workflowName: DurableStepIds.AGENTIC_LOOP,
       runId,
     });
-    if (resumeSnapshot) {
+    if (resumeSnapshot && !alreadyAccepted) {
       await this.#wrappedAgent.__validateToolResumeData({
         snapshot: resumeSnapshot,
         toolCallId: resolvedOptions.toolCallId,
@@ -3727,10 +3749,14 @@ export class DurableAgent<
         getDefaultOptions: () => ({}),
         getMemory: (args?: any) => this.getMemory(args),
         resume: (innerRunId: string, innerResumeData: unknown, innerOptions?: DurableAgentResumeOptions<TOutput>) =>
-          this.resume(innerRunId, innerResumeData, {
-            ...innerOptions,
-            tracingOptions: resumeTracingOptions,
-          } as DurableAgentResumeOptions<TOutput>),
+          this.resume(
+            innerRunId,
+            innerResumeData,
+            markResumeAccepted({
+              ...innerOptions,
+              tracingOptions: resumeTracingOptions,
+            } as DurableAgentResumeOptions<TOutput>),
+          ),
         stream: (innerMessages: MessageListInput, innerOptions?: DurableAgentStreamOptions<TOutput>) =>
           this.stream(innerMessages, innerOptions),
       } as unknown as DurableAgent<any, any, TOutput>;
