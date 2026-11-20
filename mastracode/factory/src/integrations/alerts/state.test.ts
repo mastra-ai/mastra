@@ -233,6 +233,46 @@ describe('planAlertEvent', () => {
     expect(refire.card?.timeline.at(-1)?.text).toContain('already recovered');
   });
 
+  it('carries a resolve the closed card held into the card filed after the cooldown', () => {
+    const { card, created } = run([
+      { event: event('alert.opened', 'i1'), now: T0 },
+      { close: at(MIN) },
+      { event: event('alert.resolved', 'i2'), now: at(2 * DAY) },
+      { event: event('alert.opened', 'i2'), now: at(10 * DAY) },
+    ]);
+    expect(created).toEqual(['card-1', 'card-2']);
+    expect(card?.state.incidents.i2?.resolvedAt).toBe(T0.toISOString());
+    expect(card?.timeline.map(entry => entry.kind)).toEqual(['fired', 'recovered']);
+  });
+
+  it('files the first qualifying raise of an incident that only has a resolve on the card', () => {
+    // Raised past the floor well after the first card's cooldown.
+    const raised = event('alert.severity_raised', 'i2', { severity: 'error' });
+    raised.incident.openedAt = at(10 * DAY).toISOString();
+    const { card, created, plans } = run([
+      { event: event('alert.opened', 'i1'), now: T0 },
+      { close: at(MIN) },
+      { event: event('alert.opened', 'i2', { severity: 'warning' }), now: at(2 * DAY) },
+      { event: event('alert.resolved', 'i2', { severity: 'warning' }), now: at(2 * DAY + MIN) },
+      { event: raised, now: at(10 * DAY) },
+    ]);
+    expect(plans[1]).toMatchObject({ kind: 'reject', code: 'below_severity_floor' });
+    expect(plans[3]?.kind).toBe('create');
+    expect(created).toEqual(['card-1', 'card-2']);
+    expect(card?.state.incidents.i2).toMatchObject({ resolvedAt: T0.toISOString(), severity: 'error' });
+  });
+
+  it('marks only a plan that records a recovery as recovered', () => {
+    const { plans } = run([
+      { event: event('alert.opened', 'i1'), now: T0 },
+      { event: event('alert.resolved', 'i1'), now: at(MIN) },
+      { event: event('alert.resolved', 'i2'), now: at(2 * MIN) },
+    ]);
+    expect(plans[1]).toMatchObject({ kind: 'update', recovered: true });
+    expect(plans[2]).toMatchObject({ kind: 'update' });
+    expect(plans[2]).not.toHaveProperty('recovered');
+  });
+
   it('binds the Slack thread once, from opened or a later thread_linked', () => {
     const slack = { teamId: 'T1', channelId: 'C1', ts: '1.2' };
     const inline = run([{ event: event('alert.opened', 'i1', { slack }), now: T0 }]);
