@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { listGatewayAudioModels } from '../utils/gateway-audio';
 
-/** Fails closed: a missing key, disabled flag, or unavailable server yields no audio controls. */
+/** Fails closed: a missing key or unavailable server yields no audio controls. */
 export function useGatewayAudioModels(baseUrl: string, enabled: boolean) {
   const query = useQuery({
     queryKey: ['gateway-audio-models', baseUrl],

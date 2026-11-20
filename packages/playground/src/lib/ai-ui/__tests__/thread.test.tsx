@@ -264,7 +264,7 @@ describe('Thread', () => {
     });
   });
 
-  describe('when a deployed user has Gateway audio access', () => {
+  describe('when a deployment has Gateway audio', () => {
     beforeEach(() => {
       window.MASTRA_PLATFORM_PROJECT_ID = 'project-1';
       installFakeRecorder();

@@ -11,7 +11,7 @@ function GatewayAudioModelsDemo() {
 
   return (
     <HookDemo>
-      <Txt>Gateway audio requires an injected V2 key and access for the signed-in user.</Txt>
+      <Txt>Gateway audio requires an injected V2 key.</Txt>
       <Txt role="status">{data ? 'Audio models available' : `Audio models hidden (${fetchStatus})`}</Txt>
     </HookDemo>
   );

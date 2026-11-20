@@ -14,7 +14,6 @@ afterEach(() => {
 function enableDeployment() {
   vi.stubEnv('MASTRA_GATEWAY_VERSION', 'v2');
   vi.stubEnv('MASTRA_GATEWAY_API_KEY', 'msk-gateway-test');
-  vi.stubEnv('MASTRA_SHARED_API_URL', 'https://platform.example/v1');
   vi.stubEnv('MASTRA_GATEWAY_URL', 'https://gateway.example');
 }
 
@@ -39,47 +38,27 @@ describe('Gateway audio routes', () => {
   it('recognizes the legacy V2 key prefix used by Gateway dispatch', async () => {
     enableDeployment();
     vi.stubEnv('MASTRA_GATEWAY_API_KEY', 'mskv2_test');
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(Response.json({ enabled: true }))
-      .mockResolvedValueOnce(Response.json({ data: [] }));
+    const fetchMock = vi.fn().mockResolvedValueOnce(Response.json({ data: [] }));
     vi.stubGlobal('fetch', fetchMock);
     const response = await GET_GATEWAY_AUDIO_MODELS_ROUTE.handler({ request: studioRequest() } as Parameters<
       typeof GET_GATEWAY_AUDIO_MODELS_ROUTE.handler
     >[0]);
 
     expect(response.status).toBe(200);
-    expect(fetchMock.mock.calls[1]?.[1]?.headers).toEqual({ authorization: 'Bearer mskv2_test' });
-  });
-
-  it('checks the signed-in user flag before listing key-scoped models', async () => {
-    enableDeployment();
-    const fetchMock = vi.fn(async () => Response.json({ enabled: false }));
-    vi.stubGlobal('fetch', fetchMock);
-    const response = await GET_GATEWAY_AUDIO_MODELS_ROUTE.handler({ request: studioRequest() } as Parameters<
-      typeof GET_GATEWAY_AUDIO_MODELS_ROUTE.handler
-    >[0]);
-
-    expect(response.status).toBe(403);
-    expect(fetchMock).toHaveBeenCalledOnce();
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://platform.example/v1/gateway/audio/access');
-    expect(fetchMock.mock.calls[0]?.[1]?.headers).toEqual({ cookie: '__Host-wos-session=session-data' });
+    expect(fetchMock.mock.calls[0]?.[1]?.headers).toEqual({ authorization: 'Bearer mskv2_test' });
   });
 
   it('offers transcription and reviewed MP3 speech models from the valid key', async () => {
     enableDeployment();
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(Response.json({ enabled: true }))
-      .mockResolvedValueOnce(
-        Response.json({
-          data: [
-            { id: 'speak-mp3', endpoints: ['speech'], speech: { formats: ['mp3'], voices: ['george'] } },
-            { id: 'speak-pcm', endpoints: ['speech'], speech: { formats: ['pcm'], voices: [] } },
-            { id: 'listen', endpoints: ['transcription'] },
-          ],
-        }),
-      );
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      Response.json({
+        data: [
+          { id: 'speak-mp3', endpoints: ['speech'], speech: { formats: ['mp3'], voices: ['george'] } },
+          { id: 'speak-pcm', endpoints: ['speech'], speech: { formats: ['pcm'], voices: [] } },
+          { id: 'listen', endpoints: ['transcription'] },
+        ],
+      }),
+    );
     vi.stubGlobal('fetch', fetchMock);
     const response = await GET_GATEWAY_AUDIO_MODELS_ROUTE.handler({ request: studioRequest() } as Parameters<
       typeof GET_GATEWAY_AUDIO_MODELS_ROUTE.handler
@@ -90,8 +69,8 @@ describe('Gateway audio routes', () => {
       speech: [{ id: 'speak-mp3', voices: ['george'] }],
       transcription: [{ id: 'listen' }],
     });
-    expect(fetchMock.mock.calls[1]?.[0]).toBe('https://gateway.example/v1/models');
-    expect(fetchMock.mock.calls[1]?.[1]?.headers).toEqual({ authorization: 'Bearer msk-gateway-test' });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://gateway.example/v1/models');
+    expect(fetchMock.mock.calls[0]?.[1]?.headers).toEqual({ authorization: 'Bearer msk-gateway-test' });
   });
 
   it('rejects cross-site audio POSTs before using the deployment key', async () => {
@@ -126,7 +105,6 @@ describe('Gateway audio routes', () => {
   it('accepts same-origin Studio speech and dictation behind the deployment proxy', async () => {
     enableDeployment();
     const fetchMock = vi.fn(async (url: string) => {
-      if (url.endsWith('/gateway/audio/access')) return Response.json({ enabled: true });
       if (url.endsWith('/v1/audio/speech')) return new Response('audio', { headers: { 'content-type': 'audio/mpeg' } });
       return Response.json({ text: 'spoken words' });
     });
@@ -167,7 +145,6 @@ describe('Gateway audio routes', () => {
     enableDeployment();
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(Response.json({ enabled: true }))
       .mockResolvedValueOnce(new Response('audio', { headers: { 'content-type': 'audio/mpeg' } }));
     vi.stubGlobal('fetch', fetchMock);
     const response = await POST_GATEWAY_AUDIO_SPEECH_ROUTE.handler({
@@ -179,7 +156,7 @@ describe('Gateway audio routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toBe('audio/mpeg');
-    expect(JSON.parse(fetchMock.mock.calls[1]?.[1]?.body)).toEqual({
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body)).toEqual({
       model: 'speak-mp3',
       input: 'Hello',
       voice: 'george',
@@ -189,16 +166,13 @@ describe('Gateway audio routes', () => {
 
   it('forwards recorded audio and returns the Gateway transcript', async () => {
     enableDeployment();
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(Response.json({ enabled: true }))
-      .mockImplementationOnce(async (_url: string, init: RequestInit) => {
-        const form = init.body as FormData;
-        expect(form.get('model')).toBe('openai/whisper');
-        expect((form.get('file') as File).name).toBe('dictation.webm');
-        expect(form.get('response_format')).toBe('json');
-        return Response.json({ text: 'spoken words' });
-      });
+    const fetchMock = vi.fn().mockImplementationOnce(async (_url: string, init: RequestInit) => {
+      const form = init.body as FormData;
+      expect(form.get('model')).toBe('openai/whisper');
+      expect((form.get('file') as File).name).toBe('dictation.webm');
+      expect(form.get('response_format')).toBe('json');
+      return Response.json({ text: 'spoken words' });
+    });
     vi.stubGlobal('fetch', fetchMock);
     const form = new FormData();
     form.set('model', 'openai/whisper');
@@ -218,18 +192,15 @@ describe('Gateway audio routes', () => {
 
   it('shows a provider audio validation error without exposing provider metadata', async () => {
     enableDeployment();
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(Response.json({ enabled: true }))
-      .mockResolvedValueOnce(
-        Response.json(
-          {
-            error: { message: 'The recording is too short.', metadata: { account: 'private' } },
-            user_id: 'provider-account',
-          },
-          { status: 400 },
-        ),
-      );
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      Response.json(
+        {
+          error: { message: 'The recording is too short.', metadata: { account: 'private' } },
+          user_id: 'provider-account',
+        },
+        { status: 400 },
+      ),
+    );
     vi.stubGlobal('fetch', fetchMock);
     const form = new FormData();
     form.set('model', 'assemblyai/universal-3-5-pro');
