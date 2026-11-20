@@ -381,14 +381,14 @@ const FILE_COMMAND_TIMEOUT_MS = 10 * 60_000;
 const GITHUB_TOKEN_ENV = /^(GH_TOKEN(_\d+)?|GITHUB_TOKEN|GH_ENTERPRISE_TOKEN|GITHUB_ENTERPRISE_TOKEN)$/;
 const GIT_CONFIG_ENV = /^GIT_CONFIG_(COUNT|KEY_\d+|VALUE_\d+)$/;
 
-const GITHUB_HOSTS = ['github.com', 'api.github.com'];
-
 /**
  * Whether git would apply a config key's credential to github.com. Scoped
  * `http.<url>.*` and `credential.<url>.*` keys count when their URL's host is
  * github.com or a subdomain, with or without a scheme, path, trailing slash
  * or trailing dot on the host (git resolves `github.com.` to github.com),
- * including `*` wildcards git allows in the host. Unscoped `http.extraHeader`,
+ * including `*` wildcards git allows in the host: git matches `*` within one
+ * label, so a pattern applies when its last two labels can match `github.com`
+ * (any leading labels can match some subdomain, e.g. `gist.github.*`). Unscoped `http.extraHeader`,
  * `http.cookieFile` and `credential.*` keys apply to every host, so they count too.
  */
 function appliesToGithub(key: string): boolean {
@@ -410,15 +410,18 @@ function appliesToGithub(key: string): boolean {
     .replace(/\.+$/, '');
   if (host === 'github.com' || host.endsWith('.github.com')) return true;
   if (!host.includes('*')) return false;
-  const pattern = new RegExp(
-    '^' +
-      host
-        .split('*')
-        .map(part => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
-        .join('[^.]*') +
-      '$',
-  );
-  return GITHUB_HOSTS.some(candidate => pattern.test(candidate));
+  const labels = host.split('.');
+  if (labels.length < 2) return false;
+  const labelMatches = (label: string, target: string) =>
+    new RegExp(
+      '^' +
+        label
+          .split('*')
+          .map(part => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
+          .join('[^.]*') +
+        '$',
+    ).test(target);
+  return labelMatches(labels.at(-2)!, 'github') && labelMatches(labels.at(-1)!, 'com');
 }
 
 /**

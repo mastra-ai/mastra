@@ -109,6 +109,9 @@ const GITHUB_CONFIG_KEYS = [
   'http.https://user@github.com:443/octocat.extraHeader',
   'http.github.com.extraHeader',
   'http.https://*.github.com.extraHeader',
+  'http.https://gist.github.*.extraHeader',
+  'http.https://uploads.github.*.extraHeader',
+  'http.https://*.*.extraHeader',
   'http.https://api.github.com/.extraheader',
   'http.extraHeader',
   'HTTP.EXTRAHEADER',
@@ -120,6 +123,8 @@ const GITHUB_CONFIG_KEYS = [
 const OTHER_HOST_CONFIG_KEYS = [
   'http.https://gitlab.com.extraHeader',
   'http.https://github.com.evil.example/.extraHeader',
+  'http.https://*.gitlab.com.extraHeader',
+  'http.https://gist.github.*.example.extraHeader',
   'credential.https://gitlab.com.helper',
   'http.sslVerify',
   'url.https://vault.test/git/.insteadOf',
