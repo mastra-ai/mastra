@@ -846,7 +846,9 @@ describe('skill_read tool', () => {
           ['assets/template.csv', Buffer.from('col1,col2\na,b')],
           ['docs/schema.md', Buffer.from('# Schema')],
           ['assets/unknown.bin', Buffer.from([0, 0xff, 0xfe])],
-          ['assets/large.pdf', Buffer.alloc(DEFAULT_MAX_MEDIA_BYTES + 1, 0x61)],
+          // A real PDF over the media cap, and a text log over the cap saved under a .pdf name.
+          ['assets/large.pdf', Buffer.concat([pdf, Buffer.alloc(DEFAULT_MAX_MEDIA_BYTES + 1 - pdf.length, 0x61)])],
+          ['assets/large-log.pdf', Buffer.from(`first line\n${'a'.repeat(DEFAULT_MAX_MEDIA_BYTES)}\nlast line`)],
         ]);
         let source: SkillSource;
         if (sourceType === 'local') {
@@ -907,6 +909,12 @@ describe('skill_read tool', () => {
         const oversized = await exec(tool, { skillName: 'design-system', path: 'assets/large.pdf' });
         expect(oversized).toMatch(/^Binary file: .*assets\/large.pdf \(10485761 bytes\)$/);
         expect(tool.toModelOutput?.(oversized)).toBeUndefined();
+        // Size only limits real media: a text file stays readable by line range at any size.
+        expect(
+          await exec(tool, { skillName: 'design-system', path: 'assets/large-log.pdf', startLine: 1, endLine: 1 }),
+        ).toMatch(
+          /^assets\/large-log\.pdf \(lines 1-1 of 3\) — the extension says application\/pdf, but the content is not a valid file of that type; showing it as text\nfirst line$/,
+        );
       } finally {
         await fs.rm(tempDir, { recursive: true, force: true });
       }

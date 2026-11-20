@@ -271,15 +271,15 @@ function createSkillReadTool(skills: WorkspaceSkills) {
         let mislabeledNote: string | undefined;
         if (DEFAULT_MEDIA_TYPES.includes(declaredType)) {
           const fullPath = `${resolved.skill.path}/${path}`;
-          if (bytes.length > DEFAULT_MAX_MEDIA_BYTES) {
-            span.end({ success: true }, { bytesTransferred: bytes.length });
-            return `Binary file: ${fullPath} (${bytes.length} bytes)`;
-          }
           // The bytes, not the name, decide the declared type: providers reject a part whose
           // content disagrees with it, and the stored result then fails every later call in the run.
           const mediaType = contentMediaType(bytes, declaredType);
           if (mediaType && DEFAULT_MEDIA_TYPES.includes(mediaType)) {
             span.end({ success: true }, { bytesTransferred: bytes.length });
+            // The size cap applies to real media only; text under a media name stays readable below.
+            if (bytes.length > DEFAULT_MAX_MEDIA_BYTES) {
+              return `Binary file: ${fullPath} (${bytes.length} bytes)`;
+            }
             return {
               __workspaceMedia: true,
               text: `${fullPath} (${bytes.length} bytes, ${mediaType})`,
@@ -293,7 +293,6 @@ function createSkillReadTool(skills: WorkspaceSkills) {
             return `Binary file: ${fullPath} (${bytes.length} bytes) — ${mislabeledNote}, so it was not sent as media.`;
           }
         }
-
         // Binary if it contains NUL bytes or is not valid UTF-8 (e.g. PNGs, PDFs — which are
         // often NUL-free). Report the exact byte size and never put mojibake in model context.
         const text = bytes.toString('utf-8');
