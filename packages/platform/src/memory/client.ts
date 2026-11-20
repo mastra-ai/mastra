@@ -64,10 +64,33 @@ export interface MemoryContext {
   observedAt: string | null;
 }
 
+/** One observational-memory generation. Timestamps are ISO strings. */
 export interface MemoryObservationRecord {
+  id: string;
+  scope: 'thread' | 'resource';
+  threadId: string | null;
+  resourceId: string;
+  originType: 'initial' | 'reflection';
+  generationCount: number;
+  createdAt: string;
+  updatedAt: string;
   activeObservations: string | null;
   lastObservedAt: string | null;
+  observationTokenCount: number;
+  totalTokensObserved: number;
+  pendingMessageTokens: number;
+  isObserving: boolean;
+  isReflecting: boolean;
+  isBufferingObservation: boolean;
+  isBufferingReflection: boolean;
   [key: string]: unknown;
+}
+
+export interface MemoryObservationRecords {
+  /** Null before the first observation. */
+  record: MemoryObservationRecord | null;
+  /** Past generations, newest first. Empty unless `historyLimit` was set. */
+  history: MemoryObservationRecord[];
 }
 
 type SerializedMessageList = ReturnType<import('@mastra/core/agent').MessageList['serialize']>;
@@ -238,6 +261,34 @@ export class PlatformMemoryClient {
     return res.record;
   }
 
+  /**
+   * Current observational-memory record for the thread plus up to `historyLimit` (1-50) past
+   * generations, newest first.
+   */
+  async getObservationRecords(
+    threadId: string,
+    options: { historyLimit?: number; from?: string; to?: string; offset?: number } = {},
+  ): Promise<MemoryObservationRecords> {
+    const res = await this.request<{ record: MemoryObservationRecord | null; history?: MemoryObservationRecord[] }>(
+      'GET',
+      `/threads/${encodeURIComponent(threadId)}/observations`,
+      { query: options },
+    );
+    return { record: res.record, history: res.history ?? [] };
+  }
+
+  async waitForBuffering(threadId: string): Promise<'idle' | 'completed'> {
+    const result = await this.request<{ status: unknown }>(
+      'GET',
+      `/threads/${encodeURIComponent(threadId)}/observations/buffer-status`,
+      { timeoutMs: 35_000 },
+    );
+    if (result.status !== 'idle' && result.status !== 'completed') {
+      throw new PlatformMemoryApiError(503, 'Hosted buffering returned an invalid status');
+    }
+    return result.status;
+  }
+
   /** Runs the instance's memory processors for one agent phase on a serialized message list. */
   runProcessors(threadId: string, body: RunMemoryProcessorsInput, signal?: AbortSignal) {
     return this.request<MemoryProcessorsResult>('POST', `/threads/${encodeURIComponent(threadId)}/processors`, {
@@ -255,6 +306,11 @@ export class PlatformMemoryClient {
   /** Effective observation thresholds for the thread and which ones it overrides. */
   getThreadConfig(threadId: string) {
     return this.request<MemoryThreadConfig>('GET', `/threads/${encodeURIComponent(threadId)}/config`);
+  }
+
+  /** The instance's observation thresholds, before any thread overrides. */
+  getInstanceConfig() {
+    return this.request<MemoryThreadConfig>('GET', '/config');
   }
 
   /** Overrides thresholds for one thread. Pass `null` to fall back to the instance value. */

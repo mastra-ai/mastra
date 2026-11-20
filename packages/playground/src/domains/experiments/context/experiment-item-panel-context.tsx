@@ -1,9 +1,9 @@
 import type { DatasetExperimentResult } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
+import { useItemPanelKeyboardNav } from '@mastra/playground-ui/keyboard/use-item-panel-keyboard-nav';
 import { createContext, useCallback, useContext, useMemo } from 'react';
-import { useMatch, useNavigate } from 'react-router';
 
-import { useItemPanelKeyboardNav } from '@/lib/use-item-panel-keyboard-nav';
+import { useMatch, useNavigate } from 'react-router';
 
 export type ExperimentItemPanelContextValue = {
   experimentId: string;

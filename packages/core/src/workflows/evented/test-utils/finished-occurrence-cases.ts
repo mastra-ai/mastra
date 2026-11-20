@@ -15,6 +15,7 @@ import type { PubSub } from '../../../events/pubsub';
 import type { Event } from '../../../events/types';
 import { Mastra } from '../../../mastra';
 import type { MastraStorage } from '../../../storage';
+import type { WorkflowsStorage } from '../../../storage/domains/workflows/base';
 import { getEntryWorkflow } from '../../step-entry';
 import type { StepFlowEntry } from '../../types';
 import type { Workflow } from '../../workflow';
@@ -213,6 +214,48 @@ function recordWorkflowEvents(inner: PubSub, intercept: Intercept = () => undefi
 }
 
 /**
+ * What happens after a replica saved a step result: a promise holds the
+ * replica's handler there until it resolves, as when the process stops right
+ * after the write. The write itself is already in the store.
+ */
+type AfterWrite = (write: { stepId: string; result: { status?: string } }) => Promise<void> | undefined;
+
+/** Wraps a replica's store so its step result writes go through `afterWrite`. */
+function withAfterWrite(storage: MastraStorage, afterWrite: AfterWrite): MastraStorage {
+  return new Proxy(storage, {
+    get(target, prop) {
+      const value = Reflect.get(target, prop, target);
+      if (prop !== 'getStore') {
+        return typeof value === 'function' ? value.bind(target) : value;
+      }
+
+      return async (...args: Parameters<MastraStorage['getStore']>) => {
+        const store = await target.getStore(...args);
+        if (args[0] !== 'workflows' || !store) {
+          return store;
+        }
+
+        const workflows = store as WorkflowsStorage;
+        return new Proxy(workflows, {
+          get(domain, key) {
+            const method = Reflect.get(domain, key, domain);
+            if (key !== 'updateWorkflowResults') {
+              return typeof method === 'function' ? method.bind(domain) : method;
+            }
+
+            return async (write: Parameters<WorkflowsStorage['updateWorkflowResults']>[0]) => {
+              const results = await workflows.updateWorkflowResults(write);
+              await afterWrite(write);
+              return results;
+            };
+          },
+        });
+      };
+    },
+  });
+}
+
+/**
  * Starts `run` without waiting for its result. The test reads the outcome from
  * storage, and the replica that started the run may crash or never see it end,
  * so a rejection is logged for the test's output instead of being awaited.
@@ -259,16 +302,17 @@ export function describeFinishedOccurrenceCases({
      * `delivered` the same events as its subscribers receive them, with the id a
      * broker keeps on redelivery.
      */
-    async function startReplica<W extends Built>(workflow: W, intercept?: Intercept) {
+    async function startReplica<W extends Built>(workflow: W, intercept?: Intercept, afterWrite?: AfterWrite) {
       const { pubsub, published } = recordWorkflowEvents(new EventEmitterPubSub(), intercept);
       const graph = (workflow as unknown as { stepGraph: StepFlowEntry[] }).stepGraph;
       const nested = graph.flatMap(entry => {
         const child = entry.type === 'step' ? getEntryWorkflow(entry) : null;
         return child ? [[child.id, child] as const] : [];
       });
+      const storage = await connect();
       const mastra = new Mastra({
         logger: false,
-        storage: await connect(),
+        storage: afterWrite ? withAfterWrite(storage, afterWrite) : storage,
         pubsub,
         workflows: { finished: workflow, ...Object.fromEntries(nested) } as unknown as Record<string, Workflow>,
       });
@@ -441,8 +485,8 @@ export function describeFinishedOccurrenceCases({
       );
 
       // A's step end for b is delivered and the run ends the parallel, runs c and is in d when B's
-      // message arrives. Which replica goes on depends on whether A saved b's result before B's
-      // restart handled finished branch a: then B ends the parallel and A's step end is dropped.
+      // message arrives. B's restart read b as running, so its message for finished branch a leaves
+      // ending the parallel to b's step end.
       deliverStepEnd();
       await dBlocked.promise;
       const before = b.published.length;
@@ -454,6 +498,206 @@ export function describeFinishedOccurrenceCases({
       await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
       expect(executions.map(e => e.slice(2)).sort()).toEqual(['a', 'b', 'c', 'd']);
     }, 20_000);
+
+    // Technical: A saved a's result and stopped before aggregating the entry, with b already
+    // suspended. a started after b suspended, so the run's stored active steps name only a. On a
+    // parallel the restart then dispatches only a, and its delivery continues from a's saved result
+    // and aggregates the entry, which suspends the run. Dropping it would leave nothing to aggregate
+    // the entry and the run `running` for good.
+    //
+    // A conditional restart dispatches every branch whose condition holds, and a delivery for a
+    // branch saved as suspended runs it again while the run is `running`, so there b can run once
+    // more and suspend again before a's delivery suspends the run. Known issue, outside this case.
+    it.each(['parallel', 'conditional'] as const)(
+      '%s: suspends a run restarted after one branch finished and the other suspended, then finishes it on resume',
+      async kind => {
+        const executions: string[] = [];
+        const build = (replica: string) => {
+          const report: Report = async id => void executions.push(`${replica}:${id}`);
+          const a = work('a', report);
+          const b = createStep({
+            id: 'b',
+            inputSchema: Num,
+            outputSchema: Num,
+            resumeSchema: z.object({ ok: z.boolean() }),
+            execute: async ({ inputData, resumeData, suspend }) => {
+              await report('b');
+              if (!resumeData) {
+                await suspend({});
+              }
+              return inputData;
+            },
+          });
+          const workflow = createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: z.any() });
+          const entry =
+            kind === 'parallel'
+              ? workflow.parallel([a, b])
+              : workflow.branch([
+                  [async () => true, a],
+                  [async () => true, b],
+                ]);
+          return entry
+            .then(
+              createStep({
+                id: 'c',
+                inputSchema: z.any(),
+                outputSchema: Num,
+                execute: async () => {
+                  await report('c');
+                  return { n: 1 };
+                },
+              }),
+            )
+            .commit();
+        };
+
+        // A runs a only once b suspended, and stops right after saving a's result.
+        const startA = deferred<void>();
+        const aSaved = deferred<void>();
+        const a = await startReplica(
+          build('A'),
+          event =>
+            event.type === 'workflow.step.run' && samePath(event, [0, 0]) && !event.data.restart
+              ? startA.promise
+              : undefined,
+          ({ stepId, result }) => {
+            if (stepId !== 'a' || result.status !== 'success') {
+              return undefined;
+            }
+
+            aSaved.resolve();
+            return new Promise<never>(() => {});
+          },
+        );
+        const run = await a.workflow.createRun({ runId: uniqueRunId() });
+        startInBackground(run, { n: 1 });
+        await expect.poll(async () => (await storedRun(run.runId))?.context.b?.status).toBe('suspended');
+        startA.resolve();
+        await aSaved.promise;
+        await crash(a);
+        expect((await storedRun(run.runId))?.status).toBe('running');
+
+        const b = await startReplica(build('B'));
+        void (await b.workflow.createRun({ runId: run.runId }))
+          .restart()
+          .catch(error => console.error('A restart left running by the test rejected', error));
+
+        await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('suspended');
+        expect((await storedRun(run.runId))?.suspendedPaths).toEqual({ b: [0, 1] });
+        const withoutKnownRerun = (label: string) => kind !== 'conditional' || label !== 'B:b';
+        expect(executions.filter(withoutKnownRerun)).toEqual(['A:b', 'A:a']);
+
+        const before = executions.length;
+        const resumed = await (
+          await b.workflow.createRun({ runId: run.runId })
+        ).resume({
+          step: 'b',
+          resumeData: { ok: true },
+        });
+        expect(resumed.status).toBe('success');
+        expect(executions.slice(before)).toEqual(['B:b', 'B:c']);
+      },
+      20_000,
+    );
+
+    // Technical: A saved a's failure and stopped before publishing `workflow.fail`, with b still
+    // running. A failed branch never reaches the entry's aggregation, so b's completion can't end
+    // the run: the restart's delivery for a has to continue from the saved failure and fail it.
+    // Dropping it because b was unsettled left the run `running` for good.
+    it.each(['parallel', 'conditional'] as const)(
+      '%s: fails a run restarted after one branch failed while the other was still running',
+      async kind => {
+        const executions: string[] = [];
+        const bStarted = deferred<void>();
+        const build = (replica: string) => {
+          const report: Report = async id => void executions.push(`${replica}:${id}`);
+          const a = createStep({
+            id: 'a',
+            inputSchema: Num,
+            outputSchema: Num,
+            execute: async () => {
+              await report('a');
+              throw new Error('a broke');
+            },
+          });
+          const b = createStep({
+            id: 'b',
+            inputSchema: Num,
+            outputSchema: Num,
+            execute: async ({ inputData }) => {
+              await report('b');
+              if (replica === 'A') {
+                bStarted.resolve();
+                await new Promise<never>(() => {});
+              }
+              return inputData;
+            },
+          });
+          const workflow = createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: z.any() });
+          const entry =
+            kind === 'parallel'
+              ? workflow.parallel([a, b])
+              : workflow.branch([
+                  [async () => true, a],
+                  [async () => true, b],
+                ]);
+          return entry
+            .then(
+              createStep({
+                id: 'c',
+                inputSchema: z.any(),
+                outputSchema: Num,
+                execute: async () => {
+                  await report('c');
+                  return { n: 1 };
+                },
+              }),
+            )
+            .commit();
+        };
+
+        // A runs a only once b is running, and stops right after saving a's failure.
+        const startA = deferred<void>();
+        const aSaved = deferred<void>();
+        const a = await startReplica(
+          build('A'),
+          event =>
+            event.type === 'workflow.step.run' && samePath(event, [0, 0]) && !event.data.restart
+              ? startA.promise
+              : undefined,
+          ({ stepId, result }) => {
+            if (stepId !== 'a' || result.status !== 'failed') {
+              return undefined;
+            }
+
+            aSaved.resolve();
+            return new Promise<never>(() => {});
+          },
+        );
+        const run = await a.workflow.createRun({ runId: uniqueRunId() });
+        startInBackground(run, { n: 1 });
+        await bStarted.promise;
+        startA.resolve();
+        await aSaved.promise;
+        await crash(a);
+        expect((await storedRun(run.runId))?.status).toBe('running');
+
+        const b = await startReplica(build('B'));
+        void (await b.workflow.createRun({ runId: run.runId }))
+          .restart()
+          .catch(error => console.error('A restart left running by the test rejected', error));
+
+        await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('failed');
+        expect((await storedRun(run.runId))?.error?.message).toBe('a broke');
+        // The restart runs b again, which A never finished. Step guards don't treat a saved failure
+        // as final (a retry may follow it), so there the restart runs a again too and it fails again.
+        const guards = (await getStorage().getStore('workflows'))!.supportsWorkflowStepGuards();
+        const ran = ['A:b', 'A:a', 'B:b', ...(guards ? ['B:a'] : [])].sort();
+        await expect.poll(() => [...executions].sort()).toEqual(ran);
+        expect((await storedRun(run.runId))?.status).toBe('failed');
+      },
+      20_000,
+    );
 
     /** The first entries `crashAfterSavingFirst` runs before `second`: a step, or a loop whose last iteration ends it. */
     const firstEntries = {

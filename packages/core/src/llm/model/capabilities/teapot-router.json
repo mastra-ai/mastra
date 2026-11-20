@@ -10,6 +10,12 @@
   ],
   "temperature": ["claude-haiku-4-5"],
   "reasoning": {
+    "claude-opus-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "claude-opus-5-5": [
       {
         "type": "effort",
@@ -30,18 +36,6 @@
         "type": "budget_tokens"
       }
     ],
-    "claude-opus-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "claude-sonnet-5-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
     "claude-sonnet-5": [
       {
         "type": "toggle"
@@ -52,6 +46,12 @@
       }
     ],
     "gpt-6-astra": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "claude-sonnet-5-5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]

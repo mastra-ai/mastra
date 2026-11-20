@@ -175,7 +175,7 @@ describe('OM preserves the in-flight turn across mid-turn observation (#25372)',
             : createDurableAgent({ agent });
         const mastra = new Mastra({ agents: { agent: durableAgent }, storage, logger: false });
         try {
-          expect(durableAgent.resolveWorkflowEngine()).toBe(engine === 'evented' ? 'evented' : 'default');
+          expect(durableAgent.getWorkflow().engineType).toBe(engine === 'evented' ? 'evented' : 'default');
           const options = { memory: { thread: threadId, resource: 'r' }, maxSteps: 3 };
           let text = '';
           if (method === 'generate') {

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/json-render",
-  "version": "0.1.0",
+  "version": "0.2.0-alpha.0",
   "description": "Let Mastra agents compose json-render interfaces that stream to the client and stay in memory",
   "type": "module",
   "main": "./dist/index.js",
@@ -17,6 +17,16 @@
       "require": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
+      }
+    },
+    "./studio": {
+      "import": {
+        "types": "./dist/studio/index.d.ts",
+        "default": "./dist/studio/index.js"
+      },
+      "require": {
+        "types": "./dist/studio/index.d.ts",
+        "default": "./dist/studio/index.cjs"
       }
     },
     "./package.json": "./package.json"
@@ -49,8 +59,14 @@
   },
   "peerDependencies": {
     "@json-render/core": "^0.22.0",
+    "@json-render/react": "^0.22.0",
     "@mastra/core": ">=1.83.0-0 <2.0.0-0",
     "zod": ">=3.25.0 || >=4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@json-render/react": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@internal/ai-sdk-v5": "workspace:*",

@@ -24,6 +24,7 @@ import type {
 import type { ProcessorState } from '../../processors/runner';
 import { RequestContext, MASTRA_SCOPES_KEY, MASTRA_VERSIONS_KEY, mergeVersionOverrides } from '../../request-context';
 import type { VersionOverrides } from '../../request-context';
+import { getRequestContextInputValues } from '../../request-context/input-source';
 import { asJsonSchema } from '../../stream/base/schema';
 import { normalizeToolPayloadTransformPolicy } from '../../tools/payload-transform';
 import type { CoreTool, ToolHooks, ToolPayloadTransformPolicy } from '../../tools/types';
@@ -32,13 +33,13 @@ import { boundedStringify, deepMerge } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
 import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
-import { convertInstructionsToString, getInitialSignalEchoes } from '../helpers';
+import { convertInstructionsToString, getInitialSignalEchoes, resolveVersionContext } from '../helpers';
 import { assertThreadOwnedByResource } from '../memory-thread-ownership';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { modelSpanAttributes } from '../model-span-attributes';
 import { snapshotRequestContextEntries } from '../request-context-snapshot';
-import { validateAgentRequestContext } from '../request-context-validation';
+import { throwAgentRequestContextValidationError } from '../request-context-validation';
 import { SaveQueueManager } from '../save-queue';
 import { applyResolvedAgentScopes, incomingAgentScopes, resolveAgentScopes } from '../scopes';
 import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from '../signals';
@@ -70,6 +71,11 @@ import {
 } from './utils/serialize-state';
 import { generateDurableThreadTitle } from './workflows/finalize-run';
 import { isJsonSafe } from './workflows/shared/schemas';
+
+/** Marks `prepare()` options whose scopes the caller applies itself (a resume rebuilt from storage). */
+export const SCOPES_ALREADY_APPLIED = Symbol('mastra.durable.scopesAlreadyApplied');
+/** Carries the persisted spans a resume rebuilt from storage reattaches to into `prepare()`. */
+export const RESUMED_SPAN_DATA = Symbol('mastra.durable.resumedSpanData');
 
 /**
  * Interface for the Agent methods needed during durable preparation.
@@ -264,12 +270,17 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // 2a. Validate the request context against the agent's requestContextSchema,
   // mirroring Agent.stream()/generate(). Without this, schema violations are
   // silently ignored on the durable path.
-  await validateAgentRequestContext({
-    requestContextSchema: typedAgent.requestContextSchema,
-    requestContext,
-    agentId: publicAgentId,
-    agentName: publicAgentName,
-  });
+  if (typedAgent.requestContextSchema) {
+    const contextValues = getRequestContextInputValues(requestContext);
+    const validation = await typedAgent.requestContextSchema['~standard'].validate(contextValues);
+    if (validation.issues) {
+      throwAgentRequestContextValidationError({
+        issues: validation.issues,
+        agentId: publicAgentId,
+        agentName: publicAgentName,
+      });
+    }
+  }
 
   // 2a. Merge the wrapped agent's defaultOptions under the per-request options,
   // mirroring the non-durable Agent.stream()/generate() paths. Without this the
@@ -319,13 +330,14 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 3. Merge version overrides (Mastra defaults < requestContext < call-site)
   const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
-  let mergedVersions = mergeVersionOverrides(mastra?.getVersionOverrides?.(), requestVersions);
-  if ((execOptions as any)?.versions) {
-    mergedVersions = mergeVersionOverrides(mergedVersions, (execOptions as any).versions);
-  }
-  if (mergedVersions) {
-    requestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
-  }
+  resolveVersionContext(
+    requestContext,
+    requestVersions,
+    mastra?.getVersionOverrides?.(),
+    execOptions,
+    // Durable preparation normalizes sole overrides; plain calls preserve their identity.
+    mergeVersionOverrides,
+  );
 
   // Resolve and validate the complete model selection before durable preparation
   // can persist a thread or run user-defined processors, tools, or hooks.

@@ -76,6 +76,11 @@
         "values": ["high", "max"]
       }
     ],
+    "Qwen3.8-Max": [
+      {
+        "type": "toggle"
+      }
+    ],
     "DeepSeek-V4-Pro": [
       {
         "type": "toggle"
@@ -83,11 +88,6 @@
       {
         "type": "effort",
         "values": ["high", "max"]
-      }
-    ],
-    "Qwen3.8-Max": [
-      {
-        "type": "toggle"
       }
     ]
   }

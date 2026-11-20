@@ -1,4 +1,6 @@
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
+import { mergeVersionOverrides } from '../mastra/types';
+import type { VersionOverrides } from '../mastra/types';
+import { MASTRA_VERSIONS_KEY, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { RequestContext } from '../request-context';
 import { RECOVER_ALREADY_IN_PROGRESS_ERROR_ID } from './durable/constants';
 import type { DurableAgentRecoveredRun } from './durable/durable-agent';
@@ -8,22 +10,25 @@ import { mastraDBMessageToSignal } from './signals';
 import type { AgentInstructions } from './types';
 import { resolveThreadIdFromArgs } from './utils';
 
+export function resolveVersionContext(
+  requestContext: RequestContext,
+  requestVersions: VersionOverrides | undefined,
+  defaultVersions: VersionOverrides | undefined,
+  callOptions: { versions?: VersionOverrides } | undefined,
+  mergeVersions = mergeVersionOverrides,
+): VersionOverrides | undefined {
+  let versions = mergeVersions(defaultVersions, requestVersions);
+  if (callOptions?.versions) {
+    versions = mergeVersions(versions, callOptions.versions);
+  }
+  if (versions) {
+    requestContext.set(MASTRA_VERSIONS_KEY, versions);
+  }
+  return versions;
+}
+
 export function resolveRunId(runId: string | undefined, generateId?: () => string | undefined): string {
   return runId ?? generateId?.() ?? globalThis.crypto.randomUUID();
-}
-
-export function successfulAgentOutput<T extends { error?: unknown }>(output: T): T {
-  const error = output.error;
-  if (error) {
-    throw error;
-  }
-  return output;
-}
-
-export async function drainAgentOutput<T extends { error?: unknown }>(output: {
-  getFullOutput(): Promise<T>;
-}): Promise<T> {
-  return successfulAgentOutput(await output.getFullOutput());
 }
 
 /** Format resolved instructions for string-only consumers such as voice and spans. */
