@@ -115,9 +115,13 @@ function definedLineage(source: SpanEntityLineage): SpanEntityLineage {
   return lineage;
 }
 
-function modelPair(attributes: unknown): { model?: string; provider?: string } {
+/** The span's own non-empty string `attributes.model` and `attributes.provider`, each on its own. */
+function modelFields(attributes: unknown): { model?: string; provider?: string } {
   const { model, provider } = (attributes ?? {}) as { model?: unknown; provider?: unknown };
-  return typeof model === 'string' && model && typeof provider === 'string' && provider ? { model, provider } : {};
+  return {
+    ...(typeof model === 'string' && model ? { model } : {}),
+    ...(typeof provider === 'string' && provider ? { provider } : {}),
+  };
 }
 
 /**
@@ -830,7 +834,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       parentSpanId: this.getParentSpanId(includeInternalSpans),
       externalParentSpanId: this.getExportedExternalParentSpanId(includeInternalSpans),
       ...(this.resumedFromSpanId !== undefined ? { resumedFromSpanId: this.resumedFromSpanId } : {}),
-      ...modelPair(this.attributes),
+      ...modelFields(this.attributes),
       ...(typeof timeToFirstTokenMs === 'number' ? { timeToFirstTokenMs } : {}),
       ...(nestedUnderParent ? { nestedUnderParent: true } : {}),
       ...(links ? { links } : {}),

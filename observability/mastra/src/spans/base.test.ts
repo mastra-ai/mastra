@@ -699,7 +699,7 @@ describe('Span', () => {
       expect(generation.exportSpan().attributes).toMatchObject({ model: 'gpt-4o', provider: 'openai' });
     });
 
-    it('exports neither field when the span has only half a pair, an empty string, or a non-string model', () => {
+    it('exports model and provider each on its own, skipping empty strings and non-string values', () => {
       const instance = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
         name: 'test-instance',
@@ -709,11 +709,14 @@ describe('Span', () => {
       const generationWith = (attributes: Record<string, unknown>) =>
         instance.startSpan({ type: SpanType.MODEL_GENERATION, name: 'generation', attributes: attributes as never });
 
-      expect(nativePair(generationWith({ model: 'gpt-4o' }))).toStrictEqual({});
-      expect(nativePair(generationWith({ provider: 'openai' }))).toStrictEqual({});
-      expect(nativePair(generationWith({ model: '', provider: 'openai' }))).toStrictEqual({});
-      expect(nativePair(generationWith({ model: 'gpt-4o', provider: '' }))).toStrictEqual({});
-      expect(nativePair(generationWith({ model: { modelId: 'gpt-4o' }, provider: 'openai' }))).toStrictEqual({});
+      expect(nativePair(generationWith({ model: 'gpt-4o' }))).toStrictEqual({ model: 'gpt-4o' });
+      expect(nativePair(generationWith({ provider: 'openai' }))).toStrictEqual({ provider: 'openai' });
+      expect(nativePair(generationWith({ model: '', provider: 'openai' }))).toStrictEqual({ provider: 'openai' });
+      expect(nativePair(generationWith({ model: 'gpt-4o', provider: '' }))).toStrictEqual({ model: 'gpt-4o' });
+      expect(nativePair(generationWith({ model: { modelId: 'gpt-4o' }, provider: 'openai' }))).toStrictEqual({
+        provider: 'openai',
+      });
+      expect(nativePair(generationWith({}))).toStrictEqual({});
     });
 
     it('exports the pair set by a later update', () => {
