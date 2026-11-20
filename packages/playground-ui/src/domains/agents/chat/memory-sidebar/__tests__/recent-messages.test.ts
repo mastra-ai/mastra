@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getRecentMessagesSettings } from '../lib/recent-messages';
+import { getRecentMessagesSettings } from '../recent-messages';
 
 describe('Recent message settings', () => {
   describe.each([

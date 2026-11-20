@@ -4,6 +4,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { AgentConfigSurface } from '@mastra/playground-ui/domains/agents/config/agent-config-surface';
+import { AgentMemoryConfig } from '@mastra/playground-ui/domains/agents/config/agent-memory-config';
 import { AgentMetadataSection } from '@mastra/playground-ui/domains/agents/config/agent-metadata-section';
 import { AgentSystemPrompt } from '@mastra/playground-ui/domains/agents/config/agent-system-prompt';
 import { AgentMetadataWorkspaceToolsList } from '@mastra/playground-ui/domains/agents/config/agent-workspace-tools-list';
@@ -40,7 +41,6 @@ import {
   AgentMetadataWorkflowList,
 } from '../agent-metadata/agent-metadata-lists';
 import { AgentMetadataModelList } from '../agent-metadata/agent-metadata-model-list';
-import { AgentMemoryConfig } from '../agent-settings/agent-memory-config';
 import type { AgentEditFormContextValue } from '@/domains/agents/context/agent-edit-form-context';
 import { useOptionalAgentEditFormContext } from '@/domains/agents/context/agent-edit-form-context';
 import { getEditorOwnership } from '@/domains/agents/utils/editor-ownership';

@@ -1,3 +1,4 @@
+import { MastraClientError } from '@mastra/client-js';
 import { useAgentMessages } from '@mastra/react/hooks/agents';
 import { useEffect, useRef } from 'react';
 import type { ComponentType, PropsWithChildren, ReactNode } from 'react';
@@ -86,7 +87,9 @@ export function AgentChat({
     isLoadingPrevious: isFetchingNextPage,
   };
 
-  if (error && !data) {
+  // A thread id that has no messages yet (e.g. a session URL) 404s; that's an empty conversation.
+  const missingThread = error instanceof MastraClientError && error.status === 404;
+  if (error && !data && !missingThread) {
     return (
       <div role="alert">
         <Txt>Could not load conversation.</Txt>

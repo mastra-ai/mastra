@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { AgentChatFeaturesProvider, useAgentThreadInput } from '@mastra/playground-ui/domains/agents/chat';
 import type { AgentChatThreadInput } from '@mastra/playground-ui/domains/agents/chat';
+import { ChatMessagesLoadingSkeleton } from '@mastra/playground-ui/domains/agents/chat/agent-loading-skeletons';
 import { Thread as BaseThread } from '@mastra/playground-ui/domains/agents/chat/thread';
 import type { ThreadProps } from '@mastra/playground-ui/domains/agents/chat/thread';
 import { useChatMessages } from '@mastra/playground-ui/domains/chat/context/chat-context';
@@ -13,7 +14,6 @@ import { useReadAloud } from '@mastra/react/hooks/voice';
 import { toast } from 'sonner';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
 import { AgentChannelsCard } from '@/domains/agents/components/agent-channels/agent-channels-card';
-import { ChatMessagesLoadingSkeleton } from '@/domains/agents/components/agent-loading-skeletons';
 import { ComposerModelSettings } from '@/domains/agents/components/composer-model-settings';
 import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
