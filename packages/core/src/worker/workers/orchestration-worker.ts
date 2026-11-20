@@ -105,7 +105,10 @@ export class OrchestrationWorker extends MastraWorker {
       if (this.#transport) {
         // stop() unsubscribes before it drains. Ending the retry delays once that has begun
         // nacks waiting events right away, so the drain doesn't wait them out and the
-        // redelivery goes to a consumer that is still running.
+        // redelivery goes to a consumer that is still running. The unsubscribe has only started
+        // here: a reader can still hand over entries until it resolves (on Redis, until the
+        // current XREADGROUP BLOCK ends), and a failure in that window is nacked without a wait
+        // and may come back to this worker.
         const stopping = this.#transport.stop(options);
         this.#processor?.stopRedeliveryWaits();
         await stopping;
