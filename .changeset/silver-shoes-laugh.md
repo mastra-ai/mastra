@@ -9,3 +9,13 @@ queryClient.refetchQueries({ queryKey: memoryThreadMessagesQueryKeyPrefix(thread
 ```
 
 This matches all cached pages for that thread and agent, but not pages for other agents.
+
+If you build this query key by hand, switch to the helpers:
+
+```ts
+// Before
+queryClient.setQueryData(['memory', 'thread', threadId, 'messages', page, agentId], data);
+
+// After
+queryClient.setQueryData(memoryThreadMessagesQueryKey(threadId, page, agentId), data);
+```
