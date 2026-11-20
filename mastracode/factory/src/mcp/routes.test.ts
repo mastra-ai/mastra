@@ -75,20 +75,24 @@ const USERS: Record<string, { orgId?: string; userId: string }> = {
 /**
  * An OAuth authorization server over real HTTP: RFC 8414 metadata and a JWKS,
  * signing RS256 access tokens the way AuthKit does with Resource Indicators on.
- * `outage` makes either endpoint answer 503.
+ * `outage` makes either endpoint answer 503, or never answer.
  */
 async function startAuthorizationServer() {
   const { publicKey, privateKey } = await generateKeyPair('RS256');
   const jwk = { ...(await exportJWK(publicKey)), kid: 'key-1', alg: 'RS256', use: 'sig' };
   let issuer = '';
-  const outage = { metadata: false, jwks: false };
+  const outage: Record<'metadata' | 'jwks', false | 'down' | 'hang'> = { metadata: false, jwks: false };
+  const hanging: Array<() => void> = [];
+  hangingResponses.push(() => hanging.splice(0).forEach(end => end()));
   const server = createServer((req, res) => {
     res.setHeader('Content-Type', 'application/json');
     if (req.url === '/.well-known/oauth-authorization-server') {
-      if (outage.metadata) res.writeHead(503).end('{}');
+      if (outage.metadata === 'hang') hanging.push(() => res.end());
+      else if (outage.metadata) res.writeHead(503).end('{}');
       else res.end(JSON.stringify({ issuer, jwks_uri: `${issuer}/oauth2/jwks` }));
     } else if (req.url === '/oauth2/jwks') {
-      if (outage.jwks) res.writeHead(503).end('{}');
+      if (outage.jwks === 'hang') hanging.push(() => res.end());
+      else if (outage.jwks) res.writeHead(503).end('{}');
       else res.end(JSON.stringify({ keys: [jwk] }));
     } else {
       res.writeHead(404).end('{}');
@@ -125,7 +129,7 @@ function sign(key: CryptoKey, issuer: string, claims: JWTPayload, options: SignO
 const signedTokens = new Map<string, string>();
 const bearer = (token: string) => signedTokens.get(token) ?? token;
 
-async function setup(options: { resolveCaller?: McpCallerResolver } = {}) {
+async function setup(options: { resolveCaller?: McpCallerResolver; timeoutMs?: number } = {}) {
   const seed = await createFactoryStorageForTests();
   const authServer = await startAuthorizationServer();
   for (const [name, user] of Object.entries(USERS)) {
@@ -178,6 +182,7 @@ async function setup(options: { resolveCaller?: McpCallerResolver } = {}) {
       authorizationServers: [authServer.issuer],
       resource: RESOURCE,
       ...(options.resolveCaller ? { resolveCaller: options.resolveCaller } : {}),
+      ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
     }),
     publicOrigin: PUBLIC_ORIGIN,
     authorizationServers: [authServer.issuer],
@@ -232,7 +237,10 @@ async function setup(options: { resolveCaller?: McpCallerResolver } = {}) {
 
 const servers: Server[] = [];
 const clients: MCPClient[] = [];
+/** Ends responses a hanging authorization server is holding open, so its server can close. */
+const hangingResponses: Array<() => void> = [];
 afterEach(async () => {
+  hangingResponses.splice(0).forEach(end => end());
   await Promise.all(clients.splice(0).map(client => client.disconnect()));
   await Promise.all(servers.splice(0).map(server => new Promise(resolve => server.close(resolve))));
 });
@@ -437,13 +445,13 @@ describe('Factory MCP server', () => {
   it('an authorization server outage is a server error, not a bad sign-in', async () => {
     const { url, authServer } = await setup();
 
-    authServer.outage.metadata = true;
+    authServer.outage.metadata = 'down';
     const noMetadata = await claudeRequest(url, 'server/discover', {}, 'token-alice');
     expect(noMetadata.status).toBe(500);
     expect(noMetadata.headers.get('WWW-Authenticate')).toBeNull();
 
     authServer.outage.metadata = false;
-    authServer.outage.jwks = true;
+    authServer.outage.jwks = 'down';
     const noKeys = await claudeRequest(url, 'server/discover', {}, 'token-alice');
     expect(noKeys.status).toBe(500);
     expect(noKeys.headers.get('WWW-Authenticate')).toBeNull();
@@ -451,6 +459,17 @@ describe('Factory MCP server', () => {
     // Once it's back, the next request signs in: the failures weren't cached.
     authServer.outage.jwks = false;
     expect((await claudeRequest(url, 'server/discover', {}, 'token-alice')).status).toBe(200);
+  });
+
+  it('an authorization server that stops answering fails the request instead of holding it open', async () => {
+    const { url, authServer } = await setup({ timeoutMs: 200 });
+
+    authServer.outage.metadata = 'hang';
+    expect((await claudeRequest(url, 'server/discover', {}, 'token-alice')).status).toBe(500);
+
+    authServer.outage.metadata = false;
+    authServer.outage.jwks = 'hang';
+    expect((await claudeRequest(url, 'server/discover', {}, 'token-alice')).status).toBe(500);
   });
 
   it('a failed membership lookup is a server error, not access', async () => {

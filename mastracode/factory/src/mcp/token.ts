@@ -24,13 +24,15 @@ export type McpTokenVerifier = (token: string) => Promise<McpCaller | null>;
  * membership on every request.
  * Returns `null` for a token that isn't valid here; throws when the signing
  * keys or the caller can't be fetched, so an outage isn't mistaken for a bad
- * sign-in.
+ * sign-in. Fetching metadata or keys gives up after `timeoutMs` (default 5s).
  */
 export function createMcpTokenVerifier(options: {
   authorizationServers: string[];
   resource: string;
   resolveCaller?: McpCallerResolver;
+  timeoutMs?: number;
 }): McpTokenVerifier {
+  const timeoutMs = options.timeoutMs ?? 5_000;
   const issuers = new Set(options.authorizationServers.map(trimSlash));
   const keySets = new Map<string, Promise<JWTVerifyGetKey>>();
 
@@ -38,11 +40,13 @@ export function createMcpTokenVerifier(options: {
     let keys = keySets.get(issuer);
     if (!keys) {
       keys = (async () => {
-        const response = await fetch(`${issuer}/.well-known/oauth-authorization-server`);
+        const response = await fetch(`${issuer}/.well-known/oauth-authorization-server`, {
+          signal: AbortSignal.timeout(timeoutMs),
+        });
         if (!response.ok) throw new Error(`authorization server metadata answered ${response.status}`);
         const { jwks_uri } = (await response.json()) as { jwks_uri?: unknown };
         if (typeof jwks_uri !== 'string') throw new Error('authorization server metadata has no jwks_uri');
-        return createRemoteJWKSet(new URL(jwks_uri));
+        return createRemoteJWKSet(new URL(jwks_uri), { timeoutDuration: timeoutMs });
       })();
       keySets.set(issuer, keys);
       // Retry a failed lookup on the next request instead of caching the failure.
