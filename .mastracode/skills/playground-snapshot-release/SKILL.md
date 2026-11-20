@@ -9,7 +9,7 @@ A snapshot is a temporary pin. Platform's `Promote Snapshot Pins` workflow (`.gi
 
 <constraints>
 
-- MUST use the alpha when a published alpha already contains the change, and MUST NOT publish a snapshot in that case. A snapshot is only for changes no alpha contains yet.
+- MUST use the alpha when published alphas of every needed package already contain the change, and MUST NOT publish a snapshot in that case. If any needed package lacks a qualifying alpha, either wait for it or publish one snapshot of the whole set and pin all needed packages to it. Never mix snapshot and alpha pins of one release, because the snapshot set already contains its own copies of the shared packages.
 - MUST NOT dispatch any publish workflow without the user's explicit confirmation right before the dispatch. Publishing creates immutable npm versions.
 - MUST NOT resolve versions from `latest`; that is the stable channel. Resolve each package on its own and never force Mastra packages to one version.
 - MUST NOT retry a failed run, install, or publish on a timer. Report the failure.
@@ -41,16 +41,19 @@ How alpha reaches npm, verified against `mastra-ai/mastra` `main`. Re-read befor
 ## 2. Publish the snapshot
 
 1. Publish from the source PR's own branch in `mastra-ai/mastra`, with its final commits pushed. Promotion is automatic only when the snapshot commit equals the PR head when it merges; a snapshot from `main`, a custom branch, or an older head goes to manual review.
-2. Record the branch, `head_sha=$(git ls-remote origin "refs/heads/$branch" | awk '{print $1}')`, the PR number, and a short kebab-case tag that is not `latest`, `next`, `alpha`, `beta`, `rc` or `stable`.
-3. Show the branch, SHA, PR, and tag, and ask for confirmation. Then dispatch:
+2. Resolve the commit from `mastra-ai/mastra` itself, not a fork: `head_sha=$(git ls-remote https://github.com/mastra-ai/mastra.git "refs/heads/$branch" | awk '{print $1}')`. Pick a short kebab-case tag that is not `latest`, `next`, `alpha`, `beta`, `rc` or `stable`.
+3. Show the branch, SHA, PR, and tag, and ask for confirmation. The workflow has no SHA input and builds whatever its ref points to, so after confirmation push a one-off branch at exactly that commit and dispatch from it. Nobody else pushes to it, so the run publishes the confirmed commit and the branch name identifies the run:
 
-```bash
-gh workflow run npm-publish.yml --repo mastra-ai/mastra --ref "$branch" \
-  -f publish_type=playground-snapshot -f tag="$tag"
-```
+   ```bash
+   publish_ref="playground-snapshot/$tag-$(date +%Y%m%d%H%M%S)"
+   git fetch https://github.com/mastra-ai/mastra.git "$head_sha"
+   git push https://github.com/mastra-ai/mastra.git "$head_sha:refs/heads/$publish_ref"
+   gh workflow run npm-publish.yml --repo mastra-ai/mastra --ref "$publish_ref" \
+     -f publish_type=playground-snapshot -f tag="$tag"
+   ```
 
-4. Find the run whose `headSha` equals `$head_sha` (`gh run list --workflow npm-publish.yml --branch "$branch" --event workflow_dispatch --json databaseId,headSha,url`), never just the newest, and watch it with `gh run watch <id> --exit-status`.
-5. Read the published versions from the run log (`gh run view <id> --log | grep "Published package @mastra/"`). The registry can lag behind the log.
+4. Find the run with `gh run list --repo mastra-ai/mastra --workflow npm-publish.yml --branch "$publish_ref" --event workflow_dispatch --json databaseId,headSha,url`. Check its `headSha` equals `$head_sha`, then watch it with `gh run watch <id> --exit-status`.
+5. Read the published versions from that run's log (`gh run view <id> --log | grep "Published @mastra/"`). The registry can lag behind the log.
 
 ## 3. Track it
 
