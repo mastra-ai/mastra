@@ -1586,6 +1586,8 @@ export class MastraFactory {
       sessionModel: {
         projects: factoryProjectsStorage,
         modelDefaults: modelDefaultsStorage,
+        // `this.#prepared` is assigned below; tools only run once the mount is up.
+        localAuthStorage: () => this.#prepared?.base.authStorage,
         ...(auth
           ? {
               tenantCatalog: {

@@ -151,10 +151,9 @@ export async function handleModelCommand(ctx: SlashCommandContext): Promise<void
     const currentModelId = ctx.state.session.model.get();
     const { modelId: currentCatalogId } = parseCodexModelSelection(currentModelId);
     const codexOAuth = ctx.authStorage?.get(getCredentialProviderId('openai'))?.type === 'oauth';
-    const connected = withCodexFastModels(
-      models.filter(model => model.hasApiKey || model.id === currentCatalogId),
-      { codexOAuth },
-    );
+    const available = models.filter(model => model.hasApiKey || model.id === currentCatalogId);
+    // A Factory's credentials run its sessions, so its list already says which Fast entries exist.
+    const connected = ctx.state.factory ? available : withCodexFastModels(available, { codexOAuth });
     if (connected.length === 0) {
       ctx.showInfo('No connected models. Use /connect to add a provider account or API key.');
       return;
