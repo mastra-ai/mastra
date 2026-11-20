@@ -1413,6 +1413,10 @@ function modelOutputOverride(action: ExtractedAction): { importStatement: string
  * a credential and must not see one.
  */
 const OUTPUT_SECRET_FIELDS: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
+  // GET /v1/user echoes the account's raw API key; the masked xi_api_key_preview stays.
+  elevenlabs: {
+    'get-user': ['xi_api_key'],
+  },
   // GitLab returns the project's runner registration token to maintainers.
   gitlab: {
     'create-project': ['runners_token'],

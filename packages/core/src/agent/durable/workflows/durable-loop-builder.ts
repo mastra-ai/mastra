@@ -12,7 +12,13 @@ import { pruneAgentLoopSnapshot } from '../../../loop/workflows/prune-snapshot';
 import type { StepResultReads } from '../../../loop/workflows/prune-snapshot';
 import type { Mastra } from '../../../mastra';
 import { InternalSpans } from '../../../observability';
-import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../observability';
+import type {
+  AIModelGenerationSpan,
+  ExportedSpan,
+  ObservabilityInstance,
+  Span,
+  SpanType,
+} from '../../../observability';
 import { calculateObservedUsage, isUsageIncomplete } from '../../../observability/usage';
 import { currentRunGeneration } from '../../../storage/run-fencing';
 import { ChunkFrom } from '../../../stream/types';
@@ -43,6 +49,7 @@ import type {
   DurableAgenticExecutionOutput,
   DurableLLMStepOutput,
   DurableToolCallOutput,
+  RunRegistryEntry,
 } from '../types';
 import { createRunMessageList } from '../utils/run-message-list';
 import { runDurableFinishSideEffects } from './finalize-run';
@@ -235,6 +242,17 @@ function runTopicReplays(rt: DurableLoopRuntime): boolean {
   // An agent not registered here leaves the engine's bus to go by.
   const agentBus = (agent as { pubsub?: Partial<PubSub> } | undefined)?.pubsub;
   return agentBus?.__replaysTopic?.(topic) ?? true;
+}
+
+function liveOrRebuiltAgentSpan(
+  agentSpanData: ExportedSpan<SpanType.AGENT_RUN> | undefined,
+  reg: RunRegistryEntry | undefined,
+  observability: ObservabilityInstance | undefined,
+): Span<SpanType.AGENT_RUN> | undefined {
+  if (!agentSpanData) return undefined;
+  return (
+    liveSegmentSpan(agentSpanData, reg?.resumeAgentSpan, reg?.agentSpan) ?? observability?.rebuildSpan(agentSpanData)
+  );
 }
 
 /**
@@ -1294,16 +1312,11 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                     usage: usageIncomplete ? calculateObservedUsage(steps) : state.accumulatedUsage,
                   });
                 }
-                if (agentSpanData) {
-                  const agentSpan =
-                    liveSegmentSpan(agentSpanData, reg?.resumeAgentSpan, reg?.agentSpan) ??
-                    observability.rebuildSpan(agentSpanData);
-                  agentSpan?.end({
-                    ...termination,
-                    output: { text: finalText },
-                    ...(clocks ? { attributes: clocks } : {}),
-                  });
-                }
+                liveOrRebuiltAgentSpan(agentSpanData, reg, observability)?.end({
+                  ...termination,
+                  output: { text: finalText },
+                  ...(clocks ? { attributes: clocks } : {}),
+                });
               }
             } catch (error) {
               logger?.warn?.(`[DurableAgent] Error ending observability spans: ${error}`);
@@ -1326,12 +1339,19 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                   hydrateMessageListState(params, initData.messageListState),
                   hydrateMessageListState(params, inputData.messageListState),
                 ]);
+                const reg = getRunRegistryEntry(initData.runId, mastra as Mastra | undefined);
+                const { agentSpanData } = segmentSpanData(requestContext, initData.runId, initData, reg);
+                const agentSpan = liveOrRebuiltAgentSpan(
+                  agentSpanData,
+                  reg,
+                  (mastra as Mastra | undefined)?.observability?.getSelectedInstance({ requestContext }),
+                );
                 void executeDurableAgentScorers({
                   initData: { ...initData, messageListState: initial },
                   finalOutput: { ...inputData, messageListState: final },
                   mastra: mastra as Mastra | undefined,
                   requestContext,
-                  tracingContext,
+                  tracingContext: agentSpan ? { currentSpan: agentSpan } : tracingContext,
                   loadStoredMessages: loadRunStoredMessages(params),
                   scorerInstances: takeRunScorerInstances(initData.runId, mastra as Mastra | undefined),
                 }).catch(error => mastra?.getLogger?.()?.warn?.(`[DurableAgent] Skipped scorers: ${error}`));

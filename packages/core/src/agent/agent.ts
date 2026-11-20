@@ -71,7 +71,6 @@ import { withDefaultToolCallConcurrencyLimit } from '../loop/workflows/agentic-e
 import type { Mastra } from '../mastra';
 import { mastraCtorHolder } from '../mastra/mastra-ctor-holder';
 import type { VersionOverrides } from '../mastra/types';
-import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import { normalizeMessageHistoryConfig } from '../memory/message-history-config';
 import { getMemoryRunState } from '../memory/run-state';
@@ -132,7 +131,7 @@ import {
   MASTRA_THREAD_ID_KEY,
   MASTRA_VERSIONS_KEY,
 } from '../request-context';
-import { getRequestContextInputSource } from '../request-context/input-source';
+import { getRequestContextInputSource, getRequestContextInputValues } from '../request-context/input-source';
 import type { DeclaredAgentSchedule } from '../schedules/define';
 import type { InferStandardSchemaOutput } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
@@ -227,12 +226,13 @@ import { detachFullStreamOnEnd } from './durable/observe-full-stream';
 import { createDurableAgentStream } from './durable/stream-adapter';
 import type { AgentSuspendedEventData, DurableAgentStepFinishResult } from './durable/types';
 import { GoalSignalProvider, resolveGoalStore, readObjective, writeObjective, clearObjective } from './goal';
+import { convertInstructionsToString, resolveRunId, resolveVersionContext } from './helpers';
 import { buildMcpServerGuidance } from './mcp-guidance';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { createStoredMessageLoader } from './message-list/memory-message-refs';
 import { modelSpanAttributes } from './model-span-attributes';
-import { validateAgentRequestContext } from './request-context-validation';
+import { throwAgentRequestContextValidationError } from './request-context-validation';
 import { buildResumeSpanInput } from './resume-span-input';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from './run-ownership';
 import { SaveQueueManager } from './save-queue';
@@ -3434,7 +3434,7 @@ export class Agent<
     voice?.addTools(wrappedTools as TTools);
 
     const instructions = await this.getInstructions({ requestContext: resolvedRequestContext });
-    voice?.addInstructions(this.#convertInstructionsToString(instructions));
+    voice?.addInstructions(convertInstructionsToString(instructions));
     return voice;
   }
 
@@ -3503,34 +3503,6 @@ export class Agent<
     }
 
     return buildMcpServerGuidance(tools);
-  }
-
-  /**
-   * Helper function to convert agent instructions to string for backward compatibility
-   * Used for legacy methods that expect string instructions (e.g., voice)
-   * @internal
-   */
-  #convertInstructionsToString(instructions: AgentInstructions): string {
-    if (typeof instructions === 'string') {
-      return instructions;
-    }
-
-    if (Array.isArray(instructions)) {
-      // Handle array of messages (strings or objects)
-      return instructions
-        .map(msg => {
-          if (typeof msg === 'string') {
-            return msg;
-          }
-          // Safely extract content from message objects
-          return typeof msg.content === 'string' ? msg.content : '';
-        })
-        .filter(content => content) // Remove empty strings
-        .join('\n\n');
-    }
-
-    // Handle single message object - safely extract content
-    return typeof instructions.content === 'string' ? instructions.content : '';
   }
 
   /**
@@ -3631,7 +3603,7 @@ export class Agent<
         getMostRecentUserMessage: this.getMostRecentUserMessage.bind(this),
         genTitle: this.genTitle.bind(this),
         resolveTitleGenerationConfig: this.resolveTitleGenerationConfig.bind(this),
-        convertInstructionsToString: this.#convertInstructionsToString.bind(this),
+        convertInstructionsToString,
         tracingPolicy: this.#options?.tracingPolicy,
         resolvedVersionId: this.toRawConfig()?.resolvedVersionId as string | undefined,
         _agentNetworkAppend: this._agentNetworkAppend,
@@ -4753,6 +4725,10 @@ export class Agent<
 
   public __setMemory(memory: DynamicArgument<MastraMemory, TRequestContext>) {
     this.#memory = memory;
+  }
+
+  public __setKnowledge(knowledge: Knowledge) {
+    this.#knowledge = knowledge;
   }
 
   public __setPubSub(pubsub: PubSub) {
@@ -6424,7 +6400,7 @@ export class Agent<
                 requestContext: subAgentRequestContext,
               });
               if (agentOwnInstructions) {
-                const ownStr = this.#convertInstructionsToString(agentOwnInstructions);
+                const ownStr = convertInstructionsToString(agentOwnInstructions);
                 if (ownStr) {
                   effectiveInstructions = `${ownStr}\n\n${effectiveInstructions}`;
                 }
@@ -9090,16 +9066,12 @@ export class Agent<
 
     // Build version overrides by merging: Mastra defaults < requestContext < call-site
     const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
-    let mergedVersions = mergeVersionOverrides(this.#mastra?.getVersionOverrides(), requestVersions);
-
-    // Merge call-site version overrides on top (call-site wins over request + Mastra defaults)
-    if (options.versions) {
-      mergedVersions = mergeVersionOverrides(mergedVersions, options.versions);
-    }
-
-    if (mergedVersions) {
-      requestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
-    }
+    const mergedVersions = resolveVersionContext(
+      requestContext,
+      requestVersions,
+      this.#mastra?.getVersionOverrides(),
+      options,
+    );
 
     // A run that suspended while executing a stored version must resume on *that* version.
     // The exact id was persisted into the suspend payload, so prefer it over any status
@@ -9346,7 +9318,7 @@ export class Agent<
       input: spanInput,
       attributes: {
         conversationId: threadFromArgs?.id,
-        instructions: this.#convertInstructionsToString(instructions),
+        instructions: convertInstructionsToString(instructions),
         ...modelSpanAttributes(resolvedModel),
         ...(startingSignal ? { signal: startingSignal } : {}),
         // @deprecated — use entityVersionId (top-level span context field) instead.
@@ -10090,6 +10062,20 @@ export class Agent<
     return this.resumeNetwork({ approved: false, ...(reason !== undefined ? { reason } : {}) }, resumeOptions);
   }
 
+  async #validateRequestContext(requestContext?: RequestContext): Promise<void> {
+    if (this.#requestContextSchema) {
+      const contextValues = getRequestContextInputValues(requestContext);
+      const validation = await this.#requestContextSchema['~standard'].validate(contextValues);
+      if (validation.issues) {
+        throwAgentRequestContextValidationError({
+          issues: validation.issues,
+          agentId: this.id,
+          agentName: this.name,
+        });
+      }
+    }
+  }
+
   async generate<
     OUTPUT extends StandardSchemaWithJSON<any, any>,
     T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
@@ -10123,12 +10109,7 @@ export class Agent<
     this.#extractClientObservability(messages);
 
     // Validate request context if schema is provided
-    await validateAgentRequestContext({
-      requestContextSchema: this.#requestContextSchema,
-      requestContext: options?.requestContext,
-      agentId: this.id,
-      agentName: this.name,
-    });
+    await this.#validateRequestContext(options?.requestContext);
 
     const defaultOptions = await this.getDefaultOptions({
       requestContext: options?.requestContext,
@@ -10187,12 +10168,13 @@ export class Agent<
     // is invisible to signals: a signal sent mid-turn finds an idle thread and wakes a second run that
     // never sees this turn. The wait also reserves the thread for this runId.
     const threadStreamPubSub = this.getPubSub();
-    mergedOptions.runId ??=
+    mergedOptions.runId ??= resolveRunId(undefined, () =>
       this.#mastra?.generateId({
         idType: 'run',
         source: 'agent',
         entityId: this.id,
-      }) ?? globalThis.crypto.randomUUID();
+      }),
+    );
     await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
       this as Agent<any, any, any, any>,
       { ...loopOptions, runId: mergedOptions.runId } as AgentExecutionOptions<any>,
@@ -10264,13 +10246,7 @@ export class Agent<
       );
 
       const fullOutput = await result.result.getFullOutput();
-
-      const error = fullOutput.error;
-
-      if (error) {
-        throw error;
-      }
-
+      if (fullOutput.error) throw fullOutput.error;
       return fullOutput;
     } catch (error) {
       // Release the thread reservation taken by waitForCrossAgentThreadRun so
@@ -11125,12 +11101,7 @@ export class Agent<
     this.#extractClientObservability(messages);
 
     // Validate request context if schema is provided
-    await validateAgentRequestContext({
-      requestContextSchema: this.#requestContextSchema,
-      requestContext: streamOptions?.requestContext,
-      agentId: this.id,
-      agentName: this.name,
-    });
+    await this.#validateRequestContext(streamOptions?.requestContext);
 
     const defaultOptions = await this.getDefaultOptions({
       requestContext: streamOptions?.requestContext,
@@ -11205,12 +11176,13 @@ export class Agent<
     }
 
     const threadStreamPubSub = this.getPubSub();
-    mergedOptions.runId ??=
+    mergedOptions.runId ??= resolveRunId(undefined, () =>
       this.#mastra?.generateId({
         idType: 'run',
         source: 'agent',
         entityId: this.id,
-      }) ?? globalThis.crypto.randomUUID();
+      }),
+    );
     // The wait also reserves the thread for this runId, so concurrent stream()
     // calls on the same thread serialize instead of racing between this wait
     // and registerRun below.
@@ -11894,12 +11866,7 @@ export class Agent<
       throw error;
     }
 
-    const error = fullOutput.error;
-
-    if (error) {
-      throw error;
-    }
-
+    if (fullOutput.error) throw fullOutput.error;
     return fullOutput;
   }
 
