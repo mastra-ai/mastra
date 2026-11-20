@@ -221,17 +221,30 @@ export function createLocalKnowledgeImporterHost(
 
       const { storage, importers: rootImporters } = await storageAndImporters();
       const flushStarted = Date.now();
+      const budgetAt = flushStarted + (options.flushBudgetMs ?? DEFAULT_FLUSH_BUDGET_MS);
+      // A committed receipt never changes, so its replay must not depend on the run still being live:
+      // a lost ack is resent after the run's deadline or after it finished. Look it up first, bounded by
+      // the flush budget alone.
+      const replayed = await storage
+        .transaction(tx => tx.importers!.getFlush(flush.runId, flush.generation, flush.seq), { deadlineAt: budgetAt })
+        .catch(error => {
+          throw hostError(error);
+        });
+      if (replayed) {
+        if (replayed.digest !== digest) throw conflict('digest_mismatch', 'This seq was committed with other content.');
+        return replayed.receipt as KnowledgeImporterFlushReceipt;
+      }
       const [peek, peekRun] = await Promise.all([
         rootImporters.readWriterGuard(),
         rootImporters.getRun(flush.runId),
       ]).catch(error => {
         throw hostError(error);
       });
-      // One absolute deadline for the whole flush transaction (O3 §C‴).
-      const deadlineAt = Math.min(
-        flushStarted + (options.flushBudgetMs ?? DEFAULT_FLUSH_BUDGET_MS),
-        peekRun?.deadlineAt?.getTime() ?? Infinity,
-      );
+      if (peekRun?.deadlineAt && peekRun.deadlineAt.getTime() <= Date.now()) {
+        throw conflict('run_not_active', 'The run is past its deadline.');
+      }
+      // One absolute deadline for the whole write transaction (O3 §C‴), capped by the run's.
+      const deadlineAt = Math.min(budgetAt, peekRun?.deadlineAt?.getTime() ?? Infinity);
       let embeds: KnowledgeImportEmbedJob[] = [];
       try {
         const receipt = await storage.transaction(

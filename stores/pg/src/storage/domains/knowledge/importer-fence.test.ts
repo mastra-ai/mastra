@@ -166,6 +166,58 @@ describe('PG importer sink fences (r347 O3)', () => {
     }
   });
 
+  it('replays a committed flush exactly after the run is past its deadline and after it finished, and nothing else', async () => {
+    const t = await setup([{ id: 'b1', target: 'docs:acme#notion' }]);
+    try {
+      const host = t.knowledge.importers!.host;
+      const started = await host.startRun('b1', { deadline: Date.now() + 1000 });
+      if (started.status !== 'started') throw new Error('not started');
+      const flush = async (seq: number, ops: KnowledgeImporterOp[]) =>
+        host.flush({
+          runId: started.runId,
+          generation: started.generation,
+          seq,
+          digest: await knowledgeImporterFlushDigest({ ops }),
+          ops,
+        });
+      const committedOps = [upsert({ sourceId: 'p1' })];
+      const receipt = await flush(1, committedOps);
+      expect(receipt).toMatchObject({ seq: 1, created: 1 });
+
+      await new Promise(resolve => setTimeout(resolve, 1100));
+      // Past the run's deadline: the lost ack can still be recovered, and only that.
+      expect(await flush(1, committedOps)).toEqual(receipt);
+      await expect(flush(1, [upsert({ sourceId: 'p1', body: 'changed' })])).rejects.toMatchObject({
+        status: 409,
+        code: 'digest_mismatch',
+      });
+      await expect(flush(2, [upsert({ sourceId: 'p2' })])).rejects.toMatchObject({
+        status: 409,
+        code: 'run_not_active',
+      });
+
+      await host.finishRun({
+        runId: started.runId,
+        generation: started.generation,
+        outcome: 'failed',
+        backlog: false,
+        lastSeq: 1,
+        error: { code: 'stopped', retryable: true },
+      });
+      // Finished: the same.
+      expect(await flush(1, committedOps)).toEqual(receipt);
+      await expect(flush(1, [upsert({ sourceId: 'p1', body: 'changed' })])).rejects.toMatchObject({
+        code: 'digest_mismatch',
+      });
+      await expect(flush(2, [upsert({ sourceId: 'p2' })])).rejects.toMatchObject({ code: 'run_not_active' });
+
+      expect((await t.page('notion/p1'))?.body).toBe('body of p1');
+      expect(await t.page('notion/p2')).toBeNull();
+    } finally {
+      await t.drop();
+    }
+  }, 15_000);
+
   it("stops a flush at the run's deadline while it waits on a lock, and applies nothing", async () => {
     const t = await setup([{ id: 'b1', target: 'docs:acme#notion' }]);
     let guardHolder: PoolClient | undefined;
