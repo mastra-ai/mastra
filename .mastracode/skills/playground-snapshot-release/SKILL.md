@@ -9,6 +9,7 @@ A snapshot is a temporary pin. Platform's `Promote Snapshot Pins` workflow (`.gi
 
 <constraints>
 
+- MUST use the alpha when a published alpha already contains the change, and MUST NOT publish a snapshot in that case. A snapshot is only for changes no alpha contains yet.
 - MUST NOT dispatch any publish workflow without the user's explicit confirmation right before the dispatch. Publishing creates immutable npm versions.
 - MUST NOT resolve versions from `latest`; that is the stable channel. Resolve each package on its own and never force Mastra packages to one version.
 - MUST NOT retry a failed run, install, or publish on a timer. Report the failure.
