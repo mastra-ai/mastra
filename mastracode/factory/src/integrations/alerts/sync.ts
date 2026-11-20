@@ -166,13 +166,14 @@ export function createAlertSync(deps: AlertSyncDeps): () => Promise<IssueReconci
         await save();
       }
       const project = place;
+      const takes = (event: PlatformAlertEvent) => bindingTakesIssue(binding, bindings, alertRoutingLabels(event));
       const ingestFor = (event: AlertEventPage['events'][number]): boolean => {
         const backfill = project.backfill;
         if (backfill && compareStreamIds(event.streamId, backfill.until) <= 0) {
           if (!backfill.incidents.includes(event.incident.id)) return false;
         }
         if (event.type !== 'alert.opened') return true;
-        return bindingTakesIssue(binding, bindings, alertRoutingLabels(event));
+        return takes(event);
       };
 
       projectPass: for (;;) {
@@ -180,7 +181,10 @@ export function createAlertSync(deps: AlertSyncDeps): () => Promise<IssueReconci
         if (page.events.length === 0) break;
         for (const entry of page.events) {
           const { streamId, ...event } = entry;
+          // A create the dispatcher hasn't filed holds up to the pending limit; a failed ingest or
+          // ack holds until it succeeds, since moving past it would lose the card or its ack.
           let held = false;
+          let failed = false;
           if (ingestFor(entry)) {
             summary.checked++;
             try {
@@ -190,6 +194,9 @@ export function createAlertSync(deps: AlertSyncDeps): () => Promise<IssueReconci
                 factoryProjectId,
                 event,
                 ...(namesSeverity(binding, event) ? { severityFloor: 'info' as const } : {}),
+                // A raise reaches every bound project so the card's owner sees it, but files a card
+                // only where the binding takes it.
+                ...(event.type === 'alert.severity_raised' && !takes(event) ? { createCards: false } : {}),
               });
               const card = cardOf(result);
               if (result.status === 'pending') held = true;
@@ -210,9 +217,10 @@ export function createAlertSync(deps: AlertSyncDeps): () => Promise<IssueReconci
                 projectId: factoryProjectId,
                 error: error instanceof Error ? error.message : String(error),
               });
-              held = true;
+              failed = true;
             }
           }
+          if (failed) break projectPass;
           const pendingKey = `${factoryProjectId}:${event.eventId}`;
           if (held) {
             const ticks = (pendingTicks.get(pendingKey) ?? 0) + 1;
