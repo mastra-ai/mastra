@@ -259,12 +259,35 @@ function packLocalCore(version: string, tempDir: string) {
   return extractTarball(tarball, tempDir);
 }
 
-function extractCorePackage(packVersion: string, tempDir: string) {
-  const pack = runCommand(
-    'npm',
-    ['pack', `@mastra/core@${packVersion}`, '--pack-destination', tempDir, '--silent'],
-    repoRoot,
-  );
+function findPublishedFloorVersion(coreRange: string) {
+  const view = runCommand('npm', ['view', '@mastra/core', 'versions', '--json'], repoRoot);
+
+  if (view.status !== 0) {
+    return undefined;
+  }
+
+  const versions = JSON.parse(view.stdout) as string[];
+  return semver.minSatisfying(versions, resolveCoreSemverRange(coreRange), { includePrerelease: true }) ?? undefined;
+}
+
+function packPublishedCore(version: string, tempDir: string) {
+  return runCommand('npm', ['pack', `@mastra/core@${version}`, '--pack-destination', tempDir, '--silent'], repoRoot);
+}
+
+function extractCorePackage(packVersion: string, coreRange: string, tempDir: string) {
+  let pack = packPublishedCore(packVersion, tempDir);
+
+  if (pack.status !== 0) {
+    // The floor can be a stable version that is only published as a prerelease so far (e.g. >=1.85.1-0 before 1.85.1 ships).
+    const publishedFloor = findPublishedFloorVersion(coreRange);
+
+    if (publishedFloor && publishedFloor !== packVersion) {
+      console.info(
+        `@mastra/core@${packVersion} is not on npm; using the lowest published version in range, ${publishedFloor}`,
+      );
+      pack = packPublishedCore(publishedFloor, tempDir);
+    }
+  }
 
   if (pack.status === 0) {
     const tarball = pack.stdout.trim().split('\n').at(-1);
@@ -480,7 +503,7 @@ try {
 
       if (!floorCoreRoot) {
         const versionTempDir = mkdtempSync(join(tempRoot, `core-${corePackVersion.replace(/[^0-9A-Za-z.-]/g, '-')}-`));
-        floorCoreRoot = extractCorePackage(corePackVersion, versionTempDir);
+        floorCoreRoot = extractCorePackage(corePackVersion, packageInfo.coreRange, versionTempDir);
         floorCoreRoots.set(corePackVersion, floorCoreRoot);
       }
 
