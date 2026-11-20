@@ -2326,11 +2326,12 @@ export class BackgroundTaskManager {
           expectedOwnerId: task.ownerId ?? null,
           expectedLeaseExpiresAt: task.leaseExpiresAt ?? null,
         };
-        if (task.maxRetries > 0) {
+        if (task.retryCount < task.maxRetries) {
           await storage.updateTask(
             task.id,
             {
               status: 'pending',
+              retryCount: task.retryCount + 1,
               startedAt: undefined,
               ownerId: undefined,
               leaseExpiresAt: undefined,

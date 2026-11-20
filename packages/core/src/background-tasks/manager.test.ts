@@ -1572,6 +1572,50 @@ describe('BackgroundTaskManager', () => {
         const completed = await mgr.getTask('stale-1');
         expect(completed?.status).toBe('completed');
         expect(completed?.result).toBe('recovered');
+        expect(completed?.retryCount).toBe(1);
+      } finally {
+        await local.backgroundTaskManager?.shutdown();
+        await local.stopWorkers();
+      }
+    });
+
+    it.each([false, true])('fails stale running tasks with exhausted retries (leased: %s)', async leased => {
+      // A worker died after consuming its last retry. Restart must not run it again. (#30977)
+      const seedStorage = new MockStore();
+      const bgStore = await seedStorage.getStore('backgroundTasks');
+      await bgStore!.createTask({
+        id: 'exhausted-1',
+        status: 'running',
+        toolName: 't',
+        toolCallId: 'c',
+        args: {},
+        agentId: 'a',
+        runId: 'r',
+        retryCount: 1,
+        maxRetries: 1,
+        timeoutMs: 5000,
+        createdAt: new Date(),
+        startedAt: new Date(Date.now() - 60_000),
+        ...(leased ? { ownerId: 'crashed-worker', leaseExpiresAt: new Date(Date.now() - 1000) } : {}),
+      });
+
+      const local = new Mastra({
+        logger: false,
+        storage: seedStorage,
+        backgroundTasks: { enabled: true },
+      });
+      const execute = vi.fn(async () => 'must not run');
+      local.backgroundTaskManager!.registerTaskContext('exhausted-1', ctx(execute));
+      await local.startWorkers();
+
+      try {
+        await expect
+          .poll(async () => (await local.backgroundTaskManager!.getTask('exhausted-1'))?.status)
+          .toBe('failed');
+        const failed = await local.backgroundTaskManager!.getTask('exhausted-1');
+        expect(failed?.retryCount).toBe(1);
+        expect(failed?.error?.message).toBe('Worker process terminated before task completed');
+        expect(execute).not.toHaveBeenCalled();
       } finally {
         await local.backgroundTaskManager?.shutdown();
         await local.stopWorkers();
