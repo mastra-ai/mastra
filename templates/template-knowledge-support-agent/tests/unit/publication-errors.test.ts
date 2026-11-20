@@ -11,6 +11,11 @@ test('publication retries only recognized transient failures, including wrapped 
   for (const error of [
     new WriterBusyError('/synthetic/writer.sqlite'),
     ...[
+      '40001',
+      '40P01',
+      '55P03',
+      '57P01',
+      '57P03',
       'SQLITE_BUSY',
       'SQLITE_BUSY_SNAPSHOT',
       'SQLITE_LOCKED_SHAREDCACHE',
@@ -29,6 +34,10 @@ test('publication retries only recognized transient failures, including wrapped 
     z.string().safeParse(42).error,
     ...[
       'SQLITE_CONSTRAINT_TRIGGER',
+      '23505',
+      '23503',
+      '42P01',
+      '40001_LOOKALIKE',
       'SQLITE_READONLY',
       'SQLITE_CORRUPT',
       'SQLITE_FULL',

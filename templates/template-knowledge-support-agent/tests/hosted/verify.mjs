@@ -2,12 +2,11 @@ import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { cp, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { createServer as createHttpsServer } from 'node:https';
 import { createServer as createPortServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -17,6 +16,11 @@ const exec = promisify(execFile);
 const template = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const lab = await mkdtemp(join(tmpdir(), 'support-hosted-proof-'));
 const children = [];
+const clusters = [];
+const backend = process.env.SUPPORT_TEST_BACKEND ?? 'libsql';
+assert.ok(['libsql', 'postgres'].includes(backend), 'SUPPORT_TEST_BACKEND must be libsql or postgres');
+const postgresBin = process.env.POSTGRES_BIN;
+const postgres = (command, args) => exec(postgresBin ? join(postgresBin, command) : command, args, { timeout: 30000 });
 const host = '127.0.0.1';
 const source = 'docs:retailops#guides/network';
 const confirmed = 'The terminal selected the guest network. After authorized selection, three checks succeeded.';
@@ -93,10 +97,62 @@ async function ready(proc, url, access) {
 
 async function database(directory) {
   const port = await freePort();
+  if (backend === 'postgres') {
+    await postgres('initdb', ['-D', directory, '-A', 'trust', '-U', 'support', '--no-locale', '--encoding=UTF8']);
+    await postgres('pg_ctl', [
+      '-D',
+      directory,
+      '-l',
+      `${directory}.log`,
+      '-o',
+      `-h ${host} -p ${port} -k ${lab}`,
+      '-w',
+      'start',
+    ]);
+    clusters.push(directory);
+    const base = `postgresql://support@${host}:${port}`;
+    await postgres('createdb', ['--maintenance-db', `${base}/postgres`, 'support']);
+    return {
+      url: `${base}/support`,
+      async restore() {
+        const backup = join(lab, 'support.dump');
+        await postgres('pg_dump', ['--dbname', `${base}/support`, '--format=custom', '--file', backup]);
+        await postgres('createdb', ['--maintenance-db', `${base}/postgres`, 'restored_support']);
+        await postgres('pg_restore', ['--dbname', `${base}/restored_support`, '--no-owner', '--exit-on-error', backup]);
+        return { url: `${base}/restored_support` };
+      },
+    };
+  }
   const url = `http://${host}:${port}`;
   const proc = start(process.env.SQLD_BIN ?? 'sqld', ['--http-listen-addr', `${host}:${port}`, '--db-path', directory]);
   await ready(proc, `${url}/health`);
-  return { proc, url };
+  return {
+    proc,
+    url,
+    async restore() {
+      await stop(proc);
+      const restored = join(lab, 'restored');
+      await cp(directory, restored, { recursive: true });
+      return database(restored);
+    },
+  };
+}
+
+async function holdWriterLock(env, url) {
+  const proc = start(
+    process.execPath,
+    [
+      '--input-type=module',
+      '-e',
+      "import { acquireWriterLock } from './src/mastra/knowledge/writer-lock.ts'; await acquireWriterLock(); console.log('writer-held'); setInterval(() => {}, 1000);",
+    ],
+    { ...env, SUPPORT_DATABASE_URL: url },
+  );
+  for (let attempt = 0; attempt < 100 && proc.child.exitCode === null; attempt++) {
+    if (proc.output().includes('writer-held')) return proc;
+    await delay(100);
+  }
+  throw new Error(`Writer lock holder failed: ${proc.output()}`);
 }
 
 function request(worker, route, access, body) {
@@ -231,6 +287,10 @@ try {
   };
   delete env.SUPPORT_CREDENTIALS_FILE;
   delete env.SUPPORT_STUDIO_ROLE;
+  if (backend === 'postgres') {
+    delete env.SUPPORT_WRITER_LOCK_FILE;
+    delete env.SUPPORT_DATABASE_AUTH_TOKEN;
+  }
 
   async function worker(db) {
     const port = await freePort();
@@ -264,15 +324,25 @@ try {
   assert.equal((await request(second, pageRoute(source), outsider)).status, 404);
   await json(request(second, pageRoute(source), technician));
 
-  const draft = randomUUID();
-  const generate = (worker, access) =>
+  const generate = (worker, access, draft) =>
     request(worker, '/api/agents/support/generate', access, {
       messages: [{ role: 'user', content: 'Draft Wi-Fi check' }],
       memory: { thread: draft },
     });
-  const race = await Promise.all([generate(first, technician), generate(second, reviewer)]);
-  assert.deepEqual(race.map(response => response.status).sort(), [200, 403]);
-  await Promise.all(race.map(response => response.text()));
+  // Repeated first-use races protect against one worker overwriting another actor's thread binding.
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const draft = randomUUID();
+    const race = await Promise.all([generate(first, technician, draft), generate(second, reviewer, draft)]);
+    assert.deepEqual(race.map(response => response.status).sort(), [200, 403]);
+    const winner = race[0].status === 200 ? technician : reviewer;
+    const loser = winner === technician ? reviewer : technician;
+    await Promise.all(race.map(response => response.text()));
+    const route = `/api/memory/threads/${draft}?agentId=support`;
+    const saved = await json(request(second, route, winner));
+    const { tenant_id, customer_id, sub } = profiles.get(winner);
+    assert.equal(saved.resourceId, JSON.stringify([tenant_id, customer_id, sub]));
+    assert.equal((await request(first, route, loser)).status, 403);
+  }
 
   const { id: thread } = await createThread(first, technician);
   assert.match((await turn(first, thread, 'Hosted Wi-Fi check')).text, /guides\/network/u);
@@ -313,8 +383,7 @@ try {
   );
   profiles.set(reviewer, grant);
 
-  const sidecar = new DatabaseSync(coordination);
-  sidecar.exec('BEGIN IMMEDIATE');
+  const holder = await holdWriterLock(env, db.url);
   try {
     await assert.rejects(seed, { code: 75 }, 'An admin seed sees the shared writer lock');
     const blocked = await json(
@@ -326,8 +395,9 @@ try {
     assert.equal(blocked.status, 'suspended');
     assert.equal((await request(second, pageRoute(reference), technician)).status, 404);
   } finally {
-    sidecar.close();
+    await stop(holder);
   }
+  await seed(); // The database session/OS lock is released when its owner exits.
   const resumed = await json(
     request(second, resumeRoute(runId), reviewer, {
       step: ['publish-review'],
@@ -349,16 +419,20 @@ try {
 
   await stop(restarted.proc);
   await stop(second.proc);
-  await stop(db.proc);
-  const backup = join(lab, 'restored');
-  await cp(original, backup, { recursive: true });
-  const restoredDb = await database(backup);
+  const restoredDb = await db.restore();
   const restored = await worker(restoredDb);
   assert.match(
     JSON.stringify(await json(request(restored, pageRoute(reference), technician))),
     /Three hosted reference checks succeeded/u,
   );
   assert.match(JSON.stringify(await json(request(restored, messageRoute, technician))), /Hosted Wi-Fi check/u);
+  assert.equal((await request(restored, pageRoute(reference), outsider)).status, 404);
+  assert.equal((await request(restored, messageRoute, outsider)).status, 403);
+  if (backend === 'postgres')
+    assert.ok(
+      !(await readdir(lab)).some(name => name.startsWith('shared.writer')),
+      'PostgreSQL uses no shared lock file',
+    );
   const afterBackup = await json(request(restored, runRoute(runId), reviewer));
   assert.deepEqual(afterBackup.result, beforeBackup.result);
   const visibleRecords = JSON.stringify([
@@ -368,10 +442,11 @@ try {
   ]);
   for (const secret of [technician, reviewer, outsider, resourceSecret]) assert.ok(!visibleRecords.includes(secret));
   console.log(
-    'Hosted proof passed: two built workers, HTTPS identity, remote LibSQL, scope isolation, contention, approval after restart, history reuse, and restored Knowledge, Memory, and audit.',
+    `Hosted proof passed (${backend}): two built workers, HTTPS identity, scope isolation, contention and owner exit, approval after restart, history reuse, and restored Knowledge, Memory, and audit.`,
   );
 } finally {
   for (const proc of [...children].reverse()) await stop(proc);
+  for (const directory of clusters) await postgres('pg_ctl', ['-D', directory, '-m', 'fast', '-w', 'stop']);
   await model?.close();
   if (identityServer) await new Promise(done => identityServer.close(done));
   await rm(lab, { recursive: true, force: true });

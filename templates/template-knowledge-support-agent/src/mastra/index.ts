@@ -1,22 +1,19 @@
 import { observability } from './observability.ts';
 import { resolve } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
-import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { KNOWLEDGE_ROUTES } from '@mastra/server/server-adapter';
 import { createSupportAgent } from './agents/support-agent.ts';
 import { createKnowledge } from './knowledge/index.ts';
 import { createAuth, createReviewerAuthority, loadCredentials } from './server/access.ts';
-import { hostedMode, storageConfiguration, serverHost } from './database.ts';
+import { hostedMode, serverHost } from './database.ts';
+import { createStorage } from './storage.ts';
 import { createHostedIdentity } from './server/hosted-identity.ts';
 import { createReviewService } from './review/service.ts';
 import { createConfirmationRoute } from './server/confirmations.ts';
 import { createReviewWorkflow } from './workflows/review-workflow.ts';
 
-export const storage = new LibSQLStore({
-  id: 'local-support',
-  ...storageConfiguration(),
-});
+export const storage = createStorage('support');
 export const memory = new Memory({
   storage,
   options: { lastMessages: 12, semanticRecall: false, workingMemory: { enabled: false }, generateTitle: false },

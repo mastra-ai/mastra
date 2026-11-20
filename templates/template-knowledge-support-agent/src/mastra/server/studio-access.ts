@@ -110,7 +110,7 @@ export function createStudioAccess(memory: Memory) {
         if (error instanceof WriterBusyError) return false;
         throw error;
       } finally {
-        lock?.release();
+        await lock?.release();
       }
     });
     pending = operation.catch(() => undefined);

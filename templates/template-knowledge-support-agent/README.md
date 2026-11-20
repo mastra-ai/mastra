@@ -31,7 +31,7 @@ Support teams repeat investigations when manuals, customer history, and confirme
 - Run `npm run knowledge:seed -- --dataset retail-pos-history`, then ask about Store 42 connectivity in a fresh chat. Look for dated cases and which observations remain open.
 - Use the [Studio walkthrough](docs/studio-walkthrough.md) to record an attributed confirmation, approve a fictional finding, then retrieve the approved tenant guidance in another technician's chat.
 
-For a built HTTP deployment with remote LibSQL and external OAuth identity, follow [Provider-neutral staging](docs/hosted-staging.md).
+For a built HTTP deployment with remote LibSQL or PostgreSQL and external OAuth identity, follow [Provider-neutral staging](docs/hosted-staging.md).
 
 The default database is `.local/support.db`. It keeps your Knowledge and conversations across restarts. Use the new token from each launch to reopen an existing chat.
 

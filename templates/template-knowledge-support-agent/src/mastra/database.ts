@@ -9,12 +9,30 @@ export function hostedMode() {
 }
 
 export function storageConfiguration(url = process.env.SUPPORT_DATABASE_URL) {
-  if (!hostedMode()) return { url: localDatabaseUrlFor(url) };
+  if (!hostedMode()) return { backend: 'libsql' as const, url: localDatabaseUrlFor(url) };
   if (!url) throw new Error('Hosted mode requires SUPPORT_DATABASE_URL');
-  if (!process.env.SUPPORT_WRITER_LOCK_FILE || !isAbsolute(process.env.SUPPORT_WRITER_LOCK_FILE))
-    throw new Error('Hosted mode requires an absolute SUPPORT_WRITER_LOCK_FILE');
-  const parsed = new URL(url);
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error('Invalid hosted database URL');
+  }
   const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname);
+  if (['postgres:', 'postgresql:'].includes(parsed.protocol)) {
+    if (!parsed.hostname || !/^\/[^/]+$/u.test(parsed.pathname) || parsed.hash)
+      throw new Error('PostgreSQL requires a host and explicit database name');
+    const sslmode = parsed.searchParams.get('sslmode');
+    if (
+      [...parsed.searchParams.keys()].some(key => key !== 'sslmode') ||
+      parsed.searchParams.getAll('sslmode').length > 1 ||
+      (sslmode !== null && !['disable', 'verify-full'].includes(sslmode)) ||
+      (!loopback && sslmode !== 'verify-full')
+    )
+      throw new Error('PostgreSQL requires sslmode=verify-full outside loopback; no other URL options are supported');
+    return { backend: 'postgres' as const, connectionString: url };
+  }
+  if (!process.env.SUPPORT_WRITER_LOCK_FILE || !isAbsolute(process.env.SUPPORT_WRITER_LOCK_FILE))
+    throw new Error('Hosted LibSQL requires an absolute SUPPORT_WRITER_LOCK_FILE');
   if (!['https:', 'libsql:'].includes(parsed.protocol) && !(parsed.protocol === 'http:' && loopback))
     throw new Error('Hosted database requires HTTPS or libsql (HTTP is allowed only on loopback)');
   if (parsed.username || parsed.password || parsed.search || parsed.hash || !parsed.hostname)
@@ -22,7 +40,7 @@ export function storageConfiguration(url = process.env.SUPPORT_DATABASE_URL) {
   const authToken = process.env.SUPPORT_DATABASE_AUTH_TOKEN;
   if (!authToken?.trim() || /[\r\n]/u.test(authToken))
     throw new Error('Hosted mode requires SUPPORT_DATABASE_AUTH_TOKEN');
-  return { url, authToken };
+  return { backend: 'libsql' as const, url, authToken };
 }
 
 function localDatabaseUrlFor(url?: string) {

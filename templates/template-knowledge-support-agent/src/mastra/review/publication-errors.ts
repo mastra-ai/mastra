@@ -3,6 +3,11 @@ import { WriterBusyError } from '../knowledge/writer-lock.ts';
 import { ReviewConflict } from './contracts.ts';
 
 const transientCodes = new Set([
+  '40001', // PostgreSQL serialization failure
+  '40P01', // deadlock detected
+  '55P03', // lock not available
+  '57P01', // administrator shutdown
+  '57P03', // database cannot connect now
   'SQLITE_BUSY',
   'SQLITE_BUSY_RECOVERY',
   'SQLITE_BUSY_SNAPSHOT',
