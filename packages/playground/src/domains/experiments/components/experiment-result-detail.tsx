@@ -1,5 +1,7 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 
+import { useExperimentResultDetailState } from '@mastra/playground-ui/domains/experiments/hooks/use-experiment-result-detail-state';
+import type { ExperimentResultDetailState } from '@mastra/playground-ui/domains/experiments/hooks/use-experiment-result-detail-state';
 import { TraceScoresList } from '@mastra/playground-ui/domains/scores';
 import { SpanFeedbackTab } from '@mastra/playground-ui/domains/traces/components/span-feedback-tab';
 import { TraceFeedbackTab } from '@mastra/playground-ui/domains/traces/components/trace-feedback-tab';
@@ -9,8 +11,6 @@ import { useSpanFeedback, useTraceFeedback } from '@mastra/react/hooks/traces';
 import { ExperimentResultPanel } from '@/domains/experiments/components/experiment-result-panel';
 import type { ExperimentResultPanelProps } from '@/domains/experiments/components/experiment-result-panel';
 import { ExperimentScorePanel } from '@/domains/experiments/components/experiment-score-panel';
-import { useExperimentResultDetailState } from '@/domains/experiments/hooks/use-experiment-result-detail-state';
-import type { ExperimentResultDetailState } from '@/domains/experiments/hooks/use-experiment-result-detail-state';
 import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
 
 export type ExperimentResultDetailProps = Omit<

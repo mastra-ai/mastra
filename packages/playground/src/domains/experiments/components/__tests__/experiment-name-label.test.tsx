@@ -1,8 +1,8 @@
+import { getExperimentDisplayName } from '@mastra/playground-ui/domains/experiments/utils/experiment-display-name';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ExperimentDescriptionLabel, ExperimentNameLabel } from '../experiment-name-label';
 import { experiments } from './fixtures/experiments';
-import { getExperimentDisplayName } from '@/domains/experiments/utils/experiment-display-name';
 
 const base = experiments[0];
 

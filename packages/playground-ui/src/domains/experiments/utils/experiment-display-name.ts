@@ -1,5 +1,5 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { getShortId } from '@mastra/playground-ui/components/Text';
+import { getShortId } from '@/ds/components/Text';
 
 /** The experiment name, or a readable `Experiment #<short id>` when unnamed. */
 export function getExperimentDisplayName(experiment: Pick<DatasetExperiment, 'id' | 'name'>): string {

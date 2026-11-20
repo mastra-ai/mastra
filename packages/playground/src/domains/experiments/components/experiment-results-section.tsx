@@ -2,12 +2,12 @@
 
 import type { DatasetExperimentResult } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
+import { getOptionalResultColumns } from '@mastra/playground-ui/domains/experiments/utils/result-output';
 import { useScoresByExperimentId } from '@mastra/react/hooks/datasets';
 import { useExperimentsItemUsage } from '@mastra/react/hooks/experiments';
-import { useMemo, useCallback } from 'react';
 
+import { useMemo, useCallback } from 'react';
 import { useExperimentItemPanel } from '../context/experiment-item-panel-context';
-import { getOptionalResultColumns } from '../utils/result-output';
 import { ExperimentResultsList } from './experiment-results-list';
 
 export type ExperimentResultsSectionProps = {

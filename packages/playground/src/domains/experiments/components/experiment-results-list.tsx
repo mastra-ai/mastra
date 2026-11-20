@@ -2,6 +2,10 @@ import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import {
+  getResultErrorMessage,
+  getResultOutputPreview,
+} from '@mastra/playground-ui/domains/experiments/utils/result-output';
 import { ComputedTag } from '@mastra/playground-ui/domains/observability';
 import { ReviewStatusBadge } from '@mastra/playground-ui/domains/review/components/review-status-badge';
 import { IconGauge } from '@mastra/playground-ui/icons/central/IconGauge';
@@ -9,7 +13,6 @@ import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
-import { getResultErrorMessage, getResultOutputPreview } from '../utils/result-output';
 import { formatCostValue, formatTokenCount, totalTokens } from './comparison/comparison-metric-format';
 import { ScoreReasonHoverCard } from './comparison/score-reason-hover-card';
 

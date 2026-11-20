@@ -1,6 +1,11 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { DataList } from '@mastra/playground-ui/components/DataList';
+import {
+  resolveTargetName,
+  TARGET_ICON,
+  TARGET_LABEL,
+} from '@mastra/playground-ui/domains/experiments/utils/target-name';
 import { formatCompactNumber } from '@mastra/playground-ui/utils/cost';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
@@ -10,7 +15,6 @@ import type { sideVariant } from './comparison/constants';
 import { STATUS_LABEL, STATUS_VARIANT } from './experiment-columns';
 import { ExperimentDescriptionLabel, ExperimentNameLabel } from './experiment-name-label';
 import { useTargetRegistries } from '@/domains/experiments/hooks/use-target-registries';
-import { resolveTargetName, TARGET_ICON, TARGET_LABEL } from '@/domains/experiments/utils/target-name';
 
 export interface ExperimentReviewSummary {
   needsReview: number;

@@ -5,10 +5,10 @@ import type {
   GetScorerResponse,
   GetWorkflowResponse,
 } from '@mastra/client-js';
-import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
-import { ProcessorIcon } from '@mastra/playground-ui/icons/ProcessorIcon';
-import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
-import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
+import { AgentIcon } from '@/ds/icons/AgentIcon';
+import { ProcessorIcon } from '@/ds/icons/ProcessorIcon';
+import { ScorersIcon } from '@/ds/icons/ScorersIcon';
+import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 
 export const TARGET_ICON = {
   agent: AgentIcon,

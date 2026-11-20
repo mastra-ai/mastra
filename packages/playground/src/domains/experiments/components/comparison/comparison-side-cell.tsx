@@ -9,14 +9,14 @@ import {
   sectionStackClass,
 } from '@mastra/playground-ui/domains/experiments';
 import type { ComparisonMetric } from '@mastra/playground-ui/domains/experiments';
-import { SpanPayloadToolCalls } from '@mastra/playground-ui/domains/traces/components/span-payload/span-payload-primitives';
-import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import {
   getMissingTextNotice,
   getResultErrorMessage,
   getResultOutputText,
   getResultToolCalls,
-} from '../../utils/result-output';
+} from '@mastra/playground-ui/domains/experiments/utils/result-output';
+import { SpanPayloadToolCalls } from '@mastra/playground-ui/domains/traces/components/span-payload/span-payload-primitives';
+import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { sideAverageScore, sideDurationMs } from './build-comparison-rows';
 import type { ComparisonColumn } from './build-comparison-rows';
 import { itemMetrics } from './item-metrics';

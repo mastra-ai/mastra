@@ -14,6 +14,12 @@ import {
   sectionStackClass,
 } from '@mastra/playground-ui/domains/experiments';
 import type { ComparisonMetric } from '@mastra/playground-ui/domains/experiments';
+import {
+  getMissingTextNotice,
+  getResultErrorMessage,
+  getResultOutputText,
+  getResultToolCalls,
+} from '@mastra/playground-ui/domains/experiments/utils/result-output';
 import { ComputedTag } from '@mastra/playground-ui/domains/observability';
 import { ReviewStatusBadge } from '@mastra/playground-ui/domains/review/components/review-status-badge';
 import { SpanPayloadToolCalls } from '@mastra/playground-ui/domains/traces/components/span-payload/span-payload-primitives';
@@ -34,12 +40,6 @@ import { useTraceFeedback } from '@mastra/react/hooks/traces';
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';
 import { useExperimentResultUsage } from '../hooks/use-experiment-result-usage';
-import {
-  getMissingTextNotice,
-  getResultErrorMessage,
-  getResultOutputText,
-  getResultToolCalls,
-} from '../utils/result-output';
 import { sideDurationMs } from './comparison/build-comparison-rows';
 import { itemMetrics } from './comparison/item-metrics';
 import { ExperimentResultsTagPicker } from './experiment-results-tag-picker';

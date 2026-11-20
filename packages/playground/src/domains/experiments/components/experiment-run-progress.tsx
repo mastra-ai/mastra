@@ -3,8 +3,8 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { RotatingText } from '@mastra/playground-ui/components/RotatingText';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { useNow } from '@mastra/playground-ui/domains/experiments/hooks/use-now';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
-import { useNow } from '../hooks/use-now';
 import { QUEUED_MESSAGE, RUNNING_MESSAGES } from './experiment-run-messages';
 
 export interface ExperimentRunProgressProps {
