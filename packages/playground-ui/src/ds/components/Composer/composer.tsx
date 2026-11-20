@@ -1,7 +1,6 @@
 import type { ComponentProps } from 'react';
 import { use } from 'react';
 
-import { ActivityWick } from '../Activity';
 import { ChatShellComposerInputContext } from '../ChatShell/chat-shell-context';
 import { ScrollArea } from '../ScrollArea';
 import { useComposerEngagement } from './use-composer-engagement';
@@ -82,8 +81,8 @@ export function ComposerRing({ busy = false, tone = 'green', className, children
       className={cn('composer-ring relative mx-auto w-full max-w-3xl rounded-(--composer-radius)', className)}
       {...props}
     >
-      <span aria-hidden="true" className="composer-ring-wick">
-        <ActivityWick status="working" />
+      <span aria-hidden="true" className="composer-ring-beam">
+        <span />
       </span>
       {children}
     </div>

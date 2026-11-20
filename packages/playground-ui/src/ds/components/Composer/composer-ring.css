@@ -54,40 +54,88 @@ html.light .composer-ring {
   --composer-ring-lift-focus: 32%;
 }
 
-.composer-ring-wick {
+.composer-ring-beam {
   pointer-events: none;
   position: absolute;
   inset: 0;
   z-index: 20;
+  overflow: clip;
   border-radius: inherit;
   opacity: 0;
   transition: opacity var(--duration-slow) var(--ease-out-custom);
 
-  & > .session-wick {
-    --belt-hue: var(--composer-tone-color);
+  & > span {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 45%;
+    height: 2.5rem;
+    background: radial-gradient(
+      ellipse 50% 100% at 50% 100%,
+      color-mix(in oklch, var(--composer-tone-color) 30%, transparent),
+      transparent 70%
+    );
+    translate: -20% 0;
+    animation: composer-ring-beam 3.2s var(--ease-in-out-custom) infinite alternate paused;
 
-    animation-play-state: paused;
+    &::after {
+      content: '';
+      position: absolute;
+      inset-inline: 8%;
+      bottom: 0;
+      height: 1px;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        color-mix(in oklch, var(--composer-tone-color), white 35%),
+        transparent
+      );
+    }
   }
 }
 
-.composer-ring[data-busy='true'] > .composer-ring-wick {
+html.light .composer-ring-beam > span {
+  background: radial-gradient(
+    ellipse 50% 100% at 50% 100%,
+    color-mix(in oklch, var(--composer-tone-color) 16%, transparent),
+    transparent 70%
+  );
+
+  &::after {
+    background: linear-gradient(90deg, transparent, var(--composer-tone-color), transparent);
+  }
+}
+
+.composer-ring[data-busy='true'] > .composer-ring-beam {
   opacity: 1;
 
-  & > .session-wick {
+  & > span {
     animation-play-state: running;
+  }
+}
+
+/* Sweeps the 45% beam from just past the left end to just past the right. */
+@keyframes composer-ring-beam {
+  to {
+    translate: 142% 0;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .composer-ring,
-  .composer-ring-wick {
+  .composer-ring-beam {
     transition: none;
+  }
+
+  .composer-ring-beam > span {
+    animation: none;
+    translate: 61% 0;
   }
 }
 
 @media (forced-colors: active) {
   .composer-ring::before,
-  .composer-ring-wick {
+  .composer-ring-beam {
     display: none;
   }
 }
