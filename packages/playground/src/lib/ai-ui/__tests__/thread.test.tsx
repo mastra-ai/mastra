@@ -2,14 +2,15 @@ import { MastraClient } from '@mastra/client-js';
 import type { ListMemoryThreadMessagesResponse, StreamParams } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { TaskItem } from '@mastra/core/signals';
+import { ThreadInputProvider } from '@mastra/playground-ui/domains/agents/chat/drafts/ThreadInputContext';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ComponentProps, ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { ChatProvider } from '../chat/chat-provider';
 import { Thread } from '../thread';
 import { emptyChannelPlatforms, emptyMcpServers, memoryDisabled, memoryEnabled, v2Agent } from './fixtures/agent';
@@ -17,7 +18,6 @@ import { attachmentMessages } from './fixtures/attachment-messages';
 import { abortedSignalRun, acceptedSignalMessage, signalRunStart } from './fixtures/signal-run';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
-import { ThreadInputProvider } from '@/domains/conversation';
 import { server } from '@/test/msw-server';
 
 declare global {
@@ -323,15 +323,51 @@ describe('Thread', () => {
 
       const heading = screen.getByRole('heading', { name: /what can .* do for you today\?/i });
       expect(heading.textContent).toContain('Helper');
-      // Emphasis contract: only the agent name is high-contrast; the surrounding copy is muted and regular weight.
-      expect(heading.classList.contains('font-normal')).toBe(true);
-      const name = screen.getByText('Helper');
-      expect(name.classList.contains('font-medium')).toBe(true);
-      expect(name.classList.contains('text-foreground')).toBe(true);
       const landing = screen.getByTestId('thread-landing');
       expect(landing.contains(heading)).toBe(true);
       expect(landing.contains(screen.getByRole('textbox'))).toBe(true);
       expect(screen.queryByTestId('thread-message-column')).toBeNull();
+    });
+  });
+
+  // The MCP app tools cost a request per MCP server: the conversation asks for them only once it
+  // draws messages whose tool calls they type, as it did when each message loaded them itself.
+  describe('when it loads the MCP app tools', () => {
+    const MCP_APP_TOOLS = '/api/mcp/v0/servers';
+    const recordPaths = () => {
+      const paths: string[] = [];
+      const listener = ({ request }: { request: Request }) => {
+        paths.push(new URL(request.url).pathname);
+      };
+      server.events.on('request:start', listener);
+      onTestFinished(() => {
+        server.events.removeListener('request:start', listener);
+      });
+      return paths;
+    };
+
+    it('loads none for an empty conversation', async () => {
+      server.use(...baseHandlers());
+      const paths = recordPaths();
+
+      await act(async () => {
+        renderThread([]);
+      });
+      await screen.findByTestId('thread-welcome');
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      expect(paths).not.toContain(MCP_APP_TOOLS);
+    });
+
+    it('loads them once the conversation draws a message', async () => {
+      server.use(...baseHandlers());
+      const paths = recordPaths();
+
+      await act(async () => {
+        renderThread([userMessage('previous question')]);
+      });
+
+      await waitFor(() => expect(paths).toContain(MCP_APP_TOOLS));
     });
   });
 

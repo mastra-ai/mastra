@@ -1,5 +1,8 @@
+import {
+  buildStreamErrorMessage,
+  isMaxStepsFinishChunk,
+} from '@mastra/playground-ui/domains/agents/chat/stream-error-message';
 import { describe, expect, it } from 'vitest';
-import { buildStreamErrorMessage, isMaxStepsFinishChunk } from '../stream-error-message';
 
 describe('stream error messages', () => {
   describe('when a run ends on a tool call (#29612)', () => {

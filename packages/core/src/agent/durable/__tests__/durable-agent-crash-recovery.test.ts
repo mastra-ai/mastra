@@ -227,6 +227,7 @@ async function startProcess(
     { createDurableAgent },
     { createEventedAgent },
     { globalRunRegistry },
+    { releaseRunMessageRefs },
   ] = await Promise.all([
     import('../../../mastra'),
     import('../../../storage'),
@@ -234,6 +235,7 @@ async function startProcess(
     import('../create-durable-agent'),
     import('../create-evented-agent'),
     import('../run-registry'),
+    import('../run-message-refs'),
   ]);
 
   const agent = new Agent({
@@ -264,7 +266,9 @@ async function startProcess(
       : new InMemoryStore();
   // Before `new Mastra(...)`: the engine resolves during agent registration.
   if (kind === 'evented-fallback') {
-    vi.spyOn(storage.stores.workflows!, 'supportsConcurrentUpdates').mockReturnValue(false);
+    // Override on the instance: vi.spyOn would register a restore closure in
+    // vitest's global mock set and keep every recovered graph alive.
+    storage.stores.workflows!.supportsConcurrentUpdates = () => false;
   }
   const mastra = new Mastra({
     agents: { crashAgent: durableAgent },
@@ -274,7 +278,13 @@ async function startProcess(
     ...(observability ? { observability: observability.entrypoint() as any } : {}),
   });
   const workflows = (await mastra.getStorage()!.getStore('workflows'))!;
-  return { durableAgent, workflows, globalRunRegistry, pubsub: mastra.pubsub };
+  // Module-level TTL caches arm long timers that root this graph after the test
+  // moves on to the next one. Empty them once the process is done with the run.
+  const release = (runId: string) => {
+    releaseRunMessageRefs(runId);
+    globalRunRegistry.clear();
+  };
+  return { durableAgent, workflows, globalRunRegistry, pubsub: mastra.pubsub, release };
 }
 
 function activeStepIds(snapshot: WorkflowRunState | undefined) {
@@ -362,22 +372,29 @@ async function captureCheckpoints(
   }
 
   const result = await original.durableAgent.stream('Look two things up');
-  let text = '';
-  for await (const chunk of result.fullStream) {
-    if (chunk.type === 'text-delta') text += chunk.payload.text;
+  try {
+    let text = '';
+    for await (const chunk of result.fullStream) {
+      if (chunk.type === 'text-delta') text += chunk.payload.text;
+    }
+    expect(text).toBe('done');
+    // A finished run deletes its snapshots; wait for that so every write has been captured.
+    await vi.waitFor(
+      async () =>
+        expect(
+          await original.workflows.loadWorkflowSnapshot({
+            workflowName: DurableStepIds.AGENTIC_LOOP,
+            runId: result.runId,
+          }),
+        ).toBeFalsy(),
+      { timeout: 5_000 },
+    );
+  } finally {
+    // A finished run keeps its agent (and with it this whole module graph) alive
+    // until the stream bus grace-period timer fires. Release it now.
+    result.cleanup();
+    original.release(result.runId);
   }
-  expect(text).toBe('done');
-  // A finished run deletes its snapshots; wait for that so every write has been captured.
-  await vi.waitFor(
-    async () =>
-      expect(
-        await original.workflows.loadWorkflowSnapshot({
-          workflowName: DurableStepIds.AGENTIC_LOOP,
-          runId: result.runId,
-        }),
-      ).toBeFalsy(),
-    { timeout: 5_000 },
-  );
   return { agent: original.durableAgent, checkpoints, runId: result.runId };
 }
 
@@ -390,7 +407,7 @@ async function recoverFrom(
   observability?: SpanRecorder,
   storageMode: StorageMode = 'in-memory',
 ): Promise<string> {
-  const { durableAgent, workflows, globalRunRegistry, pubsub } = await startProcess(
+  const { durableAgent, workflows, globalRunRegistry, pubsub, release } = await startProcess(
     kind,
     usages,
     observability,
@@ -405,9 +422,10 @@ async function recoverFrom(
   };
   await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), countFinish);
   let onFinishCalls = 0;
+  let recovered: Awaited<ReturnType<typeof durableAgent.recover>> | undefined;
 
   const attempt = (async () => {
-    const recovered = await durableAgent.recover(runId, { onFinish: () => void onFinishCalls++ });
+    recovered = await durableAgent.recover(runId, { onFinish: () => void onFinishCalls++ });
     const execution = globalRunRegistry.get(runId)?.workflowExecution;
     const errors: string[] = [];
     // Read the answer from the finish payload: a checkpoint saved after the final
@@ -430,6 +448,11 @@ async function recoverFrom(
     if (finalText === undefined) return 'stream closed without finish';
     if (finishEvents !== 1) return `published FINISH ${finishEvents} times`;
     if (onFinishCalls !== 1) return `onFinish fired ${onFinishCalls} times`;
+    // The result names the recovered run's span, so a score or log can be linked to the trace.
+    const recoveredSpan = observability?.ended.find(span => span.name.includes('(recovered)'));
+    if (recoveredSpan && (recovered.traceId !== recoveredSpan.traceId || recovered.spanId !== recoveredSpan.id)) {
+      return `result names span ${recovered.spanId} in trace ${recovered.traceId}`;
+    }
     const usage = finalUsage as TestUsage | undefined;
     if (
       usage?.inputTokens !== expectedUsage.inputTokens ||
@@ -453,6 +476,14 @@ async function recoverFrom(
   } finally {
     clearTimeout(timer);
     await pubsub.unsubscribe(AGENT_STREAM_TOPIC(runId), countFinish);
+    // Without this the run cleanup timer retains this recovery module graph for 30s.
+    // On timeout the attempt is still pending, so release again once it settles.
+    const releaseRun = () => {
+      recovered?.cleanup();
+      release(runId);
+    };
+    releaseRun();
+    void attempt.then(releaseRun, releaseRun);
   }
 }
 
@@ -506,9 +537,14 @@ describe('DurableAgent crash recovery', () => {
           });
         },
       });
-      const original = await scenario.start(async ({ agent }) =>
-        consumeText(await agent.stream('Look two things up', { runId })),
-      );
+      const original = await scenario.start(async ({ agent }) => {
+        const stream = await agent.stream('Look two things up', { runId });
+        try {
+          return await consumeText(stream);
+        } finally {
+          stream.cleanup();
+        }
+      });
       try {
         expect(original.graph.agent.getWorkflow().engineType).toBe('evented');
         let held = false;

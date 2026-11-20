@@ -9,7 +9,6 @@ import { IconArrowWallDown } from '@/ds/icons/central/IconArrowWallDown';
 import { IconCalendarClock4 } from '@/ds/icons/central/IconCalendarClock4';
 import { IconDollar } from '@/ds/icons/central/IconDollar';
 import { IconStopwatch } from '@/ds/icons/central/IconStopwatch';
-import type { LinkComponent } from '@/ds/types/link-component';
 import { formatCompactNumber, formatCost } from '@/lib/cost';
 import { formatDate, formatTimestampPrecise } from '@/utils/date-format';
 import { formatDuration, formatDurationPrecise } from '@/utils/duration';
@@ -39,13 +38,12 @@ type RootSpanSummary = {
 
 export interface TraceEntityMetaProps {
   rootSpan: Pick<RootSpanSummary, 'entityId' | 'entityName' | 'entityType'>;
-  /** When provided (with `LinkComponent`), the entity name links to the entity's page. */
-  entityHref?: string;
-  LinkComponent?: LinkComponent;
+  /** Opens the entity (its agent or workflow); without it, the name is text. */
+  onOpenEntity?: () => void;
 }
 
 /** The trace's root entity (agent, workflow…) as a `DataPanel.Meta` pill; renders nothing without a name or id. */
-export function TraceEntityMeta({ rootSpan, entityHref, LinkComponent }: TraceEntityMetaProps) {
+export function TraceEntityMeta({ rootSpan, onOpenEntity }: TraceEntityMetaProps) {
   const entityName = rootSpan.entityName || rootSpan.entityId;
   if (!entityName) return null;
 
@@ -53,10 +51,10 @@ export function TraceEntityMeta({ rootSpan, entityHref, LinkComponent }: TraceEn
   const formattedEntityType = entityType ? formatEntityType(entityType) : 'Entity';
   const EntityIcon = entityType?.includes('workflow') ? WorkflowIcon : AgentIcon;
 
-  return entityHref ? (
+  return onOpenEntity ? (
     <DataPanel.Meta
-      as={LinkComponent ?? 'a'}
-      href={entityHref}
+      as="button"
+      onClick={onOpenEntity}
       icon={<EntityIcon />}
       tooltip={`See ${formattedEntityType.toLowerCase()}`}
     >
@@ -96,8 +94,7 @@ export interface TraceSummaryDescriptionProps extends TraceEntityMetaProps {
 export function TraceSummaryDescription({
   rootSpan,
   usage,
-  entityHref,
-  LinkComponent,
+  onOpenEntity,
   showEntity = true,
   showStatus = true,
 }: TraceSummaryDescriptionProps) {
@@ -110,7 +107,7 @@ export function TraceSummaryDescription({
 
   return (
     <DataPanel.Metadata>
-      {showEntity && <TraceEntityMeta rootSpan={rootSpan} entityHref={entityHref} LinkComponent={LinkComponent} />}
+      {showEntity && <TraceEntityMeta rootSpan={rootSpan} onOpenEntity={onOpenEntity} />}
       {showStatus && <TraceStatusMeta rootSpan={rootSpan} />}
       {startedAtTimestamp && exactStartedAtTimestamp && (
         <DataPanel.Meta icon={<IconCalendarClock4 />} tooltip={`Started at ${exactStartedAtTimestamp}`}>

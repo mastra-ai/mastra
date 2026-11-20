@@ -891,6 +891,8 @@ const DEFAULT_WORKFLOW_GRACE_MS = 2_000;
 const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
 // The active runs whose leases one `getRunOwnerships` call reads during a recovery pass.
 const RECOVERY_OWNERSHIP_BATCH_SIZE = 100;
+// How many `listWorkflowRuns` calls the recovery passes of one instance make at once, all passes together.
+const RECOVERY_LISTING_CONCURRENCY = 5;
 // The statuses of the runs a recovery pass looks at.
 const ACTIVE_RUN_STATUSES: readonly WorkflowRunStatus[] = ['running', 'waiting'];
 const DEFAULT_WORKFLOW_SCAN_INTERVAL_MS = 60_000;
@@ -1101,6 +1103,9 @@ export class Mastra<
   #recoveryLeaderClaim?: Promise<boolean>;
   /** Runs the restarts of every recovery pass, `recovery.workflowConcurrency` at a time. */
   #recoveryRestarts!: ConcurrencyLimiter;
+  // Shared by every recovery pass, so overlapping scans don't take every connection of the store's pool
+  // and hold up this process's other reads.
+  #recoveryListings = createConcurrencyLimiter(RECOVERY_LISTING_CONCURRENCY);
   /** The runs a recovery pass handed to `#recoveryRestarts` whose restart has not settled. */
   #queuedRecoveryRestarts = new Set<string>();
   /** The runs whose last recovery restart threw, by the engine whose pass restarts them. */
@@ -4863,15 +4868,12 @@ export class Mastra<
         }
 
         try {
-          const byStatus = await Promise.all(
-            ACTIVE_RUN_STATUSES.map(status =>
-              workflowsStore.listWorkflowRuns({ workflowName: workflow.id, status, perPage: false, summary: true }),
-            ),
-          );
-
           // A run that moved from one status to the other between the two reads is listed under both.
           const runs = new Map<string, WorkflowRun>();
-          for (const { runs: listedRuns } of byStatus) {
+          for (const status of ACTIVE_RUN_STATUSES) {
+            const { runs: listedRuns } = await this.#recoveryListings.run(() =>
+              workflowsStore.listWorkflowRuns({ workflowName: workflow.id, status, perPage: false, summary: true }),
+            );
             for (const run of listedRuns) {
               if (!runs.has(run.runId) && !this.#brokerOwnsRun(workflow, run.runId)) {
                 runs.set(run.runId, run);
@@ -5835,7 +5837,10 @@ export class Mastra<
    * This method allows dynamic registration of tools after the Mastra instance
    * has been created.
    *
-   * @throws {MastraError} When a tool with the same key already exists
+   * If a tool with the same key already exists, this method leaves the existing
+   * tool registered and returns without an error. The new tool is not added.
+   *
+   * @throws {MastraError} When the tool is undefined
    *
    * @example
    * ```typescript
@@ -7204,6 +7209,8 @@ export class Mastra<
     this.#storageSource = getStorageSource(storage);
     this.#storage = augmentWithInit(storage);
     this.#storage?.__registerMastra?.(this as unknown as Parameters<NonNullable<typeof storage.__registerMastra>>[0]);
+    // Storage attached after construction must log through this instance's logger too.
+    this.#storage.__setLogger(this.#logger);
     for (const knowledge of Object.values(this.#knowledge)) {
       if (!knowledge.hasOwnStorage) {
         knowledge.setStorage(this.#storage, this.#storageSource);

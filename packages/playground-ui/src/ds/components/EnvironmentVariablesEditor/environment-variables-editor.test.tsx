@@ -215,13 +215,6 @@ describe('EnvironmentVariablesEditor', () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 
-  it('does not render a raw tab', () => {
-    render(<TestEditor />);
-
-    expect(screen.queryByRole('tab', { name: 'Raw' })).toBeNull();
-    expect(screen.queryByLabelText('Raw environment variables')).toBeNull();
-  });
-
   it('keeps controlled rows clean until they change', () => {
     render(<ControlledTestEditor initialRows={[{ key: 'PUBLIC_URL', value: 'https://example.com' }]} />);
 

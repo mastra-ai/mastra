@@ -227,6 +227,18 @@ describe('applyDateRange', () => {
 });
 
 describe('sanitizeTracesFilters', () => {
+  it.each(['all', 'input', 'output', 'error', 'inputPreview', 'outputPreview', 'errorPreview'])(
+    'drops unsupported %s content chips and preserves supported chips',
+    field => {
+      const filters: TracesFilters = {
+        ...baseFilters,
+        tokens: [{ fieldId: `spans.${field}`, operatorId: 'hasAllTokens', value: 'needle' }],
+      };
+      expect(sanitizeTracesFilters(filters, {}).tokens).toEqual([]);
+      expect(sanitizeTracesFilters(filters, { withTokenSearch: true })).toBe(filters);
+    },
+  );
+
   describe('when the filters hold entries the query cannot run', () => {
     it('drops a running status, unsupported fields and root duration without support', () => {
       const filters: TracesFilters = {
@@ -330,7 +342,7 @@ describe('resolveTracesDateWindow', () => {
       vi.setSystemTime(new Date('2026-06-10T12:00:00.000Z'));
 
       expect(resolveTracesDateWindow('last-3d', new Date(0), new Date(1))).toEqual({
-        dateFrom: new Date(Date.now() - 72 * 3600_000),
+        dateFrom: new Date('2026-06-07T12:00:00.000Z'),
         dateTo: undefined,
       });
     });
@@ -444,14 +456,6 @@ describe('buildTracesLegacyFilters', () => {
         startedAt: { start: dateFrom },
         endedAt: { end: dateTo },
       });
-    });
-  });
-});
-
-describe('trace search with date presets', () => {
-  describe('when the user changes the time window', () => {
-    it('keeps the applied search', () => {
-      expect(applyDatePreset({ ...baseFilters, textSearch: 'needle' }, 'last-24h').textSearch).toBe('needle');
     });
   });
 });

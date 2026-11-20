@@ -37,6 +37,8 @@ describe('boardPhasesRequest', () => {
 
   it('asks for the search without its outer spaces and no longer than the server accepts', () => {
     expect(request({ search: '  login bug ' }).q).toBe('login bug');
+    // Searches that differ only in case or spacing find the same cards: one request, one cached answer.
+    expect(request({ search: 'Login   BUG' }).q).toBe('login bug');
     expect(request({ search: 'x'.repeat(260) }).q).toHaveLength(200);
   });
 

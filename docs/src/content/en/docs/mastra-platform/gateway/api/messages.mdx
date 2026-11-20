@@ -1,0 +1,55 @@
+---
+title: "Anthropic Messages | Gateway"
+description: "Call Claude through Gateway with the Anthropic Messages API and the Anthropic SDK."
+---
+
+# Anthropic Messages
+
+<Inject>
+  **For AI agents:** Gateway publishes a public OpenAPI spec for every endpoint at [https://gateway-api.mastra.ai/openapi.json](https://gateway-api.mastra.ai/openapi.json). Use it for request and response schemas. Some fields, such as streaming event payloads, are open objects in the spec. Check those against the [Anthropic Messages API reference](https://platform.claude.com/docs/en/api/messages), which this endpoint is compatible with.
+</Inject>
+
+```text
+POST https://gateway-api.mastra.ai/v1/messages
+```
+
+Compatible with the Anthropic Messages API, including streaming, tools, and extended thinking. Errors on this endpoint use the Anthropic error format.
+
+## Request
+
+Authenticate with `x-api-key` or `Authorization: Bearer`:
+
+```bash
+curl https://gateway-api.mastra.ai/v1/messages \
+  -H "x-api-key: $MASTRA_GATEWAY_API_KEY" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "__GATEWAY_ANTHROPIC_MODEL_HAIKU__",
+    "max_tokens": 100,
+    "messages": [{ "role": "user", "content": "Hello, Claude." }]
+  }'
+```
+
+## Anthropic SDK
+
+The SDK appends `/v1/messages`, so set the base URL without `/v1`:
+
+```typescript
+import Anthropic from '@anthropic-ai/sdk'
+
+const client = new Anthropic({
+  apiKey: process.env.MASTRA_GATEWAY_API_KEY,
+  baseURL: 'https://gateway-api.mastra.ai',
+})
+
+const message = await client.messages.create({
+  model: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
+  max_tokens: 100,
+  messages: [{ role: 'user', content: 'Hello, Claude.' }],
+})
+```
+
+## Extended thinking
+
+When a conversation includes signed thinking blocks from an earlier turn, Gateway routes the next turn to a provider that can verify them. This can narrow failover for that request.

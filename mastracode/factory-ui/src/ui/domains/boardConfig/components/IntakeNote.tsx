@@ -3,7 +3,7 @@ import { Link } from 'react-router';
 
 import { boardIntakePath, INTAKE_ORDER_ANCHOR } from '../boardConfigPaths';
 
-/** How cards get to a board: each new item is offered to the boards in intake order, and each board's rules decide. */
+/** How cards get to a board: each new issue or pull request is offered to the boards in intake order, and each board's rules decide. */
 export function IntakeNote({ factoryId }: { factoryId: string }) {
   return (
     <Notice variant="info">

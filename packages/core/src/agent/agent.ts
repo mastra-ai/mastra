@@ -71,7 +71,6 @@ import { withDefaultToolCallConcurrencyLimit } from '../loop/workflows/agentic-e
 import type { Mastra } from '../mastra';
 import { mastraCtorHolder } from '../mastra/mastra-ctor-holder';
 import type { VersionOverrides } from '../mastra/types';
-import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import { normalizeMessageHistoryConfig } from '../memory/message-history-config';
 import { getMemoryRunState } from '../memory/run-state';
@@ -153,7 +152,13 @@ import { createTool } from '../tools';
 import { createWebSearchProviderTool, isWebSearchTool, normalizeWebSearchProvider } from '../tools/builtin/web-search';
 import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
-import { isMastraTool, isProviderTool, isApprovalExempt, markApprovalExempt } from '../tools/toolchecks';
+import {
+  isMastraTool,
+  isProviderTool,
+  isApprovalExempt,
+  markAgentWorkflowTool,
+  markApprovalExempt,
+} from '../tools/toolchecks';
 import type {
   CoreTool,
   MastraToolInvocationOptions,
@@ -221,11 +226,13 @@ import { detachFullStreamOnEnd } from './durable/observe-full-stream';
 import { createDurableAgentStream } from './durable/stream-adapter';
 import type { AgentSuspendedEventData, DurableAgentStepFinishResult } from './durable/types';
 import { GoalSignalProvider, resolveGoalStore, readObjective, writeObjective, clearObjective } from './goal';
+import { convertInstructionsToString, resolveRunId, resolveVersionContext } from './helpers';
 import { buildMcpServerGuidance } from './mcp-guidance';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { createStoredMessageLoader } from './message-list/memory-message-refs';
 import { modelSpanAttributes } from './model-span-attributes';
+import { throwAgentRequestContextValidationError } from './request-context-validation';
 import { buildResumeSpanInput } from './resume-span-input';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from './run-ownership';
 import { SaveQueueManager } from './save-queue';
@@ -1790,7 +1797,7 @@ export class Agent<
   }
 
   /** Whether run frames are published by workers on Mastra's shared log. @internal */
-  protected __usesSharedRunLog(): boolean {
+  __usesSharedRunLog(): boolean {
     return false;
   }
 
@@ -1847,7 +1854,8 @@ export class Agent<
     resourceId: string | undefined,
     { resuming }: { resuming: boolean },
   ): Promise<AgentRunRecord | undefined> {
-    const bus = this.#ownStreamBus();
+    if (!areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
+    const bus = this.__getStreamBus();
     if (!bus) return undefined;
 
     // A resume may still find its own finishing publisher here: the suspension is
@@ -1871,7 +1879,8 @@ export class Agent<
     runId: string,
     owner: { resourceId?: string; threadId?: string; abortSignal?: AbortSignal },
   ): AgentStreamPublisher | undefined {
-    const bus = this.#ownStreamBus();
+    if (!areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
+    const bus = this.__getStreamBus();
     if (!bus) return undefined;
     const publisher = createAgentStreamPublisher({
       pubsub: bus.pubsub,
@@ -1911,7 +1920,7 @@ export class Agent<
       const { resourceId, threadId } = local;
       return { agentId: this.id, runId, resourceId, threadId, status: 'running', updatedAt: Date.now() };
     }
-    const bus = this.#ownStreamBus();
+    const bus = this.__getStreamBus();
     if (!bus) return undefined;
     return readAgentRunRecord(bus.runRecordCache, this.id, runId);
   }
@@ -1932,9 +1941,10 @@ export class Agent<
    * topic. Best-effort: a failed publish is logged, and a request nobody hears
    * is a no-op, like aborting a finished run.
    */
-  async #requestStreamAbort(bus: AgentStreamBus, runId: string): Promise<void> {
+  protected async requestRemoteAbort(runId: string, bus = this.__getStreamBus()): Promise<void> {
+    if (!bus) return;
     try {
-      await publishAbortRequest(bus.pubsub, runId);
+      await publishAbortRequest(bus.forRun(this.__usesSharedRunLog()).pubsub, runId);
     } catch (error) {
       this.logger.warn(`[Agent:${this.id}] failed to publish abort request`, { runId, error });
     }
@@ -2137,37 +2147,6 @@ export class Agent<
       );
     }
     return processors;
-  }
-
-  /**
-   * Validates the request context against the agent's requestContextSchema.
-   * Throws an error if validation fails.
-   */
-  async #validateRequestContext(requestContext?: RequestContext) {
-    if (this.#requestContextSchema) {
-      const contextValues = getRequestContextInputValues(requestContext);
-      const validation = await this.#requestContextSchema['~standard'].validate(contextValues);
-
-      if (validation.issues) {
-        const errors = validation.issues;
-        const errorMessages = errors
-          .map(e => {
-            const pathStr = e.path?.map((p: any) => (typeof p === 'object' ? p.key : p)).join('.');
-            return `- ${pathStr}: ${e.message}`;
-          })
-          .join('\n');
-        throw new MastraError({
-          id: 'AGENT_REQUEST_CONTEXT_VALIDATION_FAILED',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: `Request context validation failed for agent '${this.id}':\n${errorMessages}`,
-          details: {
-            agentId: this.id,
-            agentName: this.name,
-          },
-        });
-      }
-    }
   }
 
   /**
@@ -2540,6 +2519,8 @@ export class Agent<
         // Internal processor workflows are transient and non-resumable, so they must never
         // write snapshot rows to the user's storage (mirrors the execution-workflow fix in #17344).
         shouldPersistSnapshot: () => false,
+        // Never stored, so only the agent call that owns it can cancel it.
+        localCancellationOnly: true,
         tracingPolicy: {
           // mark all workflow spans related to processor execution as internal
           internal: InternalSpans.WORKFLOW,
@@ -3453,7 +3434,7 @@ export class Agent<
     voice?.addTools(wrappedTools as TTools);
 
     const instructions = await this.getInstructions({ requestContext: resolvedRequestContext });
-    voice?.addInstructions(this.#convertInstructionsToString(instructions));
+    voice?.addInstructions(convertInstructionsToString(instructions));
     return voice;
   }
 
@@ -3522,34 +3503,6 @@ export class Agent<
     }
 
     return buildMcpServerGuidance(tools);
-  }
-
-  /**
-   * Helper function to convert agent instructions to string for backward compatibility
-   * Used for legacy methods that expect string instructions (e.g., voice)
-   * @internal
-   */
-  #convertInstructionsToString(instructions: AgentInstructions): string {
-    if (typeof instructions === 'string') {
-      return instructions;
-    }
-
-    if (Array.isArray(instructions)) {
-      // Handle array of messages (strings or objects)
-      return instructions
-        .map(msg => {
-          if (typeof msg === 'string') {
-            return msg;
-          }
-          // Safely extract content from message objects
-          return typeof msg.content === 'string' ? msg.content : '';
-        })
-        .filter(content => content) // Remove empty strings
-        .join('\n\n');
-    }
-
-    // Handle single message object - safely extract content
-    return typeof instructions.content === 'string' ? instructions.content : '';
   }
 
   /**
@@ -3650,7 +3603,7 @@ export class Agent<
         getMostRecentUserMessage: this.getMostRecentUserMessage.bind(this),
         genTitle: this.genTitle.bind(this),
         resolveTitleGenerationConfig: this.resolveTitleGenerationConfig.bind(this),
-        convertInstructionsToString: this.#convertInstructionsToString.bind(this),
+        convertInstructionsToString,
         tracingPolicy: this.#options?.tracingPolicy,
         resolvedVersionId: this.toRawConfig()?.resolvedVersionId as string | undefined,
         _agentNetworkAppend: this._agentNetworkAppend,
@@ -4772,6 +4725,10 @@ export class Agent<
 
   public __setMemory(memory: DynamicArgument<MastraMemory, TRequestContext>) {
     this.#memory = memory;
+  }
+
+  public __setKnowledge(knowledge: Knowledge) {
+    this.#knowledge = knowledge;
   }
 
   public __setPubSub(pubsub: PubSub) {
@@ -6443,7 +6400,7 @@ export class Agent<
                 requestContext: subAgentRequestContext,
               });
               if (agentOwnInstructions) {
-                const ownStr = this.#convertInstructionsToString(agentOwnInstructions);
+                const ownStr = convertInstructionsToString(agentOwnInstructions);
                 if (ownStr) {
                   effectiveInstructions = `${ownStr}\n\n${effectiveInstructions}`;
                 }
@@ -7474,13 +7431,10 @@ export class Agent<
           agentBackgroundConfig: this.#backgroundTasks,
         };
 
-        convertedWorkflowTools[`workflow-${workflowName}`] = makeCoreTool(
-          toolObj,
-          options,
-          undefined,
-          autoResumeSuspendedTools,
-          backgroundTaskEnabled,
-        );
+        const workflowTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools, backgroundTaskEnabled);
+        // Its results are marked `mastra.workflowTool` so tracing can show them (#30219).
+        markAgentWorkflowTool(workflowTool);
+        convertedWorkflowTools[`workflow-${workflowName}`] = workflowTool;
       }
     }
 
@@ -9112,16 +9066,12 @@ export class Agent<
 
     // Build version overrides by merging: Mastra defaults < requestContext < call-site
     const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
-    let mergedVersions = mergeVersionOverrides(this.#mastra?.getVersionOverrides(), requestVersions);
-
-    // Merge call-site version overrides on top (call-site wins over request + Mastra defaults)
-    if (options.versions) {
-      mergedVersions = mergeVersionOverrides(mergedVersions, options.versions);
-    }
-
-    if (mergedVersions) {
-      requestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
-    }
+    const mergedVersions = resolveVersionContext(
+      requestContext,
+      requestVersions,
+      this.#mastra?.getVersionOverrides(),
+      options,
+    );
 
     // A run that suspended while executing a stored version must resume on *that* version.
     // The exact id was persisted into the suspend payload, so prefer it over any status
@@ -9368,7 +9318,7 @@ export class Agent<
       input: spanInput,
       attributes: {
         conversationId: threadFromArgs?.id,
-        instructions: this.#convertInstructionsToString(instructions),
+        instructions: convertInstructionsToString(instructions),
         ...modelSpanAttributes(resolvedModel),
         ...(startingSignal ? { signal: startingSignal } : {}),
         // @deprecated — use entityVersionId (top-level span context field) instead.
@@ -10112,6 +10062,20 @@ export class Agent<
     return this.resumeNetwork({ approved: false, ...(reason !== undefined ? { reason } : {}) }, resumeOptions);
   }
 
+  async #validateRequestContext(requestContext?: RequestContext): Promise<void> {
+    if (this.#requestContextSchema) {
+      const contextValues = getRequestContextInputValues(requestContext);
+      const validation = await this.#requestContextSchema['~standard'].validate(contextValues);
+      if (validation.issues) {
+        throwAgentRequestContextValidationError({
+          issues: validation.issues,
+          agentId: this.id,
+          agentName: this.name,
+        });
+      }
+    }
+  }
+
   async generate<
     OUTPUT extends StandardSchemaWithJSON<any, any>,
     T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
@@ -10204,12 +10168,13 @@ export class Agent<
     // is invisible to signals: a signal sent mid-turn finds an idle thread and wakes a second run that
     // never sees this turn. The wait also reserves the thread for this runId.
     const threadStreamPubSub = this.getPubSub();
-    mergedOptions.runId ??=
+    mergedOptions.runId ??= resolveRunId(undefined, () =>
       this.#mastra?.generateId({
         idType: 'run',
         source: 'agent',
         entityId: this.id,
-      }) ?? globalThis.crypto.randomUUID();
+      }),
+    );
     await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
       this as Agent<any, any, any, any>,
       { ...loopOptions, runId: mergedOptions.runId } as AgentExecutionOptions<any>,
@@ -10281,13 +10246,7 @@ export class Agent<
       );
 
       const fullOutput = await result.result.getFullOutput();
-
-      const error = fullOutput.error;
-
-      if (error) {
-        throw error;
-      }
-
+      if (fullOutput.error) throw fullOutput.error;
       return fullOutput;
     } catch (error) {
       // Release the thread reservation taken by waitForCrossAgentThreadRun so
@@ -10648,17 +10607,16 @@ export class Agent<
   }
 
   abortRunStream(runId: string): boolean {
-    const aborted = this.#abortLocalRun(runId);
+    const aborted = this.__abortLocalRun(runId);
     if (aborted) return true;
     // A published run may be executing in another process; it listens on its
     // control topic.
-    const bus = this.#ownStreamBus();
-    if (bus) void this.#requestStreamAbort(bus, runId);
+    void this.requestRemoteAbort(runId);
     return false;
   }
 
   /** Abort `runId` if this process executes it or holds it parked. */
-  #abortLocalRun(runId: string): boolean {
+  protected __abortLocalRun(runId: string): boolean {
     const wrapperClose = getRunStreamSlot(this.#activeStreamUntilIdle, runId);
     wrapperClose?.();
     if (wrapperClose !== undefined) return true;
@@ -10677,8 +10635,8 @@ export class Agent<
    * @internal Used by the server's run abort route.
    */
   async __abortRunAcknowledged(runId: string): Promise<boolean> {
-    if (this.#abortLocalRun(runId)) return true;
-    const bus = this.#ownStreamBus();
+    if (this.__abortLocalRun(runId)) return true;
+    const bus = this.__getStreamBus();
     if (!bus) return false;
     return requestAcknowledgedAbort(bus.pubsub, runId);
   }
@@ -10853,6 +10811,10 @@ export class Agent<
     const routingRequirement = {
       requireClaimedOwner: target.ifIdle?.requireClaimedOwner === true,
       scopes: target.scopes,
+      // A persist-only send must stay persist-only when the delivery is delayed:
+      // the deferred dispatch would otherwise wake the idle thread the caller
+      // explicitly asked not to wake.
+      ...(target.ifIdle?.behavior === 'persist' ? { idleBehavior: 'persist' as const } : {}),
     };
     for (const notification of inputs) {
       records.push(
@@ -11214,12 +11176,13 @@ export class Agent<
     }
 
     const threadStreamPubSub = this.getPubSub();
-    mergedOptions.runId ??=
+    mergedOptions.runId ??= resolveRunId(undefined, () =>
       this.#mastra?.generateId({
         idType: 'run',
         source: 'agent',
         entityId: this.id,
-      }) ?? globalThis.crypto.randomUUID();
+      }),
+    );
     // The wait also reserves the thread for this runId, so concurrent stream()
     // calls on the same thread serialize instead of racing between this wait
     // and registerRun below.
@@ -11903,12 +11866,7 @@ export class Agent<
       throw error;
     }
 
-    const error = fullOutput.error;
-
-    if (error) {
-      throw error;
-    }
-
+    if (fullOutput.error) throw fullOutput.error;
     return fullOutput;
   }
 
@@ -12671,7 +12629,7 @@ export class Agent<
       cleanup: detach,
       detach,
       abort: async () => {
-        await this.#requestStreamAbort(bus, runId);
+        await this.requestRemoteAbort(runId, bus);
       },
     };
   }

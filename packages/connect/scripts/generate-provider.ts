@@ -830,7 +830,499 @@ function adaptOpenAICreateImage(action: ExtractedAction): ExtractedAction {
   return { ...action, moduleStatements, execBody };
 }
 
+/**
+ * GitLab templates build request paths inconsistently: some encode the project,
+ * group, or file path, some insert it raw, and some encode a value their schema
+ * already documents as URL-encoded. A raw `?` or `#` moves the rest of the path
+ * into the query (`project_id: "42?"` turns delete-pipeline into
+ * `DELETE /projects/42`), a raw `group/project` adds a path segment, and an
+ * encoded `group%2Fproject` passed through `encodeURIComponent` becomes
+ * `group%252Fproject`. Project and group identifiers are documented as raw or
+ * URL-encoded, so they go through a helper that decodes once and encodes once.
+ * Every other segment (branch, file path, tag, sha, numeric ids) is a literal
+ * name where `%2F` differs from `/`, so it is encoded as given.
+ */
+const GITLAB_PATH_SEGMENT_HELPER = `/** Encodes one GitLab path segment exactly once, whether \`value\` arrives raw or already URL-encoded. */
+function gitlabPathSegment(value: string | number): string {
+  const text = String(value);
+  try {
+    return encodeURIComponent(decodeURIComponent(text));
+  } catch {
+    return encodeURIComponent(text);
+  }
+}`;
+
+/** Endpoint expressions that hold a GitLab project or group id or path (raw or URL-encoded). */
+const GITLAB_ID_OR_PATH_EXPRESSIONS = new Set([
+  'input.project_id',
+  'input.group_id',
+  'input.id',
+  'projectId',
+  'encodedProjectId',
+  'groupId',
+]);
+
+function stripEncodingWrappers(expression: string): string {
+  let core = expression.trim();
+  for (;;) {
+    const wrapped = /^(?:encodeURIComponent|String)\((.*)\)$/s.exec(core);
+    if (!wrapped) return core;
+    core = wrapped[1]!.trim();
+  }
+}
+
+function encodeGitLabPathSegments(action: ExtractedAction): ExtractedAction {
+  let rewrites = 0;
+  const execBody = action.execBody.replace(/(endpoint:\s*`)([^`]*)`/g, (_match, prefix: string, path: string) => {
+    const encoded = path.replace(/\$\{([^{}]*)\}/g, (_segment, expression: string) => {
+      rewrites++;
+      const value = stripEncodingWrappers(expression);
+      return GITLAB_ID_OR_PATH_EXPRESSIONS.has(value)
+        ? `\${gitlabPathSegment(${value})}`
+        : `\${encodeURIComponent(String(${value}))}`;
+    });
+    return `${prefix}${encoded}\``;
+  });
+  if (rewrites === 0) return action;
+  return { ...action, moduleStatements: [GITLAB_PATH_SEGMENT_HELPER, ...action.moduleStatements], execBody };
+}
+
+interface StatementRewrite {
+  pattern: RegExp;
+  replacement: string;
+  /** Matches expected across all module statements; a different count means the template changed. */
+  count: number;
+  what: string;
+}
+
+function rewriteModuleStatements(action: ExtractedAction, rewrites: readonly StatementRewrite[]): ExtractedAction {
+  let moduleStatements = action.moduleStatements;
+  for (const { pattern, replacement, count, what } of rewrites) {
+    const global = new RegExp(pattern.source, `${pattern.flags.replace('g', '')}g`);
+    const found = moduleStatements.reduce((total, statement) => total + (statement.match(global)?.length ?? 0), 0);
+    if (found !== count) {
+      throw new Error(
+        `Unable to adapt ${action.candidate.providerId}/${action.candidate.actionSlug} (${what}); the upstream template shape changed.`,
+      );
+    }
+    moduleStatements = moduleStatements.map(statement => statement.replace(global, replacement));
+  }
+  return { ...action, moduleStatements };
+}
+
+/**
+ * A GitLab project or group id or path. Numbers must be exact positive
+ * integers (a rounded unsafe integer would address another resource), and
+ * strings must be encodable (an unpaired surrogate makes encodeURIComponent
+ * throw before the request).
+ */
+export const GITLAB_ID_OR_PATH_SCHEMA =
+  "z.union([z.number().int().positive().max(Number.MAX_SAFE_INTEGER), z.string().min(1).refine(value => { try { encodeURIComponent(value); return true; } catch { return false; } }, 'must not contain unpaired surrogate characters')])";
+
+/**
+ * GitLab returns `null`, not an omitted field, for these values, and the
+ * templates reject null, so a successful read or write failed validation after
+ * GitLab had answered (or acted): a commit with no CI, a release or milestone
+ * with no description or dates, a merge request read before GitLab prepared it,
+ * a retried job with no user, and pipeline coverage, which GitLab sends as a
+ * decimal string. Drop each entry once the upstream template accepts it.
+ */
+const GITLAB_RESPONSE_SCHEMA_FIXES: Readonly<Record<string, readonly StatementRewrite[]>> = {
+  'get-commit': [
+    {
+      pattern: /last_pipeline: LastPipelineSchema,/,
+      replacement: 'last_pipeline: LastPipelineSchema.nullable(),',
+      count: 2,
+      what: 'nullable last_pipeline',
+    },
+    {
+      pattern: /status: z\.string\(\)\.optional\(\),/,
+      replacement: 'status: z.string().nullish(),',
+      count: 2,
+      what: 'nullable commit status',
+    },
+  ],
+  'get-release': [
+    {
+      pattern: /(description|due_date|start_date): z\.string\(\)\.optional\(\),/,
+      replacement: '$1: z.string().nullish(),',
+      count: 4,
+      what: 'nullable release and milestone fields',
+    },
+  ],
+  'get-merge-request': [
+    { pattern: /\bsha: z\.string\(\),/, replacement: 'sha: z.string().nullable(),', count: 1, what: 'nullable sha' },
+    {
+      pattern: /prepared_at: z\.string\(\)\.optional\(\),/,
+      replacement: 'prepared_at: z.string().nullish(),',
+      count: 1,
+      what: 'nullable prepared_at',
+    },
+  ],
+  'list-merge-requests': [
+    { pattern: /\bsha: z\.string\(\),/, replacement: 'sha: z.string().nullable(),', count: 1, what: 'nullable sha' },
+  ],
+  'retry-job': [
+    {
+      pattern: /user: ProviderUserSchema\.optional\(\),/,
+      replacement: 'user: ProviderUserSchema.nullish(),',
+      count: 1,
+      what: 'nullable job user',
+    },
+  ],
+  'cancel-pipeline': [
+    {
+      pattern: /coverage: z\.number\(\)\.nullable\(\)\.optional\(\),/,
+      replacement: 'coverage: z.union([z.number(), z.string()]).nullish(),',
+      count: 1,
+      what: 'string coverage',
+    },
+  ],
+  'delete-project': [
+    {
+      pattern: /If true, archive the project instead of permanently deleting it\. Defaults to false\./,
+      replacement:
+        'If true, archive the project instead of deleting it. Defaults to false, which requests deletion; GitLab.com and instances with delayed deletion keep the project for a retention period before removing it.',
+      count: 1,
+      what: 'archive description',
+    },
+  ],
+};
+
+/**
+ * Templates advertise "delete or archive" on tools that can only delete, so an
+ * agent asked to archive a branch, issue, or group could pick a tool that
+ * deletes it. delete-project really can archive; it keeps its description.
+ */
+const GITLAB_DESCRIPTIONS: Readonly<Record<string, string>> = {
+  'delete-branch': 'Delete a branch in GitLab.',
+  'delete-issue': 'Delete an issue in GitLab.',
+  'delete-group':
+    'Schedule a group for deletion in GitLab. Pass the numeric group id: GitLab renames the group when it schedules deletion, so a path stops working. To then remove a subgroup permanently, read its renamed full_path with gitlab_get_group and call again with permanently_remove and that full_path; GitLab accepts the removal and completes it asynchronously.',
+  'list-jobs': 'List jobs from GitLab, newest first.',
+};
+
+/**
+ * Input fixes: GitLab's jobs endpoint ignores `order_by` and `sort` (it always
+ * returns newest first), and `archived` on project lists filters rather than
+ * adding archived projects to the results.
+ */
+const GITLAB_INPUT_FIXES: Readonly<Record<string, readonly StatementRewrite[]>> = {
+  'list-jobs': [
+    {
+      pattern: /\n\s*order_by: z\.string\(\)\.optional\(\)\.describe\([^\n]*\),?/,
+      replacement: '',
+      count: 1,
+      what: 'order_by',
+    },
+    {
+      pattern: /\n\s*sort: z\.string\(\)\.optional\(\)\.describe\([^\n]*\),?/,
+      replacement: '',
+      count: 1,
+      what: 'sort',
+    },
+  ],
+  'get-file': [
+    {
+      pattern: /file_path: z\.string\(\)\.describe\('URL-encoded full path to the file\. Example: hello\.txt'\)/,
+      replacement: `file_path: z.string().describe('Full path to the file, not URL-encoded (a %2F stays literally in the name). Example: "src/app.ts"')`,
+      count: 1,
+      what: 'file_path description',
+    },
+  ],
+  'update-file': [
+    {
+      pattern: /file_path: z\.string\(\)\.describe\('URL-encoded full path to the file\. Example: hello\.txt'\)/,
+      replacement: `file_path: z.string().describe('Full path to the file, not URL-encoded (a %2F stays literally in the name). Example: "src/app.ts"')`,
+      count: 1,
+      what: 'file_path description',
+    },
+  ],
+  'delete-group': [
+    {
+      pattern: /\.describe\('If true, immediately deletes a subgroup already marked for deletion\.'\)/,
+      replacement:
+        ".describe('If true, request permanent removal of a subgroup already scheduled for deletion. GitLab completes it asynchronously.')",
+      count: 1,
+      what: 'permanently_remove description',
+    },
+    {
+      pattern: /\bgroup_id: z\.union\(\[z\.number\(\), z\.string\(\)\]\)(?=\.describe)/,
+      replacement: `group_id: ${GITLAB_ID_OR_PATH_SCHEMA}`,
+      count: 1,
+      what: 'group id',
+    },
+    {
+      pattern: /\.describe\('The full path to the subgroup\. Required when permanently_remove is true\.'\)/,
+      replacement:
+        ".describe('The subgroup full_path after it was scheduled for deletion (GitLab renames it). Read it with gitlab_get_group using the numeric id. Required when permanently_remove is true.')",
+      count: 1,
+      what: 'full_path description',
+    },
+  ],
+  'delete-project': [
+    {
+      pattern: /(\n\s*)archived: z\.boolean\(\),(\s*message)/,
+      replacement:
+        "$1archived: z.boolean().describe('true when this call archived the project, false when it requested deletion. Not the project archive state.'),$2",
+      count: 1,
+      what: 'archived output description',
+    },
+  ],
+  'get-group': [
+    {
+      pattern:
+        /\bid: z\.union\(\[z\.string\(\), z\.number\(\)\]\)(?=\.describe\('The ID or URL-encoded path of the group)/,
+      replacement: `id: ${GITLAB_ID_OR_PATH_SCHEMA}`,
+      count: 1,
+      what: 'group id',
+    },
+  ],
+  'update-group': [
+    {
+      // GitLab takes a group path here too, like get_group and delete_group.
+      pattern: /(updateGroupInputSchema = z\.object\(\{\s*)id: z\.number\(\)/,
+      replacement: `$1id: ${GITLAB_ID_OR_PATH_SCHEMA}`,
+      count: 1,
+      what: 'group id',
+    },
+    {
+      pattern: /two_factor_grace_period: z(\s*)\.number\(\)(?=\s*\.optional\(\)\s*\.describe)/,
+      replacement: 'two_factor_grace_period: z$1.number().int().nonnegative()',
+      count: 1,
+      what: 'two_factor_grace_period bound',
+    },
+  ],
+  'update-project': [
+    {
+      pattern: /(updateProjectInputSchema = z\.object\(\{\s*)id: z\.union\(\[z\.number\(\), z\.string\(\)\]\)/,
+      replacement: `$1id: ${GITLAB_ID_OR_PATH_SCHEMA}`,
+      count: 1,
+      what: 'project id',
+    },
+    {
+      // A new, empty project has no default branch yet.
+      pattern: /default_branch: z\.string\(\)\.optional\(\),/,
+      replacement: 'default_branch: z.string().nullish(),',
+      count: 2,
+      what: 'nullable default_branch',
+    },
+  ],
+  'create-commit': [
+    {
+      pattern: /start_project: z\.string\(\)\.optional\(\)/,
+      replacement: `start_project: ${GITLAB_ID_OR_PATH_SCHEMA}.optional()`,
+      count: 1,
+      what: 'start_project id',
+    },
+    {
+      // GitLab rejects these after the request; check them before it.
+      pattern: /(const CommitActionSchema = z\.object\(\{[\s\S]*?\n\}\))(;)/,
+      replacement:
+        "$1.superRefine((value, ctx) => { const missing = (value.action === 'create' || value.action === 'update') && value.content === undefined ? 'content' : value.action === 'move' && value.previous_path === undefined ? 'previous_path' : value.action === 'chmod' && value.execute_filemode === undefined ? 'execute_filemode' : undefined; if (missing) ctx.addIssue({ code: 'custom', path: [missing], message: `${missing} is required for a ${value.action} action` }); })$2",
+      count: 1,
+      what: 'per-action fields',
+    },
+  ],
+  'create-release': [
+    {
+      // GitLab creates the tag before it rejects duplicate links, leaving an orphan tag.
+      pattern: /assets_links: z\.array\(AssetLinkInputSchema\)\.optional\(\)/,
+      replacement:
+        "assets_links: z.array(AssetLinkInputSchema).refine(links => new Set(links.map(link => link.name)).size === links.length && new Set(links.map(link => link.url)).size === links.length, 'asset link names and URLs must be unique').optional()",
+      count: 1,
+      what: 'unique asset links',
+    },
+  ],
+  'update-merge-request': [
+    {
+      pattern: /(export const updateMergeRequestInputSchema = [\s\S]*?)(;\s*)$/,
+      replacement:
+        "$1.refine(data => data.milestone_id === undefined || data.milestone === undefined, { message: 'Pass milestone_id or milestone, not both.', path: ['milestone'] })$2",
+      count: 1,
+      what: 'milestone exclusivity',
+    },
+  ],
+  'list-projects': [
+    {
+      pattern: /archived: z\.boolean\(\)\.optional\(\)\.describe\('Include archived projects\.'\)/,
+      replacement:
+        "archived: z.boolean().optional().describe('true returns only archived projects, false only active ones. Omit to return both.')",
+      count: 1,
+      what: 'archived description',
+    },
+  ],
+};
+
+/**
+ * Templates type `project_id` as a number in some tools and a string in others,
+ * so an id or path one tool returns can be rejected by the next. Every GitLab
+ * input accepts both; `gitlabPathSegment` turns either into one path segment.
+ */
+const GITLAB_PROJECT_ID_DESCRIPTION =
+  'Numeric project ID, or the project path raw or URL-encoded. Example: 82599306, "team/app", or "team%2Fapp"';
+
+function acceptGitLabProjectIdOrPath(action: ExtractedAction): ExtractedAction {
+  const moduleStatements = action.moduleStatements.map(statement =>
+    /export const \w+InputSchema = z\b/.test(statement)
+      ? statement.replace(
+          /project_id: z(\s*)\.(?:number\(\)|string\(\)|union\(\[[^\]]*\]\))(?:(\s*)\.describe\((['"])(?:\\.|(?!\3).)*\3\))?/g,
+          (_match, space: string, describeSpace: string | undefined) =>
+            `project_id: ${GITLAB_ID_OR_PATH_SCHEMA.replace(/^z/, `z${space}`)}${describeSpace ?? ''}.describe(${JSON.stringify(GITLAB_PROJECT_ID_DESCRIPTION)})`,
+        )
+      : statement,
+  );
+  // delete-project echoes the input id in a string output field.
+  const execBody = action.execBody.replace(
+    /\bproject_id: input\.project_id,/g,
+    'project_id: String(input.project_id),',
+  );
+  return { ...action, moduleStatements, execBody };
+}
+
+/**
+ * The proxy replays PUT and DELETE after a transient 5xx, so a GitLab write the
+ * first attempt already applied could run again: deleting a branch recreated
+ * by someone else meanwhile, committing a file change twice, or undoing a
+ * concurrent group setting. GitLab writes get exactly one attempt; reads keep
+ * the template's retries.
+ */
+function attemptGitLabWritesOnce(action: ExtractedAction): ExtractedAction {
+  if (/platformProxy\.get\(/.test(action.execBody)) return action;
+  return { ...action, execBody: action.execBody.replace(/retries: \d+/g, 'retries: 1') };
+}
+
+/** Identifier fields of each GitLab update tool; any other field counts as an update. */
+const GITLAB_UPDATE_IDENTIFIERS: Readonly<Record<string, readonly string[]>> = {
+  'update-group': ['id'],
+  'update-issue': ['project_id', 'issue_iid'],
+  'update-project': ['id'],
+  'update-release': ['project_id', 'tag_name'],
+};
+
+/** Rejects an update call with no field to change (false, 0, and "" count as values). */
+function requireGitLabUpdateField(action: ExtractedAction, identifiers: readonly string[]): ExtractedAction {
+  let rewrites = 0;
+  const moduleStatements = action.moduleStatements.map(statement => {
+    if (!/^export const \w+InputSchema = /.test(statement)) return statement;
+    rewrites++;
+    return statement.replace(
+      /;\s*$/,
+      `.refine(data => Object.entries(data).some(([key, value]) => !${JSON.stringify(identifiers)}.includes(key) && value !== undefined), { message: 'Provide at least one field to update.' });`,
+    );
+  });
+  if (rewrites !== 1)
+    throw new Error(
+      `Unable to adapt gitlab/${action.candidate.actionSlug} (update field); the upstream template shape changed.`,
+    );
+  return { ...action, moduleStatements };
+}
+
+const GITLAB_NEXT_PAGE_HELPER = `/** Fills x-next-page from the Link header when GitLab sends only Link (keyset pagination, large result sets). */
+function fillGitLabNextPage(headers: Record<string, string>): void {
+  if (headers['x-next-page']) return;
+  const next = /<([^>]+)>;\\s*rel="next"/.exec(headers['link'] ?? '')?.[1];
+  const page = next ? new URL(next).searchParams.get('page') : null;
+  if (page) headers['x-next-page'] = page;
+}`;
+
+/**
+ * GitLab list cursors are page numbers. Templates validate them inline (or
+ * not at all), so a cursor like "2junk" reaches GitLab as page 2 or throws
+ * mid-request. Constrain the cursor in the schema, and fall back to the Link
+ * header for the next page.
+ */
+function paginateGitLabList(action: ExtractedAction): ExtractedAction {
+  const moduleStatements = action.moduleStatements.map(statement =>
+    /^export const \w+InputSchema = /.test(statement)
+      ? statement.replace(
+          /cursor: z(\s*)\.string\(\)/,
+          "cursor: z$1.string().regex(/^[1-9]\\d*$/, 'cursor must be the page number from next_cursor')",
+        )
+      : statement,
+  );
+  const execBody = replaceOnce(
+    action.execBody,
+    /(const response = await platformProxy\.get\((?:config|\{[\s\S]*?\})\);\n)/,
+    '$1      fillGitLabNextPage(response.headers);\n',
+    action,
+    'next page fallback',
+  );
+  if (moduleStatements.join('\n') === action.moduleStatements.join('\n')) {
+    throw new Error(
+      `Unable to adapt gitlab/${action.candidate.actionSlug} (cursor); the upstream template shape changed.`,
+    );
+  }
+  return { ...action, moduleStatements: [GITLAB_NEXT_PAGE_HELPER, ...moduleStatements], execBody };
+}
+
+function adaptGitLabAction(action: ExtractedAction): ExtractedAction {
+  const slug = action.candidate.actionSlug;
+  let adapted = attemptGitLabWritesOnce(acceptGitLabProjectIdOrPath(encodeGitLabPathSegments(action)));
+  const schemaFixes = [...(GITLAB_RESPONSE_SCHEMA_FIXES[slug] ?? []), ...(GITLAB_INPUT_FIXES[slug] ?? [])];
+  if (schemaFixes.length > 0) adapted = rewriteModuleStatements(adapted, schemaFixes);
+  const updateIdentifiers = GITLAB_UPDATE_IDENTIFIERS[slug];
+  if (updateIdentifiers) adapted = requireGitLabUpdateField(adapted, updateIdentifiers);
+  if (slug.startsWith('list-')) adapted = paginateGitLabList(adapted);
+  if (slug === 'get-branch') {
+    // A deleted connection also arrives as a 404; don't relabel it "Branch not found".
+    adapted = {
+      ...adapted,
+      execBody: replaceOnce(
+        adapted.execBody,
+        /error\.response\.status === 404/,
+        "error.response.status === 404 &&\n          !('code' in error && error.code === 'connection_not_found')",
+        adapted,
+        'connection_not_found passthrough',
+      ),
+    };
+  }
+  if (slug === 'list-jobs') {
+    // GitLab reads several statuses only as `scope[]`; repeated bare `scope` keys keep just one.
+    let execBody = replaceOnce(
+      adapted.execBody,
+      /\{ scope: input\.scope \}/,
+      "{ 'scope[]': input.scope }",
+      adapted,
+      'scope array',
+    );
+    execBody = replaceOnce(execBody, /\n *\.\.\.\(input\.order_by !== undefined[^\n]*/, '', adapted, 'order_by param');
+    execBody = replaceOnce(execBody, /\n *\.\.\.\(input\.sort !== undefined[^\n]*/, '', adapted, 'sort param');
+    adapted = { ...adapted, execBody };
+  }
+  if (slug === 'get-group') {
+    // The tool returns group metadata only; skip the project lists GitLab embeds by default.
+    adapted = {
+      ...adapted,
+      execBody: replaceOnce(
+        adapted.execBody,
+        /(endpoint: `\/api\/v4\/groups\/\$\{gitlabPathSegment\(input\.id\)\}`,)/,
+        '$1\n        params: { with_projects: false },',
+        adapted,
+        'with_projects',
+      ),
+    };
+  }
+  if (slug === 'delete-project') {
+    adapted = {
+      ...adapted,
+      execBody: replaceOnce(
+        adapted.execBody,
+        /'Project deleted successfully\.'/,
+        "'GitLab accepted the deletion request. GitLab.com and instances with delayed deletion keep the project for a retention period before removing it.'",
+        adapted,
+        'deletion message',
+      ),
+    };
+  }
+  const description = GITLAB_DESCRIPTIONS[slug];
+  return description ? { ...adapted, description } : adapted;
+}
+
 function applyProviderActionOverrides(action: ExtractedAction): ExtractedAction {
+  if (action.candidate.providerId === 'gitlab') {
+    return adaptGitLabAction(action);
+  }
   if (action.candidate.providerId === 'openai' && action.candidate.actionSlug === 'create-image') {
     return adaptOpenAICreateImage(action);
   }
@@ -921,6 +1413,15 @@ function modelOutputOverride(action: ExtractedAction): { importStatement: string
  * a credential and must not see one.
  */
 const OUTPUT_SECRET_FIELDS: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
+  // GET /v1/user echoes the account's raw API key; the masked xi_api_key_preview stays.
+  elevenlabs: {
+    'get-user': ['xi_api_key'],
+  },
+  // GitLab returns the project's runner registration token to maintainers.
+  gitlab: {
+    'create-project': ['runners_token'],
+    'get-project': ['runners_token'],
+  },
   resend: {
     'create-webhook': ['signing_secret'],
     'get-webhook': ['signing_secret'],
@@ -1014,9 +1515,17 @@ function emitActionFile(action: ExtractedAction, pin: TemplatePin): string {
   const secretFields = outputSecretFields(action);
   const redactImport = secretFields ? "import { withoutSecretFields } from '../../../runtime/redact.js';\n" : '';
   const redactedSchemaName = `${action.outputSchemaName}Redacted`;
-  const omitKeys = (secretFields ?? []).map(field => `${JSON.stringify(field)}: true`).join(', ');
+  // `.omit` rejects keys the schema doesn't declare. An undeclared secret can
+  // still arrive through `.passthrough()`; `withoutSecretFields` removes it from
+  // the result either way, so only declared fields need dropping from the schema.
+  const declaredSecretFields = (secretFields ?? []).filter(field =>
+    action.moduleStatements.some(statement => new RegExp(`\\b${escapeRegExp(field)}:`).test(statement)),
+  );
+  const omitKeys = declaredSecretFields.map(field => `${JSON.stringify(field)}: true`).join(', ');
   const redactedSchema = secretFields
-    ? `\n/** Provider secrets removed before the result leaves the tool. */\nexport const ${redactedSchemaName} = ${action.outputSchemaName}.omit({ ${omitKeys} });\n`
+    ? `\n/** Provider secrets removed before the result leaves the tool. */\nexport const ${redactedSchemaName} = ${
+        declaredSecretFields.length > 0 ? `${action.outputSchemaName}.omit({ ${omitKeys} })` : action.outputSchemaName
+      };\n`
     : '';
   const outputSchemaName = secretFields ? redactedSchemaName : action.outputSchemaName;
   const fieldPatterns = Object.entries(

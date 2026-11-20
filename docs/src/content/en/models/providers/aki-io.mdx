@@ -7,7 +7,7 @@ description: "Browse AKI.IO model IDs, capabilities, context windows, and pricin
 
 # <img src="https://models.dev/logos/aki-io.svg" alt="AKI.IO logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />AKI.IO
 
-Access 7 AKI.IO models through Mastra's model router. Authentication is handled automatically using the `AKI_IO_API_KEY` environment variable.
+Access 8 AKI.IO models through Mastra's model router. Authentication is handled automatically using the `AKI_IO_API_KEY` environment variable.
 
 Learn more in the [AKI.IO documentation](https://aki.io/docs/).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "aki-io/deepseek-v4.1-flash-552b"
+  model: "aki-io/deepseek-v4.1-flash-1017-tl5"
 });
 
 // Generate a response
@@ -45,6 +45,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
+  {
+    "model": "aki-io/deepseek-v4.1-flash-1017-tl5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 81920,
+    "inputCost": 0.279125,
+    "outputCost": 1.1165
+  },
   {
     "model": "aki-io/deepseek-v4.1-flash-552b",
     "imageInput": false,
@@ -89,9 +101,21 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 128000,
-    "maxOutput": 32768,
+    "maxOutput": 128000,
     "inputCost": 0.168225,
     "outputCost": 0.616825
+  },
+  {
+    "model": "aki-io/kolibri-1-tl5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 81920,
+    "inputCost": 0.167475,
+    "outputCost": 0.614075
   },
   {
     "model": "aki-io/mistral4-119b",
@@ -114,8 +138,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 32768,
-    "inputCost": 0.33645,
-    "outputCost": 2.4673
+    "inputCost": 0.167475,
+    "outputCost": 0.725725
   }
 ]}
 />
@@ -133,8 +157,8 @@ const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
   model: {
-    url: "https://aki.io/v1",
-    id: "aki-io/deepseek-v4.1-flash-552b",
+    url: "https://aki.io/openai/v1",
+    id: "aki-io/deepseek-v4.1-flash-1017-tl5",
     apiKey: process.env.AKI_IO_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -155,7 +179,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "aki-io/qwen3.8-27b"
-      : "aki-io/deepseek-v4.1-flash-552b";
+      : "aki-io/deepseek-v4.1-flash-1017-tl5";
   }
 });
 ```

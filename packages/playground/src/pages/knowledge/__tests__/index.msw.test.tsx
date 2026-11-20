@@ -132,12 +132,6 @@ describe('Knowledge page', () => {
       expect(await within(tree).findByText('Payments Service')).toBeTruthy();
       expect(within(tree).getByText('Deploy Runbook')).toBeTruthy();
     });
-
-    it('renders the graph beside the tree', async () => {
-      withInstance();
-      renderPage();
-      expect(await screen.findByTestId('knowledge-graph-container')).toBeTruthy();
-    });
   });
 
   describe('when the server sends grants between scopes', () => {

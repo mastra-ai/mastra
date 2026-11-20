@@ -28,8 +28,10 @@ import { server } from '@/test/msw-server';
 const BASE_URL = 'http://localhost:4111';
 const THREADS_QUERY_URL = `${BASE_URL}/api/observability/threads/query`;
 
+type Window = { from: string; to: string };
+/** As sent: the hooks always resolve both bounds, on whichever selector the query uses. */
 type Body = {
-  timeRange: { traces: { from: string; to: string } };
+  timeRange: { traces: Window } | { threads: Window };
   orderBy: Array<{ field: string; direction: string }>;
   page: { limit: number; after?: string };
 };
@@ -90,6 +92,14 @@ const nextTick = () =>
 
 const threadIds = (threads: QueryTraceThreadsResult['threads'] | undefined) => threads?.map(thread => thread.threadId);
 
+/** The bounds of whichever selector the request used. */
+const bounds = (timeRange: Body['timeRange']) => ('traces' in timeRange ? timeRange.traces : timeRange.threads);
+const windowLength = (body: Body) => {
+  const { from, to } = bounds(body.timeRange);
+  return Date.parse(to) - Date.parse(from);
+};
+const threadWindowLength = Date.parse(threadTimeRange.to) - Date.parse(threadTimeRange.from);
+
 describe('useThreadsListSource', () => {
   describe('when the window is rolling and threads change while the list is open', () => {
     it('shows the new thread at the top after one poll, without reloading the list', async () => {
@@ -106,8 +116,8 @@ describe('useThreadsListSource', () => {
       expect(headBodies).toHaveLength(1);
       expect(headBodies[0].orderBy).toEqual([{ field: 'endedAt', direction: 'desc' }]);
       expect(headBodies[0].page).toEqual({ limit: OBSERVABILITY_LIST_HEAD_LIMIT });
-      expect(headBodies[0].timeRange.traces.from).toBe(threadTimeRange.from);
-      expect(Date.parse(headBodies[0].timeRange.traces.to)).toBeGreaterThanOrEqual(polledAfter);
+      expect(windowLength(headBodies[0])).toBe(threadWindowLength);
+      expect(Date.parse(bounds(headBodies[0].timeRange).to)).toBeGreaterThanOrEqual(polledAfter);
       expect(listBodies).toHaveLength(1);
     });
 
@@ -123,6 +133,43 @@ describe('useThreadsListSource', () => {
       expect(continued?.traceCount).toBe(3);
       expect(continued?.lastTraceId).toBe('trace-1c');
       expect(threadIds(result.current.threads)?.slice(1)).toEqual(['thread-1', 'thread-2']);
+    });
+  });
+
+  describe('when the list selects threads by their own activity', () => {
+    it('polls a window of the same length ending now on the threads selector', async () => {
+      const { headBodies } = setHandlers([threadHeadPage]);
+      const query: ThreadQueryArgs = { ...rollingQuery, timeRange: { threads: threadTimeRange } };
+      const { result } = renderSource({ query, rolling: true });
+      await waitFor(() => expect(result.current.threads).toHaveLength(2));
+      const polledAfter = Date.now();
+
+      await nextTick();
+
+      await waitFor(() => expect(headBodies).toHaveLength(1));
+      expect('threads' in headBodies[0].timeRange).toBe(true);
+      expect(windowLength(headBodies[0])).toBe(threadWindowLength);
+      expect(Date.parse(bounds(headBodies[0].timeRange).to)).toBeGreaterThanOrEqual(polledAfter);
+    });
+  });
+
+  describe('when the user picked a custom start with no end', () => {
+    it('keeps that start on every poll and on the reload after an overflow', async () => {
+      const { listBodies, headBodies } = setHandlers([
+        threadHeadPage,
+        fullThreadHeadPage(OBSERVABILITY_LIST_HEAD_LIMIT, threadTimeRange.to),
+      ]);
+      const { result } = renderSource({ query: rollingQuery, rolling: true, fixedStart: true });
+      await waitFor(() => expect(result.current.threads).toHaveLength(2));
+
+      await nextTick();
+      await waitFor(() => expect(result.current.threads).toHaveLength(3));
+      await nextTick();
+      await waitFor(() => expect(listBodies).toHaveLength(2));
+
+      expect(headBodies.map(body => bounds(body.timeRange).from)).toEqual([threadTimeRange.from, threadTimeRange.from]);
+      expect(bounds(listBodies[1].timeRange).from).toBe(threadTimeRange.from);
+      expect(Date.parse(bounds(listBodies[1].timeRange).to)).toBeGreaterThan(Date.parse(threadTimeRange.to));
     });
   });
 
@@ -152,7 +199,7 @@ describe('useThreadsListSource', () => {
   });
 
   describe('when more threads changed than one poll can bring', () => {
-    it('reloads the first page with a window ending now and drops the polled threads', async () => {
+    it('reloads the first page with a window of the same length ending now and drops the polled threads', async () => {
       const { listBodies } = setHandlers([fullThreadHeadPage(OBSERVABILITY_LIST_HEAD_LIMIT, threadTimeRange.to)]);
       const { result } = renderSource({ query: rollingQuery, rolling: true });
       await waitFor(() => expect(result.current.threads).toHaveLength(2));
@@ -161,8 +208,8 @@ describe('useThreadsListSource', () => {
       await nextTick();
 
       await waitFor(() => expect(listBodies).toHaveLength(2));
-      expect(listBodies[1].timeRange.traces.from).toBe(threadTimeRange.from);
-      expect(Date.parse(listBodies[1].timeRange.traces.to)).toBeGreaterThanOrEqual(reloadedAfter);
+      expect(windowLength(listBodies[1])).toBe(threadWindowLength);
+      expect(Date.parse(bounds(listBodies[1].timeRange).to)).toBeGreaterThanOrEqual(reloadedAfter);
       expect(listBodies[1].page.after).toBeUndefined();
       await waitFor(() => expect(threadIds(result.current.threads)).toEqual(['thread-1', 'thread-2']));
     });

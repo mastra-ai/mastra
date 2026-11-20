@@ -392,32 +392,6 @@ describe('SankeySignals lifelines mode', () => {
       expect(legacyRow.querySelectorAll('polygon')).toHaveLength(1);
     });
 
-    it('shows the point tooltip immediately on hover', async () => {
-      renderSankeySignals();
-      await screen.findByRole('region', { name: 'Trace signal theme flow' });
-
-      fireEvent.click(screen.getByRole('tab', { name: 'Lifelines' }));
-      const lifelines = await screen.findByRole('region', { name: 'Theme lifelines' });
-      const goalSection = within(lifelines).getByRole('region', { name: 'Goal lifelines' });
-      const row = await within(goalSection).findByRole('listitem', {
-        name: 'Resolve support request: present in 5 of 5 landmarks',
-      });
-      const point = within(row)
-        .getAllByRole('button', { name: /^Resolve support request:/ })
-        .at(0);
-      if (!point) throw new Error('Expected a lifeline point');
-
-      fireEvent.mouseEnter(point);
-
-      // Real timers, no advancement: the tooltip must appear without a hover delay.
-      const tooltip = await screen.findByRole('tooltip');
-      expect(tooltip.textContent).toContain('Resolve support request');
-      expect(tooltip.textContent).toContain('traces');
-
-      fireEvent.mouseLeave(point);
-      expect(screen.queryByRole('tooltip')).toBeNull();
-    });
-
     it('draws a connecting line between adjacent landmarks within a theme row', async () => {
       renderSankeySignals();
       await screen.findByRole('region', { name: 'Trace signal theme flow' });

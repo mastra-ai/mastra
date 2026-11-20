@@ -7,7 +7,7 @@ export const flashCardAgent = new Agent({
   id: 'flash-card-agent',
   name: 'Flash Card Generator',
   description: 'Generates educational flash cards from PDF documents',
-  model: 'openai/gpt-5-mini',
+  model: 'openai/gpt-6.1-terra',
   instructions: `You are an educational flash card generator. Your job is to create high-quality study flash cards from PDF documents.
 
 ## How it works

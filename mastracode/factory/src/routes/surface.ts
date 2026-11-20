@@ -16,7 +16,6 @@ import {
   reviewedChangeRequest,
 } from '../boards/index.js';
 import type { BoardRegistry, InstalledBoard } from '../boards/index.js';
-import type { ForcedIntakeEvaluator } from '../boards/intake-routing.js';
 import { legacyPlanRoleFor, workLaneForRole } from '../boards/legacy-plan-role.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardCache, ProjectBoardSource } from '../boards/project-boards.js';
@@ -161,14 +160,13 @@ export interface FactoryApiRoutesDeps {
   /** App skills from `MastraFactory({ skills })`. */
   skills?: readonly InlineSkill[];
   knowledgeKey?: string;
+  knowledgeScopes?: string[];
   /** Resolved Factory rule set, threaded from the host (no service locator). */
   configVersion: string;
   /** Each project's boards; integrations use the code boards (`codeRegistry`). */
   boardRegistry: BoardRegistry | ProjectBoardSource;
   /** Forces an evaluator on every project; without it each project uses its own setting. */
   intakeEvaluator?: IntakeEvaluator;
-  /** What forced `intakeEvaluator`. */
-  intakeEvaluatorSource?: ForcedIntakeEvaluator['source'];
   /** Stored boards and their cache; mounts the board management routes when present. */
   storedBoards?: {
     storage: StoredBoardsStorage;
@@ -178,6 +176,8 @@ export interface FactoryApiRoutesDeps {
   sessionRetirement?: import('../sandbox/session-retirement.js').SessionRetirementCoordinator;
   /** Moves a thread with its observation vectors onto another memory resource. */
   moveThread?: (input: { threadId: string; resourceId: string }) => Promise<unknown>;
+  /** Stores a title a person typed on a thread, pinned so automatic naming leaves it alone. */
+  renameThread?: (input: { threadId: string; title: string }) => Promise<unknown>;
   /** This process's dispatcher run slots, for the run queue; `undefined` until the dispatcher exists. */
   runSlots?: () => { inUse: number; cap: number; interactive: { inUse: number; cap: number } } | undefined;
   onFactoryRuntime?: (runtime: {
@@ -867,6 +867,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           sandboxRecreateSupported: deps.sandbox !== undefined && deps.sandbox.provider !== 'local',
           ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
           ...(deps.moveThread ? { moveThread: deps.moveThread } : {}),
+          ...(deps.renameThread ? { renameThread: deps.renameThread } : {}),
           ...(githubStorage ? { githubRepositories: githubStorage.repositories } : {}),
         });
   // Absent known integrations still get their disabled-status stub.
@@ -1023,6 +1024,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           knowledge: async key => deps.controller.getMastra()?.getKnowledge(key),
           defaultKnowledgeKey: deps.knowledgeKey,
+          hostScopes: deps.knowledgeScopes,
         }).routes()
       : []),
     ...(deps.factoryReady
@@ -1078,7 +1080,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           storage: deps.storedBoards.storage,
           boards: deps.storedBoards.cache,
           intakeEvaluator: deps.intakeEvaluator,
-          intakeEvaluatorSource: deps.intakeEvaluatorSource,
           intakeLookups: (deps.integrations ?? []).flatMap(({ integration, ready }) =>
             ready && integration.intakeLookup ? [integration.intakeLookup] : [],
           ),

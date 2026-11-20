@@ -123,6 +123,8 @@ export interface ExternalWorkItemSource {
 /** Dispatcher upsert idempotency token — server bookkeeping, dropped from the read wire. */
 export const FACTORY_RULE_MATERIALIZATION_KEY = 'factoryRuleMaterializationKey';
 export const FACTORY_PULL_REQUEST_RECONCILIATION_KEY = 'factoryPullRequestReconciliation';
+/** Reason of the `stale` rejection a transition commit gets when the card's revision moved on. */
+export const REVISION_CONFLICT_REASON = 'The work item changed before this transition committed.';
 
 export interface WorkItemStageEntry {
   stage: WorkItemStage;
@@ -399,6 +401,8 @@ export interface RevokeStaleFactoryRunBindingsInput {
   now: Date;
   /** Exempts an over-age binding from the age test only; the item-state checks still apply. */
   keep?: (binding: FactoryRunBindingRecord) => Promise<boolean>;
+  /** Called for each binding this sweep revoked. */
+  onRevoked?: (binding: FactoryRunBindingRecord) => void;
 }
 
 export interface RevokeFactoryRunBindingsForWorkItemInput {
@@ -1144,6 +1148,7 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       status: { type: 'text' },
       created_at: { type: 'timestamp' },
       revoked_at: { type: 'timestamp', nullable: true },
+      stop_requested_at: { type: 'timestamp', nullable: true },
     },
     indexes: [
       // Exact-address lookups run on every processor message; status filter is
@@ -1156,6 +1161,8 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
         name: 'factory_run_bindings_org_thread_idx',
         columns: ['org_id', 'thread_id', 'resource_id', 'session_id'],
       },
+      // Prompt-time checkout trust reads a session's whole binding history, on any thread.
+      { name: 'factory_run_bindings_org_session_idx', columns: ['org_id', 'session_id'] },
       // Restart reconciler enumerates active bindings across all tenants.
       { name: 'factory_run_bindings_status_idx', columns: ['status'] },
     ],
@@ -2410,6 +2417,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
         const now = new Date();
         let item: Card | null = null;
+        let movedBoard = false;
         let code: string | null = null;
         let reason: string | null = null;
         let result: Record<string, unknown>;
@@ -2424,7 +2432,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             item = existing;
             if (existing.revision !== input.expectedRevision) {
               code = 'stale';
-              reason = 'The work item changed before this transition committed.';
+              reason = REVISION_CONFLICT_REASON;
               return null;
             }
             if (input.evaluation.outcome === 'rejected') {
@@ -2438,6 +2446,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             const triageType = existing.triageType ?? input.triageType ?? null;
             const classified = triageType !== existing.triageType;
             const changesBoard = input.destinationBoard !== undefined && input.destinationBoard !== existing.board;
+            movedBoard = changesBoard;
             if (!changesBoard && existing.stages.length === 1 && existing.stages[0] === input.destinationStage) {
               // Classification is part of a terminal handoff, so unlike an
               // autonomy flip alone it is a revisioned work-item change.
@@ -2540,6 +2549,44 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 updated_at: now,
               });
             }
+          }
+        }
+        if (item && outcome === 'accepted' && movedBoard) {
+          // Runs the old board proposed, and its failures awaiting a retry, mean nothing on the
+          // new board. Retired inside this transaction, the move and the supersession land or
+          // fail together — and a proposal filed after the move is never caught by mistake.
+          // Live runs never reach here: a busy card's move is refused before commit.
+          const stranded = await ops.findMany<GovernanceDbRow>('factory_deferred_decisions', {
+            org_id: input.orgId,
+            factory_project_id: input.factoryProjectId,
+            work_item_id: item.id,
+            status: { in: ['proposed', 'failed'] },
+          });
+          for (const row of stranded) {
+            await ops.updateAtomic<GovernanceDbRow>(
+              'factory_deferred_decisions',
+              { id: row.id, org_id: input.orgId, factory_project_id: input.factoryProjectId },
+              current =>
+                current.status === row.status
+                  ? {
+                      status: 'superseded',
+                      updated_at: now,
+                      ...(row.status === 'proposed' ? { completed_at: now } : {}),
+                    }
+                  : null,
+            );
+            await ops.deleteMany(
+              'factory_attention_receipts',
+              row.status === 'proposed'
+                ? proposalReceiptFilter(input.orgId, input.factoryProjectId, String(row.id))
+                : {
+                    org_id: input.orgId,
+                    factory_project_id: input.factoryProjectId,
+                    kind: 'automation-failed',
+                    source_id: String(row.id),
+                    occurrence: Number(row.failure_occurrence ?? 0),
+                  },
+            );
           }
         }
         return { status: 'committed', item, result };
@@ -3560,6 +3607,17 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return row !== null;
   }
 
+  /** Every binding a session ever held, revoked ones included, oldest first; never grants agent authority. */
+  async listRunBindingsForSession(input: { orgId: string; sessionId: string }): Promise<FactoryRunBindingRecord[]> {
+    return (
+      await this.#db.findMany<GovernanceDbRow>(
+        'factory_run_bindings',
+        { org_id: input.orgId, session_id: input.sessionId },
+        { orderBy: [['created_at', 'asc']] },
+      )
+    ).map(toBinding);
+  }
+
   /** Resolve exact bound-session state for processor awareness; ambiguous cross-tenant matches return null. */
   async findRunBindingBySession(address: FactoryRunBindingSessionAddress): Promise<FactoryRunBindingRecord | null> {
     const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {
@@ -3611,6 +3669,36 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   /**
+   * A client asked to stop the session's run on purpose. Stored, not held in memory: the dispatcher
+   * watching that run can be on another replica. Scoped to the caller's org, since the access guard
+   * lets through a session id it has no row for.
+   */
+  async requestRunBindingStop(input: { orgId: string; sessionId: string; at: Date }): Promise<void> {
+    await this.#db.updateMany(
+      'factory_run_bindings',
+      { org_id: input.orgId, session_id: input.sessionId, status: 'active' },
+      { stop_requested_at: input.at },
+    );
+  }
+
+  /** Before each kickoff: a stop requested earlier, even with nothing running, is not about the run it starts. */
+  async clearRunBindingStopRequest(input: { orgId: string; bindingId: string }): Promise<void> {
+    await this.#db.updateMany(
+      'factory_run_bindings',
+      { id: input.bindingId, org_id: input.orgId },
+      { stop_requested_at: null },
+    );
+  }
+
+  async runBindingStopRequested(input: { orgId: string; bindingId: string }): Promise<boolean> {
+    const row = await this.#db.findOne<GovernanceDbRow>('factory_run_bindings', {
+      id: input.bindingId,
+      org_id: input.orgId,
+    });
+    return row?.stop_requested_at != null;
+  }
+
+  /**
    * Revoke leaked/legacy active bindings: older than `olderThan` (unless
    * `keep` vouches for them), or whose work item is gone, malformed, or
    * already terminal. Terminal-stage cleanup handles bindings go-forward; this
@@ -3626,7 +3714,17 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         const key = `${binding.orgId}:${binding.workItemId}`;
         let item = itemCache.get(key);
         if (item === undefined) {
-          item = await this.get({ orgId: binding.orgId, id: binding.workItemId });
+          try {
+            item = await this.get({ orgId: binding.orgId, id: binding.workItemId });
+          } catch (error) {
+            // One unreadable card must not end the sweep for every binding after it.
+            // Nothing is known about this card, so its binding stays for the next sweep.
+            console.error(
+              `[factory] stale-binding sweep could not read card ${binding.workItemId}`,
+              error instanceof Error ? error.message : error,
+            );
+            continue;
+          }
           itemCache.set(key, item);
         }
         // Terminal-ness comes from the installed board via the host-wired
@@ -3644,7 +3742,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         bindingId: binding.id,
         revokedAt: input.now,
       });
-      if (result) revoked += 1;
+      if (result) {
+        revoked += 1;
+        input.onRevoked?.(binding);
+      }
     }
     return revoked;
   }

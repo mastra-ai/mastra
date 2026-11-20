@@ -24,7 +24,6 @@ import {
   resolveIntake,
   ROUTE_AGAIN_KEY_PREFIX,
 } from '../boards/intake-routing.js';
-import type { ForcedIntakeEvaluator } from '../boards/intake-routing.js';
 import type { ProjectBoardCache } from '../boards/project-boards.js';
 import type { BoardRegistry } from '../boards/registry.js';
 import { applyReroute, planReroute, summarizeReroute } from '../boards/reroute.js';
@@ -64,8 +63,6 @@ export interface IntakeRouteRoutesDeps extends RouteDependencies {
   boards: Pick<ProjectBoardCache, 'describe'>;
   /** Forces an evaluator on every project; without it each project uses its own setting. */
   intakeEvaluator?: IntakeEvaluator;
-  /** What forced `intakeEvaluator`. */
-  intakeEvaluatorSource?: ForcedIntakeEvaluator['source'];
   /** Providers the tester can read an unseen item from by URL. */
   intakeLookups?: readonly IntakeItemLookup[];
 }
@@ -231,7 +228,7 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
       boards: order.map(boardKey => ({ boardKey, name: registry.get(boardKey)!.name })),
       origin: stored.origin,
       evaluator: forced ?? projectEvaluator ?? 'route-list',
-      evaluatorSource: forced ? (this.deps.intakeEvaluatorSource ?? 'option') : projectEvaluator ? 'project' : 'legacy',
+      evaluatorSource: forced ? 'env' : projectEvaluator ? 'project' : 'legacy',
       projectEvaluator,
       // Worked out on every read, so it always describes the order in force and today's rules.
       comparison: compareIntakeOrder({ routes, order, registry, cards }),

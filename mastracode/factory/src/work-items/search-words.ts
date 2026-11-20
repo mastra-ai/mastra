@@ -3,7 +3,10 @@ export function searchWords(query: string): string[] {
   return query.toLowerCase().split(/\s+/).filter(Boolean);
 }
 
-/** Whether every word is somewhere in `text`, which the caller has lowercased. */
-export function hasEveryWord(text: string, words: readonly string[]): boolean {
-  return words.every(word => text.includes(word));
+/**
+ * A typed search as the server is asked it: its words, lowercased, one space apart. Searches that
+ * differ only in case or spacing find the same cards, so they share one request and one cached answer.
+ */
+export function searchQuery(query: string): string {
+  return searchWords(query).join(' ');
 }

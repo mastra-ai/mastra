@@ -35,7 +35,7 @@ const newestFirst = (a: string, b: string) => (a < b ? 1 : a > b ? -1 : 0);
 const SESSION_ROW_ORDER: Record<SessionRowsView['sort'], (a: SessionRow, b: SessionRow) => number> = {
   activity: (a, b) =>
     ACTIVITY_RANK[a.cardStatus ?? a.status] - ACTIVITY_RANK[b.cardStatus ?? b.status] ||
-    newestFirst(a.session.createdAt, b.session.createdAt),
+    newestFirst(a.updatedAt, b.updatedAt),
   updated: (a, b) => newestFirst(a.updatedAt, b.updatedAt),
   created: (a, b) => newestFirst(a.session.createdAt, b.session.createdAt),
 };
@@ -46,13 +46,14 @@ const UPDATED_WINDOW_HOURS: Record<NonNullable<SessionRowsView['updated']>, numb
   '30d': 24 * 30,
 };
 
+/** Where a row's sessions start: the board grouping's group, and what the `source` filter compares. */
+function sourceOf(row: SessionRowFields): string {
+  if (row.session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX)) return sessionRowGroupKeys.slack;
+  return row.board === undefined ? sessionRowGroupKeys.user : sessionRowGroupKeys.board(row.board);
+}
+
 const GROUP_KEY_OF_ROW: Record<SessionRowsView['groupBy'], (row: SessionRow) => string> = {
-  board: row =>
-    row.session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX)
-      ? sessionRowGroupKeys.slack
-      : row.board === undefined
-        ? sessionRowGroupKeys.user
-        : sessionRowGroupKeys.board(row.board),
+  board: sourceOf,
   status: row => sessionRowGroupKeys.status(row.cardStatus ?? row.status),
   owner: row => sessionRowGroupKeys.owner(row.session.userId),
   none: () => sessionRowGroupKeys.all,
@@ -80,6 +81,7 @@ function filterSessionRows(
   const cutoff = view.updated === undefined ? undefined : now - UPDATED_WINDOW_HOURS[view.updated] * HOUR_MS;
   const matches = (row: SessionRowFields) =>
     matchesOwner(row, view.owner, viewerUserId) &&
+    (view.source === undefined || sourceOf(row) === view.source) &&
     (view.status === undefined || row.status === view.status) &&
     (cutoff === undefined || Date.parse(row.updatedAt) >= cutoff);
   return rows.flatMap(row => {
@@ -163,12 +165,15 @@ export function sessionActivity(facts: {
     ...facts.cards.flatMap(card => Object.values(card.sessions).map(ref => ref.sessionId)),
   ]);
   const sorted = (ids: Iterable<string>) => [...ids].toSorted((a, b) => a.localeCompare(b));
-  const cards = [...facts.cardStatuses].toSorted(([a], [b]) => a.localeCompare(b));
+  const cards = [...facts.cardStatuses];
+  const inFlight = cards.filter(([, { status }]) => isInFlight(status));
   return {
     runningSessionIds: sorted([...facts.runningSessionIds].filter(id => known.has(id))),
     parkedSessionIds: sorted(facts.parkedSessionIds),
-    cardStatuses: Object.fromEntries(cards.flatMap(([id, { status }]) => (isInFlight(status) ? [[id, status]] : []))),
-    sessionHeldCardIds: cards.flatMap(([id, { held }]) => (held ? [id] : [])),
-    cards: liveSessionCounts(cards.map(([, { status }]) => status)),
+    cardStatuses: Object.fromEntries(
+      inFlight.toSorted(([a], [b]) => a.localeCompare(b)).map(([id, { status }]) => [id, status]),
+    ),
+    sessionHeldCardIds: sorted(cards.flatMap(([id, { held }]) => (held ? [id] : []))),
+    cards: liveSessionCounts(inFlight.map(([, { status }]) => status)),
   };
 }

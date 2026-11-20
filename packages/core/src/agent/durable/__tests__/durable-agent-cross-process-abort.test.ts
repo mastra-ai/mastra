@@ -143,7 +143,7 @@ describe('DurableAgent cross-process abort', () => {
       // A transient transport failure must not leave the run permanently deaf:
       // the next step gets to try again.
       await expect(ensureRemoteAbortListener(pubsub, runId)).rejects.toThrow('pubsub down');
-      expect(globalRunRegistry.get(runId)!.remoteAbortListenerInstalled).toBe(false);
+      expect(globalRunRegistry.get(runId)!.remoteAbortListener).toBeUndefined();
 
       await ensureRemoteAbortListener(pubsub, runId);
       const entry = globalRunRegistry.get(runId)!;

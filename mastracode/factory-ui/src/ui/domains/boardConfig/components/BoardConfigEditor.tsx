@@ -3,37 +3,33 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
-import { useRef, useState } from 'react';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { SettingsContainer } from '@mastra/playground-ui/new/settings';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useBlocker, useNavigate } from 'react-router';
 
-import type { FactorySkillInfo, StoredBoardResponse } from '../../../../api/types';
-import { useDeleteBoardMutation, useResetBoardMutation, useSaveBoardMutation } from '../../../../hooks/useBoardEditor';
-import type { BoardRequestError } from '../../../../hooks/useBoardEditor';
-import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { boardPath, orderedBoards } from '../../factory/boardCatalog';
-import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
+import { queryKeys } from '../../../../api/keys';
+import type { BoardCatalogResponse, FactorySkillInfo, StoredBoardResponse } from '../../../../api/types';
+import { useQueryClient } from '@tanstack/react-query';
+import { useSaveBoardMutation } from '../../../../hooks/useBoardEditor';
 import { SettingsSubsection } from '../../settings/components/SettingsSubsection';
 import type { FactoryProject } from '../../workspaces/services/github';
 import { boardConfigPath, boardSkillsPath, parseBoardConfigPath } from '../boardConfigPaths';
 import { useBoardDraft } from '../BoardDraftProvider';
-import { canRemovePhase, draftChanged, phaseHasProblem, rawRuleKey, removePhase } from '../boardDraft';
+import { canRemovePhase, draftChanged, phaseHasProblem, rawRuleKey, removePhase, withAutoStart } from '../boardDraft';
 import type { RuleField } from '../boardDraft';
+import { SettingsColumn } from './SettingsColumn';
+import { BoardOverview } from './BoardOverview';
 import { AddPhaseButton } from './AddPhaseButton';
-import { NewCardsHere } from './NewCardsHere';
 import { PhaseConfig } from './PhaseConfig';
 import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
 import { IconChevronRightMedium } from '@mastra/playground-ui/icons/central/IconChevronRightMedium';
 
 const RULE_FIELDS: RuleField[] = ['autoStartWhen', 'autoApproveWhen'];
 
-function errorText(error: BoardRequestError) {
-  return error.conflicts.length > 0 ? error.conflicts.join(' ') : error.message;
-}
-
 /**
- * One board's configuration, General page or a phase page. The draft lives here, above both, so moving between a
+ * One board's configuration, Overview page or a phase page. The draft lives here, above both, so moving between a
  * board's pages keeps unsaved edits; leaving the board with edits asks first.
  */
 export function BoardConfigEditor({
@@ -64,20 +60,9 @@ export function BoardConfigEditor({
     discard();
     setDiscards(count => count + 1);
   };
-  const catalog = useBoardCatalog(factory.id);
-  const installed = catalog.data?.find(candidate => candidate.id === boardId);
   const navigate = useNavigate();
   const save = useSaveBoardMutation(factory.id, boardId);
-  const reset = useResetBoardMutation(factory.id, boardId);
-  // discard() lands on the next render, after the navigation below asks the blocker.
-  const deleted = useRef(false);
-  const remove = useDeleteBoardMutation(factory.id, boardId, () => {
-    deleted.current = true;
-    discard();
-    // The deleted board is gone from the catalog by now; Work, or the first board left, shows next.
-    const next = orderedBoards(catalog.data ?? []).find(other => other.id !== boardId);
-    void navigate(next ? boardPath(factory.id, next.id) : `/factories/${factory.id}`, { replace: true });
-  });
+  const queryClient = useQueryClient();
 
   const readOnly = !canEdit || !board.editable;
   const phase = phaseKey ? draft.phases.find(candidate => candidate.key === phaseKey) : undefined;
@@ -104,7 +89,11 @@ export function BoardConfigEditor({
   const stale = save.error?.code === 'revision_mismatch';
 
   const blocker = useBlocker(({ nextLocation }) => {
-    if (!changed || deleted.current) return false;
+    // A deleted board leaves the catalog before its header navigates away: there is nothing left to save.
+    const listed = queryClient
+      .getQueryData<BoardCatalogResponse>(queryKeys.boardCatalog(factory.id))
+      ?.boards.some(other => other.id === boardId);
+    if (!changed || listed === false) return false;
     const next = parseBoardConfigPath(nextLocation.pathname);
     // The skills, rules and intake pages have no save bar, so leaving for them counts as leaving the board's settings.
     return (
@@ -173,138 +162,79 @@ export function BoardConfigEditor({
   } else {
     body = (
       <div className="flex flex-col gap-8">
-        {sidebarHidden && (
-          <SettingsSubsection title="Phases">
-            <SettingsContainer>
-              <ul>
-                {draft.phases.map(candidate => (
-                  <li key={candidate.key}>
-                    <Link
-                      to={boardConfigPath(factory.id, boardId, candidate.key)}
-                      className="hover:bg-fill focus-visible:bg-fill flex items-center gap-3 px-4 py-3 focus-visible:outline-hidden"
-                    >
-                      <BoardStageIcon stage={candidate.key} kind={phaseIconKind(boardId, candidate.kind)} decorative />
-                      <Txt as="span" variant="label" className="min-w-0 flex-1 truncate">
-                        {candidate.name}
-                      </Txt>
-                      <IconChevronRightMedium className="text-muted-foreground size-icon-md" aria-hidden />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </SettingsContainer>
-            {!readOnly && <AddPhaseButton factoryId={factory.id} boardId={boardId} board={board} disabled={locked} />}
-          </SettingsSubsection>
-        )}
-        {sidebarHidden && (
-          <SettingsSubsection title="Factory">
-            <SettingsContainer>
-              <Link
-                to={boardSkillsPath(factory.id, boardId)}
-                className="hover:bg-fill focus-visible:bg-fill flex items-center gap-3 px-4 py-3 focus-visible:outline-hidden"
-              >
-                <IconBook className="text-muted-foreground size-icon-md" aria-hidden />
-                <Txt as="span" variant="label" className="min-w-0 flex-1 truncate">
-                  Skills
-                </Txt>
-                <IconChevronRightMedium className="text-muted-foreground size-icon-md" aria-hidden />
-              </Link>
-            </SettingsContainer>
-          </SettingsSubsection>
-        )}
-
-        {installed && <NewCardsHere factoryId={factory.id} board={installed} />}
-
-        {board.source !== 'stored' && !readOnly && (
-          <SettingsSubsection title="Default">
-            <SettingsContainer>
-              <SettingsRow label="Reset to default" description="Go back to Factory's version of this board.">
-                <AlertDialog>
-                  <AlertDialog.Trigger
-                    render={
-                      <Button size="sm" disabled={reset.isPending}>
-                        Reset
-                      </Button>
-                    }
-                  />
-                  <AlertDialog.Content>
-                    <AlertDialog.Header>
-                      <AlertDialog.Title>Reset {board.name} to default?</AlertDialog.Title>
-                      <AlertDialog.Description>
-                        Every change made to this board's name and phases is replaced with Factory's version.
-                      </AlertDialog.Description>
-                    </AlertDialog.Header>
-                    <AlertDialog.Footer>
-                      <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-                      <AlertDialog.Action onClick={() => reset.mutate(board.revision ?? 0)}>Reset</AlertDialog.Action>
-                    </AlertDialog.Footer>
-                  </AlertDialog.Content>
-                </AlertDialog>
-              </SettingsRow>
-            </SettingsContainer>
-            {reset.error && (
-              <Notice variant="destructive" role="alert">
-                <Notice.Message>The board was not reset. {errorText(reset.error)}</Notice.Message>
-              </Notice>
-            )}
-          </SettingsSubsection>
-        )}
-
-        {board.source !== 'builtin' && !readOnly && (
-          <SettingsSubsection title="Delete">
-            <SettingsContainer>
-              <SettingsRow label="Delete board" description="A board that still has cards cannot be deleted.">
-                <AlertDialog>
-                  <AlertDialog.Trigger
-                    render={
-                      <Button size="sm" variant="destructive" disabled={remove.isPending}>
-                        Delete
-                      </Button>
-                    }
-                  />
-                  <AlertDialog.Content>
-                    <AlertDialog.Header>
-                      <AlertDialog.Title>Delete {board.name}?</AlertDialog.Title>
-                      <AlertDialog.Description>
-                        The board and its phases are removed from this project.
-                      </AlertDialog.Description>
-                    </AlertDialog.Header>
-                    <AlertDialog.Footer>
-                      <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-                      <AlertDialog.Action onClick={() => remove.mutate(board.revision ?? 0)}>Delete</AlertDialog.Action>
-                    </AlertDialog.Footer>
-                  </AlertDialog.Content>
-                </AlertDialog>
-              </SettingsRow>
-            </SettingsContainer>
-            {remove.error && (
-              <Notice variant="destructive" role="alert">
-                <Notice.Message>The board was not deleted. {errorText(remove.error)}</Notice.Message>
-              </Notice>
-            )}
-          </SettingsSubsection>
-        )}
+        <BoardOverview
+          factoryId={factory.id}
+          boardId={boardId}
+          phases={draft.phases}
+          skills={skills}
+          onAutoStart={
+            readOnly || locked
+              ? undefined
+              : (phaseKey, on) => {
+                  setDraft(current => ({
+                    ...current,
+                    phases: current.phases.map(phase => (phase.key === phaseKey ? withAutoStart(phase, on) : phase)),
+                  }));
+                  if (!on) setRawRule(rawRuleKey(phaseKey, 'autoStartWhen'), undefined);
+                }
+          }
+          action={
+            sidebarHidden && !readOnly ? (
+              <AddPhaseButton factoryId={factory.id} boardId={boardId} board={board} disabled={locked} />
+            ) : undefined
+          }
+        />
+        <SettingsColumn pinned className="flex flex-col gap-8 empty:hidden">
+          {sidebarHidden && (
+            <SettingsSubsection title="Factory">
+              <SettingsContainer>
+                <Link
+                  to={boardSkillsPath(factory.id, boardId)}
+                  className="hover:bg-fill focus-visible:bg-fill flex items-center gap-3 px-4 py-3 focus-visible:outline-hidden"
+                >
+                  <IconBook className="text-muted-foreground size-icon-md" aria-hidden />
+                  <Txt as="span" variant="label" className="min-w-0 flex-1 truncate">
+                    Skills
+                  </Txt>
+                  <IconChevronRightMedium className="text-muted-foreground size-icon-md" aria-hidden />
+                </Link>
+              </SettingsContainer>
+            </SettingsSubsection>
+          )}
+        </SettingsColumn>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-8 pb-4">
+    <div className={cn('flex flex-col gap-8 pb-4', !phase && 'w-max min-w-full')}>
       {!board.editable ? (
-        <Notice variant="info">This board is defined in code, so it can't be changed here.</Notice>
+        <SettingsColumn pinned={!phase}>
+          <Notice variant="info">This board is defined in code, so it can't be changed here.</Notice>
+        </SettingsColumn>
       ) : (
-        !canEdit && <Notice variant="info">Only organization admins can change this board.</Notice>
+        !canEdit && (
+          <SettingsColumn pinned={!phase}>
+            <Notice variant="info">Only organization admins can change this board.</Notice>
+          </SettingsColumn>
+        )
       )}
       {!phase && board.problems.length > 0 && (
-        <Notice variant="warning" title="This board has problems">
-          <Notice.Message>{board.problems.join(' ')}</Notice.Message>
-        </Notice>
+        <SettingsColumn pinned>
+          <Notice variant="warning" title="This board has problems">
+            <Notice.Message>{board.problems.join(' ')}</Notice.Message>
+          </Notice>
+        </SettingsColumn>
       )}
 
       {body}
 
       {changed && (
-        <div className="rounded-card bg-card shadow-overlay dark:bg-muted sticky bottom-4 z-10 flex flex-col gap-3 p-3">
+        <SettingsColumn
+          pinned={!phase}
+          sticky
+          className="rounded-card bg-card shadow-overlay dark:bg-muted flex flex-col gap-3 p-3"
+        >
           {stale && (
             <Notice
               variant="warning"
@@ -316,7 +246,7 @@ export function BoardConfigEditor({
           )}
           {save.error && !stale && (
             <Notice variant="destructive" role="alert">
-              <Notice.Message>The board was not saved. {errorText(save.error)}</Notice.Message>
+              <Notice.Message>The board was not saved. {save.error.reasons}</Notice.Message>
             </Notice>
           )}
           <div className="flex items-center gap-3">
@@ -346,7 +276,7 @@ export function BoardConfigEditor({
               {save.isPending ? 'Saving…' : 'Save'}
             </Button>
           </div>
-        </div>
+        </SettingsColumn>
       )}
 
       <AlertDialog open={blocker.state === 'blocked'} onOpenChange={open => !open && blocker.reset?.()}>

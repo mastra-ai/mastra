@@ -47,7 +47,7 @@ After generating embeddings, you need to store them in a database that supports 
 
     <h3>Hybrid Search (Vector + Full-Text)</h3>
 
-    MongoDB supports hybrid search that combines vector similarity with BM25 full-text search through server-side `$rankFusion`. It requires MongoDB 8.0 or later, is generally available from 8.1, and is enabled on MongoDB Atlas 8.0.x. Use it to combine semantic retrieval with keyword-based results:
+    MongoDB supports hybrid search that combines vector similarity with BM25 full-text search through server-side `$rankFusion`. It requires MongoDB 8.0 or later, is available from 8.1, and is enabled on MongoDB Atlas 8.0.x. Use it to combine semantic retrieval with keyword-based results:
 
     ```ts
     await store.createSearchIndex({ indexName: 'myCollection', fields: ['text'] })
@@ -481,7 +481,7 @@ After generating embeddings, you need to store them in a database that supports 
 
 Once initialized, all vector stores share the same interface for creating indexes, upserting embeddings, and querying.
 
-### Creating Indexes
+### Creating indexes
 
 Before storing embeddings, you need to create an index with the appropriate dimension size for your embedding model:
 
@@ -504,7 +504,7 @@ The dimension size must match the output dimension of your chosen embedding mode
 Index dimensions can't be changed after creation. To use a different model, delete and recreate the index with the new dimension size.
 :::
 
-### Naming Rules for Databases
+### Naming rules for databases
 
 Each vector database enforces specific naming conventions for indexes and collections to ensure compatibility and prevent conflicts.
 
@@ -685,7 +685,7 @@ Each vector database enforces specific naming conventions for indexes and collec
   </TabItem>
 </Tabs>
 
-### Upserting Embeddings
+### Upserting embeddings
 
 After creating an index, you can store embeddings along with their basic metadata:
 
@@ -752,7 +752,7 @@ Key metadata considerations:
 
 Use `deleteVectors` with a metadata filter to remove embeddings associated with a document. This is useful for cleaning up stale vectors after a document is deleted or updated.
 
-### Delete by Metadata Filter
+### Delete by metadata filter
 
 The most common use case is deleting all vectors for a specific document when a user deletes it:
 
@@ -770,7 +770,7 @@ This is particularly useful when:
 - You're re-indexing a document and want to remove old vectors first
 - You need to clean up vectors for a specific user or tenant
 
-### Delete Multiple Documents
+### Delete multiple documents
 
 You can also use complex filters to delete vectors matching multiple conditions:
 
@@ -792,7 +792,7 @@ await store.deleteVectors({
 })
 ```
 
-### Delete by Vector IDs
+### Delete by vector IDs
 
 If you have specific vector IDs to delete, you can pass them directly:
 

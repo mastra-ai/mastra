@@ -1,0 +1,40 @@
+---
+title: "Embeddings | Gateway"
+description: "Create text embeddings through Gateway with the OpenAI Embeddings API."
+---
+
+# Embeddings
+
+<Inject>
+  **For AI agents:** Gateway publishes a public OpenAPI spec for every endpoint at [https://gateway-api.mastra.ai/openapi.json](https://gateway-api.mastra.ai/openapi.json). Use it for request and response schemas. Some fields, such as streaming event payloads, are open objects in the spec. Check those against the [OpenAI Embeddings API reference](https://developers.openai.com/api/reference/resources/embeddings), which this endpoint is compatible with.
+</Inject>
+
+```text
+POST https://gateway-api.mastra.ai/v1/embeddings
+```
+
+Compatible with the OpenAI Embeddings API. `input` accepts a string, an array of strings, or token arrays.
+
+```typescript
+import OpenAI from 'openai'
+
+const client = new OpenAI({
+  apiKey: process.env.MASTRA_GATEWAY_API_KEY,
+  baseURL: 'https://gateway-api.mastra.ai/v1',
+})
+
+const result = await client.embeddings.create({
+  model: '__GATEWAY_OPENAI_EMBEDDING_MODEL__',
+  input: ['first document', 'second document'],
+})
+
+console.log(result.data[0].embedding.length)
+```
+
+From a Mastra application, use the model router:
+
+```typescript
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
+
+const embedder = new ModelRouterEmbeddingModel('mastra/__GATEWAY_OPENAI_EMBEDDING_MODEL__')
+```

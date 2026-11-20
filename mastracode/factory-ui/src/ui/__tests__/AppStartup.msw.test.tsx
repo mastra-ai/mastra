@@ -16,7 +16,7 @@ import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_API, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createQueryClient } from '../../query-client';
 import { factory, signedIn, signedOut } from '../domains/auth/components/__tests__/fixtures/auth';
-import { createAppRoutes } from '../router';
+import { createAppRouter } from '../router';
 
 const AUTH_ME_URL = `${TEST_BASE_URL}/auth/me`;
 const PROJECTS_URL = `${TEST_BASE_URL}/web/factory/projects`;
@@ -107,9 +107,9 @@ function renderApp(
     http.get(`${TEST_BASE_URL}/web/linear/status`, () => HttpResponse.json({ enabled: false, connected: false })),
   );
   const client = createQueryClient();
-  const router = createMemoryRouter(createAppRoutes({ queryClient: client, api: TEST_API }), {
-    initialEntries: [path],
-  });
+  const router = createAppRouter({ queryClient: client, api: TEST_API }, routes =>
+    createMemoryRouter(routes, { initialEntries: [path] }),
+  );
   renderWithProviders(<RouterProvider router={router} />, client);
   return { router, client };
 }
@@ -168,7 +168,7 @@ describe('Opening Factory', () => {
       models: USABLE_MODEL,
       cards: STARTER_COUNTS,
     },
-    { page: 'Settings', path: '/factories/factory-1/settings/preferences', cards: [] },
+    { page: 'Settings', path: '/factories/factory-1/settings/account', cards: [] },
     {
       page: 'Work before a repository is linked',
       path: '/factories/factory-1/work',

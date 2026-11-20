@@ -36,15 +36,7 @@ describe('DatasetItemDetails', () => {
       expect(screen.getByText('Updated')).not.toBeNull();
     });
 
-    it('leaves out the dataset id and version rows', () => {
-      render(<DatasetItemDetails item={fullItem} />);
-
-      expect(screen.queryByText('Dataset Id')).toBeNull();
-      expect(screen.queryByText('ds-1')).toBeNull();
-      expect(screen.queryByText('Version')).toBeNull();
-    });
-
-    it('renders every data section except scorers', () => {
+    it('renders every data section', () => {
       render(<DatasetItemDetails item={fullItem} />);
 
       for (const title of [
@@ -57,7 +49,6 @@ describe('DatasetItemDetails', () => {
       ]) {
         expect(screen.getByText(title)).not.toBeNull();
       }
-      expect(screen.queryByText('Scorers')).toBeNull();
     });
   });
 

@@ -56,6 +56,12 @@ export interface ExecutionEngineOptions {
   persistResumeClaim?: boolean;
 
   /**
+   * Skips reading a stored `canceled` status. See `WorkflowOptions.localCancellationOnly`.
+   * @internal
+   */
+  localCancellationOnly?: boolean;
+
+  /**
    * Transforms the run snapshot immediately before it is persisted.
    * Must be pure and return JSON-safe data. Defaults to identity.
    */
@@ -263,6 +269,8 @@ export abstract class ExecutionEngine extends MastraBase {
     perStep?: boolean;
     /** How the run is stored. Engines that don't support version 2 ignore it. @experimental */
     storageVersion?: 1 | 2;
+    /** Called once the run is handed to workers. Engines that execute in-process ignore it. @internal */
+    onDispatched?: () => void;
     /** For a storage v2 resume or restart, what the store reported for the loaded state. @internal */
     storedState?: { seq: number; patchBytes: number; patchCount: number };
     /** For a storage v2 nested start or time travel, the version of the parent's state it starts from. @internal */

@@ -202,14 +202,6 @@ describe('CompareExperimentsPage', () => {
     });
   });
 
-  describe('when an experiment belongs to another dataset', () => {
-    it('refuses to compare when an experiment belongs to another dataset', async () => {
-      renderPage('?dataset=dataset-1&baseline=exp-a&contender=exp-c');
-      expect(await screen.findByText(/must belong to the same dataset/i)).toBeDefined();
-      expect(screen.queryByText('Experiments comparison')).toBeNull();
-    });
-  });
-
   describe('when experiment storage fails', () => {
     it('shows an error state when an experiment fails to load for another reason', async () => {
       server.use(

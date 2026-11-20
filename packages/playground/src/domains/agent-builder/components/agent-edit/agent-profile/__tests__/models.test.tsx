@@ -91,13 +91,11 @@ describe('Models', () => {
   });
 
   describe('when rendering the model grid', () => {
-    it('renders an uppercase section title per provider', async () => {
+    it('renders a section title per provider', async () => {
       const { getByTestId } = await renderModels();
 
       const openaiTitle = getByTestId('model-provider-section-title-openai');
       expect(openaiTitle.textContent).toBe('OpenAI');
-      expect(openaiTitle.className).toContain('uppercase');
-      expect(openaiTitle.className).toContain('text-eyebrow');
 
       const anthropicTitle = getByTestId('model-provider-section-title-anthropic');
       expect(anthropicTitle.textContent).toBe('Anthropic');
