@@ -2,9 +2,26 @@
 '@mastra/playground-ui': minor
 ---
 
-Expose shared agent-list and agent-page components (including `AgentPage`, `AgentCombobox`, and `AgentPageTabs`), thread-panel controls (`ThreadsPanelProvider` and `useThreadsPanel`), the agent thread page, chat integration, and draft cleanup APIs for Studio and other hosts. Studio sign-out now clears the same draft controllers used by the shared composer, preventing pending edits from being restored after logout.
+Hosts other than Studio can now build an agent page from the same parts Studio uses:
 
-To clear drafts after a successful sign-out, pass the serialized API and user scope and await cleanup:
+- Agent list and page: `AgentPage`, `AgentCombobox` and `AgentPageTabs`.
+- Threads panel: `ThreadsPanelProvider` and `useThreadsPanel`.
+- The agent thread page and chat integration.
+- The memory sidebar (Observational Memory, memory details, thread cloning).
+- The Config panel (memory settings, metadata badges, workspace tools).
+- The skill create dialog.
+
+Two options let a host fit the page to its own layout:
+
+```tsx
+// Put your own close or collapse control in the Config panel header
+<AgentConfigSurface actions={<Button onClick={close}>Close</Button>}>{children}</AgentConfigSurface>
+
+// Hide the memory capability icons in the thread sidebar (shown by default)
+<AgentThreadPage {...pageProps} sidebarExtensions={{ showConfigBadges: false }} />
+```
+
+To clear saved drafts after a user signs out, await `clearDraftsOnLogout` with the API and user scope:
 
 ```ts
 import { clearDraftsOnLogout } from '@mastra/playground-ui/domains/agents/chat';
