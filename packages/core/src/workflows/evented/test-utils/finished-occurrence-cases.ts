@@ -239,13 +239,17 @@ const stepEventsOf = (published: Event[], runId: string) =>
  * `getStorage` is the store the test reads. `connect` opens the store a
  * replica uses, on the same database: a replica that shuts down closes its
  * store. It defaults to `getStorage`, for stores that close harmlessly.
+ * `stepGuards` tells whether the store has workflow step guards, which tell
+ * some late deliveries apart that other stores can't.
  */
 export function describeFinishedOccurrenceCases({
   getStorage,
   connect = getStorage,
+  stepGuards = false,
 }: {
   getStorage: () => MastraStorage;
   connect?: () => MastraStorage | Promise<MastraStorage>;
+  stepGuards?: boolean;
 }) {
   describe('evented step deliveries that arrive after the step finished (#28712)', () => {
     const replicas: Mastra[] = [];
@@ -263,7 +267,12 @@ export function describeFinishedOccurrenceCases({
       const { pubsub, published } = recordWorkflowEvents(new EventEmitterPubSub(), intercept);
       const graph = (workflow as unknown as { stepGraph: StepFlowEntry[] }).stepGraph;
       const nested = graph.flatMap(entry => {
-        const child = entry.type === 'step' ? getEntryWorkflow(entry) : null;
+        const child =
+          entry.type === 'step'
+            ? getEntryWorkflow(entry)
+            : entry.type === 'loop' && (entry.step as { component?: string }).component === 'WORKFLOW'
+              ? (entry.step as unknown as Workflow)
+              : null;
         return child ? [[child.id, child] as const] : [];
       });
       const mastra = new Mastra({
@@ -737,7 +746,118 @@ export function describeFinishedOccurrenceCases({
       expect((await storedRun(run.runId))?.status).toBe('success');
     }, 20_000);
 
+    /**
+     * Runs whose ending events a broker can deliver again after the run's end was handled: the
+     * step end that ended each run, and each nested run's `workflow.end`. `report` hears every step
+     * and loop condition that runs.
+     */
+    const endedAgain: Record<string, (report: Report) => Built> = {
+      'a top-level run': report =>
+        createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: z.any() })
+          .then(work('first', report))
+          .then(work('second', report))
+          .commit(),
+      'a nested run in the last step': report =>
+        createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: z.any() })
+          .then(work('a', report))
+          .then(
+            createWorkflow({ id: 'finished-child', inputSchema: Num, outputSchema: Num })
+              .then(work('inner', report))
+              .then(work('use', report))
+              .commit(),
+          )
+          .commit(),
+      'a nested loop body in the last step': report =>
+        createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: z.any() })
+          .dountil(
+            createWorkflow({ id: 'finished-child', inputSchema: Num, outputSchema: Num })
+              .then(
+                createStep({
+                  id: 'body',
+                  inputSchema: Num,
+                  outputSchema: Num,
+                  execute: async ({ inputData }) => {
+                    await report(`body:${inputData.n + 1}`);
+                    return { n: inputData.n + 1 };
+                  },
+                }),
+              )
+              .commit(),
+            async ({ inputData }) => {
+              await report(`cond:${inputData.n}`);
+              return inputData.n >= 2;
+            },
+          )
+          .commit(),
+    };
+
+    /** Runs `build` to success on a replica, then hands its ending events to a second replica. */
+    async function redeliverEndingEvents(build: (report: Report) => Built) {
+      const executions: string[] = [];
+      const reporter =
+        (replica: string): Report =>
+        async label =>
+          void executions.push(`${replica}:${label}`);
+      const a = await startReplica(build(reporter('A')));
+      const b = await startReplica(build(reporter('B')));
+      const finishes: Event[] = [];
+      await b.mastra.pubsub.subscribe('workflows-finish', event => void finishes.push(event));
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      expect((await run.start({ inputData: { n: 0 } })).status).toBe('success');
+
+      const { events, runs } = stepDeliveries(a);
+      const nestedEnds = a.delivered.filter(event => event.type === 'workflow.end' && event.runId !== run.runId);
+      const late = [...endingEvents(events), ...nestedEnds];
+      const before = await storedRuns(runs);
+      for (const event of late) {
+        expect(await redeliver(b, event, 1)).toEqual({ ok: true });
+      }
+
+      const after = await storedRuns(runs);
+      return { executions, b, finishes, before, after };
+    }
+
+    // A late copy of the event that ended a run still reaches the run's end handling, since it
+    // can't be told from a copy whose worker stopped before publishing the end. It must not run a
+    // step or a loop condition again, or change how the run ended.
+    it.each(Object.keys(endedAgain))(
+      '%s: a late copy of the event that ended it runs no step again',
+      async name => {
+        const { executions, before, after } = await redeliverEndingEvents(endedAgain[name]!);
+
+        expect(executions.filter(e => e.startsWith('B:'))).toEqual([]);
+        const statuses = (stored: Record<string, any>) =>
+          Object.fromEntries(Object.entries(stored).map(([runId, { status }]) => [runId, status]));
+        expect(statuses(after)).toEqual(statuses(before));
+      },
+      20_000,
+    );
+
+    // Known gap: nothing records that a run's end was handed off, so a late copy of the event that
+    // ended a successful run publishes `workflow.end` and `workflows-finish` again. A nested run
+    // also hands its success to the parent again: a parent that ended at that nested step ends
+    // again too, and a loop parent drops it. Only a top-level run on
+    // a store with step guards is told apart: its end marks every guarded record
+    // `__continuationStarted`, and the late step end is refused as stale. Fixing the rest needs an
+    // "end handed off" marker written by the `workflow.end` handler.
+    for (const name of Object.keys(endedAgain)) {
+      const knownGap = !(stepGuards && name === 'a top-level run');
+      (knownGap ? it.fails : it)(
+        `${name}: a late copy of the event that ended it publishes no second end`,
+        async () => {
+          const { b, finishes } = await redeliverEndingEvents(endedAgain[name]!);
+
+          expect(b.published.filter(event => event.type === 'workflow.end')).toEqual([]);
+          expect(finishes).toEqual([]);
+        },
+        20_000,
+      );
+    }
+
     it('keeps a failed run as it is when a parallel sibling finishes after the run failed', async () => {
+      // The failing branch waits for its sibling to start: a sibling dispatched after the run
+      // failed is dropped and never ends.
+      const siblingStarted = deferred<void>();
       const build = () =>
         createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: z.any() })
           .parallel([
@@ -746,10 +866,11 @@ export function describeFinishedOccurrenceCases({
               inputSchema: Num,
               outputSchema: Num,
               execute: async () => {
+                await siblingStarted.promise;
                 throw new Error('broken');
               },
             }),
-            work('slow', async () => {}),
+            work('slow', async () => siblingStarted.resolve()),
           ])
           .then(createStep({ id: 'after', inputSchema: z.any(), outputSchema: z.any(), execute: async () => ({}) }))
           .commit();
