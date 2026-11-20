@@ -658,6 +658,27 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     return cloneRunData(steps as Record<string, StepResult<any, any, any, any>>);
   }
 
+  /** One method body with no awaits, so no write lands between the header and the step read. */
+  async loadWorkflowRunStep({
+    workflowName,
+    runId,
+    stepId,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+  }): Promise<(StoredWorkflowRunHeader & { steps: Record<string, StepResult<any, any, any, any>> }) | null> {
+    const key = this.getWorkflowKey(workflowName, runId);
+    const record = this.db.workflowRunHeaders.get(key);
+    if (!record) return null;
+    const steps = Object.fromEntries(latestStepResults(this.db.workflowRunEntries.get(key) ?? [], new Set([stepId])));
+    return {
+      ...storedHeader(record),
+      ...(record.resourceId !== undefined && { resourceId: record.resourceId }),
+      steps: cloneRunData(steps as Record<string, StepResult<any, any, any, any>>),
+    };
+  }
+
   /**
    * Patches a storage v2 run's header. With `opts.expectedStatus`, only when the stored status
    * matches. Returns the updated header, or undefined when the run isn't stored or the status

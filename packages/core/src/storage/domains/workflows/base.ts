@@ -27,6 +27,9 @@ import type { StatePatchOp } from './state-patch';
 // Reads the default getRunOwnerships() keeps in flight, so one batch does not flood the store.
 const RUN_OWNERSHIP_READ_CONCURRENCY = 8;
 
+/** Reads of one step before a run that keeps being written to fail the read instead of retrying. */
+const STEP_READ_ATTEMPTS = 5;
+
 function runJournalNotSupportedError(adapter: string): MastraError {
   return new MastraError({
     id: 'STORAGE_RUN_JOURNAL_NOT_SUPPORTED',
@@ -202,7 +205,14 @@ export abstract class WorkflowsStorage extends StorageDomain {
   /**
    * The latest result of each given step of a storage v2 run (as `latestStepResults` rebuilds it),
    * among its entries up to `upToSeq` (all without it). Steps without such an entry are left out,
-   * which includes a step written again after `upToSeq`: that write deleted its earlier entries.
+   * which normally includes a step written again after `upToSeq`: that write deleted its earlier
+   * entries. One exception: two writes of the same step racing on the run can leave an earlier
+   * entry behind (on PostgreSQL, the later write's delete doesn't see rows a writer it waited for
+   * committed), and a read bounded at a seq in between then returns that step's result as of the
+   * bound. So a step's presence under `upToSeq` proves only that it had a result at the bound, not
+   * that it wasn't written again after it; a caller acting on the difference must tolerate a stale,
+   * pre-terminal value for a rewritten step. Unbounded reads always see the step's latest entry,
+   * and the step's next write deletes the leftover.
    * Null when the run isn't stored, or when `expectedLastSeq` is given and the run's `lastSeq`
    * differs from it (the run was written to since). Stores that return `runToken` must also reject
    * a differing `expectedRunToken` (the run was deleted and recreated). The identity/sequence checks
@@ -218,6 +228,45 @@ export abstract class WorkflowsStorage extends StorageDomain {
     expectedRunToken?: string;
   }): Promise<Record<string, StepResult<any, any, any, any>> | null> {
     throw runJournalNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * A storage v2 run's header together with the latest result of the given step (under `steps`,
+   * left out when the step has no entry), read as one version of the run: a write landing between
+   * separate header and step reads can't be half-seen. Null when the run isn't stored as v2.
+   *
+   * Adapters override this with a single atomic read. This default composes
+   * `loadWorkflowRunHeader` and `loadWorkflowRunSteps`, reading both again when a write to the run
+   * lands in between, so unlike an override it can fail while the run keeps being written to.
+   * @experimental
+   */
+  async loadWorkflowRunStep({
+    workflowName,
+    runId,
+    stepId,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+  }): Promise<(StoredWorkflowRunHeader & { steps: Record<string, StepResult<any, any, any, any>> }) | null> {
+    for (let attempt = 1; ; attempt++) {
+      const stored = await this.loadWorkflowRunHeader({ workflowName, runId });
+      if (!stored) return null;
+      const steps = await this.loadWorkflowRunSteps({
+        workflowName,
+        runId,
+        stepIds: [stepId],
+        expectedLastSeq: stored.lastSeq,
+        expectedRunToken: stored.runToken,
+      });
+      if (steps) return { ...stored, steps };
+      // Unrelated writes to the run must not spin the reader here forever.
+      if (attempt === STEP_READ_ATTEMPTS) {
+        throw new Error(
+          `The steps of run ${runId} kept changing while they were read: ${STEP_READ_ATTEMPTS} reads were invalidated by writes. Read the run again.`,
+        );
+      }
+    }
   }
 
   /**

@@ -841,6 +841,50 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     }
   }
 
+  async loadWorkflowRunStep({
+    workflowName,
+    runId,
+    stepId,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+  }): Promise<(StoredWorkflowRunHeader & { steps: Record<string, StepResult<any, any, any, any>> }) | null> {
+    try {
+      // One statement, so the header and the step are the same version of the run: a write landing
+      // between separate reads can't be half-seen.
+      const result = await this.#client.execute({
+        sql: `SELECT ${HEADER_COLUMNS}, resourceId, (SELECT json_group_array(json_object(
+              'seq', x.seq, 'first_seq', x.first_seq, 'kind', x.kind, 'step_id', x.step_id, 'absent', x.payload IS NULL, 'payload', json(x.payload)
+            ))
+            FROM (
+              SELECT e.seq, e.kind, e.step_id, e.payload,
+                MAX(CASE WHEN e.kind = 'step' THEN e.seq END) OVER (PARTITION BY e.step_id) AS step_seq,
+                MIN(CASE WHEN e.kind = 'step' THEN COALESCE(e.first_seq, e.seq) END) OVER (PARTITION BY e.step_id) AS first_seq
+              FROM ${TABLE_WORKFLOW_RUN_ENTRIES} e
+              WHERE e.workflow_name = r.workflow_name AND e.run_id = r.run_id AND e.kind IN ('step', 'step-patch')
+                AND e.step_id = ?
+            ) x
+            WHERE x.seq >= x.step_seq) AS entries
+          FROM ${TABLE_WORKFLOW_RUNS} r WHERE r.workflow_name = ? AND r.run_id = ?`,
+        args: [stepId, workflowName, runId],
+      });
+      const row = result.rows[0];
+      if (!row) return null;
+      const steps = Object.fromEntries(latestStepResults(toEntries(entryRows(row.entries as string)))) as Record<
+        string,
+        StepResult<any, any, any, any>
+      >;
+      return {
+        ...storedHeader(row),
+        ...(row.resourceId != null && { resourceId: String(row.resourceId) }),
+        steps,
+      };
+    } catch (error) {
+      throw this.#runError('LOAD_WORKFLOW_RUN_STEP', workflowName, runId, error);
+    }
+  }
+
   async updateWorkflowRunHeader({
     workflowName,
     runId,

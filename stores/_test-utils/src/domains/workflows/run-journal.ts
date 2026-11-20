@@ -678,6 +678,56 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         expect(await store.loadWorkflowRun({ workflowName, runId: 'v1', successfulSteps: 'full' })).toBeNull();
         expect(await store.loadWorkflowRunSteps({ workflowName, runId: 'v1', stepIds: ['a'] })).toBeNull();
       });
+
+      it('loads the header and one step together, as one version of the run', async () => {
+        const id = runId();
+        await checkpoint(id, makeSnapshot(id, { context: { a: ok(1), b: ok(2) } }));
+
+        expect(await store.loadWorkflowRunStep({ workflowName, runId: id, stepId: 'a' })).toEqual({
+          header: makeHeader(id),
+          lastSeq: 3,
+          runToken: token,
+          startStateSeq: 3,
+          stateSeq: 3,
+          statePatchCount: 0,
+          statePatchBytes: 0,
+          stateBytes: 2,
+          steps: { a: ok(1) },
+        });
+        // A step with no entry loads the header with no steps.
+        expect(await store.loadWorkflowRunStep({ workflowName, runId: id, stepId: 'missing' })).toMatchObject({
+          lastSeq: 3,
+          steps: {},
+        });
+        expect(await store.loadWorkflowRunStep({ workflowName, runId: 'nope', stepId: 'a' })).toBeNull();
+        await store.persistWorkflowSnapshot({ workflowName, runId: 'v1', snapshot: makeSnapshot('v1') });
+        expect(await store.loadWorkflowRunStep({ workflowName, runId: 'v1', stepId: 'a' })).toBeNull();
+      });
+
+      it('keeps loading one step while the run is written to', async () => {
+        // The engine reads one step of a live run (a nested run start reads its parent's step), so
+        // concurrent appends must not fail the read, and the header and step it returns must be
+        // the same version of the run. A composed header read + step read used to give up after
+        // enough writes landed in between.
+        const id = runId();
+        await checkpoint(id, makeSnapshot(id, { context: { a: ok(0) } }));
+
+        const writes = Array.from({ length: 20 }, (_, i) =>
+          store.appendWorkflowRunEntries({
+            workflowName,
+            runId: id,
+            header: makeHeader(id),
+            steps: { [`s${i}`]: ok(i) },
+          }),
+        );
+        const reads = Array.from({ length: 20 }, () =>
+          store.loadWorkflowRunStep({ workflowName, runId: id, stepId: 'a' }),
+        );
+        const [results] = await Promise.all([Promise.all(reads), Promise.all(writes)]);
+        for (const stored of results) {
+          expect(stored).toMatchObject({ steps: { a: ok(0) } });
+        }
+      });
     });
 
     describe('step patches', () => {

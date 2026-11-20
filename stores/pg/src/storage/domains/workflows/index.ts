@@ -375,6 +375,8 @@ function toEntries(rows: EntryRow[]): WorkflowRunEntry[] {
  * takes. Both read the entries as of the statement's snapshot, so a write that commits while this
  * one waits for the run row lock isn't seen: its entries for a step stay, under this write's `seq`,
  * where reads ignore them, until the step's next write deletes them (taking its position from them).
+ * A read bounded at a seq at or past such a leftover returns the step's stale result, which the
+ * `loadWorkflowRunSteps` contract allows (see `WorkflowsStorage.loadWorkflowRunSteps`).
  */
 function appendEntriesSql(entriesTable: string, countParam: string, entriesParam: string): string {
   return `e AS (
@@ -1112,6 +1114,37 @@ export class WorkflowsPG extends WorkflowsStorage {
       >;
     } catch (error) {
       throw this.#runError('LOAD_WORKFLOW_RUN_STEPS', workflowName, runId, error);
+    }
+  }
+
+  async loadWorkflowRunStep({
+    workflowName,
+    runId,
+    stepId,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+  }): Promise<(StoredWorkflowRunHeader & { steps: Record<string, StepResult<any, any, any, any>> }) | null> {
+    try {
+      // One statement, so the header and the step are the same version of the run: a write landing
+      // between separate reads can't be half-seen.
+      const row = await this.#db.client.oneOrNone<
+        StoredWorkflowRunHeader & { resourceId: string | null; entries: EntryRow[] }
+      >(
+        `SELECT ${HEADER_COLUMNS}, "resourceId", ${this.#stepEntriesSql('r', '$3')} AS entries
+         FROM ${this.#runsTable()} r WHERE r.workflow_name = $1 AND r.run_id = $2`,
+        [workflowName, runId, [stepId]],
+      );
+      if (!row) return null;
+      const { resourceId, entries, ...header } = row;
+      const steps = Object.fromEntries(latestStepResults(toEntries(entries))) as Record<
+        string,
+        StepResult<any, any, any, any>
+      >;
+      return { ...header, ...(resourceId !== null && { resourceId }), steps };
+    } catch (error) {
+      throw this.#runError('LOAD_WORKFLOW_RUN_STEP', workflowName, runId, error);
     }
   }
 

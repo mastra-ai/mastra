@@ -101,9 +101,6 @@ type RunStorageArgs = {
   getStore(): Promise<WorkflowsStorage | undefined>;
 };
 
-/** Reads of one step before a run that keeps being written to fails the read instead of retrying. */
-const STEP_READ_ATTEMPTS = 5;
-
 /** @internal */
 export function createRunStorage({ storageVersion, ...args }: RunStorageArgs & { storageVersion: 1 | 2 }): RunStorage {
   return storageVersion === 2 ? new RunStorageV2(args) : new RunStorageV1(args);
@@ -428,28 +425,10 @@ class RunStorageV2 implements RunStorage {
 
   async loadStep(stepId: string): Promise<StepSnapshot | null> {
     const store = await this.#getStore();
-    const args = { workflowName: this.#workflowName, runId: this.#runId };
-    // The header and the step must be the same version of the run. A write landing between the
-    // two reads makes the step read null (the run's `lastSeq` moved), so read both again. Reading
-    // the step as of the header's `lastSeq` instead would miss a step whose older entries that
-    // write replaced.
-    for (let attempt = 1; ; attempt++) {
-      const stored = await store?.loadWorkflowRunHeader(args);
-      if (!stored) return null;
-      const context = await store!.loadWorkflowRunSteps({
-        ...args,
-        stepIds: [stepId],
-        expectedLastSeq: stored.lastSeq,
-        expectedRunToken: stored.runToken,
-      });
-      if (context) return { ...stored.header, context } as StepSnapshot;
-      // Unrelated writes to the run must not spin the reader here forever.
-      if (attempt === STEP_READ_ATTEMPTS) {
-        throw new Error(
-          `The steps of run ${this.#runId} kept changing while they were read: ${STEP_READ_ATTEMPTS} reads were invalidated by writes. Read the run again.`,
-        );
-      }
-    }
+    // One store read, so the header and the step are the same version of the run even while other
+    // writers keep appending to it.
+    const stored = await store?.loadWorkflowRunStep({ workflowName: this.#workflowName, runId: this.#runId, stepId });
+    return stored ? ({ ...stored.header, context: stored.steps } as StepSnapshot) : null;
   }
 
   async loadSteps(stepIds: string[], { upToSeq }: { upToSeq?: number } = {}): Promise<StepResults> {
