@@ -20,25 +20,30 @@ export const createPinoStream = (logger: IMastraLogger) => {
 };
 
 /**
- * Args are joined into a shell command (`shell: true` is required for package
- * manager shims on Windows), so only allow characters that appear in package
- * specifiers and CLI flags — never shell metacharacters (CodeQL
- * js/shell-command-constructed-from-input).
+ * Windows needs a shell to run package manager `.cmd` shims, and the shell joins
+ * every token into one command line. There, only allow characters that appear in
+ * package specifiers, paths and CLI flags — never shell metacharacters.
  */
-const SAFE_SHELL_ARG = /^[\w@%+=:,./^~-]*$/;
+const SAFE_SHELL_ARG = /^[\w@%+=:,./\\^~-]*$/;
 
 export function createChildProcessLogger({ logger, root }: { logger: IMastraLogger; root: string }) {
   const pinoStream = createPinoStream(logger);
   return async ({ cmd, args, env }: { cmd: string; args: string[]; env: Record<string, string> }) => {
     try {
-      for (const arg of args) {
-        if (!SAFE_SHELL_ARG.test(arg)) {
-          throw new Error(`Refusing to pass unsafe argument to shell command: ${JSON.stringify(arg)}`);
+      const [bin, ...cmdArgs] = cmd.split(' ').filter(Boolean);
+      if (!bin) throw new Error('Refusing to spawn an empty command');
+      const allArgs = [...cmdArgs, ...args.filter(Boolean)];
+      const shell = process.platform === 'win32';
+      if (shell) {
+        for (const arg of [bin, ...allArgs]) {
+          if (!SAFE_SHELL_ARG.test(arg)) {
+            throw new Error(`Refusing to pass unsafe argument to shell command: ${JSON.stringify(arg)}`);
+          }
         }
       }
-      const subprocess = spawn(cmd, args, {
+      const subprocess = spawn(bin, allArgs, {
         cwd: root,
-        shell: true,
+        shell,
         env,
         // No stdin for the child process — it doesn't need interactive input
         stdio: ['ignore', 'pipe', 'pipe'],
