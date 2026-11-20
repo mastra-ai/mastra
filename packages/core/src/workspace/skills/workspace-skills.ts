@@ -777,8 +777,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       const matchedSkill = this.#resolveByPath(skillPath);
       if (!matchedSkill) continue;
 
+      // A hit from a losing source maps to the winner only when the winner is
+      // unambiguous; with several same-named winners each keeps its own hits.
       const winners = await this.#searchCandidates(this.#skills.get(matchedSkill.name) ?? [matchedSkill]);
-      const skill = winners.find(s => s.path === matchedSkill.path) ?? winners[0] ?? matchedSkill;
+      const skill = winners.find(s => s.path === matchedSkill.path) ?? (winners.length === 1 ? winners[0] : undefined);
+      if (!skill) continue;
 
       // Filter by skill names if specified
       if (skillNames && !skillNames.includes(skill.name)) {
@@ -1642,7 +1645,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       byRank.push(...skillsByPath.values());
       search: for (const skill of byRank) {
         for (const refPath of skill.references) {
-          const content = await this.getReference(skill.name, `references/${refPath}`);
+          const content = await this.getReference(skill.path, `references/${refPath}`);
           if (!content) continue;
           const lower = content.toLowerCase();
           const matched = terms.filter(term => lower.includes(term)).length;
@@ -1677,7 +1680,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       if (!includeReferences) continue;
       for (const refPath of skill.references) {
         if (results.length >= topK) break;
-        const content = await this.getReference(skill.name, `references/${refPath}`);
+        const content = await this.getReference(skill.path, `references/${refPath}`);
         if (content) {
           results.push({
             skillName: skill.name,

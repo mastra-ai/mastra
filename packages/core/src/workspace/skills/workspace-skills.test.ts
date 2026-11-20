@@ -2515,10 +2515,13 @@ Shadow instructions.`;
         source: createMockFilesystem({
           'mastra/.claude/skills/label-bugs/SKILL.md': copy('Label core bugs', 'Apply the core label.'),
           'mastra/.agents/skills/label-bugs/SKILL.md': copy('Label core bugs again', 'Apply the core label too.'),
+          'mastra/.claude/skills/label-bugs/references/triage.md': 'Triage label rules.',
+          'mastra/.agents/skills/label-bugs/references/triage.md': 'Triage label rules too.',
+          'node_modules/@company/skills/label-bugs/SKILL.md': copy('Vendored label skill', 'Zebra label.'),
           'skills/pr-review/SKILL.md':
             '---\nname: pr-review\ndescription: Review pull requests for correctness\n---\n\nRead the diff.',
         }),
-        skills: ['mastra/.claude/skills', 'mastra/.agents/skills', 'skills'],
+        skills: ['mastra/.claude/skills', 'mastra/.agents/skills', 'skills', 'node_modules/@company/skills'],
         ...(searchEngine ? { searchEngine } : {}),
       });
 
@@ -2529,6 +2532,23 @@ Shadow instructions.`;
       expect(new Set(labelHits.map(r => r.skillPath))).toEqual(
         new Set(['mastra/.claude/skills/label-bugs', 'mastra/.agents/skills/label-bugs']),
       );
+
+      // Reference reads must target each copy by path, not the ambiguous name.
+      const referenceHits = await skills.search('triage', { includeReferences: true });
+      expect(new Set(referenceHits.map(r => `${r.skillPath}/${r.source}`))).toEqual(
+        new Set([
+          'mastra/.claude/skills/label-bugs/references/triage.md',
+          'mastra/.agents/skills/label-bugs/references/triage.md',
+        ]),
+      );
+      if (!searchEngine) {
+        // Simple search lists every skill and reference for an empty query.
+        expect(await skills.search('', { includeReferences: true })).not.toHaveLength(0);
+      }
+
+      // The losing external copy is not attributed to either local copy.
+      const vendored = await skills.search('zebra');
+      expect(vendored.filter(r => r.content.includes('Zebra'))).toEqual([]);
 
       await expect(skills.get('label-bugs')).rejects.toThrow('multiple local skills found');
     });
