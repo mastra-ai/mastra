@@ -1,15 +1,17 @@
 import type { GetAgentResponse } from '@mastra/client-js';
-import { CardContent, CardDescription, CardLink, CardTitle } from '@mastra/playground-ui/components/Card';
-import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useId } from 'react';
-import { extractPrompt } from '../../utils/extractPrompt';
+import { extractPrompt } from '../extract-prompt';
+import type { AgentCapability } from './agent-capabilities';
 import { AgentProviderDetails } from './agent-provider-details';
 import { AgentSubagentDetails } from './agent-subagent-details';
 import { AgentToolsDetails } from './agent-tools-details';
 import { AgentWorkflowDetails } from './agent-workflow-details';
+import { CardContent, CardDescription, CardLink, CardTitle } from '@/ds/components/Card';
+import { useLinkComponent } from '@/lib/framework';
 
 export interface AgentCompactCardProps {
   agent: GetAgentResponse;
+  capabilities: readonly AgentCapability[];
 }
 
 const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
@@ -43,14 +45,17 @@ function formatCount(count: number, singular: string) {
   return `${count} ${singular}${count === 1 ? '' : 's'}`;
 }
 
-export function AgentCompactCard({ agent }: AgentCompactCardProps) {
+export function AgentCompactCard({ agent, capabilities }: AgentCompactCardProps) {
   const { paths, Link } = useLinkComponent();
   const accessibleId = useId();
   const instructions = extractPrompt(agent.instructions).replace(/\s+/g, ' ').trim();
   const instructionPreview = getInstructionPreview(instructions);
-  const agentsCount = Object.keys(agent.agents ?? {}).length;
-  const toolsCount = Object.keys(agent.tools ?? {}).length;
-  const workflowsCount = Object.keys(agent.workflows ?? {}).length;
+  const showWorkflows = capabilities.includes('workflows');
+  const showAgents = capabilities.includes('agents');
+  const showTools = capabilities.includes('tools');
+  const agentsCount = showAgents ? Object.keys(agent.agents ?? {}).length : 0;
+  const toolsCount = showTools ? Object.keys(agent.tools ?? {}).length : 0;
+  const workflowsCount = showWorkflows ? Object.keys(agent.workflows ?? {}).length : 0;
   const capabilitiesCount = agentsCount + toolsCount + workflowsCount;
 
   return (
@@ -80,8 +85,14 @@ export function AgentCompactCard({ agent }: AgentCompactCardProps) {
 
         <span id={`${accessibleId}-metadata`} className="sr-only">
           {agent.provider ? `${agent.provider} provider. ` : 'No provider configured. '}
-          {formatCount(workflowsCount, 'workflow')}, {formatCount(agentsCount, 'agent')},{' '}
-          {formatCount(toolsCount, 'tool')}.
+          {[
+            showWorkflows && formatCount(workflowsCount, 'workflow'),
+            showAgents && formatCount(agentsCount, 'agent'),
+            showTools && formatCount(toolsCount, 'tool'),
+          ]
+            .filter(Boolean)
+            .join(', ')}
+          .
         </span>
 
         <div className="flex min-w-0 items-center justify-between gap-4">
@@ -90,9 +101,9 @@ export function AgentCompactCard({ agent }: AgentCompactCardProps) {
           </CardDescription>
 
           <CardDescription className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-            <AgentWorkflowDetails agentName={agent.name} workflows={agent.workflows} />
-            <AgentSubagentDetails agentName={agent.name} agents={agent.agents} />
-            <AgentToolsDetails agentName={agent.name} tools={agent.tools} />
+            {showWorkflows ? <AgentWorkflowDetails agentName={agent.name} workflows={agent.workflows} /> : null}
+            {showAgents ? <AgentSubagentDetails agentName={agent.name} agents={agent.agents} /> : null}
+            {showTools ? <AgentToolsDetails agentName={agent.name} tools={agent.tools} /> : null}
             {capabilitiesCount === 0 ? <span>—</span> : null}
           </CardDescription>
         </div>

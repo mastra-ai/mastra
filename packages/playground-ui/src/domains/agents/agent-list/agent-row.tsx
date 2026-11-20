@@ -1,18 +1,20 @@
 import type { GetAgentResponse } from '@mastra/client-js';
-import type { useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
-import { DataList } from '@mastra/playground-ui/components/DataList';
-import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useRef } from 'react';
 import type { SyntheticEvent } from 'react';
-import { extractPrompt } from '../../utils/extractPrompt';
+import { extractPrompt } from '../extract-prompt';
+import type { AgentCapability } from './agent-capabilities';
 import { AgentProviderDetails } from './agent-provider-details';
 import { AgentSubagentDetails } from './agent-subagent-details';
 import { AgentToolsDetails } from './agent-tools-details';
 import { AgentWorkflowDetails } from './agent-workflow-details';
+import type { useDataListKeyboard } from '@/ds/components/DataList';
+import { DataList } from '@/ds/components/DataList';
+import { useLinkComponent } from '@/lib/framework';
 
 export interface AgentRowProps {
   agent: GetAgentResponse;
   rowProps: ReturnType<ReturnType<typeof useDataListKeyboard>['getRowProps']>;
+  capabilities: readonly AgentCapability[];
 }
 
 // Trailing cells host popovers: a click there must open the popover, not
@@ -25,7 +27,7 @@ const stopPropagation = (event: SyntheticEvent) => event.stopPropagation();
  * `useDataListKeyboard({ global: true })`: the wrapper owns focus/roving and
  * forwards activation to the inner link via `linkRef.current.click()`.
  */
-export function AgentRow({ agent, rowProps }: AgentRowProps) {
+export function AgentRow({ agent, rowProps, capabilities }: AgentRowProps) {
   const { paths, Link } = useLinkComponent();
   const linkRef = useRef<HTMLAnchorElement>(null);
 
@@ -56,15 +58,21 @@ export function AgentRow({ agent, rowProps }: AgentRowProps) {
       <DataList.Cell className="justify-center overflow-visible" onClick={stopPropagation}>
         <AgentProviderDetails agentName={agent.name} provider={agent.provider} modelId={agent.modelId} />
       </DataList.Cell>
-      <DataList.Cell className="justify-center overflow-visible" onClick={stopPropagation}>
-        <AgentWorkflowDetails agentName={agent.name} workflows={agent.workflows} />
-      </DataList.Cell>
-      <DataList.Cell className="justify-center overflow-visible" onClick={stopPropagation}>
-        <AgentSubagentDetails agentName={agent.name} agents={agent.agents} />
-      </DataList.Cell>
-      <DataList.Cell className="justify-center overflow-visible" onClick={stopPropagation}>
-        <AgentToolsDetails agentName={agent.name} tools={agent.tools} />
-      </DataList.Cell>
+      {capabilities.includes('workflows') ? (
+        <DataList.Cell className="justify-center overflow-visible" onClick={stopPropagation}>
+          <AgentWorkflowDetails agentName={agent.name} workflows={agent.workflows} />
+        </DataList.Cell>
+      ) : null}
+      {capabilities.includes('agents') ? (
+        <DataList.Cell className="justify-center overflow-visible" onClick={stopPropagation}>
+          <AgentSubagentDetails agentName={agent.name} agents={agent.agents} />
+        </DataList.Cell>
+      ) : null}
+      {capabilities.includes('tools') ? (
+        <DataList.Cell className="justify-center overflow-visible" onClick={stopPropagation}>
+          <AgentToolsDetails agentName={agent.name} tools={agent.tools} />
+        </DataList.Cell>
+      ) : null}
     </DataList.RowWrapper>
   );
 }

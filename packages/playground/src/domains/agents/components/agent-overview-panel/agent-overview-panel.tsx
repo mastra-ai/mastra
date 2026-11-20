@@ -7,6 +7,7 @@ import { AgentConfigSurface } from '@mastra/playground-ui/domains/agents/config/
 import { AgentMetadataSection } from '@mastra/playground-ui/domains/agents/config/agent-metadata-section';
 import { AgentSystemPrompt } from '@mastra/playground-ui/domains/agents/config/agent-system-prompt';
 import { AgentMetadataWorkspaceToolsList } from '@mastra/playground-ui/domains/agents/config/agent-workspace-tools-list';
+import { extractPrompt } from '@mastra/playground-ui/domains/agents/extract-prompt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { IconBox2 } from '@mastra/playground-ui/icons/central/IconBox2';
@@ -28,7 +29,6 @@ import {
 } from '@mastra/react/hooks/agents';
 import type { ComponentProps } from 'react';
 import { useWatch } from 'react-hook-form';
-import { extractPrompt } from '../../utils/extractPrompt';
 import { AgentChannels } from '../agent-channels/agent-channels';
 import {
   AgentMetadataBrowserToolsList,

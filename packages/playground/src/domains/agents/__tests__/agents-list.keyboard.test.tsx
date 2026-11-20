@@ -1,8 +1,8 @@
 import type { GetAgentResponse } from '@mastra/client-js';
+import { AgentsList } from '@mastra/playground-ui/domains/agents/agent-list/agents-list';
 import { fireEvent, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { AgentsList } from '../agents-list';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { expectArrowNavigation, expectRovingTabindex, interactiveRows } from '@/test/keyboard';
 import { TestLinkProvider } from '@/test/link-provider';
 import { renderWithProviders } from '@/test/render';

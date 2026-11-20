@@ -1,5 +1,5 @@
 import type { GetAgentResponse } from '@mastra/client-js';
-import { sortBy } from '@mastra/playground-ui/sort/sort-by';
+import { sortBy } from '@/lib/sort/sort-by';
 
 export type AgentsSort = 'default' | 'name-asc' | 'name-desc';
 

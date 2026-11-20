@@ -1,10 +1,10 @@
 import type { GetAgentResponse } from '@mastra/client-js';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { CardTitle } from '@mastra/playground-ui/components/Card';
-import { HoverCard, HoverCardContent, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { useId } from 'react';
+import { Button } from '@/ds/components/Button';
+import { CardTitle } from '@/ds/components/Card';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/ds/components/HoverCard';
+import { Txt } from '@/ds/components/Txt';
+import { AgentIcon } from '@/ds/icons/AgentIcon';
 
 export interface AgentSubagentDetailsProps {
   agentName: string;

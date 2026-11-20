@@ -1,6 +1,6 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
+import { Button } from '@/ds/components/Button';
+import { EmptyState } from '@/ds/components/EmptyState';
+import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
 
 export const NoAgentsInfo = () => (
   <EmptyState

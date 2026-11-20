@@ -1,14 +1,17 @@
 import type { GetAgentResponse } from '@mastra/client-js';
-import { Card, CardContent } from '@mastra/playground-ui/components/Card';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import type { AgentCapability } from './agent-capabilities';
+import { ALL_AGENT_CAPABILITIES } from './agent-capabilities';
 import { AgentCompactCard } from './agent-compact-card';
+import { Card, CardContent } from '@/ds/components/Card';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Skeleton } from '@/ds/components/Skeleton';
+import { Txt } from '@/ds/components/Txt';
 
 export interface AgentsCompactGridProps {
   agents: GetAgentResponse[];
   isLoading: boolean;
   hasSearch: boolean;
+  capabilities?: readonly AgentCapability[];
 }
 
 const compactGridClassName = 'grid grid-cols-1 gap-2 p-1 md:grid-cols-2';
@@ -32,7 +35,12 @@ function AgentsCompactGridSkeleton() {
   );
 }
 
-export function AgentsCompactGrid({ agents, isLoading, hasSearch }: AgentsCompactGridProps) {
+export function AgentsCompactGrid({
+  agents,
+  isLoading,
+  hasSearch,
+  capabilities = ALL_AGENT_CAPABILITIES,
+}: AgentsCompactGridProps) {
   return (
     <ScrollArea orientation="vertical" className="size-full">
       {isLoading ? <AgentsCompactGridSkeleton /> : null}
@@ -45,7 +53,7 @@ export function AgentsCompactGrid({ agents, isLoading, hasSearch }: AgentsCompac
         <ul aria-label="Agents compact grid" className={compactGridClassName}>
           {agents.map(agent => (
             <li key={agent.id} className="min-w-0">
-              <AgentCompactCard agent={agent} />
+              <AgentCompactCard agent={agent} capabilities={capabilities} />
             </li>
           ))}
         </ul>

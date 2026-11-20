@@ -1,10 +1,10 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { CardTitle } from '@mastra/playground-ui/components/Card';
-import { HoverCard, HoverCardContent, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
-import { TextAndIcon } from '@mastra/playground-ui/components/Text';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useId } from 'react';
-import { ProviderLogo } from '../agent-metadata/provider-logo';
+import { ProviderLogo } from '@/domains/llm/provider-logo';
+import { Button } from '@/ds/components/Button';
+import { CardTitle } from '@/ds/components/Card';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/ds/components/HoverCard';
+import { TextAndIcon } from '@/ds/components/Text';
+import { Txt } from '@/ds/components/Txt';
 
 export interface AgentProviderDetailsProps {
   agentName: string;

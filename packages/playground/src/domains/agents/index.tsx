@@ -5,7 +5,7 @@ export * from './components/agent-metadata';
 export * from './components/chat-threads';
 export * from './components/agent-combobox';
 export * from './components/composer-model-switcher';
-export * from './utils/extractPrompt';
+export * from '@mastra/playground-ui/domains/agents/extract-prompt';
 export * from './components/memory-sidebar/agent-memory';
 export * from './components/agent-layout';
 
@@ -25,5 +25,5 @@ export * from './components/agent-cms-form-shell';
 export * from './components/agent-version-panel';
 export * from './components/agent-playground';
 export * from './components/agent-page-tabs';
-export * from './components/agent-list/agents-list';
-export * from './components/agent-list/no-agents-info';
+export * from '@mastra/playground-ui/domains/agents/agent-list/agents-list';
+export * from '@mastra/playground-ui/domains/agents/agent-list/no-agents-info';

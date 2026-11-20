@@ -1,10 +1,10 @@
 import type { GetAgentResponse } from '@mastra/client-js';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { CardDescription, CardTitle } from '@mastra/playground-ui/components/Card';
-import { HoverCard, HoverCardContent, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { useId } from 'react';
+import { Button } from '@/ds/components/Button';
+import { CardDescription, CardTitle } from '@/ds/components/Card';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/ds/components/HoverCard';
+import { Txt } from '@/ds/components/Txt';
+import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 
 export interface AgentWorkflowDetailsProps {
   agentName: string;

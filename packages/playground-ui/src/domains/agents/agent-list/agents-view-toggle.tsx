@@ -1,7 +1,7 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
-import { IconLayoutColumn } from '@mastra/playground-ui/icons/central/IconLayoutColumn';
-import { IconListBullets } from '@mastra/playground-ui/icons/central/IconListBullets';
+import { Button } from '@/ds/components/Button';
+import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { IconLayoutColumn } from '@/ds/icons/central/IconLayoutColumn';
+import { IconListBullets } from '@/ds/icons/central/IconListBullets';
 
 export type AgentsView = 'compact' | 'list';
 
