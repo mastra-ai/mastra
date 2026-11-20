@@ -367,10 +367,15 @@ export function createLocalKnowledgeImporterHost(
       if (peekRun?.deadlineAt && peekRun.deadlineAt.getTime() <= Date.now()) {
         throw conflict('run_not_active', 'The run is past its deadline.');
       }
-      // Read before the transaction: a bindings function may do its own I/O, which never belongs
-      // inside the write transaction. A different run row under lock is caught by the generation fence.
-      if (!peekRun) throw conflict('run_not_active', 'The run is not running.');
-      const runAuthor = author((await bindingFor(peekRun.bindingId)).binding);
+      // Resolved before the transaction, since a bindings function may do its own I/O, but only
+      // surfaced once the locked checks below find new work: a concurrent identical flush may commit
+      // meanwhile, and its replay must not depend on the bindings function.
+      const resolvedAuthor: { author: string } | { error: unknown } = peekRun
+        ? await bindingFor(peekRun.bindingId).then(
+            ({ binding }) => ({ author: author(binding) }),
+            error => ({ error }),
+          )
+        : { error: conflict('run_not_active', 'The run is not running.') };
       // One absolute deadline for the whole write transaction (O3 §C‴), capped by the run's.
       const deadlineAt = Math.min(budgetAt, peekRun?.deadlineAt?.getTime() ?? Infinity);
       let embeds: KnowledgeImportEmbedJob[] = [];
@@ -401,6 +406,7 @@ export function createLocalKnowledgeImporterHost(
             if (flush.seq !== run.lastSeq + 1)
               throw conflict('seq_mismatch', 'The flush seq is not the committed seq + 1.');
 
+            if ('error' in resolvedAuthor) throw resolvedAuthor.error;
             const binding = await importers.getBinding(run.bindingId);
             if (!binding) throw conflict('run_not_active', 'The run has no binding.');
             const [scope] = await tx.getScopesByAddress([parseKnowledgeImportTarget(binding.target).scope]);
@@ -414,7 +420,7 @@ export function createLocalKnowledgeImporterHost(
               scope,
               runId: run.id,
               ops: body.ops,
-              provenance: { author: runAuthor },
+              provenance: { author: resolvedAuthor.author },
               // After a settle slice timed out, the next uses half as many nodes; after three in a
               // row the run stops settling (O3 §C″).
               ...(timeouts < SETTLE_MAX_TIMEOUTS

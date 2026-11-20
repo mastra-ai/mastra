@@ -111,4 +111,82 @@ describe('createKnowledgeImporterHost', () => {
     expect((await host.startRun('b1')).status).toBe('started');
     expect(await host.heartbeat(first.runId, first.generation)).toEqual({ cancel: true });
   });
+
+  describe('a flush whose bindings read fails while an identical flush commits', () => {
+    const ops: KnowledgeImporterOp[] = [{ op: 'upsert', item: { sourceId: 'p1', title: 'P1', body: 'first' } }];
+
+    /** Bindings whose `park`-th read waits until the test rejects it; every other read resolves. */
+    function parkedBindings(park: number) {
+      let reads = 0;
+      let reject!: (error: Error) => void;
+      let reached!: () => void;
+      const parkedAt = new Promise<void>(resolve => (reached = resolve));
+      const bindings = async () => {
+        reads += 1;
+        if (reads !== park) return [binding('b1', 'docs:acme#notion')];
+        reached();
+        return new Promise<never>((_, fail) => (reject = fail));
+      };
+      return { bindings, parkedAt, rejectRead: (error: Error) => reject(error) };
+    }
+
+    async function race(retryOps: KnowledgeImporterOp[]) {
+      const { knowledge } = setup();
+      // Read 1 is startRun; read 2 is the retry's flush, after its receipt lookup missed.
+      const gate = parkedBindings(2);
+      const host = createKnowledgeImporterHost(knowledge, { bindings: gate.bindings });
+      const started = await host.startRun('b1');
+      if (started.status !== 'started') throw new Error('not started');
+      const flushOf = async (flushOps: KnowledgeImporterOp[]) =>
+        host.flush({
+          runId: started.runId,
+          generation: started.generation,
+          seq: 1,
+          digest: await knowledgeImporterFlushDigest({ ops: flushOps }),
+          ops: flushOps,
+        });
+
+      const retry = flushOf(retryOps);
+      await gate.parkedAt;
+      const committed = await flushOf(ops);
+      gate.rejectRead(new Error('bindings store is down'));
+      return { committed, retry };
+    }
+
+    it('returns the committed receipt to an exact replay', async () => {
+      const { committed, retry } = await race(ops);
+      expect(committed).toMatchObject({ seq: 1, created: 1 });
+      await expect(retry).resolves.toEqual(committed);
+    });
+
+    it('refuses changed content for the committed seq as digest_mismatch', async () => {
+      const changed: KnowledgeImporterOp[] = [{ op: 'upsert', item: { sourceId: 'p1', title: 'P1', body: 'changed' } }];
+      const { retry } = await race(changed);
+      await expect(retry).rejects.toMatchObject({ code: 'digest_mismatch' });
+    });
+
+    it('surfaces the bindings failure when the flush is new work', async () => {
+      const { knowledge } = setup();
+      let reads = 0;
+      const host = createKnowledgeImporterHost(knowledge, {
+        bindings: async () => {
+          reads += 1;
+          if (reads > 1) throw new Error('bindings store is down');
+          return [binding('b1', 'docs:acme#notion')];
+        },
+      });
+      const started = await host.startRun('b1');
+      if (started.status !== 'started') throw new Error('not started');
+      await expect(
+        host.flush({
+          runId: started.runId,
+          generation: started.generation,
+          seq: 1,
+          digest: await knowledgeImporterFlushDigest({ ops }),
+          ops,
+        }),
+      ).rejects.toThrow();
+      expect(await pageAt(knowledge, 'notion/p1')).toBeNull();
+    });
+  });
 });
