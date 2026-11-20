@@ -3589,6 +3589,9 @@ export class DurableAgent<
           }
         : options?.memory;
 
+      // Another agent instance in this process may already run this run from the shared registry slot;
+      // preparation replaces it, so a rollback must put it back rather than empty the slot.
+      const globalEntryBeforePrepare = globalRunRegistry.has(runId) ? globalRunRegistry.get(runId) : undefined;
       // The resume below applies the suspended run's scopes, so preparation does not resolve them again.
       await this.prepare([], {
         [SCOPES_ALREADY_APPLIED]: true,
@@ -3610,9 +3613,10 @@ export class DurableAgent<
       const preparedGlobalEntry = getRunRegistryEntry(runId, this.#mastra);
       coldAttempt.prepared(() => {
         if (preparedEntry && this.#runRegistry.get(runId) === preparedEntry) this.#runRegistry.cleanup(runId);
-        if (preparedGlobalEntry && getRunRegistryEntry(runId, this.#mastra) === preparedGlobalEntry) {
-          deleteRunRegistryEntry(runId, this.#mastra);
-        }
+        if (!preparedGlobalEntry || preparedGlobalEntry === globalEntryBeforePrepare) return;
+        if (getRunRegistryEntry(runId, this.#mastra) !== preparedGlobalEntry) return;
+        if (globalEntryBeforePrepare) globalRunRegistry.set(runId, globalEntryBeforePrepare);
+        else deleteRunRegistryEntry(runId, this.#mastra);
       });
     }
     if (!entry) {

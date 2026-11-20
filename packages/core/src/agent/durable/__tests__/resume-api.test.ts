@@ -2170,6 +2170,93 @@ describe.each([DurableAgent, EventedAgent])('resume schema preflight (%#)', Agen
     }
   });
 
+  // Technical: a second agent instance has its own local registry, so it rebuilt the run over the
+  // accepted resume's shared registry entry, and its rollback then emptied that slot.
+  it('a resume rejected on another agent instance leaves the accepted run its timeout', async () => {
+    let releaseRejected!: () => void;
+    const rejectedMayFinish = new Promise<void>(resolve => {
+      releaseRejected = resolve;
+    });
+    let markToolStarted!: () => void;
+    const toolStarted = new Promise<void>(resolve => {
+      markToolStarted = resolve;
+    });
+    const abortedByDeadline: boolean[] = [];
+    const ask = createTool({
+      id: 'ask',
+      description: 'Ask for confirmation',
+      inputSchema: z.object({ action: z.string() }),
+      suspendSchema: z.object({}),
+      resumeSchema: z.object({ confirmed: z.boolean() }),
+      execute: async (_input, context) => {
+        if (!context?.agent?.resumeData) return context?.agent?.suspend({});
+        markToolStarted();
+        const signal = context.abortSignal;
+        await new Promise<void>(resolve => {
+          const timer = setTimeout(resolve, 1500);
+          signal?.addEventListener('abort', () => {
+            clearTimeout(timer);
+            resolve();
+          });
+        });
+        abortedByDeadline.push(signal?.aborted ?? false);
+        return { confirmed: context.agent.resumeData.confirmed };
+      },
+    });
+    const agent = new Agent({
+      id: 'resume-deadline-agent',
+      name: 'Resume Deadline Agent',
+      instructions: 'Ask for confirmation',
+      model: createSuspendingThenTextModel('ask', ['Confirmed']),
+      tools: async ({ requestContext }) => {
+        if (requestContext.get('tenant') === 'rejected-caller') await rejectedMayFinish;
+        return { ask };
+      },
+    });
+    const pubsub = new EventEmitterPubSub();
+    const durable = new AgentClass({ agent, pubsub });
+    const host = new Mastra({ agents: { durable }, storage: new InMemoryStore(), logger: false });
+    try {
+      const initial = await durable.stream('Confirm', {
+        closeOnSuspend: true,
+        requestContext: new RequestContext([['tenant', 'acme']]),
+      });
+      await drain(initial.output.fullStream);
+      await globalRunRegistry.get(initial.runId)?.workflowExecution;
+      durable.runRegistry.clear();
+      globalRunRegistry.delete(initial.runId);
+      const otherInstance = new AgentClass({ agent, pubsub });
+      otherInstance.__setMastra(host);
+
+      const valid = durable.resume(
+        initial.runId,
+        { confirmed: true },
+        {
+          runId: initial.runId,
+          untilIdle: true,
+          requestContext: new RequestContext([['requestId', 'valid']]),
+          modelSettings: { timeout: { totalMs: 300 } },
+        },
+      );
+      const rejected = otherInstance.resume(
+        initial.runId,
+        { confirmed: 'yes' },
+        { runId: initial.runId, requestContext: new RequestContext([['tenant', 'rejected-caller']]) },
+      );
+      await Promise.race([toolStarted, new Promise(resolve => setTimeout(resolve, 100))]);
+      releaseRejected();
+
+      // The invalid resume is refused and the accepted one still stops at its deadline.
+      await expect(rejected).rejects.toBeInstanceOf(Error);
+      await expect((await valid).output.getFullOutput()).rejects.toThrow('modelSettings.timeout.totalMs');
+      await vi.waitFor(() => expect(abortedByDeadline).toEqual([true]));
+    } finally {
+      releaseRejected();
+      await host.shutdown({ drainTimeout: 1000 });
+      await pubsub.close();
+    }
+  });
+
   // Technical: untilIdle accepted the resume, then the resume() it re-enters validated again; a tool
   // lookup failing there rejected the call after the run already carried the caller's context.
   it.each(['warm', 'cold'].flatMap(registry => [1, 2, 3].map(failingLookup => ({ registry, failingLookup }))))(
