@@ -35,7 +35,9 @@ export function toWindowsShellArg(arg: string) {
   if (UNQUOTABLE_WINDOWS_ARG.test(arg)) {
     throw new Error(`Refusing to pass unsafe argument to shell command: ${JSON.stringify(arg)}`);
   }
-  return PLAIN_WINDOWS_ARG.test(arg) ? arg : `"${arg}"`;
+  if (PLAIN_WINDOWS_ARG.test(arg)) return arg;
+  // Double trailing backslashes so they do not escape the closing quote.
+  return `"${arg.replace(/\\+$/, run => run + run)}"`;
 }
 
 export function toWindowsShellArgs(bin: string, args: string[]) {

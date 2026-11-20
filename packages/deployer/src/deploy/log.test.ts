@@ -66,6 +66,10 @@ describe('toWindowsShellArg', () => {
     expect(toWindowsShellArg(arg)).toBe(`"${arg}"`);
   });
 
+  it('doubles trailing backslashes so they do not escape the closing quote', () => {
+    expect(toWindowsShellArg('C:\\John Smith\\out\\')).toBe('"C:\\John Smith\\out\\\\"');
+  });
+
   it.each(['"a"', 'a!b', 'a\nb', 'a\rb'])('refuses %j, which cmd.exe expands even inside quotes', arg => {
     expect(() => toWindowsShellArg(arg)).toThrow('Refusing to pass unsafe argument');
   });
