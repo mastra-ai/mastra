@@ -13,6 +13,12 @@ import {
 /** Fixed clock for comparing selections: filter and date changes move the query, time passing does not. */
 const SELECTION_CLOCK = new Date(0);
 
+/** The root projection a trace query key asks for (`traceQueryKey` holds the query second). */
+const rootSourceOfKey = (queryKey: readonly unknown[] | undefined) => {
+  const query = queryKey?.[1];
+  return typeof query === 'object' && query !== null && 'rootSource' in query ? query.rootSource : undefined;
+};
+
 export interface UseTracesListSourceArgs {
   query: (now: Date) => TraceQueryArgs;
   orderBy?: TraceQueryArgs['orderBy'];
@@ -78,7 +84,13 @@ export function useTracesListSource({
 
   const result = useTraceQuery({
     queryOptions: {
-      traceQuery: { refetchInterval, refetchOnWindowFocus },
+      traceQuery: {
+        refetchInterval,
+        refetchOnWindowFocus,
+        // The previous rows stand in while the next query loads, unless they come from another root projection.
+        placeholderData: (previous, previousQuery) =>
+          rootSourceOfKey(previousQuery?.queryKey) === query.rootSource ? previous : undefined,
+      },
       legacy: { refetchInterval, refetchOnWindowFocus },
     },
     query,

@@ -1,5 +1,476 @@
 # @mastra/playground-ui
 
+## 71.0.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`40e2880`](https://github.com/mastra-ai/mastra/commit/40e288024e8f7a1cda436ff37ae94d52cc597b13), [`40e2880`](https://github.com/mastra-ai/mastra/commit/40e288024e8f7a1cda436ff37ae94d52cc597b13), [`40e2880`](https://github.com/mastra-ai/mastra/commit/40e288024e8f7a1cda436ff37ae94d52cc597b13)]:
+  - @mastra/core@1.86.0-alpha.1
+  - @mastra/client-js@1.61.2-alpha.1
+  - @mastra/react@1.16.0-alpha.1
+
+## 71.0.0-alpha.0
+
+### Minor Changes
+
+- `TabList` takes `overflow="menu"`: tabs that don't fit fold into a "+N" menu after the last one that does, with the open tab always in the row. It was only available on contained tabs; the default still scrolls. ([#30833](https://github.com/mastra-ai/mastra/pull/30833))
+
+  ```tsx
+  <Tabs defaultTab="agents">
+    <TabList variant="pill" size="sm" overflow="menu">
+      <Tab value="agents">Agents</Tab>
+      <Tab value="tools">Tools</Tab>
+    </TabList>
+  </Tabs>
+  ```
+
+  Dashboard tables with several views, such as the Metrics page's Breakdown, now list them as pill tabs under the title ("Agents", "Tools", …) instead of a dropdown in the title: every view that fits is one click away, the rest are in the "+N" menu, and switching is instant. The standalone `BreakdownCard` keeps its title menu.
+
+- Added `CopyField` (`@mastra/playground-ui/components/CopyField`) for read-only values people copy, such as IDs, keys and URLs. It has the field look with an inset copy button, and long values are cut in the middle instead of clipped. The Copy button copies the whole value, and so does copying a selection inside a shortened value. ([#30510](https://github.com/mastra-ai/mastra/pull/30510))
+
+  `CopyInput` is deprecated and now renders a `CopyField`, which takes only `value`, `label` and `className`: drop `disabled` and other input props, and switch the import.
+
+  ```tsx
+  <SettingsItem title="Organization ID" description="Useful when contacting support.">
+    <CopyField value={organization.id} label="organization ID" />
+  </SettingsItem>
+  ```
+
+  ```tsx
+  // Before
+  const before = <CopyInput value={id} label="project ID" disabled={!canView} />;
+  // After: there's no disabled state, so render the field only when the value can be copied
+  const after = canView ? <CopyField value={id} label="project ID" /> : null;
+  ```
+
+- Added four `EmptyStateArt` drawings: `filesystems` (a folder tray), `sandboxes` (a sandbox with a sandcastle), `vault` (an access vault wired to services), and `secrets` (a cryptex). `connect` is now a switchboard where accounts plug into an agent, `alerts` is a phone that gets a notification, and the `models` cartridges light up in each provider's color on hover. Every drawing now stands on a soft hatched shadow instead of a base plate, and all drawings render at the same visual size. ([#30861](https://github.com/mastra-ai/mastra/pull/30861))
+
+  ```tsx
+  <EmptyState layout="split" iconSlot={<EmptyStateArt name="sandboxes" />} titleSlot="Give your agents a sandbox" />
+  ```
+
+- Added `CardIllustration`, a framed plate for a small drawing at the top of a card. It is the same plate the illustrated `InfoTooltip` panels use, and every plate in a set is the same size, so the drawings line up. The plate is hidden from screen readers, so the card's title and description name it. ([#30960](https://github.com/mastra-ai/mastra/pull/30960))
+
+  ```tsx
+  <CardLink href="/alerts/new?template=budget" className="block h-full">
+    <CardContent className="flex flex-col gap-3">
+      <CardIllustration>
+        <BudgetDrawing />
+      </CardIllustration>
+      <CardTitle>Daily cost budget</CardTitle>
+    </CardContent>
+  </CardLink>
+  ```
+
+  Tag the part of a drawing that matters with `data-emphasis="grow-x"` (a horizontal bar gets longer), `"grow-y"` (a vertical bar gets taller), or `"pop"` (an item grows in place). When the card is hovered or focused, that part moves, the same way on every card (no motion with reduced motion, on touch screens, or on cards that can't be clicked). Paint it with `bg-(--illustration-accent)`, and pick its color with `tone` on `CardIllustration`: `destructive` (default), `warning`, `info`, or `success`.
+
+  Interactive cards also mark `aria-current="true"` by lighting their rim in the focus color, so the card for the page or item already open stays visible in a set.
+
+- Added `MarkdownEditor`, a markdown field that reads like the rendered page. Headings, bold, links, lists and quotes show formatted, and their markdown appears only on the line or span the caret is in. The value you get back is exactly the markdown that was typed, never rewritten. ([#30893](https://github.com/mastra-ai/mastra/pull/30893))
+
+  - Select text to bold, italicize, format as code or link it, from a floating toolbar or with ⌘B, ⌘I, ⌘E and ⌘K (Ctrl on Windows and Linux).
+  - Type `/` at the start of a line to turn it into a heading, list, quote, code block or divider.
+  - Paste a URL over selected text to link it.
+
+  ```tsx
+  import { MarkdownEditor } from '@mastra/playground-ui/components/MarkdownEditor';
+
+  <MarkdownEditor aria-label="Instructions" value={instructions} onChange={setInstructions} variant="inline" />;
+  ```
+
+- The trace side panel and the thread side panel are now compound components. You build them from parts, give each part the data you loaded yourself, and decide what goes where. An app with its own transport (for example an MCP server app) can rebuild them, leave parts out, swap one part for its own, or add its own elements. No part fetches, except the `Live*` parts Studio composes them with (see `Added`): the spans, the open span, the full trace, scorers, scores, feedback and the thread's turns come in as props typed with the `@mastra/client-js` response types, and actions go out through callbacks. ([#30804](https://github.com/mastra-ai/mastra/pull/30804))
+
+  Every part except those `Live*` ones renders with no provider at all (no Mastra client, no React Query, no Studio router), so the panels work the same inside an app that has none of them. The turn messages and a span's tool calls are drawn from what the trace recorded: a sub-agent's answer comes from its call's output, a workflow's from its input and result.
+
+  Layout parts take named slots (`header`, `body`, `side`, `main`, `span`, `messages`, `feedback`…), so a slot you leave empty renders nothing, and an element you pass renders exactly there.
+
+  ```tsx
+  import { TracePanel } from '@mastra/playground-ui/domains/traces/components/trace-panel';
+
+  <TracePanel
+    traceId={trace.traceId}
+    spans={trace.spans}
+    selectedSpanId={spanId}
+    onSpanSelect={setSpanId}
+    onClose={close}
+  >
+    <TracePanel.Frame
+      variant="inline"
+      header={
+        <TracePanel.Header
+          title={<TracePanel.TraceId />}
+          actions={<TracePanel.DownloadButton onDownload={downloadTrace} />}
+        />
+      }
+      body={
+        <TracePanel.Body
+          side={<TracePanel.Side feedback={<MyFeedback traceId={trace.traceId} />} />}
+          main={<TracePanel.Main spans={<TracePanel.Spans traceSpans={trace.spans} />} />}
+          span={<TracePanel.SpanDetail span={selectedSpan} traceSpans={trace.spans} />}
+        />
+      }
+    />
+  </TracePanel>;
+  ```
+
+  ```tsx
+  import { ThreadTrace } from '@mastra/playground-ui/domains/traces/components/thread-trace';
+
+  <ThreadTrace traceIds={ids} spanDetail={<ThreadTrace.SpanDetail span={selectedSpan} />}>
+    {turns.map((turn, index) => (
+      <ThreadTrace.Row
+        key={turn.traceId}
+        traceId={turn.traceId}
+        label={`Turn ${index + 1}`}
+        messages={<ThreadTrace.TurnMessages spans={turn.spans} />}
+        scores={<MyScores traceId={turn.traceId} />}
+        spans={<ThreadTrace.Spans spans={turn.spans} />}
+      />
+    ))}
+  </ThreadTrace>;
+  ```
+
+  **Added**
+
+  - `TracePanel`, a state-only root. `TracePanel.Frame` (drawer or inline) takes `banner`, `header`, `summary`, `body` and `dialogs`. `TracePanel.Header` takes `navigation`, `title` and `actions`; `TracePanel.Summary` takes `entity`, `status` and `stats`; `TracePanel.Body` takes `side`, `main` and `span`; `TracePanel.Side` takes `messages`, `feedback`, `scores` (one tab per filled view) and `actions`; `TracePanel.Main` takes `toolbar`, `notices` and `spans`. Leaf parts cover the navigation, trace id, score, download, dataset, open page and close buttons, the search, the tree/timeline switch, the spans (with `leading` and `renderRowTrailing` for your own cells) and the open span.
+  - `SpanDataPanel`, the span detail as parts: `header`, `details`, `input`, `output` and `feedback` slots on the root, with `Header`, `Identity`, `ShowTraceButton`, `Navigation`, `CloseButton`, `Details`, `Input` and `Output` parts. A tab slot you leave empty drops that tab. `SpanDataPanelView` stays as the ready-made composition with every tab.
+  - `ThreadTrace`: the root takes a `spanDetail` slot and a controlled `selectedSpan`; `ThreadTrace.Row` takes `label`, `link`, `messages`, `feedback`, `scores`, `spans` and `detailsHeader`, plus a controlled `tab`. Parts: `TurnMessages`, `TraceLink`, `Spans`, `SpanDetail`, `Loading`, `Empty` and `Error`.
+  - `TraceThreadPanelView`, `TraceScoresListView` and `TraceScoresTabView`, and `FeedbackThread` is exported with its props.
+  - `useThreadTraceSpans` and `useTraceSearchResult` data hooks.
+  - `RecordedToolCard`, which draws a tool call read back from a record without any request or provider. The parts that draw tool calls (`TracePanel.Messages`, `ThreadTrace.TurnMessages`, `SpanDataPanel.Output`, `SpanDataPanelView`, `SpanDetailsView`) use it by default and take `renderToolCall` to draw richer cards, and `mcpAppTools` to tell MCP app calls apart. `useLiveToolCalls()` returns both for the chat's live cards (workflow graph, MCP app UI), as Studio uses them:
+
+  ```tsx
+  <TracePanel.Messages spans={trace.spans} {...useLiveToolCalls()} />
+  ```
+
+  - `navigation` on `TracePanel`, `ThreadTrace` and `SpanDataPanel` (and on `SpanDataPanelView`, `SpanDetailsView` and `TraceThreadItemView`): where the panels open things, as your callbacks. Every link of the panels (the entity, the trace page, each turn's trace, the tools a span offered, the agents and workflows it delegated to, workspaces and Knowledge pages in the turn) becomes a button that calls one of them, and text when you give none. No href, no link component, no `LinkComponentProvider`. `useStudioTraceNavigation()` builds it from Studio's router.
+
+  ```tsx
+  <TracePanel
+    traceId={trace.traceId}
+    spans={trace.spans}
+    onClose={close}
+    navigation={{
+      onOpenTrace: traceId => host.openLink(`${studioUrl}/traces/${traceId}`),
+      onOpenAgent: agentId => host.openLink(`${studioUrl}/agents/${agentId}`),
+    }}
+  >
+    …
+  </TracePanel>
+  ```
+
+  - `DataKeysAndValues.ValueButton`: a value drawn like `ValueLink` that acts through `onClick`.
+  - `SpanDataPanelView`, `TracePanel.SpanDetail` and `ThreadTrace.SpanDetail` take `input` and `output` to replace those tabs. Studio's own parts load what a view draws only once it shows: `LiveSpanInput` (the tool registry, for a span that offered tools), `LiveSpanOutput` (the trace's spans and the live tool cards, for a span that called tools), `LiveTraceMessages` and `LiveTurnMessages` (the MCP app tools, once messages show). `useLiveToolCalls({ enabled })` takes the same switch.
+
+  ```tsx
+  <TracePanel.SpanDetail span={selectedSpan} input={<LiveSpanInput />} output={<LiveSpanOutput />} />
+  ```
+
+  `TraceThreadPanel`, `ThreadViewByTrace`, `TraceScoresList` and `TraceScoresTab` keep their props.
+
+  **Changed**
+
+  `TraceSpanPanel` no longer renders the full-thread drawer. It hands the thread id to `onOpenFullThread`, and you render the thread wherever you want, or not at all. `isFullThreadOpen`, `onFullThreadOpenChange`, `withQueryTrace`, `withFeedback`, `feedbackOptions` and `onOpenScore` are gone from its props.
+
+  ```tsx
+  // Before
+  <TraceSpanPanel {...panelProps} isFullThreadOpen={open} onFullThreadOpenChange={setOpen} withQueryTrace withFeedback onOpenScore={openScore} />
+
+  // After
+  <TraceSpanPanel {...panelProps} onOpenFullThread={setThreadId} />
+  <TraceThreadPanel open={!!threadId} threadId={threadId ?? ''} onClose={() => setThreadId(undefined)} withQueryTrace withFeedback onOpenScore={openScore} />
+  ```
+
+  `MessageRow` no longer loads the MCP app tools itself: pass them in. It also takes `renderToolCard` to draw its tool calls with another card, and a read-only row no longer runs the live chat's tool call effects.
+
+  ```tsx
+  // Before
+  <MessageRow message={message} />;
+
+  // After
+  const { data: mcpAppTools } = useMcpAppTools({ queryOptions: { enabled: messages.length > 0 } });
+  <MessageRow message={message} mcpAppTools={mcpAppTools} />;
+  ```
+
+  Navigation in the panels goes through `navigation` instead of hrefs: `TracePanel.Entity`, `TracePanel.PageHeading` and `TracePanel.OpenPageButton` drop `entityHref`, `href` and `LinkComponent`, `ThreadTrace.TraceLink` drops `href`, and `TraceEntityMeta` / `TraceSummaryDescription` take `onOpenEntity` instead of `entityHref` and `LinkComponent`. Read back from a record, `WorkspaceLink` and `KnowledgePageLink` open through the record's navigation; `WorkspaceLink` takes `workspaceId` and `path` instead of an `href`.
+
+  ```tsx
+  // Before
+  <TracePanel.OpenPageButton href={`/traces/${traceId}`} LinkComponent={Link} />
+  <ThreadTrace.TraceLink href={`/traces/${traceId}`} />
+
+  // After
+  <TracePanel navigation={{ onOpenTrace: traceId => navigate(`/traces/${traceId}`) }} …>
+    <TracePanel.OpenPageButton />
+  </TracePanel>
+  ```
+
+  In Studio, those links are now buttons that navigate through the router: they go to the same pages, but a middle-click or Cmd/Ctrl-click no longer opens them in a new tab.
+
+  Without a `LinkComponentProvider`, links now render as plain anchors instead of nothing.
+
+  **Breaking:** `ThreadTrace` places its parts through slots instead of children. `ThreadTrace.List`, `ThreadTrace.Divider`, `ThreadTrace.RowBody`, `ThreadTrace.Messages`, `ThreadTrace.TabList`, `ThreadTrace.Tab`, `ThreadTrace.TabContent`, `ThreadTrace.Details`, `ThreadTrace.DetailsHeader`, `ThreadTrace.DetailsActions` and `ThreadTrace.SpanPanel` were removed, with their prop types (`ThreadTraceListProps`, `ThreadTraceDividerProps`, `ThreadTraceRowBodyProps`, `ThreadTraceMessagesProps`, `ThreadTraceTabListProps`, `ThreadTraceTabProps`, `ThreadTraceTabContentProps`, `ThreadTraceDetailsProps`, `ThreadTraceDetailsHeaderProps`, `ThreadTraceDetailsActionsProps` and `ThreadTraceSpanPanelProps`). Render the rows as the root's children and fill each `ThreadTrace.Row` slot (`label`, `link`, `messages`, `feedback`, `scores`, `spans`, `detailsHeader`); the row draws the divider, the tabs and the details card itself.
+
+  ```tsx
+  // Before
+  <ThreadTrace traceIds={ids}>
+    <ThreadTrace.List>
+      {ids.map((traceId, i) => (
+        <ThreadTrace.Row key={traceId} traceId={traceId}>
+          <ThreadTrace.Divider label={`Turn ${i + 1}`}>
+            <ThreadTrace.TabList>
+              <ThreadTrace.Tab value="messages">Messages</ThreadTrace.Tab>
+            </ThreadTrace.TabList>
+          </ThreadTrace.Divider>
+          <ThreadTrace.RowBody>
+            <ThreadTrace.Messages>
+              <ThreadTrace.TabContent value="messages">…</ThreadTrace.TabContent>
+            </ThreadTrace.Messages>
+            <ThreadTrace.Details>
+              <ThreadTrace.Spans />
+            </ThreadTrace.Details>
+          </ThreadTrace.RowBody>
+        </ThreadTrace.Row>
+      ))}
+    </ThreadTrace.List>
+    <ThreadTrace.SpanPanel />
+  </ThreadTrace>
+
+  // After
+  <ThreadTrace traceIds={ids} spanDetail={<ThreadTrace.SpanDetail span={selectedSpan} />}>
+    {turns.map((turn, i) => (
+      <ThreadTrace.Row
+        key={turn.traceId}
+        traceId={turn.traceId}
+        label={`Turn ${i + 1}`}
+        messages={<ThreadTrace.TurnMessages spans={turn.spans} />}
+        spans={<ThreadTrace.Spans spans={turn.spans} />}
+      />
+    ))}
+  </ThreadTrace>
+  ```
+
+  **Breaking:** `ThreadTrace.Spans` no longer loads the turn's spans: `spans` is required (and `isLoading` optional). `ThreadTrace.SpanPanel` no longer loads the open span either: pass the span you loaded to `ThreadTrace.SpanDetail` in the root's `spanDetail` slot, which shows beside the turns while a span is selected.
+
+  ```tsx
+  // Before
+  <ThreadTrace.Spans />
+  <ThreadTrace.SpanPanel />
+
+  // After
+  <ThreadTrace spanDetail={<ThreadTrace.SpanDetail span={selectedSpan} />} …>
+    <ThreadTrace.Row spans={<ThreadTrace.Spans spans={turn.spans} isLoading={turn.isLoading} />} … />
+  </ThreadTrace>
+  ```
+
+  `useTraceSearch` returns `payloadOnlyMatchIds` as a `ReadonlySet<string>` instead of a `Set<string>`: read it, copy it to change it.
+
+  These components used to load part of their data themselves; pass it in now:
+
+  - `SpanDataPanelView` and `SpanDetailsView`: pass `traceSpans` so tool calls show their results, and `registeredTools` so the tools a span offered open through `navigation.onOpenTool`.
+  - `SpanScoring`: takes `onTriggerScorer`, which starts the scorer and resolves once it started.
+  - `TraceThreadItemView`: takes the trace's `spans` instead of a `traceId`.
+
+  **Removed**
+
+  - `TraceDataPanelView`: compose `TracePanel` instead (it renders the same panel part by part).
+  - `TraceMessagesPanel`: use `TracePanel.Messages`.
+  - `TraceDataPanel`: compose `TracePanel.ScoreButton` in the header with `TracePanel.ScoreDialog` in the frame's `dialogs` slot.
+
+- The whole traces page, filters and histogram included, now renders from data you hand it. `TracesExplorer` and every part under it (`FilterBar`, `ColumnsMenu`, `Histogram`, `List`, `Body`, `Layout`, `Panel`) no longer fetch: they take records typed with the `@mastra/client-js` response types and report every action through a callback. An app with its own transport, for example an MCP server app, can now show the same page from its own queries, with no Mastra client, no React Query and no Studio router. ([#30935](https://github.com/mastra-ai/mastra/pull/30935))
+
+  Studio loads the same records through new data hooks, exported separately, so it shows the same page as before.
+
+  ```tsx
+  import { TracesExplorer } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
+
+  <TracesExplorer
+    selection={selection}
+    filters={filters}
+    onChange={setState}
+    sort={sort}
+    onSortChange={setSort}
+    columns={columns}
+    onColumnsChange={setColumns}
+    capabilities={{ data: capabilitiesResponse, isLoading: false }}
+    traces={{ rows, isLoading, isFetching, isFetchingNextPage, hasNextPage, onLoadMore, onRetry }}
+    discovery={{ fields, canonicalFields, isLoading: false }}
+    metricsSupport={{ supported: true, isLoading: false }}
+  >
+    <TracesExplorer.Body
+      toolbar={<TracesExplorer.FilterBar suggestions={{ rootEntityNames, environments }} />}
+      chart={<TracesExplorer.Histogram data={{ timeRange, rows: counts, isLoading, isError, isUpdating }} />}
+    >
+      <TracesExplorer.List usage={usageByTraceId} />
+      <TracesExplorer.Panel
+        trace={openTrace}
+        navigation={{ onOpenAgent, onOpenTrace }}
+        onDownload={downloadTrace}
+        renderThread={({ open, threadId, onClose }) => <MyThread open={open} threadId={threadId} onClose={onClose} />}
+      />
+    </TracesExplorer.Body>
+  </TracesExplorer>;
+  ```
+
+  **Added**
+
+  - Data contract types for the page: `TracesExplorerCapabilities`, `TracesExplorerTraces`, `TracesExplorerDiscovery`, `TracesExplorerFilterSuggestions`, `TracesExplorerHistogram`, `TracesExplorerUsage` and `TracesExplorerOpenTrace`.
+  - Studio data hooks that load those records through the Mastra client: `useTracesListQuery`, `useTracesDiscoveryQuery`, `useTracesFilterSuggestionsQuery`, `useTracesHistogramQuery`, `useTracesUsageQuery` and `useOpenTraceQuery`, exported from `domains/traces/hooks`.
+  - Helpers that build the same queries for any host: `buildTracesListQuery`, `buildTracesHistogramRequest`, `canShowTracesHistogram`, `resolveTracesSupport`, `resolveTracesSort` and `resolveTraceUsageColumns`.
+  - `TraceSpanPanelView`, the trace drawer drawn from the records you pass, with no fetching. `TraceSpanPanel` keeps loading them through the Mastra client.
+  - `ScoreDataPanelView`, the score drawer drawn from the score you pass: its trace and span open through `onOpenTrace`, and its dataset dialog is yours (`renderDatasetDialog`). `TracesExplorer.Panel` takes them as `onOpenScoreTrace` and `renderScoreDatasetDialog`. `ScoreDataPanel` keeps Studio's router and dataset dialog; its trace and span ids are now buttons that go to the same pages, so they no longer open in a new tab on middle-click.
+
+  **Breaking**
+
+  - `TracesExplorer` now requires `capabilities`, `traces`, `columns` and `onColumnsChange`, and takes `discovery`. It no longer reads the store's capabilities, lists traces, discovers fields or stores the column selection itself.
+  - `TracesExplorer.FilterBar` takes its suggestions as `suggestions`, `TracesExplorer.Histogram` its counts as `data`, and `TracesExplorer.List` its usage as `usage`. `useTracesFilterBarFields()` takes the suggestions as its argument.
+  - `TracesExplorer.Panel` takes the open trace as `trace` and its links as `navigation` callbacks. Its views that load their own data come in through `renderMessages`, `spanInput`, `spanOutput`, `renderFeedback`, `renderSpanFeedback`, `renderScores`, `renderThread` and `renderDatasetDialog`. `traceHref` is replaced by `navigation.onOpenTrace`, `withAddTraceToDataset` by `renderDatasetDialog`, and `onOpenScore` and `renderCreateDatasetDialog` move into your `renderThread` and `renderDatasetDialog`. The root's `feedbackOptions` reach your `renderFeedback`, `renderSpanFeedback` and `renderThread` in their arguments.
+  - `TracesExplorerErrorRenderArgs['refetch']` now calls your `traces.onRetry`.
+  - `useTracesDiscovery` is removed: use `useTracesDiscoveryQuery` and pass its result as `discovery`.
+  - `useTracesConfig()` no longer returns `withDeltaPolling`: no part reads it, since only the list query polls. Read it from `resolveTracesSupport(capabilities, features)`.
+  - `ObservabilityPageLayout` takes the views to offer as `views` instead of `features`. Pass the result of `useObservabilityViews({ current, features })`.
+
+  ```tsx
+  // Before
+  <TracesExplorer
+    metricsSupport={metrics}
+    selection={selection}
+    filters={filters}
+    onChange={setState}
+    sort={sort}
+    onSortChange={setSort}
+  >
+    <TracesExplorer.Body toolbar={<TracesExplorer.FilterBar />} chart={<TracesExplorer.Histogram />}>
+      <TracesExplorer.List />
+      <TracesExplorer.Panel onOpenScore={openScore} traceHref={traceId => `/traces/${traceId}`} />
+    </TracesExplorer.Body>
+  </TracesExplorer>;
+
+  // After (Studio)
+  const capabilities = useObservabilityCapabilities();
+  const columns = useTraceColumnPreferences();
+  const traces = useTracesListQuery({ filters, sort, columns: columns.preferences, capabilities });
+  const discovery = useTracesDiscoveryQuery({ filters, capabilities });
+
+  <TracesExplorer
+    metricsSupport={metrics}
+    selection={selection}
+    filters={filters}
+    onChange={setState}
+    sort={sort}
+    onSortChange={setSort}
+    columns={columns.preferences}
+    onColumnsChange={columns.setPreferences}
+    capabilities={capabilities}
+    traces={traces}
+    discovery={discovery}
+  >
+    <TracesExplorer.Body toolbar={<MyFilterBar />} chart={<MyHistogram />}>
+      <MyList />
+      <MyPanel />
+    </TracesExplorer.Body>
+  </TracesExplorer>;
+  ```
+
+  Each `My*` part calls its data hook (`useTracesFilterSuggestionsQuery`, `useTracesHistogramQuery`, `useTracesUsageQuery`, `useOpenTraceQuery`) and passes the result to its explorer part. Rendered inside the body, a part loads its records only once the body shows it, as before.
+
+- Added illustrated info tooltips, and info tooltips now open on a tap on touch screens. ([#30945](https://github.com/mastra-ai/mastra/pull/30945))
+
+  **Illustrated tooltips.** Pass `variant="illustrated"` to `InfoTooltip` and put one `InfoTooltip.Panel` per outcome inside it. Each panel takes a `title`, a `caption`, and a small drawing as children. Panels sit in equal columns that line up, and the drawing is hidden from screen readers, which read each title and caption instead.
+
+  ```tsx
+  <InfoTooltip aria-label="About alerting for each" variant="illustrated">
+    <InfoTooltip.Panel title="All traffic" caption="One failing agent can be hidden by healthy ones.">
+      <CombinedLevel />
+    </InfoTooltip.Panel>
+    <InfoTooltip.Panel title="Each agent" caption="The failing agent gets its own alert.">
+      <LevelPerAgent />
+    </InfoTooltip.Panel>
+  </InfoTooltip>
+  ```
+
+  **Touch.** Tapping the info icon opens the tooltip, and tapping it again or anywhere else closes it. Before, info tooltips never opened on phones. Hover and keyboard focus work as before. The info icon now shows the normal arrow cursor instead of the help cursor, since a mouse click doesn't open it.
+
+  See the Tooltip docs page in Storybook for when to use a text tooltip, an illustrated tooltip, or a popover, and a checklist for drawing the diagrams.
+
+### Patch Changes
+
+- If you import `AgentBadge` from `@mastra/playground-ui/domains/chat/tools/badges/agent-badge`, `renderToolCard` is now required. Pass the card you want nested tool calls drawn with: ([#30934](https://github.com/mastra-ai/mastra/pull/30934))
+
+  ```tsx
+  // Before
+  <AgentBadge {...props} />;
+
+  // After
+  import { ToolCard } from '@mastra/playground-ui/domains/chat/tools/tool-card';
+
+  <AgentBadge {...props} renderToolCard={cardProps => <ToolCard {...cardProps} />} />;
+  ```
+
+- Feedback threads now show "Deleting…" on a comment while its deletion is processed, and hide its actions. If the deletion does not finish, the comment comes back with a "Could not delete feedback" error. A failed delete request also shows this error in the confirmation dialog, only until the dialog is closed. ([#30733](https://github.com/mastra-ai/mastra/pull/30733))
+
+- Fixed Knowledge scope titles to use API display labels, with readable custom-kind fallbacks while preserving explicit names and importer titles. Empty scopes now use folder icons without becoming expandable. ([#30880](https://github.com/mastra-ai/mastra/pull/30880))
+
+- Fixed `EmptyStateArt` drawings looking different sizes. Each drawing now renders at the same visual area, so a small object like the alerts gauge no longer looks tiny next to a large one like the workspace desk. ([#30855](https://github.com/mastra-ai/mastra/pull/30855))
+
+- Added `CircleDotIcon`, a ring with a dot drawn on the Central Icons grid and stroke, for things that are open or made by hand. Use it where `IconCircleRecord` stood in for a ring with a dot: that icon is a voicemail mark. ([#30798](https://github.com/mastra-ai/mastra/pull/30798))
+
+  ```tsx
+  import { CircleDotIcon } from '@mastra/playground-ui/icons/CircleDotIcon';
+
+  <CircleDotIcon aria-hidden />;
+  ```
+
+- Fixed the `CodeEditor` suggestion list ignoring design-system styling: the highlighted suggestion now uses the neutral selection fill instead of a bright blue, and suggestions use the design-system monospace font. ([#30893](https://github.com/mastra-ai/mastra/pull/30893))
+
+- The Knowledge page panel's Preview now fills the panel's free height. A long page scrolls inside it instead of being cropped to a short 12rem strip. ([#30786](https://github.com/mastra-ai/mastra/pull/30786))
+
+- Shrank the observability explorer and trace viewer MCP Apps back under their size budget. A recorded sub-agent card no longer pulls in the live chat's tool card (and with it the MCP app viewer, form and workflow graph code), and the apps keep the trace panels' recorded tool cards instead of Studio's live ones. ([#30934](https://github.com/mastra-ai/mastra/pull/30934))
+
+- Fixed MCP App iframes so third-party app HTML cannot run with the Studio page's origin. Guest HTML loads in a nested frame that cannot read the parent page or call Studio with the viewer's cookies. ([#30593](https://github.com/mastra-ai/mastra/pull/30593))
+
+- Fixed settings rows in dialogs: a text field now sits beside its label, like a select does, instead of wrapping under it at a narrow width. ([#30940](https://github.com/mastra-ai/mastra/pull/30940))
+
+- A user message's footer now lines up on the right, like the message bubble above it. Before, a short footer line such as "Steered message" sat on the left when a longer line (for example "via Slack" with the sender's name) was shown under it. ([#30890](https://github.com/mastra-ai/mastra/pull/30890))
+
+- Share the Studio agent conversation shell and thread navigation with managed-agent hosts. `AgentConversationLayout` accepts host-provided content slots and panel registration; `AgentConversationSidebar` accepts host-owned navigation and collapse actions; `AgentConversationThreads` provides a controlled thread list without owning routing, data fetching, or mutations. ([#30982](https://github.com/mastra-ai/mastra/pull/30982))
+
+  ```tsx
+  import { AgentConversationLayout } from '@mastra/playground-ui/domains/agents/components/agent-conversation-layout';
+  import { AgentConversationThreads } from '@mastra/playground-ui/domains/agents/components/agent-conversation-threads';
+
+  <AgentConversationLayout
+    layoutId="managed-agent-layout"
+    leftSlot={
+      <AgentConversationThreads
+        threads={threads}
+        selectedThreadId={threadId}
+        onSelectThread={selectThread}
+        onNewThread={createThread}
+      />
+    }
+  >
+    {conversation}
+  </AgentConversationLayout>;
+  ```
+
+- Export a controlled stored-skills picker with host-supplied skill lists, selection, loading state, and attach/remove/create callbacks. ([#30983](https://github.com/mastra-ai/mastra/pull/30983))
+
+- Fixed live updates in the Spans and Threads lists stopping after the tab stays open for a while. With a preset range such as "Last 7 days", each poll now asks for a window of the same length ending now, instead of stretching the original window, so a server cap on the window length (such as the 7-day limit on word search) no longer refuses the poll. A custom start date with no end date is kept as picked. ([#30889](https://github.com/mastra-ai/mastra/pull/30889))
+
+  `useListAnchor` now returns `anchorWindow` instead of `anchorTo`, and `reanchor` takes the selected window (`ListWindow`, now exported along with `windowEndingAt`). Its new second argument, `fixedStart`, keeps the start of the window in place.
+
+- Export reusable conversation-memory sidebar, observational-memory display, memory detail panel, and clone-thread controls for host-driven Studio and managed-agent interfaces. ([#30980](https://github.com/mastra-ai/mastra/pull/30980))
+
+- The title of a view-only or disabled settings row is no longer dimmed, so it matches every other row. A disabled destructive row keeps its red title. The row's value and control look the same as before. ([#30830](https://github.com/mastra-ai/mastra/pull/30830))
+
+- Updated dependencies [[`d250e06`](https://github.com/mastra-ai/mastra/commit/d250e06d7c63b02aa0e5b7c61e1e54e07dcad13b), [`9315b28`](https://github.com/mastra-ai/mastra/commit/9315b2895a617947513be1f96d8964037b505f38), [`7c0c1cd`](https://github.com/mastra-ai/mastra/commit/7c0c1cdc9ed1211b3705554bf205a30ef05b0796), [`21a82af`](https://github.com/mastra-ai/mastra/commit/21a82af6e1c08daaa3c2700c98ac95a96e66399e), [`31f63a7`](https://github.com/mastra-ai/mastra/commit/31f63a75d2981793f1d1e9bcce375f999ead021e), [`0458fdc`](https://github.com/mastra-ai/mastra/commit/0458fdc0c19abc0359746247cb55b71dd4afaf6e), [`4b5c347`](https://github.com/mastra-ai/mastra/commit/4b5c347734329ff434d7cdcb6408c23dfe046540), [`b8af9e3`](https://github.com/mastra-ai/mastra/commit/b8af9e313eb446fadb24454dc18fa19aa08a8cea), [`0280c14`](https://github.com/mastra-ai/mastra/commit/0280c141dae50809cfc7f6bd7e27d1f65432121c), [`ad5059e`](https://github.com/mastra-ai/mastra/commit/ad5059e90c201279628a799f1434a8fe35140b55), [`45b8470`](https://github.com/mastra-ai/mastra/commit/45b847050897411092b1c665cdbcbb59e2bec485), [`0f098fe`](https://github.com/mastra-ai/mastra/commit/0f098fe2425bc467ff9a800c41433efe90c44e58), [`8a0acd5`](https://github.com/mastra-ai/mastra/commit/8a0acd5ab9367a48d100b9c53eeb62362e6ddb72), [`389851e`](https://github.com/mastra-ai/mastra/commit/389851ef0380c222b6223148b8c070a6919b7a8e), [`9c4810b`](https://github.com/mastra-ai/mastra/commit/9c4810b48652bee44663452f136df5e9d9247d40), [`45b8470`](https://github.com/mastra-ai/mastra/commit/45b847050897411092b1c665cdbcbb59e2bec485), [`2f04296`](https://github.com/mastra-ai/mastra/commit/2f04296f9b815fde8395a32ddbabd214fdf2f914), [`00c269d`](https://github.com/mastra-ai/mastra/commit/00c269d99f693d4e62accfdc5368c87d5fa2c11c), [`4e0b782`](https://github.com/mastra-ai/mastra/commit/4e0b7820880774ed87c151d6575ba13820035773), [`a6a5b78`](https://github.com/mastra-ai/mastra/commit/a6a5b7808581c6e7dc086a165580b23138d5e441), [`8a0acd5`](https://github.com/mastra-ai/mastra/commit/8a0acd5ab9367a48d100b9c53eeb62362e6ddb72)]:
+  - @mastra/core@1.85.1-alpha.0
+  - @mastra/memory@1.41.3-alpha.0
+  - @mastra/react@1.16.0-alpha.0
+  - @mastra/client-js@1.61.2-alpha.0
+  - @mastra/ai-sdk@1.12.0
+
 ## 70.1.0
 
 ### Minor Changes

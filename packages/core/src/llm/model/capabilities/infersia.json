@@ -21,6 +21,12 @@
     "xiaomi/mimo-v2.6-pro"
   ],
   "reasoning": {
+    "tencent/hy4-preview": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
+      }
+    ],
     "minimax/minimax-m3.1-flash": [
       {
         "type": "effort",
@@ -33,9 +39,10 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "xiaomi/mimo-v2.6-flash": [
+    "reflection/beam-1.0-501b-a23b": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "xiaomi/mimo-v2.6-pro": [
@@ -43,16 +50,9 @@
         "type": "toggle"
       }
     ],
-    "reflection/beam-1.0-501b-a23b": [
+    "xiaomi/mimo-v2.6-flash": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "tencent/hy4-preview": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high"]
+        "type": "toggle"
       }
     ]
   }

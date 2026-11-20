@@ -64,14 +64,23 @@ describe('AgentObservationalMemory token display', () => {
 
 describe('AgentObservationalMemory tooltip', () => {
   // TODO: replace with a render test. Kept as the only guard on the model-routing rows in the OM tooltip.
-  const source = readFileSync(resolve(__dirname, '../agent-observational-memory.tsx'), 'utf-8');
+  const hostSource = readFileSync(resolve(__dirname, '../agent-observational-memory.tsx'), 'utf-8');
+  const displaySource = readFileSync(
+    resolve(
+      __dirname,
+      '../../../../../../../playground-ui/src/domains/memory/components/observational-memory-display.tsx',
+    ),
+    'utf-8',
+  );
 
   it('shows ModelByInputTokens routing in the OM tooltip when available', () => {
-    expect(source).toContain('modelRouting?: Array<{ upTo: number; model: string }>;');
-    expect(source).toContain('const observationModelRouting =');
-    expect(source).toContain('const reflectionModelRouting =');
-    expect(source).toContain('≤{formatTokens(route.upTo)} → {route.model}');
-    expect(source).toContain('modelRouting={observationModelRouting}');
-    expect(source).toContain('modelRouting={reflectionModelRouting}');
+    expect(hostSource).toContain('const observationModelRouting =');
+    expect(hostSource).toContain('const reflectionModelRouting =');
+    expect(hostSource).toContain('observationModelRouting={observationModelRouting}');
+    expect(hostSource).toContain('reflectionModelRouting={reflectionModelRouting}');
+    expect(displaySource).toContain('modelRouting?: Array<{ upTo: number; model: string }>;');
+    expect(displaySource).toContain('≤{formatTokens(route.upTo)} → {route.model}');
+    expect(displaySource).toContain('modelRouting={observationModelRouting}');
+    expect(displaySource).toContain('modelRouting={reflectionModelRouting}');
   });
 });

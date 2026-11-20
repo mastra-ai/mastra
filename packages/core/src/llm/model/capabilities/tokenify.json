@@ -35,12 +35,6 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "z-ai/glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "z-ai/glm-5.2": [
       {
         "type": "toggle"
@@ -48,6 +42,12 @@
       {
         "type": "effort",
         "values": ["high", "max"]
+      }
+    ],
+    "z-ai/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

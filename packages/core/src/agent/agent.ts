@@ -116,6 +116,7 @@ import {
   resolveCurrentSpan,
   resolveObservabilityContext,
   getResumeTracingContext,
+  getWorkflowResumeTracingContext,
 } from '../observability';
 import type {
   ErrorProcessorOrWorkflow,
@@ -142,7 +143,7 @@ import {
   MASTRA_THREAD_ID_KEY,
   MASTRA_VERSIONS_KEY,
 } from '../request-context';
-import { getRequestContextInputSource } from '../request-context/input-source';
+import { getRequestContextInputSource, getRequestContextInputValues } from '../request-context/input-source';
 import type { DeclaredAgentSchedule } from '../schedules/define';
 import type { InferStandardSchemaOutput } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
@@ -315,8 +316,7 @@ import {
   clearObjective,
 } from './goal';
 import {
-  drainAgentOutput,
-  successfulAgentOutput,
+  convertInstructionsToString,
   resolveRunId,
   resolveVersionContext,
   recoverySkip,
@@ -328,7 +328,7 @@ import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMes
 import { MessageList } from './message-list';
 import { createStoredMessageLoader } from './message-list/memory-message-refs';
 import { modelSpanAttributes } from './model-span-attributes';
-import { validateAgentRequestContext } from './request-context-validation';
+import { throwAgentRequestContextValidationError } from './request-context-validation';
 import { buildResumeSpanInput } from './resume-span-input';
 import { whenRunStepsSettle } from './run-lease-fence';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from './run-ownership';
@@ -1757,7 +1757,7 @@ export class Agent<
         });
       }
 
-      return executionEngine.loadSuspendedRequestContextValue(workflowsStore, runId, this.id, key);
+      return executionEngine.loadSuspendedRequestContextValue(workflowsStore, runId, this, key);
     }
 
     try {
@@ -3770,7 +3770,7 @@ export class Agent<
     voice?.addTools(wrappedTools as TTools);
 
     const instructions = await this.getInstructions({ requestContext: resolvedRequestContext });
-    voice?.addInstructions(this.#convertInstructionsToString(instructions));
+    voice?.addInstructions(convertInstructionsToString(instructions));
     return voice;
   }
 
@@ -3839,34 +3839,6 @@ export class Agent<
     }
 
     return buildMcpServerGuidance(tools);
-  }
-
-  /**
-   * Helper function to convert agent instructions to string for backward compatibility
-   * Used for legacy methods that expect string instructions (e.g., voice)
-   * @internal
-   */
-  #convertInstructionsToString(instructions: AgentInstructions): string {
-    if (typeof instructions === 'string') {
-      return instructions;
-    }
-
-    if (Array.isArray(instructions)) {
-      // Handle array of messages (strings or objects)
-      return instructions
-        .map(msg => {
-          if (typeof msg === 'string') {
-            return msg;
-          }
-          // Safely extract content from message objects
-          return typeof msg.content === 'string' ? msg.content : '';
-        })
-        .filter(content => content) // Remove empty strings
-        .join('\n\n');
-    }
-
-    // Handle single message object - safely extract content
-    return typeof instructions.content === 'string' ? instructions.content : '';
   }
 
   /**
@@ -3967,7 +3939,7 @@ export class Agent<
         getMostRecentUserMessage: this.getMostRecentUserMessage.bind(this),
         genTitle: this.genTitle.bind(this),
         resolveTitleGenerationConfig: this.resolveTitleGenerationConfig.bind(this),
-        convertInstructionsToString: this.#convertInstructionsToString.bind(this),
+        convertInstructionsToString,
         tracingPolicy: this.#options?.tracingPolicy,
         resolvedVersionId: this.toRawConfig()?.resolvedVersionId as string | undefined,
         _agentNetworkAppend: this._agentNetworkAppend,
@@ -5091,6 +5063,10 @@ export class Agent<
 
   public __setMemory(memory: DynamicArgument<MastraMemory, TRequestContext>) {
     this.#memory = memory;
+  }
+
+  public __setKnowledge(knowledge: Knowledge) {
+    this.#knowledge = knowledge;
   }
 
   public __setPubSub(pubsub: PubSub) {
@@ -6762,7 +6738,7 @@ export class Agent<
                 requestContext: subAgentRequestContext,
               });
               if (agentOwnInstructions) {
-                const ownStr = this.#convertInstructionsToString(agentOwnInstructions);
+                const ownStr = convertInstructionsToString(agentOwnInstructions);
                 if (ownStr) {
                   effectiveInstructions = `${ownStr}\n\n${effectiveInstructions}`;
                 }
@@ -9431,7 +9407,7 @@ export class Agent<
       requestContext,
       requestVersions,
       this.#mastra?.getVersionOverrides(),
-      options.versions,
+      options,
     );
 
     // A run that suspended while executing a stored version must resume on *that* version.
@@ -9679,7 +9655,7 @@ export class Agent<
       input: spanInput,
       attributes: {
         conversationId: threadFromArgs?.id,
-        instructions: this.#convertInstructionsToString(instructions),
+        instructions: convertInstructionsToString(instructions),
         ...modelSpanAttributes(resolvedModel),
         ...(startingSignal ? { signal: startingSignal } : {}),
         // @deprecated — use entityVersionId (top-level span context field) instead.
@@ -10423,15 +10399,24 @@ export class Agent<
     return this.resumeNetwork({ approved: false, ...(reason !== undefined ? { reason } : {}) }, resumeOptions);
   }
 
+  async #validateRequestContext(requestContext?: RequestContext): Promise<void> {
+    if (this.#requestContextSchema) {
+      const contextValues = getRequestContextInputValues(requestContext);
+      const validation = await this.#requestContextSchema['~standard'].validate(contextValues);
+      if (validation.issues) {
+        throwAgentRequestContextValidationError({
+          issues: validation.issues,
+          agentId: this.id,
+          agentName: this.name,
+        });
+      }
+    }
+  }
+
   async #resolvePlainRunOptions<OUTPUT>(
     options?: AgentExecutionOptionsBase<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> },
   ) {
-    await validateAgentRequestContext({
-      requestContextSchema: this.#requestContextSchema,
-      requestContext: options?.requestContext,
-      agentId: this.id,
-      agentName: this.name,
-    });
+    await this.#validateRequestContext(options?.requestContext);
     const defaultOptions = await this.getDefaultOptions({ requestContext: options?.requestContext });
     this.#warnInheritedExecutionOptions(defaultOptions);
     const { options: mergedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(
@@ -10583,7 +10568,12 @@ export class Agent<
         threadStreamPubSub,
       );
 
-      return methodType === 'generate' ? await drainAgentOutput(result.result) : result.result;
+      if (methodType === 'generate') {
+        const fullOutput = await result.result.getFullOutput();
+        if (fullOutput.error) throw fullOutput.error;
+        return fullOutput;
+      }
+      return result.result;
     } catch (error) {
       // Release the thread reservation taken by waitForCrossAgentThreadRun so
       // a failed setup does not block subsequent runs on this thread.
@@ -12037,7 +12027,8 @@ export class Agent<
     });
     let suspended = false;
     try {
-      const fullOutput = await drainAgentOutput(result.output);
+      const fullOutput = await result.output.getFullOutput();
+      if (fullOutput.error) throw fullOutput.error;
       suspended = fullOutput.finishReason === 'suspended';
       if (suspended) {
         await getRunRegistryEntry(result.runId, this.#mastra)?.workflowExecution;
@@ -12250,7 +12241,8 @@ export class Agent<
       throw error;
     }
 
-    return successfulAgentOutput(fullOutput);
+    if (fullOutput.error) throw fullOutput.error;
+    return fullOutput;
   }
 
   /**
@@ -13864,12 +13856,7 @@ export class Agent<
 
     // 1. Validate the persisted durable-agent input before claiming ownership
     //    so obvious caller errors fail fast.
-    let { workflowInput } = await this.executionEngine.loadRecoverableSnapshot(
-      workflowsStore,
-      runId,
-      this.id,
-      this.name,
-    );
+    let { workflowInput } = await this.executionEngine.loadRecoverableSnapshot(workflowsStore, runId, this);
     this.executionEngine.assertRecoveryActive();
 
     // A crashed run that was executing a stored version must recover on
@@ -13933,7 +13920,7 @@ export class Agent<
       // An earlier owner may have completed while this one claimed. Re-read
       // after the claim and recover from that authoritative snapshot, never
       // from the pre-claim copy.
-      const loaded = await this.executionEngine.loadRecoverableSnapshot(workflowsStore, runId, this.id, this.name);
+      const loaded = await this.executionEngine.loadRecoverableSnapshot(workflowsStore, runId, this);
       workflowInput = loaded.workflowInput;
       claimedSnapshot = loaded.snapshot;
       // map-final-output publishes FINISH before saving its result. Restart skips
@@ -13971,8 +13958,8 @@ export class Agent<
         workflowsStore,
         runId,
         claimedSnapshot,
-        this.#executionStreamBus.forRun(this.__usesSharedRunLog()).pubsub,
-        this.logger,
+        () => this.#executionStreamBus.forRun(this.__usesSharedRunLog()).pubsub,
+        () => this.logger,
       );
       await emitOwnershipClaimedEvent(
         this.#executionStreamBus.forRun(this.__usesSharedRunLog()).pubsub,
@@ -14919,7 +14906,8 @@ export class Agent<
 
     let suspended = false;
     try {
-      const fullOutput = (await drainAgentOutput(output)) as FullOutput<TOutput>;
+      const fullOutput = (await output.getFullOutput()) as FullOutput<TOutput>;
+      if (fullOutput.error) throw fullOutput.error;
       suspended = fullOutput.finishReason === 'suspended';
       // On suspend, the SUSPENDED event is emitted from the tool-call step
       // before the workflow engine has persisted the snapshot. Awaiting the
@@ -15274,6 +15262,10 @@ export class Agent<
       resumeScopesSnapshot,
     )) as DurableAgentResumeOptions<TOutput>;
     validateModelTimeoutSettings(resolvedOptions.modelSettings?.timeout);
+    // The first call's trace settings hold unless this resume call sets its own. The agent's
+    // defaults are already part of them, so they must not win here.
+    const { hideInput, hideOutput, requestContextKeys } = options?.tracingOptions ?? {};
+    const resumeTracingOptions = { ...resolvedOptions.tracingOptions, hideInput, hideOutput, requestContextKeys };
     // Scoped runs execute on a run-scoped copy of the request context.
     resumeRequestContext = (resolvedOptions.requestContext as typeof resumeRequestContext) ?? resumeRequestContext;
 
@@ -15296,7 +15288,10 @@ export class Agent<
         getDefaultOptions: () => ({}),
         getMemory: (args?: any) => this.getMemory(args),
         resume: (innerRunId: string, innerResumeData: unknown, innerOptions?: DurableAgentResumeOptions<TOutput>) =>
-          this.resume(innerRunId, innerResumeData, innerOptions),
+          this.resume(innerRunId, innerResumeData, {
+            ...innerOptions,
+            tracingOptions: resumeTracingOptions,
+          } as DurableAgentResumeOptions<TOutput>),
         stream: this.stream.bind(this),
       } as unknown as DurableAgent<any, any, TOutput>;
       return runResumeDurableStreamUntilIdle<TOutput>(
@@ -15389,6 +15384,7 @@ export class Agent<
     let resumedText: { priorText: string; stepText: string } | undefined;
     let resumeOffset: number | 'latest';
     let persistedInput: DurableAgenticWorkflowInput | undefined;
+    let suspendedToolCallIds: string[] = [];
     try {
       // A concurrent resume of the same suspension may have claimed and run it while this one
       // waited for the execution claim. Report that as a lost race, not a generic failure.
@@ -15432,6 +15428,7 @@ export class Agent<
         runId,
       );
       persistedInput = current?.context?.input as DurableAgenticWorkflowInput | undefined;
+      suspendedToolCallIds = Object.keys(current?.resumeLabels ?? {});
       // A parked run that lost its thread lease must hold it again before the segment runs. Later
       // registration fails open, so take it here: a successor that now holds the thread refuses this
       // resume instead of running beside it, and the run stays parked.
@@ -15534,6 +15531,7 @@ export class Agent<
         const rawConfig = typeof (ag as any).toRawConfig === 'function' ? (ag as any).toRawConfig() : undefined;
         const resolvedVersionId = rawConfig?.resolvedVersionId as string | undefined;
         const agentTracingPolicy = typeof ag.getTracingPolicy === 'function' ? ag.getTracingPolicy() : undefined;
+        const suspendedToolCallId = resolvedOptions.toolCallId ?? suspendedToolCallIds[0];
         const resumeAgentSpan = getOrCreateSpan({
           type: SpanType.AGENT_RUN,
           outcome: null,
@@ -15541,17 +15539,22 @@ export class Agent<
           entityType: EntityType.AGENT,
           entityId: ag.id,
           entityName: ag.name,
-          attributes: modelSpanAttributes(resumeModel),
+          input: buildResumeSpanInput(resumeData, {
+            toolCallId: suspendedToolCallId,
+            toolName: initialToolCalls.find(call => call.payload.toolCallId === suspendedToolCallId)?.payload.toolName,
+          }),
+          attributes: { conversationId: memoryInfo?.threadId, ...modelSpanAttributes(resumeModel) },
           metadata: {
             runId,
+            resourceId: memoryInfo?.resourceId,
+            threadId: memoryInfo?.threadId,
             resumed: true,
             ...(origSpanId ? { resumedFromSpanId: origSpanId } : {}),
             ...(resolvedVersionId ? { entityVersionId: resolvedVersionId } : {}),
           },
-          resumeFrom: getResumeTracingContext(entry.agentSpan),
+          resumeFrom: getWorkflowResumeTracingContext(entry.agentSpan),
           tracingPolicy: agentTracingPolicy,
-          tracingOptions: { traceId: origTraceId, ...entry.agentSpan?.traceState },
-          traceState: entry.agentSpan?.traceState,
+          tracingOptions: { ...resumeTracingOptions, traceId: origTraceId },
           samplingDecision: entry.agentSpan?.isValid,
           requestContext: resolvedOptions.requestContext,
           mastra: this.#mastra,

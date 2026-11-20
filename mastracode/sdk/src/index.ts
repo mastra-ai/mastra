@@ -17,10 +17,10 @@ import type {
   Session,
 } from '@mastra/core/agent-controller';
 import { createCodingAgent } from '@mastra/core/coding-agent';
-import { classifyProviderError } from '@mastra/core/error';
+import { classifyProviderError, getErrorFromUnknown } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
 import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge';
-import { PROVIDER_REGISTRY, findGatewayForModel, getGatewayId } from '@mastra/core/llm';
+import { ModelRouterEmbeddingModel, PROVIDER_REGISTRY, findGatewayForModel, getGatewayId } from '@mastra/core/llm';
 import type { MastraModelGatewayInterface, ProviderConfig } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { defaultNotificationDeliveryDecision, readNotificationRoutingRequirement } from '@mastra/core/notifications';
@@ -40,7 +40,7 @@ import { TaskSignalProvider } from '@mastra/core/signals';
 import type { SignalProvider } from '@mastra/core/signals';
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '@mastra/core/tools';
-import type { MastraVector } from '@mastra/core/vector';
+import type { MastraEmbeddingOptions, MastraVector } from '@mastra/core/vector';
 import type { DuckDBStore } from '@mastra/duckdb';
 
 import { GithubSignals } from '@mastra/github-signals';
@@ -64,6 +64,7 @@ import {
 } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
+import type { MemoryEmbedder } from './agents/memory.js';
 import {
   canUseProvider,
   createMastraCodeGateway,
@@ -256,7 +257,7 @@ function emitTransientRetry(
   const controllerContext = requestContext?.get('controller') as AgentControllerRequestContext | undefined;
   controllerContext?.emitEvent?.({
     type: 'error',
-    error: error instanceof Error ? error : new Error(String(error)),
+    error: getErrorFromUnknown(error, { supportSerialization: false }),
     retryable: true,
     retryDelay: delayMs,
     retryAttempt: retryCount + 1,
@@ -369,6 +370,14 @@ export interface MastraCodeConfig {
   storageBackend?: 'libsql' | 'pg';
   /** Pre-built vector store instance for recall search. Skips the default vector store creation. */
   vector?: MastraVector;
+  /**
+   * Embedder for recall vectors: a `provider/model` router string (e.g.
+   * `'openai/text-embedding-3-small'`) or an AI SDK embedding model. Used only when a vector store
+   * is set. Omitted → local `fastembed.small` (bge-small, 384 dimensions).
+   */
+  embedder?: MemoryEmbedder;
+  /** Options passed to every embedding call, e.g. provider options or headers. */
+  embedderOptions?: MastraEmbeddingOptions;
   /**
    * Knowledge for the code agent, attached like an Agent's `knowledge`. Unset, it follows the
    * `signals.experimentalKnowledge` global setting (off; on means `true`). `false` keeps it off
@@ -698,6 +707,13 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const googleVertexGateway = createGoogleVertexGateway();
   const githubCopilotGateway = createGitHubCopilotGateway();
 
+  // Built now, once stored provider keys are in env and before any storage or pubsub is opened, so a
+  // missing key fails here without leaving resources behind.
+  const embedder =
+    config?.memory === undefined && typeof config?.embedder === 'string'
+      ? new ModelRouterEmbeddingModel(config.embedder)
+      : config?.embedder;
+
   // Project detection
   const project = detectProject(cwd);
 
@@ -913,6 +929,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     config?.memory === undefined
       ? getDynamicMemory(storage, vector, config?.settingsPath, {
           disableSettingsOmSeed: config?.disableSettingsOmSeed,
+          embedder,
+          embedderOptions: config?.embedderOptions,
         })
       : undefined;
   const memory =

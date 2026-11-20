@@ -15,10 +15,13 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "grok-4.7": [
+    "deepseek-v4-1-flash": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
+        "values": ["low", "high", "max"]
       }
     ],
     "kimi-k3": [
@@ -27,13 +30,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-v4-1-flash": [
-      {
-        "type": "toggle"
-      },
+    "grok-4.7": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ]
   }

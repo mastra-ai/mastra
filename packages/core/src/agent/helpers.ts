@@ -1,25 +1,25 @@
+import { mergeVersionOverrides } from '../mastra/types';
 import type { VersionOverrides } from '../mastra/types';
-import {
-  MASTRA_VERSIONS_KEY,
-  mergeVersionOverrides,
-  MASTRA_RESOURCE_ID_KEY,
-  MASTRA_THREAD_ID_KEY,
-} from '../request-context';
+import { MASTRA_VERSIONS_KEY, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { RequestContext } from '../request-context';
 import { RECOVER_ALREADY_IN_PROGRESS_ERROR_ID } from './durable/constants';
 import type { DurableAgentRecoveredRun } from './durable/durable-agent';
 import { RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID, RUN_ACTIVE_ERROR_ID } from './durable/execution-fence';
+import type { MessageList } from './message-list';
+import { mastraDBMessageToSignal } from './signals';
+import type { AgentInstructions } from './types';
 import { resolveThreadIdFromArgs } from './utils';
 
 export function resolveVersionContext(
   requestContext: RequestContext,
   requestVersions: VersionOverrides | undefined,
   defaultVersions: VersionOverrides | undefined,
-  callVersions: VersionOverrides | undefined,
+  callOptions: { versions?: VersionOverrides } | undefined,
+  mergeVersions = mergeVersionOverrides,
 ): VersionOverrides | undefined {
-  let versions = mergeVersionOverrides(defaultVersions, requestVersions);
-  if (callVersions) {
-    versions = mergeVersionOverrides(versions, callVersions);
+  let versions = mergeVersions(defaultVersions, requestVersions);
+  if (callOptions?.versions) {
+    versions = mergeVersions(versions, callOptions.versions);
   }
   if (versions) {
     requestContext.set(MASTRA_VERSIONS_KEY, versions);
@@ -31,17 +31,37 @@ export function resolveRunId(runId: string | undefined, generateId?: () => strin
   return runId ?? generateId?.() ?? globalThis.crypto.randomUUID();
 }
 
-export function successfulAgentOutput<T extends { error?: unknown }>(output: T): T {
-  if (output.error) {
-    throw output.error;
+/** Format resolved instructions for string-only consumers such as voice and spans. */
+export function convertInstructionsToString(instructions: AgentInstructions): string {
+  if (typeof instructions === 'string') {
+    return instructions;
   }
-  return output;
+
+  if (Array.isArray(instructions)) {
+    // Handle array of messages (strings or objects)
+    return instructions
+      .map(msg => {
+        if (typeof msg === 'string') {
+          return msg;
+        }
+        // Safely extract content from message objects
+        return typeof msg.content === 'string' ? msg.content : '';
+      })
+      .filter(content => content) // Remove empty strings
+      .join('\n\n');
+  }
+
+  // Handle single message object - safely extract content
+  return typeof instructions.content === 'string' ? instructions.content : '';
 }
 
-export async function drainAgentOutput<T extends { error?: unknown }>(output: {
-  getFullOutput(): Promise<T>;
-}): Promise<T> {
-  return successfulAgentOutput(await output.getFullOutput());
+/** Select persisted input signals to echo on the first LLM step. */
+export function getInitialSignalEchoes(messageList: MessageList) {
+  const inputMessageIds = messageList.makeMessageSourceChecker().input;
+  return messageList.get.all
+    .db()
+    .filter(message => message.role === 'signal' && inputMessageIds.has(message.id))
+    .map(mastraDBMessageToSignal);
 }
 
 export const TRANSIENT_RECOVERY_RETRY_DELAY_MS = 30_000;

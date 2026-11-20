@@ -85,16 +85,21 @@
         "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ],
-    "upstage/solar-pro4": [
+    "poolside/laguna-xs-2.1": [
       {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        "type": "toggle"
       }
     ],
     "upstage/solar-pro3": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "upstage/solar-pro4": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "upstage/solar-pro2": [
@@ -111,7 +116,7 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3.6-plus": [
+    "qwen/qwen3-max": [
       {
         "type": "toggle"
       },
@@ -119,7 +124,7 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3.5-397b-a17b": [
+    "qwen/qwen3-vl-plus": [
       {
         "type": "toggle"
       },
@@ -135,7 +140,23 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3-max": [
+    "qwen/qwen3.5-397b-a17b": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen/qwen3.6-plus": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen/qwen-plus": [
       {
         "type": "toggle"
       },
@@ -159,37 +180,16 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3-vl-plus": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen/qwen-plus": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "thinkingmachines/inkling": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
     "thinkingmachines/inkling-small": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
       }
     ],
-    "poolside/laguna-xs-2.1": [
+    "thinkingmachines/inkling": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
       }
     ]
   }

@@ -46,25 +46,7 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "meta/muse-spark-open": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "meta-models/Muse-Glimmer-30B": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "moonshotai/Kimi-K3.1-Pro": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "moonshotai/kimi-k3": [
+    "deepseek-ai/DeepSeek-V4-Flash-0731": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -76,7 +58,7 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Flash-0731": [
+    "deepseek-ai/DeepSeek-V4.1-Flash": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -88,28 +70,40 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4.1-Flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-NVFP4": [
-      {
-        "type": "effort",
-        "values": ["none", "medium", "high"]
-      }
-    ],
     "google/gemma-4-31B-it": [
       {
         "type": "effort",
         "values": ["none", "high"]
       }
     ],
-    "zai-org/GLM-5.2-FP8": [
+    "meta-models/Muse-Glimmer-30B": [
       {
         "type": "effort",
-        "values": ["none", "high", "max"]
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "meta/muse-spark-open": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "Qwen/Qwen3.5-35B-A3B-FP8-dottxt": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "Qwen/Qwen3.6-35B-A3B-FP8": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "Qwen/Qwen3.8-27B-FP8": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ],
     "zai-org/GLM-5.3": [
@@ -124,22 +118,28 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "Qwen/Qwen3.8-27B-FP8": [
+    "zai-org/GLM-5.2-FP8": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
+        "values": ["none", "high", "max"]
       }
     ],
-    "Qwen/Qwen3.5-35B-A3B-FP8-dottxt": [
+    "moonshotai/Kimi-K3.1-Pro": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
-    "Qwen/Qwen3.6-35B-A3B-FP8": [
+    "moonshotai/kimi-k3": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-NVFP4": [
+      {
+        "type": "effort",
+        "values": ["none", "medium", "high"]
       }
     ]
   }

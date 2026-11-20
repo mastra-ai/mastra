@@ -1,5 +1,89 @@
 # @mastra/core
 
+## 1.86.0-alpha.1
+
+### Minor Changes
+
+- Added optional `getObservationalMemoryConfig()` and `getObservationalMemoryRecords()` methods to `MastraMemory`. Memory implementations that run Observational Memory outside the agent (such as hosted memory) can override them so the memory status, config and observational memory routes report their settings and records. Both return `undefined` by default, so existing memory implementations are unaffected. ([#30986](https://github.com/mastra-ai/mastra/pull/30986))
+
+### Patch Changes
+
+- The memory status, memory config, observational memory and buffer-status routes now read Observational Memory from the agent's memory when the memory runs it (for example PlatformMemory). Thread access checks still apply, and an empty hosted result is returned as empty instead of falling back to local storage. ([#30986](https://github.com/mastra-ai/mastra/pull/30986))
+
+- PlatformMemory now reports hosted Observational Memory settings and reads the current observation record and past generations through its authenticated client, so Studio's memory status and observations views work for agents using PlatformMemory. Added `getObservationRecords(threadId, { historyLimit })` and `getInstanceConfig()` to `PlatformMemoryClient`. Date range and offset filters on observation history, and reads without a thread id, are not supported by the hosted API yet and return a 400 error. ([#30986](https://github.com/mastra-ai/mastra/pull/30986))
+
+## 1.85.1-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`d250e06`](https://github.com/mastra-ai/mastra/commit/d250e06d7c63b02aa0e5b7c61e1e54e07dcad13b))
+
+- Fixed agents getting stuck waiting on a background command that never exits. The `get_process_output` workspace tool now waits for a set time instead of waiting forever. ([#30895](https://github.com/mastra-ai/mastra/pull/30895))
+
+  `wait: true` is replaced by `waitSeconds` (1 to 300). If the process is still running when the wait ends, the tool returns the output so far, says how long it waited, and tells the agent to call again or use `kill_process`. The process keeps running.
+
+  ```ts
+  // Before: blocks until the process exits, however long that takes
+  { pid, wait: true }
+
+  // After: waits up to 60 seconds, then returns the output so far
+  { pid, waitSeconds: 60 }
+  ```
+
+  Update any agent instructions or skills that tell the agent to pass `wait: true`. It is now ignored, and the tool returns right away.
+
+- Fixed `DurableAgent` and `EventedAgent` answering two messages on the same thread at the same time. A second `stream()` or `generate()` call on a busy thread now waits for the run in progress, as it already did for a regular agent, so replies are saved in the order of the conversation. See [#30069](https://github.com/mastra-ai/mastra/issues/30069). ([#30828](https://github.com/mastra-ai/mastra/pull/30828))
+
+- Improved maintenance of agent invocations by sharing run ID and completed-output helpers without changing runtime behavior. ([#30973](https://github.com/mastra-ai/mastra/pull/30973))
+
+- Allow hosts to attach Knowledge to an Agent after loading it without storing credentials in the agent definition. ([#30981](https://github.com/mastra-ai/mastra/pull/30981))
+
+- Improved consistency of agent instruction formatting, input signal preparation, and persisted transcript and recovery reads without changing public APIs or execution behavior. ([#30947](https://github.com/mastra-ai/mastra/pull/30947))
+
+- Refactored internal agent validation and durable execution helpers without changing runtime behavior or public APIs. ([#30917](https://github.com/mastra-ai/mastra/pull/30917))
+
+- `DurableAgent.observe()` now accepts `closeOnSuspend`, so an observer's stream can end when the observed run suspends (for example while waiting for tool approval). Previously the observed stream stayed open at the suspension boundary — a reconnecting client or another replica would hang — because `observe()` never forwarded the option to the underlying durable stream. Passing `closeOnSuspend: true` resolves `fullStream`/`text`/`getFullOutput()` at the suspension boundary, matching `stream()`. ([#30836](https://github.com/mastra-ai/mastra/pull/30836))
+
+  The default (`false`) keeps the stream open across suspension so a later resume can continue on the same reader, and closing stays observer-scoped, preserving the run's registry entry and replay history for `resume()`/`resumeStream()`. A replayed suspension the run has already been resumed past is still delivered and fires `onSuspended`, but doesn't end the stream, so replaying a run from its start doesn't stop at an approval that was given long ago.
+
+- Fixed spans of a resumed durable agent run (`createDurableAgent`, `createEventedAgent`) losing their thread id, resource id, resume input and the `tracingOptions` passed to `resume()`. A filter by thread or resource now finds the whole run. The approved tool call and the thread title generation now nest under the resumed run. ([#30957](https://github.com/mastra-ai/mastra/pull/30957))
+
+- User messages are stored as written. Before a message reaches the model, turn tags are escaped unless your server built the message with `asUserTurn`. A client cannot set that mark over HTTP. ([#30593](https://github.com/mastra-ai/mastra/pull/30593))
+
+  ```ts
+  import { asUserTurn } from '@mastra/core/memory';
+
+  // Take speaker fields from the authenticated session, not from the request body.
+  const message = asUserTurn({ id: session.user.id, name: session.user.name, role: session.user.role }, body.text);
+  await agent.generate([message]);
+  ```
+
+- Fixed AgentController sessions that kept showing a tool prompt that could no longer be answered. When the agent no longer holds a suspended call by the time you answer it, for example because another runtime already resumed it, the session now retracts the prompt with `tool_suspension_cancelled` instead of showing it again. Other prompts on that run are retracted too when stored runs show the agent no longer holds them. If that lookup fails, they stay open. Prompts on other runs always stay open. ([#30717](https://github.com/mastra-ai/mastra/pull/30717))
+
+- Fixed traces of durable agent runs that suspend and resume, or recover after a crash. Each part of the run now has its own agent run and model generation spans in the run's trace, ended with that part's real outcome by whichever process or Inngest worker finishes it. A recovered run whose final step was already saved ends with that saved outcome instead of `unknown`. ([#30812](https://github.com/mastra-ai/mastra/pull/30812))
+
+- Evented agents on PostgreSQL no longer stall after a suspended tool is resumed. ([#30832](https://github.com/mastra-ai/mastra/pull/30832))
+
+  After `resumeStream()` resumed a suspended tool, the tool result and `step-finish` arrived, but the agent never made its next model call. The stream stayed open and the run kept its thread lease, so later runs on the same thread failed with `AgentThreadLeaseConflictError`. The resumed run now continues to the next model call and finishes, freeing the thread for later runs. The same fix applies to evented workflows on PostgreSQL whose loop needs another iteration after a nested workflow is resumed mid-iteration. Fixes #28932.
+
+- Durable agent runs that pause for approval and are then resumed now close their PubSub subscriptions as soon as the run finishes. Fixes [#30479](https://github.com/mastra-ai/mastra/issues/30479). ([#30884](https://github.com/mastra-ai/mastra/pull/30884))
+
+  Before this fix, a resumed run kept its stream readers and its abort listener until `cleanupTimeoutMs`. This affected runs resumed with `sendStreamResume()`, `resume()` or `approveToolCall()`. On `@mastra/redis-streams` each of these subscriptions holds its own Redis connection. If you raised `cleanupTimeoutMs` to keep `observe()` replay available longer, those connections also stayed open longer. Runs that were never paused already closed theirs right away.
+
+  - **Subscriptions close when the run ends.** A stream reader unsubscribes once it has handled the run's end (finish, error or abort). A paused run keeps its subscriptions so the approval still works.
+  - **Run state still waits for `cleanupTimeoutMs`.** The run's event history and run record are kept until `cleanupTimeoutMs`, as before. `observe()` can still replay a finished run during that window.
+  - **Behavior change.** Aborting a durable run that has already finished now reports that nothing was stopped (`false`), the same as for a plain run. Before this fix it could report `true` during the `cleanupTimeoutMs` window even though there was nothing left to stop.
+
+- Fixed evented workflows slowing down as more runs are in flight. Each run started with `start()` or `startAsync()` used to open its own listener for finish events, so every finished run was handed to every waiting run and total work grew with the square of concurrent runs. Runs now share one listener and each finish reaches only its own caller. ([#30958](https://github.com/mastra-ai/mastra/pull/30958))
+
+  Fixed evented runs staying `running` forever when the pubsub broker was unreachable while they were being started. If the start event never reaches a worker, the run is now recorded as `failed` with the error, and `start()`/`startAsync()` still reject as before.
+
+- Preserve provider error details, including status and message, when a model throws a structured response or a request is retried after a transient failure. ([#30976](https://github.com/mastra-ai/mastra/pull/30976))
+
+- Raised the minimum `ws` version to 8.23.0, which limits pending automatic pongs and terminates the connection when that limit is exceeded. ([#30840](https://github.com/mastra-ai/mastra/pull/30840))
+
+- Fixed Inngest workflow traces being split when a sampler is set. Step spans and nested workflow runs now follow their run's sampling decision, so a run is recorded whole or not at all. ([#30812](https://github.com/mastra-ai/mastra/pull/30812))
+
 ## 1.85.0
 
 ### Minor Changes

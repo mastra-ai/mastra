@@ -1,5 +1,11 @@
 # @mastra/voice-xai-realtime
 
+## 0.2.19-alpha.0
+
+### Patch Changes
+
+- Raised the minimum `ws` version to 8.23.0, which limits pending automatic pongs and terminates the connection when that limit is exceeded. ([#30840](https://github.com/mastra-ai/mastra/pull/30840))
+
 ## 0.2.18
 
 ### Patch Changes
