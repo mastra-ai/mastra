@@ -714,6 +714,7 @@ export class DurableExecutionEngine {
     }
   }
 
+  /** Whether a failed owned recovery should terminate observers of the run. */
   shouldReportRecoveryFailure(error: unknown): boolean {
     const id = (error as { id?: string } | undefined)?.id;
     return (
