@@ -125,9 +125,15 @@ export const accumulatedUsageSchema = z.object({
 }) as z.ZodType<AccumulatedUsage>;
 
 /**
- * Provider id and serving model of one response.
+ * One response: the provider's id and model for it, the configured model that
+ * answered, and what the provider reported with it (such as its own cost).
  */
-export const responseRecordSchema = z.object({ id: z.string().optional(), modelId: z.string().optional() });
+export const responseRecordSchema = z.object({
+  id: z.string().optional(),
+  modelId: z.string().optional(),
+  servedBy: z.object({ provider: z.string(), modelId: z.string() }).optional(),
+  providerMetadata: z.record(z.string(), z.any()).optional(),
+});
 
 export type ResponseRecord = z.infer<typeof responseRecordSchema>;
 

@@ -1281,6 +1281,11 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                     })),
                   );
                   const usageIncomplete = isUsageIncomplete(state.accumulatedUsage);
+                  // The span was opened for the run's first model. Name the model that answered,
+                  // so the generation and its cost are not booked on a model that failed.
+                  const servedBy = state.lastResponse?.servedBy;
+                  const servedName = servedBy && `llm: '${servedBy.modelId}'`;
+                  if (servedName && modelSpan && modelSpan.name !== servedName) modelSpan.update({ name: servedName });
                   modelSpan?.createTracker()?.endGeneration({
                     ...termination,
                     output: { text: finalText, toolCalls: toolCalls.length ? toolCalls : undefined },
@@ -1290,8 +1295,11 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                       ...clocks,
                       responseId: state.lastResponse?.id,
                       responseModel: state.lastResponse?.modelId,
+                      ...(servedBy ? { model: servedBy.modelId, provider: servedBy.provider } : {}),
                     },
                     usage: usageIncomplete ? calculateObservedUsage(steps) : state.accumulatedUsage,
+                    // Cost the provider reported itself is used in place of an estimate.
+                    stepProviderMetadata: storedSteps.map(step => step.providerMetadata),
                   });
                 }
                 if (agentSpanData) {

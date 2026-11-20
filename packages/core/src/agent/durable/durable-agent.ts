@@ -1049,6 +1049,9 @@ export class DurableAgent<
       const currentFence = getRunRegistryEntry(runId, this.#mastra)?.executionFence;
       // A continuation can finish an earlier reader after resume replaced its execution.
       if (currentFence && currentFence !== executionFence) return;
+      // The workers settle a run this process detached from. Its terminal event can arrive after the
+      // detach, and the reader still delivers it.
+      if (executionFence.detached) return;
       try {
         await publisher?.settle(status);
       } catch (error) {
