@@ -119,9 +119,9 @@ Mastra calls `spanFilter` on each event of a span: when it starts, on each updat
 
 | Filter result | What exporters receive |
 | - | - |
-| Drops every event | Nothing. A child whose start was kept attaches to the nearest ancestor whose start was exported. |
+| Drops every event | Nothing. A child whose start was kept attaches to the nearest ancestor whose start was exported, or has no parent when there is none. |
 | Keeps the start, drops the end | Exporters that write a span when it starts close it at its end time, without its end-time data. These are `MastraStorageExporter` with the `realtime` or `batch-with-updates` strategy, Braintrust, LangSmith, and Sentry. Exporters that write a span when it ends never write it, so its children have no parent there. These are Langfuse, the OpenTelemetry exporters, and `MastraStorageExporter` with the `insert-only` strategy. |
-| Drops the start, keeps the end | Exporters that write a span when it ends receive the span under its original parent. A filter on errors or duration does this for every span, so the trace keeps its shape in these exporters. A child whose start was kept attaches above the span, to the nearest ancestor whose start was exported. |
+| Drops the start, keeps the end | Exporters that write a span when it ends receive the span under its original parent. A filter on errors or duration does this for every span. The trace then keeps its shape in these exporters. When the start of an ancestor was exported, a child whose start was kept attaches above the span, to that ancestor. Its event spans, and its children in an OpenTelemetry bridge, can do the same. |
 
 To keep a connected tree in every exporter, return the same answer for every event of a span. A filter on the span type or entity always does this.
 
