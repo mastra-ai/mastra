@@ -453,12 +453,13 @@ export async function searchMessagesForResource({
     // slow, browsing still works, so point the agent there instead of failing the tool call. The error
     // can carry provider details, so it goes to the log, not to the model.
     logError(`[recall] Search failed, so recall suggested browsing instead (${describeSearchFailure(error)}).`);
-    return {
-      results: `Search is unavailable right now. Browse instead: use mode="messages" to page through messages${
-        includeThreadId ? ', and mode="threads" to find other threads' : ''
-      }.`,
-      count: 0,
-    };
+    // Keep a search scoped to one thread on that thread; thread-scope recall can only browse its own thread anyway.
+    const browse = !includeThreadId
+      ? 'use mode="messages" to page through messages'
+      : threadScope
+        ? `use mode="messages" with threadId="${threadScope}" to page through that thread's messages`
+        : 'use mode="messages" to page through messages, and mode="threads" to find other threads';
+    return { results: `Search is unavailable right now. Browse instead: ${browse}.`, count: 0 };
   }
 
   if (results.length === 0) {

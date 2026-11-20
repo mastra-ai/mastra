@@ -550,6 +550,25 @@ describe('recall search when the search itself fails', () => {
     expect(log.error).toHaveBeenCalledWith(expect.stringContaining('Incorrect API key provided'));
   });
 
+  it('keeps a search scoped to one thread on that thread when suggesting browsing', async () => {
+    const { memory } = setup([]);
+    memory.searchMessages = vi.fn(async () => {
+      throw new Error('Incorrect API key provided: sk-…1234');
+    });
+
+    const result = await searchMessagesForResource({
+      memory,
+      resourceId,
+      query: 'topic',
+      threadScope: 'thread-a',
+      logger: logger(),
+    });
+
+    expect(result.results).toBe(
+      'Search is unavailable right now. Browse instead: use mode="messages" with threadId="thread-a" to page through that thread\'s messages.',
+    );
+  });
+
   it('keeps the first results when only the deeper search fails', async () => {
     const source = [message('start'), message('end', 1)];
     const known = hit('known', 'summary', 'start:end');
