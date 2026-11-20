@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect } from 'storybook/test';
 import { CompactNumber } from '../CompactNumber';
+import { MetricsCardGroup } from '../MetricsCardGroup';
 import { MetricsKpiCard } from './metrics-kpi-card';
 import { IconCoins } from '@/ds/icons/central/IconCoins';
 import { IconGauge } from '@/ds/icons/central/IconGauge';
@@ -161,4 +163,35 @@ export const Loading: Story = {
       ))}
     </div>
   ),
+};
+
+/**
+ * A narrow cell in a `MetricsCardGroup`, which lets the card shrink below its own minimum width.
+ * The detail line truncates so the prior value stays inside the card.
+ */
+export const LongFooterInNarrowCard: Story = {
+  render: () => (
+    <div data-testid="cell" className="w-64">
+      <MetricsCardGroup>
+        <MetricsKpiCard>
+          <MetricsKpiCard.Label icon={<IconCoins />}>Model cost</MetricsKpiCard.Label>
+          <MetricsKpiCard.ValueRow>
+            <MetricsKpiCard.Value>
+              <CompactNumber value={1886.37} currency="USD" />
+            </MetricsKpiCard.Value>
+            <MetricsKpiCard.Change comparison="vs previous 24h" changePct={38.2} prevValue="$1,365.12" lowerIsBetter />
+          </MetricsKpiCard.ValueRow>
+          <MetricsKpiCard.Footer detail="Estimated cost of input and output tokens" prevValue="$1,365.12" />
+        </MetricsKpiCard>
+      </MetricsCardGroup>
+    </div>
+  ),
+  play: async ({ canvas }) => {
+    // The card fills its cell, so the cell's edge is the card's edge.
+    const cell = canvas.getByTestId('cell').getBoundingClientRect();
+    const prevValue = canvas.getByText('vs $1,365.12').getBoundingClientRect();
+    const detail = canvas.getByText('Estimated cost of input and output tokens');
+    await expect(prevValue.right).toBeLessThanOrEqual(cell.right);
+    await expect(detail.scrollWidth).toBeGreaterThan(detail.clientWidth);
+  },
 };
