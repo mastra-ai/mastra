@@ -43,6 +43,8 @@ Inspect the suspended `review-decision` proposal, including its content, target,
 
 Approval publishes the reviewed record to the customer's Knowledge. To try rejection, start a separate proposal for a different confirmed observation. Choose `reject` and check that the proposed page is absent.
 
+A suspended proposal saved by an earlier version may fail current validation and be denied resume. As its owning reviewer, inspect the saved review for invalid record fields, including topic tags longer than 80 characters, or text exceeding the native page-description or note limits. Start a fresh Review from the same confirmed message and inspect the new proposal before deciding. The earlier proposal remains in the audit history.
+
 ## 3. Approve a shared finding and reuse it
 
 Start a separate **Review** proposal for the same confirmation with `audience` set to `tenant`. Inspect the sanitized guidance, the conditions where it applies, and the public source revision before approving. Use `retailops-store-73` to start a new Support conversation about an unintended Wi-Fi network. Ask for reviewed findings and look for the approved `tenant:retailops#learnings/…` reference.

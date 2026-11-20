@@ -1,6 +1,7 @@
 import { recordOperation } from '../observability.ts';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Profile } from '../identity.ts';
+import { isRetryablePublicationError } from '../review/publication-errors.ts';
 import {
   approvalSchema,
   decisionSchema,
@@ -83,7 +84,7 @@ export function createReviewWorkflow(service: ReviewService) {
         return result;
       } catch (error) {
         recordOperation('review-publication', 'error');
-        if (error instanceof ReviewConflict) throw error;
+        if (!isRetryablePublicationError(error)) throw error;
         // The previous successful step is the durable decision checkpoint. A retry never recomputes intent.
         recordOperation('review-publication', 'suspended');
         return suspend(inputData);

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { validateSupportRecord } from '../knowledge/seed-manifest.ts';
 import { assertKnowledgeNoteTextWithinBound, assertKnowledgePageDescriptionWithinBound } from '@mastra/core/knowledge';
 
 const text = (max: number) =>
@@ -36,7 +37,14 @@ export const recordSchema = z
     summary: text(1000),
     applicability: text(1000),
   })
-  .strict();
+  .strict()
+  .superRefine((record, context) => {
+    try {
+      validateSupportRecord(record);
+    } catch (error) {
+      context.addIssue({ code: 'custom', message: (error as Error).message });
+    }
+  });
 export const candidateSchema = z
   .object({
     action: z.enum(['page', 'note', 'update', 'duplicate', 'contradiction', 'insufficient-evidence']),
@@ -57,8 +65,6 @@ export const candidateSchema = z
   .superRefine((value, context) => {
     if (['note', 'update'].includes(value.action) !== !!value.target)
       context.addIssue({ code: 'custom', message: 'Only notes and updates require an existing versioned target' });
-    if (new Set(value.record.topicTags).size !== value.record.topicTags.length)
-      context.addIssue({ code: 'custom', message: 'Topic tags must be unique' });
     const content = [value.title, value.content, value.record.summary, value.record.applicability].join('\n');
     if (/knowledge-review:|knowledge-seed:|Seed note:|```support-record/iu.test(content))
       context.addIssue({ code: 'custom', message: 'Reserved publication markers are not allowed in proposed content' });
@@ -165,5 +171,5 @@ export type Candidate = z.infer<typeof candidateSchema>;
 export type Proposal = z.infer<typeof proposalSchema>;
 export type Approval = z.infer<typeof approvalSchema>;
 
-/** Validation failures require a fresh review; only infrastructure faults may be retried. */
+/** Validation failures require a fresh review; only recognized transient faults may be retried. */
 export class ReviewConflict extends Error {}

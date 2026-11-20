@@ -371,6 +371,84 @@ test('approval_publishes_scoped_content_and_a_new_thread_reuses_knowledge', { ti
   }
 });
 
+test(
+  'review accepts readable record boundaries and fails permanent publication errors',
+  { timeout: 120000 },
+  async () => {
+    const f = await fixture();
+    try {
+      await f.start();
+      const input = await confirmation(f);
+      const valid = candidate('record-boundary');
+      valid.record.topicTags = ['connectivity', 'a'.repeat(80)];
+      f.select(valid);
+      const accepted = await pending(f, input);
+      const published = await resume(f, accepted);
+      assert.equal(published.result.status, 'published');
+      const index = f.model.requests.length;
+      await turn(f, await thread(f), 'network connectivity');
+      const prepared = history(f.model.requests[index]!);
+      assert.equal(prepared.status, 'ready');
+      assert.ok(prepared.records.some(record => record.ref === published.result.reference));
+
+      const before = await snapshot(f);
+      const invalid = candidate('invalid-record');
+      invalid.record.topicTags = ['connectivity', 'a'.repeat(81)];
+      f.select(invalid);
+      const rejected = await begin(f, input);
+      assert.equal(rejected.state.status, 'failed', 'An unreadable record must fail before review approval');
+      assert.deepEqual(await snapshot(f), before);
+
+      f.select(candidate('permanent-write-failure'));
+      const failed = await pending(f, input);
+      // A real database constraint aborts the Knowledge write, without interfering with workflow audit.
+      await sql(
+        f,
+        `CREATE TRIGGER reject_review_write BEFORE INSERT ON mastra_knowledge_pages
+      WHEN instr(NEW.body, 'knowledge-review:${failed.proposal.id}:') > 0
+      BEGIN SELECT RAISE(ABORT, 'synthetic permanent publication constraint'); END`,
+      );
+      const result = await resume(f, failed);
+      assert.equal(result.status, 'failed', 'A permanent write error must not offer an endless retry');
+      assert.deepEqual(await snapshot(f), before);
+      const audit = await inspect(f, failed.runId);
+      assert.equal(audit.status, 'failed');
+      assert.match(JSON.stringify(audit.steps['publish-review'].error), /synthetic permanent publication constraint/u);
+      assert.deepEqual(audit.steps['review-decision'].output.decision, decision(failed.proposal));
+      assert.deepEqual(audit.steps['review-decision'].output.proposal, failed.proposal);
+      await sql(f, 'DROP TRIGGER reject_review_write');
+      assert.equal(
+        (
+          await post(f, `/workflows/review/resume-async?runId=${failed.runId}`, {
+            step: ['publish-review'],
+            resumeData: decision(failed.proposal),
+          })
+        ).status,
+        403,
+      );
+
+      f.select(candidate('transient-write-contention'));
+      const busy = await pending(f, input);
+      const lock = await acquireWriterLock();
+      try {
+        assert.equal((await resume(f, busy)).status, 'suspended');
+        assert.deepEqual(await snapshot(f), before);
+      } finally {
+        await lock.release();
+      }
+      const suspended = await inspect(f, busy.runId);
+      assert.deepEqual(suspended.steps['publish-review'].suspendPayload.decision, decision(busy.proposal));
+      assert.equal((await resume(f, busy, 'approve', 'publish-review')).result.status, 'published');
+      assert.equal(
+        (await snapshot(f)).filter(item => item.page.body?.includes(`knowledge-review:${busy.proposal.id}:`)).length,
+        1,
+      );
+    } finally {
+      await f.close();
+    }
+  },
+);
+
 test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 240000 }, async () => {
   const f = await fixture();
   try {
