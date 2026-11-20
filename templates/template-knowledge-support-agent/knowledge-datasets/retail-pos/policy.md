@@ -1,3 +1,3 @@
-# Example safe changes policy
+# Safe changes
 
-Synthetic example rule: preserve pending work and obtain authorization before a disruptive change. Use [[connection-guide]] for the fictional connection check.
+Before a disruptive change, ask whether offline payments are pending. If any are pending, do not factory reset, sign out, delete the POS app, or change mode or location: the payments can be permanently lost. Preserve the queue and seek authorized support when safe recovery is uncertain. Follow [[connection-guide]] for diagnostic context.

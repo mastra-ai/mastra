@@ -14,7 +14,7 @@ export interface DatasetConfiguration {
   id: string;
   directory: string;
   profiles: Profile[];
-  mandatoryPolicies: { profileId: string; pageKey: string }[];
+  mandatoryPolicies: { profileId: string; pageKey: string; ref?: string }[];
 }
 
 export interface SupportRecord {
@@ -252,6 +252,7 @@ export async function prepareDataset(config: DatasetConfiguration): Promise<Prep
     if (
       !profile ||
       !page ||
+      (mapping.ref !== undefined && page.ref !== mapping.ref) ||
       page.input.kind !== 'policy' ||
       !['tenant', 'docs'].includes(page.placement.kind) ||
       page.placement.profile.tenantId !== profile.tenantId

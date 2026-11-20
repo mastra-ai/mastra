@@ -169,10 +169,11 @@ test('seed_dry_run_apply_repeat_and_update_preserve_provenance', { timeout: 1200
     );
     assert.match(
       await readFile(join(f.root, 'knowledge-datasets/retail-pos', manifest.pages[0]!.file), 'utf8'),
-      /original synthetic training content/u,
+      /Square Terminal network checks/u,
     );
     manifest.pages[0]!.source!.url = 'https://example.com/synthetic-reference';
     manifest.pages[0]!.source!.verifiedOn = '2026-01-15';
+    manifest.pages[0]!.source!.license = 'Apache-2.0';
     const supportedLinks =
       '[Reference](https://example.com/reference?first=1&second=2)\n\n![Indicator](https://example.com/indicator%28part%29.png?first=1&second=2)\n\n[Section](#example-connectivity-checks)\n\nhttps://example.com/path@fixture?first=1&second=2\n\n[Contact](https://example.com?contact=fixture@example.com)\n\nwww.example.com/path@fixture?first=1&second=2';
     const supportedNoteLinks =

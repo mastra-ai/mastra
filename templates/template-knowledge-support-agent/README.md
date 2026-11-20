@@ -1,10 +1,10 @@
 # Knowledge support agent
 
-Open a local support chat in Mastra Studio with profile-scoped Knowledge and persistent conversation history. Load a local Markdown dataset into native Knowledge with source attribution, links, and notes. This platform provides a minimal smoke agent. Troubleshooting behavior and reviewed publication follow separately.
+Describe a connectivity issue in Mastra Studio to investigate authorized customer cases and vendor guidance, with visible evidence references and diagnostic questions. Each turn prepares relevant customer history and receives the current safety policy through native Knowledge pins. Technician-confirmed outcomes stay in that conversation until reviewed publication is added.
 
 ## Why we built this
 
-Support conversations need a clear boundary between shared documentation, one customer's records, and the support user's private conversation history. This template establishes that boundary before adding support behavior.
+Support conversations need a clear boundary between shared documentation, one customer's records, and the support user's private conversation history. This template keeps those sources separate while preparing relevant evidence before the support model runs.
 
 ## Prerequisites
 
@@ -33,21 +33,21 @@ Support conversations need a clear boundary between shared documentation, one cu
      ```
    - Open the private credential file at the path printed by the launcher locally and copy the token for `north-store`. Tokens expire after eight hours. Each dev launch generates a separate credential file and removes that file when it exits. A failed duplicate launch leaves the running server's credentials intact. The terminal prints the file path, never the tokens.
    - Open `http://127.0.0.1:4111` with the Studio `auth_header` query parameter set to `Bearer <copied token>`. Keep this local authorization URL private and out of recordings.
-   - Select **Support**, open a new chat, and ask: “What Knowledge is available to this profile?” The loaded synthetic connectivity guide and fictional customer case are available to this profile. Its conversation is stored locally.
+   - Select **Support**, open a new chat, and ask: “My Square Terminal loses network connectivity. What should I check?” Support can read the official-source summary and fictional customer case, cite its evidence, and ask about missing details. Its conversation is stored locally.
 
 ## Try it out
 
-- Open a second chat and verify its conversation history is separate from the first chat.
-- Restart the dev server, use the newly generated token, and reopen the first chat to inspect its saved conversation.
-- Open Studio with the `north-other` or `north-colleague` profile and verify the first profile's conversations are absent.
-- Edit the synthetic Markdown or a manifest note, rerun the seed command, and inspect the changed page or note in Knowledge. Unrelated content stays intact.
+- Ask: “Can I factory reset while offline payments are pending?” The required safety policy prohibits that action because pending payments can be lost.
+- Edit `knowledge-datasets/retail-pos/policy.md`, rerun the seed command, and ask again in the same chat. Native State Signals deliver the revised policy. Missing, empty, or truncated required policies block actionable guidance.
+- Confirm a fictional outcome as the technician, then open another chat. The observation remains in the original conversation and does not publish Knowledge. Restart Studio to inspect the saved conversation.
+- Open Studio with `north-other` or `north-colleague` and verify the first profile's conversations are absent. Seeded customer cases belong to store 1 and are readable by both `north-store` and `north-colleague`; conversations remain separate by actor and thread. `north-other` starts with empty customer history and the same authorized vendor guidance.
 - Preview another use case with `npm run knowledge:seed -- --dataset software-integration --dry-run`. Its separately configured example profile and scopes do not change the retail Studio profiles.
 
 ## Customization
 
 - Ask your coding agent to explore the template and propose a plan before changing it. For example: “Plan profile mappings for our support teams and identify which Knowledge scopes each team should read.”
 - For another use case, define your example profiles and `exampleStudioRole` using [the retail POS example](src/examples/retail-pos/profiles.ts) as a starting point and import them in `scripts/dev.ts`. To try a different role locally, run `SUPPORT_STUDIO_ROLE=support-specialist npm run dev`. The launcher uses that role for generated credentials, and the server checks the same role when loading credentials. Tenant and customer Knowledge principals and Memory ownership come from the profile identifiers.
-- Register dataset directories, permitted profiles, and required policy aliases in `src/examples/datasets.ts`. Each `knowledge-datasets/<dataset>/manifest.json` declares schema version `1`, stable page and note keys, relative Markdown files, source attribution, and links to page aliases. Policies are validated here; active Support pins follow separately.
+- Register dataset directories, permitted profiles, and required policy aliases in `src/examples/datasets.ts`. Each `knowledge-datasets/<dataset>/manifest.json` declares schema version `1`, stable page and note keys, relative Markdown files, source attribution, and links to page aliases. Required policy references are shared with `src/examples/support.ts`, which also configures customer record roots, topic matching, domain instructions, and an optional depth-one guide listing. Support delivers at most two native pins within a 500-token budget. Keep the policy short enough to arrive in full.
 
 ## Local development
 
@@ -61,7 +61,7 @@ Rerunning converges after partial writes and keeps unrelated notes. Changed note
 
 Run `npm run typecheck`, `npm run test:unit`, `npm run test:integration`, and `npm run format:check` for deterministic verification. Integration tests use disposable databases, real HTTP and dev subprocesses, and a local scripted model provider. They do not require an OpenAI credential or send prompts to an external provider.
 
-The Studio route boundary permits the Support chat, owned Memory reads and creation, read-only package capabilities, and scoped Knowledge browsing. Model, tool, instruction, scope, and authorization options supplied by clients are rejected. Knowledge writes and broader workflow or trace inspection are unavailable in this initial delivery.
+The Studio route boundary permits the Support chat, owned Memory reads and creation, read-only package capabilities, and scoped Knowledge browsing. Model, tool, instruction, scope, and authorization options supplied by clients are rejected. Support has viewer-only Knowledge access, including denial of pin mutations. Broader workflow and trace inspection remain unavailable.
 
 ## About Mastra templates
 

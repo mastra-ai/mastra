@@ -1,7 +1,13 @@
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 
-export async function startModelServer() {
+export interface ScriptedReply {
+  content?: string;
+  tool?: { name: string; arguments: Record<string, unknown> };
+}
+export type ModelScript = (body: Record<string, unknown>) => ScriptedReply;
+
+export async function startModelServer(script?: ModelScript) {
   const requests: Record<string, unknown>[] = [];
   const server = createServer(async (request, response) => {
     let raw = '';
@@ -9,10 +15,13 @@ export async function startModelServer() {
     const body = JSON.parse(raw);
     requests.push(body);
     const messages = body.messages as { role: string; content?: unknown; tool_calls?: unknown }[];
-    const lastUserIndex = messages.map(message => message.role).lastIndexOf('user');
+    const userText = (message: (typeof messages)[number]) =>
+      typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
+    const lastUserIndex = messages
+      .map(message => message.role === 'user' && !userText(message)?.startsWith('<pinned-knowledge'))
+      .lastIndexOf(true);
     const hasTool = messages.slice(lastUserIndex + 1).some(message => message.role === 'tool');
-    const last = [...messages].reverse().find(message => message.role === 'user');
-    const text = typeof last?.content === 'string' ? last.content : JSON.stringify(last?.content);
+    const text = messages[lastUserIndex] ? userText(messages[lastUserIndex]!) : '';
     const read = /READ_PAGE:([^\s]+)/u.exec(text ?? '');
     const toolMessages = messages.slice(lastUserIndex + 1).filter(message => message.role === 'tool');
     let requestedPage = read?.[1];
@@ -25,18 +34,40 @@ export async function startModelServer() {
       } catch {}
     }
     const shouldRead = !read && toolMessages.length === 1 && requestedPage;
-    const tool =
-      !hasTool || shouldRead
-        ? {
-            id: `fixture-call-${toolMessages.length}`,
-            type: 'function',
-            function: {
-              name: requestedPage ? 'knowledge_read' : 'knowledge_search',
-              arguments: JSON.stringify(requestedPage ? { page: requestedPage } : { query: 'SYNTHETIC' }),
-            },
-          }
-        : undefined;
-    const content = tool ? null : 'Synthetic evidence inspected. Local platform is ready.';
+    let scripted: ScriptedReply | undefined;
+    try {
+      scripted = script?.(body);
+    } catch (error) {
+      response.writeHead(400, { 'content-type': 'application/json' });
+      response.end(
+        JSON.stringify({
+          error: {
+            message: error instanceof Error ? error.message : 'Scripted evidence assertion failed',
+            type: 'fixture_assertion',
+          },
+        }),
+      );
+      return;
+    }
+    const tool = scripted?.tool
+      ? {
+          id: `fixture-call-${requests.length}`,
+          type: 'function',
+          function: { name: scripted.tool.name, arguments: JSON.stringify(scripted.tool.arguments) },
+        }
+      : script
+        ? undefined
+        : !hasTool || shouldRead
+          ? {
+              id: `fixture-call-${requests.length}`,
+              type: 'function',
+              function: {
+                name: requestedPage ? 'knowledge_read' : 'knowledge_search',
+                arguments: JSON.stringify(requestedPage ? { page: requestedPage } : { query: 'SYNTHETIC' }),
+              },
+            }
+          : undefined;
+    const content = tool ? null : (scripted?.content ?? 'Synthetic evidence inspected. Local platform is ready.');
     if (body.stream) {
       response.writeHead(200, { 'content-type': 'text/event-stream' });
       const delta = tool ? { tool_calls: [{ index: 0, ...tool }] } : { content };

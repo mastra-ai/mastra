@@ -6,12 +6,19 @@
     {
       "key": "connection-guide",
       "path": "guides/connectivity",
-      "title": "Example connectivity checks",
+      "title": "Square Terminal network checks",
       "file": "connectivity.md",
-      "scope": { "kind": "docs", "profile": "north-store" },
+      "scope": {
+        "kind": "docs",
+        "profile": "north-store"
+      },
       "kind": "reference",
-      "description": "Synthetic connectivity procedure for the ingestion example.",
-      "source": { "kind": "original synthetic fixture", "license": "Apache-2.0" },
+      "description": "Original summary of official Square Terminal network guidance.",
+      "source": {
+        "kind": "original summary of official Square guidance",
+        "url": "https://squareup.com/help/us/en/article/8350-troubleshoot-network-connection-on-square-terminal",
+        "verifiedOn": "2026-11-20"
+      },
       "links": ["safety-policy"]
     },
     {
@@ -19,9 +26,15 @@
       "path": "policies/safe-changes",
       "title": "Example safe changes policy",
       "file": "policy.md",
-      "scope": { "kind": "tenant", "profile": "north-store" },
+      "scope": {
+        "kind": "tenant",
+        "profile": "north-store"
+      },
       "kind": "policy",
-      "source": { "kind": "original synthetic fixture", "license": "Apache-2.0" },
+      "source": {
+        "kind": "original synthetic fixture",
+        "license": "Apache-2.0"
+      },
       "links": ["connection-guide"]
     },
     {
@@ -29,9 +42,15 @@
       "path": "cases/connection-check",
       "title": "Fictional connection check",
       "file": "case.md",
-      "scope": { "kind": "customer", "profile": "north-store" },
+      "scope": {
+        "kind": "customer",
+        "profile": "north-store"
+      },
       "kind": "case",
-      "source": { "kind": "fictional service record", "license": "Apache-2.0" },
+      "source": {
+        "kind": "fictional service record",
+        "license": "Apache-2.0"
+      },
       "record": {
         "topicTags": ["connectivity"],
         "observedOn": "2026-01-12",

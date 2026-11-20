@@ -8,11 +8,13 @@ import { setTimeout } from 'node:timers/promises';
 import { exampleProfiles, exampleStudioRole } from '../../src/examples/retail-pos/profiles.ts';
 import { principals, resourceId } from '../../src/mastra/identity.ts';
 import type { KnowledgePage } from '@mastra/core/knowledge';
-import { startModelServer } from './model-server.ts';
+import { startModelServer, type ModelScript } from './model-server.ts';
 
-export async function runtimeFixture(options: { generatedCredentials?: boolean; studioRole?: string } = {}) {
+export async function runtimeFixture(
+  options: { generatedCredentials?: boolean; studioRole?: string; modelScript?: ModelScript } = {},
+) {
   const directory = await mkdtemp(join(tmpdir(), 'knowledge-support-'));
-  const model = await startModelServer();
+  const model = await startModelServer(options.modelScript);
   const studioRole = options.studioRole ?? exampleStudioRole;
   const credentials = [
     ...exampleProfiles,
@@ -72,6 +74,15 @@ export async function runtimeFixture(options: { generatedCredentials?: boolean; 
     stamps: ['customer:north:store-2'],
     author: 'synthetic-fixture',
   });
+  for (const tenant of ['north', 'south']) {
+    await runtime.supportKnowledge.upsertPage({
+      scope: `tenant:${tenant}`,
+      path: 'policies/safe-changes',
+      name: 'Synthetic safety policy',
+      body: 'Preserve pending work. Obtain authorization before any disruptive change. Do not reset while offline payments are pending.',
+      author: 'synthetic-fixture',
+    });
+  }
   let child: ReturnType<typeof spawn> | undefined;
   let output = '';
   let activeCredentialFile: string | undefined;
@@ -185,6 +196,7 @@ export async function runtimeFixture(options: { generatedCredentials?: boolean; 
   }
   return {
     ...runtime,
+    directory,
     model,
     credentials,
     expired,

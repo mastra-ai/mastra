@@ -317,6 +317,7 @@ test('http_agent_and_memory_reject_foreign_scope_and_thread', { timeout: 120000 
     const advertised = fixture.model.requests[0]!.tools as { function: { name: string } }[];
     assert.deepEqual(advertised.map(tool => tool.function.name).sort(), [
       'knowledge_list',
+      'knowledge_pin',
       'knowledge_read',
       'knowledge_search',
     ]);

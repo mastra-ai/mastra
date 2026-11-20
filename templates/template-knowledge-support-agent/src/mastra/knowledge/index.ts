@@ -1,4 +1,5 @@
 import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge';
+import { supportConfiguration } from '../../examples/support.ts';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 
 export function createKnowledge(storage: MastraCompositeStore) {
@@ -10,10 +11,14 @@ export function createKnowledge(storage: MastraCompositeStore) {
     scopes: {
       'resource:$resourceId': { ...memoryScopes['resource:$resourceId'], access: [...viewer] },
       'thread:$threadId': { ...memoryScopes['thread:$threadId'], access: [...viewer] },
-      'tenant:$tenantId': { access: [...viewer] },
+      'tenant:$tenantId': {
+        access: [...viewer],
+        pinnedContext: [`tenant:$tenantId#${supportConfiguration.policy.path}`, supportConfiguration.optionalListing],
+      },
       'docs:$tenantId': { belongsTo: 'tenant:$tenantId', access: [{ principal: 'tenant:$tenantId', role: 'viewer' }] },
       'customer:$tenantId:$customerId': { belongsTo: 'tenant:$tenantId', access: [...viewer] },
     },
     tools: { read: true, write: false },
+    pinnedContext: { maxPins: 2, maxTokens: 500 },
   });
 }

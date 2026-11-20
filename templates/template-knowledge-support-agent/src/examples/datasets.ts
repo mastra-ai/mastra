@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import type { DatasetConfiguration } from '../mastra/knowledge/seed-manifest.ts';
+import { policyReference, supportConfiguration } from './support.ts';
 import { exampleProfiles } from './retail-pos/profiles.ts';
 
 const directory = (name: string) => fileURLToPath(new URL(`../../knowledge-datasets/${name}/`, import.meta.url));
@@ -10,12 +11,29 @@ export const datasets: Record<string, DatasetConfiguration> = {
     id: 'retail-pos',
     directory: directory('retail-pos'),
     profiles: exampleProfiles,
-    mandatoryPolicies: [{ profileId: 'north-store', pageKey: 'safety-policy' }],
+    mandatoryPolicies: [
+      {
+        profileId: 'north-store',
+        pageKey: supportConfiguration.policy.pageKey,
+        ref: policyReference(exampleProfiles[0]!),
+      },
+    ],
   },
   'software-integration': {
     id: 'software-integration',
     directory: directory('software-integration'),
     profiles: [{ id: 'integration-team', actorId: 'morgan', tenantId: 'software', customerId: 'example-app' }],
-    mandatoryPolicies: [{ profileId: 'integration-team', pageKey: 'change-policy' }],
+    mandatoryPolicies: [
+      {
+        profileId: 'integration-team',
+        pageKey: 'change-policy',
+        ref: policyReference({
+          id: 'integration-team',
+          actorId: 'morgan',
+          tenantId: 'software',
+          customerId: 'example-app',
+        }),
+      },
+    ],
   },
 };
