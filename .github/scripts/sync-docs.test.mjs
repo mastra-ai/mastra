@@ -173,6 +173,38 @@ describe('mirror', () => {
     writeFiles(source, { 'a.mdx': 'a' });
     assert.deepEqual(mirror(source, path.join(tmp, 'new/dest')), { added: 1, updated: 0, deleted: 0 });
   });
+
+  test('replaces symlinks in dest instead of writing through them', () => {
+    const source = path.join(tmp, 'source');
+    const dest = path.join(tmp, 'dest');
+    const outside = path.join(tmp, 'outside');
+    writeFiles(source, { 'a.mdx': 'a', 'sub/c.mdx': 'c' });
+    writeFiles(outside, { 'secret.txt': 'secret', 'dir/keep.txt': 'keep' });
+    fs.mkdirSync(dest);
+    fs.symlinkSync(path.join(outside, 'secret.txt'), path.join(dest, 'a.mdx'));
+    fs.symlinkSync(path.join(outside, 'dir'), path.join(dest, 'sub'));
+    fs.symlinkSync(path.join(outside, 'secret.txt'), path.join(dest, 'stray.mdx'));
+
+    mirror(source, dest);
+
+    assert.deepEqual(readTree(dest), readTree(source));
+    for (const entry of ['a.mdx', 'sub']) assert.equal(fs.lstatSync(path.join(dest, entry)).isSymbolicLink(), false);
+    assert.equal(fs.existsSync(path.join(dest, 'stray.mdx')), false);
+    assert.deepEqual(readTree(outside), { 'secret.txt': 'secret', 'dir/keep.txt': 'keep' });
+  });
+
+  test('refuses a dest reached through a symlink inside withinDir', () => {
+    const source = path.join(tmp, 'source');
+    const repo = path.join(tmp, 'repo');
+    const outside = path.join(tmp, 'outside');
+    writeFiles(source, { 'a.mdx': 'a' });
+    fs.mkdirSync(repo);
+    fs.mkdirSync(outside);
+    fs.symlinkSync(outside, path.join(repo, 'src'));
+
+    assert.throws(() => mirror(source, path.join(repo, 'src/docs'), { withinDir: repo }), /symlink/);
+    assert.deepEqual(fs.readdirSync(outside), []);
+  });
 });
 
 describe('syncTarget', () => {

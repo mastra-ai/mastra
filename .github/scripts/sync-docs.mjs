@@ -109,13 +109,25 @@ export function validateManifest(manifest, { rootDir = ROOT_DIR } = {}) {
   return targets;
 }
 
-function listFiles(dir, base = dir) {
+// Directory entries are never followed through symlinks. With `allEntries`, symlinks and other non-directories are
+// listed too, so mirroring removes them from dest instead of writing through them.
+function listFiles(dir, { allEntries = false } = {}, base = dir) {
   if (!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) return listFiles(full, base);
-    return entry.isFile() ? [path.relative(base, full)] : [];
+    if (entry.isDirectory()) return listFiles(full, { allEntries }, base);
+    return entry.isFile() || allEntries ? [path.relative(base, full)] : [];
   });
+}
+
+function assertNoSymlinks(withinDir, destDir) {
+  let current = withinDir;
+  for (const segment of path.relative(withinDir, destDir).split(path.sep).filter(Boolean)) {
+    current = path.join(current, segment);
+    if (fs.lstatSync(current, { throwIfNoEntry: false })?.isSymbolicLink()) {
+      throw new Error(`Refusing to sync through symlink ${current}`);
+    }
+  }
 }
 
 function removeEmptyDirs(dir, keepRoot = true) {
@@ -127,13 +139,15 @@ function removeEmptyDirs(dir, keepRoot = true) {
 }
 
 /**
- * Makes `destDir` an exact copy of the files in `sourceDir`.
+ * Makes `destDir` an exact copy of the regular files in `sourceDir`. With `withinDir` (the checkout `destDir` lives
+ * in), refuses when a path segment between them is a symlink, so the target repo can't redirect writes elsewhere.
  */
-export function mirror(sourceDir, destDir) {
+export function mirror(sourceDir, destDir, { withinDir } = {}) {
+  if (withinDir) assertNoSymlinks(withinDir, destDir);
   const sourceFiles = new Set(listFiles(sourceDir));
   const result = { added: 0, updated: 0, deleted: 0 };
 
-  for (const file of listFiles(destDir)) {
+  for (const file of listFiles(destDir, { allEntries: true })) {
     if (!sourceFiles.has(file)) {
       fs.rmSync(path.join(destDir, file));
       result.deleted++;
@@ -145,12 +159,14 @@ export function mirror(sourceDir, destDir) {
     const from = path.join(sourceDir, file);
     const to = path.join(destDir, file);
     const content = fs.readFileSync(from);
-    if (!fs.existsSync(to)) {
+    const existing = fs.lstatSync(to, { throwIfNoEntry: false });
+    if (!existing) {
       result.added++;
-    } else if (fs.readFileSync(to).equals(content)) {
+    } else if (existing.isFile() && fs.readFileSync(to).equals(content)) {
       continue;
     } else {
       result.updated++;
+      if (!existing.isFile()) fs.rmSync(to);
     }
     fs.mkdirSync(path.dirname(to), { recursive: true });
     fs.writeFileSync(to, content);
@@ -181,7 +197,7 @@ export async function syncTarget({ target, remoteUrl, sha, beforePush, rootDir =
     const destDir = path.join(repoDir, target.dest);
 
     for (let attempt = 1; attempt <= MAX_PUSH_ATTEMPTS; attempt++) {
-      const result = mirror(sourceDir, destDir);
+      const result = mirror(sourceDir, destDir, { withinDir: repoDir });
       if (git(repoDir, 'status', '--porcelain', '--', target.dest) === '') {
         log(`${target.name}: no changes`);
         return { status: 'unchanged' };
@@ -250,7 +266,9 @@ export async function main({
 
   if (values.into) {
     for (const target of selected) {
-      log(formatResult(target.name, mirror(path.join(rootDir, target.source), path.resolve(values.into, target.dest))));
+      const into = path.resolve(values.into);
+      const result = mirror(path.join(rootDir, target.source), path.join(into, target.dest), { withinDir: into });
+      log(formatResult(target.name, result));
     }
     return 0;
   }
