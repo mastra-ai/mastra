@@ -218,9 +218,11 @@ describe('custom-only board routing', () => {
         .getAllByRole('region')
         .map(region => region.getAttribute('aria-label')),
     ).toEqual(['Queued', 'Preparing', 'Shipping', 'Shipped']);
-    for (const label of ['Preparing', 'Shipping', 'Shipped']) {
+    for (const label of ['Preparing', 'Shipping']) {
       expect(stageToggle(label, columns)).toHaveAttribute('aria-expanded', 'true');
     }
+    // A terminal phase starts closed on a custom board too.
+    expect(stageToggle('Shipped', columns)).toHaveAttribute('aria-expanded', 'false');
     // Columns render before every query settles, so only judge the feeds once idle.
     await waitForMutationsIdle(client);
     expect(providerLists).toEqual([]);
@@ -233,17 +235,17 @@ describe('custom-only board routing', () => {
     expect(screen.getByLabelText('terminal phase')).toBeTruthy();
   });
 
-  it('opens another board with every group expanded even when it shares phase ids', async () => {
+  it('opens another board with its groups in their default state even when it shares phase ids', async () => {
     const user = userEvent.setup();
     const hotfixBoard = { ...releaseBoard, id: 'hotfix', title: 'Hotfix' };
     const { router } = renderBoard('boards/release', [], [releaseBoard, hotfixBoard]);
-    await user.click(stageToggle('Shipped', await screen.findByLabelText('Board stages')));
-    expect(stageToggle('Shipped', screen.getByLabelText('Board stages'))).toHaveAttribute('aria-expanded', 'false');
+    await user.click(stageToggle('Shipping', await screen.findByLabelText('Board stages')));
+    expect(stageToggle('Shipping', screen.getByLabelText('Board stages'))).toHaveAttribute('aria-expanded', 'false');
 
     await act(() => router.navigate('/factories/fp-1/boards/hotfix'));
 
     await waitFor(() =>
-      expect(stageToggle('Shipped', screen.getByLabelText('Board stages'))).toHaveAttribute('aria-expanded', 'true'),
+      expect(stageToggle('Shipping', screen.getByLabelText('Board stages'))).toHaveAttribute('aria-expanded', 'true'),
     );
   });
 

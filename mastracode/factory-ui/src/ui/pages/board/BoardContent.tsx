@@ -173,9 +173,20 @@ export function BoardContent({
     targetReady,
   });
   const [phaseCard] = useState(() => createHoverCardHandle<string>());
-  const collapsedStages = useCollapsedStages(
-    targetItemId && targetListed ? { itemId: targetItemId, stages: targetStages } : undefined,
+  // Terminal phases hold most of a board's cards: they start closed and open while a search finds cards in them.
+  const terminalStages = useMemo(
+    () => new Set(definition.phases.filter(phase => phase.kind === 'terminal').map(phase => phase.id)),
+    [definition.phases],
   );
+  const searchRevealed = new Set(
+    view.q !== '' && viewAnswered ? [...terminalStages].filter(stage => (shownPhases.get(stage)?.total ?? 0) > 0) : [],
+  );
+  const collapsedStages = useCollapsedStages({
+    closedByDefault: terminalStages,
+    searchKey: view.q,
+    searchRevealed,
+    revealTarget: targetItemId && targetListed ? { itemId: targetItemId, stages: targetStages } : undefined,
+  });
 
   if (phasesRead.isError) {
     return (
