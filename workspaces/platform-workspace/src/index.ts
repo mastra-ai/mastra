@@ -31,6 +31,8 @@ export {
   type SandboxAddressRegistry,
   type SandboxPortAuthCookie,
   type SandboxTemplatePending,
+  BUCKET_MOUNT_PATH,
+  type BucketMountState,
 } from './sandbox.js';
 export {
   createRepoTemplate,
