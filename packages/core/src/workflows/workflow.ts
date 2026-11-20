@@ -4524,7 +4524,7 @@ export class Run<
 
   /**
    * Evicts a suspended run from the workflow's run cache when its snapshot is stored as
-   * suspended and nothing in-process still depends on this instance. `resume()` rebuilds
+   * suspended, or as finished by another instance, and nothing in-process still depends on this instance. `resume()` rebuilds
    * the run from storage, so keeping it only pins memory until the process exits (#30774).
    */
   protected async releaseIfSuspended(): Promise<void> {
@@ -4540,7 +4540,8 @@ export class Run<
     } catch {
       return;
     }
-    if (storedStatus !== 'suspended') return;
+    // A stored finish means another instance finished the run, which leaves this one stale.
+    if (storedStatus !== 'suspended' && !(storedStatus && TERMINAL_WORKFLOW_RUN_STATUSES.has(storedStatus))) return;
     if (
       epoch !== this.#executionEpoch ||
       !settled() ||

@@ -204,6 +204,20 @@ describe.each(engines)('$engine engine: suspended run eviction', ({ createWorkfl
     await expect.poll(() => workflow.runs.has(run.runId)).toBe(false);
   });
 
+  it('evicts a stale handle whose resume is rejected because another handle finished the run', async () => {
+    const { workflow } = await setup();
+    const stale = await workflow.createRun();
+    expect((await stale.start({ inputData: {} })).status).toBe('suspended');
+    await expect.poll(() => workflow.runs.has(stale.runId)).toBe(false);
+
+    const reopened = await workflow.createRun({ runId: stale.runId });
+    expect((await reopened.resume({ step: 'approve', resumeData: { by: 'ana' } })).status).toBe('success');
+    await expect.poll(() => workflow.runs.has(stale.runId)).toBe(false);
+
+    await expect(stale.resume({ step: 'approve', resumeData: { by: 'bo' } })).rejects.toThrow();
+    await expect.poll(() => workflow.runs.has(stale.runId)).toBe(false);
+  });
+
   it('releases a run canceled after its suspension is written but before the run settles', async () => {
     const { workflow } = await setup();
     const run = await workflow.createRun();
