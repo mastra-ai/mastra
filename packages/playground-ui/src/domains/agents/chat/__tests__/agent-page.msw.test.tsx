@@ -82,6 +82,16 @@ describe('AgentPage', () => {
     });
   });
 
+  describe('when tabs are omitted', () => {
+    it('allocates the single grid row to the page content', async () => {
+      const { queryClient } = renderPage({ children: <main>Agent conversation</main> });
+      const content = screen.getByText('Agent conversation');
+      expect(content.parentElement?.classList.contains('grid-rows-[minmax(0,1fr)]')).toBe(true);
+      expect(content.parentElement?.children).toHaveLength(1);
+      await waitForMutationsIdle(queryClient);
+    });
+  });
+
   describe('when tabs are supplied', () => {
     it('exposes real destinations and the current view', async () => {
       const { queryClient } = renderPage({
