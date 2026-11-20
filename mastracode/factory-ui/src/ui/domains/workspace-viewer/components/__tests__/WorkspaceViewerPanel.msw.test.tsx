@@ -750,7 +750,7 @@ describe('WorkspaceViewerPanel', () => {
 
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
 
-      await user.click(await screen.findByRole('button', { name: 'Changes, sandbox not running' }));
+      await user.click(await screen.findByRole('button', { name: 'Changes, unavailable' }));
 
       expect(await screen.findByText(/The sandbox isn.t running/)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Wake sandbox' })).toBeInTheDocument();

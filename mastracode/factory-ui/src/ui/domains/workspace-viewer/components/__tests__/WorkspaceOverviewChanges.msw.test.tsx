@@ -1,14 +1,17 @@
 import { screen, within } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import type { WorkspaceChange, WorkspaceChanges } from '../../../../../api/types';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import type { WorkspacePanelPage } from '../../context/WorkspacePanelContext';
 import { WorkspaceViewerPanel } from '../WorkspaceViewerPanel';
 import userEvent from '@testing-library/user-event';
 
 const WORKSPACE = '/workspace/overview-changes';
+const SESSION_ID = 'session-overview-1';
+const SESSION_URL = `${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`;
 
 Object.defineProperty(CSSStyleSheet.prototype, 'replaceSync', { value: () => {} });
 
@@ -83,5 +86,48 @@ describe('workspace overview of the branch’s changes', () => {
     renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
 
     expect(await screen.findByRole('button', { name: 'Changes, 0 files' })).toHaveTextContent('No changes');
+  });
+
+  it('calls a checkout git could not read unavailable, without blaming the sandbox', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/workspace/changes`, () =>
+        HttpResponse.json({ workspacePath: WORKSPACE, available: false, changes: [] }),
+      ),
+    );
+
+    renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
+
+    expect(await screen.findByRole('button', { name: 'Changes, unavailable' })).toHaveTextContent(
+      'Changes unavailable',
+    );
+    expect(screen.queryByText(/sandbox/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('workspace overview of the card’s own pull request', () => {
+  const page: WorkspacePanelPage = {
+    subject: lead => lead,
+    overview: workspace =>
+      workspace?.({
+        changeRequest: {
+          badge: <a href="https://github.com/mastra-ai/mastra/pull/30895">#30895</a>,
+          status: 'open',
+        },
+      }),
+  };
+
+  it.each([
+    ['while the branch details load', () => delay('infinite')],
+    ['when the branch details fail to load', () => HttpResponse.json({ error: 'boom' }, { status: 500 })],
+  ])('keeps the pull request reachable %s', async (_, answer) => {
+    serveChanges([]);
+    server.use(http.get(SESSION_URL, answer));
+
+    renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} sessionId={SESSION_ID} page={page} />);
+
+    expect(await screen.findByRole('link', { name: '#30895' })).toHaveAttribute(
+      'href',
+      'https://github.com/mastra-ai/mastra/pull/30895',
+    );
   });
 });

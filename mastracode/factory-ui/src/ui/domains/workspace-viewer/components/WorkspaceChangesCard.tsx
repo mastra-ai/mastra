@@ -44,7 +44,6 @@ export type WorkspaceChangesSummary =
   | { state: 'unread' }
   | { state: 'loading' }
   | { state: 'failed' }
-  | { state: 'stopped' }
   | { state: 'read'; stats: WorkspaceChangeStats };
 
 function filesLabel({ files, repositories }: WorkspaceChangeStats): string {
@@ -65,18 +64,17 @@ function conflictsLabel({ files }: WorkspaceChangeStats): string | undefined {
 function changesName(changes: WorkspaceChangesSummary): string {
   if (changes.state === 'loading') return 'Changes, loading';
   if (changes.state === 'failed') return 'Changes, unavailable';
-  if (changes.state === 'stopped') return 'Changes, sandbox not running';
   if (changes.state === 'unread') return 'Show changes';
   return ['Changes', filesLabel(changes.stats), conflictsLabel(changes.stats), unreadableLabel(changes.stats)]
     .filter(Boolean)
     .join(', ');
 }
 
-const chevron = <IconChevronRightMedium aria-hidden className="text-muted-foreground ml-auto size-icon-sm shrink-0" />;
+const chevron = <IconChevronRightMedium aria-hidden className="text-muted-foreground size-icon-sm ml-auto shrink-0" />;
 
 function StateRow({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
-    <span className="text-muted-foreground flex h-7 items-center gap-1.5 [&>svg]:size-icon-sm [&>svg]:shrink-0">
+    <span className="text-muted-foreground [&>svg]:size-icon-sm flex h-7 items-center gap-1.5 [&>svg]:shrink-0">
       {icon}
       <Txt as="span" variant="caption" tone="muted" className="min-w-0 truncate">
         {children}
@@ -329,7 +327,7 @@ export function WorkspaceChangesCard({
       )}
     >
       {changes.state === 'loading' ? (
-        <span className="text-muted-foreground flex h-7 items-center gap-1.5 [&>svg]:size-icon-sm [&>svg]:shrink-0">
+        <span className="text-muted-foreground [&>svg]:size-icon-sm flex h-7 items-center gap-1.5 [&>svg]:shrink-0">
           <IconChanges aria-hidden />
           <Txt as="span" variant="caption" tone="muted" className="shrink-0">
             Reading changes
@@ -340,9 +338,6 @@ export function WorkspaceChangesCard({
       ) : null}
       {changes.state === 'failed' ? (
         <StateRow icon={<IconPageCross aria-hidden />}>Changes unavailable</StateRow>
-      ) : null}
-      {changes.state === 'stopped' ? (
-        <StateRow icon={<IconPageCross aria-hidden />}>Sandbox not running</StateRow>
       ) : null}
       {changes.state === 'unread' ? <StateRow icon={<IconChanges aria-hidden />}>Show changes</StateRow> : null}
       {clean ? <StateRow icon={<IconCheckmark2Medium aria-hidden />}>No changes</StateRow> : null}

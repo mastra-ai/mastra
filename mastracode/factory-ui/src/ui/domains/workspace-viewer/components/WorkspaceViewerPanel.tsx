@@ -52,7 +52,7 @@ function changesSummary(changes: UseQueryResult<WorkspaceChanges>): WorkspaceCha
 
 function readSummary(data: WorkspaceChanges): WorkspaceChangesSummary {
   const unreadable = unreadableRepositories(data).length;
-  if (!data.available) return unreadable > 0 ? { state: 'failed' } : { state: 'stopped' };
+  if (!data.available) return { state: 'failed' };
   const repositories = data.repositories && {
     total: data.repositories.length,
     changed: data.repositories.filter(repository => repository.changes.length > 0).length,

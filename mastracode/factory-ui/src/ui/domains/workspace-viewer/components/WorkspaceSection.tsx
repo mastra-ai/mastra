@@ -64,7 +64,7 @@ function RepositoryName({ slug, provider }: { slug: string; provider?: Repositor
   const owner = slug.includes('/') ? slug.slice(0, slug.lastIndexOf('/') + 1) : '';
   return (
     <div className="flex h-6 min-w-0 items-center gap-1.5 pl-2" title={slug}>
-      <span aria-hidden className="text-muted-foreground flex shrink-0 [&>svg]:size-icon-xs">
+      <span aria-hidden className="text-muted-foreground [&>svg]:size-icon-xs flex shrink-0">
         {ProviderIcon ? <ProviderIcon /> : <IconBranch />}
       </span>
       <Txt as="span" variant="caption" tone="muted" className="min-w-0 truncate">
@@ -163,7 +163,10 @@ export function WorkspaceSection({
               <BranchEdge baseBranch={workspace.baseBranch} changeRequest={changeRequest} />
             </>
           ) : (
-            <BranchUnavailable loading={loading} />
+            <>
+              <BranchUnavailable loading={loading} />
+              {changeRequest ? <div className="flex h-6 min-w-0 items-center pl-2">{changeRequest.badge}</div> : null}
+            </>
           )}
         </div>
         {action ? <span className="flex shrink-0 items-center">{action}</span> : null}
