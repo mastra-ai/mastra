@@ -28,6 +28,15 @@ afterEach(async () => {
   await Promise.all(hosts.splice(0).map(host => host.close()));
 });
 
+/** Whether `value` is made only of JSON values, as a tool call's arguments must be (no `Date`). */
+const isJson = (value: unknown): boolean =>
+  value === null ||
+  ['string', 'number', 'boolean'].includes(typeof value) ||
+  (Array.isArray(value) && value.every(isJson)) ||
+  (typeof value === 'object' &&
+    Object.getPrototypeOf(value) === Object.prototype &&
+    Object.values(value).every(isJson));
+
 /**
  * Calls the opening tool on a real MCP server, then renders the app as an iframe would run it, with
  * `window.parent` played by an `AppBridge` that hands the app that tool's result and forwards its
@@ -60,6 +69,11 @@ async function openWidget(
   const bridge = new AppBridge(client, { name: 'test-host', version: '1.0.0' }, capabilities, { hostContext });
   bridge.oninitialized = () => void bridge.sendToolResult(result as Parameters<AppBridge['sendToolResult']>[0]);
   await bridge.connect(hostTransport);
+  // Like Codex, refuse a call whose arguments aren't JSON instead of serializing them on the way.
+  bridge.oncalltool = async params => {
+    if (params.arguments !== undefined && !isJson(params.arguments)) throw new Error('Invalid MCP tool call params');
+    return (await client.callTool(params)) as Awaited<ReturnType<NonNullable<AppBridge['oncalltool']>>>;
+  };
 
   render(<ObservabilityWidget />);
   return bridge;

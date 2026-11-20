@@ -14,9 +14,12 @@ const toolOutput = z.object({ data: z.unknown() });
  */
 async function ask(app: App, request: DashboardRequest, projectId: string | undefined): Promise<DashboardAnswer> {
   if (request.unsatisfiable) return emptyAnswer(request.method);
+  // Tool-call arguments must be JSON: the planned window holds `Date`s, which hosts such as Codex
+  // refuse instead of serializing.
+  const args = JSON.parse(JSON.stringify(request.args)) as Record<string, unknown>;
   const result = await app.callServerTool({
     name: QUERY_OBSERVABILITY_TOOL,
-    arguments: { action: request.method, args: request.args, ...(projectId ? { projectId } : {}) },
+    arguments: { action: request.method, args, ...(projectId ? { projectId } : {}) },
   });
   const text = result.content.find(block => block.type === 'text')?.text;
   if (result.isError) throw new Error(text ?? `${QUERY_OBSERVABILITY_TOOL} failed.`);
