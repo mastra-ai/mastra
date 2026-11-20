@@ -2051,7 +2051,7 @@ export class Workflow<
     storageVersion: 1 | 2;
     /**
      * Set when execute() may start the nested run: on a start, and on a restart, which starts it
-     * when none is stored. Unset on a resume.
+     * when none is stored or the stored one never ran. Unset on a resume.
      */
     start?: { input: TInput; state: TState; inheritedState?: StateBase };
   };
@@ -3576,7 +3576,8 @@ export class Workflow<
     const nestedPubsub = useSharedPubsub ? pubsub : undefined;
     // A started nested run works on its own copy of the parent's state and hands back its changes
     // on top of the parent's state then, so changes the parent's other steps make meanwhile are kept.
-    // A restart prepares the same, because it starts the nested run when it finds none stored.
+    // A restart prepares the same, because it starts the nested run when none is stored or the
+    // stored one never ran.
     let startState = state;
     let startedFrom: Record<string, unknown> | undefined;
     if (!isResume) {
@@ -3586,6 +3587,9 @@ export class Workflow<
     }
     // The nested run takes the parent run's version. Only a storage v2 parent hands over its
     // state link, and it stores the nested run's state as its changes to a version of the parent's.
+    // Not on a restart: it only learns after createRun() whether it starts or restarts the nested
+    // run, and taking the link can write a draft of the parent's state that a restarted run never uses.
+    // A nested run a restart starts stores its full state instead, which costs space only.
     const inheritedState = !restart && !isResume ? await parentState?.(startState) : undefined;
     // Nothing may await between this and createRun(), which takes it synchronously.
     this.#nestedRun = {

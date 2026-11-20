@@ -3,12 +3,13 @@
  * run's workflow state back to the parent, like start() and resume() do.
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
 import { createWorkflow } from './create';
-import type { WorkflowRunState } from './types';
+import type { WorkflowOptions, WorkflowRunState } from './types';
 import { createStep } from './workflow';
 import type { AnyWorkflow } from './workflow';
 
@@ -103,7 +104,10 @@ describe('nested workflow restart state', () => {
     }
   });
 
-  it('keeps the parent state when the nested run restarts before its first step', async () => {
+  // A nested run stored as `pending` never ran a step, so the restart starts it with run.start().
+  // This used to go through the pending-with-input branch of createRestartExecutionParams (#16520),
+  // which the default engine no longer reaches for nested runs.
+  it('starts a nested run that only saved its pending snapshot, with the parent state', async () => {
     const storage1 = new MockStore();
     const store1 = (await storage1.getStore('workflows'))!;
     let pendingNested: unknown;
@@ -178,13 +182,64 @@ describe('nested workflow restart state', () => {
   });
 });
 
+type Store = NonNullable<MockStore['stores']['workflows']>;
+type WriteArgs = { workflowName: string; snapshot?: { status?: string }; header?: { status?: string } };
+
+/** Every store method a v1 or v2 run writes through. */
+const WRITE_METHODS = [
+  'persistWorkflowSnapshot',
+  'updateWorkflowResults',
+  'updateWorkflowState',
+  'updateWorkflowRunHeader',
+  'writeWorkflowRunCheckpoint',
+  'appendWorkflowRunEntries',
+  'mergeWorkflowRunStepResult',
+  'appendWorkflowRunStateDraft',
+] as const;
+
+/**
+ * Routes every workflow write through `decide` until the returned function restores the store.
+ * Writes that go through are copied first: the in-memory store keeps the objects it's given, so
+ * later in-memory edits would otherwise show up as stored.
+ */
+function interceptWrites(store: Store, decide: (args: WriteArgs) => 'write' | 'hang' | 'fail') {
+  const spies = WRITE_METHODS.map(method => {
+    const write = (store[method] as (...args: unknown[]) => Promise<unknown>).bind(store);
+    return vi.spyOn(store, method).mockImplementation((async (args: WriteArgs, ...rest: unknown[]) => {
+      const decision = decide(args);
+      if (decision === 'hang') return new Promise(() => {});
+      if (decision === 'fail') throw new Error('Connection terminated unexpectedly');
+      return write(structuredClone(args), ...rest);
+    }) as never);
+  });
+  return () => spies.forEach(spy => spy.mockRestore());
+}
+
+/** Lets another process claim the runs a crashed one held. */
+async function expireRunLeases(storage: MockStore) {
+  const store = storage.stores.workflows!;
+  for (const runId of [...(store as unknown as { db: { runOwners: Map<string, unknown> } }).db.runOwners.keys()]) {
+    await store.claimRunOwnership({ runId, ownerId: 'lapsed', leaseMs: -1, force: true });
+  }
+}
+
+/** A run as stored, in either storage version. */
+async function loadStored(store: Store, version: 1 | 2, workflowName: string, runId: string) {
+  if (version === 1) {
+    const snapshot = await store.loadWorkflowSnapshot({ workflowName, runId });
+    return snapshot && { ...snapshot, steps: snapshot.context as Record<string, { status: string }> };
+  }
+  const run = await store.loadWorkflowRun({ workflowName, runId, successfulSteps: 'full' });
+  return run && { ...run.header, steps: run.steps };
+}
+
 /**
  * The parent saves its nested step as running before the nested run saves its first snapshot, in
  * two separate writes. A crash or a failed write in between leaves a running parent step with no
  * nested run, and restarting the parent failed it with "This workflow run was not active". Found by
  * the workflow-chaos soak main-nostreams-1h.
  */
-describe('restart when the nested run was never saved', () => {
+describe.each([1, 2] as const)('restart when the nested run was never saved (storage v%s)', version => {
   const armState = z.object({ log: z.array(z.string()), a: z.string().optional(), b: z.string().optional() });
   type Built = { workflows: Record<string, AnyWorkflow>; calls: Record<string, number> };
 
@@ -194,7 +249,7 @@ describe('restart when the nested run was never saved', () => {
       inputSchema: z.any(),
       outputSchema: armState,
       stateSchema: armState,
-      execute: async ({ state }) => state,
+      execute: async ({ getState }) => getState(),
     });
 
   const prep = (calls: Record<string, number>) =>
@@ -209,7 +264,7 @@ describe('restart when the nested run was never saved', () => {
     });
 
   /** `parent`: prep, then `nested` (first, second), then read-state. `first` logs the input it got. */
-  function buildSequential(nestedOptions?: { shouldPersistSnapshot: (args: { workflowStatus: string }) => boolean }) {
+  function buildSequential(nestedOptions?: Pick<WorkflowOptions, 'shouldPersistSnapshot'>): Built {
     const calls: Record<string, number> = {};
     const logStep = (id: string) =>
       createStep({
@@ -217,8 +272,9 @@ describe('restart when the nested run was never saved', () => {
         inputSchema: z.any(),
         outputSchema: z.any(),
         stateSchema: armState,
-        execute: async ({ inputData, state, setState }) => {
+        execute: async ({ inputData, getState, setState }) => {
           calls[id] = (calls[id] ?? 0) + 1;
+          const state = await getState();
           const entry = id === 'first' ? `first:${JSON.stringify(inputData) ?? 'undefined'}` : id;
           await setState({ ...state, log: [...state.log, entry] });
           return inputData;
@@ -229,7 +285,7 @@ describe('restart when the nested run was never saved', () => {
       inputSchema: z.any(),
       outputSchema: z.any(),
       stateSchema: armState,
-      ...(nestedOptions ? { options: nestedOptions as any } : {}),
+      options: nestedOptions,
     })
       .then(logStep('first'))
       .then(logStep('second'))
@@ -239,6 +295,7 @@ describe('restart when the nested run was never saved', () => {
       inputSchema: z.object({ value: z.any() }),
       outputSchema: armState,
       stateSchema: armState,
+      options: { storageVersion: version },
     })
       .then(prep(calls))
       .then(nested)
@@ -258,8 +315,9 @@ describe('restart when the nested run was never saved', () => {
             inputSchema: z.any(),
             outputSchema: z.any(),
             stateSchema: armState,
-            execute: async ({ inputData, state, setState }) => {
+            execute: async ({ inputData, getState, setState }) => {
               calls[key] = (calls[key] ?? 0) + 1;
+              const state = await getState();
               // Its own key, and an entry in the list both arms append to.
               const entry = `${key}:${JSON.stringify(inputData)}`;
               await setState({ ...state, [key]: entry, log: [...state.log, entry] });
@@ -275,6 +333,7 @@ describe('restart when the nested run was never saved', () => {
       inputSchema: z.object({ value: z.any() }),
       outputSchema: armState,
       stateSchema: armState,
+      options: { storageVersion: version },
     })
       .then(prep(calls))
       .parallel([nestedA, nestedB])
@@ -285,46 +344,45 @@ describe('restart when the nested run was never saved', () => {
 
   /**
    * Starts `parent` and lets the process die at the first nested write that `lands` rejects: that
-   * write and everything after it never reach storage. Returns fresh storage holding what landed.
+   * write and every later write it makes never reach storage. Work that runs inside the returned
+   * `revived` (the next process) writes normally. The dead process's leases are expired.
    */
   async function crashAtNestedWrite(
     { workflows }: Built,
     value: unknown,
-    lands: (args: { workflowName: string; snapshot: WorkflowRunState }) => boolean = args =>
-      args.workflowName === 'parent',
+    lands: (args: WriteArgs) => boolean = args => args.workflowName === 'parent',
   ) {
-    const storage1 = new MockStore();
-    const store1 = storage1.stores.workflows!;
-    const persist = store1.persistWorkflowSnapshot.bind(store1);
+    const storage = new MockStore();
+    // The dead process's work keeps running in this test's process, for example an arm that was
+    // still reading when the other arm hit the cut. Async context tells its writes apart from the
+    // next process's, so none of them can land after the cut.
+    const nextProcess = new AsyncLocalStorage<true>();
     let died = false;
     let markDied!: () => void;
     const dead = new Promise<void>(resolve => (markDied = resolve));
-    vi.spyOn(store1, 'persistWorkflowSnapshot').mockImplementation(async args => {
-      if (died || !lands(args)) {
-        died = true;
-        markDied();
-        return new Promise(() => {});
-      }
-      return persist({ ...args, snapshot: structuredClone(args.snapshot) });
+    interceptWrites(storage.stores.workflows!, args => {
+      if (nextProcess.getStore()) return 'write';
+      if (!died && lands(args)) return 'write';
+      died = true;
+      markDied();
+      return 'hang';
     });
-    new Mastra({ logger: false, storage: storage1, workflows });
+    new Mastra({ logger: false, storage, workflows });
     const run = await workflows.parent!.createRun();
     void run.start({ inputData: { value }, initialState: { log: ['parent'] } });
     await dead;
+    await expireRunLeases(storage);
+    const revived = <T>(fn: () => Promise<T>) => nextProcess.run(true, fn);
+    return { storage, runId: run.runId, revived };
+  }
 
-    const storage2 = new MockStore();
-    const store2 = storage2.stores.workflows!;
-    for (const workflowName of Object.keys(workflows)) {
-      const snapshot = await store1.loadWorkflowSnapshot({ workflowName, runId: run.runId });
-      if (snapshot) {
-        await store2.persistWorkflowSnapshot({
-          workflowName,
-          runId: run.runId,
-          snapshot: JSON.parse(JSON.stringify(snapshot)),
-        });
-      }
-    }
-    return { storage: storage2, runId: run.runId };
+  async function expectNestedStepRunningWithoutNestedRun(storage: MockStore, runId: string) {
+    const store = storage.stores.workflows!;
+    const parent = await loadStored(store, version, 'parent', runId);
+    expect(parent?.status).toBe('running');
+    expect(parent?.steps.nested?.status).toBe('running');
+    expect(parent?.activeStepsPath).toHaveProperty('nested');
+    expect(await loadStored(store, version, 'nested', runId)).toBeNull();
   }
 
   /** Neither arm's changes undo the other's. The arms run concurrently, so the list's order varies. */
@@ -338,40 +396,42 @@ describe('restart when the nested run was never saved', () => {
     });
   }
 
-  async function restart(built: Built, storage: InstanceType<typeof MockStore>, runId: string) {
-    new Mastra({ logger: false, storage, workflows: built.workflows });
-    return (await built.workflows.parent!.createRun({ runId })).restart();
+  type Revived = <T>(fn: () => Promise<T>) => Promise<T>;
+
+  function restart(built: Built, storage: MockStore, runId: string, revived: Revived = fn => fn()) {
+    return revived(async () => {
+      new Mastra({ logger: false, storage, workflows: built.workflows });
+      return (await built.workflows.parent!.createRun({ runId })).restart();
+    });
   }
 
   it.each([[{ n: 1 }], [null], [0], [false], [''], [undefined]])(
     'runs the nested workflow once with its input %j',
     async value => {
-      const { storage, runId } = await crashAtNestedWrite(buildSequential(), value);
-      const parentSnapshot = await storage.stores.workflows!.loadWorkflowSnapshot({ workflowName: 'parent', runId });
-      expect(parentSnapshot?.context.nested?.status).toBe('running');
-      expect(await storage.stores.workflows!.loadWorkflowSnapshot({ workflowName: 'nested', runId })).toBeNull();
+      const { storage, runId, revived } = await crashAtNestedWrite(buildSequential(), value);
+      await expectNestedStepRunningWithoutNestedRun(storage, runId);
 
       const built = buildSequential();
-      const result = await restart(built, storage, runId);
+      const result = await restart(built, storage, runId, revived);
 
       expect(result.status).toBe('success');
       expect(result.status === 'success' && result.result).toEqual({
         log: ['parent', `first:${JSON.stringify(value) ?? 'undefined'}`, 'second'],
       });
       expect(built.calls).toEqual({ first: 1, second: 1 });
-      const nested = await storage.stores.workflows!.loadWorkflowSnapshot({ workflowName: 'nested', runId });
-      expect(nested?.status).toBe('success');
+      expect((await loadStored(storage.stores.workflows!, version, 'nested', runId))?.status).toBe('success');
     },
   );
 
   it('runs a nested workflow that does not save pending snapshots', async () => {
-    const options = {
-      shouldPersistSnapshot: ({ workflowStatus }: { workflowStatus: string }) => workflowStatus !== 'pending',
+    const options: Pick<WorkflowOptions, 'shouldPersistSnapshot'> = {
+      shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus !== 'pending',
     };
-    const { storage, runId } = await crashAtNestedWrite(buildSequential(options), { n: 1 });
+    const { storage, runId, revived } = await crashAtNestedWrite(buildSequential(options), { n: 1 });
+    await expectNestedStepRunningWithoutNestedRun(storage, runId);
 
     const built = buildSequential(options);
-    const result = await restart(built, storage, runId);
+    const result = await restart(built, storage, runId, revived);
 
     expect(result.status).toBe('success');
     expect(result.status === 'success' && result.result).toEqual({ log: ['parent', 'first:{"n":1}', 'second'] });
@@ -379,18 +439,20 @@ describe('restart when the nested run was never saved', () => {
   });
 
   it('recovers the run on boot', async () => {
-    const { storage, runId } = await crashAtNestedWrite(buildSequential(), { n: 1 });
+    const { storage, runId, revived } = await crashAtNestedWrite(buildSequential(), { n: 1 });
 
     const built = buildSequential();
     // The crash was just now; a zero grace lets recovery restart the run at once.
-    await new Mastra({
-      logger: false,
-      storage,
-      workflows: built.workflows,
-      recovery: { workflowGraceMs: 0 },
-    }).restartAllActiveWorkflowRuns();
+    await revived(() =>
+      new Mastra({
+        logger: false,
+        storage,
+        workflows: built.workflows,
+        recovery: { workflowGraceMs: 0 },
+      }).restartAllActiveWorkflowRuns(),
+    );
 
-    const parent = await storage.stores.workflows!.loadWorkflowSnapshot({ workflowName: 'parent', runId });
+    const parent = await loadStored(storage.stores.workflows!, version, 'parent', runId);
     expect(parent?.status).toBe('success');
     expect(parent?.result).toEqual({ log: ['parent', 'first:{"n":1}', 'second'] });
     expect(built.calls).toEqual({ first: 1, second: 1 });
@@ -398,17 +460,12 @@ describe('restart when the nested run was never saved', () => {
 
   it('runs the nested workflow when its first write failed and the worker kept running', async () => {
     const storage = new MockStore();
-    const store = storage.stores.workflows!;
-    const persist = store.persistWorkflowSnapshot.bind(store);
     // The database drops out at the nested run's first write, so that write and the parent's
     // writes that follow it fail. The process itself keeps running.
     let outage = false;
-    const writes = vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async args => {
-      if (args.workflowName === 'nested') outage = true;
-      if (outage) throw new Error('Connection terminated unexpectedly');
-      // The in-memory store keeps the snapshot object itself; copy it so later in-memory edits
-      // don't show up as stored.
-      return persist({ ...args, snapshot: structuredClone(args.snapshot) });
+    const restore = interceptWrites(storage.stores.workflows!, args => {
+      if (args.workflowName !== 'parent') outage = true;
+      return outage ? 'fail' : 'write';
     });
     const first = buildSequential();
     new Mastra({ logger: false, storage, workflows: first.workflows });
@@ -416,12 +473,9 @@ describe('restart when the nested run was never saved', () => {
     await run.start({ inputData: { value: { n: 1 } }, initialState: { log: ['parent'] } }).catch(() => {});
     expect(outage).toBe(true);
     expect(first.calls).toEqual({ prep: 1 });
-    writes.mockRestore();
-    const stored = await store.loadWorkflowSnapshot({ workflowName: 'parent', runId: run.runId });
-    expect(stored?.status).toBe('running');
-    expect(stored?.context.nested?.status).toBe('running');
-    expect(stored?.activeStepsPath).toHaveProperty('nested');
-    expect(await store.loadWorkflowSnapshot({ workflowName: 'nested', runId: run.runId })).toBeNull();
+    restore();
+    await expireRunLeases(storage);
+    await expectNestedStepRunningWithoutNestedRun(storage, run.runId);
 
     const built = buildSequential();
     const result = await restart(built, storage, run.runId);
@@ -433,28 +487,31 @@ describe('restart when the nested run was never saved', () => {
 
   it('keeps the state of both parallel arms when one nested run was saved and the other was not', async () => {
     // As in the soak's parallel trace: nested-a saved its pending snapshot, nested-b never did.
-    const { storage, runId } = await crashAtNestedWrite(
+    const { storage, runId, revived } = await crashAtNestedWrite(
       buildParallel(),
       { n: 1 },
       args =>
-        args.workflowName === 'parent' || (args.workflowName === 'nested-a' && args.snapshot.status === 'pending'),
+        args.workflowName === 'parent' ||
+        (args.workflowName === 'nested-a' && (args.snapshot ?? args.header)?.status === 'pending'),
     );
     const store = storage.stores.workflows!;
-    expect((await store.loadWorkflowSnapshot({ workflowName: 'nested-a', runId }))?.status).toBe('pending');
-    expect(await store.loadWorkflowSnapshot({ workflowName: 'nested-b', runId })).toBeNull();
+    expect((await loadStored(store, version, 'nested-a', runId))?.status).toBe('pending');
+    expect(await loadStored(store, version, 'nested-b', runId)).toBeNull();
 
     const built = buildParallel();
-    const result = await restart(built, storage, runId);
+    const result = await restart(built, storage, runId, revived);
 
     expectBothArms(result);
     expect(built.calls).toEqual({ a: 1, b: 1 });
   });
 
   it('keeps the state of both parallel arms when neither nested run was saved', async () => {
-    const { storage, runId } = await crashAtNestedWrite(buildParallel(), { n: 1 });
+    const { storage, runId, revived } = await crashAtNestedWrite(buildParallel(), { n: 1 });
+    expect(await loadStored(storage.stores.workflows!, version, 'nested-a', runId)).toBeNull();
+    expect(await loadStored(storage.stores.workflows!, version, 'nested-b', runId)).toBeNull();
 
     const built = buildParallel();
-    const result = await restart(built, storage, runId);
+    const result = await restart(built, storage, runId, revived);
 
     expectBothArms(result);
     expect(built.calls).toEqual({ a: 1, b: 1 });
