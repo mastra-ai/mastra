@@ -1170,6 +1170,9 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         const label = (hit: Awaited<ReturnType<typeof store.searchPages>>[number]) =>
           hit.type === 'page' ? hit.page.name : hit.note.text;
         const r = read(['org:acme']);
+        // Compatibility (r397): a body-only hit carries the page body, which knowledge_search snippets are cut from.
+        const giraffeHit = (await store.searchPages({ query: 'grazes', read: r })).find(hit => hit.type === 'page');
+        expect(giraffeHit?.page.body).toBe('A giraffe grazes.');
         // Words matched first, then points, then newest. Safari matches 2 words (zebra, giraffe), the others 1:
         // Zebra care 3 points, Stripes 2, Savanna 1. Two body words beat one name word.
         expect((await store.searchPages({ query: 'zebra giraffe lion', read: r })).map(label)).toEqual([

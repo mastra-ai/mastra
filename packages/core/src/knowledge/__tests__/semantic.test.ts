@@ -233,6 +233,37 @@ describe('Knowledge semantic search', () => {
     expect(titles(await globex()('knowledge_search', { query: 'reimbursement', limit: 3 }))).toHaveLength(3);
   });
 
+  it('gives authorized semantic page hits a body snippet only when the body holds a query word (r397)', async () => {
+    await acme()('knowledge_page', {
+      op: 'write',
+      scope: 'org:acme',
+      name: 'Finance handbook',
+      body: `Office hours are 9 to 5. Any reimbursement over $500 needs a manager's sign-off. Parking is free.`,
+    });
+    await acme()('knowledge_page', {
+      op: 'write',
+      scope: 'org:acme',
+      name: 'Refund policy',
+      body: 'Refunds within 30 days.',
+    });
+    await globex()('knowledge_page', {
+      op: 'write',
+      scope: 'org:globex',
+      name: 'Globex money',
+      body: 'GLOBEX-SECRET reimbursement terms: refund refund money back.',
+    });
+
+    const result = await acme()('knowledge_search', { query: 'reimbursement' });
+    const byName = Object.fromEntries(result.results.map((hit: Result) => [hit.page.name, hit.page]));
+    expect(byName['Finance handbook'].snippet).toContain("reimbursement over $500 needs a manager's sign-off");
+    // A semantic-only hit whose body has no query word gets no snippet.
+    expect(byName['Refund policy']).toBeDefined();
+    expect(byName['Refund policy'].snippet).toBeUndefined();
+    // The other tenant's page is a semantic candidate but never reaches the result, nor does its body.
+    expect(byName['Globex money']).toBeUndefined();
+    expect(JSON.stringify(result)).not.toContain('GLOBEX-SECRET');
+  });
+
   it('notes are indexed, and only surface where the note itself is readable', async () => {
     const { page } = await acme()('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Ops', body: 'misc' });
     await acme()('knowledge_note', {

@@ -36,6 +36,7 @@ import type { KnowledgePageRefs } from './page-refs';
 import { KnowledgeNotFoundError, KnowledgeRun } from './run';
 import type { KnowledgeRunContext } from './run';
 import type { KnowledgeScopeRuntime } from './scope-runtime';
+import { knowledgeBodySnippet, knowledgeSearchQuery } from './search-snippet';
 import { knowledgeEmbedFailedWarning } from './semantic';
 import type { KnowledgeSemanticIndex } from './semantic';
 
@@ -132,6 +133,12 @@ function pageSummary(page: KnowledgePage, { refs, scopes }: KnowledgePageRefs) {
     ...(page.isScope ? { address: page.address } : { scope: scopes.get(page.scopeId) }),
     ...(page.description ? { description: page.description } : {}),
   };
+}
+
+/** A page search hit: its summary, plus a bounded excerpt of the body around the matched words. */
+function searchPageSummary(page: KnowledgePage, refs: KnowledgePageRefs, words: string) {
+  const snippet = knowledgeBodySnippet(page.body, words);
+  return { ...pageSummary(page, refs), ...(snippet ? { snippet } : {}) };
 }
 
 function noteSummary(note: KnowledgeNote, mentions?: Record<string, string>) {
@@ -250,7 +257,7 @@ function searchTool(host: KnowledgePageToolHost) {
   return createTool({
     id: 'knowledge_search',
     description:
-      'Search the knowledge this run can read: page names, descriptions, bodies and notes. Optional `scope` narrows to pages in those scopes.',
+      'Search the knowledge this run can read: page names, descriptions, bodies and notes. A page hit carries a `snippet` of its body around the matched words when the body contains them; read the page before relying on it. Optional `scope` narrows to pages in those scopes.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -268,7 +275,7 @@ function searchTool(host: KnowledgePageToolHost) {
       const max = limitOf(limit);
       // Keyword search has no quoting: a quote mark would be matched as a literal character, so
       // `"api" "responses"` would find nothing. Search the quoted words instead.
-      const words = query.replace(/["`\u201C\u201D]/g, ' ').trim();
+      const words = knowledgeSearchQuery(query);
       const lexical = words
         ? await run.storage.searchPages({ query: words, read: run.read, scopeIds, limit: max })
         : [];
@@ -315,7 +322,7 @@ function searchTool(host: KnowledgePageToolHost) {
         results: await Promise.all(
           hits.map(async hit =>
             hit.type === 'page'
-              ? { type: 'page' as const, page: pageSummary(hit.page, addresses) }
+              ? { type: 'page' as const, page: searchPageSummary(hit.page, addresses, words) }
               : {
                   type: 'note' as const,
                   page: pageSummary(hit.page, addresses),

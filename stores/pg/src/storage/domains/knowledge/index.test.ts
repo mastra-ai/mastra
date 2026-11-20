@@ -1,4 +1,8 @@
-import { createKnowledgeLegacyUpgradeTests, createKnowledgePageStoreTests } from '@internal/storage-test-utils';
+import {
+  createKnowledgeLegacyUpgradeTests,
+  createKnowledgePageStoreTests,
+  createKnowledgeSearchSnippetTests,
+} from '@internal/storage-test-utils';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -104,6 +108,12 @@ beforeAll(async () => {
 });
 
 createKnowledgePageStoreTests(() => new KnowledgePG({ pool, schemaName: 'knowledge_contract_test' }));
+
+beforeAll(async () => {
+  await pool.query('CREATE SCHEMA IF NOT EXISTS knowledge_snippet_test');
+});
+const snippetStorage = new PostgresStore({ id: 'knowledge-snippets', pool, schemaName: 'knowledge_snippet_test' });
+createKnowledgeSearchSnippetTests(() => snippetStorage);
 
 const LEGACY_SCHEMA = 'knowledge_legacy_test';
 const legacyTable = (name: string) => `"${LEGACY_SCHEMA}"."${name}"`;
