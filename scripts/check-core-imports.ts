@@ -267,7 +267,7 @@ function findPublishedFloorVersion(coreRange: string) {
   }
 
   const versions = JSON.parse(view.stdout) as string[];
-  return semver.minSatisfying(versions, resolveCoreSemverRange(coreRange), { includePrerelease: true }) ?? undefined;
+  return semver.minSatisfying(versions, resolveCoreSemverRange(coreRange)) ?? undefined;
 }
 
 function packPublishedCore(version: string, tempDir: string) {
