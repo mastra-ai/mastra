@@ -209,7 +209,32 @@ describe('token limits on huge output (#30951)', () => {
     expect(maxScanned()).toBeLessThanOrEqual(LIMIT * 32);
   });
 
-  it('cuts match tokenx slicing the whole output across mixed text and whitespace', async () => {
+  it('a window ending inside a long mixed-language segment still keeps head and tail within the budget', async () => {
+    // tokenx counts a segment by its whole length, so cutting the window inside one can
+    // move the cut away from whole-output slicing; the kept text must still fit.
+    const segment = 'a'.repeat(65_000) + 'é' + 'ж漢字'.repeat(20_000) + 'b'.repeat(65_000);
+    for (const output of [segment, 'é' + 'a'.repeat(65_000), 'a'.repeat(65_000) + 'é', `log ${segment} done`]) {
+      const tail = await applyTokenLimit(output, LIMIT, 'start');
+      const keptTail = tail.slice(tail.indexOf('\n') + 1);
+      expect(output.endsWith(keptTail)).toBe(true);
+      expect(keptTail.length).toBeGreaterThan(0);
+      expect(estimateTokenCount(keptTail)).toBeLessThanOrEqual(LIMIT);
+
+      const head = await applyTokenLimit(output, LIMIT, 'end');
+      const keptHead = head.slice(0, head.lastIndexOf('\n'));
+      expect(output.startsWith(keptHead)).toBe(true);
+      expect(keptHead.length).toBeGreaterThan(0);
+      expect(estimateTokenCount(keptHead)).toBeLessThanOrEqual(LIMIT);
+
+      const sandwich = await applyTokenLimitSandwich(output, LIMIT);
+      const [sHead, , sTail] = sandwich.split(/\n(\[\.\.\.output truncated[^\n]*)\n/);
+      expect(output.startsWith(sHead!)).toBe(true);
+      expect(output.endsWith(sTail!)).toBe(true);
+      expect(estimateTokenCount(sHead!) + estimateTokenCount(sTail!)).toBeLessThanOrEqual(LIMIT);
+    }
+  });
+
+  it('cuts match tokenx slicing the whole output when segments are short, across mixed text and whitespace', async () => {
     let seed = 7;
     const rnd = (n: number) => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) % n;
     const pieces = ['error', 'at', 'src/index.ts:42:7', '{"a":1}', '12345', '...', '漢字', '𝐀𝐁', 'ж'];

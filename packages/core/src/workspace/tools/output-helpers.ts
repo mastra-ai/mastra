@@ -200,12 +200,18 @@ function countTokensOver(output: string, limit: number): number | undefined {
 }
 
 /**
- * `budget` tokens from one end of `output`, as `sliceByTokensSafe(output, 0, budget)`
- * (`'head'`) or `sliceByTokensSafe(output, -budget)` (`'tail'`) would give them.
- * Outputs within the overall `limit`'s size cap take exactly that path. Longer ones
- * hand tokenx only a window at that end, measured as tokenx sees it: whitespace runs
+ * `budget` tokens from one end of `output`. Outputs within the overall `limit`'s
+ * size cap are cut exactly as before, by `sliceByTokensSafe(output, 0, budget)`
+ * (`'head'`) or `sliceByTokensSafe(output, -budget)` (`'tail'`). Longer ones hand
+ * tokenx only a window at that end, measured as tokenx sees it: whitespace runs
  * are collapsed (see `countTokensOver`), so padding can't crowd real text out of
  * the window. The cut is mapped back to the original text, whitespace and all.
+ *
+ * For those longer outputs the cut is approximate: it fits `budget` by tokenx's
+ * count of the kept text, but can land elsewhere than tokenizing the whole output
+ * would. tokenx counts a segment by its whole length, so a window that ends inside
+ * a long segment counts it differently (at a 2,000-token budget, 65,000 'a' then
+ * 'é' keeps 12,000 chars here and 6,000 when the whole output is tokenized).
  */
 function sliceEdge(output: string, budget: number, limit: number, side: 'head' | 'tail'): string {
   if (output.length <= Math.max(limit, 1) * WINDOW_CHARS_PER_TOKEN) {
