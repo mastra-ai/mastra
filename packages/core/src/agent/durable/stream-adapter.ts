@@ -115,6 +115,16 @@ export function createSupersededEventFilter(history: AgentStreamEvent[]): (event
     );
 }
 
+/** The newest run-log index in `history`, i.e. how far the run had got when it was read. */
+export function newestLogIndex(history: AgentStreamEvent[]): number | undefined {
+  let newest: number | undefined;
+  for (const event of history) {
+    if (typeof event.index !== 'number' || event.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED) continue;
+    if (newest === undefined || event.index > newest) newest = event.index;
+  }
+  return newest;
+}
+
 function callbackToolCalls(records: unknown[], runId: string): ToolCallChunk[] {
   return records.map(record => {
     if ((record as ToolCallChunk).type === 'tool-call') return record as ToolCallChunk;
@@ -337,6 +347,12 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   rereadMinGeneration?: () => Promise<number | undefined>;
   /** Reject events in uncheckpointed tails superseded before this reader attached. */
   keepReplayEvent?: (event: AgentStreamEvent) => boolean | Promise<boolean>;
+  /**
+   * With `closeOnSuspend`, how far the run had got when this reader attached. A
+   * replayed SUSPENDED below it was already resumed past: it is delivered as usual
+   * (`onSuspended` fires) but does not end the stream.
+   */
+  attachedAtLogIndex?: () => number | undefined;
   /** Refresh takeover ranges after replay attachment and before delivering cached events. */
   refreshReplayFilter?: () => Promise<unknown>;
   /**
@@ -478,6 +494,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     minGeneration,
     rereadMinGeneration,
     keepReplayEvent,
+    attachedAtLogIndex,
     refreshReplayFilter,
     idleTimeoutMs,
     isAlive,
@@ -736,6 +753,14 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   let onChunkDelivery = Promise.resolve();
   let activityVersion = 0;
   let terminalSettlement: Promise<void> | undefined;
+  // An expired log restarts numbering at 0 while this reader stays attached;
+  // from then on indexes no longer compare against `attachedAtLogIndex`.
+  let previousLogIndex: number | undefined;
+  let logRestarted = false;
+  const isPastSuspension = (event: AgentStreamEvent) => {
+    const attachedAt = attachedAtLogIndex?.();
+    return !logRestarted && attachedAt !== undefined && typeof event.index === 'number' && event.index < attachedAt;
+  };
 
   const handleEvent = async (event: Event) => {
     // Deliveries resume in arrival order once the skipped events are folded.
@@ -779,6 +804,10 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     armIdleTimer();
 
     if (streamEvent.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED) return;
+    if (typeof streamEvent.index === 'number') {
+      if (previousLogIndex !== undefined && streamEvent.index < previousLogIndex) logRestarted = true;
+      previousLogIndex = streamEvent.index;
+    }
 
     // Public chunks carry their run-log index so a client can resume at index + 1.
     const logIndex = typeof streamEvent.index === 'number' ? { index: streamEvent.index } : undefined;
@@ -999,17 +1028,24 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           // keep streaming chunks (the watchdog stays armed; a suspended-but-live
           // run reads as attachable via isAlive). `generate()`/`resumeGenerate()`
           // opt into closing so `getFullOutput()` can resolve.
-          if (closeOnSuspend) {
+          if (closeOnSuspend && !isPastSuspension(streamEvent)) {
             // Mark terminal BEFORE awaiting onSuspended: handleEvent re-armed the
             // watchdog at the top, and a slow callback (> idleTimeoutMs) would
             // otherwise let it fire and emit a spurious idle error on an
-            // already-closing run. safeClose in `finally` so a throwing callback
-            // can't skip closure.
+            // already-closing run.
             markTerminated();
             try {
               await onSuspended?.(data);
             } finally {
+              // Both in `finally` so a throwing callback can't skip them. Closing
+              // ends this reader only, and queued chunks stay readable. But a
+              // consumer that never drains the closed stream (`output.text`,
+              // `getFullOutput()`) would leave the subscription live forever, so
+              // tear it down once the frames already published have been delivered.
               safeClose(controller);
+              void waitForEventDelivery()
+                .catch(() => {})
+                .then(cleanup);
             }
           } else {
             // Settlement must precede resumed events, but a callback may await those events itself.
@@ -1107,6 +1143,24 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     for (const release of [...logIndexWaiters]) release();
   };
   const ackingHandleEvent = withAck(handleEvent);
+  // Once this reader has handled a terminal event, handleEvent drops every later
+  // delivery, so the subscription only holds a transport resource (a dedicated
+  // blocking connection on Redis Streams). Release it as soon as the deliveries
+  // in flight, and their acks, have settled instead of waiting for the run's
+  // cleanupTimeoutMs. This only unsubscribes this reader: the run's history and
+  // run record stay until cleanupTimeoutMs, so observe() can still replay it.
+  // A suspend without closeOnSuspend is not terminal, so a parked reader stays
+  // subscribed for the resume. See #30479.
+  let terminalRelease: Promise<void> | undefined;
+  const releaseTerminalSubscription = () => {
+    if (!terminated || cancelled || terminalRelease) return;
+    terminalRelease = (async () => {
+      while (inFlightDeliveries.size > 0) {
+        await Promise.allSettled([...inFlightDeliveries]);
+      }
+      if (!cancelled) cleanup();
+    })();
+  };
   // A takeover may be appended while cached events are still replaying. Hold
   // deliveries (and their acknowledgments) until the attached log is reconciled.
   let bufferingReplay = !!refreshReplayFilter && offset !== 'latest';
@@ -1126,6 +1180,10 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     void delivery
       .finally(() => {
         inFlightDeliveries.delete(delivery);
+        // Buffered replay handlers run in the drain below, not in
+        // inFlightDeliveries; releasing mid-drain could null the controller
+        // under a terminal handler that is still awaiting its callback.
+        if (isSubscribed && !bufferingReplay) releaseTerminalSubscription();
       })
       .catch(() => {});
     if (nextLogIndex !== undefined && typeof event.index === 'number' && event.index >= nextLogIndex) {
@@ -1221,6 +1279,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           // Start the idle countdown only once subscribed and replay is reconciled.
           armIdleTimer();
           resolveReady();
+          // Replay may already have delivered the run's terminal event.
+          releaseTerminalSubscription();
         })
         .catch(error => {
           void pubsub.unsubscribe(topic, subscribedCallback).catch(unsubscribeError => {

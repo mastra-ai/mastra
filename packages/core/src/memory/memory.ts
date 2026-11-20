@@ -54,6 +54,9 @@ import type {
   SerializedMemoryConfig,
   SerializedObservationalMemoryConfig,
   ObservationalMemoryOptions,
+  ObservationalMemorySettings,
+  GetObservationalMemoryRecordsInput,
+  ObservationalMemoryRecords,
 } from './types';
 import { isObservationalMemoryEnabled } from './types';
 
@@ -1214,6 +1217,36 @@ https://mastra.ai/en/docs/memory/overview`,
    * @returns Promise resolving to the cloned thread and copied messages
    */
   abstract cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput>;
+
+  /**
+   * Observational Memory settings for memory implementations that run Observational Memory
+   * themselves rather than through an `observational-memory` processor (for example a hosted
+   * backend). Returns `undefined` when this memory does not provide them.
+   */
+  async getObservationalMemoryConfig(_args: {
+    requestContext?: RequestContext;
+  }): Promise<ObservationalMemorySettings | undefined> {
+    return undefined;
+  }
+
+  /**
+   * Reads the current Observational Memory record and its history for memory implementations
+   * that report settings through `getObservationalMemoryConfig`. Callers must check thread
+   * access first. Returns `undefined` when this memory does not provide them.
+   */
+  async getObservationalMemoryRecords(
+    _args: GetObservationalMemoryRecordsInput,
+  ): Promise<ObservationalMemoryRecords | undefined> {
+    return undefined;
+  }
+
+  /** Waits for hosted buffering after thread access has been checked. Undefined means unsupported. */
+  async waitForObservationalMemoryBuffering(_args: {
+    threadId: string;
+    resourceId: string;
+  }): Promise<Pick<ObservationalMemoryRecords, 'record'> | undefined> {
+    return undefined;
+  }
 
   /**
    * Copies a thread and its messages to a new thread without returning the message

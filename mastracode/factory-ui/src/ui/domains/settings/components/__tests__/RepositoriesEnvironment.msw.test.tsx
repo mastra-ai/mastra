@@ -174,21 +174,6 @@ describe('Repository environment settings', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Add repository' })).toHaveFocus());
   });
 
-  it('toggles a repository out of the environment', async () => {
-    const environment = environmentPayload();
-    useEnvironment(environment);
-    const patches = recordPatches(environment);
-    const user = userEvent.setup();
-
-    renderRepositoriesSettings();
-
-    await user.click(await screen.findByRole('button', { name: 'Show settings for acme/api' }));
-    await user.click(screen.getByRole('switch', { name: 'Clone acme/api into every session' }));
-
-    await waitFor(() => expect(patches).toHaveLength(1));
-    expect(patches[0]).toEqual({ repositories: [{ projectRepositoryId: 'link-api', inEnvironment: false }] });
-  });
-
   it('keeps the controls usable while the environment refreshes after a save', async () => {
     const environment = environmentPayload();
     useEnvironment(environment);

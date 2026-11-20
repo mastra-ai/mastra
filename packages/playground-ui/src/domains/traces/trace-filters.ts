@@ -571,8 +571,10 @@ export function createTraceFilterBarFields({
 }: TraceQueryFieldSupport & {
   /** Trace-scope field descriptors from the query discovery endpoint. Empty when discovery is unavailable. */
   canonicalTraceFields?: readonly TraceQueryCanonicalFieldDescriptor[];
-  availableRootEntityNames: string[];
-  availableEnvironments: string[];
+  /** The root entity names to pick from. Omitted, `entityName` takes free text. */
+  availableRootEntityNames?: string[];
+  /** The environments to pick from. Omitted, `environment` takes free text. */
+  availableEnvironments?: string[];
   hiddenFieldIds?: readonly string[];
   /** Discovered `metadata.<key>` paths with a lazy value-suggestions resolver each. */
   metadataFields?: readonly TraceMetadataFilterField[];
@@ -594,6 +596,13 @@ export function createTraceFilterBarFields({
     strict: true,
     suggestions,
   });
+  const toOptions = (values: string[]) => values.map(value => ({ value }));
+  // A known list of values is a strict pick; without one, the host has nothing to offer and the value is typed.
+  const pickOrText = (
+    id: string,
+    values: string[] | undefined,
+    operators: TraceFilterOperatorId[] = TRACE_STRING_OPERATORS,
+  ): FilterBarField => (values ? pick(id, toOptions(values), operators) : { ...traceFieldBase(id), operators });
   const text = (id: string): FilterBarField => ({
     ...traceFieldBase(id),
     operators: id === 'traceId' ? TRACE_REQUIRED_STRING_OPERATORS : TRACE_STRING_OPERATORS,
@@ -620,20 +629,13 @@ export function createTraceFilterBarFields({
       ROOT_ENTITY_TYPE_OPTIONS.map(o => ({ value: o.entityType, label: o.label })),
       TRACE_SYNTHETIC_OPERATORS,
     ),
-    pick(
-      'entityName',
-      availableRootEntityNames.map(name => ({ value: name })),
-      TRACE_REQUIRED_STRING_OPERATORS,
-    ),
+    pickOrText('entityName', availableRootEntityNames, TRACE_REQUIRED_STRING_OPERATORS),
     pick(
       'status',
       TRACE_STATUS_OPTIONS.filter(o => o.value !== 'running').map(o => ({ value: o.value, label: o.label })),
       TRACE_SYNTHETIC_OPERATORS,
     ),
-    pick(
-      'environment',
-      availableEnvironments.map(env => ({ value: env })),
-    ),
+    pickOrText('environment', availableEnvironments),
   ];
   const textFields = TRACE_FILTER_BAR_TEXT_FIELD_IDS.map(text);
   const relatedFields = (['spans', 'scores', 'feedback'] as const).flatMap(scope =>

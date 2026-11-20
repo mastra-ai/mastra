@@ -2114,7 +2114,7 @@ describe('createMastraCode', () => {
       maxRetries?: number;
       delayMs?: (args: { error?: unknown; retryCount: number }) => number;
       onRetry?: (args: {
-        error: Error;
+        error: unknown;
         retryCount: number;
         requestContext?: { get: (key: string) => unknown };
         delayMs: number;
@@ -2172,6 +2172,22 @@ describe('createMastraCode', () => {
     expect(serverErrorPolicy.maxRetries).toBe(10);
     expect(serverErrorPolicy.delayMs!({ retryCount: 0 })).toBe(500);
     expect(typeof serverErrorPolicy.onRetry).toBe('function');
+
+    emitEvent.mockClear();
+    await serverErrorPolicy.onRetry!({
+      error: { type: 'error', error: { type: 'overloaded_error', message: 'Provider overloaded' }, statusCode: 503 },
+      retryCount: 0,
+      requestContext: { get: () => ({ emitEvent }) },
+      delayMs: 500,
+    });
+    expect(emitEvent).toHaveBeenCalledWith({
+      type: 'error',
+      error: expect.objectContaining({ message: expect.stringContaining('Provider overloaded'), statusCode: 503 }),
+      retryable: true,
+      retryDelay: 500,
+      retryAttempt: 1,
+      maxRetries: 10,
+    });
   });
 
   describe('default error lane', () => {

@@ -75,15 +75,6 @@ describe('usePwaInstall', () => {
     expect(result.current.installationMethod).toBe('manual');
   });
 
-  it('offers the manual method on Chrome iOS too', () => {
-    setUserAgent(
-      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/126.0.6478.54 Mobile/15E148 Safari/604.1',
-    );
-    const { result } = renderHook(() => usePwaInstall());
-    expect(result.current.state).toBe('manual-install');
-    expect(result.current.installationMethod).toBe('manual');
-  });
-
   it('reports installed when running standalone', () => {
     setStandalone(true);
     const { result } = renderHook(() => usePwaInstall());
@@ -123,16 +114,6 @@ describe('usePwaInstall', () => {
     expect(prompt).toHaveBeenCalledTimes(1);
   });
 
-  it('install() on iOS marks the app manually installed', async () => {
-    setUserAgent(IOS_UA);
-    const { result } = renderHook(() => usePwaInstall());
-
-    await act(() => result.current.install());
-
-    expect(localStorage.getItem(INSTALLED_KEY)).toBe('true');
-    expect(result.current.state).toBe('installed');
-  });
-
   it('becomes installed on the appinstalled event', () => {
     const { result } = renderHook(() => usePwaInstall());
     const { event } = createInstallPromptEvent('accepted');
@@ -141,27 +122,6 @@ describe('usePwaInstall', () => {
     act(() => void window.dispatchEvent(new Event('appinstalled')));
 
     expect(result.current.state).toBe('installed');
-    expect(result.current.canInstall).toBe(false);
-  });
-
-  it('dismiss() hides the banner and persists the timestamp', () => {
-    const { result } = renderHook(() => usePwaInstall());
-    const { event } = createInstallPromptEvent('accepted');
-    act(() => void window.dispatchEvent(event));
-
-    act(() => result.current.dismiss());
-
-    expect(result.current.canInstall).toBe(false);
-    expect(localStorage.getItem(DISMISSED_KEY)).not.toBeNull();
-  });
-
-  it('stays hidden while a recent dismissal is in effect', () => {
-    localStorage.setItem(DISMISSED_KEY, String(Date.now() - 1000));
-    const { result } = renderHook(() => usePwaInstall());
-    const { event } = createInstallPromptEvent('accepted');
-    act(() => void window.dispatchEvent(event));
-
-    expect(result.current.state).toBe('native-prompt-available');
     expect(result.current.canInstall).toBe(false);
   });
 

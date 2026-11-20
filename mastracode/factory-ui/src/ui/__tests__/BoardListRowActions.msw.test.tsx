@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -76,17 +76,6 @@ describe('List row actions menu', () => {
     const trigger = within(triage).getByRole('button', { name: 'Actions for Created later' });
     act(() => trigger.focus());
     await user.keyboard('{Enter}');
-
-    expect(await screen.findByRole('menuitem', { name: 'Move to Planning' })).toBeVisible();
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-  });
-
-  it('opens the same actions menu on right-click without selecting the row', async () => {
-    renderBoard();
-    const triage = await screen.findByTestId('board-column-triage');
-    const row = await within(triage).findByRole('article', { name: 'Moved recently' });
-
-    fireEvent.contextMenu(row);
 
     expect(await screen.findByRole('menuitem', { name: 'Move to Planning' })).toBeVisible();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();

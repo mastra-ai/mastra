@@ -57,8 +57,8 @@ export const greetingServer = new MCPServer({
 
 `observabilityDashboardApp` draws a Studio dashboard (rows of KPIs, time series, tables and scores widgets) with the same components Studio uses. Each widget loads and fails on its own.
 
-1. The model calls the tool that opens the app. That tool must declare an `outputSchema` so its result reaches the app as structured content: `{ dashboard, datePreset? }`, where `dashboard` passes `dashboardDefinitionSchema` from `@mastra/core/storage/dashboards` and `datePreset` is one of `24h`, `3d`, `7d`, `14d` or `30d`. Without `datePreset`, the app uses the dashboard's `defaults.datePreset` when it is one of those, else `24h`. The window ends when the app opens. The dashboard's top-level `defaults.filters` chips filter every widget.
-2. The app reads its data through the app-only `queryObservability` tool (exported as `QUERY_OBSERVABILITY_TOOL`). It calls it once per read with `{ action, args, projectId? }`, where `action` is one of `OBSERVABILITY_READ_ACTIONS`, the `MastraClient` observability reads the app sends (`aggregateTraces`, `getMetricBreakdown`, `getScoreTimeSeries`, `listScores`, …), `args` are that method's arguments, with dates as ISO strings, and `projectId` is the project the host passed, if any (see [Drawing over the host page's selection](#drawing-over-the-host-pages-selection)). The tool returns `{ data }`, the method's result; if it throws, that widget shows as failed.
+1. The model calls the tool that opens the app. That tool must declare an `outputSchema` so its result reaches the app as structured content: `{ dashboard, datePreset?, project? }`, where `dashboard` passes `dashboardDefinitionSchema` from `@mastra/core/storage/dashboards` and `datePreset` is one of `24h`, `3d`, `7d`, `14d` or `30d`. Without `datePreset`, the app uses the dashboard's `defaults.datePreset` when it is one of those, else `24h`. The window ends when the app opens. The dashboard's top-level `defaults.filters` chips filter every widget. `project` is optional; see [Reading one project's data in any chat client](#reading-one-projects-data-in-any-chat-client).
+2. The app reads its data through the app-only `queryObservability` tool (exported as `QUERY_OBSERVABILITY_TOOL`). It calls it once per read with `{ action, args, project? }`, where `action` is one of `OBSERVABILITY_READ_ACTIONS`, the `MastraClient` observability reads the app sends (`aggregateTraces`, `getMetricBreakdown`, `getScoreTimeSeries`, `listScores`, …), `args` are that method's arguments, with dates as ISO strings, and `project` is the project the host passed, else the one the opening tool returned, if any (see [Drawing over the host page's selection](#drawing-over-the-host-pages-selection)). The tool returns `{ data }`, the method's result; if it throws, that widget shows as failed.
 
 Use `observabilityDashboardInputSchema` as the opening tool's input and `toObservabilityDashboard` as its `execute`:
 
@@ -85,9 +85,9 @@ import { z } from 'zod';
 
 const uri = 'ui://mastra/observability-widget';
 const client = new MastraClient({ baseUrl: process.env.MASTRA_URL! });
-// Yours to write: checks the caller can access `projectId`, throws if not, and returns a client
+// Yours to write: checks the caller can access `project`, throws if not, and returns a client
 // whose reads stay in that project.
-declare function projectClient(projectId: string, context: unknown): Promise<MastraClient>;
+declare function projectClient(project: string, context: unknown): Promise<MastraClient>;
 
 export const observabilityServer = new MCPServer({
   id: 'observability',
@@ -111,12 +111,12 @@ export const observabilityServer = new MCPServer({
       inputSchema: z.object({
         action: z.enum(OBSERVABILITY_READ_ACTIONS),
         args: z.record(z.string(), z.unknown()),
-        projectId: z.string().optional(),
+        project: z.string().optional(),
       }),
       outputSchema: z.object({ data: z.unknown() }),
       mcp: { _meta: { ui: { resourceUri: uri, visibility: ['app'] } } },
-      execute: async ({ action, args, projectId }, context) => {
-        const reader = projectId ? await projectClient(projectId, context) : client;
+      execute: async ({ action, args, project }, context) => {
+        const reader = project ? await projectClient(project, context) : client;
         const read = reader[action].bind(reader) as (args: unknown) => Promise<unknown>;
         return { data: await read(args) };
       },
@@ -125,7 +125,7 @@ export const observabilityServer = new MCPServer({
 });
 ```
 
-`projectId` comes from the app's iframe, so the server can't trust it: check that the caller can access that project before reading. A read that throws shows its widget as failed.
+`project` is a project id or slug, as the host or the opening tool named it. It comes from the app's iframe, so the server can't trust it: resolve it and check that the caller can access that project before reading. A read that throws shows its widget as failed.
 
 The input names each widget, read and column type by a key instead of a `kind`, `source` or `type` field, so a validation error points at the part that's wrong. Each number holds the read it comes from, so nothing points at a query by id:
 
@@ -159,7 +159,7 @@ const host = useMemo(
     observabilityWidgetPins({
       resourceUri: 'ui://mastra/observability-widget',
       pinnedIds,
-      onPin: ({ widget, datePreset, filters }) => savePin(widget, datePreset, filters),
+      onPin: ({ widget, datePreset, filters, project }) => savePin(widget, { datePreset, filters, project }),
       onUnpin: widgetId => removePin(widgetId),
     }),
   [pinnedIds],
@@ -168,7 +168,7 @@ const host = useMemo(
 <McpAppHostProvider value={host}>{chat}</McpAppHostProvider>;
 ```
 
-A pin carries the widget, the date preset it was drawn over (with its `customRange` when `custom`) and, when it had any, the filters it was drawn under (the host's, else the dashboard's `defaults.filters`). The button only shows when the host sends pinned ids and accepts structured model context. A click shows right away and holds until the host sends new ids.
+A pin carries the widget, the date preset it was drawn over (with its `customRange` when `custom`) and, when it had any, the filters it was drawn under (the host's, else the dashboard's `defaults.filters`) and the project it read (`project`, as the host or the opening tool named it). The button only shows when the host sends pinned ids and accepts structured model context. A click shows right away and holds until the host sends new ids.
 
 #### Drawing over the host page's selection
 
@@ -182,20 +182,44 @@ const host = useMemo(
   () =>
     observabilityWidgetHost({
       resourceUri: 'ui://mastra/observability-widget',
-      projectId,
+      project,
       datePreset, // '24h' | '3d' | '7d' | '14d' | '30d' | 'custom'
       customRange, // { from?, to? } as Dates or ISO strings, drawn when datePreset is 'custom'
       filters, // FilterNode[], as a dashboard's defaults.filters
     }),
-  [projectId, datePreset, customRange, filters],
+  [project, datePreset, customRange, filters],
 );
 
 <McpAppHostProvider value={host}>{chat}</McpAppHostProvider>;
 ```
 
-`projectId` is sent with every `queryObservability` call, so your server can scope the reads to that project. It also sets the widgets' scope, as on the Metrics page: with a `projectId`, they show at project scope; without one, at org scope. Widgets, views and columns tagged for the other scope are hidden. The host's `datePreset` and `filters` replace the tool result's and the dashboard's defaults. The Metrics page's `datePreset`, `customRange` and `filterTokens` can be passed as they are. With `datePreset: 'custom'`, the widgets read over `customRange`, like the Metrics page: without `from`, the window starts 24 hours before now, and without `to`, it ends now. A value the app can't read (filters that fail the dashboard schema, an unknown preset, a range that ends before it starts) shows an error instead of the dashboard, so the widgets never draw data the host page didn't ask for. When any value changes, the app reads again; a preset window then ends at that moment. Each value is optional: leave one out to fall back to the dashboard's.
+`project` is sent with every `queryObservability` call, over any the opening tool returned, so your server can scope the reads to that project. It also sets the widgets' scope, as on the Metrics page: with a `project`, they show at project scope; without one, at org scope. Widgets, views and columns tagged for the other scope are hidden. The host's `datePreset` and `filters` replace the tool result's and the dashboard's defaults. The Metrics page's `datePreset`, `customRange` and `filterTokens` can be passed as they are. With `datePreset: 'custom'`, the widgets read over `customRange`, like the Metrics page: without `from`, the window starts 24 hours before now, and without `to`, it ends now. A value the app can't read (filters that fail the dashboard schema, an unknown preset, a range that ends before it starts) shows an error instead of the dashboard, so the widgets never draw data the host page didn't ask for. When any value changes, the app reads again; a preset window then ends at that moment. Each value is optional: leave one out to fall back to the dashboard's.
 
 To let the user pin widgets too, add `pins: { pinnedIds, onPin, onUnpin }`. `observabilityWidgetPins` is the same helper with only pins.
+
+#### Reading one project's data in any chat client
+
+Only a host that passes `observabilityWidgetHost` sets a project. In Claude or ChatGPT, nothing does, so every read covers all the projects your server can read. When the dashboard belongs to a project, return its id as `project` next to the dashboard:
+
+```typescript
+// Yours to write: the id of the project this dashboard is for, such as one the caller names,
+// once you've checked the caller can access it.
+declare function dashboardProjectId(context: unknown): Promise<string | undefined>;
+
+const showObservabilityDashboard = createTool({
+  id: 'showObservabilityDashboard',
+  description: 'Shows an observability dashboard of kpis, timeseries, table and scores widgets.',
+  inputSchema: observabilityDashboardInputSchema,
+  outputSchema: observabilityDashboardOutputSchema,
+  mcp: { _meta: { ui: { resourceUri: uri } } },
+  execute: async (input, context) => {
+    const project = await dashboardProjectId(context);
+    return { ...toObservabilityDashboard(input), ...(project ? { project } : {}) };
+  },
+});
+```
+
+The app sends that `project` with every `queryObservability` call and draws the widgets at project scope. A host that passes its own `project` still wins, so a page for one project never shows another's data. Inputs such as `queryObservability`'s `project` take an id or slug; the opening tool returns the resolved id. It comes back from the app's iframe, so check access in `queryObservability` too.
 
 #### Configuring a widget
 
@@ -206,14 +230,14 @@ const host = useMemo(
   () =>
     observabilityWidgetHost({
       resourceUri: 'ui://mastra/observability-widget',
-      onConfigure: ({ widget, datePreset, customRange, filters }) =>
-        openWidgetSettings(widget, { datePreset, customRange, filters }),
+      onConfigure: ({ widget, datePreset, customRange, filters, project }) =>
+        openWidgetSettings(widget, { datePreset, customRange, filters, project }),
     }),
   [],
 );
 ```
 
-The callback gets the widget as the opening tool returned it, with the date preset (and `customRange` when `custom`) and the filters it is drawn with, like a pin. The button only shows when the host passes `onConfigure` and accepts structured model context. It sits before the pin button and appears on the card's hover or keyboard focus, and always shows on touch screens.
+The callback gets the widget as the opening tool returned it, with the date preset (and `customRange` when `custom`) and the filters and project it is drawn with, like a pin. The button only shows when the host passes `onConfigure` and accepts structured model context. It sits before the pin button and appears on the card's hover or keyboard focus, and always shows on touch screens.
 
 ### Validating stored dashboards
 

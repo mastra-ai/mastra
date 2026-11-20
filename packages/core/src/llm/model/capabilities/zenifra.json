@@ -33,9 +33,21 @@
     "zenifra/qwen3.8-max"
   ],
   "reasoning": {
-    "zenifra/kimi-k2.5": [
+    "zenifra/deepseek-v4-pro": [
       {
         "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zenifra/qwen3.6-plus": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
       }
     ],
     "zenifra/qwen3.7-plus": [
@@ -46,19 +58,9 @@
         "type": "budget_tokens"
       }
     ],
-    "zenifra/deepseek-v4-flash-0731": [
+    "zenifra/kimi-k2.5": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zenifra/kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ],
     "zenifra/qwen3.8-max": [
@@ -73,16 +75,7 @@
         "type": "budget_tokens"
       }
     ],
-    "zenifra/glm-5.2": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "zenifra/deepseek-v4-pro": [
+    "zenifra/deepseek-v4-flash-0731": [
       {
         "type": "toggle"
       },
@@ -99,25 +92,24 @@
         "type": "budget_tokens"
       }
     ],
-    "zenifra/qwen3.7-max": [
+    "zenifra/kimi-k3": [
       {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "zenifra/qwen3.6-plus": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "zenifra/glm-5.1": [
       {
         "type": "toggle"
+      }
+    ],
+    "zenifra/glm-5.2": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
       }
     ],
     "zenifra/qwen3.8-flash": [
@@ -127,6 +119,14 @@
       {
         "type": "effort",
         "values": ["low", "medium", "xhigh"]
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "zenifra/qwen3.7-max": [
+      {
+        "type": "toggle"
       },
       {
         "type": "budget_tokens"

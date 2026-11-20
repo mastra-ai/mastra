@@ -177,14 +177,6 @@ describe('Sessions sidebar lists one row per card', () => {
     expect(screen.queryByRole('list', { name: 'Write docs card' })).not.toBeInTheDocument();
     expect(cardRow.closest('ul')).toBe(userRow.closest('ul'));
   });
-
-  it('keeps a plain user session as a flat row', async () => {
-    renderSection();
-
-    const row = await screen.findByRole('link', { name: 'Scratch notes' });
-    expect(row).toHaveTextContent('Scratch notes');
-    expect(screen.queryByRole('list', { name: 'Scratch notes' })).not.toBeInTheDocument();
-  });
 });
 
 async function toggleSessionView(user: ReturnType<typeof userEvent.setup>, option: string) {

@@ -21,9 +21,10 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "qwen/qwen3.6-35b-a3b-eu": [
+    "qwen/qwen3.8-27b": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ],
     "qwen/qwen3.5-397b-a17b": [
@@ -31,10 +32,9 @@
         "type": "toggle"
       }
     ],
-    "qwen/qwen3.8-27b": [
+    "qwen/qwen3.6-35b-a3b-eu": [
       {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
+        "type": "toggle"
       }
     ]
   }

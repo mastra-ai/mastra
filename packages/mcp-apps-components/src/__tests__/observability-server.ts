@@ -13,7 +13,7 @@ import {
 
 export const OBSERVABILITY_WIDGET_URI = 'ui://mastra/observability-widget';
 
-export type ObservabilityCall = { action: string; args: Record<string, unknown>; projectId?: string };
+export type ObservabilityCall = { action: string; args: Record<string, unknown>; project?: string };
 /** An action's data, or the error the tool fails with. */
 type Reply = { data: unknown } | { error: string };
 /** A fixed reply, or one picked from the call, e.g. to answer the previous window differently. */
@@ -175,12 +175,14 @@ export const agentRunsChart: DashboardWidget = {
  * The server a host writes around the observability widget: `showObservabilityDashboard` opens it
  * with a dashboard built by `toObservabilityDashboard`, and the app-only `queryObservability`
  * accepts only `OBSERVABILITY_READ_ACTIONS` and answers each from `answers` (keyed by action),
- * recording every call in `calls`.
+ * recording every call in `calls`. With `project`, the opening tool returns it next to the
+ * dashboard, as a server does once it has resolved the dashboard's project.
  */
 export function observabilityServer({
   appResources = {},
   answers = {},
-}: { appResources?: AppResources; answers?: Record<string, Answer> } = {}) {
+  project,
+}: { appResources?: AppResources; answers?: Record<string, Answer>; project?: string } = {}) {
   const calls: ObservabilityCall[] = [];
   const server = new MCPServer({
     id: 'observability',
@@ -195,7 +197,7 @@ export function observabilityServer({
         // Declaring an output schema is what makes MCPServer send the result as `structuredContent`.
         outputSchema: observabilityDashboardOutputSchema,
         mcp: { _meta: { ui: { resourceUri: OBSERVABILITY_WIDGET_URI } } },
-        execute: async input => toObservabilityDashboard(input),
+        execute: async input => ({ ...toObservabilityDashboard(input), ...(project ? { project } : {}) }),
       }),
       [QUERY_OBSERVABILITY_TOOL]: createTool({
         id: QUERY_OBSERVABILITY_TOOL,
@@ -204,7 +206,7 @@ export function observabilityServer({
         inputSchema: z.object({
           action: z.enum(OBSERVABILITY_READ_ACTIONS),
           args: z.record(z.string(), z.unknown()),
-          projectId: z.string().optional(),
+          project: z.string().optional(),
         }),
         outputSchema: z.object({ data: z.unknown() }),
         mcp: { _meta: { ui: { resourceUri: OBSERVABILITY_WIDGET_URI, visibility: ['app'] } } },

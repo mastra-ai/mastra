@@ -973,9 +973,20 @@ export const observabilityDashboardInputSchema = dashboardInputSchemaOf(draftSch
 export const observabilityDashboardOutputSchema: z.ZodType<ObservabilityDashboardOpened> = z.object({
   dashboard: dashboardDefinitionSchema,
   datePreset: z.enum(OBSERVABILITY_DATE_PRESETS).optional(),
+  project: z.string().min(1).optional(),
 });
 
-export type ObservabilityDashboardOpened = { dashboard: DashboardDefinition; datePreset?: ObservabilityDatePreset };
+export type ObservabilityDashboardOpened = {
+  dashboard: DashboardDefinition;
+  datePreset?: ObservabilityDatePreset;
+  /**
+   * The id of the project the dashboard belongs to, sent with every `queryObservability` call when
+   * the host sets no project of its own (as in Claude or ChatGPT). Only the server knows it: resolve
+   * the project the tool was given (an id or slug) to its id, authorize it, and add it next to
+   * `toObservabilityDashboard`'s result.
+   */
+  project?: string;
+};
 
 /**
  * The stored definition for `input`: each value's reads gathered into the view's queries, and every

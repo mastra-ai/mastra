@@ -54,33 +54,6 @@
         "values": ["low", "medium", "high", "max"]
       }
     ],
-    "kimi-k3": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "max"]
-      }
-    ],
-    "glm-5.3-fast": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "qwen3.8-max": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "deepseek-v4.1-flash-original": [
       {
         "type": "toggle"
@@ -105,16 +78,31 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3-flash": [
+    "qwen3.8-max": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "kimi-k3": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "max"]
+      }
+    ],
+    "glm-5.3-fast": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "muse-spark-open": [
+    "qwen3.8-2.4t-a95b": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ],
     "kimi-k3-fast": [
@@ -126,10 +114,16 @@
         "values": ["low", "medium", "high", "max"]
       }
     ],
-    "qwen3.8-2.4t-a95b": [
+    "muse-spark-open": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "glm-5.3-flash-abliterated": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "kimi-k3.1-pro": [
@@ -141,7 +135,13 @@
         "values": ["low", "medium", "high", "max"]
       }
     ],
-    "glm-5.3-flash-abliterated": [
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

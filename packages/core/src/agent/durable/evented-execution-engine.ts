@@ -10,6 +10,16 @@ import { defaultShouldPersistSnapshot } from './workflows/create-durable-agentic
 
 export class EventedExecutionEngine extends DurableExecutionEngine {
   #warnedUnfencedSharedExecution = false;
+
+  override get executionMode(): 'blocking' | 'background' {
+    return 'background';
+  }
+
+  // Evented execution can return before the suspended snapshot lands.
+  override get suspendPersistedOnReturn(): boolean {
+    return false;
+  }
+
   override prepareExecution(
     pubsub: PubSub | undefined,
     fence: ExecutionFence | undefined,
