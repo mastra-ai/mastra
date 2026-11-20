@@ -12,6 +12,7 @@
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "dev": "node scripts/dev.ts",
+    "knowledge:seed": "node scripts/seed-knowledge.ts",
     "typecheck": "tsc --noEmit",
     "test:unit": "node --test tests/unit/*.test.ts",
     "test:integration": "node --test --test-concurrency=1 tests/integration/*.test.ts"

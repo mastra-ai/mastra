@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "id": "retail-pos",
+  "version": "1",
+  "pages": [
+    {
+      "key": "connection-guide",
+      "path": "guides/connectivity",
+      "title": "Example connectivity checks",
+      "file": "connectivity.md",
+      "scope": { "kind": "docs", "profile": "north-store" },
+      "kind": "reference",
+      "description": "Synthetic connectivity procedure for the ingestion example.",
+      "source": { "kind": "original synthetic fixture", "license": "Apache-2.0" },
+      "links": ["safety-policy"]
+    },
+    {
+      "key": "safety-policy",
+      "path": "policies/safe-changes",
+      "title": "Example safe changes policy",
+      "file": "policy.md",
+      "scope": { "kind": "tenant", "profile": "north-store" },
+      "kind": "policy",
+      "source": { "kind": "original synthetic fixture", "license": "Apache-2.0" },
+      "links": ["connection-guide"]
+    },
+    {
+      "key": "store-case",
+      "path": "cases/connection-check",
+      "title": "Fictional connection check",
+      "file": "case.md",
+      "scope": { "kind": "customer", "profile": "north-store" },
+      "kind": "case",
+      "source": { "kind": "fictional service record", "license": "Apache-2.0" },
+      "record": {
+        "topicTags": ["connectivity"],
+        "observedOn": "2026-01-12",
+        "state": "approved",
+        "summary": "A fictional technician verified the example connection after reseating a cable.",
+        "applicability": "Synthetic example hardware only."
+      },
+      "links": ["connection-guide"],
+      "notes": [
+        {
+          "key": "follow-up",
+          "text": "Fictional follow-up: the example link stayed connected. See [[connection-guide]].",
+          "date": "2026-01-13",
+          "author": "Example technician"
+        }
+      ]
+    }
+  ]
+}

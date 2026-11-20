@@ -6,10 +6,11 @@ import { KNOWLEDGE_ROUTES } from '@mastra/server/server-adapter';
 import { createSupportAgent } from './agents/support-agent.ts';
 import { createKnowledge } from './knowledge/index.ts';
 import { createAuth, loadCredentials } from './server/access.ts';
+import { localDatabaseUrl } from './database.ts';
 
 export const storage = new LibSQLStore({
   id: 'local-support',
-  url: process.env.SUPPORT_DATABASE_URL ?? `file:${resolve('.local/support.db')}`,
+  url: localDatabaseUrl(),
 });
 export const memory = new Memory({
   storage,

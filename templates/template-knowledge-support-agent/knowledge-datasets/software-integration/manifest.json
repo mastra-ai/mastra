@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "id": "software-integration",
+  "version": "1",
+  "pages": [
+    {
+      "key": "request-guide",
+      "path": "guides/request-check",
+      "title": "Example request checks",
+      "file": "request.md",
+      "scope": { "kind": "docs", "profile": "integration-team" },
+      "source": { "kind": "original synthetic fixture", "license": "Apache-2.0" },
+      "links": ["change-policy"]
+    },
+    {
+      "key": "change-policy",
+      "path": "policies/safe-changes",
+      "title": "Example integration change policy",
+      "file": "policy.md",
+      "scope": { "kind": "tenant", "profile": "integration-team" },
+      "kind": "policy",
+      "source": { "kind": "original synthetic fixture", "license": "Apache-2.0" },
+      "links": ["request-guide"]
+    },
+    {
+      "key": "request-case",
+      "path": "cases/request-check",
+      "title": "Fictional request check",
+      "file": "case.md",
+      "scope": { "kind": "customer", "profile": "integration-team" },
+      "kind": "case",
+      "record": {
+        "topicTags": ["requests"],
+        "observedOn": "2026-02-03",
+        "state": "open",
+        "summary": "A fictional integration still needs a response-code check."
+      },
+      "notes": [
+        {
+          "key": "next-check",
+          "text": "Fictional next step: inspect the example response code using [[request-guide]].",
+          "author": "Example developer"
+        }
+      ]
+    }
+  ]
+}
