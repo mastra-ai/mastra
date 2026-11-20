@@ -22,12 +22,15 @@ export function readResult(result: {
   }
 }
 
+/** A tool ran and answered with an error, as opposed to the call itself failing (e.g. the tool isn't offered). */
+export class ToolError extends Error {}
+
 /** Calls a tool on the server that opened the app, through the host. Throws the tool's error text. */
 export async function callTool(app: App, name: string, args: Record<string, unknown>): Promise<unknown> {
   const result = await app.callServerTool({ name, arguments: args });
   if (result.isError) {
     const text = result.content.find(block => block.type === 'text')?.text;
-    throw new Error(text ?? `${name} failed.`);
+    throw new ToolError(text ?? `${name} failed.`);
   }
   return readResult(result);
 }

@@ -1,6 +1,10 @@
 import {
   listLogsArgsSchema,
   listLogsResponseSchema,
+  spanQueryRequestSchema,
+  spanQueryResponseSchema,
+  threadQueryRequestSchema,
+  threadQueryResponseSchema,
   traceQueryRequestSchema,
   traceQueryResponseSchema,
 } from '@mastra/core/storage';
@@ -30,7 +34,7 @@ const queryRow = (trace: (typeof traces)[number]) => ({
   inputPreview: trace.input,
   outputPreview: 'done',
   errorPreview: null,
-  threadId: null,
+  threadId: `thread-${trace.traceId}`,
   resourceId: null,
   startedAt: trace.startedAt,
   endedAt: trace.endedAt,
@@ -54,6 +58,57 @@ const listRow = (trace: (typeof traces)[number]) => ({
   updatedAt: trace.endedAt,
 });
 
+const spanRow = (trace: (typeof traces)[number]) => ({
+  organizationId: null,
+  resourceId: null,
+  traceId: trace.traceId,
+  spanId: 'root',
+  parentSpanId: null,
+  threadId: `thread-${trace.traceId}`,
+  name: `agent run: '${trace.entityName}'`,
+  spanType: 'agent_run',
+  status: 'success' as const,
+  startedAt: trace.startedAt,
+  endedAt: trace.endedAt,
+  durationMs: Date.parse(trace.endedAt) - Date.parse(trace.startedAt),
+  entityType: 'agent',
+  entityId: trace.entityName,
+  entityName: trace.entityName,
+  model: null,
+  provider: null,
+  inputPreview: trace.input,
+  outputPreview: 'done',
+  errorPreview: null,
+});
+
+const threadRow = (trace: (typeof traces)[number]) => ({
+  organizationId: null,
+  threadId: `thread-${trace.traceId}`,
+  firstTraceId: trace.traceId,
+  lastTraceId: trace.traceId,
+  resourceId: null,
+  userId: null,
+  entityType: 'agent',
+  entityId: trace.entityName,
+  entityName: trace.entityName,
+  entityVersionId: null,
+  runId: null,
+  sessionId: null,
+  requestId: null,
+  serviceName: null,
+  experimentId: null,
+  environment: null,
+  executionSource: null,
+  status: 'success' as const,
+  startedAt: trace.startedAt,
+  endedAt: trace.endedAt,
+  timeToFirstChunkMs: null,
+  inputPreview: trace.input,
+  outputPreview: 'done',
+  errorPreview: null,
+  traceCount: 1,
+});
+
 /** One log line per run: the support agent's carrier lookup failed. */
 const logRecords = [
   { level: 'info' as const, message: 'Forecast fetched for Lisbon', traceId: 'trace-1', entityName: 'weather-agent' },
@@ -65,13 +120,15 @@ const logRecords = [
   },
 ].map((log, index) => ({ ...log, timestamp: new Date(at(index * 10 + 2)), spanId: 'root', entityType: 'agent' }));
 
-/** Applies the one predicate shape these tests open the list with: `entityName` equals a literal. */
+/** Applies the predicate shapes these tests send: `entityName` or `threadId` equals a literal. */
 function matches(where: unknown, trace: (typeof traces)[number]): boolean {
   if (!where) return true;
   const predicate = where as { op: string; args?: unknown[]; left?: { path?: string }; right?: { literal?: unknown } };
   if (predicate.op === 'and') return predicate.args!.every(arg => matches(arg, trace));
   if (predicate.op === 'eq' && predicate.left?.path === 'entityName')
     return trace.entityName === predicate.right?.literal;
+  if (predicate.op === 'eq' && predicate.left?.path === 'threadId')
+    return `thread-${trace.traceId}` === predicate.right?.literal;
   throw new Error(`Unsupported predicate in test server: ${JSON.stringify(where)}`);
 }
 
@@ -79,7 +136,7 @@ function matches(where: unknown, trace: (typeof traces)[number]): boolean {
  * What `get_observability_capabilities` reports for a store that runs trace queries (the shape DuckDB reports),
  * less the aggregates, discovery and span/thread queries this server doesn't serve; or for one that only lists.
  */
-function capabilities(traceQuery: boolean, logs: boolean) {
+function capabilities(traceQuery: boolean, logs: boolean, rows: boolean) {
   const queries = {
     traceQuery,
     traceQueryTextSearch: false,
@@ -111,8 +168,8 @@ function capabilities(traceQuery: boolean, logs: boolean) {
     traceQueryDiscovery: false,
     traceAggregate: false,
     threadQuery: false,
-    threadQueryRows: false,
-    spanQuery: false,
+    threadQueryRows: rows,
+    spanQuery: rows,
     spanQueryTextSearch: false,
     spanQueryContextFields: false,
     spanQueryModelFields: false,
@@ -128,9 +185,18 @@ function capabilities(traceQuery: boolean, logs: boolean) {
  * The observability tools the observability explorer calls, answering as the built-in server does for a store that runs
  * trace queries (`traceQuery`) or one that only lists traces. Requests are validated as the real tools validate
  * them: `query_traces` with core's request schema, `list_traces` with integer paging. With `logs`, the store
- * also keeps logs and the caller can read them through `list_logs`, filtered by `level`.
+ * also keeps logs and the caller can read them through `list_logs`, filtered by `level`. With `rows`, it also
+ * serves `query_spans` and `query_threads`, validated with core's request and response schemas.
  */
-export function observabilityExplorerServer({ traceQuery, logs = false }: { traceQuery: boolean; logs?: boolean }) {
+export function observabilityExplorerServer({
+  traceQuery,
+  logs = false,
+  rows = false,
+}: {
+  traceQuery: boolean;
+  logs?: boolean;
+  rows?: boolean;
+}) {
   const calls: { tool: string; args: Record<string, any> }[] = [];
   const record = (tool: string, args: Record<string, any>) => calls.push({ tool, args });
 
@@ -162,6 +228,29 @@ export function observabilityExplorerServer({ traceQuery, logs = false }: { trac
     }),
   };
 
+  const rowTools = {
+    query_spans: createTool({
+      id: 'query_spans',
+      description: 'Queries spans',
+      inputSchema: z.object({}).passthrough(),
+      execute: async args => {
+        record('query_spans', args);
+        spanQueryRequestSchema.parse(args);
+        return spanQueryResponseSchema.parse({ spans: traces.map(spanRow), page: { next: null } });
+      },
+    }),
+    query_threads: createTool({
+      id: 'query_threads',
+      description: 'Queries threads',
+      inputSchema: z.object({}).passthrough(),
+      execute: async args => {
+        record('query_threads', args);
+        threadQueryRequestSchema.parse(args);
+        return threadQueryResponseSchema.parse({ threads: traces.map(threadRow), page: { next: null } });
+      },
+    }),
+  };
+
   const logTools = {
     list_logs: createTool({
       id: 'list_logs',
@@ -186,13 +275,14 @@ export function observabilityExplorerServer({ traceQuery, logs = false }: { trac
     tools: {
       ...(traceQuery ? queryTools : listTools),
       ...(logs ? logTools : {}),
+      ...(rows ? rowTools : {}),
       get_observability_capabilities: createTool({
         id: 'get_observability_capabilities',
         description: 'Store capabilities',
         inputSchema: z.object({}),
         execute: async () => ({
           observabilityStorageType: 'Test',
-          capabilities: capabilities(traceQuery, logs),
+          capabilities: capabilities(traceQuery, logs, rows),
           tools: { logs, metrics: false },
         }),
       }),
