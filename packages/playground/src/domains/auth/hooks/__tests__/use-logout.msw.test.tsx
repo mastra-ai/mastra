@@ -69,7 +69,7 @@ describe('Studio sign-out', () => {
       const unsubscribe = draft.subscribe(() => {});
       try {
         await waitFor(() => expect(draft.getSnapshot().status.restoring).toBe(false));
-        draft.updateDraft({ text: 'Unsaved private edit', attachments: [] });
+        draft.updateDraft(previous => ({ ...previous, text: 'Unsaved private edit' }));
         server.use(http.post(`${BASE_URL}/api/auth/logout`, () => HttpResponse.json(logoutResponse)));
         await act(async () => {
           await result.current.logout.mutateAsync({ userId: 'user' });
