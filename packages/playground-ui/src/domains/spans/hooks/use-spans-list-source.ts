@@ -22,7 +22,7 @@ export type UseSpansListSourceArgs = {
 export const spanRowId = (span: SpanRow) => `${span.traceId}:${span.spanId}`;
 
 /** The list's own order: the requested field, then trace and span ids ascending, like the server's keyset. */
-function compareSpans(orderBy: SpanQueryArgs['orderBy']) {
+export function compareSpans(orderBy: SpanQueryArgs['orderBy']) {
   const { field = 'startedAt', direction = 'desc' } = orderBy?.[0] ?? {};
   const sign = direction === 'asc' ? 1 : -1;
   return (a: SpanRow, b: SpanRow) => {

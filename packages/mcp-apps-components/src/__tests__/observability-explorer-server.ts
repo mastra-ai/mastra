@@ -18,12 +18,14 @@ export const EXPLORER_URI = 'ui://mastra/observability-explorer';
 const at = (seconds: number) => new Date(Date.now() - 60_000 + seconds * 1000).toISOString();
 
 /** Root spans of two runs, one per agent, as the built-in server's trace tools return them. */
-const traces = [
+const seedTraces = [
   { traceId: 'trace-1', entityName: 'weather-agent', input: 'what is the weather?', startedAt: at(0), endedAt: at(6) },
   { traceId: 'trace-2', entityName: 'support-agent', input: 'refund order 42', startedAt: at(10), endedAt: at(12) },
 ];
 
-const queryRow = (trace: (typeof traces)[number]) => ({
+type Run = (typeof seedTraces)[number];
+
+const queryRow = (trace: Run) => ({
   traceId: trace.traceId,
   rootSpanId: 'root',
   name: `agent run: '${trace.entityName}'`,
@@ -44,7 +46,7 @@ const queryRow = (trace: (typeof traces)[number]) => ({
   status: 'success' as const,
 });
 
-const listRow = (trace: (typeof traces)[number]) => ({
+const listRow = (trace: Run) => ({
   ...traceSpans[0]!,
   traceId: trace.traceId,
   name: `agent run: '${trace.entityName}'`,
@@ -58,7 +60,7 @@ const listRow = (trace: (typeof traces)[number]) => ({
   updatedAt: trace.endedAt,
 });
 
-const spanRow = (trace: (typeof traces)[number]) => ({
+const spanRow = (trace: Run) => ({
   organizationId: null,
   resourceId: null,
   traceId: trace.traceId,
@@ -81,7 +83,7 @@ const spanRow = (trace: (typeof traces)[number]) => ({
   errorPreview: null,
 });
 
-const threadRow = (trace: (typeof traces)[number]) => ({
+const threadRow = (trace: Run) => ({
   organizationId: null,
   threadId: `thread-${trace.traceId}`,
   firstTraceId: trace.traceId,
@@ -121,7 +123,7 @@ const logRecords = [
 ].map((log, index) => ({ ...log, timestamp: new Date(at(index * 10 + 2)), spanId: 'root', entityType: 'agent' }));
 
 /** Applies the predicate shapes these tests send: `entityName` or `threadId` equals a literal. */
-function matches(where: unknown, trace: (typeof traces)[number]): boolean {
+function matches(where: unknown, trace: Run): boolean {
   if (!where) return true;
   const predicate = where as { op: string; args?: unknown[]; left?: { path?: string }; right?: { literal?: unknown } };
   if (predicate.op === 'and') return predicate.args!.every(arg => matches(arg, trace));
@@ -198,6 +200,8 @@ export function observabilityExplorerServer({
   rows?: boolean;
 }) {
   const calls: { tool: string; args: Record<string, any> }[] = [];
+  // Each server keeps its own runs, so a test can record a new one while the app is open.
+  const traces: Run[] = [...seedTraces];
   const record = (tool: string, args: Record<string, any>) => calls.push({ tool, args });
 
   const queryTools = {
@@ -297,5 +301,5 @@ export function observabilityExplorerServer({
       }),
     },
   });
-  return { server, calls };
+  return { server, calls, addRun: (run: Run) => traces.push(run) };
 }

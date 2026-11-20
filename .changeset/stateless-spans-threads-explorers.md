@@ -39,3 +39,5 @@ const explorer = useThreadsExplorer(urlState);
 ```
 
 **Columns menu:** `ColumnsMenu` takes a `support` prop (`isLoading`, `withQuery`, `withTimeToFirstChunk`, `withTimeToFirstToken`) and an optional `metadataKeys` list instead of reading capabilities and field discovery.
+
+`compareSpans` and `compareThreads`, the sort orders Studio uses to merge newly polled rows into a list, are exported from `domains/spans/hooks/use-spans-list-source` and `domains/threads/hooks/use-threads-list-source`, so a host polling its own transport can merge rows the same way.

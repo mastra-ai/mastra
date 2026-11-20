@@ -24,6 +24,7 @@ beforeEach(() => {
 
 const hosts: Awaited<ReturnType<typeof serveAndConnect>>[] = [];
 afterEach(async () => {
+  vi.useRealTimers();
   restoreViewport.splice(0).forEach(restore => restore());
   await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
   await Promise.all(hosts.splice(0).map(host => host.close()));
@@ -294,4 +295,73 @@ it('hides the Spans and Threads tabs when the store does not query rows', async 
 
   expect(screen.queryByRole('tab', { name: 'Spans' })).toBeNull();
   expect(screen.queryByRole('tab', { name: 'Threads' })).toBeNull();
+});
+
+/** A run that ended just now, after the list loaded. */
+const newRun = () => {
+  const now = Date.now();
+  return {
+    traceId: 'trace-3',
+    entityName: 'billing-agent',
+    input: 'charge card',
+    startedAt: new Date(now - 1000).toISOString(),
+    endedAt: new Date(now).toISOString(),
+  };
+};
+
+it('reloads a rolling trace list every 10 seconds with its end moved to now', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  const mcp = observabilityExplorerServer({ traceQuery: true });
+  await openList(mcp, 'query_traces', {});
+  await screen.findByText('weather-agent');
+  const first = mcp.calls.filter(call => call.tool === 'query_traces').at(-1)!;
+
+  mcp.addRun(newRun());
+  await vi.advanceTimersByTimeAsync(10_000);
+
+  expect(await screen.findByText('billing-agent')).toBeTruthy();
+  const reload = mcp.calls.filter(call => call.tool === 'query_traces').at(-1)!;
+  expect(Date.parse(reload.args.timeRange.to)).toBeGreaterThan(Date.parse(first.args.timeRange.to));
+  // As in Studio, the preset pins its start when picked; only the end follows the clock.
+  expect(reload.args.timeRange.from).toBe(first.args.timeRange.from);
+});
+
+it('refetches a fixed trace window in place every 10 seconds', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  const mcp = observabilityExplorerServer({ traceQuery: true });
+  await openList(mcp, 'query_traces', { timeRange: lastHour() });
+  await screen.findByText('weather-agent');
+  const first = mcp.calls.filter(call => call.tool === 'query_traces').at(-1)!;
+
+  mcp.addRun(newRun());
+  await vi.advanceTimersByTimeAsync(10_000);
+
+  expect(await screen.findByText('billing-agent')).toBeTruthy();
+  const refetch = mcp.calls.filter(call => call.tool === 'query_traces').at(-1)!;
+  expect(refetch.args.timeRange).toEqual(first.args.timeRange);
+});
+
+it.each([
+  { tab: 'Spans', tool: 'query_spans', row: "agent run: 'billing-agent'" },
+  { tab: 'Threads', tool: 'query_threads', row: 'billing-agent' },
+])('brings new rows into the $tab tab every 30 seconds without reloading its pages', async ({ tab, tool, row }) => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  const mcp = observabilityExplorerServer({ traceQuery: true, rows: true });
+  await openList(mcp, 'query_traces', { timeRange: lastHour() });
+  await screen.findByText('weather-agent');
+  openTab(tab);
+  const panel = await screen.findByRole('tabpanel', { name: tab });
+  await waitFor(() => expect(within(panel).getAllByText(/support-agent/)).not.toHaveLength(0));
+  const pages = () => mcp.calls.filter(call => call.tool === tool && call.args.page.limit === 25).length;
+  const loaded = pages();
+
+  mcp.addRun(newRun());
+  await vi.advanceTimersByTimeAsync(30_000);
+
+  await waitFor(() => expect(within(panel).getAllByText(row)).not.toHaveLength(0));
+  // The head poll asked for the newest rows by end time; the loaded page stayed as it was.
+  const head = mcp.calls.filter(call => call.tool === tool).at(-1)!;
+  expect(head.args.page.limit).toBe(50);
+  expect(head.args.orderBy).toEqual([{ field: 'endedAt', direction: 'desc' }]);
+  expect(pages()).toBe(loaded);
 });

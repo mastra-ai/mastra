@@ -21,22 +21,21 @@ import type {
 import { TRACE_COLUMN_CATALOGS } from '@mastra/playground-ui/domains/traces/trace-list-columns';
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { useApp } from '@modelcontextprotocol/ext-apps/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { AppFrame, AppHost, AppState, AppToolbar, readStudioUrl } from '../../shared/host';
 import { applyTheme } from '../../shared/mcp-app';
 import type { OpenedTraceFilter } from '../../shared/mcp-tools';
 import { TraceView } from '../../shared/trace-view';
-import {
-  resolveMcpViews,
-  useMcpCapabilities,
-  useMcpSpansExplorer,
-  useMcpThreadsExplorer,
-  useMcpTracesDiscovery,
-  useMcpTracesFilterSuggestions,
-  useMcpTracesHistogram,
-  useMcpTracesList,
-} from './data/explorer-data';
-import type { UseMcpTracesArgs } from './data/explorer-data';
+import { resolveMcpViews } from './data/resolve-mcp-views';
+import { useMcpCapabilities } from './data/use-mcp-capabilities';
+import { useMcpSpansExplorer } from './data/use-mcp-spans-explorer';
+import { useMcpThreadsExplorer } from './data/use-mcp-threads-explorer';
+import type { UseMcpTracesArgs } from './data/use-mcp-traces-args';
+import { useMcpTracesDiscovery } from './data/use-mcp-traces-discovery';
+import { useMcpTracesFilterSuggestions } from './data/use-mcp-traces-filter-suggestions';
+import { useMcpTracesHistogram } from './data/use-mcp-traces-histogram';
+import { useMcpTracesList } from './data/use-mcp-traces-list';
 import { LegacyDataProvider, LegacyDataScope, useLegacyDataScopes } from './legacy-data-scope';
 import { LogsTab } from './logs-tab';
 import { MetricsTab } from './metrics-tab';
@@ -440,6 +439,10 @@ function Explorer({ app, opened: initial, studioUrl }: { app: App; opened: Opene
   const filter = useRef(opened.filter);
   filter.current = opened.filter;
   const scopes = useLegacyDataScopes(app, () => filter.current);
+  // Serves the tabs' tool-call queries; the trace lists key on the opened query, so clearing it reloads them.
+  const [queryClient] = useState(
+    () => new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } }),
+  );
   // Clearing the opened query changes what every trace and log query returns: the trace lists reload on the
   // new filter, and the logs drop what they loaded with the old one.
   const clearQuery = () => {
@@ -449,15 +452,17 @@ function Explorer({ app, opened: initial, studioUrl }: { app: App; opened: Opene
   };
 
   return (
-    <LegacyDataProvider scopes={scopes}>
-      <TooltipProvider>
-        <AppHost app={app} name="observability explorer" studioUrl={studioUrl}>
-          <AppFrame fixed>
-            <Views app={app} opened={opened} onClearQuery={clearQuery} />
-          </AppFrame>
-        </AppHost>
-      </TooltipProvider>
-    </LegacyDataProvider>
+    <QueryClientProvider client={queryClient}>
+      <LegacyDataProvider scopes={scopes}>
+        <TooltipProvider>
+          <AppHost app={app} name="observability explorer" studioUrl={studioUrl}>
+            <AppFrame fixed>
+              <Views app={app} opened={opened} onClearQuery={clearQuery} />
+            </AppFrame>
+          </AppHost>
+        </TooltipProvider>
+      </LegacyDataProvider>
+    </QueryClientProvider>
   );
 }
 
