@@ -395,6 +395,7 @@ describe('Span Filtering', () => {
         name: "tool: 'my_tool'",
         attributes: { toolId: 'my_tool', toolType: 'function' },
       });
+      stepSpan.createEventSpan({ type: SpanType.MODEL_CHUNK, name: 'chunk' });
 
       toolSpan.end();
       stepSpan.end();
@@ -405,6 +406,7 @@ describe('Span Filtering', () => {
       const exportedIds = new Set(exported.map(s => s.id));
       expect(exported.map(s => s.type)).not.toContain(SpanType.MODEL_STEP);
       expect(exported.find(s => s.type === SpanType.TOOL_CALL)?.parentSpanId).toBe(modelSpan.id);
+      expect(exported.find(s => s.type === SpanType.MODEL_CHUNK)?.parentSpanId).toBe(modelSpan.id);
       expect(exported.filter(s => s.parentSpanId && !exportedIds.has(s.parentSpanId))).toEqual([]);
     });
 
@@ -495,6 +497,26 @@ describe('Span Filtering', () => {
         ['span_ended', 'inner', toolSpan.id],
         ['span_ended', 'tool', agentSpan.id],
         ['span_ended', 'agent', undefined],
+      ]);
+    });
+
+    it('should keep an event span under its parent when the filter drops every start', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        spanFilter: span => Boolean(span.endTime),
+      });
+
+      const stepSpan = tracing.startSpan({ type: SpanType.MODEL_STEP, name: 'step' });
+      // An event span is exported once, when it is created. Its parent is still open then.
+      stepSpan.createEventSpan({ type: SpanType.MODEL_CHUNK, name: 'chunk' });
+      stepSpan.end();
+
+      expect(testExporter.events.map(e => [e.type, e.exportedSpan.name, e.exportedSpan.parentSpanId])).toEqual([
+        ['span_ended', 'chunk', stepSpan.id],
+        ['span_ended', 'step', undefined],
       ]);
     });
 

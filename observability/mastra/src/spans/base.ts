@@ -703,10 +703,11 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
    * A span whose own start was not exported keeps the parent it was created
    * under. Only exporters that write spans when they end receive it. A filter
    * on end-time data, such as errors or duration, drops every start, and the
-   * original parents keep the shape of the trace there.
+   * original parents keep the shape of the trace there. An event span has no
+   * start, so it keeps its parent when no ancestor's start was exported.
    */
   public reparentPastFilteredStarts(exportedSpan: AnyExportedSpan, includeInternalSpans?: boolean): void {
-    if (this.isStartFiltered) return;
+    if (this.isStartFiltered || (this.isEvent && !this.getParentSpan(includeInternalSpans, true))) return;
     exportedSpan.parentSpanId = this.getParentSpanId(includeInternalSpans, true);
     exportedSpan.externalParentSpanId = this.getExportedExternalParentSpanId(includeInternalSpans, true);
   }
