@@ -2219,6 +2219,53 @@ describe('PIIDetector', () => {
       expect(emitted.join('')).toBe(text);
     });
 
+    it('scans a long run of email local-part characters in linear time', async () => {
+      const detector = new PIIDetector({
+        model: new MockLanguageModelV1(),
+        strategy: 'redact',
+        redactionMethod: 'placeholder',
+        detectionTypes: ['email'],
+      });
+      const state: Record<string, any> = {};
+      const text = 'a'.repeat(200_000);
+      const emitted: string[] = [];
+
+      const started = performance.now();
+      for (const part of [
+        { type: 'text-delta', payload: { id: 'long', text }, runId: 'long', from: ChunkFrom.AGENT },
+        { type: 'step-finish' as any, payload: {}, runId: 'finish', from: ChunkFrom.AGENT },
+      ]) {
+        const result = await detector.processOutputStream({
+          part: part as any,
+          streamParts: [],
+          state,
+          abort: vi.fn() as any,
+        });
+        if (result?.type === 'text-delta') emitted.push(result.payload.text);
+      }
+
+      expect(performance.now() - started).toBeLessThan(1_000);
+      expect(emitted.join('')).toBe(text);
+    });
+
+    it('still finds an email address that starts right where another one ends', async () => {
+      const detector = new PIIDetector({
+        model: new MockLanguageModelV1(),
+        strategy: 'redact',
+        redactionMethod: 'placeholder',
+        detectionTypes: ['email'],
+      });
+
+      const result = await (detector as any).detectPIILocal('mail a@b.cc.d@e.ff and x@y.org+z@w.io now');
+
+      expect(result.detections.map((d: { value: string }) => d.value)).toEqual([
+        'a@b.cc',
+        '.d@e.ff',
+        'x@y.org',
+        '+z@w.io',
+      ]);
+    });
+
     it('pulls emission back when PII straddles the carryover boundary', async () => {
       const detector = new PIIDetector({
         model: new MockLanguageModelV1(),

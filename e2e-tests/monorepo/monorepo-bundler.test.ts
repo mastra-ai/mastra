@@ -337,7 +337,9 @@ assert.equal(subpathOnlyValue, 'c');`,
 
           const appDir = join(fixturePath, 'apps', 'custom');
           const outputDir = join(appDir, '.mastra', 'output');
-          const buildResult = await execa(join(appDir, 'node_modules', '.bin', 'mastra'), ['build'], {
+          // Run the CLI entry with node: the pinned pnpm writes .bin shims that embed
+          // the project path unquoted, which would run the injected command itself.
+          const buildResult = await execaNode(join(appDir, 'node_modules', 'mastra', 'dist', 'index.js'), ['build'], {
             cwd: appDir,
             reject: false,
             env: process.env,

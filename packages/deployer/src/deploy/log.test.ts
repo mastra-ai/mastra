@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { noopLogger } from '@mastra/core/logger';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createChildProcessLogger } from './log';
+import { createChildProcessLogger, isSafeShellArg } from './log';
 
 describe.skipIf(process.platform === 'win32')('createChildProcessLogger', () => {
   const dirs: string[] = [];
@@ -39,5 +39,18 @@ describe.skipIf(process.platform === 'win32')('createChildProcessLogger', () => 
     await expect(run({ cmd: 'node -e', args: ['process.exit(3)'], env: { PATH: process.env.PATH! } })).rejects.toThrow(
       'Process exited with code 3',
     );
+  });
+});
+
+describe('isSafeShellArg', () => {
+  it.each(['C:\\Users\\José\\repo\\output', '/home/zoë/プロジェクト/out', '--pack-destination', '@scope/pkg@^1.2.3'])(
+    'allows %s',
+    arg => {
+      expect(isSafeShellArg(arg)).toBe(true);
+    },
+  );
+
+  it.each(['out dir', 'a;b', '$(x)', '\x60x\x60', 'a&b', 'a|b', 'a>b', '"a"', '%PATH%!', 'a\nb'])('rejects %j', arg => {
+    expect(isSafeShellArg(arg)).toBe(false);
   });
 });
