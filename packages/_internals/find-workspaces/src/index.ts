@@ -127,6 +127,17 @@ export async function findWorkspaces(
   return workspaces;
 }
 
+/** Drop a trailing run of `/` or `\`. A separator earlier in the pattern stays. */
+function stripTrailingSeparators(pattern: string): string {
+  let end = pattern.length;
+  while (end > 0) {
+    const code = pattern.charCodeAt(end - 1);
+    if (code !== 47 && code !== 92) break;
+    end--;
+  }
+  return end === pattern.length ? pattern : pattern.slice(0, end);
+}
+
 /**
  * Glob for each pattern's `package.json` instead of for the directory itself. A
  * directory-only glob does not match a symlink to a directory, so a linked workspace
@@ -137,7 +148,7 @@ export async function findWorkspaces(
 function toManifestGlobs(globs: string[]): string[] {
   return globs.map(pattern => {
     const negated = pattern.startsWith('!');
-    const base = (negated ? pattern.slice(1) : pattern).replace(/[\\/]+$/, '');
+    const base = stripTrailingSeparators(negated ? pattern.slice(1) : pattern);
     return `${negated ? '!' : ''}${base}/package.json`;
   });
 }

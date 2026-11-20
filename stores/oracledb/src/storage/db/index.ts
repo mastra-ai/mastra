@@ -472,7 +472,18 @@ type ParsedColumn = {
 const SIMPLE_IDENTIFIER = /^[A-Za-z][A-Za-z0-9_]*$/;
 const LOWERCASE_SQL_IDENTIFIER = /^[a-z][a-z0-9_]*$/;
 const QUOTED_IDENTIFIER = /^"([A-Za-z][A-Za-z0-9_]*)"$/;
-const ORDERED_COLUMN = /^(.*?)(?:\s+(ASC|DESC))?$/i;
+function splitOrderedColumn(column: string): { expression: string; direction?: 'ASC' | 'DESC' } {
+  for (const direction of ['DESC', 'ASC'] as const) {
+    if (column.length <= direction.length) continue;
+    if (column.slice(-direction.length).toUpperCase() !== direction) continue;
+    const keyword = column.length - direction.length;
+    if (!/\s/.test(column[keyword - 1]!)) continue;
+    let split = keyword;
+    while (split > 0 && /\s/.test(column[split - 1]!)) split--;
+    return { expression: column.slice(0, split), direction };
+  }
+  return { expression: column };
+}
 const UNSAFE_SQL =
   /;|--|\/\*|\*\/|\0|\b(CREATE|ALTER|DROP|TRUNCATE|INSERT|UPDATE|DELETE|MERGE|GRANT|REVOKE|COMMIT|ROLLBACK|EXECUTE|BEGIN|END)\b/i;
 const RESERVED_COLUMN_NAMES = new Set(['references', 'size']);
@@ -854,9 +865,9 @@ function parseColumn(table: string, column: string): ParsedColumn {
 
   // Custom index columns may be normal schema fields or vetted expressions such
   // as JSON_VALUE(...). Keep a narrow SQL surface before passing DDL to Oracle.
-  const match = trimmed.match(ORDERED_COLUMN);
-  const rawExpression = match?.[1]?.trim();
-  const direction = match?.[2]?.toUpperCase() as 'ASC' | 'DESC' | undefined;
+  const parsed = splitOrderedColumn(trimmed);
+  const rawExpression = parsed.expression.trim();
+  const direction = parsed.direction;
   if (!rawExpression) throw new Error(`Invalid index column: ${column}`);
 
   const quoted = rawExpression.match(QUOTED_IDENTIFIER);

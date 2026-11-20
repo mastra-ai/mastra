@@ -8,7 +8,7 @@ import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
 import { REPROCESS_PART_KEY } from '../stream-reprocess';
 import type { PIIDetectionResult, PIIDetection } from './pii-detector';
-import { PIIDetector } from './pii-detector';
+import { PIIDetector, trailingNonWhitespaceIndex } from './pii-detector';
 
 /** Detection types that are handled by regex only (no LLM buffering) */
 const REGEX_ONLY_TYPES = [
@@ -73,6 +73,23 @@ function setupMockModel(result: PIIDetectionResult | PIIDetectionResult[]): Mock
     },
   });
 }
+
+describe('trailingNonWhitespaceIndex', () => {
+  it('finds the last word so a stream can hold it until the next chunk', () => {
+    expect(trailingNonWhitespaceIndex('hello world')).toBe('hello '.length);
+    expect(trailingNonWhitespaceIndex('hello ')).toBe('hello '.length);
+    expect(trailingNonWhitespaceIndex('')).toBe(0);
+    expect(trailingNonWhitespaceIndex('word')).toBe(0);
+    expect(trailingNonWhitespaceIndex('end\u00a0')).toBe('end\u00a0'.length);
+  });
+
+  it('locates the trailing word in a very long unspaced chunk without stalling', () => {
+    const text = `${'a '.repeat(20_000)}${'b'.repeat(40_000)}`;
+    const started = Date.now();
+    expect(trailingNonWhitespaceIndex(text)).toBe(text.length - 40_000);
+    expect(Date.now() - started).toBeLessThan(500);
+  });
+});
 
 describe('PIIDetector', () => {
   beforeEach(() => {

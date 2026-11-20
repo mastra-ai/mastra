@@ -114,6 +114,23 @@ describe('parseCreatedMergeRequest', () => {
       iid: 42,
     });
     expect(parseMergeRequestUrl('https://gitlab.example.com/acme/app/-/merge_requests/0')).toBeUndefined();
+    expect(parseMergeRequestUrl('http://gitlab.example.com/acme/app//-/merge_requests/7/')).toEqual({
+      host: 'gitlab.example.com',
+      projectPath: 'acme/app',
+      iid: 7,
+    });
+    expect(parseMergeRequestUrl('https://gitlab.example.com/acme/app/-/merge_requests/7//')).toBeUndefined();
+  });
+
+  it('parses a very long project path without stalling', () => {
+    const segment = 'a/'.repeat(20_000);
+    const started = Date.now();
+    expect(parseMergeRequestUrl(`https://gitlab.example.com/${segment}app/-/merge_requests/3`)).toEqual({
+      host: 'gitlab.example.com',
+      projectPath: `${segment}app`,
+      iid: 3,
+    });
+    expect(Date.now() - started).toBeLessThan(500);
   });
 });
 

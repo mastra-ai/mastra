@@ -112,6 +112,17 @@ describe('getServerTelemetryContext', () => {
     );
   });
 
+  it('hashes a repository path that contains a very long slash run', async () => {
+    vi.stubEnv('MASTRA_PROJECT_ROOT', '/tmp/mastra-project');
+    const slashes = '/'.repeat(40_000);
+    mockRemote(`https://github.com/org${slashes}repo${slashes}`);
+
+    const started = Date.now();
+    const projectId2 = (await getServerTelemetryContext()).projectId2;
+    expect(projectId2).toBe(hashTelemetryValue(`github.com/org${slashes}repo`).slice(0, 16));
+    expect(Date.now() - started).toBeLessThan(500);
+  });
+
   it.each(['https://github.com/org/other', 'https://gitlab.com/org/repo', 'https://github.com/Org/Repo'])(
     'preserves distinct hosts and repository paths for %s',
     async remote => {

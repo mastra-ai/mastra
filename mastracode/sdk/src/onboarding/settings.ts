@@ -792,11 +792,20 @@ export function getSettingsPath(): string {
 }
 
 export function getCustomProviderId(name: string): string {
-  const slug = name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+  const trimmed = name.trim().toLowerCase();
+  let slug = '';
+  let pendingDash = false;
+  for (let i = 0; i < trimmed.length; i++) {
+    const code = trimmed.charCodeAt(i);
+    const alphanumeric = (code >= 48 && code <= 57) || (code >= 97 && code <= 122);
+    if (alphanumeric) {
+      if (pendingDash && slug.length > 0) slug += '-';
+      slug += trimmed[i];
+      pendingDash = false;
+    } else if (slug.length > 0) {
+      pendingDash = true;
+    }
+  }
   return slug || 'provider';
 }
 
