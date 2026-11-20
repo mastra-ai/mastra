@@ -4296,10 +4296,10 @@
       "reason": "seed-rule-b"
     },
     "mastracode/factory/src/integrations/workos/integration.test.ts": {
-      "tier": "out",
-      "since": "2026-11-14",
-      "last_failure": null,
-      "reason": "seed-rule-b"
+      "tier": "in",
+      "since": "2026-11-20",
+      "last_failure": "2026-11-20",
+      "reason": "versioning-fail"
     },
     "mastracode/factory/src/links.test.ts": {
       "tier": "in",
@@ -15387,9 +15387,9 @@
     },
     "packages/core/src/loop/test-utils/aimock/scenarios/persistence-failed-turns.scenario.test.ts": {
       "tier": "in",
-      "since": "2026-10-18",
-      "last_failure": null,
-      "reason": "new"
+      "since": "2026-11-20",
+      "last_failure": "2026-11-20",
+      "reason": "versioning-fail"
     },
     "packages/core/src/loop/test-utils/aimock/scenarios/prepare-step.scenario.test.ts": {
       "tier": "out",
