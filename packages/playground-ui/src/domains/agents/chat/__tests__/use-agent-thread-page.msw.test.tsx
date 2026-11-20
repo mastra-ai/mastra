@@ -36,7 +36,7 @@ it('refreshes the user-scoped list after deleting the selected conversation', as
       agentId: 'support',
       resourceId: 'signed-user',
       threadId: 'conversation',
-      draftScope: ['signed-user'],
+      draftScope: [TEST_BASE_URL, '/api', 'signed-user', 'support'],
       canPersistDraft: false,
       navigateToThread: vi.fn(),
       navigateToNewThread,
