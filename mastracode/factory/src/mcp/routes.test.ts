@@ -75,7 +75,8 @@ const USERS: Record<string, { orgId?: string; userId: string }> = {
 /**
  * An OAuth authorization server over real HTTP: RFC 8414 metadata and a JWKS,
  * signing RS256 access tokens the way AuthKit does with Resource Indicators on.
- * `outage` makes either endpoint answer 503, or never answer.
+ * `outage` makes either endpoint answer 503, or never answer; `discovery`
+ * picks which well-known document describes the server.
  */
 async function startAuthorizationServer() {
   const { publicKey, privateKey } = await generateKeyPair('RS256');
@@ -83,10 +84,11 @@ async function startAuthorizationServer() {
   let issuer = '';
   const outage: Record<'metadata' | 'jwks', false | 'down' | 'hang'> = { metadata: false, jwks: false };
   const hanging: Array<() => void> = [];
+  const discovery = { document: '/.well-known/oauth-authorization-server' };
   hangingResponses.push(() => hanging.splice(0).forEach(end => end()));
   const server = createServer((req, res) => {
     res.setHeader('Content-Type', 'application/json');
-    if (req.url === '/.well-known/oauth-authorization-server') {
+    if (req.url === discovery.document) {
       if (outage.metadata === 'hang') hanging.push(() => res.end());
       else if (outage.metadata) res.writeHead(503).end('{}');
       else res.end(JSON.stringify({ issuer, jwks_uri: `${issuer}/oauth2/jwks` }));
@@ -104,6 +106,7 @@ async function startAuthorizationServer() {
   return {
     issuer,
     outage,
+    discovery,
     sign: (claims: JWTPayload, options: SignOptions = {}) => sign(privateKey, issuer, claims, options),
   };
 }
@@ -440,6 +443,13 @@ describe('Factory MCP server', () => {
     const response = await claudeRequest(url, 'server/discover', {}, 'token-alice');
     expect(response.status).toBe(401);
     expect(response.headers.get('WWW-Authenticate')).toContain('error="invalid_token"');
+  });
+
+  it('accepts tokens from an authorization server that only publishes OpenID Connect discovery', async () => {
+    const { url, authServer } = await setup();
+    authServer.discovery.document = '/.well-known/openid-configuration';
+
+    expect((await claudeRequest(url, 'server/discover', {}, 'token-alice')).status).toBe(200);
   });
 
   it('an authorization server outage is a server error, not a bad sign-in', async () => {

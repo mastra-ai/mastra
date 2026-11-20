@@ -19,7 +19,8 @@ export type McpTokenVerifier = (token: string) => Promise<McpCaller | null>;
  * is refused, and Platform refuses tokens issued for a resource, so a leaked
  * or phished MCP token can't reach the rest of the user's account.
  *
- * Signing keys come from each server's `jwks_uri` (RFC 8414 metadata).
+ * Signing keys come from each server's `jwks_uri`, read from its RFC 8414
+ * metadata, or from its OpenID Connect discovery document when it has none.
  * With `resolveCaller`, a token naming an org is also checked against current
  * membership on every request.
  * Returns `null` for a token that isn't valid here; throws when the signing
@@ -40,9 +41,9 @@ export function createMcpTokenVerifier(options: {
     let keys = keySets.get(issuer);
     if (!keys) {
       keys = (async () => {
-        const response = await fetch(`${issuer}/.well-known/oauth-authorization-server`, {
-          signal: AbortSignal.timeout(timeoutMs),
-        });
+        const discover = (path: string) => fetch(`${issuer}${path}`, { signal: AbortSignal.timeout(timeoutMs) });
+        let response = await discover('/.well-known/oauth-authorization-server');
+        if (response.status === 404) response = await discover('/.well-known/openid-configuration');
         if (!response.ok) throw new Error(`authorization server metadata answered ${response.status}`);
         const { jwks_uri } = (await response.json()) as { jwks_uri?: unknown };
         if (typeof jwks_uri !== 'string') throw new Error('authorization server metadata has no jwks_uri');

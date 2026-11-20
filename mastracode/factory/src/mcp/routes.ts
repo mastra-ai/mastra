@@ -44,7 +44,9 @@ export interface FactoryMcpConfig {
    *
    * Each server must issue JWT access tokens bound to this endpoint with RFC 8707
    * Resource Indicators: `aud` set to `<publicUrl>/mcp`. Tokens without that
-   * audience are refused.
+   * audience are refused. Signing keys come from the `jwks_uri` in the server's
+   * `/.well-known/oauth-authorization-server` metadata (RFC 8414), or its
+   * `/.well-known/openid-configuration` when that answers 404.
    */
   authorizationServers?: string[];
 }
