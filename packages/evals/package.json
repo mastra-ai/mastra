@@ -93,7 +93,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "compromise": "^14.19.0",
+    "compromise": "^14.20.0",
     "keyword-extractor": "^0.0.28",
     "sentiment": "^5.0.2",
     "string-similarity": "^4.0.4"
