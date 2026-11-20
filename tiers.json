@@ -9330,10 +9330,10 @@
       "reason": "seed-rule-b"
     },
     "packages/core/src/agent-controller/__tests__/agent-controller-notifications.test.ts": {
-      "tier": "out",
-      "since": "2026-11-14",
-      "last_failure": "2026-09-09",
-      "reason": "seed-rule-b"
+      "tier": "in",
+      "since": "2026-11-20",
+      "last_failure": "2026-11-20",
+      "reason": "versioning-fail"
     },
     "packages/core/src/agent-controller/__tests__/agent-controller-session-created.test.ts": {
       "tier": "out",
@@ -9514,10 +9514,10 @@
       "reason": "seed-rule-b"
     },
     "packages/core/src/agent-controller/__tests__/signal-messages.test.ts": {
-      "tier": "out",
-      "since": "2026-11-14",
-      "last_failure": "2026-09-15",
-      "reason": "seed-rule-b"
+      "tier": "in",
+      "since": "2026-11-20",
+      "last_failure": "2026-11-20",
+      "reason": "versioning-fail"
     },
     "packages/core/src/agent-controller/__tests__/signal-run-end-race-23053.test.ts": {
       "tier": "in",
@@ -19858,10 +19858,10 @@
       "reason": "seed-rule-b"
     },
     "packages/editor/src/namespaces/agent.test.ts": {
-      "tier": "out",
-      "since": "2026-11-14",
-      "last_failure": "2026-09-15",
-      "reason": "seed-rule-b"
+      "tier": "in",
+      "since": "2026-11-20",
+      "last_failure": "2026-11-20",
+      "reason": "versioning-fail"
     },
     "packages/editor/src/namespaces/favorites.test.ts": {
       "tier": "out",
@@ -26539,8 +26539,8 @@
     },
     "packages/playground/src/domains/run-options/components/__tests__/run-options-popovers.test.tsx": {
       "tier": "in",
-      "since": "2026-10-31",
-      "last_failure": "2026-10-31",
+      "since": "2026-11-20",
+      "last_failure": "2026-11-20",
       "reason": "versioning-fail"
     },
     "packages/playground/src/domains/schedules/__tests__/schedule-triggers-list.keyboard.test.tsx": {
