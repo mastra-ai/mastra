@@ -211,9 +211,10 @@ const MASTRACODE_E2E_STEPS = new Set([
 
 /**
  * Keys of a job that runs several tiered suites as steps: a suite ran when one of its steps ran.
- * `isTest` names each suite's test step.
+ * `isTest` names each suite's test step. `isGate` names steps that only run to fail a suite whose
+ * prerequisites failed: skipped, they say nothing about the suite.
  */
-function stepKeys(steps, keyOf, isTest) {
+function stepKeys(steps, keyOf, isTest, isGate = () => false) {
   const ran = new Set();
   const failed = new Set();
   const unfinished = new Set();
@@ -221,6 +222,7 @@ function stepKeys(steps, keyOf, isTest) {
   for (const step of steps) {
     const key = keyOf(step.name);
     if (!key) continue;
+    if (step.conclusion === 'skipped' && isGate(step.name)) continue;
     if (step.conclusion !== 'success') unfinished.add(key);
     else if (isTest(step.name)) tested.add(key);
     if (!step.conclusion || step.conclusion === 'skipped') continue;
@@ -290,6 +292,7 @@ export function jobKeysFor(workflow, name, log = () => '', steps = []) {
         return label && `job:e2e/${label}`;
       },
       step => !step.includes(':'),
+      step => step.endsWith(': not run, a prerequisite failed'),
     );
   if ((m = /^E2E Tests \/ E2E (.+?)(?: \(\d+\/\d+\)| \(optional\))?$/.exec(name)) && E2E_JOB_LABELS[m[1]])
     return one(`job:e2e/${E2E_JOB_LABELS[m[1]]}`);

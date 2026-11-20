@@ -387,6 +387,35 @@ test('a failed shared Build fails the selected light suites it blocked, not the 
   assert.deepEqual(keys.passed, []);
 });
 
+test('a green retry recovers a light suite whose prerequisite step was skipped', () => {
+  // Build passed, so the prerequisite step was skipped on purpose and the suite ran and passed.
+  const green = [
+    { name: 'Build', conclusion: 'success' },
+    { name: 'E2E no-bundling: not run, a prerequisite failed', conclusion: 'skipped' },
+    { name: 'E2E no-bundling: install e2e test dependencies', conclusion: 'success' },
+    { name: 'E2E no-bundling', conclusion: 'success' },
+    { name: 'E2E deployers: not run, a prerequisite failed', conclusion: 'skipped' },
+    { name: 'E2E deployers: install e2e test dependencies', conclusion: 'success' },
+    { name: 'E2E deployers', conclusion: 'skipped' },
+  ];
+  const keysOf = j => jobKeysFor('Prebuild', j.name, () => '', j.steps);
+  assert.deepEqual(keysOf({ name: 'E2E Tests / E2E light suites', steps: green }).passed, ['job:e2e/no-bundling']);
+  const failed = {
+    name: 'E2E Tests / E2E light suites',
+    run_id: 1,
+    run_attempt: 1,
+    steps: [
+      { name: 'Build', conclusion: 'failure' },
+      { name: 'E2E no-bundling: not run, a prerequisite failed', conclusion: 'failure' },
+      { name: 'E2E deployers: not run, a prerequisite failed', conclusion: 'failure' },
+    ],
+  };
+  const retry = { ...failed, run_attempt: 2, steps: green };
+  assert.equal(passedOnRetry(failed, 'job:e2e/no-bundling', [failed, retry], keysOf), true);
+  // A real skipped test step still isn't a pass.
+  assert.equal(passedOnRetry(failed, 'job:e2e/deployers', [failed, retry], keysOf), false);
+});
+
 test('the merged Mastra Code job fails only the suite whose step failed', () => {
   const steps = (e2e, om) => [
     { name: 'Checkout repo', conclusion: 'success' },
