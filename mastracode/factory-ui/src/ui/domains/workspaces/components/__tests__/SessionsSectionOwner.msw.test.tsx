@@ -11,7 +11,7 @@ import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import { stubSessionsFactory, testChatSession } from './fixtures/sessionsSection';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { SessionsSection } from '../SessionsSection';
-import { pickSessionProperty, sessionPropertiesTrigger } from './fixtures/sessionProperties';
+import { groupSessionsByBoard, pickSessionProperty, sessionPropertiesTrigger } from './fixtures/sessionProperties';
 
 const projectRepositoryId = 'ghp-1';
 const viewerUserId = 'user-me';
@@ -90,6 +90,7 @@ describe('Sessions sidebar owner filter', () => {
   ];
 
   it("narrows every group to the viewer's own sessions", async () => {
+    groupSessionsByBoard();
     stubSessions(mixedSessions());
     const user = userEvent.setup();
 
@@ -106,7 +107,7 @@ describe('Sessions sidebar owner filter', () => {
     expect(within(userGroup).getByRole('link', { name: 'task-20002' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'factory/issue-20003' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'task-20005' })).not.toBeInTheDocument();
-    expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
+    expect(sessionPropertiesTrigger(2)).toBeInTheDocument();
   });
 
   it('keeps the owner filter after a reload', async () => {

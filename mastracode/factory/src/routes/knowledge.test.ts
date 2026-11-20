@@ -1,3 +1,4 @@
+import { resolveKnowledgeSessionScopes } from '@mastra/code-sdk/knowledge-scope';
 import { encodeKnowledgeScopeId, Knowledge } from '@mastra/core/knowledge';
 import type { KnowledgeStorage } from '@mastra/core/storage';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -7,6 +8,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { KnowledgeRoutes } from './knowledge.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
+
+vi.mock('@mastra/code-sdk/knowledge-scope', async importOriginal => {
+  const actual = await importOriginal<typeof import('@mastra/code-sdk/knowledge-scope')>();
+  return { ...actual, resolveKnowledgeSessionScopes: vi.fn(actual.resolveKnowledgeSessionScopes) };
+});
 
 const ORG = 'org-1';
 const OTHER_ORG = 'org-2';
@@ -311,5 +317,25 @@ describe('Factory Knowledge routes on the page store', () => {
       const response = await h.app.request(`/web/factory/projects/${h.foreignProjectId}/knowledge/events`);
       expect(response.status).toBe(404);
     });
+  });
+
+  it('reads with exactly the scopes the session resolver gives an agent in that project, and refuses a foreign project', async () => {
+    const h = await createHarness();
+    const resolver = vi.mocked(resolveKnowledgeSessionScopes);
+    resolver.mockClear();
+    const readScopeFor = vi.spyOn(Knowledge.prototype, 'readScopeFor');
+    try {
+      expect((await h.get('/graph')).status).toBe(200);
+      const session = resolver.mock.results[0]?.value;
+      expect(session).toEqual({
+        resolved: true,
+        scopes: [`org:${encodeKnowledgeScopeId(ORG)}`, `project:${encodeKnowledgeScopeId(h.projectId)}`],
+      });
+      expect(readScopeFor).toHaveBeenCalledWith(session.scopes);
+      expect((await h.get('/graph', h.foreignProjectId)).status).toBe(404);
+      expect(resolver).toHaveBeenCalledTimes(1);
+    } finally {
+      readScopeFor.mockRestore();
+    }
   });
 });

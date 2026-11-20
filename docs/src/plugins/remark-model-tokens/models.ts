@@ -13,16 +13,16 @@ export const MODEL_TOKENS: Record<string, string> = {
   // OpenAI
   __GATEWAY_OPENAI_MODEL__: 'openai/gpt-6.1-sol',
   __GATEWAY_OPENAI_MODEL_LUNA__: 'openai/gpt-6-luna',
-  __GATEWAY_OPENAI_MODEL_BASE__: 'openai/gpt-5.6',
+  __GATEWAY_OPENAI_MODEL_BASE__: 'openai/gpt-5.6-sol',
   __AI_SDK_OPENAI_MODEL_BASE__: 'gpt-5.6',
   __GATEWAY_OPENAI_EMBEDDING_MODEL__: 'openai/text-embedding-3-small',
   __AI_SDK_OPENAI_EMBEDDING_MODEL__: 'text-embedding-3-small',
   __AI_SDK_OPENAI_MODEL_REALTIME__: 'gpt-realtime-2.1',
 
   // Anthropic
-  __GATEWAY_ANTHROPIC_MODEL_SONNET__: 'anthropic/claude-sonnet-5-5',
-  __GATEWAY_ANTHROPIC_MODEL_OPUS__: 'anthropic/claude-opus-5-5',
-  __GATEWAY_ANTHROPIC_MODEL_HAIKU__: 'anthropic/claude-haiku-5-5',
+  __GATEWAY_ANTHROPIC_MODEL_SONNET__: 'anthropic/claude-sonnet-5.5',
+  __GATEWAY_ANTHROPIC_MODEL_OPUS__: 'anthropic/claude-opus-5.5',
+  __GATEWAY_ANTHROPIC_MODEL_HAIKU__: 'anthropic/claude-haiku-5.5',
   __AI_SDK_ANTHROPIC_MODEL_SONNET__: 'claude-sonnet-5-5',
 
   // Google

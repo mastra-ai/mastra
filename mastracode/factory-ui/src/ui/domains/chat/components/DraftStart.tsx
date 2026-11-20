@@ -12,6 +12,7 @@ import { traySurface } from '../../../ui/tray';
 import { MODEL_DEFAULTS_LABELS } from '../../settings/components/models/routing/model-routes';
 import { MODEL_DEFAULTS_ANCHORS, settingsSectionPath } from '../../settings/settingsSections';
 import type { ModelDefaultsAnchor } from '../../settings/settingsSections';
+import { reservedSpaceClass } from '../../workspace-viewer/layout';
 import { useChatTranscript } from '../context/useChatTranscript';
 import type { DraftModelGuards, MissingCredentialGuard } from '../hooks/useDraftModelGuards';
 import { useGlobalShortcuts } from '../hooks/useGlobalShortcuts';
@@ -41,17 +42,22 @@ export function DraftStart({
   const hasNotices = Boolean(routeErrorNotice) || noticeEntries.length > 0;
 
   return (
-    <div className={draftPageClass}>
-      <div className="flex w-full min-w-0 flex-col items-center gap-4">
-        <DraftComposer heading={heading} guards={guards} starters={starters} />
-        {hasNotices && (
-          <div className="flex w-full flex-col gap-4">
-            {routeErrorNotice && <Notice variant="destructive">{routeErrorNotice}</Notice>}
-            <TranscriptEntries entries={noticeEntries} onApprove={() => undefined} onRespond={() => undefined} />
+    // `cqw` in the reserved width measures the nearest container: the main area, as under ChatShell.
+    <div className="@container">
+      <div className={reservedSpaceClass.page}>
+        <div className={draftPageClass}>
+          <div className="flex w-full min-w-0 flex-col items-center gap-4">
+            <DraftComposer heading={heading} guards={guards} starters={starters} />
+            {hasNotices && (
+              <div className="flex w-full flex-col gap-4">
+                {routeErrorNotice && <Notice variant="destructive">{routeErrorNotice}</Notice>}
+                <TranscriptEntries entries={noticeEntries} onApprove={() => undefined} onRespond={() => undefined} />
+              </div>
+            )}
           </div>
-        )}
+          {children}
+        </div>
       </div>
-      {children}
     </div>
   );
 }

@@ -116,7 +116,14 @@ describe('BreakdownCard', () => {
       expect(await screen.findByTitle('Explore Subagent')).toBeDefined();
       expect(rowNames()).toEqual(['Explore Subagent', 'Code Agent', 'Reflector']);
       expect(within(await rowOf('Explore Subagent')).getByText('30')).toBeDefined();
-      expect(await openViewMenu('Breakdown by agent')).not.toContain('Breakdown by project');
+      expect(await openViewMenu('Breakdown by agent')).toEqual([
+        'Breakdown by agent',
+        'Breakdown by workflow',
+        'Breakdown by tool',
+        'Breakdown by model',
+        'Breakdown by thread',
+        'Breakdown by environment',
+      ]);
       expect(spans[0]).toMatchObject({
         groupBy: ['entityName'],
         where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'agent_run' } },

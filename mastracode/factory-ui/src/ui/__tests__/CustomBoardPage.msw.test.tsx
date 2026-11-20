@@ -146,7 +146,7 @@ describe('custom-only board routing', () => {
     await waitForMutationsIdle(client);
 
     const queued = await screen.findByTestId('board-column-queued');
-    expect(await within(queued).findByText('No rule here takes new items')).toBeVisible();
+    expect(await within(queued).findByText('No rule files new issues here')).toBeVisible();
     expect(within(queued).queryByText('Intake is clear')).not.toBeInTheDocument();
     expect(within(queued).queryByText(/No intake sources/)).not.toBeInTheDocument();
     expect(within(queued).queryByRole('link', { name: 'Connect issue source' })).not.toBeInTheDocument();
@@ -210,7 +210,7 @@ describe('custom-only board routing', () => {
     expect(screen.queryByRole('link', { name: 'Connect issue source' })).not.toBeInTheDocument();
   });
 
-  it('renders declaration-ordered custom groups without built-in intake or automation', async () => {
+  it('renders declaration-ordered custom groups without browsing a provider feed', async () => {
     const { providerLists, client } = renderBoard();
     const columns = await screen.findByLabelText('Board stages');
     expect(
@@ -221,7 +221,6 @@ describe('custom-only board routing', () => {
     for (const label of ['Preparing', 'Shipping', 'Shipped']) {
       expect(stageToggle(label, columns)).toHaveAttribute('aria-expanded', 'true');
     }
-    expect(screen.queryByText('Auto-approve plans')).toBeNull();
     // Columns render before every query settles, so only judge the feeds once idle.
     await waitForMutationsIdle(client);
     expect(providerLists).toEqual([]);

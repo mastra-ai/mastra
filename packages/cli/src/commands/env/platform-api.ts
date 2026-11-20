@@ -37,6 +37,17 @@ export interface Environment {
   updatedAt: string;
 }
 
+/**
+ * Value the platform returns in place of a write-only secret. Sending it back
+ * on a save keeps the stored secret. It is a sentinel, never a real value, so
+ * it must not be written to env files or shown to users.
+ */
+export const SECRET_VALUE_PLACEHOLDER = '__mastra_secret__';
+
+export function isSecretPlaceholder(value: string | undefined): boolean {
+  return value === SECRET_VALUE_PLACEHOLDER;
+}
+
 export type EnvironmentDeployStatus =
   | 'queued'
   | 'uploading'

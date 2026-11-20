@@ -3,7 +3,6 @@ import type { ClientScoreRowData } from '@mastra/client-js';
 import { TraceScoresList } from '@mastra/playground-ui/domains/scores';
 import { SpanFeedbackTab } from '@mastra/playground-ui/domains/traces/components/span-feedback-tab';
 import { TraceFeedbackTab } from '@mastra/playground-ui/domains/traces/components/trace-feedback-tab';
-import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useExperimentTrace } from '@mastra/react/hooks/experiments';
 import { useTraceSpanScores } from '@mastra/react/hooks/scores';
 import { useSpanFeedback, useTraceFeedback } from '@mastra/react/hooks/traces';
@@ -13,7 +12,6 @@ import { ExperimentScorePanel } from '@/domains/experiments/components/experimen
 import { useExperimentResultDetailState } from '@/domains/experiments/hooks/use-experiment-result-detail-state';
 import type { ExperimentResultDetailState } from '@/domains/experiments/hooks/use-experiment-result-detail-state';
 import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
-import { traceScoreLink } from '@/lib/app-routing';
 
 export type ExperimentResultDetailProps = Omit<
   ExperimentResultPanelProps,
@@ -22,8 +20,6 @@ export type ExperimentResultDetailProps = Omit<
   scores?: ClientScoreRowData[];
   /** Optional controlled state, for callers that need to read it. Create it with `useExperimentResultDetailState`. */
   state?: ExperimentResultDetailState;
-  /** Trace drawer's full-thread view: lists through the trace-query API; `false` falls back to `listTracesLight`. */
-  withQueryTrace: boolean;
   /** Shows the Feedback tabs and fetches their feedback. */
   withFeedback: boolean;
 };
@@ -38,12 +34,10 @@ export function ExperimentResultDetail({
   result,
   scores,
   state,
-  withQueryTrace,
   withFeedback,
   ...panelProps
 }: ExperimentResultDetailProps) {
   const internalState = useExperimentResultDetailState(scores, result?.id);
-  const { navigate } = useLinkComponent();
   const {
     featuredTraceId,
     setFeaturedTraceId,
@@ -144,9 +138,6 @@ export function ExperimentResultDetail({
         showUnavailableFeaturesMsg={false}
         traceHref={featuredTraceId ? `/traces?traceId=${encodeURIComponent(featuredTraceId)}` : undefined}
         anchorSpanId={anchorSpan?.spanId}
-        withQueryTrace={withQueryTrace}
-        withFeedback={withFeedback}
-        onOpenScore={(traceId, scoreId) => navigate(traceScoreLink(traceId, scoreId))}
         feedbackTabBadge={withFeedback ? (traceFeedback?.pagination?.total ?? undefined) : undefined}
         feedbackTabSlot={withFeedback ? ({ traceId }) => <TraceFeedbackTab traceId={traceId} /> : undefined}
         scoresTabBadge={anchorSpanScores?.pagination?.total ?? undefined}

@@ -821,7 +821,7 @@ export const mastra = new Mastra({
 
 This is useful for connecting external MCP servers that implement the MCP Apps extension or other features to Studio without wrapping them in a Mastra `MCPServer`.
 
-### `resources` Property
+### `resources` property
 
 The `MCPClient` instance has a `resources` property that provides access to resource-related operations.
 
@@ -973,7 +973,7 @@ mcpClient.resources.onListChanged('myWeatherServer', () => {
 })
 ```
 
-### `prompts` Property
+### `prompts` property
 
 The `MCPClient` instance has a `prompts` property that provides access to prompt-related operations.
 
@@ -1059,7 +1059,7 @@ mcpClient.prompts.onListChanged('myWeatherServer', () => {
 })
 ```
 
-### `tools` Property
+### `tools` property
 
 The `MCPClient` instance has a `tools` property for subscribing to tool list change notifications. To fetch tools, use `listTools()` or `listToolsets()`.
 
@@ -1081,7 +1081,7 @@ await mcpClient.tools.onListChanged('myWeatherServer', async () => {
 })
 ```
 
-### `progress` Property
+### `progress` property
 
 The `MCPClient` instance has a `progress` property for subscribing to progress notifications emitted by MCP servers while tools execute.
 
@@ -1125,7 +1125,7 @@ Notes:
 - When `enableProgressTracking` is true, tool calls include a `progressToken` so you can correlate updates to a specific run. Servers only send progress for requests that carry a token.
 - If you pass a `runId` when executing a tool, it will be used as the `progressToken`.
 
-### `events` Property (experimental)
+### `events` property (experimental)
 
 The `events` property lists and subscribes to server events from servers that implement the [MCP Events extension (SEP-3415)](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3415). Use it to react to things that happen on the server, such as a push to a repository, without polling a tool. Delivery is at least once. After a reconnect or a resume, the server can resend an occurrence, and the client drops repeats by `eventId` within `dedupWindow` of recent ids.
 
@@ -1492,7 +1492,7 @@ for await (const event of subscription) {
 }
 ```
 
-### `tasks` Property (experimental)
+### `tasks` property (experimental)
 
 Some tools take longer than one HTTP request can stay open. A server that implements the [MCP Tasks extension (SEP-2663)](https://modelcontextprotocol.github.io/ext-tasks/specification/2026-07-28/tasks.html) can answer such a call with a task, and the client fetches the result later. Set `tasks` on a server to accept them:
 
@@ -1792,7 +1792,7 @@ try {
 }
 ```
 
-### Quick Token Provider
+### Quick token provider
 
 For testing or when you already have a valid access token:
 
@@ -1818,7 +1818,7 @@ const client = new MCPClient({
 })
 ```
 
-### Custom Token Storage
+### Custom token storage
 
 For persistent token storage across sessions, implement the `OAuthStorage` interface. The provider stores tokens (both the latest set and one entry per authorization-server issuer), discovery state, and the PKCE verifier under string keys. The backend only needs a key-value contract:
 
@@ -1864,7 +1864,7 @@ const provider = new MCPOAuthClientProvider({
 
 ## Examples
 
-### Static Tool Configuration
+### Static tool configuration
 
 For tools where you have a single connection to the MCP server for you entire app, use `listTools()` and pass the tools to your agent:
 

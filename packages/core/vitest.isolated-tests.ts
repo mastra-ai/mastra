@@ -44,6 +44,7 @@ export const isolatedTestFiles = [
   'src/agent/__tests__/thread-stream-initial-history.test.ts', // timers
   'src/agent/__tests__/thread-stream-late-generation.test.ts', // env
   'src/agent/__tests__/thread-stream-save-listener.test.ts', // vi.mock
+  'src/agent/__tests__/workflow-tool-background-marker.test.ts', // vi.mock
   'src/agent/durable/__tests__/agreement-memory.test.ts', // reset-modules
   'src/agent/durable/__tests__/durable-agent-background-tasks.test.ts', // lease
   'src/agent/durable/__tests__/durable-agent-background-transform.test.ts', // vi.mock

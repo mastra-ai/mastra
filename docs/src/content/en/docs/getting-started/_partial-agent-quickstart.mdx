@@ -1,4 +1,4 @@
-## Quickstart for Agents
+## Quickstart for agents
 
 **For AI agents:** If you're tasked to build a Mastra project from scratch, follow the condensed instructions until the next heading. Adjust the example code for the agent & tool to your needs. Important for later: Define `model` as a string in `provider/model` format, for example `__GATEWAY_OPENAI_MODEL__`. For OpenAI, use `openai/<model>`, not `openai:<model>`, and don't import or pass a provider object.
 
@@ -107,7 +107,7 @@ export const mastra = new Mastra({
 })
 ```
 
-You're now able to run the agent directly. For this, import the Mastra instance and call the agent.generate() after retrieving the agent by its id. Node.js 22.18.0 and later are able to run TypeScript files directly. Make sure to add file extensions when importing local files. Example:
+You're now able to run the agent directly. For this, import the Mastra instance and call the agent.generate() after retrieving the agent by its id. Node.js 22.18.0 and later are able to run TypeScript files directly. Ensure you add file extensions when importing local files. Example:
 
 ```ts
 // run.mjs

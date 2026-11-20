@@ -9,10 +9,10 @@ import StepItem from "@site/src/components/StepItem";
 # Kubernetes (Helm)
 
 :::info Enterprise only
-The Helm chart is available exclusively to Mastra Enterprise customers. It is distributed from a private registry: your Enterprise license is exchanged for short-lived pull credentials. [Contact us](https://mastra.ai/contact) to get an Enterprise license.
+The Helm chart is available exclusively to Mastra Enterprise customers. It's distributed from a private registry: your Enterprise license is exchanged for short-lived pull credentials. [Contact Mastra](https://mastra.ai/contact) to get an Enterprise license.
 :::
 
-Deploy the Mastra platform — Mastra Server (your agent runtime) and Mastra Studio (the management UI) — on any Kubernetes cluster using the official `mastra-projects` Helm chart. The chart works on GKE, EKS, AKS, and generic or local clusters, and handles service exposure, TLS, and secret wiring for you.
+Deploy the Mastra platform, which includes Mastra Server (your agent runtime) and Mastra Studio (the management UI), on any Kubernetes cluster using the official `mastra-projects` Helm chart. The chart works on GKE, EKS, AKS, and generic or local clusters, and handles service exposure, TLS, and secret wiring for you.
 
 The chart follows two design principles:
 
@@ -29,7 +29,7 @@ You'll need:
 - [Helm](https://helm.sh/docs/intro/install/) 3.8+ (OCI registry support)
 - A container registry your cluster can pull from
 - A PostgreSQL database reachable from the cluster
-- A Mastra Enterprise license key — required both to pull the chart and at runtime in production
+- A Mastra Enterprise license key, required both to pull the chart and at runtime in production
 - For `ingress` mode: an ingress controller, or let the chart install one
 - For `gateway` mode: Gateway API CRDs and a Gateway controller (for example GKE's managed Gateway)
 
@@ -66,7 +66,7 @@ Configure [authentication](/docs/auth/overview) in your Mastra application befor
 
     :::warning
     Don't `COPY` the host-built `node_modules` into the image. `mastra build`
-    installs native modules for your local platform — an image built on an
+    installs native modules for your local platform. An image built on an
     Apple Silicon Mac for an amd64 cluster will crash at startup with errors
     like `Cannot find module '@libsql/linux-x64-gnu'`. Installing dependencies
     in-image (as above) always matches the target platform.
@@ -203,11 +203,11 @@ The chart supports three ways to expose Server and Studio, selected once via `gl
 
 | Mode | What you get | Required values |
 | - | - | - |
-| `loadBalancer` (default) | One `LoadBalancer` Service per component with per-cloud annotations | — |
+| `loadBalancer` (default) | One `LoadBalancer` Service per component with per-cloud annotations | None |
 | `ingress` | ClusterIP Services plus one Ingress per component | `mastra-server.ingress.host`, `mastra-studio.ingress.host` |
 | `gateway` | ClusterIP Services, a shared Gateway, and one HTTPRoute per component | `mastra-server.httpRoute.host`, `mastra-studio.httpRoute.host` |
 
-### Ingress with Let's Encrypt TLS
+### Ingress with cert-manager TLS
 
 Use `ingress` mode with cert-manager to serve both components over HTTPS. The chart can install ingress-nginx and cert-manager for you, or use controllers you already run:
 
@@ -264,7 +264,7 @@ The chart creates a shared Gateway with HTTP and per-component HTTPS listeners. 
 
 ## Cloud presets
 
-The chart ships a values preset per platform that sets `global.cloud` and platform-appropriate defaults:
+The chart includes a values preset per platform that sets `global.cloud` and platform-appropriate defaults:
 
 | Platform | Preset | Notes |
 | - | - | - |
@@ -335,7 +335,7 @@ Before enabling workers:
 
 - **A pull-capable PubSub backend** configured in your Mastra application: Redis Streams, Valkey Streams, or Google Cloud Pub/Sub. Workers pull events from the broker, so request/response-only backends won't work. Put its connection string (for example `REDIS_URL`) in the same Secret the Server uses.
 - **A storage backend that supports the `schedules` domain**, if you enable the scheduler: PostgreSQL, LibSQL, MySQL, MongoDB, Spanner, or Convex. Redis and ClickHouse don't support it, and the scheduler won't find due schedules on them.
-- **`mastra-server.workers.splitDeployment: true`.** Without it the API keeps running workers in-process, so every worker also runs in the API pods alongside the worker Deployments. The chart refuses to render if you enable workers without it.
+- **`mastra-server.workers.splitDeployment: true`.** Without it the API keeps running workers in-process, which means every worker also runs in the API pods alongside the worker Deployments. The chart refuses to render if you enable workers without it.
 
 :::warning Redis eviction policy
 Set `maxmemory-policy` to `noeviction` on Redis or Valkey. Every evicting policy deletes live Mastra state under memory pressure: `allkeys-*` policies evict unacknowledged workflow events, and `volatile-*` policies evict lease keys and streams, which carry a TTL by default. Runs then stall without a run error. `RedisStreamsPubSub` and `ValkeyStreamsPubSub` log a one-time warning after they first connect when the policy can evict. On managed Redis this is a parameter-group setting, and Amazon ElastiCache defaults to `volatile-lru`.
@@ -352,7 +352,7 @@ mastra worker build --output-dir .mastra/worker
 
 `--output-dir` is required. Without it, `mastra worker build` writes to `.mastra/output` and **overwrites the server bundle**, leaving you with a worker-only image.
 
-The two bundles declare different dependencies — the worker pulls in packages such as `bufferutil` and `pg` that the server bundle doesn't list — so each needs its own `npm install`. Node resolves modules upward from the entrypoint, so the worker finds its packages in `.mastra/worker/node_modules`:
+The worker and server bundles declare different dependencies: the worker pulls in packages such as `bufferutil` and `pg` that the server bundle doesn't list, which means each needs its own `npm install`. Because Node resolves modules upward from the entrypoint, the worker finds its packages in `.mastra/worker/node_modules`:
 
 ```dockerfile title="Dockerfile"
 FROM node:22-slim
@@ -377,7 +377,7 @@ CMD ["node", "index.mjs"]
 .mastra/worker/node_modules
 ```
 
-The server still starts with `CMD ["node", "index.mjs"]` and Studio assets stay at `/app/studio`, so nothing about the Server or Studio deployment changes. The worker entrypoint lands at `/app/.mastra/worker/index.mjs`, which is the chart's default `mastra-workers.command`. If you lay your image out differently, override that value to match.
+The server still starts with `CMD ["node", "index.mjs"]` and Studio assets stay at `/app/studio`, so nothing about the Server or Studio deployment changes. The worker entrypoint is written to `/app/.mastra/worker/index.mjs`, which is the chart's default `mastra-workers.command`. If you lay your image out differently, override that value to match.
 
 :::warning Use a new tag for each build
 Push each build under its own tag. The chart's default `imagePullPolicy` is `IfNotPresent`, so re-pushing an existing tag leaves nodes running the cached digest and your worker pods keep crashing on the old bundle.
@@ -385,7 +385,7 @@ Push each build under its own tag. The chart's default `imagePullPolicy` is `IfN
 
 ### Enable workers
 
-Workers run the **same image** as the Server — `mastra build` emits the worker entrypoint alongside the server entrypoint. Setting `global.image` once keeps every component on the same build:
+Workers run the **same image** as the Server because `mastra build` emits the worker entrypoint alongside the server entrypoint. Setting `global.image` once keeps every component on the same build:
 
 ```yaml title="mastra-values.yaml"
 global:
@@ -421,10 +421,10 @@ Worker pods mount the **Server's** ConfigMap and Secret rather than defining the
 | Role | Scales | Notes |
 | - | - | - |
 | `orchestration` | Yes | Consumes the `workflows` topic and calls back into the API to execute steps. The consumer group distributes work across replicas. |
-| `scheduler` | **No — always 1** | Polls storage for due cron schedules. The chart pins it to one replica and uses the `Recreate` strategy. Extra schedulers are safe but add polling load without adding throughput. |
+| `scheduler` | **No, always 1** | Polls storage for due cron schedules. The chart pins it to one replica and uses the `Recreate` strategy. Extra schedulers are safe but add polling load without adding throughput. |
 | `backgroundTasks` | Yes | Executes agent tool calls marked `background: { enabled: true }` off the request path. |
 
-The two scalable roles support autoscaling. Utilization targets need matching resource requests, and the chart fails the render if you enable autoscaling without them:
+The API and worker roles support autoscaling. Utilization targets need matching resource requests, and the chart fails the render if you enable autoscaling without them:
 
 ```yaml title="mastra-values.yaml"
 mastra-workers:
@@ -461,7 +461,7 @@ The guard exists because a version skew between the API and the workers is silen
 
 ### Restarting workers after a config change
 
-Worker pods don't restart automatically when the Server's ConfigMap or Secret changes — Helm's checksum annotations only cover objects a chart owns, and those belong to `mastra-server`. Roll them yourself:
+Worker pods don't restart automatically when the Server's ConfigMap or Secret changes. Helm's checksum annotations only cover objects a chart owns, and those belong to `mastra-server`. Roll them yourself:
 
 ```bash
 kubectl rollout restart deploy -n mastra   -l app.kubernetes.io/name=mastra-workers,app.kubernetes.io/instance=mastra
@@ -471,10 +471,10 @@ kubectl rollout restart deploy -n mastra   -l app.kubernetes.io/name=mastra-work
 
 - Reference credentials with `existingSecret` instead of plaintext values.
 - Set resource requests via `mastra-server.resources` and `mastra-studio.resources`.
-- Prefer standalone cert-manager and ingress controller installs over the bundled toggles; CRD lifecycle inside an umbrella chart complicates upgrades.
+- Prefer standalone cert-manager and ingress controller installs over the bundled toggles. CRD lifecycle inside an umbrella chart complicates upgrades.
 - Enable multiple replicas only after configuring shared storage, distributed PubSub, shared cache, and the required process roles.
 - When running background workers, set `mastra-server.workers.splitDeployment: true` and set `maxmemory-policy` to `noeviction` on Redis or Valkey.
-- The chart applies hardened defaults: non-root containers, read-only root filesystem, seccomp `RuntimeDefault`, and no service account token automount.
+- The chart runs non-root containers with a read-only root filesystem, seccomp `RuntimeDefault`, and no service account token automount.
 
 ## Upgrade and uninstall
 

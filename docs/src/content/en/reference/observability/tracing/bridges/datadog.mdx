@@ -193,11 +193,11 @@ The flush is best-effort: dd-trace sends LLM Observability data from a backgroun
 async shutdown(): Promise<void>
 ```
 
-Force-finishes any APM spans that weren't properly closed and flushes pending LLM Observability data. It then disables the integration and clears all internal state.
+Force-finishes any APM spans that weren't closed cleanly and flushes pending LLM Observability data. It then disables the integration and clears all internal state.
 
 ## Usage examples
 
-### Basic Usage
+### Basic usage
 
 ```typescript
 import tracer from 'dd-trace'
@@ -226,7 +226,7 @@ const mastra = new Mastra({
 })
 ```
 
-### Agentless Mode (LLM Observability only, no local agent)
+### Agentless mode (LLM observability only, no local agent)
 
 If you don't have a local Datadog Agent and only want LLM Observability data, enable agentless mode:
 
@@ -240,7 +240,7 @@ new DatadogBridge({
 
 Note: APM data can't be sent in agentless mode. If you only need LLM Observability data without `dd-trace` APM, the [Datadog Exporter](/reference/observability/tracing/exporters/datadog) is a simpler choice.
 
-### With Additional Exporters
+### With additional exporters
 
 The bridge can be combined with non-Datadog exporters to send traces to additional destinations:
 

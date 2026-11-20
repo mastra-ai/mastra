@@ -28,6 +28,15 @@ afterEach(async () => {
   await Promise.all(hosts.splice(0).map(host => host.close()));
 });
 
+/** Whether `value` is made only of JSON values, as a tool call's arguments must be (no `Date`). */
+const isJson = (value: unknown): boolean =>
+  value === null ||
+  ['string', 'number', 'boolean'].includes(typeof value) ||
+  (Array.isArray(value) && value.every(isJson)) ||
+  (typeof value === 'object' &&
+    Object.getPrototypeOf(value) === Object.prototype &&
+    Object.values(value).every(isJson));
+
 /**
  * Calls the opening tool on a real MCP server, then renders the app as an iframe would run it, with
  * `window.parent` played by an `AppBridge` that hands the app that tool's result and forwards its
@@ -60,6 +69,11 @@ async function openWidget(
   const bridge = new AppBridge(client, { name: 'test-host', version: '1.0.0' }, capabilities, { hostContext });
   bridge.oninitialized = () => void bridge.sendToolResult(result as Parameters<AppBridge['sendToolResult']>[0]);
   await bridge.connect(hostTransport);
+  // Like Codex, refuse a call whose arguments aren't JSON instead of serializing them on the way.
+  bridge.oncalltool = async params => {
+    if (params.arguments !== undefined && !isJson(params.arguments)) throw new Error('Invalid MCP tool call params');
+    return (await client.callTool(params)) as Awaited<ReturnType<NonNullable<AppBridge['oncalltool']>>>;
+  };
 
   render(<ObservabilityWidget />);
   return bridge;
@@ -477,7 +491,7 @@ it("reads over the host page's date preset, filters and project instead of the d
     resourceUri: APP.resourceUri,
     datePreset: '14d',
     filters: HOST_FILTERS,
-    projectId: 'project-1',
+    project: 'project-1',
   });
 
   await openWidget(
@@ -495,7 +509,7 @@ it("reads over the host page's date preset, filters and project instead of the d
 
   expect(await screen.findByText('5')).toBeTruthy();
   const [call] = mcp.calls;
-  expect(call).toMatchObject({ projectId: 'project-1', args: { filters: { environment: 'staging' } } });
+  expect(call).toMatchObject({ project: 'project-1', args: { filters: { environment: 'staging' } } });
   expect(windowOf(call)).toBe(14 * DAY);
   expect(screen.queryByRole('button', { name: 'Pin agent-runs' })).toBeNull();
 });
@@ -510,7 +524,7 @@ it('reads again when the host page changes its date preset, filters or project',
   );
   await screen.findByText('5');
   expect(mcp.calls).toHaveLength(1);
-  expect(mcp.calls[0]!.projectId).toBeUndefined();
+  expect(mcp.calls[0]!.project).toBeUndefined();
   expect(windowOf(mcp.calls[0])).toBe(DAY);
 
   bridge.setHostContext(
@@ -518,12 +532,12 @@ it('reads again when the host page changes its date preset, filters or project',
       resourceUri: APP.resourceUri,
       datePreset: '30d',
       filters: HOST_FILTERS,
-      projectId: 'project-2',
+      project: 'project-2',
     }).hostContext!(APP)!,
   );
 
   await waitFor(() => expect(mcp.calls).toHaveLength(2));
-  expect(mcp.calls[1]).toMatchObject({ projectId: 'project-2', args: { filters: { environment: 'staging' } } });
+  expect(mcp.calls[1]).toMatchObject({ project: 'project-2', args: { filters: { environment: 'staging' } } });
   expect(windowOf(mcp.calls[1])).toBe(30 * DAY);
 });
 
@@ -565,13 +579,52 @@ it("draws the org's widgets without a project, and the project's once the host p
   expect(mcp.calls.map(call => call.action)).toEqual(['getMetricAggregate']);
 
   bridge.setHostContext(
-    observabilityWidgetHost({ resourceUri: APP.resourceUri, projectId: 'project-1' }).hostContext!(APP)!,
+    observabilityWidgetHost({ resourceUri: APP.resourceUri, project: 'project-1' }).hostContext!(APP)!,
   );
 
   expect(await screen.findByText('Agent runs over time')).toBeTruthy();
   expect(widgetIds()).toEqual([agentRunsChart.id]);
   await waitFor(() => expect(mcp.calls).toHaveLength(2));
-  expect(mcp.calls[1]).toMatchObject({ action: 'getMetricTimeSeries', projectId: 'project-1' });
+  expect(mcp.calls[1]).toMatchObject({ action: 'getMetricTimeSeries', project: 'project-1' });
+});
+
+// Claude and ChatGPT set no host view, so without the dashboard's own project every read would cover
+// the whole org (OBS-967).
+it("reads the opened dashboard's project, and draws its project widgets, in a host that sets none", async () => {
+  const mcp = observabilityServer({
+    project: 'project-2',
+    answers: { getMetricAggregate: { data: { value: 5 } }, getMetricTimeSeries: { data: { series: [] } } },
+  });
+
+  await openWidget(
+    mcp,
+    { dashboard: dashboardOf(agentRunsKpi, agentRunsChart) },
+    {},
+    undefined,
+    scoped({ [agentRunsKpi.id]: 'org', [agentRunsChart.id]: 'project' }),
+  );
+
+  expect(await screen.findByText('Agent runs over time')).toBeTruthy();
+  expect(screen.queryByText('Agent runs')).toBeNull();
+  await waitFor(() => expect(mcp.calls).toHaveLength(1));
+  expect(mcp.calls[0]).toMatchObject({ action: 'getMetricTimeSeries', project: 'project-2' });
+});
+
+it("reads the host page's project over the opened dashboard's, and the dashboard's once the host sets none", async () => {
+  const mcp = observabilityServer({ project: 'project-2', answers: { getMetricAggregate: { data: { value: 5 } } } });
+
+  const bridge = await openWidget(
+    mcp,
+    { dashboard: dashboardOf(agentRunsKpi) },
+    observabilityWidgetHost({ resourceUri: APP.resourceUri, project: 'project-1' }).hostContext!(APP),
+  );
+
+  await screen.findByText('5');
+  expect(mcp.calls[0]!.project).toBe('project-1');
+
+  bridge.setHostContext(observabilityWidgetHost({ resourceUri: APP.resourceUri }).hostContext!(APP)!);
+  await waitFor(() => expect(mcp.calls).toHaveLength(2));
+  expect(mcp.calls[1]!.project).toBe('project-2');
 });
 
 it("reads over the host page's custom date range, as the Metrics page passes it", async () => {
@@ -658,9 +711,9 @@ it("pins a widget with the host page's custom date range", async () => {
   expect(host.pins).toEqual([{ widget: expect.objectContaining(agentRunsKpi), datePreset: 'custom', customRange }]);
 });
 
-it("pins a widget with the host page's date preset and filters, without reading it again", async () => {
+it("pins a widget with the host page's date preset, filters and project, without reading it again", async () => {
   const mcp = observabilityServer({ answers: { getMetricAggregate: { data: { value: 1 } } } });
-  const host = pinningHost({ datePreset: '3d', filters: HOST_FILTERS, projectId: 'project-1' });
+  const host = pinningHost({ datePreset: '3d', filters: HOST_FILTERS, project: 'project-1' });
 
   host.connect(await openWidget(mcp, { dashboard: dashboardOf(agentRunsKpi) }, host.hostContext(), PINNING));
   await screen.findByText('1');
@@ -668,10 +721,25 @@ it("pins a widget with the host page's date preset and filters, without reading 
   fireEvent.click(screen.getByRole('button', { name: 'Pin agent-runs' }));
   await screen.findByRole('button', { name: 'Unpin agent-runs' });
   expect(host.pins).toEqual([
-    { widget: expect.objectContaining(agentRunsKpi), datePreset: '3d', filters: HOST_FILTERS },
+    { widget: expect.objectContaining(agentRunsKpi), datePreset: '3d', filters: HOST_FILTERS, project: 'project-1' },
   ]);
   // The view didn't change, so the pin's new host context leaves the window and its reads alone.
   expect(mcp.calls).toHaveLength(1);
+});
+
+// Pinned without its project, the host couldn't tell which project's data the widget showed.
+it("pins a widget with the opened dashboard's project when the host sets none", async () => {
+  const mcp = observabilityServer({ project: 'project-2', answers: { getMetricAggregate: { data: { value: 1 } } } });
+  const host = pinningHost();
+
+  host.connect(await openWidget(mcp, { dashboard: dashboardOf(agentRunsKpi) }, host.hostContext(), PINNING));
+  await screen.findByText('1');
+
+  fireEvent.click(screen.getByRole('button', { name: 'Pin agent-runs' }));
+  await screen.findByRole('button', { name: 'Unpin agent-runs' });
+  expect(host.pins).toEqual([
+    { widget: expect.objectContaining(agentRunsKpi), datePreset: '24h', project: 'project-2' },
+  ]);
 });
 
 it('shows the widget as pinned when the host already holds it, and follows the host when it unpins', async () => {
@@ -786,6 +854,20 @@ it.each([
     expect(screen.queryByRole('button', { name: `Pin ${name}` })).toBeNull();
   },
 );
+
+it("hands the host the opened dashboard's project with the widget whose settings are clicked", async () => {
+  const mcp = observabilityServer({ project: 'project-2', answers: { getMetricAggregate: { data: { value: 1 } } } });
+  const host = configuringHost();
+
+  host.connect(await openWidget(mcp, { dashboard: dashboardOf(agentRunsKpi) }, host.hostContext(), PINNING));
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Configure agent-runs' }));
+  await waitFor(() =>
+    expect(host.configured).toEqual([
+      { widget: expect.objectContaining(agentRunsKpi), datePreset: '24h', project: 'project-2' },
+    ]),
+  );
+});
 
 it('shows no settings button when the host passes no onConfigure', async () => {
   const mcp = observabilityServer({ answers: { getMetricTimeSeries: { data: { series: [] } } } });

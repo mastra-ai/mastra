@@ -18,7 +18,7 @@ const options = benchmarkOptions.parse({
   pricingModel: process.env.BENCHMARK_PRICING_MODEL,
   pricingVerifiedAt: process.env.BENCHMARK_PRICING_VERIFIED_AT,
   pricingReference: process.env.BENCHMARK_PRICING_REFERENCE,
-  model: process.env.ANALYSIS_MODEL ?? "gpt-4.1-mini",
+  model: process.env.ANALYSIS_MODEL ?? "gpt-6-luna",
 });
 const budget = benchmarkBudget(options);
 if (!process.env.OPENAI_API_KEY)

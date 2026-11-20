@@ -65,7 +65,7 @@ for await (const chunk of stream) {
   },
   {
     "model": "mistral/deepseek-v4-1-flash-1017",
-    "imageInput": false,
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
@@ -95,7 +95,7 @@ for await (const chunk of stream) {
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 131072,
-    "maxOutput": 262144,
+    "maxOutput": 131072,
     "inputCost": 0.1,
     "outputCost": 0.1
   },
@@ -189,11 +189,11 @@ for await (const chunk of stream) {
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262144,
+    "reasoning": true,
+    "contextWindow": 1048576,
     "maxOutput": 262144,
-    "inputCost": 0.5,
-    "outputCost": 1.5
+    "inputCost": 0.7,
+    "outputCost": 2.1
   },
   {
     "model": "mistral/mistral-medium-2604",

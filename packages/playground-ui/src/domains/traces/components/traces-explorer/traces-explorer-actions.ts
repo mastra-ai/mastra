@@ -13,7 +13,7 @@ import type {
 } from '../../trace-filters';
 import { buildTraceQueryRequest, TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS } from '../../trace-query-filters';
 import type { SpanTab, TraceDatePreset } from '../../types';
-import type { TraceSpanView } from '../trace-data-panel-view';
+import type { TraceSpanView } from '../trace-panel';
 
 export type TracesSelection = {
   traceId?: string;

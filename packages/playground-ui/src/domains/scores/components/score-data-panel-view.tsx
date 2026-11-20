@@ -1,0 +1,228 @@
+import type { ClientScoreRowData } from '@mastra/client-js';
+import { useState } from 'react';
+import type { ReactNode } from 'react';
+import { Button } from '@/ds/components/Button';
+import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
+import { DataPanel } from '@/ds/components/DataPanel';
+import { Txt } from '@/ds/components/Txt';
+import { IconFileArrowRightIn } from '@/ds/icons/central/IconFileArrowRightIn';
+import { IconFileArrowRightOut } from '@/ds/icons/central/IconFileArrowRightOut';
+import { IconFloppyDisk1 } from '@/ds/icons/central/IconFloppyDisk1';
+import { IconGauge } from '@/ds/icons/central/IconGauge';
+import { IconReceiptBill } from '@/ds/icons/central/IconReceiptBill';
+import { cn } from '@/utils/cn';
+import { formatTimestampPrecise } from '@/utils/date-format';
+
+function isCodeBasedScorer(score?: ClientScoreRowData): boolean {
+  if (!score) return false;
+  const scorer = score.scorer as Record<string, unknown> | undefined;
+  if (scorer?.hasJudge === false) return true;
+  if (scorer?.hasJudge === true) return false;
+  return !score.preprocessPrompt && !score.analyzePrompt && !score.generateScorePrompt && !score.generateReasonPrompt;
+}
+
+function buildDialogTitle(sectionTitle: string, icon: React.ReactNode, score: ClientScoreRowData) {
+  return (
+    <>
+      <Txt as="span" variant="eyebrow" tone="faint" className="flex items-center gap-1.5 [&>svg]:size-icon-sm">
+        {icon}
+        {sectionTitle}
+      </Txt>
+      <span>
+        › Score <b className="text-muted-foreground">#{score.id}</b>
+      </span>
+    </>
+  );
+}
+
+export type ScoreDataPanelDatasetDialogArgs = {
+  score: ClientScoreRowData;
+  isOpen: boolean;
+  onClose: () => void;
+  /** Sibling-drawer elevation: the dialog stacks above the score drawer. */
+  depth: 2 | 3;
+};
+
+export interface ScoreDataPanelViewProps {
+  /** Always mount the panel and pass `undefined` to close it, so the drawer can animate out. */
+  score?: ClientScoreRowData;
+  onClose: () => void;
+  onPrevious?: () => void;
+  onNext?: () => void;
+  depth?: 1 | 2 | 3;
+  /** Opens the trace the score ran on, or its span when `spanId` is given. Without it, both ids show as text. */
+  onOpenTrace?: (traceId: string, spanId?: string) => void;
+  /** The dialog that saves the score as a dataset item. Without it, the drawer offers no "Save as dataset item". */
+  renderDatasetDialog?: (args: ScoreDataPanelDatasetDialogArgs) => ReactNode;
+}
+
+/**
+ * A score's drawer, drawn from the record it is given: it never fetches and draws no link. The trace and
+ * span it ran on open through `onOpenTrace`, and the dataset dialog is the host's (`renderDatasetDialog`).
+ */
+export function ScoreDataPanelView({
+  score,
+  onClose,
+  onPrevious,
+  onNext,
+  depth,
+  onOpenTrace,
+  renderDatasetDialog,
+}: ScoreDataPanelViewProps) {
+  const [datasetDialogOpen, setDatasetDialogOpen] = useState(false);
+  const traceId = score?.traceId ?? undefined;
+  const spanId = score?.spanId ?? undefined;
+  const openTrace = onOpenTrace && traceId ? () => onOpenTrace(traceId) : undefined;
+  const openSpan = onOpenTrace && traceId && spanId ? () => onOpenTrace(traceId, spanId) : undefined;
+  const isCodeBased = isCodeBasedScorer(score);
+  const naText = isCodeBased ? 'Code-based scorer does not use prompts' : 'Step not configured';
+
+  return (
+    <>
+      <DataPanel open={!!score} onClose={onClose} title={score ? `Score ${score.id}` : 'Score'} depth={depth}>
+        {score && (
+          <>
+            <DataPanel.Header>
+              <DataPanel.Heading>
+                Score
+                <DataPanel.CopyId id={score.id} />
+              </DataPanel.Heading>
+              <DataPanel.HeaderActions>
+                {(onPrevious || onNext) && (
+                  <DataPanel.NextPrevNav
+                    onPrevious={onPrevious}
+                    onNext={onNext}
+                    previousLabel="Go to previous score"
+                    nextLabel="Go to next score"
+                  />
+                )}
+                <DataPanel.CloseButton icon="x" onClick={onClose} label="Close score" tooltip="Close score" />
+              </DataPanel.HeaderActions>
+            </DataPanel.Header>
+
+            <DataPanel.Content>
+              <DataKeysAndValues>
+                {score.scorer?.name != null && (
+                  <>
+                    <DataKeysAndValues.Key>Scorer</DataKeysAndValues.Key>
+                    <DataKeysAndValues.Value>{String(score.scorer.name)}</DataKeysAndValues.Value>
+                  </>
+                )}
+                {score.createdAt && (
+                  <>
+                    <DataKeysAndValues.Key>Created</DataKeysAndValues.Key>
+                    <DataKeysAndValues.Value>{formatTimestampPrecise(score.createdAt)}</DataKeysAndValues.Value>
+                  </>
+                )}
+                {score.traceId && (
+                  <>
+                    <DataKeysAndValues.Key>Trace Id</DataKeysAndValues.Key>
+                    {openTrace ? (
+                      <DataKeysAndValues.ValueButton onClick={openTrace}>{score.traceId}</DataKeysAndValues.ValueButton>
+                    ) : (
+                      <DataKeysAndValues.Value>{score.traceId}</DataKeysAndValues.Value>
+                    )}
+                  </>
+                )}
+                {score.spanId && score.traceId && (
+                  <>
+                    <DataKeysAndValues.Key>Span Id</DataKeysAndValues.Key>
+                    {openSpan ? (
+                      <DataKeysAndValues.ValueButton onClick={openSpan}>{score.spanId}</DataKeysAndValues.ValueButton>
+                    ) : (
+                      <DataKeysAndValues.Value>{score.spanId}</DataKeysAndValues.Value>
+                    )}
+                  </>
+                )}
+              </DataKeysAndValues>
+
+              {renderDatasetDialog && (
+                <div className="my-6 flex justify-end">
+                  <Button size="sm" onClick={() => setDatasetDialogOpen(true)} icon={<IconFloppyDisk1 />}>
+                    Save as dataset item
+                  </Button>
+                </div>
+              )}
+
+              <div className="mb-6 text-muted-foreground">
+                <div
+                  className={cn(
+                    'text-placeholder',
+                    'flex items-baseline gap-2',
+                    '[&>svg]:size-icon-lg [&>svg]:translate-y-1',
+                  )}
+                >
+                  <IconGauge />
+                  <Txt as="span" variant="body">
+                    Score:
+                  </Txt>
+                  <Txt
+                    as="b"
+                    variant="body"
+                    tone="muted"
+                    className="tabular-nums"
+                  >{`${score.score == null || Number.isNaN(score.score) ? 'n/a' : score.score}`}</Txt>
+                </div>
+                <Txt as="p" variant="body-sm" className="mt-2">
+                  {score.reason ||
+                    (isCodeBased ? 'Code-based scorer does not generate a reason' : 'Step not configured')}
+                </Txt>
+              </div>
+
+              <div className="grid gap-4">
+                <DataPanel.CodeSection
+                  title="Input"
+                  dialogTitle={buildDialogTitle('Input', <IconFileArrowRightIn />, score)}
+                  icon={<IconFileArrowRightIn />}
+                  codeStr={JSON.stringify(score.input ?? null, null, 2)}
+                />
+                <DataPanel.CodeSection
+                  title="Output"
+                  dialogTitle={buildDialogTitle('Output', <IconFileArrowRightOut />, score)}
+                  icon={<IconFileArrowRightOut />}
+                  codeStr={JSON.stringify(score.output ?? null, null, 2)}
+                />
+                <DataPanel.CodeSection
+                  title="Preprocess Prompt"
+                  dialogTitle={buildDialogTitle('Preprocess Prompt', <IconReceiptBill />, score)}
+                  icon={<IconReceiptBill />}
+                  codeStr={score.preprocessPrompt || naText}
+                  simplified
+                />
+                <DataPanel.CodeSection
+                  title="Analyze Prompt"
+                  dialogTitle={buildDialogTitle('Analyze Prompt', <IconReceiptBill />, score)}
+                  icon={<IconReceiptBill />}
+                  codeStr={score.analyzePrompt || naText}
+                  simplified
+                />
+                <DataPanel.CodeSection
+                  title="Generate Score Prompt"
+                  dialogTitle={buildDialogTitle('Generate Score Prompt', <IconReceiptBill />, score)}
+                  icon={<IconReceiptBill />}
+                  codeStr={score.generateScorePrompt || naText}
+                  simplified
+                />
+                <DataPanel.CodeSection
+                  title="Generate Reason Prompt"
+                  dialogTitle={buildDialogTitle('Generate Reason Prompt', <IconReceiptBill />, score)}
+                  icon={<IconReceiptBill />}
+                  codeStr={score.generateReasonPrompt || naText}
+                  simplified
+                />
+              </div>
+            </DataPanel.Content>
+          </>
+        )}
+      </DataPanel>
+
+      {score &&
+        renderDatasetDialog?.({
+          score,
+          isOpen: datasetDialogOpen,
+          onClose: () => setDatasetDialogOpen(false),
+          depth: (depth ?? 1) > 1 ? 3 : 2,
+        })}
+    </>
+  );
+}

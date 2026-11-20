@@ -11,6 +11,7 @@ import { AgentThreadLeaseLostError, agentThreadStreamRuntime } from '../agent/th
 import type { AgentThreadSubscription } from '../agent/types';
 import { getErrorFromUnknown, MastraError } from '../error';
 import { isLeaseProvider } from '../events/pubsub';
+import { describeNonSuccessFinishReason } from '../loop/shared/non-success-finish-reason';
 import type { RequestContext } from '../request-context';
 import type { GoalEvaluationPayload, IsTaskCompletePayload } from '../stream/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
@@ -21,12 +22,7 @@ import {
   SUSPENDED_RUN_AGENT_KEY,
   SUSPENDED_RUN_MEMORY_KEY,
 } from './session';
-import {
-  describeNonSuccessFinishReason,
-  describeServerSideFallback,
-  getDisplayTransform,
-  toStepTokenUsage,
-} from './stream-content';
+import { describeServerSideFallback, getDisplayTransform, toStepTokenUsage } from './stream-content';
 import { isToolResultError } from './tool-result';
 import { createEmptyTokenUsage } from './types';
 import type { ActiveSubagentState, AgentControllerEvent, TokenUsage } from './types';
@@ -1249,7 +1245,7 @@ export class SessionRunEngine {
             break;
           if (savedUsage) this.#session.setTokenUsage({ ...createEmptyTokenUsage(), ...savedUsage });
           else this.#session.addUsage(stepUsage);
-          this.#session.emit({ type: 'usage_update', usage: stepUsage });
+          this.#session.emit({ type: 'usage_update', usage: stepUsage, total: this.#session.getTokenUsage() });
         }
         break;
       }

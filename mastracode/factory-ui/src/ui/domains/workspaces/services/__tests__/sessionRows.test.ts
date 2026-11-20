@@ -227,7 +227,7 @@ describe('pinnedSessionsAfter', () => {
     const { pin } = sessionRowsRequest({
       sort: 'activity',
       groupBy: 'none',
-      filters: { owner: 'all', status: 'all', updated: 'all' },
+      filters: { owner: 'all', source: 'all', status: 'all', updated: 'all' },
       pinned: repinned,
       open: undefined,
       children: false,
@@ -245,7 +245,7 @@ describe('sessionRowsRequest', () => {
     const { windows } = sessionRowsRequest({
       sort: 'activity',
       groupBy: 'board',
-      filters: { owner: 'all', status: 'all', updated: 'all' },
+      filters: { owner: 'all', source: 'all', status: 'all', updated: 'all' },
       pinned: new Set(),
       open: undefined,
       children: false,

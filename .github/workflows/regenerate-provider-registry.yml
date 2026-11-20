@@ -60,12 +60,12 @@ jobs:
       - name: Build vendored ai-v6 package
         run: pnpm --filter @internal/ai-v6 build
 
-      - name: Build internal core package
+      - name: Build packages the generator imports
         # The model-router generator imports @mastra/core source, which
-        # re-exports @internal/core/error. That subpath resolves to the
-        # package's dist output, so @internal/core must be built first or the
+        # imports @internal/core/error and @mastra/schema-compat. Both resolve
+        # to their package's dist output, so they must be built first or the
         # script fails with ERR_MODULE_NOT_FOUND.
-        run: pnpm turbo build --filter @internal/core
+        run: pnpm turbo build --filter @internal/core --filter @mastra/schema-compat
 
       - name: Generate provider registry and model documentation
         run: pnpm --filter @mastra/core generate:model-router
