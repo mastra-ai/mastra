@@ -1,5 +1,6 @@
 import type { GetAgentResponse } from '@mastra/client-js';
 import type { StorageThreadType } from '@mastra/core/memory';
+import { ThreadInputProvider } from '@mastra/playground-ui/domains/agents/chat/drafts/ThreadInputContext';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import type { LinkComponentProviderProps } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
@@ -8,8 +9,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { http, HttpResponse } from 'msw';
 import type { AnchorHTMLAttributes } from 'react';
 import { forwardRef } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readOnlyAuthCapabilities } from '../../__tests__/fixtures/auth';
 import { systemPackages } from '../../__tests__/fixtures/channels';
 import { v2Agent } from '../../__tests__/fixtures/composer-model-settings';
@@ -33,7 +34,6 @@ import {
 } from '@/domains/agents/context/agent-observational-memory-context';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { MemoryTimelineProvider, useMemoryTimeline } from '@/domains/agents/context/memory-timeline-context';
-import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';

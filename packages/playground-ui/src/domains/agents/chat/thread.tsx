@@ -244,7 +244,7 @@ const ThreadContent = ({
                                 isSpeaking={readAloud?.isSpeaking ?? false}
                                 onReadAloud={readAloud?.readAloud}
                                 onStopSpeaking={readAloud?.stop}
-                                mcpAppTools={mcpAppTools}
+                                mcpAppTools={mcpAppTools ?? features.mcpAppTools}
                               />
                             </MessageScrollerItem>
                           ))}
