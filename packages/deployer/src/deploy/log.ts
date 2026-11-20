@@ -20,15 +20,21 @@ export const createPinoStream = (logger: IMastraLogger) => {
 };
 
 /**
- * Windows needs a shell to run package manager `.cmd` shims, and the shell joins
- * every token into one command line. There, only allow characters that appear in
- * package specifiers, paths (including non-ASCII letters) and CLI flags — never
- * shell metacharacters.
+ * Windows needs a shell to run package manager `.cmd` shims, and cmd.exe joins
+ * every token into one command line. Plain tokens pass through as-is; anything
+ * else (spaces, apostrophes, emoji, `&`, `^`…) is wrapped in double quotes, where
+ * cmd.exe treats it literally. Characters cmd.exe still interprets inside quotes
+ * (`"`, `%`, `!`, line breaks) are refused; none of them can appear in a
+ * Windows file name.
  */
-const SAFE_SHELL_ARG = /^[\p{L}\p{M}\p{N}_@%+=:,./\\^~-]*$/u;
+const PLAIN_WINDOWS_ARG = /^[\p{L}\p{M}\p{N}_@+=:,./\\~-]+$/u;
+const UNQUOTABLE_WINDOWS_ARG = /["%!\r\n\0]/;
 
-export function isSafeShellArg(arg: string) {
-  return SAFE_SHELL_ARG.test(arg);
+export function toWindowsShellArg(arg: string) {
+  if (UNQUOTABLE_WINDOWS_ARG.test(arg)) {
+    throw new Error(`Refusing to pass unsafe argument to shell command: ${JSON.stringify(arg)}`);
+  }
+  return PLAIN_WINDOWS_ARG.test(arg) ? arg : `"${arg}"`;
 }
 
 export function createChildProcessLogger({ logger, root }: { logger: IMastraLogger; root: string }) {
@@ -39,14 +45,10 @@ export function createChildProcessLogger({ logger, root }: { logger: IMastraLogg
       if (!bin) throw new Error('Refusing to spawn an empty command');
       const allArgs = [...cmdArgs, ...args.filter(Boolean)];
       const shell = process.platform === 'win32';
-      if (shell) {
-        for (const arg of [bin, ...allArgs]) {
-          if (!isSafeShellArg(arg)) {
-            throw new Error(`Refusing to pass unsafe argument to shell command: ${JSON.stringify(arg)}`);
-          }
-        }
+      if (shell && !PLAIN_WINDOWS_ARG.test(bin)) {
+        throw new Error(`Refusing to spawn unsafe command: ${JSON.stringify(bin)}`);
       }
-      const subprocess = spawn(bin, allArgs, {
+      const subprocess = spawn(bin, shell ? allArgs.map(toWindowsShellArg) : allArgs, {
         cwd: root,
         shell,
         env,
