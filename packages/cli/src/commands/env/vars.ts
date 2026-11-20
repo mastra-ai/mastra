@@ -103,7 +103,7 @@ export async function envVarsPullAction(
 
   // Write-only secrets come back as a placeholder, not their value. Writing
   // the placeholder would put a value in the file that looks real but isn't.
-  const vars: Record<string, string> = {};
+  const vars: Record<string, string> = Object.create(null);
   const secretVarNames: string[] = [];
   for (const [name, value] of Object.entries(pulled)) {
     if (isSecretPlaceholder(value)) secretVarNames.push(name);
@@ -169,7 +169,7 @@ interface ParsedVarArgs {
  * and never echo their text.
  */
 function parseVarArgs(args: string[], kind: EnvVarKind | undefined): ParsedVarArgs {
-  const values: Record<string, string> = {};
+  const values: Record<string, string> = Object.create(null);
   const bareNames: ParsedVarArgs['bareNames'] = [];
   for (const [index, arg] of args.entries()) {
     const position = index + 1;
@@ -260,7 +260,7 @@ export async function envVarsSetAction(
 
   const changedNames = Object.keys(values);
   const kindNames = [...new Set([...changedNames, ...bareNames.map(({ name }) => name)])];
-  const envVarMeta: Record<string, { secret: boolean }> = {};
+  const envVarMeta: Record<string, { secret: boolean }> = Object.create(null);
   if (kind) {
     for (const name of kindNames) envVarMeta[name] = { secret: kind === 'secret' };
   }

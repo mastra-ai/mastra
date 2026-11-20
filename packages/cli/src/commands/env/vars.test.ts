@@ -376,6 +376,17 @@ describe('envVarsSetAction', () => {
     });
   });
 
+  it('keeps __proto__ as a variable instead of setting the prototype', async () => {
+    await runSet('my-app', ['__proto__=1'], { secret: true });
+
+    const sent = mockUpdateEnvironmentVars.mock.calls[0]![4];
+    expect(Object.keys(sent.envVars)).toEqual(['__proto__']);
+    expect(Object.keys(sent.envVarMeta)).toEqual(['__proto__']);
+    expect(JSON.parse(JSON.stringify(sent))).toEqual(
+      JSON.parse('{"envVars":{"__proto__":"1"},"envVarMeta":{"__proto__":{"secret":true}}}'),
+    );
+  });
+
   it('changes only the kind for bare names, including one in the environment slot', async () => {
     mockFetchEnvironmentList.mockResolvedValue({
       environments: [environment({ envVars: { DATABASE_URL: 'x', REDIS_URL: 'y' } })],
