@@ -270,7 +270,7 @@ function CmsPromptBlocksEditPage() {
 
   if (!block || !blockId) {
     return (
-      <PageLayout kind="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout kind="page" body="workspace" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">{blockId}</h1>
         <AgentEditLayout leftSlot={<EmptyState variant="fill" titleSlot="Prompt block not found" />}>
           <EmptyState variant="fill" titleSlot="Prompt block not found" />

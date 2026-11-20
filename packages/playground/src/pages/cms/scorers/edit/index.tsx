@@ -267,7 +267,7 @@ function CmsScorersEditPage() {
 
   if (!scorer || !scorerId) {
     return (
-      <PageLayout kind="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout kind="page" body="workspace" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">{scorerId}</h1>
         <AgentEditLayout leftSlot={<EmptyState variant="fill" titleSlot="Scorer not found" />}>
           <EmptyState variant="fill" titleSlot="Scorer not found" />

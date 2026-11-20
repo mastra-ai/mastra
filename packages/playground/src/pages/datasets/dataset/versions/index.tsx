@@ -75,7 +75,7 @@ function DatasetCompareVersionsPage() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <PageLayout kind="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout kind="page" body="workspace" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Versions</h1>
         <PermissionDenied variant="fill" resource="datasets" />
       </PageLayout>
@@ -102,7 +102,7 @@ function DatasetCompareVersionsPage() {
   };
 
   return (
-    <PageLayout kind="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+    <PageLayout kind="page" body="workspace" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <h1 className="sr-only">Versions</h1>
       <div className="h-full overflow-hidden px-[3vw] pb-4">
         <div className="grid h-full grid-rows-[auto_1fr] gap-4">
