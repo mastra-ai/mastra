@@ -18,6 +18,7 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import { noopLogger } from '../../logger/noop-logger';
 import { Mastra } from '../../mastra';
 import type { Processor } from '../../processors';
+import { PROCESSOR_ABORT_SIGNAL } from '../../processors/abort-signal-scope';
 import { ProcessorRunner } from '../../processors/runner';
 import { ProcessorStepSchema } from '../../processors/step-schema';
 import { RequestContext } from '../../request-context';
@@ -593,8 +594,40 @@ describe('Workflow (Evented Engine Specific)', () => {
 
         expect(result.blocked).toBe(false);
         expect(received).toHaveLength(2);
-        expect(received[0]).toBe(controller.signal);
-        expect(received[1]).toBe(controller.signal);
+        expect(received.map(s => s?.aborted)).toEqual([false, false]);
+        controller.abort();
+        expect(received.map(s => s?.aborted)).toEqual([true, true]);
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+
+    it('aborts the processor signal when the run is cancelled while a caller signal is set', async () => {
+      let secondStarted!: () => void;
+      const started = new Promise<void>(resolve => (secondStarted = resolve));
+      let secondSignal: AbortSignal | undefined;
+      const { received, workflow, mastra } = setup(
+        'evented-processor-abort-signal-caller-and-cancel',
+        async () => {
+          secondSignal = received[1];
+          secondStarted();
+          await new Promise<void>(resolve => secondSignal!.addEventListener('abort', () => resolve(), { once: true }));
+        },
+        new EventEmitterPubSub(),
+      );
+      await mastra.startWorkers();
+      try {
+        const caller = new AbortController();
+        const run = await workflow.createRun();
+        mastra.__createRunScope(run.runId).set(PROCESSOR_ABORT_SIGNAL, caller.signal);
+        const result = run.start({ inputData: inputData(caller.signal) });
+        await started;
+
+        expect(secondSignal!.aborted).toBe(false);
+        await run.cancel();
+        expect(secondSignal!.aborted).toBe(true);
+        expect(caller.signal.aborted).toBe(false);
+        await result;
       } finally {
         await mastra.stopWorkers();
       }
