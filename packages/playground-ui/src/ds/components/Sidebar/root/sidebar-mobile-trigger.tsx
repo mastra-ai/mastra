@@ -1,11 +1,10 @@
-import type { ComponentPropsWithoutRef } from 'react';
 import { useSidebar } from './sidebar-context';
+import { Button } from '@/ds/components/Button';
+import type { ButtonProps } from '@/ds/components/Button';
 import { IconBarsThree } from '@/ds/icons/central/IconBarsThree';
-import { focusRing } from '@/ds/primitives/transitions';
-import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
-export type SidebarMobileTriggerProps = ComponentPropsWithoutRef<'button'> & {
+export type SidebarMobileTriggerProps = Omit<ButtonProps, 'variant' | 'size' | 'tooltip' | 'children'> & {
   icon?: React.ReactNode;
 };
 
@@ -18,9 +17,11 @@ export function SidebarMobileTrigger({
 }: SidebarMobileTriggerProps) {
   const { isMobile, mobileTriggerRef, setOpenMobile } = useSidebar();
   return (
-    <button
+    <Button
       ref={mobileTriggerRef}
       type="button"
+      variant="ghost"
+      size="icon-sm"
       aria-label={ariaLabel}
       aria-hidden={!isMobile}
       tabIndex={isMobile ? 0 : -1}
@@ -31,16 +32,13 @@ export function SidebarMobileTrigger({
         if (!event.defaultPrevented) setOpenMobile(true);
       }}
       className={cn(
-        'inline-flex size-10 items-center justify-center rounded-md',
+        'shrink-0',
         // compound selector, not `in-*` — its `:where()` ties with a consumer's later `.inline-flex`
         "[[data-sidebar-mobile='false']_&]:hidden",
-        quietTextHover,
-        'hover:bg-fill-subtle',
-        focusRing,
         className,
       )}
     >
-      {icon ?? <IconBarsThree className="size-icon-lg" />}
-    </button>
+      {icon ?? <IconBarsThree />}
+    </Button>
   );
 }
