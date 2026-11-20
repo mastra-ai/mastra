@@ -7,3 +7,6 @@ coverage/
 !.env.example
 *.db
 *.db-*
+
+!/package-lock.json
+.local/

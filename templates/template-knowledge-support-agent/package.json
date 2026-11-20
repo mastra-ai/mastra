@@ -10,10 +10,17 @@
   },
   "scripts": {
     "format": "oxfmt .",
-    "format:check": "oxfmt --check ."
+    "format:check": "oxfmt --check .",
+    "dev": "node scripts/dev.ts",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "node --test tests/unit/*.test.ts",
+    "test:integration": "node --test --test-concurrency=1 tests/integration/*.test.ts"
   },
   "dependencies": {
-    "@mastra/core": "latest"
+    "@mastra/core": "latest",
+    "@mastra/server": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/memory": "latest"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

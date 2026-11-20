@@ -1,0 +1,40 @@
+import { resolve } from 'node:path';
+import { Mastra } from '@mastra/core/mastra';
+import { LibSQLStore } from '@mastra/libsql';
+import { Memory } from '@mastra/memory';
+import { KNOWLEDGE_ROUTES } from '@mastra/server/server-adapter';
+import { createSupportAgent } from './agents/support-agent.ts';
+import { createKnowledge } from './knowledge/index.ts';
+import { createAuth, loadCredentials } from './server/access.ts';
+
+export const storage = new LibSQLStore({
+  id: 'local-support',
+  url: process.env.SUPPORT_DATABASE_URL ?? `file:${resolve('.local/support.db')}`,
+});
+export const memory = new Memory({
+  storage,
+  options: { lastMessages: 12, semanticRecall: false, workingMemory: { enabled: false }, generateTitle: false },
+});
+export const supportKnowledge = createKnowledge(storage);
+const support = createSupportAgent(memory, supportKnowledge);
+
+const auth = createAuth(
+  loadCredentials(
+    process.env.SUPPORT_CREDENTIALS_FILE ?? resolve('.local/local-access.json'),
+    process.env.SUPPORT_STUDIO_ROLE,
+  ),
+  memory,
+);
+
+export const mastra = new Mastra({
+  logger: false,
+  storage,
+  knowledge: { support: supportKnowledge },
+  agents: { support },
+  server: {
+    host: '127.0.0.1',
+    port: Number(process.env.PORT ?? 4111),
+    auth,
+    apiRoutes: [...KNOWLEDGE_ROUTES],
+  },
+});
