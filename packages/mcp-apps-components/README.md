@@ -199,7 +199,7 @@ To let the user pin widgets too, add `pins: { pinnedIds, onPin, onUnpin }`. `obs
 
 #### Reading one project's data in any chat client
 
-Only a host that passes `observabilityWidgetHost` sets a project. In Claude or ChatGPT, nothing does, so every read covers all the projects your server can read. When the dashboard belongs to a project, return its id as `project` next to the dashboard:
+Only a host that passes `observabilityWidgetHost` sets a project. In Claude or ChatGPT, nothing does, so `queryObservability` gets no `project` and reads at whatever scope your server falls back to (every project its client can read, in the example above). When the dashboard belongs to a project, return its id as `project` next to the dashboard:
 
 ```typescript
 // Yours to write: the id of the project this dashboard is for, such as one the caller names,
