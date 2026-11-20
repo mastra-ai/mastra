@@ -14644,8 +14644,11 @@ export class Agent<
         id: this.id,
         getDefaultOptions: () => ({}),
         getMemory: (args?: any) => this.getMemory(args),
-        stream: (innerMessages: MessageListInput, innerOptions?: DurableAgentStreamOptions<TOutput>) =>
-          this.#streamDurable(innerMessages, innerOptions),
+        // Legacy wrappers route continuations through their public stream() so subclass overrides still run.
+        stream: this.returnsDurableStreamResult
+          ? this.stream.bind(this)
+          : (innerMessages: MessageListInput, innerOptions?: DurableAgentStreamOptions<TOutput>) =>
+              this.#streamDurable(innerMessages, innerOptions),
       } as unknown as DurableAgent<any, any, TOutput>;
       return runDurableStreamUntilIdle<TOutput>(
         resolvedOptionsAgent,

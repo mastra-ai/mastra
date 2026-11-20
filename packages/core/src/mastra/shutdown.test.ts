@@ -1,6 +1,7 @@
 import EventEmitter from 'node:events';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { Agent } from '../agent';
 import { globalRunRegistry } from '../agent/durable/run-registry';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSubDeliveryMode } from '../events/pubsub';
@@ -347,6 +348,49 @@ describe('Mastra shutdown lifecycle', () => {
       expect(flush).toHaveBeenCalled();
     } finally {
       handling.resolve();
+      await mastra.shutdown();
+      mastra.__unregisterHooks();
+    }
+  });
+
+  it('stopWorkers waits for a push event still initializing a late-registered native engine', async () => {
+    const initializing = deferred();
+    const initStarted = deferred();
+    const pubsub = new PushOnlyPubSub();
+    const mastra = new Mastra({ logger: false, pubsub, storage: new MockStore(), workflows: {} as any });
+    const handle = vi.spyOn(mastra, 'handleWorkflowEvent').mockResolvedValue({ ok: true });
+
+    try {
+      await mastra.startWorkers();
+      const agent = new Agent({
+        id: 'late-native',
+        name: 'late-native',
+        instructions: 'test',
+        model: 'openai/gpt-4o',
+        durable: { executionEngine: 'durable' },
+      });
+      vi.spyOn(agent, '__hasDurableExecution').mockReturnValue(true);
+      vi.spyOn(agent, '__initializeDurableExecution').mockImplementation(async () => {
+        initStarted.resolve();
+        await initializing.promise;
+      });
+      mastra.addAgent(agent, 'late-native');
+
+      await pubsub.publish('workflows', { type: 'workflow.start', runId: 'run-1', data: {} } as any);
+      await initStarted.promise;
+
+      let stopped = false;
+      const stop = mastra.stopWorkers().then(() => {
+        stopped = true;
+      });
+      await new Promise(r => setTimeout(r, 20));
+      expect(stopped).toBe(false);
+
+      initializing.resolve();
+      await stop;
+      expect(handle).toHaveBeenCalledOnce();
+    } finally {
+      initializing.resolve();
       await mastra.shutdown();
       mastra.__unregisterHooks();
     }

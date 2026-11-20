@@ -8195,7 +8195,11 @@ export class Mastra<
     const modes = this.#pubsub.supportedModes ?? ['pull'];
     const pushOnly = modes.includes('push') && !modes.includes('pull');
     if (pushOnly && !this.#pushSubscription) {
-      const cb: EventCallback = async (event, ack, nack) => {
+      const deliver = async (
+        event: Parameters<EventCallback>[0],
+        ack?: () => Promise<void>,
+        nack?: () => Promise<void>,
+      ) => {
         try {
           await this.#initializeDurableAgents();
         } catch (error) {
@@ -8221,7 +8225,7 @@ export class Mastra<
           return;
         }
 
-        const inFlight = this.handleWorkflowEvent(event)
+        await this.handleWorkflowEvent(event)
           .then(result => {
             if (result.ok) {
               if (ack) {
@@ -8260,6 +8264,11 @@ export class Mastra<
             }
           })
           .catch(err => this.#logger?.error?.('Unhandled error in workflow event push subscription', err));
+      };
+      const cb: EventCallback = (event, ack, nack) => {
+        // Track the whole delivery, including native engine initialization, so a
+        // concurrent stopWorkers() drain cannot finish before this event is handled.
+        const inFlight = deliver(event, ack, nack);
         this.#inFlightPushEvents.add(inFlight);
         void inFlight.finally(() => this.#inFlightPushEvents.delete(inFlight));
       };
