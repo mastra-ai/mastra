@@ -34,7 +34,16 @@ const EXCLUDED_OPERATIONS = new Set(['getOpenApi', 'getHealth', 'getReadiness'])
 
 const HTTP_METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace']
 
-const SCHEMA_SHAPE_KEYS = ['type', '$ref', 'properties', 'items', 'allOf', 'anyOf', 'oneOf', 'not', 'enum', 'const']
+const SCHEMA_ANNOTATION_KEYS = new Set([
+  'description',
+  'title',
+  'example',
+  'examples',
+  'deprecated',
+  'externalDocs',
+  'readOnly',
+  'writeOnly',
+])
 
 type Operation = { operationId?: string; [key: string]: unknown }
 interface OpenApiDocument {
@@ -129,10 +138,10 @@ export function transformSpec(source: OpenApiDocument): TransformResult {
     )
   }
 
-  // A schema with only a description (provider JSON passed through) renders as an empty Schema panel.
+  // A schema with only annotations, such as a description (provider JSON passed through) renders as an empty Schema panel.
   const components = spec.components as { schemas?: Record<string, Record<string, unknown>> } | undefined
   for (const schema of Object.values(components?.schemas ?? {})) {
-    if (!SCHEMA_SHAPE_KEYS.some(key => key in schema)) {
+    if (Object.keys(schema).every(key => SCHEMA_ANNOTATION_KEYS.has(key))) {
       schema.type = 'object'
       schema.additionalProperties = true
     }

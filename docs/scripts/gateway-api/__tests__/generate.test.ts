@@ -57,6 +57,8 @@ describe('transformSpec', () => {
     const schemas = (source.components as { schemas: Record<string, unknown> }).schemas
     schemas.Passthrough = { description: 'Provider JSON forwarded unchanged.' }
     schemas.Status = { enum: ['ok'] }
+    schemas.Labels = { additionalProperties: { type: 'string' } }
+    schemas.Timestamp = { format: 'date-time' }
     const { spec } = transformSpec(source)
     const result = (spec.components as { schemas: Record<string, unknown> }).schemas
     expect(result.Passthrough).toEqual({
@@ -65,6 +67,8 @@ describe('transformSpec', () => {
       additionalProperties: true,
     })
     expect(result.Status).toEqual({ enum: ['ok'] })
+    expect(result.Labels).toEqual({ additionalProperties: { type: 'string' } })
+    expect(result.Timestamp).toEqual({ format: 'date-time' })
   })
 
   test('reports operations without a pages.ts entry', () => {
