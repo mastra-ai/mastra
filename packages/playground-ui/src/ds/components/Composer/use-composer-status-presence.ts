@@ -8,7 +8,9 @@ const GRAPHICS = 'img, svg, canvas, video, progress, meter, [role="img"], [role=
 function shows(node: Node): boolean {
   if (node.nodeType === Node.TEXT_NODE) return (node.textContent ?? '').trim() !== '';
   if (!(node instanceof HTMLElement || node instanceof SVGElement) || node.classList.contains('sr-only')) return false;
-  if ((node instanceof HTMLElement && node.hidden) || node.checkVisibility?.() === false) return false;
+  if (node instanceof HTMLElement && node.hidden) return false;
+  // A display: contents wrapper has no box of its own, so checkVisibility() calls it hidden.
+  if (getComputedStyle(node).display !== 'contents' && node.checkVisibility?.() === false) return false;
   return node.matches(GRAPHICS) || Array.from(node.childNodes).some(shows);
 }
 
