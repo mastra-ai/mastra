@@ -4,6 +4,9 @@ import useIsBrowser from '@docusaurus/useIsBrowser'
 import { useFeatureFlagEnabled } from 'posthog-js/react'
 import { Button } from '../ui/button'
 
+// If the regional flag never resolves (blocked or failed PostHog requests), fall back to asking for consent.
+const REGION_RESOLUTION_TIMEOUT_MS = 3000
+
 declare global {
   interface Window {
     gtag?: (...args: any[]) => void
@@ -17,13 +20,20 @@ export function CookieBanner({ onConsentChange }: { onConsentChange: (consent: b
 
   const featureFlag = useFeatureFlagEnabled('cookie-banner')
   const isRegionResolved = featureFlag !== undefined
-  const isInEU = featureFlag === true
+  const [hasRegionTimedOut, setHasRegionTimedOut] = useState(false)
+  const requiresConsent = isRegionResolved ? featureFlag === true : hasRegionTimedOut
+
+  useEffect(() => {
+    if (!isBrowser || isRegionResolved) return
+    const timer = window.setTimeout(() => setHasRegionTimedOut(true), REGION_RESOLUTION_TIMEOUT_MS)
+    return () => window.clearTimeout(timer)
+  }, [isBrowser, isRegionResolved])
 
   useEffect(() => {
     // Do not grant tracking while the regional flag is still loading.
-    if (!isBrowser || !isRegionResolved) return
+    if (!isBrowser || (!isRegionResolved && !hasRegionTimedOut)) return
 
-    if (!isInEU) {
+    if (!requiresConsent) {
       setShowBanner(false)
       onConsentChange(true)
       window.gtag?.('consent', 'update', {
@@ -57,7 +67,7 @@ export function CookieBanner({ onConsentChange }: { onConsentChange: (consent: b
     } else {
       setShowBanner(true)
     }
-  }, [isInEU, isRegionResolved, isBrowser])
+  }, [requiresConsent, isRegionResolved, hasRegionTimedOut, isBrowser])
 
   const handleAccept = () => {
     localStorage.setItem('cookie-consent', 'true')
