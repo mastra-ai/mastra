@@ -2,16 +2,16 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import type { AnchorHTMLAttributes } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { FormLayout } from './index';
+import { PageLayout } from './index';
 
 afterEach(cleanup);
 
-describe('FormLayout', () => {
+describe('PageLayout kind="form"', () => {
   it('shows a back link and the page title, with no breadcrumb bar', () => {
     render(
-      <FormLayout backHref="/alerts" backLabel="Alerts" title="New alert">
+      <PageLayout kind="form" backHref="/alerts" backLabel="Alerts" title="New alert">
         <section>Conditions</section>
-      </FormLayout>,
+      </PageLayout>,
     );
 
     const back = screen.getByRole('link', { name: 'Back to Alerts' });
@@ -26,9 +26,9 @@ describe('FormLayout', () => {
 
   it('puts the back link above the title', () => {
     render(
-      <FormLayout backHref="/alerts" backLabel="Alerts" title="New alert">
+      <PageLayout kind="form" backHref="/alerts" backLabel="Alerts" title="New alert">
         <section>Conditions</section>
-      </FormLayout>,
+      </PageLayout>,
     );
 
     const back = screen.getByRole('link', { name: 'Back to Alerts' });
@@ -38,9 +38,9 @@ describe('FormLayout', () => {
 
   it('marks the title busy while the page loads', () => {
     render(
-      <FormLayout backHref="/alerts/1" backLabel="Alert" title="Edit alert" isLoading>
+      <PageLayout kind="form" backHref="/alerts/1" backLabel="Alert" title="Edit alert" isLoading>
         <section>Conditions</section>
-      </FormLayout>,
+      </PageLayout>,
     );
 
     const title = screen.getByRole('heading', { level: 1 });
@@ -54,9 +54,9 @@ describe('FormLayout', () => {
     }
 
     render(
-      <FormLayout backHref="/projects" backLabel="Projects" title="New project" LinkComponent={RouterLink}>
+      <PageLayout kind="form" backHref="/projects" backLabel="Projects" title="New project" LinkComponent={RouterLink}>
         <section>Repository</section>
-      </FormLayout>,
+      </PageLayout>,
     );
 
     const back = screen.getByRole('link', { name: 'Back to Projects' });
@@ -66,12 +66,12 @@ describe('FormLayout', () => {
 
   it('puts the aside after the title and before the form, so small screens show it above the fields', () => {
     render(
-      <FormLayout backHref="/alerts" backLabel="Alerts" title="New alert" aside={<p>Backtest</p>}>
+      <PageLayout kind="form" backHref="/alerts" backLabel="Alerts" title="New alert" aside={<p>Backtest</p>}>
         <label>
           Name
           <input />
         </label>
-      </FormLayout>,
+      </PageLayout>,
     );
 
     const title = screen.getByRole('heading', { level: 1 });

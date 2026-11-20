@@ -38,8 +38,8 @@ export function FactoryBoardLanding({ factoryId }: { factoryId: string | undefin
 function BoardLandingLayout({ children }: { children: ReactNode }) {
   const slots = useSidebarHeaderSlots();
   return (
-    <PageLayout {...slots}>
-      <PageLayout.Workspace>{children}</PageLayout.Workspace>
+    <PageLayout kind="page" body="workspace" {...slots}>
+      {children}
     </PageLayout>
   );
 }

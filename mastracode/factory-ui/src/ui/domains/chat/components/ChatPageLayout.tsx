@@ -69,8 +69,8 @@ export function ChatPageLayout({
           </div>
         </div>
       ) : null}
-      <PageLayout>
-        <PageLayout.Workspace>{children}</PageLayout.Workspace>
+      <PageLayout kind="page" body="workspace">
+        {children}
       </PageLayout>
     </div>
   );

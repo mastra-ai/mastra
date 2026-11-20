@@ -6,7 +6,6 @@ import {
   SettingsGroup,
   SettingsItem,
   SettingsItemIcon,
-  SettingsLayout,
   SettingsListHeader,
   SettingsRow,
   SettingsSkeleton,
@@ -16,6 +15,8 @@ import { Avatar } from '@/ds/components/Avatar';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { Input } from '@/ds/components/Input';
+import { PageLayout } from '@/ds/components/PageLayout';
+import { SettingsFrame } from '@/ds/components/PageLayout/settings-frame';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { Switch } from '@/ds/components/Switch';
 import { ThemeProvider } from '@/ds/components/ThemeProvider';
@@ -26,13 +27,13 @@ import { MainCard } from '@/ds/new/layout/app-shell';
 
 const meta = {
   title: 'New/Settings',
-  component: SettingsLayout,
+  component: SettingsFrame,
   parameters: {
     layout: 'padded',
     docs: {
       description: {
         component:
-          "Every settings page in Studio, Factory and Platform is built from these. `SettingsLayout` is the 640px column; each `SettingsGroup` is a `SettingsTitle` above one `SettingsContainer` card. A card holds `SettingsRow`s (a setting: label, description, control) or a list: a `SettingsListHeader` with a count and the list's action, then `SettingsItem`s. An empty list is one `SettingsEmptyRow` holding the empty text and that same action. The card owns all row spacing, so rows carry no padding of their own.",
+          "Every settings page in Studio, Factory and Platform is built from these. `<PageLayout kind='settings'>` is the 640px column; each `SettingsGroup` is a `SettingsTitle` above one `SettingsContainer` card. A card holds `SettingsRow`s (a setting: label, description, control) or a list: a `SettingsListHeader` with a count and the list's action, then `SettingsItem`s. An empty list is one `SettingsEmptyRow` holding the empty text and that same action. The card owns all row spacing, so rows carry no padding of their own.",
       },
     },
   },
@@ -43,7 +44,7 @@ const meta = {
       </ThemeProvider>
     ),
   ],
-} satisfies Meta<typeof SettingsLayout>;
+} satisfies Meta<typeof SettingsFrame>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -69,7 +70,7 @@ export const Page: Story = {
   render: args => (
     <div className="flex h-152 bg-sidebar p-2">
       <MainCard>
-        <SettingsLayout title={args.title}>
+        <PageLayout kind="settings" title={args.title}>
           <SettingsGroup>
             <SettingsTitle>Organization</SettingsTitle>
             <SettingsContainer>
@@ -148,7 +149,7 @@ export const Page: Story = {
               </SettingsRow>
             </SettingsContainer>
           </SettingsGroup>
-        </SettingsLayout>
+        </PageLayout>
       </MainCard>
     </div>
   ),
@@ -158,7 +159,7 @@ export const Page: Story = {
 export const Controls: Story = {
   args: { children: null },
   render: () => (
-    <SettingsLayout>
+    <PageLayout kind="settings">
       <SettingsGroup>
         <SettingsTitle>Environment</SettingsTitle>
         <SettingsContainer>
@@ -180,7 +181,7 @@ export const Controls: Story = {
           </SettingsFieldsetRow>
         </SettingsContainer>
       </SettingsGroup>
-    </SettingsLayout>
+    </PageLayout>
   ),
 };
 
@@ -188,7 +189,7 @@ export const Controls: Story = {
 export const Loading: Story = {
   args: { children: null },
   render: () => (
-    <SettingsLayout title="General">
+    <PageLayout kind="settings" title="General">
       <SettingsGroup>
         <SettingsTitle>Organization</SettingsTitle>
         <SettingsContainer>
@@ -201,6 +202,6 @@ export const Loading: Story = {
           <SettingsSkeleton label="Loading members" variant="item" rows={3} />
         </SettingsContainer>
       </SettingsGroup>
-    </SettingsLayout>
+    </PageLayout>
   ),
 };

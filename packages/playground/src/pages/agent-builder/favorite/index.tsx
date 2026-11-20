@@ -117,6 +117,7 @@ export default function AgentBuilderFavoritePage() {
   return (
     <>
       <PageLayout
+        kind="page"
         actionRow={
           <>
             <ActionRow className="items-start">

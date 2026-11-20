@@ -66,37 +66,31 @@ function DatasetCompareVersionsPage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <PageLayout.Workspace>
-          <h1 className="sr-only">Versions</h1>
-          <SessionExpired variant="fill" />
-        </PageLayout.Workspace>
+      <PageLayout kind="page" body="workspace" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Versions</h1>
+        <SessionExpired variant="fill" />
       </PageLayout>
     );
   }
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <PageLayout.Workspace>
-          <h1 className="sr-only">Versions</h1>
-          <PermissionDenied variant="fill" resource="datasets" />
-        </PageLayout.Workspace>
+      <PageLayout kind="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Versions</h1>
+        <PermissionDenied variant="fill" resource="datasets" />
       </PageLayout>
     );
   }
 
   if (!datasetId || versionNumbers.length < 2) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <PageLayout.Workspace>
-          <h1 className="sr-only">Versions</h1>
-          <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
-            <div className="py-5 text-center text-muted-foreground">
-              <p>Select at least two versions to compare.</p>
-            </div>
+      <PageLayout kind="page" body="workspace" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Versions</h1>
+        <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
+          <div className="py-5 text-center text-muted-foreground">
+            <p>Select at least two versions to compare.</p>
           </div>
-        </PageLayout.Workspace>
+        </div>
       </PageLayout>
     );
   }
@@ -108,51 +102,49 @@ function DatasetCompareVersionsPage() {
   };
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-      <PageLayout.Workspace>
-        <h1 className="sr-only">Versions</h1>
-        <div className="h-full overflow-hidden px-[3vw] pb-4">
-          <div className="grid h-full grid-rows-[auto_1fr] gap-4">
-            <MainHeader>
-              <MainHeader.Column>
-                <MainHeader.Title>
-                  <IconLaw /> Compare Dataset Versions
-                </MainHeader.Title>
-                <MainHeader.Description>
-                  <TextAndIcon>
-                    <IconHistory /> Comparing {versionNumbers.length} versions of{' '}
-                    {dataset?.name || datasetId?.slice(0, 8)}
-                  </TextAndIcon>
-                </MainHeader.Description>
-              </MainHeader.Column>
-              <MainHeader.Column>
-                <Button render={<Link to={`/datasets/${datasetId}`} />} icon={<IconArrowLeft />}>
-                  Back to dataset
-                </Button>
-              </MainHeader.Column>
-            </MainHeader>
+    <PageLayout kind="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <h1 className="sr-only">Versions</h1>
+      <div className="h-full overflow-hidden px-[3vw] pb-4">
+        <div className="grid h-full grid-rows-[auto_1fr] gap-4">
+          <MainHeader>
+            <MainHeader.Column>
+              <MainHeader.Title>
+                <IconLaw /> Compare Dataset Versions
+              </MainHeader.Title>
+              <MainHeader.Description>
+                <TextAndIcon>
+                  <IconHistory /> Comparing {versionNumbers.length} versions of{' '}
+                  {dataset?.name || datasetId?.slice(0, 8)}
+                </TextAndIcon>
+              </MainHeader.Description>
+            </MainHeader.Column>
+            <MainHeader.Column>
+              <Button render={<Link to={`/datasets/${datasetId}`} />} icon={<IconArrowLeft />}>
+                Back to dataset
+              </Button>
+            </MainHeader.Column>
+          </MainHeader>
 
-            <Columns>
-              <Column>
-                <DatasetCompareVersionToolbar
-                  datasetId={datasetId}
-                  versionA={String(versionNumbers[0])}
-                  versionB={String(versionNumbers[1])}
-                  onVersionChange={handleVersionChange}
-                />
-                <DatasetCompareVersionsList
-                  datasetId={datasetId}
-                  versionA={versionNumbers[0]}
-                  versionB={versionNumbers[1]}
-                  allItems={allItems}
-                  itemsAMap={itemsAMap}
-                  itemsBMap={itemsBMap}
-                />
-              </Column>
-            </Columns>
-          </div>
+          <Columns>
+            <Column>
+              <DatasetCompareVersionToolbar
+                datasetId={datasetId}
+                versionA={String(versionNumbers[0])}
+                versionB={String(versionNumbers[1])}
+                onVersionChange={handleVersionChange}
+              />
+              <DatasetCompareVersionsList
+                datasetId={datasetId}
+                versionA={versionNumbers[0]}
+                versionB={versionNumbers[1]}
+                allItems={allItems}
+                itemsAMap={itemsAMap}
+                itemsBMap={itemsBMap}
+              />
+            </Column>
+          </Columns>
         </div>
-      </PageLayout.Workspace>
+      </div>
     </PageLayout>
   );
 }

@@ -129,6 +129,7 @@ export default function ConnectionsPage() {
 
   return (
     <PageLayout
+      kind="page"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       header={
         <PageHeader>

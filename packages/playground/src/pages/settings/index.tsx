@@ -1,16 +1,11 @@
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { ThemeToggle } from '@mastra/playground-ui/components/ThemeToggle';
-import {
-  SettingsContainer,
-  SettingsGroup,
-  SettingsLayout,
-  SettingsRow,
-  SettingsTitle,
-} from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsGroup, SettingsRow, SettingsTitle } from '@mastra/playground-ui/new/settings';
 import { StudioConnectionSettings } from '@/domains/configuration/components/studio-connection-settings';
 
 export const StudioSettingsPage = () => {
   return (
-    <SettingsLayout title="Settings">
+    <PageLayout kind="settings" title="Settings">
       <SettingsGroup>
         <SettingsTitle info="Stored in this browser.">General</SettingsTitle>
         <SettingsContainer>
@@ -21,6 +16,6 @@ export const StudioSettingsPage = () => {
       </SettingsGroup>
 
       <StudioConnectionSettings />
-    </SettingsLayout>
+    </PageLayout>
   );
 };

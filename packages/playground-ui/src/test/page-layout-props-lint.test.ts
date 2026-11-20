@@ -16,7 +16,7 @@ tester.run('page-layout-props', plugin.rules['page-layout-props'], {
   valid: [
     {
       name: 'allows a workspace body',
-      code: '<PageLayout breadcrumbs={crumbs}><PageLayout.Workspace>{panels}</PageLayout.Workspace></PageLayout>;',
+      code: '<PageLayout kind="page" body="workspace" breadcrumbs={crumbs}>{panels}</PageLayout>;',
     },
     { name: 'ignores variant on other components', code: '<EmptyState variant="fill" />;' },
     { name: 'ignores mask on a scroll area', code: '<ScrollArea mask={false} />;' },

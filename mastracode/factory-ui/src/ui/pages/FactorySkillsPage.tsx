@@ -1,8 +1,8 @@
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
-import { SettingsLayout } from '@mastra/playground-ui/new/settings';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { Link } from 'react-router';
 
@@ -41,7 +41,8 @@ export function FactorySkillsPage() {
   });
 
   return (
-    <SettingsLayout
+    <PageLayout
+      kind="settings"
       header={
         <PageHeader>
           <PageHeader.Title>Skills</PageHeader.Title>
@@ -60,6 +61,6 @@ export function FactorySkillsPage() {
       {...slots}
     >
       <FactorySkillsSection factoryId={factory.id} boardId={boardId} />
-    </SettingsLayout>
+    </PageLayout>
   );
 }

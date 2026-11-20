@@ -174,7 +174,7 @@ export default function Experiments() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout kind="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Experiments</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
@@ -183,7 +183,7 @@ export default function Experiments() {
 
   if (errorExperiments && is403ForbiddenError(errorExperiments)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout kind="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Experiments</h1>
         <PermissionDenied variant="fill" resource="experiments" />
       </PageLayout>
@@ -192,7 +192,7 @@ export default function Experiments() {
 
   if (errorDatasets && is403ForbiddenError(errorDatasets)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout kind="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Experiments</h1>
         <PermissionDenied variant="fill" resource="datasets" />
       </PageLayout>
@@ -201,7 +201,7 @@ export default function Experiments() {
 
   if (error) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout kind="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Experiments</h1>
         <EmptyState
           tone="error"
@@ -224,7 +224,7 @@ export default function Experiments() {
   // With a dataset or target filter active, keep the toolbar so the user can remove it.
   if (experiments.length === 0 && !isLoading && datasetFilter === 'all' && !targetType) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout kind="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Experiments</h1>
         <NoExperimentsInfo onRunExperiment={() => setRunDialogOpen(true)} />
         {runDialog}
@@ -234,6 +234,7 @@ export default function Experiments() {
 
   return (
     <PageLayout
+      kind="page"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={
         <Button variant="primary" size="sm" icon={<IconPlusMedium />} onClick={() => setRunDialogOpen(true)}>

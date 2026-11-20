@@ -12,10 +12,13 @@ const crumbs = [
 
 function CompareExperimentsPage() {
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={<CompareHeaderActions />}>
-      <PageLayout.Workspace>
-        <CompareExperimentsBody />
-      </PageLayout.Workspace>
+    <PageLayout
+      kind="page"
+      body="workspace"
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      headerActions={<CompareHeaderActions />}
+    >
+      <CompareExperimentsBody />
     </PageLayout>
   );
 }

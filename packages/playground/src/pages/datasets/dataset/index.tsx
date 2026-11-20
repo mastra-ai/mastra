@@ -35,7 +35,7 @@ import type { CrumbDef } from '@/domains/navigation/crumbs';
 
 function DatasetPageShell({ crumbs, children }: { crumbs: CrumbDef[]; children?: ReactNode }) {
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+    <PageLayout kind="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <h1 className="sr-only">Dataset</h1>
       <div />
       <div className="flex h-full items-center justify-center">{children}</div>
@@ -182,17 +182,20 @@ function DatasetPage() {
   return (
     <DatasetItemPanelProvider datasetId={datasetId} items={unfilteredItems} isLoadingItems={isUnfilteredLoading}>
       <div className="h-full">
-        <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={headerActions}>
-          <PageLayout.Workspace>
-            <h1 className="sr-only">{datasetId}</h1>
-            <div>
-              <DatasetItemsView
-                datasetId={datasetId}
-                onAddItemClick={() => setAddItemDialogOpen(true)}
-                toolbarActionsSlot={showTagsEditor ? <DatasetTagsEditor datasetId={datasetId} /> : undefined}
-              />
-            </div>
-          </PageLayout.Workspace>
+        <PageLayout
+          kind="page"
+          body="workspace"
+          breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+          headerActions={headerActions}
+        >
+          <h1 className="sr-only">{datasetId}</h1>
+          <div>
+            <DatasetItemsView
+              datasetId={datasetId}
+              onAddItemClick={() => setAddItemDialogOpen(true)}
+              toolbarActionsSlot={showTagsEditor ? <DatasetTagsEditor datasetId={datasetId} /> : undefined}
+            />
+          </div>
         </PageLayout>
 
         {/* Selected item of the `items/:itemId` child route, in the route side panel. */}

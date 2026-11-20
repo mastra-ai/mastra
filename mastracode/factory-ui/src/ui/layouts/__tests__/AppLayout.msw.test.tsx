@@ -102,7 +102,7 @@ function PageB() {
 function SlotsPage() {
   const slots = useSidebarHeaderSlots();
   return (
-    <PageLayout {...slots}>
+    <PageLayout kind="page" {...slots}>
       <h1>Slots page</h1>
     </PageLayout>
   );

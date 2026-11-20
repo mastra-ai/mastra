@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
-import { PageLayout } from '@/ds/components/PageLayout/page-layout';
+import { PageFrame } from './page-frame';
 import { PageHeader } from '@/ds/new/layout/page-header';
 import { cn } from '@/lib/utils';
 
-export interface SettingsLayoutProps {
+export interface SettingsFrameProps {
   breadcrumbs?: ReactNode;
   headerActions?: ReactNode;
   /** The page title. Leave it out when the app's own header already names the page. */
@@ -16,10 +16,8 @@ export interface SettingsLayoutProps {
   children: ReactNode;
 }
 
-/**
- * A settings page: a centered 640px column with the title, inset like the section titles, above its sections.
- */
-export function SettingsLayout({
+/** The frame behind `<PageLayout kind="settings">`. */
+export function SettingsFrame({
   breadcrumbs,
   headerActions,
   title,
@@ -27,9 +25,9 @@ export function SettingsLayout({
   action,
   header,
   children,
-}: SettingsLayoutProps) {
+}: SettingsFrameProps) {
   return (
-    <PageLayout breadcrumbs={breadcrumbs} headerActions={headerActions}>
+    <PageFrame breadcrumbs={breadcrumbs} headerActions={headerActions}>
       {/* The content row takes the rest of the page's height, so a lone `EmptyState variant="fill"` centers in it. */}
       <div
         data-slot="settings-layout"
@@ -57,6 +55,6 @@ export function SettingsLayout({
           {children}
         </div>
       </div>
-    </PageLayout>
+    </PageFrame>
   );
 }

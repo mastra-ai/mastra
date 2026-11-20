@@ -321,14 +321,14 @@ function placeholderText(context) {
 }
 
 const PAGE_WIDTH_MESSAGE =
-  'Take the page width from PageLayout, FormLayout or SettingsLayout instead of a centred max-w-* column of its own.';
+  'Take the page width from PageLayout (kind="page", "settings" or "form") instead of a centred max-w-* column of its own.';
 
 const centredPageColumn = classStrings('^(?=[\\s\\S]*(^|\\s)mx-auto(\\s|$))(?=[\\s\\S]*(^|\\s)max-w-)');
 const noPageWidth = selectorRule(() => centredPageColumn.map(selector => ({ selector, message: PAGE_WIDTH_MESSAGE })));
 
 const PAGE_LAYOUT_PROP_MESSAGES = {
   variant:
-    'PageLayout has no variant. Put a body whose panels scroll on their own in <PageLayout.Workspace>, use FormLayout for a form and SettingsLayout for a settings page, and drop the prop otherwise.',
+    'PageLayout has no variant. Pick a kind: kind="form" for a form, kind="settings" for a settings page, kind="page" otherwise, with body="workspace" when its panels scroll on their own.',
   mask: 'PageLayout has no mask. Drop the prop.',
 };
 const pageLayoutProps = selectorRule(() =>

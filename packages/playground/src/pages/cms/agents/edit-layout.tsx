@@ -345,51 +345,49 @@ function EditLayoutWrapper() {
   );
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
-      <PageLayout.Workspace>
-        <h1 className="sr-only">{agentId}</h1>
-        {isNotFound ? (
-          <>
-            <EmptyState variant="fill" titleSlot="Agent not found" />
-            <div className="hidden">
-              <EditFormContent
-                agentId={agentId ?? ''}
-                selectedVersionId={selectedVersionId}
-                versionData={versionData}
-                readOnly
-                form={form}
-                handlePublish={handlePublish}
-                handleSaveDraft={handleSaveDraft}
-                isSubmitting={isSubmitting}
-                isSavingDraft={isSavingDraft}
-                onVersionSelect={handleVersionSelect}
-                activeVersionId={activeVersionId}
-                latestVersionId={latestVersion?.id}
-                editorConfig={undefined}
-              />
-            </div>
-          </>
-        ) : (
-          <EditFormContent
-            agentId={agentId ?? ''}
-            selectedVersionId={selectedVersionId}
-            versionData={versionData}
-            readOnly={!isCodeAgentEditable}
-            form={form}
-            handlePublish={handlePublish}
-            handleSaveDraft={handleSaveDraft}
-            isSubmitting={isSubmitting}
-            isSavingDraft={isSavingDraft}
-            onVersionSelect={handleVersionSelect}
-            activeVersionId={activeVersionId}
-            latestVersionId={latestVersion?.id}
-            hideVersionPanel={isCodeAgentOverride && !storedAgent}
-            isCodeAgentOverride={isCodeAgentOverride}
-            isCodeSourceAgent={showCodeModeActions}
-            editorConfig={codeAgent?.editor}
-          />
-        )}
-      </PageLayout.Workspace>
+    <PageLayout kind="page" body="workspace" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
+      <h1 className="sr-only">{agentId}</h1>
+      {isNotFound ? (
+        <>
+          <EmptyState variant="fill" titleSlot="Agent not found" />
+          <div className="hidden">
+            <EditFormContent
+              agentId={agentId ?? ''}
+              selectedVersionId={selectedVersionId}
+              versionData={versionData}
+              readOnly
+              form={form}
+              handlePublish={handlePublish}
+              handleSaveDraft={handleSaveDraft}
+              isSubmitting={isSubmitting}
+              isSavingDraft={isSavingDraft}
+              onVersionSelect={handleVersionSelect}
+              activeVersionId={activeVersionId}
+              latestVersionId={latestVersion?.id}
+              editorConfig={undefined}
+            />
+          </div>
+        </>
+      ) : (
+        <EditFormContent
+          agentId={agentId ?? ''}
+          selectedVersionId={selectedVersionId}
+          versionData={versionData}
+          readOnly={!isCodeAgentEditable}
+          form={form}
+          handlePublish={handlePublish}
+          handleSaveDraft={handleSaveDraft}
+          isSubmitting={isSubmitting}
+          isSavingDraft={isSavingDraft}
+          onVersionSelect={handleVersionSelect}
+          activeVersionId={activeVersionId}
+          latestVersionId={latestVersion?.id}
+          hideVersionPanel={isCodeAgentOverride && !storedAgent}
+          isCodeAgentOverride={isCodeAgentOverride}
+          isCodeSourceAgent={showCodeModeActions}
+          editorConfig={codeAgent?.editor}
+        />
+      )}
     </PageLayout>
   );
 }

@@ -134,37 +134,31 @@ function DatasetItemVersionsComparePage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <PageLayout.Workspace>
-          <h1 className="sr-only">Item Version History</h1>
-          <SessionExpired variant="fill" />
-        </PageLayout.Workspace>
+      <PageLayout kind="page" body="workspace" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Item Version History</h1>
+        <SessionExpired variant="fill" />
       </PageLayout>
     );
   }
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <PageLayout.Workspace>
-          <h1 className="sr-only">Item Version History</h1>
-          <PermissionDenied variant="fill" resource="datasets" />
-        </PageLayout.Workspace>
+      <PageLayout kind="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Item Version History</h1>
+        <PermissionDenied variant="fill" resource="datasets" />
       </PageLayout>
     );
   }
 
   if (!datasetId || !itemId) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <PageLayout.Workspace>
-          <h1 className="sr-only">Item Version History</h1>
-          <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
-            <div className="py-5 text-center text-muted-foreground">
-              <p>Item not found.</p>
-            </div>
+      <PageLayout kind="page" body="workspace" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Item Version History</h1>
+        <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
+          <div className="py-5 text-center text-muted-foreground">
+            <p>Item not found.</p>
           </div>
-        </PageLayout.Workspace>
+        </div>
       </PageLayout>
     );
   }
@@ -178,6 +172,7 @@ function DatasetItemVersionsComparePage() {
 
   return (
     <PageLayout
+      kind="page"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={
         canDiff && (
@@ -195,71 +190,69 @@ function DatasetItemVersionsComparePage() {
         )
       }
     >
-      <PageLayout.Workspace>
-        <h1 className="sr-only">Item Version History</h1>
-        <div className="grid min-h-0 grid-cols-1 gap-4 md:grid-cols-2">
-          <Card className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">
-            <CardHeader>
-              <VersionSelect
-                label="Version"
-                value={leftNumber != null ? String(leftNumber) : ''}
-                options={versionOptions(allVersions ?? [], rightNumber != null ? new Set([rightNumber]) : undefined)}
-                onValueChange={val => setParam('version', Number(val))}
+      <h1 className="sr-only">Item Version History</h1>
+      <div className="grid min-h-0 grid-cols-1 gap-4 md:grid-cols-2">
+        <Card className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">
+          <CardHeader>
+            <VersionSelect
+              label="Version"
+              value={leftNumber != null ? String(leftNumber) : ''}
+              options={versionOptions(allVersions ?? [], rightNumber != null ? new Set([rightNumber]) : undefined)}
+              onValueChange={val => setParam('version', Number(val))}
+            />
+          </CardHeader>
+          <CardContent className="grid content-start gap-5 overflow-y-auto">
+            {isLoading ? (
+              <Txt as="p" variant="body" tone="muted">
+                Loading...
+              </Txt>
+            ) : leftItem ? (
+              <DatasetItemDetails
+                item={leftItem}
+                diff={showDiff && rightItem ? { against: rightItem, side: leftIsOlder ? 'a' : 'b' } : undefined}
               />
-            </CardHeader>
-            <CardContent className="grid content-start gap-5 overflow-y-auto">
-              {isLoading ? (
-                <Txt as="p" variant="body" tone="muted">
-                  Loading...
-                </Txt>
-              ) : leftItem ? (
-                <DatasetItemDetails
-                  item={leftItem}
-                  diff={showDiff && rightItem ? { against: rightItem, side: leftIsOlder ? 'a' : 'b' } : undefined}
-                />
-              ) : (
-                <Txt as="p" variant="body" tone="muted">
-                  Item data not available
-                </Txt>
-              )}
-            </CardContent>
-          </Card>
+            ) : (
+              <Txt as="p" variant="body" tone="muted">
+                Item data not available
+              </Txt>
+            )}
+          </CardContent>
+        </Card>
 
-          <Card className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">
-            <CardHeader>
-              <VersionSelect
-                label="Compare version"
-                value={rightNumber != null ? String(rightNumber) : ''}
-                placeholder="Select a version to compare"
-                options={versionOptions(allVersions ?? [], leftNumber != null ? new Set([leftNumber]) : undefined)}
-                onValueChange={val => setParam('compare', Number(val))}
+        <Card className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">
+          <CardHeader>
+            <VersionSelect
+              label="Compare version"
+              value={rightNumber != null ? String(rightNumber) : ''}
+              placeholder="Select a version to compare"
+              options={versionOptions(allVersions ?? [], leftNumber != null ? new Set([leftNumber]) : undefined)}
+              onValueChange={val => setParam('compare', Number(val))}
+            />
+          </CardHeader>
+          <CardContent className="grid content-start gap-5 overflow-y-auto">
+            {rightNumber == null ? (
+              <EmptyState
+                className="h-full"
+                titleSlot="No version selected"
+                descriptionSlot="Pick a version above to compare it with the one on the left."
               />
-            </CardHeader>
-            <CardContent className="grid content-start gap-5 overflow-y-auto">
-              {rightNumber == null ? (
-                <EmptyState
-                  className="h-full"
-                  titleSlot="No version selected"
-                  descriptionSlot="Pick a version above to compare it with the one on the left."
-                />
-              ) : isRightLoading ? (
-                <Txt as="p" variant="body" tone="muted">
-                  Loading...
-                </Txt>
-              ) : rightItem ? (
-                <DatasetItemDetails
-                  item={rightItem}
-                  diff={showDiff && leftItem ? { against: leftItem, side: leftIsOlder ? 'b' : 'a' } : undefined}
-                />
-              ) : (
-                <Txt as="p" variant="body" tone="muted">
-                  Version {rightNumber} not found
-                </Txt>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </PageLayout.Workspace>
+            ) : isRightLoading ? (
+              <Txt as="p" variant="body" tone="muted">
+                Loading...
+              </Txt>
+            ) : rightItem ? (
+              <DatasetItemDetails
+                item={rightItem}
+                diff={showDiff && leftItem ? { against: leftItem, side: leftIsOlder ? 'b' : 'a' } : undefined}
+              />
+            ) : (
+              <Txt as="p" variant="body" tone="muted">
+                Version {rightNumber} not found
+              </Txt>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </PageLayout>
   );
 }

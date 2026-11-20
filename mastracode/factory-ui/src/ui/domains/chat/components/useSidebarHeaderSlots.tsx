@@ -1,5 +1,5 @@
 import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
-import type { PageLayoutProps } from '@mastra/playground-ui/components/PageLayout';
+import type { PageLayoutPageProps } from '@mastra/playground-ui/components/PageLayout';
 import type { ReactNode } from 'react';
 
 import { ChatHeaderSidebarTrigger } from './ChatHeaderSidebarTrigger';
@@ -11,7 +11,7 @@ import { ChatHeaderSidebarTrigger } from './ChatHeaderSidebarTrigger';
 export function useSidebarHeaderSlots({
   breadcrumbs,
   triggerClassName,
-}: { breadcrumbs?: ReactNode; triggerClassName?: string } = {}): Pick<PageLayoutProps, 'breadcrumbs'> {
+}: { breadcrumbs?: ReactNode; triggerClassName?: string } = {}): Pick<PageLayoutPageProps, 'breadcrumbs'> {
   const { isMobile, desktopState } = useSidebar();
   const showTrigger = !isMobile && desktopState === 'collapsed';
 

@@ -2,7 +2,7 @@ import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
-import { SettingsContainer, SettingsLayout, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Link } from 'react-router';
 
@@ -101,17 +101,20 @@ export function BoardConfigPage() {
 
   if (phaseKey) {
     return (
-      <SettingsLayout header={configHeader} {...slots}>
+      <PageLayout kind="settings" header={configHeader} {...slots}>
         {body}
-      </SettingsLayout>
+      </PageLayout>
     );
   }
 
   return (
-    <PageLayout header={configHeader && <div className={cn(SETTINGS_COLUMN, 'pb-3')}>{configHeader}</div>} {...slots}>
-      <PageLayout.Workspace>
-        <div className={query.isSuccess ? OVERVIEW_SURFACE : cn(SETTINGS_COLUMN, 'px-4')}>{body}</div>
-      </PageLayout.Workspace>
+    <PageLayout
+      kind="page"
+      body="workspace"
+      header={configHeader && <div className={cn(SETTINGS_COLUMN, 'pb-3')}>{configHeader}</div>}
+      {...slots}
+    >
+      <div className={query.isSuccess ? OVERVIEW_SURFACE : cn(SETTINGS_COLUMN, 'px-4')}>{body}</div>
     </PageLayout>
   );
 }

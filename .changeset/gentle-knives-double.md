@@ -2,56 +2,45 @@
 '@mastra/playground-ui': minor
 ---
 
-Simplified page frames to three choices, one per kind of page: `PageLayout` for lists, dashboards, detail pages and explorers, `FormLayout` for create and edit forms, and `SettingsLayout` for settings pages. A page no longer picks a width, gutter or scroll mode.
+Simplified page frames to one component, `PageLayout`, with a required `kind` that says what the page is for. Each kind takes only the props that make sense for it, so a page can no longer pick its own width, gutter or scroll mode, and a form can no longer show breadcrumbs next to its back link.
 
-**PageLayout**
+- `kind="page"`: lists, dashboards, detail pages and explorers. The full width with the standard gutter, up to 1536px on very wide screens. Takes `breadcrumbs`, `headerActions`, `actionRow` and `header`. Add `body="workspace"` when the body is panels, an editor, a graph, a board or a chat that scroll on their own: it takes the remaining height edge to edge, as `variant="fit"` did.
+- `kind="settings"`: settings pages. A centered 640px column of `SettingsGroup`s under the title. Takes `breadcrumbs`, `headerActions`, `title`, `titleAccessory`, `action` and `header`.
+- `kind="form"`: create and edit forms. A centered 640px column under a back link and the title, with no breadcrumb bar. Takes `backHref`, `backLabel`, `title`, `isLoading`, `LinkComponent` and `aside`, for a live preview beside the form when the column is wide enough.
 
-Removed the `variant` and `mask` props. Every page uses the full width with the standard gutter, up to 1536px on very wide screens. A body that is one entity's workspace (panels, editor, graph, board or chat that scroll on their own) goes in `PageLayout.Workspace`, which takes the remaining height edge to edge, as `variant="fit"` did.
+What goes inside the frame (`PageHeader`, `SettingsGroup`, `EmptyState`, `DashboardGrid`, panels) is unchanged.
+
+**Migrating**
+
+`PageLayout` no longer takes `variant` or `mask`, and `FormLayout` and `SettingsLayout` are no longer exported. Use the matching `kind` instead:
 
 ```tsx
 // Before
+<PageLayout breadcrumbs={crumbs}>{list}</PageLayout>
 <PageLayout variant="fit" breadcrumbs={crumbs}>
   <AgentPanels />
 </PageLayout>
-
-// After
-<PageLayout breadcrumbs={crumbs}>
-  <PageLayout.Workspace>
-    <AgentPanels />
-  </PageLayout.Workspace>
-</PageLayout>
-```
-
-Pages that used `variant="narrow"` drop the prop, or move to `FormLayout` or `SettingsLayout` when that is what they are.
-
-Added `PageLayout.Grid`, a 12-column grid for laying out cards and panels, with the same gap and breakpoint as dashboard widgets. Children span the full width until they set a `col-span-*`, and every child stacks at full width on narrow pages:
-
-```tsx
-<PageLayout.Grid>
-  <section className="col-span-8">{details}</section>
-  <aside className="col-span-4">{properties}</aside>
-</PageLayout.Grid>
-```
-
-**SettingsLayout**
-
-`SettingsLayout` now renders the whole page frame and takes `breadcrumbs` and `headerActions`, so it no longer goes inside a `PageLayout`.
-
-```tsx
-// Before
 <PageLayout breadcrumbs={crumbs}>
   <SettingsLayout title="Project settings">{sections}</SettingsLayout>
 </PageLayout>
+<FormLayout backHref="/alerts" backLabel="Alerts" title="New alert">
+  {sections}
+</FormLayout>
 
 // After
-<SettingsLayout breadcrumbs={crumbs} title="Project settings">
+<PageLayout kind="page" breadcrumbs={crumbs}>{list}</PageLayout>
+<PageLayout kind="page" body="workspace" breadcrumbs={crumbs}>
+  <AgentPanels />
+</PageLayout>
+<PageLayout kind="settings" breadcrumbs={crumbs} title="Project settings">
   {sections}
-</SettingsLayout>
+</PageLayout>
+<PageLayout kind="form" backHref="/alerts" backLabel="Alerts" title="New alert">
+  {sections}
+</PageLayout>
 ```
 
-**FormLayout**
-
-Added `aside`, for a live preview beside the form when the column is wide enough (above the fields otherwise). A form page has a back link and a title, and no breadcrumbs.
+Pages that used `variant="narrow"` move to `kind="settings"` or `kind="form"` when that is what they are, and to `kind="page"` otherwise.
 
 **Lint**
 
@@ -61,4 +50,4 @@ Added the `playground-ui/no-page-width` rule and a `pageRules` preset. Turn it o
 overrides: [{ files: ['src/pages/**/*.tsx'], rules: pageRules }]
 ```
 
-Added `playground-ui/page-layout-props` to the `recommended` preset. It flags the removed `variant` and `mask` props on `PageLayout` and says which layout to use instead.
+Added `playground-ui/page-layout-props` to the `recommended` preset. It flags the removed `variant` and `mask` props on `PageLayout` and says which `kind` to use instead.

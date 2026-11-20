@@ -9,7 +9,7 @@ describe('PageLayout', () => {
   describe('when breadcrumbs and header actions are provided', () => {
     it('renders them inside a header above the main content', () => {
       render(
-        <PageLayout breadcrumbs={<span>Crumbs</span>} headerActions={<button>Act</button>}>
+        <PageLayout kind="page" breadcrumbs={<span>Crumbs</span>} headerActions={<button>Act</button>}>
           <p>Body</p>
         </PageLayout>,
       );
@@ -24,7 +24,7 @@ describe('PageLayout', () => {
   describe('when an action row is provided', () => {
     it('pins it between the header and the scrollable body', () => {
       render(
-        <PageLayout breadcrumbs={<span>Crumbs</span>} actionRow={<input aria-label="Filter" />}>
+        <PageLayout kind="page" breadcrumbs={<span>Crumbs</span>} actionRow={<input aria-label="Filter" />}>
           <p>Body</p>
         </PageLayout>,
       );
@@ -44,7 +44,7 @@ describe('PageLayout', () => {
       'scrolls the body in an overlay scroll area with no reserved gutter',
       header => {
         render(
-          <PageLayout header={header}>
+          <PageLayout kind="page" header={header}>
             <p>Body</p>
           </PageLayout>,
         );
@@ -60,7 +60,7 @@ describe('PageLayout', () => {
   describe('when a header is provided', () => {
     it('renders it inside main before the body', () => {
       render(
-        <PageLayout header={<h1>Title</h1>}>
+        <PageLayout kind="page" header={<h1>Title</h1>}>
           <p>Body</p>
         </PageLayout>,
       );
@@ -79,10 +79,8 @@ describe('PageLayout', () => {
       'sits beside the header in the scrolling body, so the frame can hand it the remaining height',
       header => {
         render(
-          <PageLayout header={header}>
-            <PageLayout.Workspace>
-              <p>Panels</p>
-            </PageLayout.Workspace>
+          <PageLayout kind="page" body="workspace" header={header}>
+            <p>Panels</p>
           </PageLayout>,
         );
 
@@ -90,7 +88,6 @@ describe('PageLayout', () => {
         const viewport = screen.getByText('Panels').closest<HTMLElement>('[style*="overflow"]');
         expect(workspace).not.toBeNull();
         expect(workspace?.parentElement?.parentElement).toBe(viewport);
-        expect(viewport?.matches(':has(> * > [data-slot="page-layout-workspace"])')).toBe(true);
         if (header) {
           expect(workspace?.previousElementSibling?.getAttribute('data-slot')).toBe('page-layout-header');
         }
@@ -101,7 +98,7 @@ describe('PageLayout', () => {
   describe('when neither breadcrumbs nor header actions are provided', () => {
     it('does not render a header', () => {
       render(
-        <PageLayout>
+        <PageLayout kind="page">
           <p>Body</p>
         </PageLayout>,
       );
@@ -110,20 +107,30 @@ describe('PageLayout', () => {
       expect(screen.getByRole('main').textContent).toBe('Body');
     });
   });
+});
 
-  describe('grid', () => {
-    it('places children on the page grid, full width unless they ask for columns', () => {
-      render(
-        <PageLayout>
-          <PageLayout.Grid>
-            <section>Summary</section>
-          </PageLayout.Grid>
-        </PageLayout>,
-      );
-
-      const grid = screen.getByText('Summary').closest('[data-slot="page-layout-grid"]');
-      expect(grid).not.toBeNull();
-      expect(screen.getByRole('main').contains(grid)).toBe(true);
-    });
+describe('PageLayout kind props', () => {
+  it('rejects props that belong to another kind, so pages cannot drift', () => {
+    const typeOnly = () => (
+      <>
+        {/* @ts-expect-error a form has a back link, not breadcrumbs */}
+        <PageLayout kind="form" backHref="/alerts" backLabel="Alerts" title="New alert" breadcrumbs={<span />}>
+          <p />
+        </PageLayout>
+        {/* @ts-expect-error a form needs its way back */}
+        <PageLayout kind="form" title="New alert">
+          <p />
+        </PageLayout>
+        {/* @ts-expect-error only a plain page can be a workspace */}
+        <PageLayout kind="settings" body="workspace">
+          <p />
+        </PageLayout>
+        {/* @ts-expect-error every page names its kind */}
+        <PageLayout breadcrumbs={<span />}>
+          <p />
+        </PageLayout>
+      </>
+    );
+    expect(typeOnly).toBeTypeOf('function');
   });
 });

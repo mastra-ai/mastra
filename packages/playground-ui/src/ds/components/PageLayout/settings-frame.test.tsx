@@ -1,17 +1,18 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { SettingsLayout } from './settings-layout';
+import { PageLayout } from './index';
 
-describe('SettingsLayout', () => {
+describe('PageLayout kind="settings"', () => {
   it('renders the page title, accessory, action, and sections', () => {
     const output = renderToStaticMarkup(
-      <SettingsLayout
+      <PageLayout
+        kind="settings"
         title="Project settings"
         titleAccessory={<span>Studio</span>}
         action={<button type="button">Save</button>}
       >
         <section>General settings</section>
-      </SettingsLayout>,
+      </PageLayout>,
     );
 
     expect(output).toContain('<h1');
@@ -24,9 +25,9 @@ describe('SettingsLayout', () => {
 
   it('leaves the title out when the app already names the page', () => {
     const output = renderToStaticMarkup(
-      <SettingsLayout>
+      <PageLayout kind="settings">
         <section>General settings</section>
-      </SettingsLayout>,
+      </PageLayout>,
     );
 
     expect(output).not.toContain('<h1');
@@ -35,9 +36,9 @@ describe('SettingsLayout', () => {
 
   it('renders an app header in place of the title, with the same inset', () => {
     const output = renderToStaticMarkup(
-      <SettingsLayout title="Ignored" header={<h1 id="announced">Repositories</h1>}>
+      <PageLayout kind="settings" title="Ignored" header={<h1 id="announced">Repositories</h1>}>
         <section>Sections</section>
-      </SettingsLayout>,
+      </PageLayout>,
     );
 
     expect(output).toContain('data-slot="settings-page-header"');
@@ -48,9 +49,9 @@ describe('SettingsLayout', () => {
 
   it('owns the page frame, with the breadcrumb bar when given breadcrumbs', () => {
     const output = renderToStaticMarkup(
-      <SettingsLayout breadcrumbs={<nav aria-label="Breadcrumb">Settings</nav>} title="Members">
+      <PageLayout kind="settings" breadcrumbs={<nav aria-label="Breadcrumb">Settings</nav>} title="Members">
         <section>Sections</section>
-      </SettingsLayout>,
+      </PageLayout>,
     );
 
     const breadcrumb = output.indexOf('aria-label="Breadcrumb"');

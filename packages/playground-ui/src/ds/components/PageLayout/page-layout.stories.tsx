@@ -74,7 +74,7 @@ const resourceList = (
 export const Container: Story = {
   render: () => (
     <StoryFrame>
-      <PageLayout breadcrumbs={crumbs} headerActions={headerActions} header={pageHeader}>
+      <PageLayout kind="page" breadcrumbs={crumbs} headerActions={headerActions} header={pageHeader}>
         {resourceList}
       </PageLayout>
     </StoryFrame>
@@ -129,7 +129,7 @@ export const TopBarSpacingComparison: Story = {
           With top bar (default)
         </Txt>
         <StoryFrame>
-          <PageLayout breadcrumbs={crumbs} headerActions={headerActions} header={<ComparisonHeader />}>
+          <PageLayout kind="page" breadcrumbs={crumbs} headerActions={headerActions} header={<ComparisonHeader />}>
             {resourceList}
           </PageLayout>
         </StoryFrame>
@@ -139,7 +139,9 @@ export const TopBarSpacingComparison: Story = {
           No bar + breathing spacing
         </Txt>
         <StoryFrame>
-          <PageLayout header={<ComparisonHeader spacing="breathing" />}>{resourceList}</PageLayout>
+          <PageLayout kind="page" header={<ComparisonHeader spacing="breathing" />}>
+            {resourceList}
+          </PageLayout>
         </StoryFrame>
       </div>
       <div>
@@ -147,7 +149,9 @@ export const TopBarSpacingComparison: Story = {
           No bar + breathing spacing + Back link
         </Txt>
         <StoryFrame>
-          <PageLayout header={<ComparisonHeader spacing="breathing" eyebrow={backLink} />}>{resourceList}</PageLayout>
+          <PageLayout kind="page" header={<ComparisonHeader spacing="breathing" eyebrow={backLink} />}>
+            {resourceList}
+          </PageLayout>
         </StoryFrame>
       </div>
       <div>
@@ -155,7 +159,9 @@ export const TopBarSpacingComparison: Story = {
           No bar (default unchanged)
         </Txt>
         <StoryFrame>
-          <PageLayout header={<ComparisonHeader />}>{resourceList}</PageLayout>
+          <PageLayout kind="page" header={<ComparisonHeader />}>
+            {resourceList}
+          </PageLayout>
         </StoryFrame>
       </div>
     </div>
@@ -181,19 +187,17 @@ export const TopBarSpacingComparison: Story = {
 export const Workspace: Story = {
   render: () => (
     <StoryFrame>
-      <PageLayout breadcrumbs={crumbs} headerActions={headerActions}>
-        <PageLayout.Workspace>
-          <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_16rem]">
-            <ul className="grid content-start gap-2 overflow-y-auto border-r border-border p-4">
-              {Array.from({ length: 40 }, (_, index) => (
-                <li key={index} className="rounded border border-border px-3 py-2">
-                  Message {index + 1}
-                </li>
-              ))}
-            </ul>
-            <div className="p-4 text-placeholder">Side panel</div>
-          </div>
-        </PageLayout.Workspace>
+      <PageLayout kind="page" body="workspace" breadcrumbs={crumbs} headerActions={headerActions}>
+        <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_16rem]">
+          <ul className="grid content-start gap-2 overflow-y-auto border-r border-border p-4">
+            {Array.from({ length: 40 }, (_, index) => (
+              <li key={index} className="rounded border border-border px-3 py-2">
+                Message {index + 1}
+              </li>
+            ))}
+          </ul>
+          <div className="p-4 text-placeholder">Side panel</div>
+        </div>
       </PageLayout>
     </StoryFrame>
   ),
@@ -205,40 +209,11 @@ export const Workspace: Story = {
   },
 };
 
-export const Grid: Story = {
-  render: () => (
-    <StoryFrame>
-      <PageLayout breadcrumbs={crumbs} header={pageHeader}>
-        <PageLayout.Grid>
-          <section className="col-span-8 min-h-28 rounded-xl bg-card p-4">Details</section>
-          <aside className="col-span-4 min-h-28 rounded-xl bg-card p-4">Properties</aside>
-          <section className="min-h-28 rounded-xl bg-card p-4">Activity</section>
-        </PageLayout.Grid>
-      </PageLayout>
-    </StoryFrame>
-  ),
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    const details = canvas.getByText('Details').getBoundingClientRect();
-    const properties = canvas.getByText('Properties').getBoundingClientRect();
-    const activity = canvas.getByText('Activity').getBoundingClientRect();
-    const gridWidth = canvas.getByText('Details').closest('[data-slot="page-layout-grid"]')?.clientWidth ?? 0;
-    const sideBySide = gridWidth >= 768;
-
-    await expect(sideBySide ? properties.top === details.top : properties.top > details.top).toBe(true);
-    await expect(activity.width).toBeGreaterThanOrEqual(details.width);
-
-    const header = canvasElement.querySelector('[data-slot="page-layout-header"] > *');
-    if (!header) throw new Error('Missing page header');
-    const headerBottom = header.getBoundingClientRect().bottom;
-    await expect(Math.round(details.top - headerBottom)).toBe(24);
-  },
-};
-
 export const FullPage: Story = {
   render: () => (
     <StoryFrame>
       <PageLayout
+        kind="page"
         breadcrumbs={crumbs}
         headerActions={headerActions}
         actionRow={
@@ -261,7 +236,9 @@ export const FullPage: Story = {
 export const WithoutBreadcrumbsAndHeaderActions: Story = {
   render: () => (
     <StoryFrame>
-      <PageLayout header={pageHeader}>{resourceList}</PageLayout>
+      <PageLayout kind="page" header={pageHeader}>
+        {resourceList}
+      </PageLayout>
     </StoryFrame>
   ),
 };
@@ -269,7 +246,7 @@ export const WithoutBreadcrumbsAndHeaderActions: Story = {
 export const Empty: Story = {
   render: () => (
     <StoryFrame>
-      <PageLayout breadcrumbs={crumbs}>
+      <PageLayout kind="page" breadcrumbs={crumbs}>
         <div className="flex h-full items-center justify-center">
           <EmptyState titleSlot="No resources yet" descriptionSlot="Create a resource to get started." />
         </div>
@@ -281,7 +258,7 @@ export const Empty: Story = {
 export const HeaderWithSectionsAndEmptyState: Story = {
   render: () => (
     <StoryFrame>
-      <PageLayout breadcrumbs={crumbs} header={pageHeader}>
+      <PageLayout kind="page" breadcrumbs={crumbs} header={pageHeader}>
         <section>{resourceList}</section>
         <EmptyState
           variant="fill"

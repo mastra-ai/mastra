@@ -7,7 +7,8 @@ import { Input } from '../Input/input';
 import { Kbd } from '../Kbd/kbd';
 import { Switch } from '../Switch/switch';
 import { Txt } from '../Txt/Txt';
-import { FormLayout } from './index';
+import { FormFrame } from './form-frame';
+import { PageLayout } from './index';
 import { MainCard } from '@/ds/new/layout/app-shell/main-card';
 import { SettingsContainer } from '@/ds/new/settings/settings-container';
 import { SettingsGroup, SettingsTitle } from '@/ds/new/settings/settings-header';
@@ -15,16 +16,16 @@ import { SettingsRow } from '@/ds/new/settings/settings-row';
 import { SettingsSkeleton } from '@/ds/new/settings/settings-skeleton';
 
 const meta = {
-  title: 'Layout/FormLayout',
-  component: FormLayout,
+  title: 'Layout/PageLayout/Form',
+  component: FormFrame,
   parameters: {
     layout: 'fullscreen',
     docs: {
       description: {
         component: [
-          'The frame for any create or edit form page, such as New alert, New project or Edit destination. It is `PageLayout` with no breadcrumb bar, holding a centered 640px column (the `SettingsLayout` width) under a back link and the page title.',
+          'The frame for any create or edit form page, such as New alert, New project or Edit destination. It is `<PageLayout kind="form">`: no breadcrumb bar, holding a centered 640px column (the settings width) under a back link and the page title.',
           'The back link, the title, each `SettingsTitle` and the field labels share one left edge, and sections sit 28px apart. The back link is the only way out, so there is no breadcrumb to show the same thing twice. Pass the app router link as `LinkComponent`.',
-          'Use `SettingsLayout` for a settings page that someone browses to and changes in place. Use `PageLayout` for every other page: lists, dashboards, detail pages and explorers.',
+          'Use `kind="settings"` for a settings page that someone browses to and changes in place. Use `kind="page"` for every other page: lists, dashboards, detail pages and explorers.',
         ].join('\n\n'),
       },
     },
@@ -35,7 +36,7 @@ const meta = {
     title: 'New alert',
     children: null,
   },
-} satisfies Meta<typeof FormLayout>;
+} satisfies Meta<typeof FormFrame>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -82,9 +83,9 @@ function AlertSections() {
 export const Create: Story = {
   render: args => (
     <StoryFrame>
-      <FormLayout {...args}>
+      <PageLayout kind="form" {...args}>
         <AlertSections />
-      </FormLayout>
+      </PageLayout>
     </StoryFrame>
   ),
   play: async ({ canvasElement }) => {
@@ -115,14 +116,14 @@ export const Loading: Story = {
   args: { backHref: '#alerts/deploy-failed', backLabel: 'Deploy failed', title: 'Edit alert', isLoading: true },
   render: args => (
     <StoryFrame>
-      <FormLayout {...args}>
+      <PageLayout kind="form" {...args}>
         <SettingsGroup>
           <SettingsTitle>Details</SettingsTitle>
           <SettingsContainer>
             <SettingsSkeleton label="Loading alert" rows={2} />
           </SettingsContainer>
         </SettingsGroup>
-      </FormLayout>
+      </PageLayout>
     </StoryFrame>
   ),
 };
@@ -136,9 +137,9 @@ export const LongText: Story = {
   },
   render: args => (
     <StoryFrame>
-      <FormLayout {...args}>
+      <PageLayout kind="form" {...args}>
         <AlertSections />
-      </FormLayout>
+      </PageLayout>
     </StoryFrame>
   ),
 };
@@ -146,7 +147,8 @@ export const LongText: Story = {
 export const WithAside: Story = {
   render: args => (
     <StoryFrame>
-      <FormLayout
+      <PageLayout
+        kind="form"
         {...args}
         aside={
           <SettingsGroup>
@@ -160,7 +162,7 @@ export const WithAside: Story = {
         }
       >
         <AlertSections />
-      </FormLayout>
+      </PageLayout>
     </StoryFrame>
   ),
 };
@@ -170,14 +172,14 @@ export const PhoneWidth: Story = {
   render: args => (
     <div className="flex h-200 w-80 bg-sidebar p-2">
       <MainCard>
-        <FormLayout {...args}>
+        <PageLayout kind="form" {...args}>
           <div className="flex items-center gap-3">
             <Txt as="span" className="truncate">
               acme-platform/payments-billing-reliability-service-monorepo
             </Txt>
             <Kbd>Esc</Kbd>
           </div>
-        </FormLayout>
+        </PageLayout>
       </MainCard>
     </div>
   ),

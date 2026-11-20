@@ -1,4 +1,4 @@
-import { FormLayout } from '@mastra/playground-ui/components/FormLayout';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { CreateFactoryWizard } from '../domains/workspaces/components/create-factory/CreateFactoryWizard';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { HrefLink } from '../ui/HrefLink';
@@ -7,13 +7,14 @@ import { HrefLink } from '../ui/HrefLink';
 export function CreateFactoryPage() {
   const factory = useActiveFactory();
   return (
-    <FormLayout
+    <PageLayout
+      kind="form"
       backHref={`/factories/${factory.id}`}
       backLabel={factory.name}
       title="New Factory"
       LinkComponent={HrefLink}
     >
       <CreateFactoryWizard />
-    </FormLayout>
+    </PageLayout>
   );
 }

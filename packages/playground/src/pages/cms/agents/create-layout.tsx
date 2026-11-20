@@ -40,20 +40,18 @@ function CreateLayoutWrapper() {
   );
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
-      <PageLayout.Workspace>
-        <h1 className="sr-only">Create agent</h1>
-        <AgentCmsFormShell
-          form={form}
-          mode="create"
-          isSubmitting={isSubmitting}
-          handlePublish={handlePublish}
-          basePath="/cms/agents/create"
-          currentPath={location.pathname}
-        >
-          <Outlet />
-        </AgentCmsFormShell>
-      </PageLayout.Workspace>
+    <PageLayout kind="page" body="workspace" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
+      <h1 className="sr-only">Create agent</h1>
+      <AgentCmsFormShell
+        form={form}
+        mode="create"
+        isSubmitting={isSubmitting}
+        handlePublish={handlePublish}
+        basePath="/cms/agents/create"
+        currentPath={location.pathname}
+      >
+        <Outlet />
+      </AgentCmsFormShell>
     </PageLayout>
   );
 }

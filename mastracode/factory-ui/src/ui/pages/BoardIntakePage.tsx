@@ -1,7 +1,7 @@
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
-import { SettingsLayout } from '@mastra/playground-ui/new/settings';
 import { Link } from 'react-router';
 
 import { useBoardQuery } from '../../hooks/useBoardEditor';
@@ -35,7 +35,8 @@ export function BoardIntakePage() {
   });
 
   return (
-    <SettingsLayout
+    <PageLayout
+      kind="settings"
       header={
         <PageHeader>
           <PageHeader.Title>Routing</PageHeader.Title>
@@ -53,6 +54,6 @@ export function BoardIntakePage() {
       {...slots}
     >
       <IntakeOrderSection factoryId={factory.id} />
-    </SettingsLayout>
+    </PageLayout>
   );
 }

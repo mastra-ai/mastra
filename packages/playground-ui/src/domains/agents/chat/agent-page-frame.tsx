@@ -17,11 +17,9 @@ export function AgentPageFrame({
   children: ReactNode;
 }) {
   return (
-    <PageLayout breadcrumbs={breadcrumbs} headerActions={headerActions}>
-      <PageLayout.Workspace>
-        <h1 className="sr-only">{agentId}</h1>
-        <AgentPageBody tabs={tabs}>{children}</AgentPageBody>
-      </PageLayout.Workspace>
+    <PageLayout kind="page" body="workspace" breadcrumbs={breadcrumbs} headerActions={headerActions}>
+      <h1 className="sr-only">{agentId}</h1>
+      <AgentPageBody tabs={tabs}>{children}</AgentPageBody>
     </PageLayout>
   );
 }

@@ -256,26 +256,22 @@ function CmsScorersEditPage() {
 
   if (isLoading) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <PageLayout.Workspace>
-          <h1 className="sr-only">{scorerId}</h1>
-          <AgentEditLayout leftSlot={<Spinner fill size="lg" />}>
-            <Spinner fill size="lg" />
-          </AgentEditLayout>
-        </PageLayout.Workspace>
+      <PageLayout kind="page" body="workspace" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">{scorerId}</h1>
+        <AgentEditLayout leftSlot={<Spinner fill size="lg" />}>
+          <Spinner fill size="lg" />
+        </AgentEditLayout>
       </PageLayout>
     );
   }
 
   if (!scorer || !scorerId) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <PageLayout.Workspace>
-          <h1 className="sr-only">{scorerId}</h1>
-          <AgentEditLayout leftSlot={<EmptyState variant="fill" titleSlot="Scorer not found" />}>
-            <EmptyState variant="fill" titleSlot="Scorer not found" />
-          </AgentEditLayout>
-        </PageLayout.Workspace>
+      <PageLayout kind="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">{scorerId}</h1>
+        <AgentEditLayout leftSlot={<EmptyState variant="fill" titleSlot="Scorer not found" />}>
+          <EmptyState variant="fill" titleSlot="Scorer not found" />
+        </AgentEditLayout>
       </PageLayout>
     );
   }
@@ -293,18 +289,16 @@ function CmsScorersEditPage() {
   );
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
-      <PageLayout.Workspace>
-        <h1 className="sr-only">{scorerId}</h1>
-        <CmsScorersEditForm
-          scorer={scorer}
-          scorerId={scorerId}
-          selectedVersionId={selectedVersionId}
-          latestVersionId={latestVersion?.id}
-          activeVersionId={activeVersionId}
-          onClearVersion={handleClearVersion}
-        />
-      </PageLayout.Workspace>
+    <PageLayout kind="page" body="workspace" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
+      <h1 className="sr-only">{scorerId}</h1>
+      <CmsScorersEditForm
+        scorer={scorer}
+        scorerId={scorerId}
+        selectedVersionId={selectedVersionId}
+        latestVersionId={latestVersion?.id}
+        activeVersionId={activeVersionId}
+        onClearVersion={handleClearVersion}
+      />
     </PageLayout>
   );
 }

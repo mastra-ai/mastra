@@ -333,7 +333,7 @@ export default function Template() {
   };
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+    <PageLayout kind="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <h1 className="sr-only">{templateSlug}</h1>
       <div className="grid gap-y-4">
         <TemplateInfo

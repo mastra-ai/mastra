@@ -1,6 +1,6 @@
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { FormLayout } from '@mastra/playground-ui/components/FormLayout';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Link, useNavigate, useParams } from 'react-router';
@@ -21,9 +21,15 @@ export function FactorySkillPage() {
   const skillsPath = boardSkillsPath(factory.id, boardId);
 
   return (
-    <FormLayout backHref={skillsPath} backLabel="Skills" title={skillName ?? 'New skill'} LinkComponent={HrefLink}>
+    <PageLayout
+      kind="form"
+      backHref={skillsPath}
+      backLabel="Skills"
+      title={skillName ?? 'New skill'}
+      LinkComponent={HrefLink}
+    >
       <SkillPageBody factoryId={factory.id} boardId={boardId} skillName={skillName} />
-    </FormLayout>
+    </PageLayout>
   );
 }
 

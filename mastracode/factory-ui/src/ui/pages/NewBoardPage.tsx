@@ -1,8 +1,8 @@
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { FormLayout } from '@mastra/playground-ui/components/FormLayout';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { useQueryClient } from '@tanstack/react-query';
 import { useId, useState } from 'react';
@@ -82,7 +82,8 @@ export function NewBoardPage() {
   };
 
   return (
-    <FormLayout
+    <PageLayout
+      kind="form"
       backHref={`/factories/${factory.id}`}
       backLabel={factory.name}
       title="New board"
@@ -175,6 +176,6 @@ export function NewBoardPage() {
           </div>
         </form>
       )}
-    </FormLayout>
+    </PageLayout>
   );
 }

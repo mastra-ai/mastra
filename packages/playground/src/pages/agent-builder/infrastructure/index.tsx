@@ -1,10 +1,11 @@
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
-import { SettingsLayout } from '@mastra/playground-ui/new/settings';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 
 import { InfrastructureOverview } from '@/domains/agent-builder/components/infrastructure/infrastructure-overview';
 
 export const AgentBuilderInfrastructure = () => (
-  <SettingsLayout
+  <PageLayout
+    kind="settings"
     header={
       <PageHeader>
         <PageHeader.Title>Infrastructure</PageHeader.Title>
@@ -15,7 +16,7 @@ export const AgentBuilderInfrastructure = () => (
     }
   >
     <InfrastructureOverview />
-  </SettingsLayout>
+  </PageLayout>
 );
 
 export default AgentBuilderInfrastructure;
