@@ -31,6 +31,6 @@ Externally synced docs:
 - Each directory in `../.github/docs-sync.json` (for example `src/mastra-code`) is pushed to another docs site's repo whenever it changes on `main`. Edit those pages here; edits in the target repo are overwritten.
 - Links in those pages use the target site's routes (for example `/reference#…`), not this site's.
 - Each synced directory owns its `sidebars.js`. Add every new page there.
-- Validate them with the unscoped `pnpm check` or `pnpm check --rule 'mastra/external-*'`. File-scoped `pnpm check <file>` only accepts `src/content/en` pages.
+- Validate them with the unscoped `pnpm check` or `pnpm check --rule 'mastra/external-*'`. File-scoped `pnpm check <file>` only accepts `src/content/en` pages, and inline `lint` comments don't apply to synced pages.
 - Deleting or renaming a synced page breaks inbound links to it, because synced directories have no redirects.
 - To add a site, add a manifest entry, install the Dane GitHub App on its repo, and remove any build-time docs fetching there.
