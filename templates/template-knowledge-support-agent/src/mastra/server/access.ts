@@ -7,6 +7,7 @@ import { MASTRA_KNOWLEDGE_PRINCIPALS_KEY } from '@mastra/server/server-adapter';
 import type { Memory } from '@mastra/memory';
 import { principals, resourceId, validateProfile } from '../identity.ts';
 import type { Profile } from '../identity.ts';
+import { authorizeConfirmation } from './confirmations.ts';
 import { createStudioAccess } from './studio-access.ts';
 import { createReviewAccess } from './review-access.ts';
 import type { ReviewWorkflow } from '../workflows/review-workflow.ts';
@@ -74,7 +75,8 @@ export function createAuth(credentials: CredentialSource, memory: Memory, review
     requestContext.set(MASTRA_KNOWLEDGE_PRINCIPALS_KEY, principals(profile));
 
     const review = await authorizeReviewRoute?.(path, method, request, owner, profile);
-    const allowed = review ?? (await authorizeStudioRoute(path, method, request, owner));
+    const confirmation = await authorizeConfirmation(path, method, request, owner, memory);
+    const allowed = confirmation ?? review ?? (await authorizeStudioRoute(path, method, request, owner));
     recordOperation('authorization', allowed ? 'success' : 'denied', started);
     return allowed;
   };

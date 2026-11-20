@@ -19,7 +19,7 @@ import {
   publicationSchema,
   publicationRetryInputSchema,
   proposalSchema,
-  reviewInputSchema,
+  reviewStartInputSchema,
   sameDecision,
 } from '../review/contracts.ts';
 import type { ReviewerAuthority } from '../review/service.ts';
@@ -67,7 +67,7 @@ const createRun: WritePolicy = ({ body, owner, runId, run }) =>
 const startRun: WritePolicy = ({ body, owner, run }) =>
   run?.status === 'pending' &&
   onlyKeys(body, startFields) &&
-  reviewInputSchema.safeParse(body.inputData).success &&
+  reviewStartInputSchema.safeParse(body.inputData).success &&
   (body.resourceId === undefined || body.resourceId === owner) &&
   [body.requestContext, body.tracingOptions, body.initialState].every(emptyObjectOption) &&
   (body.perStep === undefined || body.perStep === false) &&

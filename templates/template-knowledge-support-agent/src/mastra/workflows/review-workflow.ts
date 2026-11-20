@@ -8,7 +8,7 @@ import {
   proposalSchema,
   publicationRetryInputSchema,
   publicationSchema,
-  reviewInputSchema,
+  reviewStartInputSchema,
   ReviewConflict,
 } from '../review/contracts.ts';
 import type { ReviewService } from '../review/service.ts';
@@ -16,7 +16,7 @@ import type { ReviewService } from '../review/service.ts';
 export function createReviewWorkflow(service: ReviewService) {
   const prepare = createStep({
     id: 'prepare-review',
-    inputSchema: reviewInputSchema,
+    inputSchema: reviewStartInputSchema,
     outputSchema: proposalSchema,
     execute: async ({ inputData, requestContext, mastra }) => {
       const started = performance.now();
@@ -93,7 +93,7 @@ export function createReviewWorkflow(service: ReviewService) {
   });
   return createWorkflow({
     id: 'review',
-    inputSchema: reviewInputSchema,
+    inputSchema: reviewStartInputSchema,
     outputSchema: publicationSchema,
     options: { autoRestartActiveRuns: false, shouldPersistSnapshot: () => true },
   })

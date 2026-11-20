@@ -32,10 +32,15 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
     recordOperation('history-retrieval', status, started, inspected);
     return { status, records: selected };
   };
-  const words = new Set(question.toLowerCase().match(/[a-z0-9]+(?:-[a-z0-9]+)*/gu) ?? []);
+  const words = new Set(
+    question
+      .normalize('NFC')
+      .toLowerCase()
+      .match(/[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*/gu) ?? [],
+  );
   const topics = new Set(
     Object.entries(supportConfiguration.topicTerms)
-      .filter(([tag, terms]) => words.has(tag) || terms.some(term => words.has(term)))
+      .filter(([tag, terms]) => words.has(tag) || terms.some(term => words.has(term.normalize('NFC').toLowerCase())))
       .map(([tag]) => tag),
   );
   try {

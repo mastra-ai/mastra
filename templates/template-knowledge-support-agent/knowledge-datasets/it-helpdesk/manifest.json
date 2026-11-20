@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "id": "it-helpdesk",
+  "version": "2026-11-20.1",
+  "pages": [
+    {
+      "key": "helpdesk-policy",
+      "path": "policies/helpdesk-safety",
+      "title": "Política do suporte de TI",
+      "file": "policy.md",
+      "scope": {
+        "kind": "tenant",
+        "profile": "helpdesk-office"
+      },
+      "kind": "policy",
+      "source": {
+        "kind": "original synthetic fixture",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "key": "network-guide",
+      "path": "guides/network-configuration",
+      "title": "Consulta de configuração TCP/IP",
+      "file": "network.md",
+      "scope": {
+        "kind": "docs",
+        "profile": "helpdesk-office"
+      },
+      "kind": "reference",
+      "source": {
+        "kind": "original summary of public Microsoft documentation",
+        "url": "https://learn.microsoft.com/pt-br/windows-server/administration/windows-commands/ipconfig",
+        "verifiedOn": "2026-11-20"
+      },
+      "links": ["helpdesk-policy"]
+    },
+    {
+      "key": "office-case",
+      "path": "cases/network-check",
+      "title": "Caso fictício de conexão: office",
+      "file": "office-case.md",
+      "scope": {
+        "kind": "customer",
+        "profile": "helpdesk-office"
+      },
+      "kind": "case",
+      "record": {
+        "topicTags": ["connectivity"],
+        "observedOn": "2026-11-15",
+        "state": "approved",
+        "summary": "Registro fictício office: seleção incorreta de adaptador foi corrigida com autorização e verificações tiveram sucesso.",
+        "applicability": "Somente seleção incorreta confirmada; uma consulta de configuração não determina a causa."
+      },
+      "source": {
+        "kind": "fictional service record",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "key": "branch-case",
+      "path": "cases/network-check",
+      "title": "Caso fictício de conexão: branch",
+      "file": "branch-case.md",
+      "scope": {
+        "kind": "customer",
+        "profile": "helpdesk-branch"
+      },
+      "kind": "case",
+      "record": {
+        "topicTags": ["connectivity"],
+        "observedOn": "2026-11-16",
+        "state": "approved",
+        "summary": "Registro fictício branch: seleção incorreta de adaptador foi corrigida com autorização e verificações tiveram sucesso.",
+        "applicability": "Somente seleção incorreta confirmada; uma consulta de configuração não determina a causa."
+      },
+      "source": {
+        "kind": "fictional service record",
+        "license": "Apache-2.0"
+      }
+    }
+  ]
+}

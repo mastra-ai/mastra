@@ -1,3 +1,4 @@
+import { confirmationMetadataSchema, confirmationText, decodeConfirmationReference } from './confirmation.ts';
 import type { Mastra } from '@mastra/core/mastra';
 import { createHash, randomUUID } from 'node:crypto';
 import { knowledgeScopeAddress, type Knowledge, type KnowledgePage } from '@mastra/core/knowledge';
@@ -18,6 +19,7 @@ import {
   type Candidate,
   type Proposal,
   type ReviewInput,
+  type ReviewStartInput,
 } from './contracts.ts';
 
 export type ReviewerAuthority = (profile: Profile) => LocalProfile | null;
@@ -54,7 +56,7 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
     return current;
   }
 
-  async function confirmation(profile: Profile, input: ReviewInput) {
+  async function confirmation(profile: Profile, input: ReviewInput, structured = false) {
     requireReview(profile.actorId !== input.sourceActorId, 'Reviewer must differ from source technician');
     const owner = resourceId({ ...profile, actorId: input.sourceActorId });
     const thread = await memory.getThreadById({ threadId: input.threadId });
@@ -73,11 +75,34 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
       .map(part => part.text)
       .join('\n')
       .trim();
-    requireReview(
-      text.length >= 30 && text.length <= 4000 && /^(?:Confirmed:|I confirm\b|I confirmed\b)/iu.test(text),
-      'Selected user turn must explicitly confirm an outcome',
-    );
-    return { confirmation: text, digest: digest({ id: message.id, owner, threadId: input.threadId, text }) };
+    const metadata = confirmationMetadataSchema.safeParse(message.content.metadata?.supportConfirmation);
+    if (metadata.success) {
+      requireReview(
+        metadata.data.threadId === input.threadId &&
+          metadata.data.sourceActorId === input.sourceActorId &&
+          text === confirmationText(metadata.data),
+        'Structured confirmation attribution mismatch',
+      );
+    } else {
+      requireReview(
+        !structured &&
+          !message.content.metadata?.supportConfirmation &&
+          text.length >= 30 &&
+          text.length <= 4000 &&
+          /^(?:Confirmed:|I confirm\b|I confirmed\b)/iu.test(text),
+        'Selected user turn must explicitly confirm an outcome',
+      );
+    }
+    return {
+      confirmation: text,
+      digest: digest({
+        id: message.id,
+        owner,
+        threadId: input.threadId,
+        text,
+        ...(metadata.success ? { metadata: metadata.data } : {}),
+      }),
+    };
   }
 
   async function page(ref: string, allowed: string[]) {
@@ -193,7 +218,8 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
       identity('target', `${proposal.destination.scope}#${proposal.destination.path}`, current);
       requireReview(
         proposal.destination.path.startsWith(`${supportConfiguration.customerRoots[0]}/`) ||
-          (proposal.source.audience === 'tenant' && proposal.destination.path.startsWith('learnings/')),
+          (proposal.source.audience === 'tenant' &&
+            proposal.destination.path.startsWith(`${supportConfiguration.sharedRoot}/`)),
         'Target must be an allowed finding or case record',
       );
       if (proposal.candidate.action === 'update')
@@ -222,9 +248,13 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
     return false;
   }
 
-  async function prepare(profile: Profile | undefined, input: ReviewInput, mastra?: Mastra): Promise<Proposal> {
+  async function prepare(profile: Profile | undefined, received: ReviewStartInput, mastra?: Mastra): Promise<Proposal> {
     const current = reviewer(profile);
-    const selected = await confirmation(current, input);
+    const structured = 'confirmationReference' in received;
+    const input: ReviewInput = structured
+      ? { ...decodeConfirmationReference(received.confirmationReference), audience: received.audience }
+      : received;
+    const selected = await confirmation(current, input, structured);
     const customerScope = customer(current);
     const curator = createCuratorAgent(knowledge, customerScope);
     if (mastra) curator.__registerMastra(mastra);
@@ -256,7 +286,7 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
             : knowledgeScopeAddress('tenant:$tenantId', { ...plainProfile(current) }),
         path:
           candidate.target?.path ??
-          `${input.audience === 'private' ? supportConfiguration.customerRoots[0] : 'learnings'}/review-${id}`,
+          `${input.audience === 'private' ? supportConfiguration.customerRoots[0] : supportConfiguration.sharedRoot}/review-${id}`,
       },
       revision: '',
     };

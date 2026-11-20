@@ -13,7 +13,10 @@ export function createKnowledge(storage: MastraCompositeStore) {
       'thread:$threadId': { ...memoryScopes['thread:$threadId'], access: [...viewer] },
       'tenant:$tenantId': {
         access: [...viewer],
-        pinnedContext: [`tenant:$tenantId#${supportConfiguration.policy.path}`, supportConfiguration.optionalListing],
+        pinnedContext: [
+          `${supportConfiguration.policy.kind}:$tenantId#${supportConfiguration.policy.path}`,
+          supportConfiguration.optionalListing,
+        ],
       },
       'docs:$tenantId': { belongsTo: 'tenant:$tenantId', access: [{ principal: 'tenant:$tenantId', role: 'viewer' }] },
       'customer:$tenantId:$customerId': { belongsTo: 'tenant:$tenantId', access: [...viewer] },

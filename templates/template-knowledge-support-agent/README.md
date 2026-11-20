@@ -29,14 +29,14 @@ Support teams repeat investigations when manuals, customer history, and confirme
 
 - Ask “Can I factory reset while offline payments are pending?” Look for guidance based on the pinned policy to preserve the pending payments.
 - Run `npm run knowledge:seed -- --dataset retail-pos-history`, then ask about Store 42 connectivity in a fresh chat. Look for dated cases and which observations remain open.
-- Use the [Studio walkthrough](docs/studio-walkthrough.md) to approve a fictional finding, then retrieve the approved tenant guidance in another technician's chat.
+- Use the [Studio walkthrough](docs/studio-walkthrough.md) to record an attributed confirmation, approve a fictional finding, then retrieve the approved tenant guidance in another technician's chat.
 
 The default database is `.local/support.db`. It keeps your Knowledge and conversations across restarts. Use the new token from each launch to reopen an existing chat.
 
 ## Customization
 
 - Ask your coding agent to explore the project and plan an adaptation before editing. For example, “Plan an IT help desk example with shared setup guides and private employee support cases.”
-- Follow [Datasets and examples](docs/datasets-and-examples.md) to add cases, replace the standing policy, or try the software integration example.
+- Follow [Datasets and examples](docs/datasets-and-examples.md) to add cases, replace the standing policy, or try the software integration and Portuguese IT helpdesk examples.
 
 ## About Mastra templates
 

@@ -18,20 +18,37 @@ As `retailops-store-42`, open **Knowledge**, select **support**, and explore the
 
 ## 2. Confirm and review a private finding
 
-Continue the chat with a fictional observation.
-
-> Confirmed: The terminal had selected the guest Wi-Fi network while an adjacent device on the intended network stayed connected. No offline payments were pending. With authorization we selected the intended network and three checks succeeded. Public reference docs:retailops#guides/network, version 1.
-
-Find the thread ID and confirmed message ID in the authenticated Memory response `GET /api/memory/threads/<threadId>/messages?agentId=support`, using the technician session. Switch to the reviewer profile and start **Review** with these inputs.
+Record a structured fictional confirmation as the technician. Copy the **thread ID from the current Studio conversation URL** after sending a Support turn; do not copy the token-bearing URL into the request. Set `TECHNICIAN_TOKEN` in your shell to the private `retailops-store-42` token from this launch. Save the following body as `confirmation.json`, replacing the thread placeholder.
 
 ```json
 {
-  "threadId": "<technician thread>",
-  "messageId": "<confirmed user message>",
-  "sourceActorId": "alex",
+  "threadId": "<technician thread from Studio URL>",
+  "observation": "The terminal selected the guest Wi-Fi while an adjacent device on the intended network stayed connected. No offline payments were pending.",
+  "outcome": "With authorization the intended network was selected and three checks succeeded. Public reference docs:retailops#guides/network, version 1."
+}
+```
+
+Submit it to the custom route at the server root. Native Mastra workflow routes remain under `/api`.
+
+```sh
+curl --fail-with-body http://127.0.0.1:4111/support/confirmations \
+  -H "Authorization: Bearer $TECHNICIAN_TOKEN" \
+  -H 'Content-Type: application/json' \
+  --data-binary @confirmation.json
+```
+
+The `201` response contains one `confirmationReference`. This records the observation and outcome as a user Memory turn attributed to the authenticated technician, without invoking a model or publishing Knowledge. The route accepts only those three fields and an already-owned thread. It derives identity from the token, never the body. No message IDs or Memory API responses are needed.
+
+Switch to the `retailops-reviewer` token, open **Review**, and paste the returned reference with the desired audience into the workflow input.
+
+```json
+{
+  "confirmationReference": "<reference returned by the confirmation route>",
   "audience": "private"
 }
 ```
+
+A reference locates stored evidence; it grants no access. Review checks the technician's complete tenant/customer/actor ownership before reading the stored turn, then validates its structured attribution. The reviewer must have a current grant for that same customer and be a different actor. Treat the reference as opaque and preserve it verbatim.
 
 Inspect the suspended `review-decision` proposal, including its content, target, and evidence. Resume it with its exact revision.
 
@@ -45,7 +62,7 @@ Inspect the suspended `review-decision` proposal, including its content, target,
 
 Approval publishes the reviewed record to the customer's Knowledge. To try rejection, start a separate proposal for a different confirmed observation. Choose `reject` and check that the proposed page is absent.
 
-A suspended proposal saved by an earlier version may fail current validation and be denied resume. As its owning reviewer, inspect the saved review for invalid record fields, including topic tags longer than 80 characters, or text exceeding the native page-description or note limits. Start a fresh Review from the same confirmed message and inspect the new proposal before deciding. The earlier proposal remains in the audit history.
+Existing inputs with `threadId`, `messageId`, `sourceActorId`, and `audience` remain supported for explicit English confirmation turns (`Confirmed:`, `I confirm`, or `I confirmed`). Existing valid persisted proposals keep their source format. A suspended proposal saved by an earlier version may fail current validation and be denied resume. As its owning reviewer, inspect the saved review for invalid record fields, including topic tags longer than 80 characters, or text exceeding the native page-description or note limits. Start a fresh Review from the same confirmation reference and inspect the new proposal before deciding. The earlier proposal remains in the audit history.
 
 ## 3. Approve a shared finding and reuse it
 

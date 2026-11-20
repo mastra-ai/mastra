@@ -18,7 +18,7 @@ interface RuntimeOptions {
   modelScript?: ModelScript;
   profiles?: (Profile & { review?: boolean })[];
   syntheticKnowledge?: boolean;
-  example?: 'retail-pos' | 'software-integration';
+  example?: 'retail-pos' | 'software-integration' | 'it-helpdesk';
 }
 interface RuntimeProcess {
   launcher: ReturnType<typeof spawn>;

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { confirmationReferenceSchema } from './confirmation.ts';
 import { validateSupportRecord } from '../knowledge/seed-manifest.ts';
 import { assertKnowledgeNoteTextWithinBound, assertKnowledgePageDescriptionWithinBound } from '@mastra/core/knowledge';
 
@@ -18,6 +19,17 @@ export const reviewInputSchema = z
     audience: z.enum(['private', 'tenant']),
   })
   .strict();
+/** Normalize new references before persisting the unchanged proposal source contract. */
+export const reviewStartInputSchema = z.union([
+  reviewInputSchema,
+  z
+    .object({
+      confirmationReference: confirmationReferenceSchema,
+      audience: z.enum(['private', 'tenant']),
+    })
+    .strict(),
+]);
+export type ReviewStartInput = z.infer<typeof reviewStartInputSchema>;
 export const decisionSchema = z
   .object({
     decision: z.enum(['approve', 'reject']),

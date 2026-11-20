@@ -9,6 +9,7 @@ import { createKnowledge } from './knowledge/index.ts';
 import { createAuth, createReviewerAuthority, loadCredentials } from './server/access.ts';
 import { localDatabaseUrl } from './database.ts';
 import { createReviewService } from './review/service.ts';
+import { createConfirmationRoute } from './server/confirmations.ts';
 import { createReviewWorkflow } from './workflows/review-workflow.ts';
 
 export const storage = new LibSQLStore({
@@ -43,6 +44,6 @@ export const mastra = new Mastra({
     host: '127.0.0.1',
     port: Number(process.env.PORT ?? 4111),
     auth,
-    apiRoutes: [...KNOWLEDGE_ROUTES],
+    apiRoutes: [...KNOWLEDGE_ROUTES, createConfirmationRoute(memory)],
   },
 });
