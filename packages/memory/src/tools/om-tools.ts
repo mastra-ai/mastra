@@ -364,7 +364,9 @@ function searchWithTimeout(memory: RecallMemory, args: SearchArgs, timeoutMs: nu
       reject(runSignal?.aborted ? runSignal.reason : new Error(`search did not finish within ${timeoutMs}ms`));
     if (abortSignal.aborted) return onAbort();
     abortSignal.addEventListener('abort', onAbort, { once: true });
-    memory.searchMessages!({ ...args, abortSignal }).then(resolve, reject);
+    memory.searchMessages!({ ...args, abortSignal })
+      .then(resolve, reject)
+      .finally(() => abortSignal.removeEventListener('abort', onAbort));
   });
 }
 

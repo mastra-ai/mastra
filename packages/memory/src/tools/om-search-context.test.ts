@@ -597,4 +597,25 @@ describe('recall search when the search itself fails', () => {
     expect(searchSignal?.aborted).toBe(true);
     expect(log.error).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ['succeeds', async () => ({ results: [] })],
+    [
+      'fails',
+      async () => {
+        throw new Error('vector store timed out');
+      },
+    ],
+  ])('stops listening for the deadline once a search %s', async (_, answer) => {
+    const { memory } = setup([]);
+    let removeListener: ReturnType<typeof vi.spyOn> | undefined;
+    memory.searchMessages = vi.fn(({ abortSignal }) => {
+      removeListener = vi.spyOn(abortSignal!, 'removeEventListener');
+      return answer();
+    });
+
+    await searchMessagesForResource({ memory, resourceId, query: 'topic', logger: logger() });
+
+    expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
+  });
 });
