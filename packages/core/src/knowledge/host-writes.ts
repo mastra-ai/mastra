@@ -1,4 +1,4 @@
-import { KnowledgeNotFoundError } from '../storage/domains/knowledge/base';
+import { KnowledgeConflictError, KnowledgeNotFoundError } from '../storage/domains/knowledge/base';
 import type { KnowledgeStorage } from '../storage/domains/knowledge/base';
 import { assertKnowledgeNoteTextWithinBound, knowledgePagePath } from '../storage/domains/knowledge/pages';
 import type {
@@ -33,6 +33,12 @@ export interface KnowledgeUpsertPageInput {
   body?: string;
   /** Recorded as the writer. Default `host`. */
   author?: string;
+  /**
+   * Write only if the page is still at this version, e.g. the one the caller read before deciding to
+   * write. Otherwise, including when the page is gone, throws `KnowledgeConflictError` and writes
+   * nothing, so a write prepared from a stale read never replaces someone else's edit.
+   */
+  expectedVersion?: number;
 }
 
 /** @experimental */
@@ -145,9 +151,13 @@ async function upsertAt(
   fields: { name: string; description?: string; body?: string },
   provenance: KnowledgeProvenance,
   overwrite: boolean,
+  expectedVersion?: number,
 ): Promise<KnowledgeUpsertPageResult & { renamed?: boolean }> {
   for (let attempt = 1; ; attempt++) {
     const existing = await storage.getPageByPath({ scopeId, path, read: 'all' });
+    if (expectedVersion !== undefined && existing?.version !== expectedVersion) {
+      throw new KnowledgeConflictError(existing?.id ?? path.join('/'));
+    }
     try {
       if (!existing) {
         const page = await storage.createPage({ parentId, key: path[path.length - 1], ...fields, provenance });
@@ -185,6 +195,16 @@ export async function upsertKnowledgePage(
   await host.runtime.resolve();
   const keys = splitPath(input.path);
   const provenance: KnowledgeProvenance = { author: input.author ?? 'host' };
+  if (input.expectedVersion !== undefined) {
+    // Checked before anything is created: a page that is gone stays gone, and so do its parents.
+    await host.runtime.checkDeclarations();
+    const storage = await host.getStorage();
+    const [scope] = await storage.getScopesByAddress([input.scope]);
+    const page = scope ? await storage.getPageByPath({ scopeId: scope.id, path: keys, read: 'all' }) : null;
+    if (page?.version !== input.expectedVersion) {
+      throw new KnowledgeConflictError(page?.id ?? `${input.scope}#${keys.join('/')}`);
+    }
+  }
   // No principals: the host is trusted, and the scope is placed (belongsTo) by the first run that holds it.
   const scope = await host.runtime.materializeScope(input.scope, [], provenance);
   const storage = await host.getStorage();
@@ -206,6 +226,7 @@ export async function upsertKnowledgePage(
     { name: input.name, description: input.description, body: input.body },
     provenance,
     true,
+    input.expectedVersion,
   );
   if (result.status !== 'unchanged') {
     await embed(host, index => index.indexPage(result.page), pageEmbedFailed(storage, result.page));
