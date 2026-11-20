@@ -1055,6 +1055,8 @@ export class DurableAgent<
       try {
         await publisher?.settle(status);
       } catch (error) {
+        // The detach can also land while the write waits in the publisher's queue.
+        if (executionFence.detached) return;
         if (!(error instanceof DurableExecutionFenceError) || error.id !== EXECUTION_UNVERIFIED_ERROR_ID) throw error;
         // The local reader still finishes, but cannot mutate shared lifecycle state.
         this.#unverifiedReaderFences.add(executionFence);
