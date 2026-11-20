@@ -16,6 +16,27 @@ export interface GatewayApiPage {
    * these fill the gap in the generated request schema. A field the spec already describes keeps its own text.
    */
   fields?: Record<string, string>
+  /**
+   * The provider API reference this endpoint is compatible with. The generated AI-agent note points there for
+   * fields the spec leaves as open objects, such as streaming event payloads.
+   */
+  compatibleWith?: { name: string; url: string }
+}
+
+const openai = (name: string, resource: string) => ({
+  name: `OpenAI ${name} API reference`,
+  url: `https://developers.openai.com/api/reference/resources/${resource}`,
+})
+
+const COMPATIBLE_APIS = {
+  chat: openai('Chat Completions', 'chat'),
+  responses: openai('Responses', 'responses'),
+  messages: { name: 'Anthropic Messages API reference', url: 'https://platform.claude.com/docs/en/api/messages' },
+  embeddings: openai('Embeddings', 'embeddings'),
+  decisions: openai('Decisions', 'decisions'),
+  images: openai('Images', 'images'),
+  audio: openai('Audio', 'audio'),
+  models: openai('Models', 'models'),
 }
 
 const MODEL_FROM_CATALOG = 'A `provider/model` ID from [`/v1/models`](/docs/mastra-platform/gateway/api/models).'
@@ -23,6 +44,7 @@ const MODEL_FROM_CATALOG = 'A `provider/model` ID from [`/v1/models`](/docs/mast
 export const GATEWAY_API_PAGES: Record<string, GatewayApiPage> = {
   createChatCompletion: {
     slug: 'chat-completions',
+    compatibleWith: COMPATIBLE_APIS.chat,
     title: 'Chat Completions',
     description: 'Send OpenAI-compatible chat completion requests, with streaming and tools, to any Gateway model.',
     fields: {
@@ -43,41 +65,49 @@ export const GATEWAY_API_PAGES: Record<string, GatewayApiPage> = {
   },
   createResponse: {
     slug: 'responses',
+    compatibleWith: COMPATIBLE_APIS.responses,
     title: 'Create a response',
     description: 'Use the OpenAI Responses API through Gateway, including stored responses and continuation.',
   },
   getResponse: {
     slug: 'responses/retrieve',
+    compatibleWith: COMPATIBLE_APIS.responses,
     title: 'Retrieve a response',
     description: 'Retrieve a response stored by the provider that created it.',
   },
   deleteResponse: {
     slug: 'responses/delete',
+    compatibleWith: COMPATIBLE_APIS.responses,
     title: 'Delete a response',
     description: 'Delete a response stored by the provider that created it.',
   },
   listResponseInputItems: {
     slug: 'responses/input-items',
+    compatibleWith: COMPATIBLE_APIS.responses,
     title: 'List response input items',
     description: 'List the input items of a response stored with the OpenAI Responses API.',
   },
   createMessage: {
     slug: 'messages',
+    compatibleWith: COMPATIBLE_APIS.messages,
     title: 'Anthropic Messages',
     description: 'Call Claude through Gateway with the Anthropic Messages API and the Anthropic SDK.',
   },
   countMessageTokens: {
     slug: 'messages/count-tokens',
+    compatibleWith: COMPATIBLE_APIS.messages,
     title: 'Count message tokens',
     description: 'Count the tokens in an Anthropic Messages request with your Anthropic account.',
   },
   createEmbeddings: {
     slug: 'embeddings',
+    compatibleWith: COMPATIBLE_APIS.embeddings,
     title: 'Embeddings',
     description: 'Create text embeddings through Gateway with the OpenAI Embeddings API.',
   },
   createDecision: {
     slug: 'decisions',
+    compatibleWith: COMPATIBLE_APIS.decisions,
     title: 'Decisions',
     description: 'Ask a model structured predicate, choice, and score questions about an input in a single request.',
     fields: {
@@ -99,11 +129,13 @@ export const GATEWAY_API_PAGES: Record<string, GatewayApiPage> = {
   },
   generateImage: {
     slug: 'images',
+    compatibleWith: COMPATIBLE_APIS.images,
     title: 'Generate an image',
     description: 'Generate images through Gateway with the OpenAI Images API.',
   },
   editImage: {
     slug: 'images/edits',
+    compatibleWith: COMPATIBLE_APIS.images,
     title: 'Edit an image',
     description: 'Edit images through Gateway with the OpenAI Images API.',
   },
@@ -138,6 +170,7 @@ export const GATEWAY_API_PAGES: Record<string, GatewayApiPage> = {
   },
   createSpeech: {
     slug: 'audio',
+    compatibleWith: COMPATIBLE_APIS.audio,
     title: 'Create speech',
     description: 'Generate speech through Gateway with the OpenAI Audio API.',
     fields: {
@@ -149,16 +182,19 @@ export const GATEWAY_API_PAGES: Record<string, GatewayApiPage> = {
   },
   createTranscription: {
     slug: 'audio/transcriptions',
+    compatibleWith: COMPATIBLE_APIS.audio,
     title: 'Create a transcription',
     description: 'Transcribe an audio file through Gateway with the OpenAI Audio API.',
   },
   listModels: {
     slug: 'models',
+    compatibleWith: COMPATIBLE_APIS.models,
     title: 'List models',
     description: 'List the models available through Gateway with the OpenAI-compatible models endpoint.',
   },
   getModel: {
     slug: 'models/retrieve',
+    compatibleWith: COMPATIBLE_APIS.models,
     title: 'Retrieve a model',
     description: 'Get one model from the Gateway catalog, including its pricing and capabilities.',
   },

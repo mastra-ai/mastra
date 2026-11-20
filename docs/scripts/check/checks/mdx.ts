@@ -143,7 +143,7 @@ function ruleIdForMessage(message: LintMessage): string {
   return `mastra/remark-${slugifyRuleName(message.ruleId ?? 'unknown')}`
 }
 
-const PAGE_RULES = new Set(['mastra/description-required', 'mastra/description-length'])
+const PAGE_RULES = new Set(['mdx-parse', 'mastra/description-required', 'mastra/description-length'])
 
 /**
  * Runs every rule that needs the parsed MDX tree: remark-lint, structure, links, and bare URLs.

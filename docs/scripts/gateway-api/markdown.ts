@@ -2,8 +2,9 @@ import fs from 'fs'
 import path from 'path'
 import { createApiPageMD } from 'docusaurus-plugin-openapi-docs/lib/markdown'
 import type { ApiPageMetadata } from 'docusaurus-plugin-openapi-docs/src/types'
-import { DOCS_ROOT, PAGES_DIR } from './constants'
+import { DOCS_ROOT, PAGES_DIR, SPEC_URL } from './constants'
 import { GATEWAY_API_PAGES } from './pages'
+import type { GatewayApiPage } from './pages'
 
 const GUIDE_SLOT = 'GATEWAYAPIGUIDESLOT'
 
@@ -17,8 +18,8 @@ function frontMatter(fields: Record<string, string | undefined>): string {
 
 /**
  * Wraps the plugin's API page generator. Applies the title, description, and slug from `pages.ts`, and
- * renders the operation's hand-written guide, if there is one, between the endpoint and the generated
- * description, request, and response reference.
+ * renders an AI-agent note pointing to the OpenAPI spec, then the operation's hand-written guide if there is
+ * one, between the endpoint and the generated description, request, and response reference.
  *
  * The template in `template.mustache` writes `gatewayFrontMatter` into the page's frontmatter.
  */
@@ -36,16 +37,23 @@ export function createGatewayApiPageMD(item: ApiPageMetadata & { gatewayFrontMat
   })
 
   const guide = page && path.posix.join('_guides', `${page.slug}.mdx`)
-  if (!guide || !fs.existsSync(path.join(DOCS_ROOT, PAGES_DIR, guide))) {
-    return createApiPageMD({ ...item, title })
-  }
+  const hasGuide = guide !== undefined && fs.existsSync(path.join(DOCS_ROOT, PAGES_DIR, guide))
 
-  // The plugin escapes MDX in descriptions, so render a plain-text slot there and swap the guide in after.
+  // The plugin escapes MDX in descriptions, so render a plain-text slot there and swap the MDX in after.
   const markdown = createApiPageMD({
     ...item,
     title,
     api: { ...item.api, description: `${GUIDE_SLOT}\n\n${item.api.description ?? ''}` },
   })
   if (!markdown.includes(GUIDE_SLOT)) throw new Error(`Could not place the guide for ${operationId}`)
-  return `import Guide from './${guide}'\n${markdown.replace(GUIDE_SLOT, '<Guide />')}`
+  const slot = [agentNote(page?.compatibleWith), hasGuide ? '<Guide />' : undefined].filter(Boolean).join('\n\n')
+  const body = markdown.replace(GUIDE_SLOT, slot)
+  return hasGuide ? `import Guide from './${guide}'\n${body}` : body
+}
+
+function agentNote(compatibleWith: GatewayApiPage['compatibleWith']): string {
+  const compatibility = compatibleWith
+    ? ` Some fields, such as streaming event payloads, are open objects in the spec. Check those against the [${compatibleWith.name}](${compatibleWith.url}), which this endpoint is compatible with.`
+    : ''
+  return `<Inject>\n  **For AI agents:** Gateway publishes a public OpenAPI spec for every endpoint at [${SPEC_URL}](${SPEC_URL}). Use it for request and response schemas.${compatibility}\n</Inject>`
 }

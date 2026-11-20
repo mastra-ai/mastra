@@ -65,7 +65,12 @@ type Schema = { $ref?: string; description?: string; properties?: Record<string,
 function describeFields(spec: OpenApiDocument, operation: Operation, fields: Record<string, string> | undefined) {
   if (!fields) return
   const content = (operation.requestBody as { content?: Record<string, { schema?: Schema }> } | undefined)?.content
-  for (const [contentType, media] of Object.entries(content ?? {})) {
+  if (!content || Object.keys(content).length === 0) {
+    throw new Error(
+      `${operation.operationId} has no inline request body, but pages.ts describes its fields. Update pages.ts.`,
+    )
+  }
+  for (const [contentType, media] of Object.entries(content)) {
     let schema = media.schema
     if (schema?.$ref) {
       const name = schema.$ref.replace('#/components/schemas/', '')
@@ -136,7 +141,9 @@ export async function generate(): Promise<void> {
   await fs.mkdir(path.dirname(specPath), { recursive: true })
   await fs.writeFile(specPath, `${JSON.stringify(spec, null, 2)}\n`)
 
-  await runPluginCli('clean-api-docs')
+  // Like generation, cleanup logs failures instead of exiting non-zero, and the plugin skips pages that already exist.
+  const cleanup = await runPluginCli('clean-api-docs')
+  if (/Cleanup failed/.test(cleanup)) throw new Error(`clean-api-docs reported failures:\n${cleanup}`)
   const output = await runPluginCli('gen-api-docs')
 
   // The plugin logs write failures instead of exiting non-zero, so check its output and the files it wrote.

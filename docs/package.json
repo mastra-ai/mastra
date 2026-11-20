@@ -11,7 +11,7 @@
     "dev": "pnpm generate:gateway-api && docusaurus start",
     "build": "pnpm generate:gateway-api && docusaurus build",
     "swizzle": "docusaurus swizzle",
-    "deploy": "docusaurus deploy",
+    "deploy": "pnpm generate:gateway-api && docusaurus deploy",
     "clear": "docusaurus clear",
     "serve": "docusaurus serve",
     "write-translations": "docusaurus write-translations",

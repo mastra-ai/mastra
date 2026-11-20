@@ -1,11 +1,11 @@
-Video generation runs as a job. Create a job, [poll it](/docs/mastra-platform/gateway/api/videos/retrieve) until it finishes, then [download the video](/docs/mastra-platform/gateway/api/videos/content). Replace `google/veo-3.1` with any video model from [`/v1/models`](/docs/mastra-platform/gateway/api/models).
+Video generation runs as a job. Create a job, [poll it](/docs/mastra-platform/gateway/api/videos/retrieve) until it finishes, then [download the video](/docs/mastra-platform/gateway/api/videos/content). Replace `__GATEWAY_GOOGLE_VIDEO_MODEL__` with any video model from [`/v1/models`](/docs/mastra-platform/gateway/api/models).
 
 ```bash
 curl https://gateway-api.mastra.ai/v1/videos \
   -H "Authorization: Bearer $MASTRA_GATEWAY_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "google/veo-3.1",
+    "model": "__GATEWAY_GOOGLE_VIDEO_MODEL__",
     "prompt": "A lighthouse at dusk, waves crashing, slow aerial pan",
     "duration": 8,
     "resolution": "720p",
@@ -21,7 +21,7 @@ The response returns `202` with the job:
 {
   "id": "...",
   "object": "video",
-  "model": "google/veo-3.1",
+  "model": "__GATEWAY_GOOGLE_VIDEO_MODEL__",
   "status": "pending",
   "created_at": 1763460000
 }
