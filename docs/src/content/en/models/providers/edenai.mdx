@@ -7,7 +7,7 @@ description: "Browse Eden AI model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/edenai.svg" alt="Eden AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Eden AI
 
-Access 401 Eden AI models through Mastra's model router. Authentication is handled automatically using the `EDENAI_API_KEY` environment variable.
+Access 389 Eden AI models through Mastra's model router. Authentication is handled automatically using the `EDENAI_API_KEY` environment variable.
 
 Learn more in the [Eden AI documentation](https://docs.edenai.co).
 
@@ -754,30 +754,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.555
   },
   {
-    "model": "edenai/cloudflare/@cf/deepseek-ai/deepseek-v4-flash-0731",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 384000,
-    "inputCost": 0.44,
-    "outputCost": 1.32
-  },
-  {
-    "model": "edenai/cloudflare/@cf/deepseek-ai/deepseek-v4-pro-0813",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 384000,
-    "inputCost": 1.32,
-    "outputCost": 3.96
-  },
-  {
     "model": "edenai/cloudflare/@cf/deepseek-ai/deepseek-v4.1-flash-1017",
     "imageInput": true,
     "audioInput": false,
@@ -788,18 +764,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 384000,
     "inputCost": 0.3,
     "outputCost": 1.2
-  },
-  {
-    "model": "edenai/cloudflare/@cf/meta/llama-3.2-1b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 60000,
-    "maxOutput": 32000,
-    "inputCost": 0.027,
-    "outputCost": 0.201
   },
   {
     "model": "edenai/cloudflare/@cf/meta/llama-3.2-3b-instruct",
@@ -4496,114 +4460,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 65536,
     "inputCost": 4.4,
     "outputCost": 22
-  },
-  {
-    "model": "edenai/vertex/gemini-4-carbon",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 65536,
-    "inputCost": 4,
-    "outputCost": 20
-  },
-  {
-    "model": "edenai/vertex/gemini-4-carbon@eu",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 65536,
-    "inputCost": 4.4,
-    "outputCost": 22
-  },
-  {
-    "model": "edenai/vertex/gemini-4-carbon@us",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 65536,
-    "inputCost": 4.4,
-    "outputCost": 22
-  },
-  {
-    "model": "edenai/vertex/gemini-4-hydrogen",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 65536,
-    "inputCost": 1.5,
-    "outputCost": 7.5
-  },
-  {
-    "model": "edenai/vertex/gemini-4-hydrogen@eu",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 65536,
-    "inputCost": 1.65,
-    "outputCost": 8.25
-  },
-  {
-    "model": "edenai/vertex/gemini-4-hydrogen@us",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 65536,
-    "inputCost": 1.65,
-    "outputCost": 8.25
-  },
-  {
-    "model": "edenai/vertex/gemini-4-neon",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 65536,
-    "inputCost": 3,
-    "outputCost": 15
-  },
-  {
-    "model": "edenai/vertex/gemini-4-neon@eu",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 65536,
-    "inputCost": 3.3,
-    "outputCost": 16.5
-  },
-  {
-    "model": "edenai/vertex/gemini-4-neon@us",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 65536,
-    "inputCost": 3.3,
-    "outputCost": 16.5
   },
   {
     "model": "edenai/vertex/gemini-flash-latest",
