@@ -76,6 +76,7 @@
  */
 
 import { expect, vi } from 'vitest';
+import type { ObservabilityEntrypoint } from '../../../observability';
 import type { WorkflowRunState } from '../../../workflows/types';
 import type { Agent } from '../../agent';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
@@ -224,6 +225,8 @@ export type ScenarioOptions<K extends RestartKind> = {
    * they are at `restart()`, which is the checkpoint only while graph 1 is parked.
    */
   storageVersion?: 1 | 2;
+  /** Observability for each graph's Mastra, so a test can read the spans both processes emit. */
+  observability?: (generation: number) => ObservabilityEntrypoint;
 };
 
 export type Graph = {
@@ -271,6 +274,7 @@ async function buildGraph<K extends RestartKind>(options: ScenarioOptions<K>, ge
       storage,
       agents: { [built.id]: agent as any },
       recovery: { durableAgents: 'auto' },
+      ...(options.observability ? { observability: options.observability(generation) } : {}),
     });
     const expectedEngine = options.kind === 'evented' ? 'evented' : 'default';
     expect((agent.getWorkflow() as { engineType?: string }).engineType).toBe(expectedEngine);

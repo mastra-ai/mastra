@@ -338,14 +338,26 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
     .then(llmExecutionStep)
     // Step 2: Extract tool calls as array for foreach (forward model_step span for nesting)
     .map(
-      async ({ inputData }) => {
+      async ({ inputData, getInitData }) => {
         const llmOutput = inputData as DurableLLMStepOutput;
-        return (llmOutput.toolCalls ?? []).map(toolCall => ({
+        const toolCalls = llmOutput.toolCalls ?? [];
+        const state = getInitData() as IterationState | undefined;
+        // More than one of these calls can suspend at once, on workers that share no memory, so
+        // none of them reports the step's model usage. The last execution of the run does.
+        const sideBySide =
+          toolCalls.length > 1 &&
+          resolveDurableToolCallConcurrency({
+            options: state?.options,
+            toolsMetadata: state?.toolsMetadata,
+            toolCalls,
+          }) > 1;
+        return toolCalls.map(toolCall => ({
           ...toolCall,
           stepSpanData: llmOutput.stepSpanData,
           completionStartTime: llmOutput.completionStartTime,
           timeToFirstTokenMs: llmOutput.timeToFirstTokenMs,
           stepUsage: llmOutput.stepResult?.totalUsage,
+          ...(sideBySide ? { sideBySide } : {}),
         })) as DurableToolCallInput[];
       },
       { id: 'extract-tool-calls' },
@@ -474,6 +486,7 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
               outputTokens: 0,
               totalTokens: 0,
             },
+            generationReportedUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
             lastStepResult: undefined,
             agentSpanData,
             modelSpanData,
@@ -802,7 +815,11 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
                 args: tc.args,
               })),
             );
-            const { usageIncomplete, usage } = generationUsage(state.accumulatedUsage, state.accumulatedSteps);
+            const { usageIncomplete, usage } = generationUsage(
+              state.accumulatedUsage,
+              state.accumulatedSteps,
+              state.generationReportedUsage,
+            );
             modelSpan?.createTracker()?.endGeneration({
               ...termination,
               output: { text: finalText, ...(toolCalls.length ? { toolCalls } : {}) },

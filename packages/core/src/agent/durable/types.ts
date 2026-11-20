@@ -480,6 +480,8 @@ export interface DurableToolCallInput {
   stepSpanData?: unknown;
   /** Model usage of the step that produced this call, reported on its suspension chunk */
   stepUsage?: LanguageModelUsage;
+  /** Other tool calls of the step run at the same time, so a suspension of this one reports no model usage */
+  sideBySide?: boolean;
 }
 
 /**
@@ -624,6 +626,8 @@ export interface DurableAgenticExecutionOutput {
   tracingTermination?: SpanTermination;
   /** Failure behind this iteration's delegation bail, see DurableToolCallOutput */
   tracingDelegationFailure?: SpanTermination;
+  /** An earlier segment's suspension ended this iteration's MODEL_STEP and reported the run's usage so far */
+  suspensionReportedUsage?: boolean;
 }
 
 /**

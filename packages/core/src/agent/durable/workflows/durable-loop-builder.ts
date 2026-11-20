@@ -13,7 +13,7 @@ import type { StepResultReads } from '../../../loop/workflows/prune-snapshot';
 import type { Mastra } from '../../../mastra';
 import { InternalSpans } from '../../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../observability';
-import { calculateObservedUsage, isUsageIncomplete } from '../../../observability/usage';
+import { calculateObservedUsage, isUsageIncomplete, subtractReportedUsage } from '../../../observability/usage';
 import { currentRunGeneration } from '../../../storage/run-fencing';
 import { ChunkFrom } from '../../../stream/types';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
@@ -54,6 +54,7 @@ import {
   durableOptionsSchema,
   createBaseIterationStateUpdate,
   resolveDurableToolCallConcurrency,
+  toolCallsRunSideBySide,
   executeDurableAgentScorers,
   dehydrateSnapshotTranscripts,
   hydrateMessageListState,
@@ -610,8 +611,14 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         .then(llmExecutionStep)
         // Step 2: Extract tool calls as array for foreach (forward model_step span for nesting)
         .map(
-          async ({ inputData }) => {
+          async ({ inputData, getInitData }) => {
             const llmOutput = inputData as DurableLLMStepOutput;
+            const state = getInitData() as IterationState | undefined;
+            const sideBySide = toolCallsRunSideBySide({
+              options: state?.options,
+              toolsMetadata: state?.toolsMetadata,
+              toolCalls: llmOutput.toolCalls,
+            });
             return (llmOutput.toolCalls ?? []).map(toolCall => ({
               ...toolCall,
               stepSpanData: llmOutput.stepSpanData,
@@ -619,6 +626,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               timeToFirstTokenMs: llmOutput.timeToFirstTokenMs,
               // A suspended step never emits step-finish, so its usage rides on the suspension chunk.
               stepUsage: llmOutput.stepResult?.totalUsage,
+              ...(sideBySide ? { sideBySide } : {}),
             })) as DurableToolCallInput[];
           },
           { id: 'extract-tool-calls' },
@@ -1095,6 +1103,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                 totalTokens: 0,
               },
               usageAggregationVersion: 1,
+              generationReportedUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
               lastStepResult: undefined,
             };
             return iterationState;
@@ -1291,7 +1300,10 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                       responseId: state.lastResponse?.id,
                       responseModel: state.lastResponse?.modelId,
                     },
-                    usage: usageIncomplete ? calculateObservedUsage(steps) : state.accumulatedUsage,
+                    usage: subtractReportedUsage(
+                      usageIncomplete ? calculateObservedUsage(steps) : state.accumulatedUsage,
+                      state.generationReportedUsage,
+                    ),
                   });
                 }
                 if (agentSpanData) {
