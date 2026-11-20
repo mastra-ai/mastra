@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, useSearchParams } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { DatasetItems } from '../dataset-items';
+import { DatasetItems } from '../dataset-items';
 import { TestLinkProvider } from '@/test/link-provider';
 
 const now = new Date().toISOString();
@@ -20,7 +20,7 @@ function RoutedDatasetItems(
   props: Omit<React.ComponentProps<typeof DatasetItems>, 'searchParams' | 'setSearchParams'>,
 ) {
   const [searchParams, setSearchParams] = useSearchParams();
-  return <RoutedDatasetItems {...props} searchParams={searchParams} setSearchParams={setSearchParams} />;
+  return <DatasetItems {...props} searchParams={searchParams} setSearchParams={setSearchParams} />;
 }
 
 const renderItems = (
