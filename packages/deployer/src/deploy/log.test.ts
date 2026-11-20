@@ -70,6 +70,13 @@ describe('toWindowsShellArg', () => {
     expect(toWindowsShellArg('C:\\John Smith\\out\\')).toBe('"C:\\John Smith\\out\\\\"');
   });
 
+  it('handles a long backslash run in linear time', () => {
+    const arg = `a ${'\\'.repeat(200_000)}x`;
+    const start = performance.now();
+    expect(toWindowsShellArg(arg)).toBe(`"${arg}"`);
+    expect(performance.now() - start).toBeLessThan(1000);
+  });
+
   it.each(['"a"', 'a!b', 'a\nb', 'a\rb'])('refuses %j, which cmd.exe expands even inside quotes', arg => {
     expect(() => toWindowsShellArg(arg)).toThrow('Refusing to pass unsafe argument');
   });

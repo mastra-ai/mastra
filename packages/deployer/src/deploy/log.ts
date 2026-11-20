@@ -37,7 +37,9 @@ export function toWindowsShellArg(arg: string) {
   }
   if (PLAIN_WINDOWS_ARG.test(arg)) return arg;
   // Double trailing backslashes so they do not escape the closing quote.
-  return `"${arg.replace(/\\+$/, run => run + run)}"`;
+  let end = arg.length;
+  while (end > 0 && arg[end - 1] === '\\') end--;
+  return `"${arg}${arg.slice(end)}"`;
 }
 
 export function toWindowsShellArgs(bin: string, args: string[]) {
