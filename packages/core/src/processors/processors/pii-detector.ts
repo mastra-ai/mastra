@@ -1018,10 +1018,12 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
 
     if (combined.length <= PIIDetector.REGEX_CARRYOVER_SIZE) return null;
 
-    let emitEnd = Math.min(
-      combined.length - PIIDetector.REGEX_CARRYOVER_SIZE,
-      Math.max(combined.search(/\S*$/), combined.length - PIIDetector.MAX_WORD_HOLD),
-    );
+    // Walk back over the unfinished word, at most MAX_WORD_HOLD characters, instead of
+    // searching with /\S*$/, which is quadratic on long runs of non-whitespace.
+    const wordHoldStart = Math.max(0, combined.length - PIIDetector.MAX_WORD_HOLD);
+    let wordStart = combined.length;
+    while (wordStart > wordHoldStart && /\S/.test(combined[wordStart - 1]!)) wordStart--;
+    let emitEnd = Math.min(combined.length - PIIDetector.REGEX_CARRYOVER_SIZE, wordStart);
     const regions = this.buildRedactionRegions(detections);
     for (const region of regions) {
       if (region.start < emitEnd && region.end > emitEnd) emitEnd = region.start;

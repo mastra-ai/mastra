@@ -328,6 +328,36 @@ assert.equal(subpathOnlyValue, 'c');`,
     );
 
     it(
+      'should pack workspace packages when the project path contains shell metacharacters',
+      async () => {
+        const parentDir = await mkdtemp(join(tmpdir(), `mastra-monorepo-shell-path-${pkgManager}-`));
+        const fixturePath = join(parentDir, 'app dir;touch pwned;$(touch pwned2)');
+        try {
+          await setupMonorepo(fixturePath, pkgManager);
+
+          const appDir = join(fixturePath, 'apps', 'custom');
+          const outputDir = join(appDir, '.mastra', 'output');
+          const buildResult = await execa(join(appDir, 'node_modules', '.bin', 'mastra'), ['build'], {
+            cwd: appDir,
+            reject: false,
+            env: process.env,
+          });
+          expect(buildResult.exitCode, `${buildResult.stdout}\n${buildResult.stderr}`).toBe(0);
+          expect(await readdir(join(outputDir, 'workspace-module'))).toContain('inner-subpath-only-1.0.0.tgz');
+
+          for (const dir of [parentDir, fixturePath, appDir, outputDir]) {
+            const entries = await readdir(dir);
+            expect(entries).not.toContain('pwned');
+            expect(entries).not.toContain('pwned2');
+          }
+        } finally {
+          await rm(parentDir, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+
+    it(
       'should not analyze dependencies listed in bundler externals',
       async () => {
         const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-analysis-external-${pkgManager}-`));

@@ -2186,6 +2186,39 @@ describe('PIIDetector', () => {
       expect(emitted.join('')).toBe(`${prefix} [EMAIL] trailing`);
     });
 
+    it('streams a long unbroken word followed by a short one in linear time, unchanged', async () => {
+      const detector = new PIIDetector({
+        model: new MockLanguageModelV1(),
+        strategy: 'redact',
+        redactionMethod: 'placeholder',
+        detectionTypes: ['email'],
+      });
+      const state: Record<string, any> = {};
+      // '#' is non-whitespace but outside the email pattern, so this times only the held-word
+      // lookup; the short trailing word is what made a /\S*$/ search backtrack over the long run.
+      const text = `${'#'.repeat(200_000)} #`;
+      const emitted: string[] = [];
+
+      const started = performance.now();
+      const result = await detector.processOutputStream({
+        part: { type: 'text-delta', payload: { id: 'long', text }, runId: 'long', from: ChunkFrom.AGENT },
+        streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+      if (result?.type === 'text-delta') emitted.push(result.payload.text);
+      const flushed = await detector.processOutputStream({
+        part: { type: 'step-finish' as any, payload: {}, runId: 'finish', from: ChunkFrom.AGENT },
+        streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+      if (flushed?.type === 'text-delta') emitted.push(flushed.payload.text);
+
+      expect(performance.now() - started).toBeLessThan(1_000);
+      expect(emitted.join('')).toBe(text);
+    });
+
     it('pulls emission back when PII straddles the carryover boundary', async () => {
       const detector = new PIIDetector({
         model: new MockLanguageModelV1(),

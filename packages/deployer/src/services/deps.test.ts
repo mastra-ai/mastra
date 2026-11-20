@@ -869,7 +869,8 @@ describe('Deps.pack', () => {
 
     await new DepsService(root).pack({ dir: root, destination, sanitizedName: 'scope-utilities', version: '1.2.3' });
 
-    return runChildProcess.mock.calls[0]?.[0].cmd;
+    const call = runChildProcess.mock.calls[0]![0];
+    return [call.cmd, ...call.args].join(' ');
   }
 
   it('uses --filename with the resolved version for Yarn classic', async () => {
