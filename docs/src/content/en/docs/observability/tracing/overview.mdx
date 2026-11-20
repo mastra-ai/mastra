@@ -585,7 +585,7 @@ Filtering happens at export time in this order:
 
 If `spanFilter` throws, Mastra keeps the span and logs the error to avoid silent data loss.
 
-Mastra calls `spanFilter` when a span starts and again when it ends. To drop a span and keep its children attached to the trace, return the same answer both times, for example by filtering on its type or entity. For the full span type list and more examples, see the [Span filtering reference](/reference/observability/tracing/span-filtering).
+Mastra calls `spanFilter` on each event of a span: when it starts, on each update, and when it ends. To drop a span and keep its children attached to the trace, return the same answer for every event, for example by filtering on its type or entity. For the full span type list and more examples, see the [Span filtering reference](/reference/observability/tracing/span-filtering).
 
 ### Custom span formatters
 

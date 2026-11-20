@@ -1,5 +1,5 @@
 ---
-'@mastra/observability': patch
+'@mastra/observability': minor
 ---
 
 Fixed broken traces when `spanFilter` drops a span.
