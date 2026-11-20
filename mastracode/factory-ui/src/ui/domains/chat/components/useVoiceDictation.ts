@@ -1,4 +1,5 @@
 import { recordMicrophoneToFile } from '@mastra/react';
+import { transcribeGatewayAudio } from '@mastra/playground-ui/utils/gateway-audio';
 import { useMutation } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 
@@ -56,10 +57,12 @@ export function useVoiceDictation({
   factoryId,
   onTranscript,
   onError,
+  gateway,
 }: {
   factoryId: string | undefined;
   onTranscript: (transcript: string, replacing: string) => void;
   onError: (message: string) => void;
+  gateway?: { baseUrl: string; model: string };
 }): VoiceDictation {
   const { client } = useApiConfig();
   const [phase, setPhase] = useState<RecordingPhase>('idle');
@@ -68,7 +71,13 @@ export function useVoiceDictation({
   const query = factoryId ? `?factoryId=${encodeURIComponent(factoryId)}` : '';
 
   const transcribe = useMutation({
-    mutationFn: (clip: Blob) => client.post<TranscribeResponse>(`/web/voice/transcribe${query}`, clip),
+    mutationFn: async (clip: File) => {
+      if (gateway) {
+        const extension = clip.name.split('.').pop() || 'webm';
+        return { text: await transcribeGatewayAudio(gateway.baseUrl, gateway.model, clip, extension) };
+      }
+      return client.post<TranscribeResponse>(`/web/voice/transcribe${query}`, clip);
+    },
     onSuccess: ({ text }) => {
       if (text) onTranscript(text, '');
       else onError(NO_SPEECH);
@@ -151,6 +160,14 @@ export function useVoiceDictation({
 
   const start = async () => {
     setPhase('requesting');
+    if (gateway) {
+      try {
+        await recordClip();
+      } catch (error) {
+        fail(captureErrorMessage(error));
+      }
+      return;
+    }
     let session: LiveSessionResponse;
     try {
       session = await client.post<LiveSessionResponse>(`/web/voice/live-session${query}`);

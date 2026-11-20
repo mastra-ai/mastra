@@ -5,7 +5,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 
 import type { VoiceChoice, VoiceSettingsResponse } from '../../../../../api/types';
-import { useUpdateVoiceSettings } from '../../../../../hooks/use-voice-settings';
+import { GATEWAY_VOICE_PROVIDER, useUpdateVoiceSettings } from '../../../../../hooks/use-voice-settings';
 import type { VoiceModel } from '../../../../../hooks/use-voice-settings';
 
 const AUTO = 'auto';
@@ -36,28 +36,51 @@ function voiceModelLabel(models: VoiceModel[], choice: VoiceChoice | null): stri
   return models.find(m => voiceOptionValue(m) === voiceOptionValue(choice))?.label;
 }
 
-function modelHint(settings: VoiceSettingsResponse, needsKey: boolean): string {
+function modelHint(settings: VoiceSettingsResponse, needsKey: boolean, gatewayAvailable: boolean): string {
   if (!settings.canEdit) return READ_ONLY_HINT;
+  if (gatewayAvailable) return 'Mastra Gateway is the preferred speech-to-text connection. Auto uses Gateway.';
   return needsKey ? MODEL_ROW[settings.scope].noKey : AUTO_HINT;
 }
 
-function inUseLabel(settings: VoiceSettingsResponse): string {
+function inUseLabel(settings: VoiceSettingsResponse, gatewayModels: readonly { id: string }[]): string {
+  const selected = settings.selected;
+  if (selected?.provider === GATEWAY_VOICE_PROVIDER && gatewayModels.some(model => model.id === selected.model)) {
+    return `Mastra Gateway: ${selected.model}`;
+  }
+  if ((!selected || selected.provider === GATEWAY_VOICE_PROVIDER) && gatewayModels[0]) {
+    return `Mastra Gateway: ${gatewayModels[0].id}`;
+  }
   const effective = voiceModelLabel(settings.models, settings.effective);
   if (effective) return effective;
-  if (settings.selected !== null) return `Needs a ${providerDisplayName(settings.selected.provider)} key`;
+  if (selected !== null && selected.provider !== GATEWAY_VOICE_PROVIDER)
+    return `Needs a ${providerDisplayName(selected.provider)} key`;
   return 'No speech-to-text key yet';
 }
 
-export function VoiceModelSettings({ factoryId, settings }: { factoryId: string; settings: VoiceSettingsResponse }) {
+export function VoiceModelSettings({
+  factoryId,
+  settings,
+  gatewayModels = [],
+}: {
+  factoryId: string;
+  settings: VoiceSettingsResponse;
+  gatewayModels?: readonly { id: string }[];
+}) {
   const update = useUpdateVoiceSettings(factoryId);
   const { selected, models } = settings;
   const keyed = new Set(settings.keys.filter(k => k.saved).map(k => k.provider));
   const hasKey = (m: VoiceModel) => keyed.has(m.provider);
+  const gatewayChoices: VoiceModel[] = gatewayModels.map(model => ({
+    provider: GATEWAY_VOICE_PROVIDER,
+    model: model.id,
+    label: `Mastra Gateway: ${model.id}`,
+  }));
   const selectedValue = selected === null ? AUTO : voiceOptionValue(selected);
   // A saved model stays listed after its key is removed, so the picker shows what voice input will try.
-  const options = models.filter(m => hasKey(m) || voiceOptionValue(m) === selectedValue);
+  const options = [...gatewayChoices, ...models.filter(m => hasKey(m) || voiceOptionValue(m) === selectedValue)];
   const needsKey = options.length === 0;
   const row = MODEL_ROW[settings.scope];
+  const shownValue = options.some(option => voiceOptionValue(option) === selectedValue) ? selectedValue : AUTO;
 
   const pick = (value: string) => {
     const model = options.find(m => voiceOptionValue(m) === value);
@@ -68,16 +91,16 @@ export function VoiceModelSettings({ factoryId, settings }: { factoryId: string;
 
   return (
     <SettingsContainer>
-      <SettingsRow label={row.label} description={modelHint(settings, needsKey)}>
-        <Select value={selectedValue} disabled={!settings.canEdit || needsKey || update.isPending} onValueChange={pick}>
+      <SettingsRow label={row.label} description={modelHint(settings, needsKey, gatewayModels.length > 0)}>
+        <Select value={shownValue} disabled={!settings.canEdit || needsKey || update.isPending} onValueChange={pick}>
           <SelectTrigger size="sm" aria-label={row.picker}>
-            {voiceModelLabel(models, selected) ?? AUTO_LABEL}
+            {options.find(option => voiceOptionValue(option) === shownValue)?.label ?? AUTO_LABEL}
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={AUTO}>{AUTO_LABEL}</SelectItem>
             {options.map(m => (
               <SelectItem key={voiceOptionValue(m)} value={voiceOptionValue(m)}>
-                {hasKey(m) ? m.label : `${m.label} (no key)`}
+                {m.provider === GATEWAY_VOICE_PROVIDER || hasKey(m) ? m.label : `${m.label} (no key)`}
               </SelectItem>
             ))}
           </SelectContent>
@@ -85,7 +108,7 @@ export function VoiceModelSettings({ factoryId, settings }: { factoryId: string;
       </SettingsRow>
       <SettingsRow label="In use for you" description="What the mic uses right now">
         <Txt as="span" variant="caption">
-          {inUseLabel(settings)}
+          {inUseLabel(settings, gatewayModels)}
         </Txt>
       </SettingsRow>
     </SettingsContainer>

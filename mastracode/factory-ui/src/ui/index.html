@@ -10,6 +10,10 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <title>Mastra Factory</title>
     <script>
+      const platformProjectId = '%%MASTRA_PLATFORM_PROJECT_ID%%';
+      window.MASTRA_PLATFORM_PROJECT_ID = platformProjectId.startsWith('%%') ? '' : platformProjectId;
+    </script>
+    <script>
       // Apply the persisted/system theme class before paint to avoid a flash.
       // Mirrors @mastra/playground-ui's ThemeProvider, which keys off the
       // `.dark`/`.light` class on <html> and stores the raw theme string

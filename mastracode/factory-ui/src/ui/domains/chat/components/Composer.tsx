@@ -20,6 +20,7 @@ import {
 } from '@mastra/playground-ui/components/Composer';
 import type { ComposerInputProps } from '@mastra/playground-ui/components/Composer';
 import { useOptionalMessageScroller } from '@mastra/playground-ui/components/MessageScroller';
+import { useGatewayAudioModels } from '@mastra/playground-ui/hooks/use-gateway-audio-models';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useEffectEvent, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
@@ -31,6 +32,7 @@ import {
   useSendAgentControllerMessageMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAgentControllerThreadMutations';
+import { GATEWAY_VOICE_PROVIDER, useVoiceSettings } from '../../../../hooks/use-voice-settings';
 import { useChatCommands } from '../context/ChatCommandsProvider';
 import type { PendingImage } from '../context/ComposerImagesContext';
 import { useChatConnection } from '../context/useChatConnection';
@@ -86,6 +88,14 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
   const { busy, phase, localUser, failLocalUser, reset, clearPending, pushNotice } = useChatTranscript();
   const chatPreparing = phase === 'initializing';
   const scroller = useOptionalMessageScroller();
+  const { data: gatewayAudio } = useGatewayAudioModels(baseUrl, Boolean(window.MASTRA_PLATFORM_PROJECT_ID));
+  const { data: voiceSettings } = useVoiceSettings(factoryId ?? '');
+  const gatewayModels = gatewayAudio?.transcription ?? [];
+  const selectedVoice = voiceSettings?.selected;
+  const gatewayModel =
+    !voiceSettings || (selectedVoice && selectedVoice.provider !== GATEWAY_VOICE_PROVIDER)
+      ? undefined
+      : (gatewayModels.find(model => model.id === selectedVoice?.model)?.id ?? gatewayModels[0]?.id);
   const { isLoading: modelLoading, error: modelError } = useChatModels();
   const {
     commands,
@@ -130,6 +140,7 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
     factoryId,
     onTranscript: insertTranscript,
     onError: message => pushNotice(message, 'error'),
+    gateway: gatewayModel ? { baseUrl, model: gatewayModel } : undefined,
   });
   const dictating = dictation.state !== 'idle';
   const sendDisabled = composerDisabled || draftModelFailed || chatPreparing || planFeedback.loading || dictating;
@@ -349,6 +360,7 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
                     factoryId={factoryId}
                     disabled={textareaDisabled || preview !== undefined}
                     dictation={dictation}
+                    gatewaySelected={Boolean(gatewayModel)}
                   />
                 )}
                 <ComposerPrimaryAction

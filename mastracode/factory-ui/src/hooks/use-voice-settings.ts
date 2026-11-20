@@ -6,6 +6,7 @@ import type { VoiceChoice, VoiceSettingsResponse } from '../api/types';
 
 export type VoiceModel = VoiceSettingsResponse['models'][number];
 export type VoiceKeyStatus = VoiceSettingsResponse['keys'][number];
+export const GATEWAY_VOICE_PROVIDER = 'mastra-gateway';
 
 export function useVoiceSettings(factoryId: string) {
   const { client } = useApiConfig();

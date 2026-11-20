@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../../e2e/ui/render';
@@ -88,6 +88,38 @@ function renderVoiceSettings() {
 }
 
 describe('VoiceInputSettings', () => {
+  afterEach(() => {
+    delete window.MASTRA_PLATFORM_PROJECT_ID;
+  });
+
+  it('offers Gateway models in the existing voice model setting', async () => {
+    window.MASTRA_PLATFORM_PROJECT_ID = 'project-1';
+    const { saved } = stubSettings(settings({ effective: null, keys: keys([]) }), body =>
+      settings({
+        effective: null,
+        keys: keys([]),
+        selected: body.provider ? { provider: body.provider, model: body.model } : null,
+      }),
+    );
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/system/gateway-audio/models`, () =>
+        HttpResponse.json({ speech: [], transcription: [{ id: 'openai/whisper' }, { id: 'mistral/voxtral' }] }),
+      ),
+    );
+    renderVoiceSettings();
+    const user = userEvent.setup();
+    const picker = await screen.findByRole('combobox', { name: 'Your voice model' });
+    expect(
+      screen.queryByText('Connected. Choose a Gateway model beside the composer microphone.'),
+    ).not.toBeInTheDocument();
+    await user.click(picker);
+    await user.click(await screen.findByRole('option', { name: 'Mastra Gateway: mistral/voxtral' }));
+    await waitFor(() =>
+      expect(saved).toEqual([{ factoryId: FACTORY_ID, provider: 'mastra-gateway', model: 'mistral/voxtral' }]),
+    );
+    expect(picker).toHaveTextContent('Mastra Gateway: mistral/voxtral');
+  });
+
   it('lets an admin of a factory-scoped Factory pick the Factory model from models with an organization key', async () => {
     const { requested, saved } = stubSettings(factorySettings(), () =>
       factorySettings({ selected: { provider: 'openai', model: 'whisper-1' } }),
