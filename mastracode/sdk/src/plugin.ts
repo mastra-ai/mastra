@@ -8,6 +8,7 @@ import type { Extractor, ExtractorConfig } from '@mastra/memory';
 
 import type { MastraCodeState } from './schema.js';
 
+export { Agent } from '@mastra/core/agent';
 export { createTool } from '@mastra/core/tools';
 export { RequestContext } from '@mastra/core/di';
 export type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
