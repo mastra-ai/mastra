@@ -1,7 +1,7 @@
 import { useImperativeHandle, useState, useSyncExternalStore } from 'react';
 import type { ReactNode, Ref, SetStateAction } from 'react';
 import { createThreadDraftState } from './thread-draft-state';
-import { getDraftUserScope } from './thread-draft-storage';
+import { scopeAnonymousDraftKey } from './thread-draft-storage';
 import type { ThreadDraft } from './thread-draft-storage';
 import { resolveThreadInputKey, ThreadInputContext } from './thread-input-context';
 import type { ThreadInputContextValue } from './thread-input-context';
@@ -21,7 +21,8 @@ export const ThreadInputProvider = ({
   ref?: Ref<ThreadDraftHandle>;
   persistence?: { key: string; threadId: string };
 }) => {
-  const persisted = persistence && getDraftUserScope(persistence.key) ? persistence : undefined;
+  const key = persistence && scopeAnonymousDraftKey(persistence.key);
+  const persisted = key && persistence ? { ...persistence, key } : undefined;
   const [state] = useState(() => createThreadDraftState(persisted?.key));
   const snapshot = useSyncExternalStore(state.subscribe, state.getSnapshot, state.getSnapshot);
   const [memoryDrafts, setMemoryDrafts] = useState(() => new Map<string, ThreadDraft>());

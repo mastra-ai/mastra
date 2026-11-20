@@ -1,3 +1,4 @@
+import { v4 as uuid } from '@lukeed/uuid';
 import { openDB } from 'idb';
 import type { DBSchema, IDBPObjectStore } from 'idb';
 import { z } from 'zod';
@@ -39,11 +40,36 @@ interface DraftDatabase extends DBSchema {
   drafts: { key: string; value: DraftRecord; indexes: { retention: [number, number] } };
 }
 type DraftStore = IDBPObjectStore<DraftDatabase, ['drafts'], 'drafts', 'readwrite'>;
-const draftKeySchema = z.tuple([z.string().nullish(), z.string().nullish(), z.string().min(1), z.string(), z.string()]);
+const draftKeySchema = z.tuple([
+  z.string().nullish(),
+  z.string().nullish(),
+  z.string().nullish(),
+  z.string(),
+  z.string(),
+]);
+const anonymousDraftSessionKey = 'mastra-anonymous-draft-session';
+
+export function scopeAnonymousDraftKey(key: string): string | undefined {
+  try {
+    const parsed = draftKeySchema.safeParse(JSON.parse(key));
+    if (!parsed.success) return undefined;
+    if (parsed.data[2]) return key;
+    const session = window.sessionStorage;
+    let id = session.getItem(anonymousDraftSessionKey);
+    if (!id) {
+      id = uuid();
+      session.setItem(anonymousDraftSessionKey, id);
+    }
+    return JSON.stringify([parsed.data[0], parsed.data[1], `anonymous-session:${id}`, parsed.data[3], parsed.data[4]]);
+  } catch {
+    return undefined;
+  }
+}
+
 export function getDraftUserScope(key: string): string | undefined {
   try {
     const parsed = draftKeySchema.safeParse(JSON.parse(key));
-    return parsed.success ? JSON.stringify(parsed.data.slice(0, 3)) : undefined;
+    return parsed.success && parsed.data[2] ? JSON.stringify(parsed.data.slice(0, 3)) : undefined;
   } catch {
     return undefined;
   }

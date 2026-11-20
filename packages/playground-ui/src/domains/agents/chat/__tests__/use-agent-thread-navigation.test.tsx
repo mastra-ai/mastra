@@ -4,7 +4,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { deleteDB } from 'idb';
 import { afterEach, expect, it } from 'vitest';
 import { createThreadDraftState } from '../drafts/thread-draft-state';
-import { readThreadDraft } from '../drafts/thread-draft-storage';
+import { readThreadDraft, scopeAnonymousDraftKey } from '../drafts/thread-draft-storage';
 import { useAgentThreadNavigation } from '../use-agent-thread-navigation';
 
 const database = 'mastra-composer-drafts';
@@ -12,11 +12,17 @@ const database = 'mastra-composer-drafts';
 afterEach(async () => {
   await readThreadDraft('__drain__');
   await deleteDB(database);
+  sessionStorage.clear();
 });
 
-it('moves the New Chat draft before navigating to the created thread', async () => {
-  const draftScope: [string, string, string, string] = ['http://localhost:4111', '/api', 'signed-user', 'support'];
-  const state = createThreadDraftState(JSON.stringify([...draftScope, 'new']));
+it.each([
+  ['signed-in', 'signed-user'],
+  ['auth-off', undefined],
+] as const)('moves the %s New Chat draft before navigating to the created thread', async (_mode, userId) => {
+  const draftScope: [string, string, string | undefined, string] = ['http://localhost:4111', '/api', userId, 'support'];
+  const draftKey = scopeAnonymousDraftKey(JSON.stringify([...draftScope, 'new']));
+  expect(draftKey).toBeDefined();
+  const state = createThreadDraftState(draftKey);
   const unsubscribe = state.subscribe(() => {});
   try {
     await waitFor(() => expect(state.getSnapshot().status.restoring).toBe(false));
@@ -32,16 +38,19 @@ it('moves the New Chat draft before navigating to the created thread', async () 
         draftHandle: { current: { move: state.move } },
         navigateToThread: id => {
           navigated.push(id);
-          destinationAtNavigation = readThreadDraft(JSON.stringify([...draftScope, id])).then(draft => draft.text);
+          destinationAtNavigation = readThreadDraft(
+            scopeAnonymousDraftKey(JSON.stringify([...draftScope, id])) ?? '',
+          ).then(draft => draft.text);
         },
         refreshThreads: async () => {},
       }),
     );
 
+    expect(result.current.draftKey).toBe(draftKey);
     await act(async () => result.current.refreshThreadList());
     expect(navigated).toEqual([result.current.actualThreadId]);
     expect(await destinationAtNavigation).toBe('Unsent follow-up');
-    expect((await readThreadDraft(JSON.stringify([...draftScope, 'new']))).text).toBe('');
+    expect((await readThreadDraft(draftKey ?? '')).text).toBe('');
   } finally {
     unsubscribe();
   }
