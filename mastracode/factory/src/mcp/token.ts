@@ -16,8 +16,7 @@ export type McpTokenVerifier = (token: string) => Promise<McpCaller | null>;
  * Verifies MCP access tokens as JWTs issued for this endpoint alone: signed by
  * one of `authorizationServers`, with `aud` naming `resource`. A token issued
  * for anything else (a Platform login, another Factory, Platform's own MCP)
- * is refused, and Platform refuses tokens issued for a resource, so a leaked
- * or phished MCP token can't reach the rest of the user's account.
+ * is refused, and the Factory's auth gate refuses tokens issued for this one.
  *
  * Signing keys come from each server's `jwks_uri`, read from its RFC 8414
  * metadata, or from its OpenID Connect discovery document when it has none.
