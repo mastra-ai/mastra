@@ -3,6 +3,7 @@
   "temperature": [
     "ambient/large",
     "ambient/small",
+    "deepseek/deepseek-v4.1-flash-1017",
     "minimax/minimax-m3",
     "qwen/qwen3-30b-a3b-instruct-2507",
     "qwen/qwen3.6-27b",
@@ -14,6 +15,7 @@
   ],
   "structuredOutput": [
     "ambient/large",
+    "deepseek/deepseek-v4.1-flash-1017",
     "minimax/minimax-m3",
     "qwen/qwen3-30b-a3b-instruct-2507",
     "qwen/qwen3.6-27b",
@@ -23,11 +25,6 @@
     "zai-org/GLM-5.2-FP8"
   ],
   "reasoning": {
-    "qwen/qwen3.6-27b": [
-      {
-        "type": "toggle"
-      }
-    ],
     "qwen/qwen3.8-27b": [
       {
         "type": "toggle"
@@ -37,9 +34,15 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "minimax/minimax-m3": [
+    "qwen/qwen3.6-27b": [
       {
         "type": "toggle"
+      }
+    ],
+    "ambient/large": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
       }
     ],
     "z-ai/glm-5.2": [
@@ -48,16 +51,24 @@
         "values": ["high", "max"]
       }
     ],
+    "deepseek/deepseek-v4.1-flash-1017": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "zai-org/GLM-5.2-FP8": [
       {
         "type": "effort",
         "values": ["high", "max"]
       }
     ],
-    "ambient/large": [
+    "minimax/minimax-m3": [
       {
-        "type": "effort",
-        "values": ["high", "max"]
+        "type": "toggle"
       }
     ]
   }

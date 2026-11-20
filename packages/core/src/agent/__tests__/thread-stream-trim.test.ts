@@ -85,7 +85,7 @@ describe('thread topic trim', () => {
     expect(entriesFor('trim-run-1').length).toBeGreaterThan(0);
     run.complete();
     await waitFor(() => trim.mock.calls.length === 1);
-    expect(entriesFor('trim-run-1')).toEqual([]);
+    expect(entriesFor('trim-run-1').map(event => event.data.type)).toEqual(['run-registered', 'run-completed']);
   });
 
   it('keeps a failed run for live readers, then deletes it', async () => {
@@ -103,17 +103,33 @@ describe('thread topic trim', () => {
       vi.useRealTimers();
     }
     await waitFor(() => trim.mock.calls.length === 1);
-    expect(entriesFor('trim-run-failed')).toEqual([]);
+    expect(entriesFor('trim-run-failed').map(event => event.data.type)).toEqual(['run-registered', 'run-completed']);
   });
 
-  it('does not trim when the agent has no storage', async () => {
-    const { trim, register } = setup({ withMemory: false });
-    const run = register('trim-run-no-memory');
-    await run.registered;
-    run.complete();
-    await settle();
-    expect(trim).not.toHaveBeenCalled();
-  });
+  // An agent without storage (e.g. the observational memory observer on its
+  // `<thread>-observational-memory-observer` thread) used to keep every run on
+  // the topic until the backend's length cap, filling Redis.
+  it.each(['success', 'failed'] as const)(
+    "keeps a memoryless agent's %s run for live readers, then deletes it",
+    async status => {
+      const { trim, register, entriesFor } = setup({ withMemory: false });
+      const runId = `trim-run-no-memory-${status}`;
+      const run = register(runId, status);
+      await run.registered;
+      vi.useFakeTimers({ toFake: ['setTimeout'] });
+      try {
+        run.complete();
+        await vi.advanceTimersByTimeAsync(1_000);
+        expect(trim).not.toHaveBeenCalled();
+        expect(entriesFor(runId).some(event => event.type === 'stream-part')).toBe(true);
+        await vi.advanceTimersByTimeAsync(30_000);
+      } finally {
+        vi.useRealTimers();
+      }
+      await waitFor(() => trim.mock.calls.length === 1);
+      expect(entriesFor(runId).map(event => event.data.type)).toEqual(['run-registered', 'run-completed']);
+    },
+  );
 
   it('keeps a run registered after another run completes but before its trim runs', async () => {
     const { trim, register, entriesFor, holdMemory, published } = setup();
@@ -129,7 +145,7 @@ describe('thread topic trim', () => {
     expect(nextEntries.length).toBeGreaterThan(0);
     release();
     await waitFor(() => trim.mock.calls.length === 1);
-    expect(entriesFor('trim-run-first')).toEqual([]);
+    expect(entriesFor('trim-run-first').map(event => event.data.type)).toEqual(['run-registered', 'run-completed']);
     expect(entriesFor('trim-run-next')).toEqual(nextEntries);
   });
 
@@ -153,7 +169,10 @@ describe('thread topic trim', () => {
     await restarted.registered;
     restarted.complete();
     await waitFor(() => trim.mock.calls.length === 2);
-    expect(entriesFor('trim-run-after-restart')).toEqual([]);
+    expect(entriesFor('trim-run-after-restart').map(event => event.data.type)).toEqual([
+      'run-registered',
+      'run-completed',
+    ]);
     expect(entriesFor('trim-run-suspended')).toEqual(suspendedEntries);
   });
 
@@ -169,7 +188,11 @@ describe('thread topic trim', () => {
     await resumed.registered;
     resumed.complete();
     await waitFor(() => trim.mock.calls.length === 1);
-    expect(entriesFor('trim-run-resumed')).toEqual([]);
+    expect(entriesFor('trim-run-resumed').map(event => event.data.type)).toEqual([
+      'run-registered',
+      'run-registered',
+      'run-completed',
+    ]);
   });
 
   it('keeps a run held by another runtime on the same pubsub', async () => {
@@ -182,11 +205,11 @@ describe('thread topic trim', () => {
     await done.registered;
     done.complete();
     await waitFor(() => trim.mock.calls.length === 1);
-    expect(entriesFor('trim-run-other')).toEqual([]);
+    expect(entriesFor('trim-run-other').map(event => event.data.type)).toEqual(['run-registered', 'run-completed']);
     expect(entriesFor('trim-run-held')).toEqual(heldEntries);
 
     held.complete();
     await waitFor(() => trim.mock.calls.length === 2);
-    expect(entriesFor('trim-run-held')).toEqual([]);
+    expect(entriesFor('trim-run-held').map(event => event.data.type)).toEqual(['run-registered', 'run-completed']);
   });
 });

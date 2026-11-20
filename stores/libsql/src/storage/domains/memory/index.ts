@@ -167,7 +167,12 @@ export class MemoryLibSQL extends MemoryStorage {
     const client = resolveClient(config);
     this.#client = client;
     this.#embeddedReplica = config.embeddedReplica === true;
-    this.#db = new LibSQLDB({ client, maxRetries: config.maxRetries, initialBackoffMs: config.initialBackoffMs });
+    this.#db = new LibSQLDB({
+      client,
+      maxRetries: config.maxRetries,
+      initialBackoffMs: config.initialBackoffMs,
+      getLogger: () => this.logger,
+    });
   }
 
   /**
@@ -2911,12 +2916,11 @@ export class MemoryLibSQL extends MemoryStorage {
                 bestOverBoundary = boundary;
                 bestOverTokens = cumulativeMessageTokens;
               }
-            } else {
+            } else if (cumulativeMessageTokens > bestUnderTokens) {
               // Under — track the closest (highest) under boundary
-              if (cumulativeMessageTokens > bestUnderTokens) {
-                bestUnderBoundary = boundary;
-                bestUnderTokens = cumulativeMessageTokens;
-              }
+
+              bestUnderBoundary = boundary;
+              bestUnderTokens = cumulativeMessageTokens;
             }
           }
 

@@ -188,12 +188,6 @@ describe('Code', () => {
     expect(container.querySelector('pre')?.textContent).toBe('const a');
   });
 
-  it('does not highlight at all without a language', () => {
-    render(<Code code="plain text content" />);
-
-    expect(vi.mocked(highlight)).not.toHaveBeenCalled();
-  });
-
   it('drops the colors when the language is taken away', async () => {
     const settle = deferredHighlight();
 

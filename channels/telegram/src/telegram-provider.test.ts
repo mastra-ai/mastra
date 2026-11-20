@@ -1072,11 +1072,14 @@ describe('TelegramProvider — polling mode (getUpdates loop)', () => {
     const mastra = new Mastra({ agents: { 'poll-agent': agent }, channels: { telegram: provider } });
     expect(mastra).toBeDefined();
 
-    // getMe is called by connect() and again by the adapter's initialize().
-    persist('GET', `/bot${BOT_TOKEN}/getMe`, () => ({
+    // getMe is called by connect() (GET, our client) and by the adapter's
+    // initialize() and poll loop (POST, @chat-adapter/telegram >= 4.43).
+    const me = () => ({
       ok: true,
       result: { id: 42, is_bot: true, first_name: 'T', username: 'poll_bot' },
-    }));
+    });
+    persist('GET', `/bot${BOT_TOKEN}/getMe`, me);
+    persist('POST', `/bot${BOT_TOKEN}/getMe`, me);
     persist('POST', `/bot${BOT_TOKEN}/deleteWebhook`, () => ({ ok: true, result: true }));
     persist('POST', `/bot${BOT_TOKEN}/setMyCommands`, () => ({ ok: true, result: true }));
 

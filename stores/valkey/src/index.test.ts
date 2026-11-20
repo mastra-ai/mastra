@@ -65,4 +65,13 @@ describe('ValkeyServerCache', () => {
       '300',
     ]);
   });
+
+  it('listPushIndexed raises the TTL of both keys to a requested longer TTL', async () => {
+    command.mockResolvedValue(1);
+
+    await cache.listPushIndexed('events', 'events:counter', { type: 'chunk' }, 24 * 60 * 60 * 1000);
+    await cache.listPushIndexed('events', 'events:counter', { type: 'chunk' }, 1_000);
+
+    expect(command.mock.calls.map(call => (call[0] as string[]).at(-1))).toEqual(['86400', '300']);
+  });
 });

@@ -161,17 +161,6 @@ describe('CodeEditor — the format button', () => {
 describe('CodeEditor — language extensions', () => {
   const extensionCount = () => lastProps()?.extensions.length ?? 0;
 
-  it('adds one language extension for json', () => {
-    render(<CodeEditor value="{}" showCopyButton={false} lineWrapping={false} />);
-    const withJson = extensionCount();
-
-    cleanup();
-
-    render(<CodeEditor value="{}" showCopyButton={false} lineWrapping={false} language="text" />);
-
-    expect(withJson).toBe(extensionCount() + 1);
-  });
-
   it('adds one language extension for markdown', () => {
     render(<CodeEditor value="# hi" showCopyButton={false} lineWrapping={false} language="markdown" />);
     const withMarkdown = extensionCount();

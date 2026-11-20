@@ -7,13 +7,13 @@ import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
+import { IconMagnifyingGlass } from '@mastra/playground-ui/icons/central/IconMagnifyingGlass';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { AppShell, MainCard } from '@mastra/playground-ui/new/layout/app-shell';
 import { CollapsiblePanel } from '@mastra/playground-ui/resize/collapsible-panel';
 import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
 import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
 import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
-import { Search } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { Panel, useDefaultLayout } from 'react-resizable-panels';
 import { useLocation } from 'react-router';
@@ -56,7 +56,7 @@ function MobileNavbar() {
         onClick={openNavigationCommand}
         className="shrink-0"
       >
-        <Search />
+        <IconMagnifyingGlass />
       </Button>
     </header>
   );
@@ -106,7 +106,10 @@ export function StudioFrame({ children, className }: { children: React.ReactNode
               collapsible
               collapsedSize={0}
               hideExpandButton
-              minSize={480}
+              // Must fit under `maxSize` at the smallest desktop width (1024px gives ~384px):
+              // CollapsiblePanel keeps its content at least `minSize` wide, so a panel capped
+              // below it clips its content's left side.
+              minSize={370}
               maxSize="50%"
               defaultSize={560}
               className="min-w-0"

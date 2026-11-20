@@ -884,12 +884,14 @@ export class MemoryDSQL extends MemoryStorage {
       }
 
       if (filter?.dateRange?.start) {
-        conditions.push(`"createdAtZ" >= $${paramIndex++}::timestamptz`);
+        const operator = filter.dateRange.startExclusive ? '>' : '>=';
+        conditions.push(`"createdAtZ" ${operator} $${paramIndex++}::timestamptz`);
         queryParams.push(filter.dateRange.start);
       }
 
       if (filter?.dateRange?.end) {
-        conditions.push(`"createdAtZ" <= $${paramIndex++}::timestamptz`);
+        const operator = filter.dateRange.endExclusive ? '<' : '<=';
+        conditions.push(`"createdAtZ" ${operator} $${paramIndex++}::timestamptz`);
         queryParams.push(filter.dateRange.end);
       }
 

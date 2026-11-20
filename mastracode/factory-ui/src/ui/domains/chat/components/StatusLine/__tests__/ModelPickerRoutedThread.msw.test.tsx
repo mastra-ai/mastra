@@ -143,21 +143,19 @@ function renderRoute(initialThreadId: string) {
 
 async function expectWorkItemCatalog(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('button', { name: /^Session model/ }));
-  const option = await screen.findByRole('option', { name: /gpt-5/ });
+  const option = await screen.findByRole('option', { name: /GPT-5/ });
   expect(within(option).getByText('Default')).toBeVisible();
-  expect(screen.queryByRole('option', { name: /claude-sonnet-4-6/ })).not.toBeInTheDocument();
-  expect(await screen.findByRole('note')).toHaveTextContent(
-    "Showing models this Factory's organization credentials can run.",
-  );
+  expect(screen.queryByRole('option', { name: /Claude Sonnet 4\.6/ })).not.toBeInTheDocument();
+  expect(await screen.findByRole('link', { name: 'Add an organization credential' })).toBeInTheDocument();
   await user.keyboard('{Escape}');
 }
 
 async function expectInteractiveCatalog(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('button', { name: /^Session model/ }));
-  const option = await screen.findByRole('option', { name: /claude-sonnet-4-6/ });
+  const option = await screen.findByRole('option', { name: /Claude Sonnet 4\.6/ });
   expect(within(option).getByText('Default')).toBeVisible();
-  expect(screen.queryByRole('option', { name: /gpt-5/ })).not.toBeInTheDocument();
-  expect(screen.queryByText(/Showing models this Factory/)).not.toBeInTheDocument();
+  expect(screen.queryByRole('option', { name: /GPT-5/ })).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Connect a provider' })).toBeInTheDocument();
   await user.keyboard('{Escape}');
 }
 

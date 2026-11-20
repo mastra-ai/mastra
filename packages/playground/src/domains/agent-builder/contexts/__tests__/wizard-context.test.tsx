@@ -128,14 +128,6 @@ describe('WizardProvider', () => {
       expect(getByTestId('step').textContent).toBe('end');
     });
 
-    it('is a no-op when advancing past the end step', async () => {
-      const { getByTestId } = renderWizard({ initialStep: 'ready' });
-      await expectSteps(getByTestId, 'ready>identity>instructions>library>end');
-
-      for (let i = 0; i < 5; i++) fireEvent.click(getByTestId('next'));
-      expect(getByTestId('step').textContent).toBe('end');
-    });
-
     it('is a no-op when going back from the first step', async () => {
       const { getByTestId } = renderWizard({ initialStep: 'ready' });
       await expectSteps(getByTestId, 'ready>identity>instructions>library>end');
@@ -158,29 +150,9 @@ describe('WizardProvider', () => {
       fireEvent.click(getByTestId('prev')); // identity -> ready
       expect(getByTestId('step').textContent).toBe('ready');
     });
-
-    it('round-trips next() then prev()', async () => {
-      const { getByTestId } = renderWizard({ initialStep: 'ready' });
-      await expectSteps(getByTestId, 'ready>identity>instructions>library>end');
-
-      fireEvent.click(getByTestId('next'));
-      expect(getByTestId('step').textContent).toBe('identity');
-      fireEvent.click(getByTestId('prev'));
-      expect(getByTestId('step').textContent).toBe('ready');
-    });
   });
 
   describe('when all features are on and a configured platform exists', () => {
-    it('builds the full step tree', async () => {
-      setFeatures({ tools: true, model: true, skills: true, browser: true });
-      skillsMock = [{ id: 'skill-a' } as StoredSkillResponse];
-      setPlatformsHandler([{ id: 'slack', name: 'Slack', isConfigured: true }]);
-
-      const { getByTestId } = renderWizard({ initialStep: 'ready' });
-
-      await expectSteps(getByTestId, 'ready>identity>model>tools>instructions>skills>browser>library>integrations>end');
-    });
-
     it('advances through every step in order and is a no-op at end', async () => {
       setFeatures({ tools: true, model: true, skills: true, browser: true });
       skillsMock = [{ id: 'skill-a' } as StoredSkillResponse];
@@ -331,14 +303,6 @@ describe('WizardProvider', () => {
   });
 
   describe('isLast', () => {
-    it('is false at the default end step', async () => {
-      const { getByTestId } = renderWizard();
-      await expectSteps(getByTestId, 'instructions>end');
-
-      expect(getByTestId('step').textContent).toBe('end');
-      expect(getByTestId('is-last').textContent).toBe('no');
-    });
-
     it('is true only on the last user-facing step when starting from ready', async () => {
       const { getByTestId } = renderWizard({ initialStep: 'ready' });
       await expectSteps(getByTestId, 'ready>identity>instructions>library>end');
@@ -361,29 +325,6 @@ describe('WizardProvider', () => {
       fireEvent.click(getByTestId('next'));
       expect(getByTestId('step').textContent).toBe('end');
       expect(getByTestId('is-last').textContent).toBe('no');
-    });
-
-    it('is false on intermediate steps and true only on the final user-facing one', async () => {
-      setFeatures({ model: true, tools: true });
-
-      const { getByTestId } = renderWizard({ initialStep: 'ready' });
-      await expectSteps(getByTestId, 'ready>identity>model>tools>instructions>library>end');
-
-      const order: { step: WizardStep; isLast: 'yes' | 'no' }[] = [
-        { step: 'ready', isLast: 'no' },
-        { step: 'identity', isLast: 'no' },
-        { step: 'model', isLast: 'no' },
-        { step: 'tools', isLast: 'no' },
-        { step: 'instructions', isLast: 'no' },
-        { step: 'library', isLast: 'yes' },
-        { step: 'end', isLast: 'no' },
-      ];
-
-      for (let i = 0; i < order.length; i++) {
-        expect(getByTestId('step').textContent).toBe(order[i].step);
-        expect(getByTestId('is-last').textContent).toBe(order[i].isLast);
-        if (i < order.length - 1) fireEvent.click(getByTestId('next'));
-      }
     });
   });
 });

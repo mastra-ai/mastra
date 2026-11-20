@@ -1,7 +1,7 @@
 import type { AgentControllerEvent } from '@mastra/client-js';
 import { useEffect, useRef, useState } from 'react';
 
-import { useDocumentVisible } from '../../../lib/hooks/useDocumentVisible';
+import { useRecentlyVisible } from '../../../lib/hooks/useDocumentVisible';
 import type { AgentControllerSession } from '../services/agentControllerClient';
 
 export type SseConnectionState = 'never' | 'connected' | 'dropped';
@@ -10,7 +10,7 @@ interface UseAgentControllerEventsArgs {
   session: AgentControllerSession | null;
   enabled: boolean;
   epoch: number;
-  onEvent: (event: AgentControllerEvent) => void;
+  onEvent: (event: AgentControllerEvent, opensStream: boolean) => void;
   onConnectedChange: (connected: boolean) => void;
 }
 
@@ -18,7 +18,11 @@ interface SharedSubscription {
   state: SseConnectionState;
   /** A subscribe attempt is in flight — do not start another. */
   connecting: boolean;
-  eventListeners: Set<(event: AgentControllerEvent) => void>;
+  /** Id of the latest stream attempt; ids are unique across subscriptions. */
+  stream: number;
+  /** The latest stream has delivered its first event. */
+  opened: boolean;
+  eventListeners: Set<(event: AgentControllerEvent, opensStream: boolean) => void>;
   stateListeners: Set<(state: SseConnectionState) => void>;
   unsubscribe?: () => void;
   teardown?: ReturnType<typeof setTimeout>;
@@ -26,6 +30,7 @@ interface SharedSubscription {
 }
 
 const subscriptions = new WeakMap<AgentControllerSession, SharedSubscription>();
+let lastStream = 0;
 
 function setState(subscription: SharedSubscription, state: SseConnectionState) {
   if (subscription.state === state) return;
@@ -51,11 +56,18 @@ function ensureConnected(session: AgentControllerSession, subscription: SharedSu
   subscription.unsubscribe?.();
   subscription.unsubscribe = undefined;
   subscription.connecting = true;
+  const stream = ++lastStream;
+  subscription.stream = stream;
+  subscription.opened = false;
 
   void session
     .subscribe({
+      displayState: false,
       onEvent: event => {
-        for (const listener of subscription.eventListeners) listener(event);
+        if (subscription.stream !== stream) return;
+        const opensStream = !subscription.opened;
+        subscription.opened = true;
+        for (const listener of subscription.eventListeners) listener(event, opensStream);
       },
       onError: () => {
         if (subscription.state === 'connected') setState(subscription, 'dropped');
@@ -84,6 +96,8 @@ function getSubscription(session: AgentControllerSession) {
     subscription = {
       state: 'never',
       connecting: false,
+      stream: 0,
+      opened: false,
       eventListeners: new Set(),
       stateListeners: new Set(),
     };
@@ -108,11 +122,14 @@ export function useAgentControllerEvents({
   const [connectionState, setConnectionState] = useState<SseConnectionState>('never');
   // A hidden tab must not hold a stream: browsers cap HTTP/1.1 at 6 connections
   // per host, so a few background tabs starve every other request to the app.
-  // Losing visibility tears the subscription down through the normal cleanup
-  // path; regaining it re-subscribes and re-syncs like any reconnect.
-  const visible = useDocumentVisible();
+  // A tab hidden past the grace period tears the subscription down through the
+  // normal cleanup path; regaining visibility re-subscribes and re-syncs like
+  // any reconnect. A quick tab switch keeps the stream.
+  const visible = useRecentlyVisible();
   const onEventRef = useRef(onEvent);
   const onConnectedChangeRef = useRef(onConnectedChange);
+  // Initial state (the reply in flight) arrives once per stream; a remount attached past it reopens the stream.
+  const seenOpening = useRef(0);
 
   onEventRef.current = onEvent;
   onConnectedChangeRef.current = onConnectedChange;
@@ -121,7 +138,12 @@ export function useAgentControllerEvents({
     if (!enabled || !session || !epoch || !visible) return;
 
     const subscription = getSubscription(session);
-    const handleEvent = (event: AgentControllerEvent) => onEventRef.current(event);
+    const missedOpening =
+      subscription.state === 'connected' && subscription.opened && seenOpening.current !== subscription.stream;
+    const handleEvent = (event: AgentControllerEvent, opensStream: boolean) => {
+      if (opensStream) seenOpening.current = subscription.stream;
+      onEventRef.current(event, opensStream);
+    };
     const handleState = (state: SseConnectionState) => {
       onConnectedChangeRef.current(state === 'connected');
       setConnectionState(state);
@@ -129,7 +151,8 @@ export function useAgentControllerEvents({
 
     subscription.eventListeners.add(handleEvent);
     subscription.stateListeners.add(handleState);
-    handleState(subscription.state);
+    if (missedOpening) setState(subscription, 'dropped');
+    else handleState(subscription.state);
     ensureConnected(session, subscription);
 
     return () => {

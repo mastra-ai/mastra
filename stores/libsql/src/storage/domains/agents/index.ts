@@ -35,7 +35,12 @@ export class AgentsLibSQL extends AgentsStorage {
     super();
     const client = resolveClient(config);
     this.#client = client;
-    this.#db = new LibSQLDB({ client, maxRetries: config.maxRetries, initialBackoffMs: config.initialBackoffMs });
+    this.#db = new LibSQLDB({
+      client,
+      maxRetries: config.maxRetries,
+      initialBackoffMs: config.initialBackoffMs,
+      getLogger: () => this.logger,
+    });
   }
 
   async init(): Promise<void> {
@@ -63,6 +68,7 @@ export class AgentsLibSQL extends AgentsStorage {
         'durable',
         'browser',
         'toolProviders',
+        'modelList',
       ],
     });
 
@@ -680,8 +686,9 @@ export class AgentsLibSQL extends AgentsStorage {
           versionNumber: input.versionNumber,
           name: input.name ?? null,
           description: input.description ?? null,
-          instructions: this.serializeInstructions(input.instructions),
-          model: input.model,
+          instructions: this.serializeInstructions(input.instructions ?? ''),
+          model: input.model ?? {},
+          modelList: input.modelList ?? null,
           tools: input.tools ?? null,
           defaultOptions: input.defaultOptions ?? null,
           workflows: input.workflows ?? null,
@@ -1017,6 +1024,7 @@ export class AgentsLibSQL extends AgentsStorage {
       description: row.description as string | undefined,
       instructions: this.deserializeInstructions(row.instructions as string),
       model: this.parseJson(row.model, 'model'),
+      modelList: this.parseJson(row.modelList, 'modelList'),
       tools: this.parseJson(row.tools, 'tools'),
       defaultOptions: this.parseJson(row.defaultOptions, 'defaultOptions'),
       workflows: this.parseJson(row.workflows, 'workflows'),

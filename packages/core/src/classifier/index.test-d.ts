@@ -1,4 +1,4 @@
-import { expectTypeOf } from 'vitest';
+import { expectTypeOf, test } from 'vitest';
 
 import { Classifier } from './index';
 import type {
@@ -70,3 +70,6 @@ if (routeAnswer.type === 'choice') {
 } else {
   expectTypeOf(routeAnswer).toEqualTypeOf<RefusalAnswer>();
 }
+
+// Vitest 5 fails typecheck files without a test; the assertions above are still checked file-wide.
+test('index types', () => {});

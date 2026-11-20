@@ -794,6 +794,7 @@ describe('resolveProject (studio)', () => {
       initialValue?: string;
     };
     expect(selectArgs.options.map(o => o.value)).toEqual(['proj-a', 'proj-b', '__create_new__']);
+    expect(selectArgs.initialValue).toBe('__create_new__');
 
     exitSpy.mockRestore();
   });

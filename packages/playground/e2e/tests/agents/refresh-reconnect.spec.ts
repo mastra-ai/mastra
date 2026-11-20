@@ -67,7 +67,7 @@ test.describe('Studio refresh connection', () => {
 
         try {
           await page.goto(chatPath);
-          await expect(page.getByPlaceholder('Enter your message...')).toBeVisible();
+          await expect(page.getByPlaceholder('Enter your message')).toBeVisible();
           await disconnected;
           // In the established case, two same-generation handshakes must not reload.
           expect(documents).toBe(1);
@@ -77,7 +77,7 @@ test.describe('Studio refresh connection', () => {
           releaseReconnect();
           await reloaded;
           await expect(page.getByRole('heading', { name: 'Agent not found' })).toBeVisible();
-          await expect(page.getByPlaceholder('Enter your message...')).toHaveCount(0);
+          await expect(page.getByPlaceholder('Enter your message')).toHaveCount(0);
           await expect(page.getByRole('link', { name: 'Choose agent' })).toBeVisible();
           expect(documents).toBe(2);
         } finally {
@@ -132,7 +132,7 @@ test.describe('Studio refresh connection', () => {
 
         try {
           await page.goto(chatPath);
-          const composer = page.getByPlaceholder('Enter your message...');
+          const composer = page.getByPlaceholder('Enter your message');
           await composer.fill('Keep my draft while reconnecting');
           await reconnected;
           // Initial and same-server (or legacy) handshakes must preserve the document.

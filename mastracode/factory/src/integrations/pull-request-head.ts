@@ -1,5 +1,6 @@
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { pullRequestSourceNumber, pullRequestSources, workingPullRequest } from '../work-items/change-requests.js';
 
 /**
  * Records the head a pull request or merge request was observed at, so a
@@ -16,7 +17,8 @@ export async function recordPullRequestHead(
     id: string;
     headSha: string;
     headAt: number | undefined;
-    /** Only write while the card has no open pull request or has this one out. */
+    deliveryId?: string;
+    /** Only write while this is the card's pull request: the one it has out, or its working one. */
     ownedPullRequestNumber?: number;
   },
 ): Promise<void> {
@@ -27,6 +29,12 @@ export async function recordPullRequestHead(
     if (input.ownedPullRequestNumber !== undefined) {
       const recorded = card.metadata?.openPullRequestNumber;
       if (typeof recorded === 'number' && recorded !== input.ownedPullRequestNumber) return;
+      // With no pointer, an issue's card with pull requests linked records only its working one's
+      // head: an outsider's push never becomes the head a review covers until a person picks it.
+      if (typeof recorded !== 'number' && pullRequestSources(card).length > 0) {
+        const working = workingPullRequest(card);
+        if (!working || pullRequestSourceNumber(working) !== input.ownedPullRequestNumber) return;
+      }
     }
     const recordedAt = card.metadata?.pullRequestHeadAt;
     if (typeof recordedAt === 'number' && recordedAt >= input.headAt) return;
@@ -38,7 +46,16 @@ export async function recordPullRequestHead(
         id: card.id,
         userId: 'factory-rule-dispatcher',
         expectedRevision: card.revision,
-        patch: { metadata: { pullRequestHeadSha: input.headSha, pullRequestHeadAt: input.headAt } },
+        patch: {
+          metadata: {
+            pullRequestHeadSha: input.headSha,
+            pullRequestHeadAt: input.headAt,
+            pullRequestHeadDeliveryId:
+              card.metadata?.pullRequestHeadSha === input.headSha
+                ? (card.metadata?.pullRequestHeadDeliveryId ?? null)
+                : (input.deliveryId ?? null),
+          },
+        },
       });
       return;
     } catch (error) {

@@ -30,6 +30,17 @@ import type {
 import { MastraFilesystem, FileNotFoundError, FileExistsError } from '@mastra/core/workspace';
 
 /**
+ * Owner of the files inside a FUSE mount, as numeric uid/gid.
+ *
+ * Set this when commands run as a different OS user than the one the sandbox
+ * mounts as, so that user can read and write the mounted files.
+ */
+export interface MountOwner {
+  uid: number;
+  gid: number;
+}
+
+/**
  * S3 mount configuration.
  * Returned by S3Filesystem.getMountConfig() for FUSE mounting in sandboxes.
  */
@@ -55,6 +66,11 @@ export interface S3MountConfig extends FilesystemMountConfig {
   prefix?: string;
   /** Mount as read-only */
   readOnly?: boolean;
+  /**
+   * Owner of the files inside the mount, as numeric uid/gid.
+   * When unset, the sandbox probes the default user's uid/gid.
+   */
+  owner?: MountOwner;
 }
 
 /**
@@ -177,6 +193,13 @@ export interface S3FilesystemOptions extends MastraFilesystemOptions {
   prefix?: string;
   /** Mount as read-only (blocks write operations, mounts read-only in sandboxes) */
   readOnly?: boolean;
+  /**
+   * Owner of the files inside the FUSE mount, as numeric uid/gid.
+   * Use this when sandbox commands run as a different OS user than the one
+   * performing the mount, so that user can read and write the mounted files.
+   * When unset, the sandbox probes the default user's uid/gid.
+   */
+  owner?: MountOwner;
 }
 
 /**
@@ -253,6 +276,7 @@ export class S3Filesystem extends MastraFilesystem {
   readonly name = 'S3Filesystem';
   readonly provider = 's3';
   readonly readOnly?: boolean;
+  readonly owner?: MountOwner;
 
   status: ProviderStatus = 'pending';
 
@@ -293,6 +317,7 @@ export class S3Filesystem extends MastraFilesystem {
     this.displayName = options.displayName ?? this.getDefaultDisplayName(this.icon);
     this.description = options.description;
     this.readOnly = options.readOnly;
+    this.owner = options.owner;
   }
 
   /**
@@ -350,6 +375,13 @@ export class S3Filesystem extends MastraFilesystem {
 
     if (this.readOnly) {
       config.readOnly = true;
+    }
+
+    if (this.owner) {
+      // Copy the ids: the mount marker hashes this config, so a caller that mutates
+      // the object it passed in must not change the ownership that was mounted.
+      // Reading the fields also keeps an accessor-backed owner, which a spread would drop.
+      config.owner = { uid: this.owner.uid, gid: this.owner.gid };
     }
 
     return config;

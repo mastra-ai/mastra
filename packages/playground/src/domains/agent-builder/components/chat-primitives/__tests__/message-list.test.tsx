@@ -32,7 +32,7 @@ describe('MessageList pending indicator', () => {
   });
 
   it('shows the pending indicator while running with no messages', () => {
-    const { queryByTestId } = render(<MessageList messages={[]} isRunning={true} />);
+    const { queryByTestId } = render(<MessageList messages={[]} isRunning />);
     expect(queryByTestId('agent-builder-chat-pending')).not.toBeNull();
   });
 
@@ -51,18 +51,18 @@ describe('MessageList pending indicator', () => {
         } as unknown as MastraMessagePart,
       ]),
     ];
-    const { queryByTestId } = render(<MessageList messages={messages} isRunning={true} />);
+    const { queryByTestId } = render(<MessageList messages={messages} isRunning />);
     expect(queryByTestId('agent-builder-chat-pending')).toBeNull();
   });
 
   it('shows the pending indicator after a user message while waiting for the assistant', () => {
     const messages: MastraDBMessage[] = [buildUserMessage('hello')];
-    const { queryByTestId } = render(<MessageList messages={messages} isRunning={true} />);
+    const { queryByTestId } = render(<MessageList messages={messages} isRunning />);
     expect(queryByTestId('agent-builder-chat-pending')).not.toBeNull();
   });
 
   it('does not show the pending indicator while the initial skeleton is rendered', () => {
-    const { queryByTestId } = render(<MessageList messages={[]} isRunning={true} isLoading={true} />);
+    const { queryByTestId } = render(<MessageList messages={[]} isRunning isLoading />);
     expect(queryByTestId('agent-builder-chat-pending')).toBeNull();
   });
 
@@ -82,7 +82,7 @@ describe('MessageList pending indicator', () => {
         } as unknown as MastraMessagePart,
       ]),
     ];
-    const { queryByTestId } = render(<MessageList messages={messages} isRunning={true} />);
+    const { queryByTestId } = render(<MessageList messages={messages} isRunning />);
     expect(queryByTestId('agent-builder-chat-pending')).not.toBeNull();
   });
 
@@ -102,7 +102,7 @@ describe('MessageList pending indicator', () => {
         } as unknown as MastraMessagePart,
       ]),
     ];
-    const { queryByTestId } = render(<MessageList messages={messages} isRunning={true} />);
+    const { queryByTestId } = render(<MessageList messages={messages} isRunning />);
     expect(queryByTestId('agent-builder-chat-pending')).not.toBeNull();
   });
 
@@ -118,7 +118,7 @@ describe('MessageList pending indicator', () => {
         } as unknown as MastraMessagePart,
       ]),
     ];
-    const { queryByTestId } = render(<MessageList messages={messages} isRunning={true} />);
+    const { queryByTestId } = render(<MessageList messages={messages} isRunning />);
     expect(queryByTestId('agent-builder-chat-pending')).toBeNull();
   });
 });
@@ -134,7 +134,7 @@ describe('MessageList deferred skeleton', () => {
   });
 
   it('does not render the skeleton during the 300ms grace period', () => {
-    const { queryByTestId } = render(<MessageList messages={[]} isLoading={true} skeletonTestId="msg-skeleton" />);
+    const { queryByTestId } = render(<MessageList messages={[]} isLoading skeletonTestId="msg-skeleton" />);
     expect(queryByTestId('msg-skeleton')).toBeNull();
 
     act(() => {
@@ -144,7 +144,7 @@ describe('MessageList deferred skeleton', () => {
   });
 
   it('renders the skeleton after the 300ms grace period elapses', () => {
-    const { queryByTestId } = render(<MessageList messages={[]} isLoading={true} skeletonTestId="msg-skeleton" />);
+    const { queryByTestId } = render(<MessageList messages={[]} isLoading skeletonTestId="msg-skeleton" />);
 
     act(() => {
       vi.advanceTimersByTime(300);
@@ -153,9 +153,7 @@ describe('MessageList deferred skeleton', () => {
   });
 
   it('never shows the skeleton if data resolves within the grace period', () => {
-    const { queryByTestId, rerender } = render(
-      <MessageList messages={[]} isLoading={true} skeletonTestId="msg-skeleton" />,
-    );
+    const { queryByTestId, rerender } = render(<MessageList messages={[]} isLoading skeletonTestId="msg-skeleton" />);
 
     act(() => {
       vi.advanceTimersByTime(150);
@@ -219,11 +217,7 @@ describe('MessageList history pagination', () => {
       expect(onLoadPrevious).toHaveBeenCalledTimes(1);
 
       rerender(
-        <MessageList
-          messages={[buildUserMessage('a', 'a')]}
-          onLoadPrevious={onLoadPrevious}
-          isLoadingPrevious={true}
-        />,
+        <MessageList messages={[buildUserMessage('a', 'a')]} onLoadPrevious={onLoadPrevious} isLoadingPrevious />,
       );
       rerender(
         <MessageList
@@ -274,7 +268,7 @@ describe('MessageList history pagination', () => {
 
     it('renders the loading indicator above the messages while the older page is in flight', () => {
       const { getByTestId } = render(
-        <MessageList messages={[buildUserMessage('a', 'a')]} onLoadPrevious={vi.fn()} isLoadingPrevious={true} />,
+        <MessageList messages={[buildUserMessage('a', 'a')]} onLoadPrevious={vi.fn()} isLoadingPrevious />,
       );
       expect(getByTestId('agent-builder-chat-loading-previous')).toBeTruthy();
     });

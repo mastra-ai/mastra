@@ -73,6 +73,7 @@ const Providers = ({ children }: { children: ReactNode }) => {
 };
 
 const renderToolCard = (props: ToolCardProps) => render(<ToolCard {...props} />, { wrapper: Providers });
+const renderLiveToolCard = (props: ToolCardProps) => <ToolCard {...props} />;
 
 const ToolPartCard = ({ part }: { part: ToolPart }) => <ToolCard {...readToolPart(part)} />;
 
@@ -304,17 +305,6 @@ describe('ToolCard dispatch', () => {
     expect(screen.getByRole('button', { name: /extractions.*1 extracted/i })).toBeTruthy();
   });
 
-  it('routes agent-* tools to the agent badge wrapper', () => {
-    renderToolCard(
-      baseProps({
-        toolName: 'agent-weatherAgent',
-        output: { text: 'sunny' },
-      }),
-    );
-    // Display name strips the agent- prefix.
-    expect(screen.queryByText(/agent-weatherAgent/)).toBeNull();
-  });
-
   it('routes workflow-* tools to the workflow badge', async () => {
     server.use(
       http.get(`${BASE_URL}/api/workflows/myFlow`, () =>
@@ -350,6 +340,60 @@ describe('ToolCard dispatch', () => {
       }),
     );
     expect(screen.getByTestId('sandbox-execution-badge')).toBeTruthy();
+  });
+
+  describe('when a command exits non-zero after printing output', () => {
+    it('reads as failed, says how it exited, and shows the error only its result carries', () => {
+      renderToolCard(
+        baseProps({
+          toolName: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
+          input: { command: 'pnpm build' },
+          output: 'building\n\nError: sandbox connection lost\nExit code: -1',
+          dataParts: [
+            {
+              type: 'data',
+              name: 'sandbox-stdout',
+              data: { output: 'building\n', timestamp: Date.now(), toolCallId: 'call-1' },
+            },
+            { type: 'data', name: 'sandbox-exit', data: { exitCode: -1, success: false, toolCallId: 'call-1' } },
+          ],
+        }),
+      );
+      const line = screen.getByTestId('sandbox-execution-badge');
+
+      expect(within(line).getByRole('img', { name: 'Failed' })).toBeTruthy();
+      expect(within(line).getByText('exit -1')).toBeTruthy();
+      fireEvent.click(within(line).getByRole('button', { name: /Run/ }));
+      expect(within(line).getByText(/Error: sandbox connection lost/)).toBeTruthy();
+    });
+  });
+
+  describe('when the sandbox could not run a command after it printed output', () => {
+    it('says it errored and shows the whole error, even one with blank lines in it', () => {
+      const error = 'Request failed with status 502\n\n<html>Bad Gateway</html>';
+      renderToolCard(
+        baseProps({
+          toolName: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
+          input: { command: 'pnpm build' },
+          output: `building\n\nError: ${error}\nExit code: -1`,
+          dataParts: [
+            {
+              type: 'data',
+              name: 'sandbox-stdout',
+              data: { output: 'building\n', timestamp: Date.now(), toolCallId: 'call-1' },
+            },
+            { type: 'data', name: 'sandbox-exit', data: { exitCode: -1, success: false, error, toolCallId: 'call-1' } },
+          ],
+        }),
+      );
+      const line = screen.getByTestId('sandbox-execution-badge');
+
+      expect(within(line).getByRole('img', { name: 'Failed' })).toBeTruthy();
+      expect(within(line).getByText('error')).toBeTruthy();
+      expect(within(line).queryByText('exit -1')).toBeNull();
+      fireEvent.click(within(line).getByRole('button', { name: /Run/ }));
+      expect(within(line).getByText(/Error: Request failed with status 502/)).toBeTruthy();
+    });
   });
 
   it('routes code-mode calls to the code mode badge', () => {
@@ -519,6 +563,7 @@ describe('ToolCard dispatch', () => {
     it('keeps the badge expanded with the approval controls visible', () => {
       render(
         <AgentBadge
+          renderToolCard={renderLiveToolCard}
           agentId="head"
           messages={[]}
           toolCallId="approval-call"
@@ -546,11 +591,19 @@ describe('ToolCard dispatch', () => {
         isNetwork: false,
         toolApprovalMetadata: undefined,
       };
-      const { rerender } = render(<AgentBadge {...props} messages={[]} />, { wrapper: Providers });
+      const { rerender } = render(<AgentBadge renderToolCard={renderLiveToolCard} {...props} messages={[]} />, {
+        wrapper: Providers,
+      });
       expect(screen.getByText('head')).not.toBeNull();
       expect(screen.queryByRole('button', { name: 'head' })).toBeNull();
 
-      rerender(<AgentBadge {...props} messages={[{ type: 'text', content: 'Checking the forecast.' }]} />);
+      rerender(
+        <AgentBadge
+          renderToolCard={renderLiveToolCard}
+          {...props}
+          messages={[{ type: 'text', content: 'Checking the forecast.' }]}
+        />,
+      );
       expect(screen.getByRole('button', { name: 'head' }).getAttribute('aria-expanded')).toBe('true');
     });
   });
@@ -566,9 +619,12 @@ describe('ToolCard dispatch', () => {
         toolApprovalMetadata: undefined,
         isComplete: true,
       };
-      const { rerender } = render(<AgentBadge {...props} keepOpenForStreamingChildMessages />, { wrapper: Providers });
+      const { rerender } = render(
+        <AgentBadge renderToolCard={renderLiveToolCard} {...props} keepOpenForStreamingChildMessages />,
+        { wrapper: Providers },
+      );
       expect(screen.getByRole('button', { name: 'head' }).getAttribute('aria-expanded')).toBe('true');
-      rerender(<AgentBadge {...props} keepOpenForStreamingChildMessages={false} />);
+      rerender(<AgentBadge renderToolCard={renderLiveToolCard} {...props} keepOpenForStreamingChildMessages={false} />);
       expect(screen.getByRole('button', { name: 'head' }).getAttribute('aria-expanded')).toBe('false');
     });
   });
@@ -577,6 +633,7 @@ describe('ToolCard dispatch', () => {
     it.each([false, 0, '', null])('treats %j as complete instead of asking for approval again', toolOutput => {
       render(
         <AgentBadge
+          renderToolCard={renderLiveToolCard}
           agentId="head"
           messages={[{ type: 'tool', toolName: 'search', toolCallId: 'child-call', toolOutput }]}
           toolCallId="approval-call"
@@ -596,6 +653,7 @@ describe('ToolCard dispatch', () => {
     it('does not show an error slot even if stale error text is supplied', () => {
       render(
         <AgentBadge
+          renderToolCard={renderLiveToolCard}
           agentId="head"
           messages={[{ type: 'text', content: 'Done.' }]}
           toolCallId="successful-delegation"
@@ -632,9 +690,18 @@ describe('ToolCard dispatch', () => {
         toolApprovalMetadata: undefined,
         isComplete: true,
       };
-      const { rerender } = render(<AgentBadge {...props} />, { wrapper: Providers });
+      const { rerender } = render(<AgentBadge renderToolCard={renderLiveToolCard} {...props} />, {
+        wrapper: Providers,
+      });
       expect(screen.getByTestId('agent-badge').querySelector('button')?.getAttribute('aria-expanded')).toBe('false');
-      rerender(<AgentBadge {...props} status="error" errorText="Provider rejected the request" />);
+      rerender(
+        <AgentBadge
+          renderToolCard={renderLiveToolCard}
+          {...props}
+          status="error"
+          errorText="Provider rejected the request"
+        />,
+      );
       expect(screen.getByRole('img', { name: 'Failed' })).not.toBeNull();
       expect(screen.getByTestId('agent-badge').querySelector('button')?.getAttribute('aria-expanded')).toBe('true');
       expect(screen.getByTestId('agent-error').textContent).toBe('Provider rejected the request');

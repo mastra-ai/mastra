@@ -31,7 +31,7 @@ export function InstructionBlocksPage() {
           <AgentCMSBlocks
             items={field.value ?? []}
             onChange={field.onChange}
-            placeholder="Enter content..."
+            placeholder="Enter content"
             schema={schema}
             readOnly={isReadOnly}
           />

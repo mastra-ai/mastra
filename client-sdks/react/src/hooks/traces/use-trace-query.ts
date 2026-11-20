@@ -125,7 +125,7 @@ export const traceQueryKey = (query: TraceQueryArgs | undefined, limit: number =
 type TraceQueryOrderBy = NonNullable<TraceQueryArgs['orderBy']>[number];
 
 function traceSortValue(trace: TraceQueryTrace, field: TraceQueryOrderBy['field']): number | null {
-  if (field === 'timeToFirstChunkMs') return trace.timeToFirstChunkMs ?? null;
+  if (field === 'timeToFirstChunkMs' || field === 'timeToFirstTokenMs') return trace[field] ?? null;
   const value = trace[field];
   return value == null ? null : Date.parse(value);
 }

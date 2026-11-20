@@ -1,12 +1,16 @@
 import type { DatasetExperiment } from '@mastra/client-js';
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { MetricsCardGroup } from '@mastra/playground-ui/components/MetricsCardGroup';
 import { KpiCard } from '@mastra/playground-ui/domains/metrics/components';
+import { IconCoins } from '@mastra/playground-ui/icons/central/IconCoins';
+import { IconGauge } from '@mastra/playground-ui/icons/central/IconGauge';
+import { IconHashtag } from '@mastra/playground-ui/icons/central/IconHashtag';
+import { IconStopwatch } from '@mastra/playground-ui/icons/central/IconStopwatch';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
 import { useScoresByExperimentId } from '@mastra/react/hooks/datasets';
 import { useExperimentsItemUsage } from '@mastra/react/hooks/experiments';
 import type { ExperimentMetrics } from '@mastra/react/hooks/experiments';
-import { CoinsIcon, GaugeIcon, HashIcon, TimerIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { formatCostValue, formatTokenCount, totalTokens } from './comparison/comparison-metric-format';
 
@@ -56,9 +60,14 @@ export function ExperimentKpis({ experiment, metrics }: ExperimentKpisProps) {
   const usage = usageById[experiment.id]?.summary;
   const tokens = totalTokens(usage);
   const tokensDetail =
-    usage?.inputTokens === undefined && usage?.outputTokens === undefined
-      ? 'input + output'
-      : `${formatTokenCount(usage.inputTokens ?? 0)} in · ${formatTokenCount(usage.outputTokens ?? 0)} out`;
+    usage?.inputTokens === undefined && usage?.outputTokens === undefined ? (
+      'input + output'
+    ) : (
+      <Metadata singleLine>
+        <Metadata.Item>{formatTokenCount(usage.inputTokens ?? 0)} in</Metadata.Item>
+        <Metadata.Item>{formatTokenCount(usage.outputTokens ?? 0)} out</Metadata.Item>
+      </Metadata>
+    );
   const avgItemDuration = metrics?.isEnabled ? metrics.data?.avgAgentDurationMs : undefined;
   const formattedAvgItemDuration = avgItemDuration == null ? undefined : formatDuration(Math.round(avgItemDuration));
 
@@ -72,17 +81,17 @@ export function ExperimentKpis({ experiment, metrics }: ExperimentKpisProps) {
       {metrics?.isEnabled && (
         <KpiCard
           label="Total cost"
-          icon={CoinsIcon}
+          icon={IconCoins}
           value={usage?.estimatedCost === undefined ? '—' : formatCostValue(usage.estimatedCost, usage.costUnit)}
           detail="estimated"
           isLoading={isUsageLoading}
         />
       )}
-      <KpiCard label="Run duration" icon={TimerIcon} value={duration} detail={runDurationDetail} />
+      <KpiCard label="Run duration" icon={IconStopwatch} value={duration} detail={runDurationDetail} />
       {metrics?.isEnabled && (
         <KpiCard
           label="Total tokens"
-          icon={HashIcon}
+          icon={IconHashtag}
           value={tokens === undefined ? '—' : formatTokenCount(tokens)}
           detail={tokensDetail}
           isLoading={isUsageLoading}
@@ -90,7 +99,7 @@ export function ExperimentKpis({ experiment, metrics }: ExperimentKpisProps) {
       )}
       <KpiCard
         label="Avg score"
-        icon={GaugeIcon}
+        icon={IconGauge}
         value={avgScore == null ? '—' : avgScore.toFixed(3)}
         detail={avgScore == null ? 'no scores' : 'across all scorers'}
         isLoading={avgScore === undefined}

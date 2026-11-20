@@ -517,28 +517,27 @@ export const writeIndexFile = async ({
 }) => {
   const indexPath = dirPath + '/index.ts';
   const destPath = path.join(indexPath);
-  try {
-    await fs.writeFile(destPath, '');
-    const filteredExports = [
-      addWorkflow ? `workflows: { weatherWorkflow },` : '',
-      addAgent ? `agents: { weatherAgent },` : '',
-      addScorers ? `scorers: { toolCallAppropriatenessScorer, completenessScorer, translationScorer },` : '',
-    ].filter(Boolean);
-    if (!addExample) {
-      await fs.writeFile(
-        destPath,
-        `
+  await fs.writeFile(destPath, '');
+  const filteredExports = [
+    addWorkflow ? `workflows: { weatherWorkflow },` : '',
+    addAgent ? `agents: { weatherAgent },` : '',
+    addScorers ? `scorers: { toolCallAppropriatenessScorer, completenessScorer, translationScorer },` : '',
+  ].filter(Boolean);
+  if (!addExample) {
+    await fs.writeFile(
+      destPath,
+      `
 import { Mastra } from '@mastra/core/mastra';
 
 export const mastra = new Mastra()
         `,
-      );
+    );
 
-      return;
-    }
-    await fs.writeFile(
-      destPath,
-      `
+    return;
+  }
+  await fs.writeFile(
+    destPath,
+    `
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
@@ -584,10 +583,7 @@ export const mastra = new Mastra({
   }),
 });
 `,
-    );
-  } catch (err) {
-    throw err;
-  }
+  );
 };
 
 export const checkInitialization = async (dirPath: string) => {
@@ -787,11 +783,7 @@ export const writeCodeSample = async (
 ) => {
   const destPath = dirPath + `/${component}/weather-${component.slice(0, -1)}.ts`;
 
-  try {
-    await writeCodeSampleForComponents(llmProvider, component, destPath, importComponents);
-  } catch (err) {
-    throw err;
-  }
+  await writeCodeSampleForComponents(llmProvider, component, destPath, importComponents);
 };
 
 export const LLM_PROVIDERS: { value: LLMProvider; label: string; hint?: string }[] = [

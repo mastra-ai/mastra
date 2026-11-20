@@ -1,8 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Activity, BarChart3, Database, Gauge, GitBranch, ListChecks, ScrollText } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import { Field, FieldError, FieldLabel } from '../Field';
 import { Combobox } from './combobox';
+import { IconBranch } from '@/ds/icons/central/IconBranch';
+import { IconChart6 } from '@/ds/icons/central/IconChart6';
+import { IconChecklist } from '@/ds/icons/central/IconChecklist';
+import { IconElectrocardiogram } from '@/ds/icons/central/IconElectrocardiogram';
+import { IconGauge } from '@/ds/icons/central/IconGauge';
+import { IconScript } from '@/ds/icons/central/IconScript';
+import { IconServer1 } from '@/ds/icons/central/IconServer1';
 
 const meta: Meta<typeof Combobox> = {
   title: 'Composite/Combobox',
@@ -23,6 +29,10 @@ const meta: Meta<typeof Combobox> = {
     },
     iconOnlyValue: {
       control: { type: 'boolean' },
+    },
+    popupWidth: {
+      control: { type: 'select' },
+      options: [undefined, 'sm', 'md', 'lg', 'xl'],
     },
   },
 };
@@ -56,49 +66,49 @@ const capabilityOptions = [
     label: 'Logs',
     value: 'logs',
     description: 'Inspect application output',
-    start: <ScrollText className={iconClassName} />,
+    start: <IconScript className={iconClassName} />,
     end: <span className={badgeClassName}>Live</span>,
   },
   {
     label: 'Traces',
     value: 'traces',
     description: 'Follow request spans',
-    start: <GitBranch className={iconClassName} />,
+    start: <IconBranch className={iconClassName} />,
     end: <span className={badgeClassName}>8 services</span>,
   },
   {
     label: 'Metrics',
     value: 'metrics',
     description: 'Monitor service health',
-    start: <Gauge className={iconClassName} />,
+    start: <IconGauge className={iconClassName} />,
     end: <span className={badgeClassName}>42 charts</span>,
   },
   {
     label: 'Datasets',
     value: 'datasets',
     description: 'Review evaluation data',
-    start: <Database className={iconClassName} />,
+    start: <IconServer1 className={iconClassName} />,
     end: <span className={badgeClassName}>12 sets</span>,
   },
   {
     label: 'Workflows',
     value: 'workflows',
     description: 'Run multi-step processes',
-    start: <ListChecks className={iconClassName} />,
+    start: <IconChecklist className={iconClassName} />,
     end: <span className={badgeClassName}>6 active</span>,
   },
   {
     label: 'Scorers',
     value: 'scorers',
     description: 'Evaluate generated output',
-    start: <BarChart3 className={iconClassName} />,
+    start: <IconChart6 className={iconClassName} />,
     end: <span className={badgeClassName}>Quality</span>,
   },
   {
     label: 'Signals',
     value: 'signals',
     description: 'Watch runtime activity',
-    start: <Activity className={iconClassName} />,
+    start: <IconElectrocardiogram className={iconClassName} />,
     end: <span className={badgeClassName}>Beta</span>,
   },
 ];
@@ -106,7 +116,7 @@ const capabilityOptions = [
 export const Default: Story = {
   args: {
     options: frameworkOptions,
-    placeholder: 'Select a framework...',
+    placeholder: 'Select a framework',
     className: 'w-[200px]',
   },
 };
@@ -114,7 +124,7 @@ export const Default: Story = {
 export const WithError: Story = {
   args: {
     options: frameworkOptions,
-    placeholder: 'Select a framework...',
+    placeholder: 'Select a framework',
     className: 'w-[200px]',
   },
   render: args => (
@@ -130,7 +140,7 @@ export const WithValue: Story = {
   args: {
     options: frameworkOptions,
     value: 'react',
-    placeholder: 'Select a framework...',
+    placeholder: 'Select a framework',
     className: 'w-[200px]',
   },
 };
@@ -138,16 +148,34 @@ export const WithValue: Story = {
 export const ModelSelector: Story = {
   args: {
     options: modelOptions,
-    placeholder: 'Select a model...',
-    searchPlaceholder: 'Search models...',
+    placeholder: 'Select a model',
+    searchPlaceholder: 'Search models',
     className: 'w-[220px]',
+  },
+};
+
+/** `popupWidth` gives a compact trigger a wider, fixed popup; labels past it wrap and clamp at two lines. */
+export const PopupWidth: Story = {
+  args: {
+    options: [
+      'moonshotai/kimi-k2',
+      'moonshotai/kimi-k2-0905',
+      'moonshotai/kimi-k2-thinking',
+      'moonshotai/kimi-k3.1-pro',
+      'cognitivecomputations/dolphin-mistral-24b-venice-edition',
+    ].map(id => ({ label: id, value: id })),
+    placeholder: 'Select model',
+    searchPlaceholder: 'Search models',
+    variant: 'ghost',
+    popupWidth: 'lg',
+    className: 'w-auto max-w-40',
   },
 };
 
 export const Disabled: Story = {
   args: {
     options: frameworkOptions,
-    placeholder: 'Select a framework...',
+    placeholder: 'Select a framework',
     disabled: true,
     className: 'w-[200px]',
   },
@@ -156,7 +184,7 @@ export const Disabled: Story = {
 export const CustomEmptyText: Story = {
   args: {
     options: [],
-    placeholder: 'Select an option...',
+    placeholder: 'Select an option',
     emptyText: 'No options available',
     className: 'w-[200px]',
   },
@@ -173,7 +201,7 @@ export const ManyOptions: Story = {
   },
   args: {
     options: Array.from({ length: 40 }, (_, index) => ({ label: `Option ${index + 1}`, value: `${index + 1}` })),
-    placeholder: 'Select an option...',
+    placeholder: 'Select an option',
     className: 'w-[200px]',
   },
 };
@@ -184,19 +212,19 @@ export const IconOnlyValue: Story = {
       {
         label: 'Database',
         value: 'database',
-        start: <Database className={iconClassName} />,
+        start: <IconServer1 className={iconClassName} />,
         displayLabel: <span className="sr-only">Database</span>,
       },
       {
         label: 'Metrics',
         value: 'metrics',
-        start: <Gauge className={iconClassName} />,
+        start: <IconGauge className={iconClassName} />,
         displayLabel: <span className="sr-only">Metrics</span>,
       },
       {
         label: 'Branches',
         value: 'branches',
-        start: <GitBranch className={iconClassName} />,
+        start: <IconBranch className={iconClassName} />,
         displayLabel: <span className="sr-only">Branches</span>,
       },
     ],
@@ -228,7 +256,7 @@ export const WithDescriptions: Story = {
       { label: 'Claude 3 Opus', value: 'claude-3-opus', description: "Anthropic's most powerful" },
     ],
     value: 'gpt-4-turbo',
-    placeholder: 'Select a model...',
+    placeholder: 'Select a model',
     className: 'w-[280px]',
   },
 };
@@ -257,8 +285,8 @@ export const Multiple: Story = {
           options={capabilityOptions}
           value={value}
           onValueChange={setValue}
-          placeholder="Select capabilities..."
-          searchPlaceholder="Search capabilities..."
+          placeholder="Select capabilities"
+          searchPlaceholder="Search capabilities"
           emptyText="No capabilities found."
           className="w-full"
         />

@@ -7,7 +7,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { UserConnectProvider, UserConnection } from '@mastra/playground-ui/domains/connect';
 import { ProviderLogo } from '@mastra/playground-ui/domains/connect';
 
-import { MoreVertical, Unplug } from 'lucide-react';
+import { IconDotGrid1x3Vertical } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Vertical';
+import { Unplug } from 'lucide-react';
 
 function statusVariant(status: string): BadgeVariant {
   if (status === 'active') return 'success';
@@ -28,6 +29,9 @@ interface ConnectionRowsProps {
 }
 
 const SKELETON_ROWS = [0, 1, 2];
+
+/** Bar widths that stand in for each column's content; the actions column stays empty. */
+const SKELETON_WIDTHS = ['w-40', 'w-28', 'w-14', null];
 
 function ConnectionRows({
   label,
@@ -50,10 +54,8 @@ function ConnectionRows({
       {loading ? (
         SKELETON_ROWS.map(index => (
           <Table.Row key={index}>
-            {Array.from({ length: columnCount }, (_, cell) => (
-              <Table.Cell key={cell}>
-                <SkeletonText />
-              </Table.Cell>
+            {SKELETON_WIDTHS.map((width, cell) => (
+              <Table.Cell key={cell}>{width ? <SkeletonText className={width} /> : null}</Table.Cell>
             ))}
           </Table.Row>
         ))
@@ -96,7 +98,7 @@ function ConnectionRows({
                 {onDisconnect ? (
                   <DropdownMenu>
                     <DropdownMenu.Trigger variant="ghost" size="icon-sm" aria-label={`Actions for ${displayName}`}>
-                      <MoreVertical />
+                      <IconDotGrid1x3Vertical />
                     </DropdownMenu.Trigger>
                     <DropdownMenu.Content align="end" className="w-44">
                       <DropdownMenu.Item

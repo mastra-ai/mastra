@@ -125,6 +125,91 @@ describeForAllEngines('Support agent final-answer processors', engine => {
     expect(await savedText(memory)).toBe('');
   });
 
+  const orderCard = { type: 'data-order-card', data: { orderId: 'A-1' } } as const;
+
+  // Technical: writer.custom() in processOutputResult must stream its chunk once, before `finish`,
+  // without passing through processOutputStream, and a non-transient chunk is saved as a data part
+  // of the reply. Durable engines passed no writer. (#29213)
+  it('follow-up suggestions written by a final-answer processor are streamed and the card is saved (#29213)', async () => {
+    const memory = new MockMemory();
+    const streamedDataParts: string[] = [];
+    const suggester: Processor = {
+      id: 'suggester',
+      processOutputStream: async ({ part }) => {
+        if (part.type.startsWith('data-')) streamedDataParts.push(part.type);
+        return part;
+      },
+      processOutputResult: async ({ messages, writer }) => {
+        await writer?.custom({ type: 'data-suggestions', data: { prompts: ['Track it'] }, transient: true });
+        await writer?.custom(orderCard);
+        return messages;
+      },
+    };
+
+    const { chunks } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: QUESTION,
+      collectChunks: true,
+      memory,
+      ...THREAD,
+      outputProcessors: [suggester],
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat' }, { content: 'Your order ships today.' });
+      },
+    });
+
+    const types = chunks!.map(c => c.type);
+    expect(types.filter(t => t.startsWith('data-'))).toEqual(['data-suggestions', 'data-order-card']);
+    expect(types.indexOf('data-order-card')).toBeLessThan(types.indexOf('finish'));
+    expect(streamedDataParts).toEqual([]);
+
+    const saved = (await memory.recall(THREAD)).messages.filter(m => m.role === 'assistant');
+    expect(saved).toHaveLength(1);
+    expect(saved[0]!.content.parts.map(p => p.type)).toEqual(expect.arrayContaining(['text', 'data-order-card']));
+    expect(saved[0]!.content.parts.some(p => p.type === 'data-suggestions')).toBe(false);
+  });
+
+  // Technical: a failed isTaskComplete check rotates the response message id, so the card must be
+  // saved with the retried answer, not the rejected one. (#29213)
+  it('the card is saved with the answer that passed the completion check (#29213)', async () => {
+    const memory = new MockMemory();
+    const suggester: Processor = {
+      id: 'suggester',
+      processOutputResult: async ({ messages, writer }) => {
+        await writer?.custom(orderCard);
+        return messages;
+      },
+    };
+    let checks = 0;
+    const answerCheck = {
+      id: 'answer-check',
+      name: 'Answer Check',
+      run: async () => (checks++ === 0 ? { score: 0, reason: 'No date given' } : { score: 1, reason: 'Answered' }),
+    };
+
+    await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: QUESTION,
+      memory,
+      ...THREAD,
+      maxSteps: 4,
+      isTaskComplete: { scorers: [answerCheck as any] },
+      outputProcessors: [suggester],
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat', sequenceIndex: 0 }, { content: 'Let me check.' });
+        llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Your order ships today.' });
+      },
+    });
+
+    const withCard = (await memory.recall(THREAD)).messages.filter(m =>
+      m.content.parts.some(p => p.type === 'data-order-card'),
+    );
+    expect(withCard).toHaveLength(1);
+    expect(JSON.stringify(withCard[0]!.content.parts)).toContain('Your order ships today.');
+  });
+
   // Technical: when the provider call fails, processOutputResult still runs and sees
   // finishReason 'error', so audit processors can record failed turns.
   it('an audit processor still runs when the provider fails, and sees the error finish', async () => {

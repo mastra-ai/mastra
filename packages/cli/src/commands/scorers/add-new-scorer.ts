@@ -16,8 +16,8 @@ export async function selectScorer(): Promise<ScorerTemplate[] | null> {
     if (!obj) return acc;
     obj.push({
       value: curr.id,
-      label: `${curr.name}`,
-      hint: `${curr.description}`,
+      label: curr.name,
+      hint: curr.description,
     });
     return acc;
   }, {});
@@ -82,13 +82,9 @@ export async function addNewScorer(scorerId?: string, customDir?: string) {
 }
 
 async function initializeScorer(scorer: ScorerTemplate, customPath?: string) {
-  try {
-    const templateContent = scorer.content;
-    const res = writeScorer(scorer.filename, templateContent!, customPath);
-    return res;
-  } catch (error) {
-    throw error;
-  }
+  const templateContent = scorer.content;
+  const res = writeScorer(scorer.filename, templateContent!, customPath);
+  return res;
 }
 
 function showSuccessNote() {
@@ -155,5 +151,4 @@ async function showInteractivePrompt(providedCustomDir?: string) {
   if (containsSuccessfulWrites) {
     showSuccessNote();
   }
-  return;
 }

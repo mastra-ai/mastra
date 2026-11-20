@@ -1,13 +1,21 @@
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import userEvent from '@testing-library/user-event';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../../e2e/ui/factory-projects';
 import { server } from '../../../../e2e/ui/msw-server';
-import { findPageHeader, renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
-import { createAppRoutes } from '../../router';
+import {
+  findPageHeader,
+  renderWithProviders,
+  TEST_API,
+  TEST_BASE_URL,
+  waitForMutationsIdle,
+} from '../../../../e2e/ui/render';
+import { createQueryClient } from '../../../query-client';
+import { createAppRouter } from '../../router';
 import type { FactoryUserSession } from '../../domains/workspaces/services/user-sessions';
 
 const FACTORY_ID = 'fp-1';
@@ -94,31 +102,21 @@ function stubThreadRoute({
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
+      HttpResponse.json({
+        projects: [
+          {
+            id: FACTORY_ID,
+            name: 'Acme Factory',
+            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main' })],
+          },
+        ],
+      }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`, () =>
       HttpResponse.json({ project: { id: FACTORY_ID, name: 'Acme Factory', defaultModelId: 'openai/gpt-4o-mini' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
       HttpResponse.json({ modelId: 'openai/gpt-4o-mini', thinkingLevel: null }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
-      HttpResponse.json({
-        connections: [
-          {
-            id: 'conn-1',
-            installationId: 'inst-1',
-            repositories: [
-              {
-                id: REPO_ID,
-                branch: 'main',
-                sandboxWorkdir: '/local/acme/app',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
-          },
-        ],
-      }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: [workItem] }),
@@ -184,13 +182,20 @@ function stubThreadRoute({
 }
 
 function renderRoute(path: string) {
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [path] });
-  return renderWithProviders(
-    <>
-      <RouterProvider router={router} />
-      <Toaster position="bottom-right" />
-    </>,
+  const queryClient = createQueryClient();
+  const router = createAppRouter({ queryClient, api: TEST_API }, routes =>
+    createMemoryRouter(routes, { initialEntries: [path] }),
   );
+  return {
+    router,
+    ...renderWithProviders(
+      <>
+        <RouterProvider router={router} />
+        <Toaster position="bottom-right" />
+      </>,
+      queryClient,
+    ),
+  };
 }
 
 afterEach(() => {
@@ -198,31 +203,96 @@ afterEach(() => {
 });
 
 describe('ThreadPage header', () => {
-  it('keeps the sidebar toggle and the session breadcrumb in a single header', async () => {
+  it('leaves the session to the sidebar, keeping its toggle in a single header', async () => {
     window.localStorage.setItem(SIDEBAR_STATE_KEY, 'collapsed');
     stubThreadRoute();
     renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${SESSION_ID}`);
 
-    const breadcrumb = await screen.findByRole('navigation', { name: 'Breadcrumb' });
-    const header = breadcrumb.closest('header');
-    expect(header).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Toggle sidebar' }).closest('header')).toBe(header);
+    const header = await findPageHeader();
+    // The stage bar waits on the card, so by now the header has everything it will show.
+    expect(await within(header).findByRole('group', { name: 'Card stage' })).toBeInTheDocument();
+    expect(within(header).queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
+    expect(within(header).queryByRole('button', { name: 'Switch session' })).not.toBeInTheDocument();
+    expect(within(header).getByRole('button', { name: 'Toggle sidebar' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Open navigation menu')).not.toBeInTheDocument();
-    expect(within(header!).getByText('Issue #42: Fix the flaky login test')).toBeInTheDocument();
-    expect(within(header!).getByRole('link', { name: 'Work' })).toBeInTheDocument();
   });
 
-  it('shows the user session title in the breadcrumb', async () => {
+  it("opens the next card's session at once, then shows its stage when the card answers", async () => {
+    stubThreadRoute();
+    const nextSessionId = 'sess-3';
+    const nextPath = `/factories/${FACTORY_ID}/workspaces/${nextSessionId}/threads/${nextSessionId}`;
+    const nextSession = { ...workspaceSession, id: 'row-3', sessionId: nextSessionId, branch: 'factory/issue-43' };
+    const nextItem = {
+      ...workItem,
+      id: 'wi-3',
+      title: 'Speed up the build',
+      stages: ['planning'],
+      sessions: {
+        [nextSessionId]: {
+          sessionId: nextSessionId,
+          branch: 'factory/issue-43',
+          threadId: nextSessionId,
+          startedBy: 'user-1',
+        },
+      },
+    };
+    const nextCard = deferred();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/user-sessions/${nextSessionId}`, () =>
+        HttpResponse.json({ session: nextSession }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async ({ request }) => {
+        if (new URL(request.url).searchParams.get('sessionId') !== nextSessionId) {
+          return HttpResponse.json({ workItems: [workItem] });
+        }
+        await nextCard.promise;
+        return HttpResponse.json({ workItems: [nextItem] });
+      }),
+    );
+    const { router } = renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${SESSION_ID}`);
+    const header = await findPageHeader();
+    expect(await within(header).findByRole('button', { name: 'Change stage from Building' })).toBeInTheDocument();
+
+    const navigation = router.navigate(nextPath);
+
+    // The page moves before the next card answers, and the previous card's stage goes with it.
+    await waitFor(() => expect(router.state.location.pathname).toBe(nextPath));
+    await act(() => navigation);
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Change stage from Building' })).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByRole('button', { name: 'Change stage from Planning' })).not.toBeInTheDocument();
+
+    nextCard.resolve();
+    expect(await screen.findByRole('button', { name: 'Change stage from Planning' })).toBeInTheDocument();
+  });
+
+  it('titles a user session with its own name', async () => {
     stubThreadRoute();
     renderRoute(`/factories/${FACTORY_ID}/user/threads/${USER_SESSION_ID}`);
 
-    const breadcrumb = await screen.findByRole('navigation', { name: 'Breadcrumb' });
-    const header = breadcrumb.closest('header');
-    expect(header).not.toBeNull();
-    expect(within(breadcrumb).getByText('User sessions')).toBeInTheDocument();
-    expect(within(breadcrumb).getByText('salut ca va ?')).toBeInTheDocument();
-    expect(within(breadcrumb).queryByRole('link')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Workspace files' }).closest('header')).toBe(header);
+    const header = await findPageHeader();
+    expect(await within(header).findByRole('heading', { level: 1, name: 'salut ca va ?' })).toBeInTheDocument();
+    const panel = screen.getByRole('complementary', { name: 'Session panel' });
+    expect(within(panel).getByRole('button', { name: 'Session panel' })).toBeInTheDocument();
+  });
+
+  it('titles a factory session with no card and no title by its branch, as the sidebar names it', async () => {
+    stubThreadRoute();
+    const slackSession = { ...workspaceSession, branch: 'slack/1794850014-495739', title: null };
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: [] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
+        HttpResponse.json({ sessions: [slackSession] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, () => HttpResponse.json({ session: slackSession })),
+    );
+    renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${SESSION_ID}`);
+
+    const header = await findPageHeader();
+    expect(await within(header).findByRole('heading', { level: 1, name: slackSession.branch })).toBeInTheDocument();
   });
 
   it('shares from the header and restores privacy from the sidebar menu', async () => {
@@ -302,19 +372,16 @@ describe('ThreadPage header', () => {
     });
     renderRoute(`/factories/${FACTORY_ID}/user/threads/${USER_SESSION_ID}`);
 
-    const breadcrumb = await screen.findByRole('navigation', { name: 'Breadcrumb' });
-    await within(breadcrumb).findByText('salut ca va ?');
-    expect(within(breadcrumb).queryByText('New session')).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'salut ca va ?' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 1, name: 'New session' })).not.toBeInTheDocument();
   });
 
-  it('shows the draft breadcrumb on the new session page', async () => {
+  it('titles the new session page', async () => {
     stubThreadRoute();
     renderRoute(`/factories/${FACTORY_ID}/user/new/draft-1`);
 
-    const breadcrumb = await screen.findByRole('navigation', { name: 'Breadcrumb' });
-    expect(breadcrumb.closest('header')).not.toBeNull();
-    expect(within(breadcrumb).getByText('User sessions')).toBeInTheDocument();
-    expect(within(breadcrumb).getByText('New session')).toBeInTheDocument();
+    const header = await findPageHeader();
+    expect(within(header).getByRole('heading', { level: 1, name: 'New session' })).toBeInTheDocument();
   });
 
   it('carries the sidebar toggle while the session resolves', async () => {
@@ -322,11 +389,14 @@ describe('ThreadPage header', () => {
     const { sessionGate } = stubThreadRoute({ gateSession: true });
     renderRoute(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`);
 
-    expect(await screen.findByLabelText('Loading session')).toBeInTheDocument();
+    const user = userEvent.setup();
+    const composer = await screen.findByRole('region', { name: 'Thread composer' });
     expect(screen.getByRole('button', { name: 'Toggle sidebar' })).toBeInTheDocument();
+    await user.type(within(composer).getByRole('textbox', { name: 'Message' }), 'Draft while the session resolves');
+    expect(within(composer).getByRole('button', { name: 'Send message' })).toBeDisabled();
 
     sessionGate.resolve();
-    await waitFor(() => expect(screen.queryByLabelText('Loading session')).not.toBeInTheDocument());
+    await waitFor(() => expect(within(composer).getByRole('button', { name: 'Send message' })).toBeEnabled());
     expect(screen.getByRole('button', { name: 'Toggle sidebar' })).toBeInTheDocument();
   });
 });

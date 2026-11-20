@@ -22,6 +22,7 @@ export default defineConfig({
     acp: 'src/acp.ts',
     headless: 'src/headless.ts',
     plugin: 'src/plugin.ts',
+    'run-tui': 'src/run-tui.ts',
   },
   format: ['esm', 'cjs'],
   fixedExtension: false,

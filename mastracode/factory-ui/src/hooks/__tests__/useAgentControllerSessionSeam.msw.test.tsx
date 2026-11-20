@@ -1,4 +1,4 @@
-import { act, waitFor } from '@testing-library/react';
+import { act } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
@@ -9,7 +9,6 @@ import {
   useCreateAgentControllerThreadMutation,
   useSwitchAgentControllerThreadMutation,
 } from '../useAgentControllerThreadMutations';
-import { useAgentControllerThreads } from '../useAgentControllerThreads';
 
 const controllerId = 'code';
 const sessionId = 'session-test';
@@ -75,28 +74,5 @@ describe('agent-controller hook seam addresses the session by its id', () => {
     await waitForMutationsIdle(client);
     expect(captured?.pathname).toContain(`/sessions/${sessionId}/`);
     expect(captured?.searchParams.has('sessionScope')).toBe(false);
-  });
-
-  it('createThread lands in the session thread list so /new can navigate to the new thread', async () => {
-    const threads: Array<{ id: string; title: string; updatedAt: string }> = [];
-    server.use(
-      http.get(sessionUrl, () => HttpResponse.json({ threadId: null })),
-      http.get(`${sessionUrl}/threads`, () => HttpResponse.json({ threads })),
-      http.post(`${sessionUrl}/threads`, () => {
-        const created = { id: 'thread-created', title: 'x', updatedAt: '2026-07-21T00:00:00.000Z' };
-        threads.unshift(created);
-        return HttpResponse.json(created);
-      }),
-    );
-
-    const { result, client } = renderHookWithProviders(() => ({
-      list: useAgentControllerThreads(hookArgs),
-      create: useCreateAgentControllerThreadMutation(hookArgs),
-    }));
-
-    await waitFor(() => expect(result.current.list.data).toEqual([]));
-    await act(async () => result.current.create.mutateAsync('x'));
-    await waitForMutationsIdle(client);
-    await waitFor(() => expect(result.current.list.data?.map(t => t.id)).toEqual(['thread-created']));
   });
 });

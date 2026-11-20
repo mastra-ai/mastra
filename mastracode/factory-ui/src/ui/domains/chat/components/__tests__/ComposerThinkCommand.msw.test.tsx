@@ -39,7 +39,9 @@ function useThinkingHandlers({
     http.get(FACTORY_API, () =>
       failThinkingConfig
         ? new HttpResponse(null, { status: 503 })
-        : HttpResponse.json({ project: { id: OVERLAY_FACTORY_ID, name: 'Overlay', defaultThinkingLevel: 'low' } }),
+        : HttpResponse.json({
+            project: { id: OVERLAY_FACTORY_ID, name: 'Overlay', modelScope: 'factory', defaultThinkingLevel: 'low' },
+          }),
     ),
     http.put(`${SESSION_API}/state`, async ({ request }) => {
       const body: unknown = await request.json();

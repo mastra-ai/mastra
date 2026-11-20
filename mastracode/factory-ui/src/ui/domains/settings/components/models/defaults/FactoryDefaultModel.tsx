@@ -3,7 +3,7 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
-import { useAvailableModelsQuery } from '../../../../../../hooks/useAvailableModels';
+import { useAvailableModelsQuery, useFallbackModelQuery } from '../../../../../../hooks/useAvailableModels';
 import {
   useApplyFactoryDefaultModelMutation,
   useFactoryProjectQuery,
@@ -11,13 +11,13 @@ import {
 } from '../../../../../../hooks/useFactoryDefaultModel';
 import { ModelCombobox } from '../../ModelCombobox';
 import { SharedCredentialNotice } from '../../SharedCredentialNotice';
-import { AppliedSessionsSummary } from './AppliedSessionsSummary';
 import { FactoryThinkingControl } from './FactoryThinkingControl';
 import { SwitchRunningSessionsDialog } from './SwitchRunningSessionsDialog';
 
 export function FactoryDefaultModel({ factoryId }: { factoryId: string }) {
   const projectQuery = useFactoryProjectQuery(factoryId);
-  const modelsQuery = useAvailableModelsQuery({ factoryProjectId: factoryId });
+  const modelsQuery = useAvailableModelsQuery({ scope: 'org' });
+  const fallbackModelQuery = useFallbackModelQuery({ scope: 'org' });
   const setDefaultModel = useSetFactoryDefaultModelMutation(factoryId);
   const applyToSessions = useApplyFactoryDefaultModelMutation(factoryId);
   const [confirmModelId, setConfirmModelId] = useState<string>();
@@ -44,6 +44,7 @@ export function FactoryDefaultModel({ factoryId }: { factoryId: string }) {
               models={modelsQuery.data ?? []}
               value={defaultModelId}
               onValueChange={saveDefaultModel}
+              fallbackModelId={fallbackModelQuery.data}
               placeholder="Select a model"
               aria-label="Factory default model"
               size="sm"
@@ -62,7 +63,11 @@ export function FactoryDefaultModel({ factoryId }: { factoryId: string }) {
           </Txt>
         )}
         <SharedCredentialNotice modelId={defaultModelId || undefined} />
-        {applyToSessions.data && <AppliedSessionsSummary result={applyToSessions.data} />}
+        {applyToSessions.data && (
+          <Txt as="p" variant="meta" role="status">
+            Switch started in the background. Running sessions will pick up the new model on their next step.
+          </Txt>
+        )}
       </div>
 
       {confirmModelId && (

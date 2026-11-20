@@ -77,7 +77,9 @@ describe('durable agent running snapshots (issue #26462)', () => {
         }),
       },
     });
-    const durableAgent = createDurableAgent({ agent });
+    // v1's snapshot pruning drops the request body; v2 stores step results unpruned
+    // (see workflows/__tests__/snapshot-write-amplification.test.ts).
+    const durableAgent = createDurableAgent({ agent, storageVersion: 1 });
     const mastra = new Mastra({
       logger: false,
       storage: new InMemoryStore(),

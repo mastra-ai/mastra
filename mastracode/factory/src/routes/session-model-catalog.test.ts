@@ -33,9 +33,6 @@ async function setup(modelScope: 'hybrid' | 'user' | 'factory' = 'hybrid', visib
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    createdByUserId: 'owner',
-    sandboxProvider: 'local',
-    sandboxWorkdir: '/sandbox/mastra',
   });
   const sourceSession = await sourceControl.sessions.create({
     orgId: 'org-1',
@@ -132,6 +129,7 @@ describe('session-owner model catalog', () => {
       expect(body.modelScope).toBe('user');
       expect(body.defaultModelId).toBe('anthropic/claude-opus-4-6');
       expect(body.personalThinkingLevel).toBe('high');
+      expect(body).not.toHaveProperty('fallbackModelId');
       expect(body.models).toEqual([
         expect.objectContaining({ id: 'anthropic/claude-opus-4-6', credentialLabel: 'Anthropic API key' }),
       ]);

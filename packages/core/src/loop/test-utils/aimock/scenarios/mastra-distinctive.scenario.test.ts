@@ -43,9 +43,17 @@ describeForAllEngines('AIMock loop scenario: Mastra-distinctive behaviors', engi
     });
 
     // The request's tool list contains only the active tool.
-    const toolNames = ((requests[0]?.body as any)?.tools ?? []).map((t: any) => t.function?.name ?? t.name);
-    expect(toolNames).toContain('allowed_tool');
-    expect(toolNames).not.toContain('blocked_tool');
+    // Only the active tool is sent, and its definition is not changed by the filter.
+    const requestTools = (requests[0]?.body as any)?.tools ?? [];
+    expect(requestTools).toHaveLength(1);
+    expect(requestTools[0]).toMatchObject({
+      type: 'function',
+      function: {
+        name: 'allowed_tool',
+        description: 'An allowed tool.',
+        parameters: { type: 'object', properties: {} },
+      },
+    });
   });
 
   it('applies an output processor that redacts loop text', async () => {

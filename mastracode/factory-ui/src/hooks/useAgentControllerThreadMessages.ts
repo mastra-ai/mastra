@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
-import { useCallback, useRef, useState } from 'react';
+import { hashKey, queryOptions, useQuery } from '@tanstack/react-query';
+import { useCallback, useState } from 'react';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../api/keys';
 import { createAgentControllerClient } from '../ui/domains/chat/services/agentControllerClient';
@@ -26,14 +26,19 @@ function isNotFound(error: unknown): boolean {
   return typeof error === 'object' && error !== null && (error as { status?: unknown }).status === 404;
 }
 
-interface UseAgentControllerThreadMessagesArgs {
+/**
+ * Message windows of session threads the server has not created yet, by query
+ * hash. Kept beside the cache rather than in one hook so a read the route
+ * loader started still schedules the re-read once the page mounts.
+ */
+const missingSessionThreads = new Set<string>();
+
+interface ThreadMessagesQueryArgs {
   agentControllerId: string;
   sessionId: string;
-  threadId?: string;
+  threadId: string | undefined;
   baseUrl?: string;
-  enabled?: boolean;
-  initialLimit?: number;
-  pageSize?: number;
+  limit?: number;
   /**
    * The thread is the session's own thread. The server creates it only when
    * the controller session boots, which can trail opening the session by as
@@ -42,6 +47,45 @@ interface UseAgentControllerThreadMessagesArgs {
    * transcript) and is re-read until the thread exists.
    */
   isSessionThread?: boolean;
+}
+
+/**
+ * A thread's newest message window. The read is keyed by session and thread
+ * id alone: the server resolves the session's memory resource itself, so it
+ * can start before the session's metadata has loaded.
+ */
+export function threadMessagesQueryOptions({
+  agentControllerId,
+  sessionId,
+  threadId,
+  baseUrl = '',
+  limit = DEFAULT_INITIAL_MESSAGE_LIMIT,
+  isSessionThread = false,
+}: ThreadMessagesQueryArgs) {
+  return queryOptions({
+    queryKey: queryKeys.agentControllerThreadMessages(agentControllerId, sessionId, threadId, limit),
+    queryFn: async ({ queryKey }) => {
+      const { session } = createAgentControllerClient({ agentControllerId, sessionId, baseUrl });
+      const hash = hashKey(queryKey);
+      try {
+        const messages = await session!.listMessages(threadId!, limit);
+        missingSessionThreads.delete(hash);
+        return messages;
+      } catch (error) {
+        if (!isSessionThread || !isNotFound(error)) throw error;
+        missingSessionThreads.add(hash);
+        return [];
+      }
+    },
+    refetchInterval: query => (missingSessionThreads.has(query.queryHash) ? MISSING_THREAD_REFETCH_MS : false),
+  });
+}
+
+interface UseAgentControllerThreadMessagesArgs extends Omit<ThreadMessagesQueryArgs, 'threadId' | 'limit'> {
+  threadId?: string;
+  enabled?: boolean;
+  initialLimit?: number;
+  pageSize?: number;
 }
 
 export function useAgentControllerThreadMessages({
@@ -81,23 +125,8 @@ export function useAgentControllerThreadMessages({
   // Prefix without the limit — used to detect "same thread" for placeholder data.
   const threadKey = queryKeys.agentControllerThreadMessages(agentControllerId, sessionId, threadId);
 
-  // The thread id whose last read was a 404 that `isSessionThread` turned into an empty history.
-  const missingThreadRef = useRef<string | undefined>(undefined);
-
   const query = useQuery({
-    queryKey: queryKeys.agentControllerThreadMessages(agentControllerId, sessionId, threadId, limit),
-    queryFn: async () => {
-      try {
-        const messages = await session!.listMessages(threadId!, limit);
-        missingThreadRef.current = undefined;
-        return messages;
-      } catch (error) {
-        if (!isSessionThread || !isNotFound(error)) throw error;
-        missingThreadRef.current = threadId;
-        return [];
-      }
-    },
-    refetchInterval: () => (missingThreadRef.current === threadId ? MISSING_THREAD_REFETCH_MS : false),
+    ...threadMessagesQueryOptions({ agentControllerId, sessionId, threadId, baseUrl, limit, isSessionThread }),
     enabled: enabled && Boolean(session) && Boolean(threadId),
     refetchOnWindowFocus: false,
     // Live stream only reaches a mounted transcript — re-entering the route must

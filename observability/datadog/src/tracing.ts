@@ -249,7 +249,7 @@ export class DatadogExporter extends BaseExporter {
       switch (event.type) {
         case 'span_started':
           this.captureTraceContext(span);
-          return;
+          break;
 
         case 'span_updated':
           // No-op: completion-only pattern ignores mid-span updates
@@ -257,7 +257,7 @@ export class DatadogExporter extends BaseExporter {
 
         case 'span_ended':
           this.enqueueSpan(span);
-          return;
+          break;
       }
     } catch (error) {
       this.logger.error('Datadog exporter error', {

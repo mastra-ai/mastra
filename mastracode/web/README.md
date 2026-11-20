@@ -169,6 +169,21 @@ DATABASE_URL=postgres://user:pass@localhost:54329/mastracode_web
 REDIS_URL=redis://localhost:63799
 ```
 
+### Recall embedder
+
+With `DATABASE_URL` set, memory recall embeds thread text locally with fastembed on the server. To embed with a hosted model instead, set `FACTORY_EMBEDDER` in `mastracode/web/.env` to a `provider/model` embedding id, along with that provider's key:
+
+```dotenv
+FACTORY_EMBEDDER=openai/text-embedding-3-small
+OPENAI_API_KEY=...
+```
+
+Other providers work the same way, for example `google/gemini-embedding-001` with `GOOGLE_GENERATIVE_AI_API_KEY`. A Mastra gateway id such as `mastra/openai/text-embedding-3-small` reads `MASTRA_GATEWAY_API_KEY`. The server fails to start when the key is missing. Thread text is sent to the embedding provider.
+
+A server `MASTRA_GATEWAY_API_KEY` also lets every account run `mastra/` chat models on your gateway credits, when the account hasn't connected its own gateway key. To keep the embedding key out of chat, use a provider id instead: accounts never use the server's provider keys.
+
+Vector indexes are named by dimension, so a model with a different dimension starts with an empty index: recall doesn't find content observed before the switch. Earlier content isn't re-embedded. Don't switch between two models with the same dimension on one vector store, including from the default fastembed to a 384-dimension model: their vectors would share an index, can't be compared, and recall would return wrong results without an error.
+
 ### Amazon Bedrock
 
 Bedrock authenticates with the server's AWS credentials, not a key each account saves. With sign-in enabled, turn it on for every account by adding these values to `mastracode/web/.env`:
@@ -183,6 +198,28 @@ AWS_BEARER_TOKEN_BEDROCK=...
 On EC2, an instance profile alone isn't detected. Add a profile to `~/.aws/config` with `credential_source = Ec2InstanceMetadata` and set `AWS_PROFILE` to that profile.
 
 Every signed-in account can then run Bedrock models, billed to that AWS account. Settings show Bedrock as **From deployment** and offer no key field. Without `FACTORY_DEPLOYMENT_MODEL_PROVIDERS`, Bedrock stays hidden and runs fail with a message that tells the operator what to set. Local mode without sign-in uses any AWS credentials in the environment, as before.
+
+### Google Vertex AI
+
+Vertex AI authenticates with the server's Google Cloud Application Default Credentials (ADC). With sign-in enabled, add these values to `mastracode/web/.env`:
+
+```dotenv
+FACTORY_DEPLOYMENT_MODEL_PROVIDERS=google-vertex
+GOOGLE_VERTEX_PROJECT=my-google-cloud-project
+GOOGLE_VERTEX_LOCATION=us-central1
+```
+
+For local development, create ADC credentials with:
+
+```shell
+gcloud auth application-default login
+```
+
+Deployments can instead use a service account or a Google Cloud runtime identity. Every signed-in account can then run Vertex AI models using the configured project and location. Settings show Vertex AI as **From deployment** and offer no key field.
+
+### Mastra Connect tools
+
+Sessions in web chat, Slack and on work items get the [Mastra Connect](https://mastra.ai/docs/mastra-platform/connect) tools of every connection attached to your Platform project, MCP servers included, for example to answer questions about Linear in a Slack thread. Attach connections in Mastra Platform, on the project's **Connect** page. **Settings → Tools** shows which ones sessions get. Platform deploys already have the credentials. Locally, set `MASTRA_PROJECT_ID` and `MASTRA_PLATFORM_SECRET_KEY` in `mastracode/web/.env`. Every user and organization on the server shares the project's connections. See `@mastra/factory`'s README for which tools are left out.
 
 ## Tests
 

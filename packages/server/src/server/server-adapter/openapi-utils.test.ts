@@ -100,6 +100,35 @@ describe('convertCustomRoutesToOpenAPIPaths', () => {
     });
   });
 
+  it('documents accepted request inputs and serialized outputs (#30050)', () => {
+    const route = createRoute({
+      method: 'POST',
+      path: '/widgets/:widgetId',
+      responseType: 'json',
+      pathParamSchema: z.object({ widgetId: z.string().transform(value => value.length) }),
+      queryParamSchema: z.object({ limit: z.string().transform(Number).default('10') }),
+      bodySchema: z.object({ name: z.string(), enabled: z.boolean().default(true) }),
+      responseSchema: z.object({ enabled: z.boolean().default(true) }),
+      handler: async () => ({ enabled: true }),
+    });
+
+    const document = generateOpenAPIDocument([route], { title: 'Widgets', version: '1' });
+    const operation = document.paths['/widgets/{widgetId}'].post;
+    expect(operation.parameters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'widgetId', in: 'path', schema: expect.objectContaining({ type: 'string' }) }),
+        expect.objectContaining({
+          name: 'limit',
+          in: 'query',
+          required: false,
+          schema: expect.objectContaining({ type: 'string' }),
+        }),
+      ]),
+    );
+    expect(operation.requestBody.content['application/json'].schema.required).toEqual(['name']);
+    expect(operation.responses['200'].content['application/json'].schema.required).toEqual(['enabled']);
+  });
+
   describe('component schemas', () => {
     interface Node {
       name: string;

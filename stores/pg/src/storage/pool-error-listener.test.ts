@@ -39,16 +39,27 @@ describe('PostgresStore pool error listeners', () => {
     }
   });
 
-  it('leaves user-provided pools untouched', async () => {
+  it.each(['pool', 'writePool'] as const)('leaves user-provided %s and read pools untouched', async poolKey => {
     const userPool = new pg.Pool({ connectionString: DEAD_CONNECTION_STRING });
-    const store = new PostgresStore({ id: 'pool-error-test', pool: userPool });
+    const readPool = new pg.Pool({ connectionString: DEAD_CONNECTION_STRING });
+    const store = new PostgresStore({
+      id: 'pool-error-test',
+      ...(poolKey === 'pool' ? { pool: userPool } : { writePool: userPool }),
+      readPool,
+    });
 
     try {
+      for (const pool of [userPool, readPool]) {
+        for (const event of ['connect', 'acquire', 'release', 'error']) {
+          expect(pool.listenerCount(event)).toBe(0);
+        }
+      }
       // Error handling on a user-owned pool stays the user's, mirroring close().
       expect(userPool.listenerCount('error')).toBe(0);
     } finally {
       await store.close();
       await userPool.end();
+      await readPool.end();
     }
   });
 
@@ -162,6 +173,16 @@ describe('PostgresStore pool error listeners', () => {
       const obsPool = errorRegistrations[0]!.instance;
       expect(obsPool).not.toBe(userPool);
       expect(obsPool.listenerCount('error')).toBe(1);
+      // A pool error listener only covers idle clients. Exercise the separate
+      // observability pool's checked-out client guard as well (#28234).
+      const client = new pg.Client();
+      obsPool.emit('connect', client);
+      obsPool.emit('acquire', client);
+      expect(() => client.emit('error', new Error('Connection terminated unexpectedly'))).not.toThrow();
+      for (const event of ['connect', 'acquire', 'release']) {
+        expect(obsPool.listenerCount(event)).toBe(1);
+        expect(userPool.listenerCount(event)).toBe(0);
+      }
       expect(() => obsPool.emit('error', new Error('idle client dropped'))).not.toThrow();
       expect(userPool.listenerCount('error')).toBe(0);
     } finally {

@@ -1,11 +1,14 @@
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import type { ReactNode } from 'react';
 import { Navigate } from 'react-router';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
+import { LoadErrorState } from '../../../ui/LoadErrorState';
 import { useSidebarHeaderSlots } from '../../chat/components/useSidebarHeaderSlots';
 import { orderedBoards } from '../boardCatalog';
 import { rememberedBoardPath } from '../services/boardViews';
+import { BoardLoadingSkeleton } from './BoardLoadingSkeleton';
 
 export function FactoryBoardLanding({ factoryId }: { factoryId: string | undefined }) {
   const catalog = useBoardCatalog(factoryId);
@@ -14,19 +17,29 @@ export function FactoryBoardLanding({ factoryId }: { factoryId: string | undefin
 
   return (
     <BoardLandingLayout>
-      <BoardLandingMessage isPending={catalog.isPending} isError={catalog.isError} />
+      {catalog.isPending ? (
+        <BoardLoadingSkeleton />
+      ) : catalog.isError ? (
+        <LoadErrorState
+          title="Couldn’t load boards"
+          error={catalog.error}
+          onRetry={() => void catalog.refetch()}
+          retrying={catalog.isFetching}
+        />
+      ) : (
+        <EmptyState variant="fill" titleSlot="No boards installed." />
+      )}
     </BoardLandingLayout>
   );
 }
 
-// A page header, so a collapsed sidebar can still be reopened from here (useSidebarHeaderSlots).
+// A page header, so a collapsed sidebar can still be reopened from here (useSidebarHeaderSlots). `fit` gives the
+// skeleton and the centered states the page's full height.
 function BoardLandingLayout({ children }: { children: ReactNode }) {
   const slots = useSidebarHeaderSlots();
-  return <PageLayout {...slots}>{children}</PageLayout>;
-}
-
-function BoardLandingMessage({ isPending, isError }: { isPending: boolean; isError: boolean }) {
-  if (isPending) return <p role="status">Loading boards…</p>;
-  if (isError) return <p role="alert">Unable to load boards.</p>;
-  return <p>No boards installed.</p>;
+  return (
+    <PageLayout variant="fit" {...slots}>
+      {children}
+    </PageLayout>
+  );
 }

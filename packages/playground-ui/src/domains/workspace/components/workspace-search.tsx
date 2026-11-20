@@ -1,14 +1,15 @@
 import { useWorkspaceSearch } from '@mastra/react/hooks/workspace';
-import { XIcon } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { useWorkspaceContext } from './use-workspace-context';
 import { WorkspaceError } from './workspace-error';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { Input } from '@/ds/components/Input';
+import { Metadata } from '@/ds/components/Metadata';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Txt } from '@/ds/components/Txt';
 import { FileIcon, Icon, SearchIcon, SkillIcon } from '@/ds/icons';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { cn } from '@/lib/utils';
 
 /** Icon button that swaps the tree for the search panel, like VS Code's search view. */
@@ -40,16 +41,11 @@ const countLabel = (count: number, noun: string) => `${count} ${noun}${count ===
 function AsideTitle() {
   const { fileCount, skillCount } = useWorkspaceContext();
   return (
-    <Txt as="span" variant="label" tone="muted" className="block min-w-0 truncate">
-      <span>{fileCount === undefined ? 'Files' : countLabel(fileCount, 'File')}</span>
-      {skillCount === undefined ? null : (
-        <>
-          <Txt as="span" variant="label" tone="faint" aria-hidden className="mx-1.5">
-            ·
-          </Txt>
-          <span>{countLabel(skillCount, 'Skill')}</span>
-        </>
-      )}
+    <Txt as="span" variant="label" tone="muted" className="block min-w-0">
+      <Metadata singleLine>
+        <Metadata.Item>{fileCount === undefined ? 'Files' : countLabel(fileCount, 'File')}</Metadata.Item>
+        {skillCount === undefined ? null : <Metadata.Item>{countLabel(skillCount, 'Skill')}</Metadata.Item>}
+      </Metadata>
     </Txt>
   );
 }
@@ -79,7 +75,7 @@ function SearchInput() {
         }}
       />
       <Button variant="ghost" size="icon-sm" tooltip="Close search" onClick={() => setSearching(false)}>
-        <XIcon />
+        <IconCrossMedium />
       </Button>
     </div>
   );

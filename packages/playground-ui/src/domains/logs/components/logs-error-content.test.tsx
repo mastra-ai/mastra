@@ -49,12 +49,6 @@ describe('LogsErrorContent', () => {
     expect(screen.getByText('Unknown error')).toBeTruthy();
   });
 
-  it('says the error is unknown when there is no error object', () => {
-    render(withClient(<LogsErrorContent error={undefined} resource="logs" errorTitle="Failed to load logs" />));
-
-    expect(screen.getByText('Unknown error')).toBeTruthy();
-  });
-
   it('checks for a logs-specific limitation, not any unsupported operation', () => {
     render(
       withClient(

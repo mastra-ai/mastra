@@ -1,3 +1,5 @@
+import { createOpenAI } from '@ai-sdk/openai-v5';
+import { LLMock } from '@copilotkit/aimock';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
@@ -9,6 +11,7 @@ import { createMockWorkspace } from '../../agent-controller/test-utils';
 import type { AgentControllerEvent } from '../../agent-controller/types';
 import { FGADeniedError } from '../../auth/ee/fga-check';
 import type { IFGAProvider } from '../../auth/ee/interfaces/fga';
+import type { MastraModelConfig } from '../../llm';
 import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
@@ -142,7 +145,7 @@ async function createSetup({
   platform?: string;
   responseText?: string;
   instructions?: () => Promise<string>;
-  model?: MockLanguageModelV2;
+  model?: MastraModelConfig;
   tools?: Record<string, any>;
   toolDisplay?: 'text';
   stateSchema?: z.ZodTypeAny;
@@ -332,6 +335,50 @@ describe('AgentControllerChannels', () => {
     expect(sessionAgain!.thread.getId()).toBe(boundThreadId);
     const threads = await getChannelThreads(mastra, 'chan-1:t-1');
     expect(threads).toHaveLength(1);
+  }, 30_000);
+
+  it('posts the provider explanation, not just the HTTP status text, when the model call is rejected', async () => {
+    // A provider 400 whose body the AI SDK cannot parse leaves only the status
+    // text ("Bad Request") in the error message; the explanation is in the body.
+    const llm = new LLMock({ port: 0 });
+    await llm.start();
+    try {
+      llm.onMessage(/.*/, {
+        error: { message: 'PROVIDER_REJECTED_THIS_REQUEST', type: 'invalid_request_error' },
+        status: 400,
+      });
+      const model = createOpenAI({
+        apiKey: 'aimock-test-key',
+        baseURL: `${llm.url.replace(/\/+$/, '')}/v1`,
+        // Reshape the error body so it no longer matches the provider's error
+        // schema — the shape of the production failures this guards against.
+        fetch: async (input, init) => {
+          const response = await fetch(input, init);
+          const { error } = (await response.json()) as { error: { message: string } };
+          return new Response(JSON.stringify({ message: error.message }), {
+            status: response.status,
+            statusText: response.statusText,
+            headers: { 'content-type': 'application/json', 'x-request-id': 'req_provider_400' },
+          });
+        },
+      }).chat('gpt-4o-mini');
+      const { adapter, mastra, channels } = await createSetup({ model });
+      const chatThread = createChatThread(adapter, 'chan-1:t-provider-400');
+
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-1', 'hello'),
+        mastra,
+        new RequestContext(),
+      );
+
+      await waitFor(() => postedText(chatThread).includes('❌ Error:'), { what: 'error posted to chat thread' });
+      expect(postedText(chatThread)).toContain(
+        '❌ Error: Bad Request (HTTP 400): PROVIDER_REJECTED_THIS_REQUEST (request id req_provider_400)',
+      );
+    } finally {
+      await llm.stop();
+    }
   }, 30_000);
 
   /**
@@ -706,6 +753,169 @@ describe('AgentControllerChannels', () => {
       expect(respondSpy).not.toHaveBeenCalled();
     }, 30_000);
 
+    it.each<[string, ((ctx: any) => any) | undefined]>([
+      ['the default session', undefined],
+      [
+        'a resolveSession host',
+        ({ controller, thread, requestContext }: any) =>
+          controller.createSession({
+            resourceId: thread.resourceId,
+            id: thread.resourceId,
+            threadId: thread.id,
+            requestContext,
+          }),
+      ],
+    ])(
+      'does not switch a shared session away from a live run for a click from another thread (%s)',
+      async (_, resolveSession) => {
+        const stale: any[] = [];
+        const storage = new InMemoryStore();
+        const { adapter, controller, mastra, channels } = await createSetup({
+          storage,
+          model: createApprovalFlowModel(),
+          tools: { deployTool: createDeployTool().tool },
+          onStaleToolApproval: (ctx: any) => void stale.push(ctx),
+          resolveSession,
+        });
+        const chatThread = createChatThread(adapter, 'chan-1:t-shared');
+
+        await (channels as any).processChatMessage(
+          chatThread,
+          createMessage('m-1', 'deploy'),
+          mastra,
+          new RequestContext(),
+        );
+        const session = (await controller.getSession('channel:chan-1:t-shared'))!;
+        await waitFor(() => session.approval.isArmed(), { what: 'approval gate armed' });
+        const liveThreadId = session.thread.getId();
+        const resourceId = session.identity.getResourceId();
+
+        // A second thread owned by the same session, e.g. an older card in another thread.
+        const memoryStore = await storage.getStore('memory');
+        await memoryStore!.saveThread({
+          thread: {
+            id: 'other-thread',
+            resourceId,
+            title: 'other',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            metadata: {},
+          },
+        });
+        const switchSpy = vi.spyOn(session.thread, 'switch');
+
+        await (channels as any).dispatchApproval({
+          runId: 'run-old',
+          toolCallId: session.approval.getToolCallIds()[0]!,
+          requestContext: new RequestContext(),
+          memory: { thread: 'other-thread', resource: resourceId },
+        });
+
+        expect(switchSpy).not.toHaveBeenCalled();
+        expect(session.thread.getId()).toBe(liveThreadId);
+        expect(session.approval.isArmed()).toBe(true);
+        expect(stale).toHaveLength(1);
+      },
+      30_000,
+    );
+
+    it('does not switch a session registered after the lookup to the clicked thread', async () => {
+      const stale: any[] = [];
+      const storage = new InMemoryStore();
+      const { adapter, controller, mastra, channels } = await createSetup({
+        storage,
+        model: createApprovalFlowModel(),
+        tools: { deployTool: createDeployTool().tool },
+        onStaleToolApproval: (ctx: any) => void stale.push(ctx),
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-race');
+
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-1', 'deploy'),
+        mastra,
+        new RequestContext(),
+      );
+      const session = (await controller.getSession('channel:chan-1:t-race'))!;
+      await waitFor(() => session.approval.isArmed(), { what: 'approval gate armed' });
+      const liveThreadId = session.thread.getId();
+      const resourceId = session.identity.getResourceId();
+
+      const memoryStore = await storage.getStore('memory');
+      await memoryStore!.saveThread({
+        thread: {
+          id: 'other-thread',
+          resourceId,
+          title: 'other',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {},
+        },
+      });
+      const switchSpy = vi.spyOn(session.thread, 'switch');
+      // The session shows up only after the lookup, so the click takes the createSession fallback.
+      vi.spyOn(controller, 'getSession').mockResolvedValueOnce(undefined);
+
+      await (channels as any).dispatchApproval({
+        runId: 'run-old',
+        toolCallId: session.approval.getToolCallIds()[0]!,
+        requestContext: new RequestContext(),
+        memory: { thread: 'other-thread', resource: resourceId },
+      });
+
+      expect(switchSpy).not.toHaveBeenCalled();
+      expect(session.thread.getId()).toBe(liveThreadId);
+      expect(session.approval.isArmed()).toBe(true);
+      expect(stale).toHaveLength(1);
+    }, 30_000);
+
+    it('refuses an approval from a principal that can read but not execute, leaving the gate armed', async () => {
+      const { adapter, controller, mastra, channels } = await createSetup({
+        model: createApprovalFlowModel(),
+        tools: { deployTool: createDeployTool().tool },
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-read-only');
+
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-1', 'deploy'),
+        mastra,
+        new RequestContext(),
+      );
+      const session = (await controller.getSession('channel:chan-1:t-read-only'))!;
+      await waitFor(() => session.approval.isArmed(), { what: 'approval gate armed' });
+      const respondSpy = vi.spyOn(session, 'respondToToolApproval');
+
+      // Allows READ (and everything else) but denies EXECUTE.
+      const provider: IFGAProvider = {
+        check: vi.fn(async (_user: any, { permission }: any) => permission !== 'agent-controller:execute'),
+        require: vi.fn(async (_user: any, { permission }: any) => {
+          if (permission === 'agent-controller:execute') {
+            throw new FGADeniedError({ id: 'user-1' }, { type: 'agent-controller', id: 'ctrl-1' }, permission);
+          }
+        }),
+        filterAccessible: vi.fn(async (_user: any, resources: any) => resources),
+      };
+      controller.__registerMastra({ getServer: () => ({ fga: provider }) } as any);
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1', organizationMembershipId: 'om-1' });
+
+      await expect(
+        (channels as any).dispatchApproval({
+          runId: 'run-live',
+          toolCallId: session.approval.getToolCallIds()[0]!,
+          requestContext,
+          memory: { thread: session.thread.getId()!, resource: session.identity.getResourceId() },
+        }),
+      ).rejects.toBeInstanceOf(FGADeniedError);
+
+      expect(vi.mocked(provider.require).mock.calls.map(([, auth]: any) => auth.permission)).toContain(
+        'agent-controller:execute',
+      );
+      expect(respondSpy).not.toHaveBeenCalled();
+      expect(session.approval.isArmed()).toBe(true);
+    }, 30_000);
+
     it('does not fire when the gate matches the action', async () => {
       const stale: any[] = [];
       const { adapter, controller, mastra, channels } = await createSetup({
@@ -914,14 +1124,14 @@ describe('AgentControllerChannels', () => {
       'posts no approval card for $policy-policy tools the session resolves itself',
       async ({ policy, executes }) => {
         const { tool, executeSpy } = createDeployTool();
+        // Rules belong to the session's bound thread, so set them once the channel
+        // has bound its thread: the documented seam for configuring channel sessions.
         const { adapter, controller, mastra, channels } = await createSetup({
           model: createApprovalFlowModel(),
           tools: { deployTool: tool },
+          onSessionStart: ({ session }) => session.permissions.setForTool({ toolName: 'deployTool', policy }),
         });
         const threadId = `chan-1:t-${policy}`;
-        const resourceId = `channel:${threadId}`;
-        const session = await controller.createSession({ resourceId, id: resourceId, ownerId: controller.id });
-        await session.permissions.setForTool({ toolName: 'deployTool', policy });
         const chatThread = createChatThread(adapter, threadId);
 
         await (channels as any).processChatMessage(
@@ -934,6 +1144,8 @@ describe('AgentControllerChannels', () => {
         await waitFor(() => allPostedText(adapter, chatThread).includes('Deployed successfully.'), {
           what: 'continuation rendered',
         });
+        const session = (await controller.getSession(`channel:${threadId}`))!;
+        expect(session.permissions.getRules().tools.deployTool).toBe(policy);
         expect(session.approval.isArmed()).toBe(false);
         expect(executeSpy).toHaveBeenCalledTimes(executes ? 1 : 0);
         // Cards are posted then edited in place, so check both paths.
@@ -1460,7 +1672,7 @@ describe('AgentControllerChannels thread history', () => {
     // and the trigger wakes the session instead of attaching to an existing run.
     expect(events.slice(0, 2)).toEqual(['save:3', 'send']);
     expect(sends).toHaveLength(1);
-    expect(sends[0].options).toMatchObject({ requireDelivery: true });
+    expect(sends[0].options).toMatchObject({ requireDelivery: true, untilIdle: true });
     expect(JSON.stringify(sends[0].input.contents)).not.toContain('[Thread context');
     await expect(sends[0].result.accepted).resolves.toMatchObject({ action: 'wake' });
 

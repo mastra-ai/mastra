@@ -1,8 +1,8 @@
-import { Plus } from 'lucide-react';
 import React, { useRef } from 'react';
 import { Button } from './Button';
 import type { ButtonProps } from './Button';
 import { Kbd } from '@/ds/components/Kbd';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { useKeydown } from '@/lib/keyboard';
 import { mergeRefs } from '@/lib/merge-refs';
 
@@ -32,7 +32,7 @@ export const CreateButton = React.forwardRef<HTMLElement, CreateButtonProps>(
     return (
       <Button
         ref={mergeRefs(buttonRef, forwardedRef)}
-        icon={<Plus />}
+        icon={<IconPlusMedium />}
         disabled={disabled}
         tooltip={
           <span className="inline-flex items-center gap-1.5">

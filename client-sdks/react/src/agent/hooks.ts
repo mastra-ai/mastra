@@ -7,7 +7,7 @@ import type { CoreUserMessage } from '@mastra/core/llm';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { TaskItem } from '@mastra/core/signals';
-import type { ChunkType, DataChunkType, NetworkChunkType } from '@mastra/core/stream';
+import type { ChunkType, DataChunkType, NetworkChunkType, ThreadRunStatusChunk } from '@mastra/core/stream';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   accumulateChunk,
@@ -362,6 +362,7 @@ export const useChat = ({
   const liveApprovalIds = useRef(new Set<string>());
   const liveRunId = useRef<string | undefined>(undefined);
   const liveRunFinished = useRef(false);
+  const pendingRunStatuses = useRef<Map<string, ThreadRunStatusChunk> | undefined>(undefined);
   const [isAwaitingToolApproval, setIsAwaitingToolApproval] = useState(false);
 
   const baseClient = useMastraClient();
@@ -653,7 +654,12 @@ export const useChat = ({
       const subscriptionAgent = clientWithAbort.getAgent(agentId, undefined, { stream: streamPath });
 
       _threadSubscriptionPromiseRef.current = subscriptionAgent
-        .subscribeToThread({ resourceId, threadId, ...(withInitialHistory ? { withInitialHistory } : {}) })
+        .subscribeToThread({
+          resourceId,
+          threadId,
+          withRunStatus: true,
+          ...(withInitialHistory ? { withInitialHistory } : {}),
+        })
         .then(response => {
           const subscription = response;
           if (_threadSubscriptionAbortRef.current !== subscriptionAbort) {
@@ -667,7 +673,17 @@ export const useChat = ({
               onChunk: chunk => {
                 if (chunk.type === 'thread-history') {
                   if (_threadSubscriptionAbortRef.current === subscriptionAbort) {
-                    const { hasMore } = chunk.payload;
+                    const { hasMore, activeRunId } = chunk.payload;
+                    if (
+                      activeRunId &&
+                      activeRunId !== liveRunId.current &&
+                      (!liveRunId.current || liveRunFinished.current)
+                    ) {
+                      liveRunId.current = activeRunId;
+                      liveRunFinished.current = false;
+                      _currentRunId.current = activeRunId;
+                      setIsRunning(pendingToolApprovalIdsRef.current.size === 0);
+                    }
                     setSubscriptionPagination(
                       typeof hasMore === 'boolean' ? { key: subscriptionKey, pagination: { hasMore } } : undefined,
                     );
@@ -683,6 +699,20 @@ export const useChat = ({
                     key: `${agentId}:${resourceId ?? ''}:${threadId}`,
                     messages: chunk.payload.messages,
                   });
+                  return;
+                }
+                if (chunk.type === 'thread-run-status') {
+                  if (chunk.runId !== liveRunId.current) {
+                    pendingRunStatuses.current?.set(chunk.runId, chunk);
+                    return;
+                  }
+                  setIsRunning(false);
+                  if (chunk.payload.status !== 'suspended') {
+                    liveRunFinished.current = true;
+                    for (const toolCallId of pendingToolApprovalIdsRef.current) liveApprovalIds.current.add(toolCallId);
+                    pendingToolApprovalIdsRef.current.clear();
+                    setIsAwaitingToolApproval(false);
+                  }
                   return;
                 }
                 return processStreamChunk(chunk);
@@ -922,7 +952,31 @@ export const useChat = ({
 
     const agent = clientWithAbort.getAgent(agentId, undefined, { stream: streamPath });
 
+    // Stop (or a newer send) aborts this controller on purpose; that ends the send, it doesn't fail it.
+    // A caller-supplied signal keeps normal fetch semantics and still rejects.
+    const stoppedHere = (error: unknown) => isAbortError(error) && internalAbort.signal.aborted && !signal?.aborted;
+    const releaseRunning = () => {
+      // A newer send owns the running state once it has replaced this controller.
+      if (!_streamAbortRef.current || _streamAbortRef.current === internalAbort) setIsRunning(false);
+    };
+    const settleStopped = () => {
+      releaseRunning();
+      // The server never confirmed this turn, so its optimistic bubble must not stay pending.
+      if (signalId) {
+        setMessages(s => s.filter(m => !(m.id === signalId && m.content.metadata?.status === 'pending')));
+      }
+    };
+
     const streamWithLegacyRoute = async () => {
+      try {
+        await runLegacyRoute();
+      } catch (error) {
+        if (!stoppedHere(error)) throw error;
+        settleStopped();
+      }
+    };
+
+    const runLegacyRoute = async () => {
       const runId = uuid();
       _currentRunId.current = runId;
       const response = await agent.stream(coreUserMessages, {
@@ -960,7 +1014,7 @@ export const useChat = ({
       if (_streamAbortRef.current === internalAbort) {
         _streamAbortRef.current = null;
       }
-      setIsRunning(false);
+      releaseRunning();
     };
 
     if (!threadId || _threadSignalsUnsupportedRef.current || threadSignalsDisabled) {
@@ -1004,6 +1058,10 @@ export const useChat = ({
       clientToolsResolver,
     };
 
+    const liveRunIdBeforeSend = liveRunId.current;
+    // An outcome can reach SSE before the acceptance response supplies its run ID.
+    const earlyRunStatuses = new Map<string, ThreadRunStatusChunk>();
+    pendingRunStatuses.current = earlyRunStatuses;
     try {
       const result = await agent.sendMessage({
         message:
@@ -1024,6 +1082,28 @@ export const useChat = ({
           },
         },
       });
+      // SSE may already have finished this run or moved on while the request was pending.
+      if (
+        _streamAbortRef.current === internalAbort &&
+        liveRunId.current === liveRunIdBeforeSend &&
+        liveRunId.current !== result.runId
+      ) {
+        liveApprovalIds.current.clear();
+        liveRunId.current = result.runId;
+        liveRunFinished.current = false;
+        _currentRunId.current = result.runId;
+        setIsRunning(true);
+        const earlyStatus = earlyRunStatuses.get(result.runId);
+        if (earlyStatus) {
+          setIsRunning(false);
+          if (earlyStatus.payload.status !== 'suspended') {
+            liveRunFinished.current = true;
+            for (const toolCallId of pendingToolApprovalIdsRef.current) liveApprovalIds.current.add(toolCallId);
+            pendingToolApprovalIdsRef.current.clear();
+            setIsAwaitingToolApproval(false);
+          }
+        }
+      }
       const echoedSignalId =
         result.signal &&
         typeof result.signal === 'object' &&
@@ -1036,6 +1116,10 @@ export const useChat = ({
         setIsRunning(false);
       }
     } catch (error) {
+      if (stoppedHere(error)) {
+        settleStopped();
+        return;
+      }
       if (isThreadSignalUnsupportedError(error)) {
         try {
           await agent.sendSignal({
@@ -1053,6 +1137,10 @@ export const useChat = ({
           return;
         } catch (signalError) {
           onSignalEcho?.(resolvedSignalId);
+          if (stoppedHere(signalError)) {
+            settleStopped();
+            return;
+          }
           if (isThreadSignalUnsupportedError(signalError)) {
             markThreadSignalsUnsupported();
             setMessages(prev => [...prev, fromCoreUserMessagesToMastraDBMessage(coreUserMessages)]);
@@ -1063,6 +1151,8 @@ export const useChat = ({
         }
       }
       throw error;
+    } finally {
+      if (pendingRunStatuses.current === earlyRunStatuses) pendingRunStatuses.current = undefined;
     }
 
     if (_streamAbortRef.current === internalAbort) {
