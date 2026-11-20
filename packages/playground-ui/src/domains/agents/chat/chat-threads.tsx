@@ -89,7 +89,7 @@ export const ChatThreads = ({
           actions={
             <ThreadActionsMenu
               onPin={() => pin(thread.id)}
-              onRename={canRenameThread ? () => setDialog({ type: 'rename', thread }) : undefined}
+              onRename={canRenameThread && renderRenameDialog ? () => setDialog({ type: 'rename', thread }) : undefined}
               onDelete={canDeleteThread ? () => setDialog({ type: 'delete', thread }) : undefined}
             />
           }
@@ -156,7 +156,11 @@ export const ChatThreads = ({
                       actions={
                         <ThreadActionsMenu
                           onUnpin={() => unpin(thread.id)}
-                          onRename={canRenameThread ? () => setDialog({ type: 'rename', thread }) : undefined}
+                          onRename={
+                            canRenameThread && renderRenameDialog
+                              ? () => setDialog({ type: 'rename', thread })
+                              : undefined
+                          }
                           onDelete={canDeleteThread ? () => setDialog({ type: 'delete', thread }) : undefined}
                         />
                       }

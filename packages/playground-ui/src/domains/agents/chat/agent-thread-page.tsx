@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { AgentChat } from './agent-chat';
 import type { AgentChatProps } from './agent-chat';
 import { AgentChatLoadingSkeleton, AgentLandingLoadingSkeleton } from './agent-loading-skeletons';
@@ -34,6 +35,7 @@ export interface AgentThreadPageProps {
   threadListFeatures?: AgentThreadListFeatures;
   layoutBehavior?: AgentThreadLayoutBehavior;
   sidebarExtensions?: AgentThreadSidebarExtensions;
+  renderSidebar?: (threadList: ReactNode) => ReactNode;
 }
 
 export function AgentThreadPage({
@@ -45,6 +47,7 @@ export function AgentThreadPage({
   threadListFeatures,
   layoutBehavior,
   sidebarExtensions,
+  renderSidebar,
 }: AgentThreadPageProps) {
   const threadsPanel = useThreadsPanel();
   const { actualThreadId, isNewThread, hasMemory, isMemoryLoading, threads, isThreadsLoading } = state;
@@ -69,7 +72,9 @@ export function AgentThreadPage({
       onDelete={state.deleteThread}
     />
   );
-  const sidebar = hideThreadsPanel ? undefined : (
+  const sidebar = hideThreadsPanel ? undefined : renderSidebar ? (
+    renderSidebar(threadList)
+  ) : (
     <SidebarPanel>
       <AgentThreadSidebar {...sidebarExtensions} agentId={agentId} threadList={threadList} isLoading={isLoading} />
     </SidebarPanel>

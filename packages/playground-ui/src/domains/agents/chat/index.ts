@@ -8,5 +8,6 @@ export { ChatProvider } from './chat-provider';
 export { Thread } from './thread';
 export type { ThreadProps } from './thread';
 export type { AgentSettingsType, ChatProps, ModelSettings } from './types';
-export { AgentChatFeaturesProvider } from './features';
+export { AgentChatFeaturesProvider, useAgentThreadInput } from './features';
+export { ThreadsPanelContext } from './use-threads-panel';
 export type { AgentChatFeatures, AgentChatSlots, AgentChatThreadInput } from './features';
