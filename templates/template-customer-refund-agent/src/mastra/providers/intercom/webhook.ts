@@ -82,6 +82,7 @@ export function verifyIntercomWebhook(
   if (contentType !== 'application/json') throw new Error('Intercom webhook must be application/json.');
   const actual = suppliedSignature(headers.get('x-hub-signature'));
   if (!actual) throw new Error('Intercom webhook signature is missing or invalid.');
+  // Intercom's `X-Hub-Signature` header is HMAC-SHA1 (`sha1=`). A stronger digest would reject every real webhook.
   const expected = createHmac('sha1', config.clientSecret).update(rawBody).digest('hex');
   const actualBytes = Buffer.from(actual, 'hex');
   const expectedBytes = Buffer.from(expected, 'hex');
