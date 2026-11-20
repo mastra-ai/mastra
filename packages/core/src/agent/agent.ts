@@ -12907,8 +12907,12 @@ export class Agent<
   /** Runs with a resume() setting up or executing, which a parked-run release must leave alone. */
   readonly #resumesInProgress = new Map<string, number>();
 
-  /** {@link createRunCleanup}, tracked per run until it releases. */
-  #createStreamCleanup(runId: string, options: CreateRunCleanupOptions): RunCleanup {
+  /** {@link createRunCleanup}, tracked per run until it releases (unless `tracked` is false). */
+  #createStreamCleanup(
+    runId: string,
+    options: CreateRunCleanupOptions,
+    { tracked = true }: { tracked?: boolean } = {},
+  ): RunCleanup {
     const forget = () => this.#forgetStreamCleanup(runId, cleanup);
     const { release, releaseOnTimer } = options;
     const cleanup = createRunCleanup({
@@ -12926,10 +12930,15 @@ export class Agent<
           }
         : {}),
     });
+    if (tracked) this.#trackStreamCleanup(runId, cleanup);
+    return cleanup;
+  }
+
+  #trackStreamCleanup(runId: string, cleanup: RunCleanup): void {
+    if (cleanup.done) return;
     let cleanups = this.#streamCleanups.get(runId);
     if (!cleanups) this.#streamCleanups.set(runId, (cleanups = new Set()));
     cleanups.add(cleanup);
-    return cleanup;
   }
 
   /** Stops tracking a stream release, as when the stream it would release was never set up. */
@@ -16488,28 +16497,33 @@ export class Agent<
     const localEntry = this.executionRunRegistry.get(runId);
     const observedEntry = localEntry ?? getRunRegistryEntry(runId, this.#mastra);
     const observedFence = observedEntry?.executionFence;
-    const runCleanup = this.#createStreamCleanup(runId, {
-      scheduleTimer: cleanup =>
-        observedFence
-          ? this.scheduleReaderCleanup(observedFence, cleanup)
-          : this.#executionStreamBus.scheduleCleanup(cleanup),
-      release: () => {
-        streamCleanup?.();
-        if (
-          observedFence &&
-          (this.#unverifiedReaderFences.has(observedFence) ||
-            !observedFence.ownsRunTopics() ||
-            getRunRegistryEntry(runId, this.#mastra)?.executionFence !== observedFence ||
-            (localEntry &&
-              (this.executionRunRegistry.get(runId) !== localEntry || localEntry.executionFence !== observedFence)))
-        ) {
-          return;
-        }
-        this.executionRunRegistry.cleanup(runId);
-        deleteRunRegistryEntry(runId, this.#mastra);
-        this.clearPubsubTopic(runId, observedEntry);
+    // Tracked only once the observer is attached: a detached or failed observer holds nothing to release.
+    const runCleanup = this.#createStreamCleanup(
+      runId,
+      {
+        scheduleTimer: cleanup =>
+          observedFence
+            ? this.scheduleReaderCleanup(observedFence, cleanup)
+            : this.#executionStreamBus.scheduleCleanup(cleanup),
+        release: () => {
+          streamCleanup?.();
+          if (
+            observedFence &&
+            (this.#unverifiedReaderFences.has(observedFence) ||
+              !observedFence.ownsRunTopics() ||
+              getRunRegistryEntry(runId, this.#mastra)?.executionFence !== observedFence ||
+              (localEntry &&
+                (this.executionRunRegistry.get(runId) !== localEntry || localEntry.executionFence !== observedFence)))
+          ) {
+            return;
+          }
+          this.executionRunRegistry.cleanup(runId);
+          deleteRunRegistryEntry(runId, this.#mastra);
+          this.clearPubsubTopic(runId, observedEntry);
+        },
       },
-    });
+      { tracked: false },
+    );
     const performCleanup = runCleanup.run;
     const scheduleAutoCleanup = runCleanup.schedule;
 
@@ -16792,8 +16806,14 @@ export class Agent<
       tracingContext: observedAgentSpan ? { currentSpan: observedAgentSpan } : undefined,
       messageList,
     });
-    const { output, ready, detach } = stream;
+    const { output, ready } = stream;
     streamCleanup = stream.cleanup;
+    let detached = false;
+    const detach = () => {
+      detached = true;
+      this.#forgetStreamCleanup(runId, runCleanup);
+      stream.detach();
+    };
 
     // This output belongs to this observer alone, so a consumer that stops
     // reading fullStream (break/return/throw out of `for await`) should detach
@@ -16813,6 +16833,7 @@ export class Agent<
       detach();
       throw error;
     }
+    if (!detached) this.#trackStreamCleanup(runId, runCleanup);
 
     const cleanup = () => {
       if (abortPending) {

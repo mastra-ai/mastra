@@ -204,6 +204,34 @@ describe('releaseParkedRun ownership', () => {
   });
 });
 
+describe('an observer that stops watching', () => {
+  it('leaves no stream release behind after it detaches', async () => {
+    const { agent, workflow, storage } = setup();
+    await suspend(agent, 'run-detached');
+    await expect.poll(() => workflow.runs.size).toBe(0);
+
+    const observed = await agent.observe('run-detached');
+    observed.detach();
+
+    expect(await agent.releaseParkedRun('run-detached')).toBe(false);
+    expect(await storedStatus(storage, 'run-detached')).toBe('suspended');
+  });
+
+  it('leaves no stream release behind when its setup fails', async () => {
+    const { agent, workflow } = setup();
+    await suspend(agent, 'run-observe-fails');
+    await expect.poll(() => workflow.runs.size).toBe(0);
+
+    const getStorage = vi.spyOn(agent.getMastraInstance()!, 'getStorage').mockImplementationOnce(() => {
+      throw new Error('storage unavailable');
+    });
+    await expect(agent.observe('run-observe-fails')).rejects.toThrow('storage unavailable');
+    getStorage.mockRestore();
+
+    expect(await agent.releaseParkedRun('run-observe-fails')).toBe(false);
+  });
+});
+
 describe('a failed recovery', () => {
   it('leaves no stream release behind', async () => {
     const { agent, workflow, storage } = setup();
