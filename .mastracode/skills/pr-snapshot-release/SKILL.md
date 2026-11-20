@@ -10,7 +10,7 @@ PR and branch snapshots are retired. Mixing different versions of the same packa
 <constraints>
 
 - MUST NOT dispatch `publish_type=snapshot` or `publish_type=playground-snapshot`, publish a custom branch tag, or fall back to a snapshot because alpha is unavailable.
-- MUST NOT dispatch any release workflow without Justin's explicit approval to start that release.
+- MUST NOT dispatch any release workflow without the user's explicit approval to start that release.
 
 </constraints>
 

@@ -66,6 +66,6 @@ Only when the dependency change is separately authorized:
 
 <format>
 
-Report: packages checked, resolved alpha version per package, the run or SHA evidence that the change is included (or what is missing), and the one next action for Justin.
+Report: packages checked, resolved alpha version per package, the run or SHA evidence that the change is included (or what is missing), and the one next action for the user.
 
 </format>
