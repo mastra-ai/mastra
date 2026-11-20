@@ -109,7 +109,7 @@ export class HelpDeskImporter extends KnowledgeImporter({
 
 - **Await every `ctx.items` call.** Items are buffered and sent in batches, so a call can wait for the previous batch to land.
 - **`ctx.state.set()` saves the cursor with the items before it.** Call it after the items it covers, never before.
-- **Use `ctx.fetch` and watch `ctx.signal`.** The signal fires when the run is canceled or reaches its time limit. `ctx.fetch` is bound to it.
+- **Use `ctx.fetch` and watch `ctx.signal`.** The signal fires when the run is canceled or reaches its time limit. `ctx.fetch` uses that signal unless you pass your own `signal`, which replaces it, so combine them with `AbortSignal.any()` if you need both. `ctx.fetch` doesn't retry, so handle rate limits and server errors yourself, for example by waiting for the source's `Retry-After` header before trying again.
 - **Throw `KnowledgeImporterSourceError` with the HTTP status** when the source fails. The run ends with a fixed error code, such as `source_auth_failed` for 401 or 403 and `source_rate_limited` for 429, and your error text stays in your own logs.
 
 ## Place items in a tree
