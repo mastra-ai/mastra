@@ -4,7 +4,7 @@ import { useMastraClient } from '@mastra/react';
 import { useChat } from '@mastra/react/chat';
 import {
   memoryStatusQueryKey,
-  memoryThreadMessagesQueryKey,
+  memoryThreadMessagesQueryKeyPrefix,
   observationalMemoryQueryKey,
   useMemoryConfig,
 } from '@mastra/react/hooks/memory';
@@ -195,7 +195,7 @@ export function ChatProvider({
       // active thread so unrelated memory caches and other threads are untouched,
       // and refetch (not just invalidate) so the panel shows live data right away.
       void queryClient.refetchQueries({ queryKey: observationalMemoryQueryKey(agentId, threadId) });
-      void queryClient.refetchQueries({ queryKey: memoryThreadMessagesQueryKey(threadId) });
+      void queryClient.refetchQueries({ queryKey: memoryThreadMessagesQueryKeyPrefix(threadId, agentId) });
       void queryClient.refetchQueries({ queryKey: memoryStatusQueryKey(agentId, threadId) });
     },
     [agentId, queryClient, setIsObservingFromStream, setIsReflectingFromStream, signalObservationsUpdated, threadId],
@@ -219,7 +219,7 @@ export function ChatProvider({
     void queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
     // Force an immediate refetch of the memory timeline panel on stream reset (see refreshObservationalMemory).
     void queryClient.refetchQueries({ queryKey: observationalMemoryQueryKey(agentId, threadId) });
-    void queryClient.refetchQueries({ queryKey: memoryThreadMessagesQueryKey(threadId) });
+    void queryClient.refetchQueries({ queryKey: memoryThreadMessagesQueryKeyPrefix(threadId, agentId) });
     void queryClient.refetchQueries({ queryKey: memoryStatusQueryKey(agentId, threadId) });
   }, [agentId, queryClient, setIsObservingFromStream, setIsReflectingFromStream, setMessages, threadId]);
 
