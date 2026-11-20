@@ -1438,7 +1438,8 @@ export class Agent<
       if (legacyKeys.length) {
         this.logger.warn(
           `Agent "${this.id}" ignores durable execution options: ${legacyKeys.join(', ')}. ` +
-            'Use createDurableAgent({ agent, ...executionOptions }) to configure wrapper-specific options.',
+            'Use createDurableAgent({ agent, ...executionOptions }) to configure wrapper-specific options. ' +
+            'On native Agent, durable configures resumable streams and the execution engine.',
         );
       }
     }
@@ -11597,20 +11598,20 @@ export class Agent<
     streamOptions: AgentExecutionOptionsBase<T> & {
       structuredOutput: PublicStructuredOutputOptions<T>;
     } & { model?: DynamicArgument<MastraModelConfig> },
-  ): Promise<AgentStreamOutput<T>>;
+  ): Promise<MastraModelOutput<T>>;
   async stream<OUTPUT extends {}>(
     messages: MessageListInput,
     streamOptions: AgentExecutionOptionsBase<OUTPUT> & {
       structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
     } & { model?: DynamicArgument<MastraModelConfig> },
-  ): Promise<AgentStreamOutput<OUTPUT>>;
+  ): Promise<MastraModelOutput<OUTPUT>>;
   async stream(
     messages: MessageListInput,
     streamOptions: AgentExecutionOptionsBase<unknown> & {
       structuredOutput?: never;
     } & { model?: DynamicArgument<MastraModelConfig> },
-  ): Promise<AgentStreamOutput<TOutput>>;
-  async stream(messages: MessageListInput): Promise<AgentStreamOutput<TOutput>>;
+  ): Promise<MastraModelOutput<TOutput>>;
+  async stream(messages: MessageListInput): Promise<MastraModelOutput<TOutput>>;
   async stream<OUTPUT = TOutput>(
     messages: MessageListInput,
     streamOptions?: AgentExecutionOptionsBase<any> & {
@@ -11705,22 +11706,22 @@ export class Agent<
       structuredOutput: PublicStructuredOutputOptions<T>;
       maxIdleMs?: number;
     } & { model?: DynamicArgument<MastraModelConfig> },
-  ): Promise<AgentStreamOutput<T>>;
+  ): Promise<MastraModelOutput<T>>;
   async streamUntilIdle<OUTPUT extends {}>(
     messages: MessageListInput,
     streamOptions: AgentExecutionOptionsBase<OUTPUT> & {
       structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
       maxIdleMs?: number;
     } & { model?: DynamicArgument<MastraModelConfig> },
-  ): Promise<AgentStreamOutput<OUTPUT>>;
+  ): Promise<MastraModelOutput<OUTPUT>>;
   async streamUntilIdle(
     messages: MessageListInput,
     streamOptions: AgentExecutionOptionsBase<unknown> & {
       structuredOutput?: never;
       maxIdleMs?: number;
     } & { model?: DynamicArgument<MastraModelConfig> },
-  ): Promise<AgentStreamOutput<TOutput>>;
-  async streamUntilIdle(messages: MessageListInput): Promise<AgentStreamOutput<TOutput>>;
+  ): Promise<MastraModelOutput<TOutput>>;
+  async streamUntilIdle(messages: MessageListInput): Promise<MastraModelOutput<TOutput>>;
   async streamUntilIdle<OUTPUT = TOutput>(
     messages: MessageListInput,
     streamOptions?: AgentExecutionOptionsBase<any> & {
@@ -11780,7 +11781,7 @@ export class Agent<
       /** Close the outer stream after this many ms of idleness. Default: 5 minutes. */
       maxIdleMs?: number;
     } & { model?: DynamicArgument<MastraModelConfig> },
-  ): Promise<AgentStreamOutput<T>>;
+  ): Promise<MastraModelOutput<T>>;
   async resumeStreamUntilIdle<OUTPUT extends {}>(
     resumeData: any,
     streamOptions: AgentExecutionOptionsBase<OUTPUT> & {
@@ -11788,7 +11789,7 @@ export class Agent<
       toolCallId?: string;
       maxIdleMs?: number;
     } & { model?: DynamicArgument<MastraModelConfig> },
-  ): Promise<AgentStreamOutput<OUTPUT>>;
+  ): Promise<MastraModelOutput<OUTPUT>>;
   async resumeStreamUntilIdle(
     resumeData: any,
     streamOptions: AgentExecutionOptionsBase<unknown> & {
@@ -11796,7 +11797,7 @@ export class Agent<
       toolCallId?: string;
       maxIdleMs?: number;
     } & { model?: DynamicArgument<MastraModelConfig> },
-  ): Promise<AgentStreamOutput<TOutput>>;
+  ): Promise<MastraModelOutput<TOutput>>;
   async resumeStreamUntilIdle(
     resumeData: any,
     streamOptions?: AgentExecutionOptionsBase<any> & {
@@ -11841,21 +11842,21 @@ export class Agent<
       structuredOutput: PublicStructuredOutputOptions<T>;
       toolCallId?: string;
     } & { model?: DynamicArgument<MastraModelConfig> },
-  ): Promise<AgentStreamOutput<T>>;
+  ): Promise<MastraModelOutput<T>>;
   async resumeStream<OUTPUT extends {}>(
     resumeData: any,
     streamOptions: AgentExecutionOptionsBase<OUTPUT> & {
       structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
       toolCallId?: string;
     } & { model?: DynamicArgument<MastraModelConfig> },
-  ): Promise<AgentStreamOutput<OUTPUT>>;
+  ): Promise<MastraModelOutput<OUTPUT>>;
   async resumeStream(
     resumeData: any,
     streamOptions: AgentExecutionOptionsBase<unknown> & {
       structuredOutput?: never;
       toolCallId?: string;
     } & { model?: DynamicArgument<MastraModelConfig> },
-  ): Promise<AgentStreamOutput<TOutput>>;
+  ): Promise<MastraModelOutput<TOutput>>;
   async resumeStream<OUTPUT = TOutput>(
     resumeData: any,
     streamOptions?: AgentExecutionOptionsBase<any> & {
