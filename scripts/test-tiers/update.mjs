@@ -703,16 +703,20 @@ export function failedJobKeys(job, keys) {
 
 /**
  * Whether a failed job's tier key passed on a later attempt of the job or in a later green run of
- * the same head (`candidates` holds those runs' jobs). Grouped jobs are judged by the key's own
- * step, so a sibling's new failure doesn't hide a recovery and a skipped or cancelled retry isn't
- * one; jobs tiered as a whole go by the job's conclusion.
+ * the same head (`candidates` holds those runs' jobs; the caller keeps them to the same workflow
+ * and head). Grouped jobs are judged by the key's own store step in any grouped job, since a
+ * group's name lists the stores it selected and that can change between runs; a sibling's new
+ * failure doesn't hide a recovery and a skipped or cancelled retry isn't one. Jobs tiered as a
+ * whole go by the conclusion of the job with the same name.
  */
 export function passedOnRetry(job, key, candidates, keysOf) {
+  const grouped = Boolean(keysOf(job).passed);
   return candidates.some(j => {
-    if (j === job || j.name !== job.name) return false;
+    if (j === job) return false;
     if (j.run_id === job.run_id && !(j.run_attempt > job.run_attempt)) return false;
     const { passed } = keysOf(j);
-    return passed ? passed.includes(key) : j.conclusion === 'success';
+    if (grouped) return Boolean(passed?.includes(key));
+    return j.name === job.name && !passed && j.conclusion === 'success';
   });
 }
 

@@ -457,6 +457,41 @@ test('a grouped store recovers on its own retry even when a sibling store newly 
   assert.equal(passedOnRetry(pg(1, 'failure'), 'job:store/pg', [pg(2, 'cancelled')], keysOf), false);
 });
 
+test('a grouped store recovers in a later green run whose group selected different stores', () => {
+  const keysOf = j => jobKeysFor('Prebuild', j.name, () => '', j.steps);
+  const group = (id, runId, stores, conclusions) => ({
+    id,
+    name: `Combined Store Tests / test (containers 1: ${stores.join(' ')})`,
+    run_id: runId,
+    run_attempt: 1,
+    conclusion: conclusions.includes('failure') ? 'failure' : 'success',
+    steps: [
+      { name: `Build grouped storage packages (${stores.join(' ')})`, conclusion: 'success' },
+      ...stores.map((s, i) => ({ name: `Run ${s} tests`, conclusion: conclusions[i] })),
+    ],
+  });
+  const failed = group(1, 10, ['mssql', 'mysql'], ['failure', 'success']);
+  const later = group(2, 11, ['mssql'], ['success']);
+  assert.equal(passedOnRetry(failed, 'job:store/mssql', [failed, later], keysOf), true);
+  // A store the later group didn't run hasn't recovered.
+  assert.equal(passedOnRetry(failed, 'job:store/mysql', [failed, later], keysOf), false);
+  // The other group never runs this store, and a whole job never counts for a grouped key.
+  const other = { ...group(3, 11, ['redis'], ['success']), name: 'Combined Store Tests / test (containers 2: redis)' };
+  assert.equal(passedOnRetry(failed, 'job:store/redis', [failed, other], keysOf), true);
+  assert.equal(
+    passedOnRetry(
+      failed,
+      'job:store/mssql',
+      [
+        failed,
+        { name: 'Combined Store Tests / test (pg)', run_id: 11, run_attempt: 1, conclusion: 'success', steps: [] },
+      ],
+      keysOf,
+    ),
+    false,
+  );
+});
+
 test('a completed store failure counts even when its grouped job was later cancelled or timed out', () => {
   const grouped = conclusion => ({
     name: 'Combined Store Tests / test (containers 1: mssql mysql)',
