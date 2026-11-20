@@ -18,6 +18,7 @@ export { DATASET_EXPERIMENT_OPTIONS, getAllDatasetTags, getDatasetTagOptions } f
 export { DATASET_TARGET_TYPES, isDatasetTargetType, type DatasetTargetType } from './target-type-options';
 export { DatasetCombobox } from './dataset-combobox';
 export type { DatasetComboboxProps } from './dataset-combobox';
+export type { DatasetVersionsProps } from './dataset-versions';
 export { DatasetVersions } from './dataset-versions';
 export { DatasetBreadcrumbs, DatasetPage } from './dataset-page';
 export type { DatasetBreadcrumbsProps, DatasetPageProps } from './dataset-page';
