@@ -187,7 +187,9 @@ function createSkillSearchTool(skills: WorkspaceSkills) {
             // Reference hits name their file so the model can pass it to skill_read
             const file = r.source !== 'SKILL.md' ? ` ${r.source}` : '';
             const location = r.lineRange ? ` (lines ${r.lineRange.start}-${r.lineRange.end})` : '';
-            return `[${r.skillName}]${file}${location} (score: ${r.score.toFixed(2)})\n${preview}`;
+            // The path tells same-named skills apart; pass it to `skill` or `skill_read`.
+            const skillPath = r.skillPath ? ` (${r.skillPath})` : '';
+            return `[${r.skillName}]${skillPath}${file}${location} (score: ${r.score.toFixed(2)})\n${preview}`;
           })
           .join('\n\n');
       } catch (err) {

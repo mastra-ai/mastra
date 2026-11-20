@@ -516,8 +516,38 @@ describe('skill_search tool', () => {
 
     const result = await exec(tool, { query: 'blue' });
 
-    expect(result).toContain('[brand-guide] references/colors.md (lines 3-3) (score: 0.60)');
-    expect(result).toContain('[brand-guide] (score: 0.40)');
+    expect(result).toContain('[brand-guide] (skills/brand-guide) references/colors.md (lines 3-3) (score: 0.60)');
+    expect(result).toContain('[brand-guide] (skills/brand-guide) (score: 0.40)');
+  });
+
+  it('lists each same-named skill with a path that the skill tool can load', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-skill-search-'));
+
+    try {
+      for (const [root, body] of [
+        ['.claude/skills', 'Claude copy of the label rules.'],
+        ['.agents/skills', 'Agents copy of the label rules.'],
+      ]) {
+        await fs.mkdir(path.join(tempDir, root, 'label-bugs'), { recursive: true });
+        await fs.writeFile(
+          path.join(tempDir, root, 'label-bugs', 'SKILL.md'),
+          `---\nname: label-bugs\ndescription: Label bugs\n---\n\n${body}`,
+        );
+      }
+      const skills = new WorkspaceSkillsImpl({
+        source: new LocalSkillSource({ basePath: tempDir }),
+        skills: ['.claude/skills', '.agents/skills'],
+      });
+      const { skill_search: search, skill } = createSkillTools(skills);
+
+      const result = await exec(search, { query: 'label rules' });
+
+      expect(result).toContain('[label-bugs] (.claude/skills/label-bugs)');
+      expect(result).toContain('[label-bugs] (.agents/skills/label-bugs)');
+      expect(await exec(skill, { name: '.agents/skills/label-bugs' })).toContain('Agents copy of the label rules.');
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
   });
 
   it('truncates preview at 200 characters with ellipsis', async () => {
