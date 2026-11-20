@@ -242,120 +242,103 @@ describe('Knowledge host page writes', () => {
     expect(new Set(results.map(result => result.page.id)).size).toBe(1);
   });
 
-  describe('expectedVersion', () => {
-    it('writes only while the page is still at the version the caller read', async () => {
+  describe('expected', () => {
+    const faq = { scope: 'docs:acme', path: 'guides/faq', name: 'FAQ' };
+
+    it('updates the page it read, at the version it read, and indexes and links it', async () => {
       const { knowledge, storage, vector } = setup();
-      const first = await knowledge.upsertPage({ scope: 'docs:acme', path: 'faq', name: 'FAQ', body: 'placeholder' });
+      const { page } = await knowledge.upsertPage({ ...faq, body: 'placeholder' });
 
       const filled = await knowledge.upsertPage({
-        scope: 'docs:acme',
-        path: 'faq',
-        name: 'FAQ',
+        ...faq,
         body: 'See [[docs:acme#start]]',
-        expectedVersion: first.page.version,
+        expected: { id: page.id, version: page.version },
       });
-      expect(filled).toMatchObject({ status: 'updated', page: { version: 2, body: 'See [[docs:acme#start]]' } });
-      expect(vector.rows.get(`page:${first.page.id}`)).toBe('page');
-      const store = await storage.getStore('knowledge');
-      const links = await store!.listPageLinks({ pageIds: [first.page.id], read: 'all', direction: 'out' });
-      expect(links.map(link => link.toPageId)).toHaveLength(1);
-    });
-
-    it('refuses a write when someone else wrote the page since, and keeps their edit', async () => {
-      const { knowledge } = setup();
-      const first = await knowledge.upsertPage({ scope: 'docs:acme', path: 'faq', name: 'FAQ', body: 'placeholder' });
-      await knowledge.upsertPage({
-        scope: 'docs:acme',
-        path: 'faq',
-        name: 'FAQ',
-        body: 'Agent notes',
-        author: 'agent:a',
+      expect(filled).toMatchObject({
+        status: 'updated',
+        page: { id: page.id, version: 2, body: 'See [[docs:acme#start]]' },
       });
+      expect(vector.rows.get(`page:${page.id}`)).toBe('page');
+      const store = (await storage.getStore('knowledge'))!;
+      const links = await store.listPageLinks({ pageIds: [page.id], read: 'all', direction: 'out' });
+      expect(links).toHaveLength(1);
+    });
 
-      const stale = knowledge.upsertPage({
-        scope: 'docs:acme',
-        path: 'faq',
-        name: 'FAQ',
-        body: 'imported body',
-        expectedVersion: first.page.version,
+    it('refuses when someone wrote the page since, even with the same content, and keeps their edit', async () => {
+      const { knowledge } = setup();
+      const { page } = await knowledge.upsertPage({ ...faq, body: 'placeholder' });
+      await knowledge.upsertPage({ ...faq, body: 'Agent notes', author: 'agent:a' });
+
+      for (const body of ['imported', 'Agent notes']) {
+        await expect(
+          knowledge.upsertPage({ ...faq, body, expected: { id: page.id, version: page.version } }),
+        ).rejects.toMatchObject({ name: 'KnowledgeConflictError' });
+      }
+      expect(await knowledge.upsertPage({ ...faq, body: 'Agent notes' })).toMatchObject({
+        status: 'unchanged',
+        page: { version: 2 },
       });
-      await expect(stale).rejects.toMatchObject({ name: 'KnowledgeConflictError' });
-      const page = await knowledge.upsertPage({ scope: 'docs:acme', path: 'faq', name: 'FAQ', body: 'Agent notes' });
-      expect(page).toMatchObject({ status: 'unchanged', page: { version: 2, body: 'Agent notes' } });
     });
 
-    it('refuses a stale version even when the content would not change', async () => {
+    it('refuses a different page that replaced it at the same path and version', async () => {
       const { knowledge } = setup();
-      const first = await knowledge.upsertPage({ scope: 'docs:acme', path: 'faq', name: 'FAQ', body: 'one' });
-      await knowledge.upsertPage({ scope: 'docs:acme', path: 'faq', name: 'FAQ', body: 'two' });
+      const { page } = await knowledge.upsertPage({ ...faq, body: 'placeholder' });
+      await knowledge.removePage(faq);
+      const replacement = await knowledge.upsertPage({ ...faq, body: 'Replacement' });
+      expect(replacement.page).toMatchObject({ version: 1 });
+      expect(replacement.page.id).not.toBe(page.id);
+
       await expect(
-        knowledge.upsertPage({
-          scope: 'docs:acme',
-          path: 'faq',
-          name: 'FAQ',
-          body: 'two',
-          expectedVersion: first.page.version,
-        }),
+        knowledge.upsertPage({ ...faq, body: 'imported', expected: { id: page.id, version: 1 } }),
       ).rejects.toMatchObject({ name: 'KnowledgeConflictError' });
+      expect((await knowledge.upsertPage({ ...faq, body: 'Replacement' })).status).toBe('unchanged');
     });
 
-    it('refuses to recreate a page that is gone', async () => {
-      const { knowledge } = setup();
-      const first = await knowledge.upsertPage({ scope: 'docs:acme', path: 'faq', name: 'FAQ', body: 'one' });
-      await knowledge.removePage({ scope: 'docs:acme', path: 'faq' });
-      await expect(
-        knowledge.upsertPage({
-          scope: 'docs:acme',
-          path: 'faq',
-          name: 'FAQ',
-          body: 'two',
-          expectedVersion: first.page.version,
-        }),
-      ).rejects.toMatchObject({ name: 'KnowledgeConflictError' });
-      expect(await knowledge.removePage({ scope: 'docs:acme', path: 'faq' })).toBeNull();
-    });
-
-    it('creates nothing along the path of a page that is gone', async () => {
-      const { knowledge } = setup();
-      const first = await knowledge.upsertPage({ scope: 'docs:acme', path: 'guides/faq', name: 'FAQ', body: 'one' });
-      await knowledge.removePage({ scope: 'docs:acme', path: 'guides/faq' });
-      await knowledge.removePage({ scope: 'docs:acme', path: 'guides' });
-      await expect(
-        knowledge.upsertPage({
-          scope: 'docs:acme',
-          path: 'guides/faq',
-          name: 'FAQ',
-          body: 'two',
-          expectedVersion: first.page.version,
-        }),
-      ).rejects.toMatchObject({ name: 'KnowledgeConflictError' });
-      expect(await knowledge.removePage({ scope: 'docs:acme', path: 'guides' })).toBeNull();
-    });
-
-    it('refuses when a concurrent write lands between its read and its write', async () => {
+    it('creates nothing for a page that is gone: not the page, its parents or its scope', async () => {
       const { knowledge, storage } = setup();
-      const first = await knowledge.upsertPage({ scope: 'docs:acme', path: 'faq', name: 'FAQ', body: 'placeholder' });
+      const { page } = await knowledge.upsertPage({ ...faq, body: 'one' });
+      await knowledge.removePage(faq);
+      await knowledge.removePage({ scope: 'docs:acme', path: 'guides' });
+      const expected = { id: page.id, version: page.version };
+
+      await expect(knowledge.upsertPage({ ...faq, body: 'two', expected })).rejects.toMatchObject({
+        name: 'KnowledgeConflictError',
+      });
+      expect(await knowledge.removePage({ scope: 'docs:acme', path: 'guides' })).toBeNull();
+      await expect(
+        knowledge.upsertPage({ scope: 'docs:globex', path: 'faq', name: 'FAQ', body: 'x', expected }),
+      ).rejects.toMatchObject({ name: 'KnowledgeConflictError' });
+      const store = (await storage.getStore('knowledge'))!;
+      expect(await store.getScopesByAddress(['docs:globex'])).toEqual([]);
+    });
+
+    it('refuses when the page is edited or removed between its read and its write', async () => {
+      const { knowledge, storage } = setup();
       const store = (await storage.getStore('knowledge'))!;
       const update = store.updatePage.bind(store);
-      let raced = false;
-      store.updatePage = async input => {
-        if (!raced) {
-          raced = true;
-          await update({
-            id: first.page.id,
-            expectedVersion: 1,
-            body: 'Agent notes',
-            provenance: { author: 'agent:a' },
-          });
-        }
-        return update(input);
-      };
-
-      await expect(
-        knowledge.upsertPage({ scope: 'docs:acme', path: 'faq', name: 'FAQ', body: 'imported', expectedVersion: 1 }),
-      ).rejects.toMatchObject({ name: 'KnowledgeConflictError' });
-      store.updatePage = update;
-      expect((await store.getPage({ id: first.page.id, read: 'all' }))?.body).toBe('Agent notes');
+      for (const [race, after] of [
+        [
+          (id: string) => update({ id, expectedVersion: 1, body: 'Agent notes', provenance: { author: 'agent:a' } }),
+          { body: 'Agent notes', deleted: false },
+        ],
+        [
+          (id: string) => store.deletePage({ id, expectedVersion: 1, deletedBy: 'agent:a' }),
+          { body: 'placeholder', deleted: true },
+        ],
+      ] as const) {
+        const { page } = await knowledge.upsertPage({ ...faq, body: 'placeholder' });
+        store.updatePage = async input => {
+          store.updatePage = update;
+          await race(page.id);
+          return update(input);
+        };
+        await expect(
+          knowledge.upsertPage({ ...faq, body: 'imported', expected: { id: page.id, version: 1 } }),
+        ).rejects.toMatchObject({ name: 'KnowledgeConflictError' });
+        const stored = await store.getPage({ id: page.id, read: 'all' });
+        expect({ body: stored?.body, deleted: Boolean(stored?.deletedAt) }).toEqual(after);
+        await knowledge.removePage(faq);
+      }
     });
   });
 

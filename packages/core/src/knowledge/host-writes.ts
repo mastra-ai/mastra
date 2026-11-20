@@ -34,11 +34,12 @@ export interface KnowledgeUpsertPageInput {
   /** Recorded as the writer. Default `host`. */
   author?: string;
   /**
-   * Write only if the page is still at this version, e.g. the one the caller read before deciding to
-   * write. Otherwise, including when the page is gone, throws `KnowledgeConflictError` and writes
-   * nothing, so a write prepared from a stale read never replaces someone else's edit.
+   * The page as the caller read it. With it the write only updates that page, and only while it is
+   * still at that version and at `scope#path`; otherwise (edited, moved, removed, or replaced by a new
+   * page at the same path) it throws `KnowledgeConflictError` and writes nothing: no page, scope or
+   * parent is created. A write prepared from a stale read never replaces someone else's edit.
    */
-  expectedVersion?: number;
+  expected?: { id: string; version: number };
 }
 
 /** @experimental */
@@ -142,6 +143,14 @@ function pageEmbedFailed(storage: KnowledgeStorage, page: KnowledgePage): () => 
   };
 }
 
+function unchanged(fields: { name: string; description?: string; body?: string }, page: KnowledgePage): boolean {
+  return (
+    fields.name === page.name &&
+    (fields.description === undefined || fields.description === (page.description ?? '')) &&
+    (fields.body === undefined || fields.body === (page.body ?? ''))
+  );
+}
+
 /** Creates or updates the page at `path` in `scopeId`; `overwrite: false` only fills a missing page. */
 async function upsertAt(
   storage: KnowledgeStorage,
@@ -151,24 +160,15 @@ async function upsertAt(
   fields: { name: string; description?: string; body?: string },
   provenance: KnowledgeProvenance,
   overwrite: boolean,
-  expectedVersion?: number,
 ): Promise<KnowledgeUpsertPageResult & { renamed?: boolean }> {
   for (let attempt = 1; ; attempt++) {
     const existing = await storage.getPageByPath({ scopeId, path, read: 'all' });
-    if (expectedVersion !== undefined && existing?.version !== expectedVersion) {
-      throw new KnowledgeConflictError(existing?.id ?? path.join('/'));
-    }
     try {
       if (!existing) {
         const page = await storage.createPage({ parentId, key: path[path.length - 1], ...fields, provenance });
         return { page, status: 'created' };
       }
-      if (
-        !overwrite ||
-        (fields.name === existing.name &&
-          (fields.description === undefined || fields.description === (existing.description ?? '')) &&
-          (fields.body === undefined || fields.body === (existing.body ?? '')))
-      ) {
+      if (!overwrite || unchanged(fields, existing)) {
         return { page: existing, status: 'unchanged' };
       }
       const page = await storage.updatePage({
@@ -195,16 +195,7 @@ export async function upsertKnowledgePage(
   await host.runtime.resolve();
   const keys = splitPath(input.path);
   const provenance: KnowledgeProvenance = { author: input.author ?? 'host' };
-  if (input.expectedVersion !== undefined) {
-    // Checked before anything is created: a page that is gone stays gone, and so do its parents.
-    await host.runtime.checkDeclarations();
-    const storage = await host.getStorage();
-    const [scope] = await storage.getScopesByAddress([input.scope]);
-    const page = scope ? await storage.getPageByPath({ scopeId: scope.id, path: keys, read: 'all' }) : null;
-    if (page?.version !== input.expectedVersion) {
-      throw new KnowledgeConflictError(page?.id ?? `${input.scope}#${keys.join('/')}`);
-    }
-  }
+  if (input.expected) return updateExpectedPage(host, input, keys, input.expected, provenance);
   // No principals: the host is trusted, and the scope is placed (belongsTo) by the first run that holds it.
   const scope = await host.runtime.materializeScope(input.scope, [], provenance);
   const storage = await host.getStorage();
@@ -226,16 +217,56 @@ export async function upsertKnowledgePage(
     { name: input.name, description: input.description, body: input.body },
     provenance,
     true,
-    input.expectedVersion,
   );
-  if (result.status !== 'unchanged') {
-    await embed(host, index => index.indexPage(result.page), pageEmbedFailed(storage, result.page));
-    await updateKnowledgeLinks(host.warn, async () => {
-      await syncKnowledgePageBodyLinks(storage, result.page);
-      // An update keeps the page's id and path, so only a new name changes what links can reach it.
-      if (result.status === 'created' || renamed) await refreshKnowledgeLinksTo(storage, [result.page]);
-    });
+  await afterPageWrite(host, storage, result, renamed);
+  return result;
+}
+
+/** Re-embeds a written page and syncs its links; nothing for an unchanged write. */
+async function afterPageWrite(
+  host: KnowledgeHostWriter,
+  storage: KnowledgeStorage,
+  result: KnowledgeUpsertPageResult,
+  renamed: boolean | undefined,
+) {
+  if (result.status === 'unchanged') return;
+  await embed(host, index => index.indexPage(result.page), pageEmbedFailed(storage, result.page));
+  await updateKnowledgeLinks(host.warn, async () => {
+    await syncKnowledgePageBodyLinks(storage, result.page);
+    // An update keeps the page's id and path, so only a new name changes what links can reach it.
+    if (result.status === 'created' || renamed) await refreshKnowledgeLinksTo(storage, [result.page]);
+  });
+}
+
+/**
+ * `upsertPage` with `expected`: updates only the page the caller read, at the version it read. Reads
+ * only, so a missing scope or parent stays missing; the store's version check makes the write itself
+ * atomic against any writer that commits between this read and the update.
+ */
+async function updateExpectedPage(
+  host: KnowledgeHostWriter,
+  input: KnowledgeUpsertPageInput,
+  keys: string[],
+  expected: { id: string; version: number },
+  provenance: KnowledgeProvenance,
+): Promise<KnowledgeUpsertPageResult> {
+  await host.runtime.checkDeclarations();
+  const storage = await host.getStorage();
+  const [scope] = await storage.getScopesByAddress([input.scope]);
+  const page = scope ? await storage.getPageByPath({ scopeId: scope.id, path: keys, read: 'all' }) : null;
+  if (page?.id !== expected.id || page.version !== expected.version) throw new KnowledgeConflictError(expected.id);
+  const fields = { name: input.name, description: input.description, body: input.body };
+  if (unchanged(fields, page)) return { page, status: 'unchanged' };
+  let updated: KnowledgePage;
+  try {
+    updated = await storage.updatePage({ id: page.id, expectedVersion: expected.version, ...fields, provenance });
+  } catch (error) {
+    // Removed after the read: the stores report a page they can't find, which is a lost race here.
+    if ((error as Error | undefined)?.name === 'KnowledgeNotFoundError') throw new KnowledgeConflictError(expected.id);
+    throw error;
   }
+  const result: KnowledgeUpsertPageResult = { page: updated, status: 'updated' };
+  await afterPageWrite(host, storage, result, updated.name !== page.name);
   return result;
 }
 
