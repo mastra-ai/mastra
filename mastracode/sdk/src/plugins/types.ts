@@ -1,5 +1,6 @@
 import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
 import type { SignalProvider } from '@mastra/core/signals';
+import type { Extractor } from '@mastra/memory';
 
 import type {
   MastraCodePluginConfigSchema,
@@ -26,6 +27,18 @@ export type PluginContribution<TValue> = {
   versionStamp: string;
   value: TValue;
 };
+
+/** Extractors a plugin contributed, normalized into the OM lane they run in. */
+export type LoadedPluginExtractors = {
+  observation: Extractor<any>[];
+  reflection: Extractor<any>[];
+};
+
+/**
+ * Extractors from every active plugin, validated together. `key` changes
+ * whenever the set does, so a cached Memory can tell it must be rebuilt.
+ */
+export type PluginExtractorSet = LoadedPluginExtractors & { key: string };
 
 export type PluginProcessorEntries = {
   input: PluginContribution<InputProcessor>[];
@@ -74,6 +87,7 @@ export type LoadedPlugin = ScopedInstalledPluginRecord & {
   renderConfigs?: Record<string, MastraCodeToolRenderConfig>;
   toolNames: string[];
   processors?: LoadedPluginProcessors;
+  extractors?: LoadedPluginExtractors;
   signalProviders?: SignalProvider<string>[];
   skillPaths?: string[];
   commandPaths?: string[];

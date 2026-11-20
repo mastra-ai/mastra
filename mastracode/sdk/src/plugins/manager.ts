@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import type { SignalProvider } from '@mastra/core/signals';
+import { validateExtractorList } from '@mastra/memory';
+import type { Extractor } from '@mastra/memory';
 import { execa } from 'execa';
 
 import type { MastraCodePluginConfigValue, MastraCodePluginRuntime } from '../plugin.js';
@@ -17,6 +19,7 @@ import type {
   LoadedPlugin,
   PluginContribution,
   PluginErrorEvent,
+  PluginExtractorSet,
   PluginProcessorEntries,
   PluginScope,
 } from './types.js';
@@ -45,6 +48,7 @@ type PluginManagerOptions = PluginPathOptions & {
 
 export class PluginManager {
   private loadedPlugins: LoadedPlugin[] = [];
+  private extractorSet: PluginExtractorSet = { observation: [], reflection: [], key: '' };
   private readonly pluginTools: ReturnType<typeof collectActivePluginTools> = {};
   private readonly rawPluginTools: ReturnType<typeof collectActivePluginTools> = {};
   private readonly toolRenderConfigs = new Map<string, NonNullable<LoadedPlugin['renderConfigs']>[string]>();
@@ -98,6 +102,7 @@ export class PluginManager {
       this.updateGithubPoller(this.loadedPlugins);
       this.updatePluginRenderConfigs(this.loadedPlugins);
       this.updatePluginTools(collectActivePluginTools(this.loadedPlugins));
+      this.extractorSet = this.collectExtractors();
       // Before the reload listeners: one that rejects must not swallow the notice,
       // which is reported only once per distinct error.
       this.reportReloadFailures(previous, this.loadedPlugins);
@@ -205,6 +210,44 @@ export class PluginManager {
       input: this.collectActive(plugin => plugin.processors?.input ?? []),
       output: this.collectActive(plugin => plugin.processors?.output ?? []),
     };
+  }
+
+  /**
+   * OM extractors contributed by active plugins, validated when plugins load.
+   * Read before every request by the memory factory, so it only returns state.
+   */
+  getPluginExtractors(): PluginExtractorSet {
+    return this.extractorSet;
+  }
+
+  /**
+   * One lane at a time, in plugin order: an extractor joins only if the lane
+   * stays valid with it (no slug another plugin already took). A rejected one is skipped and reported, so one plugin can't
+   * stop Observational Memory from building.
+   */
+  private collectExtractors(): PluginExtractorSet {
+    const lane = (select: (plugin: LoadedPlugin) => Extractor<any>[]) => {
+      const accepted: PluginContribution<Extractor<any>>[] = [];
+      for (const entry of this.collectActive(select)) {
+        try {
+          validateExtractorList([...accepted.map(a => a.value), entry.value]);
+          accepted.push(entry);
+        } catch (error) {
+          this.reportPluginError({
+            pluginId: entry.pluginId,
+            message: `Plugin "${entry.pluginId}" extractor "${entry.value.name}" was skipped: ${error instanceof Error ? error.message : String(error)}`,
+          });
+        }
+      }
+      return accepted;
+    };
+    const observation = lane(plugin => plugin.extractors?.observation ?? []);
+    const reflection = lane(plugin => plugin.extractors?.reflection ?? []);
+    const key = [
+      ...observation.map(e => `o:${e.pluginId}@${e.versionStamp}:${e.value.slug}`),
+      ...reflection.map(e => `r:${e.pluginId}@${e.versionStamp}:${e.value.slug}`),
+    ].join(',');
+    return { observation: observation.map(e => e.value), reflection: reflection.map(e => e.value), key };
   }
 
   /** Signal providers contributed by active plugins, tagged with their owning plugin. */

@@ -537,6 +537,33 @@ describe('getDynamicMemory', () => {
     expect(requestContext.get('om.reflector.effectiveModelId')).toBe('custom-provider/custom-model');
   });
 
+  it('passes plugin extractors to the observer and reflector, and rebuilds when the set changes', async () => {
+    vi.resetModules();
+    getOmScopeMock.mockReturnValue('thread');
+    const { getDynamicMemory } = await import('./memory.js');
+    const vis = { slug: 'vis-state', name: 'vis state' };
+    let set = { observation: [vis], reflection: [vis], key: 'a' };
+    const factory = getDynamicMemory({ storage: true } as never, undefined, undefined, {
+      readExtractors: () => set as never,
+    });
+    const requestContext = createRequestContext({ projectPath: '/tmp/project' }) as never;
+
+    const first = factory({ requestContext }) as unknown as {
+      config: {
+        options: { observationalMemory: { observation: { extract?: unknown }; reflection: { extract?: unknown } } };
+      };
+    };
+    expect(first.config.options.observationalMemory.observation.extract).toEqual([vis]);
+    expect(first.config.options.observationalMemory.reflection.extract).toEqual([vis]);
+    expect(factory({ requestContext })).toBe(first);
+
+    set = { observation: [], reflection: [], key: '' };
+    const second = factory({ requestContext }) as typeof first;
+    expect(second).not.toBe(first);
+    expect(second.config.options.observationalMemory.observation.extract).toBeUndefined();
+    expect(second.config.options.observationalMemory.reflection.extract).toBeUndefined();
+  });
+
   it('settles both the current memory and one replaced by a config change', async () => {
     vi.resetModules();
     getOmScopeMock.mockReturnValue('thread');

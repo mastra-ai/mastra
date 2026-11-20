@@ -9,6 +9,7 @@ import { DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD, MIN_OBSERVATION_THRESHOLD
 import { LOCAL_KNOWLEDGE_ORG_ID } from '../knowledge-scope.js';
 import { MASTRACODE_AUTO_OM_MODELS, resolveAutoOMModelId } from '../onboarding/packs.js';
 import { loadSettings } from '../onboarding/settings.js';
+import type { PluginExtractorSet } from '../plugins/types.js';
 import { ANTHROPIC_PROMPT_CACHE_TTL } from '../providers/anthropic-prompt-cache.js';
 import type { MastraCodeState } from '../schema.js';
 import { getOmScope } from '../utils/project.js';
@@ -246,6 +247,11 @@ export function getDynamicMemory(
     embedder?: MemoryEmbedder;
     /** Options passed to every embedding call, e.g. provider options or headers. */
     embedderOptions?: MastraEmbeddingOptions;
+    /**
+     * Extractors contributed by plugins, read on every request. A change in
+     * `key` rebuilds the cached Memory so added or removed extractors apply.
+     */
+    readExtractors?: () => PluginExtractorSet;
   },
 ) {
   // Built now, so a missing provider key throws here rather than on the first embed.
@@ -316,7 +322,8 @@ export function getDynamicMemory(
       factorySettings !== undefined ? (factorySettings?.observeAttachments ?? 'auto') : state?.observeAttachments;
     // Factory sessions get a factory-only config, so the cache key carries
     // Factory presence to keep those configs from cross-serving.
-    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}`;
+    const extractors = options?.readExtractors?.();
+    const cacheKey = `${extractors?.key ?? ''}|${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
     }
@@ -389,6 +396,7 @@ export function getDynamicMemory(
                   threadTitle: true,
                   instruction: observerInstruction,
                   observeAttachments,
+                  ...(extractors?.observation.length ? { extract: extractors.observation } : {}),
                 },
                 reflection: {
                   bufferActivation: isResourceScope ? undefined : 1 / 2,
@@ -396,6 +404,7 @@ export function getDynamicMemory(
                   model: getReflectorModel,
                   observationTokens: refThreshold,
                   instruction: reflectionInstruction,
+                  ...(extractors?.reflection.length ? { extract: extractors.reflection } : {}),
                 },
               },
       },
