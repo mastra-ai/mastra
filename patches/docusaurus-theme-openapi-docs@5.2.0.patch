@@ -1,0 +1,78 @@
+diff --git a/lib/theme/ParamsDetails/index.js b/lib/theme/ParamsDetails/index.js
+index 24069f350ad6892b1f231ef31371cf88c4b5de00..603875c477c632098b03b098e75786170fad112c 100644
+--- a/lib/theme/ParamsDetails/index.js
++++ b/lib/theme/ParamsDetails/index.js
+@@ -74,19 +74,6 @@ const ParamsDetailsComponent = ({ parameters }) => {
+     })
+   );
+ };
+-const ParamsDetails = (props) => {
+-  return react_1.default.createElement(
+-    BrowserOnly_1.default,
+-    {
+-      fallback: react_1.default.createElement(SkeletonLoader_1.default, {
+-        size: "sm",
+-      }),
+-    },
+-    () => {
+-      return react_1.default.createElement(ParamsDetailsComponent, {
+-        ...props,
+-      });
+-    }
+-  );
+-};
++// Rendered on the server too, so the reference is in the static HTML (and llms.txt).
++const ParamsDetails = (props) => react_1.default.createElement(ParamsDetailsComponent, props);
+ exports.default = ParamsDetails;
+diff --git a/lib/theme/RequestSchema/index.js b/lib/theme/RequestSchema/index.js
+index 8f1a8e44646932c7b4f75b0003177a172ba8cbec..6ed02e75b3ce243ed3df3fd536deaae74b29996b 100644
+--- a/lib/theme/RequestSchema/index.js
++++ b/lib/theme/RequestSchema/index.js
+@@ -259,19 +259,6 @@ const RequestSchemaComponent = ({ title, body, style }) => {
+     )
+   );
+ };
+-const RequestSchema = (props) => {
+-  return react_1.default.createElement(
+-    BrowserOnly_1.default,
+-    {
+-      fallback: react_1.default.createElement(SkeletonLoader_1.default, {
+-        size: "sm",
+-      }),
+-    },
+-    () => {
+-      return react_1.default.createElement(RequestSchemaComponent, {
+-        ...props,
+-      });
+-    }
+-  );
+-};
++// Rendered on the server too, so the reference is in the static HTML (and llms.txt).
++const RequestSchema = (props) => react_1.default.createElement(RequestSchemaComponent, props);
+ exports.default = RequestSchema;
+diff --git a/lib/theme/ResponseSchema/index.js b/lib/theme/ResponseSchema/index.js
+index d3a220445642c44acf1f2a54a4ab2e8f0f9b28f3..ac3db170a0b46f7595d3386d9bd269b8f7d0ce2c 100644
+--- a/lib/theme/ResponseSchema/index.js
++++ b/lib/theme/ResponseSchema/index.js
+@@ -158,19 +158,6 @@ const ResponseSchemaComponent = ({ title, body, style }) => {
+   }
+   return undefined;
+ };
+-const ResponseSchema = (props) => {
+-  return react_1.default.createElement(
+-    BrowserOnly_1.default,
+-    {
+-      fallback: react_1.default.createElement(SkeletonLoader_1.default, {
+-        size: "md",
+-      }),
+-    },
+-    () => {
+-      return react_1.default.createElement(ResponseSchemaComponent, {
+-        ...props,
+-      });
+-    }
+-  );
+-};
++// Rendered on the server too, so the reference is in the static HTML (and llms.txt).
++const ResponseSchema = (props) => react_1.default.createElement(ResponseSchemaComponent, props);
+ exports.default = ResponseSchema;

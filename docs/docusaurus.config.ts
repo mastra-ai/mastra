@@ -6,6 +6,9 @@ import type { Config } from '@docusaurus/types'
 import type { Options as PresetOptions, ThemeConfig } from '@docusaurus/preset-classic'
 import type { AlgoliaPluginOptions } from '@mastra/docusaurus-plugin-algolia'
 import type { KapaPluginOptions } from '@mastra/docusaurus-plugin-kapa'
+import type * as OpenApiPlugin from 'docusaurus-plugin-openapi-docs'
+import * as GATEWAY_API from './scripts/gateway-api/constants'
+import { createGatewayApiPageMD } from './scripts/gateway-api/markdown'
 import { normalizeSiteSectionRoot, SITE_SECTION_ROOTS } from './src/utils/canonical-url'
 
 const NPM2YARN_CONFIG = { sync: true, converters: ['pnpm', 'yarn', 'bun'] }
@@ -101,6 +104,32 @@ const config: Config = {
       },
     ],
     [
+      // Only adds the `gen-api-docs` CLI, which scripts/gateway-api/generate.ts runs.
+      'docusaurus-plugin-openapi-docs',
+      {
+        id: 'openapi',
+        docsPluginId: 'classic',
+        config: {
+          [GATEWAY_API.PLUGIN_ID]: {
+            specPath: GATEWAY_API.SPEC_OUTPUT,
+            outputDir: GATEWAY_API.PAGES_DIR,
+            template: 'scripts/gateway-api/template.mustache',
+            markdownGenerators: { createApiPageMD: createGatewayApiPageMD },
+            showInfoPage: false,
+          },
+        },
+      } satisfies OpenApiPlugin.Options,
+    ],
+    // The API Explorer's code snippet generators import Node built-ins that the theme doesn't polyfill.
+    () => ({
+      name: 'openapi-node-polyfills',
+      configureWebpack: () => ({
+        resolve: {
+          fallback: { url: require.resolve('url/'), string_decoder: require.resolve('string_decoder/') },
+        },
+      }),
+    }),
+    [
       '@docusaurus/plugin-content-docs',
       {
         id: 'integrations',
@@ -190,7 +219,7 @@ const config: Config = {
       } satisfies AlgoliaPluginOptions,
     ],
   ],
-  themes: ['@docusaurus/theme-mermaid', ...kapaThemes],
+  themes: ['@docusaurus/theme-mermaid', 'docusaurus-theme-openapi-docs', ...kapaThemes],
   presets: [
     [
       'classic',
@@ -239,6 +268,11 @@ const config: Config = {
     mermaid: {
       theme: { light: 'base', dark: 'base' },
     },
+    languageTabs: [
+      { highlight: 'bash', language: 'curl', logoClass: 'curl' },
+      { highlight: 'javascript', language: 'javascript', logoClass: 'javascript', variants: ['fetch'] },
+      { highlight: 'python', language: 'python', logoClass: 'python', variants: ['requests'] },
+    ],
     footer: {
       links: [
         {

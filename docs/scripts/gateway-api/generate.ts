@@ -1,0 +1,165 @@
+import { execFile } from 'child_process'
+import fs from 'fs/promises'
+import path from 'path'
+import { promisify } from 'util'
+import { isDirectRun } from '../is-direct-run'
+import { API_HOST, DOCS_ROOT, PAGES_DIR, PLUGIN_ID, SPEC_OUTPUT, SPEC_URL } from './constants'
+import { GATEWAY_API_PAGES } from './pages'
+
+/**
+ * Generates the Gateway API reference pages from the live OpenAPI document.
+ *
+ * 1. Fetches the spec (override with GATEWAY_OPENAPI_SPEC, a URL or a local file path).
+ * 2. Drops infrastructure operations and points `servers` at the public API host.
+ * 3. Runs the `docusaurus-plugin-openapi-docs` CLI, which writes one `*.api.mdx` page per operation.
+ *    `markdown.ts` gives each page its slug, title, and guide from `pages.ts`.
+ *
+ * Generated files are gitignored. `pnpm build`, `pnpm dev`, and `pnpm check` run this first.
+ *
+ * Usage:
+ *   pnpm generate:gateway-api
+ */
+
+const execFileAsync = promisify(execFile)
+
+/** Operations that don't belong in the API reference. */
+const EXCLUDED_OPERATIONS = new Set(['getOpenApi', 'getHealth', 'getReadiness'])
+
+const HTTP_METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace']
+
+type Operation = { operationId?: string; [key: string]: unknown }
+interface OpenApiDocument {
+  openapi: string
+  servers?: { url: string; description?: string }[]
+  paths: Record<string, Record<string, Operation | unknown>>
+  [key: string]: unknown
+}
+
+export async function loadSpec(source = process.env.GATEWAY_OPENAPI_SPEC ?? SPEC_URL): Promise<OpenApiDocument> {
+  if (!/^https?:\/\//.test(source)) {
+    return JSON.parse(await fs.readFile(path.resolve(source), 'utf-8')) as OpenApiDocument
+  }
+  let lastError: unknown
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const response = await fetch(source, { signal: AbortSignal.timeout(15_000) })
+      if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`)
+      return (await response.json()) as OpenApiDocument
+    } catch (error) {
+      lastError = error
+      if (attempt < 3) await new Promise(resolve => setTimeout(resolve, attempt * 2000))
+    }
+  }
+  throw new Error(`Could not fetch the Gateway OpenAPI document from ${source}: ${String(lastError)}`)
+}
+
+export interface TransformResult {
+  spec: OpenApiDocument
+  /** Operations kept that have no entry in GATEWAY_API_PAGES. */
+  unmapped: string[]
+}
+
+type Schema = { $ref?: string; description?: string; properties?: Record<string, Schema> }
+
+/** Adds the descriptions from `pages.ts` to the operation's request body fields the spec leaves undescribed. */
+function describeFields(spec: OpenApiDocument, operation: Operation, fields: Record<string, string> | undefined) {
+  if (!fields) return
+  const content = (operation.requestBody as { content?: Record<string, { schema?: Schema }> } | undefined)?.content
+  for (const [contentType, media] of Object.entries(content ?? {})) {
+    let schema = media.schema
+    if (schema?.$ref) {
+      const name = schema.$ref.replace('#/components/schemas/', '')
+      schema = (spec.components as { schemas: Record<string, Schema> }).schemas[name]
+    }
+    for (const [field, description] of Object.entries(fields)) {
+      const property = schema?.properties?.[field]
+      if (!property) {
+        throw new Error(`${operation.operationId} (${contentType}) has no request field "${field}". Update pages.ts.`)
+      }
+      // A `$ref` sibling would be ignored by some tools, so wrap referenced properties.
+      if (property.$ref) schema!.properties![field] = { allOf: [property], description } as Schema
+      else property.description ??= description
+    }
+  }
+}
+
+export function transformSpec(source: OpenApiDocument): TransformResult {
+  const spec = structuredClone(source)
+  const unmapped: string[] = []
+  const missing = new Set(Object.keys(GATEWAY_API_PAGES))
+
+  for (const [route, pathItem] of Object.entries(spec.paths)) {
+    for (const method of Object.keys(pathItem)) {
+      if (!HTTP_METHODS.includes(method)) continue
+      const id = (pathItem[method] as Operation).operationId
+      if (!id) throw new Error(`${method.toUpperCase()} ${route} has no operationId`)
+      if (EXCLUDED_OPERATIONS.has(id)) {
+        delete pathItem[method]
+        continue
+      }
+      if (!missing.delete(id)) unmapped.push(id)
+      describeFields(spec, pathItem[method] as Operation, GATEWAY_API_PAGES[id]?.fields)
+    }
+    if (!Object.keys(pathItem).some(key => HTTP_METHODS.includes(key))) delete spec.paths[route]
+  }
+
+  // A page listed in sidebars.js would point at a doc that no longer exists.
+  if (missing.size > 0) {
+    throw new Error(
+      `The Gateway OpenAPI document no longer has ${[...missing].join(', ')}. Remove them from pages.ts and sidebars.js.`,
+    )
+  }
+
+  // The spec uses a relative server URL, which would send API Explorer requests to the docs site.
+  spec.servers = [{ url: API_HOST, description: 'Mastra Gateway' }]
+  return { spec, unmapped }
+}
+
+async function runPluginCli(command: 'gen-api-docs' | 'clean-api-docs'): Promise<string> {
+  const { stdout, stderr } = await execFileAsync('pnpm', ['exec', 'docusaurus', command, PLUGIN_ID], {
+    cwd: DOCS_ROOT,
+    env: process.env,
+    maxBuffer: 16 * 1024 * 1024,
+  })
+  return `${stdout}${stderr}`
+}
+
+export async function generate(): Promise<void> {
+  const { spec, unmapped } = transformSpec(await loadSpec())
+  for (const id of unmapped) {
+    console.warn(
+      `[gateway-api] ${id} has no entry in pages.ts. Its page is generated from the spec summary; add it to pages.ts and sidebars.js.`,
+    )
+  }
+
+  const specPath = path.join(DOCS_ROOT, SPEC_OUTPUT)
+  await fs.mkdir(path.dirname(specPath), { recursive: true })
+  await fs.writeFile(specPath, `${JSON.stringify(spec, null, 2)}\n`)
+
+  await runPluginCli('clean-api-docs')
+  const output = await runPluginCli('gen-api-docs')
+
+  // The plugin logs write failures instead of exiting non-zero, so check its output and the files it wrote.
+  if (/Failed to (write|create)/.test(output)) throw new Error(`gen-api-docs reported failures:\n${output}`)
+  const pagesDir = path.join(DOCS_ROOT, PAGES_DIR)
+  // The plugin always writes an overview page for the spec's `info`; the hand-written overview covers it.
+  for (const file of await fs.readdir(pagesDir)) {
+    if (file.endsWith('.info.mdx')) await fs.unlink(path.join(pagesDir, file))
+  }
+  const pages = (await fs.readdir(pagesDir)).filter(file => file.endsWith('.api.mdx'))
+  const operationCount = Object.values(spec.paths).reduce(
+    (count, pathItem) => count + Object.keys(pathItem).filter(key => HTTP_METHODS.includes(key)).length,
+    0,
+  )
+  if (pages.length !== operationCount) {
+    throw new Error(`Expected ${operationCount} generated pages in ${PAGES_DIR}, found ${pages.length}`)
+  }
+  console.log(`[gateway-api] Generated ${pages.length} pages in ${PAGES_DIR}`)
+}
+
+if (isDirectRun(import.meta.url)) {
+  generate().catch(error => {
+    console.error(error instanceof Error ? error.message : error)
+    process.exit(1)
+  })
+}

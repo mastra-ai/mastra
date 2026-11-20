@@ -161,7 +161,7 @@ export const mdxCheck: Check = {
 
     for (const file of ctx.files) {
       const { tree, lintMessages } = await parseMdx(file)
-      // Generated model pages only get link and description checks; the other remark rules cover authored sections.
+      // Generated model and API pages only get link and description checks; the other remark rules cover authored sections.
       // The runner drops findings outside the selected categories.
       const remark = remarkFindings(file, lintMessages)
       findings.push(...(isFormattedFile(file) ? remark : remark.filter(item => PAGE_RULES.has(item.ruleId))))
