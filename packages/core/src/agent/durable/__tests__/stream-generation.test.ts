@@ -245,6 +245,64 @@ describe('durable run stream claim generations', () => {
     await pubsub.close();
   });
 
+  // Technical: on a run fenced by a pubsub lease, events carry no generation, so a late
+  // step-finish of the execution that lost the run is delivered. Its whole list (`from: 0`) is
+  // that execution's older list, and it replaced the reader's, dropping the final answer from
+  // onFinish and output messages. It now only reports that execution's own step.
+  it("keeps the successor's response messages when the execution that lost the run sends a late whole list", async () => {
+    const pubsub = new EventEmitterPubSub();
+    const runId = 'late-whole-list';
+    const call = { type: 'tool-call', toolCallId: 'call-1', toolName: 'lookup', input: { order: 'A-1' } };
+    const lookup = [
+      { role: 'assistant', content: [call] },
+      {
+        role: 'tool',
+        content: [{ ...call, type: 'tool-result', input: undefined, output: { type: 'json', value: 'shipped' } }],
+      },
+    ];
+    const answered = [...lookup, { role: 'assistant', content: [{ type: 'text', text: 'Order A-1 has shipped.' }] }];
+    const publishStep = (producer: string, seq: number, list: unknown[]) =>
+      emitChunkEvent(pubsub, runId, {
+        type: 'step-finish',
+        runId,
+        from: 'AGENT',
+        payload: {
+          stepResult: { reason: 'stop' },
+          output: { usage: {} },
+          metadata: {},
+          _durableResponseMessagesDiff: { ...diffResponseMessages({ producer }, list as any).diff, seq },
+        },
+      } as any);
+    const finished = Promise.withResolvers<unknown>();
+    const { output, cleanup, ready } = makeStream(pubsub, runId, {
+      onFinish: event => finished.resolve(event.messages),
+    });
+    await ready;
+
+    await publishStep('lost', 0, lookup);
+    // The successor took the run over and finished it.
+    await publishStep('successor', 0, answered);
+    // The execution that lost the run hadn't noticed yet.
+    await publishStep('lost', 1, lookup);
+    await emitFinishEvent(pubsub, runId, finishData);
+
+    const expected = [
+      { role: 'assistant', content: [{ type: 'tool-call', toolName: 'lookup' }] },
+      { role: 'tool', content: [{ type: 'tool-result', toolName: 'lookup' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'Order A-1 has shipped.' }] },
+    ];
+    expect(await finished.promise).toMatchObject(expected);
+    const full = await output.getFullOutput();
+    const outputTexts = full.messages.flatMap(message =>
+      message.content.parts.flatMap(part => (part.type === 'text' ? part.text : [])),
+    );
+    expect(outputTexts).toEqual(['Order A-1 has shipped.']);
+    // The late step still reports what that execution sent.
+    expect(full.steps.map(step => step.response.messages)).toEqual([lookup, answered, lookup]);
+    cleanup();
+    await pubsub.close();
+  });
+
   it('does not count stale events as signs of life', async () => {
     const pubsub = new EventEmitterPubSub();
     const runId = 'stale-idle';
