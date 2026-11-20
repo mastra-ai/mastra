@@ -1919,4 +1919,76 @@ describe.each([DurableAgent, EventedAgent])('resume schema preflight (%#)', Agen
       }
     },
   );
+
+  // Technical: the rejected attempt wrote its request context onto the run registry entry (warm)
+  // or left the entry prepare() rebuilt from it registered (cold), and the retry seeded from it.
+  it.each(['warm', 'cold'].flatMap(registry => [false, true].map(untilIdle => ({ registry, untilIdle }))))(
+    'a corrected retry runs the tool with the original request context, not the rejected one ($registry registry, untilIdle $untilIdle)',
+    async ({ registry, untilIdle }) => {
+      const seenTenants: unknown[] = [];
+      const ask = createTool({
+        id: 'ask',
+        description: 'Ask for confirmation',
+        inputSchema: z.object({ action: z.string() }),
+        suspendSchema: z.object({}),
+        resumeSchema: z.object({ confirmed: z.boolean() }),
+        execute: async (_input, context) => {
+          if (!context?.agent?.resumeData) return context?.agent?.suspend({});
+          seenTenants.push(context.requestContext?.get('tenant'));
+          return { confirmed: context.agent.resumeData.confirmed };
+        },
+      });
+      const agent = new Agent({
+        id: 'resume-context-agent',
+        name: 'Resume Context Agent',
+        instructions: 'Ask for confirmation',
+        model: createSuspendingThenTextModel('ask', ['Confirmed']),
+        tools: { ask },
+      });
+      const pubsub = new EventEmitterPubSub();
+      const durable = new AgentClass({ agent, pubsub });
+      const host = new Mastra({ agents: { durable }, storage: new InMemoryStore(), logger: false });
+      try {
+        const initial = await durable.stream('Confirm', {
+          closeOnSuspend: true,
+          requestContext: new RequestContext([['tenant', 'acme']]),
+        });
+        await drain(initial.output.fullStream);
+        await globalRunRegistry.get(initial.runId)?.workflowExecution;
+        if (registry === 'cold') {
+          durable.runRegistry.clear();
+          globalRunRegistry.delete(initial.runId);
+        }
+        const options = { runId: initial.runId, ...(untilIdle ? { untilIdle: true } : {}) };
+
+        await expect(
+          durable.resume(
+            initial.runId,
+            { confirmed: 'yes' },
+            {
+              ...options,
+              requestContext: new RequestContext([['tenant', 'rejected-caller']]),
+            },
+          ),
+        ).rejects.toMatchObject({ id: 'AGENT_RESUME_INVALID_DATA' });
+
+        // The retry's own request sets no tenant, so the tenant must come from the suspended run.
+        const retry = await durable.resume(
+          initial.runId,
+          { confirmed: true },
+          {
+            ...options,
+            requestContext: new RequestContext([['requestId', 'retry']]),
+          },
+        );
+        const resumed = await retry.output.getFullOutput();
+        expect(resumed.error).toBeUndefined();
+        expect(resumed.text).toBe('Confirmed');
+        expect(seenTenants).toEqual(['acme']);
+      } finally {
+        await host.shutdown({ drainTimeout: 1000 });
+        await pubsub.close();
+      }
+    },
+  );
 });
