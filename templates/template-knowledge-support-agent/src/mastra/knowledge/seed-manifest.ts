@@ -6,6 +6,8 @@ import {
   knowledgeScopeAddress,
   knowledgeLinkRefKey,
   MAX_KNOWLEDGE_PAGE_DEPTH,
+  MAX_KNOWLEDGE_PAGE_BODY_LINKS,
+  parseKnowledgeWikilinks,
   MAX_KNOWLEDGE_PAGE_LINK_REF_LENGTH,
   type KnowledgePage,
 } from '@mastra/core/knowledge';
@@ -185,6 +187,14 @@ function renderLinks(text: string, resolveAlias: (ref: string) => string) {
   return { text: rendered, refs: [...refs] };
 }
 
+// Match the native indexer's code exclusion before deriving expected body edges.
+function indexableBodyRefs(body: string) {
+  const prose = body
+    .replace(/^(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^\1[ \t]*$|(?![\s\S]))/gmu, '')
+    .replace(/(`+)[\s\S]*?\1/gu, '');
+  return parseKnowledgeWikilinks(prose).slice(0, MAX_KNOWLEDGE_PAGE_BODY_LINKS);
+}
+
 export const pageMarker = (dataset: string, page: string) => `<!-- knowledge-seed:page:${dataset}:${page} -->`;
 export const noteMarker = (dataset: string, page: string, note: string) => `Seed note: ${dataset}/${page}/${note}`;
 const httpsSourceMarker = '<!-- knowledge-seed:source:https -->';
@@ -293,12 +303,7 @@ export async function prepareDataset(
       if (!canLink(page.placement, target.placement)) throw new Error(`Link crosses its audience: ${ref}`);
       return target.ref;
     };
-    const refs = new Set<string>();
-    const render = (text: string) => {
-      const result = renderLinks(text, lookup);
-      for (const ref of result.refs) refs.add(ref);
-      return result.text;
-    };
+    const render = (text: string) => renderLinks(text, lookup).text;
     const envelope = page.envelope;
     let markdown = render(envelope ? page.body.slice(0, envelope.index) : page.body);
     if (page.record) {
@@ -363,7 +368,7 @@ export async function prepareDataset(
       description: page.description ?? '',
       body,
       marker,
-      refs: [...refs],
+      refs: indexableBodyRefs(body),
       notes,
     };
   });

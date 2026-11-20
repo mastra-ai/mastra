@@ -167,31 +167,43 @@ async function configureRuntime(
     launcher.stderr?.on('data', chunk => {
       output = (output + chunk).slice(-10000);
     });
-    for (let index = 0; index < 150; index++) {
+    const deadline = Date.now() + 30000;
+    while (Date.now() < deadline) {
+      if (running.error) throw running.error;
+      if (launcher.exitCode !== null || launcher.signalCode !== null) throw new Error(`Dev exited: ${output}`);
       if (options.generatedCredentials && !activeCredentialFile) {
         const match = /Local Studio credentials are available privately in (.+?)\. Open/u.exec(output);
         if (match) {
-          activeCredentialFile = match[1]!;
-          const generated = JSON.parse(await readFile(activeCredentialFile, 'utf8'));
+          const generated = JSON.parse(await readFile(match[1]!, 'utf8'));
           for (const credential of credentials) {
             const entry = generated.find(
               (entry: { profile: { id: string } }) => entry.profile.id === credential.profile.id,
             );
             if (entry) credential.token = entry.token;
+            else if (credential === credentials[0]) throw new Error('Generated readiness credential is missing');
           }
+          activeCredentialFile = match[1]!;
         }
       }
-      try {
-        const response = await request('/knowledge');
-        if (response.status === 200) return;
-        if (response.status !== 503)
-          throw new Error(`Startup HTTP ${response.status}: ${await response.text()}\n${output}`);
-      } catch (error) {
-        if (!(error instanceof TypeError)) throw error;
+      if (!options.generatedCredentials || activeCredentialFile) {
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) break;
+        const signal = AbortSignal.timeout(Math.min(1000, remaining));
+        const response = await request('/knowledge', 0, { signal }).catch(error => {
+          if (!(error instanceof TypeError) && !signal.aborted) throw error;
+          return undefined;
+        });
+        if (response?.status === 200) {
+          await response.body?.cancel();
+          return;
+        }
+        if (response && response.status !== 503) {
+          const diagnostic = await response.text().catch(() => 'Unable to read readiness response');
+          throw new Error(`Startup HTTP ${response.status}: ${diagnostic}\n${output}`);
+        }
+        await response?.body?.cancel().catch(() => undefined);
       }
-      if (running.error) throw running.error;
-      if (launcher.exitCode !== null || launcher.signalCode !== null) throw new Error(`Dev exited: ${output}`);
-      await setTimeout(200);
+      await setTimeout(Math.max(0, Math.min(200, deadline - Date.now())));
     }
     throw new Error(`Dev did not boot: ${output}`);
   }
@@ -287,16 +299,21 @@ async function configureRuntime(
     injectedCredentialFile: file,
     output: () => output,
     async close() {
-      await stop();
-      try {
-        await runtime.storage.close();
-      } finally {
+      const errors: unknown[] = [];
+      for (const cleanup of [
+        stop,
+        () => runtime.storage.close(),
+        () => model.close(),
+        () => rm(directory, { recursive: true, force: true }),
+      ]) {
         try {
-          await model.close();
-        } finally {
-          await rm(directory, { recursive: true, force: true });
+          await cleanup();
+        } catch (error) {
+          errors.push(error);
         }
       }
+      if (errors.length === 1) throw errors[0];
+      if (errors.length) throw new AggregateError(errors, 'Runtime fixture cleanup failed', { cause: errors[0] });
     },
   };
 }

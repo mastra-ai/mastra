@@ -1,6 +1,7 @@
 import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge';
 import { supportConfiguration } from '../../examples/support.ts';
-import type { MastraCompositeStore } from '@mastra/core/storage';
+import { MastraCompositeStore } from '@mastra/core/storage';
+import { KnowledgePG, type DbClient } from '@mastra/pg';
 
 export function createKnowledge(storage: MastraCompositeStore) {
   const memoryScopes = knowledgeMemoryScopes({ org: 'tenant:$tenantId' });
@@ -24,4 +25,13 @@ export function createKnowledge(storage: MastraCompositeStore) {
     tools: { read: true, write: false },
     pinnedContext: { maxPins: 2, maxTokens: 500 },
   });
+}
+
+export function createPostgresWriterKnowledge(client: DbClient, initialize = false) {
+  const storage = new MastraCompositeStore({
+    id: 'support-writer',
+    disableInit: !initialize,
+    domains: { knowledge: new KnowledgePG({ client, schemaName: 'public', storageIsolationKey: client }) },
+  });
+  return createKnowledge(storage);
 }

@@ -29,9 +29,30 @@ export function createHostedIdentity() {
           redirect: 'error',
           signal: AbortSignal.timeout(5000),
         });
-        if (!response.ok) return null;
-        const body = await response.text();
-        if (body.length > 65536) return null;
+        if (!response.ok) {
+          await response.body?.cancel();
+          return null;
+        }
+        if (!response.body) return null;
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let bytes = 0;
+        let body = '';
+        try {
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            bytes += value.byteLength;
+            if (bytes > 65536) {
+              await reader.cancel();
+              return null;
+            }
+            body += decoder.decode(value, { stream: true });
+          }
+          body += decoder.decode();
+        } finally {
+          reader.releaseLock();
+        }
         const claims = JSON.parse(body);
         const now = Date.now();
         if (

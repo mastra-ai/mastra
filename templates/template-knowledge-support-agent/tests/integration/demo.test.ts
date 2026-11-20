@@ -340,16 +340,63 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
       ),
       'Failed model cannot leave invented assistant guidance',
     );
+    const requiredLifecycle = [
+      ['authorization', 'success'],
+      ['authorization', 'denied'],
+      ['preflight', 'empty'],
+      ['preflight', 'ready'],
+      ['policy', 'ready'],
+      ['knowledge-search', 'success'],
+      ['knowledge-read', 'success'],
+      ['missing-evidence', 'empty'],
+      ['resolution-reuse', 'ready'],
+      ['review-proposal', 'success'],
+      ['review-decision', 'suspended'],
+      ['review-decision', 'resumed'],
+      ['review-publication', 'rejected'],
+      ['review-publication', 'published'],
+    ];
+    const requiredDurations = [
+      'support_operation_duration_ms',
+      'support_result_count',
+      'mastra_agent_duration_ms',
+      'mastra_model_duration_ms',
+      'mastra_tool_duration_ms',
+      'mastra_workflow_duration_ms',
+    ];
+    function missingTelemetry(rows: Record<string, any>[]) {
+      const samples = rows.filter(row => row.isEvent && row.metadata?.value !== undefined);
+      const missing = requiredLifecycle
+        .filter(
+          ([operation, status]) =>
+            !samples.some(
+              row =>
+                row.name === 'support_operation_count' &&
+                row.metadata.labels?.operation === operation &&
+                row.metadata.labels?.status === status &&
+                row.metadata.value >= 1,
+            ),
+        )
+        .map(([operation, status]) => `${operation}/${status}`);
+      for (const name of requiredDurations)
+        if (!samples.some(row => row.name === name && row.metadata.value > 0)) missing.push(name);
+      if (!samples.some(row => row.name === 'mastra_model_total_input_tokens' && row.metadata.value === 12))
+        missing.push('model input tokens');
+      if (!samples.some(row => row.name === 'mastra_model_total_output_tokens' && row.metadata.value === 8))
+        missing.push('model output tokens');
+      if (!samples.some(row => row.metadata.costContext?.estimatedCost > 0)) missing.push('native cost estimate');
+      if (!rows.some(row => row.name === 'agent_run' && row.outcome === 'error' && row.error))
+        missing.push('failed agent run');
+      if (!rows.some(row => row.name === 'agent_run' && row.outcome === 'success'))
+        missing.push('successful agent run');
+      return missing;
+    }
     let tables: Awaited<ReturnType<typeof telemetryRows>> = {};
     let rows: Record<string, any>[] = [];
     for (let attempt = 0; attempt < 30; attempt++) {
       tables = await telemetryRows(f);
       rows = (tables.mastra_ai_spans ?? []).map(event);
-      if (
-        rows.some(row => row.name === 'agent_run' && row.outcome === 'error') &&
-        rows.some(row => row.name === 'support_operation_count' && row.metadata?.labels?.status === 'denied')
-      )
-        break;
+      if (!missingTelemetry(rows).length) break;
       await setTimeout(200);
     }
     assert.ok(rows.length > 0, 'Inspect actual persisted spans, not terminal logs');
@@ -391,47 +438,8 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
     }
     const samples = rows.filter(row => row.isEvent && row.metadata?.value !== undefined);
     assert.ok(samples.every(row => Number.isFinite(row.metadata.value) && row.metadata.value >= 0));
-    const has = (operation: string, status: string) =>
-      samples.some(
-        row =>
-          row.name === 'support_operation_count' &&
-          row.metadata.labels.operation === operation &&
-          row.metadata.labels.status === status &&
-          row.metadata.value >= 1,
-      );
-    for (const [operation, status] of [
-      ['authorization', 'success'],
-      ['authorization', 'denied'],
-      ['preflight', 'empty'],
-      ['preflight', 'ready'],
-      ['policy', 'ready'],
-      ['knowledge-search', 'success'],
-      ['knowledge-read', 'success'],
-      ['missing-evidence', 'empty'],
-      ['resolution-reuse', 'ready'],
-      ['review-proposal', 'success'],
-      ['review-decision', 'suspended'],
-      ['review-decision', 'resumed'],
-      ['review-publication', 'rejected'],
-      ['review-publication', 'published'],
-    ])
-      assert.ok(has(operation!, status!), `Missing persisted lifecycle ${operation}/${status}`);
-    assert.ok(samples.some(row => row.name === 'support_operation_duration_ms' && row.metadata.value > 0));
-    assert.ok(samples.some(row => row.name === 'support_result_count' && row.metadata.value > 0));
-    for (const name of [
-      'mastra_agent_duration_ms',
-      'mastra_model_duration_ms',
-      'mastra_tool_duration_ms',
-      'mastra_workflow_duration_ms',
-    ])
-      assert.ok(
-        samples.some(row => row.name === name && row.metadata.value > 0),
-        `Missing ${name}`,
-      );
-    assert.ok(samples.some(row => row.name === 'mastra_model_total_input_tokens' && row.metadata.value === 12));
-    assert.ok(samples.some(row => row.name === 'mastra_model_total_output_tokens' && row.metadata.value === 8));
+    assert.deepEqual(missingTelemetry(rows), [], 'All required telemetry must be persisted');
     const costs = samples.filter(row => row.metadata.costContext?.estimatedCost > 0);
-    assert.ok(costs.length > 0, 'Supported native cost estimates must survive filtering');
     for (const row of costs) {
       const cost = row.metadata.costContext;
       assert.equal(cost.provider, 'openai');
@@ -443,8 +451,6 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
         `Unexpected native cost for ${row.name}`,
       );
     }
-    assert.ok(rows.some(row => row.name === 'agent_run' && row.outcome === 'error' && row.error));
-    assert.ok(rows.some(row => row.name === 'agent_run' && row.outcome === 'success'));
     for (const [table, records] of Object.entries(tables))
       if (!table.includes('span'))
         assert.equal(records.length, 0, `Unused telemetry channel ${table} must not store freeform payloads`);

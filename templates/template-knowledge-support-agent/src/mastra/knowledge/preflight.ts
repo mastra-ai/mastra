@@ -15,8 +15,20 @@ async function requiredPolicyReady(knowledge: Knowledge, profile: Profile) {
   const store = await knowledge.getStorage();
   const [home] = await store.getScopesByAddress([scope]);
   const page = home ? await store.getPageByPath({ scopeId: home.id, path: path.split('/'), read }) : null;
-  if (!page?.body || requiredPolicyContentIssue(page.body)) return null;
-  return { id: page.id, version: page.version, ref, body: page.body.trim() };
+  return page?.body && !requiredPolicyContentIssue(page.body) ? ref : null;
+}
+
+type Pin = { id: string; text: string; name?: string };
+type PinOperation = { op: 'add' | 'change'; pin: Pin } | { op: 'remove'; id: string };
+
+function fullPolicyBody(pin: Pin, ref: string) {
+  if (!pin.name) return;
+  const prefix = `${pin.name} (${ref}, v`;
+  if (!pin.text.startsWith(prefix)) return;
+  const header = /^\d+(?:, (?:no notes|\d+ notes?))?\): /u.exec(pin.text.slice(prefix.length));
+  if (!header) return;
+  const body = pin.text.slice(prefix.length + header[0].length);
+  if (!body.endsWith('[truncated — knowledge_read for the rest]')) return body;
 }
 
 export function supportPreflight(knowledge: Knowledge): InputProcessor {
@@ -60,19 +72,28 @@ export function supportPreflight(knowledge: Knowledge): InputProcessor {
       return messageList;
     },
     processLLMRequest({ prompt, state, messageList, abort }) {
-      const policy = state.requiredPolicy as { id: string; version: number; ref: string; body: string };
-      // Native signal provenance survives MessageList conversion; user-authored XML has no authority.
-      const delivered = messageList?.get.all.db().some(message => {
-        if (message.role !== 'signal') return false;
+      // Fold only native Knowledge signals that were delivered in the model prompt.
+      const visible = new Set(
+        prompt.flatMap(entry =>
+          entry.role === 'user' ? entry.content.flatMap(part => (part.type === 'text' ? [part.text] : [])) : [],
+        ),
+      );
+      const pins = new Map<string, Pin>();
+      let hasSnapshot = false;
+      for (const message of messageList?.get.all.db() ?? []) {
+        if (message.role !== 'signal') continue;
         const signal = mastraDBMessageToSignal(message);
-        const metadata = signal.metadata?.state as { id?: string; threadId?: string } | undefined;
+        const metadata = signal.metadata as {
+          state?: { id?: string; threadId?: string };
+          value?: { pins?: Pin[] };
+          delta?: { ops?: PinOperation[] };
+        };
         if (
           signal.type !== 'state' ||
-          metadata?.id !== 'knowledge' ||
-          metadata.threadId !== message.threadId ||
-          !['pinned-knowledge', 'pinned-knowledge-update'].includes(signal.tagName ?? '')
+          metadata?.state?.id !== 'knowledge' ||
+          metadata.state.threadId !== message.threadId
         )
-          return false;
+          continue;
         const content = signal.toLLMMessage().content;
         const text =
           typeof content === 'string'
@@ -81,14 +102,22 @@ export function supportPreflight(knowledge: Knowledge): InputProcessor {
                 .filter(part => part.type === 'text')
                 .map(part => part.text)
                 .join('');
-        return (
-          text.includes(`{id: ${policy.id}}`) &&
-          text.includes(`${policy.ref}, v${policy.version},`) &&
-          text.includes(policy.body) &&
-          prompt.some(
-            entry => entry.role === 'user' && entry.content.some(part => part.type === 'text' && part.text === text),
-          )
-        );
+        if (!visible.has(text)) continue;
+        if (signal.tagName === 'pinned-knowledge') {
+          hasSnapshot = true;
+          pins.clear();
+          for (const pin of metadata.value?.pins ?? []) pins.set(pin.id, pin);
+        } else if (hasSnapshot && signal.tagName === 'pinned-knowledge-update') {
+          for (const change of metadata.delta?.ops ?? []) {
+            if (change.op === 'remove') pins.delete(change.id);
+            else pins.set(change.pin.id, change.pin);
+          }
+        }
+      }
+      const ref = state.requiredPolicy as string;
+      const delivered = [...pins.values()].some(pin => {
+        const body = fullPolicyBody(pin, ref);
+        return body && !requiredPolicyContentIssue(body);
       });
       if (!delivered)
         return abort(

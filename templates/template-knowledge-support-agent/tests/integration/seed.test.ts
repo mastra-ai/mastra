@@ -179,6 +179,15 @@ test('seed_rejects_an_invalid_rendered_policy_without_changing_stored_knowledge'
     for (const [body, reason] of [
       [oversized, /exceeds the 800-character limit/u],
       ['# Safe changes\n\n[[connection-guide]]', /substantive policy instructions/u],
+      [
+        '# Safe changes\n\n[Reference catalog vendor handbook product documentation](https://example.com/manual)',
+        /substantive policy instructions/u,
+      ],
+      [
+        'https://reference-catalog-vendor.example.com/handbook/product/documentation',
+        /substantive policy instructions/u,
+      ],
+      ['reference.catalog.vendor.handbook.product.documentation@example.com', /substantive policy instructions/u],
     ] as const) {
       await writeFile(policyPath, body);
       for (const args of [['--dry-run'], []]) {
@@ -227,7 +236,11 @@ test('seed_dry_run_apply_repeat_and_update_preserve_provenance', { timeout: 1200
     await writeFile(supportedBodyPath, `${await readFile(supportedBodyPath, 'utf8')}\n${supportedLinks}\n`);
     assert.ok((await readFile(supportedBodyPath, 'utf8')).includes(supportedLinks));
     const casePath = join(f.root, 'knowledge-datasets/retail-pos', manifest.pages[2]!.file);
-    const envelope = '```support-record\n' + JSON.stringify(manifest.pages[2]!.record) + '\n```';
+    const caseEntry = manifest.pages[2]!;
+    const caseRecord = caseEntry.record!;
+    caseRecord.summary += ' See [[connection-guide]].';
+    const envelope = '```support-record\n' + JSON.stringify(caseRecord) + '\n```';
+    delete caseEntry.links;
     delete manifest.pages[2]!.record;
     await writeFile(
       casePath,
@@ -311,6 +324,12 @@ test('seed_dry_run_apply_repeat_and_update_preserve_provenance', { timeout: 1200
       const record = (await storage.getPage({ id: history.id!, read: owner }))!.body!;
       assert.match(record, /```support-record\n/u);
       assert.match(record, /"state":\s*"approved"/u);
+      assert.ok(record.includes('[[docs:north#guides/connectivity]]'));
+      assert.deepEqual(
+        await storage.listPageLinks({ pageIds: [history.id!], read: owner, kinds: ['body'], direction: 'out' }),
+        [],
+        'A wiki reference only inside the support-record fence does not create a body edge',
+      );
       assert.match(record, /\n\n {4}Example transcript\./u);
       return knowledge.addNote({
         scope: 'customer:north:store-1',
@@ -732,9 +751,10 @@ test('seed_rejects_invalid_input_and_recovers_partial_note_update', { timeout: 1
     const aliasPath = join(f.directory, 'database-alias.db');
     await symlink(f.database, aliasPath);
     const lock = await acquireWriterLock(pathToFileURL(aliasPath).href);
-    const beforeContention = await f.snapshot();
     const encodedAlias = `file:${f.database.replace('support.db', 'support%2Edb')}`;
+    let beforeContention: Awaited<ReturnType<typeof f.snapshot>>;
     try {
+      beforeContention = await f.snapshot();
       await f.cli({ url: encodedAlias, code: 75 });
       await f.cli({ url: encodedAlias, args: ['--recover-lock'], code: 75 });
       assert.deepEqual(await f.snapshot(), beforeContention);

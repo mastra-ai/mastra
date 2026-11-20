@@ -1,5 +1,5 @@
 import { ZodError } from 'zod';
-import { WriterBusyError } from '../knowledge/writer-lock.ts';
+import { WriterBusyError, WriterSessionLostError } from '../knowledge/writer-lock.ts';
 import { ReviewConflict } from './contracts.ts';
 
 const transientCodes = new Set([
@@ -39,6 +39,7 @@ export function isRetryablePublicationError(error: unknown): boolean {
     const { code, errcode, cause } = error as { code?: unknown; errcode?: unknown; cause?: unknown };
     if (
       error instanceof WriterBusyError ||
+      error instanceof WriterSessionLostError ||
       (typeof code === 'string' && transientCodes.has(code)) ||
       (typeof errcode === 'number' && Number.isInteger(errcode) && [5, 6].includes(errcode & 0xff))
     )

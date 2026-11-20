@@ -270,8 +270,16 @@ async function snapshot(f: Fixture) {
   let cursor: string | undefined;
   do {
     const batch = await store.listPages({ read: 'all', cursor, limit: 100 });
-    for (const page of batch.pages)
-      all.push({ page, notes: await store.listNotes({ pageId: page.id, read: 'all', limit: 100 }) });
+    for (const page of batch.pages) {
+      const notes = [];
+      let noteCursor: string | undefined;
+      do {
+        const result = await store.listNotes({ pageId: page.id, read: 'all', cursor: noteCursor, limit: 100 });
+        notes.push(...result.notes);
+        noteCursor = result.nextCursor;
+      } while (noteCursor);
+      all.push({ page, notes: { notes } });
+    }
     cursor = batch.nextCursor;
   } while (cursor);
   return all;
@@ -674,7 +682,10 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
     const effects = (await snapshot(f)).filter(item =>
       item.page.body?.includes(`knowledge-review:${busy.proposal.id}:`),
     );
-    assert.equal(effects.length, 1);
+    assert.deepEqual(
+      effects.map(effect => effect.page.version),
+      [1],
+    );
     await unchanged(async () => {
       assert.equal(
         (
@@ -709,9 +720,12 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
       await Promise.all(replies.map(reply => reply.text()));
       const finished = await inspect(f, racing.runId);
       assert.equal(finished.result.status, 'published', JSON.stringify(finished));
-      assert.equal(
-        (await snapshot(f)).filter(item => item.page.body?.includes(`knowledge-review:${racing.proposal.id}:`)).length,
-        1,
+      const effects = (await snapshot(f)).filter(item =>
+        item.page.body?.includes(`knowledge-review:${racing.proposal.id}:`),
+      );
+      assert.deepEqual(
+        effects.map(effect => effect.page.version),
+        [1],
       );
       assert.equal(
         finished.result.reference,
@@ -791,6 +805,17 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
         ],
         { timeout: 10000 },
       );
+      if (note) {
+        const { scope, path } = interrupted.proposal.destination;
+        const { page } = await f.supportKnowledge.upsertPage({
+          scope,
+          path,
+          name: 'Case edited after the note committed',
+          body: 'A separate edit after the approval was already published.',
+          author: 'synthetic-fixture',
+        });
+        assert.equal(page.version, interrupted.proposal.candidate.target!.expectedVersion + 1);
+      }
       await f.start();
       const beforeRetry = await snapshot(f);
       assert.equal(

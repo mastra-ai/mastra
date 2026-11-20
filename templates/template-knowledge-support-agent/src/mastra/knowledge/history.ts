@@ -7,7 +7,16 @@ import { validateSupportRecord, type SupportRecord } from './seed-manifest.ts';
 
 // Search prioritizes relevant pages beyond the enumeration window. Neither native search nor
 // this bounded fallback promises exhaustive ranking across an arbitrarily large history.
-const bounds = { batch: 100, enumeration: 100, hits: 100, candidates: 300, queries: 12, notes: 100, records: 3 };
+const bounds = {
+  batch: 100,
+  enumeration: 100,
+  hits: 100,
+  candidates: 300,
+  queries: 12,
+  notes: 100,
+  noteConcurrency: 8,
+  records: 3,
+};
 type Evidence = SupportRecord & { ref: string };
 export type History = {
   status: 'ready' | 'empty' | 'no-relevant-records' | 'partial' | 'unavailable';
@@ -49,6 +58,7 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
     const store = await knowledge.getStorage();
     const [customer] = await store.getScopesByAddress([scope]);
     if (!customer) return finish('empty');
+    let historyReadable = false;
     const candidates = new Map<string, KnowledgePage>();
     const pages = new Map<string, KnowledgePage>();
     const noteHits = new Map<string, KnowledgeNote[]>();
@@ -67,6 +77,7 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
     for (const query of queries.slice(0, bounds.queries)) {
       try {
         const hits = await store.searchPages({ query, scopeIds: [customer.id], read, limit: bounds.hits });
+        historyReadable = true;
         if (hits.length >= bounds.hits) partial = true;
         for (const hit of hits) {
           add(hit.page);
@@ -93,6 +104,7 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
           limit: Math.min(bounds.batch, bounds.enumeration - enumerated),
           cursor,
         });
+        historyReadable = true;
         for (const page of batch.pages) add(page);
         enumerated += batch.pages.length;
         cursor = batch.nextCursor;
@@ -104,6 +116,7 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
     } catch {
       partial = true;
     }
+    if (!historyReadable) return finish('unavailable');
     // Search hits have no canonical path. Resolve parents in batches using the public store API,
     // then reject foreign scopes, missing/deleted ancestors, cycles, and paths outside allowed roots.
     for (let depth = 0; depth < MAX_KNOWLEDGE_PAGE_DEPTH; depth++) {
@@ -126,7 +139,8 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
     } catch {
       partial = true;
     }
-    for (const page of candidates.values()) {
+    const pagesToInspect = candidates.values();
+    async function inspect(page: KnowledgePage) {
       const path: string[] = [];
       const seen = new Set<string>();
       let current: KnowledgePage | undefined = page;
@@ -142,11 +156,11 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
       }
       if (current?.id !== customer.id) {
         partial = true;
-        continue;
+        return;
       }
       const canonical = path.join('/');
       if (!supportConfiguration.customerRoots.some(root => canonical === root || canonical.startsWith(`${root}/`)))
-        continue;
+        return;
       const ref = `${scope}#${canonical}`;
       inspected++;
       try {
@@ -175,7 +189,7 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
       // Native note hits already passed the scoped reader's stamps/mentions visibility checks.
       // Keep relevant notes even when they fall outside the oldest-first listing window.
       for (const note of noteHits.get(page.id) ?? []) includeNote(note);
-      if (noteCounts[page.id] === 0) continue;
+      if (noteCounts[page.id] === 0) return;
       try {
         let cursor: string | undefined;
         let count = 0;
@@ -195,6 +209,11 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
         partial = true;
       }
     }
+    await Promise.all(
+      Array.from({ length: Math.min(bounds.noteConcurrency, candidates.size) }, async () => {
+        for (let next = pagesToInspect.next(); !next.done; next = pagesToInspect.next()) await inspect(next.value);
+      }),
+    );
   } catch {
     return finish('unavailable');
   }

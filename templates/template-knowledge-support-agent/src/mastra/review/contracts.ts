@@ -143,14 +143,12 @@ export const proposalSchema = z
       context.addIssue({ code: 'custom', message: (error as Error).message });
     }
   });
-export const approvalSchema = z
-  .object({
-    proposal: proposalSchema,
-    decision: decisionSchema,
-    reviewerId: identifier,
-    decidedAt: z.iso.datetime(),
-  })
-  .strict()
+export const approvalDecisionSchema = z
+  .object({ proposal: proposalSchema, decision: decisionSchema, reviewerId: identifier })
+  .strict();
+
+export const approvalSchema = approvalDecisionSchema
+  .extend({ decidedAt: z.iso.datetime() })
   .refine(({ proposal, decision }) => proposal.revision === decision.revision, {
     message: 'Decision revision mismatch',
     path: ['decision', 'revision'],

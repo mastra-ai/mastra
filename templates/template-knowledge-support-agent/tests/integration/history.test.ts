@@ -146,12 +146,25 @@ test(
       assert.equal(created.status, 200, await created.clone().text());
       const { id } = (await created.json()) as { id: string };
       for (const route of ['generate', 'stream']) {
+        const requestStart = f.model.requests.length;
         const response = await f.request(`/agents/support/${route}`, 0, {
           method: 'POST',
           body: JSON.stringify({ messages: [{ role: 'user', content: 'network printer' }], memory: { thread: id } }),
         });
         assert.equal(response.status, 200);
         assert.match(await response.text(), /Partial customer history/u);
+        assert.ok(
+          f.model.requests.slice(requestStart).some(body => {
+            const messages = body.messages as Array<{ role: string; content?: string }>;
+            return messages.some(
+              message =>
+                message.role === 'system' &&
+                message.content?.startsWith('Customer history preflight') &&
+                expected.every(ref => message.content?.includes(ref)),
+            );
+          }),
+          `${route} must send prepared history to the provider`,
+        );
       }
       await f.stop();
       await f.storage.close();

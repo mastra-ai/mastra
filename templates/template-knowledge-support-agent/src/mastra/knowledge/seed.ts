@@ -2,8 +2,8 @@ import type { Knowledge, KnowledgeNote, KnowledgePage, KnowledgeStorage } from '
 import { policyReference } from '../../examples/support.ts';
 import { databaseUrlForPath, hostedMode } from '../database.ts';
 import { createStorage } from '../storage.ts';
-import { createKnowledge } from './index.ts';
-import { acquireWriterLock } from './writer-lock.ts';
+import { createKnowledge, createPostgresWriterKnowledge } from './index.ts';
+import { withWriterLock } from './writer-lock.ts';
 import {
   prepareDataset,
   type DatasetConfiguration,
@@ -54,7 +54,9 @@ function ownedPage(page: KnowledgePage, wanted: PreparedPage, author: string) {
   return !page.body && !page.description && page.name === page.key;
 }
 function sameSet(a: string[], b: string[]) {
-  return a.length === b.length && [...a].sort().every((value, index) => value === [...b].sort()[index]);
+  if (a.length !== b.length) return false;
+  const sortedB = [...b].sort();
+  return [...a].sort().every((value, index) => value === sortedB[index]);
 }
 function exactNote(note: KnowledgeNote, wanted: PreparedNote, scopeId: string, mentions: string[], author: string) {
   return (
@@ -210,11 +212,14 @@ export async function seedDataset(config: DatasetConfiguration, options: SeedOpt
     );
     return report;
   }
-  const lock = await acquireWriterLock(options.databaseUrl);
-  try {
+  return withWriterLock(async ({ databasePath, postgres }) => {
+    if (postgres) {
+      await writeDataset(createPostgresWriterKnowledge(postgres, true), dataset, report);
+      return report;
+    }
     const storage = createStorage(
       'knowledge-seed',
-      hostedMode() ? options.databaseUrl : databaseUrlForPath(lock.databasePath),
+      hostedMode() ? options.databaseUrl : databaseUrlForPath(databasePath),
     );
     try {
       await writeDataset(createKnowledge(storage), dataset, report);
@@ -222,7 +227,5 @@ export async function seedDataset(config: DatasetConfiguration, options: SeedOpt
     } finally {
       await storage.close();
     }
-  } finally {
-    await lock.release();
-  }
+  }, options.databaseUrl);
 }

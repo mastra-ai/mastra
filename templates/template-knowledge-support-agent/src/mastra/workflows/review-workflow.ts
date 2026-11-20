@@ -1,8 +1,10 @@
 import { recordOperation } from '../observability.ts';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
+import { createTool, isValidationError } from '@mastra/core/tools';
 import type { Profile } from '../identity.ts';
 import { isRetryablePublicationError } from '../review/publication-errors.ts';
 import {
+  approvalDecisionSchema,
   approvalSchema,
   decisionSchema,
   proposalSchema,
@@ -34,6 +36,17 @@ export function createReviewWorkflow(service: ReviewService) {
       }
     },
   });
+  // Workflow steps persist their raw output. Validate the approval before saving that checkpoint.
+  const recordApproval = createTool({
+    id: 'record-approval',
+    description: 'Record the validated reviewer decision',
+    inputSchema: approvalDecisionSchema,
+    outputSchema: approvalSchema,
+    execute: async approval => ({
+      ...approval,
+      decidedAt: new Date().toISOString(),
+    }),
+  });
   const decision = createStep({
     id: 'review-decision',
     inputSchema: proposalSchema,
@@ -52,15 +65,24 @@ export function createReviewWorkflow(service: ReviewService) {
         recordOperation('review-decision', 'suspended');
         return suspend(inputData);
       }
-      const approval = approvalSchema.parse({
+      const approval = await recordApproval.execute!({
         proposal: inputData,
         decision: resumeData,
         reviewerId: reviewer.actorId,
-        decidedAt: new Date().toISOString(),
       });
+      if (isValidationError(approval)) throw new ReviewConflict(approval.message);
+      if (!approval) throw new Error('Reviewer decision returned no approval');
       recordOperation('review-decision', 'resumed');
       return approval;
     },
+  });
+  const publicationAttempt = createTool({
+    id: 'publication-attempt',
+    description: 'Publish the recorded approval after validating the retry decision',
+    inputSchema: publicationRetryInputSchema,
+    outputSchema: publicationSchema,
+    execute: ({ approval }, context) =>
+      service.publish(approval, service.reviewer(context?.requestContext?.get('mastra__user') as Profile | undefined)),
   });
   const publish = createStep({
     id: 'publish-review',
@@ -76,10 +98,14 @@ export function createReviewWorkflow(service: ReviewService) {
         reviewer.customerId !== inputData.proposal.reviewer.customerId
       )
         throw new ReviewConflict('Reviewer does not own this approval');
-      const { approval } = publicationRetryInputSchema.parse({ approval: inputData, retryDecision: resumeData });
       try {
         const started = performance.now();
-        const result = await service.publish(approval, reviewer);
+        const result = await publicationAttempt.execute!(
+          { approval: inputData, retryDecision: resumeData },
+          { requestContext },
+        );
+        if (isValidationError(result)) throw new ReviewConflict(result.message);
+        if (!result) throw new Error('Publication attempt returned no result');
         recordOperation('review-publication', result.status, started);
         return result;
       } catch (error) {

@@ -4,6 +4,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { join } from 'node:path';
 import test from 'node:test';
+import { RequestContext } from '@mastra/core/request-context';
 import { runtimeFixture } from '../fixtures/runtime.ts';
 import type { ModelScript } from '../fixtures/model-server.ts';
 import { datasets } from '../../src/examples/datasets.ts';
@@ -65,7 +66,7 @@ const supportScript: ModelScript = body => {
     return { tool: { name: 'knowledge_read', arguments: { page: guide } } };
   }
   assert.match(tools.at(-1)!.content!, /Square Terminal network checks/u);
-  assert.match(tools.at(-1)!.content!, /squareup.com/u);
+  assert.ok(tools.at(-1)!.content!.includes(vendor), 'The cited vendor URL must come from the Knowledge read');
   return {
     content: `${prepared.status === 'empty' ? 'No customer history yet. ' : ''}Vendor guidance: inspect the network indicator [${guide}] (${vendor}). Which connection indicator do you see, and are offline payments pending?`,
   };
@@ -257,6 +258,13 @@ test('preflight_precedes_model_and_distinguishes_history_outcomes', { timeout: 1
       const unavailableStart = f.model.requests.length;
       await turn(f, unavailable, 'network connectivity');
       assert.equal(history(f.model.requests[unavailableStart]!).status, 'partial');
+      await assert.rejects(
+        () => store.searchPages({ scopeIds: [scope!.id], read: scopedRead, query: 'decoder' }),
+        /JSON|Unexpected|property/iu,
+      );
+      const requestStart = f.model.requests.length;
+      await turn(f, unavailable, 'decoder');
+      assert.deepEqual(history(f.model.requests[requestStart]!), { status: 'unavailable', records: [] });
     } finally {
       await sql(f, 'UPDATE mastra_knowledge_pages SET createdBy = ? WHERE id = ?', [original, broken.page.id]);
     }
@@ -440,6 +448,72 @@ test('same_thread_gets_updated_policy_signal_and_rejects_pin_mutation', { timeou
   } catch (error) {
     console.error(f.output());
     throw error;
+  } finally {
+    await f.close();
+  }
+});
+
+test('turns use the delivered policy when an edit lands during preflight', { timeout: 30000 }, async () => {
+  const f = await runtimeFixture({ modelScript: () => ({ content: 'Policy delivered.' }) });
+  try {
+    const profile = f.credentials[0]!.profile;
+    const agent = f.mastra.getAgent('support');
+    const context = new RequestContext();
+    context.set('mastra__user', profile);
+    const resource = resourceId(profile);
+    const store = await f.supportKnowledge.getStorage();
+    const search = store.searchPages.bind(store);
+    const countNotes = store.countNotes.bind(store);
+    const policy = { scope: 'tenant:north', path: 'policies/safe-changes' };
+    const [scope] = await store.getScopesByAddress([policy.scope]);
+    const original = await store.getPageByPath({ scopeId: scope!.id, path: policy.path.split('/'), read: 'all' });
+    assert.ok(original?.body);
+    let pendingEdit: string | undefined;
+    let verifyMissingCounts = false;
+    // Commit a real edit after preflight's policy lookup, before the native pin lookup in this turn.
+    store.searchPages = async input => {
+      if (pendingEdit) {
+        const body = pendingEdit;
+        pendingEdit = undefined;
+        await f.supportKnowledge.upsertPage({ ...policy, name: original.name, body, author: 'synthetic-fixture' });
+      }
+      return search(input);
+    };
+    store.countNotes = async input => {
+      if (verifyMissingCounts && input.pageIds.includes(original.id)) throw new Error('Synthetic note count outage');
+      return countNotes(input);
+    };
+    const generate = (thread: string) =>
+      agent.generate('network', { memory: { thread, resource }, requestContext: context });
+    const first = await f.memory.createThread({ resourceId: resource });
+    assert.equal((await generate(first.id)).text, 'Policy delivered.');
+
+    const revised = `${original.body}\nAsk the network lead for an authorization record.`;
+    pendingEdit = revised;
+    verifyMissingCounts = true;
+    const deltaStart = f.model.requests.length;
+    assert.equal((await generate(first.id)).text, 'Policy delivered.');
+    const delta = messages(f.model.requests[deltaStart]!).find(message =>
+      message.content?.startsWith('<pinned-knowledge-update'),
+    );
+    assert.match(delta?.content ?? '', /v2\):[\s\S]*authorization record/u);
+
+    // With an existing valid snapshot, an unusable change in the same turn must suppress the provider call.
+    pendingEdit = '[Reference catalog vendor handbook product documentation](https://example.com/manual)';
+    const blockedStart = f.model.requests.length;
+    const blocked = await generate(first.id);
+    assert.match(blocked.tripwire?.reason ?? '', /not fully delivered/u);
+    assert.equal(f.model.requests.length, blockedStart);
+
+    await f.supportKnowledge.upsertPage({ ...policy, name: original.name, body: revised, author: 'synthetic-fixture' });
+    const fresh = await f.memory.createThread({ resourceId: resource });
+    pendingEdit = `${revised}\nDocument the authorized recovery plan in the work order.`;
+    const snapshotStart = f.model.requests.length;
+    assert.equal((await generate(fresh.id)).text, 'Policy delivered.');
+    const snapshot = messages(f.model.requests[snapshotStart]!).find(message =>
+      message.content?.startsWith('<pinned-knowledge '),
+    );
+    assert.match(snapshot?.content ?? '', /v5\):[\s\S]*work order/u);
   } finally {
     await f.close();
   }

@@ -307,8 +307,10 @@ test('http_agent_and_memory_reject_foreign_scope_and_thread', { timeout: 120000 
     const before = await fixture.supportKnowledge
       .getStorage()
       .then(store => store.getPage({ id: fixture.pages[2]!.id, read: 'all' }));
+    const foreignReadStart = fixture.model.requests.length;
     await json(await generate(fixture, independent.id, 0, `READ_PAGE:${fixture.pages[2]!.id}`));
-    const latest = JSON.stringify(fixture.model.requests.slice(-2));
+    assert.ok(fixture.model.requests.length > foreignReadStart);
+    const latest = JSON.stringify(fixture.model.requests.slice(foreignReadStart));
     assert.doesNotMatch(latest, /SYNTHETIC_PRIVATE_2/u);
     const after = await fixture.supportKnowledge
       .getStorage()

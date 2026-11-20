@@ -18,7 +18,11 @@ export async function startModelServer(script?: ModelScript) {
       let raw = '';
       for await (const chunk of request) raw += chunk;
       body = JSON.parse(raw);
-      if (!Array.isArray(body?.messages)) throw new Error('Expected a messages array');
+      if (
+        !Array.isArray(body?.messages) ||
+        !body.messages.every(message => message && typeof message === 'object' && typeof message.role === 'string')
+      )
+        throw new Error('Expected a messages array with valid roles');
     } catch (error) {
       if (!response.destroyed && !response.writableEnded && !request.aborted) {
         response.writeHead(400, { 'content-type': 'application/json' });

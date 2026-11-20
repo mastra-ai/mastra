@@ -24,13 +24,11 @@ test('confirmation references support long Unicode actors and reject ambiguous l
     'sc1.' + Buffer.from(JSON.stringify({ ...locator, actorId: 'claimed' })).toString('base64url'),
   ])
     assert.equal(confirmationReferenceSchema.safeParse(invalid).success, false);
-  assert.equal(
-    confirmationInputSchema.safeParse({
-      threadId: 'thread',
-      observation: 'Observed adapter configuration.',
-      outcome: 'The authorized check succeeded.',
-      sourceActorId: 'claimed',
-    }).success,
-    false,
-  );
+  const payload = {
+    threadId: 'thread',
+    observation: 'Observed adapter configuration.',
+    outcome: 'The authorized check succeeded.',
+  };
+  assert.equal(confirmationInputSchema.safeParse(payload).success, true);
+  assert.equal(confirmationInputSchema.safeParse({ ...payload, sourceActorId: 'claimed' }).success, false);
 });

@@ -27,8 +27,9 @@ import {
 import { GET_SYSTEM_PACKAGES_ROUTE } from '@mastra/server/handlers/system';
 import { LIST_TOOLS_ROUTE } from '@mastra/server/handlers/tools';
 import type { Memory } from '@mastra/memory';
+import { MemoryPG } from '@mastra/pg';
 import { hostedMode } from '../database.ts';
-import { acquireWriterLock, WriterBusyError } from '../knowledge/writer-lock.ts';
+import { withWriterLock, WriterBusyError } from '../knowledge/writer-lock.ts';
 
 type RoutePolicy = (input: {
   request: Request;
@@ -92,25 +93,30 @@ const supportKnowledge = ({ params }: Parameters<RoutePolicy>[0]) => params.know
 export function createStudioAccess(memory: Memory) {
   let pending: Promise<unknown> = Promise.resolve();
 
-  function bindThread(threadId: string, owner: string): Promise<boolean> {
+  async function bindThread(threadId: string, owner: string): Promise<boolean> {
+    const existing = await memory.getThreadById({ threadId });
+    if (existing) return existing.resourceId === owner;
+
     const operation = pending.then(async () => {
       // First ownership must be serialized across workers, before agent execution writes Memory.
-      let lock;
-      try {
-        const existing = await memory.getThreadById({ threadId });
-        if (existing) return existing.resourceId === owner;
-        if (hostedMode()) {
-          lock = await acquireWriterLock();
-          const claimed = await memory.getThreadById({ threadId });
-          if (claimed) return claimed.resourceId === owner;
-        }
+      const queued = await memory.getThreadById({ threadId });
+      if (queued) return queued.resourceId === owner;
+      if (!hostedMode()) {
         await memory.createThread({ threadId, resourceId: owner });
         return true;
+      }
+      try {
+        return await withWriterLock(async ({ postgres }) => {
+          const store = postgres ? new MemoryPG({ client: postgres, schemaName: 'public' }) : memory;
+          const claimed = await store.getThreadById({ threadId });
+          if (claimed) return claimed.resourceId === owner;
+          const thread = await memory.createThread({ threadId, resourceId: owner, saveThread: false });
+          await store.saveThread({ thread });
+          return true;
+        });
       } catch (error) {
         if (error instanceof WriterBusyError) return false;
         throw error;
-      } finally {
-        await lock?.release();
       }
     });
     pending = operation.catch(() => undefined);
