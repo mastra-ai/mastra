@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import '@/test/inert-resize-observer';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { StreamParams } from '@mastra/client-js';
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/request-context';
@@ -27,7 +28,16 @@ const AGENT_ID = 'gen-ui';
 
 afterEach(cleanup);
 
-const signupForm = {
+/** What Studio posts to the stream endpoint; the request context arrives as a plain object. */
+type StreamBody = Omit<StreamParams, 'requestContext'> & { requestContext?: Record<string, unknown> };
+
+type FormSpec = {
+  root: string;
+  state: Record<string, unknown>;
+  elements: Record<string, { type: string; props: Record<string, unknown>; children: string[]; on?: unknown }>;
+};
+
+const signupForm: FormSpec = {
   root: 'card',
   state: { email: '' },
   elements: {
@@ -42,8 +52,23 @@ const signupForm = {
   },
 };
 
+const teamForm: FormSpec = {
+  root: 'team-card',
+  state: { team: 'core' },
+  elements: {
+    'team-card': { type: 'Card', props: { title: 'Pick a team' }, children: ['team', 'save'] },
+    team: { type: 'Input', props: { label: 'Team', value: { $bindState: '/team' } }, children: [] },
+    save: {
+      type: 'Button',
+      props: { label: 'Save team' },
+      on: { press: { action: 'sendMessage', params: { message: 'Save it' } } },
+      children: [],
+    },
+  },
+};
+
 /** The ```spec block the catalog's prompt asks the model to write. */
-function specBlock(spec: typeof signupForm) {
+function specBlock(spec: FormSpec) {
   const lines = [
     { op: 'add', path: '/root', value: spec.root },
     { op: 'add', path: '/state', value: spec.state },
@@ -90,14 +115,10 @@ function serveAgent(model: MockLanguageModelV2) {
     inputProcessors: [processor],
     outputProcessors: [processor],
   });
-  const bodies: { requestContext?: Record<string, unknown> }[] = [];
+  const bodies: StreamBody[] = [];
   server.use(
     http.post(`${BASE_URL}/api/agents/${AGENT_ID}/stream`, async ({ request }) => {
-      const body = (await request.json()) as {
-        messages: MastraDBMessage[];
-        memory?: { thread: string; resource: string };
-        requestContext?: Record<string, unknown>;
-      };
+      const body = (await request.json()) as StreamBody;
       bodies.push(body);
       const stream = await agent.stream(body.messages, {
         memory: body.memory,
@@ -188,6 +209,38 @@ describe('an interface an agent composes in Studio chat', () => {
       expect(bodies[1]?.requestContext?.[JSON_RENDER_STATE]).toEqual({ email: 'ada@example.com' });
       // The processor shows the model its interface as the user left it.
       expect(modelSaw(prompts[1]).join('\n')).toContain('ada@example.com');
+    },
+  );
+
+  it(
+    'only lets the latest interface answer, since the agent applies the state it gets to that one',
+    { timeout: 45_000 },
+    async () => {
+      const { model } = modelWriting(
+        `Here you go.\n${specBlock(signupForm)}`,
+        `Now this.\n${specBlock(teamForm)}`,
+        'Saved.',
+      );
+      const bodies = serveAgent(model);
+      renderChat();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+      const join = await screen.findByRole('button', { name: 'Join' }, TURN);
+      await waitFor(() => expect(join.hasAttribute('disabled')).toBe(false), TURN);
+      fireEvent.click(join);
+
+      const save = await screen.findByRole('button', { name: 'Save team' }, TURN);
+      await waitFor(() => expect(save.hasAttribute('disabled')).toBe(false), TURN);
+      // The signup form is now an earlier interface: it is shown, but can no longer answer.
+      expect(screen.getByRole('button', { name: 'Join' }).hasAttribute('disabled')).toBe(true);
+      expect(screen.getByRole('textbox', { name: 'Email' }).hasAttribute('disabled')).toBe(true);
+
+      fireEvent.change(screen.getByRole('textbox', { name: 'Team' }), { target: { value: 'platform' } });
+      fireEvent.click(save);
+
+      await screen.findByText('Saved.', undefined, TURN);
+      expect(bodies).toHaveLength(3);
+      expect(bodies[2]?.requestContext?.[JSON_RENDER_STATE]).toEqual({ team: 'platform' });
     },
   );
 

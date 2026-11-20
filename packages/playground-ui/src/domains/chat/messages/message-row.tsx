@@ -234,7 +234,12 @@ export const MessageRow = memo(function MessageRow({
           if (part !== specParts[0]) return null;
           return (
             <Arriving>
-              <ChatInterface parts={specParts} readOnly={readOnly} />
+              <ChatInterface
+                messageId={message.id}
+                parts={specParts}
+                chatRunning={running.isRunning}
+                readOnly={readOnly}
+              />
             </Arriving>
           );
         }
@@ -252,7 +257,7 @@ export const MessageRow = memo(function MessageRow({
         </Notice>
       ),
     };
-  }, [metadata, dataParts, readOnly, toolGroups, isRunning, renderToolCard, shownParts]);
+  }, [metadata, dataParts, readOnly, toolGroups, isRunning, renderToolCard, shownParts, message.id, running.isRunning]);
 
   const userRenderers = useMemo<MessageRenderers>(
     () => ({

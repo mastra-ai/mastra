@@ -57,9 +57,9 @@ function Reply({ message }) {
 }
 ```
 
-## Render interfaces in Studio
+### Render interfaces in Studio
 
-Studio draws interfaces composed from `studioCatalog`, using its own components. Give an agent this catalog to see its interfaces in Studio's chat, with no client code:
+Studio draws interfaces composed from `studioCatalog`, using its own components. The `/studio` entry reads its component schema from `@json-render/react`, so install it alongside the processor. Give an agent this catalog to see its interfaces in Studio's chat, with no client code:
 
 ```typescript
 import { JsonRenderProcessor } from '@mastra/json-render';

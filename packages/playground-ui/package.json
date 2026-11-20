@@ -173,7 +173,7 @@
     "build:publish": "pnpm build && yalc push",
     "preview": "vite preview",
     "storybook": "storybook dev -p 6006 --no-open",
-    "build-storybook": "pnpm turbo build --filter @mastra/core --filter @mastra/react --filter @mastra/ai-sdk && storybook build"
+    "build-storybook": "pnpm turbo build --filter @mastra/core --filter @mastra/react --filter @mastra/ai-sdk --filter @mastra/json-render && storybook build"
   },
   "keywords": [
     "mastra",
@@ -236,7 +236,7 @@
   "peerDependencies": {
     "@mastra/ai-sdk": "workspace:^",
     "@mastra/client-js": "workspace:^",
-    "@mastra/core": ">=1.81.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.83.0-0 <2.0.0-0",
     "@mastra/memory": ">=1.21.0-0 <2.0.0-0",
     "@mastra/react": "workspace:*",
     "@tanstack/react-query": "^5.90.21",
