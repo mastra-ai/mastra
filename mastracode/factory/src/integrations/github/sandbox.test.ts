@@ -124,6 +124,8 @@ beforeEach(() => {
 const GITHUB_CONFIG_KEYS = [
   'http.https://github.com.extraHeader',
   'http.https://github.com/.extraHeader',
+  'http.https://github.com..extraHeader',
+  'http.https://github.com./.extraHeader',
   'http.https://user@github.com:443/octocat.extraHeader',
   'http.github.com.extraHeader',
   'http.https://*.github.com.extraHeader',

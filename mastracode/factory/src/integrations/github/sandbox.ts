@@ -168,7 +168,8 @@ function appliesToGithub(key: string): boolean {
     .slice(first + 1, last)
     .replace(/^[a-z][a-z0-9+.-]*:\/\//, '')
     .replace(/^[^/@]*@/, '')
-    .split(/[/:]/)[0]!;
+    .split(/[/:]/)[0]!
+    .replace(/\.+$/, '');
   if (host === 'github.com' || host.endsWith('.github.com')) return true;
   if (!host.includes('*')) return false;
   const pattern = new RegExp(
