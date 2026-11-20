@@ -1,15 +1,11 @@
 import { getEntryId } from '../../step-entry';
 import type { RestartExecutionParams, StepResult, WorkflowRunState } from '../../types';
 import type { LeafEntry } from './routing';
+import { samePath } from './run-status';
 
 type StoredRecord = { status?: string; startedAt?: number; endedAt?: number; metadata?: Record<string, any> };
 
 const TERMINAL_STATUSES = new Set(['success', 'failed', 'canceled', 'tripwire']);
-
-/** Whether a run stored with `status` has ended. */
-export function isEndedRunStatus(status: string | undefined): boolean {
-  return TERMINAL_STATUSES.has(status!);
-}
 
 /**
  * What a worker does with a delivery of a step occurrence: run the step, drop
@@ -17,11 +13,6 @@ export function isEndedRunStatus(status: string | undefined): boolean {
  * or continue the run from the result the occurrence saved.
  */
 export type FinishedOccurrence = 'run' | 'drop' | { continueFrom: StepResult<any, any, any, any> };
-
-/** Whether two execution paths name the same position in the step graph. */
-function samePath(a: number[] | undefined, b: number[]): boolean {
-  return !!a && a.length === b.length && a.every((index, depth) => index === b[depth]);
-}
 
 /** The record of one foreach item, kept in the foreach step's resume metadata. */
 function foreachItem(result: unknown, index: number | undefined): StoredRecord | undefined {

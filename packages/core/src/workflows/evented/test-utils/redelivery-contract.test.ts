@@ -123,7 +123,9 @@ describe('redelivery processor draining', () => {
       });
     // Opting out of recovery also opts out of the finished-step check, and a run whose end is not
     // stored can't be seen to have ended, so a replay runs the steps again and gives the drain
-    // descendants to wait for.
+    // descendants to wait for. This leans on a known gap: when a run's end is stored, the replay
+    // is dropped and the evented engine matches the default one. Once an ended-run marker covers
+    // runs whose end is not stored, this test needs another source of descendants.
     const workflow = createEventedWorkflow({
       id: 'drain-contract',
       inputSchema: z.number(),
