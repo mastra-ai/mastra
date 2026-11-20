@@ -805,15 +805,21 @@ export class AgentChannels {
 
       if (onAction !== false) {
         chat.onAction(event => {
-          const { handlerContext } = beginMessage();
+          const { defaultHandler: handleMessage, handlerContext } = beginMessage();
           // Tool approval buttons — id is "tool_approve:<toolCallId>" or "tool_deny:<toolCallId>"
           const defaultHandler = async () => {
             const { actionId } = event;
             if (actionId === CONTINUE_RUN_ACTION_ID) {
-              // A retry button on an error card: the clicker asks the agent to continue,
+              // A continue button on an error card: the clicker asks the agent to continue,
               // as if they had replied in the thread, so the reply route's gates still apply.
-              const chatThread = event.thread as Thread | null;
-              if (!chatThread || onSubscribedMessage === false) return;
+              const clickedThread = event.thread as Thread | null;
+              if (!clickedThread || onSubscribedMessage === false) return;
+              // A card posted at the top level of a conversation reports itself as the thread.
+              const threadId = this.resolveExternalThreadId({
+                platform: event.adapter.name,
+                chatThread: clickedThread,
+                messageId: event.messageId,
+              });
               const text = CONTINUE_RUN_MESSAGE;
               const message = new ChatMessage({
                 attachments: [],
@@ -827,9 +833,25 @@ export class AgentChannels {
                 metadata: { dateSent: new Date(), edited: false },
                 raw: event.raw,
                 text,
-                threadId: chatThread.id,
+                threadId,
               });
-              return dispatchBatch(chatThread, message, undefined, onSubscribedMessage, 'subscribed');
+              const chatThread =
+                threadId === clickedThread.id
+                  ? clickedThread
+                  : new ThreadImpl({
+                      adapter: event.adapter,
+                      channelId: clickedThread.channelId,
+                      channelVisibility: clickedThread.channelVisibility,
+                      currentMessage: message,
+                      id: threadId,
+                      isDM: clickedThread.isDM,
+                      stateAdapter: this.stateAdapter,
+                    });
+              // The click's own scope, so context a custom onAction set reaches the run.
+              if (typeof onSubscribedMessage === 'function') {
+                return onSubscribedMessage(chatThread, message, handleMessage, handlerContext);
+              }
+              return handleMessage(chatThread, message);
             }
             if (!actionId.startsWith('tool_approve:') && !actionId.startsWith('tool_deny:')) return;
             const platform = event.adapter.name;
