@@ -216,9 +216,9 @@ export const Grid: Story = {
     <StoryFrame>
       <PageLayout breadcrumbs={crumbs} header={pageHeader}>
         <PageLayout.Grid>
-          <section className="rounded-xl bg-card p-4 @4xl:col-span-8">Details</section>
-          <aside className="rounded-xl bg-card p-4 @4xl:col-span-4">Properties</aside>
-          <section className="rounded-xl bg-card p-4">Activity</section>
+          <section className="col-span-8 min-h-28 rounded-xl bg-card p-4">Details</section>
+          <aside className="col-span-4 min-h-28 rounded-xl bg-card p-4">Properties</aside>
+          <section className="min-h-28 rounded-xl bg-card p-4">Activity</section>
         </PageLayout.Grid>
       </PageLayout>
     </StoryFrame>

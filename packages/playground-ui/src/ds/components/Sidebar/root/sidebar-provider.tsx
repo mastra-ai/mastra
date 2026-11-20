@@ -97,7 +97,10 @@ export function SidebarProvider({
 
   const [state, setState] = React.useState<SidebarState>(initial.state);
   const [width, setWidthState] = React.useState<number>(initial.width);
-  const [isMobile, setIsMobile] = React.useState(false);
+  const mobileQuery = `(max-width: ${mobileBreakpoint - 1}px)`;
+  const [isMobile, setIsMobile] = React.useState(
+    () => typeof window !== 'undefined' && window.matchMedia(mobileQuery).matches,
+  );
   const [openMobile, setOpenMobileState] = React.useState(false);
   const [mobileDrawerPresent, setMobileDrawerPresent] = React.useState(false);
   const openMobileRef = React.useRef(false);
@@ -111,12 +114,12 @@ export function SidebarProvider({
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
-    const mq = window.matchMedia(`(max-width: ${mobileBreakpoint - 1}px)`);
+    const mq = window.matchMedia(mobileQuery);
     const update = () => setIsMobile(mq.matches);
     update();
     mq.addEventListener('change', update);
     return () => mq.removeEventListener('change', update);
-  }, [mobileBreakpoint]);
+  }, [mobileQuery]);
 
   const setOpenMobile = React.useCallback((open: boolean) => {
     openMobileRef.current = open;

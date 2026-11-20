@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SidebarSearchTrigger } from '../header/sidebar-search-trigger';
+import { useSidebar } from './sidebar-context';
 import { SidebarProvider } from './sidebar-provider';
 import { SidebarTrigger } from './sidebar-trigger';
 import { TooltipProvider } from '@/ds/components/Tooltip';
@@ -65,5 +66,24 @@ describe('SidebarSearchTrigger tooltip', () => {
     const tooltip = await screen.findByRole('tooltip');
     expect(tooltip.textContent).toContain('Search');
     expect(tooltip.querySelector('kbd')?.textContent).toBe('⌘ K');
+  });
+});
+
+describe('SidebarProvider on a phone', () => {
+  it('knows it is on a phone from the first render, so phone-only controls never pop in', () => {
+    mockMatchMedia(true);
+    const seen: boolean[] = [];
+    function Probe() {
+      seen.push(useSidebar().isMobile);
+      return null;
+    }
+
+    render(
+      <SidebarProvider>
+        <Probe />
+      </SidebarProvider>,
+    );
+
+    expect(seen[0]).toBe(true);
   });
 });

@@ -24,12 +24,12 @@ Removed the `variant` and `mask` props. Every page uses the full width with the 
 
 Pages that used `variant="narrow"` drop the prop, or move to `FormLayout` or `SettingsLayout` when that is what they are.
 
-Added `PageLayout.Grid`, a 12-column grid for laying out cards and panels. Children span the full width until they set a span, and stack on narrow pages:
+Added `PageLayout.Grid`, a 12-column grid for laying out cards and panels. Children span the full width until they set a `col-span-*`, and every child stacks at full width on narrow pages:
 
 ```tsx
 <PageLayout.Grid>
-  <section className="@4xl:col-span-8">{details}</section>
-  <aside className="@4xl:col-span-4">{properties}</aside>
+  <section className="col-span-8">{details}</section>
+  <aside className="col-span-4">{properties}</aside>
 </PageLayout.Grid>
 ```
 
