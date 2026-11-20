@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import { posix as posixPath } from 'node:path';
 
 import { ATTACH_TIMEOUT_MS, CommandsApiProcessHandle, CommandsApiProcessManager } from '@internal/workspace';
 import type { CommandsApi, CommandsApiHandle, CommandsApiOperation } from '@internal/workspace';
@@ -28,6 +27,7 @@ import {
 import { AuthenticationError, TimeoutError } from 'e2b';
 import type { PlatformClientOptions, PlatformRequestOptions } from './client.js';
 import { PlatformApiError, PlatformClient, resolveSandboxProvider } from './client.js';
+import { commandInCwd, shellQuote } from './command-in-cwd.js';
 import type { DirectExecWebSocketFactory, ExecLease } from './direct-exec.js';
 import { execViaLease } from './direct-exec.js';
 import type { E2BCommandsFactory, E2BExecRunner, E2BFiles, E2BFilesFactory } from './e2b-exec.js';
@@ -37,6 +37,8 @@ import { execViaPrivateNetwork, PrivateNetExecHttpError } from './private-net-ex
 import { isBrokenSandboxError, PlatformSandboxFilesystem } from './sandbox-filesystem.js';
 import type { SandboxTemplateBuilder, SerializedSandboxTemplate } from './template.js';
 import { getSandboxTemplateBuildEnvs, serializeSandboxTemplate } from './template.js';
+
+export { commandInCwd };
 
 export type PlatformSandboxNetworkIsolation = 'ISOLATED' | 'PRIVATE';
 
@@ -366,38 +368,6 @@ const FILE_COMMAND_TIMEOUT_MS = 10 * 60_000;
  */
 function buildCommand(command: string, args?: string[]): string {
   return args?.length ? `${command} ${args.map(shellQuote).join(' ')}` : command;
-}
-
-function shellQuote(arg: string): string {
-  if (/^[a-zA-Z0-9._\-/=:@]+$/.test(arg)) return arg;
-  return `'${arg.replace(/'/g, `'\\''`)}'`;
-}
-
-/**
- * `command` run from `cwd` by a leading shell `cd`, with the transports left to
- * start in the working directory. The exec transports report a `cwd` that
- * doesn't exist as a broken connection (retried, then "transport failed"), so
- * changing directory in the shell turns it into an ordinary failed command.
- *
- * A relative `cwd` resolves under `workingDirectory`. An absolute one outside it
- * that doesn't exist falls back to the same path under `workingDirectory`: the
- * workspace file tools read absolute paths that way (`/repo` is
- * `<workingDirectory>/repo`), so agents pass command `cwd`s the same way.
- */
-export function commandInCwd(command: string, cwd: string | undefined, workingDirectory: string | undefined): string {
-  if (!cwd) return command;
-  const normalize = (dir: string) => posixPath.normalize(dir).replace(/(.)\/$/, '$1');
-  const base = workingDirectory ? normalize(workingDirectory) : undefined;
-  const target = normalize(base && !cwd.startsWith('/') ? posixPath.join(base, cwd) : cwd);
-  if (target === base) return command;
-  const candidates = [target];
-  if (base && cwd.startsWith('/') && !target.startsWith(`${base}/`)) candidates.push(posixPath.join(base, target));
-  const branches = candidates.map(
-    (dir, i) => `${i === 0 ? 'if' : 'elif'} [ -d ${shellQuote(dir)} ]; then cd -- ${shellQuote(dir)} || exit 1`,
-  );
-  const tried = candidates.length > 1 ? ` (also tried ${candidates[1]})` : '';
-  const notFound = shellQuote(`Working directory not found: ${target}${tried}`);
-  return `${branches.join('; ')}; else echo ${notFound} >&2; exit 1; fi\n${command}`;
 }
 
 class PlatformProcessHandle extends ProcessHandle {
