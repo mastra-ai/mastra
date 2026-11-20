@@ -8,6 +8,15 @@ Kept real GitHub tokens out of credential-vault sandboxes. `PlatformSandbox` now
 
 `PlatformSandbox.refreshVault()` reads the sandbox's mode from `GET /sandbox/:id`. A reattach by recovery id calls it before the start completes. Network errors, 429 and 5xx responses are retried with backoff; if every retry fails, the start fails and the next start asks again. A failed read never falls back to handing out tokens.
 
+```ts
+await sandbox.start();
+// undefined until the platform has answered; refreshVault() asks it and throws if it cannot
+const vault = sandbox.vault ?? (await sandbox.refreshVault());
+if (vault !== true) {
+  // token mode: safe to install a GitHub token
+}
+```
+
 `FactorySandboxContext` gains an optional `userId`, the session owner. Factory sets it on every session sandbox, and `PlatformFactorySandbox` sends it as the acting user (`x-acting-user-id`) on every workspace-proxy request, which the proxy requires to create and run a vault sandbox. Sandboxes without an owner send no acting user, as before.
 
 Vault sandboxes need a workspace proxy that reports `vault: true` on reattach and `GET /sandbox/:id` as well as on provision.
