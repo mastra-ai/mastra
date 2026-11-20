@@ -15,7 +15,8 @@
  *
  * - `DurableAgent` extends `Agent` - Base durable agent with resumable streams
  * - `EventedAgent` extends `DurableAgent` - Fire-and-forget execution
- * - `InngestAgent` extends `DurableAgent` - Inngest-powered execution (from @mastra/inngest)
+ *
+ * `InngestAgent` is the proxy interface returned by `createInngestAgent` (from @mastra/inngest).
  *
  * ## Features
  *
