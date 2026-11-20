@@ -80,6 +80,7 @@ import type { AgentAbortThreadOptions, AgentDurableOption, AgentModelManagerConf
 import { isDurableAgentLike } from '../types';
 
 import { publishAbortRequest, releaseRemoteAbortListener, requestAcknowledgedAbort } from './abort-transport';
+import { ColdResumeAttempt, undecidedColdResume } from './cold-resume-gate';
 import {
   AGENT_STREAM_TOPIC,
   AgentStreamEventTypes,
@@ -764,6 +765,21 @@ export interface DurableAgentRecoverOptions<OUTPUT = undefined> {
    * `DURABLE_AGENT_RUN_ACTIVE` for a live run.
    */
   force?: boolean;
+}
+
+/**
+ * Set by the untilIdle wrapper on the resume() it re-enters: the outer call already authorized and
+ * validated this resume and accepted it, so the inner call must not check again and fail after
+ * acceptance, when the run already carries the caller's request context.
+ */
+const RESUME_ALREADY_ACCEPTED = Symbol('durable-agent.resume-already-accepted');
+
+function markResumeAccepted<T extends object>(options: T): T {
+  return Object.assign(options, { [RESUME_ALREADY_ACCEPTED]: true });
+}
+
+function isAcceptedResume(options: object | undefined): boolean {
+  return options !== undefined && RESUME_ALREADY_ACCEPTED in options;
 }
 
 export class DurableAgent<
@@ -3359,13 +3375,19 @@ export class DurableAgent<
       }
       releaseResumeMarker = release;
     }
+    const coldAttempt = new ColdResumeAttempt(runId);
     try {
       // An abort on another server leaves the run canceled in storage.
       if (await this.#isRunCanceledInStorage(runId)) throw abortedRunError();
-      return await this.#resumeRun(runId, resumeData, options, releaseResumeMarker);
+      return await this.#resumeRun(runId, resumeData, options, releaseResumeMarker, coldAttempt);
     } catch (error) {
+      // A rebuilt run whose resume never accepted is removed again, so no later resume inherits
+      // the rejected caller's request context.
+      coldAttempt.abandon();
       releaseResumeMarker();
       throw error;
+    } finally {
+      coldAttempt.accept();
     }
   }
 
@@ -3408,13 +3430,21 @@ export class DurableAgent<
     resumeData: unknown,
     options: DurableAgentResumeOptions<TOutput> | undefined,
     releaseResumeMarker: () => void,
+    coldAttempt: ColdResumeAttempt,
   ): Promise<DurableAgentStreamResult<TOutput>> {
+    // Wait out any cold resume of this run that is still deciding, then read the registry and claim
+    // a cold run in the same tick, so two resumes can never both rebuild it.
+    for (let pending = undecidedColdResume(runId); pending; pending = undecidedColdResume(runId)) {
+      await pending;
+    }
     let entry = this.#runRegistry.get(runId);
     // Scopes persisted with a run rebuilt from storage. They are the suspended run's set even when
     // the caller passes its own request context.
     let rehydratedScopes: unknown;
     let coldSnapshot: WorkflowRunState | undefined;
     if (!entry) {
+      // Same tick as the loop above: other resumes of this run wait until this one decides.
+      coldAttempt.begin();
       // A persisted durable run can outlive this process (or the registry TTL).
       // Rebuild the non-serializable runtime state before resuming the stored
       // workflow snapshot. Keep warm resumes on the existing path to avoid
@@ -3505,6 +3535,8 @@ export class DurableAgent<
             // Hand the tool-call marker to the pinned agent's resume(), which
             // re-takes it synchronously before its first await.
             releaseResumeMarker();
+            // The pinned agent's resume() rebuilds and decides for itself.
+            coldAttempt.accept();
             return (resolved as unknown as DurableAgent<TAgentId, TTools, TOutput>).resume(runId, resumeData, options);
           }
         }
@@ -3557,6 +3589,9 @@ export class DurableAgent<
           }
         : options?.memory;
 
+      // Another agent instance in this process may already run this run from the shared registry slot;
+      // preparation replaces it, so a rollback must put it back rather than empty the slot.
+      const globalEntryBeforePrepare = globalRunRegistry.has(runId) ? globalRunRegistry.get(runId) : undefined;
       // The resume below applies the suspended run's scopes, so preparation does not resolve them again.
       await this.prepare([], {
         [SCOPES_ALREADY_APPLIED]: true,
@@ -3574,6 +3609,15 @@ export class DurableAgent<
         modelSettings: options?.modelSettings ?? (workflowInput.options?.modelSettings as any),
       } as AgentExecutionOptions<TOutput>);
       entry = this.#runRegistry.get(runId);
+      const preparedEntry = entry;
+      const preparedGlobalEntry = getRunRegistryEntry(runId, this.#mastra);
+      coldAttempt.prepared(() => {
+        if (preparedEntry && this.#runRegistry.get(runId) === preparedEntry) this.#runRegistry.cleanup(runId);
+        if (!preparedGlobalEntry || preparedGlobalEntry === globalEntryBeforePrepare) return;
+        if (getRunRegistryEntry(runId, this.#mastra) !== preparedGlobalEntry) return;
+        if (globalEntryBeforePrepare) globalRunRegistry.set(runId, globalEntryBeforePrepare);
+        else deleteRunRegistryEntry(runId, this.#mastra);
+      });
     }
     if (!entry) {
       throw new Error(`Failed to rehydrate registry entry for run ${runId}. Cannot resume.`);
@@ -3648,11 +3692,53 @@ export class DurableAgent<
     // Scoped runs execute on a run-scoped copy of the request context.
     resumeRequestContext = (resolvedOptions.requestContext as typeof resumeRequestContext) ?? resumeRequestContext;
 
+    const alreadyAccepted = isAcceptedResume(options);
+    if (!alreadyAccepted) {
+      await this.requireAgentExecutionFGA({
+        requestContext: resolvedOptions.requestContext,
+        memory: resolvedOptions.memory,
+        runId,
+        snapshotMemoryInfo: memoryInfo,
+        actor: resolvedOptions.actor,
+      });
+    }
+
+    // Settle the prior segment before claiming the run and reading its snapshot
+    // and event offset. The suspension chunk can arrive before the suspended
+    // snapshot is persisted, and a late suspension event replayed into the new
+    // segment would close it early.
+    const priorExecution = getRunRegistryEntry(runId, this.#mastra)?.workflowExecution;
+    await priorExecution?.catch(() => {
+      /* errors already handled by the prior segment */
+    });
+    // Validate before claiming or advancing the suspended run so invalid answers can be corrected.
+    // Use Agent's preflight to preserve target selection, approval and stored-version behavior.
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    const resumeSnapshot = await workflowsStore?.loadWorkflowSnapshot({
+      workflowName: DurableStepIds.AGENTIC_LOOP,
+      runId,
+    });
+    if (resumeSnapshot && !alreadyAccepted) {
+      await this.#wrappedAgent.__validateToolResumeData({
+        snapshot: resumeSnapshot,
+        toolCallId: resolvedOptions.toolCallId,
+        resumeData,
+        requestContext: resumeRequestContext,
+        toolsets: resolvedOptions.toolsets,
+        clientTools: resolvedOptions.clientTools,
+        runId,
+        method: 'resume',
+      });
+    }
+    // Only an accepted resume may change the suspended run's request context: it carries
+    // the caller's identity and per-request tool configuration into the next resume. Everything
+    // above runs before acceptance, so a cold resume that fails there is rolled back by resume().
     entry.requestContext = resumeRequestContext;
     const globalEntryForContext = getRunRegistryEntry(runId, this.#mastra);
     if (globalEntryForContext) {
       globalEntryForContext.requestContext = resumeRequestContext;
     }
+    coldAttempt.accept();
 
     // Delegate to the idle-loop wrapper when `untilIdle` is set. Strip
     // `untilIdle` before passing to the wrapper so the inner agent.resume()
@@ -3667,10 +3753,14 @@ export class DurableAgent<
         getDefaultOptions: () => ({}),
         getMemory: (args?: any) => this.getMemory(args),
         resume: (innerRunId: string, innerResumeData: unknown, innerOptions?: DurableAgentResumeOptions<TOutput>) =>
-          this.resume(innerRunId, innerResumeData, {
-            ...innerOptions,
-            tracingOptions: resumeTracingOptions,
-          } as DurableAgentResumeOptions<TOutput>),
+          this.resume(
+            innerRunId,
+            innerResumeData,
+            markResumeAccepted({
+              ...innerOptions,
+              tracingOptions: resumeTracingOptions,
+            } as DurableAgentResumeOptions<TOutput>),
+          ),
         stream: (innerMessages: MessageListInput, innerOptions?: DurableAgentStreamOptions<TOutput>) =>
           this.stream(innerMessages, innerOptions),
       } as unknown as DurableAgent<any, any, TOutput>;
@@ -3686,22 +3776,6 @@ export class DurableAgent<
       );
     }
 
-    await this.requireAgentExecutionFGA({
-      requestContext: resolvedOptions.requestContext,
-      memory: resolvedOptions.memory,
-      runId,
-      snapshotMemoryInfo: memoryInfo,
-      actor: resolvedOptions.actor,
-    });
-
-    // Settle the prior segment before claiming the run and reading its snapshot
-    // and event offset. The suspension chunk can arrive before the suspended
-    // snapshot is persisted, and a late suspension event replayed into the new
-    // segment would close it early.
-    const priorExecution = getRunRegistryEntry(runId, this.#mastra)?.workflowExecution;
-    await priorExecution?.catch(() => {
-      /* errors already handled by the prior segment */
-    });
     // A warm resume reuses the tools built for the first request, which close
     // over its request context, delegation hooks, and tool hooks (#25960). Rebuild them for
     // this call and swap in only entries still holding a request-built tool, so
