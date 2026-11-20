@@ -1,5 +1,33 @@
 # @mastra/playground-ui
 
+## 71.0.0-alpha.3
+
+### Minor Changes
+
+- Share dataset edit, duplicate, schema and version-compare views from `@mastra/playground-ui/domains/datasets` (`EditDatasetForm`, `DuplicateDatasetDialog`, `DatasetSchemaDialog`, `DatasetCompareVersionToolbar`, `DatasetCompareVersionsList`, `ScorerSelector`), so apps other than Studio can render them. ([#31087](https://github.com/mastra-ai/mastra/pull/31087))
+
+- Shared the dataset detail views (items list, item panel, add/import/export dialogs, version history) and experiment comparison components from `@mastra/playground-ui`, so apps other than Studio can render a dataset's items. These components take URL state (`searchParams`, `setSearchParams`, `currentItemId`) as props and navigate through the app's `paths.datasetLink`/`paths.datasetItemLink`. ([#31087](https://github.com/mastra-ai/mastra/pull/31087))
+
+- Added `DatasetPage` to `@mastra/playground-ui/domains/datasets`: the full dataset detail page (dataset and version switcher crumbs, Schema and Edit/Duplicate/Delete actions, items list, dialogs). Studio now renders it, so other apps get the same page. `DatasetCombobox` and `DatasetVersions` also moved to playground-ui. ([#31087](https://github.com/mastra-ai/mastra/pull/31087))
+
+- Share the dataset edit page, version compare pages and item side panel from `@mastra/playground-ui/domains/datasets`, so every app shows the same dataset screens. Item and version links now use the app's `paths.datasetItemLink` instead of hardcoded `/datasets` URLs. ([#31087](https://github.com/mastra-ai/mastra/pull/31087))
+
+- Exported the datasets list building blocks from `@mastra/playground-ui/domains/datasets` (`DatasetsList`, `DatasetsToolbar`, `DatasetsFilterBar`, `CreateDatasetDialog`, `NoDatasetsInfo`, `DatasetsListSkeleton`, target filter helpers) and `ComputedTag` from `@mastra/playground-ui/domains/observability`, so apps other than Studio can render the datasets list. `CreateDatasetDialog` now opens the new dataset through the app's `paths.datasetLink`. ([#31087](https://github.com/mastra-ai/mastra/pull/31087))
+
+- Studio's agent chat now draws interfaces that agents compose with `studioCatalog` from `@mastra/json-render/studio`. Users can fill in and submit them; the values they enter are sent back to the agent with their next message. Interfaces are read-only while the reply streams and in read-only views. ([#31016](https://github.com/mastra-ai/mastra/pull/31016))
+
+### Patch Changes
+
+- Fixed the Traces page returning no traces, or the wrong traces, when a link or saved filter excluded a status or primitive type with "is not" (for example `?status=error&status.op=isNot`). On servers that support trace queries, these filters now hide only the excluded traces. Servers that only support the older trace list can't exclude values, so there the exclusion is ignored and traces matching your other filters are shown. ([#31044](https://github.com/mastra-ai/mastra/pull/31044))
+
+- Observability lists (traces, logs, and their filters) now keep live polling through a 429 rate-limit response, instead of stopping until the page is reloaded. Other 4xx responses still stop polling. ([#31049](https://github.com/mastra-ai/mastra/pull/31049))
+
+- Updated dependencies [[`f35fac5`](https://github.com/mastra-ai/mastra/commit/f35fac5b216214a6fc6407558f94fc2f4cbcc610), [`f2c23af`](https://github.com/mastra-ai/mastra/commit/f2c23af7f751a3e195d7bd52bd0377edb5f9072b), [`50e318b`](https://github.com/mastra-ai/mastra/commit/50e318bd77cc72ac0a148c900bb48b8f0b759b75), [`b008c95`](https://github.com/mastra-ai/mastra/commit/b008c95fa93c5a73ae08c4f86e99d7bd55bf3e78), [`6507fdc`](https://github.com/mastra-ai/mastra/commit/6507fdc6343363bc33eef8e30e83f50c50fc90ab), [`f77bcb1`](https://github.com/mastra-ai/mastra/commit/f77bcb1a5bcdfebda3df4b4adec8e6ac5f5f4e18), [`2ff45a1`](https://github.com/mastra-ai/mastra/commit/2ff45a18e335df452d1654ae3ce59b4b74844dfc)]:
+  - @mastra/core@1.86.0-alpha.3
+  - @mastra/json-render@0.2.0-alpha.0
+  - @mastra/client-js@1.61.2-alpha.3
+  - @mastra/react@1.16.0-alpha.3
+
 ## 71.0.0-alpha.2
 
 ### Minor Changes
