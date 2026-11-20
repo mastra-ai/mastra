@@ -12,20 +12,6 @@ export function resolveRunId(runId: string | undefined, generateId?: () => strin
   return runId ?? generateId?.() ?? globalThis.crypto.randomUUID();
 }
 
-export function successfulAgentOutput<T extends { error?: unknown }>(output: T): T {
-  const error = output.error;
-  if (error) {
-    throw error;
-  }
-  return output;
-}
-
-export async function drainAgentOutput<T extends { error?: unknown }>(output: {
-  getFullOutput(): Promise<T>;
-}): Promise<T> {
-  return successfulAgentOutput(await output.getFullOutput());
-}
-
 /** Format resolved instructions for string-only consumers such as voice and spans. */
 export function convertInstructionsToString(instructions: AgentInstructions): string {
   if (typeof instructions === 'string') {
