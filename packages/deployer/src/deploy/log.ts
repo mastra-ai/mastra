@@ -24,18 +24,29 @@ export const createPinoStream = (logger: IMastraLogger) => {
  * every token into one command line. Plain tokens pass through as-is; anything
  * else (spaces, apostrophes, emoji, `&`, `^`…) is wrapped in double quotes, where
  * cmd.exe treats it literally. Characters cmd.exe still interprets inside quotes
- * (`"`, `%`, `!`, line breaks) are refused. `"` can never appear in a Windows
- * path; a project path containing `%` or `!` fails on Windows rather than risk
- * variable expansion.
+ * (`"`, `!`, line breaks) are refused; `"` can never appear in a Windows path.
+ * `%` only expands as a `%name%` pair, so one `%` per command line is allowed
+ * (Yarn Berry's `--out …%v.tgz` needs it) and a second one is refused.
  */
 const PLAIN_WINDOWS_ARG = /^[\p{L}\p{M}\p{N}_@+=:,./\\~-]+$/u;
-const UNQUOTABLE_WINDOWS_ARG = /["%!\r\n\0]/;
+const UNQUOTABLE_WINDOWS_ARG = /["!\r\n\0]/;
 
 export function toWindowsShellArg(arg: string) {
   if (UNQUOTABLE_WINDOWS_ARG.test(arg)) {
     throw new Error(`Refusing to pass unsafe argument to shell command: ${JSON.stringify(arg)}`);
   }
   return PLAIN_WINDOWS_ARG.test(arg) ? arg : `"${arg}"`;
+}
+
+export function toWindowsShellArgs(bin: string, args: string[]) {
+  if (!PLAIN_WINDOWS_ARG.test(bin)) {
+    throw new Error(`Refusing to spawn unsafe command: ${JSON.stringify(bin)}`);
+  }
+  const quoted = args.map(toWindowsShellArg);
+  if ([bin, ...quoted].join(' ').split('%').length > 2) {
+    throw new Error('Refusing to pass more than one "%" to a shell command');
+  }
+  return quoted;
 }
 
 export function createChildProcessLogger({ logger, root }: { logger: IMastraLogger; root: string }) {
@@ -46,10 +57,7 @@ export function createChildProcessLogger({ logger, root }: { logger: IMastraLogg
       if (!bin) throw new Error('Refusing to spawn an empty command');
       const allArgs = [...cmdArgs, ...args.filter(Boolean)];
       const shell = process.platform === 'win32';
-      if (shell && !PLAIN_WINDOWS_ARG.test(bin)) {
-        throw new Error(`Refusing to spawn unsafe command: ${JSON.stringify(bin)}`);
-      }
-      const subprocess = spawn(bin, shell ? allArgs.map(toWindowsShellArg) : allArgs, {
+      const subprocess = spawn(bin, shell ? toWindowsShellArgs(bin, allArgs) : allArgs, {
         cwd: root,
         shell,
         env,

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { noopLogger } from '@mastra/core/logger';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createChildProcessLogger, toWindowsShellArg } from './log';
+import { createChildProcessLogger, toWindowsShellArg, toWindowsShellArgs } from './log';
 
 describe.skipIf(process.platform === 'win32')('createChildProcessLogger', () => {
   const dirs: string[] = [];
@@ -66,7 +66,29 @@ describe('toWindowsShellArg', () => {
     expect(toWindowsShellArg(arg)).toBe(`"${arg}"`);
   });
 
-  it.each(['"a"', '%PATH%', 'a!b', 'a\nb', 'a\rb'])('refuses %j, which cmd.exe expands even inside quotes', arg => {
+  it.each(['"a"', 'a!b', 'a\nb', 'a\rb'])('refuses %j, which cmd.exe expands even inside quotes', arg => {
     expect(() => toWindowsShellArg(arg)).toThrow('Refusing to pass unsafe argument');
+  });
+});
+
+describe('toWindowsShellArgs', () => {
+  it("keeps Yarn Berry's %v output path", () => {
+    expect(toWindowsShellArgs('yarn', ['pack', '--out', 'C:\\Users\\José\\out/scope-utilities-%v.tgz'])).toEqual([
+      'pack',
+      '--out',
+      '"C:\\Users\\José\\out/scope-utilities-%v.tgz"',
+    ]);
+  });
+
+  it.each([
+    [['pack', '%PATH%']],
+    [['pack', '--out', 'C:\\100%\\out/pkg-%v.tgz']],
+    [['--pack-destination', 'C:\\a%b', 'c%d']],
+  ])('refuses %j, where a %%name%% pair could expand', args => {
+    expect(() => toWindowsShellArgs('yarn', args)).toThrow('more than one "%"');
+  });
+
+  it('refuses a command with shell characters', () => {
+    expect(() => toWindowsShellArgs('yarn&calc', ['pack'])).toThrow('Refusing to spawn unsafe command');
   });
 });
