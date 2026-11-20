@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { getObservationWindowTokens } from '@mastra/playground-ui/domains/agents/chat/memory-sidebar/lib/observation-window';
 import { describe, expect, it } from 'vitest';
-import { getObservationWindowTokens } from '../lib/observation-window';
 import { observationalMemoryWithRecord } from './fixtures/memory';
 import type { OmProgressData } from '@/domains/agents/context';
 
@@ -64,7 +64,13 @@ describe('AgentObservationalMemory token display', () => {
 
 describe('AgentObservationalMemory tooltip', () => {
   // TODO: replace with a render test. Kept as the only guard on the model-routing rows in the OM tooltip.
-  const hostSource = readFileSync(resolve(__dirname, '../agent-observational-memory.tsx'), 'utf-8');
+  const hostSource = readFileSync(
+    resolve(
+      __dirname,
+      '../../../../../../../playground-ui/src/domains/agents/chat/memory-sidebar/agent-observational-memory.tsx',
+    ),
+    'utf-8',
+  );
   const displaySource = readFileSync(
     resolve(
       __dirname,
