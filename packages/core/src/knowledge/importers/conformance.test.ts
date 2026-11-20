@@ -50,6 +50,27 @@ describe('importerHostConformance', () => {
     expect(failed).toContain('replays a committed seq to the same receipt and refuses other content for it');
   });
 
+  it('catches a host that trusts the supplied digest when it replays a committed seq', async () => {
+    const failed = await failures(host => {
+      const committed = new Map<string, { digest: string; receipt: Awaited<ReturnType<typeof host.flush>> }>();
+      return {
+        ...host,
+        startRun: host.startRun.bind(host),
+        heartbeat: host.heartbeat.bind(host),
+        finishRun: host.finishRun.bind(host),
+        async flush(flush) {
+          const key = `${flush.runId}:${flush.generation}:${flush.seq}`;
+          const stored = committed.get(key);
+          if (stored?.digest === flush.digest) return stored.receipt;
+          const receipt = await host.flush(flush);
+          committed.set(key, { digest: flush.digest, receipt });
+          return receipt;
+        },
+      };
+    });
+    expect(failed).toEqual(['replays a committed seq to the same receipt and refuses other content for it']);
+  });
+
   it('catches a host that chains on nothing and one that forgets refusal codes', async () => {
     const chains = await failures(host => ({
       ...host,

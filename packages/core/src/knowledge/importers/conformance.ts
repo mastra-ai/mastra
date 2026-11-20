@@ -65,6 +65,14 @@ export function importerHostConformance(
         const again = await t.flush(run, 1, ops);
         check(same(first, again), 'resending a committed flush returns its stored receipt');
         await refused(() => t.flush(run, 1, [upsert('b')]), 409, 'digest_mismatch');
+        // Other content sent with the committed digest: the host recomputes, it doesn't trust it.
+        const digest = await knowledgeImporterFlushDigest({ ops });
+        await refused(
+          () => t.host.flush({ runId: run.runId, generation: run.generation, seq: 1, digest, ops: [upsert('b')] }),
+          409,
+          'digest_mismatch',
+        );
+        check(same(first, await t.flush(run, 1, ops)), 'an exact replay still returns the stored receipt');
         const next = await t.flush(run, 2, []);
         check(next.seq === 2, 'the replay did not advance the seq');
       },
