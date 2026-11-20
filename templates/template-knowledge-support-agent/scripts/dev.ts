@@ -3,14 +3,14 @@ import { spawn } from 'node:child_process';
 import { mkdir, writeFile, chmod, rm } from 'node:fs/promises';
 import { resolve, dirname, delimiter } from 'node:path';
 import { runtimeExample } from '../src/examples/runtime.ts';
+import { storageConfiguration } from '../src/mastra/database.ts';
 
 const { profiles: exampleProfiles, reviewers: exampleReviewers, role: exampleStudioRole } = runtimeExample;
-import { hostedMode, localDatabaseUrl } from '../src/mastra/database.ts';
-
-if (hostedMode()) throw new Error('Use the built bundle for hosted mode; npm run dev is the local Studio launcher');
+const database = storageConfiguration();
+if (database.backend !== 'libsql' || database.lockFile)
+  throw new Error('Use the built bundle for hosted mode. npm run dev launches local Studio.');
 
 const studioRole = process.env.SUPPORT_STUDIO_ROLE ?? exampleStudioRole;
-const databaseUrl = localDatabaseUrl();
 const generated = !process.env.SUPPORT_CREDENTIALS_FILE;
 const file =
   process.env.SUPPORT_CREDENTIALS_FILE ?? resolve('.local', `access-${randomBytes(12).toString('hex')}.json`);
@@ -43,7 +43,7 @@ const child = spawn(process.execPath, ['node_modules/mastra/dist/index.js', 'dev
     MASTRA_AGENT_SIGNALS: 'false',
     SUPPORT_CREDENTIALS_FILE: file,
     SUPPORT_STUDIO_ROLE: studioRole,
-    SUPPORT_DATABASE_URL: databaseUrl,
+    SUPPORT_DATABASE_URL: database.url,
   },
 });
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => child.kill(signal));

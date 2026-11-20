@@ -1,7 +1,7 @@
 {
   "name": "template-knowledge-support-agent",
   "version": "1.0.0",
-  "description": "A local support agent template powered by Mastra Knowledge.",
+  "description": "A support agent template powered by Mastra Knowledge.",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -9,10 +9,11 @@
     "node": "^22.19.0 || >=24.11.0"
   },
   "scripts": {
+    "build": "mastra build && node scripts/package-knowledge-datasets.ts",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
-    "dev": "node scripts/dev.ts",
-    "knowledge:seed": "node scripts/seed-knowledge.ts",
+    "dev": "node --env-file-if-exists=.env scripts/dev.ts",
+    "knowledge:seed": "node --env-file-if-exists=.env scripts/seed-knowledge.ts",
     "typecheck": "tsc --noEmit",
     "test:unit": "node --test tests/unit/*.test.ts",
     "test:integration": "node --test --test-concurrency=1 tests/integration/*.test.ts"

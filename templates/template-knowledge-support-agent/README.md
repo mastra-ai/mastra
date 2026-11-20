@@ -11,6 +11,7 @@ Support teams repeat investigations when manuals, customer history, and confirme
 ## Prerequisites
 
 - Set `OPENAI_API_KEY` for the default `openai/gpt-4o-mini` model. [Get an OpenAI API key](https://platform.openai.com/api-keys)
+- Keep `DATABASE_PROVIDER=local` for Studio. The database at `.local/support.db` keeps Knowledge and conversations across restarts.
 
 ## Quickstart 🚀
 
@@ -33,14 +34,26 @@ Support teams repeat investigations when manuals, customer history, and confirme
 - Run `npm run knowledge:seed -- --dataset retail-pos-history`, then ask about Store 42 connectivity in a fresh chat. Look for dated cases and which observations remain open.
 - Use the [Studio walkthrough](docs/studio-walkthrough.md) to record an attributed confirmation, approve a fictional finding, then retrieve the approved tenant guidance in another technician's chat.
 
-For a built HTTP deployment with remote LibSQL or PostgreSQL and external OAuth identity, follow [Provider-neutral staging](docs/hosted-staging.md).
-
-The default database is `.local/support.db`. It keeps your Knowledge and conversations across restarts. Use the new token from each launch to reopen an existing chat.
+- Use the new token from each launch to reopen an existing chat.
 
 ## Customization
 
 - Ask your coding agent to explore the project and plan an adaptation before editing. For example, “Plan an IT help desk example with shared setup guides and private employee support cases.”
 - Follow [Datasets and examples](docs/datasets-and-examples.md) to add cases, replace the standing policy, or try the software integration and Portuguese IT helpdesk examples.
+
+## Deploy to Mastra Platform
+
+Attach a managed database to your target environment and set `DATABASE_PROVIDER` there. The platform injects the corresponding connection variables. Keep the local `.env` for Studio and configure `OPENAI_API_KEY` and the hosted OAuth introspection variables in the target environment. [Managed database variables](https://mastra.ai/docs/mastra-platform/system-environment-variables#managed-database-variables)
+
+| `DATABASE_PROVIDER` | Database         | Injected variables                       |
+| ------------------- | ---------------- | ---------------------------------------- |
+| `turso`             | Turso            | `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` |
+| `neon`              | Neon PostgreSQL  | `DATABASE_URL`                           |
+| `postgres`          | PostgreSQL (VPC) | `DATABASE_URL`                           |
+
+With `DATABASE_PROVIDER` unset, the template detects a single attached Turso or PostgreSQL database from its variables. When both are attached, set the provider explicitly. Redis (VPC) is unsupported because the Mastra Redis adapter implements Memory, Workflows, and Scores without a Knowledge storage domain. [Mastra Redis adapter](https://mastra.ai/integrations/databases/redis#key-structure)
+
+For a new database, set `SUPPORT_SEED_ON_STARTUP=true` in the target environment and run `npm run build` to package the example dataset. Deploy that bundle with `npx mastra deploy --skip-build --env-file .env.production`. Use a separate `.env.production` containing only values you want to upload. It can contain just a comment when the dashboard holds all settings. Remove `SUPPORT_SEED_ON_STARTUP` after the first successful start. [Hosted staging](docs/hosted-staging.md)
 
 ## About Mastra templates
 

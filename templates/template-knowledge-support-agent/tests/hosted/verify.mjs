@@ -18,7 +18,13 @@ const template = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const lab = await mkdtemp(join(tmpdir(), 'support-hosted-proof-'));
 const children = [];
 const clusters = [];
-const backend = process.env.SUPPORT_TEST_BACKEND ?? 'libsql';
+const provider = process.env.SUPPORT_TEST_PROVIDER;
+assert.ok(!provider || ['turso', 'neon', 'postgres'].includes(provider), 'Choose turso, neon, or postgres');
+const backend = provider
+  ? provider === 'turso'
+    ? 'libsql'
+    : 'postgres'
+  : (process.env.SUPPORT_TEST_BACKEND ?? 'libsql');
 assert.ok(['libsql', 'postgres'].includes(backend), 'SUPPORT_TEST_BACKEND must be libsql or postgres');
 const postgresBin = process.env.POSTGRES_BIN;
 const postgres = (command, args) => exec(postgresBin ? join(postgresBin, command) : command, args, { timeout: 30000 });
@@ -33,6 +39,11 @@ const issuer = 'https://identity.example.invalid';
 const audience = 'knowledge-support';
 const token = () => randomBytes(32).toString('base64url');
 const [technician, reviewer, outsider, resourceSecret] = Array.from({ length: 4 }, token);
+
+function databaseEnv(url) {
+  if (!provider) return { SUPPORT_DATABASE_URL: url };
+  return provider === 'turso' ? { TURSO_DATABASE_URL: url } : { DATABASE_URL: url };
+}
 
 function bearerProfile(sub, tenantId, customerId, scope) {
   return {
@@ -61,8 +72,8 @@ async function freePort() {
   return port;
 }
 
-function start(program, args, env = process.env) {
-  const child = spawn(program, args, { cwd: template, env, stdio: ['ignore', 'pipe', 'pipe'] });
+function start(program, args, env = process.env, cwd = template) {
+  const child = spawn(program, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';
   for (const stream of [child.stdout, child.stderr])
     stream.on('data', chunk => {
@@ -193,7 +204,7 @@ async function verifyInterruptedSeed(databaseUrl, env, [first, second]) {
     import { seedDataset } from './src/mastra/knowledge/seed.ts';
     await seedDataset({ ...datasets['retail-pos-docs'], directory: process.env.PROOF_REVISED_DATASET });`,
   ];
-  const workerEnv = { ...env, SUPPORT_DATABASE_URL: databaseUrl, PROOF_REVISED_DATASET: dataset };
+  const workerEnv = { ...env, ...databaseEnv(databaseUrl), PROOF_REVISED_DATASET: dataset };
   const admin = new Client({ connectionString: databaseUrl });
   await admin.connect();
   try {
@@ -251,7 +262,7 @@ async function holdWriterLock(env, url) {
       '-e',
       "import { withWriterLock } from './src/mastra/knowledge/writer-lock.ts'; import { setInterval } from 'node:timers/promises'; await withWriterLock(async () => { console.log('writer-held'); for await (const _ of setInterval(1000)) {} });",
     ],
-    { ...env, SUPPORT_DATABASE_URL: url },
+    { ...env, ...databaseEnv(url) },
   );
   for (let attempt = 0; attempt < 100 && proc.child.exitCode === null; attempt++) {
     if (proc.output().includes('writer-held')) return proc;
@@ -393,19 +404,44 @@ try {
   };
   delete env.SUPPORT_CREDENTIALS_FILE;
   delete env.SUPPORT_STUDIO_ROLE;
+  for (const name of [
+    'DATABASE_PROVIDER',
+    'DATABASE_URL',
+    'TURSO_DATABASE_URL',
+    'TURSO_AUTH_TOKEN',
+    'SUPPORT_DATABASE_URL',
+    'SUPPORT_SEED_ON_STARTUP',
+  ])
+    delete env[name];
+  if (provider) {
+    delete env.SUPPORT_MODE;
+    delete env.SUPPORT_HOST;
+    env.MASTRA_ENVIRONMENT_ID = 'reference-hosted-env';
+    env.DATABASE_PROVIDER = provider;
+    if (provider === 'turso') {
+      env.TURSO_AUTH_TOKEN = env.SUPPORT_DATABASE_AUTH_TOKEN;
+      delete env.SUPPORT_DATABASE_AUTH_TOKEN;
+    }
+  }
   if (backend === 'postgres') {
     delete env.SUPPORT_WRITER_LOCK_FILE;
     delete env.SUPPORT_DATABASE_AUTH_TOKEN;
   }
 
-  async function worker(db) {
+  async function worker(db, seedOnStartup = false) {
     const port = await freePort();
     const url = `http://${host}:${port}`;
-    const proc = start(process.execPath, ['.mastra/output/index.mjs'], {
-      ...env,
-      PORT: String(port),
-      SUPPORT_DATABASE_URL: db.url,
-    });
+    const proc = start(
+      process.execPath,
+      ['index.mjs'],
+      {
+        ...env,
+        PORT: String(port),
+        ...databaseEnv(db.url),
+        ...(seedOnStartup ? { SUPPORT_SEED_ON_STARTUP: 'true' } : {}),
+      },
+      join(template, '.mastra/output'),
+    );
     await ready(proc, `${url}/api/knowledge`, technician);
     return { proc, url };
   }
@@ -415,16 +451,19 @@ try {
   const seed = () =>
     exec('npm', ['run', 'knowledge:seed'], {
       cwd: template,
-      env: { ...env, SUPPORT_DATABASE_URL: db.url },
+      env: { ...env, ...databaseEnv(db.url) },
       timeout: 30000,
     });
+  // VPC PostgreSQL must seed a fresh database from the deploy artifact before serving support requests.
+  const bootstrapped = provider === 'postgres' ? await worker(db, true) : undefined;
+  if (bootstrapped) await json(request(bootstrapped, pageRoute('tenant:retailops#policies/safe-changes'), technician));
   const seeded = await seed();
   assert.match(seeded.stdout, /retail-pos-docs/u);
   if (backend === 'postgres') {
     const report = JSON.parse(seeded.stdout.slice(seeded.stdout.indexOf('{')));
     await verifyInterruptedSeed(db.url, env, report.pages);
   }
-  const first = await worker(db);
+  const first = bootstrapped ?? (await worker(db));
   const second = await worker(db);
   assert.equal((await request(first, '/api/knowledge')).status, 401);
   assert.equal((await request(first, '/api/knowledge', token())).status, 401);
@@ -551,7 +590,7 @@ try {
   const visibleRecords = JSON.stringify([afterBackup, restoredMemory, restoredPage, published]);
   for (const secret of [technician, reviewer, outsider, resourceSecret]) assert.ok(!visibleRecords.includes(secret));
   console.log(
-    `Hosted proof passed (${backend}): two built workers, HTTPS identity, scope isolation, contention and owner exit${backend === 'postgres' ? ', interrupted seed rollback' : ''}, approval after restart, history reuse, and restored Knowledge, Memory, and audit.`,
+    `Hosted proof passed (${provider ?? backend}): two built workers, HTTPS identity, scope isolation, contention and owner exit${backend === 'postgres' ? ', interrupted seed rollback' : ''}, approval after restart, history reuse, and restored Knowledge, Memory, and audit.`,
   );
 } catch (error) {
   proofFailed = true;

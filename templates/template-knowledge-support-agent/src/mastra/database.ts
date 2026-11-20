@@ -1,16 +1,13 @@
 import { lstat, realpath, stat } from 'node:fs/promises';
 import { dirname, resolve, basename, join, isAbsolute } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { resolveDatabaseConnection } from './database-provider.ts';
 
-export function hostedMode() {
-  const mode = process.env.SUPPORT_MODE ?? 'local';
-  if (mode !== 'local' && mode !== 'hosted') throw new Error('SUPPORT_MODE must be local or hosted');
-  return mode === 'hosted';
-}
+export type StorageConfiguration =
+  | { backend: 'libsql'; url: string; authToken?: string; lockFile?: string }
+  | { backend: 'postgres'; connectionString: string };
 
-export function storageConfiguration(url = process.env.SUPPORT_DATABASE_URL) {
-  if (!hostedMode()) return { backend: 'libsql' as const, url: localDatabaseUrlFor(url) };
-  if (!url) throw new Error('Hosted mode requires SUPPORT_DATABASE_URL');
+function legacyHostedStorage(url: string): StorageConfiguration {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -29,10 +26,8 @@ export function storageConfiguration(url = process.env.SUPPORT_DATABASE_URL) {
       (!loopback && sslmode !== 'verify-full')
     )
       throw new Error('PostgreSQL requires sslmode=verify-full outside loopback; no other URL options are supported');
-    return { backend: 'postgres' as const, connectionString: url };
+    return { backend: 'postgres', connectionString: url };
   }
-  if (!process.env.SUPPORT_WRITER_LOCK_FILE || !isAbsolute(process.env.SUPPORT_WRITER_LOCK_FILE))
-    throw new Error('Hosted LibSQL requires an absolute SUPPORT_WRITER_LOCK_FILE');
   if (!['https:', 'libsql:'].includes(parsed.protocol) && !(parsed.protocol === 'http:' && loopback))
     throw new Error('Hosted database requires HTTPS or libsql (HTTP is allowed only on loopback)');
   if (parsed.username || parsed.password || parsed.search || parsed.hash || !parsed.hostname)
@@ -40,16 +35,50 @@ export function storageConfiguration(url = process.env.SUPPORT_DATABASE_URL) {
   const authToken = process.env.SUPPORT_DATABASE_AUTH_TOKEN;
   if (!authToken?.trim() || /[\r\n]/u.test(authToken))
     throw new Error('Hosted mode requires SUPPORT_DATABASE_AUTH_TOKEN');
-  return { backend: 'libsql' as const, url, authToken };
+  return { backend: 'libsql', url, authToken, lockFile: writerLockFile() };
 }
 
-function localDatabaseUrlFor(url?: string) {
-  return databaseUrlForPath(localDatabasePath(url));
+function writerLockFile(fallback?: string) {
+  const path = process.env.SUPPORT_WRITER_LOCK_FILE ?? fallback;
+  if (!path || !isAbsolute(path)) throw new Error('Hosted LibSQL requires an absolute SUPPORT_WRITER_LOCK_FILE');
+  return path;
 }
 
-export function serverHost() {
-  if (!hostedMode()) return '127.0.0.1';
-  const host = process.env.SUPPORT_HOST;
+export function storageConfiguration(url = process.env.SUPPORT_DATABASE_URL): StorageConfiguration {
+  const mode = process.env.SUPPORT_MODE;
+  if (mode !== undefined && mode !== 'local' && mode !== 'hosted')
+    throw new Error('SUPPORT_MODE must be local or hosted');
+  if (mode === 'hosted' && url && process.env.DATABASE_PROVIDER === undefined) return legacyHostedStorage(url);
+
+  const connection = resolveDatabaseConnection(
+    mode === 'local' && process.env.DATABASE_PROVIDER === undefined
+      ? { ...process.env, DATABASE_PROVIDER: 'local' }
+      : process.env,
+  );
+  switch (connection.provider) {
+    case 'local':
+      if (mode === 'hosted') throw new Error('Hosted mode requires a remote database');
+      return { backend: 'libsql', url: databaseUrlForPath(localDatabasePath(url)) };
+    case 'turso':
+      return {
+        backend: 'libsql',
+        url: connection.url,
+        authToken: connection.authToken,
+        lockFile: writerLockFile(resolve('.local/support.writer.sqlite')),
+      };
+    case 'neon':
+    case 'postgres':
+      return { backend: 'postgres', connectionString: connection.connectionString };
+  }
+}
+
+export function hostedMode(configuration = storageConfiguration()) {
+  return configuration.backend === 'postgres' || configuration.lockFile !== undefined;
+}
+
+export function serverHost(hosted: boolean) {
+  if (!hosted) return '127.0.0.1';
+  const host = process.env.SUPPORT_HOST ?? (process.env.MASTRA_ENVIRONMENT_ID ? '0.0.0.0' : undefined);
   if (!host || !/^[a-zA-Z0-9.:-]+$/u.test(host)) throw new Error('Hosted mode requires SUPPORT_HOST');
   return host;
 }
@@ -63,10 +92,6 @@ export function localDatabasePath(
   if (!path || path === ':memory:' || /[\u0000\\]/u.test(path))
     throw new Error('Expected a persistent local file database');
   return resolve(path);
-}
-
-export function localDatabaseUrl() {
-  return databaseUrlForPath(localDatabasePath());
 }
 
 export function databaseUrlForPath(path: string) {

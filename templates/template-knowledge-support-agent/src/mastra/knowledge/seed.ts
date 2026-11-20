@@ -1,6 +1,5 @@
 import type { Knowledge, KnowledgeNote, KnowledgePage, KnowledgeStorage } from '@mastra/core/knowledge';
 import { policyReference } from '../../examples/support.ts';
-import { databaseUrlForPath, hostedMode } from '../database.ts';
 import { createStorage } from '../storage.ts';
 import { createKnowledge, createPostgresWriterKnowledge } from './index.ts';
 import { withWriterLock } from './writer-lock.ts';
@@ -212,15 +211,12 @@ export async function seedDataset(config: DatasetConfiguration, options: SeedOpt
     );
     return report;
   }
-  return withWriterLock(async ({ databasePath, postgres }) => {
+  return withWriterLock(async ({ libsql, postgres }) => {
     if (postgres) {
       await writeDataset(createPostgresWriterKnowledge(postgres, true), dataset, report);
       return report;
     }
-    const storage = createStorage(
-      'knowledge-seed',
-      hostedMode() ? options.databaseUrl : databaseUrlForPath(databasePath),
-    );
+    const storage = createStorage('knowledge-seed', libsql);
     try {
       await writeDataset(createKnowledge(storage), dataset, report);
       return report;

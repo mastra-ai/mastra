@@ -104,7 +104,7 @@ Adding this use case changed configuration and dataset files; the Knowledge, pre
 
 ## Manage local seed data
 
-- Studio and the seed command default to `.local/support.db`. Export the same `SUPPORT_DATABASE_URL` for both commands to use a different persistent local file. The seed command reads the shell environment.
+- Studio and the seed command use `.local/support.db` with `DATABASE_PROVIDER=local`. Set `SUPPORT_DATABASE_URL` in `.env` or export it in the shell to use a different persistent local file.
 - Reapplying a dataset preserves IDs and versions for unchanged content. Keep dataset, page, and note keys stable so the seed can identify its records. Removed manifest entries are retained and reported by stored ID.
 - Privileged writes share a lock in the database's `.writer.sqlite` sidecar. If seeding exits with code `75`, retry after the active writer exits. The operating system releases the lock even if the writer crashes. Keep the sidecar in place while the database is in use.
 - Tenant-wide publication requires an HTTPS source declared in the documentation page's seed manifest. Rerun the seed after upgrading to record source provenance for existing documentation.

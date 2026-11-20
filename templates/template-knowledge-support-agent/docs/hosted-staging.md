@@ -16,7 +16,19 @@ The PostgreSQL reference exercises two processes against one healthy PostgreSQL 
 
 ## Configuration
 
-Inject the appropriate database configuration in the seed administrator and every worker. For LibSQL, use the following values.
+### Mastra Platform
+
+Set `DATABASE_PROVIDER` to `turso`, `neon`, or `postgres` in the target environment. The seed and the server use the same provider variables. Turso reads `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`. Neon and VPC PostgreSQL both pass `DATABASE_URL` through to the PostgreSQL driver, including its connection options. The built server defaults to `0.0.0.0` on the platform. Set the OAuth variables and `OPENAI_API_KEY` described below.
+
+For Turso, run a single writable application instance with the default lock at `.local/support.writer.sqlite`. Run the initial seed before the app starts serving requests. During later runs, stop other writers or run the seed where it shares the same lock file. With multiple concurrent writers, including release overlap, mount a shared POSIX volume at the same absolute `SUPPORT_WRITER_LOCK_FILE` path for all writers, or choose Neon or PostgreSQL. The lock file coordinates writes and holds no Knowledge data.
+
+For a fresh database, including VPC PostgreSQL, set `SUPPORT_SEED_ON_STARTUP=true` on the target environment. Run `npm run build` to package the example datasets, then run `npx mastra deploy --skip-build --env-file .env.production` with a deployment-specific env file. Start with one replica so it can load the selected example's initial dataset before accepting requests. Remove the setting after the first successful start. For later builds with the usual `mastra build`, use the existing seeded database.
+
+You can also run the seed command from a checkout that can reach Turso or Neon. VPC PostgreSQL is reachable from the deployed server, so use the startup option to load its initial dataset. [Mastra Platform hosted databases](https://mastra.ai/docs/mastra-platform/database)
+
+### Self-hosting
+
+The existing `SUPPORT_MODE=hosted` and `SUPPORT_DATABASE_URL` configuration is available for self-hosting. Leave `DATABASE_PROVIDER` unset when using those variables. Inject the appropriate database configuration in the seed administrator and every worker. For LibSQL, use the following values.
 
 ```sh
 SUPPORT_MODE=hosted
@@ -36,7 +48,9 @@ SUPPORT_DATABASE_URL=postgresql://support:percent-encoded-password@your-database
 
 Both `postgres://` and `postgresql://` select PostgreSQL. Specify the database name explicitly for the seed and runtime. The URL accepts only the `sslmode` option. Non-loopback connections require `sslmode=verify-full`, which encrypts traffic and verifies the server certificate and hostname. For a private CA, configure `NODE_EXTRA_CA_CERTS` for every worker and seed process. Loopback connections may omit `sslmode` or use `sslmode=disable` for a disposable local test. Keep the connection string private. Include the database credentials in that string. PostgreSQL itself provides the writer lock. Provision the database before seeding and grant the role permission to create and use Mastra's native tables and indexes in `public`.
 
-Set these variables for every worker.
+### Runtime credentials
+
+Set the OAuth and model variables for every worker. The example bind address and port are for a standalone worker.
 
 ```sh
 SUPPORT_HOST=127.0.0.1
