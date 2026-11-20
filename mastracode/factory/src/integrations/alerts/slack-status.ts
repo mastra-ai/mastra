@@ -128,6 +128,16 @@ export function chatAlertSlackClient(chat: () => Chat | null | undefined): Alert
   };
 }
 
+/** Whether a reaction call took effect: it succeeded, or Slack says the reaction is already so. */
+async function settled(call: Promise<void>, alreadySo: string): Promise<boolean> {
+  try {
+    await call;
+    return true;
+  } catch (error) {
+    return String((error as { data?: { error?: string } })?.data?.error ?? (error as Error)?.message).includes(alreadySo);
+  }
+}
+
 /**
  * The reaction on the alert message. ✅ only once the alert has recovered: a fix up for review
  * is not the end of it, and a green check would tell people to stop watching the thread.
@@ -367,7 +377,10 @@ export class AlertSlackStatus {
     }
   }
 
-  /** Puts the latest stage's reaction on the alert, removing a stale one another writer added. */
+  /**
+   * Puts the latest stage's reaction on the alert, removing a stale one another writer added. Only
+   * a reaction change Slack confirmed is recorded, so a refused one is redone on the next write.
+   */
   async #syncReaction(card: Card, thread: AlertThreadRef): Promise<void> {
     for (let pass = 0; pass < SYNC_PASSES; pass++) {
       const latest = await this.#current(card);
@@ -375,25 +388,34 @@ export class AlertSlackStatus {
       const want = reactionFor(latest);
       const have = latest.reaction ?? null;
       if (want === have) return;
-      if (have) await this.#client.unreact(thread, thread.rootTs, have).catch(() => undefined);
-      if (want) await this.#client.react(thread, thread.rootTs, want).catch(() => undefined);
-      const recorded = await updateCardMetadata(
-        this.#workItems,
-        { orgId: card.orgId, id: card.id, userId: STATUS_USER_ID },
-        current => {
-          const status = readAlertSlackStatus(current);
-          return status && (status.reaction ?? null) === have
-            ? { [ALERT_SLACK_STATUS_KEY]: { ...status, reaction: want } }
-            : null;
-        },
-      );
-      if (recorded) continue;
+      if (have) {
+        if (!(await settled(this.#client.unreact(thread, thread.rootTs, have), 'no_reaction'))) return;
+        await this.#recordReaction(card, have, null);
+        continue;
+      }
+      if (!want || !(await settled(this.#client.react(thread, thread.rootTs, want), 'already_reacted'))) return;
+      if (await this.#recordReaction(card, null, want)) continue;
       // Another writer moved the reaction first: take back ours unless it is the one it recorded.
       const now = await this.#current(card);
-      if (want && want !== (now?.reaction ?? null)) {
+      if (want !== (now?.reaction ?? null)) {
         await this.#client.unreact(thread, thread.rootTs, want).catch(() => undefined);
       }
     }
+  }
+
+  /** Records the alert's reaction moving from `from` to `to`, unless another writer moved it first. */
+  async #recordReaction(card: Card, from: string | null, to: string | null): Promise<boolean> {
+    const recorded = await updateCardMetadata(
+      this.#workItems,
+      { orgId: card.orgId, id: card.id, userId: STATUS_USER_ID },
+      current => {
+        const status = readAlertSlackStatus(current);
+        return status && (status.reaction ?? null) === from
+          ? { [ALERT_SLACK_STATUS_KEY]: { ...status, reaction: to } }
+          : null;
+      },
+    );
+    return recorded !== null;
   }
 
   async #setMessage(
