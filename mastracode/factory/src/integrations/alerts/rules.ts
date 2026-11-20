@@ -140,15 +140,22 @@ export class PlatformAlertRules {
 
   /**
    * The card an event lands on: the one that filed its incident, so a late resolve or raise reaches
-   * the card it belongs to, else the alert's newest card, where a new fire goes.
+   * the card it belongs to, else the alert's newest card, where a new fire goes. Also returns a
+   * resolve an older card remembered for the incident before it opened, so a newer card that
+   * rolled over meanwhile doesn't lose it.
    */
   async #targetCard(
     input: PlatformAlertRulesIngress,
     workKey: string,
-  ): Promise<{ card: Card; generation: number } | null> {
+  ): Promise<{ target: { card: Card; generation: number } | null; resolvedEarly?: string }> {
     const cards = await this.#alertCards(input, workKey);
-    const owner = cards.find(({ card }) => readState(card)?.incidents[input.event.incident.id]?.openedAt);
-    return owner ?? cards[0] ?? null;
+    const incidents = cards.map(({ card }) => readState(card)?.incidents[input.event.incident.id]);
+    const owner = incidents.findIndex(incident => incident?.openedAt);
+    const remembered = incidents.find(incident => incident && !incident.openedAt && incident.resolvedAt)?.resolvedAt;
+    return {
+      target: (owner >= 0 ? cards[owner] : cards[0]) ?? null,
+      ...(remembered ? { resolvedEarly: remembered } : {}),
+    };
   }
 
   /** The newest card filed for this alert's work key in the project. */
@@ -234,10 +241,10 @@ export class PlatformAlertRules {
     const boards = this.#boards(input);
 
     const workKey = alertWorkKey(event.workKey);
-    const latest = await this.#targetCard(input, workKey);
+    const { target: latest, resolvedEarly: rememberedOnCard } = await this.#targetCard(input, workKey);
     const view = latest ? this.#view(latest.card, boards) : null;
     const earlyKey = `${input.orgId}:${event.incident.id}`;
-    const resolvedEarly = this.#earlyResolves.get(earlyKey);
+    const resolvedEarly = this.#earlyResolves.get(earlyKey) ?? rememberedOnCard;
     const plan = planAlertEvent({
       event,
       card: view,
