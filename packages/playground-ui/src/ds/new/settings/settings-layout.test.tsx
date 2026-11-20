@@ -53,8 +53,13 @@ describe('SettingsLayout', () => {
       </SettingsLayout>,
     );
 
+    const breadcrumb = output.indexOf('aria-label="Breadcrumb"');
+    const main = output.indexOf('<main');
+    const settings = output.indexOf('data-slot="settings-layout"');
+
     expect(output).toContain('data-slot="page-layout"');
-    expect(output.indexOf('aria-label="Breadcrumb"')).toBeLessThan(output.indexOf('<main'));
-    expect(output.indexOf('data-slot="settings-layout"')).toBeGreaterThan(output.indexOf('<main'));
+    expect(breadcrumb).toBeGreaterThanOrEqual(0);
+    expect(main).toBeGreaterThan(breadcrumb);
+    expect(settings).toBeGreaterThan(main);
   });
 });
