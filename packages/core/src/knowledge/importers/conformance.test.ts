@@ -1,0 +1,77 @@
+import { describe, expect, it } from 'vitest';
+import { InMemoryStore } from '../../storage';
+import { Knowledge } from '../index';
+import { importerHostConformance } from './conformance';
+import { defineKnowledgeImporter } from './define';
+import type { KnowledgeImporterHost } from './host';
+
+function localHost(): KnowledgeImporterHost {
+  const knowledge = new Knowledge({
+    storage: new InMemoryStore(),
+    scopes: { 'docs:$orgId': {} },
+    importers: {
+      definitions: [defineKnowledgeImporter({ id: 'notes', label: 'Notes', sync: async () => {} })],
+      bindings: [{ id: 'b1', importer: 'notes', target: 'docs:acme#notion', settings: {}, credentials: {} }],
+    },
+  });
+  return knowledge.importers!.host;
+}
+
+async function failures(wrap: (host: KnowledgeImporterHost) => KnowledgeImporterHost): Promise<string[]> {
+  const failed: string[] = [];
+  for (const c of importerHostConformance(async () => ({ host: wrap(localHost()), bindingId: 'b1' }))) {
+    await c.run().catch(() => failed.push(c.name));
+  }
+  return failed;
+}
+
+describe('importerHostConformance', () => {
+  it('passes the local host', async () => {
+    expect(await failures(host => host)).toEqual([]);
+  });
+
+  it('catches a host that applies a replayed seq again instead of returning its receipt', async () => {
+    const failed = await failures(host => {
+      const seen = new Map<string, number>();
+      return {
+        ...host,
+        startRun: host.startRun.bind(host),
+        heartbeat: host.heartbeat.bind(host),
+        finishRun: host.finishRun.bind(host),
+        async flush(flush) {
+          const receipt = await host.flush(flush);
+          const key = `${flush.runId}:${flush.seq}`;
+          const n = (seen.get(key) ?? 0) + 1;
+          seen.set(key, n);
+          return n > 1 ? { ...receipt, created: receipt.created + 1 } : receipt;
+        },
+      };
+    });
+    expect(failed).toContain('replays a committed seq to the same receipt and refuses other content for it');
+  });
+
+  it('catches a host that chains on nothing and one that forgets refusal codes', async () => {
+    const chains = await failures(host => ({
+      ...host,
+      startRun: host.startRun.bind(host),
+      heartbeat: host.heartbeat.bind(host),
+      flush: host.flush.bind(host),
+      finishRun: async request => ({ ...(await host.finishRun(request)), chain: true }),
+    }));
+    expect(chains).toContain(
+      'finishes at the committed seq, sums counts from receipts, and replays the finish exactly',
+    );
+
+    const codes = await failures(host => ({
+      ...host,
+      startRun: host.startRun.bind(host),
+      heartbeat: host.heartbeat.bind(host),
+      finishRun: host.finishRun.bind(host),
+      flush: request =>
+        host.flush(request).catch((error: { status?: number }) => {
+          throw Object.assign(new Error('refused'), { status: error.status });
+        }),
+    }));
+    expect(codes).toContain('refuses a seq gap');
+  });
+});

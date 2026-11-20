@@ -2,6 +2,7 @@ import {
   Knowledge,
   KnowledgeImporterHostConflictError,
   defineKnowledgeImporter,
+  importerHostConformance,
   knowledgeImporterFlushDigest,
 } from '@mastra/core/knowledge';
 import type { KnowledgeImporterHost, KnowledgeImportItem, KnowledgeImporterOp } from '@mastra/core/knowledge';
@@ -411,5 +412,15 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       ]);
       await expect(run([upsert({ sourceId: 'p1' })], 'b2')).rejects.toMatchObject({ status: 409 });
     });
+  });
+
+  describe('importer host conformance (local host)', () => {
+    // Each case gets the fresh store from beforeEach; the suite's own cleanup runs in afterEach.
+    for (const c of importerHostConformance(async () => ({
+      host: setup().knowledge.importers!.host,
+      bindingId: 'b1',
+    }))) {
+      it(c.name, c.run);
+    }
   });
 }
