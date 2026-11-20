@@ -10,6 +10,34 @@ const bounds = { pageSize: 10, pages: 100, records: 3, policyCharacters: 800 };
 type History = { status: 'ready' | 'empty' | 'no-relevant-records' | 'unavailable'; records: Evidence[] };
 type Evidence = SupportRecord & { ref: string };
 
+async function approvedNotes(
+  knowledge: Knowledge,
+  page: KnowledgePage,
+  ref: string,
+  read: Awaited<ReturnType<Knowledge['readScopeFor']>>,
+): Promise<Evidence[]> {
+  const store = await knowledge.getStorage();
+  const records: Evidence[] = [];
+  let cursor: string | undefined,
+    count = 0;
+  do {
+    const batch = await store.listNotes({ pageId: page.id, read, cursor, limit: bounds.pageSize });
+    for (const note of batch.notes) {
+      if (++count > 100) throw new Error('Case notes exceed the configured bound');
+      if (
+        !/^<!-- knowledge-review:[a-f0-9-]{36}:[a-f0-9]{64} -->\nReviewed by: /u.test(note.text) ||
+        !note.provenance.author?.startsWith('review:')
+      )
+        continue;
+      if (note.text.length > 8000) throw new Error('Approved note exceeds the configured bound');
+      const parsed = record({ ...page, body: note.text });
+      if (parsed?.state === 'approved') records.push({ ...parsed, ref: `${ref}?note=${note.id}` });
+    }
+    cursor = batch.nextCursor;
+  } while (cursor);
+  return records;
+}
+
 function record(page: KnowledgePage): SupportRecord | undefined {
   const body = page.body ?? '';
   const envelopes = [...body.matchAll(/^```support-record\n([\s\S]*?)\n```[ \t]*$/gmu)];
@@ -37,6 +65,7 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
         if (++count > bounds.pages) throw new Error('History exceeds the configured bound');
         const parsed = record(current.page);
         if (parsed) records.push({ ...parsed, ref: `${scope}#${current.path}` });
+        records.push(...(await approvedNotes(knowledge, current.page, `${scope}#${current.path}`, read)));
         let cursor: string | undefined;
         do {
           const children = await store.listChildPages({

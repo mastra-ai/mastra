@@ -2,6 +2,10 @@ import type { Profile } from '../../mastra/identity.ts';
 
 export const exampleStudioRole = 'technician';
 
+export const exampleReviewers: Profile[] = [
+  { id: 'north-reviewer', actorId: 'morgan', tenantId: 'north', customerId: 'store-1' },
+];
+
 export const exampleProfiles: Profile[] = [
   { id: 'north-store', actorId: 'alex', tenantId: 'north', customerId: 'store-1' },
   { id: 'north-other', actorId: 'alex', tenantId: 'north', customerId: 'store-2' },

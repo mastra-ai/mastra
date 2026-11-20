@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mkdir, writeFile, chmod, rm } from 'node:fs/promises';
 import { resolve, dirname, delimiter } from 'node:path';
-import { exampleProfiles, exampleStudioRole } from '../src/examples/retail-pos/profiles.ts';
+import { exampleProfiles, exampleReviewers, exampleStudioRole } from '../src/examples/retail-pos/profiles.ts';
 import { localDatabaseUrl } from '../src/mastra/database.ts';
 
 const studioRole = process.env.SUPPORT_STUDIO_ROLE ?? exampleStudioRole;
@@ -16,8 +16,8 @@ if (generated) {
   await writeFile(
     file,
     JSON.stringify(
-      exampleProfiles.map(profile => ({
-        profile: { ...profile, role: studioRole },
+      [...exampleProfiles, ...exampleReviewers].map(profile => ({
+        profile: { ...profile, role: studioRole, ...(exampleReviewers.includes(profile) ? { review: true } : {}) },
         token: randomBytes(32).toString('base64url'),
         expiresAt: Date.now() + 8 * 60 * 60 * 1000,
       })),
