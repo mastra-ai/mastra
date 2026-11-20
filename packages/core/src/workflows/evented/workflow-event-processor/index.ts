@@ -33,6 +33,7 @@ import {
   resolveRunFence,
   RunFenceConflictError,
 } from '../../../storage/run-fencing';
+import type { UpdateWorkflowStateOptions } from '../../../storage/types';
 import { assertWorkflowStepGuard, isWorkflowStepConflictError } from '../../../storage/workflow-step-guard';
 import type { StepExecutionStrategy } from '../../../worker/types';
 import { getEntryId, getEntryRetries, getEntrySchemas, getEntryWorkflow } from '../../../workflows/step-entry';
@@ -73,7 +74,7 @@ import {
   withoutAuthToken,
 } from '../helpers';
 import { StepExecutor } from '../step-executor';
-import { finishedOccurrence } from './finished-occurrence';
+import { finishedOccurrence, isEndedRunStatus } from './finished-occurrence';
 import {
   evaluateLoopCondition,
   failedLoopStep,
@@ -98,6 +99,20 @@ import {
   storedResults,
 } from './storage-scope';
 import { endedPaused, getNestedWorkflow, getStepId, isExecutableStep, toStepExecutionParentWorkflow } from './utils';
+
+/** The statuses of a run that has not ended yet. */
+const UNENDED_RUN_STATUSES: WorkflowRunStatus[] = [
+  'running',
+  'waiting',
+  'suspended',
+  'pending',
+  'paused',
+  'bailed',
+  'skipped',
+];
+
+const samePath = (a: number[] | undefined, b: number[] | undefined) =>
+  JSON.stringify(a ?? []) === JSON.stringify(b ?? []);
 
 export type ProcessorArgs = {
   eventId?: string;
@@ -1421,13 +1436,16 @@ export class WorkflowEventProcessor extends EventProcessor {
         workflowStatus: finalStatus,
       }) ?? true;
 
-    if (shouldPersist) {
-      await runStorage.updateHeader({
+    if (
+      shouldPersist &&
+      !(await this.#writeRunEnd(args, runStorage, {
         status: finalStatus,
         result: normalizedPrevResult,
         activePaths: executionPath,
         activeStepsPath: activeStepsPath,
-      });
+      }))
+    ) {
+      return;
     }
 
     this.endRunSpans(args, finalStatus);
@@ -1468,6 +1486,39 @@ export class WorkflowEventProcessor extends EventProcessor {
         deleteSnapshotAfterEnd: !shouldPersist && finalStatus !== 'paused',
       },
     });
+  }
+
+  /**
+   * Stores a run's end only while the run has not ended, so a late or second end can't replace
+   * the first one. Returns false, after logging, when the run already ended another way. A run
+   * that already ended the same way at the same path is this end handled again, after its worker
+   * stopped before publishing it, and returns true so the end is published. A stored run without
+   * a status to compare is written as before.
+   */
+  async #writeRunEnd(
+    { workflowId, runId, executionPath }: Pick<ProcessorArgs, 'workflowId' | 'runId' | 'executionPath'>,
+    runStorage: RunStorage,
+    end: UpdateWorkflowStateOptions & { status: WorkflowRunStatus },
+  ): Promise<boolean> {
+    // A canceled run is stored as canceled before its end is written.
+    const expectedStatus =
+      end.status === 'canceled' ? [...UNENDED_RUN_STATUSES, 'canceled' as const] : UNENDED_RUN_STATUSES;
+    if (await runStorage.updateHeader({ ...end, expectedStatus })) return true;
+
+    const stored = await runStorage.loadHeader();
+    if (!isEndedRunStatus(stored?.status)) {
+      await runStorage.updateHeader(end);
+      return true;
+    }
+    if (stored!.status === end.status && samePath(stored!.activePaths, executionPath)) return true;
+
+    this.mastra.getLogger()?.warn('Dropping a workflow end: the run already ended', {
+      workflowId,
+      runId,
+      status: end.status,
+      storedStatus: stored!.status,
+    });
+    return false;
   }
 
   private async publishFinishEvent(event: Pick<Event, 'type' | 'runId' | 'data'>) {
@@ -1901,13 +1952,16 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (ownershipLost) {
       // Another execution may be driving the run from its stored snapshot:
       // neither mark that row failed nor delete it.
-    } else if (shouldPersist) {
-      await runStorage.updateHeader({
+    } else if (
+      shouldPersist &&
+      !(await this.#writeRunEnd(args, runStorage, {
         status: 'failed',
         error: (prevResult as any).error,
         activePaths: executionPath,
         activeStepsPath: activeStepsPath,
-      });
+      }))
+    ) {
+      return;
     }
 
     // handle nested workflow
@@ -3059,12 +3113,24 @@ export class WorkflowEventProcessor extends EventProcessor {
       // shape restart routing expects: `createRestartExecutionParams` feeds it
       // back as the workflow.start executionPath, and parallel/conditional
       // restart routing keeps it at the same depth instead of re-appending.
-      await runStorage.updateHeader({
+      const claimed = await runStorage.updateHeader({
         status: 'running',
         activePaths: executionPath,
         activeStepsPath,
         expectedStatus: 'running',
       });
+      // The run ended after this delivery was dispatched: its step must not run. A canceled run
+      // is left to the cancel check that aborts its steps.
+      const stored = claimed ? undefined : await runStorage.loadHeader();
+      if (stored?.status !== 'canceled' && isEndedRunStatus(stored?.status)) {
+        this.mastra.getLogger()?.warn('Not running a step: the run already ended', {
+          workflowId,
+          runId,
+          executionPath,
+          storedStatus: stored!.status,
+        });
+        return;
+      }
     }
 
     // Authorization bookkeeping, not progress, and deliberately outside the
@@ -5583,6 +5649,33 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     const workflow = this.#resolveLiveWorkflow(workflowData);
+
+    // A step event that reaches a run that already ended, e.g. reclaimed by the broker from a
+    // worker that stopped before acking it, must not advance the run. The event that ended a
+    // successful run is still handled: its worker stores the end before publishing it, may have
+    // stopped in between, and handling it again publishes the end. The stored active path names
+    // that event: the step end the run ended at, or the step run past the last entry. A failed
+    // run's end is stored by its own `workflow.fail`, which a redelivery of that event finishes.
+    if (
+      (type === 'workflow.step.end' || type === 'workflow.step.run') &&
+      isEndedRunStatus(currentState?.status) &&
+      !(
+        currentState!.status === 'success' &&
+        samePath(currentState!.activePaths, workflowData.executionPath) &&
+        (type === 'workflow.step.end' ||
+          (!!workflow && (workflowData.executionPath?.[0] ?? -1) >= workflow.stepGraph.length))
+      )
+    ) {
+      this.mastra.getLogger()?.warn('Dropping a step event: the run already ended', {
+        type,
+        workflowId: workflowData.workflowId,
+        runId: workflowData.runId,
+        executionPath: workflowData.executionPath,
+        storedStatus: currentState!.status,
+        deliveryAttempt: event.deliveryAttempt,
+      });
+      return;
+    }
 
     if (!workflow) {
       // For terminal/cleanup events (`workflow.fail`, `workflow.end`,

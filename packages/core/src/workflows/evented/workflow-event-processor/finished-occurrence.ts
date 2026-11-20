@@ -6,6 +6,11 @@ type StoredRecord = { status?: string; startedAt?: number; endedAt?: number; met
 
 const TERMINAL_STATUSES = new Set(['success', 'failed', 'canceled', 'tripwire']);
 
+/** Whether a run stored with `status` has ended. */
+export function isEndedRunStatus(status: string | undefined): boolean {
+  return TERMINAL_STATUSES.has(status!);
+}
+
 /**
  * What a worker does with a delivery of a step occurrence: run the step, drop
  * the delivery because the occurrence already finished and the run moved on,
