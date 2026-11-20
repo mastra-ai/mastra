@@ -57,6 +57,13 @@ export interface PlatformAlertRulesIngress {
   userId: string;
   factoryProjectId: string;
   event: PlatformAlertEvent;
+  /** This project's floor for this event, when its binding sets one; else the rules' own floor. */
+  severityFloor?: AlertSeverity;
+  /**
+   * False when this project's binding doesn't take the event: it still lands on a card the project
+   * already holds, but files none (a raise on an incident filed elsewhere). Default true.
+   */
+  createCards?: boolean;
 }
 
 export interface AlertCardRef {
@@ -255,10 +262,11 @@ export class PlatformAlertRules {
       event,
       card: view,
       now: this.#now(),
-      severityFloor: this.options.severityFloor ?? DEFAULT_ALERT_SEVERITY_FLOOR,
+      severityFloor: input.severityFloor ?? this.options.severityFloor ?? DEFAULT_ALERT_SEVERITY_FLOOR,
       ...(resolvedEarly ? { resolvedEarly } : {}),
     });
 
+    if (plan.kind === 'create' && input.createCards === false) return { status: 'missing' };
     if (plan.kind === 'noop') {
       if (plan.reason !== 'replayed' || !latest) return { status: 'missing' };
       await this.#attachThread(input, latest.card);
@@ -309,7 +317,7 @@ export class PlatformAlertRules {
       alert: event,
       sourceKey: alertSourceKey(workKey, plan.kind === 'create' ? plan.state.generation : (latest?.generation ?? 1)),
       ...(plan.kind === 'create' && plan.state.previousCardId ? { previousCardId: plan.state.previousCardId } : {}),
-      severityFloor: this.options.severityFloor ?? DEFAULT_ALERT_SEVERITY_FLOOR,
+      severityFloor: input.severityFloor ?? this.options.severityFloor ?? DEFAULT_ALERT_SEVERITY_FLOOR,
     };
     const boardEvent: BoardEventFacts | undefined =
       plan.kind === 'create'
