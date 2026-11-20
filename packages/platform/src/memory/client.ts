@@ -267,12 +267,12 @@ export class PlatformMemoryClient {
    */
   async getObservationRecords(
     threadId: string,
-    options: { historyLimit?: number } = {},
+    options: { historyLimit?: number; from?: string; to?: string; offset?: number } = {},
   ): Promise<MemoryObservationRecords> {
     const res = await this.request<{ record: MemoryObservationRecord | null; history?: MemoryObservationRecord[] }>(
       'GET',
       `/threads/${encodeURIComponent(threadId)}/observations`,
-      { query: { historyLimit: options.historyLimit } },
+      { query: options },
     );
     return { record: res.record, history: res.history ?? [] };
   }

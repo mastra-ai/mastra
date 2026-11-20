@@ -100,9 +100,10 @@ function fakeMemoryApi() {
       if (!threads.has(id)) return json({ title: 'Not found' }, 404);
       const [record, ...past] = observationRecords.get(id) ?? [];
       const historyLimit = url.searchParams.get('historyLimit');
+      const offset = Number(url.searchParams.get('offset') ?? 0);
       return json({
         record: record ?? null,
-        ...(historyLimit ? { history: past.slice(0, Number(historyLimit)) } : {}),
+        ...(historyLimit ? { history: past.slice(offset, offset + Number(historyLimit)) } : {}),
       });
     }
     if ((m = path.match(/^\/threads\/([^/]+)\/context$/))) {
@@ -509,11 +510,16 @@ describe('PlatformMemory', () => {
       ).resolves.toEqual({ record: null, history: [] });
     });
 
+    it('forwards the history offset to the hosted API', async () => {
+      const { memory } = agentWith([]);
+      await memory.client.createThread({ id: 'thread_1', resourceId: 'user' });
+      api.setObservationRecords('thread_1', [hostedRecord(2), hostedRecord(1), hostedRecord(0)]);
+      const result = await memory.getObservationalMemoryRecords({ threadId: 'thread_1', historyLimit: 1, offset: 1 });
+      expect(result.history.map(r => r.id)).toEqual(['om_0']);
+    });
+
     it.each([
       [{ resourceId: 'user' }, /pass a threadId/],
-      [{ threadId: 'thread_1', from: new Date() }, /from, to, or offset/],
-      [{ threadId: 'thread_1', to: new Date() }, /from, to, or offset/],
-      [{ threadId: 'thread_1', offset: 2 }, /from, to, or offset/],
       [{ threadId: 'thread_1', historyLimit: 51 }, /at most 50/],
     ])('rejects reads the hosted service cannot serve: %o', async (args, message) => {
       const { memory } = agentWith([]);

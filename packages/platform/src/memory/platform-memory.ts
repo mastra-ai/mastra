@@ -425,20 +425,13 @@ export class PlatformMemory extends MastraMemory {
   }
 
   /**
-   * Reads a thread's hosted record and history. The hosted service keys observations by thread
-   * and only limits history by count, so resource-only reads and `from`/`to`/`offset` are rejected.
+   * Reads a thread's hosted record and an optional filtered page of history.
    */
   async getObservationalMemoryRecords(args: GetObservationalMemoryRecordsInput): Promise<ObservationalMemoryRecords> {
     if (!args.threadId) {
       throw unsupportedObservationRead(
         'PLATFORM_MEMORY_OBSERVATIONS_THREAD_ID_REQUIRED',
         'PlatformMemory reads Observational Memory per thread; pass a threadId',
-      );
-    }
-    if (args.from || args.to || args.offset) {
-      throw unsupportedObservationRead(
-        'PLATFORM_MEMORY_OBSERVATIONS_UNSUPPORTED_FILTER',
-        'PlatformMemory does not support from, to, or offset filters on Observational Memory history',
       );
     }
     if (args.historyLimit !== undefined && args.historyLimit > MAX_OBSERVATION_HISTORY) {
@@ -451,7 +444,10 @@ export class PlatformMemory extends MastraMemory {
     let result;
     try {
       result = await this.client.getObservationRecords(args.threadId, {
-        historyLimit: args.historyLimit || undefined,
+        historyLimit: args.historyLimit,
+        from: args.from?.toISOString(),
+        to: args.to?.toISOString(),
+        offset: args.offset,
       });
     } catch (error) {
       // The thread is gone, so it has no observations.
