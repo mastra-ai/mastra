@@ -1,5 +1,5 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { createTool } from '../../../../tools';
 import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
@@ -75,4 +75,73 @@ describeForAllEngines(
   },
   // The shared Inngest Mastra is built without per-scenario `backgroundTasks` config.
   { skip: ['inngest'] },
+);
+
+describeForAllEngines(
+  'producer-only background-task scenario',
+  engine => {
+    const getMock = useLoopScenarioAimock();
+
+    it('does not promise background work that cannot run on the API server (#31089)', async () => {
+      vi.stubEnv('MASTRA_WORKERS', 'false');
+      let result: Awaited<ReturnType<typeof runLoopScenario>> | undefined;
+      let executions = 0;
+      const tool = createTool({
+        id: 'background-work',
+        description: 'Look up the requested account balance',
+        inputSchema: z.object({ account: z.string() }),
+        outputSchema: z.object({ balance: z.number() }),
+        background: { enabled: true },
+        execute: async () => {
+          executions++;
+          return { balance: 31089 };
+        },
+      });
+
+      try {
+        result = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Look up the balance for account A',
+          tools: { 'background-work': tool },
+          agentBackgroundTasks: { tools: { 'background-work': true } },
+          backgroundTasks: { enabled: true },
+          startWorkers: false,
+          collectChunks: true,
+          stopWhen: stepCountIs(3),
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 0 },
+              { toolCalls: [{ id: 'call_producer', name: 'background-work', arguments: { account: 'A' } }] },
+            );
+            llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'The tool response was received.' });
+          },
+        });
+
+        const { mastra, requests, chunks } = result;
+        expect(mastra.backgroundTaskManager.config.mode).toBe('producer');
+        expect(requests).toHaveLength(2);
+        const messages = JSON.stringify(requests[1]!.body.messages);
+        if (engine === 'durable') {
+          // Durable's dispatch-error policy falls back before accepting any work.
+          expect(executions).toBe(1);
+          expect(messages).toContain('31089');
+          expect(messages).not.toContain('producer mode');
+        } else {
+          // The default loop propagates the actionable error, not a placeholder.
+          expect(executions).toBe(0);
+          expect(messages).toContain('producer mode');
+          expect(messages).toContain('local background task worker');
+        }
+        expect(messages).not.toContain('is running in the background');
+        expect(chunks?.filter(chunk => chunk.type === 'background-task-started')).toEqual([]);
+        expect(await mastra.backgroundTaskManager.listTasks({})).toMatchObject({ tasks: [], total: 0 });
+      } finally {
+        vi.unstubAllEnvs();
+        await result?.mastra.stopWorkers();
+      }
+    });
+  },
+  // These engines execute on a worker host, not on the worker-disabled API tier (#31090).
+  { skip: ['evented', 'inngest'] },
 );
