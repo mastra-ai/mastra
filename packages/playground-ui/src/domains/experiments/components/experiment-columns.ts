@@ -1,3 +1,4 @@
+import type { DatasetExperiment } from '@mastra/client-js';
 import type { BadgeVariant } from '@/ds/components/Badge';
 
 // experiment name is free-form — an `auto` track would let it starve its neighbours
@@ -27,7 +28,7 @@ export const experimentColumnLabels = {
 };
 
 // A completed run is neutral, not a success: it says the run finished, not that the scores are good.
-export const STATUS_VARIANT: Record<string, BadgeVariant> = {
+export const STATUS_VARIANT: Record<DatasetExperiment['status'], BadgeVariant> = {
   completed: 'neutral',
   running: 'warning',
   failed: 'destructive',
@@ -35,7 +36,7 @@ export const STATUS_VARIANT: Record<string, BadgeVariant> = {
 };
 
 // "Completed" alone reads as a verdict on the scores; "Run completed" says it's the run that finished.
-export const STATUS_LABEL: Record<string, string> = {
+export const STATUS_LABEL: Record<DatasetExperiment['status'], string> = {
   completed: 'Run completed',
   running: 'Run in progress',
   failed: 'Run failed',

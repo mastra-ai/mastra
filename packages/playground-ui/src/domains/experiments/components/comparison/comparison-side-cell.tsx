@@ -1,26 +1,23 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import {
-  ComparisonMetricList,
-  ComparisonPayload,
-  ComparisonSection,
-  sectionStackClass,
-} from '@mastra/playground-ui/domains/experiments';
-import type { ComparisonMetric } from '@mastra/playground-ui/domains/experiments';
+import { sideAverageScore, sideDurationMs } from './build-comparison-rows';
+import type { ComparisonColumn } from './build-comparison-rows';
+import { ComparisonMetricList } from './comparison-metric-list';
+import type { ComparisonMetric } from './comparison-metric-list';
+import { ComparisonPayload } from './comparison-payload';
+import { ComparisonSection, sectionStackClass } from './comparison-section';
+import { itemMetrics } from './item-metrics';
+import { useCompareMetricPreferences } from './use-compare-metric-preferences';
 import {
   getMissingTextNotice,
   getResultErrorMessage,
   getResultOutputText,
   getResultToolCalls,
-} from '@mastra/playground-ui/domains/experiments/utils/result-output';
-import { SpanPayloadToolCalls } from '@mastra/playground-ui/domains/traces/components/span-payload/span-payload-primitives';
-import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
-import { sideAverageScore, sideDurationMs } from './build-comparison-rows';
-import type { ComparisonColumn } from './build-comparison-rows';
-import { itemMetrics } from './item-metrics';
-import { useCompareMetricPreferences } from './use-compare-metric-preferences';
+} from '@/domains/experiments/utils/result-output';
+import { SpanPayloadToolCalls } from '@/domains/traces/components/span-payload/span-payload-primitives';
+import { Button } from '@/ds/components/Button';
+import { CopyButton } from '@/ds/components/CopyButton';
+import { Spinner } from '@/ds/components/Spinner';
+import { Txt } from '@/ds/components/Txt';
+import { TraceIcon } from '@/ds/icons/TraceIcon';
 
 export interface ComparisonSideCellProps {
   /** One experiment's side of the row. Contenders carry their deltas against the baseline. */

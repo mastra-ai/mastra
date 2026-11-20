@@ -1,5 +1,5 @@
-import { createLocalStorageStore, useLocalStorageStore } from '@mastra/playground-ui/hooks/use-local-storage-store';
 import { z } from 'zod';
+import { createLocalStorageStore, useLocalStorageStore } from '@/hooks/use-local-storage-store';
 
 /** Toggleable metrics of the compare page. Scorers use `scorer:<id>`. */
 export type CompareMetricKey = 'cost' | 'duration' | 'average' | 'tokens' | 'errors' | `scorer:${string}`;

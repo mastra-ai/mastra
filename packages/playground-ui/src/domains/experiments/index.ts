@@ -24,6 +24,33 @@ export { NoExperimentsInfo } from './components/no-experiments-info';
 export { EXPERIMENT_STATUS_OPTIONS, getExperimentDatasetOptions } from './components/experiments-list-options';
 export { STATUS_LABEL, STATUS_VARIANT, experimentColumnLabels } from './components/experiment-columns';
 
+// Experiment page
+export { ExperimentStatusIcon } from './components/experiment-stats';
+export { ExperimentRunProgress } from './components/experiment-run-progress';
+export type { ExperimentRunProgressProps } from './components/experiment-run-progress';
+export { QUEUED_MESSAGE, RUNNING_MESSAGES } from './components/experiment-run-messages';
+export { ExperimentResultsList } from './components/experiment-results-list';
+export type {
+  ExperimentResultsListColumn,
+  ExperimentResultsListItem,
+  ExperimentResultsListProps,
+} from './components/experiment-results-list';
+export { ExperimentResultsBulkActions } from './components/experiment-results-bulk-actions';
+export type { ExperimentResultsBulkActionsProps } from './components/experiment-results-bulk-actions';
+export { ExperimentResultsTagPicker } from './components/experiment-results-tag-picker';
+export type { ExperimentResultsTagPickerProps } from './components/experiment-results-tag-picker';
+export { ExperimentResultPanel } from './components/experiment-result-panel';
+export type {
+  ExperimentResultPanelProps,
+  ExperimentResultPanelResult,
+  ExperimentResultPanelScore,
+} from './components/experiment-result-panel';
+export { ExperimentScorePanel } from './components/experiment-score-panel';
+export type { ExperimentScorePanelProps } from './components/experiment-score-panel';
+export { ToolMockReportSection } from './components/tool-mock-report-section';
+export type { ToolMockReportSectionProps } from './components/tool-mock-report-section';
+export { useResultsSelection } from './hooks/use-results-selection';
+
 // Helpers
 export { getExperimentDisplayName } from './utils/experiment-display-name';
 export { EXTERNAL_TARGET_LABEL, TARGET_ICON, TARGET_LABEL, resolveTargetName } from './utils/target-name';
@@ -59,3 +86,24 @@ export type { ComparisonPayloadProps } from './components/comparison/comparison-
 export { ComparisonSection, sectionStackClass } from './components/comparison/comparison-section';
 export type { ComparisonSectionProps } from './components/comparison/comparison-section';
 export { ScoreDelta } from './components/comparison/score-delta';
+export { buildComparisonRows, sideAverageScore, sideDurationMs } from './components/comparison/build-comparison-rows';
+export type {
+  ComparisonColumn,
+  ComparisonRole,
+  ComparisonRow,
+  ComparisonScore,
+  ComparisonSide,
+  ScoresByItemId,
+} from './components/comparison/build-comparison-rows';
+export { itemMetrics } from './components/comparison/item-metrics';
+export type { ItemMetricScore, ItemMetricsParams } from './components/comparison/item-metrics';
+export { ScoreReasonHoverCard } from './components/comparison/score-reason-hover-card';
+export type { ScoreReasonHoverCardProps } from './components/comparison/score-reason-hover-card';
+export { ComparisonDatasetVersion } from './components/comparison/comparison-dataset-version';
+export type { ComparisonDatasetVersionProps } from './components/comparison/comparison-dataset-version';
+export { ComparisonItemPayload } from './components/comparison/comparison-item-payload';
+export type { ComparisonItemPayloadProps } from './components/comparison/comparison-item-payload';
+export { ComparisonSideCell } from './components/comparison/comparison-side-cell';
+export type { ComparisonSideCellProps } from './components/comparison/comparison-side-cell';
+export { useCompareMetricPreferences } from './components/comparison/use-compare-metric-preferences';
+export type { CompareMetricKey } from './components/comparison/use-compare-metric-preferences';

@@ -1,11 +1,11 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { STATUS_LABEL } from '@mastra/playground-ui/domains/experiments/components/experiment-columns';
-import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
-import { IconCircleX } from '@mastra/playground-ui/icons/central/IconCircleX';
-import { IconClock } from '@mastra/playground-ui/icons/central/IconClock';
-import { cn } from '@mastra/playground-ui/utils/cn';
+import { STATUS_LABEL } from './experiment-columns';
+import { Spinner } from '@/ds/components/Spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { IconCircleCheck } from '@/ds/icons/central/IconCircleCheck';
+import { IconCircleX } from '@/ds/icons/central/IconCircleX';
+import { IconClock } from '@/ds/icons/central/IconClock';
+import { cn } from '@/utils/cn';
 
 type RunStatus = 'pending' | 'running' | 'completed' | 'failed';
 

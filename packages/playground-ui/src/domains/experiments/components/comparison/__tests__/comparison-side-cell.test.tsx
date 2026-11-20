@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { agentNoFinalTextResult, agentToolCallsResult } from '../../__tests__/fixtures/experiment-results';

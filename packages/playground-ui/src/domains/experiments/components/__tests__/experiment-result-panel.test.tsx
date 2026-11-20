@@ -1,8 +1,6 @@
 // @vitest-environment jsdom
-import type { DatasetExperimentResult, GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
-import { EntityType } from '@mastra/core/observability';
+import type { DatasetExperimentResult } from '@mastra/client-js';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { delay, http, HttpResponse } from 'msw';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ExperimentResultPanel } from '../experiment-result-panel';
@@ -13,16 +11,9 @@ import {
   agentToolCallsResult,
   workflowResult,
 } from './fixtures/experiment-results';
-import {
-  metricsCapableCapabilities,
-  metricsUnavailableCapabilities,
-  traceSpans,
-  traceUsageBreakdown,
-} from '@/pages/traces/__tests__/fixtures/traces';
+import { agentTraceUsage } from './fixtures/experiment-usage';
 import { expectComputedTag, expectInheritsTagForeground } from '@/test/computed-tag';
 import { TestLinkProvider } from '@/test/link-provider';
-import { server } from '@/test/msw-server';
-import { makeWrapper, TEST_BASE_URL } from '@/test/render';
 
 const makeResult = (overrides: Partial<DatasetExperimentResult> = {}): DatasetExperimentResult => ({
   id: 'res-1',
@@ -43,17 +34,6 @@ const makeResult = (overrides: Partial<DatasetExperimentResult> = {}): DatasetEx
   ...overrides,
 });
 
-// The panel prefetches trace feedback (needs-review dot) and the trace itself (usage rows).
-beforeEach(() => {
-  server.use(
-    http.get('*/api/observability/feedback', () =>
-      HttpResponse.json({ feedback: [], pagination: { total: 0, page: 0, perPage: 50, hasMore: false } }),
-    ),
-    http.get('*/api/observability/traces/:traceId', () => HttpResponse.json(traceSpans)),
-    http.get('*/api/observability/capabilities', () => HttpResponse.json(metricsUnavailableCapabilities)),
-  );
-});
-
 beforeAll(() => {
   if (typeof window.PointerEvent === 'undefined') {
     window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;
@@ -72,20 +52,17 @@ function renderPanel(
   props: Partial<Parameters<typeof ExperimentResultPanel>[0]> = {},
 ) {
   const onTagsChange = vi.fn();
-  const { wrapper: Wrapper } = makeWrapper();
   const tree = (current: DatasetExperimentResult) => (
-    <Wrapper>
-      <TestLinkProvider>
-        <ExperimentResultPanel
-          open
-          result={current}
-          onClose={() => {}}
-          onTagsChange={onTagsChange}
-          tagVocabulary={['alpha', 'beta']}
-          {...props}
-        />
-      </TestLinkProvider>
-    </Wrapper>
+    <TestLinkProvider>
+      <ExperimentResultPanel
+        open
+        result={current}
+        onClose={() => {}}
+        onTagsChange={onTagsChange}
+        tagVocabulary={['alpha', 'beta']}
+        {...props}
+      />
+    </TestLinkProvider>
   );
   const { rerender } = render(tree(result));
   return { onTagsChange, showResult: (next: DatasetExperimentResult) => rerender(tree(next)) };
@@ -275,120 +252,52 @@ describe('ExperimentResultPanel review controls', () => {
 });
 
 describe('ExperimentResultPanel trace usage', () => {
-  const onTraceRequest = vi.fn();
-  const onBreakdownRequest = vi.fn();
+  describe('when there is no usage', () => {
+    it('renders no usage rows', () => {
+      renderPanel(makeResult({ targetType: 'agent', traceId: 'trace-a' }));
 
-  const setUsageHandlers = ({
-    capabilities,
-    rootEntityType,
-  }: {
-    capabilities: GetObservabilityCapabilitiesResponse;
-    rootEntityType: EntityType;
-  }) => {
-    server.use(
-      http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(capabilities)),
-      http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => {
-        onTraceRequest();
-        const [root] = traceSpans.spans;
-        // Storage does not guarantee root-first ordering: put a child span first.
-        return HttpResponse.json({
-          ...traceSpans,
-          spans: [
-            { ...root, spanId: 'span-child', parentSpanId: root.spanId, entityType: EntityType.TOOL },
-            { ...root, entityType: rootEntityType },
-          ],
-        });
-      }),
-      http.post(`${TEST_BASE_URL}/api/observability/metrics/breakdown`, () => {
-        onBreakdownRequest();
-        return HttpResponse.json(traceUsageBreakdown);
-      }),
-    );
-  };
-
-  beforeEach(() => {
-    onTraceRequest.mockClear();
-    onBreakdownRequest.mockClear();
+      expect(screen.queryByText('Tokens')).toBeNull();
+      expect(screen.queryByText('Cost')).toBeNull();
+    });
   });
 
-  it('renders no usage rows and fetches nothing when the result has no trace', async () => {
-    setUsageHandlers({ capabilities: metricsCapableCapabilities, rootEntityType: EntityType.AGENT });
-    renderPanel(makeResult({ traceId: null }));
+  describe('when the trace has usage', () => {
+    it('shows total tokens and cost', () => {
+      renderPanel(makeResult({ targetType: 'agent', traceId: 'trace-a' }), { usage: agentTraceUsage });
 
-    await screen.findByText('Item Id');
-    expect(onTraceRequest).not.toHaveBeenCalled();
-    expect(onBreakdownRequest).not.toHaveBeenCalled();
-    expect(screen.queryByText('Tokens')).toBeNull();
-  });
-
-  it('shows total tokens and cost for an agent trace when metrics are supported', async () => {
-    setUsageHandlers({ capabilities: metricsCapableCapabilities, rootEntityType: EntityType.AGENT });
-    renderPanel(makeResult({ traceId: 'trace-a' }));
-
-    expect(await screen.findByText('Tokens')).toBeDefined();
-    expect(onBreakdownRequest).toHaveBeenCalled();
-    expect(screen.getByText('100')).toBeDefined();
-    expect(screen.getByText('Cost')).toBeDefined();
-    expect(screen.getByText('$0.001')).toBeDefined();
+      expect(screen.getByText('Tokens')).toBeDefined();
+      expect(screen.getByText('100')).toBeDefined();
+      expect(screen.getByText('$0.001')).toBeDefined();
+    });
   });
 
   describe('when the usage of an agent result is still loading', () => {
-    it('reserves the cost and tokens rows', async () => {
-      setUsageHandlers({ capabilities: metricsCapableCapabilities, rootEntityType: EntityType.AGENT });
-      server.use(http.post(`${TEST_BASE_URL}/api/observability/metrics/breakdown`, () => delay('infinite')));
-      renderPanel(makeResult({ targetType: 'agent', traceId: 'trace-a' }));
-
-      expect(termLabels().slice(0, 2)).toEqual(['Cost', 'Tokens']);
-      await waitFor(() => expect(onTraceRequest).toHaveBeenCalled());
-      expect(termLabels().slice(0, 2)).toEqual(['Cost', 'Tokens']);
-      expect(screen.queryByText('$0.001')).toBeNull();
-    });
-  });
-
-  describe('when switching to another agent result whose usage is still loading', () => {
-    it('keeps the cost and tokens rows reserved', async () => {
-      setUsageHandlers({ capabilities: metricsCapableCapabilities, rootEntityType: EntityType.AGENT });
-      const { showResult } = renderPanel(makeResult({ targetType: 'agent', traceId: 'trace-a' }));
-      await screen.findByText('$0.001');
-
-      server.use(http.post(`${TEST_BASE_URL}/api/observability/metrics/breakdown`, () => delay('infinite')));
-      showResult(makeResult({ id: 'res-2', itemId: 'item-2', targetType: 'agent', traceId: 'trace-b' }));
-      await waitFor(() => expect(screen.queryByText('$0.001')).toBeNull());
-      // Let the trace load and the next usage request start, the window where the rows used to vanish.
-      await waitFor(() => expect(onTraceRequest).toHaveBeenCalledTimes(2));
-      await new Promise(resolve => setTimeout(resolve, 50));
+    it('reserves the cost and tokens rows', () => {
+      renderPanel(makeResult({ targetType: 'agent', traceId: 'trace-a' }), { isUsageLoading: true });
 
       expect(termLabels().slice(0, 2)).toEqual(['Cost', 'Tokens']);
     });
   });
 
-  describe('when the result is a workflow run', () => {
-    it('does not reserve usage rows while the trace loads', () => {
-      setUsageHandlers({ capabilities: metricsCapableCapabilities, rootEntityType: EntityType.WORKFLOW });
-      renderPanel(makeResult({ targetType: 'workflow', traceId: 'trace-a' }));
+  describe('when the usage of a workflow result is still loading', () => {
+    it('does not reserve usage rows', () => {
+      renderPanel(makeResult({ targetType: 'workflow', traceId: 'trace-a' }), { isUsageLoading: true });
 
       expect(termLabels()).not.toContain('Cost');
     });
   });
+});
 
-  it('skips usage for a workflow trace', async () => {
-    setUsageHandlers({ capabilities: metricsCapableCapabilities, rootEntityType: EntityType.WORKFLOW });
-    renderPanel(makeResult({ traceId: 'trace-a' }));
+describe('ExperimentResultPanel feedback tab', () => {
+  describe('when the feedback count is known', () => {
+    it('shows it on the tab', () => {
+      renderPanel(makeResult({ traceId: 'trace-1' }), {
+        feedbackTabSlot: () => <div>feedback</div>,
+        feedbackCount: 3,
+      });
 
-    await waitFor(() => expect(onTraceRequest).toHaveBeenCalled());
-    await screen.findByText('Item Id');
-    expect(onBreakdownRequest).not.toHaveBeenCalled();
-    expect(screen.queryByText('Tokens')).toBeNull();
-  });
-
-  it('skips usage when the observability storage does not support metrics', async () => {
-    setUsageHandlers({ capabilities: metricsUnavailableCapabilities, rootEntityType: EntityType.AGENT });
-    renderPanel(makeResult({ traceId: 'trace-a' }));
-
-    await waitFor(() => expect(onTraceRequest).toHaveBeenCalled());
-    await screen.findByText('Item Id');
-    expect(onBreakdownRequest).not.toHaveBeenCalled();
-    expect(screen.queryByText('Tokens')).toBeNull();
+      expect(screen.getByRole('tab', { name: 'Feedback (3)' })).toBeDefined();
+    });
   });
 });
 
@@ -410,19 +319,7 @@ describe('ExperimentResultPanel summary', () => {
   });
 
   describe('when the result has usage, details and scores', () => {
-    it('lists usage first, then item details, then scorers', async () => {
-      server.use(
-        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () =>
-          HttpResponse.json(metricsCapableCapabilities),
-        ),
-        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () =>
-          HttpResponse.json({
-            ...traceSpans,
-            spans: traceSpans.spans.map(span => ({ ...span, entityType: EntityType.AGENT })),
-          }),
-        ),
-        http.post(`${TEST_BASE_URL}/api/observability/metrics/breakdown`, () => HttpResponse.json(traceUsageBreakdown)),
-      );
+    it('lists usage first, then item details, then scorers', () => {
       renderPanel(
         makeResult({
           traceId: 'trace-a',
@@ -430,10 +327,9 @@ describe('ExperimentResultPanel summary', () => {
           startedAt: new Date('2026-01-01T00:00:00Z'),
           completedAt: new Date('2026-01-01T00:00:01Z'),
         }),
-        { scores: [{ id: 'score-1', scorerId: 'accuracy', score: 0.5 }] },
+        { scores: [{ id: 'score-1', scorerId: 'accuracy', score: 0.5 }], usage: agentTraceUsage },
       );
 
-      await screen.findByText('Tokens');
       expect(termLabels()).toEqual(['Cost', 'Duration', 'Tokens', 'Item Id', 'Created', 'Status', 'Tags', 'accuracy']);
     });
   });

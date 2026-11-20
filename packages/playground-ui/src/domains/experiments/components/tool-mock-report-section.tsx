@@ -1,9 +1,9 @@
 import type { ToolMockReport } from '@mastra/client-js';
-import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
-import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
-import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { IconMaintenance } from '@mastra/playground-ui/icons/central/IconMaintenance';
+import { DataPanel } from '@/ds/components/DataPanel';
+import { InlineCode } from '@/ds/components/InlineCode';
+import { Notice } from '@/ds/components/Notice';
+import { Txt } from '@/ds/components/Txt';
+import { IconMaintenance } from '@/ds/icons/central/IconMaintenance';
 
 export interface ToolMockReportSectionProps {
   report: ToolMockReport;

@@ -7,8 +7,8 @@ import type {
 } from '@mastra/client-js';
 import { SpanType } from '@mastra/core/observability';
 import { TraceStatus } from '@mastra/core/storage';
+import type { ScoresByItemId } from '@mastra/playground-ui/domains/experiments/components/comparison/build-comparison-rows';
 import type { ExperimentUsage } from '@mastra/react/hooks/experiments';
-import type { ScoresByItemId } from '../../build-comparison-rows';
 
 export const DATASET_ID = 'dataset-1';
 export const BASELINE_ID = 'exp-baseline';

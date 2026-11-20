@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import type { DatasetExperimentResult } from '@mastra/client-js';
 import { cleanup, fireEvent, screen } from '@testing-library/react';
 import type { ComponentProps } from 'react';

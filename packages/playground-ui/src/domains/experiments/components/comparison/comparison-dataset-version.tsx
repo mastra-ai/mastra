@@ -1,5 +1,5 @@
-import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { cn } from '@mastra/playground-ui/utils/cn';
+import { useLinkComponent } from '@/lib/framework';
+import { cn } from '@/utils/cn';
 
 export interface ComparisonDatasetVersionProps {
   datasetId: string;

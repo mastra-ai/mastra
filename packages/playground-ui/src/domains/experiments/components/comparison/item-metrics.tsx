@@ -1,5 +1,8 @@
-import { ScorerLabel } from '@mastra/playground-ui/domains/experiments';
-import type { ComparisonMetric } from '@mastra/playground-ui/domains/experiments';
+import type { ExperimentItemUsage } from '@mastra/react/hooks/experiments';
+import type { ReactNode } from 'react';
+import { ScorerLabel } from './comparison-metric-list';
+import type { ComparisonMetric } from './comparison-metric-list';
+import { ScoreReasonHoverCard } from './score-reason-hover-card';
 import {
   costDeltaFormatter,
   formatCostValue,
@@ -7,16 +10,13 @@ import {
   formatScore,
   formatTokenCount,
   totalTokens,
-} from '@mastra/playground-ui/domains/experiments/components/comparison/comparison-metric-format';
-import { IconClock } from '@mastra/playground-ui/icons/central/IconClock';
-import { IconCoins } from '@mastra/playground-ui/icons/central/IconCoins';
-import { IconGauge } from '@mastra/playground-ui/icons/central/IconGauge';
-import { IconHashtag } from '@mastra/playground-ui/icons/central/IconHashtag';
-import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
-import { formatDuration } from '@mastra/playground-ui/utils/duration';
-import type { ExperimentItemUsage } from '@mastra/react/hooks/experiments';
-import type { ReactNode } from 'react';
-import { ScoreReasonHoverCard } from './score-reason-hover-card';
+} from '@/domains/experiments/components/comparison/comparison-metric-format';
+import { IconClock } from '@/ds/icons/central/IconClock';
+import { IconCoins } from '@/ds/icons/central/IconCoins';
+import { IconGauge } from '@/ds/icons/central/IconGauge';
+import { IconHashtag } from '@/ds/icons/central/IconHashtag';
+import { ScorersIcon } from '@/ds/icons/ScorersIcon';
+import { formatDuration } from '@/utils/duration';
 
 export interface ItemMetricScore {
   scorerId: string;

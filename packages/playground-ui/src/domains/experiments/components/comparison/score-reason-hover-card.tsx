@@ -1,6 +1,6 @@
-import { HoverCard, HoverCardContent, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
-import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
-import { IconCircleInfo } from '@mastra/playground-ui/icons/central/IconCircleInfo';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/ds/components/HoverCard';
+import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
+import { IconCircleInfo } from '@/ds/icons/central/IconCircleInfo';
 
 export interface ScoreReasonHoverCardProps {
   scorerId: string;

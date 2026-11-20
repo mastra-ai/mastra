@@ -1,6 +1,6 @@
 import type { ClientScoreRowData, CompareExperimentsResponse, DatasetExperimentResult } from '@mastra/client-js';
-import { totalTokens } from '@mastra/playground-ui/domains/experiments/components/comparison/comparison-metric-format';
 import type { ExperimentItemUsage, ExperimentUsage } from '@mastra/react/hooks/experiments';
+import { totalTokens } from '@/domains/experiments/components/comparison/comparison-metric-format';
 
 export interface ComparisonScore {
   scorerId: string;
@@ -191,30 +191,33 @@ export const buildComparisonRows = ({
   const indexes = new Map(experimentIds.map(id => [id, indexByItemId(resultsById?.[id])]));
 
   return comparison.items.map(item => {
-    const sides = experimentIds.map(experimentId =>
-      buildSide(
+    const sides = experimentIds.map(experimentId => ({
+      experimentId,
+      ...buildSide(
         item.results[experimentId],
         indexes.get(experimentId)?.get(item.itemId),
         scoresById?.[experimentId]?.[item.itemId],
         usageById?.[experimentId]?.traces,
       ),
-    );
+    }));
     const [baseline] = sides;
 
     return {
       itemId: item.itemId,
       input: item.input,
       groundTruth: item.groundTruth,
-      sides: sides.map((side, index) => ({
-        ...side,
-        experimentId: experimentIds[index],
-        role: index === 0 ? 'baseline' : 'contender',
-        deltas: index === 0 ? null : deltasAgainst(baseline, side),
-        durationDeltaMs: index === 0 ? null : durationDeltaAgainst(baseline, side),
-        costDelta: index === 0 ? undefined : costDeltaAgainst(baseline, side),
-        tokenDelta: index === 0 ? undefined : tokenDeltaAgainst(baseline, side),
-        averageScoreDelta: index === 0 ? undefined : averageScoreDeltaAgainst(baseline, side),
-      })),
+      sides: sides.map((side, index) => {
+        const against = index === 0 ? undefined : baseline;
+        return {
+          ...side,
+          role: index === 0 ? 'baseline' : 'contender',
+          deltas: against ? deltasAgainst(against, side) : null,
+          durationDeltaMs: against ? durationDeltaAgainst(against, side) : null,
+          costDelta: against ? costDeltaAgainst(against, side) : undefined,
+          tokenDelta: against ? tokenDeltaAgainst(against, side) : undefined,
+          averageScoreDelta: against ? averageScoreDeltaAgainst(against, side) : undefined,
+        };
+      }),
     };
   });
 };

@@ -1,8 +1,8 @@
 import type { DatasetExperimentResult } from '@mastra/client-js';
-import { Combobox } from '@mastra/playground-ui/components/Combobox';
-import type { ComboboxOption, ComboboxVariant } from '@mastra/playground-ui/components/Combobox';
-import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { useMemo, useState } from 'react';
+import { Combobox } from '@/ds/components/Combobox';
+import type { ComboboxOption, ComboboxVariant } from '@/ds/components/Combobox';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 
 const CREATE_TAG_VALUE = '__create_tag__';
 
@@ -33,8 +33,8 @@ export function ExperimentResultsTagPicker({
 
   // Tags present on every selected result: selecting them again is a no-op.
   const appliedToAll = useMemo(() => {
-    if (selectedResults.length === 0) return new Set<string>();
     const [first, ...rest] = selectedResults;
+    if (!first) return new Set<string>();
     return new Set((first.tags ?? []).filter(tag => rest.every(r => (r.tags ?? []).includes(tag))));
   }, [selectedResults]);
 

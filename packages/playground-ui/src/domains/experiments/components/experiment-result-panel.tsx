@@ -1,49 +1,45 @@
 'use client';
 
 import type { DatasetExperimentResult } from '@mastra/client-js';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
-import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import {
-  ComparisonMetricList,
-  ComparisonPayload,
-  ComparisonSection,
-  sectionStackClass,
-} from '@mastra/playground-ui/domains/experiments';
-import type { ComparisonMetric } from '@mastra/playground-ui/domains/experiments';
+import type { ExperimentItemUsage } from '@mastra/react/hooks/experiments';
+import type { ReactNode } from 'react';
+import { useMemo } from 'react';
+import { sideDurationMs } from './comparison/build-comparison-rows';
+import { ComparisonMetricList } from './comparison/comparison-metric-list';
+import type { ComparisonMetric } from './comparison/comparison-metric-list';
+import { ComparisonPayload } from './comparison/comparison-payload';
+import { ComparisonSection, sectionStackClass } from './comparison/comparison-section';
+import { itemMetrics } from './comparison/item-metrics';
+import { ExperimentResultsTagPicker } from './experiment-results-tag-picker';
+import { ToolMockReportSection } from './tool-mock-report-section';
 import {
   getMissingTextNotice,
   getResultErrorMessage,
   getResultOutputText,
   getResultToolCalls,
-} from '@mastra/playground-ui/domains/experiments/utils/result-output';
-import { ComputedTag } from '@mastra/playground-ui/domains/observability';
-import { ReviewStatusBadge } from '@mastra/playground-ui/domains/review/components/review-status-badge';
-import { SpanPayloadToolCalls } from '@mastra/playground-ui/domains/traces/components/span-payload/span-payload-primitives';
-import { IconCalendar1 } from '@mastra/playground-ui/icons/central/IconCalendar1';
-import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
-import { IconClipboard2 } from '@mastra/playground-ui/icons/central/IconClipboard2';
-import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
-import { IconFingerPrint1 } from '@mastra/playground-ui/icons/central/IconFingerPrint1';
-import { IconLab } from '@mastra/playground-ui/icons/central/IconLab';
-import { IconTag } from '@mastra/playground-ui/icons/central/IconTag';
-import { CircleDotIcon } from '@mastra/playground-ui/icons/CircleDotIcon';
-import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
-import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { formatDate } from '@mastra/playground-ui/utils/date-format';
-import { getShortId } from '@mastra/playground-ui/utils/id';
-import { useTraceFeedback } from '@mastra/react/hooks/traces';
-import type { ReactNode } from 'react';
-import { useMemo } from 'react';
-import { useExperimentResultUsage } from '../hooks/use-experiment-result-usage';
-import { sideDurationMs } from './comparison/build-comparison-rows';
-import { itemMetrics } from './comparison/item-metrics';
-import { ExperimentResultsTagPicker } from './experiment-results-tag-picker';
-import { ToolMockReportSection } from './tool-mock-report-section';
+} from '@/domains/experiments/utils/result-output';
+import { ComputedTag } from '@/domains/observability';
+import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
+import { SpanPayloadToolCalls } from '@/domains/traces/components/span-payload/span-payload-primitives';
+import { Button } from '@/ds/components/Button';
+import { CopyButton } from '@/ds/components/CopyButton';
+import { DataPanel } from '@/ds/components/DataPanel';
+import { Skeleton } from '@/ds/components/Skeleton';
+import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
+import { Txt } from '@/ds/components/Txt';
+import { IconCalendar1 } from '@/ds/icons/central/IconCalendar1';
+import { IconCircleCheck } from '@/ds/icons/central/IconCircleCheck';
+import { IconClipboard2 } from '@/ds/icons/central/IconClipboard2';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconFingerPrint1 } from '@/ds/icons/central/IconFingerPrint1';
+import { IconLab } from '@/ds/icons/central/IconLab';
+import { IconTag } from '@/ds/icons/central/IconTag';
+import { CircleDotIcon } from '@/ds/icons/CircleDotIcon';
+import { TraceIcon } from '@/ds/icons/TraceIcon';
+import { useLinkComponent } from '@/lib/framework';
+import { cn } from '@/utils/cn';
+import { formatDate } from '@/utils/date-format';
+import { getShortId } from '@/utils/id';
 
 /**
  * Structural subset of `DatasetExperimentResult` the panel renders. Review-queue
@@ -93,6 +89,12 @@ export type ExperimentResultPanelProps = {
    * Feedback tabs; this renders the feedback tab, keyed by trace id.
    */
   feedbackTabSlot?: (args: { traceId: string }) => ReactNode;
+  /** Feedback on the result's trace, shown on the Feedback tab. */
+  feedbackCount?: number;
+  /** Token/cost usage of the result's trace; agent runs only. */
+  usage?: ExperimentItemUsage;
+  /** While true, agent results reserve the cost and tokens rows so the panel doesn't shift once usage lands. */
+  isUsageLoading?: boolean;
   /**
    * `drawer` (default) portals the panel over the app. `inline` renders it in the document flow
    * (e.g. inside the route side panel) and renders nothing while there is no `result`/`itemId`.
@@ -163,6 +165,9 @@ function ExperimentResultPanelBody({
   experimentLink,
   onComplete,
   feedbackTabSlot,
+  feedbackCount,
+  usage,
+  isUsageLoading = false,
 }: ExperimentResultPanelBodyProps) {
   const inputStr = formatValue(result.input);
   const outputStr = formatValue(result.output);
@@ -175,12 +180,6 @@ function ExperimentResultPanelBody({
   const showTagsRow = Boolean(onTagsChange) || tags.length > 0;
   const { Link } = useLinkComponent();
   const feedbackTraceId = feedbackTabSlot && result.traceId ? result.traceId : undefined;
-  // Fetched as soon as the panel opens so the tab can flag feedback still needing review.
-  const { data: traceFeedback } = useTraceFeedback({
-    traceId: feedbackTraceId,
-    queryOptions: { enabled: !!feedbackTraceId },
-  });
-  const { usage, isLoading: isUsageLoading } = useExperimentResultUsage(result.traceId);
   // Only agent runs report usage: reserve its rows while loading so the panel doesn't shift once it lands.
   const isUsagePending = isUsageLoading && (result.targetType == null || result.targetType === 'agent');
   const usageMetrics = itemMetrics({
@@ -358,21 +357,19 @@ function ExperimentResultPanelBody({
         </DataPanel.HeaderActions>
       </DataPanel.Header>
 
-      {feedbackTraceId ? (
+      {feedbackTabSlot && feedbackTraceId ? (
         <Tabs<'details' | 'feedback'> defaultTab="details" className="grid h-full min-h-0 grid-rows-[auto_1fr]">
           <DataPanel.Header>
             <TabList variant="pill-ghost" size="sm">
               <Tab value="details">Details</Tab>
-              <Tab value="feedback">
-                Feedback{traceFeedback?.pagination?.total != null && <> ({traceFeedback.pagination.total})</>}
-              </Tab>
+              <Tab value="feedback">Feedback{feedbackCount != null && <> ({feedbackCount})</>}</Tab>
             </TabList>
           </DataPanel.Header>
           <TabContent value="details" flush>
             {details}
           </TabContent>
           <TabContent value="feedback" flush>
-            <DataPanel.Content>{feedbackTabSlot!({ traceId: feedbackTraceId })}</DataPanel.Content>
+            <DataPanel.Content>{feedbackTabSlot({ traceId: feedbackTraceId })}</DataPanel.Content>
           </TabContent>
         </Tabs>
       ) : (

@@ -1,10 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import type { CompareMetricKey } from '@mastra/playground-ui/domains/experiments/components/comparison/use-compare-metric-preferences';
+import { useCompareMetricPreferences } from '@mastra/playground-ui/domains/experiments/components/comparison/use-compare-metric-preferences';
 import { IconColumns3 } from '@mastra/playground-ui/icons/central/IconColumns3';
 import { useCompareExperiments } from '@mastra/react/hooks/datasets';
 import { useMemo } from 'react';
-import type { CompareMetricKey } from './use-compare-metric-preferences';
-import { useCompareMetricPreferences } from './use-compare-metric-preferences';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 
 const RUN_METRICS: { key: CompareMetricKey; label: string; usage?: boolean }[] = [

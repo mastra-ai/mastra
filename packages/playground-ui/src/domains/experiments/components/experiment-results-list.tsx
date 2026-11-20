@@ -1,24 +1,21 @@
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
-import { Badge } from '@mastra/playground-ui/components/Badge';
-import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ScoreReasonHoverCard } from './comparison/score-reason-hover-card';
 import {
   formatCostValue,
   formatTokenCount,
   totalTokens,
-} from '@mastra/playground-ui/domains/experiments/components/comparison/comparison-metric-format';
-import {
-  getResultErrorMessage,
-  getResultOutputPreview,
-} from '@mastra/playground-ui/domains/experiments/utils/result-output';
-import { ComputedTag } from '@mastra/playground-ui/domains/observability';
-import { ReviewStatusBadge } from '@mastra/playground-ui/domains/review/components/review-status-badge';
-import { IconGauge } from '@mastra/playground-ui/icons/central/IconGauge';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
-import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { formatDuration } from '@mastra/playground-ui/utils/duration';
-import { ScoreReasonHoverCard } from './comparison/score-reason-hover-card';
+} from '@/domains/experiments/components/comparison/comparison-metric-format';
+import { getResultErrorMessage, getResultOutputPreview } from '@/domains/experiments/utils/result-output';
+import { ComputedTag } from '@/domains/observability';
+import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
+import { Badge } from '@/ds/components/Badge';
+import { DataList, DataListSkeleton, useDataListKeyboard } from '@/ds/components/DataList';
+import { Txt } from '@/ds/components/Txt';
+import { IconGauge } from '@/ds/icons/central/IconGauge';
+import { Icon } from '@/ds/icons/Icon';
+import { ScorersIcon } from '@/ds/icons/ScorersIcon';
+import { useLinkComponent } from '@/lib/framework';
+import { formatDuration } from '@/utils/duration';
 
 /**
  * Minimal shape shared by every surface that lists dataset items
@@ -271,7 +268,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
               </>
             );
 
-            if (!hasSelection) {
+            if (!selectedIds || !onToggleSelect) {
               return (
                 <DataList.RowButton
                   key={result.id}
@@ -289,8 +286,8 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
             return (
               <DataList.RowWrapper key={result.id}>
                 <DataList.SelectCell
-                  checked={selectedIds!.has(result.id)}
-                  onToggle={() => onToggleSelect!(result.id)}
+                  checked={selectedIds.has(result.id)}
+                  onToggle={() => onToggleSelect(result.id)}
                   aria-label={`Select result ${result.itemId}`}
                 />
                 <DataList.RowButton
@@ -322,7 +319,8 @@ function ScoresSummary({ scores }: { scores: ExperimentResultsListItem['scores']
   const values = Array.isArray(scores)
     ? scores.map(s => s.score).filter((v): v is number => v != null)
     : Object.values(scores ?? {});
-  if (values.length === 0) {
+  const [first] = values;
+  if (first === undefined) {
     return (
       <Txt variant="meta" tone="faint">
         —
@@ -335,7 +333,7 @@ function ScoresSummary({ scores }: { scores: ExperimentResultsListItem['scores']
         <IconGauge />
       </Icon>
       <Txt variant="meta" tone="muted" font="mono">
-        {values[0].toFixed(2)}
+        {first.toFixed(2)}
       </Txt>
       {values.length > 1 && <Badge>+{values.length - 1}</Badge>}
     </div>

@@ -1,11 +1,11 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { Metadata } from '@mastra/playground-ui/components/Metadata';
-import { RotatingText } from '@mastra/playground-ui/components/RotatingText';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { useNow } from '@mastra/playground-ui/domains/experiments/hooks/use-now';
-import { formatDuration } from '@mastra/playground-ui/utils/duration';
 import { QUEUED_MESSAGE, RUNNING_MESSAGES } from './experiment-run-messages';
+import { useNow } from '@/domains/experiments/hooks/use-now';
+import { EmptyState } from '@/ds/components/EmptyState';
+import { Metadata } from '@/ds/components/Metadata';
+import { RotatingText } from '@/ds/components/RotatingText';
+import { Spinner } from '@/ds/components/Spinner';
+import { formatDuration } from '@/utils/duration';
 
 export interface ExperimentRunProgressProps {
   experiment: DatasetExperiment;

@@ -5,6 +5,8 @@ import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
 import { DeleteExperimentDialog } from '@mastra/playground-ui/domains/experiments';
+import { ExperimentResultsBulkActions } from '@mastra/playground-ui/domains/experiments/components/experiment-results-bulk-actions';
+import { ExperimentRunProgress } from '@mastra/playground-ui/domains/experiments/components/experiment-run-progress';
 import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import {
@@ -22,9 +24,7 @@ import { useObservabilityStorageCapabilities } from '@/domains/configuration/hoo
 import { ExperimentHeaderActions } from '@/domains/experiments/components/experiment-header-actions';
 import { ExperimentItemSidePanel } from '@/domains/experiments/components/experiment-item-side-panel';
 import { ExperimentKpis } from '@/domains/experiments/components/experiment-kpis';
-import { ExperimentResultsBulkActions } from '@/domains/experiments/components/experiment-results-bulk-actions';
 import { ExperimentResultsSection } from '@/domains/experiments/components/experiment-results-section';
-import { ExperimentRunProgress } from '@/domains/experiments/components/experiment-run-progress';
 import { ExperimentItemPanelProvider } from '@/domains/experiments/context/experiment-item-panel-context';
 import {
   ExperimentCrumb,
@@ -186,7 +186,15 @@ function ExperimentPage() {
             <div className="grid content-start gap-4">
               <ExperimentKpis experiment={experiment} metrics={experimentMetrics} />
               <div className="grid content-start gap-1">
-                <ExperimentResultsBulkActions selection={selection} />
+                <ExperimentResultsBulkActions
+                  selectedResults={selection.selectedResults}
+                  onClearSelection={selection.clearSelection}
+                  onRequestReview={selection.flagSelectedForReview}
+                  isRequestingReview={selection.isFlagging}
+                  onAddTag={selection.addTagToSelected}
+                  isTagging={selection.isTagging}
+                  tagVocabulary={selection.tagVocabulary}
+                />
                 <ExperimentResultsSection
                   experimentId={experimentId}
                   experimentStatus={experiment.status}

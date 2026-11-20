@@ -1,11 +1,11 @@
 'use client';
 
 import type { ClientScoreRowData } from '@mastra/client-js';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
-import { IconGauge } from '@mastra/playground-ui/icons/central/IconGauge';
-import { IconReceiptBill } from '@mastra/playground-ui/icons/central/IconReceiptBill';
-import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
+import { Button } from '@/ds/components/Button';
+import { DataPanel } from '@/ds/components/DataPanel';
+import { IconGauge } from '@/ds/icons/central/IconGauge';
+import { IconReceiptBill } from '@/ds/icons/central/IconReceiptBill';
+import { TraceIcon } from '@/ds/icons/TraceIcon';
 
 export type ExperimentScorePanelProps = {
   /** Always mount the panel and pass `undefined` to close it, so the drawer can animate out. */

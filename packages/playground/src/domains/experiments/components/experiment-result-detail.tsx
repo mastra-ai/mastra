@@ -1,5 +1,8 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 
+import { ExperimentResultPanel } from '@mastra/playground-ui/domains/experiments/components/experiment-result-panel';
+import type { ExperimentResultPanelProps } from '@mastra/playground-ui/domains/experiments/components/experiment-result-panel';
+import { ExperimentScorePanel } from '@mastra/playground-ui/domains/experiments/components/experiment-score-panel';
 import { useExperimentResultDetailState } from '@mastra/playground-ui/domains/experiments/hooks/use-experiment-result-detail-state';
 import type { ExperimentResultDetailState } from '@mastra/playground-ui/domains/experiments/hooks/use-experiment-result-detail-state';
 import { TraceScoresList } from '@mastra/playground-ui/domains/scores';
@@ -8,14 +11,20 @@ import { TraceFeedbackTab } from '@mastra/playground-ui/domains/traces/component
 import { useExperimentTrace } from '@mastra/react/hooks/experiments';
 import { useTraceSpanScores } from '@mastra/react/hooks/scores';
 import { useSpanFeedback, useTraceFeedback } from '@mastra/react/hooks/traces';
-import { ExperimentResultPanel } from '@/domains/experiments/components/experiment-result-panel';
-import type { ExperimentResultPanelProps } from '@/domains/experiments/components/experiment-result-panel';
-import { ExperimentScorePanel } from '@/domains/experiments/components/experiment-score-panel';
+import { useExperimentResultUsage } from '@/domains/experiments/hooks/use-experiment-result-usage';
 import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
 
 export type ExperimentResultDetailProps = Omit<
   ExperimentResultPanelProps,
-  'scores' | 'onShowTrace' | 'onScoreClick' | 'featuredScoreId' | 'collapsed' | 'feedbackTabSlot'
+  | 'scores'
+  | 'onShowTrace'
+  | 'onScoreClick'
+  | 'featuredScoreId'
+  | 'collapsed'
+  | 'feedbackTabSlot'
+  | 'feedbackCount'
+  | 'usage'
+  | 'isUsageLoading'
 > & {
   scores?: ClientScoreRowData[];
   /** Optional controlled state, for callers that need to read it. Create it with `useExperimentResultDetailState`. */
@@ -79,6 +88,14 @@ export function ExperimentResultDetail({
     return undefined;
   };
 
+  const resultFeedbackTraceId = withFeedback ? (result?.traceId ?? undefined) : undefined;
+  // Fetched as soon as the panel opens so the tab can flag feedback still needing review.
+  const { data: resultFeedback } = useTraceFeedback({
+    traceId: resultFeedbackTraceId,
+    queryOptions: { enabled: !!resultFeedbackTraceId },
+  });
+  const { usage, isLoading: isUsageLoading } = useExperimentResultUsage(result?.traceId);
+
   const { data: traceData, isLoading: isTraceLoading } = useExperimentTrace({
     traceId: featuredTraceId,
     queryOptions: { enabled: !!featuredTraceId },
@@ -113,6 +130,9 @@ export function ExperimentResultDetail({
         feedbackTabSlot={
           withFeedback ? ({ traceId }) => <TraceFeedbackTab key={traceId} traceId={traceId} /> : undefined
         }
+        feedbackCount={resultFeedback?.pagination?.total ?? undefined}
+        usage={usage}
+        isUsageLoading={isUsageLoading}
       />
 
       <ExperimentScorePanel
