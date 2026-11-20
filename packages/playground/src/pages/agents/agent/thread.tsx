@@ -1,10 +1,12 @@
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import type { ChatProps } from '@mastra/playground-ui/domains/agents/chat';
 import {
   AgentThreadPage as SharedAgentThreadPage,
   ThreadsPanelContext,
+  ThreadsPanelProvider,
   useAgentThreadPage,
+  useThreadsPanel,
 } from '@mastra/playground-ui/domains/agents/chat';
-import type { ChatProps } from '@mastra/playground-ui/domains/agents/chat';
 import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/context/activated-skills-context';
 import { BrowserToolCallsProvider } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
@@ -26,8 +28,6 @@ import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-me
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 import { MemoryTimelineProvider, useMemoryTimeline } from '@/domains/agents/context/memory-timeline-context';
 import { ThreadPreferencesProvider } from '@/domains/agents/context/thread-preferences-provider';
-import { ThreadsPanelProvider } from '@/domains/agents/context/threads-panel-context';
-import { useThreadsPanel } from '@/domains/agents/context/use-threads-panel';
 import { buildAgentDefaultSettings } from '@/domains/agents/utils/agent-default-settings';
 import { getAgentSuggestedPrompts } from '@/domains/agents/utils/agent-suggested-prompts';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';

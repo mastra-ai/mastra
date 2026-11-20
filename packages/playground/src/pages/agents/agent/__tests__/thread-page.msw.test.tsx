@@ -1077,8 +1077,8 @@ describe('Standalone thread page', () => {
     renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
 
     await screen.findByText('Tonight we cook carbonara.');
-    expect(screen.getByRole('tab', { name: 'Chat' }).getAttribute('aria-selected')).toBe('true');
-    expect(screen.queryByRole('tab', { name: 'Overview' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Chat' }).getAttribute('aria-current')).toBe('page');
+    expect(screen.queryByRole('link', { name: 'Overview' })).toBeNull();
   });
 
   it('highlights the Chat tab on /threads/new', async () => {
@@ -1086,7 +1086,7 @@ describe('Standalone thread page', () => {
     renderAt(`/agents/${AGENT_ID}/threads/new`);
 
     await screen.findByText('Sushi ideas');
-    expect(screen.getByRole('tab', { name: 'Chat' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('link', { name: 'Chat' }).getAttribute('aria-current')).toBe('page');
   });
 
   it('navigates to another thread when clicked in the list', async () => {

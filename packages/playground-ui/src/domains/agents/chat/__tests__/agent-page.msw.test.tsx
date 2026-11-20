@@ -4,9 +4,11 @@ import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { AgentCombobox } from '../../agent-combobox';
 import { AgentPage } from '../agent-page';
 import type { AgentPageProps } from '../agent-page';
 import { agentCatalog, supportAgent } from './fixtures/agent-page';
+import { crumbSwitcherTriggerProps } from '@/ds/components/Breadcrumb';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { LinkComponentProvider } from '@/lib/framework';
 import { StubLink, stubLinkPaths } from '@/test/link-provider';
@@ -38,7 +40,18 @@ function renderPage(props?: Partial<AgentPageProps>, withDock = false) {
   return renderWithProviders(
     <LinkComponentProvider Link={StubLink} navigate={navigate} paths={stubLinkPaths}>
       <TooltipProvider>
-        {withDock ? <PageWithDock /> : <AgentPage agent={supportAgent} overviewHref="/overview" {...props} />}
+        {withDock ? (
+          <PageWithDock />
+        ) : (
+          <AgentPage
+            agent={supportAgent}
+            overviewHref="/overview"
+            switcher={
+              <AgentCombobox value={supportAgent.id} {...crumbSwitcherTriggerProps} aria-label="Switch agent" />
+            }
+            {...props}
+          />
+        )}
       </TooltipProvider>
     </LinkComponentProvider>,
   );
@@ -64,6 +77,33 @@ describe('AgentPage', () => {
       fireEvent.change(await screen.findByPlaceholderText('Search agents'), { target: { value: 'Echo' } });
       fireEvent.click(await screen.findByRole('option', { name: 'Echo Bot' }));
       expect(navigate).toHaveBeenCalledWith('/agents/echo');
+      await waitForMutationsIdle(queryClient);
+    });
+  });
+
+  describe('when no tabs are supplied', () => {
+    it('gives the page content the only grid row', async () => {
+      const { queryClient } = renderPage({ children: <div data-testid="agent-content">Content</div> });
+      expect(screen.getByTestId('agent-content').parentElement?.className).toContain('grid-rows-[minmax(0,1fr)]');
+      await waitForMutationsIdle(queryClient);
+    });
+  });
+
+  describe('when tabs are supplied', () => {
+    it('exposes real destinations and the current view', async () => {
+      const { queryClient } = renderPage({
+        tabs: {
+          activeTab: 'traces',
+          chatHref: '/agents/support/threads/123',
+          tracesHref: '/agents/support/traces?threadId=123',
+          versionsHref: '/agents/support/editor',
+          showObservability: true,
+          showPlayground: true,
+        },
+      });
+      expect(screen.getByRole('link', { name: 'Chat' }).getAttribute('href')).toBe('/agents/support/threads/123');
+      expect(screen.getByRole('link', { name: 'Traces' }).getAttribute('aria-current')).toBe('page');
+      expect(screen.getByRole('link', { name: 'Editor' }).getAttribute('href')).toBe('/agents/support/editor');
       await waitForMutationsIdle(queryClient);
     });
   });

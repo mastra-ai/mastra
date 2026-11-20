@@ -9,6 +9,7 @@ import {
   ThreadListNewItem,
 } from '@mastra/playground-ui/components/ThreadList';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useThreadsPanel } from '@mastra/playground-ui/domains/agents/chat';
 import { AgentConversationSidebar } from '@mastra/playground-ui/domains/agents/components/agent-conversation-sidebar';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
@@ -16,7 +17,6 @@ import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
-import { useThreadsPanel } from '../context/use-threads-panel';
 import { useCollapsedThreadSections } from '../hooks/use-collapsed-thread-sections';
 import { usePinnedThreads } from '../hooks/use-pinned-threads';
 import { RenameThreadDialog } from './rename-thread-dialog';
