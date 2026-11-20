@@ -2,7 +2,7 @@ import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
-import { SettingsContainer } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Link } from 'react-router';
 
@@ -14,14 +14,12 @@ import { boardConfigPath } from '../domains/boardConfig/boardConfigPaths';
 import { BoardConfigEditor } from '../domains/boardConfig/components/BoardConfigEditor';
 import { BoardConfigHeader } from '../domains/boardConfig/components/BoardConfigHeader';
 import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfigRoute';
+import { OVERVIEW_SURFACE, SETTINGS_COLUMN } from '../domains/boardConfig/settingsColumn';
 import { boardPath } from '../domains/factory/boardCatalog';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
-import { SettingsRowsSkeleton } from '../ui/SettingsRowsSkeleton';
+import { LoadErrorState } from '../ui/LoadErrorState';
 
-/** Settings read best in a short line, so the page keeps to a centered column narrower than the layout's. */
-const COLUMN = 'mx-auto w-full max-w-2xl';
-
-/** Factory › board › Configure: the board's General page, or one phase's page. The sidebar lists the pages. */
+/** Factory › board › Configure: the board's Overview page, or one phase's page. The sidebar lists the pages. */
 export function BoardConfigPage() {
   const factory = useActiveFactory();
   const route = useBoardConfigRoute();
@@ -65,7 +63,7 @@ export function BoardConfigPage() {
 
   const header =
     query.isSuccess && (!phaseKey || shownPhase) ? (
-      <div className={cn(COLUMN, 'pb-8')}>
+      <div className={cn(SETTINGS_COLUMN, phaseKey ? 'pb-8' : 'pb-3')}>
         <BoardConfigHeader
           key={`${boardId}:${query.data.board.revision ?? 'code'}`}
           factoryId={factory.id}
@@ -77,22 +75,23 @@ export function BoardConfigPage() {
     ) : undefined;
 
   return (
-    <PageLayout variant="narrow" header={header} {...slots}>
-      <div className={COLUMN}>
+    <PageLayout variant={phaseKey ? 'narrow' : 'fit'} header={header} {...slots}>
+      <div className={phaseKey || !query.isSuccess ? cn(SETTINGS_COLUMN, !phaseKey && 'px-4') : OVERVIEW_SURFACE}>
         {query.isPending ? (
           <SettingsContainer>
-            <SettingsRowsSkeleton label="Loading board" rows={3} />
+            <SettingsSkeleton label="Loading board" rows={3} />
           </SettingsContainer>
-        ) : query.isError ? (
+        ) : query.isError && query.error instanceof BoardRequestError && query.error.code === 'board_not_found' ? (
           <EmptyState
             variant="fill"
-            titleSlot={
-              <span role="alert">
-                {query.error instanceof BoardRequestError && query.error.code === 'board_not_found'
-                  ? 'Board unavailable: this board is not installed.'
-                  : 'Unable to load this board.'}
-              </span>
-            }
+            titleSlot={<span role="alert">Board unavailable: this board is not installed.</span>}
+          />
+        ) : query.isError ? (
+          <LoadErrorState
+            title="Couldn’t load this board"
+            error={query.error}
+            onRetry={() => void query.refetch()}
+            retrying={query.isFetching}
           />
         ) : (
           <BoardConfigEditor

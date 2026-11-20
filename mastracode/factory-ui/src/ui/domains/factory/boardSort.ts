@@ -1,5 +1,13 @@
-import { BOARD_SORTS } from './boardOrder';
-import type { BoardSort } from './boardOrder';
+import type { BoardPhasesSort } from '../../../api/types';
+
+/** The orders the server lists a phase in. */
+export type BoardSort = BoardPhasesSort;
+export const BOARD_SORTS = [
+  'recent',
+  'recent-mine',
+  'created-newest',
+  'created-oldest',
+] as const satisfies readonly BoardSort[];
 
 export const BOARD_SORT_QUERY = 'sort';
 

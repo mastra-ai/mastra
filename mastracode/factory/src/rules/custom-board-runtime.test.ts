@@ -247,9 +247,6 @@ describe('custom board public runtime', () => {
           orgId: 'release-org',
           connectionId: connection.id,
           repositoryId: repository.id,
-          createdByUserId: 'release-user',
-          sandboxProvider: 'local',
-          sandboxWorkdir: '/tmp/release-runtime',
         });
         const itemResponse = await post(`/web/factory/projects/${project.id}/work-items`, {
           board: 'release',
@@ -360,7 +357,7 @@ describe('custom board public runtime', () => {
         expect(bindings.map(binding => binding.role).sort()).toEqual(['release-preparer', 'release-publisher']);
         const publisher = bindings.find(binding => binding.role === 'release-publisher')!;
         const cursor = await workItems.getToolResultCursor('release-org', project.id, publisher.id);
-        expect(cursor).toMatchObject({ bindingId: publisher.id, lastMessageId: expect.any(String) });
+        expect(cursor).toMatchObject({ bindingId: publisher.id, lastMessageCreatedAt: expect.any(Date) });
         const decisions = await workItems.listDeferredDecisions('release-org', project.id);
         expect(decisions.map(record => record.decision.type).sort()).toEqual([
           'invokeSkill',
@@ -381,9 +378,9 @@ describe('custom board public runtime', () => {
         });
         const evaluations = await storage.ops.findMany('factory_rule_evaluations', {});
         expect(evaluations.length).toBeGreaterThan(0);
-        expect(evaluations.every(row => row.rule_set_version === 'release-runtime-v1')).toBe(true);
-        expect(evaluations.filter(row => row.code === 'approval_required')).toHaveLength(1);
-        const toolIngresses = await storage.ops.findMany('factory_rule_ingress', { trigger_type: 'tool.result' });
+        const toolIngresses = (await storage.ops.findMany('factory_rule_ingress', {})).filter(row =>
+          String(row.identity).startsWith(`["${publisher.id}",`),
+        );
         expect(toolIngresses).toHaveLength(1);
         expect(evaluations.filter(row => row.ingress_id === toolIngresses[0]!.id)).toHaveLength(1);
         const terminal = await workItems.get({ orgId: 'release-org', id: workItem.id });

@@ -54,7 +54,7 @@ import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
 import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from '../signals';
 import type { TripwireData } from '../trip-wire';
-import type { GoalConfig, StructuredOutputOptions } from '../types';
+import type { AgentMethodType, GoalConfig, StructuredOutputOptions } from '../types';
 import type { ExecutionFence } from './execution-fence';
 import type { ResponseRecord } from './workflows/shared/schemas';
 
@@ -176,6 +176,8 @@ export interface SerializableStructuredOutput {
    * text and the finish step runs a separate structuring pass, like Agent.
    */
   hasStructuringModel?: boolean;
+  /** The model answers omitted optional fields with `null` (OpenAI strict mode); validate with null → undefined. */
+  nullToUndefined?: boolean;
   /** How validation failures are handled (see `StructuredOutputOptionsBase.errorStrategy`) */
   errorStrategy?: 'strict' | 'warn' | 'fallback';
   /** Value used when `errorStrategy` is `'fallback'`. Omitted when it is not JSON-safe. */
@@ -549,6 +551,10 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
   delegationBailed?: boolean;
   /** Why the delegation that bailed failed, carried beside `delegationBailed` for the root spans */
   tracingDelegationFailure?: SpanTermination;
+  /** Set when the total deadline aborted this tool call; carried so any worker ends the run as the deadline */
+  deadlineTimeout?: { timeoutType: 'total'; timeoutMs: number };
+  /** Set when abort() stopped this tool call; carried so any worker ends the run as aborted */
+  runAborted?: boolean;
   /** Error if tool execution failed */
   error?: {
     name: string;
@@ -602,6 +608,10 @@ export interface DurableAgenticExecutionOutput {
   backgroundTaskPending?: boolean;
   /** Whether a delegation hook called ctx.bail() during this iteration */
   delegationBailed?: boolean;
+  /** Set when the total deadline aborted a tool call this iteration */
+  deadlineTimeout?: { timeoutType: 'total'; timeoutMs: number };
+  /** Set when abort() stopped a tool call this iteration */
+  runAborted?: boolean;
   /** Step-finish chunk awaiting the loop's final continuation decision */
   deferredStepFinishChunk?: unknown;
   /** When this iteration's inference streamed its first chunk */
@@ -634,6 +644,8 @@ export interface DurableAgenticLoopOutput {
   };
   /** Final state */
   state: SerializableDurableState;
+  /** The outcome the run's spans ended with; a recovery of the saved run ends its own spans with it. */
+  tracingTermination?: SpanTermination;
 }
 
 export type { AgentStreamEvent, AgentStreamEventType } from '../streams/types';
@@ -794,6 +806,12 @@ export interface RunRegistryEntry {
    * replaced tools are kept (#25960).
    */
   requestTools?: Record<string, CoreTool>;
+  /**
+   * The method that started the run (`stream` or `generate`). A warm resume
+   * rebuilds `requestTools` for this method, so a streamed run's sub-agents keep
+   * streaming whatever the resume's `closeOnSuspend` is (#29436).
+   */
+  methodType?: AgentMethodType;
   /** SaveQueueManager for message persistence (undefined when memory is not configured) */
   saveQueueManager?: SaveQueueManager;
   /** Memory instance for thread creation and message persistence */
@@ -864,15 +882,11 @@ export interface RunRegistryEntry {
   /** Live MODEL_GENERATION span for this run (non-serializable) */
   modelSpan?: AIModelGenerationSpan;
   /**
-   * On resume, a fresh AGENT_RUN span is opened for the resumed segment (the
-   * original was ended as `suspended`). These override the frozen span IDs so
-   * post-resume steps nest under the resumed root and end it on completion.
+   * The live spans of the segment a resume or recovery opened in this process. Steps read the
+   * segment's pair from the request context and end these in place when they match it.
    */
   resumeAgentSpan?: Span<SpanType.AGENT_RUN>;
   resumeModelSpan?: AIModelGenerationSpan;
-  /** Exported forms of the resume spans, read by the workflow steps (same process). */
-  resumeAgentSpanData?: unknown;
-  resumeModelSpanData?: unknown;
   /** First-chunk clock of the resumed segment's spans; the originals' clock lives in the loop state. */
   resumeCompletionStartTime?: Date;
   /** Time to first token of the resumed segment's spans, kept the same way. */
@@ -1037,12 +1051,13 @@ export interface RunRegistryEntry {
   /** A late subscriber re-publishes the winning deadline error at most once per segment. */
   deadlineErrorRedelivered?: boolean;
   /**
-   * Whether this process has already subscribed to cross-process abort
-   * requests for the run. Set by `ensureRemoteAbortListener`, which every
-   * durable step calls on entry — the flag is what keeps a run's many steps
-   * from installing duplicate subscriptions.
+   * This process's subscription to cross-process abort requests for the run.
+   * Set by `ensureRemoteAbortListener`, which every durable step calls on
+   * entry; its presence keeps a run's many steps from installing duplicate
+   * subscriptions. `releaseRemoteAbortListener` detaches and clears it once
+   * the run reaches a final status.
    */
-  remoteAbortListenerInstalled?: boolean;
+  remoteAbortListener?: { detach(): Promise<void> };
   /**
    * Promise tracking the in-flight workflow execution (or resume) for this
    * run. Resolves once the workflow has fully settled (finished, errored,

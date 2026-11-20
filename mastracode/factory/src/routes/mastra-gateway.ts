@@ -9,8 +9,9 @@ const MASTRA_PROJECTS_URL = process.env.MASTRA_PROJECTS_URL || 'https://projects
 const STARTER_CREDIT_POOL = 'gateway_credits';
 
 /**
- * Provisions a Gateway project with a v1 key, which the live gateway accepts. Organization (v2) keys
- * aren't released yet, so Factory doesn't ask for one (the CLI does the same).
+ * Creates a Gateway key on the caller's organization. The platform decides which kind: a Gateway
+ * project with a v1 key, or an organization (v2) key for callers in the v2 rollout. Factory reads
+ * only the key from the response.
  */
 const GATEWAY_PROVISION_PATH = '/gateway/projects/provision';
 

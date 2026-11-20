@@ -18,6 +18,7 @@ import {
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 import { getAgentFromSystem } from './agents';
+import { matchesAuthorFilter, resolveAuthorFilter } from './authorship';
 import { handleError } from './error';
 
 async function listScorersFromSystem({
@@ -73,15 +74,19 @@ async function listScorersFromSystem({
 
   // Process code-defined agents
   for (const [_, agent] of Object.entries(agents)) {
+    // Hydrated stored agents are registered on Mastra too; they're handled (visibility-filtered) below.
+    if (agent.source === 'stored') continue;
     await processAgentScorers(agent);
   }
 
   // Process stored agents (database-backed agents)
   try {
     const editor = mastra.getEditor();
-    const storedAgentsResult = await editor?.agent.list();
+    const storedAgentsResult = await editor?.agent.list({ perPage: false });
     if (storedAgentsResult?.agents) {
+      const authorFilter = resolveAuthorFilter({ requestContext, resource: 'stored-agents' });
       for (const storedAgentConfig of storedAgentsResult.agents) {
+        if (!matchesAuthorFilter(storedAgentConfig, authorFilter)) continue;
         try {
           const agent = await editor?.agent.getById(storedAgentConfig.id);
           if (agent) {
@@ -295,13 +300,13 @@ export const LIST_SCORES_BY_ENTITY_ID_ROUTE = createRoute({
   description: 'Returns all scores for a specific entity (agent or workflow)',
   tags: ['Scoring'],
   requiresAuth: true,
-  handler: async ({ mastra, entityId, entityType, ...params }) => {
+  handler: async ({ mastra, requestContext, entityId, entityType, ...params }) => {
     try {
       const { page, perPage } = params;
       let entityIdToUse = entityId;
 
       if (entityType === 'AGENT') {
-        const agent = await getAgentFromSystem({ mastra, agentId: entityId });
+        const agent = await getAgentFromSystem({ mastra, agentId: entityId, requestContext, access: 'read' });
         entityIdToUse = agent.id;
       } else if (entityType === 'WORKFLOW') {
         const workflow = mastra.getWorkflowById(entityId);

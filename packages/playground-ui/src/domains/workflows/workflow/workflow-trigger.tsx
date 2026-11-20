@@ -1,5 +1,4 @@
 import type { WorkflowRunStatus } from '@mastra/core/workflows';
-import { Loader2 } from 'lucide-react';
 import { useState, useEffect, useContext, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { z } from 'zod/v4';
@@ -19,6 +18,7 @@ import { InitialWorkflowHeader } from './workflow-trigger-header';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Txt } from '@/ds/components/Txt';
+import { IconLoadingCircle } from '@/ds/icons/central/IconLoadingCircle';
 import { Icon } from '@/ds/icons/Icon';
 import { useLocalStorageState } from '@/hooks/use-local-storage-state';
 import { toast } from '@/utils/toast';
@@ -198,7 +198,7 @@ export function WorkflowTrigger({
         {isSuspendedSteps && isStreamingWorkflow && (
           <div className="-mt-5 flex items-center gap-2 border-b border-border bg-card px-5 py-2">
             <Icon>
-              <Loader2 className="animate-spin text-foreground" />
+              <IconLoadingCircle className="animate-spin text-foreground" />
             </Icon>
             <Txt>Resuming workflow</Txt>
           </div>

@@ -153,6 +153,10 @@ export {
   type DurableAgentStreamResult as StreamAdapterResult,
 } from './stream-adapter';
 
+// Detach an observer's fullStream subscription when its consumer stops reading,
+// shared with durable-agent integrations outside core
+export { detachFullStreamOnEnd } from './observe-full-stream';
+
 // Constants
 export {
   AGENT_STREAM_TOPIC,
@@ -168,7 +172,10 @@ export {
   requestAcknowledgedAbort,
   subscribeToAbortRequests,
   ensureRemoteAbortListener,
+  readRunDeadline,
+  RUN_DEADLINE_KEY,
 } from './abort-transport';
+export type { RunDeadline } from './abort-transport';
 
 // Types
 export type {
@@ -273,5 +280,7 @@ export { pruneAgentLoopSnapshot } from '../../loop/workflows/prune-snapshot';
 
 // Shared runtime outcome classification for external durable engines.
 export { endRunSpansWithError } from './run-registry';
+/** @internal The span pair a resumed or recovered execution reports under, shared with external durable engines. */
+export { carrySegmentSpans, liveSegmentSpan, segmentSpanData, type SegmentSpanData } from './segment-spans';
 /** @internal Runtime instrumentation helpers. */
 export { agentLoopTermination, executionFailureTermination } from '../../loop/shared/execution-outcome';

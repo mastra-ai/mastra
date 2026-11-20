@@ -1,11 +1,11 @@
 import { screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { listedRepository } from '../../../../e2e/ui/factory-projects';
 import { server } from '../../../../e2e/ui/msw-server';
-import { findPageHeader, renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
+import { findPageHeader, renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import type { PullRequestSubscription } from '../../domains/factory/services/githubSubscriptions';
 import { createAppRoutes } from '../../router';
 
@@ -16,10 +16,8 @@ const THREAD_ID = 'thread-1';
 const PROJECT_PATH = 'rhys-group1/factory-gitlab-primary';
 const MERGE_REQUEST_IID = 7;
 const MERGE_REQUEST_URL = `https://gitlab.com/${PROJECT_PATH}/-/merge_requests/${MERGE_REQUEST_IID}`;
-const MERGE_REQUEST_ACCESSIBLE_NAME = `Open open ${PROJECT_PATH} merge request ${MERGE_REQUEST_IID}`;
 const SUBSCRIBED_IID = 9;
 const SUBSCRIBED_URL = `https://gitlab.com/${PROJECT_PATH}/-/merge_requests/${SUBSCRIBED_IID}`;
-const SUBSCRIBED_ACCESSIBLE_NAME = `Open open ${PROJECT_PATH} merge request ${SUBSCRIBED_IID}`;
 const AC = `${TEST_BASE_URL}/api/agent-controller/code`;
 
 const workspaceSession = {
@@ -43,9 +41,10 @@ const subscribedMergeRequest: PullRequestSubscription = {
   pullRequestNumber: SUBSCRIBED_IID,
   status: 'open',
   url: SUBSCRIBED_URL,
+  updatedAt: '2026-09-20T00:00:00.000Z',
 };
 
-function createWireWorkItem(type: 'pull-request' | 'issue') {
+function createWireWorkItem(type: 'pull-request' | 'issue', metadata?: Record<string, unknown>) {
   return {
     id: `work-item-${type}`,
     orgId: 'org-1',
@@ -59,10 +58,10 @@ function createWireWorkItem(type: 'pull-request' | 'issue') {
     },
     parentWorkItemId: null,
     title: type === 'pull-request' ? 'Review the merge request link' : 'Track the merge request link',
-    stages: ['review'],
+    stages: [type === 'pull-request' ? 'pr-review' : 'execute'],
     stageHistory: [],
     sessions: {
-      [SESSION_ID]: {
+      [type === 'pull-request' ? 'review' : 'work']: {
         sessionId: SESSION_ID,
         branch: 'factory/item-1',
         threadId: THREAD_ID,
@@ -70,14 +69,15 @@ function createWireWorkItem(type: 'pull-request' | 'issue') {
       },
     },
     metadata:
-      type === 'pull-request'
+      metadata ??
+      (type === 'pull-request'
         ? {
             gitlabMergeRequestIid: MERGE_REQUEST_IID,
             gitlabProjectId: 86555418,
             gitlabHost: 'gitlab.com',
             state: 'open',
           }
-        : { identifier: `${PROJECT_PATH}#3`, state: 'opened' },
+        : { identifier: `${PROJECT_PATH}#3`, state: 'opened' }),
     revision: 1,
     createdAt: '2026-09-20T00:00:00.000Z',
     updatedAt: '2026-09-20T00:00:00.000Z',
@@ -100,13 +100,26 @@ function stubThreadRoute(workItem: ReturnType<typeof createWireWorkItem>, subscr
               listedRepository(REPO_ID, PROJECT_PATH, {
                 integrationId: 'gitlab',
                 branch: 'main',
-                sandboxWorkdir: '/local/app',
               }),
             ],
           },
         ],
       }),
     ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`, () =>
+      HttpResponse.json({ project: { id: FACTORY_ID, name: 'GitLab Factory', defaultModelId: 'openai/gpt-4o-mini' } }),
+    ),
+    http.get(
+      `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/feed-events`,
+      () =>
+        new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
+          headers: { 'content-type': 'text/event-stream' },
+        }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+      HttpResponse.json({ modelId: null, thinkingLevel: null }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/intake/config`, () => HttpResponse.json({ config: {} })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
       HttpResponse.json({ sessions: [workspaceSession] }),
     ),
@@ -140,6 +153,9 @@ function stubThreadRoute(workItem: ReturnType<typeof createWireWorkItem>, subscr
     http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, () =>
       HttpResponse.json({ workspacePath: `/ws/${SESSION_ID}`, root: '.artifacts', rootPath: '', entries: [] }),
     ),
+    http.get(`${TEST_BASE_URL}/web/workspace/changes`, () =>
+      HttpResponse.json({ workspacePath: SESSION_ID, available: true, changes: [] }),
+    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: [workItem] }),
     ),
@@ -148,6 +164,10 @@ function stubThreadRoute(workItem: ReturnType<typeof createWireWorkItem>, subscr
       githubSubscriptionRequests();
       return HttpResponse.json({ subscriptions: [] });
     }),
+    http.get(`${TEST_BASE_URL}/web/gitlab/issues/:issueId`, () => HttpResponse.json({ description: null })),
+    http.get(`${TEST_BASE_URL}/web/gitlab/projects/:repository/prs/:number`, () =>
+      HttpResponse.json({ description: null }),
+    ),
   );
   return { githubSubscriptionRequests };
 }
@@ -159,26 +179,42 @@ function renderThreadRoute() {
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
+async function findSessionPanel() {
+  const panel = await screen.findByTestId('workspace-files-card');
+  await within(panel).findByRole('region', { name: 'Card' });
+  return panel;
+}
+
+const linksTo = (container: HTMLElement, url: string) =>
+  within(container)
+    .queryAllByRole('link')
+    .filter(link => link.getAttribute('href') === url);
+
 describe('ThreadPage merge request link placement', () => {
+  // Wide enough to dock the panel beside the conversation.
+  beforeEach(() => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 1200, 800));
+  });
+  afterEach(() => vi.restoreAllMocks());
+
   describe('when the current Factory session reviews a GitLab merge request', () => {
-    it('shows the active review as an MR link in the header and asks GitLab, not GitHub, for subscriptions', async () => {
+    it('lists the reviewed and subscribed merge requests as MRs, asking GitLab, not GitHub, for subscriptions', async () => {
       const { githubSubscriptionRequests } = stubThreadRoute(createWireWorkItem('pull-request'), [
         subscribedMergeRequest,
       ]);
       renderThreadRoute();
 
-      const factorySession = await findPageHeader();
-      const composer = await screen.findByRole('region', { name: 'Thread composer' });
-      const activeReviewLink = await within(factorySession).findByRole('link', {
-        name: MERGE_REQUEST_ACCESSIBLE_NAME,
-      });
-      const subscribedLink = await within(factorySession).findByRole('link', { name: SUBSCRIBED_ACCESSIBLE_NAME });
-
-      expect(activeReviewLink).toHaveAttribute('href', MERGE_REQUEST_URL);
-      expect(activeReviewLink).toHaveTextContent(`MR !${MERGE_REQUEST_IID}`);
-      expect(subscribedLink).toHaveAttribute('href', SUBSCRIBED_URL);
-      expect(within(factorySession).queryAllByRole('link', { name: /pull request/ })).toHaveLength(0);
-      expect(within(composer).queryByRole('link', { name: MERGE_REQUEST_ACCESSIBLE_NAME })).not.toBeInTheDocument();
+      const panel = await findSessionPanel();
+      expect(within(panel).getByRole('link', { name: `Open MR !${MERGE_REQUEST_IID}` })).toHaveAttribute(
+        'href',
+        MERGE_REQUEST_URL,
+      );
+      expect(await within(panel).findByRole('link', { name: `Open MR !${SUBSCRIBED_IID}` })).toHaveAttribute(
+        'href',
+        SUBSCRIBED_URL,
+      );
+      expect(within(panel).queryAllByRole('link', { name: /PR #/ })).toHaveLength(0);
+      expect(linksTo(await findPageHeader(), MERGE_REQUEST_URL)).toHaveLength(0);
       expect(githubSubscriptionRequests).not.toHaveBeenCalled();
     });
 
@@ -186,31 +222,53 @@ describe('ThreadPage merge request link placement', () => {
       stubThreadRoute(createWireWorkItem('pull-request'), [
         { ...subscribedMergeRequest, pullRequestNumber: MERGE_REQUEST_IID, url: MERGE_REQUEST_URL },
       ]);
-      renderThreadRoute();
+      const { client } = renderThreadRoute();
 
-      const factorySession = await findPageHeader();
-      await within(factorySession).findByRole('link', { name: MERGE_REQUEST_ACCESSIBLE_NAME });
-      const mergeRequestLinks = within(factorySession)
-        .getAllByRole('link')
-        .filter(link => link.getAttribute('href') === MERGE_REQUEST_URL);
-
-      expect(mergeRequestLinks).toHaveLength(1);
+      const panel = await findSessionPanel();
+      await within(panel).findByRole('link', { name: `Open MR !${MERGE_REQUEST_IID}` });
+      await waitForMutationsIdle(client);
+      expect(linksTo(panel, MERGE_REQUEST_URL)).toHaveLength(1);
     });
   });
 
   describe('when the current Factory session is ordinary GitLab work', () => {
-    it('keeps the subscribed merge request in the composer status line', async () => {
+    it('links the issue by its number, without the project path the session already works in', async () => {
       const { githubSubscriptionRequests } = stubThreadRoute(createWireWorkItem('issue'), [subscribedMergeRequest]);
       renderThreadRoute();
 
-      const factorySession = await findPageHeader();
-      const composer = await screen.findByRole('region', { name: 'Thread composer' });
-      const link = await within(composer).findByRole('link', { name: SUBSCRIBED_ACCESSIBLE_NAME });
-
-      expect(link).toHaveAttribute('href', SUBSCRIBED_URL);
-      expect(link).toHaveTextContent(`MR !${SUBSCRIBED_IID}`);
-      expect(within(factorySession).queryByRole('link', { name: SUBSCRIBED_ACCESSIBLE_NAME })).not.toBeInTheDocument();
+      const panel = await findSessionPanel();
+      expect(within(panel).getByRole('link', { name: 'Open Issue #3' })).toHaveAttribute(
+        'href',
+        `https://gitlab.com/${PROJECT_PATH}/-/issues/3`,
+      );
+      expect(within(panel).queryByText(`${PROJECT_PATH}#3`, { exact: false })).not.toBeInTheDocument();
+      expect(within(panel).getByRole('region', { name: 'Workspace' })).toHaveTextContent(PROJECT_PATH);
+      const mergeRequest = await within(panel).findByRole('link', { name: `Open MR !${SUBSCRIBED_IID}` });
+      expect(mergeRequest).toHaveAttribute('href', SUBSCRIBED_URL);
+      expect(within(panel).getByRole('heading', { name: 'Merge requests 1' })).toBeInTheDocument();
+      expect(linksTo(await screen.findByRole('region', { name: 'Thread composer' }), SUBSCRIBED_URL)).toHaveLength(0);
       expect(githubSubscriptionRequests).not.toHaveBeenCalled();
+    });
+
+    it('names the issue by its GitLab number when the card carries no project reference', async () => {
+      stubThreadRoute(createWireWorkItem('issue', { gitlabIssueIid: 3, state: 'opened' }), []);
+      renderThreadRoute();
+
+      const panel = await findSessionPanel();
+      expect(within(panel).getByRole('link', { name: 'Open Issue #3' })).toHaveAttribute(
+        'href',
+        `https://gitlab.com/${PROJECT_PATH}/-/issues/3`,
+      );
+    });
+
+    it('says the merge requests could not load, never calling them pull requests', async () => {
+      stubThreadRoute(createWireWorkItem('issue'), []);
+      server.use(http.get(`${TEST_BASE_URL}/web/gitlab/subscriptions`, () => new HttpResponse(null, { status: 500 })));
+      renderThreadRoute();
+
+      const panel = await findSessionPanel();
+      expect(await within(panel).findByText("Couldn't load merge requests.")).toBeInTheDocument();
+      expect(within(panel).queryByText(/pull request/i)).not.toBeInTheDocument();
     });
   });
 });

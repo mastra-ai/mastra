@@ -1,9 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Maximize2, Minimize2 } from 'lucide-react';
 import { CollapsibleBox } from './collapsible-box';
 import { useCollapsibleBox } from './use-collapsible-box';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
+import { IconExpand45 } from '@/ds/icons/central/IconExpand45';
+import { IconMinimize45 } from '@/ds/icons/central/IconMinimize45';
 
 function Demo({ paragraphs, collapsedHeight }: { paragraphs: number; collapsedHeight?: number }) {
   const box = useCollapsibleBox({ collapsedHeight });
@@ -17,7 +18,7 @@ function Demo({ paragraphs, collapsedHeight }: { paragraphs: number; collapsedHe
           <Button
             variant="ghost"
             size="sm"
-            icon={box.isExpanded ? <Minimize2 /> : <Maximize2 />}
+            icon={box.isExpanded ? <IconMinimize45 /> : <IconExpand45 />}
             onClick={box.toggleExpanded}
           >
             {box.isExpanded ? 'Collapse' : 'Expand'}

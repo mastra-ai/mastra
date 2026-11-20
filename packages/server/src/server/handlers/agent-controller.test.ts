@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
 import { Mastra } from '@mastra/core/mastra';
@@ -9,6 +11,8 @@ import { z } from 'zod';
 
 import { MASTRA_USER_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
+import { redactStreamChunk } from '../server-adapter/redact';
+import { serializeStreamChunk } from '../server-adapter/serialize';
 import {
   LIST_AGENT_CONTROLLERS_ROUTE,
   CREATE_AGENT_CONTROLLER_SESSION_ROUTE,
@@ -1196,6 +1200,52 @@ describe('agent-controller routes', () => {
       expect([first.value, second.value]).toEqual([{ type: 'agent_start' }, { type: 'agent_end' }]);
     });
 
+    it('opens a displayState=false stream on the message in flight, then streams its deltas', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({
+        resourceId: 'user-late-no-snapshots',
+        id: 'user-late-no-snapshots',
+        ownerId: 'code',
+      });
+      const message = {
+        id: 'assistant-in-flight',
+        role: 'assistant',
+        createdAt: new Date('2026-01-02T03:04:05.000Z'),
+        content: { format: 2, parts: [{ type: 'text', text: '' }] },
+      } as any;
+      session.emit({ type: 'agent_start' });
+      session.emit({ type: 'message_start', message });
+      session.emit({ type: 'message_update', id: message.id, event: { type: 'text-delta', delta: 'so far' } });
+
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-late-no-snapshots',
+        displayState: false,
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+      const reader = stream.getReader();
+      session.emit({ type: 'message_update', id: message.id, event: { type: 'text-delta', delta: ' and on' } });
+      const frames: any[] = [];
+      while (frames.length < 2) {
+        const { value } = await reader.read();
+        if (value && typeof value === 'object') frames.push(value);
+      }
+      await reader.cancel();
+
+      expect(frames).toEqual([
+        {
+          type: 'message_start',
+          message: expect.objectContaining({
+            id: 'assistant-in-flight',
+            content: expect.objectContaining({ parts: [{ type: 'text', text: 'so far' }] }),
+          }),
+        },
+        { type: 'message_update', id: 'assistant-in-flight', event: { type: 'text-delta', delta: ' and on' } },
+      ]);
+    });
+
     // The adapter can hand the route a signal that aborted while earlier middleware ran. Without checking
     // `aborted` up front the session subscription and its 25 s heartbeat stay alive until something cancels the
     // stream, which a client that already left never does. (#28480)
@@ -1220,7 +1270,8 @@ describe('agent-controller routes', () => {
       const frames: unknown[] = [];
       for (let next = await reader.read(); !next.done; next = await reader.read()) frames.push(next.value);
 
-      expect(frames.map(frame => (frame as { type: string }).type)).toEqual(['display_state_changed']);
+      // Frames still waiting for a client that is gone are discarded with it.
+      expect(frames).toEqual([]);
     });
 
     it('still sends live display state changes by default', async () => {
@@ -1557,6 +1608,471 @@ describe('agent-controller routes', () => {
       expect(wire.displayState.pendingApprovals['call-2']).toMatchObject({
         toolName: 'edit_file',
         args: { path: 'b.ts' },
+      });
+    });
+
+    describe('display-state frames on the wire', () => {
+      async function openStream(sessionId: string) {
+        const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          sessionId,
+          abortSignal: new AbortController().signal,
+        } as any)) as ReadableStream<unknown>;
+        return stream.getReader();
+      }
+
+      /**
+       * Drain a stream the way a server adapter writes it (redact, serialize, then
+       * parsed back as a client sees it), through the snapshot that follows `agent_end`.
+       */
+      async function readWire(reader: ReadableStreamDefaultReader<unknown>): Promise<any[]> {
+        const frames: any[] = [];
+        let ended = false;
+        for (let next = await reader.read(); !next.done; next = await reader.read()) {
+          if (typeof next.value === 'string') continue;
+          const serialized = serializeStreamChunk(redactStreamChunk(next.value as any));
+          if (!serialized.ok) throw serialized.error;
+          const frame = JSON.parse(serialized.json);
+          frames.push(frame);
+          if (ended && frame.type === 'display_state_changed') break;
+          if (frame.type === 'agent_end') ended = true;
+        }
+        await reader.cancel();
+        return frames;
+      }
+
+      /** The display state a client renders right after the `nth` frame of `type`. */
+      function displayAfter(frames: any[], type: string, nth = 0) {
+        let seen = -1;
+        for (let i = 0; i < frames.length; i++) {
+          if (frames[i].type === type && ++seen === nth) {
+            return frames.slice(i + 1).find(frame => frame.type === 'display_state_changed')!.displayState;
+          }
+        }
+        throw new Error(`no ${type} frame #${nth}`);
+      }
+
+      // A client that reads slower than the session emits has frames queued in
+      // its stream. The reducer keeps updating the live display state in place
+      // (tool status and results, input buffers, file operations), so a queued
+      // frame must carry the state from when it was emitted, not a later one.
+      it('a slow client still sees each step of a turn, not the state from after later steps', async () => {
+        const controller = mastra.getAgentController('code')!;
+        await controller.init();
+        const session = await controller.createSession({ resourceId: 'user-slow', id: 'user-slow', ownerId: 'code' });
+        const reader = await openStream('user-slow');
+
+        session.emit({ type: 'agent_start' });
+        session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'write_file', args: { path: 'a.ts' } });
+        session.emit({
+          type: 'message_start',
+          message: {
+            id: 'assistant-slow',
+            role: 'assistant',
+            createdAt: new Date('2026-01-02T03:04:05.000Z'),
+            content: {
+              format: 2,
+              parts: [
+                { type: 'text', text: '' },
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    state: 'call',
+                    toolCallId: 'call-1',
+                    toolName: 'write_file',
+                    args: { path: 'a.ts' },
+                  },
+                },
+              ],
+            },
+          } as any,
+        });
+        session.emit({ type: 'tool_end', toolCallId: 'call-1', result: { written: true }, isError: false });
+        session.emit({ type: 'tool_input_start', toolCallId: 'call-2', toolName: 'write_file' });
+        session.emit({ type: 'tool_input_delta', toolCallId: 'call-2', argsTextDelta: '{"path":' });
+        session.emit({ type: 'tool_input_end', toolCallId: 'call-2' });
+        session.emit({ type: 'tool_start', toolCallId: 'call-2', toolName: 'write_file', args: { path: 'a.ts' } });
+        session.emit({ type: 'tool_end', toolCallId: 'call-2', result: { written: true }, isError: false });
+        session.emit({ type: 'agent_end', reason: 'complete' });
+
+        const frames = await readWire(reader);
+
+        expect(displayAfter(frames, 'tool_start').activeTools['call-1']).toEqual({
+          name: 'write_file',
+          args: { path: 'a.ts' },
+          status: 'running',
+        });
+        expect(displayAfter(frames, 'message_start').currentMessage).toEqual({
+          id: 'assistant-slow',
+          role: 'assistant',
+          createdAt: '2026-01-02T03:04:05.000Z',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: '' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'write_file', args: { path: 'a.ts' } },
+              },
+            ],
+          },
+        });
+        const afterFirstWrite = displayAfter(frames, 'tool_end');
+        expect(afterFirstWrite.activeTools['call-1']).toMatchObject({ status: 'completed', result: { written: true } });
+        expect(afterFirstWrite.modifiedFiles['a.ts'].operations).toEqual(['write_file']);
+        expect(displayAfter(frames, 'tool_input_start').toolInputBuffers['call-2']).toEqual({
+          text: '',
+          toolName: 'write_file',
+        });
+        expect(displayAfter(frames, 'tool_input_delta').toolInputBuffers['call-2'].text).toBe('{"path":');
+        expect(displayAfter(frames, 'tool_end', 1).modifiedFiles['a.ts'].operations).toEqual([
+          'write_file',
+          'write_file',
+        ]);
+        expect(displayAfter(frames, 'agent_end').isRunning).toBe(false);
+      });
+
+      it('every client of a session gets the same frames, and only that session state', async () => {
+        const controller = mastra.getAgentController('code')!;
+        await controller.init();
+        const sessionA = await controller.createSession({
+          resourceId: 'user-fan-a',
+          id: 'user-fan-a',
+          ownerId: 'code',
+        });
+        const sessionB = await controller.createSession({
+          resourceId: 'user-fan-b',
+          id: 'user-fan-b',
+          ownerId: 'code',
+        });
+        const readersA = [await openStream('user-fan-a'), await openStream('user-fan-a')];
+        const readerB = await openStream('user-fan-b');
+
+        for (const [session, tool] of [
+          [sessionA, 'read_file'],
+          [sessionB, 'grep'],
+        ] as const) {
+          session.emit({ type: 'agent_start' });
+          session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: tool, args: { query: tool } });
+          session.emit({ type: 'tool_end', toolCallId: 'call-1', result: `${tool} output`, isError: false });
+          session.emit({ type: 'agent_end', reason: 'complete' });
+        }
+
+        const [framesA1, framesA2, framesB] = await Promise.all([...readersA, readerB].map(readWire));
+
+        expect(framesA2).toEqual(framesA1);
+        expect(displayAfter(framesA1, 'tool_end').activeTools['call-1']).toMatchObject({
+          name: 'read_file',
+          result: 'read_file output',
+        });
+        expect(displayAfter(framesB, 'tool_end').activeTools['call-1']).toMatchObject({
+          name: 'grep',
+          result: 'grep output',
+        });
+      });
+
+      // Tool results are often parsed JSON from files or web pages, which can
+      // carry an own `__proto__` key; the client must still receive it.
+      it('a tool result with a __proto__ key reaches the client unchanged', async () => {
+        const controller = mastra.getAgentController('code')!;
+        await controller.init();
+        const session = await controller.createSession({ resourceId: 'user-proto', id: 'user-proto', ownerId: 'code' });
+        const reader = await openStream('user-proto');
+
+        const resultJson = '{"before":1,"__proto__":{"injected":true},"after":2}';
+        session.emit({ type: 'agent_start' });
+        session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'read_json', args: { path: 'a.json' } });
+        session.emit({ type: 'tool_end', toolCallId: 'call-1', result: JSON.parse(resultJson), isError: false });
+        session.emit({ type: 'agent_end', reason: 'complete' });
+
+        const frames = await readWire(reader);
+        const toolEnd = frames.findIndex(frame => frame.type === 'tool_end');
+        const snapshot = frames.slice(toolEnd + 1).find(frame => frame.type === 'display_state_changed')!;
+        const wire = serializeStreamChunk(snapshot);
+        expect(wire.ok && wire.json).toContain(`"result":${resultJson}`);
+      });
+
+      // `JSON.stringify` unwraps boxed numbers, strings and booleans, so the
+      // display snapshot must agree with the `tool_end` event before it.
+      it('a tool result holding boxed primitives reads the same in the event and the display state', async () => {
+        const controller = mastra.getAgentController('code')!;
+        await controller.init();
+        const session = await controller.createSession({ resourceId: 'user-boxed', id: 'user-boxed', ownerId: 'code' });
+        const reader = await openStream('user-boxed');
+
+        const result = { count: new Number(7), label: new String('seven'), done: new Boolean(false) };
+        session.emit({ type: 'agent_start' });
+        session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'count', args: {} });
+        session.emit({ type: 'tool_end', toolCallId: 'call-1', result, isError: false });
+        session.emit({ type: 'agent_end', reason: 'complete' });
+
+        const frames = await readWire(reader);
+        const toolEnd = frames.find(frame => frame.type === 'tool_end')!;
+        expect(toolEnd.result).toEqual({ count: 7, label: 'seven', done: false });
+        expect(displayAfter(frames, 'tool_end').activeTools['call-1'].result).toEqual(toolEnd.result);
+      });
+
+      it('re-emitting a held display_state_changed event sends the state as it is now', async () => {
+        const controller = mastra.getAgentController('code')!;
+        await controller.init();
+        const session = await controller.createSession({ resourceId: 'user-held', id: 'user-held', ownerId: 'code' });
+        // Both clients keep up, so every snapshot reaches them.
+        const wires = Promise.all([await openStream('user-held'), await openStream('user-held')].map(readWire));
+
+        session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'write_file', args: { path: 'a.ts' } });
+        session.emit({ type: 'tool_end', toolCallId: 'call-1', result: 'ok', isError: false });
+        const held = { type: 'display_state_changed', displayState: session.displayState.get() } as const;
+        session.emit(held);
+        await new Promise(resolve => setTimeout(resolve, 0));
+        session.displayState.clearModifiedFiles();
+        session.emit(held);
+        session.emit({ type: 'agent_end', reason: 'complete' });
+
+        for (const frames of await wires) {
+          const snapshots = frames.filter(frame => frame.type === 'display_state_changed');
+          // Seed, tool_start, tool_end, the held event twice, agent_end.
+          expect(snapshots.map(frame => Object.keys(frame.displayState.modifiedFiles))).toEqual([
+            [],
+            [],
+            ['a.ts'],
+            ['a.ts'],
+            [],
+            [],
+          ]);
+        }
+      });
+    });
+
+    // A tab whose client reads slower than the session emits (a laptop asleep,
+    // a bad network, a dead connection not yet detected, or a server too busy to
+    // write) used to hold every frame in memory, each snapshot a full copy of the
+    // display state. Frames now wait in a backlog the route bounds.
+    describe('a client that reads slower than the session emits', () => {
+      // Real runs emit over many event-loop turns, not in one synchronous loop.
+      const nextTurn = () => new Promise(resolve => setImmediate(resolve));
+      const wire = (frame: unknown) => {
+        const serialized = serializeStreamChunk(redactStreamChunk(frame as any));
+        if (!serialized.ok) throw serialized.error;
+        return serialized.json;
+      };
+
+      async function openSession(id: string) {
+        const controller = mastra.getAgentController('code')!;
+        await controller.init();
+        const session = await controller.createSession({ resourceId: id, id, ownerId: 'code' });
+        const open = async () => {
+          const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+            mastra,
+            controllerId: 'code',
+            sessionId: id,
+            abortSignal: new AbortController().signal,
+          } as any)) as ReadableStream<unknown>;
+          return stream.getReader();
+        };
+        return { session, open };
+      }
+
+      function recordMetrics() {
+        const emitted: { name: string; value: number; labels?: Record<string, string> }[] = [];
+        vi.spyOn(mastra, 'metrics', 'get').mockReturnValue({
+          emit: (name: string, value: number, labels?: Record<string, string>) => emitted.push({ name, value, labels }),
+        } as any);
+        return emitted;
+      }
+
+      it('a tab that stops reading holds one snapshot, not one per update, and still gets every event in order', async () => {
+        const { session, open } = await openSession('user-stalled');
+        const metrics = recordMetrics();
+        const reader = await open();
+        let snapshotsSent = 1; // the seed
+        session.subscribe(event => {
+          if (event.type === 'display_state_changed') snapshotsSent++;
+        });
+
+        const emitted: string[] = [];
+        for (let i = 0; i < 500; i++) {
+          session.emit({
+            type: 'tool_start',
+            toolCallId: `call-${i}`,
+            toolName: 'read_file',
+            args: { path: `${i}.ts` },
+          });
+          session.emit({ type: 'tool_end', toolCallId: `call-${i}`, result: `contents of ${i}.ts`, isError: false });
+          emitted.push(`tool_start:call-${i}`, `tool_end:call-${i}`);
+          await nextTurn();
+        }
+
+        // The tab wakes up and reads everything it was sent.
+        const frames: any[] = [];
+        let last: any;
+        do {
+          const { done, value } = await reader.read();
+          expect(done).toBe(false);
+          last = value;
+          if (typeof last !== 'string') frames.push(last);
+        } while (
+          !(
+            last?.type === 'display_state_changed' &&
+            frames.some(f => f.type === 'tool_end' && f.toolCallId === 'call-499')
+          )
+        );
+        await reader.cancel();
+
+        const snapshots = frames.filter(frame => frame.type === 'display_state_changed');
+        // Only the snapshots of the last turn were still waiting, not one per update.
+        expect(snapshots.length).toBeLessThanOrEqual(2);
+        expect(
+          frames.filter(frame => frame.type.startsWith('tool_')).map(frame => `${frame.type}:${frame.toolCallId}`),
+        ).toEqual(emitted);
+        // The last snapshot is the state now, as a tab connecting now is seeded with it.
+        const fresh = await open();
+        const seed = (await fresh.read()).value;
+        await fresh.cancel();
+        expect(wire(frames.at(-1))).toBe(wire(seed));
+        expect(metrics).toContainEqual({
+          name: 'mastra_agent_controller_sse_snapshots_dropped_total',
+          value: snapshotsSent - snapshots.length,
+          labels: { controllerId: 'code' },
+        });
+      });
+
+      it('a tab that keeps up gets every frame the session sent, byte for byte', async () => {
+        const { session, open } = await openSession('user-keeps-up');
+        const reader = await open();
+
+        // What the route sent before it bounded the backlog: every event as it
+        // was dispatched, display-state Maps as records.
+        const wireEvent = (event: any) =>
+          event.type === 'display_state_changed'
+            ? {
+                ...event,
+                displayState: Object.fromEntries(
+                  Object.entries(event.displayState).map(([key, value]) => [
+                    key,
+                    value instanceof Map ? Object.fromEntries(value) : value,
+                  ]),
+                ),
+              }
+            : event;
+        const expected = [wire(wireEvent({ type: 'display_state_changed', displayState: session.displayState.get() }))];
+        session.subscribe(event => {
+          expected.push(wire(wireEvent(event)));
+        });
+
+        const received: string[] = [];
+        const reading = (async () => {
+          for (let next = await reader.read(); !next.done; next = await reader.read()) {
+            if (typeof next.value !== 'string') received.push(wire(next.value));
+          }
+        })();
+
+        // A turn with streamed text and, in single synchronous bursts, a tool
+        // call that starts and ends and a run that ends with its message.
+        const message = {
+          id: 'assistant-1',
+          role: 'assistant',
+          createdAt: new Date('2026-01-02T03:04:05.000Z'),
+          content: { format: 2, parts: [{ type: 'text', text: '' }] },
+        } as any;
+        session.emit({ type: 'agent_start' });
+        session.emit({ type: 'message_start', message });
+        for (let i = 0; i < 20; i++) {
+          session.emit({ type: 'message_update', id: message.id, event: { type: 'text-delta', delta: `word ${i} ` } });
+          await new Promise(resolve => setTimeout(resolve, i % 4 === 0 ? 20 : 0));
+        }
+        session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'grep', args: { query: 'needle' } });
+        session.emit({ type: 'tool_end', toolCallId: 'call-1', result: { matches: 3 }, isError: false });
+        await nextTurn();
+        session.emit({ type: 'message_end', id: message.id });
+        session.emit({ type: 'agent_end', reason: 'complete' });
+        await new Promise(resolve => setTimeout(resolve, 30));
+        await reader.cancel();
+        await reading;
+
+        const hash = (frames: string[]) => createHash('sha256').update(frames.join('\n')).digest('hex');
+        expect(received).toHaveLength(expected.length);
+        expect(hash(received)).toBe(hash(expected));
+      });
+
+      it('a tab too far behind is closed, and its reconnect starts from the current state', async () => {
+        const { session, open } = await openSession('user-far-behind');
+        const metrics = recordMetrics();
+        const reader = await open();
+
+        // A long run the tab never reads: 5,200 events, none of which are dropped.
+        for (let i = 0; i < 2_600; i++) {
+          session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'bash', args: { step: i } });
+          session.emit({ type: 'tool_end', toolCallId: 'call-1', result: `step ${i}`, isError: false });
+          await nextTurn();
+        }
+
+        // The backlog was discarded and the stream ended, so the client reconnects.
+        expect(await reader.read()).toEqual({ done: true, value: undefined });
+        expect(metrics).toContainEqual({
+          name: 'mastra_agent_controller_sse_slow_client_closes_total',
+          value: 1,
+          labels: { controllerId: 'code', reason: 'max_pending' },
+        });
+
+        session.emit({ type: 'tool_start', toolCallId: 'call-2', toolName: 'bash', args: { step: 'after' } });
+        const reconnected = await open();
+        const seed = (await reconnected.read()).value as any;
+        await reconnected.cancel();
+        expect(seed.type).toBe('display_state_changed');
+        expect(seed.displayState.activeTools['call-1']).toMatchObject({ status: 'completed', result: 'step 2599' });
+        expect(seed.displayState.activeTools['call-2']).toMatchObject({ status: 'running' });
+      });
+
+      it('a tab that stopped reading over a minute ago is closed even when the session goes quiet', async () => {
+        const { session, open } = await openSession('user-asleep');
+        const metrics = recordMetrics();
+        vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+        try {
+          const reader = await open();
+          session.emit({ type: 'agent_start' });
+
+          // Heartbeats find the same frames still waiting at 25 s and 50 s.
+          vi.advanceTimersByTime(50_000);
+          expect(metrics).toEqual([]);
+          vi.advanceTimersByTime(25_000);
+
+          expect(metrics).toContainEqual({
+            name: 'mastra_agent_controller_sse_slow_client_closes_total',
+            value: 1,
+            labels: { controllerId: 'code', reason: 'max_wait' },
+          });
+          expect(await reader.read()).toEqual({ done: true, value: undefined });
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      // The age cap measures the oldest frame still waiting. A snapshot that a
+      // newer one replaced must not count once the frames before it are read.
+      it('a tab that is still reading is not closed for a snapshot that was replaced', async () => {
+        const { session, open } = await openSession('user-reading-slowly');
+        const metrics = recordMetrics();
+        vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+        try {
+          const reader = await open();
+          expect(((await reader.read()).value as any).type).toBe('display_state_changed');
+          session.emit({ type: 'agent_start' });
+          await nextTurn();
+          vi.advanceTimersByTime(50_000);
+          // Its snapshot replaces the one queued with agent_start 50 s ago.
+          session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'bash', args: {} });
+          expect(((await reader.read()).value as any).type).toBe('agent_start');
+
+          // What is waiting now has waited 25 s.
+          vi.advanceTimersByTime(25_000);
+
+          expect(metrics.filter(m => m.name === 'mastra_agent_controller_sse_slow_client_closes_total')).toEqual([]);
+          expect(((await reader.read()).value as any).type).toBe('tool_start');
+          await reader.cancel();
+        } finally {
+          vi.useRealTimers();
+        }
       });
     });
   });
@@ -2102,6 +2618,8 @@ describe('agent-controller routes', () => {
         .getAgentController('code')!
         .createSession({ resourceId: 'user-limit', id: 'user-limit', ownerId: 'code' });
       for (let i = 0; i < 4; i++) await session.thread.create({ title: `t${i}` });
+      const memory = (await mastra.getStorage()!.getStore('memory'))!;
+      const listThreads = vi.spyOn(memory, 'listThreads');
 
       const res = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
         mastra,
@@ -2118,6 +2636,28 @@ describe('agent-controller routes', () => {
       );
       const times = res.threads.map(t => Date.parse(t.updatedAt!));
       expect(times[0]).toBeGreaterThanOrEqual(times[1]!);
+      // In-memory storage scans once instead of materializing the whole map for each page.
+      expect(listThreads).toHaveBeenCalledTimes(1);
+      expect(listThreads.mock.calls[0]?.[0]).toMatchObject({
+        perPage: false,
+        orderBy: { field: 'updatedAt', direction: 'DESC' },
+      });
+
+      const fractional = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-limit',
+        limit: 1.2,
+      } as any)) as { threads: { id: string }[] };
+      expect(fractional.threads.length).toBe(1);
+
+      const subOne = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-limit',
+        limit: 0.2,
+      } as any)) as { threads: { id: string }[] };
+      expect(subOne.threads).toEqual([]);
     });
 
     it('scopes the result to `tags` so worktrees sharing a resourceId stay isolated', async () => {

@@ -1,4 +1,4 @@
-import type { WorkspaceChangesScope } from './types';
+import type { BoardPhasesRequest, SessionRowsRequest, WorkspaceChangesScope } from './types';
 
 /**
  * Stable, scoped React Query keys for the settings API.
@@ -23,6 +23,17 @@ export interface AvailableModelsFilter {
   sessionId?: string;
   resourceId?: string;
   threadId?: string;
+}
+
+/**
+ * Whether a `boardPhasesView` key is of a view that searches and filters nothing: the one view
+ * every card of its board is in.
+ */
+export function isUnnarrowedBoardView(boardPhasesViewKey: readonly unknown[]): boolean {
+  const view = boardPhasesViewKey.at(-2);
+  if (typeof view !== 'object' || view === null || !('q' in view) || !('filters' in view)) return false;
+  const { q, filters } = view;
+  return q === '' && typeof filters === 'object' && filters !== null && Object.keys(filters).length === 0;
 }
 
 export const queryKeys = {
@@ -51,24 +62,16 @@ export const queryKeys = {
   githubStatus: () => ['github', 'status'] as const,
   githubPat: () => ['github', 'pat'] as const,
   githubRepos: (query: string | undefined) => ['github', 'repos', query ?? null] as const,
-  githubIssues: (projectRepositoryIds: readonly string[], label?: string) =>
-    ['github', 'issues', projectRepositoryIds, label ?? null] as const,
   githubIssue: (githubProjectId: string | undefined, number: number | undefined) =>
     ['github', 'issue', githubProjectId ?? null, number ?? null] as const,
-  githubPulls: (projectRepositoryIds: readonly string[]) => ['github', 'prs', projectRepositoryIds] as const,
   githubPull: (githubProjectId: string | undefined, number: number | undefined) =>
     ['github', 'pr', githubProjectId ?? null, number ?? null] as const,
   repositorySettings: (projectRepositoryId: string | undefined) =>
     ['source-control', 'repository-settings', projectRepositoryId ?? null] as const,
   gitlabStatus: (baseUrl: string) => ['gitlab', 'status', baseUrl] as const,
   gitlabProjects: (baseUrl: string) => ['gitlab', 'projects', baseUrl] as const,
-  gitlabIssuesAll: (baseUrl: string) => ['gitlab', 'issues', baseUrl] as const,
-  gitlabIssues: (baseUrl: string, factoryProjectId: string | undefined) =>
-    [...queryKeys.gitlabIssuesAll(baseUrl), factoryProjectId ?? null] as const,
   gitlabIssue: (baseUrl: string, factoryProjectId: string | undefined, issueId: string | undefined) =>
     ['gitlab', 'issue', baseUrl, factoryProjectId ?? null, issueId ?? null] as const,
-  gitlabPulls: (baseUrl: string, factoryProjectId: string | undefined, projectRepositoryId: string | undefined) =>
-    ['gitlab', 'prs', baseUrl, factoryProjectId ?? null, projectRepositoryId ?? null] as const,
   gitlabPull: (
     baseUrl: string,
     factoryProjectId: string | undefined,
@@ -78,35 +81,73 @@ export const queryKeys = {
   linearStatus: () => ['linear', 'status'] as const,
   linearProjects: () => ['linear', 'projects'] as const,
   linearTeams: () => ['linear', 'teams'] as const,
-  linearIssuesAll: () => ['linear', 'issues'] as const,
-  linearIssues: (githubProjectId: string | undefined) =>
-    [...queryKeys.linearIssuesAll(), githubProjectId ?? null] as const,
   linearIssue: (factoryProjectId: string | undefined, identifier: string | undefined, issueId: string | undefined) =>
     ['linear', 'issue', factoryProjectId ?? null, identifier ?? null, issueId ?? null] as const,
   jiraStatus: () => ['jira', 'status'] as const,
   platformConnections: (provider: string) => ['platform-connections', provider] as const,
   connectTools: () => ['connect-tools'] as const,
+  connectToolList: () => ['connect-tools', 'tools'] as const,
   jiraProjects: () => ['jira', 'projects'] as const,
-  jiraIssuesAll: () => ['jira', 'issues'] as const,
-  jiraIssues: (factoryProjectId: string | undefined) =>
-    [...queryKeys.jiraIssuesAll(), factoryProjectId ?? null] as const,
   jiraIssue: (factoryProjectId: string | undefined, identifier: string | undefined, issueRef: string | undefined) =>
     ['jira', 'issue', factoryProjectId ?? null, identifier ?? null, issueRef ?? null] as const,
   incidentioSources: () => ['incidentio', 'sources'] as const,
   incidentioStatus: () => ['incidentio', 'status'] as const,
-  incidentioIssuesAll: () => ['incidentio', 'issues'] as const,
-  incidentioIssues: (factoryProjectId: string | undefined) =>
-    [...queryKeys.incidentioIssuesAll(), factoryProjectId ?? null] as const,
   incidentioIssue: (factoryProjectId: string | undefined, issueRef: string | undefined) =>
     ['incidentio', 'issue', factoryProjectId ?? null, issueRef ?? null] as const,
   intakeConfig: () => ['intake', 'config'] as const,
   intakeBindings: () => ['intake', 'bindings'] as const,
   intakeRoutes: (factoryProjectId: string | undefined) => ['intake', 'routes', factoryProjectId ?? null] as const,
+  // Under the routes' key: a rule or order change refreshes the counts.
+  intakeDryRun: (factoryProjectId: string | undefined) =>
+    [...queryKeys.intakeRoutes(factoryProjectId), 'dry-run'] as const,
+  intakeOrder: (factoryProjectId: string | undefined) => ['intake', 'order', factoryProjectId ?? null] as const,
+  // Under the routes' key: a rule change refreshes its skips.
+  intakeSkipped: (factoryProjectId: string | undefined) =>
+    [...queryKeys.intakeRoutes(factoryProjectId), 'skipped'] as const,
+  intakeNotRouted: (factoryProjectId: string | undefined) =>
+    ['intake', 'not-routed', factoryProjectId ?? null] as const,
   channelAccounts: () => ['channel-accounts'] as const,
+  // Not under the board's key: card rewrites there expect a board snapshot.
+  workItemSessionRepository: (
+    factoryProjectId: string | undefined,
+    workItemId: string | undefined,
+    cardUpdatedAt: string | undefined,
+  ) =>
+    [
+      'factory',
+      'work-item-session-repository',
+      factoryProjectId ?? null,
+      workItemId ?? null,
+      cardUpdatedAt ?? null,
+    ] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
-  // Under the board's key: whatever refreshes or rewrites the board's cards reaches a session's too.
+  // Under the board's key: whatever refreshes or rewrites the board's cards reaches these too.
   sessionWorkItems: (factoryProjectId: string | undefined, sessionId: string | undefined) =>
     [...queryKeys.workItems(factoryProjectId), 'session', sessionId ?? null] as const,
+  workItem: (factoryProjectId: string | undefined, workItemId: string | undefined) =>
+    [...queryKeys.workItems(factoryProjectId), 'card', workItemId ?? null] as const,
+  workItemsWithSessions: (factoryProjectId: string | undefined) =>
+    [...queryKeys.workItems(factoryProjectId), 'sessions'] as const,
+  unstartedWorkItems: (factoryProjectId: string | undefined, search: string) =>
+    [...queryKeys.workItems(factoryProjectId), 'unstarted', search] as const,
+  /** Every view of one board the tab holds. */
+  boardPhases: (factoryProjectId: string | undefined, board: string) =>
+    [...queryKeys.workItems(factoryProjectId), 'phases', board] as const,
+  /** One view of a board; `windows` is how deep each of its phases is listed. */
+  boardPhasesView: (factoryProjectId: string | undefined, { board, windows, ...view }: BoardPhasesRequest) =>
+    [...queryKeys.boardPhases(factoryProjectId, board), view, windows] as const,
+  // Outside the board's key: these hold counts and dates, not cards, so a rewrite of the cached cards must not reach them.
+  boardFacts: (factoryProjectId: string | undefined) => ['factory', 'board-facts', factoryProjectId ?? null] as const,
+  workItemStarters: (factoryProjectId: string | undefined) =>
+    [...queryKeys.boardFacts(factoryProjectId), 'starters'] as const,
+  workItemActivity: (factoryProjectId: string | undefined, depth: string) =>
+    [...queryKeys.boardFacts(factoryProjectId), 'activity', depth] as const,
+  workItemFilterOptions: (factoryProjectId: string | undefined) =>
+    [...queryKeys.boardFacts(factoryProjectId), 'filter-options'] as const,
+  // Apart from a session page's read of the same route, so the feed refreshes only the sidebar's.
+  sidebarPullRequestSubscriptionsAll: () => ['sidebar-pull-request-subscriptions'] as const,
+  sidebarPullRequestSubscriptions: (provider: string, sessionId: string, threadId: string) =>
+    [...queryKeys.sidebarPullRequestSubscriptionsAll(), provider, sessionId, threadId] as const,
   knowledgeGraph: (factoryProjectId: string | undefined) =>
     ['factory', 'knowledge-graph', factoryProjectId ?? null] as const,
   knowledgePage: (factoryProjectId: string | undefined, pageId: string | null, noteCursor?: string) =>
@@ -122,10 +163,18 @@ export const queryKeys = {
     ['factory', 'decisions', githubProjectId ?? null] as const,
   factoryDecisions: (githubProjectId: string | undefined, statusKey: string) =>
     ['factory', 'decisions', githubProjectId ?? null, statusKey] as const,
+  /** Under the decision lists, so whatever refreshes them refreshes the queue too. */
+  factoryRunQueue: (githubProjectId: string | undefined) =>
+    [...queryKeys.factoryDecisionsRoot(githubProjectId), 'run-queue'] as const,
   factoryAudit: (githubProjectId: string | undefined, group: string, actorKey?: string) =>
     ['factory', 'audit', githubProjectId ?? null, group, actorKey ?? null] as const,
   sessions: (factoryId: string | undefined) => ['sessions', factoryId ?? null] as const,
   userSession: (sessionId: string | undefined) => ['user-session', sessionId ?? null] as const,
+  // Outside `workItems`: a rewrite of the cached cards must not reach these, which hold no card.
+  sessionRowsRoot: (factoryId: string | undefined) => ['factory', 'session-rows', factoryId ?? null] as const,
+  sessionRows: (factoryId: string | undefined, request: SessionRowsRequest) =>
+    [...queryKeys.sessionRowsRoot(factoryId), request] as const,
+  sessionActivity: (factoryId: string | undefined) => ['factory', 'session-activity', factoryId ?? null] as const,
   providers: () => ['providers'] as const,
   mastraGatewayCredits: () => ['mastra-gateway-credits'] as const,
   availableModels: (filter?: AvailableModelsFilter) =>
@@ -144,6 +193,9 @@ export const queryKeys = {
   workspaceTreeScope: (workspacePath: string | undefined) => ['workspace-tree', workspacePath ?? null] as const,
   workspaceTree: (workspacePath: string | undefined, path: string) =>
     ['workspace-tree', workspacePath ?? null, path] as const,
+  // Under the tree's prefix so a tree refresh refreshes it; the object never equals a folder path.
+  workspaceFileIndex: (workspacePath: string | undefined) =>
+    ['workspace-tree', workspacePath ?? null, { index: 'files' }] as const,
   workspaceFileScope: (workspacePath: string | undefined) => ['workspace-file', workspacePath ?? null] as const,
   workspaceFile: (workspacePath: string | undefined, filePath: string | undefined) =>
     ['workspace-file', workspacePath ?? null, filePath ?? null] as const,
@@ -174,9 +226,6 @@ export const queryKeys = {
       'state',
       ...(threadId ? [threadId] : []),
     ] as const,
-  // Session state must stay out of the key: it would reset the query on navigation, and a reset reads as every run going idle.
-  agentControllerActivity: (agentControllerId: string | undefined, baseUrl: string) =>
-    ['agent-controller', agentControllerId ?? null, 'activity', baseUrl] as const,
   agentControllerSettings: (agentControllerId: string | undefined, sessionId: string | undefined) =>
     [...queryKeys.agentControllerSession(agentControllerId, sessionId), 'settings'] as const,
   agentControllerPermissions: (agentControllerId: string | undefined, sessionId: string | undefined) =>
@@ -208,5 +257,9 @@ export const queryKeys = {
     ] as const,
 } as const;
 
+/** Every mutation that writes a card of this Factory's board. */
+export const cardWriteMutationKey = (factoryProjectId: string | undefined) =>
+  ['factory', 'write-work-item', factoryProjectId] as const;
+
 export const cardMoveMutationKey = (factoryProjectId: string | undefined) =>
-  ['factory', 'transition-work-item', factoryProjectId] as const;
+  [...cardWriteMutationKey(factoryProjectId), 'transition'] as const;

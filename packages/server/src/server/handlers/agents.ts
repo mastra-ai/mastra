@@ -17,6 +17,7 @@ import type { PubSub } from '@mastra/core/events';
 import { PROVIDER_REGISTRY, parseModelString, defaultGateways, ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { MastraModelGatewayInterface, ProviderConfig, SystemMessage } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
+import { stripClientAuthoredTurnMarks } from '@mastra/core/memory';
 import type {
   InputProcessor,
   OutputProcessor,
@@ -34,6 +35,7 @@ import { z } from 'zod/v4';
 import {
   MASTRA_IS_STUDIO_KEY,
   MASTRA_RESOURCE_ID_KEY,
+  MASTRA_USER_KEY,
   MASTRA_USER_PERMISSIONS_KEY,
   WORKSPACE_TOOLS,
   resolveToolConfig,
@@ -96,8 +98,11 @@ import type { Context } from '../types';
 import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceMetadata, toSlug } from '../utils';
 import { toAgentStreamChunks } from '../utils/agent-stream-events';
 
-import { assertWriteAccess, getCallerAuthorId } from './authorship';
+import { assertStoredAgentAccess } from './agent-access';
+import { assertWriteAccess, getCallerAuthorId, matchesAuthorFilter, resolveAuthorFilter } from './authorship';
+import type { OwnedRecord } from './authorship';
 import { handleError } from './error';
+import { isGatewayV2 } from './gateway-memory-client';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
 import {
   sanitizeBody,
@@ -216,6 +221,23 @@ async function persistEditorOwnedModelList({
   return true;
 }
 
+/**
+ * Drop client-supplied authored-turn marks from every model-visible field of a
+ * request body: `messages`, `context`, `resumeData` and `streamOptions.context`.
+ * Approval, decline and resume routes forward these to the agent, so a client
+ * must not be able to mark its own text as an application-written turn there.
+ */
+function stripClientAuthoredTurnMarksFromBody(body: object): void {
+  const record = body as Record<string, unknown>;
+  stripClientAuthoredTurnMarks(record.messages);
+  stripClientAuthoredTurnMarks(record.context);
+  stripClientAuthoredTurnMarks(record.resumeData);
+  const streamOptions = record.streamOptions;
+  if (streamOptions && typeof streamOptions === 'object' && !Array.isArray(streamOptions)) {
+    stripClientAuthoredTurnMarks((streamOptions as Record<string, unknown>).context);
+  }
+}
+
 function normalizePublicExecutionOptions(
   options: Record<string, unknown> | undefined,
   serverRequestContext: RequestContext,
@@ -224,6 +246,7 @@ function normalizePublicExecutionOptions(
 
   const { actor: _actor, scopes: _scopes, requestContext, ...normalized } = options;
   stripClientCredentialHeaders(normalized);
+  stripClientAuthoredTurnMarks(normalized.context);
   mergeBodyRequestContext(serverRequestContext, requestContext);
   return { ...normalized, requestContext: serverRequestContext };
 }
@@ -439,9 +462,10 @@ async function authorizeRunOwner({
 
 /** Whether the agent publishes its runs, so a closed HTTP reader can detach instead of aborting. */
 function hasResumableStreams(agent: Agent): boolean {
-  // Durable wrappers always publish. Check them first: a proxy wrapper (Inngest) forwards
-  // hasResumableStreams() to its wrapped Agent, which may have streams off.
+  // Older Inngest wrappers inherit false from the plain Agent or lack this capability method.
+  // Keep durable execution detached from HTTP cancellation across package-version mismatches.
   if (isDurableAgentLike(agent)) return true;
+
   const resumable = agent as unknown as ResumableStreamsAgent;
   return typeof resumable.hasResumableStreams === 'function' && resumable.hasResumableStreams();
 }
@@ -1121,16 +1145,26 @@ export function extractVersionOptions(
   return undefined;
 }
 
+/**
+ * Resolves an agent by id: code-defined agents first (with stored overrides applied), then sub-agents, then stored
+ * agents. Stored agents are owner/visibility scoped like `/stored/agents`: a caller without `access` to a private
+ * stored agent gets the same 404 as for a missing agent. Code agents are visible to every caller.
+ *
+ * `requestContext` is required: without the caller's context there is no one to check, so a missing one fails closed.
+ */
 export async function getAgentFromSystem({
   mastra,
   agentId,
   versionOptions,
   requestContext,
+  access = 'execute',
 }: {
   mastra: Context['mastra'];
   agentId: string;
   versionOptions?: { status?: 'draft' | 'published' } | { versionId: string };
-  requestContext?: RequestContext;
+  requestContext: RequestContext;
+  /** `read` for routes that only describe the agent; `execute` (default) for anything that runs or changes it. */
+  access?: 'read' | 'execute';
 }): Promise<Agent> {
   const logger = mastra.getLogger();
 
@@ -1183,10 +1217,12 @@ export async function getAgentFromSystem({
   }
 
   // If still not found, try to get stored agent
+  let fromStore = false;
   if (!agent) {
     logger.debug('Agent not found in code-defined agents, looking in stored agents', { agentId });
     try {
       agent = (await mastra.getEditor()?.agent.getById(agentId, versionOptions)) ?? null;
+      fromStore = !!agent;
     } catch (error) {
       logger.debug('Error getting stored agent', error);
     }
@@ -1196,7 +1232,24 @@ export async function getAgentFromSystem({
     throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
   }
 
+  assertStoredAgentAccess({ agent, agentId, requestContext, access, fromStore });
+
   return agent;
+}
+
+/**
+ * Swapping or resetting a stored agent's in-memory model changes it for every caller, so it needs the same edit access
+ * as `PATCH /stored/agents/:id`; public visibility only grants execute. Code agents are not owner-scoped.
+ */
+function assertStoredAgentEditAccess(agent: Agent, agentId: string, requestContext: RequestContext): void {
+  if (agent.source !== 'stored') return;
+  assertWriteAccess({
+    requestContext,
+    resource: 'stored-agents',
+    resourceId: agentId,
+    action: 'edit',
+    record: (agent.toRawConfig() ?? {}) as OwnedRecord,
+  });
 }
 
 async function getAgentForModelListMutation({
@@ -1484,11 +1537,19 @@ export const LIST_AGENTS_ROUTE = createRoute({
   summary: 'List all agents',
   description: 'Returns a list of all available agents in the system (both code-defined and stored)',
   tags: ['Agents'],
+  mcp: {
+    toolset: 'agents',
+    name: 'list_agents',
+    description: 'List the agents you can call, with their ids, names, and descriptions.',
+  },
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_READ,
   handler: async ({ mastra, requestContext, partial }) => {
     try {
-      const codeAgents = mastra.listAgents();
+      // Hydrated stored agents are registered on Mastra too; list them through the visibility-filtered stored loop below.
+      const codeAgents = Object.fromEntries(
+        Object.entries(mastra.listAgents()).filter(([, agent]) => agent.source !== 'stored'),
+      );
 
       const isPartial = partial === 'true';
 
@@ -1531,7 +1592,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
 
         let storedAgentsResult;
         try {
-          storedAgentsResult = await editor?.agent.list();
+          storedAgentsResult = await editor?.agent.list({ perPage: false });
         } catch (error) {
           console.error('Error listing stored agents:', error);
           storedAgentsResult = null;
@@ -1547,8 +1608,11 @@ export const LIST_AGENTS_ROUTE = createRoute({
         }
 
         if (storedAgentsResult?.agents) {
+          // Same owner/visibility view as GET /stored/agents: own, public and legacy unowned agents.
+          const authorFilter = resolveAuthorFilter({ requestContext, resource: 'stored-agents' });
           // Process each agent individually to avoid one bad agent breaking the whole list
           for (const storedAgentConfig of storedAgentsResult.agents) {
+            if (!matchesAuthorFilter(storedAgentConfig, authorFilter)) continue;
             // Skip stored configs that overlay an existing code-defined agent.
             // Those are overrides (no standalone model), not standalone stored agents,
             // and trying to hydrate them as standalone would fail model validation.
@@ -1619,12 +1683,17 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
   description:
     'Returns details for a specific agent including configuration, tools, and memory settings. Use query params to control which stored config version is used for overrides: ?status=published (active version, default), ?status=draft (latest draft), or ?versionId=<id> (specific version). Use either status or versionId, not both.',
   tags: ['Agents'],
+  mcp: {
+    toolset: 'agents',
+    name: 'get_agent',
+    description: 'Get details for one agent: description, instructions, model, and tools.',
+  },
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_READ,
   handler: async ({ agentId, mastra, requestContext, status, versionId }) => {
     try {
       const versionOptions = versionId ? { versionId } : status ? { status } : undefined;
-      const agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext });
+      const agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext, access: 'read' });
       const isStudio = getIsStudioFromContext(requestContext);
       const result = await formatAgent({
         mastra,
@@ -1669,15 +1738,28 @@ export const CLONE_AGENT_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
+        access: 'read',
       });
 
       const cloneId = toSlug(newId || `${agentId}-clone`);
+
+      // Like POST /stored/agents, the clone belongs to the authenticated caller and any body-provided authorId is
+      // ignored. Without auth there is no caller, so the body's authorId is kept. A signed-in caller without an id
+      // can't own the clone, and an unowned clone is public, so refuse rather than publish a copy of the agent.
+      const callerAuthorId = getCallerAuthorId(requestContext);
+      const authenticated = callerAuthorId !== null || requestContext.get(MASTRA_USER_KEY) != null;
+      if (authenticated && callerAuthorId === null) {
+        throw new HTTPException(403, { message: 'Cloning an agent requires a signed-in user with an id' });
+      }
+      const ownerId = callerAuthorId ?? authorId;
 
       const result = await editor.agent.clone(agent, {
         newId: cloneId,
         newName,
         metadata,
-        authorId,
+        authorId: ownerId,
+        ...(authenticated ? { visibility: 'private' as const } : {}),
         requestContext,
       });
 
@@ -1698,6 +1780,12 @@ export const GENERATE_AGENT_ROUTE = createRoute({
   summary: 'Generate agent response',
   description: 'Executes an agent with the provided messages and returns the complete response',
   tags: ['Agents'],
+  mcp: {
+    toolset: 'agents',
+    name: 'call_agent',
+    description:
+      'Send a message to an agent and get its reply. Pass threadId (and resourceId) to continue a conversation with memory.',
+  },
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
   handler: async ({ agentId, mastra, abortSignal, requestContext: serverRequestContext, ...params }) => {
@@ -1710,6 +1798,9 @@ export const GENERATE_AGENT_ROUTE = createRoute({
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
 
       validateBody({ messages });
+      // A client must not be able to mark its own message as an authored turn.
+      stripClientAuthoredTurnMarks(messages);
+      stripClientAuthoredTurnMarks((rest as { context?: unknown }).context);
 
       const versionOptions = extractVersionOptions(
         serverRequestContext,
@@ -1825,6 +1916,9 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
 
       validateBody({ messages });
+      // A client must not be able to mark its own message as an authored turn.
+      stripClientAuthoredTurnMarks(messages);
+      stripClientAuthoredTurnMarks((rest as { context?: unknown }).context);
 
       if ((effectiveThreadId && !effectiveResourceId) || (!effectiveThreadId && effectiveResourceId)) {
         throw new HTTPException(400, { message: 'Both threadId or resourceId must be provided' });
@@ -1896,6 +1990,9 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
 
       validateBody({ messages });
+      // A client must not be able to mark its own message as an authored turn.
+      stripClientAuthoredTurnMarks(messages);
+      stripClientAuthoredTurnMarks((rest as { context?: unknown }).context);
 
       if ((effectiveThreadId && !effectiveResourceId) || (!effectiveThreadId && effectiveResourceId)) {
         throw new HTTPException(400, { message: 'Both threadId or resourceId must be provided' });
@@ -1988,8 +2085,14 @@ export async function buildProvidersList(mastra: Context['mastra']): Promise<Pro
     process.env.AUTO_BLOCK_EXTERNAL_PROVIDERS === 'true' || process.env.AUTO_BLOCK_EXTERNAL_PROVIDERS === '1';
   const defaultGatewayIds = new Set<string>(defaultGateways.map(gateway => gateway.id));
 
+  // Consult registered gateway instances too: a user-registered MastraGateway
+  // may carry a v2 key via config.apiKey that env-only checks cannot see.
+  const gatewayV2 = isGatewayV2(mastra);
+
   if (!blockExternalProviders) {
     for (const [id, provider] of Object.entries(PROVIDER_REGISTRY)) {
+      // In v2 the live catalog (via the gateway manager) replaces the static registry entry.
+      if (id === 'mastra' && gatewayV2) continue;
       allProviders[id] = provider;
     }
   }
@@ -2111,6 +2214,9 @@ export const STREAM_GENERATE_ROUTE = createRoute({
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
       validateBody({ messages });
+      // A client must not be able to mark its own message as an authored turn.
+      stripClientAuthoredTurnMarks(messages);
+      stripClientAuthoredTurnMarks((rest as { context?: unknown }).context);
 
       const versionOptions = extractVersionOptions(
         serverRequestContext,
@@ -2454,7 +2560,11 @@ export const SEND_AGENT_MESSAGE_ROUTE = createRoute({
       return await handleAgentMessageRoute({
         ...params,
         methodName: 'sendMessage',
-        invoke: (agent, target) => agent.sendMessage(params.message, target),
+        invoke: (agent, target) => {
+          const sanitized = [params.message];
+          stripClientAuthoredTurnMarks(sanitized);
+          return agent.sendMessage(sanitized[0] as typeof params.message, target);
+        },
       });
     } catch (error) {
       return handleSignalRoutingError(error, 'error sending agent message');
@@ -2480,7 +2590,11 @@ export const QUEUE_AGENT_MESSAGE_ROUTE = createRoute({
       return await handleAgentMessageRoute({
         ...params,
         methodName: 'queueMessage',
-        invoke: (agent, target) => agent.queueMessage(params.message, target),
+        invoke: (agent, target) => {
+          const sanitized = [params.message];
+          stripClientAuthoredTurnMarks(sanitized);
+          return agent.queueMessage(sanitized[0] as typeof params.message, target);
+        },
       });
     } catch (error) {
       return handleSignalRoutingError(error, 'error queueing agent message');
@@ -2969,6 +3083,9 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, ...rest } = params;
       validateBody({ messages });
+      // A client must not be able to mark its own message as an authored turn.
+      stripClientAuthoredTurnMarks(messages);
+      stripClientAuthoredTurnMarks((rest as { context?: unknown }).context);
 
       const agent = await getAgentFromSystem({
         mastra,
@@ -3064,9 +3181,7 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, runId, offset, abortSignal, requestContext }) => {
     try {
-      // Verify agent exists and get its pubsub for stream subscription.
-      // Durable agents have their own CachingPubSub instance separate from mastra.pubsub,
-      // so we must subscribe to the agent's pubsub to receive the correct stream events.
+      // Authorize against the execution's ownership record before subscribing to its stream bus.
       const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
       const run = await authorizeRunAccess({
         mastra,
@@ -3077,7 +3192,7 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       });
       if (!run) throw new HTTPException(404, { message: 'Run not found' });
       const durableAgent = isDurableAgentLike(agent) ? (agent as DurableAgentLike) : undefined;
-      // Plain agents with resumable streams publish on their own stream bus.
+      // Inngest still exposes its transport through pubsub rather than the core stream-bus accessor.
       const pubsub = durableAgent?.pubsub ?? getAgentStreamPubSub(agent) ?? mastra.pubsub;
       const topic = AGENT_STREAM_TOPIC(runId);
 
@@ -3254,6 +3369,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       if (!params.runId) {
@@ -3268,6 +3384,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
+      stripClientAuthoredTurnMarksFromBody(params);
 
       await validateDurableToolCallAccess({
         mastra,
@@ -3352,6 +3469,7 @@ export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
       sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
+      stripClientAuthoredTurnMarksFromBody(params);
       const normalizedStreamOptions = normalizePublicExecutionOptions(
         params.streamOptions as Record<string, unknown> | undefined,
         serverRequestContext,
@@ -3395,6 +3513,8 @@ export const LIST_SUSPENDED_RUNS_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
+        access: 'read',
       });
 
       // Honor server-enforced thread/resource scoping from the request context
@@ -3459,6 +3579,7 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       if (!params.runId) {
@@ -3473,6 +3594,7 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
+      stripClientAuthoredTurnMarksFromBody(params);
 
       await validateDurableToolCallAccess({
         mastra,
@@ -3519,6 +3641,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
       sanitizeBody(params, ['tools', 'actor', 'scopes']);
 
       stripClientCredentialHeaders(params);
+      stripClientAuthoredTurnMarksFromBody(params);
 
       const {
         resumeData,
@@ -3539,6 +3662,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions,
+        requestContext: serverRequestContext,
       });
 
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
@@ -3617,6 +3741,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
         options.untilIdle = untilIdle;
       }
 
+      stripClientAuthoredTurnMarks(resumeData);
       const streamResult = structuredOutput
         ? await agent.resumeStream(resumeData, { ...options, structuredOutput })
         : await agent.resumeStream(resumeData, options);
@@ -3670,6 +3795,7 @@ export const RECOVER_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions,
+        requestContext: serverRequestContext,
       });
 
       // Durable-agent check via duck-typing to avoid a hard runtime dep on the
@@ -3728,6 +3854,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
       sanitizeBody(params, ['tools', 'actor', 'scopes']);
 
       stripClientCredentialHeaders(params);
+      stripClientAuthoredTurnMarksFromBody(params);
 
       const {
         resumeData,
@@ -3751,6 +3878,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions,
+        requestContext: serverRequestContext,
       });
 
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
@@ -3828,6 +3956,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         _detachObserverOnCancel: hasResumableStreams(agent),
       };
 
+      stripClientAuthoredTurnMarks(resumeData);
       const streamResult = structuredOutput
         ? await agent.resumeStreamUntilIdle(resumeData, { ...options, structuredOutput })
         : await agent.resumeStreamUntilIdle(resumeData, options);
@@ -3856,6 +3985,7 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       if (!params.runId) {
@@ -3870,6 +4000,7 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
+      stripClientAuthoredTurnMarksFromBody(params);
 
       await validateDurableToolCallAccess({
         mastra,
@@ -3910,6 +4041,7 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       if (!params.runId) {
@@ -3924,6 +4056,7 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
+      stripClientAuthoredTurnMarksFromBody(params);
 
       await validateDurableToolCallAccess({
         mastra,
@@ -3965,6 +4098,7 @@ export const STREAM_NETWORK_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       // UI Frameworks may send "client tools" in the body,
@@ -3973,6 +4107,9 @@ export const STREAM_NETWORK_ROUTE = createRoute({
       stripClientCredentialHeaders(params);
 
       validateBody({ messages });
+      // A client must not be able to mark its own message as an authored turn.
+      stripClientAuthoredTurnMarks(messages);
+      stripClientAuthoredTurnMarks((params as { context?: unknown }).context);
 
       // Authorization: context values take precedence over client-provided values
       let authorizedMemoryOption = params.memory;
@@ -4012,6 +4149,7 @@ export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       if (!params.runId) {
@@ -4022,6 +4160,7 @@ export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
+      stripClientAuthoredTurnMarksFromBody(params);
 
       const streamResult = await agent.approveNetworkToolCall({
         ...params,
@@ -4052,6 +4191,7 @@ export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       if (!params.runId) {
@@ -4062,6 +4202,7 @@ export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
+      stripClientAuthoredTurnMarksFromBody(params);
 
       const streamResult = await agent.declineNetworkToolCall({
         ...params,
@@ -4085,9 +4226,10 @@ export const UPDATE_AGENT_MODEL_ROUTE = createRoute({
   description: 'Updates the AI model used by the agent',
   tags: ['Agents', 'Models'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, modelId, provider }) => {
+  handler: async ({ mastra, requestContext, agentId, modelId, provider }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
+      assertStoredAgentEditAccess(agent, agentId, requestContext);
 
       // Use the universal Mastra router format: provider/model
       const newModel = `${provider}/${modelId}`;
@@ -4114,9 +4256,10 @@ export const RESET_AGENT_MODEL_ROUTE = createRoute({
   description: 'Resets the agent model to its original configuration',
   tags: ['Agents', 'Models'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId }) => {
+  handler: async ({ mastra, requestContext, agentId }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
+      assertStoredAgentEditAccess(agent, agentId, requestContext);
 
       agent.__resetToOriginalModel();
 
@@ -4325,9 +4468,9 @@ export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
   description: 'Uses AI to enhance or modify agent instructions based on user feedback',
   tags: ['Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, instructions, comment }) => {
+  handler: async ({ mastra, requestContext, agentId, instructions, comment }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
 
       // Find the first model with a connected provider (similar to how chat works)
       const model = await findConnectedModel(agent);
@@ -4439,10 +4582,7 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
   tags: ['Agents', 'Skills'],
   handler: async ({ mastra, agentId, skillName, path, requestContext }) => {
     try {
-      const agent = agentId ? mastra.getAgentById(agentId) : null;
-      if (!agent) {
-        throw new HTTPException(404, { message: 'Agent not found' });
-      }
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext, access: 'read' });
 
       // Use the optional ?path= query param for disambiguation, otherwise fall back to name
       const identifier = path ?? skillName;

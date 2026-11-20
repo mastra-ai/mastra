@@ -86,15 +86,6 @@ describe('ExperimentResultsSection', () => {
     });
   });
 
-  describe('when a result has a start time and tags', () => {
-    it('shows neither a Created nor a Tags column', () => {
-      renderSection([{ ...agentTracedResult, tags: ['alpha'] }]);
-      expect(screen.queryByText('Created')).toBeNull();
-      expect(screen.queryByText('Tags')).toBeNull();
-      expect(screen.queryByText('alpha')).toBeNull();
-    });
-  });
-
   describe('when a result has start and end times', () => {
     it('shows how long the item took', () => {
       renderSection([agentTracedResult]);

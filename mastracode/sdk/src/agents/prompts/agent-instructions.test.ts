@@ -26,7 +26,9 @@ vi.mock('node:os', async importOriginal => {
 
 import {
   createGitRefInstructionReader,
+  createGitRefReminderReaderAsync,
   createGitRefReminderReader,
+  loadSessionInstructionsAsync,
   getStaticallyLoadedInstructionPaths,
   loadAgentInstructions,
   loadSessionInstructions,
@@ -187,6 +189,48 @@ describe('git-ref instruction readers', () => {
 
   afterEach(() => {
     rmSync(root, { recursive: true, force: true });
+  });
+
+  it('does not block the event loop while loading trusted-ref instructions and reminders', async () => {
+    let ticked = false;
+    setImmediate(() => {
+      ticked = true;
+    });
+    const sources = await loadSessionInstructionsAsync({
+      workingDir: repo,
+      untrustedCheckout: true,
+      baseRef: 'main',
+      skipGlobal: true,
+    });
+    expect(ticked).toBe(true);
+    expect(sources[0]?.content).toBe('trusted base instructions');
+    const reader = createGitRefReminderReaderAsync(repo, 'main');
+    ticked = false;
+    setImmediate(() => {
+      ticked = true;
+    });
+    expect(await reader.readFile(join(repo, 'AGENTS.md'))).toBe('trusted base instructions');
+    expect(ticked).toBe(true);
+
+    expect(
+      await loadSessionInstructionsAsync({
+        workingDir: repo,
+        untrustedCheckout: true,
+        baseRef: 'nonexistent-ref',
+        skipGlobal: true,
+      }),
+    ).toEqual([]);
+    expect(await loadSessionInstructionsAsync({ workingDir: repo, untrustedCheckout: true, skipGlobal: true })).toEqual(
+      [],
+    );
+    await expect(
+      createGitRefReminderReaderAsync(repo, 'nonexistent-ref').readFile(join(repo, 'AGENTS.md')),
+    ).rejects.toThrow('Not found at ref');
+  });
+
+  it('treats invalid git path arguments as absent in async readers', async () => {
+    const reader = createGitRefReminderReaderAsync(repo, 'main');
+    expect(await reader.pathExists(join(repo, 'a\0b'))).toBe(false);
   });
 
   it('loadAgentInstructions serves project content from the ref, never the working tree', () => {

@@ -4,7 +4,7 @@ import { detectCommonBinariesAsync } from '../utils/binaries.js';
 import { getCurrentGitBranchAsync } from '../utils/project.js';
 import { prepareProviderWebSearchRoute } from './model.js';
 import type { PromptContext, PromptSection } from './prompts/index.js';
-import { buildFullPromptSections, joinPromptSections } from './prompts/index.js';
+import { buildFullPromptSectionsAsync, joinPromptSections } from './prompts/index.js';
 
 export async function getDynamicInstructions({
   requestContext,
@@ -106,7 +106,7 @@ export async function getDynamicInstructionSections({
     requestContext,
   };
 
-  const promptSections = buildFullPromptSections(promptCtx);
+  const promptSections = await buildFullPromptSectionsAsync(promptCtx);
   const pluginInstructions: string[] =
     state?.pluginInstructions?.filter((instruction: string) => instruction.trim().length > 0) ?? [];
   if (pluginInstructions.length === 0) return promptSections;

@@ -876,6 +876,9 @@ export class MastraAuthStudio
     if (!sessionCookie) return null;
     const headers = new Headers(init.headers);
     headers.set('Cookie', `${COOKIE_NAME}=${sessionCookie}`);
+    // The shared API refuses a cookie-authenticated write that names no trusted origin, so pass on the browser's.
+    const origin = request.headers.get('origin');
+    if (origin && !headers.has('Origin')) headers.set('Origin', origin);
     const res = await fetch(`${this.sharedApiUrl}${path}`, {
       ...init,
       headers,

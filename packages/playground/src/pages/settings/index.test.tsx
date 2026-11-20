@@ -39,10 +39,10 @@ afterEach(() => {
 
 describe('StudioSettingsPage', () => {
   describe('when the settings page is visited', () => {
-    it('exposes the settings breadcrumb and settings controls inside the main landmark', async () => {
+    it('shows the settings title and controls inside the main landmark', async () => {
       await renderSettingsPage();
 
-      expect(within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getByText('Settings')).toBeDefined();
+      expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeDefined();
       const main = within(screen.getByRole('main'));
       expect(
         within(main.getByRole('radiogroup', { name: 'Theme' }))
@@ -59,7 +59,7 @@ describe('StudioSettingsPage', () => {
       await renderSettingsPage();
 
       fireEvent.change(screen.getByRole('textbox', { name: 'API prefix' }), { target: { value: '/custom-api' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
       expect(JSON.parse(localStorage.getItem(MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY) ?? '{}')).toMatchObject({
         baseUrl: BASE_URL,

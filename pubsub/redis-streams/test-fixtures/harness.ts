@@ -365,6 +365,72 @@ export function makeXaddDropProxy(
 }
 
 /**
+ * TCP proxy in front of Redis that can simulate the two ways a broker goes
+ * away. `stop()`/`start()` behave like `docker stop`/`docker start`: every
+ * connection is severed and reconnects are refused until restarted.
+ * `pause()`/`unpause()` behave like `docker pause`: connections stay open but
+ * nothing is forwarded until unpaused, then queued bytes flow in order.
+ */
+export function makeOutageProxy(target: { host: string; port: number }) {
+  const sockets = new Set<Socket>();
+  let paused = false;
+  const queued: Array<[Socket, Buffer]> = [];
+  const relay = (from: Socket, to: Socket) =>
+    from.on('data', chunk => {
+      if (paused) queued.push([to, chunk]);
+      else to.write(chunk);
+    });
+  const server = createServer(client => {
+    const upstream = connect(target.port, target.host);
+    for (const s of [client, upstream]) {
+      sockets.add(s);
+      s.on('error', () => {});
+    }
+    client.on('close', () => {
+      sockets.delete(client);
+      upstream.destroy();
+    });
+    upstream.on('close', () => {
+      sockets.delete(upstream);
+      client.destroy();
+    });
+    relay(client, upstream);
+    relay(upstream, client);
+  });
+  const listening = new Promise<number>(resolve => {
+    server.listen(0, '127.0.0.1', () => resolve((server.address() as AddressInfo).port));
+  });
+  const sever = () => {
+    for (const s of sockets) s.destroy();
+    sockets.clear();
+  };
+  return {
+    listening,
+    async stop() {
+      await listening;
+      const closed = new Promise<void>(r => server.close(() => r()));
+      sever();
+      await closed;
+    },
+    async start() {
+      const port = await listening;
+      await new Promise<void>(r => server.listen(port, '127.0.0.1', () => r()));
+    },
+    pause: () => void (paused = true),
+    unpause() {
+      paused = false;
+      for (const [to, chunk] of queued.splice(0)) if (!to.destroyed) to.write(chunk);
+    },
+    close() {
+      paused = false;
+      queued.length = 0;
+      sever();
+      return new Promise<void>(r => (server.listening ? server.close(() => r()) : r()));
+    },
+  };
+}
+
+/**
  * TCP proxy in front of a Redis node. While stalled it still accepts new
  * connections (so node-redis's TCP-level connectTimeout is satisfied) but never
  * forwards them, exactly like a frozen server. Connections made before the

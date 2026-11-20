@@ -128,6 +128,7 @@ export function attachGitLabIssueReconciler(
     intake: gitlab.intake,
     projects: context.storage.projects,
     storage: context.runtime.workItems,
+    ...(context.runtime.keptCards ? { cards: context.runtime.keptCards } : {}),
     isTerminal: item => workItemPhaseSemantics(toBoardSource(boards).forProject(item), item)?.kind === 'terminal',
     issueId: item => {
       const issueIid = identityForItem(item)?.issueIid;

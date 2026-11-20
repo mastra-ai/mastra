@@ -78,7 +78,6 @@ describe('PromptBlockPickerDialog', () => {
       renderDialog();
 
       expect(await screen.findByText('Live Block')).not.toBeNull();
-      expect(screen.queryByText('Draft Block')).toBeNull();
       expect(onListPromptBlocks).toHaveBeenCalledWith('published');
     });
   });

@@ -7,7 +7,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { UserConnectProvider, UserConnection } from '@mastra/playground-ui/domains/connect';
 import { ProviderLogo } from '@mastra/playground-ui/domains/connect';
 
-import { MoreVertical, Unplug } from 'lucide-react';
+import { IconDotGrid1x3Vertical } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Vertical';
+import { Unplug } from 'lucide-react';
 
 function statusVariant(status: string): BadgeVariant {
   if (status === 'active') return 'success';
@@ -97,7 +98,7 @@ function ConnectionRows({
                 {onDisconnect ? (
                   <DropdownMenu>
                     <DropdownMenu.Trigger variant="ghost" size="icon-sm" aria-label={`Actions for ${displayName}`}>
-                      <MoreVertical />
+                      <IconDotGrid1x3Vertical />
                     </DropdownMenu.Trigger>
                     <DropdownMenu.Content align="end" className="w-44">
                       <DropdownMenu.Item

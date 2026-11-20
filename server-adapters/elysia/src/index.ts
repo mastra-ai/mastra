@@ -305,22 +305,6 @@ function createDatastreamBody(
   });
 }
 
-type HasPermissionFn = (userPerms: string[], required: string) => boolean;
-let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
-function loadHasPermission(): Promise<HasPermissionFn | undefined> {
-  if (!_hasPermissionPromise) {
-    _hasPermissionPromise = import('@mastra/core/auth/ee')
-      .then(m => m.hasPermission)
-      .catch(() => {
-        console.error(
-          '[@mastra/elysia] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
-        );
-        return undefined;
-      });
-  }
-  return _hasPermissionPromise;
-}
-
 // Export type definitions for Elysia app configuration
 export interface ElysiaContext {
   mastra: Mastra;
@@ -623,6 +607,11 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
     return result;
   }
 
+  /** Adapter `mcpOptions` win; otherwise use `server.mcpOptions` from the Mastra config. */
+  private resolveMcpOptions() {
+    return this.mcpOptions ?? this.mastra.getServer()?.mcpOptions;
+  }
+
   async sendResponse(route: ServerRoute, response: Response, result: unknown, prefix?: string): Promise<any> {
     const resolvedPrefix = prefix ?? this.prefix ?? '';
 
@@ -660,7 +649,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       const forwardRequest = await createForwardRequest(request);
       const { req, res } = toReqRes(forwardRequest);
 
-      const { setRequestAuth, ...options } = { ...this.mcpOptions, ...routeMcpOptions };
+      const { setRequestAuth, ...options } = { ...this.resolveMcpOptions(), ...routeMcpOptions };
 
       // `toReqRes` builds a fresh IncomingMessage, so bridge the principal auth resolved.
       await applyMcpRequestAuth({ req, requestContext: request.requestContext, setRequestAuth });
@@ -703,7 +692,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       await applyMcpRequestAuth({
         req,
         requestContext: request.requestContext,
-        setRequestAuth: this.mcpOptions?.setRequestAuth,
+        setRequestAuth: this.resolveMcpOptions()?.setRequestAuth,
       });
 
       server
@@ -776,20 +765,13 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
         });
       }
 
-      // Check if any auth is configured (studio or server) for RBAC
-      const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
-      if (hasAuth) {
-        const hasPermission = await loadHasPermission();
-        if (hasPermission) {
-          const userPermissions = ctx.requestContext.get('mastra__userPermissions') as string[] | undefined;
-          const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, ctx.requestContext);
-          if (permissionError) {
-            return new Response(JSON.stringify({ error: permissionError.error, message: permissionError.message }), {
-              status: permissionError.status,
-              headers: { 'Content-Type': 'application/json' },
-            });
-          }
-        }
+      // Check route permission (RBAC). Elysia checks it before schema validation.
+      const permissionError = this.checkRouteRBAC(route, ctx.requestContext);
+      if (permissionError) {
+        return new Response(JSON.stringify({ error: permissionError.error, message: permissionError.message }), {
+          status: permissionError.status,
+          headers: { 'Content-Type': 'application/json' },
+        });
       }
 
       // Extract params - remap from normalized param names back to original
@@ -1035,28 +1017,12 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
               });
             }
 
-            // Check if any auth is configured (studio or server) for RBAC
-            const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
-            if (hasAuth) {
-              const hasPermission = await loadHasPermission();
-              if (hasPermission) {
-                const userPermissions = ctx.requestContext.get('mastra__userPermissions') as string[] | undefined;
-                const permissionError = this.checkRoutePermission(
-                  serverRoute,
-                  userPermissions,
-                  hasPermission,
-                  ctx.requestContext,
-                );
-                if (permissionError) {
-                  return new Response(
-                    JSON.stringify({ error: permissionError.error, message: permissionError.message }),
-                    {
-                      status: permissionError.status,
-                      headers: { 'Content-Type': 'application/json' },
-                    },
-                  );
-                }
-              }
+            const permissionError = this.checkRouteRBAC(serverRoute, ctx.requestContext);
+            if (permissionError) {
+              return new Response(JSON.stringify({ error: permissionError.error, message: permissionError.message }), {
+                status: permissionError.status,
+                headers: { 'Content-Type': 'application/json' },
+              });
             }
           }
 

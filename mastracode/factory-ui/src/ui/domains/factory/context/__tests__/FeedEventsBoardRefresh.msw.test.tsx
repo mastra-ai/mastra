@@ -1,24 +1,57 @@
 // @vitest-environment jsdom
+import { useQuery } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
 import { act, waitFor } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { answerBoardPhases, versionedCard } from '../../../../../../e2e/ui/board-reads';
 import { pushableFeedStream } from '../../../../../../e2e/ui/feed-stream';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { queryKeys } from '../../../../../api/keys';
-import { useActiveRunResourceIds } from '../../../../../hooks/useActiveRunResources';
+import type { SessionActivity, SessionRowsRequest, SessionRowsResponse } from '../../../../../api/types';
 import { useFactoryDecisionStatus } from '../../../../../hooks/useFactoryDecisions';
-import { useTransitionWorkItemMutation, useWorkItemsQuery } from '../../../../../hooks/useWorkItems';
+import { useSessionActivityQuery, useSessionRowsQuery } from '../../../../../hooks/useSessionRows';
+import {
+  useBoardPhasesQuery,
+  useSessionCardsQuery,
+  useSessionWorkItemsQuery,
+  useTransitionWorkItemMutation,
+  workItemActivityQueryOptions,
+  workItemStartersQueryOptions,
+} from '../../../../../hooks/useWorkItems';
 import { createQueryClient } from '../../../../../query-client';
-import { AGENT_CONTROLLER_ID } from '../../../chat/services/constants';
 import { FeedEventsProvider } from '../FeedEventsProvider';
 
 const PROJECT_ID = 'project-1';
 const BOARD_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`;
 const DECISIONS_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/decisions`;
-const RUNS_URL = '*/api/agent-controller/:controllerId/active-runs';
+const SESSION_ROWS_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/session-rows`;
+const SESSION_ACTIVITY_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/session-activity`;
+const SIDEBAR_VIEW: SessionRowsRequest = {
+  sort: 'activity',
+  groupBy: 'none',
+  owner: 'all',
+  children: false,
+  pin: [],
+  windows: {},
+};
+const NO_SESSION_ROWS: SessionRowsResponse = {
+  total: 0,
+  matching: 0,
+  groups: [],
+  boards: [],
+  owners: [],
+};
+const NO_SESSION_ACTIVITY: SessionActivity = {
+  runningSessionIds: [],
+  parkedSessionIds: [],
+  cardStatuses: {},
+  sessionHeldCardIds: [],
+  cards: { working: 0, waiting: 0 },
+};
+const PHASES_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/boards/:boardKey/phases`;
 const FEED_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/feed-events`;
 const WITHIN_A_SECOND_MS = 900;
 const PAST_ONE_REFRESH_GAP_MS = 6_000;
@@ -46,7 +79,7 @@ function card(title: string, stage = 'intake') {
 }
 
 function boardSnapshot(title: string, stage?: string) {
-  return { workItems: [card(title, stage)], runningSessionIds: [], parkedSessionIds: [] };
+  return { workItems: [card(title, stage)] };
 }
 
 function inner({ children }: { children: React.ReactNode }) {
@@ -54,10 +87,12 @@ function inner({ children }: { children: React.ReactNode }) {
 }
 
 function watchBoard() {
+  const cards = useSessionCardsQuery(PROJECT_ID);
   return {
-    cards: useWorkItemsQuery(PROJECT_ID),
+    cards: { isSuccess: cards.isSuccess, data: cards.data?.workItems },
     decisions: useFactoryDecisionStatus(PROJECT_ID, ['pending', 'leased']),
-    running: useActiveRunResourceIds(AGENT_CONTROLLER_ID),
+    sessionRows: useSessionRowsQuery(PROJECT_ID, SIDEBAR_VIEW).shown,
+    sessionActivity: useSessionActivityQuery(PROJECT_ID).data,
     move: useTransitionWorkItemMutation(PROJECT_ID),
   };
 }
@@ -65,11 +100,17 @@ function watchBoard() {
 interface BoardRequests {
   cards: number;
   decisions: number;
-  runs: number;
+  sessionRows: number;
+  sessionActivity: number;
 }
 
 function moreRefreshes(requests: BoardRequests, count: number) {
-  return { cards: requests.cards + count, decisions: requests.decisions + count, runs: requests.runs + count };
+  return {
+    cards: requests.cards + count,
+    decisions: requests.decisions + count,
+    sessionRows: requests.sessionRows + count,
+    sessionActivity: requests.sessionActivity + count,
+  };
 }
 
 function oneMoreRefresh(requests: BoardRequests) {
@@ -102,7 +143,7 @@ function heldCardMove(board: { stage: string }) {
 }
 
 function boardEndpoints() {
-  const requests: BoardRequests = { cards: 0, decisions: 0, runs: 0 };
+  const requests: BoardRequests = { cards: 0, decisions: 0, sessionRows: 0, sessionActivity: 0 };
   const board = { title: 'Fix login', stage: 'intake', readMs: 0 };
   server.use(
     http.get(BOARD_URL, async () => {
@@ -115,9 +156,13 @@ function boardEndpoints() {
       requests.decisions += 1;
       return HttpResponse.json({ decisions: [] });
     }),
-    http.get(RUNS_URL, () => {
-      requests.runs += 1;
-      return HttpResponse.json({ runs: [] });
+    http.get(SESSION_ROWS_URL, () => {
+      requests.sessionRows += 1;
+      return HttpResponse.json(NO_SESSION_ROWS);
+    }),
+    http.get(SESSION_ACTIVITY_URL, () => {
+      requests.sessionActivity += 1;
+      return HttpResponse.json(NO_SESSION_ACTIVITY);
     }),
   );
   return { requests, board };
@@ -153,7 +198,7 @@ describe('FeedEventsProvider, on the board', () => {
     vi.useRealTimers();
   });
 
-  it('refreshes cards, decisions and runs within a second of a lone frame', async () => {
+  it('refreshes cards, decisions, session rows and session activity within a second of a lone frame', async () => {
     const stream = pushableFeedStream(PROJECT_ID);
     server.use(stream.handler);
     const { requests } = boardEndpoints();
@@ -165,6 +210,51 @@ describe('FeedEventsProvider, on the board', () => {
 
     await waitFor(() => expect(requests).toEqual(oneMoreRefresh(before)));
     await waitForMutationsIdle(rendered.client);
+  });
+
+  it('lists a card that landed on the board in the phase the board shows, within a second of a frame', async () => {
+    const stream = pushableFeedStream(PROJECT_ID);
+    const project = {
+      workItems: [card('Fix login')],
+      boards: [{ id: 'work', phases: [{ id: 'intake' }] }],
+      userId: 'user-1',
+    };
+    let listings = 0;
+    server.use(
+      stream.handler,
+      http.get(PHASES_URL, ({ request, params }) => {
+        listings += 1;
+        return answerBoardPhases(request, project, String(params.boardKey));
+      }),
+      http.get(BOARD_URL, ({ request }) => {
+        const ids = new URL(request.url).searchParams.getAll('workItemId');
+        return HttpResponse.json({
+          workItems: project.workItems.filter(listed => ids.includes(listed.id)).map(versionedCard),
+        });
+      }),
+    );
+    const rendered = renderHookWithProviders(
+      () => useBoardPhasesQuery(PROJECT_ID, { board: 'work', sort: 'created-newest', q: '', filters: {}, windows: {} }),
+      { inner },
+    );
+    const titlesInIntake = () => {
+      const snapshot = rendered.result.current.data;
+      return snapshot?.phases[0]?.ids.map(id => snapshot.workItems.find(held => held.id === id)?.title);
+    };
+    await waitFor(() => expect(stream.open).toBe(true));
+    await waitFor(() => expect(titlesInIntake()).toEqual(['Fix login']));
+    await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
+    const before = listings;
+
+    project.workItems = [
+      ...project.workItems,
+      { ...card('Fix logout'), id: 'item-2', createdAt: '2030-01-02T00:00:00.000Z' },
+    ];
+    stream.push();
+    await advance(rendered.client, WITHIN_A_SECOND_MS);
+
+    await waitFor(() => expect(titlesInIntake()).toEqual(['Fix logout', 'Fix login']));
+    expect(listings).toBe(before + 1);
   });
 
   it('folds a burst of frames into one refresh', async () => {
@@ -230,8 +320,7 @@ describe('FeedEventsProvider, on the board', () => {
       stream.ping();
       await advance(rendered.client, SERVER_PING_EVERY_MS);
     }
-    // Runs have no timer of their own: they are read with the board, at most once a minute.
-    const safetyRereads = requests.runs - connected.runs;
+    const safetyRereads = requests.sessionActivity - connected.sessionActivity;
     expect(safetyRereads).toBeLessThanOrEqual(5);
     expect(requests).toEqual(moreRefreshes(connected, safetyRereads));
 
@@ -244,7 +333,8 @@ describe('FeedEventsProvider, on the board', () => {
     await waitFor(() => {
       expect(requests.cards).toBeGreaterThan(dropped.cards);
       expect(requests.decisions).toBeGreaterThan(dropped.decisions);
-      expect(requests.runs).toBeGreaterThan(dropped.runs);
+      expect(requests.sessionRows).toBeGreaterThan(dropped.sessionRows);
+      expect(requests.sessionActivity).toBeGreaterThan(dropped.sessionActivity);
     });
   });
 
@@ -270,7 +360,7 @@ describe('FeedEventsProvider, on the board', () => {
     server.use(stream.handler);
     const { requests, board } = boardEndpoints();
     const client = createQueryClient();
-    client.setQueryData(queryKeys.workItems(PROJECT_ID), boardSnapshot('Fix login'));
+    client.setQueryData(queryKeys.workItemsWithSessions(PROJECT_ID), boardSnapshot('Fix login'));
     board.title = 'Fix logout';
 
     const rendered = await renderConnectedBoard(stream, client);
@@ -301,7 +391,7 @@ describe('FeedEventsProvider, on the board', () => {
     settleMove();
     await waitFor(() => expect(rendered.result.current.move.isSuccess).toBe(true));
     await advance(rendered.client, WITHIN_A_SECOND_MS);
-    await waitFor(() => expect(requests.runs).toBeGreaterThan(moving.runs));
+    await waitFor(() => expect(requests.sessionActivity).toBeGreaterThan(moving.sessionActivity));
     expect(shownStages()).toEqual(['review']);
     await waitForMutationsIdle(rendered.client);
   });
@@ -410,6 +500,148 @@ describe('FeedEventsProvider, on the board', () => {
 
     expect(stream.opens).toBe(1);
     expect(stream.open).toBe(true);
+    await waitForMutationsIdle(rendered.client);
+  });
+});
+
+describe('FeedEventsProvider, on a session page', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('keeps a session’s card current, change after change, while the board read hangs', async () => {
+    const stream = pushableFeedStream(PROJECT_ID);
+    const shown = { title: 'Fix login' };
+    let releaseBoard = () => {};
+    const boardHeld = new Promise<void>(resolve => {
+      releaseBoard = resolve;
+    });
+    server.use(
+      stream.handler,
+      http.get(BOARD_URL, async ({ request }) => {
+        const snapshot = boardSnapshot(shown.title);
+        if (!new URL(request.url).searchParams.has('sessionId')) await boardHeld;
+        return HttpResponse.json(snapshot);
+      }),
+    );
+    // The sidebar reads every card holding a session; the header reads the session's cards.
+    const rendered = renderHookWithProviders(
+      () => ({
+        board: useSessionCardsQuery(PROJECT_ID),
+        session: useSessionWorkItemsQuery(PROJECT_ID, 'session-1'),
+      }),
+      { inner },
+    );
+    await waitFor(() => expect(stream.open).toBe(true));
+    const sessionCardTitle = () => rendered.result.current.session.data?.[0]?.title;
+    await waitFor(() => expect(sessionCardTitle()).toBe('Fix login'));
+
+    for (const title of ['Fix logout', 'Fix signup']) {
+      shown.title = title;
+      stream.push();
+      await act(() => vi.advanceTimersByTimeAsync(PAST_ONE_REFRESH_GAP_MS));
+      await waitFor(() => expect(sessionCardTitle()).toBe(title));
+    }
+
+    releaseBoard();
+    await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
+    await waitForMutationsIdle(rendered.client);
+  });
+});
+
+describe('FeedEventsProvider, on a draft page', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('keeps the starter counts and the activity current when the board changes', async () => {
+    const stream = pushableFeedStream(PROJECT_ID);
+    const board = { untriaged: 1, cards: 1 };
+    server.use(
+      stream.handler,
+      http.get(`${BOARD_URL}/starters`, () =>
+        HttpResponse.json({
+          failed: 0,
+          changesRequested: 0,
+          review: { count: 0 },
+          undecided: 0,
+          untriaged: board.untriaged,
+          unplannedBugs: 0,
+          stale: 0,
+        }),
+      ),
+      http.get(`${BOARD_URL}/activity`, () => HttpResponse.json({ total: board.cards, createdAt: [], doneAt: [] })),
+    );
+    const rendered = renderHookWithProviders(
+      () => ({
+        starters: useQuery(workItemStartersQueryOptions(TEST_BASE_URL, PROJECT_ID)),
+        activity: useQuery(workItemActivityQueryOptions(TEST_BASE_URL, PROJECT_ID, 'week')),
+      }),
+      { inner },
+    );
+    await waitFor(() => expect(stream.open).toBe(true));
+    const shown = () => ({
+      untriaged: rendered.result.current.starters.data?.untriaged,
+      cards: rendered.result.current.activity.data?.total,
+    });
+    await waitFor(() => expect(shown()).toEqual({ untriaged: 1, cards: 1 }));
+    await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
+
+    board.untriaged = 2;
+    board.cards = 2;
+    stream.push();
+    await advance(rendered.client, WITHIN_A_SECOND_MS);
+
+    await waitFor(() => expect(shown()).toEqual({ untriaged: 2, cards: 2 }));
+    await waitForMutationsIdle(rendered.client);
+  });
+
+  it('stops asking a server too old to count starters or activity, while frames keep refreshing the rest', async () => {
+    const stream = pushableFeedStream(PROJECT_ID);
+    const { requests } = boardEndpoints();
+    const counted = { starters: 0, activity: 0 };
+    server.use(
+      stream.handler,
+      http.get(`${BOARD_URL}/starters`, () => {
+        counted.starters += 1;
+        return HttpResponse.json({ error: 'not_found' }, { status: 404 });
+      }),
+      http.get(`${BOARD_URL}/activity`, () => {
+        counted.activity += 1;
+        return HttpResponse.json({ error: 'not_found' }, { status: 404 });
+      }),
+    );
+    const rendered = renderHookWithProviders(
+      () => ({
+        starters: useQuery(workItemStartersQueryOptions(TEST_BASE_URL, PROJECT_ID)),
+        activity: useQuery(workItemActivityQueryOptions(TEST_BASE_URL, PROJECT_ID, 'week')),
+        decisions: useFactoryDecisionStatus(PROJECT_ID, ['pending', 'leased']),
+      }),
+      { inner },
+    );
+    await waitFor(() => expect(stream.open).toBe(true));
+    await waitFor(() => {
+      expect(rendered.result.current.starters.isError).toBe(true);
+      expect(rendered.result.current.activity.isError).toBe(true);
+    });
+    await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
+    const before = { ...counted, decisions: requests.decisions };
+
+    for (let frame = 0; frame < 2; frame += 1) {
+      stream.push();
+      await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
+    }
+
+    expect(requests.decisions).toBe(before.decisions + 2);
+    expect(counted).toEqual({ starters: before.starters, activity: before.activity });
     await waitForMutationsIdle(rendered.client);
   });
 });

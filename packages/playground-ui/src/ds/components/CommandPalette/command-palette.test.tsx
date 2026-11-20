@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { Route, Search } from 'lucide-react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CommandEmpty, CommandGroup } from '../Command';
@@ -15,6 +14,8 @@ import {
   CommandPaletteResults,
   CommandPaletteScope,
 } from './command-palette';
+import { IconDirection1 } from '@/ds/icons/central/IconDirection1';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 
 class TestResizeObserver implements ResizeObserver {
   observe() {}
@@ -51,14 +52,20 @@ function renderPalette() {
       <CommandPaletteInput placeholder="Search resources" />
       <CommandPaletteBody>
         <CommandPaletteRail aria-label="Search categories">
-          <CommandPaletteScope icon={<Search />} label="All" count={4} active={false} onSelect={() => {}} />
-          <CommandPaletteScope icon={<Route />} label="Navigation" count={2} active onSelect={selectScope} />
+          <CommandPaletteScope
+            icon={<IconMagnifyingGlass />}
+            label="All"
+            count={4}
+            active={false}
+            onSelect={() => {}}
+          />
+          <CommandPaletteScope icon={<IconDirection1 />} label="Navigation" count={2} active onSelect={selectScope} />
         </CommandPaletteRail>
         <CommandPaletteResults aria-label="Search results" footer={<CommandPaletteFooter label="Application search" />}>
           <CommandEmpty>No matching results.</CommandEmpty>
           <CommandGroup heading="Navigation">
             <CommandPaletteItem
-              icon={<Route />}
+              icon={<IconDirection1 />}
               title="Settings"
               subtitle="Application navigation"
               path="/settings"
@@ -103,7 +110,7 @@ describe('CommandPaletteScope', () => {
   const renderScope = (props: Partial<Parameters<typeof CommandPaletteScope>[0]> = {}) =>
     render(
       <CommandPaletteScope
-        icon={<Search data-testid="scope-icon" />}
+        icon={<IconMagnifyingGlass data-testid="scope-icon" />}
         label="Navigation"
         count={2}
         active={false}
@@ -161,7 +168,12 @@ describe('CommandPaletteItem', () => {
       >
         <CommandPaletteResults aria-label="Search results">
           <CommandGroup heading="Navigation">
-            <CommandPaletteItem icon={<Route data-testid="item-icon" />} title="Settings" value="settings" {...props} />
+            <CommandPaletteItem
+              icon={<IconDirection1 data-testid="item-icon" />}
+              title="Settings"
+              value="settings"
+              {...props}
+            />
           </CommandGroup>
         </CommandPaletteResults>
       </CommandPaletteDialog>,

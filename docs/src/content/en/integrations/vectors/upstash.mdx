@@ -249,7 +249,7 @@ Attempts to delete an item by its ID from the specified index. Logs an error mes
 
 Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both, and neither can be empty.
 
-Filter deletion runs one approximate query with `topK: 1000` and deletes the returned IDs. `deleteVectors()` returns `Promise<void>` and does not report how many vectors it deleted, so repeating the call cannot guarantee complete deletion. Use [Upstash's filter-delete API](https://upstash.com/docs/vector/api/endpoints/delete) when complete filter deletion is required. Deleting by `ids` isn't subject to this query limit.
+Filter deletion runs one approximate query with `topK: 1000` and deletes the returned IDs. `deleteVectors()` returns `Promise<void>` and doesn't report how many vectors it deleted, so repeating the call can't guarantee complete deletion. Use [Upstash's filter-delete API](https://upstash.com/docs/vector/api/endpoints/delete) when complete filter deletion is required. Deleting by `ids` isn't subject to this query limit.
 
 <PropertiesTable
   content={[
@@ -278,7 +278,7 @@ Filter deletion runs one approximate query with `topK: 1000` and deletes the ret
 
 Upstash Vector supports hybrid search that combines semantic search (dense vectors) with keyword-based search (sparse vectors) for improved relevance and accuracy.
 
-### Basic Hybrid Usage
+### Basic hybrid usage
 
 ```typescript
 import { UpstashVector } from '@mastra/upstash'
@@ -315,7 +315,7 @@ const results = await vectorStore.query({
 })
 ```
 
-### Advanced Hybrid Search Options
+### Advanced hybrid search options
 
 ```typescript
 import { FusionAlgorithm, QueryMode } from '@upstash/vector'
@@ -347,7 +347,7 @@ const sparseResults = await vectorStore.query({
 })
 ```
 
-### Updating Hybrid Vectors
+### Updating hybrid vectors
 
 ```typescript
 // Update both dense and sparse components

@@ -1,0 +1,4 @@
+{
+  "attachment": ["openai/gpt-4o-mini"],
+  "temperature": ["openai/gpt-4o-mini"]
+}

@@ -8,7 +8,8 @@ import { connectionString, TEST_CONFIG } from '../../test-utils';
 const ROUNDS = 25;
 
 describe('PostgreSQL thread metadata writes across processes', () => {
-  const schemaName = `thread_meta_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+  // Short enough that every default index name fits in 63 characters and gets created.
+  const schemaName = `thread_meta_${randomUUID().slice(0, 8)}`;
   let stores: PostgresStore[];
   let a: MemoryStorage;
   let b: MemoryStorage;
@@ -27,6 +28,29 @@ describe('PostgreSQL thread metadata writes across processes', () => {
     await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
     await pool.end();
   });
+
+  // Older deployments store metadata as TEXT. The jsonb metadata index can't exist on a TEXT
+  // column, so drop it for the test and rebuild it after.
+  async function withLegacyTextMetadata(id: string, run: (pool: Pool, table: string) => Promise<void>) {
+    const table = `"${schemaName}".mastra_threads`;
+    const index = `"${schemaName}"."${schemaName}_mastra_threads_metadata_gin_idx"`;
+    const pool = new Pool({ connectionString });
+    const { rowCount } = await pool.query(`SELECT 1 FROM pg_indexes WHERE schemaname = $1 AND indexname = $2`, [
+      schemaName,
+      `${schemaName}_mastra_threads_metadata_gin_idx`,
+    ]);
+    expect(rowCount).toBe(1);
+    try {
+      await pool.query(`DROP INDEX ${index}`);
+      await pool.query(`ALTER TABLE ${table} ALTER COLUMN metadata TYPE text`);
+      await run(pool, table);
+    } finally {
+      await pool.query(`DELETE FROM ${table} WHERE id = $1`, [id]);
+      await pool.query(`ALTER TABLE ${table} ALTER COLUMN metadata TYPE jsonb USING metadata::jsonb`);
+      await pool.query(`CREATE INDEX ${index.split('.')[1]} ON ${table} USING gin (metadata jsonb_path_ops)`);
+      await pool.end();
+    }
+  }
 
   async function createThread(resourceId = 'resource') {
     const now = new Date();
@@ -95,37 +119,23 @@ describe('PostgreSQL thread metadata writes across processes', () => {
 
   it('updateThread title-only update does not cast legacy TEXT metadata', async () => {
     const { id } = await createThread();
-    const table = `"${schemaName}".mastra_threads`;
-    const pool = new Pool({ connectionString });
-    try {
-      // Older deployments store metadata as TEXT, which can hold JSON that jsonb rejects.
-      await pool.query(`ALTER TABLE ${table} ALTER COLUMN metadata TYPE text`);
+    await withLegacyTextMetadata(id, async (pool, table) => {
+      // TEXT can hold JSON that jsonb rejects.
       await pool.query(`UPDATE ${table} SET metadata = $1 WHERE id = $2`, ['{"v":"\\u0000"}', id]);
       const updated = await a.updateThread({ id, title: 'renamed' });
       expect(updated.title).toBe('renamed');
       expect(updated.metadata).toEqual({ v: '\u0000' });
-    } finally {
-      await pool.query(`DELETE FROM ${table} WHERE id = $1`, [id]);
-      await pool.query(`ALTER TABLE ${table} ALTER COLUMN metadata TYPE jsonb USING metadata::jsonb`);
-      await pool.end();
-    }
+    });
   });
 
   it('metadata updates on legacy TEXT metadata that jsonb rejects still merge', async () => {
     const { id } = await createThread();
-    const table = `"${schemaName}".mastra_threads`;
-    const pool = new Pool({ connectionString });
-    try {
-      await pool.query(`ALTER TABLE ${table} ALTER COLUMN metadata TYPE text`);
+    await withLegacyTextMetadata(id, async (pool, table) => {
       await pool.query(`UPDATE ${table} SET metadata = $1 WHERE id = $2`, ['{"v":"\\u0000","keep":1}', id]);
       expect((await a.updateThread({ id, metadata: { k: 1 } })).metadata).toMatchObject({ keep: 1, k: 1 });
       const updated = await a.updateThreadMetadata({ id, update: () => ({ j: 2 }) });
       expect(updated?.metadata).toMatchObject({ keep: 1, k: 1, j: 2 });
-    } finally {
-      await pool.query(`DELETE FROM ${table} WHERE id = $1`, [id]);
-      await pool.query(`ALTER TABLE ${table} ALTER COLUMN metadata TYPE jsonb USING metadata::jsonb`);
-      await pool.end();
-    }
+    });
   });
 
   it('keys patched to undefined are removed from metadata', async () => {

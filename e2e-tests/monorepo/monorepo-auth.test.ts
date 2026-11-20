@@ -101,6 +101,127 @@ describe.for([['pnpm'] as const])(`%s monorepo`, { concurrent: false }, ([pkgMan
     );
   });
 
+  describe('Authenticated user in dynamic agent config', { concurrent: false }, () => {
+    it(
+      'passes the signed-in user to dynamic instructions and ignores a user sent by the client',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-agent-user-test-${pkgManager}-`));
+        const port = await getPort();
+        const controller = new AbortController();
+        let proc: ReturnType<typeof execa> | undefined;
+
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+
+          const corePath = join(isolatedFixturePath, 'apps', 'custom', 'node_modules', '@mastra', 'core', 'dist');
+          await mkdir(join(corePath, 'runtime-context'), { recursive: true });
+          await writeFile(
+            join(corePath, 'runtime-context', 'index.js'),
+            `export { RequestContext as RuntimeContext } from '../request-context/index.js';`,
+          );
+
+          const mastraConfigPath = join(isolatedFixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts');
+          const originalMastraConfig = await readFile(mastraConfigPath, 'utf-8');
+          const authenticatedMastraConfig = originalMastraConfig
+            .replace(
+              "import { ConsoleLogger } from '@mastra/core/logger';",
+              [
+                "import { ConsoleLogger } from '@mastra/core/logger';",
+                "import { Agent } from '@mastra/core/agent';",
+                "import { SimpleAuth } from '@mastra/core/server';",
+                '',
+                'const userAgent = new Agent({',
+                "  id: 'user-agent',",
+                "  name: 'User Agent',",
+                "  instructions: ({ user }) => (user ? `Helping ${user.name ?? user.id} (${user.role ?? 'no role'})` : 'Helping a guest'),",
+                "  model: 'google/gemini-2.5-flash-lite',",
+                '});',
+              ].join('\n'),
+            )
+            .replace('agents: {', "agents: {\n    'user-agent': userAgent,")
+            .replace(
+              'server: {',
+              [
+                'server: {',
+                '    auth: new SimpleAuth({',
+                '      tokens: {',
+                "        'ada-token': { id: 'ada', name: 'Ada Lovelace', role: 'admin' },",
+                "        'grace-token': { sub: 'grace' },",
+                '      },',
+                '    }),',
+              ].join('\n'),
+            );
+          await writeFile(mastraConfigPath, authenticatedMastraConfig);
+
+          proc = execa('npm', ['run', 'dev'], {
+            cwd: join(isolatedFixturePath, 'apps', 'custom'),
+            cancelSignal: controller.signal,
+            gracefulCancel: true,
+            env: {
+              OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+              MASTRA_PORT: port.toString(),
+            },
+          });
+          activeProcesses.push({ controller, proc });
+
+          await new Promise<void>((resolve, reject) => {
+            proc!.stderr?.on('data', data => {
+              const errMsg = data?.toString();
+              if (errMsg?.includes('punycode') || errMsg?.includes('falling back to an in-memory store')) {
+                return;
+              }
+              reject(new Error('failed to start authenticated agent dev server: ' + errMsg));
+            });
+            proc!.stdout?.on('data', data => {
+              console.log(data?.toString());
+              if (data?.toString()?.includes(`http://localhost:${port}`)) {
+                resolve();
+              }
+            });
+          });
+
+          const instructionsFor = async (token: string, query = '') => {
+            const response = await fetch(`http://localhost:${port}/api/agents/user-agent${query}`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            expect(response.status).toBe(200);
+            return (await response.json()).instructions;
+          };
+
+          // The provider's user is normalized: `id`/`name`/`role` pass through, `sub` becomes the id.
+          expect(await instructionsFor('ada-token')).toBe('Helping Ada Lovelace (admin)');
+          expect(await instructionsFor('grace-token')).toBe('Helping grace (no role)');
+
+          // The normalized user is a reserved key, so a client can't set it through requestContext.
+          const spoofed = encodeURIComponent(
+            JSON.stringify({ mastra__normalizedUser: { id: 'mallory', name: 'Mallory', role: 'admin' } }),
+          );
+          expect(await instructionsFor('grace-token', `?requestContext=${spoofed}`)).toBe('Helping grace (no role)');
+
+          const unauthenticated = await fetch(`http://localhost:${port}/api/agents/user-agent`);
+          expect(unauthenticated.status).toBe(401);
+          await unauthenticated.body?.cancel();
+        } finally {
+          if (proc) {
+            try {
+              proc.kill('SIGKILL');
+              await Promise.race([proc.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
+            } catch (err) {
+              // @ts-expect-error - killed is not typed
+              if (!err.killed) {
+                console.log('failed to kill authenticated agent dev proc', err);
+              }
+            }
+          }
+          await new Promise(resolve => setTimeout(resolve, 1_000));
+          await removeOutputDir(isolatedFixturePath);
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+  });
+
   describe('Browser stream route authentication', { concurrent: false }, () => {
     /**
      * Browser stream routes are registered outside the route-registration pipeline,

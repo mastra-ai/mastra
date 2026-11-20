@@ -10,7 +10,7 @@ import type { TracingContext } from '../../../observability';
 import type { OutputResult } from '../../../processors';
 import { StructuredOutputProcessor } from '../../../processors/processors/structured-output';
 import { ProcessorRunner } from '../../../processors/runner';
-import { RequestContext } from '../../../request-context';
+import { RequestContext, withoutLiveRequestKeys } from '../../../request-context';
 import { toStandardSchema } from '../../../schema';
 import {
   persistProcessorDataChunk,
@@ -31,8 +31,10 @@ import { isDurableAgentLike } from '../../types';
 import { assertExecutionOwned, isExecutionFenceError } from '../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../memory-fga';
 import { getRunRegistryEntry } from '../run-registry';
+import { toLiveStructuredOutputSchema } from '../structured-output-null-transform';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry } from '../types';
 import { resolveRuntimeDependencies } from '../utils/resolve-runtime';
+import { foldBackgroundResults } from './shared/background-results';
 import { hydrateMessageListState } from './shared/message-list-state';
 
 type GenerateThreadTitleArgs = Parameters<NonNullable<RunRegistryEntry['generateThreadTitle']>>[0];
@@ -94,7 +96,9 @@ function restoreRequestContext(
   if (!entries) return fallback ?? new RequestContext();
 
   const restored = new RequestContext<unknown>(fallback?.entries());
-  for (const [key, value] of Object.entries(entries)) restored.set(key, value);
+  // The snapshot's token and signed-in user belong to whoever started the run;
+  // the live ones in `fallback` are kept.
+  for (const [key, value] of Object.entries(withoutLiveRequestKeys(entries))) restored.set(key, value);
   restoreRunAgentScopes(restored);
   return restored;
 }
@@ -194,6 +198,8 @@ export async function runDurableFinishSideEffects({
   if (registryEntry) {
     registryEntry.messageList = messageList;
   }
+  // A background result that landed after the last background check is still a placeholder here.
+  await foldBackgroundResults(registryEntry, messageList);
 
   // The caller-side MastraModelOutput only sees the finish event after this step has
   // persisted messages, and remote/recovered runs have no caller at all. Attach the
@@ -207,7 +213,11 @@ export async function runDurableFinishSideEffects({
   const structuredOutput = initData.options?.structuredOutput;
   const structuredOutputText = resolveOutputText(messageList);
   const liveStructuredOutput = registryEntry?.structuredOutput;
-  const structuredOutputSchema = liveStructuredOutput?.schema ?? structuredOutput?.schema;
+  const structuredOutputSchema =
+    liveStructuredOutput?.schema ??
+    (structuredOutput?.schema
+      ? toLiveStructuredOutputSchema(structuredOutput.schema, structuredOutput.nullToUndefined)
+      : undefined);
   let structuredOutputChunks: ChunkType[] | undefined;
   // The structuring model reads tool calls and results too, so a tool-only answer still qualifies.
   const structuringParts = structuredOutput?.hasStructuringModel ? responseStreamParts(messageList) : undefined;
@@ -606,10 +616,7 @@ export async function runDurableDeadlineOutputPass({
     // A resumed run's persisted input keeps messages memory already stores as refs (a recovered run's
     // crash-time transcript is hydrated already). Defensive: refs only reach here when a resumed run's
     // deadline fires before its first step snapshot with no settled tool results, which no test drives.
-    await hydrateMessageListState(
-      { state: undefined, getInitData: () => initData, mastra, requestContext },
-      messageListState,
-    ),
+    await hydrateMessageListState({ getInitData: () => initData, mastra, requestContext }, messageListState),
   );
   // Untargeted processor data lands on the reply, as at finish; resolved before the cut-off text is added.
   const replyMessageId = resolveOutputMessageSkippingCompletionChecks(messageList)?.id ?? initData.messageId;

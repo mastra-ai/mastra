@@ -65,7 +65,7 @@ export default defineSchema({
 })
 ```
 
-### 2. Create the Storage Handler
+### 2. Create the storage handler
 
 In `convex/mastra/storage.ts`:
 
@@ -217,11 +217,11 @@ const cache = new ConvexServerCache({
 
 `ConvexServerCache` stores list entries as separate Convex documents. This avoids growing a stream replay list inside one document and helps stay within Convex's record size limit.
 
-Each scalar cache value and each list item is stored as one Convex row and must stay within Convex's row-size limits. Very large lists are still bounded by Convex query limits when replaying a range.
+Each scalar cache value and each list item is stored as one Convex row and must stay within Convex's row-size limits. Large lists are still bounded by Convex query limits when replaying a range.
 
-Cache cleanup and `clear()` run in bounded batches. A single client call can loop through up to 1,000 Convex mutations, with each mutation handling up to 25 list items. While `clear()` is cleaning a key, reads for that key can return empty results until cleanup finishes.
+Cache cleanup and `clear()` run in bounded batches. A single client call can loop through up to 1,000 Convex mutations, with each mutation handling up to 25 list items. A key that `clear()` is cleaning returns empty results on read until cleanup finishes.
 
-For very large cache namespaces, clear incrementally or use narrower prefixes to avoid long-running cleanup operations.
+For large cache namespaces, clear incrementally or use narrower prefixes to avoid long-running cleanup operations.
 
 During batched cleanup, cache metadata can temporarily use an internal `deleted` state. The next cleanup pass removes those rows. Avoid writing new values with the same prefix until `clear()` finishes.
 
@@ -235,7 +235,7 @@ Use a non-empty `keyPrefix` unless you intentionally want `clear()` to remove ev
 
 ## Additional notes
 
-### Schema Management
+### Schema management
 
 The storage implementation uses typed Convex tables for each Mastra domain:
 
@@ -262,7 +262,7 @@ All typed tables include:
 - An `id` field for Mastra's record ID (distinct from Convex's auto-generated `_id`)
 - A `by_record_id` index for efficient lookups by Mastra ID
 
-This design ensures compatibility with Mastra's storage contract while using Convex's automatic indexing and real-time capabilities.
+The adapter stores data in a layout compatible with Mastra's storage contract and uses Convex's automatic indexing and real-time capabilities.
 
 ### Environment variables
 

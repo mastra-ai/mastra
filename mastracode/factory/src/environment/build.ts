@@ -19,13 +19,15 @@ import { environmentSandboxContext, resolveProjectEnvironment } from '../workspa
 import type { SessionEnvironment } from '../workspace.js';
 import { headsChanged, recordedHeadResolver, resolveCurrentHeads } from './heads.js';
 import type { EnvironmentHeads } from './heads.js';
+import { groupedRepositoryAccess } from './repository-access.js';
 
-export const ENVIRONMENT_BUILD_TRIGGERS = ['manual', 'schedule', 'push'] as const;
+/** `settings`: a saved change to the environment; builds only when the template inputs changed. */
+export const ENVIRONMENT_BUILD_TRIGGERS = ['manual', 'schedule', 'push', 'settings'] as const;
 export type EnvironmentBuildTrigger = (typeof ENVIRONMENT_BUILD_TRIGGERS)[number];
 
 export interface EnvironmentBuildSourceControl {
   storage: Pick<SourceControlStorageHandle, 'projectRepositories' | 'repositories'>;
-  versionControl: Pick<VersionControl, 'getRepositoryAccess'>;
+  versionControl: Pick<VersionControl, 'getRepositoryAccess' | 'getRepositoriesAccess'>;
 }
 
 export interface EnvironmentBuildDeps {
@@ -51,7 +53,7 @@ export interface EnvironmentBuildOutcome {
   outcome: 'started' | 'skipped' | 'unavailable' | 'failed';
   buildId?: string;
   templateId?: string;
-  /** Why nothing started: `debounced`, `starting` (another run is starting a build), `in_progress`, `unchanged`, `unresolved` (a lapsed run may have started a build the provider cannot list), `no_environment`, `no_builds`, `no_source_control`; why a run failed: `not_recorded`, `superseded`, or an error. */
+  /** Why nothing started: `debounced`, `starting` (another run is starting a build), `in_progress`, `unchanged`, `unresolved` (a lapsed run may have started a build the provider cannot list), `no_template` (a `settings` run before the first build), `no_environment`, `no_builds`, `no_source_control`; why a run failed: `not_recorded`, `superseded`, or an error. */
   reason?: string;
   /** The heads the started build pins; the workflow stores them once the build is ready. */
   heads?: EnvironmentHeads;
@@ -85,15 +87,20 @@ export function environmentBuildContext(
   project: Pick<FactoryProject, 'id' | 'orgId' | 'name'>,
   environment: SessionEnvironment,
   heads: EnvironmentHeads,
-  versionControl: Pick<VersionControl, 'getRepositoryAccess'>,
+  versionControl: Pick<VersionControl, 'getRepositoryAccess' | 'getRepositoriesAccess'>,
 ): FactorySandboxContext {
+  const repositoryAccess = groupedRepositoryAccess(
+    versionControl,
+    project.orgId,
+    environment.repos.map(repo => repo.repositoryId),
+  );
   return {
     sessionId: environmentBuildSessionId(project.id),
     factoryId: project.id,
     factoryName: project.name,
     ...environmentSandboxContext(environment, {
       orgId: project.orgId,
-      getRepositoryAccess: args => versionControl.getRepositoryAccess(args),
+      getRepositoryAccess: args => repositoryAccess(args.repositoryId),
       resolveHead: recordedHeadResolver(heads),
     }),
   };
@@ -108,13 +115,30 @@ export async function environmentBuildContextWithEnv(
   project: Pick<FactoryProject, 'id' | 'orgId' | 'name'>,
   environment: SessionEnvironment,
   heads: EnvironmentHeads,
-  versionControl: Pick<VersionControl, 'getRepositoryAccess'>,
+  versionControl: Pick<VersionControl, 'getRepositoryAccess' | 'getRepositoriesAccess'>,
   sandboxEnvs: Pick<SandboxEnvStore, 'resolve'> | undefined,
 ): Promise<{ ctx: FactorySandboxContext; buildEnvRevision: string | undefined }> {
+  return withBuildEnv(project, environment, heads, versionControl, await environmentBuildEnv(project, sandboxEnvs));
+}
+
+/** The Factory's Build variables as a build context hands them to the provider. */
+async function environmentBuildEnv(
+  project: Pick<FactoryProject, 'id' | 'orgId'>,
+  sandboxEnvs: Pick<SandboxEnvStore, 'resolve'> | undefined,
+): Promise<ReturnType<typeof sandboxBuildContext>> {
   const env = sandboxEnvs
     ? await resolveSandboxEnv(sandboxEnvs, { orgId: project.orgId, projectId: project.id })
     : undefined;
-  const build = sandboxBuildContext(env);
+  return sandboxBuildContext(env);
+}
+
+function withBuildEnv(
+  project: Pick<FactoryProject, 'id' | 'orgId' | 'name'>,
+  environment: SessionEnvironment,
+  heads: EnvironmentHeads,
+  versionControl: Pick<VersionControl, 'getRepositoryAccess' | 'getRepositoriesAccess'>,
+  build: ReturnType<typeof sandboxBuildContext>,
+): { ctx: FactorySandboxContext; buildEnvRevision: string | undefined } {
   return {
     ctx: { ...environmentBuildContext(project, environment, heads, versionControl), ...build },
     buildEnvRevision: build.buildEnvRevision,
@@ -172,6 +196,17 @@ export async function resolveEnvironmentHeads(
  */
 export const BUILD_START_LEASE_MS = 10 * 60_000;
 
+/** How long the build workflow polls a started build before it gives up on it. */
+export const MAX_BUILD_WAIT_MS = 30 * 60_000;
+
+/**
+ * How long after a lapsed lease a provider that cannot list builds keeps every
+ * trigger from building. The lapsed run started its build, if it did, before
+ * its lease expired, so by now that build has outlived the workflow's own wait
+ * and is treated as failed.
+ */
+export const UNRESOLVED_BUILD_START_TIMEOUT_MS = MAX_BUILD_WAIT_MS;
+
 /** Tries at recording a started build before the run leaves its lease to lapse. */
 const RECORD_ATTEMPTS = 5;
 
@@ -185,13 +220,18 @@ const RECORD_ATTEMPTS = 5;
  * build is ready and neither a head nor any other template input changed;
  * `manual` otherwise always builds. A `push` that would build then takes the
  * leading-edge debounce claim, so only a push that starts a build opens the
- * window. Saving settings never builds.
+ * window. `settings` (a saved environment change) builds only once the
+ * project has a template and the template inputs differ from the last
+ * build's, whatever the heads; it skips as `no_template` before the first
+ * build, and saving the same inputs twice skips as `unchanged`.
  *
  * Taking over a lapsed lease leaves the start uncertain: the lapsed run may
  * have started a build it never recorded. The mark persists until resolved.
  * While it stands, a provider that lists builds is asked for a running one
  * (and every trigger skips as `in_progress` on it); with a provider that
- * cannot list, every trigger skips as `unresolved`.
+ * cannot list, every trigger skips as `unresolved` until
+ * `UNRESOLVED_BUILD_START_TIMEOUT_MS` after the lapse, when the run gives
+ * up on that build as failed, clears the mark and carries on.
  *
  * The result is written as the lease is released, and only while this run
  * still holds it. A failed `builds.start` clears the last build id, so a later
@@ -218,6 +258,31 @@ export async function runEnvironmentBuild(
     project.lastPushBuildAt !== null &&
     at.getTime() - project.lastPushBuildAt.getTime() < project.buildPushDebounceMinutes * 60_000;
   if (input.trigger === 'push' && pushDebounced(initial, now())) return { outcome: 'skipped', reason: 'debounced' };
+
+  const readInputs = async (project: FactoryProject) => {
+    const environment = await resolveProjectEnvironment(sourceControl.storage, project);
+    const buildEnv = await environmentBuildEnv(project, deps.sandboxEnvs);
+    return { environment, buildEnv, buildInputs: environmentBuildInputs(environment, buildEnv.buildEnvRevision) };
+  };
+  // A `settings` run builds only for a project with a template whose inputs
+  // moved; checked before any head lookup, so a save that changed nothing the
+  // template bakes never calls GitHub or the provider.
+  const settingsSkip = (project: FactoryProject, read: Awaited<ReturnType<typeof readInputs>>) =>
+    input.trigger !== 'settings'
+      ? undefined
+      : read.environment.repos.length === 0
+        ? 'no_environment'
+        : !project.activeTemplateId && !project.lastBuildId
+          ? 'no_template'
+          : project.lastBuildInputs === read.buildInputs
+            ? 'unchanged'
+            : undefined;
+  if (input.trigger === 'settings') {
+    // Also checked before the lease, so a save that changes nothing never
+    // holds it against a Build now right behind it.
+    const reason = settingsSkip(initial, await readInputs(initial));
+    if (reason) return { outcome: 'skipped', reason };
+  }
 
   const token = randomUUID();
   const lease = { id: initial.id, token, leaseMs: BUILD_START_LEASE_MS };
@@ -260,21 +325,20 @@ export async function runEnvironmentBuild(
       // Read build state only once this run holds the lease, so a run that
       // finished while this one waited has already recorded its build.
       project = (await deps.projects.getById({ id: initial.id })) ?? initial;
-      environment = await resolveProjectEnvironment(sourceControl.storage, project);
+      const read = await readInputs(project);
+      ({ environment, buildInputs } = read);
       if (environment.repos.length === 0) {
         await release();
         return { outcome: 'skipped', reason: 'no_environment' };
       }
+      const skip = settingsSkip(project, read);
+      if (skip) {
+        await release();
+        return { outcome: 'skipped', reason: skip };
+      }
+      const buildEnv = read.buildEnv;
       heads = await resolveEnvironmentHeads(sourceControl, project, environment);
-      const built = await environmentBuildContextWithEnv(
-        project,
-        environment,
-        heads,
-        sourceControl.versionControl,
-        deps.sandboxEnvs,
-      );
-      ctx = built.ctx;
-      buildInputs = environmentBuildInputs(environment, built.buildEnvRevision);
+      ctx = withBuildEnv(project, environment, heads, sourceControl.versionControl, buildEnv).ctx;
 
       if (claim.uncertain) {
         // A run whose lease lapsed may have reached the provider before it
@@ -290,9 +354,19 @@ export async function runEnvironmentBuild(
           resolved = true;
         } else {
           // Without history the earlier start can never be reconciled, so no
-          // trigger starts another build beside it.
-          await release();
-          return { outcome: 'skipped', reason: 'unresolved' };
+          // trigger starts another build beside it until that build, if it
+          // exists, has outlived the workflow's own wait.
+          const since = project.buildStartUncertainSince ?? now();
+          if (now().getTime() - since.getTime() < UNRESOLVED_BUILD_START_TIMEOUT_MS) {
+            await release();
+            return { outcome: 'skipped', reason: 'unresolved' };
+          }
+          resolved = true;
+          deps.logger?.info('environment build gave up on an unrecorded build start', {
+            factoryProjectId: project.id,
+            trigger: input.trigger,
+            uncertainSince: since.toISOString(),
+          });
         }
       }
 

@@ -16,47 +16,42 @@ import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cardRuleGroupSchema } from '@mastra/factory/rules/rule-group';
 import { SettingsContainer, SettingsGroup, SettingsRow, SettingsTitle } from '@mastra/playground-ui/new/settings';
-
-import { BookOpen, Bot, FileText, Flag, Pencil, Play, Route, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { Link } from 'react-router';
 import type { ReactNode } from 'react';
 
 import type { FactorySkillInfo, StoredPhaseInfo } from '../../../../api/types';
-import { FactorySkillEditorDialog } from '../../settings/components/FactorySkillEditorDialog';
+import { useSourceSuggestions } from '../../../../hooks/useSourceSuggestions';
+import { boardSkillPath } from '../boardConfigPaths';
 import { RuleEditor } from '../../settings/components/RuleEditor';
 import { SettingsSubsection } from '../../settings/components/SettingsSubsection';
 import {
+  DEFAULT_SESSION,
   MAX_GOAL_RUNS,
   MAX_INSTRUCTIONS,
   MAX_OBJECTIVE,
   PHASE_TOOLS,
   goalRunsValid,
   nextPhasesOf,
+  withAutoStart,
 } from '../boardDraft';
 import type { RuleField } from '../boardDraft';
 import { PhaseMoves } from './PhaseMoves';
 import { PhaseStep, PhaseSteps } from './PhaseSteps';
+import { SkillBadges } from './skills/SkillBadges';
+import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
+import { IconDirection1 } from '@mastra/playground-ui/icons/central/IconDirection1';
+import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
+import { IconPlay } from '@mastra/playground-ui/icons/central/IconPlay';
+import { IconRobot } from '@mastra/playground-ui/icons/central/IconRobot';
+import { IconFlag2 } from '@mastra/playground-ui/icons/central/IconFlag2';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
 const NO_SKILL = '__none__';
 /** Free-text fields share one width, so short values don't stretch across the page. */
 const FIELD_WIDTH = 'sm:max-w-xs';
 /** A counter only shows once its limit is near. */
 const countNear = (length: number, max: number) => (length >= max - 200 ? ` ${length}/${max}` : '');
-
-/** Runner context a phase gets when it names none. */
-const DEFAULT_SESSION = 'work';
-
-/** A skill's status, with the same badges as the Skills page. */
-function SkillBadges({ skill, missing }: { skill?: FactorySkillInfo; missing: boolean }) {
-  return (
-    <>
-      {missing && <Badge variant="destructive">Not found</Badge>}
-      {skill?.error && <Badge variant="destructive">Failed to load</Badge>}
-      {skill?.builtIn && skill.origin !== undefined && skill.origin !== 'bundled' && <Badge>Overridden by app</Badge>}
-      {skill?.edited && <Badge>Edited</Badge>}
-    </>
-  );
-}
 
 /**
  * A setting whose heading and help sit above its control, so the control stands alone as the place to type.
@@ -160,6 +155,7 @@ export function PhaseConfig({
   /** Unset when the phase can't be removed. */
   onRemove?: () => void;
 }) {
+  const sources = useSourceSuggestions(factoryId);
   const working = phase.kind === 'working';
   const next = nextPhasesOf(phase, phases);
   const instructions = phase.runner?.instructions ?? '';
@@ -170,7 +166,6 @@ export function PhaseConfig({
   const skillName = phase.runner?.skill;
   const skill = skillName ? skills?.find(candidate => candidate.name === skillName) : undefined;
   const skillMissing = skillName !== undefined && skills !== undefined && skill === undefined;
-  const [openSkill, setOpenSkill] = useState<FactorySkillInfo>();
 
   const setRunner = (runner: Partial<NonNullable<StoredPhaseInfo['runner']>>) => {
     const merged = { ...phase.runner, ...runner };
@@ -195,7 +190,7 @@ export function PhaseConfig({
   );
   const remove = onRemove && (
     <div>
-      <Button variant="ghost" icon={<Trash2 />} onClick={onRemove}>
+      <Button variant="ghost" icon={<TrashIcon />} onClick={onRemove}>
         Remove {phase.name}
       </Button>
     </div>
@@ -213,7 +208,7 @@ export function PhaseConfig({
   return (
     <div className="flex flex-col gap-8">
       <PhaseSteps label={`How ${phase.name} runs`}>
-        <PhaseStep icon={<Play />} title="Starts">
+        <PhaseStep icon={<IconPlay />} title="Starts">
           <SettingsContainer>
             <SettingsRow label="Start on its own" disabled={disabled}>
               <Switch
@@ -221,7 +216,7 @@ export function PhaseConfig({
                 checked={phase.autoStart ?? false}
                 disabled={disabled}
                 onCheckedChange={checked => {
-                  onChange({ ...phase, autoStart: checked, autoStartWhen: checked ? phase.autoStartWhen : null });
+                  onChange(withAutoStart(phase, checked));
                   if (!checked) onRawRule('autoStartWhen', undefined);
                 }}
               />
@@ -233,6 +228,7 @@ export function PhaseConfig({
                   description="Leave empty to start every card on its own."
                   rule={phase.autoStartWhen}
                   schema={cardRuleGroupSchema}
+                  options={{ 'source.repository': sources }}
                   disabled={disabled}
                   json={json('autoStartWhen')}
                   onUnfinished={unfinished => onUnfinished('autoStartWhen', unfinished)}
@@ -243,7 +239,7 @@ export function PhaseConfig({
           </SettingsContainer>
         </PhaseStep>
 
-        <PhaseStep icon={<Bot />} title="Agent runs">
+        <PhaseStep icon={<IconRobot />} title="Agent runs">
           <PhaseField
             title="Instructions"
             description={`Added to the agent's prompt when the phase starts.${countNear(instructions.length, MAX_INSTRUCTIONS)}`}
@@ -337,7 +333,7 @@ export function PhaseConfig({
                   >
                     <SelectTrigger variant="ghost" size="sm" aria-label={`${phase.name} skill`} className="-ml-2 w-fit">
                       <span className="flex min-w-0 items-center gap-2">
-                        <BookOpen aria-hidden className="text-muted-foreground size-4 shrink-0" />
+                        <IconBook aria-hidden className="text-muted-foreground size-icon-md shrink-0" />
                         <span className="truncate">{skillName ?? 'No skill'}</span>
                       </span>
                     </SelectTrigger>
@@ -350,15 +346,17 @@ export function PhaseConfig({
                       ))}
                     </SelectContent>
                   </Select>
-                  <SkillBadges skill={skill} missing={skillMissing} />
+                  {skillMissing && <Badge variant="destructive">Not found</Badge>}
+                  {skill?.error && <Badge variant="destructive">Failed to load</Badge>}
+                  {skill && <SkillBadges skill={skill} />}
                   {skill && (
                     <Button
                       size="sm"
                       variant="ghost"
-                      icon={skillsEditable ? <Pencil /> : <FileText />}
+                      icon={skillsEditable ? <IconPencil /> : <IconFileText />}
                       aria-label={`${skillsEditable ? 'Edit' : 'View'} ${skill.name}`}
                       className="ml-auto"
-                      onClick={() => setOpenSkill(skill)}
+                      render={<Link to={boardSkillPath(factoryId, boardId, skill.name)} />}
                     >
                       {skillsEditable ? 'Edit' : 'View'}
                     </Button>
@@ -407,7 +405,7 @@ export function PhaseConfig({
           </SettingsSubsection>
         </PhaseStep>
 
-        <PhaseStep icon={<Flag />} title="Ends">
+        <PhaseStep icon={<IconFlag2 />} title="Ends">
           <PhaseField
             title="Exit tool"
             description="Ends the phase when it succeeds. Leave empty for none."
@@ -453,6 +451,7 @@ export function PhaseConfig({
                     description="Leave empty to approve for every card."
                     rule={phase.exitTool.autoApproveWhen}
                     schema={cardRuleGroupSchema}
+                    options={{ 'source.repository': sources }}
                     disabled={disabled}
                     json={json('autoApproveWhen')}
                     onUnfinished={unfinished => onUnfinished('autoApproveWhen', unfinished)}
@@ -474,21 +473,12 @@ export function PhaseConfig({
           )}
         </PhaseStep>
 
-        <PhaseStep icon={<Route />} title="Allowed moves">
+        <PhaseStep icon={<IconDirection1 />} title="Allowed moves">
           {moves}
         </PhaseStep>
       </PhaseSteps>
 
       {remove}
-
-      {openSkill && (
-        <FactorySkillEditorDialog
-          skill={openSkill}
-          factoryId={factoryId}
-          canEdit={skillsEditable}
-          onClose={() => setOpenSkill(undefined)}
-        />
-      )}
     </div>
   );
 }

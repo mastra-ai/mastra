@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ExternalLinkIcon } from 'lucide-react';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 
 export const NoToolsInfo = () => (
   <EmptyState
@@ -18,7 +18,7 @@ export const NoToolsInfo = () => (
           <a href="https://mastra.ai/docs/agents/using-tools-and-mcp" target="_blank" rel="noopener noreferrer" />
         }
 
-        icon={<ExternalLinkIcon />}
+        icon={<IconSquareArrowTopRight />}
       >
         Tools documentation
       </Button>

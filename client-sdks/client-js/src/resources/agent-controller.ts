@@ -277,7 +277,11 @@ export interface AgentControllerRequestOptions {
 
 /** Options for subscribing to an agent controller session's event stream. */
 export interface SubscribeAgentControllerSessionOptions {
-  /** Set to false to omit full display_state_changed snapshots, including the initial snapshot. Defaults to true. */
+  /**
+   * Set to false to omit `display_state_changed` snapshots, including the initial one. The stream then opens
+   * with the session's current state as events: `message_start` for the message being streamed, and the latest
+   * `om_status`. Defaults to true.
+   */
   displayState?: boolean;
   /** Called for each event received over the stream. */
   onEvent: (event: AgentControllerEvent) => void;

@@ -1,0 +1,76 @@
+[
+  {
+    "id": "01M7QNDRA936ABXB5K0FEM9JAF",
+    "scopeId": "01M7QNDRA936ABXB5K0FEM9JAF",
+    "parentId": null,
+    "isScope": true,
+    "address": "org:org-1",
+    "declaration": "org:$orgId",
+    "position": "11",
+    "name": "org:org-1",
+    "version": 1,
+    "createdBy": {
+      "author": "host"
+    },
+    "updatedBy": {
+      "author": "host"
+    },
+    "createdAt": "2026-11-18T15:46:50.824Z",
+    "updatedAt": "2026-11-18T15:46:50.824Z",
+    "displayLabel": "Acme"
+  },
+  {
+    "id": "01M7QNDRAAE1V4QAQM1675DAFQ",
+    "scopeId": "01M7QNDRAAE1V4QAQM1675DAFQ",
+    "parentId": "01M7QNDRA936ABXB5K0FEM9JAF",
+    "isScope": true,
+    "address": "project:2eebab66-e6db-4e5c-896c-ceb6e9bafb11",
+    "declaration": "project:$projectId",
+    "position": "11",
+    "name": "project:2eebab66-e6db-4e5c-896c-ceb6e9bafb11",
+    "version": 1,
+    "createdBy": {
+      "author": "host"
+    },
+    "updatedBy": {
+      "author": "host"
+    },
+    "createdAt": "2026-11-18T15:46:50.826Z",
+    "updatedAt": "2026-11-18T15:46:50.826Z",
+    "displayLabel": "Roadmap"
+  },
+  {
+    "id": "01M7QNDRAR089W111QKAENHX5V",
+    "scopeId": "01M7QNDRA936ABXB5K0FEM9JAF",
+    "parentId": "01M7QNDRA936ABXB5K0FEM9JAF",
+    "isScope": false,
+    "position": "11",
+    "name": "Handbook",
+    "version": 1,
+    "createdBy": {
+      "author": "host"
+    },
+    "updatedBy": {
+      "author": "host"
+    },
+    "createdAt": "2026-11-18T15:46:50.841Z",
+    "updatedAt": "2026-11-18T15:46:50.841Z"
+  },
+  {
+    "id": "01M7QNDRASV640KDHDE1YVP6QA",
+    "scopeId": "01M7QNDRAAE1V4QAQM1675DAFQ",
+    "parentId": "01M7QNDRAAE1V4QAQM1675DAFQ",
+    "isScope": false,
+    "position": "11",
+    "name": "Deploy runbook",
+    "version": 1,
+    "createdBy": {
+      "author": "host"
+    },
+    "updatedBy": {
+      "author": "host"
+    },
+    "createdAt": "2026-11-18T15:46:50.842Z",
+    "updatedAt": "2026-11-18T15:46:50.842Z"
+  }
+]
