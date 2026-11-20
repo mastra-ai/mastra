@@ -136,11 +136,18 @@ describe.each(Object.entries(routes))('OpenAI prompt cache key sent by the %s', 
     },
   );
 
-  it('strips the alias before applying the route-specific model remap', async () => {
+  it('strips the alias before applying the route-specific model remap, without Fast on a model that lacks it', async () => {
     const standard = await send('thread-fast', 'gpt-5.3');
     const aliased = await send('thread-fast', 'gpt-5.3:fast');
 
     expect(standard.body.model).toBe(route.sessionHeaders ? 'gpt-5.3-codex' : 'gpt-5.3');
+    expect(aliased.body).toEqual(standard.body);
+  });
+
+  it('requests Fast from the model suffix on a model that supports it', async () => {
+    const standard = await send('thread-fast', 'gpt-6.2-sol');
+    const aliased = await send('thread-fast', 'gpt-6.2-sol:fast');
+
     expect(aliased.body).toEqual(route.sessionHeaders ? { ...standard.body, service_tier: 'priority' } : standard.body);
   });
 

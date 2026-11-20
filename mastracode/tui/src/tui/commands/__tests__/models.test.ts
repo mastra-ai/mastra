@@ -138,6 +138,41 @@ describe('handleModelCommand', () => {
     expect(ctx.showInfo).not.toHaveBeenCalled();
   });
 
+  it('lists Fast entries for supported OpenAI models only with Codex sign-in', async () => {
+    const sol = { id: 'openai/gpt-6.2-sol', provider: 'openai', modelName: 'gpt-6.2-sol', hasApiKey: true };
+    const older = { id: 'openai/gpt-5.3', provider: 'openai', modelName: 'gpt-5.3', hasApiKey: true };
+    const listFor = async (credential: { type: string } | undefined) => {
+      mocks.selectorOptions = undefined;
+      const ctx = {
+        state: {
+          controller: { listAvailableModels: vi.fn(async () => [sol, older]) },
+          session: {
+            model: { get: vi.fn(() => 'openai/gpt-6.2-sol:fast') },
+            thread: { getId: vi.fn(() => null) },
+          },
+          ui: {},
+        },
+        authStorage: { get: vi.fn((id: string) => (id === 'openai-codex' ? credential : undefined)) },
+        showInfo: vi.fn(),
+        showError: vi.fn(),
+      } as any;
+      void handleModelCommand(ctx);
+      await vi.waitFor(() => expect(mocks.selectorOptions).toBeDefined());
+      return mocks.selectorOptions;
+    };
+
+    const signedIn = await listFor({ type: 'oauth' });
+    expect(signedIn.models.map((model: { id: string }) => model.id)).toEqual([
+      'openai/gpt-6.2-sol',
+      'openai/gpt-6.2-sol:fast',
+      'openai/gpt-5.3',
+    ]);
+    expect(signedIn.currentModelId).toBe('openai/gpt-6.2-sol:fast');
+
+    const apiKey = await listFor({ type: 'api_key' });
+    expect(apiKey.models.map((model: { id: string }) => model.id)).toEqual(['openai/gpt-6.2-sol', 'openai/gpt-5.3']);
+  });
+
   it('limits built-in packs to models from the pack provider', async () => {
     const openai = {
       id: 'openai/gpt-5.4',

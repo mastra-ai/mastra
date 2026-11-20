@@ -1146,6 +1146,55 @@ describe('GET /web/config/models', () => {
     expect((await app.request('/web/config/models?factoryId=missing')).status).toBe(404);
   });
 
+  it('offers Fast entries for supported OpenAI models only to a Codex sign-in', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'openai-codex', {
+      type: 'oauth',
+      refresh: 'refresh',
+      access: 'access',
+      expires: Date.now() + 60_000,
+    });
+    await seed.credentials.setCredential({ orgId: 'org1' }, 'openai-codex', { type: 'api_key', key: 'sk-org' });
+    const orgProject = await seed.projects.create({ orgId: 'org1', userId: 'user-a', input: { name: 'Org' } });
+    const controller = {
+      listAvailableModels: async () => [
+        { id: 'openai/gpt-6.2-sol', modelName: 'gpt-6.2-sol', provider: 'openai', hasApiKey: false },
+        { id: 'openai/gpt-5.3', modelName: 'gpt-5.3', provider: 'openai', hasApiKey: false },
+      ],
+    };
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, { workosId: 'user-a', organizationId: 'org1' } as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as any,
+      new ConfigRoutes({
+        auth: fakeRouteAuth(),
+        controller,
+        modelCredentials: seed.credentials,
+        factoryProjects: seed.projects,
+      }).routes(),
+    );
+    const models = async (query: string) => {
+      const res = await app.request(`/web/config/models${query}`);
+      expect(res.status).toBe(200);
+      return ((await res.json()) as { models: ModelCatalogEntry[] }).models;
+    };
+
+    const personal = await models('');
+    expect(personal.map(model => model.id)).toEqual(['openai/gpt-5.3', 'openai/gpt-6.2-sol', 'openai/gpt-6.2-sol:fast']);
+    expect(personal.find(model => model.id === 'openai/gpt-6.2-sol:fast')).toMatchObject({
+      provider: 'openai',
+      modelName: 'gpt-6.2-sol:fast',
+      credentialHolder: 'personal',
+    });
+    expect((await models(`?factoryId=${orgProject.id}`)).map(model => model.id)).toEqual([
+      'openai/gpt-5.3',
+      'openai/gpt-6.2-sol',
+    ]);
+  });
+
   it('names the credential and its holder from the scope a reply will use, not a personal login that shadows it', async () => {
     const seed = await createFactoryStorageForTests();
     await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'anthropic', {
