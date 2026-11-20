@@ -11,7 +11,7 @@ import { CardGrid, CardGridItem } from '@site/src/components/cards/card-grid'
 # Gateway
 
 <Inject>
-  **For AI agents:** Gateway publishes a public OpenAPI spec for every endpoint at [https://gateway-api.mastra.ai/openapi.json](https://gateway-api.mastra.ai/openapi.json). Fetch it for exact request and response schemas.
+  **For AI agents:** Gateway publishes a public OpenAPI spec for every endpoint at [https://gateway-api.mastra.ai/openapi.json](https://gateway-api.mastra.ai/openapi.json). Use it for request and response schemas, and use these docs pages for protocol details the spec leaves out, such as streaming event payloads.
 </Inject>
 
 Mastra Gateway lets you call models from many providers through one managed API. It centralizes credentials, fails over between providers, controls spend, and records the cost of every request. You don't have to run your own proxy or routing layer.
@@ -243,7 +243,7 @@ Browse every model, its ID, and its price in the [model catalog](https://mastra.
   <details>
     <summary>Is there a public OpenAPI spec?</summary>
 
-    Yes. The OpenAPI spec for every Gateway endpoint is at <a href="https://gateway-api.mastra.ai/openapi.json">gateway-api.mastra.ai/openapi.json</a>. Use it to generate clients or to look up exact request and response schemas.
+    Yes. The OpenAPI spec for every Gateway endpoint is at <a href="https://gateway-api.mastra.ai/openapi.json">gateway-api.mastra.ai/openapi.json</a>. Use it to generate clients or to look up request and response schemas.
   </details>
 
   <details>
