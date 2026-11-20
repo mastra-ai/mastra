@@ -17,7 +17,6 @@ import { ChatMessagesLoadingSkeleton } from '@/domains/agents/components/agent-l
 import { ComposerModelSettings } from '@/domains/agents/components/composer-model-settings';
 import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { useThreadInput } from '@/domains/conversation';
 import { useVoiceCall, VoiceCallButton, VoiceCallPanel } from '@/domains/voice';
 
 export type { ThreadProps };
@@ -27,7 +26,7 @@ export type { ThreadProps };
  * wrapper supplies the Studio-only slots (voice, browser, model switcher).
  */
 export function Thread(props: ThreadProps) {
-  const threadInput = useThreadInput(props.threadId);
+  const threadInput = useAgentThreadInput(props.threadId);
   return (
     <StudioThreadFeatures {...props} threadInput={threadInput}>
       <StudioThreadBody {...props} />
@@ -37,7 +36,11 @@ export function Thread(props: ThreadProps) {
 
 export function StudioComposerFeatures(props: ThreadProps & { children: React.ReactNode }) {
   const threadInput = useAgentThreadInput(props.threadId);
-  return <StudioThreadFeatures {...props} threadInput={threadInput} />;
+  return (
+    <StudioThreadFeatures {...props} threadInput={threadInput}>
+      {props.children}
+    </StudioThreadFeatures>
+  );
 }
 
 function StudioThreadFeatures({

@@ -1,5 +1,6 @@
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useAgentThreadInput } from '@mastra/playground-ui/domains/agents/chat';
 import { CloneThreadControl } from '@mastra/playground-ui/domains/memory/components/clone-thread-control';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
@@ -19,7 +20,6 @@ import { useCallback } from 'react';
 import { AgentObservationalMemory } from './agent-observational-memory';
 import { AgentWorkingMemory } from './agent-working-memory';
 import { getRecentMessagesSettings } from './lib/recent-messages';
-import { useThreadInput } from '@/domains/conversation';
 import { MemorySearch } from '@/lib/ai-ui/memory-search';
 
 interface AgentMemoryProps {
@@ -30,7 +30,7 @@ interface AgentMemoryProps {
 
 export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps) {
   const isGatewayMemory = memoryType === 'gateway';
-  const { threadInput: chatInputValue } = useThreadInput(threadId);
+  const { threadInput: chatInputValue } = useAgentThreadInput(threadId);
 
   const { paths, navigate } = useLinkComponent();
 
