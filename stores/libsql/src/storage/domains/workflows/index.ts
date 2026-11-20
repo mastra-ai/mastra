@@ -1285,11 +1285,13 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     runId,
     expectedLastSeq,
     expectedRunToken,
+    protectDraftSeqs,
   }: {
     workflowName: string;
     runId: string;
     expectedLastSeq: number;
     expectedRunToken?: string;
+    protectDraftSeqs?: readonly number[];
   }): Promise<void> {
     try {
       await this.executeWithRetry(
@@ -1321,7 +1323,11 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
                 on: entry.on == null ? undefined : (JSON.parse(entry.on as string) as StateVersion),
               })),
               run.startStateSeq == null ? undefined : Number(run.startStateSeq),
-              refs.rows.map(ref => JSON.parse(ref.payload as string) as StateRef),
+              [
+                ...refs.rows.map(ref => JSON.parse(ref.payload as string) as StateRef),
+                // A protected draft counts as referenced: its child's linking write may not have landed yet.
+                ...(protectDraftSeqs ?? []).map(seq => ({ seq, draft: true as const })),
+              ],
             );
             if (!unused.length) return;
             await tx.execute({

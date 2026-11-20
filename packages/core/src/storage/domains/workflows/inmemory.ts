@@ -848,17 +848,20 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     runId,
     expectedLastSeq,
     expectedRunToken,
+    protectDraftSeqs,
   }: {
     workflowName: string;
     runId: string;
     expectedLastSeq: number;
     expectedRunToken?: string;
+    protectDraftSeqs?: readonly number[];
   }): Promise<void> {
     const key = this.getWorkflowKey(workflowName, runId);
     const record = this.db.workflowRunHeaders.get(key);
     if (!record || record.lastSeq !== expectedLastSeq) return;
     if (expectedRunToken !== undefined && record.runToken !== expectedRunToken) return;
-    const refs: StateRef[] = [];
+    // A protected draft counts as referenced: its child's linking write may not have landed yet.
+    const refs: StateVersion[] = (protectDraftSeqs ?? []).map(seq => ({ seq, draft: true }));
     for (const entries of this.db.workflowRunEntries.values()) {
       for (const entry of entries) {
         if (entry.kind === 'state-base' && entry.base.workflowName === workflowName && entry.base.runId === runId) {

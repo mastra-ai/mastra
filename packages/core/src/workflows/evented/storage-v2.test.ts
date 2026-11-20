@@ -487,6 +487,77 @@ describe('evented step messages on storage v2', () => {
     expect(pruned).toEqual([]);
   });
 
+  it('prunes a finished run once, even when its workflow.end is delivered again', async () => {
+    // Pubsub is at-least-once. The first prune replaces the stored results with what the hook
+    // returned, so a redelivered end that pruned again would hand the hook its own output.
+    const pruned: string[] = [];
+    const big = createStep({
+      id: 'big',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      execute: async () => ({ data: BIG }),
+    });
+    const workflow = createWorkflow({
+      id: 'prune-once',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      options: {
+        storageVersion: 2,
+        pruneSnapshot: ({ snapshot, workflowStatus }) => {
+          pruned.push(workflowStatus);
+          return {
+            ...snapshot,
+            context: {
+              ...snapshot.context,
+              big: {
+                ...snapshot.context.big,
+                // Deliberately not idempotent: pruning a pruned run previews the preview.
+                output: { preview: JSON.stringify(snapshot.context.big!.output).slice(0, 60) },
+              },
+            },
+          };
+        },
+      },
+    })
+      .then(big)
+      .commit();
+
+    const storage = new MockStore();
+    const pubsub = new EventEmitterPubSub();
+    const ends: { topic: string; event: any }[] = [];
+    const publish = pubsub.publish.bind(pubsub);
+    pubsub.publish = async (topic, event) => {
+      if (topic === 'workflows' && event.type === 'workflow.end') ends.push({ topic, event });
+      return publish(topic, event);
+    };
+    const mastra = new Mastra({ logger: false, storage, workflows: { wf: workflow as any }, pubsub });
+    await mastra.startWorkers();
+    try {
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+      expect(result.status).toBe('success');
+      expect(pruned).toEqual(['success']);
+      const storedBig = async () =>
+        (await storage.stores.workflows!.loadWorkflowSnapshot({
+          workflowName: 'prune-once',
+          runId: run.runId,
+          storageVersion: 2,
+        }))!.context.big as { output: { preview: string } };
+      const once = await storedBig();
+      expect(once.output.preview.startsWith('{"data"')).toBe(true);
+
+      // Redeliver the end event and let the worker settle.
+      expect(ends.length).toBeGreaterThan(0);
+      await publish(ends[0]!.topic, ends[0]!.event);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(pruned).toEqual(['success']);
+      expect(await storedBig()).toEqual(once);
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+
   it('join parallel branches once when both write before either loads the other', async () => {
     let joins = 0;
     const arm = (id: string) =>

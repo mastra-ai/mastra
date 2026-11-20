@@ -110,6 +110,8 @@ export class RunJournal {
   #patchCount: number;
   /** The latest draft of the live state written for nested runs to build on, since the last state write. */
   #draft: StateBase | undefined;
+  /** The seqs of the drafts this drive minted, which close-time cleanup must not collect. */
+  #mintedDraftSeqs: number[] = [];
   /** JSON size of the draft patches chained since the latest full draft or state write. */
   #draftBytes = 0;
   /** Serializes `baseFor`, so concurrent nested starts share one draft. */
@@ -253,6 +255,7 @@ export class RunJournal {
       return undefined;
     }
     this.#draftBytes = chained ? this.#draftBytes + opsBytes : 0;
+    this.#mintedDraftSeqs.push(seq);
     this.#draft = { ref: { workflowName: this.workflowName, runId: this.runId, seq, draft: true }, state: next.state };
     return this.#draft;
   }
@@ -277,6 +280,10 @@ export class RunJournal {
             runId: this.runId,
             expectedLastSeq: this.#lastSeq,
             expectedRunToken: this.#runToken,
+            // A nested run links the draft it was handed with its own first write, which can land
+            // after this close (an abandoned parallel arm's child). This drive's drafts stay until
+            // a later drive's cleanup, when each is linked or truly unreferenced.
+            protectDraftSeqs: this.#mintedDraftSeqs,
           })
           .catch(() => undefined);
       }

@@ -772,6 +772,9 @@ export class WorkflowEventProcessor extends EventProcessor {
   }): Promise<void> {
     const pruneSnapshot = this.#pruneSnapshotOf(workflow, finished);
     if (!pruneSnapshot && !terminalHandoff) return;
+    // A finished storage v2 run prunes exactly once: the hook's write replaces the results it read,
+    // so running it again (a redelivered `workflow.end`) would hand it its own output.
+    const pruneOnce = finished && !!pruneSnapshot && currentStorageVersion() === 2;
     let guarded = false;
     try {
       const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
@@ -780,6 +783,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       const runStorage = this.#runStorage(workflowId, runId);
       const snapshot = await runStorage.loadFull();
       if (!snapshot) return;
+      if (pruneOnce && snapshot.prunedAtSeq !== undefined) return;
       let pruned: WorkflowRunState;
       try {
         pruned = pruneSnapshot ? pruneSnapshot({ snapshot, workflowStatus: snapshot.status }) : snapshot;
@@ -787,6 +791,9 @@ export class WorkflowEventProcessor extends EventProcessor {
         this.mastra.getLogger()?.warn?.(`Failed to prune workflow snapshot for run ${runId}: ${error}`);
         return;
       }
+      // In the same write as the pruned results; a drive that re-runs the run writes fresh headers,
+      // clearing it, so its own finish prunes again.
+      if (pruneOnce) pruned = { ...pruned, prunedAtSeq: runStorage.storedState(snapshot)?.seq ?? snapshot.timestamp };
       if (terminalHandoff && guarded) {
         for (const result of Object.values(pruned.context)) {
           if (result?.metadata?.startedBy) {

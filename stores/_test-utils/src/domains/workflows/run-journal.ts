@@ -1328,7 +1328,7 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
             steps: {},
             stateBase: { ...parent, ...base },
           });
-        return { parent, child, driveStart, unused, lastSeq, buildOn };
+        return { parent, child, run, driveStart, unused, lastSeq, buildOn };
       }
 
       it('drops the state entries no version in use reads, keeping every version that is', async () => {
@@ -1343,6 +1343,20 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         // A run starting on the dropped draft after the drive ended fails instead of reading other state.
         await expect(buildOn({ seq: unused.seq, draft: true })).rejects.toThrow();
         await buildOn({ seq: driveStart });
+      });
+
+      it('keeps a protected draft until a later cleanup judges it by its links', async () => {
+        // A child links the draft it was handed with its own first write, which can land after the
+        // parent's drive closed: the closing drive protects the drafts it minted this drive.
+        const { parent, run, unused, lastSeq, buildOn } = await parentWithDrafts();
+
+        await store.dropUnusedStateEntries({ ...parent, expectedLastSeq: lastSeq, protectDraftSeqs: [unused.seq] });
+        await buildOn({ seq: unused.seq, draft: true });
+        expect((await statesOf(run(`late-${unused.seq}`))).state).toEqual({ a: 2, c: 1, d: 1 });
+
+        // Linked, the draft survives the next, unprotected cleanup as a real reference.
+        await store.dropUnusedStateEntries({ ...parent, expectedLastSeq: lastSeq });
+        expect((await statesOf(run(`late-${unused.seq}`))).state).toEqual({ a: 2, c: 1, d: 1 });
       });
 
       it('drops nothing when the run was written since, or is another run under the same id', async () => {

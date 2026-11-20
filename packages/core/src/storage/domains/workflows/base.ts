@@ -414,6 +414,11 @@ export abstract class WorkflowsStorage extends StorageDomain {
    * `unusedStateEntries`), for an engine to call once a drive of the run has ended. Does nothing
    * when the run was written after `expectedLastSeq`, or isn't the run `expectedRunToken` names. A
    * failure is logged, not thrown: the rows stay until a later drive's call drops them.
+   *
+   * `protectDraftSeqs` names the drafts the ended drive handed to nested runs: a child links its
+   * draft with its own first write, which can land after the drive ends, so these are kept (with
+   * what they build on, as a linked draft is) even when no run references them yet. A later drive's
+   * call judges them by their real references.
    * @experimental
    */
   async dropUnusedStateEntries(_args: {
@@ -421,6 +426,7 @@ export abstract class WorkflowsStorage extends StorageDomain {
     runId: string;
     expectedLastSeq: number;
     expectedRunToken?: string;
+    protectDraftSeqs?: readonly number[];
   }): Promise<void> {
     throw runJournalNotSupportedError(this.constructor.name);
   }

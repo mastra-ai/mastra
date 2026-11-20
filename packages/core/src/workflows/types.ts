@@ -423,6 +423,15 @@ export interface WorkflowRunState {
   waitingPaths: Record<string, number[]>;
   timestamp: number;
   /**
+   * The run's `lastSeq` when the evented engine applied `pruneSnapshot` to this finished storage v2
+   * run, written in the same write as the pruned results. A redelivered `workflow.end` sees it and
+   * doesn't prune again: the hook would read its own output, since the first prune replaced the
+   * results it was applied to. Cleared by the engine-built headers of a drive that re-runs the run
+   * (a restart or time travel), whose finish prunes again.
+   * @internal
+   */
+  prunedAtSeq?: number;
+  /**
    * Epoch ms when an agent resume claimed this suspended run (status `pending`). Lets a later
    * resume recognize a claim abandoned by a process that died before starting the run.
    * @internal
@@ -674,6 +683,8 @@ export interface WorkflowOptions<TStorageVersion extends 1 | 2 = 1> {
    *
    * On storage version 2 it's called once, when the run finishes, with every
    * step result, and only for a workflow that sets `storageVersion: 2` itself.
+   * A redelivered finish event doesn't prune again: the run remembers it was
+   * pruned until a restart or time travel re-runs it.
    * Suspended runs aren't pruned: their later steps read earlier results from
    * storage. Step results the hook returns as the same object aren't written
    * again, and the run's result keeps the unpruned step results. Replace step

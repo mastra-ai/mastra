@@ -1724,11 +1724,13 @@ export class WorkflowsPG extends WorkflowsStorage {
     runId,
     expectedLastSeq,
     expectedRunToken,
+    protectDraftSeqs,
   }: {
     workflowName: string;
     runId: string;
     expectedLastSeq: number;
     expectedRunToken?: string;
+    protectDraftSeqs?: readonly number[];
   }): Promise<void> {
     try {
       await this.#db.client.tx(async t => {
@@ -1752,7 +1754,11 @@ export class WorkflowsPG extends WorkflowsStorage {
         const unused = unusedStateEntries(
           entries.map(entry => ({ seq: entry.seq, kind: entry.kind, on: entry.on ?? undefined })),
           run.startStateSeq ?? undefined,
-          refs.map(ref => ref.payload),
+          [
+            ...refs.map(ref => ref.payload),
+            // A protected draft counts as referenced: its child's linking write may not have landed yet.
+            ...(protectDraftSeqs ?? []).map(seq => ({ seq, draft: true as const })),
+          ],
         );
         if (!unused.length) return;
         await t.none(
