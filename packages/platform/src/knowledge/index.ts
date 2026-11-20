@@ -1,5 +1,6 @@
 import { Knowledge } from '@mastra/core/knowledge';
-import type { KnowledgeConfig, KnowledgeScopeDeclarations } from '@mastra/core/knowledge';
+import type { KnowledgeConfig, KnowledgeImporterClass, KnowledgeScopeDeclarations } from '@mastra/core/knowledge';
+import type { IMastraLogger } from '@mastra/core/logger';
 import {
   MastraCompositeStore,
   KnowledgeStorage,
@@ -15,7 +16,7 @@ import type { PlatformAccessToken } from '@mastra/platform-workspace';
 
 export interface PlatformKnowledgeOptions extends Omit<
   KnowledgeConfig,
-  'storage' | 'vector' | 'embedder' | 'embedderOptions' | 'scopes'
+  'storage' | 'vector' | 'embedder' | 'embedderOptions' | 'scopes' | 'importers'
 > {
   /** A token, or a function called before every request so long-lived clients never hold an expired one. */
   accessToken?: PlatformAccessToken;
@@ -25,6 +26,14 @@ export interface PlatformKnowledgeOptions extends Omit<
    * Knowledge API URL. Falls back to `MASTRA_KNOWLEDGE_API_URL`, then `https://knowledge-api.mastra.ai`.
    */
   apiUrl?: string;
+  /**
+   * Importer classes this app offers Platform, e.g. `[HelpSpotImporter]`. Platform lists them in the
+   * Knowledge UI, stores each configured source and runs it here on its schedule. Pass the classes, not
+   * instances: Platform supplies each binding's target, settings and credentials.
+   *
+   * @experimental
+   */
+  importers?: readonly KnowledgeImporterClass[];
 }
 
 // These are the schema-v4 page-store methods, not arbitrary object properties or storage lifecycle methods.
@@ -228,6 +237,9 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
 const DEFAULT_API_URL = 'https://knowledge-api.mastra.ai';
 
 export class PlatformKnowledge extends Knowledge {
+  readonly #importerClasses: readonly KnowledgeImporterClass[];
+  #importerWarnings: string[] = [];
+
   constructor(options: PlatformKnowledgeOptions = {}) {
     // `MASTRA_KNOWLEDGE_ACCESS_TOKEN` is a Knowledge-only credential, narrower than the general
     // Platform token, so it's preferred when set.
@@ -253,6 +265,7 @@ export class PlatformKnowledge extends Knowledge {
       projectId: _projectId,
       instanceId: _instanceId,
       apiUrl: _apiUrl,
+      importers = [],
       ...config
     } = options;
     const endpoint = `${apiUrl.replace(/\/$/, '')}/v1/knowledge/${encodeURIComponent(instanceId)}`;
@@ -272,6 +285,41 @@ export class PlatformKnowledge extends Knowledge {
       scopes: {},
       storage,
     });
+    const classes: KnowledgeImporterClass[] = [];
+    for (const importer of importers) {
+      if (typeof importer !== 'function' || typeof importer.toManifest !== 'function') {
+        throw new TypeError(
+          'PlatformKnowledge `importers` takes importer classes, e.g. `[HelpSpotImporter]`, not instances: Platform supplies each binding.',
+        );
+      }
+      if (classes.includes(importer)) continue;
+      if (classes.some(known => known.id === importer.id)) {
+        this.#importerWarnings.push(
+          `PlatformKnowledge has two importer classes with the id "${importer.id}"; keeping the first one listed. Give each class its own id.`,
+        );
+        continue;
+      }
+      classes.push(importer);
+    }
+    this.#importerClasses = Object.freeze(classes);
+  }
+
+  // The logger a Knowledge starts with drops warnings, so they wait for the first one the app's Mastra
+  // hands over. Mastra hands one over more than once while it starts; warn only the first time.
+  override __setLogger(logger: IMastraLogger): void {
+    super.__setLogger(logger);
+    for (const message of this.#importerWarnings) this.logger.warn(message);
+    this.#importerWarnings = [];
+  }
+
+  /**
+   * The importer classes from the `importers` option, each id once, in the order given. Platform
+   * reads their manifests to list them in the Knowledge UI.
+   *
+   * @experimental
+   */
+  get importerClasses(): readonly KnowledgeImporterClass[] {
+    return this.#importerClasses;
   }
 }
 
