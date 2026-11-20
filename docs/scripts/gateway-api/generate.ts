@@ -10,6 +10,8 @@ import { GATEWAY_API_PAGES } from './pages'
  * Generates the Gateway API reference pages from the live OpenAPI document.
  *
  * 1. Fetches the spec (override with GATEWAY_OPENAPI_SPEC, a URL or a local file path).
+ *    If the fetch fails, it falls back to `openapi.snapshot.json`. Refresh the snapshot with:
+ *    curl -s https://gateway-api.mastra.ai/openapi.json > scripts/gateway-api/openapi.snapshot.json
  * 2. Drops infrastructure operations and points `servers` at the public API host.
  * 3. Runs the `docusaurus-plugin-openapi-docs` CLI, which writes one `*.api.mdx` page per operation.
  *    `markdown.ts` gives each page its slug, title, and guide from `pages.ts`.
@@ -21,6 +23,9 @@ import { GATEWAY_API_PAGES } from './pages'
  */
 
 const execFileAsync = promisify(execFile)
+
+/** Used when the live spec can't be fetched. */
+const SNAPSHOT_PATH = path.join(DOCS_ROOT, 'scripts/gateway-api/openapi.snapshot.json')
 
 /** Operations that don't belong in the API reference. */
 const EXCLUDED_OPERATIONS = new Set(['getOpenApi', 'getHealth', 'getReadiness'])
@@ -50,7 +55,11 @@ export async function loadSpec(source = process.env.GATEWAY_OPENAPI_SPEC ?? SPEC
       if (attempt < 3) await new Promise(resolve => setTimeout(resolve, attempt * 2000))
     }
   }
-  throw new Error(`Could not fetch the Gateway OpenAPI document from ${source}: ${String(lastError)}`)
+  // Slightly stale reference pages are better than a failed docs build or deploy.
+  console.warn(
+    `[gateway-api] Could not fetch the Gateway OpenAPI document from ${source} (${String(lastError)}). Using ${SNAPSHOT_PATH}.`,
+  )
+  return JSON.parse(await fs.readFile(SNAPSHOT_PATH, 'utf-8')) as OpenApiDocument
 }
 
 export interface TransformResult {

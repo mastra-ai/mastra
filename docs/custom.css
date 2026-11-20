@@ -2004,3 +2004,51 @@ a.learn-sidebar-item.is-active {
 #docs-search-results .group > span.truncate {
   flex-shrink: 0;
 }
+
+/* Gateway API pages (docusaurus-theme-openapi-docs) */
+.openapi-explorer {
+  margin-top: 2rem;
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-xl);
+  background-color: color-mix(in oklab, var(--mastra-surface-2) 40%, transparent);
+}
+
+.openapi-explorer__summary {
+  cursor: pointer;
+  padding: 0.75rem 1rem;
+  font-weight: 500;
+}
+
+.openapi-explorer[open] > .openapi-explorer__summary {
+  border-bottom: 0.5px solid var(--border);
+}
+
+.openapi-explorer > .openapi-right-panel__container {
+  padding: 1rem;
+}
+
+/* The theme separates its two columns with a border; with the explorer stacked below it's a stray line */
+main .openapi-left-panel__container {
+  border-right: none;
+}
+
+/* The site's h2 underline and padding misalign the endpoint path next to its method badge */
+.openapi__method-endpoint .openapi__method-endpoint-path {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+/* Use the site accent instead of each language's brand colour for the selected code sample */
+.openapi-tabs__code-list-container > .tabs__item.active {
+  border-color: var(--mastra-green-accent-3);
+  box-shadow: none;
+}
+
+[data-theme='dark'] .openapi-tabs__code-list-container > .tabs__item.active {
+  border-color: var(--mastra-green-accent);
+}
+
+/* Hide the variant picker when a language has only one variant */
+.openapi-tabs__code-container-inner:has(> :only-child) {
+  display: none;
+}

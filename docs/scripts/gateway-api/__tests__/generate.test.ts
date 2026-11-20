@@ -1,6 +1,6 @@
-import { describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 import { API_HOST } from '../constants'
-import { transformSpec } from '../generate'
+import { loadSpec, transformSpec } from '../generate'
 import { GATEWAY_API_PAGES } from '../pages'
 
 type Spec = Parameters<typeof transformSpec>[0]
@@ -116,5 +116,29 @@ describe('transformSpec', () => {
     const copy = structuredClone(source)
     transformSpec(source)
     expect(source).toEqual(copy)
+  })
+})
+
+describe('loadSpec', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  test('falls back to the committed snapshot when the spec cannot be fetched', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError('fetch failed'))
+    vi.stubGlobal('fetch', fetchMock)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const pending = loadSpec('https://gateway-api.example/openapi.json')
+    await vi.runAllTimersAsync()
+    const spec = await pending
+
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('openapi.snapshot.json'))
+    expect(spec.openapi).toMatch(/^3\./)
+    expect(() => transformSpec(spec)).not.toThrow()
   })
 })
