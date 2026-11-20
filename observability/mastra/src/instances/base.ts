@@ -906,14 +906,15 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   }
 
   /**
-   * Ask `spanFilter` about a span's start. When it drops the start, record that
-   * on the span so descendants point at an ancestor exporters did receive.
+   * Ask `spanFilter` about a span's start. When the start is not exported, by
+   * the filter or by a span output processor, record that on the span. Its
+   * descendants then point at an ancestor exporters did receive, and exporters
+   * get no close for a span they never saw open.
    * Returns the start view to export, if any.
    */
   private judgeSpanStart(span: AnySpan): AnyExportedSpan | undefined {
-    const unfilteredSpan = this.getUnfilteredSpanForExport(span);
-    const exportedSpan = this.applySpanFilter(span, unfilteredSpan);
-    if (unfilteredSpan && !exportedSpan && span instanceof BaseSpan) span.isStartFiltered = true;
+    const exportedSpan = this.applySpanFilter(span, this.getUnfilteredSpanForExport(span));
+    if (!exportedSpan && this.config.spanFilter && span instanceof BaseSpan) span.isStartFiltered = true;
     return exportedSpan;
   }
 

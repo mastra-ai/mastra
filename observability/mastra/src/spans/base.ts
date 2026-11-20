@@ -75,7 +75,7 @@ type AnyBaseSpan = AnySpan & {
   getParentSpanId(includeInternalSpans?: boolean, pastFilteredStarts?: boolean): string | undefined;
   /** True when the span is dropped before export (excludeSpanTypes / internal / alwaysExcluded) */
   readonly isExcluded?: boolean;
-  /** True when `spanFilter` dropped the span's start event */
+  /** True when the span's start event was not exported while `spanFilter` is set */
   readonly isStartFiltered?: boolean;
 };
 
@@ -329,11 +329,12 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
    */
   public isExcluded: boolean;
   /**
-   * True when `spanFilter` dropped this span's start event, so exporters never
-   * saw the span open. The observability instance sets it right after creation,
-   * before any child exists. Exported parent ids and bridge lookups then skip
-   * the span (`pastFilteredStarts`). Unlike `isExcluded`, the span keeps its
-   * data, and `spanFilter` still judges its update and end events.
+   * True when exporters never saw this span open while `spanFilter` is set:
+   * the filter, or a span output processor, dropped its start event. The
+   * observability instance sets it right after creation, before any child
+   * exists. Exported parent ids and bridge lookups then skip the span
+   * (`pastFilteredStarts`). Unlike `isExcluded`, the span keeps its data, and
+   * `spanFilter` still judges its update and end events.
    */
   public isStartFiltered = false;
   /** Cached canonical correlation context for this live span */
@@ -698,8 +699,14 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   /**
    * Point an exported view of this span at the nearest ancestor that exporters
    * received. `spanFilter` judges the view before this runs.
+   *
+   * A span whose own start was not exported keeps the parent it was created
+   * under. Only exporters that write spans when they end receive it. A filter
+   * on end-time data, such as errors or duration, drops every start, and the
+   * original parents keep the shape of the trace there.
    */
   public reparentPastFilteredStarts(exportedSpan: AnyExportedSpan, includeInternalSpans?: boolean): void {
+    if (this.isStartFiltered) return;
     exportedSpan.parentSpanId = this.getParentSpanId(includeInternalSpans, true);
     exportedSpan.externalParentSpanId = this.getExportedExternalParentSpanId(includeInternalSpans, true);
   }

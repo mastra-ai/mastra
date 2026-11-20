@@ -467,6 +467,61 @@ describe('Span Filtering', () => {
       ]);
     });
 
+    it('should keep each span under its parent when the filter drops every start', () => {
+      // An errors-only filter reads data set at the end, so no start passes. Exporters
+      // that write spans when they end must still get the tree.
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        spanFilter: span => Boolean(span.errorInfo),
+      });
+
+      const agentSpan = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent' });
+      const toolSpan = agentSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'tool',
+        attributes: { toolId: 'my_tool', toolType: 'function' },
+      });
+      const innerSpan = toolSpan.createChildSpan({ type: SpanType.GENERIC, name: 'inner' });
+      const error = new Error('boom');
+      // Durable engines end a span from its snapshot. It must keep its parent there too.
+      tracing.rebuildSpan(innerSpan.snapshot!()).error({ error, endSpan: true });
+      toolSpan.error({ error, endSpan: true });
+      agentSpan.error({ error, endSpan: true });
+
+      expect(testExporter.events.map(e => [e.type, e.exportedSpan.name, e.exportedSpan.parentSpanId])).toEqual([
+        ['span_ended', 'inner', toolSpan.id],
+        ['span_ended', 'tool', agentSpan.id],
+        ['span_ended', 'agent', undefined],
+      ]);
+    });
+
+    it('should not tell exporters to close a span whose start a processor dropped', async () => {
+      const closed: SpanFilteredEvent[] = [];
+      const exporter = Object.assign(testExporter, {
+        onSpanFilteredEvent: async (event: SpanFilteredEvent) => void closed.push(event),
+      });
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [exporter],
+        // The processor hides a span while it is open. The filter drops it once it has ended.
+        spanOutputProcessors: [
+          { name: 'hide-open-spans', process: span => (span?.endTime ? span : undefined), shutdown: async () => {} },
+        ],
+        spanFilter: span => !span.endTime,
+      });
+
+      tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent' }).end();
+      await tracing.flush();
+
+      expect(testExporter.events).toEqual([]);
+      expect(closed).toEqual([]);
+    });
+
     it('should tell exporters to close a span when the filter drops only its end', async () => {
       const closed: SpanFilteredEvent[] = [];
       const exporter = Object.assign(testExporter, {
