@@ -59,6 +59,11 @@ export interface PlatformAlertRulesIngress {
   event: PlatformAlertEvent;
   /** This project's floor for this event, when its binding sets one; else the rules' own floor. */
   severityFloor?: AlertSeverity;
+  /**
+   * False when this project's binding doesn't take the event: it still lands on a card the project
+   * already holds, but files none (a raise on an incident filed elsewhere). Default true.
+   */
+  createCards?: boolean;
 }
 
 export interface AlertCardRef {
@@ -201,6 +206,7 @@ export class PlatformAlertRules {
       ...(resolvedEarly ? { resolvedEarly } : {}),
     });
 
+    if (plan.kind === 'create' && input.createCards === false) return { status: 'missing' };
     if (plan.kind === 'noop') {
       if (plan.reason !== 'replayed' || !latest) return { status: 'missing' };
       return { status: 'replayed', card: { workItemId: latest.card.id, board: boardForWorkItem(latest.card) } };

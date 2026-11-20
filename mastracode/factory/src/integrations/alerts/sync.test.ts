@@ -47,6 +47,7 @@ function setup(
   const acks: AlertAck[] = [];
   const ingested: string[] = [];
   const floors: Record<string, string | undefined> = {};
+  const creates: Record<string, boolean> = {};
   const queue = [...results];
   let bindings: AlertBinding[] = bound ?? [
     { factoryProjectId: 'fp-1', labels: null, createdAt: new Date('2026-11-01') },
@@ -71,6 +72,7 @@ function setup(
       const key = `${input.factoryProjectId}:${input.event.eventId}`;
       ingested.push(key);
       floors[key] = input.severityFloor;
+      creates[key] = input.createCards !== false;
       const next = queue.shift() ?? { status: 'replayed', card: { workItemId: 'w1', board: 'work' } };
       if (next instanceof Error) throw next;
       return next;
@@ -85,6 +87,7 @@ function setup(
     acks,
     ingested,
     floors,
+    creates,
     cursor: () => cursor,
     bind: (next: AlertBinding[]) => void (bindings = next),
   };
@@ -149,6 +152,42 @@ describe('createAlertSync', () => {
     const summary = await sync();
     expect(summary.failed).toBe(1);
     expect(cursor().projects?.['fp-1']?.after).toBeNull();
+  });
+
+  it('keeps retrying a failing ingest or ack past the pending limit, then moves on once it lands', async () => {
+    const failures = Array.from({ length: 35 }, () => new Error('db down'));
+    const { sync, append, cursor } = setup([...failures, committed]);
+    append('i1');
+    for (let i = 0; i < 35; i++) await sync();
+    expect(cursor().projects?.['fp-1']?.after).toBeNull();
+    await sync();
+    expect(cursor().projects?.['fp-1']?.after).toBe('1-0');
+
+    let ackFailures = 35;
+    const acked = setup([], {
+      ack: async () => {
+        if (ackFailures-- > 0) throw new Error('platform down');
+      },
+    });
+    acked.append('i1');
+    for (let i = 0; i < 35; i++) await acked.sync();
+    expect(acked.cursor().projects?.['fp-1']?.after).toBeNull();
+    await acked.sync();
+    expect(acked.cursor().projects?.['fp-1']?.after).toBe('1-0');
+  });
+
+  it("lets a severity raise file a card only where the binding takes it, and reach every card's owner", async () => {
+    const { sync, append, ingested, creates } = setup([], {
+      bound: [
+        { factoryProjectId: 'fp-1', labels: null, createdAt: new Date('2026-11-01') },
+        { factoryProjectId: 'fp-2', labels: ['platform-project:p2'], createdAt: new Date('2026-11-02') },
+      ],
+    });
+    await sync();
+    append('i1', 'alert.severity_raised', { projectId: 'p2', severity: 'critical' });
+    await sync();
+    expect(ingested).toEqual(['fp-1:i1:alert.severity_raised', 'fp-2:i1:alert.severity_raised']);
+    expect(creates).toEqual({ 'fp-1:i1:alert.severity_raised': false, 'fp-2:i1:alert.severity_raised': true });
   });
 
   it("routes a first fire by its binding's labels and follows the incident everywhere after", async () => {

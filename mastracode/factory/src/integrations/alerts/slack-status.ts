@@ -6,6 +6,7 @@ import { factoryWorkItemUrl } from '../../links.js';
 import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { FactoryRunOutcome } from '../../tools/reports.js';
 import { updateCardMetadata } from './card-metadata.js';
+import { ALERT_TIMELINE_KEY } from './rules.js';
 import { alertSlackThreadOf } from './run-thread.js';
 
 /** Card metadata key holding the Factory's messages in the alert's Slack thread. */
@@ -24,10 +25,14 @@ export type AlertMessageSlot = 'status' | 'diagnosis' | 'fix';
  * A message the Factory posts once. The slot is claimed in the card's metadata before posting, so
  * two replicas (or two calls) never both post; `ts` is set once the post lands. A claim with no
  * `ts` older than {@link CLAIM_STALE_MS} belongs to a post that never landed and may be taken over.
+ * The card holds what the message should say (`text` for a reply; the status renders from the
+ * record) and what Slack last took (`shown`), so a failed or overtaken edit is redone later.
  */
 interface PostedMessage {
   ts?: string;
   claimedAt: string;
+  text?: string;
+  shown?: string;
 }
 
 export interface AlertSlackStatusRecord {
@@ -36,9 +41,13 @@ export interface AlertSlackStatusRecord {
   reason?: string;
   recoveredAt?: string;
   messages: Partial<Record<AlertMessageSlot, PostedMessage>>;
+  /** The reaction last put on the alert message. */
+  reaction?: string | null;
 }
 
 const CLAIM_STALE_MS = 2 * 60_000;
+/** Re-reads after an edit, in case a newer write landed meanwhile; bounded so writers can't ping-pong forever. */
+const SYNC_PASSES = 3;
 const WORKING: ReadonlySet<AlertTriageStage> = new Set(['investigating', 'diagnosed']);
 const CONCLUDED: ReadonlySet<AlertTriageStage> = new Set(['fix_up', 'no_fix']);
 /** A new run restarts the status from here; after a fix or a written conclusion it stays put. */
@@ -136,6 +145,20 @@ const STAGE_REACTION: Record<AlertTriageStage, string | null> = {
 function reactionFor(status: AlertSlackStatusRecord | null): string | null {
   if (!status) return null;
   return status.recoveredAt ? 'white_check_mark' : STAGE_REACTION[status.stage];
+}
+
+function recoveredAtText(at: Date): string {
+  return `${at.toISOString().slice(11, 16)} UTC`;
+}
+
+/** The recovery the card already records, for a status first written after it (thread linked late). */
+function recordedRecovery(card: Card): Pick<AlertSlackStatusRecord, 'recoveredAt'> {
+  const timeline = card.metadata?.[ALERT_TIMELINE_KEY];
+  if (!Array.isArray(timeline)) return {};
+  const last = (timeline as Array<{ kind?: string; at?: string }>)
+    .filter(entry => entry.kind !== 'mention' && entry.kind !== 'severity_raised')
+    .at(-1);
+  return last?.kind === 'recovered' && last.at ? { recoveredAt: recoveredAtText(new Date(last.at)) } : {};
 }
 
 function threadOf(card: Card): AlertThreadRef | null {
@@ -246,103 +269,149 @@ export class AlertSlackStatus {
 
   /** Notes a recovery on the status message; no new reply. */
   async recovered(card: Card, at: Date): Promise<boolean> {
-    const recoveredAt = `${at.toISOString().slice(11, 16)} UTC`;
+    const recoveredAt = recoveredAtText(at);
     return this.#writeStatus(card, previous => (previous ? { recoveredAt } : null));
   }
 
   /** The diagnosis or fix reply. A second call edits the first reply instead of posting another. */
   async reply(card: Card, slot: 'diagnosis' | 'fix', markdown: string): Promise<boolean> {
-    return this.#write(
-      card,
-      slot,
-      () => ({}),
-      () => markdown,
-    );
+    return this.#write(card, slot, () => ({}), markdown);
   }
 
   #writeStatus(card: Card, change: StatusChange): Promise<boolean> {
-    return this.#write(card, 'status', change, status => alertStatusText(status, this.#cardUrl(card)));
+    return this.#write(card, 'status', change);
   }
 
-  async #write(
-    card: Card,
-    slot: AlertMessageSlot,
-    change: StatusChange,
-    render: (status: AlertSlackStatusRecord) => string,
-  ): Promise<boolean> {
+  #render(card: Card, status: AlertSlackStatusRecord, slot: AlertMessageSlot): string {
+    return slot === 'status' ? alertStatusText(status, this.#cardUrl(card)) : (status.messages[slot]?.text ?? '');
+  }
+
+  /**
+   * Records the change on the card, then brings Slack in line with the card: posts the message if
+   * this call claimed it, edits it while Slack shows something older, and sets the reaction. Runs
+   * even when the change is a no-op, so a post or edit that failed earlier is redone. Returns
+   * whether the change applied.
+   */
+  async #write(card: Card, slot: AlertMessageSlot, change: StatusChange, text?: string): Promise<boolean> {
     const thread = threadOf(card);
     if (!thread) return false;
     let claimed = false;
+    let applied = false;
+    let exists = false;
     const now = this.#now();
-    const written = await updateCardMetadata(
-      this.#workItems,
-      { orgId: card.orgId, id: card.id, userId: STATUS_USER_ID },
-      current => {
-        claimed = false;
-        const previous = readAlertSlackStatus(current);
-        const changed = change(previous);
-        if (!changed) return null;
-        const next: AlertSlackStatusRecord = {
-          ...(previous ?? { stage: 'filed' }),
-          ...changed,
-          messages: { ...previous?.messages },
-        };
-        const message = next.messages[slot];
-        if (!message?.ts && (!message || now.getTime() - Date.parse(message.claimedAt) > CLAIM_STALE_MS)) {
-          claimed = true;
-          next.messages[slot] = { claimedAt: now.toISOString() };
-        }
-        return { [ALERT_SLACK_STATUS_KEY]: next };
-      },
-    );
-    if (!written) return false;
-    const before = readAlertSlackStatus(written.before);
-    let after = readAlertSlackStatus(written.after)!;
-    if (claimed) {
-      let ts: string;
-      try {
-        ts = await this.#client.post(thread, render(after));
-      } catch (error) {
-        await this.#setMessage(card, slot, undefined).catch(() => undefined);
-        throw error;
+    await updateCardMetadata(this.#workItems, { orgId: card.orgId, id: card.id, userId: STATUS_USER_ID }, current => {
+      claimed = false;
+      const previous = readAlertSlackStatus(current);
+      const changed = change(previous);
+      applied = changed !== null;
+      exists = applied || previous !== null;
+      if (!exists) return null;
+      const next: AlertSlackStatusRecord = {
+        ...(previous ?? { stage: 'filed', ...recordedRecovery(current) }),
+        ...changed,
+        messages: { ...previous?.messages },
+      };
+      let message = next.messages[slot];
+      if (!message?.ts && (!message || now.getTime() - Date.parse(message.claimedAt) > CLAIM_STALE_MS)) {
+        claimed = true;
+        message = { ...message, claimedAt: now.toISOString() };
       }
-      const latest = (await this.#setMessage(card, slot, { ts, claimedAt: now.toISOString() })) ?? after;
-      // Another write landed while the post was in flight and found no ts to edit: show it now.
-      if (render(latest) !== render(after)) await this.#client.edit(thread, ts, render(latest));
-      after = latest;
-    } else {
-      const ts = after.messages[slot]?.ts;
-      // No ts: the claim holder is still posting, and shows the latest state once it has.
-      if (ts) await this.#client.edit(thread, ts, render(after));
+      if (text !== undefined && message?.text !== text) message = { ...message!, text };
+      if (!changed && message === next.messages[slot]) return null;
+      if (message) next.messages[slot] = message;
+      return { [ALERT_SLACK_STATUS_KEY]: next };
+    });
+    if (!exists) return false;
+    if (claimed) await this.#post(card, thread, slot);
+    await this.#syncMessage(card, thread, slot);
+    if (slot === 'status') await this.#syncReaction(card, thread);
+    return applied;
+  }
+
+  async #current(card: Card): Promise<AlertSlackStatusRecord | null> {
+    const current = await this.#workItems.get({ orgId: card.orgId, id: card.id });
+    return current && readAlertSlackStatus(current);
+  }
+
+  /** Posts the claimed message with what the card says now. A refused post drops the claim, keeping a reply's text. */
+  async #post(card: Card, thread: AlertThreadRef, slot: AlertMessageSlot): Promise<void> {
+    const latest = await this.#current(card);
+    if (!latest) return;
+    const text = this.#render(card, latest, slot);
+    let ts: string;
+    try {
+      ts = await this.#client.post(thread, text);
+    } catch (error) {
+      await this.#setMessage(card, slot, message =>
+        message?.ts ? message : message?.text ? { text: message.text, claimedAt: new Date(0).toISOString() } : undefined,
+      ).catch(() => undefined);
+      throw error;
     }
-    if (slot === 'status') await this.#swapReaction(thread, reactionFor(before), reactionFor(after));
-    return true;
+    await this.#setMessage(card, slot, message => ({ ...message, claimedAt: message?.claimedAt ?? this.#now().toISOString(), ts, shown: text }));
+  }
+
+  /**
+   * Edits the message until Slack took what the card says. An edit that finishes after a newer
+   * one records what it showed, so the next pass (here or in the newer writer) puts the latest back.
+   * Without a ts the claim holder is still posting, and syncs once it has.
+   */
+  async #syncMessage(card: Card, thread: AlertThreadRef, slot: AlertMessageSlot): Promise<void> {
+    for (let pass = 0; pass < SYNC_PASSES; pass++) {
+      const latest = await this.#current(card);
+      const message = latest?.messages[slot];
+      if (!latest || !message?.ts) return;
+      const text = this.#render(card, latest, slot);
+      if (text === message.shown) return;
+      await this.#client.edit(thread, message.ts, text);
+      await this.#setMessage(card, slot, current => (current && current.ts === message.ts ? { ...current, shown: text } : current));
+    }
+  }
+
+  /** Puts the latest stage's reaction on the alert, removing a stale one another writer added. */
+  async #syncReaction(card: Card, thread: AlertThreadRef): Promise<void> {
+    for (let pass = 0; pass < SYNC_PASSES; pass++) {
+      const latest = await this.#current(card);
+      if (!latest) return;
+      const want = reactionFor(latest);
+      const have = latest.reaction ?? null;
+      if (want === have) return;
+      if (have) await this.#client.unreact(thread, thread.rootTs, have).catch(() => undefined);
+      if (want) await this.#client.react(thread, thread.rootTs, want).catch(() => undefined);
+      const recorded = await updateCardMetadata(
+        this.#workItems,
+        { orgId: card.orgId, id: card.id, userId: STATUS_USER_ID },
+        current => {
+          const status = readAlertSlackStatus(current);
+          return status && (status.reaction ?? null) === have
+            ? { [ALERT_SLACK_STATUS_KEY]: { ...status, reaction: want } }
+            : null;
+        },
+      );
+      if (recorded) continue;
+      // Another writer moved the reaction first: take back ours unless it is the one it recorded.
+      const now = await this.#current(card);
+      if (want && want !== (now?.reaction ?? null)) {
+        await this.#client.unreact(thread, thread.rootTs, want).catch(() => undefined);
+      }
+    }
   }
 
   async #setMessage(
     card: Card,
     slot: AlertMessageSlot,
-    message: PostedMessage | undefined,
-  ): Promise<AlertSlackStatusRecord | null> {
-    const written = await updateCardMetadata(
-      this.#workItems,
-      { orgId: card.orgId, id: card.id, userId: STATUS_USER_ID },
-      current => {
-        const status = readAlertSlackStatus(current);
-        if (!status) return null;
-        const messages = { ...status.messages };
-        if (message) messages[slot] = message;
-        else delete messages[slot];
-        return { [ALERT_SLACK_STATUS_KEY]: { ...status, messages } };
-      },
-    );
-    return written && readAlertSlackStatus(written.after);
-  }
-
-  async #swapReaction(thread: AlertThreadRef, before: string | null, after: string | null): Promise<void> {
-    if (before === after) return;
-    if (before) await this.#client.unreact(thread, thread.rootTs, before).catch(() => undefined);
-    if (after) await this.#client.react(thread, thread.rootTs, after).catch(() => undefined);
+    update: (message: PostedMessage | undefined) => PostedMessage | undefined,
+  ): Promise<void> {
+    await updateCardMetadata(this.#workItems, { orgId: card.orgId, id: card.id, userId: STATUS_USER_ID }, current => {
+      const status = readAlertSlackStatus(current);
+      if (!status) return null;
+      const before = status.messages[slot];
+      const after = update(before);
+      if (after === before) return null;
+      const messages = { ...status.messages };
+      if (after) messages[slot] = after;
+      else delete messages[slot];
+      return { [ALERT_SLACK_STATUS_KEY]: { ...status, messages } };
+    });
   }
 }
 
