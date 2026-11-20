@@ -1,22 +1,177 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createOpenAI } from '@ai-sdk/openai-v5';
+import { UnixSocketPubSub } from '../../../../events/unix-socket-pubsub';
+import { InMemoryStore } from '../../../../storage/mock';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { createDurableAgent, createEventedAgent } from '../../../../agent/durable';
+import { AGENT_CONTROL_TOPIC, AgentControlEventTypes } from '../../../../agent/streams/constants';
+import { EventEmitterPubSub } from '../../../../events/event-emitter';
 import { hasDurableExecution } from '../../../../agent/streams/execution-capability';
 import { createTool } from '../../../../tools';
 import { Agent } from '../../../../agent/agent';
 import { isDurableAgentLike } from '../../../../agent/types';
 import { ConsoleLogger } from '../../../../logger';
+import { MockMemory } from '../../../../memory/mock';
 import { Mastra } from '../../../../mastra';
 import { MastraModelOutput } from '../../../../stream/base/output';
 import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
 
-// COR-1563 PR 1: accepting policy must not silently change output or enable recovery.
-describe('Configured native engines remain native execution', () => {
+// COR-1579: native engine selection must preserve the Agent output contract.
+describe('Configured native engines preserve Agent outputs', () => {
   const getMock = useLoopScenarioAimock();
+
+  it.each([false, true])(
+    'executes a native evented run on a cold worker (late registration: %s)',
+    async lateRegistration => {
+      const directory = await mkdtemp(join(tmpdir(), 'native-worker-'));
+      const socket = join(directory, 'pubsub.sock');
+      const apiPubsub = new UnixSocketPubSub(socket);
+      const workerPubsub = new UnixSocketPubSub(socket);
+      const storage = new InMemoryStore();
+      const llm = getMock();
+      llm.on({ endpoint: 'chat' }, { content: 'Your order has shipped.' });
+      const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url}/v1` });
+      const build = () =>
+        new Agent({
+          id: 'cold-worker',
+          name: 'Cold worker',
+          instructions: 'Help with orders.',
+          model: openai('gpt-4o'),
+        });
+      const apiAgent = build();
+      const api = new Mastra({
+        agents: { support: apiAgent },
+        storage,
+        pubsub: apiPubsub,
+        workers: false,
+        durable: { executionEngine: 'evented' },
+        logger: false,
+      });
+      const worker = new Mastra({
+        agents: lateRegistration ? {} : { support: build() },
+        storage,
+        pubsub: workerPubsub,
+        durable: { executionEngine: 'evented' },
+        logger: false,
+      });
+      try {
+        await worker.startWorkers();
+        if (lateRegistration) worker.addAgent(build(), 'support');
+        const output = await apiAgent.stream('Where is my order?');
+        expect(output).toBeInstanceOf(MastraModelOutput);
+        expect(await output.text).toBe('Your order has shipped.');
+        expect(JSON.stringify(llm.getRequests()[0]?.body)).toContain('Where is my order?');
+      } finally {
+        await api.shutdown();
+        await worker.shutdown();
+        await apiPubsub.close();
+        await workerPubsub.close();
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+    15000,
+  );
+
+  it.each(['abortRunStream', 'abortThreadStream', '__abortThreadStreamAcrossProcesses'] as const)(
+    'sends %s from a cold native Agent to the shared worker transport',
+    async method => {
+      const directory = await mkdtemp(join(tmpdir(), 'native-abort-'));
+      const socket = join(directory, 'pubsub.sock');
+      const apiPubsub = new UnixSocketPubSub(socket);
+      const workerPubsub = new UnixSocketPubSub(socket);
+      const agent = new Agent({
+        id: 'cold-abort',
+        name: 'Cold abort',
+        instructions: 'Help.',
+        model: 'openai/gpt-4o',
+        durable: { pubsub: new EventEmitterPubSub() },
+      });
+      const mastra = new Mastra({
+        agents: { agent },
+        storage: new InMemoryStore(),
+        pubsub: apiPubsub,
+        workers: false,
+        durable: { executionEngine: 'evented' },
+        logger: false,
+      });
+      const requests: string[] = [];
+      try {
+        await workerPubsub.subscribe(AGENT_CONTROL_TOPIC('remote-run'), async event => {
+          if (event.type === AgentControlEventTypes.ABORT_REQUEST) requests.push(event.runId);
+        });
+        if (method === 'abortRunStream') {
+          expect(agent.abortRunStream('remote-run')).toBe(false);
+        } else {
+          await workerPubsub.acquireLease('resource\u0000thread', 'remote-run', 30_000);
+          expect(await agent[method]({ resourceId: 'resource', threadId: 'thread' })).toBe(
+            method === '__abortThreadStreamAcrossProcesses',
+          );
+        }
+        await expect.poll(() => requests).toEqual(['remote-run']);
+      } finally {
+        await mastra.shutdown();
+        await apiPubsub.close();
+        await workerPubsub.close();
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
   for (const executionEngine of ['durable', 'evented'] as const) {
+    for (const method of ['resumeStream', 'resumeStreamUntilIdle'] as const) {
+      it(`${executionEngine}/${method}: keeps lifecycle controls when resuming a suspended tool`, async () => {
+        const llm = getMock();
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            toolCalls: [{ id: 'call-confirm', name: 'confirm', arguments: {} }],
+          },
+        );
+        llm.on({ endpoint: 'chat', toolCallId: 'call-confirm', hasToolResult: true }, { content: 'Order confirmed.' });
+        const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url}/v1` });
+        const confirm = createTool({
+          id: 'confirm',
+          description: 'Confirm the order',
+          inputSchema: z.object({}),
+          suspendSchema: z.object({ message: z.string() }),
+          resumeSchema: z.object({ confirmed: z.boolean() }),
+          execute: async (_input, context) =>
+            context?.agent?.resumeData
+              ? { confirmed: context.agent.resumeData.confirmed }
+              : context?.agent?.suspend({ message: 'Confirm this order' }),
+        });
+        const agent = new Agent({
+          id: 'resume-order',
+          name: 'Order support',
+          instructions: 'Confirm orders.',
+          model: openai('gpt-4o'),
+          tools: { confirm },
+          memory: new MockMemory(),
+          durable: { executionEngine },
+        });
+        const mastra = new Mastra({ agents: { agent }, logger: false });
+        try {
+          const first = await agent.generate('Confirm my order', { memory: { thread: 'order', resource: 'customer' } });
+          expect(first.finishReason).toBe('suspended');
+          const resumed = await agent[method]({ confirmed: true }, { runId: first.runId, toolCallId: 'call-confirm' });
+          expect(resumed).toBeInstanceOf(MastraModelOutput);
+          expect(resumed.abort).toBeTypeOf('function');
+          expect(resumed.cleanup).toBeTypeOf('function');
+          expect(resumed.threadId).toBe('order');
+          expect(resumed.resourceId).toBe('customer');
+          expect(await resumed.text).toBe('Order confirmed.');
+          expect(JSON.stringify(llm.getRequests().at(-1)?.body)).toContain('confirmed');
+          resumed.cleanup?.();
+        } finally {
+          await mastra.shutdown();
+        }
+      });
+    }
     for (const method of ['stream', 'generate'] as const) {
-      it(`${executionEngine}/${method}: inherits policy without activating wrapper execution`, async () => {
+      it(`${executionEngine}/${method}: executes inherited policy without replacing the registered Agent`, async () => {
         const llm = getMock();
         llm.on({ endpoint: 'chat' }, { content: 'Your order has shipped.' });
         const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url}/v1` });
@@ -34,7 +189,10 @@ describe('Configured native engines remain native execution', () => {
         expect(agent.__getExecutionEnginePolicy()).toBe(executionEngine);
         expect(mastra.getAgent('support')).toBe(agent);
         expect(isDurableAgentLike(agent)).toBe(false);
-        await expect(agent.recover('unavailable')).rejects.toMatchObject({ id: 'AGENT_DURABLE_METHOD_NOT_AVAILABLE' });
+        expect(hasDurableExecution(agent)).toBe(true);
+        await expect(agent.recover('unavailable')).rejects.not.toMatchObject({
+          id: 'AGENT_DURABLE_METHOD_NOT_AVAILABLE',
+        });
         expect(JSON.stringify(llm.getRequests()[0]?.body)).toContain('Where is my order?');
       });
     }
@@ -67,7 +225,7 @@ describe('Configured native engines remain native execution', () => {
         expect(agent.durable).toEqual(durable);
         expect(agent.__getExecutionEnginePolicy()).toBe(typeof durable === 'object' ? durable.executionEngine : false);
         expect(wrapped.__getExecutionEngineStrategy()).toBe(strategy);
-        expect(hasDurableExecution(agent)).toBe(false);
+        expect(hasDurableExecution(agent)).toBe(typeof durable === 'object' && durable.executionEngine !== false);
         if (method === 'stream') expect(output).toBeInstanceOf(MastraModelOutput);
         else expect(output).not.toBeInstanceOf(MastraModelOutput);
         expect(JSON.stringify(llm.getRequests()[0]?.body)).toContain('Where is my order?');
@@ -116,7 +274,7 @@ describe('Configured native engines remain native execution', () => {
         const wrapped = wrap({ agent });
         expect(agent.durable).toEqual(before);
         expect(agent.__getStreamBus()).toBe(bus);
-        expect(hasDurableExecution(agent)).toBe(false);
+        expect(hasDurableExecution(agent)).toBe(true);
         expect(hasDurableExecution(wrapped)).toBe(true);
         expect(mastra.getAgent('agent')).toBe(agent);
         release.resolve();
@@ -149,8 +307,14 @@ describe('Configured native engines remain native execution', () => {
       const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
       try {
         for (let turn = 0; turn < 3; turn++) {
-          const output = await agent[method]('Ready?', {});
-          expect(await output.text).toBe('Ready.');
+          if (turn === 0) {
+            const output = await agent[method]('Ready?', {});
+            expect(await output.text).toBe('Ready.');
+          } else {
+            await expect(agent[method]('Ready?', {})).rejects.toThrow(
+              'eagerToolExecution is not supported by durable agents',
+            );
+          }
           expect(
             warn.mock.calls.filter(([message]) => String(message).includes('does not support eagerToolExecution')),
           ).toHaveLength(turn === 0 ? 0 : 1);

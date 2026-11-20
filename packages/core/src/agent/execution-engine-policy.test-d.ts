@@ -1,4 +1,5 @@
 import { describe, expectTypeOf, it } from 'vitest';
+import { z } from 'zod/v4';
 import { Mastra } from '../mastra';
 import type { ShouldPersistSnapshotFn } from '../workflows/types';
 import { Agent } from './agent';
@@ -7,6 +8,20 @@ import type { AgentStreamsConfig } from './streams/types';
 const config = { id: 'policy', name: 'Policy', instructions: 'Help the user.', model: 'openai/gpt-4o' } as const;
 
 describe('execution engine configuration contracts', () => {
+  it('preserves call-specific structured output inference for native engines', async () => {
+    for (const executionEngine of ['durable', 'evented', false] as const) {
+      const agent = new Agent({ ...config, durable: { executionEngine } });
+      const schema = z.object({ status: z.string() });
+      const streamed = await agent.stream('Check my order', { structuredOutput: { schema } });
+      expectTypeOf(await streamed.object).toEqualTypeOf<{ status: string }>();
+      expectTypeOf(streamed.abort).toEqualTypeOf<((reason?: unknown) => Promise<void>) | undefined>();
+      expectTypeOf(streamed.cleanup).toEqualTypeOf<(() => void) | undefined>();
+      expectTypeOf(streamed.threadId).toEqualTypeOf<string | undefined>();
+      expectTypeOf(streamed.resourceId).toEqualTypeOf<string | undefined>();
+      const generated = await agent.generate('Check my order', { structuredOutput: { schema } });
+      expectTypeOf(generated.object).toEqualTypeOf<{ status: string }>();
+    }
+  });
   it('accepts Agent boolean forms and object policies without accepting Mastra booleans', () => {
     new Agent({ ...config, durable: true });
     new Agent({ ...config, durable: false });

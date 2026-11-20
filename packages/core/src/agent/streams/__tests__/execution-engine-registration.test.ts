@@ -217,7 +217,7 @@ describe('native Agent stored-registration policy', () => {
       expect(messages.filter(message => message.includes('does not support stopWhen'))).toHaveLength(
         executionEngine === 'evented' ? 1 : 0,
       );
-      expect(messages.every(message => message.includes('activation is deferred'))).toBe(true);
+      expect(messages.every(message => !message.includes('activation is deferred'))).toBe(true);
     },
   );
 
@@ -322,7 +322,7 @@ describe('wrappers leave inner durable policy unchanged', () => {
               expect(wrapped.__getExecutionEngineStrategy()).toBe(wrapper.engine);
               expect(hasDurableExecution(wrapped)).toBe(true);
               expect(isDurableAgentLike(wrapped)).toBe(true);
-              expect(hasDurableExecution(agent)).toBe(false);
+              expect(hasDurableExecution(agent)).toBe(selected !== false);
               if (bus) {
                 expect(agent.__getStreamBus()).toBe(bus);
                 expect(bus.pubsub).toBe(transport);

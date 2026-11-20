@@ -495,6 +495,10 @@ export class DurableAgent<
     return new DurableExecutionEngine(this.id, mastra);
   }
 
+  protected override get returnsDurableStreamResult(): boolean {
+    return true;
+  }
+
   /** @internal Forced strategy, without resolving host/storage fallback. */
   __getExecutionEngineStrategy(): 'durable' | 'evented' {
     return this.workflowEngine === 'evented' ? 'evented' : 'durable';
@@ -1110,8 +1114,6 @@ export class DurableAgent<
     messages: MessageListInput,
     options?: DurableAgentStreamOptions<TOutput>,
   ) => Promise<DurableAgentStreamResult<TOutput>>;
-
-  declare resumeStream: (resumeData: any, streamOptions?: any) => Promise<MastraModelOutput<TOutput>>;
 
   /**
    * Generate a complete response from the agent using durable execution.
