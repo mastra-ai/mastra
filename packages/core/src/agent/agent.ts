@@ -284,6 +284,7 @@ import {
   emitErrorEvent,
   emitFinishEvent,
   emitOwnershipClaimedEvent,
+  newestLogIndex,
 } from './durable/stream-adapter';
 import { toLiveStructuredOutputSchema } from './durable/structured-output-null-transform';
 import type {
@@ -11730,6 +11731,12 @@ export class Agent<
       maxIdleMs?: number;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<any>> {
+    if (!this.#resolveExecutionEngine()) {
+      return runResumeStreamUntilIdle(this, resumeData, streamOptions, {
+        activeStreams: this.activeStreamUntilIdle,
+        bgManager: this.#mastra?.backgroundTaskManager,
+      });
+    }
     const { maxIdleMs, structuredOutput, ...options } = streamOptions ?? {};
     const untilIdle = maxIdleMs === undefined ? true : { maxIdleMs };
     if (structuredOutput) {
@@ -16745,21 +16752,36 @@ export class Agent<
     runId: string,
     options: Parameters<Agent<TAgentId, TTools, TOutput>['observe']>[1],
   ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string; detach: () => void }> {
+    let attachedAt: number | undefined;
+    // Buffer replay until its attachment boundary distinguishes past suspensions from the current tail.
+    const refreshReplayFilter = options?.closeOnSuspend
+      ? async () => {
+          try {
+            const history = await bus.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0);
+            attachedAt = newestLogIndex(history as AgentStreamEvent[]);
+          } catch (error) {
+            this.logger.warn(`Couldn't read the replay boundary of run ${runId}`, { error });
+          }
+        }
+      : undefined;
     const stream = createDurableAgentStream<TOutput>({
       pubsub: bus.pubsub,
       runId,
       messageId: globalThis.crypto.randomUUID(),
       model: { modelId: undefined, provider: undefined, version: 'v3' },
       offset: options?.offset,
+      closeOnSuspend: options?.closeOnSuspend,
+      attachedAtLogIndex: () => attachedAt,
+      refreshReplayFilter,
       replayResponseMessagesBeforeOffset: true,
       onChunk: options?.onChunk,
       onStepFinish: options?.onStepFinish,
       onFinish: options?.onFinish,
       onError: options?.onError ? ({ error }) => options.onError!({ error }) : undefined,
       onSuspended: options?.onSuspended,
-      // Suspension is an event, not the end: the resumed run publishes on the
-      // same topic, so the observation follows it to its finish (as for
-      // DurableAgent). Detach to stop observing a parked run.
+      // By default, suspension is an event, not the end: the resumed run
+      // publishes on the same topic, so the observation follows it to its finish.
+      // closeOnSuspend opts out without canceling the underlying run.
       logger: this.logger,
     });
     const { output, detach } = stream;

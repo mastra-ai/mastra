@@ -17,6 +17,7 @@ import type { WorkItem } from '../services/workItems';
 import { toMinute } from '../stageStays';
 import { CardDescription } from './CardDescription';
 import { CardSourceRow } from './CardSourceRow';
+import { ChangeRequestBadge } from './ChangeRequestBadge';
 import { ChangeRequestLink } from './ChangeRequestLink';
 import { ChangeRequestList } from './ChangeRequestList';
 import { MovesGraph } from './MovesGraph';
@@ -57,9 +58,6 @@ export function CardOverview({
   const provider = repositoryProvider(repository);
   const related = relatedWorkItemIndex(sessionItems)(item);
   const ownRequest = ownChangeRequest(item, repository?.slug, subscriptions);
-  const ownRequestLink = ownRequest ? (
-    <ChangeRequestLink request={ownRequest} sessionRepository={repository?.slug} label="reference" />
-  ) : undefined;
   const sourceUrl = genericExternalWorkItemUrl(item);
   const requests = sessionChangeRequests({
     item,
@@ -74,7 +72,9 @@ export function CardOverview({
   return (
     <>
       <section aria-label="Card" className={`${overviewSectionClass} empty:hidden`}>
-        {workspace ? null : ownRequestLink}
+        {!workspace && ownRequest ? (
+          <ChangeRequestLink request={ownRequest} sessionRepository={repository?.slug} label="reference" />
+        ) : null}
         <CardSourceRow item={item} url={sourceUrl} repository={repository?.slug} />
         <CardDescription
           item={item}
@@ -89,7 +89,10 @@ export function CardOverview({
       </section>
       {workspace?.({
         repository: repository && { slug: repository.slug, provider },
-        changeRequest: ownRequestLink,
+        changeRequest: ownRequest && {
+          badge: <ChangeRequestBadge request={ownRequest} sessionRepository={repository?.slug} />,
+          status: ownRequest.status,
+        },
       })}
       {pullRequestsFailed || requests.length > 0 || showsPhases ? (
         <section aria-label="Card activity" className={overviewSectionClass}>
