@@ -62,7 +62,7 @@ const mySchema = jsonSchema({
 
 export const weatherInfo = tool({
   description: 'Fetches the current weather information for a given city',
-  parameters: mySchema,
+  inputSchema: mySchema,
   execute: async ({ city }) => {
     return {
       city,
