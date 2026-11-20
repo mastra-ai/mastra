@@ -1,6 +1,15 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { MastraMemory, parseMemoryRequestContext } from '@mastra/core/memory';
-import type { MemoryConfig, MemoryConfigInternal, StorageThreadType, WorkingMemoryTemplate } from '@mastra/core/memory';
+import type {
+  GetObservationalMemoryRecordsInput,
+  MemoryConfig,
+  MemoryConfigInternal,
+  ObservationalMemoryRecords,
+  ObservationalMemorySettings,
+  StorageThreadType,
+  WorkingMemoryTemplate,
+} from '@mastra/core/memory';
 import type {
   InputProcessor,
   OutputProcessor,
@@ -10,6 +19,7 @@ import type {
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type {
+  ObservationalMemoryRecord,
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
   StorageListMessagesInput,
@@ -17,9 +27,10 @@ import type {
   StorageListThreadsOutput,
 } from '@mastra/core/storage';
 
-import { PlatformMemoryClient } from './client';
+import { PlatformMemoryApiError, PlatformMemoryClient } from './client';
 import type {
   MemoryMessage,
+  MemoryObservationRecord,
   MemoryMessageInput,
   MemoryProcessorsResult,
   MemoryThread,
@@ -94,6 +105,45 @@ function memoryContext(requestContext: RequestContext | undefined, messageList: 
   const info = messageList.serialize().memoryInfo;
   if (info?.threadId) return { threadId: info.threadId, resourceId: info.resourceId ?? info.threadId, readOnly: false };
   return null;
+}
+
+/** The hosted service keeps up to this many past generations per request. */
+const MAX_OBSERVATION_HISTORY = 50;
+
+function unsupportedObservationRead(id: Uppercase<string>, text: string): MastraError {
+  return new MastraError({
+    id,
+    domain: ErrorDomain.MASTRA_MEMORY,
+    category: ErrorCategory.USER,
+    details: { status: 400 },
+    text,
+  });
+}
+
+function observationRecordFromApi(record: MemoryObservationRecord): ObservationalMemoryRecord {
+  return {
+    id: record.id,
+    scope: record.scope,
+    threadId: record.threadId,
+    resourceId: record.resourceId,
+    originType: record.originType,
+    generationCount: record.generationCount,
+    createdAt: new Date(record.createdAt),
+    updatedAt: new Date(record.updatedAt),
+    lastObservedAt: record.lastObservedAt ? new Date(record.lastObservedAt) : undefined,
+    activeObservations: record.activeObservations ?? '',
+    observationTokenCount: record.observationTokenCount,
+    totalTokensObserved: record.totalTokensObserved,
+    pendingMessageTokens: record.pendingMessageTokens,
+    isObserving: record.isObserving,
+    isReflecting: record.isReflecting,
+    isBufferingObservation: record.isBufferingObservation,
+    isBufferingReflection: record.isBufferingReflection,
+    // Buffering cursors and engine config stay on the hosted service.
+    lastBufferedAtTokens: 0,
+    lastBufferedAtTime: null,
+    config: {},
+  };
 }
 
 /**
@@ -361,5 +411,60 @@ export class PlatformMemory extends MastraMemory {
 
   async cloneThread(_args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput> {
     throw new Error('PlatformMemory does not support cloning threads yet');
+  }
+
+  /** Observational Memory always runs on the hosted service, scoped to the thread. */
+  async getObservationalMemoryConfig(): Promise<ObservationalMemorySettings> {
+    const config = await this.client.getInstanceConfig();
+    return {
+      enabled: true,
+      scope: 'thread',
+      messageTokens: config.observationTokens,
+      observationTokens: config.reflectionTokens,
+    };
+  }
+
+  async waitForObservationalMemoryBuffering(args: { threadId: string; resourceId: string }) {
+    const status = await this.client.waitForBuffering(args.threadId);
+    if (status === 'idle') return { record: null };
+    const { record } = await this.getObservationalMemoryRecords(args);
+    return { record };
+  }
+
+  /**
+   * Reads a thread's hosted record and an optional filtered page of history.
+   */
+  async getObservationalMemoryRecords(args: GetObservationalMemoryRecordsInput): Promise<ObservationalMemoryRecords> {
+    if (!args.threadId) {
+      throw unsupportedObservationRead(
+        'PLATFORM_MEMORY_OBSERVATIONS_THREAD_ID_REQUIRED',
+        'PlatformMemory reads Observational Memory per thread; pass a threadId',
+      );
+    }
+    if (args.historyLimit !== undefined && args.historyLimit > MAX_OBSERVATION_HISTORY) {
+      throw unsupportedObservationRead(
+        'PLATFORM_MEMORY_OBSERVATIONS_HISTORY_LIMIT',
+        `PlatformMemory returns at most ${MAX_OBSERVATION_HISTORY} Observational Memory history records`,
+      );
+    }
+
+    let result;
+    try {
+      result = await this.client.getObservationRecords(args.threadId, {
+        historyLimit: args.historyLimit,
+        from: args.from?.toISOString(),
+        to: args.to?.toISOString(),
+        offset: args.offset,
+      });
+    } catch (error) {
+      // The thread is gone, so it has no observations.
+      if (error instanceof PlatformMemoryApiError && error.status === 404) return { record: null, history: [] };
+      throw error;
+    }
+    const owned = (record: MemoryObservationRecord) => !args.resourceId || record.resourceId === args.resourceId;
+    return {
+      record: result.record && owned(result.record) ? observationRecordFromApi(result.record) : null,
+      history: result.history.filter(owned).map(observationRecordFromApi),
+    };
   }
 }
