@@ -41,9 +41,16 @@ export interface LocalKnowledgeImporterHostOptions {
    * bounded. Default 45 seconds, under the runner's 60-second host-call timeout.
    */
   flushBudgetMs?: number;
+  /**
+   * A running run whose last heartbeat (or start, before its first) is older than this is taken
+   * to have lost its runner: the next start of its binding ends it as `failed` (`stopped`) and
+   * starts. A run past its deadline is reclaimed the same way. Default 5 minutes.
+   */
+  staleRunAfterMs?: number;
 }
 
 const DEFAULT_FLUSH_BUDGET_MS = 45_000;
+const DEFAULT_STALE_RUN_AFTER_MS = 5 * 60_000;
 
 const conflict = (code: KnowledgeImporterHostConflictError['code'], message: string) =>
   new KnowledgeImporterHostConflictError(code, message);
@@ -148,6 +155,36 @@ export function createLocalKnowledgeImporterHost(
     }
   };
 
+  /**
+   * Ends the binding's running run when its runner is gone (O3 §D): past its deadline, or no
+   * heartbeat within `staleRunAfterMs`. Called under the exclusive writer guard; the run row is
+   * locked and rechecked so a heartbeat that commits first keeps it alive. Its runner's later
+   * flushes and finish are refused as `run_not_active`; exact replays still return receipts.
+   */
+  const reclaimStaleRuns = async (importers: KnowledgeImportersStorage, bindingId: string) => {
+    const staleAfter = options.staleRunAfterMs ?? DEFAULT_STALE_RUN_AFTER_MS;
+    for (const candidate of await importers.listRuns(bindingId)) {
+      if (candidate.status !== 'running') continue;
+      const run = await importers.lockRun(candidate.id);
+      if (!run || run.status !== 'running') continue;
+      const now = Date.now();
+      const lastSign = (run.heartbeatAt ?? run.startedAt).getTime();
+      const pastDeadline = run.deadlineAt !== null && run.deadlineAt.getTime() <= now;
+      if (!pastDeadline && now - lastSign < staleAfter) continue;
+      await importers.abandonRun({
+        runId: run.id,
+        finish: normalizeKnowledgeImporterFinish({
+          runId: run.id,
+          generation: run.generation,
+          outcome: 'failed',
+          backlog: false,
+          lastSeq: run.lastSeq,
+          error: { code: 'stopped', retryable: true },
+        }),
+      });
+    }
+  };
+
   return {
     async startRun(bindingId: string, start?: KnowledgeImporterStartRunOptions): Promise<KnowledgeImporterRunStart> {
       const binding = await bindingFor(bindingId);
@@ -178,6 +215,7 @@ export function createLocalKnowledgeImporterHost(
             );
           }
           await importers.registerBinding({ id: binding.id, importer: binding.importer, target: binding.target });
+          await reclaimStaleRuns(importers, binding.id);
           const run = await importers.startRun({
             bindingId: binding.id,
             runId: start?.runId ?? randomUUID(),

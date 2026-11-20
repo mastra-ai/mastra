@@ -258,6 +258,63 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect((await page('notion/p2/p3/mine'))?.body).toBe('human');
     });
 
+    it('reclaims a run past its deadline at the next start, and refuses its runner after that', async () => {
+      const { knowledge } = setup();
+      const host = knowledge.importers!.host;
+      const orphan = await host.startRun('b1', { deadline: Date.now() + 1500 });
+      if (orphan.status !== 'started') throw new Error('not started');
+      const ops = [upsert({ sourceId: 'p1' })];
+      const committed = await flushOnce(host, orphan.runId, orphan.generation, 1, ops);
+      await new Promise(resolve => setTimeout(resolve, 1600));
+
+      const next = await host.startRun('b1');
+      expect(next.status).toBe('started');
+      const storage = await knowledge.getStorage();
+      expect(await storage.importers!.getRun(orphan.runId)).toMatchObject({
+        status: 'failed',
+        finish: { outcome: 'failed', lastSeq: 1, error: { code: 'stopped' } },
+      });
+      // Its runner is fenced, but can still learn what it committed.
+      expect(await flushOnce(host, orphan.runId, orphan.generation, 1, ops)).toEqual(committed);
+      await expect(
+        flushOnce(host, orphan.runId, orphan.generation, 2, [upsert({ sourceId: 'p2' })]),
+      ).rejects.toMatchObject({ status: 409, code: 'run_not_active' });
+      await expect(
+        host.finishRun({
+          runId: orphan.runId,
+          generation: orphan.generation,
+          outcome: 'succeeded',
+          backlog: false,
+          lastSeq: 1,
+        }),
+      ).rejects.toMatchObject({ status: 409 });
+    });
+
+    it('reclaims a run whose heartbeat went stale, and never one whose runner is alive', async () => {
+      const { knowledge } = setup();
+      const host = knowledge.importers!.host;
+      const live = await host.startRun('b1');
+      if (live.status !== 'started') throw new Error('not started');
+      await host.heartbeat(live.runId, live.generation);
+      expect((await host.startRun('b1')).status).toBe('skipped');
+      const storage = await knowledge.getStorage();
+      expect((await storage.importers!.getRun(live.runId))?.status).toBe('running');
+
+      // Six minutes on, with no heartbeat since: past the 5-minute default.
+      vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 6 * 60_000 });
+      try {
+        const next = await host.startRun('b1');
+        expect(next.status).toBe('started');
+        expect(await storage.importers!.getRun(live.runId)).toMatchObject({
+          status: 'failed',
+          finish: { error: { code: 'stopped' } },
+        });
+        expect(await host.heartbeat(live.runId, live.generation)).toEqual({ cancel: true });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('rolls the whole flush back, receipt included, when the sink fails unexpectedly', async () => {
       const { knowledge, page } = setup();
       const host = knowledge.importers!.host;
