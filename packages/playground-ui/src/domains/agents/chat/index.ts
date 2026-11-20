@@ -1,4 +1,8 @@
+export { AgentPage } from './agent-page';
+export type { AgentPageDock, AgentPageProps } from './agent-page';
 export { AgentThreadPage } from './agent-thread-page';
+export { ThreadsPanelProvider } from './threads-panel-context';
+export { useThreadsPanel } from './use-threads-panel';
 export { useAgentThreadPage } from './use-agent-thread-page';
 export { ChatProvider } from './chat-provider';
 export { Thread } from './thread';
