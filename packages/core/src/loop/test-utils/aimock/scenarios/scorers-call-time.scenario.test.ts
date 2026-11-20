@@ -81,7 +81,6 @@ describeForAllEngines('AIMock loop scenario: call-time and defaultOptions scorer
       observability,
       defaultOptions: scorerDefaults({ spanTarget: { scorer } }),
     });
-    // Only a scorer registered on Mastra exports score events.
     mastra.addScorer(scorer);
 
     const runId = await streamToEnd(agent);
