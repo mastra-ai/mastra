@@ -60,10 +60,10 @@ describe('ModelRoutingSection', () => {
     expect(within(region('Chats')).getByText('Uses Personal defaults')).toBeInTheDocument();
     expect(within(region('Work-item runs')).getByText('Uses Factory defaults')).toBeInTheDocument();
     expect(
-      await within(region('Personal defaults')).findByRole('combobox', { name: 'Personal default model' }),
+      await within(region('Personal defaults')).findByRole('button', { name: 'Personal default model' }),
     ).toBeInTheDocument();
     expect(
-      within(region('Factory defaults')).getByRole('combobox', { name: 'Factory default model' }),
+      within(region('Factory defaults')).getByRole('button', { name: 'Factory default model' }),
     ).toBeInTheDocument();
   });
 
@@ -74,7 +74,7 @@ describe('ModelRoutingSection', () => {
 
     await waitFor(() => expect(routing('Personal')).toBeChecked());
     expect(within(region('Factory defaults')).getByText('Not used in this scope')).toBeInTheDocument();
-    expect(screen.queryByRole('combobox', { name: 'Factory default model' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Factory default model' })).not.toBeInTheDocument();
 
     await user.click(routing('Factory'));
     await confirmSwitch(user);
@@ -85,7 +85,7 @@ describe('ModelRoutingSection', () => {
     expect(routing('Factory')).toBeChecked();
     expect(within(region('Chats')).getByText('Uses Factory defaults')).toBeInTheDocument();
     expect(within(region('Personal defaults')).getByText('Not used in this scope')).toBeInTheDocument();
-    expect(screen.queryByRole('combobox', { name: 'Personal default model' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Personal default model' })).not.toBeInTheDocument();
     expect(within(region('Factory defaults')).getByRole('button', { name: 'Add provider' })).toBeInTheDocument();
     expect(within(region('Factory defaults')).queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument();
   });
@@ -220,7 +220,7 @@ describe('ModelRoutingSection', () => {
     renderRoutingSection('/factories/fp-1/settings/models#factory-defaults');
 
     expect(
-      await within(await screen.findByRole('region', { name: 'Factory defaults' })).findByRole('combobox', {
+      await within(await screen.findByRole('region', { name: 'Factory defaults' })).findByRole('button', {
         name: 'Factory default model',
       }),
     ).toBeInTheDocument();

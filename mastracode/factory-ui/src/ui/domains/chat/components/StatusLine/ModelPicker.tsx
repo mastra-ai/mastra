@@ -1,15 +1,13 @@
-import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { ModelPicker as SharedModelPicker } from '@mastra/playground-ui/domains/llm';
-import type { ModelPickerProvider } from '@mastra/playground-ui/domains/llm';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { formatModelName } from '@mastra/playground-ui/utils/model';
 import type { ReactNode } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 
-import type { AvailableModelOption } from '../../../../../hooks/useAvailableModels';
 import { useAvailableModelsQuery } from '../../../../../hooks/useAvailableModels';
+import { fromPickerValue, toPickerProviders, toPickerValue } from '../../services/modelPickerCatalog';
 import { useChatConnection } from '../../context/useChatConnection';
 import { useChatModelScope } from '../../context/useChatModelScope';
 import type { ChatSessionContextApi } from '../../context/ChatSessionContext';
@@ -25,20 +23,6 @@ import { SessionThinkingIcon } from './SessionThinkingIcon';
 import { SessionThinkingSettings } from './SessionThinkingSettings';
 import { useSessionThinking } from './useSessionThinking';
 import { IconKey2 } from '@mastra/playground-ui/icons/central/IconKey2';
-
-function groupByProvider(models: AvailableModelOption[]): [string, AvailableModelOption[]][] {
-  const groups = new Map<string, AvailableModelOption[]>();
-  for (const model of models) {
-    const group = groups.get(model.provider);
-    if (group) group.push(model);
-    else groups.set(model.provider, [model]);
-  }
-  return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
-}
-
-/** The shared picker keys models within their provider, so drop the provider prefix. */
-const withinProvider = (provider: string, modelId: string) =>
-  modelId.startsWith(`${provider}/`) ? modelId.slice(provider.length + 1) : modelId;
 
 function canSwitchModel({
   draftSessionId,
@@ -118,34 +102,22 @@ function ModelMenu({
   const location = useLocation();
   const { factoryId, modelScope } = useChatModelScope();
   const organizationScoped = useOrganizationScopedFactory();
-  const providers: ModelPickerProvider[] = groupByProvider(modelsQuery.data ?? []).map(([provider, models]) => ({
-    id: provider,
-    name: providerDisplayName(provider),
-    models: models.map(model => ({ id: withinProvider(provider, model.id), releaseDate: model.releaseDate })),
-  }));
-  const defaultProvider = modelsQuery.data?.find(option => option.id === defaultModelId)?.provider;
-  const toModelId = (provider: string, model: string) =>
-    modelsQuery.data?.find(
-      option => option.provider === provider && (option.id === `${provider}/${model}` || option.id === model),
-    )?.id;
-  const selected = modelsQuery.data?.find(option => option.id === selectedModelId);
-  const selectedProvider = selected?.provider ?? selectedModelId?.split('/')[0];
-  const selectedModel =
-    selectedModelId && selectedProvider ? withinProvider(selectedProvider, selectedModelId) : undefined;
+  const models = modelsQuery.data ?? [];
+  const providers = toPickerProviders(models);
+  const selectedValue = toPickerValue(models, selectedModelId);
+  const defaultValue = models.some(option => option.id === defaultModelId)
+    ? toPickerValue(models, defaultModelId)
+    : undefined;
 
   return (
     <SharedModelPicker
       providers={providers}
-      value={selectedModel && selectedProvider ? { provider: selectedProvider, model: selectedModel } : undefined}
-      onValueChange={({ provider, model }) => {
-        const modelId = toModelId(provider, model);
-        if (modelId) pickModel(modelId);
+      value={selectedValue}
+      onValueChange={value => {
+        const modelId = fromPickerValue(models, value);
+        if (models.some(option => option.id === modelId)) pickModel(modelId);
       }}
-      defaultModel={
-        defaultModelId && defaultProvider
-          ? { provider: defaultProvider, model: withinProvider(defaultProvider, defaultModelId) }
-          : undefined
-      }
+      defaultModel={defaultValue}
       renderProviderIcon={renderProviderIcon}
       header={<ModelCredentialSummary modelId={selectedModelId} />}
       settings={settings}

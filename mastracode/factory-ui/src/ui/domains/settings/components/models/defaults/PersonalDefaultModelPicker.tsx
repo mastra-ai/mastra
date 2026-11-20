@@ -10,7 +10,7 @@ import {
   useClearDefaultModel,
   useSetDefaultModel,
 } from '../../../../../../hooks/use-default-model';
-import { ModelCombobox } from '../../ModelCombobox';
+import { DefaultModelPicker } from './DefaultModelPicker';
 import { AppliedSessionsSummary } from './AppliedSessionsSummary';
 import { PersonalThinkingControl } from './PersonalThinkingControl';
 
@@ -48,15 +48,12 @@ export function PersonalDefaultModelPicker({
   return (
     <div className="flex min-w-0 flex-col gap-2">
       <ButtonsGroup size="sm" aria-label="Personal default model and thinking" className="w-full">
-        <ModelCombobox
-          models={models ?? []}
-          value={savedModelId ?? ''}
+        <DefaultModelPicker
+          models={models}
+          value={savedModelId}
           onValueChange={saveDefaultModel}
           fallbackModelId={fallbackModelId}
-          placeholder="Select a model"
           aria-label="Personal default model"
-          size="sm"
-          className="min-w-0 flex-1"
           disabled={busy}
         />
         <PersonalThinkingControl savedModelId={savedModelId} savedThinkingLevel={savedThinkingLevel} saving={busy} />

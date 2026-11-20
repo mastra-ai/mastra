@@ -9,8 +9,8 @@ import {
   useFactoryProjectQuery,
   useSetFactoryDefaultModelMutation,
 } from '../../../../../../hooks/useFactoryDefaultModel';
-import { ModelCombobox } from '../../ModelCombobox';
 import { SharedCredentialNotice } from '../../SharedCredentialNotice';
+import { DefaultModelPicker } from './DefaultModelPicker';
 import { FactoryThinkingControl } from './FactoryThinkingControl';
 import { SwitchRunningSessionsDialog } from './SwitchRunningSessionsDialog';
 
@@ -40,15 +40,12 @@ export function FactoryDefaultModel({ factoryId }: { factoryId: string }) {
       <div className="flex min-w-0 flex-col gap-2">
         <div className="flex items-center gap-2">
           <ButtonsGroup size="sm" aria-label="Factory default model and thinking" className="min-w-0 flex-1">
-            <ModelCombobox
-              models={modelsQuery.data ?? []}
+            <DefaultModelPicker
+              models={modelsQuery.data}
               value={defaultModelId}
               onValueChange={saveDefaultModel}
               fallbackModelId={fallbackModelQuery.data}
-              placeholder="Select a model"
               aria-label="Factory default model"
-              size="sm"
-              className="min-w-0 flex-1"
               disabled={projectQuery.isPending || setDefaultModel.isPending}
             />
             <FactoryThinkingControl factoryId={factoryId} />

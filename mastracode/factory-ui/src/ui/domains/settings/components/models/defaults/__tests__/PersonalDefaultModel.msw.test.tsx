@@ -1,7 +1,7 @@
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { Field } from '@mastra/playground-ui/components/Field';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { UserEvent } from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -12,7 +12,7 @@ import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../
 import type { DefaultModelResponse } from '../../../../../../../api/types';
 import type { AvailableModelOption } from '../../../../../../../hooks/useAvailableModels';
 import { PersonalDefaultModel } from '../PersonalDefaultModel';
-import { pickModel } from './default-model-test-utils';
+import { findModelOption, openPicker, pickModel } from './default-model-test-utils';
 
 const renderInField = () =>
   renderWithProviders(
@@ -29,6 +29,7 @@ const THINKING_URL = `${DEFAULT_MODEL_URL}/thinking`;
 const MODELS_URL = `${TEST_BASE_URL}/web/config/models`;
 const FACTORY_URL = `${TEST_BASE_URL}/web/factory/projects/fp-1`;
 const UNAVAILABLE_WARNING = /None of your connected accounts can run/;
+const PICKER = 'Personal default model';
 const FOLLOWING_BUILT_IN = 'Thinking: Medium (Built-in default)';
 
 const models: AvailableModelOption[] = [
@@ -76,11 +77,12 @@ describe('PersonalDefaultModel', () => {
     const user = userEvent.setup();
     const { client } = renderInField();
 
-    await pickModel(user, 'Personal default model', 'anthropic/claude-sonnet-4-5');
+    const picker = await pickModel(user, PICKER, 'anthropic/claude-sonnet-4-5');
     await waitForMutationsIdle(client);
 
     expect(putBody).toEqual({ modelId: 'anthropic/claude-sonnet-4-5' });
-    expect(screen.getByRole('combobox', { name: 'Personal default model' })).toHaveValue('Claude Sonnet 4.5');
+    expect(picker).toHaveTextContent('Claude Sonnet 4.5');
+    expect(picker).toHaveAttribute('title', 'anthropic/claude-sonnet-4-5');
   });
 
   it('applies the default to running sessions and reports the skipped ones', async () => {
@@ -144,7 +146,7 @@ describe('PersonalDefaultModel', () => {
     await waitForMutationsIdle(client);
 
     expect(screen.getByRole('button', { name: 'Clear' })).toBeDisabled();
-    expect(screen.getByRole('combobox', { name: 'Personal default model' })).toHaveValue('');
+    expect(screen.getByRole('button', { name: PICKER })).not.toHaveAttribute('title');
   });
 
   it('flags a saved default the personal catalog cannot run', async () => {
@@ -153,9 +155,14 @@ describe('PersonalDefaultModel', () => {
       http.get(DEFAULT_MODEL_URL, () => HttpResponse.json({ modelId: 'deepseek/deepseek-flash', thinkingLevel: null })),
     );
 
+    const user = userEvent.setup();
     renderInField();
 
     expect(await screen.findByText(UNAVAILABLE_WARNING)).toBeInTheDocument();
+    const picker = screen.getByRole('button', { name: PICKER });
+    expect(picker).toHaveAttribute('title', 'deepseek/deepseek-flash');
+    await openPicker(user, PICKER);
+    expect(await findModelOption('deepseek/deepseek-flash')).toBeInTheDocument();
   });
 
   it('does not flag the default while the personal catalog is unknown', async () => {
@@ -165,7 +172,7 @@ describe('PersonalDefaultModel', () => {
     );
     const { client } = renderInField();
 
-    await screen.findByRole('combobox', { name: 'Personal default model' });
+    await screen.findByRole('button', { name: PICKER });
     await waitForMutationsIdle(client);
 
     expect(screen.queryByText(UNAVAILABLE_WARNING)).not.toBeInTheDocument();
@@ -177,8 +184,8 @@ describe('PersonalDefaultModel', () => {
     const user = userEvent.setup();
     renderInField();
 
-    await user.click(await screen.findByRole('combobox', { name: 'Personal default model' }));
-    expect(await screen.findByRole('option', { name: /openai\/gpt-5/ })).toBeInTheDocument();
+    await openPicker(user, PICKER);
+    expect(await findModelOption('openai/gpt-5')).toBeInTheDocument();
     expect(screen.queryByText(UNAVAILABLE_WARNING)).not.toBeInTheDocument();
   });
 
@@ -199,7 +206,30 @@ describe('PersonalDefaultModel', () => {
 
     renderInField();
 
-    expect(await screen.findByPlaceholderText('GPT-5 (Built-in default)')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: PICKER })).toHaveTextContent('GPT-5 (Built-in default)'),
+    );
+  });
+
+  it('offers only the personal catalog, searchable and filterable by provider', async () => {
+    stubPersonalCatalog(models);
+    server.use(http.get(DEFAULT_MODEL_URL, () => HttpResponse.json({ modelId: null, thinkingLevel: null })));
+    const user = userEvent.setup();
+    renderInField();
+
+    await openPicker(user, PICKER);
+    const values = () => screen.getAllByRole('option').map(option => option.getAttribute('data-value'));
+    await waitFor(() => expect(values()).toEqual(['anthropic/claude-sonnet-4-5', 'openai/gpt-5']));
+
+    const anthropic = within(screen.getByRole('group', { name: 'Filter by provider' })).getByRole('button', {
+      name: 'Anthropic',
+    });
+    await user.click(anthropic);
+    await waitFor(() => expect(values()).toEqual(['anthropic/claude-sonnet-4-5']));
+
+    await user.click(anthropic);
+    await user.type(screen.getByPlaceholderText('Search models'), 'gpt');
+    await waitFor(() => expect(values()).toEqual(['openai/gpt-5']));
   });
 
   it('follows the built-in level, never the Factory level, until a personal level is saved, and hands back to it', async () => {
@@ -271,16 +301,17 @@ describe('PersonalDefaultModel', () => {
     );
     const user = userEvent.setup();
     const { client } = renderInField();
-    const modelPicker = await screen.findByRole('combobox', { name: 'Personal default model' });
+    const modelPicker = await screen.findByRole('button', { name: PICKER });
+    await waitFor(() => expect(modelPicker).toHaveAttribute('title', 'openai/gpt-5'));
 
     await dragThinkingTo(user, FOLLOWING_BUILT_IN, 3);
     await user.keyboard('{Escape}');
     await user.click(screen.getByRole('button', { name: 'Clear' }));
-    await waitFor(() => expect(modelPicker).toHaveValue(''));
+    await waitFor(() => expect(modelPicker).not.toHaveAttribute('title'));
     releaseThinkingPut();
     await waitForMutationsIdle(client);
 
     expect(await screen.findByText('default_model_not_set')).toBeInTheDocument();
-    expect(modelPicker).toHaveValue('');
+    expect(modelPicker).not.toHaveAttribute('title');
   });
 });

@@ -1,5 +1,5 @@
 import { Field } from '@mastra/playground-ui/components/Field';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import type { PathParams } from 'msw';
@@ -10,7 +10,7 @@ import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../
 import type { AvailableModelOption } from '../../../../../../../hooks/useAvailableModels';
 import type { ApplyFactoryDefaultModelResult, FactoryProjectPayload } from '../../../../../workspaces/services/github';
 import { FactoryDefaultModel } from '../FactoryDefaultModel';
-import { pickModel } from './default-model-test-utils';
+import { findModelOption, openPicker, pickModel } from './default-model-test-utils';
 
 const renderInField = () =>
   renderWithProviders(
@@ -70,27 +70,82 @@ const PICKER = 'Factory default model';
 const SWITCH_PROMPT = /Also switch running sessions to/;
 
 describe('FactoryDefaultModel', () => {
-  it('offers the Factory catalog with no way to clear the default', async () => {
+  it('offers the Factory catalog grouped by provider with no way to clear the default', async () => {
     stubFactory('anthropic/claude-sonnet-4-5');
     const user = userEvent.setup();
     renderInField();
 
-    const picker = await screen.findByRole('combobox', { name: 'Factory default model' });
-    await waitFor(() => expect(picker).toHaveValue('Claude Sonnet 4.5'));
-    await user.click(picker);
+    const picker = await screen.findByRole('button', { name: PICKER });
+    await waitFor(() => expect(picker).toHaveTextContent('Claude Sonnet 4.5'));
+    expect(picker).toHaveAttribute('title', 'anthropic/claude-sonnet-4-5');
+    await openPicker(user, PICKER);
 
     const options = await screen.findAllByRole('option');
-    expect(options.map(option => option.textContent)).toEqual([
-      expect.stringContaining('anthropic/claude-sonnet-4-5'),
-      expect.stringContaining('openai/gpt-5'),
+    expect(options.map(option => option.getAttribute('data-value'))).toEqual([
+      'anthropic/claude-sonnet-4-5',
+      'openai/gpt-5',
     ]);
+    expect(screen.getByRole('group', { name: 'Filter by provider' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Reset/ })).not.toBeInTheDocument();
+  });
+
+  it('marks the built-in model as the default in the list', async () => {
+    stubFactory('anthropic/claude-sonnet-4-5');
+    const user = userEvent.setup();
+    renderInField();
+
+    await openPicker(user, PICKER);
+
+    expect(within(await findModelOption('openai/gpt-5')).getByText('Default')).toBeVisible();
+    expect(within(await findModelOption('anthropic/claude-sonnet-4-5')).queryByText('Default')).toBeNull();
+  });
+
+  it('narrows the catalog by search', async () => {
+    stubFactory('anthropic/claude-sonnet-4-5');
+    const user = userEvent.setup();
+    renderInField();
+
+    await openPicker(user, PICKER);
+    await user.type(screen.getByPlaceholderText('Search models'), 'gpt');
+
+    await waitFor(() =>
+      expect(screen.getAllByRole('option').map(option => option.getAttribute('data-value'))).toEqual(['openai/gpt-5']),
+    );
+  });
+
+  it('filters the catalog to one provider', async () => {
+    stubFactory('anthropic/claude-sonnet-4-5');
+    const user = userEvent.setup();
+    renderInField();
+
+    await openPicker(user, PICKER);
+    const filters = screen.getByRole('group', { name: 'Filter by provider' });
+    await user.click(within(filters).getByRole('button', { name: 'OpenAI' }));
+
+    await waitFor(() =>
+      expect(screen.getAllByRole('option').map(option => option.getAttribute('data-value'))).toEqual(['openai/gpt-5']),
+    );
+  });
+
+  it('keeps a saved default the catalog no longer offers selectable', async () => {
+    stubFactory('deepseek/deepseek-r1');
+    const user = userEvent.setup();
+    renderInField();
+
+    const picker = await screen.findByRole('button', { name: PICKER });
+    await waitFor(() => expect(picker).toHaveAttribute('title', 'deepseek/deepseek-r1'));
+    await openPicker(user, PICKER);
+
+    expect(await findModelOption('deepseek/deepseek-r1')).toBeInTheDocument();
   });
 
   it("names the model the org's keys start chats on while no Factory default is chosen", async () => {
     stubFactory(null);
     renderInField();
 
-    expect(await screen.findByPlaceholderText('GPT-5 (Built-in default)')).toBeInTheDocument();
+    const picker = await screen.findByRole('button', { name: PICKER });
+    await waitFor(() => expect(picker).toHaveTextContent('GPT-5 (Built-in default)'));
+    expect(picker).not.toHaveAttribute('title');
   });
 
   it('saves the new default before asking whether to switch running sessions', async () => {
@@ -102,7 +157,7 @@ describe('FactoryDefaultModel', () => {
 
     expect(await screen.findByRole('dialog', { name: 'Also switch running sessions to GPT-5?' })).toBeInTheDocument();
     expect(patchedBodies).toEqual([{ defaultModelId: 'openai/gpt-5' }]);
-    expect(picker).toHaveValue('GPT-5');
+    expect(picker).toHaveAttribute('title', 'openai/gpt-5');
 
     await user.click(screen.getByRole('button', { name: 'Keep them as-is' }));
     await waitForMutationsIdle(client);
@@ -150,7 +205,7 @@ describe('FactoryDefaultModel', () => {
 
     await pickModel(user, PICKER, 'anthropic/claude-sonnet-4-5');
 
-    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByPlaceholderText('Search models')).not.toBeInTheDocument());
     expect(patchedBodies).toEqual([]);
     expect(applyRequests).toEqual([]);
     expect(screen.queryByRole('dialog', { name: SWITCH_PROMPT })).not.toBeInTheDocument();
@@ -179,6 +234,6 @@ describe('FactoryDefaultModel', () => {
 
     expect(await screen.findByRole('dialog', { name: SWITCH_PROMPT })).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByLabelText('Saving default model')).not.toBeInTheDocument());
-    expect(picker).toHaveValue('GPT-5');
+    expect(picker).toHaveAttribute('title', 'openai/gpt-5');
   });
 });
