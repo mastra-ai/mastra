@@ -3,6 +3,12 @@ packages:
 
 # Security floors (Vanta/Dependabot 2026-09-21): scrub nested lock residuals.
 overrides:
+  # Vanta 2026-11-20: GHSA-p4f5-76q4-ffq7 dev-server RCE, fixed in vite 8.3.7.
+  # vitest declares vite ^6 || ^7 || ^8 and does not floor 8.3.7.
+  'vite@>=8.0.0 <8.3.7': 8.3.8
+  # Vanta 2026-11-20: GHSA-mf82-cgp5-3vmq, fixed in tldts 7.4.24.
+  # tough-cookie@6 and @kapaai/react-sdk declare tldts ^7 and do not floor 7.4.24.
+  'tldts@>=7.0.0 <7.4.24': 7.4.28
   proxy-addr: 2.0.8
   '@fastify/proxy-addr@<=5.1.0': 5.1.1
   qs@>=6.7.0 <6.16.0: 6.16.1

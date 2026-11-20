@@ -10,6 +10,9 @@ minimumReleaseAgeExclude:
   - vitest@5.1.0
 
 overrides:
+  # Vanta 2026-11-20: GHSA-p4f5-76q4-ffq7 dev-server RCE, fixed in vite 8.3.7.
+  # vitest declares vite ^6 || ^7 || ^8 and does not floor 8.3.7.
+  'vite@>=8.0.0 <8.3.7': 8.3.8
   '@modelcontextprotocol/sdk@>=1.0.0 <1.32.0': 1.32.1
   # Vanta 2026-09-28: nested-lock security floors
   'postcss@<8.5.23': 8.5.23

@@ -55,6 +55,7 @@
       "@mastra/evals": "link:../../packages/evals",
       "@mastra/ai-sdk": "link:../../client-sdks/ai-sdk",
       "mastra": "link:../../packages/cli",
+      "tldts@>=7.0.0 <7.4.24": "7.4.28",
       "@mastra/editor": "link:../../packages/editor",
       "@mastra/stagehand": "link:../../browser/stagehand",
       "@mastra/slack": "link:../../channels/slack",

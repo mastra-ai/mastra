@@ -73,6 +73,8 @@
       "@mastra/json-render": "link:../../integrations/json-render",
       "@mastra/auth-studio": "link:../../auth/studio",
       "mastra": "link:../../packages/cli",
+      "vite@>=8.0.0 <8.3.7": "8.3.8",
+      "tldts@>=7.0.0 <7.4.24": "7.4.28",
       "proxy-addr": "2.0.8",
       "@fastify/proxy-addr@<=5.1.0": "5.1.1",
       "qs@>=6.7.0 <6.16.0": "6.16.0",
