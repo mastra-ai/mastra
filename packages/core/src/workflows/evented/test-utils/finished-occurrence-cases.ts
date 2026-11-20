@@ -590,6 +590,227 @@ export function describeFinishedOccurrenceCases({
       20_000,
     );
 
+    /** The step events `replica` received, and the runs (top-level and nested) they belong to. */
+    function stepDeliveries(replica: { delivered: Event[] }) {
+      const events = replica.delivered.filter(
+        event => event.type === 'workflow.step.end' || event.type === 'workflow.step.run',
+      );
+      const runs = new Map(events.map(event => [event.runId, (event.data as { workflowId: string }).workflowId]));
+      return { events, runs };
+    }
+
+    /** The stored status and step records of each run, to compare before and after the late deliveries. */
+    async function storedRuns(runs: Map<string, string>) {
+      const store = (await getStorage().getStore('workflows'))!;
+      const stored: Record<string, unknown> = {};
+      for (const [runId, workflowName] of runs) {
+        const snapshot = await store.loadWorkflowSnapshot({ workflowName, runId });
+        stored[runId] = { status: snapshot?.status, context: snapshot?.context };
+      }
+      return stored;
+    }
+
+    /**
+     * The step event that ended each run: the last one the run received. A worker can stop after
+     * saving the end and before publishing it, so a redelivery of that event still has to finish
+     * the run (see the next case).
+     */
+    const endingEvents = (events: Event[]) => new Set([...new Map(events.map(event => [event.runId, event])).values()]);
+
+    const suspending = (id: string, report: Report) =>
+      createStep({
+        id,
+        inputSchema: Num,
+        outputSchema: Num,
+        resumeSchema: z.object({ ok: z.boolean() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          if (!resumeData) {
+            await suspend({});
+            return inputData;
+          }
+          await report(id);
+          return inputData;
+        },
+      });
+
+    /** Runs that end in success, some after a suspend and a resume. */
+    const endedRuns: Record<
+      string,
+      { build: (report: Report) => Built; input: unknown; resume?: { step: string | string[] } }
+    > = {
+      ...Object.fromEntries(Object.entries(shapes).map(([name, shape]) => [name, shape])),
+      resumed: {
+        input: { n: 0 },
+        build: report =>
+          createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: z.any() })
+            .then(work('first', report))
+            .then(suspending('gate', report))
+            .then(work('after', report))
+            .then(work('last', report))
+            .commit(),
+        resume: { step: 'gate' },
+      },
+      'nested resumed': {
+        input: { n: 0 },
+        build: report =>
+          createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: z.any() })
+            .then(work('a', report))
+            .then(
+              createWorkflow({ id: 'finished-child', inputSchema: Num, outputSchema: Num })
+                .then(suspending('ask', report))
+                .then(work('use', report))
+                .commit(),
+            )
+            .then(work('c', report))
+            .commit(),
+        resume: { step: ['finished-child', 'ask'] },
+      },
+    };
+
+    // A broker reclaims a step end or a foreach's item dispatch from a worker that stopped before
+    // acking it, and hands it to another worker after the run ended. A reclaimed message keeps its
+    // delivery attempt, so it arrives as a first delivery.
+    it.each(Object.keys(endedRuns))(
+      '%s: a step end or step dispatch delivered after the run ended does not advance the run',
+      async name => {
+        const shape = endedRuns[name]!;
+        const executions: string[] = [];
+        const reporter =
+          (replica: string): Report =>
+          async label =>
+            void executions.push(`${replica}:${label}`);
+        const a = await startReplica(shape.build(reporter('A')));
+        const b = await startReplica(shape.build(reporter('B')));
+        const run = await a.workflow.createRun({ runId: uniqueRunId() });
+        if (shape.resume) {
+          expect((await run.start({ inputData: shape.input as any })).status).toBe('suspended');
+          expect((await run.resume({ step: shape.resume.step, resumeData: { ok: true } })).status).toBe('success');
+        } else {
+          expect((await run.start({ inputData: shape.input as any })).status).toBe('success');
+        }
+
+        const { events, runs } = stepDeliveries(a);
+        const ending = endingEvents(events);
+        const late = events.filter(event => !ending.has(event));
+        expect(late.length).toBeGreaterThan(0);
+        const before = await storedRuns(runs);
+        for (const event of late) {
+          expect(await redeliver(b, event, 1)).toEqual({ ok: true });
+        }
+
+        expect(executions.filter(e => e.startsWith('B:'))).toEqual([]);
+        expect(b.published.map(event => `${event.type}@${JSON.stringify(event.data?.executionPath)}`)).toEqual([]);
+        expect(await storedRuns(runs)).toEqual(before);
+      },
+      20_000,
+    );
+
+    it('finishes a run whose worker saved its end and stopped before publishing it, when the last step end is redelivered', async () => {
+      const executions: string[] = [];
+      const build = (replica: string) =>
+        createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num })
+          .then(work('first', async id => void executions.push(`${replica}:${id}`)))
+          .then(work('second', async id => void executions.push(`${replica}:${id}`)))
+          .commit();
+      const endDropped = deferred<void>();
+      const a = await startReplica(build('A'), event => {
+        if (event.type !== 'workflow.end') {
+          return undefined;
+        }
+
+        endDropped.resolve();
+        return 'drop';
+      });
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      startInBackground(run, { n: 1 });
+      await endDropped.promise;
+      expect((await storedRun(run.runId))?.status).toBe('success');
+      const { events } = stepDeliveries(a);
+      const last = [...endingEvents(events)][0]!;
+      await crash(a);
+
+      const b = await startReplica(build('B'));
+      expect(await redeliver(b, last, 1)).toEqual({ ok: true });
+
+      expect(b.published.filter(event => event.type === 'workflow.end')).toHaveLength(1);
+      expect(executions).toEqual(['A:first', 'A:second']);
+      expect((await storedRun(run.runId))?.status).toBe('success');
+    }, 20_000);
+
+    it('keeps a failed run as it is when a parallel sibling finishes after the run failed', async () => {
+      const build = () =>
+        createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: z.any() })
+          .parallel([
+            createStep({
+              id: 'broken',
+              inputSchema: Num,
+              outputSchema: Num,
+              execute: async () => {
+                throw new Error('broken');
+              },
+            }),
+            work('slow', async () => {}),
+          ])
+          .then(createStep({ id: 'after', inputSchema: z.any(), outputSchema: z.any(), execute: async () => ({}) }))
+          .commit();
+      const siblingEnd = deferred<Event>();
+      const a = await startReplica(build(), event => {
+        if (event.type !== 'workflow.step.end' || !samePath(event, [0, 1])) {
+          return undefined;
+        }
+
+        siblingEnd.resolve(copyEvent(event));
+        return 'drop';
+      });
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      expect((await run.start({ inputData: { n: 1 } })).status).toBe('failed');
+      const late = await siblingEnd.promise;
+      const runs = new Map([[run.runId, 'finished']]);
+      const before = await storedRuns(runs);
+
+      const b = await startReplica(build());
+      expect(await redeliver(b, late, 1)).toEqual({ ok: true });
+
+      expect(b.published).toEqual([]);
+      expect(await storedRuns(runs)).toEqual(before);
+    }, 20_000);
+
+    it('keeps a finished run successful when a workflow.fail for it arrives late', async () => {
+      const workflow = createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num })
+        .then(work('first', async () => {}))
+        .commit();
+      const a = await startReplica(workflow);
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      expect((await run.start({ inputData: { n: 1 } })).status).toBe('success');
+      const runs = new Map([[run.runId, 'finished']]);
+      const before = await storedRuns(runs);
+
+      const b = await startReplica(workflow);
+      const finishes: Event[] = [];
+      await b.mastra.pubsub.subscribe('workflows-finish', event => void finishes.push(event));
+      const lateFail: Event = {
+        id: `late-fail-${run.runId}`,
+        type: 'workflow.fail',
+        runId: run.runId,
+        createdAt: new Date(),
+        deliveryAttempt: 1,
+        data: {
+          workflowId: 'finished',
+          runId: run.runId,
+          executionPath: [0],
+          resumeSteps: [],
+          stepResults: {},
+          activeStepsPath: {},
+          requestContext: {},
+          prevResult: { status: 'failed', error: { message: 'late failure' } },
+        },
+      };
+      expect(await b.mastra.handleWorkflowEvent(lateFail)).toEqual({ ok: true });
+
+      expect(finishes).toEqual([]);
+      expect(await storedRuns(runs)).toEqual(before);
+    }, 20_000);
+
     it('runs a step used twice in one workflow at both places', async () => {
       const executions: string[] = [];
       const report: Report = async id => void executions.push(id);
