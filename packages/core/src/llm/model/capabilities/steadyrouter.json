@@ -35,82 +35,16 @@
     "qwen3.8-max"
   ],
   "reasoning": {
-    "gemini-3.8-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "claude-fable-5-1": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "claude-sonnet-5-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "qwen3.8-max": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
     "claude-haiku-5-5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "kimi-k3": [
+    "gemini-3.8-flash": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "qwen3.8-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "deepseek-v4-pro-0813": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-v4.1-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "gpt-6.1-sol": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "claude-opus-5-5": [
@@ -119,30 +53,7 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "gpt-5.4-mini": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "MiniMax-M3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "gpt-5.4": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "gemini-4-argon": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "deepseek-v4-flash": [
+    "deepseek-v4-pro-0813": [
       {
         "type": "toggle"
       },
@@ -157,15 +68,104 @@
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "gpt-6-astra": [
+    "qwen3.8-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "gemini-4-argon": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "claude-fable-5-1": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
+    "deepseek-v4-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "kimi-k2.6": [
       {
         "type": "toggle"
+      }
+    ],
+    "gpt-5.4-mini": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "gpt-6.1-sol": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "claude-sonnet-5-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepseek-v4.1-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "gpt-5.4": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "qwen3.8-max": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "MiniMax-M3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "gpt-6-astra": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

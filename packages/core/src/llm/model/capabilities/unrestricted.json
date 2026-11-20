@@ -18,10 +18,10 @@
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "mimo-v2.6-flash-uncensored": [
+    "deepseek-v4.1-flash-uncensored": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "glm-5.3-flash-uncensored": [
@@ -30,10 +30,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-v4.1-flash-uncensored": [
+    "mimo-v2.6-flash-uncensored": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["none", "low", "medium", "high"]
       }
     ]
   }

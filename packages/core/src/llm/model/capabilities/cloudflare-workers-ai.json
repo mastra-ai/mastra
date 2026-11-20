@@ -63,17 +63,6 @@
     "@cf/zai-org/glm-5.3-flash"
   ],
   "reasoning": {
-    "@cf/moonshotai/kimi-k2.6": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "@cf/google/gemma-4-26b-a4b-it": [
-      {
-        "type": "toggle"
-      }
-    ],
     "@cf/qwen/qwen3.8-27b": [
       {
         "type": "toggle"
@@ -83,13 +72,58 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "@cf/zai-org/glm-5.3": [
+    "@cf/deepseek-ai/deepseek-v4-pro-0813": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
-    "@cf/zai-org/glm-4.7-flash": [
+    "@cf/deepseek-ai/deepseek-v4-flash-0731": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "@cf/deepseek-ai/deepseek-v4.1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "@cf/thinkingmachines/inkling-2-small": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "max"]
+      }
+    ],
+    "@cf/moonshotai/kimi-k2.6": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "@cf/openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "@cf/openai/gpt-oss-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "@cf/nvidia/nemotron-3-120b-a12b": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high"]
+      }
+    ],
+    "@cf/google/gemma-4-26b-a4b-it": [
       {
         "type": "toggle"
       }
@@ -106,49 +140,15 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "@cf/nvidia/nemotron-3-120b-a12b": [
+    "@cf/zai-org/glm-4.7-flash": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high"]
       }
     ],
-    "@cf/deepseek-ai/deepseek-v4-pro-0813": [
+    "@cf/zai-org/glm-5.3": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "@cf/deepseek-ai/deepseek-v4.1-flash-1017": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "@cf/deepseek-ai/deepseek-v4-flash-0731": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "@cf/openai/gpt-oss-20b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "@cf/openai/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "@cf/thinkingmachines/inkling-2-small": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "max"]
+        "values": ["low", "high", "max"]
       }
     ]
   }
