@@ -1,18 +1,28 @@
 import { s } from './scene-style';
 import type { SceneProps } from './scene-style';
 
-export function EnvVarsScene(_props: SceneProps) {
+export function EnvVarsScene({ id }: SceneProps) {
   return (
     <>
-      <path
-        d="M-26.5,9.7Q-26.5,8 -24.6,7L-2,-4.3Q0,-5.3 2,-4.3L45.8,17.6Q47.7,18.6 47.7,20.3L47.7,20.6Q47.7,22.3 45.8,23.3L23.2,34.6Q21.2,35.6 19.2,34.6L-24.6,12.7Q-26.5,11.7 -26.5,10Z"
-        fill="var(--face)"
-        stroke="var(--line)"
-        strokeWidth="1"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        vectorEffect="non-scaling-stroke"
-      />
+      <defs>
+        <pattern id={`${id}-gh`} patternUnits="userSpaceOnUse" width="1.8" height="1.8" patternTransform="rotate(-30)">
+          <line x1="0" y1="0" x2="0" y2="1.8" stroke="var(--detail)" strokeOpacity=".42" strokeWidth=".34" />
+        </pattern>
+        <radialGradient id={`${id}-gg0`} gradientUnits="userSpaceOnUse" cx="12.4" cy="12.4" r="38.4">
+          <stop offset=".2" stopColor="#fff" />
+          <stop offset=".9" stopColor="#fff" stopOpacity="0" />
+        </radialGradient>
+        <mask id={`${id}-gm0`} maskUnits="userSpaceOnUse" x="-400" y="-400" width="800" height="800">
+          <rect x="-400" y="-400" width="800" height="800" fill={`url(#${id}-gg0)`} />
+        </mask>
+      </defs>
+      <g className="ground">
+        <path
+          mask={`url(#${id}-gm0)`}
+          d="M-18.6,6.1C-20.7,3.5 -12.6,3 -9.6,1.4C-6.5,-0.1 -2.5,-2.6 -0.4,-3.3C1.7,-3.9 1.8,-2.6 2.9,-2.3C4,-2 1.9,-3.3 6.2,-1.3C10.4,0.7 21.2,6 28.5,9.7C35.8,13.4 47.8,18.1 49.9,20.7C51.9,23.3 43.8,23.8 40.8,25.3C37.8,26.9 33.7,29.4 31.7,30C29.6,30.6 29.5,29.4 28.4,29C27.3,28.7 29.3,30.1 25.1,28.1C20.8,26.1 10.1,20.7 2.8,17C-4.5,13.4 -16.6,8.7 -18.6,6.1Z"
+          fill={`url(#${id}-gh)`}
+        />
+      </g>
       <path
         d="M-12.4,-54.1Q-12.4,-56.3 -10.4,-57.3L-2,-61.5Q0,-62.5 2,-61.5L35.2,-44.9Q37.1,-43.9 37.1,-41.7L37.1,16.4Q37.1,18.6 35.2,19.5L26.7,23.8Q24.8,24.8 22.8,23.8L-10.4,7.2Q-12.4,6.2 -12.4,4Z"
         fill="var(--face)"

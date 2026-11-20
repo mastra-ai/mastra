@@ -16,6 +16,12 @@ import { restoreRunAgentScopes } from './scopes';
 export const MASTRA_DURABLE_EXECUTIONS_KEY = 'mastra__durableExecutions';
 
 /**
+ * Reserved request-context key carrying `Record<runId, SegmentSpanData | null>`: the span pair a
+ * resumed or recovered execution reports under (see `durable/segment-spans.ts`).
+ */
+export const MASTRA_DURABLE_SEGMENTS_KEY = 'mastra__durableSegments';
+
+/**
  * JSON-safe snapshot of `requestContext.entries()`, for a run that continues
  * somewhere the live context can't follow: a durable step, or a claimed
  * thread owner in another process. Best-effort: entries that fail a JSON
@@ -49,6 +55,8 @@ export function snapshotRequestContextEntries(
     // Execution ids are claimed per execution. A persisted id would be restored
     // over a later execution's id (e.g. the recovered one) and fence it out.
     if (key === MASTRA_DURABLE_EXECUTIONS_KEY) continue;
+    // A segment's spans belong to the execution that carried them, not to the run's input.
+    if (key === MASTRA_DURABLE_SEGMENTS_KEY) continue;
     // Serialize each entry exactly once with a bounded pass: a shared-reference
     // graph would otherwise make JSON.stringify expand exponentially and wedge
     // the event loop on every durable step, and reading the value twice (probe

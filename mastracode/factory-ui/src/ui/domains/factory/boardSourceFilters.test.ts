@@ -1,4 +1,4 @@
-import { matchesSourceFilters } from '@mastra/factory/work-items/card-source-filters';
+import { boardSource, matchesSourceFilters } from '@mastra/factory/work-items/card-source-filters';
 import { describe, expect, it } from 'vitest';
 import { boardFilterFields } from './components/boardFilterFields';
 import {
@@ -8,8 +8,27 @@ import {
   boardFiltersFromParams,
   withBoardFilterValues,
 } from './boardFilters';
+import { BOARD_SOURCE_OPTIONS } from './boardSourceFilters';
+import { CARD_SOURCES } from './cardSources';
+import type { WorkItemSource } from './services/workItems';
+
+function isCardSource(key: string): key is WorkItemSource {
+  return key in CARD_SOURCES;
+}
 
 describe('Board source filters', () => {
+  // The server files each card under `boardSource` of its source. A source with no menu entry can't be
+  // filtered to, and picking "Manual" hides its cards: Vanta's vulnerabilities were in that state.
+  // Slack threads aren't offered yet: the board has no Slack connection status to offer them by.
+  it.each(
+    Object.keys(CARD_SOURCES)
+      .filter(isCardSource)
+      .filter(source => source !== 'slack-thread'),
+  )('offers the source that %s cards are filed under', source => {
+    const offered: string[] = BOARD_SOURCE_OPTIONS.map(option => option.value);
+    expect(offered).toContain(boardSource(source));
+  });
+
   it('offers Detail findings even without a connected source and filters them from other cards', () => {
     const state = boardFiltersFromParams(new URLSearchParams(), false);
     const source = boardFilterFields({

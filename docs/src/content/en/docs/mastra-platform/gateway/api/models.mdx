@@ -1,0 +1,26 @@
+---
+title: "Models list | Gateway"
+description: "List the models available through Gateway with the OpenAI-compatible models endpoint."
+---
+
+# Models list
+
+```text
+GET https://gateway-api.mastra.ai/v1/models
+```
+
+Returns the model catalog in the OpenAI list format. Each entry's `id` is the `provider/model` value to use as `model` in requests.
+
+```bash
+curl https://gateway-api.mastra.ai/v1/models
+```
+
+- **Without a key**: Returns every public model with a published price.
+- **With a key**: Returns only the models that key is allowed to call, after [allowed-model restrictions](/docs/mastra-platform/gateway/keys-and-byok#restrict-a-key) and organization policy.
+
+```bash
+curl https://gateway-api.mastra.ai/v1/models \
+  -H "Authorization: Bearer $MASTRA_GATEWAY_API_KEY"
+```
+
+This endpoint isn't billed and doesn't count toward rate limits.

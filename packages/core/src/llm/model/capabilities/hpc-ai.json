@@ -22,10 +22,9 @@
     "zai-org/glm-5.2"
   ],
   "reasoning": {
-    "zai-org/glm-5.2": [
+    "moonshotai/kimi-k2.5": [
       {
-        "type": "effort",
-        "values": ["high", "max"]
+        "type": "toggle"
       }
     ],
     "zai-org/glm-5.1": [
@@ -33,9 +32,10 @@
         "type": "toggle"
       }
     ],
-    "moonshotai/kimi-k2.5": [
+    "zai-org/glm-5.2": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["high", "max"]
       }
     ],
     "deepseek/deepseek-v4-pro": [

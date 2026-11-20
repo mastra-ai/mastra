@@ -2,6 +2,7 @@
   "attachment": [
     "codestral-2508",
     "codestral-latest",
+    "deepseek-v4-1-flash-1017",
     "labs-devstral-small-2512",
     "labs-leanstral-1-5-1",
     "magistral-medium-latest",
@@ -88,7 +89,19 @@
     "zai-glm-5-3-flash"
   ],
   "reasoning": {
-    "mistral-large-4": [
+    "glm-5-2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "zai-glm-5-2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "mistral-large-latest": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -100,10 +113,34 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "glm-5-2": [
+    "mistral-small-latest": [
       {
         "type": "effort",
-        "values": ["none", "high", "max"]
+        "values": ["none", "high"]
+      }
+    ],
+    "mistral-large-4-0-8": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "mistral-large-4": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "mistral-medium-2604": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "mistral-small-2603": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ],
     "zai-glm-5-3-flash": [
@@ -118,7 +155,13 @@
         "values": ["none", "high"]
       }
     ],
-    "mistral-small-latest": [
+    "mistral-medium-latest": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "magistral-medium-latest": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -128,42 +171,6 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "mistral-small-2603": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "zai-glm-5-2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "mistral-medium-latest": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "mistral-medium-2604": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "mistral-large-4-0-8": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "magistral-medium-latest": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
       }
     ]
   }

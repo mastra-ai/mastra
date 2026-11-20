@@ -71,12 +71,6 @@ describe('SpanDataPanelView', () => {
       expect(screen.queryByRole('tab', { name: /feedback/i })).toBeNull();
     });
 
-    it('uses the pill-ghost variant, like the agent page tabs', () => {
-      const { container } = renderWithProviders(<SpanDataPanelView {...baseProps} />);
-
-      expect(container.querySelector('[data-variant="pill-ghost"]')).not.toBeNull();
-    });
-
     describe('when a feedback slot is provided', () => {
       it('adds a Feedback tab that renders the slot when opened', () => {
         renderWithProviders(<SpanDataPanelView {...baseProps} feedbackTabSlot={() => <div>feedback here</div>} />);

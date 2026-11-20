@@ -1,5 +1,42 @@
 # @mastra/inngest
 
+## 1.11.5-alpha.0
+
+### Patch Changes
+
+- Fixed Inngest durable agents ending the agent run and model generation spans on the default observability config when a `configSelector` picked a different one. The spans now end on the config they started on. ([#30921](https://github.com/mastra-ai/mastra/pull/30921))
+
+- Fixed the resumed part of a `createInngestAgent` run losing the thread id and resource id on its spans, so filters by thread or resource find the whole run. ([#30957](https://github.com/mastra-ai/mastra/pull/30957))
+
+- Fixed Inngest workflows exporting step input and output that the run asked to hide. With `tracingOptions: { hideInput: true, hideOutput: true }`, the step spans and the spans of agents called in a step now hide their input and output, and carry the `requestContextKeys` values, as on the default engine. Fixes [#30868](https://github.com/mastra-ai/mastra/issues/30868). ([#30929](https://github.com/mastra-ai/mastra/pull/30929))
+
+  Fixed `createInngestAgent` traces where the thread title model call showed as a separate top-level span. It now sits under the agent run, hides the same input and output, and follows the run's sampling decision.
+
+- Fixed traces of durable agent runs that suspend and resume, or recover after a crash. Each part of the run now has its own agent run and model generation spans in the run's trace, ended with that part's real outcome by whichever process or Inngest worker finishes it. A recovered run whose final step was already saved ends with that saved outcome instead of `unknown`. ([#30812](https://github.com/mastra-ai/mastra/pull/30812))
+
+- Fixed Inngest workflow traces being split when a sampler is set. Step spans and nested workflow runs now follow their run's sampling decision, so a run is recorded whole or not at all. ([#30812](https://github.com/mastra-ai/mastra/pull/30812))
+
+- Updated dependencies [[`d250e06`](https://github.com/mastra-ai/mastra/commit/d250e06d7c63b02aa0e5b7c61e1e54e07dcad13b), [`9315b28`](https://github.com/mastra-ai/mastra/commit/9315b2895a617947513be1f96d8964037b505f38), [`7c0c1cd`](https://github.com/mastra-ai/mastra/commit/7c0c1cdc9ed1211b3705554bf205a30ef05b0796), [`21a82af`](https://github.com/mastra-ai/mastra/commit/21a82af6e1c08daaa3c2700c98ac95a96e66399e), [`0458fdc`](https://github.com/mastra-ai/mastra/commit/0458fdc0c19abc0359746247cb55b71dd4afaf6e), [`4b5c347`](https://github.com/mastra-ai/mastra/commit/4b5c347734329ff434d7cdcb6408c23dfe046540), [`b8af9e3`](https://github.com/mastra-ai/mastra/commit/b8af9e313eb446fadb24454dc18fa19aa08a8cea), [`0280c14`](https://github.com/mastra-ai/mastra/commit/0280c141dae50809cfc7f6bd7e27d1f65432121c), [`ad5059e`](https://github.com/mastra-ai/mastra/commit/ad5059e90c201279628a799f1434a8fe35140b55), [`45b8470`](https://github.com/mastra-ai/mastra/commit/45b847050897411092b1c665cdbcbb59e2bec485), [`0f098fe`](https://github.com/mastra-ai/mastra/commit/0f098fe2425bc467ff9a800c41433efe90c44e58), [`8a0acd5`](https://github.com/mastra-ai/mastra/commit/8a0acd5ab9367a48d100b9c53eeb62362e6ddb72), [`389851e`](https://github.com/mastra-ai/mastra/commit/389851ef0380c222b6223148b8c070a6919b7a8e), [`9c4810b`](https://github.com/mastra-ai/mastra/commit/9c4810b48652bee44663452f136df5e9d9247d40), [`2f04296`](https://github.com/mastra-ai/mastra/commit/2f04296f9b815fde8395a32ddbabd214fdf2f914), [`4e0b782`](https://github.com/mastra-ai/mastra/commit/4e0b7820880774ed87c151d6575ba13820035773), [`a6a5b78`](https://github.com/mastra-ai/mastra/commit/a6a5b7808581c6e7dc086a165580b23138d5e441), [`8a0acd5`](https://github.com/mastra-ai/mastra/commit/8a0acd5ab9367a48d100b9c53eeb62362e6ddb72)]:
+  - @mastra/core@1.85.1-alpha.0
+
+## 1.11.4
+
+### Patch Changes
+
+- Fixed resumed workflow runs sampling again. A resume now keeps the suspended run's sampling decision and trace settings and nests under its span on the default, evented and Inngest engines. A resume of a run the sampler did not record stays unrecorded, so scorers do not run for it. This also applies to a durable agent run that another process resumes. On Inngest, a custom sampler now receives the request context and run metadata for the workflow run span. ([#30697](https://github.com/mastra-ai/mastra/pull/30697))
+
+- Updated dependencies [[`10484e3`](https://github.com/mastra-ai/mastra/commit/10484e3b5544f0a160bc28446e4584be1a32c8e5), [`0410aad`](https://github.com/mastra-ai/mastra/commit/0410aadf076536e3318b06b9ee493d70c3ef271f), [`a094a96`](https://github.com/mastra-ai/mastra/commit/a094a964cca2477f6fdaea8e4224666990331c14), [`998939a`](https://github.com/mastra-ai/mastra/commit/998939acc06a9d10f0c0aba21a36d3d21c8a08a3), [`7dd73e5`](https://github.com/mastra-ai/mastra/commit/7dd73e52417f6f438a37d24bdad6e6a2493d76b2), [`9b7df85`](https://github.com/mastra-ai/mastra/commit/9b7df85172170dd1f92bbb1343ae375d464334af), [`732a6a9`](https://github.com/mastra-ai/mastra/commit/732a6a9a831ca0a523188458c927d60068651119), [`ac63b9c`](https://github.com/mastra-ai/mastra/commit/ac63b9cc80f26f1d09901d9626a476555e294963), [`08faca4`](https://github.com/mastra-ai/mastra/commit/08faca458e39ab0b87e8597f75b6f1a7979a8599), [`3724a2e`](https://github.com/mastra-ai/mastra/commit/3724a2eb71acd0832938dcf25f428fa34237503c), [`b9d38c7`](https://github.com/mastra-ai/mastra/commit/b9d38c73982210c6564ee8a33d992a238e29a20b), [`192bb52`](https://github.com/mastra-ai/mastra/commit/192bb5225e53032dc1bd1e3ff861526861a62586), [`ab2295f`](https://github.com/mastra-ai/mastra/commit/ab2295fc158d6c107eb8459c648ad7293ba2af8e), [`e8a81e0`](https://github.com/mastra-ai/mastra/commit/e8a81e0919d9d8f75f85909178c637c708edc1d5), [`5564da0`](https://github.com/mastra-ai/mastra/commit/5564da07d1f09c551a7a0c3749dd8ad7281be2d1), [`00e2a36`](https://github.com/mastra-ai/mastra/commit/00e2a36a63153763efef33dee69753be5cdc85f0)]:
+  - @mastra/core@1.85.0
+
+## 1.11.4-alpha.0
+
+### Patch Changes
+
+- Fixed resumed workflow runs sampling again. A resume now keeps the suspended run's sampling decision and trace settings and nests under its span on the default, evented and Inngest engines. A resume of a run the sampler did not record stays unrecorded, so scorers do not run for it. This also applies to a durable agent run that another process resumes. On Inngest, a custom sampler now receives the request context and run metadata for the workflow run span. ([#30697](https://github.com/mastra-ai/mastra/pull/30697))
+
+- Updated dependencies [[`0410aad`](https://github.com/mastra-ai/mastra/commit/0410aadf076536e3318b06b9ee493d70c3ef271f), [`a094a96`](https://github.com/mastra-ai/mastra/commit/a094a964cca2477f6fdaea8e4224666990331c14), [`08faca4`](https://github.com/mastra-ai/mastra/commit/08faca458e39ab0b87e8597f75b6f1a7979a8599), [`b9d38c7`](https://github.com/mastra-ai/mastra/commit/b9d38c73982210c6564ee8a33d992a238e29a20b), [`192bb52`](https://github.com/mastra-ai/mastra/commit/192bb5225e53032dc1bd1e3ff861526861a62586), [`5564da0`](https://github.com/mastra-ai/mastra/commit/5564da07d1f09c551a7a0c3749dd8ad7281be2d1)]:
+  - @mastra/core@1.85.0-alpha.3
+
 ## 1.11.3
 
 ### Patch Changes

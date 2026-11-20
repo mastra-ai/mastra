@@ -59,6 +59,7 @@ describe('AgentBadge routing decision', () => {
         toolName: 'agent-call',
         isNetwork: true,
         toolApprovalMetadata: undefined,
+        renderToolCard: () => null,
       }),
     );
 
@@ -87,6 +88,7 @@ describe('AgentBadge routing decision', () => {
         toolName: 'agent-call',
         isNetwork: true,
         toolApprovalMetadata: undefined,
+        renderToolCard: () => null,
       }),
     );
 

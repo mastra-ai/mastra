@@ -29,6 +29,12 @@
 //
 // Usage:
 //   node publish-packages.mjs [--tag <dist-tag>] [--concurrency <n>] [--registry <url>]
+//                             [--pnpm-filter-prod <filter>]... [--dry-run]
+//
+// --pnpm-filter-prod limits the release to the packages pnpm selects with
+// `--filter-prod` (for example '@mastra/playground-ui...' for a package and
+// its production dependencies). --dry-run runs every `pnpm publish` with
+// --dry-run: packages are packed and checked, nothing is uploaded.
 //
 // Lifecycle scripts (prepack etc.) and env such as NPM_CONFIG_PROVENANCE
 // apply exactly as they do for `pnpm publish -r`.
@@ -53,7 +59,13 @@ const FETCH_ATTEMPTS = 3;
 const FETCH_TIMEOUT_MS = 15_000;
 
 function parseArgs(argv) {
-  const options = { tag: undefined, concurrency: DEFAULT_CONCURRENCY, registry: undefined };
+  const options = {
+    tag: undefined,
+    concurrency: DEFAULT_CONCURRENCY,
+    registry: undefined,
+    pnpmFilters: [],
+    dryRun: false,
+  };
   const value = i => {
     if (argv[i] === undefined || argv[i].startsWith('--')) {
       console.error(`Missing value for ${argv[i - 1]}`);
@@ -66,6 +78,8 @@ function parseArgs(argv) {
     if (arg === '--tag') options.tag = value(++i);
     else if (arg === '--concurrency') options.concurrency = Number(value(++i));
     else if (arg === '--registry') options.registry = value(++i).replace(/\/+$/, '');
+    else if (arg === '--pnpm-filter-prod') options.pnpmFilters.push('--filter-prod', value(++i));
+    else if (arg === '--dry-run') options.dryRun = true;
     else {
       console.error(`Unknown argument: ${arg}`);
       process.exit(2);
@@ -78,8 +92,8 @@ function parseArgs(argv) {
   return options;
 }
 
-function discoverPublishablePackages() {
-  const output = execFileSync('pnpm', ['m', 'ls', '--depth', '-1', '--json'], {
+function discoverPublishablePackages(pnpmFilters) {
+  const output = execFileSync('pnpm', ['m', 'ls', '--depth', '-1', '--json', ...pnpmFilters], {
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
   });
@@ -162,6 +176,7 @@ function runPublish(pkg, options) {
   const args = ['publish', '--access', 'public', '--no-git-checks'];
   if (options.tag) args.push('--tag', options.tag);
   if (options.registry) args.push('--registry', options.registry);
+  if (options.dryRun) args.push('--dry-run');
   return new Promise(resolve => {
     // Its own process group, so a timeout kills pnpm and everything it started
     // (lifecycle scripts, the upload) instead of leaving them running.
@@ -210,7 +225,9 @@ async function publishPackage(pkg, options, registry) {
     const { code, output } = await runPublish(pkg, options);
     const seconds = ((Date.now() - started) / 1000).toFixed(1);
     if (code === 0) {
-      console.log(`::group::Published ${id} (${seconds}s)\n${output.trimEnd()}\n::endgroup::`);
+      console.log(
+        `::group::${options.dryRun ? 'Dry run of' : 'Published'} ${id} (${seconds}s)\n${output.trimEnd()}\n::endgroup::`,
+      );
       return true;
     }
     const signing = isSigningFailure(output);
@@ -244,7 +261,7 @@ async function publishPackage(pkg, options, registry) {
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const registry = options.registry ?? DEFAULT_REGISTRY;
-  const packages = discoverPublishablePackages();
+  const packages = discoverPublishablePackages(options.pnpmFilters);
 
   const published = await mapConcurrent([...packages.values()], 16, pkg => isPublished(registry, pkg));
   const pending = new Map([...packages.values()].filter((_, i) => !published[i]).map(pkg => [pkg.name, pkg]));
@@ -256,7 +273,8 @@ async function main() {
   const levels = dependencyLevels(pending);
   console.log(
     `Publishing ${pending.size} package(s) in ${levels.length} dependency level(s), ${options.concurrency} at a time` +
-      (options.tag ? ` with tag "${options.tag}"` : ''),
+      (options.tag ? ` with tag "${options.tag}"` : '') +
+      (options.dryRun ? ' (dry run, nothing is uploaded)' : ''),
   );
 
   const started = Date.now();
@@ -277,7 +295,7 @@ async function main() {
   }
   const seconds = ((Date.now() - started) / 1000).toFixed(0);
   if (failed.length === 0) {
-    console.log(`Published ${pending.size} package(s) in ${seconds}s`);
+    console.log(`${options.dryRun ? 'Dry run of' : 'Published'} ${pending.size} package(s) in ${seconds}s`);
     return;
   }
   const publishedCount = pending.size - failed.length - blockedBy.size;

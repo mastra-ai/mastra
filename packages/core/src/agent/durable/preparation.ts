@@ -33,15 +33,17 @@ import { boundedStringify, deepMerge } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
 import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
+import { convertInstructionsToString, getInitialSignalEchoes, resolveVersionContext } from '../helpers';
 import { assertThreadOwnedByResource } from '../memory-thread-ownership';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { modelSpanAttributes } from '../model-span-attributes';
 import { snapshotRequestContextEntries } from '../request-context-snapshot';
+import { throwAgentRequestContextValidationError } from '../request-context-validation';
 import { SaveQueueManager } from '../save-queue';
 import { applyResolvedAgentScopes, incomingAgentScopes, resolveAgentScopes } from '../scopes';
 import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from '../signals';
-import { mastraDBMessageToSignal, signalSpanAttributes } from '../signals';
+import { signalSpanAttributes } from '../signals';
 import { TripWire } from '../trip-wire';
 import type {
   AgentInstructions,
@@ -69,36 +71,6 @@ import {
 } from './utils/serialize-state';
 import { generateDurableThreadTitle } from './workflows/finalize-run';
 import { isJsonSafe } from './workflows/shared/schemas';
-
-/**
- * Mirror of Agent#convertInstructionsToString — used for the AGENT_RUN span
- * `attributes.instructions` field so durable runs publish the same shape as
- * non-durable runs. Kept local to avoid promoting the private method.
- */
-function convertInstructionsToString(instructions: AgentInstructions | undefined): string {
-  if (!instructions) return '';
-  if (typeof instructions === 'string') return instructions;
-  if (Array.isArray(instructions)) {
-    return instructions
-      .map(msg => (typeof msg === 'string' ? msg : typeof msg.content === 'string' ? msg.content : ''))
-      .filter(Boolean)
-      .join('\n\n');
-  }
-  return typeof instructions.content === 'string' ? instructions.content : '';
-}
-
-/**
- * Extract signal messages already present in the messageList at run start
- * (from persisted history) so they can be echoed as data-signal stream parts
- * on the first LLM step. Mirrors `prepare-memory-step.ts#getInitialSignalEchoes`.
- */
-function getInitialSignalEchoes(messageList: MessageList): CreatedAgentSignal[] {
-  const inputMessageIds = messageList.makeMessageSourceChecker().input;
-  return messageList.get.all
-    .db()
-    .filter(message => message.role === 'signal' && inputMessageIds.has(message.id))
-    .map(mastraDBMessageToSignal);
-}
 
 /**
  * Interface for the Agent methods needed during durable preparation.
@@ -296,23 +268,11 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   if (typedAgent.requestContextSchema) {
     const contextValues = getRequestContextInputValues(requestContext);
     const validation = await typedAgent.requestContextSchema['~standard'].validate(contextValues);
-
     if (validation.issues) {
-      const errorMessages = validation.issues
-        .map(e => {
-          const pathStr = e.path?.map((p: any) => (typeof p === 'object' ? p.key : p)).join('.');
-          return `- ${pathStr}: ${e.message}`;
-        })
-        .join('\n');
-      throw new MastraError({
-        id: 'AGENT_REQUEST_CONTEXT_VALIDATION_FAILED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: `Request context validation failed for agent '${publicAgentId}':\n${errorMessages}`,
-        details: {
-          agentId: publicAgentId,
-          agentName: publicAgentName,
-        },
+      throwAgentRequestContextValidationError({
+        issues: validation.issues,
+        agentId: publicAgentId,
+        agentName: publicAgentName,
       });
     }
   }
@@ -365,13 +325,14 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 3. Merge version overrides (Mastra defaults < requestContext < call-site)
   const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
-  let mergedVersions = mergeVersionOverrides(mastra?.getVersionOverrides?.(), requestVersions);
-  if ((execOptions as any)?.versions) {
-    mergedVersions = mergeVersionOverrides(mergedVersions, (execOptions as any).versions);
-  }
-  if (mergedVersions) {
-    requestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
-  }
+  resolveVersionContext(
+    requestContext,
+    requestVersions,
+    mastra?.getVersionOverrides?.(),
+    execOptions,
+    // Durable preparation normalizes sole overrides; plain calls preserve their identity.
+    mergeVersionOverrides,
+  );
 
   // Resolve and validate the complete model selection before durable preparation
   // can persist a thread or run user-defined processors, tools, or hooks.
@@ -589,7 +550,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         input: messages,
         attributes: {
           conversationId: threadId,
-          instructions: convertInstructionsToString(instructions),
+          instructions: instructions ? convertInstructionsToString(instructions) : '',
           ...modelSpanAttributes(model),
           ...(startingSignal ? { signal: startingSignal } : {}),
           // @deprecated — use entityVersionId (top-level span context field) instead.

@@ -1,5 +1,62 @@
 # @mastra/platform
 
+## 0.2.0-alpha.2
+
+### Patch Changes
+
+- Hosted Knowledge now rejects too-deep pages and too-large moves with `KnowledgePageDepthError` and `KnowledgeMoveTooLargeError`, the same errors local storage throws, instead of a plain `Error`. A hosted `KnowledgePageKeyConflictError` now carries its `key` and `parentId`, and `KnowledgeMoveTooLargeError` its `pageId` and `pages`, when the service sends them. ([#31007](https://github.com/mastra-ai/mastra/pull/31007))
+
+- Updated dependencies [[`3baa66d`](https://github.com/mastra-ai/mastra/commit/3baa66dfc785c222bb727a6da6012a0f28480b4a), [`d1f0a92`](https://github.com/mastra-ai/mastra/commit/d1f0a92ca41e1b725ed296abeb540908d09b5c64), [`4c71c2e`](https://github.com/mastra-ai/mastra/commit/4c71c2e776563852ef2301d674a1b8c70f511039)]:
+  - @mastra/core@1.86.0-alpha.2
+
+## 0.2.0-alpha.1
+
+### Minor Changes
+
+- PlatformMemory now reports hosted Observational Memory settings and reads the current observation record and past generations through its authenticated client, so Studio's memory status and observations views work for agents using PlatformMemory. Added `getObservationRecords(threadId, { historyLimit })` and `getInstanceConfig()` to `PlatformMemoryClient`. Date range and offset filters on observation history, and reads without a thread id, are not supported by the hosted API yet and return a 400 error. ([#30986](https://github.com/mastra-ai/mastra/pull/30986))
+
+### Patch Changes
+
+- The memory status, memory config, observational memory and buffer-status routes now read Observational Memory from the agent's memory when the memory runs it (for example PlatformMemory). Thread access checks still apply, and an empty hosted result is returned as empty instead of falling back to local storage. ([#30986](https://github.com/mastra-ai/mastra/pull/30986))
+
+- Added optional `getObservationalMemoryConfig()` and `getObservationalMemoryRecords()` methods to `MastraMemory`. Memory implementations that run Observational Memory outside the agent (such as hosted memory) can override them so the memory status, config and observational memory routes report their settings and records. Both return `undefined` by default, so existing memory implementations are unaffected. ([#30986](https://github.com/mastra-ai/mastra/pull/30986))
+
+- Updated dependencies [[`40e2880`](https://github.com/mastra-ai/mastra/commit/40e288024e8f7a1cda436ff37ae94d52cc597b13), [`40e2880`](https://github.com/mastra-ai/mastra/commit/40e288024e8f7a1cda436ff37ae94d52cc597b13), [`40e2880`](https://github.com/mastra-ai/mastra/commit/40e288024e8f7a1cda436ff37ae94d52cc597b13)]:
+  - @mastra/core@1.86.0-alpha.1
+
+## 0.1.2-alpha.0
+
+### Patch Changes
+
+- Remove unreleased hosted working memory API calls, model context injection, and options from Platform Memory while retaining local working memory in OSS Memory. ([#30984](https://github.com/mastra-ai/mastra/pull/30984))
+
+- Updated dependencies [[`d250e06`](https://github.com/mastra-ai/mastra/commit/d250e06d7c63b02aa0e5b7c61e1e54e07dcad13b), [`9315b28`](https://github.com/mastra-ai/mastra/commit/9315b2895a617947513be1f96d8964037b505f38), [`7c0c1cd`](https://github.com/mastra-ai/mastra/commit/7c0c1cdc9ed1211b3705554bf205a30ef05b0796), [`21a82af`](https://github.com/mastra-ai/mastra/commit/21a82af6e1c08daaa3c2700c98ac95a96e66399e), [`0458fdc`](https://github.com/mastra-ai/mastra/commit/0458fdc0c19abc0359746247cb55b71dd4afaf6e), [`4b5c347`](https://github.com/mastra-ai/mastra/commit/4b5c347734329ff434d7cdcb6408c23dfe046540), [`b8af9e3`](https://github.com/mastra-ai/mastra/commit/b8af9e313eb446fadb24454dc18fa19aa08a8cea), [`0280c14`](https://github.com/mastra-ai/mastra/commit/0280c141dae50809cfc7f6bd7e27d1f65432121c), [`ad5059e`](https://github.com/mastra-ai/mastra/commit/ad5059e90c201279628a799f1434a8fe35140b55), [`45b8470`](https://github.com/mastra-ai/mastra/commit/45b847050897411092b1c665cdbcbb59e2bec485), [`0f098fe`](https://github.com/mastra-ai/mastra/commit/0f098fe2425bc467ff9a800c41433efe90c44e58), [`8a0acd5`](https://github.com/mastra-ai/mastra/commit/8a0acd5ab9367a48d100b9c53eeb62362e6ddb72), [`389851e`](https://github.com/mastra-ai/mastra/commit/389851ef0380c222b6223148b8c070a6919b7a8e), [`9c4810b`](https://github.com/mastra-ai/mastra/commit/9c4810b48652bee44663452f136df5e9d9247d40), [`2f04296`](https://github.com/mastra-ai/mastra/commit/2f04296f9b815fde8395a32ddbabd214fdf2f914), [`4e0b782`](https://github.com/mastra-ai/mastra/commit/4e0b7820880774ed87c151d6575ba13820035773), [`a6a5b78`](https://github.com/mastra-ai/mastra/commit/a6a5b7808581c6e7dc086a165580b23138d5e441), [`8a0acd5`](https://github.com/mastra-ai/mastra/commit/8a0acd5ab9367a48d100b9c53eeb62362e6ddb72)]:
+  - @mastra/core@1.85.1-alpha.0
+
+## 0.1.1
+
+### Patch Changes
+
+- `PlatformKnowledge` now reads `MASTRA_KNOWLEDGE_ACCESS_TOKEN` when it is set, ahead of `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PLATFORM_SECRET_KEY`. An explicit `accessToken` option still wins. An empty `MASTRA_KNOWLEDGE_ACCESS_TOKEN` is ignored. This is a Knowledge-only credential, so an app can authenticate to Knowledge without the general Platform token. ([#30765](https://github.com/mastra-ai/mastra/pull/30765))
+
+  Set the credential and instance ID in your environment:
+
+  ```sh
+  export MASTRA_KNOWLEDGE_ACCESS_TOKEN='your-knowledge-token'
+  export MASTRA_KNOWLEDGE_INSTANCE_ID='your-knowledge-instance-id'
+  ```
+
+  ```ts
+  import { PlatformKnowledge } from '@mastra/platform';
+
+  const knowledge = new PlatformKnowledge();
+  ```
+
+- `PlatformKnowledge` now registers under the stable id `platform-knowledge-<instanceId>` (was random per boot), so two instances with different instance IDs still register side by side, and a missing instance ID now fails at construction with its own error naming `MASTRA_KNOWLEDGE_INSTANCE_ID`. ([#30757](https://github.com/mastra-ai/mastra/pull/30757))
+
+- Updated dependencies [[`10484e3`](https://github.com/mastra-ai/mastra/commit/10484e3b5544f0a160bc28446e4584be1a32c8e5), [`0410aad`](https://github.com/mastra-ai/mastra/commit/0410aadf076536e3318b06b9ee493d70c3ef271f), [`a094a96`](https://github.com/mastra-ai/mastra/commit/a094a964cca2477f6fdaea8e4224666990331c14), [`998939a`](https://github.com/mastra-ai/mastra/commit/998939acc06a9d10f0c0aba21a36d3d21c8a08a3), [`7dd73e5`](https://github.com/mastra-ai/mastra/commit/7dd73e52417f6f438a37d24bdad6e6a2493d76b2), [`9b7df85`](https://github.com/mastra-ai/mastra/commit/9b7df85172170dd1f92bbb1343ae375d464334af), [`732a6a9`](https://github.com/mastra-ai/mastra/commit/732a6a9a831ca0a523188458c927d60068651119), [`ac63b9c`](https://github.com/mastra-ai/mastra/commit/ac63b9cc80f26f1d09901d9626a476555e294963), [`08faca4`](https://github.com/mastra-ai/mastra/commit/08faca458e39ab0b87e8597f75b6f1a7979a8599), [`3724a2e`](https://github.com/mastra-ai/mastra/commit/3724a2eb71acd0832938dcf25f428fa34237503c), [`b9d38c7`](https://github.com/mastra-ai/mastra/commit/b9d38c73982210c6564ee8a33d992a238e29a20b), [`192bb52`](https://github.com/mastra-ai/mastra/commit/192bb5225e53032dc1bd1e3ff861526861a62586), [`ab2295f`](https://github.com/mastra-ai/mastra/commit/ab2295fc158d6c107eb8459c648ad7293ba2af8e), [`e8a81e0`](https://github.com/mastra-ai/mastra/commit/e8a81e0919d9d8f75f85909178c637c708edc1d5), [`5564da0`](https://github.com/mastra-ai/mastra/commit/5564da07d1f09c551a7a0c3749dd8ad7281be2d1), [`00e2a36`](https://github.com/mastra-ai/mastra/commit/00e2a36a63153763efef33dee69753be5cdc85f0)]:
+  - @mastra/core@1.85.0
+
 ## 0.1.1-alpha.1
 
 ### Patch Changes

@@ -202,7 +202,7 @@ function ExperimentPage() {
         </PageLayout>
 
         {/* Item detail in the route side panel (drawer on mobile); the `items/:itemId` child route only carries the selected item. */}
-        <ExperimentItemSidePanel withQueryTrace={traceQuery.enabled} withFeedback={traceQuery.enabled} />
+        <ExperimentItemSidePanel withFeedback={traceQuery.enabled} />
 
         <DeleteExperimentDialog
           open={deleteDialogOpen}

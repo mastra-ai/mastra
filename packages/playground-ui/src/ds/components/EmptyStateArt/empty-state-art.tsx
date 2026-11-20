@@ -25,9 +25,17 @@ export type EmptyStateArtProps = Omit<ComponentProps<'span'>, 'children'> & {
   hue?: EmptyStateArtHue;
 };
 
+const OPTICAL_SIZE = 150;
+
+function opticalSize({ width, height }: { width: number; height: number }) {
+  const scale = OPTICAL_SIZE / Math.sqrt(width * height);
+  return { width: Math.round(width * scale), height: Math.round(height * scale) };
+}
+
 export function EmptyStateArt({ name, state = 'idle', hue, className, style, ...props }: EmptyStateArtProps) {
   const id = useId().replace(/[^\w-]/g, '');
   const scene = sceneByName[name];
+  const size = opticalSize(scene);
   const artStyle: CSSProperties & { '--art-tint': string } = { ...style, '--art-tint': hueColor[hue ?? scene.hue] };
 
   return (
@@ -42,8 +50,8 @@ export function EmptyStateArt({ name, state = 'idle', hue, className, style, ...
       <svg
         className="art max-w-full"
         viewBox={scene.viewBox}
-        width={scene.width}
-        height={scene.height}
+        width={size.width}
+        height={size.height}
         aria-hidden="true"
         data-illustration={name}
       >

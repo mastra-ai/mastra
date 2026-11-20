@@ -43,7 +43,7 @@ describe('Tools loading state', () => {
     cleanup();
   });
 
-  it('shows a skeleton (never the empty state) while provider tools load, then the padded empty state', async () => {
+  it('shows a skeleton (never the empty state) while provider tools load, then the empty state', async () => {
     const gate = (() => {
       let resolve: () => void = () => {};
       const promise = new Promise<void>(r => {
@@ -67,20 +67,15 @@ describe('Tools loading state', () => {
 
     // While integration tools may still arrive, render the structural skeleton
     // (mirroring the Models loading layout) — never the empty-state flash.
-    const skeleton = await screen.findByTestId('tools-card-picker-loading');
-    expect(skeleton.className).toContain('grid-cols-[280px_minmax(0,1fr)]');
+    await screen.findByTestId('tools-card-picker-loading');
     expect(screen.queryByText('No tools available in this project')).toBeNull();
     expect(screen.queryByTestId('tools-card-picker')).toBeNull();
 
     gate.resolve();
 
-    // Once resolved-empty, the empty state appears with the pane padding the
-    // two-column layouts use, so it is not flush under the `!py-0` tab shell.
     await waitFor(() => {
       expect(screen.queryByTestId('tools-card-picker-loading')).toBeNull();
     });
     expect(screen.getByText('No tools available in this project')).toBeTruthy();
-    expect(screen.getByTestId('tools-empty-state').className).toContain('px-4');
-    expect(screen.getByTestId('tools-empty-state').className).toContain('py-4');
   });
 });

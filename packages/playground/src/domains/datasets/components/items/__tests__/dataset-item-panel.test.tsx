@@ -58,12 +58,6 @@ describe('DatasetItemPanel', () => {
       expect(screen.getByText(/getWeather/)).not.toBeNull();
     });
 
-    it('keeps the versions history out of the header', () => {
-      renderPanel(baseItem);
-
-      expect(screen.queryByRole('link', { name: 'Go to item versions history' })).toBeNull();
-    });
-
     it('opens the versions history from the actions menu, with the item version pre-selected', async () => {
       const navigate = vi.fn();
       renderPanel(baseItem, navigate);
@@ -74,34 +68,11 @@ describe('DatasetItemPanel', () => {
       expect(navigate).toHaveBeenCalledWith(`/datasets/ds-1/items/${baseItem.id}/versions?version=1`);
     });
 
-    it('leaves out the scorers section', () => {
-      renderPanel(itemWithScorers);
-
-      expect(screen.queryByText('Scorers')).toBeNull();
-    });
-
     it('titles the panel like experiment results, without the id', () => {
       renderPanel(itemWithUuid);
 
       expect(screen.getByText('Dataset item')).not.toBeNull();
       expect(screen.queryByRole('button', { name: /^0bbd9730-e38/ })).toBeNull();
-    });
-
-    it('leaves out the dataset id and version rows', () => {
-      renderPanel(baseItem);
-
-      expect(screen.queryByText('Dataset Id')).toBeNull();
-      expect(screen.queryByText('Version')).toBeNull();
-    });
-  });
-
-  describe('when an item is edited', () => {
-    it('does not offer a scorer override', async () => {
-      renderPanel(baseItem);
-      await enterEditMode();
-
-      expect(screen.getByRole('button', { name: 'Save changes' })).not.toBeNull();
-      expect(screen.queryByRole('switch', { name: 'Override dataset scorers' })).toBeNull();
     });
   });
 

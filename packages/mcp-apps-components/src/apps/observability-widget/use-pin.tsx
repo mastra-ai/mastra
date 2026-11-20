@@ -35,6 +35,7 @@ export function usePin(
   datePreset: ObservabilityDatePreset | 'custom',
   customRange: ObservabilityWidgetDateRange | undefined,
   filters: readonly unknown[] | undefined,
+  project: string | undefined,
 ): ReactNode {
   const hostIds = useHostPinnedIds(app);
   const [requested, setRequested] = useState<boolean>();
@@ -60,6 +61,7 @@ export function usePin(
       datePreset,
       ...(customRange ? { customRange } : {}),
       ...(filters?.length ? { filters: [...filters] } : {}),
+      ...(project ? { project } : {}),
     };
     app
       .updateModelContext({

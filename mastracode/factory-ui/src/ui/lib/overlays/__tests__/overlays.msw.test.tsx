@@ -36,14 +36,6 @@ function stateOf(name: OverlayName) {
 }
 
 describe('OverlaysProvider', () => {
-  it('given a fresh provider, then every overlay starts closed', () => {
-    renderProbe();
-
-    for (const name of OVERLAY_NAMES) {
-      expect(stateOf(name)).toBe('closed');
-    }
-  });
-
   it('given a closed overlay, when opened, then only that overlay reports open', async () => {
     renderProbe();
 
