@@ -101,16 +101,75 @@ function transformList(value: string): Matrix {
   return result;
 }
 
-function placement(declarations: string): Matrix | undefined {
-  const properties = new Map<string, string>();
-  for (const declaration of declarations.split(';')) {
-    const colon = declaration.indexOf(':');
-    if (colon > 0) properties.set(declaration.slice(0, colon).trim(), declaration.slice(colon + 1).trim());
+type Declarations = Map<string, string>;
+
+const POSE = ['translate', 'rotate', 'scale', 'transform'];
+const ANIMATED = /^(animation|transition|opacity|stroke-dashoffset|offset-|transform-origin|transform-box)/;
+const ANIMATION_DEFAULTS = {
+  duration: '0s',
+  'timing-function': 'ease',
+  delay: '0s',
+  'iteration-count': '1',
+  direction: 'normal',
+  'fill-mode': 'none',
+  'play-state': 'running',
+  name: 'none',
+} as const;
+
+function normalize(value: string) {
+  return value
+    .replace(/'/g, '"')
+    .replace(/\s+/g, ' ')
+    .replace(/\s*,\s*/g, ',')
+    .replace(/\(\s+/g, '(')
+    .replace(/\s+\)/g, ')')
+    .replace(/\)\s+(?=[\w-]+\()/g, ')')
+    .trim()
+    .replace(/(^|[^\w-])(-?\d*\.?\d+(?:e-?\d+)?)/g, (_, before: string, number: string) => before + Number(number))
+    .replace(/(^|[\s(,])-?0(?:px|%|deg)?(?=[\s),!]|$)/g, '$10')
+    .replace(/\bsteps\(1(?:,end)?\)|\bstep-end\b/g, 'step-end')
+    .replace(/^(-?[\d.e]+)px(!?)$/, '$1$2');
+}
+
+function topLevelTokens(value: string) {
+  const tokens: string[] = [];
+  let depth = 0;
+  let token = '';
+  for (const character of value) {
+    if (character === '(') depth++;
+    if (character === ')') depth--;
+    if (character === ',' && depth === 0) throw new Error(`unexpected animation list ${value}`);
+    if (character === ' ' && depth === 0) {
+      if (token) tokens.push(token);
+      token = '';
+    } else token += character;
   }
-  const placed = ['translate', 'rotate', 'scale', 'transform'].filter(property => properties.has(property));
-  if (placed.length === 0 || placed.some(property => properties.get(property)?.includes('var('))) return undefined;
+  if (token) tokens.push(token);
+  return tokens;
+}
+
+function expandAnimation(value: string): Map<string, string> | undefined {
+  if (value.includes('var(')) return undefined;
+  const fields = new Map<string, string>(Object.entries(ANIMATION_DEFAULTS));
+  let times = 0;
+  for (const token of topLevelTokens(value)) {
+    if (/^-?[\d.]+m?s$/.test(token)) fields.set(times++ === 0 ? 'duration' : 'delay', token);
+    else if (token === 'infinite' || /^[\d.]+$/.test(token)) fields.set('iteration-count', token);
+    else if (/^(normal|reverse|alternate|alternate-reverse)$/.test(token)) fields.set('direction', token);
+    else if (/^(forwards|backwards|both)$/.test(token)) fields.set('fill-mode', token);
+    else if (/^(running|paused)$/.test(token)) fields.set('play-state', token);
+    else if (
+      /^(linear|ease|ease-in|ease-out|ease-in-out|step-start|step-end)$|^(cubic-bezier|steps|linear)\(/.test(token)
+    )
+      fields.set('timing-function', token);
+    else fields.set('name', token);
+  }
+  return fields;
+}
+
+function pose(declarations: Declarations): Matrix | undefined {
   const read = (property: string) => {
-    const value = properties.get(property);
+    const value = declarations.get(property);
     return value === undefined || value === 'none' ? undefined : value;
   };
   const translate = read('translate');
@@ -127,23 +186,76 @@ function placement(declarations: string): Matrix | undefined {
   ].reduce(multiply);
 }
 
+function declarationsOf(body: string, into: Declarations) {
+  for (const declaration of body.split(';')) {
+    const colon = declaration.indexOf(':');
+    if (colon <= 0) continue;
+    const property = declaration.slice(0, colon).trim();
+    const raw = declaration.slice(colon + 1).trim();
+    const important = /!\s*important$/.test(raw);
+    const value = normalize(raw.replace(/!\s*important$/, '')) + (important ? '!' : '');
+    if (property === 'animation') {
+      const fields = expandAnimation(value.replace(/!$/, ''));
+      if (!fields) into.set(property, value);
+      else for (const [field, part] of fields) into.set(`animation-${field}`, part + (important ? '!' : ''));
+    } else into.set(property, value);
+  }
+}
+
+function blocks(css: string, visit: (context: string, prelude: string, body: string) => void) {
+  const text = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const walk = (start: number, context: string): number => {
+    let index = start;
+    while (index < text.length) {
+      const open = text.indexOf('{', index);
+      const close = text.indexOf('}', index);
+      if (close !== -1 && (open === -1 || close < open)) return close + 1;
+      if (open === -1) return text.length;
+      const prelude = text.slice(index, open).trim();
+      const nextOpen = text.indexOf('{', open + 1);
+      const nextClose = text.indexOf('}', open + 1);
+      if (nextClose === -1) throw new Error(`unclosed block after ${prelude}`);
+      if (nextOpen === -1 || nextClose < nextOpen) {
+        visit(context, prelude, text.slice(open + 1, nextClose));
+        index = nextClose + 1;
+      } else index = walk(open + 1, `${context}${prelude.replace(/\s+/g, '')}|`);
+    }
+    return index;
+  };
+  walk(0, '');
+}
+
 const offset = (key: string) => (key === 'from' ? 0 : key === 'to' ? 100 : Number.parseFloat(key));
 
-function placements(css: string) {
-  const result = new Map<string, Matrix>();
-  for (const keyframes of css.matchAll(/@keyframes\s+([\w-]+)\s*\{((?:[^{}]*\{[^{}]*\})*)\s*\}/g)) {
-    const name = capture(keyframes, 1);
-    for (const frame of capture(keyframes, 2).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-      const pose = placement(capture(frame, 2));
-      if (!pose) continue;
-      for (const key of capture(frame, 1).split(',')) result.set(`${name} ${offset(key.trim())}%`, pose);
+function animatedValues(css: string) {
+  const rules = new Map<string, Declarations>();
+  blocks(css, (context, prelude, body) => {
+    const keyframes = /@keyframes([\w-]+)\|$/.exec(context);
+    const keys = keyframes
+      ? prelude.split(',').map(stop => `@keyframes ${capture(keyframes, 1)} ${offset(stop.trim())}%`)
+      : [context + prelude.replace(/[\s'"]/g, '')];
+    for (const key of keys) {
+      const declarations = rules.get(key) ?? new Map<string, string>();
+      declarationsOf(body, declarations);
+      rules.set(key, declarations);
+    }
+  });
+  const poses = new Map<string, Matrix>();
+  const values = new Map<string, string>();
+  for (const [key, declarations] of rules) {
+    const inKeyframes = key.startsWith('@keyframes ');
+    const placed = POSE.filter(property => declarations.has(property));
+    const literal = placed.every(property => !declarations.get(property)?.includes('var('));
+    if (placed.length > 0 && literal) {
+      const matrix = pose(declarations);
+      if (matrix) poses.set(key, matrix);
+    }
+    for (const [property, value] of declarations) {
+      if (POSE.includes(property) && literal) continue;
+      if (inKeyframes || POSE.includes(property) || ANIMATED.test(property)) values.set(`${key} ${property}`, value);
     }
   }
-  for (const rule of css.matchAll(/([^{}@]*\.fx-[\w-]+[^{}]*)\{([^{}]*)\}/g)) {
-    const pose = placement(capture(rule, 2));
-    if (pose) result.set(capture(rule, 1).replace(/[\s'"]/g, ''), pose);
-  }
-  return result;
+  return { poses, values };
 }
 
 async function minified(path: string) {
@@ -169,16 +281,15 @@ async function minified(path: string) {
 }
 
 describe('EmptyStateArt stylesheet', () => {
-  it('keeps every animated pose through a production Vite build', async () => {
-    const expected = placements(readFileSync(stylesheet, 'utf8'));
-    const actual = placements(await minified(stylesheet));
-    expect(expected.size).toBeGreaterThan(1000);
-    const changed = [...expected]
-      .filter(([key, pose]) => {
-        const built = actual.get(key);
-        return !built || differs(built, pose);
-      })
-      .map(([key]) => key);
-    expect(changed).toEqual([]);
+  it('keeps every animated value through a production Vite build', async () => {
+    const expected = animatedValues(readFileSync(stylesheet, 'utf8'));
+    const actual = animatedValues(await minified(stylesheet));
+    expect(expected.poses.size + expected.values.size).toBeGreaterThan(5000);
+    const movedPoses = [...expected.poses].filter(([key, pose]) => {
+      const built = actual.poses.get(key);
+      return !built || differs(built, pose);
+    });
+    const changedValues = [...expected.values].filter(([key, value]) => actual.values.get(key) !== value);
+    expect([...movedPoses, ...changedValues].map(([key]) => key)).toEqual([]);
   }, 30000);
 });
