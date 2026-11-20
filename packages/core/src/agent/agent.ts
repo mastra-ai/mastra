@@ -131,7 +131,7 @@ import {
   MASTRA_THREAD_ID_KEY,
   MASTRA_VERSIONS_KEY,
 } from '../request-context';
-import { getRequestContextInputSource } from '../request-context/input-source';
+import { getRequestContextInputSource, getRequestContextInputValues } from '../request-context/input-source';
 import type { DeclaredAgentSchedule } from '../schedules/define';
 import type { InferStandardSchemaOutput } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
@@ -226,19 +226,13 @@ import { detachFullStreamOnEnd } from './durable/observe-full-stream';
 import { createDurableAgentStream } from './durable/stream-adapter';
 import type { AgentSuspendedEventData, DurableAgentStepFinishResult } from './durable/types';
 import { GoalSignalProvider, resolveGoalStore, readObjective, writeObjective, clearObjective } from './goal';
-import {
-  convertInstructionsToString,
-  drainAgentOutput,
-  resolveRunId,
-  resolveVersionContext,
-  successfulAgentOutput,
-} from './helpers';
+import { convertInstructionsToString, resolveRunId, resolveVersionContext } from './helpers';
 import { buildMcpServerGuidance } from './mcp-guidance';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { createStoredMessageLoader } from './message-list/memory-message-refs';
 import { modelSpanAttributes } from './model-span-attributes';
-import { validateAgentRequestContext } from './request-context-validation';
+import { throwAgentRequestContextValidationError } from './request-context-validation';
 import { buildResumeSpanInput } from './resume-span-input';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from './run-ownership';
 import { SaveQueueManager } from './save-queue';
@@ -10068,6 +10062,20 @@ export class Agent<
     return this.resumeNetwork({ approved: false, ...(reason !== undefined ? { reason } : {}) }, resumeOptions);
   }
 
+  async #validateRequestContext(requestContext?: RequestContext): Promise<void> {
+    if (this.#requestContextSchema) {
+      const contextValues = getRequestContextInputValues(requestContext);
+      const validation = await this.#requestContextSchema['~standard'].validate(contextValues);
+      if (validation.issues) {
+        throwAgentRequestContextValidationError({
+          issues: validation.issues,
+          agentId: this.id,
+          agentName: this.name,
+        });
+      }
+    }
+  }
+
   async generate<
     OUTPUT extends StandardSchemaWithJSON<any, any>,
     T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
@@ -10101,12 +10109,7 @@ export class Agent<
     this.#extractClientObservability(messages);
 
     // Validate request context if schema is provided
-    await validateAgentRequestContext({
-      requestContextSchema: this.#requestContextSchema,
-      requestContext: options?.requestContext,
-      agentId: this.id,
-      agentName: this.name,
-    });
+    await this.#validateRequestContext(options?.requestContext);
 
     const defaultOptions = await this.getDefaultOptions({
       requestContext: options?.requestContext,
@@ -10242,7 +10245,9 @@ export class Agent<
         threadStreamPubSub,
       );
 
-      return await drainAgentOutput(result.result);
+      const fullOutput = await result.result.getFullOutput();
+      if (fullOutput.error) throw fullOutput.error;
+      return fullOutput;
     } catch (error) {
       // Release the thread reservation taken by waitForCrossAgentThreadRun so
       // a failed setup does not block subsequent runs on this thread.
@@ -11096,12 +11101,7 @@ export class Agent<
     this.#extractClientObservability(messages);
 
     // Validate request context if schema is provided
-    await validateAgentRequestContext({
-      requestContextSchema: this.#requestContextSchema,
-      requestContext: streamOptions?.requestContext,
-      agentId: this.id,
-      agentName: this.name,
-    });
+    await this.#validateRequestContext(streamOptions?.requestContext);
 
     const defaultOptions = await this.getDefaultOptions({
       requestContext: streamOptions?.requestContext,
@@ -11866,7 +11866,8 @@ export class Agent<
       throw error;
     }
 
-    return successfulAgentOutput(fullOutput);
+    if (fullOutput.error) throw fullOutput.error;
+    return fullOutput;
   }
 
   /**
