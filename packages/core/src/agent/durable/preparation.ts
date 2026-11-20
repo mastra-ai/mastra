@@ -70,6 +70,7 @@ import {
   createWorkflowInput,
   serializeClientTools,
   serializeModelConfig,
+  serializeModelSettings,
   serializeToolsetToolNames,
 } from './utils/serialize-state';
 import { generateDurableThreadTitle } from './workflows/finalize-run';
@@ -830,7 +831,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
           model: model.modelId,
           provider: model.provider,
           streaming: true,
-          parameters: execOptions?.modelSettings,
+          parameters: serializeModelSettings(execOptions?.modelSettings),
           tools: agentSpan?.isValid
             ? getToolDefinitionsForTracing({
                 tools: tools as unknown as ToolSet,
