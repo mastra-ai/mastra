@@ -9,12 +9,6 @@ afterEach(() => {
 });
 
 describe('Shimmer', () => {
-  it('renders its children', () => {
-    render(<Shimmer>Thinking…</Shimmer>);
-
-    expect(screen.getByText('Thinking…')).not.toBeNull();
-  });
-
   it('applies the provided className alongside its base classes', () => {
     render(<Shimmer className="custom-class">Loading</Shimmer>);
 

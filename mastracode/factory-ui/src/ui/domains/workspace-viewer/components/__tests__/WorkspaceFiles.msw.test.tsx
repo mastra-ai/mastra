@@ -108,7 +108,7 @@ function transcriptApi(busy: boolean): ChatTranscriptApi {
     busy,
     phase: busy ? 'working' : 'awaiting',
     initializing: false,
-    historyInitializing: false,
+    loadingHistory: false,
     initialHistoryReady: true,
     localUser: vi.fn(),
     failLocalUser: vi.fn(),

@@ -315,7 +315,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
    *
    * Note: metadata is still attached and deepCleaned because it is read in
    * process by getCorrelationContext() and by getLoggerContext() /
-   * getMetricsContext() (which structuredClone it).
+   * getMetricsContext() (which hand it to a context that snapshots it).
    */
   public isExcluded: boolean;
   /** Cached canonical correlation context for this live span */
@@ -367,8 +367,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
 
     // Metadata is always attached and deepCleaned: it is read in-process
     // by getCorrelationContext() and by getLoggerContext() /
-    // getMetricsContext() (which structuredClone it), and non-filtered
-    // child spans inherit it via options.parent?.metadata.
+    // getMetricsContext() (which hand it to a context that snapshots it), and
+    // non-filtered child spans inherit it via options.parent?.metadata.
     this.metadata = deepClean(
       this.prepareSpanMetadata(mergeSpanMetadata(options.parent?.metadata, options.metadata)),
       this.deepCleanOptions,
@@ -841,8 +841,11 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
 
   /** Returns the span saved for a later `rebuildSpan()`, with its trace state */
   public snapshot(): SpanSnapshot<TType> {
+    const { tags } = this.getCorrelationContext();
     return {
       ...this.exportSpan(this.observabilityInstance.getConfig().includeInternalSpans),
+      // An export has tags on the root only. A rebuilt child needs them for its metrics.
+      ...(tags ? { tags } : {}),
       ownEntityVersionId: this.ownEntityVersionId ?? null,
       ...(this.errorOccurrenceIds ? { errorOccurrenceIds: [...this.errorOccurrenceIds] } : {}),
       ...(this.traceState ? { traceState: this.traceState } : {}),

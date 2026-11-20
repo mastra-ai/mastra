@@ -1,5 +1,19 @@
 # @mastra/voyageai
 
+## 0.4.4-alpha.0
+
+### Patch Changes
+
+- Added the `rerank-3` and `rerank-3-lite` VoyageAI reranker models to `VoyageRerankerModel` and `RERANKER_MODEL_INFO`. ([#30067](https://github.com/mastra-ai/mastra/pull/30067))
+
+  `rerank-2.5` remains the default. `rerank-3` and `rerank-3-lite` are out of Preview in the Voyage AI API.
+
+  ```ts
+  import { createVoyageReranker } from '@mastra/voyageai';
+
+  const reranker = createVoyageReranker('rerank-3-lite');
+  ```
+
 ## 0.4.3
 
 ### Patch Changes

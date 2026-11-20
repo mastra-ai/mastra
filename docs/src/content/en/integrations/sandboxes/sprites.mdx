@@ -75,7 +75,7 @@ const response = await agent.generate(
 console.log(response.text)
 ```
 
-### Reusing a Sprite
+### Reusing a sprite
 
 The `id` is the Sprite name. On `start()`, `SpritesSandbox` looks up a Sprite with that name and reconnects to it, or creates one when none exists. Files written in an earlier session are still there:
 
@@ -270,7 +270,7 @@ await handle.sendStdin('reload\n')
 await handle.kill()
 ```
 
-Processes started by one `SpritesSandbox` instance are not visible to another instance, and `stop()` kills them.
+Processes started by one `SpritesSandbox` instance aren't visible to another instance, and `stop()` kills them.
 
 See [`SandboxProcessManager` reference](/reference/workspace/process-manager) for the full API.
 

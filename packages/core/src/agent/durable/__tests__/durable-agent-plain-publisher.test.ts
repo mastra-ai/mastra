@@ -1,5 +1,5 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryServerCache } from '../../../cache/inmemory';
 import { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -8,14 +8,11 @@ import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage/mock';
 import { Agent } from '../../agent';
 import { AGENT_CONTROL_TOPIC } from '../../streams/constants';
-import { writeAgentRunRecord } from '../../streams/run-records';
+import { durableReplayOwnerKey, writeAgentRunRecord } from '../../streams/run-records';
 import { createDurableAgent } from '../create-durable-agent';
+import { createEventedAgent } from '../create-evented-agent';
 
-/**
- * DurableAgent publishes on its own stream bus. The plain Agent publisher and
- * its bus must stay absent for it, otherwise the inherited abort path sends a
- * second abort request and run records are read from the plain bus's cache.
- */
+/** Count requests on the shared control topic so aborts are not delivered twice. */
 function countControlPublishes(pubsub: PubSub, runId: string): () => number {
   let count = 0;
   const publish = pubsub.publish.bind(pubsub);
@@ -26,7 +23,7 @@ function countControlPublishes(pubsub: PubSub, runId: string): () => number {
   return () => count;
 }
 
-function setup() {
+function setup(create = createDurableAgent) {
   const pubsub = new EventEmitterPubSub();
   const serverCache = new InMemoryServerCache();
   const agent = new Agent({
@@ -35,18 +32,18 @@ function setup() {
     instructions: 'x',
     model: new MockLanguageModelV2(),
   });
-  const durableAgent = createDurableAgent({ agent });
+  const durableAgent = create({ agent });
   const mastra = new Mastra({
     logger: false,
     storage: new InMemoryStore(),
     pubsub,
-    serverCache,
+    cache: serverCache,
     agents: { durableAgent },
   });
   return { pubsub, serverCache, durableAgent: mastra.getAgent('durableAgent'), mastra };
 }
 
-describe('DurableAgent never uses the plain Agent stream publisher', () => {
+describe('DurableAgent shares the run publisher transport and records', () => {
   const mastras: Mastra[] = [];
   afterEach(async () => {
     await Promise.all(mastras.splice(0).map(m => m.shutdown?.()));
@@ -64,19 +61,58 @@ describe('DurableAgent never uses the plain Agent stream publisher', () => {
     expect(published()).toBe(1);
   });
 
-  it('does not read run records from a plain-bus cache', async () => {
-    const { durableAgent, mastra } = setup();
+  it('reads shared run ownership records at the existing durable key for cross-server authorization', async () => {
+    const { durableAgent, serverCache, mastra } = setup();
     mastras.push(mastra);
     const runId = 'recorded-run';
-    await writeAgentRunRecord(mastra.serverCache!, {
+    await writeAgentRunRecord(
+      serverCache,
+      {
+        agentId: durableAgent.id,
+        runId,
+        resourceId: 'someone',
+        status: 'running',
+        updatedAt: Date.now(),
+      },
+      durableReplayOwnerKey(durableAgent.id, runId),
+    );
+
+    await expect(durableAgent.__getRunRecord(runId)).resolves.toMatchObject({
       agentId: durableAgent.id,
       runId,
       resourceId: 'someone',
       status: 'running',
-      updatedAt: Date.now(),
     });
+    await expect(durableAgent.__getReplayOwner(runId)).resolves.toEqual({ resourceId: 'someone' });
+  });
 
+  it.each([
+    ['durable', createDurableAgent],
+    ['evented', createEventedAgent],
+  ] as const)('%s accepts legacy records only as replay ownership, not stream status', async (_engine, create) => {
+    const { durableAgent, serverCache, mastra } = setup(create);
+    mastras.push(mastra);
+    const runId = 'legacy-recorded-run';
+    const key = durableReplayOwnerKey(durableAgent.id, runId);
+    const legacy = { agentId: durableAgent.id, runId, resourceId: 'someone', threadId: 'legacy-thread' };
+    await serverCache.set(key, legacy);
+
+    await expect(durableAgent.__getReplayOwner(runId)).resolves.toEqual({
+      resourceId: 'someone',
+      threadId: 'legacy-thread',
+    });
     await expect(durableAgent.__getRunRecord(runId)).resolves.toBeUndefined();
+    expect(durableAgent.__getRunOwner(runId)).toBeUndefined();
+    expect(durableAgent.abortRunStream(runId)).toBe(false);
+    expect(await serverCache.get(key)).toEqual(legacy);
+
+    await serverCache.set(key, { ...legacy, runId: 'different-run' });
+    await expect(durableAgent.__getReplayOwner(runId)).resolves.toBeUndefined();
+    await serverCache.set(key, { ...legacy, agentId: 'different-agent' });
+    await expect(durableAgent.__getReplayOwner(runId)).resolves.toBeUndefined();
+
+    vi.spyOn(serverCache, 'get').mockRejectedValueOnce(new Error('Cache unavailable'));
+    await expect(durableAgent.__getReplayOwner(runId)).rejects.toThrow('Cache unavailable');
   });
 
   it('exposes only its own singly wrapped bus', () => {

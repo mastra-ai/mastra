@@ -148,6 +148,8 @@ describe('ArizeExporter', () => {
       attributes: {
         model: 'gpt-4',
         provider: 'openai',
+        finishReason: 'length',
+        parameters: { stopSequences: ['END'] },
         usage: {
           inputTokens: 10,
           outputTokens: 5,
@@ -172,6 +174,7 @@ describe('ArizeExporter', () => {
       {
         "input.mime_type": "application/json",
         "input.value": "[{"role":"system","parts":[{"type":"text","content":"You are a helpful weather assistant."}]},{"role":"user","parts":[{"type":"text","content":"What is the weather in Tokyo?"}]},{"role":"assistant","parts":[{"type":"text","content":"Let me check the weather for you."},{"type":"tool_call","id":"weatherTool-1","name":"weatherTool","arguments":"{\\"city\\":\\"Tokyo\\"}"}]},{"role":"tool","parts":[{"type":"tool_call_response","id":"weatherTool-1","name":"weatherTool","response":"{\\"city\\":\\"Tokyo\\",\\"temperature\\":70,\\"condition\\":\\"sunny\\"}"}]}]",
+        "llm.finish_reason": "length",
         "llm.input_messages.0.message.contents.0.message_content.text": "You are a helpful weather assistant.",
         "llm.input_messages.0.message.contents.0.message_content.type": "text",
         "llm.input_messages.0.message.role": "system",
@@ -187,7 +190,7 @@ describe('ArizeExporter', () => {
         "llm.input_messages.3.message.content": "{"city":"Tokyo","temperature":70,"condition":"sunny"}",
         "llm.input_messages.3.message.role": "tool",
         "llm.input_messages.3.message.tool_call_id": "weatherTool-1",
-        "llm.invocation_parameters": "{"model":"gpt-4"}",
+        "llm.invocation_parameters": "{"model":"gpt-4","stop_sequences":["END"]}",
         "llm.model_name": "gpt-4",
         "llm.output_messages.0.message.contents.0.message_content.text": "The weather in Tokyo is sunny.",
         "llm.output_messages.0.message.contents.0.message_content.type": "text",
@@ -200,7 +203,7 @@ describe('ArizeExporter', () => {
         "mastra.span.type": "model_inference",
         "openinference.span.kind": "LLM",
         "output.mime_type": "application/json",
-        "output.value": "[{"role":"assistant","parts":[{"type":"text","content":"The weather in Tokyo is sunny."}]}]",
+        "output.value": "[{"role":"assistant","parts":[{"type":"text","content":"The weather in Tokyo is sunny."}],"finish_reason":"length"}]",
       }
     `);
   });

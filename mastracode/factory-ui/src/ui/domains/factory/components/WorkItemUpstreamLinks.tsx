@@ -3,10 +3,10 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
 
-import { externalLinkLabel } from '../boardItems';
+import { CARD_SOURCES } from '../cardSources';
 import { CHANGE_REQUEST_TERMS, changeRequestStatus } from '../changeRequestState';
 import { changeRequestLinkLabel, changeRequestRepository } from '../sessionChangeRequests';
-import { workItemIdentifier } from '../services/relationships';
+import { workItemIdentifier, workItemShortReference } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
@@ -19,15 +19,16 @@ interface UpstreamLink {
   icon: ReactNode;
 }
 
-function upstreamLinks(item: WorkItem, shownAsRelated: readonly string[]): UpstreamLink[] {
+function upstreamLinks(item: WorkItem, shownAsRelated: readonly string[], short: boolean): UpstreamLink[] {
   const origin = item.url;
   const own: UpstreamLink[] = [];
   if (origin !== null) {
-    const label = workItemIdentifier(item) ?? externalLinkLabel(item.source);
+    const { linkLabel } = CARD_SOURCES[item.source];
+    const label = (short ? workItemShortReference(item) : workItemIdentifier(item)) ?? linkLabel;
     own.push({
       url: origin,
       label,
-      ariaLabel: `${externalLinkLabel(item.source)}: ${label}`,
+      ariaLabel: `${linkLabel}: ${label}`,
       icon: <SourceIcon source={item.source} className="size-3" />,
     });
   }
@@ -54,9 +55,20 @@ function upstreamLinks(item: WorkItem, shownAsRelated: readonly string[]): Upstr
   return [...own, ...attached];
 }
 
-/** Where the card lives upstream: its own issue or pull request, then each attached one no related card links already. */
-export function WorkItemUpstreamLinks({ item, shownAsRelated }: { item: WorkItem; shownAsRelated: readonly string[] }) {
-  return upstreamLinks(item, shownAsRelated).map(link => (
+/**
+ * Where the card lives upstream: its own issue or pull request, then each attached one no related card links already.
+ * `short` drops the repository owner from the card's own key, for list rows where space is tight.
+ */
+export function WorkItemUpstreamLinks({
+  item,
+  shownAsRelated,
+  short = false,
+}: {
+  item: WorkItem;
+  shownAsRelated: readonly string[];
+  short?: boolean;
+}) {
+  return upstreamLinks(item, shownAsRelated, short).map(link => (
     <a
       key={link.url}
       href={link.url}

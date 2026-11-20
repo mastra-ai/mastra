@@ -74,6 +74,7 @@ export interface SessionRowsRequest {
   owner: string;
   status?: SessionRowsQuery['status'];
   updated?: SessionRowsQuery['updated'];
+  source?: SessionRowsQuery['source'];
   children: boolean;
   pin: readonly string[];
   open?: string;
@@ -157,8 +158,11 @@ export interface FactorySkillInfo {
   description: string;
   /** SKILL.md body with the frontmatter removed. */
   content: string;
-  /** Shipped with Factory, the app's `factory-skills/` folder, or `MastraFactory({ skills })`. Absent from older servers. */
-  origin?: 'bundled' | 'folder' | 'code';
+  /**
+   * Shipped with Factory, the app's `factory-skills/` folder, `MastraFactory({ skills })`, or `project` for a skill
+   * this Factory created. Absent from older servers.
+   */
+  origin?: 'bundled' | 'folder' | 'code' | 'project';
   /** True for a skill Factory ships, including when the app overrides it. Absent from older servers. */
   builtIn?: boolean;
   /** Set when the SKILL.md fails runtime parsing/validation; the agent will not be able to load the skill. */
@@ -169,6 +173,8 @@ export interface FactorySkillInfo {
   edited?: { updatedBy: string; updatedAt: string };
   /** True when the original SKILL.md changed since the project's edit was made. */
   originalChanged?: boolean;
+  /** Set for a skill this Factory created (`origin: 'project'`): who saved it last, and when. */
+  created?: { updatedBy: string; updatedAt: string };
 }
 
 export interface FactorySkillsResponse {

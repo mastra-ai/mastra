@@ -12,7 +12,7 @@ import { hasEveryLabel } from './card-labels.js';
 import { BOARD_PERSON_FIELDS, matchesPeople } from './card-people.js';
 import { matchesSourceFilters } from './card-source-filters.js';
 import { relatedCardsIn } from './list-related-cards.js';
-import { hasEveryWord, searchWords } from './search-words.js';
+import { matchesSearch, searchTerms } from './search-terms.js';
 
 /** The board whose phases are read: its id and its phases in declaration order. */
 export interface PhasesBoard {
@@ -123,15 +123,15 @@ function ordered(held: PhaseCards, sort: BoardPhasesView['sort']): readonly Plac
 
 /** Whether the view's search and filters keep a card; undefined when the view has none. */
 function viewMatcher(view: BoardPhasesView): ((card: Card) => boolean) | undefined {
-  const words = searchWords(view.q ?? '');
+  const terms = searchTerms(view.q ?? '');
   const bySource = view.source.size > 0 || view.linearProject.size > 0;
   const byLabel = view.label.size > 0;
   const byPeople = BOARD_PERSON_FIELDS.some(field => view[field].size > 0);
-  if (words.length === 0 && !bySource && !byLabel && !byPeople) return undefined;
+  if (terms.length === 0 && !bySource && !byLabel && !byPeople) return undefined;
   return card => {
     const facts = cardFacts(card);
     return (
-      hasEveryWord(facts.text, words) &&
+      matchesSearch(facts.search, terms) &&
       (!bySource || matchesSourceFilters(facts, view)) &&
       (!byLabel || hasEveryLabel(facts.labels, view.label)) &&
       (!byPeople || matchesPeople(facts.relations, view))

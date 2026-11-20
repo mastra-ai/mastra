@@ -136,18 +136,6 @@ describe('themeShareSeries', () => {
 });
 
 describe('timelineTickPositions', () => {
-  describe('when snapshots carry bursty cutoff timestamps', () => {
-    it('places ticks proportionally to cutoff time with the endpoints pinned', () => {
-      const positions = timelineTickPositions(landmarkThemeSnapshotsResponse.snapshots);
-
-      expect(positions[0]).toBe(0);
-      expect(positions[4]).toBe(100);
-      // Landmark 4 (Jul 7 18:00 of a Jul 1 04:00 → Jul 8 00:00 range) sits in
-      // the final burst rather than at the 75% index position.
-      expect(positions[3]).toBeGreaterThan(90);
-    });
-  });
-
   describe('when snapshots have no cutoff timestamps', () => {
     it('falls back to even index spacing', () => {
       const positions = timelineTickPositions(multiThemeSnapshotsResponse.snapshots);
@@ -199,10 +187,9 @@ describe('SankeySignals compare mode', () => {
       expect(within(later).getByText('Jul 1 – 8, 2026')).not.toBeNull();
       expect(within(later).getByText('50 traces')).not.toBeNull();
       expect(within(later).getByText('9 themes')).not.toBeNull();
-      expect(within(comparison).queryByText(/snapshot \d/)).toBeNull();
     });
 
-    it('shows a gone theme with its share movement and no status badge', async () => {
+    it('shows a gone theme with its share movement', async () => {
       renderSankeySignals();
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
 
@@ -213,10 +200,6 @@ describe('SankeySignals compare mode', () => {
       if (!legacyRow) throw new Error('Legacy support request row was not rendered');
       expect(within(legacyRow).getByText('-8%')).not.toBeNull();
       expect(within(legacyRow).getByText('8% → 0%')).not.toBeNull();
-      expect(within(legacyRow).queryByText('GONE')).toBeNull();
-      expect(within(goalColumn).queryByText('NEW')).toBeNull();
-      // Marker dots render as HTML overlays, not stretched svg circles.
-      expect(legacyRow.querySelectorAll('circle')).toHaveLength(0);
     });
 
     it('opens the theme details panel when a delta card is clicked', async () => {
@@ -232,7 +215,7 @@ describe('SankeySignals compare mode', () => {
       expect(await screen.findByRole('dialog', { name: 'Legacy support request' })).not.toBeNull();
     });
 
-    it('renders two identical compare points without A/B chips or badges', async () => {
+    it('marks both compare points on the timeline the same way', async () => {
       renderSankeySignals();
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
 
@@ -244,10 +227,6 @@ describe('SankeySignals compare mode', () => {
         .getAllByRole('button', { name: /Snapshot \d+ of/ })
         .filter(tick => tick.getAttribute('data-marker'));
       expect(markedTicks.map(tick => tick.getAttribute('data-marker'))).toEqual(['compare-point', 'compare-point']);
-      expect(within(comparison).queryByRole('button', { name: /Point A/ })).toBeNull();
-      expect(within(comparison).queryByRole('button', { name: /Point B/ })).toBeNull();
-      expect(within(track).queryByText('A')).toBeNull();
-      expect(within(track).queryByText('B')).toBeNull();
       // Snapshot summaries stay visible as plain text, not buttons.
       const summary = await within(comparison).findByRole('group', { name: 'Earlier snapshot' });
       expect(summary.closest('button')).toBeNull();

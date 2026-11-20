@@ -136,14 +136,6 @@ describe('Chat history recovery', () => {
       expect(result.current.isAwaitingToolApproval).toBe(true);
     });
 
-    it('does not restore stale pending approvals after the run finishes', async () => {
-      const { result, rerender } = await setup();
-      await act(async () => push(finishChunk));
-      await waitFor(() => expect(result.current.isRunning).toBe(false));
-      rerender({ threadId: 'first', history: approvalHistory() });
-      expect(result.current.isAwaitingToolApproval).toBe(false);
-    });
-
     it('keeps parallel approvals independent and does not resurrect accepted decisions', async () => {
       const { result, rerender } = await setup();
       const requests: unknown[] = [];

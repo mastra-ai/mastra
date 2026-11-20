@@ -1,6 +1,8 @@
 import { MessageList } from '@mastra/core/agent/message-list';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/request-context';
 import { createSignal } from '@mastra/core/signals';
+import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import { boardRegistryOf, createBoardRegistry, defineBoard } from '../boards/index.js';
@@ -16,6 +18,7 @@ const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 function requestContext(
   overrides: Partial<{
     threadId: string;
+    sessionId: string;
     authenticated: boolean;
     modelId: string;
     thinkingLevel: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
@@ -28,7 +31,7 @@ function requestContext(
   context.set('controller', {
     resourceId: 'resource-1',
     threadId: overrides.threadId ?? 'thread-1',
-    sessionId: 'resource-1',
+    sessionId: overrides.sessionId ?? 'resource-1',
     state: { factoryProjectId: PROJECT_ID, thinkingLevel: overrides.thinkingLevel ?? 'high' },
     getState: () => ({ factoryProjectId: PROJECT_ID, thinkingLevel: overrides.thinkingLevel ?? 'high' }),
     session: { modelId: overrides.modelId ?? 'openai/gpt-5.6-sol', modeId: 'review' },
@@ -1961,5 +1964,221 @@ describe('FactoryPhaseStateProcessor', () => {
     await storage.delete({ orgId: 'org-1', id: prepared.item.id });
     await processor.reconcileAllBoundThreads();
     expect(reader.listMessages).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('FactoryPhaseStateProcessor bound-thread reconcile', () => {
+  function prepareBound(storage: WorkItemsStorage, index: number) {
+    return storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        input: {
+          externalSource: {
+            integrationId: 'github',
+            type: 'issue',
+            externalId: `github-issue:${100 + index}`,
+            url: `https://example.test/issues/${100 + index}`,
+          },
+          title: `Card ${index}`,
+          stages: ['planning'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'work',
+      session: { sessionId: `session-${index}`, branch: `factory/issue-${index}`, threadId: `thread-${index}` },
+      resourceId: 'resource-1',
+      kickoffKey: `kickoff-${index}`,
+      kickoffMessage: null,
+    });
+  }
+
+  /** Threads in the in-memory Mastra store, read through the same `listMessages` Factory uses. */
+  async function threadStore() {
+    const memory = (await new InMemoryStore().getStore('memory'))!;
+    const reads = { inFlight: 0, maxInFlight: 0 };
+    const listMessages = vi.fn(async (input: Parameters<typeof memory.listMessages>[0]) => {
+      reads.maxInFlight = Math.max(reads.maxInFlight, ++reads.inFlight);
+      try {
+        // A database read takes time; this is what lets overlapping reads show.
+        await new Promise(resolve => setTimeout(resolve, 1));
+        return await memory.listMessages(input);
+      } finally {
+        reads.inFlight -= 1;
+      }
+    });
+    return {
+      reads,
+      reader: { listMessages },
+      save: (threadId: string, ...messages: Array<ReturnType<typeof toolMessage>>) =>
+        memory.saveMessages({ messages: messages.map(message => ({ ...message, threadId }) as MastraDBMessage) }),
+      readThreads: () => listMessages.mock.calls.map(([input]) => (input as { threadId: string }).threadId).sort(),
+    };
+  }
+
+  function step(processor: FactoryPhaseStateProcessor, index: number) {
+    return processor.processInputStep(
+      inputArgs(requestContext({ threadId: `thread-${index}`, sessionId: `session-${index}` }), []),
+    );
+  }
+
+  // Production walked all 232 active bindings every 30s while busy, most of them idle for hours.
+  it('reads only the threads a run stepped on, plus a slow full walk', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const threads = await threadStore();
+    for (let index = 0; index < 12; index++) {
+      await prepareBound(storage, index);
+      await threads.save(
+        `thread-${index}`,
+        toolMessage({ id: `assistant-${index}`, toolCallId: `call-${index}`, toolName: 'old_tool' }),
+      );
+    }
+    const onResult = vi.fn(() => undefined);
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createToolRuleTestRegistry({ submit_plan: { onResult } }),
+      storage,
+      messageReader: threads.reader as never,
+      isThreadRunning: () => false,
+    });
+    const start = Date.now();
+
+    // The first pass catches up on everything written while no process watched.
+    await processor.reconcileBoundThreads(start);
+    expect(threads.readThreads()).toHaveLength(12);
+    // A few at a time, so a walk never floods the event loop or the database.
+    expect(threads.reads.maxInFlight).toBeGreaterThan(1);
+    expect(threads.reads.maxInFlight).toBeLessThanOrEqual(4);
+
+    threads.reader.listMessages.mockClear();
+    await threads.save(
+      'thread-3',
+      toolMessage({ id: 'assistant-3b', toolCallId: 'plan-3', createdAt: new Date('2026-07-18T11:00:00Z') }),
+    );
+    await threads.save(
+      'thread-7',
+      toolMessage({ id: 'assistant-7b', toolCallId: 'plan-7', createdAt: new Date('2026-07-18T11:00:00Z') }),
+    );
+    await step(processor, 3);
+    await step(processor, 7);
+    await processor.reconcileBoundThreads(start + 30_000);
+
+    expect(threads.readThreads()).toEqual(['thread-3', 'thread-7']);
+    expect(onResult).toHaveBeenCalledTimes(2);
+
+    // One trailing read for results persisted after the run ended, then they drop out.
+    threads.reader.listMessages.mockClear();
+    await processor.reconcileBoundThreads(start + 60_000);
+    expect(threads.readThreads()).toEqual(['thread-3', 'thread-7']);
+    threads.reader.listMessages.mockClear();
+    await processor.reconcileBoundThreads(start + 90_000);
+    expect(threads.readThreads()).toEqual([]);
+
+    // The safety net still walks every active binding, just far less often.
+    await processor.reconcileBoundThreads(start + 10 * 60_000);
+    expect(threads.readThreads()).toHaveLength(12);
+    expect(onResult).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps reading a running thread and catches the result its run leaves after its last step', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const threads = await threadStore();
+    await prepareBound(storage, 1);
+    await prepareBound(storage, 2);
+    const onResult = vi.fn(() => undefined);
+    let running = true;
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createToolRuleTestRegistry({ submit_plan: { onResult } }),
+      storage,
+      messageReader: threads.reader as never,
+      isThreadRunning: threadId => running && threadId === 'thread-1',
+    });
+    const start = Date.now();
+    await processor.reconcileBoundThreads(start);
+    await step(processor, 1);
+    for (let pass = 1; pass <= 3; pass++) await processor.reconcileBoundThreads(start + pass * 30_000);
+
+    // The run is aborted mid-tool-call: its error result lands with no step after it.
+    await threads.save(
+      'thread-1',
+      toolMessage({ id: 'assistant-aborted', toolCallId: 'aborted-call', state: 'error', result: 'aborted' }),
+    );
+    running = false;
+    threads.reader.listMessages.mockClear();
+    await processor.reconcileBoundThreads(start + 4 * 30_000);
+
+    expect(threads.readThreads()).toEqual(['thread-1']);
+    expect(onResult).toHaveBeenCalledWith(
+      expect.objectContaining({ toolCallId: 'aborted-call', result: expect.objectContaining({ status: 'error' }) }),
+    );
+  });
+
+  it('does not ingest the message at its cursor again until it changes', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const threads = await threadStore();
+    const prepared = await prepareBound(storage, 1);
+    await threads.save('thread-1', toolMessage({ id: 'assistant-1', toolCallId: 'pending-call', state: 'call' }));
+    await threads.save(
+      'thread-1',
+      toolMessage({ id: 'assistant-2', toolCallId: 'done-call', createdAt: new Date('2026-07-18T10:00:00Z') }),
+    );
+    const recordPullRequestProvenance = vi.fn(async () => undefined);
+    const onResult = vi.fn(() => undefined);
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createToolRuleTestRegistry({ submit_plan: { onResult } }),
+      storage,
+      messageReader: threads.reader as never,
+      recordPullRequestProvenance,
+    });
+    const advance = vi.spyOn(storage, 'advanceToolResultCursor');
+
+    await processor.reconcileAllBoundThreads();
+    expect(recordPullRequestProvenance).toHaveBeenCalledTimes(1);
+    expect(advance).toHaveBeenCalledTimes(1);
+
+    await processor.reconcileAllBoundThreads();
+    expect(recordPullRequestProvenance).toHaveBeenCalledTimes(1);
+    expect(advance).toHaveBeenCalledTimes(1);
+
+    // The suspended call at the cursor time resumes in place with its result.
+    await threads.save('thread-1', toolMessage({ id: 'assistant-1', toolCallId: 'pending-call', state: 'result' }));
+    await processor.reconcileAllBoundThreads();
+
+    expect(recordPullRequestProvenance).toHaveBeenCalledTimes(2);
+    expect(recordPullRequestProvenance).toHaveBeenLastCalledWith(
+      expect.objectContaining({ toolCallId: 'pending-call' }),
+    );
+    expect(onResult).toHaveBeenCalledTimes(2);
+    await expect(storage.getToolResultCursor('org-1', PROJECT_ID, prepared.binding.id)).resolves.toMatchObject({
+      lastMessageCreatedAt: new Date('2026-07-18T10:00:00Z'),
+    });
+  });
+
+  it('skips a binding revoked after its last step', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const threads = await threadStore();
+    const prepared = await prepareBound(storage, 1);
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createToolRuleTestRegistry({}),
+      storage,
+      messageReader: threads.reader as never,
+    });
+    const start = Date.now();
+    await processor.reconcileBoundThreads(start);
+    await step(processor, 1);
+    await storage.revokeRunBinding({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      bindingId: prepared.binding.id,
+      revokedAt: new Date(),
+    });
+    threads.reader.listMessages.mockClear();
+    await processor.reconcileBoundThreads(start + 30_000);
+    expect(threads.readThreads()).toEqual([]);
   });
 });

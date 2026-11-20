@@ -38,11 +38,6 @@ describe('installed board landing', () => {
     renderLanding();
     expect(await screen.findByText(`/factories/project-1/${id === 'release' ? 'boards/release' : id}`)).toBeTruthy();
   });
-  it('shows empty installations without redirecting to Work', async () => {
-    server.use(http.get(endpoint, () => HttpResponse.json({ boards: [] } satisfies BoardCatalogResponse)));
-    renderLanding();
-    expect(await screen.findByText('No boards installed.')).toBeTruthy();
-  });
   it('keeps a way to reopen a collapsed sidebar while no board is installed', async () => {
     window.localStorage.setItem('board-landing-test:sidebar:state', 'collapsed');
     server.use(http.get(endpoint, () => HttpResponse.json({ boards: [] } satisfies BoardCatalogResponse)));

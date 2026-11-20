@@ -156,6 +156,11 @@ packageExtensions:
     dependencies:
       protobufjs: '*'
 
+# Stagehand 3 lists puppeteer-core 22 as optional and never loads it at runtime.
+# Skipping it drops extract-zip, basic-ftp 5 and chromium-bidi's zod 3.23.8.
+ignoredOptionalDependencies:
+  - puppeteer-core
+
 blockExoticSubdeps: true
 trustPolicy: no-downgrade
 trustPolicyIgnoreAfter: 43200 # 30 days
@@ -353,6 +358,12 @@ trustPolicyExclude:
   # flags it because modal stopped attaching provenance after 0.7.2.
   - 'modal@0.11.1'
 overrides:
+  # Vanta 2026-11-13: hono <4.13.16 advisories; 4.13.18 is the latest 4.x
+  hono@<4.13.18: 4.13.18
+  # @mastra/server imports @mastra/mcp-apps-components only when an app installs it (an optional peer).
+  # Keep the published one out of the workspace: the server's tests mock it, and @mastra/hono's resolve
+  # the workspace build (see its vitest config).
+  '@mastra/server>@mastra/mcp-apps-components': '-'
   # The Lance adapter supplies vectors; its optional embedding providers are unused here.
   '@lancedb/lancedb@0.31.0>@huggingface/transformers': '-'
   '@lancedb/lancedb@0.31.0>openai': '-'
@@ -393,10 +404,10 @@ overrides:
   # Security floors for Dependabot alerts (transitive deps; patched versions
   # are within the parents' declared ranges).
   axios@>=1.0.0 <1.20.0: 1.20.0
-  # Vanta 2026-11-10: CVE-2026-118764 (minimatch >=7.0.0 <11.0.1, fixed only in 11.0.1). Cross-major, approved.
+  # Vanta 2026-11-10: CVE-2026-118764 (minimatch >=7.0.0 <11.0.1, fixed only in 11.0.1; target raised to 11.0.9 on 2026-11-18). Cross-major, approved.
   # 11.x drops makeRe()/Minimatch#regexp; @verdaccio/core 8.4.0 (e2e registry) is patched to use minimatch().
-  minimatch@>=7.0.0 <11.0.1: 11.0.5
-  ws@>=8.0.0 <8.21.3: 8.22.0
+  minimatch@>=7.0.0 <11.0.9: 11.0.9
+  ws@>=8.0.0 <8.23.0: 8.23.0
   # Vanta 2026-10-28: CVE-2026-110816 / GHSA-6pq8-jhm2-2vcw (qs <=6.16.0 stringify comma DoS) fixed in 6.16.1
   qs@>=6.7.0 <6.16.1: 6.16.1
   e2b>undici8: npm:undici@8.12.4
@@ -461,7 +472,7 @@ overrides:
   cjs-module-lexer@<2.2.1: 2.2.1
   fast-copy@<4.1.1: 4.1.1
   '@fastify/busboy@<3.2.2': 3.2.2
-  tinypool@<2.1.2: 2.1.2
+  tinypool@<2.1.2: 2.2.0
   ajv@>=8.0.0 <8.20.0: 8.20.0
   # Vanta 2026-10-14: AIKIDO-2026-143019 fixed in 4.6.7
   zod@>=4.0.0 <4.6.7: 4.6.7
@@ -565,7 +576,8 @@ overrides:
   'raw-body@<4.0.0': 4.0.0
   'protobufjs@<8.8.0': 8.8.0
   'nanoid@<5.1.16': 5.1.16
-  'basic-ftp@<6.2.1': 6.2.4
+  # Vanta 2026-11-13: basic-ftp <=6.2.3 advisories (fixed 6.2.4); 6.2.6 is the latest 6.x
+  'basic-ftp@<6.2.6': 6.2.6
   # Vanta 2026-10-05 (Aikido): in-major floors for transitive deps whose parents pin an exact
   # vulnerable version (just-bash, @opentelemetry/configuration 0.221, @blaxel/core, @react-grab/cli,
   # fast-xml-parser 5.10.1, style-to-object 1.0.11).

@@ -10,11 +10,13 @@ import {
   useTracesSelection,
 } from './traces-explorer-context';
 import type { TracesListContextValue } from './traces-explorer-context';
-import { useTracesBodyLoading } from './use-traces-discovery';
+import { useTracesBodyLoading } from './use-traces-body-loading';
 import { ObservabilityListBody } from '@/domains/observability/components/observability-list-body';
 
-export type TracesExplorerErrorRenderArgs = Pick<TracesListContextValue, 'refetch'> & {
+export type TracesExplorerErrorRenderArgs = {
   error: NonNullable<TracesListContextValue['error']>;
+  /** Loads the list again: the host's `traces.onRetry`. */
+  refetch: () => void;
   isFetching: boolean;
 };
 
@@ -31,7 +33,7 @@ export type TracesExplorerBodyProps = {
 /** The traces page body without its page frame, for hosts that own the header (e.g. a shared router layout). */
 export function TracesExplorerBody({ toolbar, chart, children, renderError }: TracesExplorerBodyProps) {
   const isBodyLoading = useTracesBodyLoading();
-  const { rows, isLoading, error, refetch } = useTracesList();
+  const { rows, isLoading, error, onRetry } = useTracesList();
   const { filters, dateFrom, dateTo, contentFiltersApplied } = useTracesFilters();
   const { selectedTraceId } = useTracesSelection();
   const { displayedPreferences } = useTraceUsageColumns();
@@ -53,7 +55,7 @@ export function TracesExplorerBody({ toolbar, chart, children, renderError }: Tr
   let errorNode: ReactNode;
   if (error) {
     errorNode = renderError ? (
-      <HostTracesError renderError={renderError} error={error} refetch={refetch} />
+      <HostTracesError renderError={renderError} error={error} refetch={onRetry} />
     ) : (
       <TracesErrorContent error={error} resource="traces" errorTitle="Failed to load traces" />
     );

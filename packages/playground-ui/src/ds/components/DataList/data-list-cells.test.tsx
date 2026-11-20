@@ -336,12 +336,15 @@ describe('DataListSelectCell', () => {
 
 describe('DataListDateCell', () => {
   it('shows only the date for today', () => {
-    const today = new Date();
-    const { container } = render(<DataListDateCell timestamp={today} />);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 4, 19, 15, 30, 0));
+    try {
+      const { container } = render(<DataListDateCell timestamp={new Date()} />);
 
-    expect(container.textContent).toBe(
-      new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(today),
-    );
+      expect(container.textContent).toBe('May 19');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('names the month and day for any other date', () => {

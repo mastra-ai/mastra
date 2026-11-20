@@ -247,11 +247,32 @@ describe('GET /web/factory/projects/:id/session-rows', () => {
   });
 
   it('refuses a view that fails to parse instead of answering another view', async () => {
-    for (const query of ['?window=user:0', '?owner=someone', '?window=all:5&window=all:6', '?sort=random']) {
+    for (const query of [
+      '?window=user:0',
+      '?owner=someone',
+      '?window=all:5&window=all:6',
+      '?sort=random',
+      '?source=github',
+    ]) {
       const res = await buildApp('u1').request(`/web/factory/projects/${projectId}/session-rows${query}`);
       expect(res.status, query).toBe(400);
       expect(await res.json()).toEqual({ error: 'invalid_session_rows_query' });
     }
+  });
+
+  it('keeps the rows of the source the reader filters on', async () => {
+    await createSession('web');
+    await createSession('thread', { branch: 'slack/1794960854.774509' });
+    await createCardSession('card-run', 'Fix login');
+
+    const ids = async (source: string) =>
+      (await readRows(buildApp('u1'), `?source=${encodeURIComponent(source)}`)).groups.flatMap(group =>
+        group.rows.map(row => row.session.sessionId),
+      );
+
+    expect(await ids('slack')).toEqual(['thread']);
+    expect(await ids('user')).toEqual(['web']);
+    expect(await ids('board:work')).toEqual(['card-run']);
   });
 
   it("leaves out another person's private session", async () => {

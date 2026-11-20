@@ -43,6 +43,56 @@ function makeFailThenAnswerModel(failures = 1, recordPrompt?: (prompt: unknown) 
 }
 
 describe('durable agent API-error retry', () => {
+  it('preserves structured model failures in the terminal error event', async () => {
+    const model = new MockLanguageModelV2({
+      doStream: async () => {
+        throw { statusCode: 403, message: 'model access denied', url: 'https://model.example.com/v1/messages' };
+      },
+    });
+    const agent = new Agent({
+      id: 'structured-model-error',
+      name: 'structured-model-error',
+      instructions: 'You are helpful.',
+      model: [{ model: model as LanguageModelV2, maxRetries: 0 }],
+    });
+    const pubsub = new EventEmitterPubSub();
+    try {
+      const durableAgent = createDurableAgent({ agent, pubsub });
+      const { fullStream, cleanup } = await durableAgent.stream('hello');
+      const errors: unknown[] = [];
+      for await (const chunk of fullStream) {
+        if (chunk.type === 'error') errors.push(chunk.payload);
+      }
+      await cleanup?.();
+      expect(errors).toContainEqual(
+        expect.objectContaining({
+          error: expect.objectContaining({ statusCode: 403, message: 'model access denied' }),
+        }),
+      );
+    } finally {
+      await pubsub.close();
+    }
+  });
+
+  it('does not retry a structured model failure', async () => {
+    let calls = 0;
+    const model = new MockLanguageModelV2({
+      doStream: async () => {
+        calls++;
+        throw { statusCode: 403, message: 'model access denied' };
+      },
+    });
+    const agent = new Agent({
+      id: 'structured-model-error-no-retry',
+      name: 'structured-model-error-no-retry',
+      instructions: 'You are helpful.',
+      model: model as LanguageModelV2,
+    });
+    const result = await agent.stream('hello', { modelSettings: { maxRetries: 2 } });
+    await result.consumeStream();
+    expect(calls).toBe(1);
+  });
+
   it('reports the API-error retry to the other processor hooks like Agent does', async () => {
     const run = async (durable: boolean) => {
       const seen: Record<string, number[]> = { inputStep: [], llmRequest: [], outputStep: [] };

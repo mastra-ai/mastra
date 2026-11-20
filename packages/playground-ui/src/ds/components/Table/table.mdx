@@ -123,7 +123,7 @@ Renders `td` (the same component as `Cell`). In inset mode it renders children d
 
 ### `Table.RowButton`
 
-Renders a `button` whose click area covers the whole row, for an action that stays on the page, such as opening a drawer.
+Renders a `button` that a click anywhere in its row activates, for an action that stays on the page, such as opening a drawer.
 
 - Takes every `button` prop except `type`, which is always `"button"`.
 - Put it in the cell that names the row. Its text is the button's accessible name.
@@ -141,7 +141,7 @@ Renders `a`, or the element you pass to `render`.
 
 - Takes every `a` prop, including `href`.
 - `render` swaps in a router link: `render={<Link to="/projects/1" />}`.
-- Its click area covers the whole row.
+- A click anywhere else in its row follows it. Cmd-click and middle-click open a new tab from the link itself.
 
 ### `Table.Pagination`
 
@@ -249,7 +249,7 @@ Avoid `rowSpan` for grouping. Merged cells are hard to scan and read out of orde
 
 ### Rows that link
 
-Put a `Table.RowLink` in the cell that names the row. It is a real link: Tab reaches it, Enter follows it, and Cmd-click opens it in a new tab. Its click area stretches over the whole row, and the row highlights on hover and keyboard focus. Buttons, menus, and inputs in the same row sit above the link and keep their own clicks, with no extra code.
+Put a `Table.RowLink` in the cell that names the row. It is a real link: Tab reaches it, Enter follows it, and Cmd-click opens it in a new tab. A click anywhere else in the row follows it too, and the row highlights on hover and keyboard focus. Buttons, links, menus, inputs, and other focusable controls in the same row keep their own clicks, and selecting text in the row does not follow the link, with no extra code. Cmd-click, Ctrl-click, Shift-click and middle-click open a new tab from the link itself only: browsers open no tab for a click handed on by a script, so those clicks elsewhere in the row do nothing.
 
 <Canvas of={TableStories.InsetLinkedRows} />
 
@@ -271,7 +271,7 @@ Use one `Table.RowLink` per row. For a row that opens something on the page inst
 
 ### Rows that open something
 
-When clicking a row opens a drawer, dialog, or side panel instead of navigating, use `Table.RowButton`. It behaves like `Table.RowLink`: the click area covers the row, the row highlights on hover and focus, and other controls in the row keep their own clicks. Enter and Space activate it.
+When clicking a row opens a drawer, dialog, or side panel instead of navigating, use `Table.RowButton`. It behaves like `Table.RowLink`: a click anywhere else in the row activates it, the row highlights on hover and focus, and other controls in the row keep their own clicks. Enter and Space activate it.
 
 <Canvas of={TableStories.InsetRowButtons} />
 

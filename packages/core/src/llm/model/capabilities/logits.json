@@ -1,0 +1,19 @@
+{
+  "attachment": ["deepseek/deepseek-v4.1-flash", "moonshotai/kimi-k3.1-pro"],
+  "temperature": ["deepseek/deepseek-v4.1-flash"],
+  "structuredOutput": ["deepseek/deepseek-v4.1-flash"],
+  "reasoning": {
+    "moonshotai/kimi-k3.1-pro": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ]
+  }
+}

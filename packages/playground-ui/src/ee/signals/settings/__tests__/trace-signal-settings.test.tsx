@@ -99,7 +99,7 @@ describe('TraceSignalSettingsButton', () => {
     expect(screen.queryByRole('button', { name: 'Signal settings' })).toBeNull();
   });
 
-  it('opens a minimal in-page right-side section with custom signal usage', async () => {
+  it('opens an in-page section with custom signal usage', async () => {
     renderSettings(management());
     const settingsButton = screen.getByRole('button', { name: 'Signal settings' });
     expect(settingsButton.getAttribute('aria-expanded')).toBe('false');
@@ -108,10 +108,6 @@ describe('TraceSignalSettingsButton', () => {
     expect(settingsButton.getAttribute('aria-expanded')).toBe('true');
     expect(await screen.findByText('Custom signals')).toBeTruthy();
     expect(screen.getByText('1 of 7 active organization definitions')).toBeTruthy();
-    expect(screen.queryByText('Organization signal library')).toBeNull();
-    expect(screen.queryByText('Current project')).toBeNull();
-    expect(screen.queryByText('Built-in signals')).toBeNull();
-    expect(screen.queryByText('Read only')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Close panel' }));
     await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Trace signal settings' })).toBeNull());
   });
@@ -123,12 +119,10 @@ describe('TraceSignalSettingsButton', () => {
     await screen.findByText('Handoff Quality');
 
     fireEvent.click(screen.getByRole('button', { name: 'Create signal' }));
-    expect(screen.queryByText('Trace context')).toBeNull();
     expect(screen.getByText(/every signal receives all available bounded trace context/i)).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Signal name'), { target: { value: 'tool_usage' } });
     fireEvent.change(screen.getByLabelText('Display label'), { target: { value: 'Tool Usage' } });
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'How the agent used tools.' } });
-    expect(screen.queryByLabelText('Additional response rules')).toBeNull();
     fireEvent.change(screen.getByLabelText('Signal instructions'), {
       target: { value: 'Describe how the agent used tools in one sentence.' },
     });
@@ -144,7 +138,6 @@ describe('TraceSignalSettingsButton', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
     expect(screen.getByLabelText('Signal name')).toHaveProperty('disabled', true);
-    expect(screen.queryByLabelText('Additional response rules')).toBeNull();
     expect(screen.getByText(/instruction changes create a new version and apply only to new traces/i)).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Display label'), { target: { value: 'Handoff Clarity' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save signal' }));

@@ -74,23 +74,25 @@ describe('useInitializingPlaceholder', () => {
     { preparing: false, isEmpty: true },
     { preparing: true, isEmpty: false },
   ])('stays inactive when preparing is $preparing and isEmpty is $isEmpty', ({ preparing, isEmpty }) => {
-    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
     const { result } = renderHook(() => useInitializingPlaceholder(preparing, isEmpty));
 
     expect(result.current).toBeUndefined();
-    expect(setIntervalSpy).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(1_000));
+    expect(result.current).toBeUndefined();
   });
 
   it('stops and resumes when the reduced-motion preference changes', () => {
     const mediaQuery = stubMatchMedia(false);
-    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
     const { result } = renderHook(() => useInitializingPlaceholder(true, true));
-    expect(setIntervalSpy).toHaveBeenCalledTimes(1);
 
     act(() => mediaQuery.setMatches(true));
     expect(result.current).toBe('Initializing work session...');
+    act(() => vi.advanceTimersByTime(1_000));
+    expect(result.current).toBe('Initializing work session...');
 
     act(() => mediaQuery.setMatches(false));
-    expect(setIntervalSpy).toHaveBeenCalledTimes(2);
+    expect(result.current).toBe('Initializing work session');
+    act(() => vi.advanceTimersByTime(500));
+    expect(result.current).toBe('Initializing work session.');
   });
 });

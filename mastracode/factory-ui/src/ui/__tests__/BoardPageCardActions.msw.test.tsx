@@ -1,10 +1,10 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
-import { workBoardInfo } from '../../../e2e/ui/board-catalog';
+import { releaseBoard, workBoardInfo } from '../../../e2e/ui/board-catalog';
 import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
@@ -276,7 +276,7 @@ describe('Board card buttons move the card', () => {
     expect(transitions[0]?.body).toMatchObject({ stage: 'triage', cause: 'card_action', reenter: true });
   });
 
-  it('offers only explicit card moves without hands-off approval shortcuts', async () => {
+  it('offers Investigate and Plan from the menu of an intake card', async () => {
     stubBoardEndpoints();
     renderWorkBoard();
     const user = userEvent.setup();
@@ -285,7 +285,6 @@ describe('Board card buttons move the card', () => {
 
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Plan' })).toBeVisible();
-    expect(screen.queryByRole('menuitem', { name: /hands-off/i })).not.toBeInTheDocument();
   });
 
   it("keeps Work's moves against a server older than the board loop", async () => {
@@ -304,7 +303,7 @@ describe('Board card buttons move the card', () => {
     expect(transitions[0]).toMatchObject({ itemId: 'item-1', body: { board: 'work', stage: 'triage' } });
   });
 
-  it('offers no hands-off twin for Prepare approval, whose outcome is a maintainer decision', async () => {
+  it('offers Prepare approval on a triaged card that needs approval', async () => {
     stubBoardEndpoints({
       workItems: [
         { ...issueWorkItem, metadata: { number: 7, labels: ['status: needs approval'] }, stages: ['triage'] },
@@ -314,8 +313,7 @@ describe('Board card buttons move the card', () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole('button', { name: 'Actions for Fix login bug' }));
-    await screen.findByRole('menuitem', { name: 'Prepare approval' });
-    expect(screen.queryByRole('menuitem', { name: 'Prepare approval hands-off' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('menuitem', { name: 'Prepare approval' })).toBeVisible();
   });
 
   it('offers the ordinary runs once a person moved a labelled card into a working lane, before the label catches up', async () => {
@@ -334,6 +332,39 @@ describe('Board card buttons move the card', () => {
     await user.click(await screen.findByRole('button', { name: 'Actions for Fix login bug' }));
     await screen.findByRole('menuitem', { name: 'Build' });
     expect(screen.queryByRole('menuitem', { name: 'Prepare approval' })).not.toBeInTheDocument();
+  });
+
+  it('moves a card to another board from its menu, offering only non-terminal target phases', async () => {
+    const { transitions } = stubBoardEndpoints({ workItems: [intakeWorkItem] });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/boards`, () =>
+        HttpResponse.json({ boards: [workBoardInfo, releaseBoard] }),
+      ),
+    );
+    const { client } = renderWorkBoard();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for Fix login bug' }));
+    const boardsTrigger = await screen.findByRole('menuitem', { name: 'Move to board' });
+    act(() => boardsTrigger.focus());
+    await user.keyboard('{ArrowRight}');
+    const releaseTrigger = await screen.findByRole('menuitem', { name: 'Release Preview' });
+    act(() => releaseTrigger.focus());
+    await user.keyboard('{ArrowRight}');
+
+    await screen.findByRole('menuitem', { name: 'Queued' });
+    // A card finishes on its own board: the target's terminal phase is not offered.
+    expect(screen.queryByRole('menuitem', { name: 'Shipped' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('menuitem', { name: 'Queued' }));
+
+    await waitFor(() => expect(transitions).toHaveLength(1));
+    expect(transitions[0]).toMatchObject({
+      itemId: 'item-1',
+      body: { board: 'release', stage: 'queued', cause: 'move_to_board', expectedRevision: 1 },
+    });
+    await waitForMutationsIdle(client);
+    expect(transitions).toHaveLength(1);
   });
 
   it("links the card's source from the card", async () => {

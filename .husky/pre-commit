@@ -1,8 +1,9 @@
-corepack pnpm --version || {
-  echo "Pre-commit requires pnpm (via corepack)"
+# Call lint-staged directly. `pnpm lint-staged` first auto-installs when dependencies look stale
+# (pnpm's verifyDepsBeforeRun), and that install re-verifies the whole lockfile, which can take a minute.
+if [ ! -x node_modules/.bin/lint-staged ]; then
+  echo "Pre-commit requires installed dependencies (run pnpm install)"
   exit 0
-}
+fi
 
 # Formatting on staged files
-corepack pnpm lint-staged --quiet
-
+node_modules/.bin/lint-staged --quiet

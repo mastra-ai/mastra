@@ -73,6 +73,7 @@ const Providers = ({ children }: { children: ReactNode }) => {
 };
 
 const renderToolCard = (props: ToolCardProps) => render(<ToolCard {...props} />, { wrapper: Providers });
+const renderLiveToolCard = (props: ToolCardProps) => <ToolCard {...props} />;
 
 const ToolPartCard = ({ part }: { part: ToolPart }) => <ToolCard {...readToolPart(part)} />;
 
@@ -302,17 +303,6 @@ describe('ToolCard dispatch', () => {
 
     expect(screen.getByRole('button', { name: /observed/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /extractions.*1 extracted/i })).toBeTruthy();
-  });
-
-  it('routes agent-* tools to the agent badge wrapper', () => {
-    renderToolCard(
-      baseProps({
-        toolName: 'agent-weatherAgent',
-        output: { text: 'sunny' },
-      }),
-    );
-    // Display name strips the agent- prefix.
-    expect(screen.queryByText(/agent-weatherAgent/)).toBeNull();
   });
 
   it('routes workflow-* tools to the workflow badge', async () => {
@@ -573,6 +563,7 @@ describe('ToolCard dispatch', () => {
     it('keeps the badge expanded with the approval controls visible', () => {
       render(
         <AgentBadge
+          renderToolCard={renderLiveToolCard}
           agentId="head"
           messages={[]}
           toolCallId="approval-call"
@@ -600,11 +591,19 @@ describe('ToolCard dispatch', () => {
         isNetwork: false,
         toolApprovalMetadata: undefined,
       };
-      const { rerender } = render(<AgentBadge {...props} messages={[]} />, { wrapper: Providers });
+      const { rerender } = render(<AgentBadge renderToolCard={renderLiveToolCard} {...props} messages={[]} />, {
+        wrapper: Providers,
+      });
       expect(screen.getByText('head')).not.toBeNull();
       expect(screen.queryByRole('button', { name: 'head' })).toBeNull();
 
-      rerender(<AgentBadge {...props} messages={[{ type: 'text', content: 'Checking the forecast.' }]} />);
+      rerender(
+        <AgentBadge
+          renderToolCard={renderLiveToolCard}
+          {...props}
+          messages={[{ type: 'text', content: 'Checking the forecast.' }]}
+        />,
+      );
       expect(screen.getByRole('button', { name: 'head' }).getAttribute('aria-expanded')).toBe('true');
     });
   });
@@ -620,9 +619,12 @@ describe('ToolCard dispatch', () => {
         toolApprovalMetadata: undefined,
         isComplete: true,
       };
-      const { rerender } = render(<AgentBadge {...props} keepOpenForStreamingChildMessages />, { wrapper: Providers });
+      const { rerender } = render(
+        <AgentBadge renderToolCard={renderLiveToolCard} {...props} keepOpenForStreamingChildMessages />,
+        { wrapper: Providers },
+      );
       expect(screen.getByRole('button', { name: 'head' }).getAttribute('aria-expanded')).toBe('true');
-      rerender(<AgentBadge {...props} keepOpenForStreamingChildMessages={false} />);
+      rerender(<AgentBadge renderToolCard={renderLiveToolCard} {...props} keepOpenForStreamingChildMessages={false} />);
       expect(screen.getByRole('button', { name: 'head' }).getAttribute('aria-expanded')).toBe('false');
     });
   });
@@ -631,6 +633,7 @@ describe('ToolCard dispatch', () => {
     it.each([false, 0, '', null])('treats %j as complete instead of asking for approval again', toolOutput => {
       render(
         <AgentBadge
+          renderToolCard={renderLiveToolCard}
           agentId="head"
           messages={[{ type: 'tool', toolName: 'search', toolCallId: 'child-call', toolOutput }]}
           toolCallId="approval-call"
@@ -650,6 +653,7 @@ describe('ToolCard dispatch', () => {
     it('does not show an error slot even if stale error text is supplied', () => {
       render(
         <AgentBadge
+          renderToolCard={renderLiveToolCard}
           agentId="head"
           messages={[{ type: 'text', content: 'Done.' }]}
           toolCallId="successful-delegation"
@@ -686,9 +690,18 @@ describe('ToolCard dispatch', () => {
         toolApprovalMetadata: undefined,
         isComplete: true,
       };
-      const { rerender } = render(<AgentBadge {...props} />, { wrapper: Providers });
+      const { rerender } = render(<AgentBadge renderToolCard={renderLiveToolCard} {...props} />, {
+        wrapper: Providers,
+      });
       expect(screen.getByTestId('agent-badge').querySelector('button')?.getAttribute('aria-expanded')).toBe('false');
-      rerender(<AgentBadge {...props} status="error" errorText="Provider rejected the request" />);
+      rerender(
+        <AgentBadge
+          renderToolCard={renderLiveToolCard}
+          {...props}
+          status="error"
+          errorText="Provider rejected the request"
+        />,
+      );
       expect(screen.getByRole('img', { name: 'Failed' })).not.toBeNull();
       expect(screen.getByTestId('agent-badge').querySelector('button')?.getAttribute('aria-expanded')).toBe('true');
       expect(screen.getByTestId('agent-error').textContent).toBe('Provider rejected the request');

@@ -15,8 +15,10 @@ export interface ChatTranscriptApi {
   viewerId?: string;
   busy: boolean;
   phase: ChatSessionPhase | undefined;
+  /** Session metadata or the thread's first message window is still loading; locks the composer. */
   initializing: boolean;
-  historyInitializing: boolean;
+  /** The thread's first message window is still loading or merging; the transcript is not ready to show. */
+  loadingHistory: boolean;
   initialHistoryReady: boolean;
   localUser: (text: string, steer?: boolean, files?: OutgoingFile[]) => string;
   failLocalUser: (id: string) => void;

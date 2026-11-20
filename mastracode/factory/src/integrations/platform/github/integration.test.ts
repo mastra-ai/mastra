@@ -413,7 +413,7 @@ describe('PlatformGithubIntegration', () => {
         connection: { type: 'app-installation', installationId: 7 },
         sourceIds: ['acme/app'],
       }),
-    ).rejects.toMatchObject({ status: 429, retryAfterSeconds: 9 });
+    ).rejects.toMatchObject({ status: 429, retryAfterMs: 9000 });
   });
 
   it('maps PR, review, inline-comment, and reviewer writes onto platform routes', async () => {
@@ -580,6 +580,28 @@ describe('PlatformGithubIntegration', () => {
     expect((fetchImpl.mock.calls[2]?.[1] as RequestInit).headers).toMatchObject({ 'x-acting-user-id': 'user-42' });
   });
 
+  it('sends the acting user only on the write that names one', async () => {
+    const comment = {
+      id: 91,
+      body: 'Done',
+      htmlUrl: 'https://github.com/acme/app/issues/12#issuecomment-91',
+      user: actor,
+      createdAt: '2026-07-03T00:00:00Z',
+      updatedAt: '2026-07-03T00:00:00Z',
+    };
+    const fetchImpl = vi.fn<typeof fetch>(async () => json(comment));
+    const integration = createIntegration(fetchImpl);
+    const write = { connection: { type: 'app-installation' as const, installationId: 7 }, sourceId: 'acme/app' };
+
+    await integration.intake.createComment({ ...write, issueId: '12', body: 'Done', actingUserId: 'user-42' });
+    await integration.intake.createComment({ ...write, issueId: '12', body: 'Done again' });
+
+    const headers = fetchImpl.mock.calls.map(call => new Headers((call[1] as RequestInit).headers));
+    expect(headers).toHaveLength(2);
+    expect(headers[0]?.get('x-acting-user-id')).toBe('user-42');
+    expect(headers[1]?.has('x-acting-user-id')).toBe(false);
+  });
+
   it('assigns a PR to the verified GitHub account of its opener', async () => {
     const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
       const url = String(input);
@@ -695,7 +717,7 @@ describe('PlatformGithubIntegration', () => {
       const url = String(input);
       const pathname = new URL(url).pathname;
       const method = init?.method;
-      if (method === 'DELETE') return json(undefined, 204);
+      if (method === 'DELETE' || pathname.endsWith('/thread')) return json(undefined, 204);
       if (pathname.endsWith('/merge')) return json({ merged: true, message: 'merged', sha: 'def456' });
       if (url.includes('/requested-reviewers')) return json({ users: ['grace'], teams: ['platform'] });
       if (url.includes('/pulls/comments/')) return json(reviewComment);
@@ -755,6 +777,7 @@ describe('PlatformGithubIntegration', () => {
       body: 'Updated nit',
     });
     await integration.versionControl.deleteReviewComment({ connection, sourceId, commentId: '77' });
+    await integration.versionControl.resolveReviewThread!({ connection, sourceId, commentId: '77', resolved: true });
     await integration.versionControl.listRequestedReviewers(ref);
     await integration.versionControl.requestReviewers({ ...ref, users: ['grace'] });
     await integration.versionControl.removeRequestedReviewers({ ...ref, teams: ['platform'] });
@@ -783,10 +806,13 @@ describe('PlatformGithubIntegration', () => {
       'POST /v1/server/github/repos/acme/app/pulls/34/comments',
       'PATCH /v1/server/github/repos/acme/app/pulls/comments/77',
       'DELETE /v1/server/github/repos/acme/app/pulls/comments/77',
+      'PUT /v1/server/github/repos/acme/app/pulls/comments/77/thread',
       'GET /v1/server/github/repos/acme/app/pulls/34/requested-reviewers',
       'POST /v1/server/github/repos/acme/app/pulls/34/requested-reviewers',
       'DELETE /v1/server/github/repos/acme/app/pulls/34/requested-reviewers',
     ]);
+    const threadCall = fetchImpl.mock.calls.find(call => String(call[0]).endsWith('/pulls/comments/77/thread'));
+    expect(JSON.parse(String((threadCall?.[1] as RequestInit).body))).toEqual({ resolved: true });
   });
 
   it('mints a repository-scoped platform token for git access', async () => {
@@ -1426,6 +1452,7 @@ describe('PlatformGithubIntegration', () => {
       connectionId: connection.id,
       repositoryId: repository.id,
     });
+    await seed.intake.saveConfig({ orgId: 'org-1', config: { github: { enabled: true, sourceIds: ['acme/app'] } } });
     const context = {
       auth: fakeAuth(),
       // Only presence is read here; the callback is never invoked.

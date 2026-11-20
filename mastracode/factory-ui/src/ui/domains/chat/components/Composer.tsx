@@ -27,6 +27,7 @@ import { useMatch, useNavigate, useParams } from 'react-router';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
 import {
+  isEndedPrompt,
   useAbortAgentControllerMutation,
   useSendAgentControllerMessageMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
@@ -80,7 +81,7 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
   const onDraftComposer = useMatch('/factories/:factoryId/new') !== null;
   const onUserDraft = useMatch('/factories/:factoryId/user/new/:draftSessionId') !== null;
   const draftStart = useContext(DraftSessionStartContext);
-  const onDraft = onUserDraft || draftStart !== null;
+  const onDraft = onUserDraft || draftStart !== undefined;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
@@ -282,9 +283,18 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
   async function handleInput(text: string, sentAnnotations: readonly ChatAnnotation[]) {
     const message = formatAnnotatedMessage(text, sentAnnotations);
     if (planFeedback.pending) {
-      await planFeedback.submitFeedback(message);
-      setImages([]);
-      return;
+      const answered = await planFeedback.submitFeedback(message).then(
+        () => true,
+        error => {
+          // The plan's run has ended, so nothing reads this as feedback; send it as a message.
+          if (isEndedPrompt(error)) return false;
+          throw error;
+        },
+      );
+      if (answered) {
+        setImages([]);
+        return;
+      }
     }
     if (onDraft && isSlashCommand(text)) {
       if (commandRequiresReadySession(commands, text)) {

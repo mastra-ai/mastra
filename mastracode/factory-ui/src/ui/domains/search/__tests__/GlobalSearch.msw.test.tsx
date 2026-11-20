@@ -307,7 +307,7 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
   return state;
 }
 
-function renderSearchRoute(initialEntry = `/factories/${ACTIVE_FACTORY_ID}/settings/preferences`) {
+function renderSearchRoute(initialEntry = `/factories/${ACTIVE_FACTORY_ID}/settings/account`) {
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
   const client = createQueryClient();
   renderWithProviders(
@@ -378,7 +378,7 @@ describe('Global search', () => {
     const user = userEvent.setup();
     renderSearchRoute();
 
-    await screen.findByRole('heading', { name: 'Preferences' });
+    await screen.findByRole('heading', { name: 'My account' });
     const settingsNavigation = await screen.findByRole('navigation', { name: 'Settings sections' });
     const focusedBeforeSearch = within(settingsNavigation).getByRole('button', { name: 'Back to app' });
     act(() => focusedBeforeSearch.focus());
@@ -476,7 +476,7 @@ describe('Global search', () => {
       'Work',
       'Pull requests',
       'Rules',
-      'Preferences',
+      'My account',
       'Manage Factory',
       'Connections',
       'Repositories',
@@ -487,8 +487,6 @@ describe('Global search', () => {
     ]) {
       expect(within(dialog).getByText(label)).toBeInTheDocument();
     }
-    expect(within(dialog).queryByText('Activity')).not.toBeInTheDocument();
-    expect(within(dialog).queryByText('Audit log')).not.toBeInTheDocument();
     expect(requests.sessionRequests).toEqual({ [ACTIVE_FACTORY_ID]: 1 });
   });
 
@@ -949,6 +947,122 @@ describe('Global search', () => {
     expect(requests.createSessionRequests).toBe(0);
   });
 
+  it('finds the card a pasted link names, whatever page of the pull request the link opens', async () => {
+    const requests = stubSearchApi();
+    const user = userEvent.setup();
+    renderSearchRoute();
+    const dialog = await openWithShortcut();
+    await screen.findByText('Review command palette PR');
+    const input = screen.getByRole('combobox', { name: 'Search MastraCode' });
+    const results = within(dialog).getByRole('region', { name: 'Search results' });
+
+    // A card holding a session: the palette reads it itself.
+    await user.type(input, 'https://github.com/mastra-ai/mastra/pull/900/files#diff-1a2b');
+    expect(await within(results).findByText('Review command palette PR')).toBeInTheDocument();
+    expect(within(results).queryByText('Add universal command search')).not.toBeInTheDocument();
+
+    // A card holding none: the server finds it, and the palette keeps it.
+    await user.clear(input);
+    await user.type(input, 'GitHub.com/Mastra-AI/mastra/pull/4242?tab=checks');
+    expect(await within(results).findByText('Bump the command palette dependencies')).toBeInTheDocument();
+    expect(within(results).queryByText('Review command palette PR')).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(requests.workItemQueries).toContain(
+        // Asked lowercased: the server reads it so, and `GitHub.com` and `github.com` share one answer.
+        `started=false&q=${encodeURIComponent('github.com/mastra-ai/mastra/pull/4242?tab=checks')}`,
+      ),
+    );
+
+    // A link names its own number, never one it starts.
+    await user.clear(input);
+    await user.type(input, 'https://github.com/mastra-ai/mastra/pull/42');
+    expect(await within(dialog).findByText('No matching results.')).toBeInTheDocument();
+  });
+
+  it('keeps the cards the server’s search finds by what their rows do not show, and no other', async () => {
+    // A pull request opened from a card's session rides on the card: its key, link and branch are the card's too.
+    const attachPullRequest = (item: WorkItem, number: number, headBranch: string): WorkItem => {
+      const source = (sourceType: string, key: string, url: string, metadata: Record<string, unknown>) => ({
+        id: `${item.id}:${key}`,
+        workItemId: item.id,
+        provider: 'github' as const,
+        integrationId: 'github',
+        sourceType,
+        workspaceId: null,
+        externalId: key,
+        sourceKey: null,
+        key,
+        url,
+        state: 'open',
+        labels: [],
+        author: null,
+        metadata,
+        revision: 1,
+        syncedAt: null,
+        createdAt: new Date(item.createdAt),
+        updatedAt: new Date(item.updatedAt),
+      });
+      return {
+        ...item,
+        workItem: {
+          provider: 'github',
+          key: null,
+          url: item.url,
+          title: item.title,
+          state: 'open',
+          labels: [],
+          author: null,
+          metadata: item.metadata,
+          sources: [
+            source('issue', `mastra-ai/mastra#${String(item.metadata.number)}`, item.url ?? '', item.metadata),
+            source('pull-request', `mastra-ai/mastra#${number}`, `https://github.com/mastra-ai/mastra/pull/${number}`, {
+              githubPullRequestNumber: number,
+              headBranch,
+            }),
+          ],
+        },
+      };
+    };
+    const withSession = workItems.find(item => item.id === 'work-item-search')!;
+    const unstarted = workItems.find(item => item.id === 'work-item-unstarted-issue')!;
+    stubSearchApi({
+      workItems: workItems.map(item =>
+        item === withSession
+          ? attachPullRequest(item, 5150, 'octo.cat/command-search')
+          : item === unstarted
+            ? attachPullRequest(item, 7070, 'palette-focus')
+            : item,
+      ),
+    });
+    const user = userEvent.setup();
+    renderSearchRoute();
+    const dialog = await openWithShortcut();
+    await screen.findByText('Review command palette PR');
+    const input = screen.getByRole('combobox', { name: 'Search MastraCode' });
+    const results = within(dialog).getByRole('region', { name: 'Search results' });
+    const search = async (typed: string) => {
+      await user.clear(input);
+      await user.type(input, typed);
+    };
+
+    for (const typed of ['5150', 'octo.cat/command-search', 'https://github.com/mastra-ai/mastra/pull/5150/files']) {
+      await search(typed);
+      expect(await within(results).findByText('Add universal command search')).toBeInTheDocument();
+      expect(within(results).queryByText('Review command palette PR')).not.toBeInTheDocument();
+    }
+
+    // A card nobody started is found by the server, and its row stays.
+    for (const typed of ['7070', 'work-item-unstarted-issue']) {
+      await search(typed);
+      expect(await within(results).findByText('Palette keyboard traps focus on mobile')).toBeInTheDocument();
+    }
+
+    // The card answers the second link only; the first is in it as text, and still finds nothing.
+    await search('https://github.com/mastra-ai/mastra/pull/515 https://github.com/mastra-ai/mastra/pull/5150');
+    expect(await within(dialog).findByText('No matching results.')).toBeInTheDocument();
+    expect(within(results).queryByText('Add universal command search')).not.toBeInTheDocument();
+  });
+
   it('scopes results to board cards with no session', async () => {
     stubSearchApi();
     const user = userEvent.setup();
@@ -1024,7 +1138,7 @@ describe('Global search', () => {
 
   it('selects Settings with origin state and closes without creating a session', async () => {
     const requests = stubSearchApi();
-    const origin = `/factories/${ACTIVE_FACTORY_ID}/settings/preferences`;
+    const origin = `/factories/${ACTIVE_FACTORY_ID}/settings/account`;
     const user = userEvent.setup();
     const { router } = renderSearchRoute(origin);
     const dialog = await openWithShortcut();
@@ -1067,7 +1181,7 @@ describe('Global search', () => {
     },
   ])('selects $title on the declared route and closes search', async ({ title, path, preservesOrigin }) => {
     const requests = stubSearchApi();
-    const origin = `/factories/${ACTIVE_FACTORY_ID}/settings/preferences`;
+    const origin = `/factories/${ACTIVE_FACTORY_ID}/settings/account`;
     const user = userEvent.setup();
     const { router } = renderSearchRoute(origin);
     const dialog = await openWithShortcut();
