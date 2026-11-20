@@ -784,17 +784,6 @@ export class DurableAgent<
     return true;
   }
 
-  /**
-   * prepare() rebuilt a cold run's registry entry from the resuming caller's request context.
-   * When that resume is rejected before it runs, drop the entry so a corrected retry
-   * rehydrates from the snapshot instead of inheriting the rejected caller's context.
-   */
-  #dropRejectedColdEntry(runId: string, entry: RunRegistryEntry): void {
-    if (this.#runRegistry.get(runId) !== entry) return;
-    this.#runRegistry.cleanup(runId);
-    deleteRunRegistryEntry(runId, this.#mastra);
-  }
-
   #hasRecoveryAttempt(runId: string): boolean {
     return this.#recoveryAttempts.has(runId);
   }
@@ -3568,6 +3557,22 @@ export class DurableAgent<
           }
         : options?.memory;
 
+      // Validate before prepare() registers an entry built from this caller's request context. A
+      // rejected resume then leaves nothing for the corrected retry, or a concurrent resume, to
+      // inherit, and nothing to clean up. The check below covers warm resumes.
+      const preflightContext = options?.requestContext ?? snapshotRequestContext;
+      const preflightDefaults = await this.getDefaultOptions({ requestContext: preflightContext });
+      await this.#wrappedAgent.__validateToolResumeData({
+        snapshot,
+        toolCallId: options?.toolCallId,
+        resumeData,
+        requestContext: preflightContext,
+        toolsets: deepMerge(preflightDefaults?.toolsets ?? {}, options?.toolsets ?? {}),
+        clientTools: { ...preflightDefaults?.clientTools, ...options?.clientTools },
+        runId,
+        method: 'resume',
+      });
+
       // The resume below applies the suspended run's scopes, so preparation does not resolve them again.
       await this.prepare([], {
         [SCOPES_ALREADY_APPLIED]: true,
@@ -3679,24 +3684,16 @@ export class DurableAgent<
         stream: (innerMessages: MessageListInput, innerOptions?: DurableAgentStreamOptions<TOutput>) =>
           this.stream(innerMessages, innerOptions),
       } as unknown as DurableAgent<any, any, TOutput>;
-      try {
-        return await runResumeDurableStreamUntilIdle<TOutput>(
-          resolvedOptionsAgent,
-          runId,
-          resumeData,
-          { ...rest, maxIdleMs } as DurableAgentStreamOptions<TOutput> & { maxIdleMs?: number },
-          {
-            activeStreams: this.#activeStreamUntilIdle,
-            bgManager: this.#mastra?.backgroundTaskManager,
-          },
-        );
-      } catch (error) {
-        // The inner resume() found this call's rebuilt entry warm, so it cannot drop it itself.
-        if (coldSnapshot && error instanceof MastraError && error.id === 'AGENT_RESUME_INVALID_DATA') {
-          this.#dropRejectedColdEntry(runId, entry);
-        }
-        throw error;
-      }
+      return runResumeDurableStreamUntilIdle<TOutput>(
+        resolvedOptionsAgent,
+        runId,
+        resumeData,
+        { ...rest, maxIdleMs } as DurableAgentStreamOptions<TOutput> & { maxIdleMs?: number },
+        {
+          activeStreams: this.#activeStreamUntilIdle,
+          bgManager: this.#mastra?.backgroundTaskManager,
+        },
+      );
     }
 
     await this.requireAgentExecutionFGA({
@@ -3723,21 +3720,16 @@ export class DurableAgent<
       runId,
     });
     if (resumeSnapshot) {
-      try {
-        await this.#wrappedAgent.__validateToolResumeData({
-          snapshot: resumeSnapshot,
-          toolCallId: resolvedOptions.toolCallId,
-          resumeData,
-          requestContext: resumeRequestContext,
-          toolsets: resolvedOptions.toolsets,
-          clientTools: resolvedOptions.clientTools,
-          runId,
-          method: 'resume',
-        });
-      } catch (error) {
-        if (coldSnapshot) this.#dropRejectedColdEntry(runId, entry);
-        throw error;
-      }
+      await this.#wrappedAgent.__validateToolResumeData({
+        snapshot: resumeSnapshot,
+        toolCallId: resolvedOptions.toolCallId,
+        resumeData,
+        requestContext: resumeRequestContext,
+        toolsets: resolvedOptions.toolsets,
+        clientTools: resolvedOptions.clientTools,
+        runId,
+        method: 'resume',
+      });
     }
     // Only an accepted resume may change the suspended run's request context: it carries
     // the caller's identity and per-request tool configuration into the next resume.
