@@ -31,6 +31,8 @@ export interface AgentThreadSidebarExtensions {
   /** Replaces the sidebar body while a host memory detail view is open. */
   memoryDetail?: ReactNode;
   footer?: ReactNode;
+  /** Show the memory capability badges on the collapsed Memory card. Defaults to true. */
+  showConfigBadges?: boolean;
 }
 
 export interface AgentThreadSidebarProps extends AgentThreadSidebarExtensions {
@@ -97,6 +99,7 @@ export function AgentThreadSidebar({
   memoryContent,
   memoryDetail,
   footer,
+  showConfigBadges = true,
 }: AgentThreadSidebarProps) {
   const [requestContext] = useEntityRequestContext('agent', agentId);
   const { data: memory, isLoading: isMemoryLoading } = useMemory({
@@ -151,6 +154,7 @@ export function AgentThreadSidebar({
     observationPercent,
     observationalOn,
     semanticRecallOn,
+    showConfigBadges,
     showMemory,
     workingMemoryOn,
   ]);
@@ -189,7 +193,7 @@ export function AgentThreadSidebar({
         ) : undefined}
       </span>
 
-      {!showMemory ? (
+      {!showMemory && showConfigBadges ? (
         <TooltipProvider delay={150} timeout={400}>
           <span data-testid="memory-config-badges" className="mt-1.5 flex flex-wrap items-center gap-1.5">
             <ConfigBadge
