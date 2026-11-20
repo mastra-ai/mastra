@@ -16,3 +16,8 @@ export { DatasetsListSkeleton } from './datasets-list/datasets-list-skeleton';
 export { NoDatasetsInfo } from './datasets-list/no-datasets-info';
 export { DATASET_EXPERIMENT_OPTIONS, getAllDatasetTags, getDatasetTagOptions } from './datasets-list/helpers';
 export { DATASET_TARGET_TYPES, isDatasetTargetType, type DatasetTargetType } from './target-type-options';
+export { DatasetCombobox } from './dataset-combobox';
+export type { DatasetComboboxProps } from './dataset-combobox';
+export { DatasetVersions } from './dataset-versions';
+export { DatasetPage } from './dataset-page';
+export type { DatasetPageProps } from './dataset-page';

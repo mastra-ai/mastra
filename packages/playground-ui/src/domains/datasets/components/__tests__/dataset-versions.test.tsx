@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -10,7 +11,7 @@ import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 
-vi.mock('@mastra/playground-ui/components/Combobox', () => ({
+vi.mock('@/ds/components/Combobox', () => ({
   Combobox: ({
     options,
     value,

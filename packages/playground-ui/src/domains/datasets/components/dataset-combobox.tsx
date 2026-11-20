@@ -1,11 +1,11 @@
 'use client';
 
-import { Combobox } from '@mastra/playground-ui/components/Combobox';
-import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
-import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { toast } from '@mastra/playground-ui/utils/toast';
 import { useDatasets } from '@mastra/react/hooks/datasets';
 import { useEffect } from 'react';
+import { Combobox } from '@/ds/components/Combobox';
+import type { ComboboxProps } from '@/ds/components/Combobox';
+import { useLinkComponent } from '@/lib/framework';
+import { toast } from '@/utils/toast';
 
 export interface DatasetComboboxProps {
   value?: string;

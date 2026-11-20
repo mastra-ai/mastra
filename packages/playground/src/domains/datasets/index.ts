@@ -1,10 +1,10 @@
 export * from '@mastra/playground-ui/domains/datasets';
 
 // Components
-export { DatasetCombobox } from './components/dataset-combobox';
-export type { DatasetComboboxProps } from './components/dataset-combobox';
-export { DatasetVersions } from './components/dataset-versions';
-export type { DatasetVersionsProps } from './components/dataset-versions';
+export { DatasetCombobox } from '@mastra/playground-ui/domains/datasets';
+export type { DatasetComboboxProps } from '@mastra/playground-ui/domains/datasets';
+export { DatasetVersions } from '@mastra/playground-ui/domains/datasets';
+export type { DatasetVersionsProps } from '@mastra/playground-ui/domains/datasets';
 
 // Experiment trigger components
 export { ExperimentTriggerDialog } from './components/experiment-trigger/experiment-trigger-dialog';
