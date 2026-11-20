@@ -248,6 +248,7 @@ describe('Knowledge host page writes', () => {
     it('updates the page it read, at the version it read, and indexes and links it', async () => {
       const { knowledge, storage, vector } = setup();
       const { page } = await knowledge.upsertPage({ ...faq, body: 'placeholder' });
+      vector.rows.delete(`page:${page.id}`);
 
       const filled = await knowledge.upsertPage({
         ...faq,

@@ -258,6 +258,7 @@ async function updateExpectedPage(
   await host.runtime.checkDeclarations();
   const storage = await host.getStorage();
   const [scope] = await storage.getScopesByAddress([input.scope]);
+  if (scope) host.runtime.assertCurrentScope(scope);
   const page = scope ? await storage.getPageByPath({ scopeId: scope.id, path: keys, read: 'all' }) : null;
   if (page?.id !== expected.id || page.version !== expected.version) throw new KnowledgeConflictError(expected.id);
   const fields = { name: input.name, description: input.description, body: input.body };
