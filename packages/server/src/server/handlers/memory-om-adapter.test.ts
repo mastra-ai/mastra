@@ -168,25 +168,18 @@ describe('Observational Memory routes with a memory adapter that runs OM', () =>
       threadId: 'thread-a',
     });
     expect(records).toEqual({ record: null, history: undefined });
-
-    const buffered = await AWAIT_BUFFER_STATUS_ROUTE.handler({
-      ...createTestServerContext({ mastra }),
-      agentId: 'hosted',
-      resourceId: 'user-a',
-      threadId: 'thread-a',
-    });
-    expect(buffered).toEqual({ record: null });
   });
 
-  it('returns the adapter record from the buffer-status route', async () => {
+  it('does not report a readable adapter snapshot as completed buffering', async () => {
     memory.generations.set('thread-a', [omRecord('thread-a', 'user-a', 1)]);
-    const result = await AWAIT_BUFFER_STATUS_ROUTE.handler({
-      ...createTestServerContext({ mastra }),
-      agentId: 'hosted',
-      resourceId: 'user-a',
-      threadId: 'thread-a',
-    });
-    expect(result.record?.id).toBe('om-thread-a-1');
+    await expect(
+      AWAIT_BUFFER_STATUS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'hosted',
+        resourceId: 'user-a',
+        threadId: 'thread-a',
+      }),
+    ).rejects.toMatchObject({ status: 501 });
   });
 
   it('returns empty for a thread that does not exist', async () => {

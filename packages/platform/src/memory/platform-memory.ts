@@ -26,10 +26,6 @@ import type {
   StorageListThreadsInput,
   StorageListThreadsOutput,
 } from '@mastra/core/storage';
-import { createTool } from '@mastra/core/tools';
-import type { ToolAction } from '@mastra/core/tools';
-
-import { z } from 'zod';
 
 import { PlatformMemoryApiError, PlatformMemoryClient } from './client';
 import type {
@@ -45,12 +41,6 @@ export type PlatformMemoryOptions = PlatformMemoryClientOptions & {
   id?: string;
   /** Use a preconfigured client instead of building one from the options above. */
   client?: PlatformMemoryClient;
-  /**
-   * How working memory is shown to the model. Defaults to `readonly`: the resource's stored
-   * working memory is added to each run's prompt. `tool` also gives the agent an
-   * `updateWorkingMemory` tool (not in read-only runs); `off` leaves working memory out.
-   */
-  workingMemory?: 'readonly' | 'tool' | 'off';
 };
 
 type MessageListLike = ProcessInputArgs['messageList'];
@@ -117,8 +107,6 @@ function memoryContext(requestContext: RequestContext | undefined, messageList: 
   return null;
 }
 
-const WORKING_MEMORY_TAG = 'platform-working-memory';
-
 /** The hosted service keeps up to this many past generations per request. */
 const MAX_OBSERVATION_HISTORY = 50;
 
@@ -159,42 +147,6 @@ function observationRecordFromApi(record: MemoryObservationRecord): Observationa
 }
 
 /**
- * Adds the resource's stored working memory as a system message. The hosted processors don't
- * deliver it, so the client reads it on the first step of every run: a fresh read each run, so an
- * update between runs shows up on the next one.
- */
-async function addWorkingMemory(
-  client: PlatformMemoryClient,
-  messageList: MessageListLike,
-  resourceId: string,
-  canUpdate: boolean,
-) {
-  const data = await client.getWorkingMemory(resourceId);
-  messageList.clearSystemMessages(WORKING_MEMORY_TAG);
-  if (canUpdate) {
-    messageList.addSystem(
-      `WORKING_MEMORY_SYSTEM_INSTRUCTION:
-Store and update any conversation-relevant information about the user by calling the updateWorkingMemory tool. Pass the whole memory each time: anything you leave out is removed.
-
-<working_memory_data>
-${data ?? ''}
-</working_memory_data>`,
-      WORKING_MEMORY_TAG,
-    );
-  } else if (data) {
-    messageList.addSystem(
-      `WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY):
-The following is what is remembered about the user. Use it for context; you cannot change it.
-
-<working_memory_data>
-${data}
-</working_memory_data>`,
-      WORKING_MEMORY_TAG,
-    );
-  }
-}
-
-/**
  * What a read-only run sees of the thread, read through the context route, which writes nothing:
  * observations, the continuation reminder, then the messages not yet observed. Running the hosted
  * processors instead would save messages and start observation.
@@ -205,7 +157,7 @@ async function addReadOnlyContext(
   threadId: string,
   resourceId: string,
 ) {
-  const context = await client.getContext(threadId, resourceId, { workingMemory: 'off' });
+  const context = await client.getContext(threadId, resourceId);
   const prompt = context.prompt ?? [
     ...(context.system
       ? [{ id: 'om-system', role: 'system', content: context.system, parts: [], createdAt: new Date(0).toISOString() }]
@@ -248,41 +200,16 @@ async function applyResult(
  */
 export class PlatformMemory extends MastraMemory {
   readonly client: PlatformMemoryClient;
-  private readonly workingMemoryMode: 'readonly' | 'tool' | 'off';
 
   constructor(options: PlatformMemoryOptions = {}) {
     super({ id: options.id ?? 'platform-memory', name: 'PlatformMemory' });
     this.client = options.client ?? new PlatformMemoryClient(options);
-    this.workingMemoryMode = options.workingMemory ?? 'readonly';
-  }
-
-  listTools(config?: MemoryConfig): Record<string, ToolAction<any, any, any, any, any>> {
-    if (this.workingMemoryMode !== 'tool' || config?.readOnly) return {};
-    this.assertResourceScopedWorkingMemory(config);
-    const client = this.client;
-    return {
-      updateWorkingMemory: createTool({
-        id: 'update-working-memory',
-        description:
-          'Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.',
-        inputSchema: z.object({
-          memory: z.string().describe('The Markdown formatted working memory content to store.'),
-        }),
-        execute: async ({ memory }, context) => {
-          const resourceId = context?.agent?.resourceId ?? context?.agent?.threadId;
-          if (!resourceId) throw new Error('updateWorkingMemory needs a thread or resource');
-          await client.updateWorkingMemory(resourceId, memory);
-          return { success: true };
-        },
-      }),
-    };
   }
 
   // The instance runs the real @mastra/memory processors; these only ship the message list
   // there and apply what comes back (list, stream parts, message-id rotations, abort).
   async getInputProcessors(): Promise<InputProcessor[]> {
     const client = this.client;
-    const workingMemoryMode = this.workingMemoryMode;
     return [
       {
         id: 'platform-memory',
@@ -302,7 +229,6 @@ export class PlatformMemory extends MastraMemory {
           if (ctx.readOnly) {
             if (stepNumber === 0) {
               await addReadOnlyContext(client, messageList, ctx.threadId, ctx.resourceId);
-              if (workingMemoryMode !== 'off') await addWorkingMemory(client, messageList, ctx.resourceId, false);
             }
             return messageList;
           }
@@ -318,9 +244,6 @@ export class PlatformMemory extends MastraMemory {
             abortSignal,
           );
           const list = await applyResult(result, { messageList, writer, abort, rotateResponseMessageId });
-          if (stepNumber === 0 && workingMemoryMode !== 'off') {
-            await addWorkingMemory(client, messageList, ctx.resourceId, workingMemoryMode === 'tool');
-          }
           return list;
         },
       },
@@ -466,54 +389,20 @@ export class PlatformMemory extends MastraMemory {
     };
   }
 
-  // Hosted working memory is keyed by resource only, so thread scope would silently be shared
-  // across every thread of the same resource.
-  private assertResourceScopedWorkingMemory(config?: MemoryConfig | MemoryConfigInternal): void {
-    if (this.getMergedThreadConfig(config ?? {}).workingMemory?.scope === 'thread') {
-      throw new Error('PlatformMemory does not support thread-scoped working memory');
-    }
-  }
-
-  async getWorkingMemory({
-    threadId,
-    resourceId,
-    memoryConfig,
-  }: {
-    threadId: string;
-    resourceId?: string;
-    memoryConfig?: MemoryConfigInternal;
-  }): Promise<string | null> {
-    this.assertResourceScopedWorkingMemory(memoryConfig);
-    return this.client.getWorkingMemory(resourceId ?? threadId);
+  async getWorkingMemory(): Promise<string | null> {
+    throw new Error('PlatformMemory does not support working memory');
   }
 
   async getWorkingMemoryTemplate(): Promise<WorkingMemoryTemplate | null> {
     return null;
   }
 
-  async updateWorkingMemory({
-    threadId,
-    resourceId,
-    workingMemory,
-    memoryConfig,
-  }: {
-    threadId: string;
-    resourceId?: string;
-    workingMemory: string;
-    memoryConfig?: MemoryConfigInternal;
-  }): Promise<void> {
-    this.assertResourceScopedWorkingMemory(memoryConfig);
-    await this.client.updateWorkingMemory(resourceId ?? threadId, workingMemory);
+  async updateWorkingMemory(): Promise<void> {
+    throw new Error('PlatformMemory does not support working memory');
   }
 
-  async __experimental_updateWorkingMemoryVNext(args: {
-    threadId: string;
-    resourceId?: string;
-    workingMemory: string;
-    memoryConfig?: MemoryConfigInternal;
-  }): Promise<{ success: boolean; reason: string }> {
-    await this.updateWorkingMemory(args);
-    return { success: true, reason: 'replaced' };
+  async __experimental_updateWorkingMemoryVNext(): Promise<{ success: boolean; reason: string }> {
+    throw new Error('PlatformMemory does not support working memory');
   }
 
   async deleteMessages(): Promise<void> {

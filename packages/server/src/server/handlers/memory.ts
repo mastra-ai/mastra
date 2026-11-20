@@ -1068,7 +1068,7 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
 
       const omConfig = await getOMConfigFromAgent(agent, requestContext);
       if (!omConfig?.enabled) {
-        // Memory adapters that run OM themselves buffer on their side; return their current record
+        // An adapter's readable record does not establish buffering completion.
         const adapterMemory = await getMemoryFromContext({ mastra, agentId, requestContext });
         const memoryOM = await getMemoryOMSettings(adapterMemory, requestContext);
         if (!adapterMemory || !memoryOM) {
@@ -1077,15 +1077,19 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
         if (!effectiveResourceId) {
           throw new HTTPException(400, { message: 'resourceId is required' });
         }
-        const { record } = await readMemoryOMRecords({
-          memory: adapterMemory,
-          settings: memoryOM,
-          mastra,
-          requestContext,
-          threadId: effectiveThreadId,
-          resourceId: effectiveResourceId,
+        if (effectiveThreadId) {
+          const thread = await adapterMemory.getThreadById({ threadId: effectiveThreadId });
+          await enforceThreadAccess({
+            mastra,
+            requestContext,
+            threadId: effectiveThreadId,
+            thread,
+            effectiveResourceId,
+          });
+        }
+        throw new HTTPException(501, {
+          message: 'Observational Memory adapter does not support waiting for buffering',
         });
-        return { record };
       }
 
       // Resolve the OM processor to call waitForBuffering

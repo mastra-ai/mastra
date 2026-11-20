@@ -19,7 +19,6 @@ function fakeMemoryApi() {
   const messages = new Map<string, StoredMessage[]>();
   const requests: { method: string; path: string; headers: Headers; body?: any }[] = [];
   let observations: string | null = null;
-  const workingMemory = new Map<string, string>();
   // Observation generations per thread, newest first; the first is the current record.
   const observationRecords = new Map<string, Record<string, unknown>[]>();
 
@@ -48,13 +47,6 @@ function fakeMemoryApi() {
       }
       messages.set(id, list);
       return json({ messages: body.messages }, 201);
-    }
-    if (path === '/working-memory' && method === 'PUT') {
-      workingMemory.set(body.resourceId, body.workingMemory);
-      return json({ ok: true });
-    }
-    if (path === '/working-memory' && method === 'GET') {
-      return json({ workingMemory: workingMemory.get(url.searchParams.get('resourceId')!) ?? null });
     }
     if ((m = path.match(/^\/threads\/([^/]+)\/processors$/)) && method === 'POST') {
       const id = decodeURIComponent(m[1]!);
@@ -178,9 +170,8 @@ describe('PlatformMemory', () => {
     api = fakeMemoryApi();
   });
 
-  function agentWith(prompts: unknown[], options: { workingMemory?: 'readonly' | 'tool' | 'off' } = {}) {
+  function agentWith(prompts: unknown[]) {
     const memory = new PlatformMemory({
-      ...options,
       accessToken: 'tok_1',
       instanceId: 'mem_1',
       apiUrl: 'https://platform.test',
@@ -376,19 +367,6 @@ describe('PlatformMemory', () => {
     expect((await memory.recall({ threadId: 'missing' })).messages).toEqual([]);
   });
 
-  it('lets the agent update working memory in tool mode', async () => {
-    const opts = { accessToken: 'tok_1', instanceId: 'mem_1', apiUrl: 'https://platform.test', fetch: api.fetchImpl };
-    expect(Object.keys(new PlatformMemory(opts).listTools())).toEqual([]);
-    const memory = new PlatformMemory({ ...opts, workingMemory: 'tool' });
-    expect(Object.keys(memory.listTools({ readOnly: true }))).toEqual([]);
-
-    const tool = memory.listTools().updateWorkingMemory!;
-    await tool.execute!({ memory: '# User\n- Name: Ada' }, { agent: { threadId: 't', resourceId: 'user_1' } } as never);
-
-    const put = api.requests.find(r => r.path === '/working-memory')!;
-    expect(put.body).toEqual({ resourceId: 'user_1', workingMemory: '# User\n- Name: Ada' });
-  });
-
   it("keeps a read-only run read-only but still gives it the thread's stored context", async () => {
     const prompts: any[] = [];
     const { agent } = agentWith(prompts);
@@ -409,70 +387,15 @@ describe('PlatformMemory', () => {
     expect(api.messages.get('thread_ro')).toEqual(stored);
   });
 
-  it.each([
-    ['readonly', true, false],
-    ['tool', true, true],
-    ['off', false, false],
-  ] as const)('delivers working memory in %s mode as configured', async (mode, delivered, hasTool) => {
+  it('does not expose hosted working memory calls or model context', async () => {
     const prompts: any[] = [];
-    const { agent, memory } = agentWith(prompts, { workingMemory: mode });
-    const memoryArg = { thread: `thread_wm_${mode}`, resource: 'user_wm' };
-    const systemOf = (prompt: any) =>
-      prompt
-        .filter((m: any) => m.role === 'system')
-        .map((m: any) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)))
-        .join('\n');
-
-    await memory.updateWorkingMemory({
-      threadId: memoryArg.thread,
-      resourceId: 'user_wm',
-      workingMemory: '- Name: Ada',
-    });
-    await agent.generate('Hi.', { memory: memoryArg });
-    // A second turn after the memo changes, so a stale first read can't pass.
-    await memory.updateWorkingMemory({
-      threadId: memoryArg.thread,
-      resourceId: 'user_wm',
-      workingMemory: '- Name: Grace',
-    });
-    await agent.generate('Hi again.', { memory: memoryArg });
-
-    expect(systemOf(prompts[0]).includes('- Name: Ada')).toBe(delivered);
-    expect(systemOf(prompts[1]).includes('- Name: Grace')).toBe(delivered);
-    expect(systemOf(prompts[1]).includes('- Name: Ada')).toBe(false);
-    expect('updateWorkingMemory' in memory.listTools()).toBe(hasTool);
-    expect(memory.listTools({ readOnly: true })).toEqual({});
-
-    // A read-only run still sees the memo (unless off) but is told it can't change it.
-    await agent.generate('Read only.', { memory: { ...memoryArg, options: { readOnly: true } } });
-    const readOnlySystem = systemOf(prompts[2]);
-    expect(readOnlySystem.includes('- Name: Grace')).toBe(delivered);
-    expect(readOnlySystem).not.toContain('updateWorkingMemory');
-  });
-
-  it('rejects thread-scoped working memory instead of sharing it across threads', async () => {
-    const opts = { accessToken: 'tok_1', instanceId: 'mem_1', apiUrl: 'https://platform.test', fetch: api.fetchImpl };
-    const memory = new PlatformMemory({ ...opts, workingMemory: 'tool' });
-    const threadScope = { workingMemory: { enabled: true, scope: 'thread' as const } };
-    const before = api.requests.length;
-
-    expect(() => memory.listTools(threadScope)).toThrow('thread-scoped working memory');
-    await expect(
-      memory.getWorkingMemory({ threadId: 't', resourceId: 'u', memoryConfig: threadScope }),
-    ).rejects.toThrow('thread-scoped working memory');
-    await expect(
-      memory.updateWorkingMemory({ threadId: 't', resourceId: 'u', workingMemory: 'x', memoryConfig: threadScope }),
-    ).rejects.toThrow('thread-scoped working memory');
-    expect(api.requests.length).toBe(before);
-
-    const resourceScope = { workingMemory: { enabled: true, scope: 'resource' as const } };
-    await memory.updateWorkingMemory({
-      threadId: 't',
-      resourceId: 'u',
-      workingMemory: 'x',
-      memoryConfig: resourceScope,
-    });
-    expect(api.requests.at(-1)!.body).toEqual({ resourceId: 'u', workingMemory: 'x' });
+    const { agent, memory } = agentWith(prompts);
+    expect(memory.listTools()).toEqual({});
+    await expect(memory.getWorkingMemory()).rejects.toThrow('does not support working memory');
+    await expect(memory.updateWorkingMemory()).rejects.toThrow('does not support working memory');
+    await agent.generate('Hi.', { memory: { thread: 'thread_no_wm', resource: 'user_1' } });
+    expect(JSON.stringify(prompts[0])).not.toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
+    expect(api.requests.some(request => request.path === '/working-memory')).toBe(false);
   });
 
   describe('Observational Memory reads', () => {
