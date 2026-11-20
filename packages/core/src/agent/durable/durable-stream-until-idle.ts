@@ -62,6 +62,8 @@ export async function runDurableStreamUntilIdle<OUTPUT = undefined>(
         runId: first.runId,
         threadId: ctx.threadId,
         resourceId: ctx.resourceId,
+        traceId: first.traceId,
+        spanId: first.spanId,
         cleanup: ctx.forceClose,
         abort: async (reason?: unknown) => {
           // Fan the abort out to every inner DurableAgent.stream() that has been
@@ -150,6 +152,8 @@ export async function runResumeDurableStreamUntilIdle<OUTPUT = undefined>(
         runId: first.runId,
         threadId: ctx.threadId,
         resourceId: ctx.resourceId,
+        traceId: first.traceId,
+        spanId: first.spanId,
         cleanup: ctx.forceClose,
         abort: async (reason?: unknown) => {
           await Promise.all(
