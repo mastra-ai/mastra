@@ -777,10 +777,19 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       const matchedSkill = this.#resolveByPath(skillPath);
       if (!matchedSkill) continue;
 
-      // A hit from a losing source maps to the winner only when the winner is
-      // unambiguous; with several same-named winners each keeps its own hits.
+      // A hit maps onto a winner only when it is that winner or an alias of it
+      // (same canonical path); hits from losing same-named copies are dropped.
       const winners = await this.#searchCandidates(this.#skills.get(matchedSkill.name) ?? [matchedSkill]);
-      const skill = winners.find(s => s.path === matchedSkill.path) ?? (winners.length === 1 ? winners[0] : undefined);
+      let skill = winners.find(s => s.path === matchedSkill.path);
+      if (!skill) {
+        const canonicalPath = await this.#getCanonicalSkillPath(matchedSkill.path);
+        for (const winner of winners) {
+          if ((await this.#getCanonicalSkillPath(winner.path)) === canonicalPath) {
+            skill = winner;
+            break;
+          }
+        }
+      }
       if (!skill) continue;
 
       // Filter by skill names if specified
@@ -830,8 +839,13 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     const skill = (await this.#resolveByName(skillName)) ?? this.#resolveByPath(skillName);
     if (!skill) return null;
 
+    return this.#readReference(skill.path, referencePath);
+  }
+
+  /** Reads a reference file from a known skill directory, without resolving a name. */
+  async #readReference(skillPath: string, referencePath: string): Promise<string | null> {
     const safeRefPath = this.#assertRelativePath(referencePath, 'reference');
-    const refFilePath = this.#joinPath(skill.path, safeRefPath);
+    const refFilePath = this.#joinPath(skillPath, safeRefPath);
 
     if (!(await this.#source.exists(refFilePath))) {
       return null;
@@ -1645,7 +1659,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       byRank.push(...skillsByPath.values());
       search: for (const skill of byRank) {
         for (const refPath of skill.references) {
-          const content = await this.getReference(skill.path, `references/${refPath}`);
+          const content = await this.#readReference(skill.path, `references/${refPath}`);
           if (!content) continue;
           const lower = content.toLowerCase();
           const matched = terms.filter(term => lower.includes(term)).length;
@@ -1680,7 +1694,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       if (!includeReferences) continue;
       for (const refPath of skill.references) {
         if (results.length >= topK) break;
-        const content = await this.getReference(skill.path, `references/${refPath}`);
+        const content = await this.#readReference(skill.path, `references/${refPath}`);
         if (content) {
           results.push({
             skillName: skill.name,

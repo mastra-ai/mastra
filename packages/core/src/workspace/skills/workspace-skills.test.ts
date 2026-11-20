@@ -2553,6 +2553,49 @@ Shadow instructions.`;
       await expect(skills.get('label-bugs')).rejects.toThrow('multiple local skills found');
     });
 
+    it.each([
+      ['BM25', () => new SearchEngine({ bm25: {} })],
+      ['simple search', () => undefined],
+    ])('search() reads references when a skill path equals a duplicated name (%s)', async (_label, engine) => {
+      const copy = (body: string) => `---\nname: label-bugs\ndescription: Label bugs\n---\n\n${body}`;
+      const searchEngine = engine();
+      const skills = new WorkspaceSkillsImpl({
+        source: createMockFilesystem({
+          'label-bugs/SKILL.md': copy('Direct copy.'),
+          'label-bugs/references/triage.md': 'Triage rules, direct.',
+          'skills/label-bugs/SKILL.md': copy('Nested copy.'),
+          'skills/label-bugs/references/triage.md': 'Triage rules, nested.',
+        }),
+        skills: ['label-bugs', 'skills'],
+        ...(searchEngine ? { searchEngine } : {}),
+      });
+
+      const hits = await skills.search('triage', { includeReferences: true });
+      expect(new Set(hits.map(r => `${r.skillPath}/${r.source}`))).toEqual(
+        new Set(['label-bugs/references/triage.md', 'skills/label-bugs/references/triage.md']),
+      );
+    });
+
+    it.each([
+      ['BM25', () => new SearchEngine({ bm25: {} })],
+      ['simple search', () => undefined],
+    ])('search() does not credit a losing external copy to the local winner (%s)', async (_label, engine) => {
+      const searchEngine = engine();
+      const skills = new WorkspaceSkillsImpl({
+        source: createMockFilesystem({
+          'skills/label-bugs/SKILL.md': '---\nname: label-bugs\ndescription: Label bugs\n---\n\nApply labels.',
+          'node_modules/@company/skills/label-bugs/SKILL.md':
+            '---\nname: label-bugs\ndescription: Vendored label skill\n---\n\nZebra label.',
+        }),
+        skills: ['skills', 'node_modules/@company/skills'],
+        ...(searchEngine ? { searchEngine } : {}),
+      });
+
+      expect((await skills.search('zebra')).filter(r => r.content.includes('Zebra'))).toEqual([]);
+      const [local] = await skills.search('apply labels');
+      expect(local?.skillPath).toBe('skills/label-bugs');
+    });
+
     it('should prefer local skills over external skills with same name', async () => {
       const externalSkillMd = `---
 name: test-skill
