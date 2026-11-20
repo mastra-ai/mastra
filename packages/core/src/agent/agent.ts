@@ -15375,8 +15375,11 @@ export class Agent<
             ...innerOptions,
             tracingOptions: resumeTracingOptions,
           } as DurableAgentResumeOptions<TOutput>),
-        stream: (innerMessages: MessageListInput, innerOptions?: DurableAgentStreamOptions<TOutput>) =>
-          this.#streamDurable(innerMessages, innerOptions),
+        // Legacy wrappers route continuations through their public stream() so subclass overrides still run.
+        stream: this.returnsDurableStreamResult
+          ? this.stream.bind(this)
+          : (innerMessages: MessageListInput, innerOptions?: DurableAgentStreamOptions<TOutput>) =>
+              this.#streamDurable(innerMessages, innerOptions),
       } as unknown as DurableAgent<any, any, TOutput>;
       return runResumeDurableStreamUntilIdle<TOutput>(
         resolvedOptionsAgent,
@@ -15966,7 +15969,8 @@ export class Agent<
   async recoverActiveRuns(
     options: DurableAgentRecoverActiveRunsOptions = {},
   ): Promise<DurableAgentRecoverActiveRunsResult> {
-    const executionEngine = await this.#initializeExecutionEngine();
+    // Resolve an existing engine synchronously so discovery starts before a concurrent shutdown can begin.
+    const executionEngine = this.#resolveExecutionEngine() ?? (await this.#initializeExecutionEngine());
     if (!executionEngine) return this.#requireDurableExecution('recoverActiveRuns');
     if (this.#mastra?.__shuttingDown) return { recovered: [], succeeded: 0, failed: 0 };
     const { runId, ...discoveryOptions } = options;
