@@ -4,19 +4,21 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import type { DatasetsFilters } from '@mastra/playground-ui/domains/datasets';
+import {
+  CreateDatasetDialog,
+  DatasetsList,
+  DatasetsListSkeleton,
+  getDatasetTagOptions,
+  NoDatasetsInfo,
+  DatasetsToolbar,
+} from '@mastra/playground-ui/domains/datasets';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useInfiniteDatasets, useExperiments } from '@mastra/react/hooks/datasets';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
-import { CreateDatasetDialog } from '@/domains/datasets/components/create-dataset-dialog';
-import type { DatasetsFilters } from '@/domains/datasets/components/datasets-filter-bar';
-import { DatasetsList } from '@/domains/datasets/components/datasets-list/datasets-list';
-import { DatasetsListSkeleton } from '@/domains/datasets/components/datasets-list/datasets-list-skeleton';
-import { getDatasetTagOptions } from '@/domains/datasets/components/datasets-list/helpers';
-import { NoDatasetsInfo } from '@/domains/datasets/components/datasets-list/no-datasets-info';
-import { DatasetsToolbar } from '@/domains/datasets/components/datasets-toolbar';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import {
   TARGET_ID_PARAM,
