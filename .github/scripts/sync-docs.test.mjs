@@ -267,6 +267,28 @@ describe('syncTarget', () => {
       /Invalid source commit sha/,
     );
   });
+
+  test('refuses a clone whose dest is reached through a committed symlink', async () => {
+    const root = makeRoot();
+    const outside = path.join(tmp, 'outside');
+    fs.mkdirSync(outside);
+    const bare = path.join(tmp, 'linked.git');
+    const work = path.join(tmp, 'linked-seed');
+    git(tmp, 'init', '--quiet', '--bare', '--initial-branch=main', bare);
+    git(tmp, 'init', '--quiet', '--initial-branch=main', work);
+    fs.symlinkSync(outside, path.join(work, 'src'));
+    git(work, 'add', '--all');
+    git(work, 'commit', '--quiet', '-m', 'seed');
+    git(work, 'push', '--quiet', bare, 'main');
+    const before = git(bare, 'rev-parse', 'main');
+
+    await assert.rejects(
+      syncTarget({ target: target(), remoteUrl: pathToFileURL(bare).href, sha: SHA, rootDir: root, log: quiet }),
+      /Refusing to sync through symlink/,
+    );
+    assert.deepEqual(fs.readdirSync(outside), []);
+    assert.equal(git(bare, 'rev-parse', 'main'), before);
+  });
 });
 
 describe('main', () => {
@@ -289,6 +311,25 @@ describe('main', () => {
     assert.equal(code, 0);
     assert.deepEqual(lines, ['site: added 4, updated 0, deleted 0']);
     assert.deepEqual(readTree(path.join(into, 'src/docs')), SOURCE_FILES);
+  });
+
+  test('--into refuses a dest reached through a symlink in the checkout', async () => {
+    const root = makeRoot();
+    const into = path.join(tmp, 'checkout');
+    const outside = path.join(tmp, 'outside');
+    fs.mkdirSync(into);
+    fs.mkdirSync(outside);
+    fs.symlinkSync(outside, path.join(into, 'src'));
+    await assert.rejects(
+      main({
+        argv: ['--target', 'site', '--into', into],
+        rootDir: root,
+        manifestPath: writeManifest(root, [target()]),
+        log: () => {},
+      }),
+      /Refusing to sync through symlink/,
+    );
+    assert.deepEqual(fs.readdirSync(outside), []);
   });
 
   test('--target all reports a failing target, still syncs the others, and uses the monorepo sha', async () => {
