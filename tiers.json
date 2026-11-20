@@ -34839,9 +34839,9 @@
     },
     "job:e2e/commonjs": {
       "tier": "in",
-      "since": "2026-11-01",
-      "last_failure": "2026-11-13",
-      "reason": "pr-job-fail",
+      "since": "2026-11-20",
+      "last_failure": "2026-11-20",
+      "reason": "versioning-fail",
       "pr_failures": {
         "131942713582": {
           "date": "2026-11-13",
@@ -34915,9 +34915,9 @@
     },
     "job:e2e/deployers": {
       "tier": "in",
-      "since": "2026-11-01",
-      "last_failure": "2026-11-13",
-      "reason": "pr-job-fail",
+      "since": "2026-11-20",
+      "last_failure": "2026-11-20",
+      "reason": "versioning-fail",
       "pr_failures": {
         "131942713716": {
           "date": "2026-11-13",
@@ -35211,8 +35211,8 @@
     },
     "job:e2e/monorepo": {
       "tier": "in",
-      "since": "2026-11-19",
-      "last_failure": "2026-11-19",
+      "since": "2026-11-20",
+      "last_failure": "2026-11-20",
       "reason": "versioning-fail",
       "pr_failures": {
         "131196720686": {
@@ -35395,8 +35395,8 @@
     },
     "job:e2e/no-bundling": {
       "tier": "in",
-      "since": "2026-11-18",
-      "last_failure": "2026-11-18",
+      "since": "2026-11-20",
+      "last_failure": "2026-11-20",
       "reason": "versioning-fail",
       "pr_failures": {
         "131942713367": {
@@ -35411,9 +35411,9 @@
     },
     "job:e2e/type-check": {
       "tier": "in",
-      "since": "2026-11-01",
-      "last_failure": "2026-11-13",
-      "reason": "pr-job-fail",
+      "since": "2026-11-20",
+      "last_failure": "2026-11-20",
+      "reason": "versioning-fail",
       "pr_failures": {
         "131942713577": {
           "date": "2026-11-13",
