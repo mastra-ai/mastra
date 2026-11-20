@@ -1,7 +1,7 @@
 import { mkdir } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { dirname, isAbsolute } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { canonicalDatabasePath } from '../database.ts';
+import { canonicalDatabasePath, hostedMode, databaseUrlForPath } from '../database.ts';
 
 export class WriterBusyError extends Error {
   readonly lockPath: string;
@@ -14,8 +14,18 @@ export class WriterBusyError extends Error {
 
 /** All privileged writers must hold this lock around reads and writes. */
 export async function acquireWriterLock(databaseUrl?: string) {
-  const databasePath = await canonicalDatabasePath(databaseUrl);
-  const lockPath = `${databasePath}.writer.sqlite`;
+  let databasePath: string;
+  let lockPath: string;
+  if (hostedMode()) {
+    const configured = process.env.SUPPORT_WRITER_LOCK_FILE;
+    if (!configured || !isAbsolute(configured))
+      throw new Error('Hosted mode requires an absolute SUPPORT_WRITER_LOCK_FILE on the shared POSIX volume');
+    lockPath = await canonicalDatabasePath(databaseUrlForPath(configured));
+    databasePath = databaseUrl ?? process.env.SUPPORT_DATABASE_URL ?? '';
+  } else {
+    databasePath = await canonicalDatabasePath(databaseUrl);
+    lockPath = `${databasePath}.writer.sqlite`;
+  }
   await mkdir(dirname(lockPath), { recursive: true, mode: 0o700 });
   // SQLite holds an OS lock on a stable sidecar, separate from the Knowledge store's transactions.
   // Closing the connection or exiting the process releases it. Leave the sidecar in place.

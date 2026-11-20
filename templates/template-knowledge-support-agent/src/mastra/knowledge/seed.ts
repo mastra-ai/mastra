@@ -1,7 +1,7 @@
 import { LibSQLStore } from '@mastra/libsql';
 import type { Knowledge, KnowledgeNote, KnowledgePage, KnowledgeStorage } from '@mastra/core/knowledge';
 import { policyReference } from '../../examples/support.ts';
-import { databaseUrlForPath } from '../database.ts';
+import { databaseUrlForPath, hostedMode, storageConfiguration } from '../database.ts';
 import { createKnowledge } from './index.ts';
 import { acquireWriterLock } from './writer-lock.ts';
 import {
@@ -212,7 +212,10 @@ export async function seedDataset(config: DatasetConfiguration, options: SeedOpt
   }
   const lock = await acquireWriterLock(options.databaseUrl);
   try {
-    const storage = new LibSQLStore({ id: 'knowledge-seed', url: databaseUrlForPath(lock.databasePath) });
+    const storage = new LibSQLStore({
+      id: 'knowledge-seed',
+      ...storageConfiguration(hostedMode() ? options.databaseUrl : databaseUrlForPath(lock.databasePath)),
+    });
     try {
       await writeDataset(createKnowledge(storage), dataset, report);
       return report;

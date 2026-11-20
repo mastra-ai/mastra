@@ -79,7 +79,7 @@ export function createReviewWorkflow(service: ReviewService) {
       const { approval } = publicationRetryInputSchema.parse({ approval: inputData, retryDecision: resumeData });
       try {
         const started = performance.now();
-        const result = await service.publish(approval);
+        const result = await service.publish(approval, reviewer);
         recordOperation('review-publication', result.status, started);
         return result;
       } catch (error) {

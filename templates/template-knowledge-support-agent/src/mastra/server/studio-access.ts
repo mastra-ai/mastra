@@ -27,6 +27,8 @@ import {
 import { GET_SYSTEM_PACKAGES_ROUTE } from '@mastra/server/handlers/system';
 import { LIST_TOOLS_ROUTE } from '@mastra/server/handlers/tools';
 import type { Memory } from '@mastra/memory';
+import { hostedMode } from '../database.ts';
+import { acquireWriterLock, WriterBusyError } from '../knowledge/writer-lock.ts';
 
 type RoutePolicy = (input: {
   request: Request;
@@ -92,10 +94,24 @@ export function createStudioAccess(memory: Memory) {
 
   function bindThread(threadId: string, owner: string): Promise<boolean> {
     const operation = pending.then(async () => {
-      const thread = await memory.getThreadById({ threadId });
-      if (thread) return thread.resourceId === owner;
-      await memory.createThread({ threadId, resourceId: owner });
-      return true;
+      // First ownership must be serialized across workers, before agent execution writes Memory.
+      let lock;
+      try {
+        const existing = await memory.getThreadById({ threadId });
+        if (existing) return existing.resourceId === owner;
+        if (hostedMode()) {
+          lock = await acquireWriterLock();
+          const claimed = await memory.getThreadById({ threadId });
+          if (claimed) return claimed.resourceId === owner;
+        }
+        await memory.createThread({ threadId, resourceId: owner });
+        return true;
+      } catch (error) {
+        if (error instanceof WriterBusyError) return false;
+        throw error;
+      } finally {
+        lock?.release();
+      }
     });
     pending = operation.catch(() => undefined);
     return operation;

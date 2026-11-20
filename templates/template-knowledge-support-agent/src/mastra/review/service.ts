@@ -150,7 +150,12 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
     );
   }
 
-  async function validate(proposal: Proposal, checkTarget = true, reconciledUpdate?: KnowledgePage) {
+  async function validate(
+    proposal: Proposal,
+    checkTarget = true,
+    reconciledUpdate?: KnowledgePage,
+    authenticated?: Profile,
+  ) {
     const identity = (kind: Proposal['bindings'][number]['kind'], ref: string, current: KnowledgePage) => {
       const binding = proposal.bindings.find(item => item.kind === kind && item.ref === ref);
       requireReview(
@@ -161,7 +166,7 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
         'Bound evidence or target changed',
       );
     };
-    reviewer(proposal.reviewer);
+    reviewer(authenticated ?? proposal.reviewer);
     requireReview(resourceId(proposal.reviewer) === proposal.owner, 'Proposal ownership mismatch');
     const selected = await confirmation(proposal.reviewer, proposal.source);
     requireReview(
@@ -304,7 +309,7 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
       await bind('target', `${proposal.destination.scope}#${proposal.destination.path}`, [proposal.destination.scope]);
     proposal.revision = digest({ ...proposal, revision: undefined });
     proposalSchema.parse(proposal);
-    await validate(proposal);
+    await validate(proposal, true, undefined, current);
     if (['page', 'note', 'update'].includes(candidate.action) && (await duplicate(proposal))) {
       proposal.candidate = { ...candidate, action: 'duplicate', target: null };
       proposal.revision = digest({ ...proposal, revision: undefined });
@@ -312,7 +317,7 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
     return proposal;
   }
 
-  async function publish(approval: Approval) {
+  async function publish(approval: Approval, authenticated?: Profile) {
     const { proposal, decision, reviewerId } = approval;
     requireReview(digest({ ...proposal, revision: undefined }) === proposal.revision, 'Approved revision mismatch');
     requireReview(reviewerId === proposal.reviewer.actorId, 'Decision reviewer mismatch');
@@ -320,7 +325,13 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
       status: 'published' | 'rejected' | 'duplicate' | 'contradiction' | 'insufficient-evidence',
       reference: string | null = null,
     ) => ({ proposalId: proposal.id, status, revision: proposal.revision, reference, decision, reviewerId });
-    reviewer(proposal.reviewer);
+    const currentReviewer = reviewer(authenticated ?? proposal.reviewer);
+    requireReview(
+      currentReviewer.id === proposal.reviewer.id &&
+        currentReviewer.actorId === proposal.reviewer.actorId &&
+        resourceId(currentReviewer) === proposal.owner,
+      'Reviewer does not own this approval',
+    );
     if (decision.decision === 'reject') return result('rejected');
     if (['duplicate', 'contradiction', 'insufficient-evidence'].includes(proposal.candidate.action))
       return result(proposal.candidate.action as 'duplicate' | 'contradiction' | 'insufficient-evidence');
@@ -349,7 +360,7 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
           cursor = batch.nextCursor;
           requireReview(!cursor || notes.length <= noteLimit, 'Note reconciliation exceeds its bound');
         } while (cursor);
-        await validate(proposal);
+        await validate(proposal, true, undefined, authenticated);
         const owned = notes.filter(note => note.text.startsWith(marker));
         if (owned.length) {
           const mentions = [
@@ -369,7 +380,7 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
               owned[0]!.stampScopeIds[0] === current.scopeId,
             'Conflicting prior note effect',
           );
-          reviewer(proposal.reviewer);
+          reviewer(authenticated ?? proposal.reviewer);
           return result('published', `${reference}?note=${owned[0]!.id}`);
         }
         requireReview(notes.length <= noteLimit, 'Note reconciliation exceeds its bound');
@@ -377,7 +388,7 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
           !notes.some(note => note.text.includes(proposal.candidate.content)),
           'A duplicate note now exists; reevaluate',
         );
-        reviewer(proposal.reviewer);
+        reviewer(authenticated ?? proposal.reviewer);
         const note = await knowledge.addNote({
           ...proposal.destination,
           text: body,
@@ -409,14 +420,14 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
             'Conflicting prior page creation',
           );
         }
-        await validate(proposal, false, proposal.candidate.action === 'update' ? current : undefined);
-        reviewer(proposal.reviewer);
+        await validate(proposal, false, proposal.candidate.action === 'update' ? current : undefined, authenticated);
+        reviewer(authenticated ?? proposal.reviewer);
         return result('published', reference);
       }
       if (proposal.candidate.action === 'page') requireReview(!current, 'Page destination already exists');
-      await validate(proposal);
+      await validate(proposal, true, undefined, authenticated);
       requireReview(!(await duplicate(proposal)), 'A duplicate finding now exists; reevaluate');
-      reviewer(proposal.reviewer);
+      reviewer(authenticated ?? proposal.reviewer);
       await knowledge.upsertPage({
         ...proposal.destination,
         name: proposal.candidate.title,

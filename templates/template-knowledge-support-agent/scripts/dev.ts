@@ -5,7 +5,9 @@ import { resolve, dirname, delimiter } from 'node:path';
 import { runtimeExample } from '../src/examples/runtime.ts';
 
 const { profiles: exampleProfiles, reviewers: exampleReviewers, role: exampleStudioRole } = runtimeExample;
-import { localDatabaseUrl } from '../src/mastra/database.ts';
+import { hostedMode, localDatabaseUrl } from '../src/mastra/database.ts';
+
+if (hostedMode()) throw new Error('Use the built bundle for hosted mode; npm run dev is the local Studio launcher');
 
 const studioRole = process.env.SUPPORT_STUDIO_ROLE ?? exampleStudioRole;
 const databaseUrl = localDatabaseUrl();

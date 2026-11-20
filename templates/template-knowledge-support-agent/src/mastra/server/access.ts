@@ -11,6 +11,7 @@ import { authorizeConfirmation } from './confirmations.ts';
 import { createStudioAccess } from './studio-access.ts';
 import { createReviewAccess } from './review-access.ts';
 import type { ReviewWorkflow } from '../workflows/review-workflow.ts';
+import type { ReviewerAuthority } from '../review/service.ts';
 
 export type LocalProfile = Profile & { role: string; review?: boolean };
 export type CredentialSource = Credential[] | (() => Credential[]);
@@ -49,13 +50,24 @@ export function loadCredentials(file: string, studioRole: string | undefined): C
   });
 }
 
-export function createAuth(credentials: CredentialSource, memory: Memory, reviewWorkflow?: ReviewWorkflow) {
-  const authenticateToken = async (token: string) =>
-    currentCredentials(credentials).find(entry => entry.token === token && entry.expiresAt > Date.now())?.profile ??
-    null;
+export function createAuth(
+  credentials: CredentialSource,
+  memory: Memory,
+  reviewWorkflow?: ReviewWorkflow,
+  identity?: {
+    authenticateToken: (token: string) => Promise<LocalProfile | null>;
+    reviewerAuthority: ReviewerAuthority;
+  },
+) {
+  const authenticateToken =
+    identity?.authenticateToken ??
+    (async (token: string) =>
+      currentCredentials(credentials).find(entry => entry.token === token && entry.expiresAt > Date.now())?.profile ??
+      null);
   const authorizeStudioRoute = createStudioAccess(memory);
   const authorizeReviewRoute =
-    reviewWorkflow && createReviewAccess(reviewWorkflow, createReviewerAuthority(credentials));
+    reviewWorkflow &&
+    createReviewAccess(reviewWorkflow, identity?.reviewerAuthority ?? createReviewerAuthority(credentials));
   const authorize: NonNullable<MastraAuthConfig<LocalProfile | null>['authorize']> = async (
     path,
     method,
