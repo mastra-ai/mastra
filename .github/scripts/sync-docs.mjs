@@ -1,0 +1,282 @@
+#!/usr/bin/env node
+
+// Mirrors docs directories of this monorepo into external docs repos, as listed
+// in .github/docs-sync.json. Each target's `dest` directory is fully owned by
+// the sync: files missing from `source` are deleted there.
+//
+// Usage:
+//   node sync-docs.mjs --target <name|all> --into <dir>   mirror into a local checkout, no git
+//   node sync-docs.mjs --target <name|all> --push         clone the target repo, commit, push
+//
+// --push relies on ambient git credentials (in CI: ./.github/actions/app-auth,
+// which writes the app token to ~/.netrc). Remote URLs never contain a token.
+
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { parseArgs } from 'node:util';
+
+export const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+export const MANIFEST_PATH = path.join(ROOT_DIR, '.github', 'docs-sync.json');
+const MAX_PUSH_ATTEMPTS = 3;
+
+const NAME_RE = /^[a-z0-9-]+$/;
+const REPO_RE = /^mastra-ai\/[\w.-]+$/;
+const BRANCH_RE = /^[\w./-]+$/;
+const SHA_RE = /^[0-9a-f]{40}$/;
+
+function isSafeRelativePath(value) {
+  if (typeof value !== 'string' || value === '' || value.includes('\\') || path.posix.isAbsolute(value)) return false;
+  const segments = value.split('/');
+  return segments.every(segment => segment !== '' && segment !== '.' && segment !== '..');
+}
+
+function containsMdx(dir) {
+  return fs.readdirSync(dir, { withFileTypes: true }).some(entry => {
+    if (entry.isDirectory()) return containsMdx(path.join(dir, entry.name));
+    return entry.isFile() && entry.name.endsWith('.mdx');
+  });
+}
+
+/**
+ * Validates the manifest and returns its targets. Throws one error listing every problem.
+ */
+export function validateManifest(manifest, { rootDir = ROOT_DIR } = {}) {
+  const errors = [];
+  const targets = manifest?.targets;
+  if (!Array.isArray(targets) || targets.length === 0) {
+    throw new Error('Invalid docs sync manifest: "targets" must be a non-empty array');
+  }
+
+  const names = new Set();
+  targets.forEach((target, index) => {
+    const label = `targets[${index}]${typeof target?.name === 'string' ? ` (${target.name})` : ''}`;
+    if (!target || typeof target !== 'object') {
+      errors.push(`${label}: must be an object`);
+      return;
+    }
+    const { name, source, repo, branch, dest } = target;
+
+    if (typeof name !== 'string' || !NAME_RE.test(name)) errors.push(`${label}: "name" must match ${NAME_RE}`);
+    else if (names.has(name)) errors.push(`${label}: duplicate name "${name}"`);
+    else names.add(name);
+
+    if (typeof repo !== 'string' || !REPO_RE.test(repo) || /\/\.\.?$/.test(repo)) {
+      errors.push(`${label}: "repo" must match ${REPO_RE}`);
+    }
+
+    if (
+      typeof branch !== 'string' ||
+      !BRANCH_RE.test(branch) ||
+      branch.startsWith('-') ||
+      branch.includes('..') ||
+      branch.endsWith('/')
+    ) {
+      errors.push(`${label}: "branch" must be a plain branch name`);
+    }
+
+    if (!isSafeRelativePath(dest) || dest.split('/')[0] === '.git') {
+      errors.push(`${label}: "dest" must be a non-empty relative path without "." or ".." segments, outside .git`);
+    }
+
+    if (!isSafeRelativePath(source) || !source.startsWith('docs/')) {
+      errors.push(`${label}: "source" must be a relative path under docs/ without "." or ".." segments`);
+    } else {
+      const sourceDir = path.join(rootDir, source);
+      if (!fs.existsSync(sourceDir) || !fs.statSync(sourceDir).isDirectory()) {
+        errors.push(`${label}: "source" directory ${source} does not exist`);
+      } else if (!containsMdx(sourceDir)) {
+        errors.push(`${label}: "source" directory ${source} contains no .mdx files`);
+      }
+    }
+  });
+
+  // Two targets writing overlapping dirs in one repo would delete each other's files.
+  for (let i = 0; i < targets.length; i++) {
+    for (let j = i + 1; j < targets.length; j++) {
+      const a = targets[i];
+      const b = targets[j];
+      if (a?.repo !== b?.repo || typeof a?.dest !== 'string' || typeof b?.dest !== 'string') continue;
+      if (a.dest === b.dest || a.dest.startsWith(`${b.dest}/`) || b.dest.startsWith(`${a.dest}/`)) {
+        errors.push(`targets[${i}] and targets[${j}]: overlapping "dest" in ${a.repo}`);
+      }
+    }
+  }
+
+  if (errors.length > 0) throw new Error(`Invalid docs sync manifest:\n  ${errors.join('\n  ')}`);
+  return targets;
+}
+
+function listFiles(dir, base = dir) {
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) return listFiles(full, base);
+    return entry.isFile() ? [path.relative(base, full)] : [];
+  });
+}
+
+function removeEmptyDirs(dir, keepRoot = true) {
+  if (!fs.existsSync(dir)) return;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) removeEmptyDirs(path.join(dir, entry.name), false);
+  }
+  if (!keepRoot && fs.readdirSync(dir).length === 0) fs.rmdirSync(dir);
+}
+
+/**
+ * Makes `destDir` an exact copy of the files in `sourceDir`.
+ */
+export function mirror(sourceDir, destDir) {
+  const sourceFiles = new Set(listFiles(sourceDir));
+  const result = { added: 0, updated: 0, deleted: 0 };
+
+  for (const file of listFiles(destDir)) {
+    if (!sourceFiles.has(file)) {
+      fs.rmSync(path.join(destDir, file));
+      result.deleted++;
+    }
+  }
+  removeEmptyDirs(destDir);
+
+  for (const file of sourceFiles) {
+    const from = path.join(sourceDir, file);
+    const to = path.join(destDir, file);
+    const content = fs.readFileSync(from);
+    if (!fs.existsSync(to)) {
+      result.added++;
+    } else if (fs.readFileSync(to).equals(content)) {
+      continue;
+    } else {
+      result.updated++;
+    }
+    fs.mkdirSync(path.dirname(to), { recursive: true });
+    fs.writeFileSync(to, content);
+  }
+  return result;
+}
+
+function git(cwd, ...args) {
+  return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+}
+
+function formatResult(name, { added, updated, deleted }) {
+  return `${name}: added ${added}, updated ${updated}, deleted ${deleted}`;
+}
+
+/**
+ * Clones the target repo, mirrors `source` into `dest`, and pushes one commit if anything changed.
+ * On a rejected push, resets to the remote branch and mirrors again (up to MAX_PUSH_ATTEMPTS).
+ */
+export async function syncTarget({ target, remoteUrl, sha, beforePush, rootDir = ROOT_DIR, log = console.log }) {
+  if (!SHA_RE.test(sha)) throw new Error(`Invalid source commit sha: ${sha}`);
+  const sourceDir = path.join(rootDir, target.source);
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), `docs-sync-${target.name}-`));
+
+  try {
+    git(workDir, 'clone', '--quiet', '--depth', '1', '--branch', target.branch, '--', remoteUrl, 'repo');
+    const repoDir = path.join(workDir, 'repo');
+    const destDir = path.join(repoDir, target.dest);
+
+    for (let attempt = 1; attempt <= MAX_PUSH_ATTEMPTS; attempt++) {
+      const result = mirror(sourceDir, destDir);
+      if (git(repoDir, 'status', '--porcelain', '--', target.dest) === '') {
+        log(`${target.name}: no changes`);
+        return { status: 'unchanged' };
+      }
+      log(formatResult(target.name, result));
+
+      git(repoDir, 'add', '--all', '--', target.dest);
+      git(
+        repoDir,
+        'commit',
+        '--quiet',
+        '-m',
+        `docs: sync from mastra-ai/mastra@${sha.slice(0, 7)}`,
+        '-m',
+        `Source: https://github.com/mastra-ai/mastra/commit/${sha}`,
+      );
+
+      if (attempt === 1 && beforePush) await beforePush();
+      try {
+        git(repoDir, 'push', '--quiet', 'origin', `HEAD:refs/heads/${target.branch}`);
+        log(`${target.name}: pushed to ${target.repo}@${target.branch}`);
+        return { status: 'pushed', attempts: attempt };
+      } catch (error) {
+        if (attempt === MAX_PUSH_ATTEMPTS) throw error;
+        log(`${target.name}: push rejected (attempt ${attempt}), resetting to the remote branch and retrying`);
+        git(repoDir, 'fetch', '--quiet', '--depth', '1', 'origin', target.branch);
+        git(repoDir, 'reset', '--quiet', '--hard', 'FETCH_HEAD');
+      }
+    }
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+}
+
+function sourceSha(rootDir, env) {
+  return env.GITHUB_SHA || git(rootDir, 'rev-parse', 'HEAD');
+}
+
+/**
+ * CLI entry point. Returns the process exit code.
+ */
+export async function main({
+  argv = process.argv.slice(2),
+  rootDir = ROOT_DIR,
+  manifestPath = MANIFEST_PATH,
+  remoteUrl = repo => `https://github.com/${repo}.git`,
+  env = process.env,
+  log = console.log,
+  logError = console.error,
+} = {}) {
+  const { values } = parseArgs({
+    args: argv,
+    options: { target: { type: 'string' }, into: { type: 'string' }, push: { type: 'boolean' } },
+  });
+  if (!values.target || Boolean(values.into) === Boolean(values.push)) {
+    logError('Usage: sync-docs.mjs --target <name|all> (--into <dir> | --push)');
+    return 2;
+  }
+
+  const targets = validateManifest(JSON.parse(fs.readFileSync(manifestPath, 'utf8')), { rootDir });
+  const selected = values.target === 'all' ? targets : targets.filter(target => target.name === values.target);
+  if (selected.length === 0) {
+    logError(`Unknown target "${values.target}". Known: ${targets.map(target => target.name).join(', ')}`);
+    return 2;
+  }
+
+  if (values.into) {
+    for (const target of selected) {
+      log(formatResult(target.name, mirror(path.join(rootDir, target.source), path.resolve(values.into, target.dest))));
+    }
+    return 0;
+  }
+
+  const sha = sourceSha(rootDir, env);
+  const failed = [];
+  for (const target of selected) {
+    try {
+      await syncTarget({ target, remoteUrl: remoteUrl(target.repo), sha, rootDir, log });
+    } catch (error) {
+      failed.push(target.name);
+      logError(`${target.name}: sync failed: ${error.stderr?.toString().trim() || error.message}`);
+    }
+  }
+  if (failed.length > 0) {
+    logError(`Failed targets: ${failed.join(', ')}`);
+    return 1;
+  }
+  return 0;
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  try {
+    process.exitCode = await main();
+  } catch (error) {
+    console.error(error.message);
+    process.exitCode = 1;
+  }
+}
