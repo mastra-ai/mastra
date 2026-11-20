@@ -51,6 +51,8 @@ export interface LocalKnowledgeImporterHostOptions {
 
 const DEFAULT_FLUSH_BUDGET_MS = 45_000;
 const DEFAULT_STALE_RUN_AFTER_MS = 5 * 60_000;
+/** Re-index rounds after a page changed under its embed; a page rewritten faster than this is left to its own writes' jobs. */
+const MAX_REINDEX_ROUNDS = 3;
 
 const conflict = (code: KnowledgeImporterHostConflictError['code'], message: string) =>
   new KnowledgeImporterHostConflictError(code, message);
@@ -147,8 +149,15 @@ export function createLocalKnowledgeImporterHost(
           await semantic.removePage(job.pageId);
           continue;
         }
-        const page = await storage.getPage({ id: job.pageId, read: 'all' });
-        if (page && !page.deletedAt) await semantic.indexPage(page);
+        // Vector stores have no compare-and-set, so an embed of an older version can publish after a
+        // newer write's. Re-read after publishing and index again while the page moved on (O3 §E″).
+        let indexed = 0;
+        for (let round = 0; round < MAX_REINDEX_ROUNDS; round++) {
+          const page = await storage.getPage({ id: job.pageId, read: 'all' });
+          if (!page || page.deletedAt || page.version <= indexed) break;
+          await semantic.indexPage(page);
+          indexed = page.version;
+        }
       } catch (error) {
         writer.warn(`Knowledge importer: indexing page ${job.pageId} failed after commit: ${String(error)}`);
       }
