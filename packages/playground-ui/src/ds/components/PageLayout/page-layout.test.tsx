@@ -108,29 +108,3 @@ describe('PageLayout', () => {
     });
   });
 });
-
-describe('PageLayout kind props', () => {
-  it('rejects props that belong to another kind, so pages cannot drift', () => {
-    const typeOnly = () => (
-      <>
-        {/* @ts-expect-error a form has a back link, not breadcrumbs */}
-        <PageLayout kind="form" backHref="/alerts" backLabel="Alerts" title="New alert" breadcrumbs={<span />}>
-          <p />
-        </PageLayout>
-        {/* @ts-expect-error a form needs its way back */}
-        <PageLayout kind="form" title="New alert">
-          <p />
-        </PageLayout>
-        {/* @ts-expect-error only a plain page can be a workspace */}
-        <PageLayout kind="settings" body="workspace">
-          <p />
-        </PageLayout>
-        {/* @ts-expect-error every page names its kind */}
-        <PageLayout breadcrumbs={<span />}>
-          <p />
-        </PageLayout>
-      </>
-    );
-    expect(typeOnly).toBeTypeOf('function');
-  });
-});

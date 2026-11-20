@@ -3,4 +3,3 @@ export { EXPERIMENT_STATUS_OPTIONS, getExperimentDatasetOptions } from './compon
 export { NoExperimentsInfo } from './components/no-experiments-info';
 export { ExperimentsToolbar, type ExperimentsToolbarProps } from './components/experiments-toolbar';
 export { ExperimentsComparison } from './components/comparison/experiments-comparison';
-export { ScoreDelta } from './components/comparison/score-delta';
