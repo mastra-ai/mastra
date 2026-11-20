@@ -502,12 +502,14 @@ try {
     }
 
     try {
-      let floorCoreRoot = floorCoreRoots.get(corePackVersion);
+      // The fallback version depends on the declared range, so cache per version and range.
+      const floorCoreKey = `${corePackVersion}\0${packageInfo.coreRange}`;
+      let floorCoreRoot = floorCoreRoots.get(floorCoreKey);
 
       if (!floorCoreRoot) {
         const versionTempDir = mkdtempSync(join(tempRoot, `core-${corePackVersion.replace(/[^0-9A-Za-z.-]/g, '-')}-`));
         floorCoreRoot = extractCorePackage(corePackVersion, packageInfo.coreRange, versionTempDir);
-        floorCoreRoots.set(corePackVersion, floorCoreRoot);
+        floorCoreRoots.set(floorCoreKey, floorCoreRoot);
       }
 
       if (checkPackage(packageInfo, floorCoreRoot, tempRoot) !== 0) {
