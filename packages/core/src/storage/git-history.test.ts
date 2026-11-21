@@ -521,4 +521,104 @@ describe('FilesystemVersionedHelpers - Git integration', () => {
 
     expect(db.listDomainFiles('agents')).toHaveLength(0);
   });
+
+  it('a restored deleted agent keeps its restore commit in the version history (shared file)', async () => {
+    // https://github.com/mastra-ai/mastra/issues/30421 — when a shared file is
+    // deleted, the per-entity dedupe baseline must be reset, otherwise the
+    // restore commit looks unchanged and never appears in the version history.
+    writeAndCommit(storageDir, 'agents.json', { 'agent-1': { name: 'Agent v1' } }, 'Add agent-1');
+    writeAndCommit(storageDir, 'agents.json', { 'agent-1': { name: 'Agent v2' } }, 'Update agent-1');
+
+    // Removing the only tracked file also removes the now-empty .mastra-storage
+    // directory (git does not track empty directories), so recreate it to restore.
+    git(repoDir, ['rm', join('.mastra-storage', 'agents.json')]);
+    git(repoDir, ['commit', '-m', 'Delete agents.json']);
+    mkdirSync(storageDir, { recursive: true });
+
+    // Byte-identical to the "Update agent-1" commit.
+    writeAndCommit(storageDir, 'agents.json', { 'agent-1': { name: 'Agent v2' } }, 'Restore agents.json');
+
+    const helpers = createHelpers();
+    const result = await helpers.listVersions(versionInput('agent-1'), 'agentId');
+
+    // 3 git commits + 1 hydrated (current disk) = 4
+    expect(result.total).toBe(4);
+    const versions = result.versions;
+    expect(versions[0]!.versionNumber).toBe(4); // hydrated
+    expect(versions[1]!.changeMessage).toBe('Restore agents.json');
+    expect(versions[2]!.changeMessage).toBe('Update agent-1');
+    expect(versions[3]!.changeMessage).toBe('Add agent-1');
+  });
+
+  it('an agent removed from the shared file and restored keeps its restore commit', async () => {
+    // Same bug as above, but the file survives while the entity is dropped from it.
+    writeAndCommit(
+      storageDir,
+      'agents.json',
+      { 'agent-1': { name: 'Agent v1' }, 'agent-2': { name: 'Other' } },
+      'Add both agents',
+    );
+    writeAndCommit(
+      storageDir,
+      'agents.json',
+      { 'agent-1': { name: 'Agent v2' }, 'agent-2': { name: 'Other' } },
+      'Update agent-1',
+    );
+    writeAndCommit(storageDir, 'agents.json', { 'agent-2': { name: 'Other' } }, 'Remove agent-1');
+    writeAndCommit(
+      storageDir,
+      'agents.json',
+      { 'agent-1': { name: 'Agent v2' }, 'agent-2': { name: 'Other' } },
+      'Restore agent-1',
+    );
+
+    const helpers = createHelpers();
+    const result = await helpers.listVersions(versionInput('agent-1'), 'agentId');
+
+    // 3 git commits + 1 hydrated (current disk) = 4
+    expect(result.total).toBe(4);
+    expect(result.versions[1]!.changeMessage).toBe('Restore agent-1');
+  });
+
+  it('a restored per-entity agent file keeps its restore commit in the version history (code mode)', async () => {
+    // Control for the already-correct per-entity path, which resets its own
+    // dedupe baseline when the file is absent from a commit.
+    mkdirSync(join(storageDir, 'agents'), { recursive: true });
+    writeAndCommit(storageDir, 'agents.json', {}, 'Seed shared file');
+    writeAndCommit(storageDir, 'agents/agent-1.json', { name: 'Agent v1', instructions: 'Be helpful' }, 'Add agent-1');
+    writeAndCommit(
+      storageDir,
+      'agents/agent-1.json',
+      { name: 'Agent v2', instructions: 'Be very helpful' },
+      'Update agent-1',
+    );
+    git(repoDir, ['rm', join('.mastra-storage', 'agents', 'agent-1.json')]);
+    git(repoDir, ['commit', '-m', 'Delete agent-1']);
+    mkdirSync(join(storageDir, 'agents'), { recursive: true });
+
+    // Byte-identical to the "Update agent-1" commit.
+    writeAndCommit(
+      storageDir,
+      'agents/agent-1.json',
+      { name: 'Agent v2', instructions: 'Be very helpful' },
+      'Restore agent-1',
+    );
+
+    const db = new FilesystemDB(storageDir);
+    const helpers = new FilesystemVersionedHelpers<StorageAgentType, AgentVersion>({
+      db,
+      entitiesFile: 'agents.json',
+      parentIdField: 'agentId',
+      name: 'TestAgents',
+      versionMetadataFields: ['id', 'agentId', 'versionNumber', 'changedFields', 'changeMessage', 'createdAt'],
+      perEntityFilesDir: 'agents',
+      shouldPersistToPerEntityFile: () => true,
+    });
+
+    const result = await helpers.listVersions(versionInput('agent-1'), 'agentId');
+
+    // 3 git commits + 1 hydrated (current disk) = 4
+    expect(result.total).toBe(4);
+    expect(result.versions[1]!.changeMessage).toBe('Restore agent-1');
+  });
 });
