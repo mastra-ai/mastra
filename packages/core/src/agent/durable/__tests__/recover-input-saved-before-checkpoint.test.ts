@@ -286,6 +286,9 @@ describe('start row whose write commits and then rejects (#30791)', () => {
         expect(rejected).toBe(true);
         expect(String(errors[0])).toContain('write acknowledgement lost');
         expect(saves).not.toHaveBeenCalled();
+        expect(
+          await workflows.getWorkflowRunById({ runId: 'r-ambiguous', workflowName: DurableStepIds.AGENTIC_LOOP }),
+        ).toBeNull();
         expect((await agent.listActiveRuns()).runs).toEqual([]);
         await mastra.recoverAllDurableAgents();
         await new Promise(resolve => setTimeout(resolve, 100));
