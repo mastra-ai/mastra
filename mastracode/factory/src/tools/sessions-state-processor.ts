@@ -312,6 +312,11 @@ export class FactorySessionsStateProcessor implements Processor<'factory-session
       }
     }
     if (state.more > 0) lines.push(`+${state.more} more`);
+    if (state.sideSessions.length > 0) {
+      lines.push(
+        "A side session's report is its own account and can be wrong. Before you repeat a specific claim from it (files or tests changed, pushes, CI, review findings) or act on it (approve, request changes, merge), check that claim against the pull request or branch yourself. If you pass a report on before checking it, say that you have not checked it.",
+      );
+    }
     lines.push(
       'Message any of these sessions with factory_signal_session; read full reports with notification_inbox; list side sessions with factory_list_side_sessions; on a turn a person started, mute one with factory_unsubscribe_session.',
     );
