@@ -903,6 +903,23 @@ export function createDurableToolCallStep() {
       // tool call; that process's list then lacks the assistant message (#30123). Called
       // before recording suspension or approval metadata, the only writes that need it.
       let recoveryAttempted = false;
+      // Recovery could not read storage: the saved copy is unknown, so annotate no copy.
+      let skipToolMetadata = false;
+      // Like flushMessagesBeforeSuspension: a storage failure must not stop the suspension, a fence error must.
+      const readForRecovery = async <T>(read: () => Promise<T>): Promise<{ value: T } | undefined> => {
+        try {
+          return { value: await read() };
+        } catch (error) {
+          if (isExecutionFenceError(error)) throw error;
+          skipToolMetadata = true;
+          logger?.warn?.('Failed to read the tool call message before durable tool suspension', {
+            runId,
+            toolCallId,
+            error,
+          });
+          return undefined;
+        }
+      };
       const recoverInvocation = async () => {
         if (recoveryAttempted) return;
         recoveryAttempted = true;
@@ -918,7 +935,11 @@ export function createDurableToolCallStep() {
           return;
         }
         // The LLM step's transcript identifies this turn's message; a tool call id alone may recur in older turns.
-        transcript ??= await readTranscript();
+        if (!transcript) {
+          const read = await readForRecovery(readTranscript);
+          if (!read) return;
+          transcript = read.value;
+        }
         const current = [...(transcript?.get.all.db() ?? [])].reverse().find(hasInvocation);
         if (!current) return;
         // Recovery exists only to write, so check that first; the read check gates the recall.
@@ -926,12 +947,12 @@ export function createDurableToolCallStep() {
         await authorizeMemory(MastraFGAPermissions.MEMORY_READ);
         // The saved copy of this message wins: a sibling's resume in another process may have
         // resolved its tool parts and cleared their metadata since this list last saw it.
-        const { messages } = await memory.recall({
-          threadId: state.threadId,
-          resourceId: state.resourceId,
-          perPage: false,
-        });
-        const saved = messages.find((message: MastraDBMessage) => message.id === current.id);
+        const { threadId, resourceId } = state;
+        const recalled = await readForRecovery<{ messages: MastraDBMessage[] }>(() =>
+          memory.recall({ threadId, resourceId, perPage: false }),
+        );
+        if (!recalled) return;
+        const saved = recalled.value.messages.find((message: MastraDBMessage) => message.id === current.id);
         const retained = persistMessageList?.get.all.db().find(message => message.id === current.id);
         if (retained) {
           // Not an unsaved response (checked above), so this copy holds no local writes and
@@ -1071,7 +1092,7 @@ export function createDurableToolCallStep() {
         approvalArgs?: unknown;
       }) => {
         const metadataMessageList = persistMessageList;
-        if (!metadataMessageList) return;
+        if (!metadataMessageList || skipToolMetadata) return;
         const metadataKey = opts.type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
         const entry = {
           toolCallId,

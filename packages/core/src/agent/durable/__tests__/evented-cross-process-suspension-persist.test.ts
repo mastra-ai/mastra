@@ -34,7 +34,7 @@ import { clearResumeInFlight, globalRunRegistry } from '../run-registry';
 type Boundary = 'same-process' | 'fresh-worker' | 'stale-message-list' | 'starting-process-tools';
 
 class CrossProcessToolStepPubSub extends EventEmitterPubSub {
-  private toolSteps = 0;
+  toolSteps = 0;
   private startingList: MessageList | undefined;
 
   constructor(private readonly boundary: Boundary) {
@@ -192,6 +192,67 @@ describe('evented agent cross-process tool suspension persistence (#30123)', () 
           suspendPayload: { question: 'Favourite colour?' },
         });
       }
+    },
+    15_000,
+  );
+
+  it.each(
+    (['fresh-worker', 'stale-message-list'] as const).flatMap(boundary =>
+      (['suspension', 'approval'] as const).map(kind => ({ boundary, kind })),
+    ),
+  )(
+    'still parks on the $kind when memory cannot be read in the tool step ($boundary)',
+    async ({ boundary, kind }) => {
+      const crossProcess = new CrossProcessToolStepPubSub(boundary);
+      pubsub = crossProcess;
+      const storage = new InMemoryStore();
+      const memory = new MockMemory({ storage });
+      const recall = memory.recall.bind(memory);
+      // Storage goes down once the tool step starts; the LLM step's reads have already happened.
+      vi.spyOn(memory, 'recall').mockImplementation(async args => {
+        if (crossProcess.toolSteps > 0) throw new Error('storage unavailable');
+        return recall(args);
+      });
+      const askColour = createTool({
+        id: 'askColour',
+        description: 'Asks the user for a colour',
+        inputSchema: z.object({ question: z.string() }),
+        suspendSchema: z.object({ question: z.string() }),
+        resumeSchema: z.object({ colour: z.string() }),
+        requireApproval: kind === 'approval',
+        execute: async (input, context: any) => {
+          if (!context?.agent?.resumeData) return await context.agent.suspend({ question: input.question });
+          return { colour: context.agent.resumeData.colour };
+        },
+      });
+      const agent = new Agent({
+        id: 'colour-agent',
+        name: 'colour-agent',
+        instructions: 'Ask for a colour.',
+        model: makeModel() as any,
+        tools: { askColour },
+        memory,
+      });
+      const evented = createEventedAgent({ agent });
+      mastra = new Mastra({ logger: false, storage, pubsub, agents: { [evented.id]: evented } });
+      await mastra.startWorkers();
+
+      const { output, runId, cleanup } = await mastra.getAgentById(evented.id).stream('Ask me my colour', {
+        memory: { thread: 'thread-1', resource: 'user-1' },
+      });
+      const types: string[] = [];
+      for await (const chunk of output.fullStream) {
+        types.push(chunk.type);
+        if (chunk.type === 'tool-call-suspended' || chunk.type === 'tool-call-approval') break;
+      }
+      cleanup();
+      expect(types).toContain(kind === 'approval' ? 'tool-call-approval' : 'tool-call-suspended');
+      const workflows = (await storage.getStore('workflows'))!;
+      await vi.waitFor(async () => {
+        const persisted = await workflows.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
+        const snapshot = typeof persisted?.snapshot === 'string' ? JSON.parse(persisted.snapshot) : persisted?.snapshot;
+        expect(snapshot?.status).toBe('suspended');
+      });
     },
     15_000,
   );
