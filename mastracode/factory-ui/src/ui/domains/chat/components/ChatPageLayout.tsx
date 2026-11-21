@@ -34,7 +34,6 @@ export function ChatPageLayout({
         {titleMenu}
       </div>
     ) : undefined,
-    triggerClassName: 'size-control-sm rounded-full [&>svg]:size-icon-md',
   });
   const hasHeader = Boolean(slots.breadcrumbs || headerActions);
   const dock = headerActions && dockActions ? dockActions(headerActions) : undefined;
@@ -49,8 +48,10 @@ export function ChatPageLayout({
             className={cn(
               'grid items-center gap-x-2 ps-3 pt-(--chat-header-top)',
               reservedSpaceClass.header,
-              // Equal side tracks keep the center on the row's midline, whatever the title holds.
-              headerCenter ? 'grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]' : 'grid-cols-[minmax(0,1fr)_auto]',
+              // Equal side tracks keep the center on the row's midline; each fits one capsule, so the center shrinks first.
+              headerCenter
+                ? '[--capsule-height:calc(var(--spacing-control-sm)+--spacing(1))] grid-cols-[minmax(var(--capsule-height),1fr)_auto_minmax(var(--capsule-height),1fr)]'
+                : 'grid-cols-[minmax(0,1fr)_auto]',
             )}
           >
             <Header border={false} className={cn('grid grid-cols-subgrid px-0', dock ? 'col-[1/-2]' : 'col-span-full')}>
@@ -58,7 +59,7 @@ export function ChatPageLayout({
               <div className="flex min-w-0 items-center">
                 {slots.breadcrumbs && <div className={headerCapsuleClass}>{slots.breadcrumbs}</div>}
               </div>
-              {headerCenter ? <div className="flex items-center">{headerCenter}</div> : null}
+              {headerCenter ? <div className="flex min-w-0 items-center">{headerCenter}</div> : null}
               {dock ? null : (
                 <div className="flex min-w-0 justify-end">
                   {headerActions && <div className={cn(headerCapsuleClass, 'shrink-0')}>{headerActions}</div>}
