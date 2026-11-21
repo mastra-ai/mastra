@@ -203,8 +203,10 @@ describe('DurableAgent approval resume data', () => {
     await vi.waitFor(() => expect(suspendedData).toBeDefined());
     const childWorkflow = createRunSpy.mock.contexts.find(workflow => workflow.id === 'durable-agentic-execution');
     expect(childWorkflow).toBeDefined();
-    expect(durableAgent.getWorkflow().runs.has(initial.runId)).toBe(true);
-    expect(childWorkflow!.runs.has(initial.runId)).toBe(true);
+    // The suspension is persisted, so neither workflow keeps the parked run in memory (#30774);
+    // resume() rebuilds it from the snapshot.
+    await vi.waitFor(() => expect(durableAgent.getWorkflow().runs.has(initial.runId)).toBe(false));
+    expect(childWorkflow!.runs.has(initial.runId)).toBe(false);
 
     const controller = new AbortController();
     const addListener = vi.spyOn(controller.signal, 'addEventListener');

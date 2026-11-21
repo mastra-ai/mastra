@@ -2203,25 +2203,37 @@ export class WorkflowsPG extends WorkflowsStorage {
     }
   }
 
+  supportsGuardedRunDeletes(): boolean {
+    return true;
+  }
+
   async deleteWorkflowRunById({
     runId,
     workflowName,
     storageVersion,
     fence,
+    expectedStatus,
   }: {
     runId: string;
     workflowName: string;
     storageVersion?: 1 | 2;
     fence?: RunFence;
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
   }): Promise<void> {
     const resolvedFence = resolveRunFence(this, fence, runId);
+    const expected = expectedStatus === undefined ? undefined : [expectedStatus].flat();
+    const snapshotTable = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) });
     try {
       if (storageVersion === 1) {
+        // The status guard sits on the delete itself, so a concurrent status change can't land
+        // between the check and the delete.
+        const guard = expected ? ` AND ${await this.#statusExpression('snapshot')} = ANY($3::text[])` : '';
         await withRunFence(this.#db.client, this.#runOwnersTable(), resolvedFence, 'deleteWorkflowRunById', q =>
-          q.none(
-            `DELETE FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} WHERE run_id = $1 AND workflow_name = $2`,
-            [runId, workflowName],
-          ),
+          q.none(`DELETE FROM ${snapshotTable} WHERE run_id = $1 AND workflow_name = $2${guard}`, [
+            runId,
+            workflowName,
+            ...(expected ? [expected] : []),
+          ]),
         );
         return;
       }
@@ -2230,10 +2242,19 @@ export class WorkflowsPG extends WorkflowsStorage {
         // The storage v2 header is locked first: its row lock waits out an in-flight append, and the
         // entries delete, a later statement, then sees that append's entries. The runs built on
         // this one's state are detached while its entries can still be read.
-        const run = await t.oneOrNone<{ stateShared: boolean }>(
-          `SELECT "stateShared" FROM ${this.#runsTable()} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
+        const run = await t.oneOrNone<{ stateShared: boolean; status: WorkflowRunStatus }>(
+          `SELECT "stateShared", status FROM ${this.#runsTable()} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
           [workflowName, runId],
         );
+        if (expected && run && !expected.includes(run.status)) return;
+        if (expected && storageVersion !== 2) {
+          // Locked like the header, so the status checked is the one deleted.
+          const snapshot = await t.oneOrNone<{ status: string | null }>(
+            `SELECT ${await this.#statusExpression('snapshot')} AS status FROM ${snapshotTable} WHERE run_id = $1 AND workflow_name = $2 FOR UPDATE`,
+            [runId, workflowName],
+          );
+          if (snapshot && !expected.includes(snapshot.status as WorkflowRunStatus)) return;
+        }
         if (run?.stateShared) await this.#detachStateChildren(t, workflowName, runId);
         for (const table of [
           this.#runsTable(),

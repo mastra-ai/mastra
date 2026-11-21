@@ -1830,20 +1830,36 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
     }
 
+    // Decided before the suspend is published: once it is, the caller may resume the run, and the
+    // resume's running record must not be taken for the record this suspend left behind. When the
+    // record is guarded-only running, this suspend declined its snapshot, and resume() refuses a
+    // run whose stored status is not suspended, so no resume can write a record before the delete.
+    const runStorage = this.#runStorage(args.workflowId, runId);
+    let deleteGuardedOnlyRecord = false;
+    if (!restart && !timeTravel && !resumeSteps?.length) {
+      try {
+        const header = await runStorage.loadHeader();
+        // Never delete a resumable snapshot.
+        deleteGuardedOnlyRecord = header?.guardedOnlySnapshot === true && header.status === 'running';
+      } catch (error) {
+        this.mastra
+          .getLogger()
+          ?.warn('Failed to read workflow snapshot for cleanup', { workflowId: args.workflowId, runId, error });
+      }
+    }
+
     await this.publishFinishEvent({
       type: 'workflow.suspend',
       runId,
       data: { ...args, workflow: undefined, state: finalState },
     });
 
-    if (!restart && !timeTravel && !resumeSteps?.length) {
+    // Retain recovery records until suspend propagation succeeds. A cancel landing any time before
+    // the delete replaces the record with a canceled one to keep, so the delete only goes through
+    // while the stored run is still running; a store that can't check that atomically keeps it.
+    if (deleteGuardedOnlyRecord) {
       try {
-        const runStorage = this.#runStorage(args.workflowId, runId);
-        const header = await runStorage.loadHeader();
-        // Retain recovery records until suspend propagation succeeds, but never delete resumable snapshots.
-        if (header?.guardedOnlySnapshot && header.status === 'running') {
-          await runStorage.delete();
-        }
+        await runStorage.delete({ expectedStatus: 'running' });
       } catch (error) {
         this.mastra
           .getLogger()

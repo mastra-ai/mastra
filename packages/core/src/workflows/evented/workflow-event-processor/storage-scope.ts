@@ -244,8 +244,8 @@ export function scopedRunStorage(runId: string, runStorage: RunStorage): RunStor
       if (opts?.stateBase) scope.bases.delete(runId);
       else scope.bases.set(runId, toJson(snapshot.value));
     },
-    delete: async () => {
-      await runStorage.delete();
+    delete: async opts => {
+      await runStorage.delete(opts);
       scope.bases.delete(runId);
     },
   };
