@@ -1544,7 +1544,10 @@ function activityDate(name: 'since' | 'until', value: string): Date {
   ) as number[];
   // Every field must survive a UTC round trip unchanged, which rules out day 30 of February,
   // hour 24, minute 60 and the like.
-  const wall = new Date(Date.UTC(year!, month! - 1, day!, hour, minute, second));
+  // setUTCFullYear, not Date.UTC: Date.UTC reads years 0-99 as 1900-1999.
+  const wall = new Date(0);
+  wall.setUTCFullYear(year!, month! - 1, day!);
+  wall.setUTCHours(hour, minute, second, 0);
   if (
     wall.getUTCFullYear() !== year ||
     wall.getUTCMonth() !== month! - 1 ||
@@ -1558,7 +1561,7 @@ function activityDate(name: 'since' | 'until', value: string): Date {
   if (dateTime?.[9] !== undefined) {
     const offsetHours = Number(dateTime[10]);
     const offsetMinutes = Number(dateTime[11]);
-    if (offsetHours > 14 || offsetMinutes > 59) refuse();
+    if (offsetMinutes > 59 || offsetHours > 14 || (offsetHours === 14 && offsetMinutes > 0)) refuse();
   }
   const date = new Date(dateOnly ? `${trimmed}T00:00:00.000Z` : trimmed);
   if (Number.isNaN(date.getTime())) refuse();

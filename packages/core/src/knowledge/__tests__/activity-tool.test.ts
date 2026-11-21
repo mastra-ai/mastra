@@ -330,6 +330,18 @@ describe('knowledge_activity: refusals before any listing', () => {
     ]) {
       await expect(call({ since })).rejects.toThrow(/must be a date/);
     }
+    for (const since of ['2026-07-01T09:30:00+14:01', '2026-07-01T09:30:00-14:59', '2026-07-01T09:30:00+13:60']) {
+      await expect(call({ since })).rejects.toThrow(/must be a date/);
+    }
+    // The outer offsets and four-digit years before 100 are valid.
+    for (const until of [
+      '2026-07-01T09:30:00+14:00',
+      '2026-07-01T09:30:00-14:00',
+      '0099-07-01',
+      '0001-01-01T00:00:00Z',
+    ]) {
+      await expect(call({ until })).resolves.toMatchObject({ changes: [] });
+    }
     // A real leap day is fine.
     await expect(call({ until: '2028-02-29' })).resolves.toMatchObject({ changes: [] });
   });
