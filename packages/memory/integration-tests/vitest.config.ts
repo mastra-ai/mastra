@@ -4,7 +4,7 @@ export default defineConfig({
   // Cast to any to avoid vite version mismatch type errors between workspace packages
   test: {
     execArgv: ['--no-enable-source-maps'],
-    maxWorkers: 2,
+    maxWorkers: Number(process.env.MEMORY_TEST_MAX_WORKERS ?? 2),
     globals: true,
     environment: 'node',
     testTimeout: 60000,

@@ -356,10 +356,15 @@ jobs:
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
   memory-test:
-    name: Memory Tests
+    name: Memory Tests (${{ matrix.workers }} workers)
     needs: [changes, affected-tests, prebuild]
     if: ${{ !cancelled() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.memory_changed == 'true' && needs.prebuild.result == 'success' }}
-    runs-on: starsling-ubuntu-26.04
+    runs-on: starsling-ubuntu-26.04-16
+    # Trial: measure Memory worker counts side by side on the 16-vCPU runner.
+    strategy:
+      fail-fast: false
+      matrix:
+        workers: [2, 4, 6]
     permissions:
       contents: read
       id-token: write
@@ -420,11 +425,21 @@ jobs:
       # Docker store; they take most of this job's time, so PRs skip them and the twice-daily
       # alpha cron (a workflow_call on main) runs them.
       - name: Run Memory tests
-        run: pnpm vitest run ${{ github.event_name == 'pull_request' && '--exclude "src/performance-testing/**"' || '' }}
+        run: |
+          # Trial: sample used memory every 2 s and print the peak.
+          ( peak=0; while sleep 2; do used=$(free -m | awk '/^Mem:/ {print $3}'); [ "$used" -gt "$peak" ] && peak=$used && echo "$peak" > /tmp/mem-peak; done ) &
+          sampler=$!
+          start=$(date +%s)
+          status=0
+          pnpm vitest run ${{ github.event_name == 'pull_request' && '--exclude "src/performance-testing/**"' || '' }} || status=$?
+          kill "$sampler" || true
+          echo "TRIAL workers=$MEMORY_TEST_MAX_WORKERS nproc=$(nproc) vitest_s=$(( $(date +%s) - start )) peak_used_mb=$(cat /tmp/mem-peak 2>/dev/null) total_mb=$(free -m | awk '/^Mem:/ {print $2}') exit=$status"
+          exit "$status"
         working-directory: packages/memory/integration-tests
         env:
           NODE_OPTIONS: '--max_old_space_size=8192'
           DB_URL: 'postgresql://postgres:postgres@localhost:5432/mastra'
+          MEMORY_TEST_MAX_WORKERS: ${{ matrix.workers }}
 
   # The Changesets release PR gates every release, so a red suite there should not wait for
   # someone to open the PR. It alerts once when the suite goes red and once when it is green
