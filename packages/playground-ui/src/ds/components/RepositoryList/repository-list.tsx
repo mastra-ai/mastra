@@ -80,7 +80,7 @@ export function RepositoryList({
             if (disabled || order(next) === order(live)) return;
             onReorder([...next, ...dead].map(repository => repository.id));
           }}
-          className="divide-border flex min-w-0 flex-col divide-y *:py-3.25 *:first:pt-0 *:last:pb-0"
+          className="flex min-w-0 flex-col divide-y divide-border *:py-3.25 *:first:pt-0 *:last:pb-0"
         >
           {live.map((repository, index) => (
             <ContentBlock key={repository.id} draggableId={repository.id} index={index}>
@@ -261,7 +261,7 @@ function RepositoryRow({
       {expanded && (
         <div
           id={detailsId}
-          className="border-border divide-border mt-1.25 flex flex-col divide-y border-t *:py-3.25 *:last:pb-0"
+          className="mt-1.25 flex flex-col divide-y divide-border border-t border-border *:py-3.25 *:last:pb-0"
         >
           <SettingsRow
             label={

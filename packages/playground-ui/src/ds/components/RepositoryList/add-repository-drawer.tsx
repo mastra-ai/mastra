@@ -108,7 +108,7 @@ export function AddRepositoryDrawerContent({
             {unavailableMessage}
           </Txt>
         ) : (
-          <div className="divide-border flex flex-col divide-y *:py-3">
+          <div className="flex flex-col divide-y divide-border *:py-3">
             {repositories.map(repo => (
               <SettingsItem
                 key={repo.key}
