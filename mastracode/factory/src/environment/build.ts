@@ -15,11 +15,11 @@ import { maskSandboxEnvValues, resolveSandboxEnv, sandboxBuildContext } from '..
 import type { FactoryProject, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SandboxEnvStore } from '../storage/domains/sandbox-envs/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
-import { environmentSandboxContext, resolveProjectEnvironment } from './session-environment.js';
-import type { SessionEnvironment } from './session-environment.js';
 import { headsChanged, recordedHeadResolver, resolveCurrentHeads } from './heads.js';
 import type { EnvironmentHeads } from './heads.js';
 import { groupedRepositoryAccess } from './repository-access.js';
+import { environmentSandboxContext, resolveProjectEnvironment } from './session-environment.js';
+import type { SessionEnvironment } from './session-environment.js';
 
 /** `settings`: a saved change to the environment; builds only when the template inputs changed. */
 export const ENVIRONMENT_BUILD_TRIGGERS = ['manual', 'schedule', 'push', 'settings'] as const;

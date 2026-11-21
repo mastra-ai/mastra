@@ -116,7 +116,6 @@ export const projectEnvironmentResponseSchema = z.object({
   }),
 });
 
-
 export const environmentRepositoryPatchSchema = z.object({
   projectRepositoryId: uuidSchema,
   position: z.number().int().min(1).optional(),

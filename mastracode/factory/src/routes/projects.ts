@@ -10,18 +10,15 @@ import type { ProjectBoardCache } from '../boards/project-boards.js';
 import { createBoardRegistry } from '../boards/registry.js';
 import { workItemPhaseSemantics } from '../boards/semantics.js';
 import type { EnvironmentBuildRunner } from '../environment/build-runner.js';
+import { scheduleIdFor } from '../environment/build-schedule.js';
+import { redactCredentials } from '../environment/build.js';
 import { EnvironmentHandlers } from '../environment/handlers.js';
 import type { EnvironmentScope } from '../environment/handlers.js';
 import { ProjectEnvironment } from '../environment/project-environment.js';
-import { scheduleIdFor } from '../environment/build-schedule.js';
-import { redactCredentials } from '../environment/build.js';
 import { maskSandboxEnvValues } from '../sandbox/sandbox-env.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
-import type {
-  FactoryProject,
-  FactoryProjectsStorage,
-} from '../storage/domains/projects/base.js';
+import type { FactoryProject, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type {
   ProjectRepository,
   SourceControlRepository,

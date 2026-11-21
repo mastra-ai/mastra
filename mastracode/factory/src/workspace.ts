@@ -23,6 +23,8 @@ import { REVIEW_CONTEXT } from './boards/define-board.js';
 import type { RepositoryAccess, VersionControl } from './capabilities/version-control.js';
 import { redactCredentials } from './environment/build.js';
 import { groupRepositoryIds, groupedRepositoryAccess } from './environment/repository-access.js';
+import { environmentSandboxContext, resolveProjectEnvironment } from './environment/session-environment.js';
+import type { SessionEnvironment, SessionEnvironmentRepo } from './environment/session-environment.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { getGithubPat } from './integrations/github/pat.js';
 import type { GithubPatKind } from './integrations/github/pat.js';
@@ -629,8 +631,6 @@ async function forEachConcurrently<T>(items: T[], limit: number, run: (item: T) 
 
 export { environmentSandboxContext, resolveProjectEnvironment } from './environment/session-environment.js';
 export type { SessionEnvironment, SessionEnvironmentRepo } from './environment/session-environment.js';
-import { environmentSandboxContext, resolveProjectEnvironment } from './environment/session-environment.js';
-import type { SessionEnvironment, SessionEnvironmentRepo } from './environment/session-environment.js';
 
 /**
  * Resolve the factory environment a session boots from: the project's

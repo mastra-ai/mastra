@@ -1,5 +1,11 @@
 import type { Context } from 'hono';
 
+import {
+  sandboxEnvPathSchema,
+  sandboxEnvSetBodySchema,
+  sandboxEnvUpdateBodySchema,
+  updateProjectEnvironmentBodySchema,
+} from '../routes/environment-contracts.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import type { AuditEmitter, EmitAuditInput } from '../storage/domains/audit/domain.js';
 import type { FactoryProject, UpdateFactoryProjectInput } from '../storage/domains/projects/base.js';
@@ -10,12 +16,6 @@ import type {
   UpdateProjectRepositoryInput,
 } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import {
-  sandboxEnvPathSchema,
-  sandboxEnvSetBodySchema,
-  sandboxEnvUpdateBodySchema,
-  updateProjectEnvironmentBodySchema,
-} from '../routes/environment-contracts.js';
 import type { EnvironmentBuildRunner } from './build-runner.js';
 import { ensureSchedule, invalidCronMessage, readSchedule } from './build-schedule.js';
 import type { ProjectEnvironment } from './project-environment.js';
@@ -116,7 +116,9 @@ export class EnvironmentHandlers {
     const builds = this.deps.environmentBuilds;
     if (!builds) return {};
     const schedules = builds.scheduleAvailable ? builds.schedules() : undefined;
-    const schedule = schedules ? await readSchedule(schedules, project.id) : { enabled: false, cron: null, timezone: null };
+    const schedule = schedules
+      ? await readSchedule(schedules, project.id)
+      : { enabled: false, cron: null, timezone: null };
     return {
       buildTriggers: {
         schedule: { ...schedule, scheduleAvailable: builds.scheduleAvailable },

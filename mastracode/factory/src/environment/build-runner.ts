@@ -7,13 +7,13 @@
 import type { Mastra } from '@mastra/core/mastra';
 import type { FactorySandboxContext } from '@mastra/core/workspace';
 import type { RepositoryPushEvent } from '../integrations/base.js';
-import { resolveProjectEnvironment } from './session-environment.js';
 import { probeSchedulesAvailable } from './build-schedule.js';
 import type { ScheduleService } from './build-schedule.js';
 import { createEnvironmentBuildWorkflow, ENVIRONMENT_BUILD_WORKFLOW_ID } from './build-workflow.js';
 import type { EnvironmentBuildWorkflowOptions } from './build-workflow.js';
 import type { EnvironmentBuildDeps, EnvironmentBuildOutcome, EnvironmentBuildTrigger } from './build.js';
 import { environmentBuildContextWithEnv, errorReason, resolveEnvironmentHeads } from './build.js';
+import { resolveProjectEnvironment } from './session-environment.js';
 
 /** Longest wait between `settings` runs that find another process holding the build-start lease. */
 const SETTINGS_RETRY_MAX_MS = 30_000;

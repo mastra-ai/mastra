@@ -1,5 +1,5 @@
-import type { RepositoryAccess } from '../capabilities/version-control.js';
 import type { FactorySandboxContext } from '@mastra/core/workspace';
+import type { RepositoryAccess } from '../capabilities/version-control.js';
 import { repositoryDirectoryName } from '../sandbox/workdir.js';
 import type { FactoryProject } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
@@ -123,4 +123,3 @@ export function environmentSandboxContext(
     ...(options.resolveHead ? { resolveHead: options.resolveHead } : {}),
   };
 }
-
