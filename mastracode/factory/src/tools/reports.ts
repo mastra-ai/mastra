@@ -357,12 +357,16 @@ export type FactoryRunEndReporter = (input: FactoryRunEndInput) => Promise<Facto
 export function createWorkItemRunEndReporter({
   workItems,
   reporting,
+  onRunEnd,
 }: {
   workItems: Pick<WorkItemsStorage, 'listWorkItemSubscribers' | 'getForProject'>;
   /** Resolved per report: the controller exists only once the mount is up. */
   reporting: () => Promise<FactoryReporting | null>;
+  /** Told of every run end first, e.g. integrations' `afterWorkItemRun`; must not throw. */
+  onRunEnd?: (input: FactoryRunEndInput) => Promise<void>;
 }): FactoryRunEndReporter {
   return async input => {
+    await onRunEnd?.(input);
     try {
       const resolved = await reporting();
       if (!resolved) return { waiting: false };
@@ -483,6 +487,7 @@ interface SessionReportDependencies {
     'findActiveRunBindingForSession' | 'findRunBindingBySession' | 'listWorkItemSubscribers' | 'getForProject'
   >;
   reporting: () => Promise<FactoryReporting | null>;
+  onRunEnd?: (input: FactoryRunEndInput) => Promise<void>;
 }
 
 /** How much of a gated call's arguments an approval notice quotes. */

@@ -251,7 +251,7 @@ import {
   createStageChangeNotifier,
   createWorkItemRunEndReporter,
 } from './tools/reports.js';
-import type { FactoryReporting } from './tools/reports.js';
+import type { FactoryReporting, FactoryRunEndInput } from './tools/reports.js';
 import { observeSessionRunReports } from './tools/run-watch.js';
 import { createFactorySandboxTools } from './tools/sandbox-tools.js';
 import { FactorySessionsStateProcessor } from './tools/sessions-state-processor.js';
@@ -1465,10 +1465,23 @@ export class MastraFactory {
           }),
       };
     };
+    const integrationsRunEnd = async (input: FactoryRunEndInput) => {
+      await Promise.all(
+        integrations.map(async integration => {
+          if (!integration.afterWorkItemRun) return;
+          try {
+            await integration.afterWorkItemRun(input);
+          } catch (error) {
+            console.warn(`[factory] Integration '${integration.id}' run-end hook failed:`, error);
+          }
+        }),
+      );
+    };
     const sessionReports = {
       sessions: sourceControlSessions,
       workItems: workItemsStorage,
       reporting: factoryReporting,
+      onRunEnd: integrationsRunEnd,
     };
     const reportSessionRunEnd = createSessionRunEndReporter(sessionReports);
     // Repeated attempts of one delivery send one report: identical failures to
@@ -2444,6 +2457,16 @@ export class MastraFactory {
                 reconcileToolResults: () => factoryProcessor?.reconcileBoundThreads() ?? Promise.resolve(),
                 reconcileRunBinding: binding => factoryProcessor?.reconcileBinding(binding) ?? Promise.resolve(),
                 prepareBinding,
+                beforeSkillRun: async ({ item, binding, session }) => {
+                  for (const integration of integrations) {
+                    if (!integration.beforeWorkItemRun) continue;
+                    try {
+                      await integration.beforeWorkItemRun({ item, binding, thread: session.thread });
+                    } catch (error) {
+                      console.warn(`[factory] Integration '${integration.id}' run-start hook failed:`, error);
+                    }
+                  }
+                },
                 ...(githubIntegration
                   ? {
                       dismissStaleReviews: async decision => {
@@ -2472,6 +2495,7 @@ export class MastraFactory {
                 reportRunEnd: createWorkItemRunEndReporter({
                   workItems: storage.getDomain<WorkItemsStorage>('work-items'),
                   reporting: factoryReporting,
+                  onRunEnd: integrationsRunEnd,
                 }),
                 resolveLinkedWorkItemParentId: async ({ orgId, factoryProjectId, decision }) => {
                   if (decision.source !== 'github-pr') return null;

@@ -7,9 +7,13 @@ import type { Intake, IntakeSource } from '../../../capabilities/intake.js';
 import { factoryWorkItemUrl } from '../../../links.js';
 import { loose } from '../../../routes/route.js';
 import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
+import type { WorkItemsStorage } from '../../../storage/domains/work-items/base.js';
+import type { FactoryRunEndInput } from '../../../tools/reports.js';
 import { AlertReadClient, buildAlertReadTools } from '../../alerts/read-tools.js';
 import type { AlertReadToken } from '../../alerts/read-tools.js';
 import { ALERT_INTEGRATION_ID, attachPlatformAlertRules } from '../../alerts/rules.js';
+import { bindAlertRunThread, bindAlertRunsOnThreadLink } from '../../alerts/run-thread.js';
+import { AlertSlackStatus, buildAlertUpdateTool, chatAlertSlackClient } from '../../alerts/slack-status.js';
 import { createAlertSync } from '../../alerts/sync.js';
 import type { AlertAck, AlertEventPage, AlertSyncCursor } from '../../alerts/sync.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
@@ -60,6 +64,8 @@ export class PlatformAlertsIntegration implements FactoryIntegration {
   readonly #pollIntervalMs: number;
   readonly #reader: AlertReadClient;
   #projects: Pick<FactoryProjectsStorage, 'listAll'> | undefined;
+  #workItems: Pick<WorkItemsStorage, 'get' | 'update' | 'findActiveRunBindingForSession'> | undefined;
+  #status: AlertSlackStatus | undefined;
 
   readonly intake: Intake = {
     listSources: () => this.#listSources(),
@@ -111,19 +117,76 @@ export class PlatformAlertsIntegration implements FactoryIntegration {
 
   async agentTools({ requestContext }: { requestContext: RequestContext }): Promise<IntegrationTools> {
     const controller = requestContext.get('controller') as
-      { getState(): { factoryProjectId?: string }; resourceId?: string } | undefined;
+      { getState(): { factoryProjectId?: string }; resourceId?: string; sessionId?: string } | undefined;
     const projectId = controller?.getState().factoryProjectId ?? controller?.resourceId;
     if (!projectId || !this.#projects) return {};
     const project = (await this.#projects.listAll()).find(p => p.id === projectId);
     const connection = project ? await this.connection() : null;
     // The credential reads one Platform org; only that org's sessions get the tools.
     if (!project || !connection || connection.organizationId !== project.orgId) return {};
-    return buildAlertReadTools(this.#reader, connection.organizationId);
+    return {
+      ...buildAlertReadTools(this.#reader, connection.organizationId),
+      ...(this.#status && this.#workItems && controller?.sessionId
+        ? buildAlertUpdateTool({
+            status: this.#status,
+            workItems: this.#workItems,
+            orgId: project.orgId,
+            factoryProjectId: project.id,
+            sessionId: controller.sessionId,
+          })
+        : {}),
+    };
+  }
+
+  /** An alert card's run is linked to the alert's Slack thread, and the thread hears that it started. */
+  async beforeWorkItemRun({
+    item,
+    binding,
+    thread,
+  }: Parameters<NonNullable<FactoryIntegration['beforeWorkItemRun']>>[0]) {
+    if (!(await bindAlertRunThread({ item, binding, thread }))) return;
+    await this.#status?.runStarted(item);
+  }
+
+  /** A run that ended without concluding, or failed, says so on the alert's status. */
+  async afterWorkItemRun(input: FactoryRunEndInput): Promise<void> {
+    if (!this.#status || !this.#workItems) return;
+    const card = await this.#workItems.get({ orgId: input.orgId, id: input.workItemId });
+    if (card?.externalSource?.integrationId !== ALERT_INTEGRATION_ID) return;
+    await this.#status.runEnded(card, input.outcome);
   }
 
   workers(ctx: IntegrationContext): MastraWorker[] {
     this.#projects = ctx.storage.projects;
-    const ingest = attachPlatformAlertRules(ctx);
+    const { controller } = ctx;
+    const workItems = ctx.runtime?.workItems;
+    const status =
+      controller && workItems
+        ? new AlertSlackStatus({ client: chatAlertSlackClient(() => controller.getChannels?.()?.sdk), workItems })
+        : undefined;
+    this.#status = status;
+    this.#workItems = workItems;
+    const ingest = attachPlatformAlertRules(
+      ctx,
+      controller && workItems && status
+        ? {
+            onThreadAttached: async card => {
+              await status.linked(card);
+              // A run that started before the thread was known is linked to it now.
+              const bound = await bindAlertRunsOnThreadLink({
+                card,
+                listRunBindings: (orgId, factoryProjectId, workItemId) =>
+                  workItems.listRunBindings(orgId, factoryProjectId, workItemId),
+                getSession: sessionId => controller.getSession(sessionId),
+              });
+              if (bound > 0) await status.runStarted(card);
+            },
+            onRecovered: async (card, at) => {
+              await status.recovered(card, at);
+            },
+          }
+        : {},
+    );
     if (!ingest) return [];
     const { projects, intake, generic } = ctx.storage;
     const sync = createAlertSync({
@@ -145,6 +208,7 @@ export class PlatformAlertsIntegration implements FactoryIntegration {
       bindings: orgId => intake.listBindings({ orgId, integrationId: this.id }),
       ingest,
       workItemUrl: ({ factoryProjectId, workItemId }) => factoryWorkItemUrl({ factoryProjectId, workItemId }),
+      ...(status ? { canReplyInThread: (thread: { teamId: string; channelId: string }) => status.covers(thread) } : {}),
     });
     return [new IssueReconcileWorker({ integrationId: this.id, reconcile: sync, intervalMs: this.#pollIntervalMs })];
   }

@@ -13,8 +13,8 @@ import type { Mastra } from '@mastra/core/mastra';
 import { createSlackAdapter } from '@mastra/slack';
 import type { SlackAdapterChannelConfig } from '@mastra/slack';
 import { Card, CardText, Actions, LinkButton } from 'chat';
-
 import { FACTORY_INTERACTIVE_KEY } from '../../auth.js';
+
 import {
   primeTenantCredentialsForRequestContext,
   primeTenantCredentialsForTenant,
@@ -40,6 +40,7 @@ import type { FactoryProjectsStorage } from '../../storage/domains/projects/base
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import { FACTORY_SLACK_SENDER_KEY } from '../../tools/scope.js';
+import type { AlertThreads } from '../alerts/mention.js';
 import type { FactoryChannelsConfig } from '../base.js';
 import { prepareSessionRunContext } from '../subscription-session.js';
 import { markNewChannelSession } from './channel-session-link-processor.js';
@@ -62,6 +63,11 @@ class SlackSessionStartError extends Error {}
 
 /** Dependencies the Slack channel handlers close over, injected from the web entry. */
 interface SlackChannelDeps extends VoiceClipDeps {
+  /**
+   * Finds the Mastra Alerts card a Slack thread belongs to, so a mention in an alert's thread is
+   * noted on that card and its session starts in the card's Factory project, told about the card.
+   */
+  alertThreads?: AlertThreads;
   /**
    * The factory's reverse-index store mapping a Slack sender to a Mastra
    * tenant. When provided, inbound messages from an unlinked sender are not
@@ -398,7 +404,10 @@ export function createChannelResourceIdResolver(
       // time a new thread is created, so this is a read-only re-resolve.
       const orgId = link.orgId ?? '';
       let factoryProjectId: string | undefined;
-      if (link.defaultFactoryProjectId && (await projects.get({ orgId, id: link.defaultFactoryProjectId }))) {
+      const alertCard = await deps.alertThreads?.find({ teamId: externalTeamId, threadId: thread.id });
+      if (alertCard && alertCard.orgId === orgId) {
+        factoryProjectId = alertCard.factoryProjectId;
+      } else if (link.defaultFactoryProjectId && (await projects.get({ orgId, id: link.defaultFactoryProjectId }))) {
         factoryProjectId = link.defaultFactoryProjectId;
       } else if (orgId) {
         const factories = await projects.list({ orgId });
@@ -1019,8 +1028,12 @@ async function transcribeBatch(
   return false;
 }
 
-function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
-  return async (thread, message, defaultHandler, ctx) => {
+type GatedHook = (gate: DispatchGate) => Promise<void>;
+
+function createNewSessionChatHandler(
+  deps: SlackChannelDeps,
+): (...args: [...Parameters<ChannelHandler>, onGated?: GatedHook]) => Promise<void> {
+  return async (thread, message, defaultHandler, ctx, onGated) => {
     // Gate on the sender having linked their Slack account to a Mastra tenant.
     // Unlinked → post the Connect card and stop; no session/run is
     // created (which would otherwise be tenant-less and fail credential
@@ -1037,11 +1050,33 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
       if (!(await thread.isSubscribed())) markNewChannelSession(ctx.requestContext);
       acknowledgeReceipt(thread, deps);
       if (!(await transcribeBatch(thread, message, deps, ctx, gate))) return;
+      await onGated?.(gate);
     } catch (error) {
       await reportPreDispatchError(thread, message, ctx, error);
       return;
     }
     await defaultHandler(thread, message);
+  };
+}
+
+/** A mention in an alert's thread is noted on its card, and a new session starts with the card's context. */
+async function alertMentionHook(
+  deps: SlackChannelDeps,
+  thread: HandlerThread,
+  message: HandlerMessage,
+): Promise<GatedHook | undefined> {
+  const teamId = rawTeamId(message.raw);
+  if (!deps.alertThreads || !teamId) return undefined;
+  const card = await deps.alertThreads.find({ teamId, threadId: thread.id });
+  if (!card) return undefined;
+  return async gate => {
+    if (gate.link?.orgId !== card.orgId) return;
+    await deps.alertThreads!.recordMention(card, {
+      author: message.author.fullName || message.author.userName || message.author.userId,
+      text: typedText(message),
+      at: new Date(),
+    });
+    if (!(await thread.isSubscribed())) message.text = `${card.preamble}\n\n${message.text}`;
   };
 }
 
@@ -1090,9 +1125,11 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
       // `@bot mute` in a thread the bot never joined has nothing to mute, and
       // must not start a session about the word "mute".
       if (muteCommand(message)) return;
-      await newSessionChatHandler(thread, message, defaultHandler, ctx);
+      const onGated = await alertMentionHook(deps, thread, message);
+      await newSessionChatHandler(thread, message, defaultHandler, ctx, onGated);
     },
-    onDirectMessage: newSessionChatHandler,
+    onDirectMessage: (thread, message, defaultHandler, ctx) =>
+      newSessionChatHandler(thread, message, defaultHandler, ctx),
   };
 };
 

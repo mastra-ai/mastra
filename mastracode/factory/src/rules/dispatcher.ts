@@ -545,6 +545,12 @@ export interface FactoryDecisionDispatcherOptions {
   reconcileToolResults?: () => Promise<void>;
   reconcileRunBinding?: (binding: FactoryRunBindingRecord) => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
+  /** Called before a skill run starts on a card's bound session, once the session is up. Failures are logged, never fatal. */
+  beforeSkillRun?: (input: {
+    item: Card;
+    binding: FactoryRunBindingRecord;
+    session: BoundDispatcherSession;
+  }) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   /**
    * Told when a run fails terminally at dispatch, so whoever follows the item
@@ -798,6 +804,7 @@ export class FactoryDecisionDispatcher {
   readonly #reconcileToolResults?: () => Promise<void>;
   readonly #reconcileRunBinding?: FactoryDecisionDispatcherOptions['reconcileRunBinding'];
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
+  readonly #beforeSkillRun?: FactoryDecisionDispatcherOptions['beforeSkillRun'];
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   readonly #reportRunEnd?: FactoryRunEndReporter;
   readonly #dismissStaleReviews?: FactoryDecisionDispatcherOptions['dismissStaleReviews'];
@@ -862,6 +869,7 @@ export class FactoryDecisionDispatcher {
     this.#reconcileToolResults = options.reconcileToolResults;
     this.#reconcileRunBinding = options.reconcileRunBinding;
     this.#prepareBinding = options.prepareBinding;
+    this.#beforeSkillRun = options.beforeSkillRun;
     this.#primeCredentials = options.primeCredentials;
     this.#reportRunEnd = options.reportRunEnd;
     this.#dismissStaleReviews = options.dismissStaleReviews;
@@ -1656,6 +1664,14 @@ export class FactoryDecisionDispatcher {
           if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
           await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
           const session = await this.#requireSession(binding, { userId: startedBy, orgId: record.orgId });
+          if (item && this.#beforeSkillRun) {
+            await this.#beforeSkillRun({ item, binding, session }).catch(error => {
+              console.warn('[factory] beforeSkillRun failed', {
+                workItemId: item.id,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            });
+          }
           const requestContext = factoryRequestContext({
             session,
             binding,
