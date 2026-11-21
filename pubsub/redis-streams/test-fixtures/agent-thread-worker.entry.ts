@@ -343,6 +343,13 @@ async function main() {
       return;
     }
 
+    if (cmd.cmd === 'send-and-die') {
+      // Repro for #28535: exit as soon as `accepted` settles, with NO close()/flush().
+      // A serverless sender treats `accepted` as its "safe to exit" boundary.
+      await fireSignal(cmd.sigId);
+      process.exit(0);
+    }
+
     if (cmd.cmd === 'send' || cmd.cmd === 'send-and-exit') {
       const sigId: string = cmd.sigId;
       try {

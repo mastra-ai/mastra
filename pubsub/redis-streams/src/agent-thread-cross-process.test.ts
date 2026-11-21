@@ -408,6 +408,40 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
       expect(eventsByType(winner, 'command-error')).toHaveLength(0);
     }, 60_000);
 
+    // Repro for https://github.com/mastra-ai/mastra/issues/28535
+    // The sender must not be told `accepted` until its signal-enqueued publish has
+    // reached Redis. Here the sender exits right after `accepted` WITHOUT close()/flush().
+    // Known bug: remove `.fails` (use plain `it`) when #28535 is fixed.
+    it.fails('delivers a signal whose sender exits right after accepted without closing its pubsub', async () => {
+      const resourceId = `accepted-then-die-${Date.now()}`;
+      const threadId = `thread-${Date.now()}`;
+      const env = {
+        RESOURCE_ID: resourceId,
+        THREAD_ID: threadId,
+        RUN_MS: '300',
+        HOLD_SIG_IDS: 'sig-1',
+        AGENT_ID: 'lambda-agent',
+        MASTRA_AGENT_THREAD_LEASE_TTL_MS: '6000',
+      };
+
+      const winner = spawnWorker('winner', env);
+      workers = [winner];
+      await waitForLine(winner, '"type":"ready"');
+      winner.send({ cmd: 'send', sigId: 'sig-1' });
+      await waitForLine(winner, '"type":"owner-stream-resolved"');
+
+      const sender = spawnWorker('sender', env);
+      workers = [winner, sender];
+      await waitForLine(sender, '"type":"ready"');
+      sender.send({ cmd: 'send-and-die', sigId: 'sig-2' });
+      await waitFor(async () => sender.proc.exitCode !== null, 10_000);
+
+      winner.send({ cmd: 'finish-run', sigId: 'sig-1' });
+      await waitFor(async () => eventsByType(winner, 'run-finished').length >= 2, 15_000).catch(() => {});
+
+      expect(new Set(eventsByType(winner, 'run-finished').map(e => e.sigId))).toEqual(new Set(['sig-1', 'sig-2']));
+    }, 60_000);
+
     it('owner without a thread subscription drains a mid-run follow-up sent from another pod', async () => {
       // Issue #24375 topology: subscriber on pod A, run owner on pod B, follow-up
       // sender on pod C. Neither B nor C calls subscribeToThread, so B must pick
