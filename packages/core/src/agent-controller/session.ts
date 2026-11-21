@@ -4847,7 +4847,9 @@ export class Session<TState = unknown> {
         // Drop this process's hold on the parked run (stream, registry entries, cached
         // workflow run) while its snapshot still reads as suspended, then the snapshot.
         // A failed in-memory release must not keep the snapshot from being deleted.
-        await this.#releaseParkedRunInMemory(runId);
+        await this.#releaseParkedRunInMemory(runId).catch(error =>
+          this.emit({ type: 'error', error: getErrorFromUnknown(error) }),
+        );
         await this.machinery.releaseSuspendedRun(runId);
       } catch (error) {
         this.emit({ type: 'error', error: getErrorFromUnknown(error) });

@@ -103,6 +103,24 @@ describe('releaseParkedRun', () => {
     expect(await resumeText(agent, 'run-parked')).toBe('done');
   });
 
+  it('still drops the run and its entries when a stream release throws', async () => {
+    const { agent, workflow, storage, mastra } = setup();
+    const { fullStream } = await agent.stream('hi', { runId: 'run-throws' });
+    const reader = (fullStream as ReadableStream<any>).getReader();
+    await expect.poll(() => storedStatus(storage, 'run-throws')).toBe('suspended');
+    const getPubSub = vi.spyOn(agent as any, 'getPubSub').mockImplementation(() => {
+      throw new Error('stream release failed');
+    });
+
+    await expect(agent.releaseParkedRun('run-throws')).rejects.toThrow('stream release failed');
+    getPubSub.mockRestore();
+    expect(workflow.runs.size).toBe(0);
+    expect(agent.runRegistry.size).toBe(0);
+    expect(getRunRegistryEntry('run-throws', mastra)).toBeUndefined();
+    expect(await storedStatus(storage, 'run-throws')).toBe('suspended');
+    reader.releaseLock();
+  });
+
   it('leaves a run alone while a resume of it is setting up', async () => {
     const { agent, storage } = setup();
     const { fullStream } = await agent.stream('hi', { runId: 'run-resuming' });

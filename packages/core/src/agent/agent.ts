@@ -12997,12 +12997,21 @@ export class Agent<
 
     // Checked before anything is released, so `false` always means nothing was.
     if (run && !engine.releaseParkedRun(workflow, runId, run, snapshot.status)) return false;
-    for (const cleanup of streamCleanups) cleanup.run();
+    // The workflow run is gone now, so a failing stream release must not strand the rest of the hold.
+    const failures: unknown[] = [];
+    for (const cleanup of streamCleanups) {
+      try {
+        cleanup.run();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
     if (localEntry) this.executionRunRegistry.cleanup(runId);
     // The global slot may hold another instance's later execution of the run; only this one's own entry goes.
     if (localEntry?.executionFence && globalEntry?.executionFence === localEntry.executionFence) {
       globalRunRegistry.delete(runId);
     }
+    if (failures.length > 0) throw failures[0];
     return true;
   }
 
