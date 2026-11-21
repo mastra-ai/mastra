@@ -82,7 +82,7 @@ describe('durable tool-call FGA error propagation', () => {
     globalRunRegistry.set(runId, {
       tools: { secureTool: { execute: vi.fn() } },
       saveQueueManager: { flushMessages },
-      memory: {},
+      memory: { recall: async () => ({ messages: [] }) },
       messageList,
     } as any);
 
@@ -137,7 +137,7 @@ describe('durable tool-call FGA error propagation', () => {
     globalRunRegistry.set(runId, {
       tools: { secureTool: { execute: vi.fn() } },
       saveQueueManager: { flushMessages },
-      memory: {},
+      memory: { recall: async () => ({ messages: [] }) },
       messageList,
     } as any);
 
