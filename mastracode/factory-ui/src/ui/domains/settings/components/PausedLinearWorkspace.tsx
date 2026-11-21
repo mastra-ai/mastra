@@ -33,8 +33,7 @@ export function PausedLinearWorkspace({
       }
       description={
         <span className="whitespace-normal">
-          {count} {count === 1 ? 'project or team' : 'projects and teams'} paused. Reconnect to resume. Your saved
-          routing is kept.
+          {count} {count === 1 ? 'project or team' : 'projects and teams'} paused.
           {/* Under the description in the destructive tone, where the row's field error used to sit. */}
           {reconnect.error && <span className="text-destructive-foreground block">{reconnect.error}</span>}
         </span>

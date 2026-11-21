@@ -46,11 +46,7 @@ function EnvironmentBlocks({ factoryId, environment }: { factoryId: string; envi
   const canBuild = environment.sandbox.capabilities.builds.available && environment.buildTriggers !== undefined;
   return (
     <>
-      <SettingsSubsection
-        scope="factory"
-        title="Environment"
-        description={`How each sandbox is set up. ${providerLine(environment.sandbox.provider)}`}
-      >
+      <SettingsSubsection scope="factory" title="Environment" description={providerLine(environment.sandbox.provider)}>
         <WorkspaceSetupBlock
           workdir={environment.sandboxWorkingDirectory}
           command={environment.workspaceSetupCommand}

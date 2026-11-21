@@ -28,7 +28,7 @@ export function DebugSection() {
     <SettingsSubsection
       scope="deployment"
       title="Running versions"
-      description="The Mastra packages this Factory server was built with. Include them when you report an issue."
+      description="The Mastra packages this Factory server was built with."
       action={
         query.data && (
           <CopyButton

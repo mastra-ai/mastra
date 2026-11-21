@@ -164,7 +164,7 @@ function ScheduleRows({
         description={
           schedule.scheduleAvailable
             ? describe(frequency, cron, hour, day, timezone)
-            : 'Needs a storage adapter with schedules. Build now and push builds still work.'
+            : 'Needs a storage adapter with schedules.'
         }
       >
         <Select value={frequency} onValueChange={next => pick(next)} disabled={locked}>

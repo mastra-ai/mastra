@@ -138,9 +138,7 @@ describe('FactoryDefaultModel', () => {
     await waitForMutationsIdle(client);
 
     expect(screen.queryByRole('dialog', { name: SWITCH_PROMPT })).not.toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent(
-      'Switch started in the background. Running sessions will pick up the new model on their next step.',
-    );
+    expect(screen.getByRole('status')).toHaveTextContent('Switch started in the background.');
   });
 
   it('does not save or ask when the picked model is already the default', async () => {

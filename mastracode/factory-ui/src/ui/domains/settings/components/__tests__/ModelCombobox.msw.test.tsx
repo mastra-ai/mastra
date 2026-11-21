@@ -12,7 +12,7 @@ describe('ModelCombobox', () => {
       fireEvent.click(screen.getByRole('combobox'));
       const options = await screen.findAllByRole('option');
       expect(options.map(option => option.textContent)).toEqual([
-        'AutoPicked for you',
+        'Auto',
         'GPT-5openai/gpt-5',
         'GPT-4.1openai/gpt-4.1',
         'GPT-4oopenai/gpt-4o',

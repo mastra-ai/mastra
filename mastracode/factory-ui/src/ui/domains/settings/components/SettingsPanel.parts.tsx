@@ -27,7 +27,7 @@ export function PreferencesSettings() {
   return (
     <SettingsSubsection scope="personal" title="Preferences" description="Stored in this browser.">
       <SettingsContainer>
-        <SettingsRow label="Theme" description="Color scheme for the interface.">
+        <SettingsRow label="Theme" description="Light, dark, or match your system.">
           <ThemeToggle />
         </SettingsRow>
         <SettingsRow label="Completion sound" description="Played when an agent run finishes.">
@@ -57,7 +57,7 @@ export function BehaviorSettings({
       <SettingsSubsection
         scope="factory"
         title="General"
-        description="Shared by everyone working in this Factory. Auto-approve and smart editing reset when the server restarts."
+        description="Auto-approve and smart editing reset when the server restarts."
       >
         <SettingsContainer>
           <SettingsRow label="Auto-approve tools" description="Run tool calls without asking.">
@@ -100,8 +100,8 @@ const TOOL_CATEGORIES: { value: ToolCategory; label: string; hint: string }[] = 
   { value: 'read', label: 'Read', hint: 'View files and inspect the workspace.' },
   { value: 'edit', label: 'Edit', hint: 'Create, change or delete files.' },
   { value: 'execute', label: 'Execute', hint: 'Run shell commands.' },
-  { value: 'mcp', label: 'MCP', hint: 'Call tools from MCP servers.' },
-  { value: 'other', label: 'Other', hint: 'Anything not covered above.' },
+  { value: 'mcp', label: 'MCP', hint: 'Tools from connected MCP servers.' },
+  { value: 'other', label: 'Other', hint: 'Tools not covered above.' },
 ];
 function PermissionsSection({
   permissions,
@@ -111,7 +111,7 @@ function PermissionsSection({
     <SettingsSubsection
       scope="factory"
       title="Tool permissions"
-      description="Whether agents run each kind of tool without asking, ask first, or never run it. Auto-approve sets them all to Allow. Shared by everyone in this Factory, and reset when the server restarts."
+      description="Auto-approve sets them all to Allow. Reset when the server restarts."
     >
       <SettingsContainer>
         {TOOL_CATEGORIES.map(({ value, label, hint }) => (

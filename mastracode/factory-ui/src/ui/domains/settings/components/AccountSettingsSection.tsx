@@ -94,11 +94,7 @@ function ProfileSubsection({ auth }: { auth: ReturnType<typeof useFactoryAuth> }
   const user = state.user;
 
   return (
-    <SettingsSubsection
-      scope="personal"
-      title="Profile"
-      description="Your signed-in identity for this MastraCode deployment."
-    >
+    <SettingsSubsection scope="personal" title="Profile">
       <SettingsContainer>
         <SettingsItem title="Name" description="From your sign-in provider.">
           <AccountValue>{user?.name ?? 'Not provided'}</AccountValue>

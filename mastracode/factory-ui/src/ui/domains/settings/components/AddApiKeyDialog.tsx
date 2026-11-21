@@ -22,7 +22,7 @@ type KeyScope = 'user' | 'org';
 
 const SCOPED_KEY_ACCESS: Record<KeyScope, string> = {
   org: 'Everyone in your organization can use this key.',
-  user: 'Only you can use this key. Shared organization access stays unchanged.',
+  user: 'Only you can use this key.',
 };
 
 interface AddApiKeyDialogProps {
@@ -87,7 +87,7 @@ export function AddApiKeyDialog({
         <DialogHeader>
           <DialogTitle>API key for {displayName}</DialogTitle>
           <DialogDescription>
-            The key is stored securely and never displayed again.
+            The key is never displayed again.
             {fixedScope && ` ${SCOPED_KEY_ACCESS[fixedScope]}`}
             {replacesSignIn && ' Saving replaces the provider sign-in at this scope.'}
           </DialogDescription>

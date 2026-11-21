@@ -27,9 +27,7 @@ export function SwitchRunningSessionsDialog({
         <DialogHeader>
           <DialogTitle>Also switch running sessions to {formatModelName(modelId)}?</DialogTitle>
           <DialogDescription>
-            New activity using the Factory defaults will use this model. Running work and review sessions keep their
-            current model unless you switch them. Switched sessions keep their work and pick up the new model on their
-            next step.
+            Switched sessions keep their work and pick up the new model on their next step.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>

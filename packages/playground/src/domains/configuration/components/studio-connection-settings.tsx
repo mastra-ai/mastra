@@ -13,9 +13,7 @@ export function StudioConnectionSettings() {
 
   return (
     <SettingsGroup>
-      <SettingsTitle info="The Mastra instance the studio talks to, the path in front of its API routes, and the headers sent with every request.">
-        Mastra connection
-      </SettingsTitle>
+      <SettingsTitle>Mastra connection</SettingsTitle>
       <StudioConnectionForm key={configKey} initialConfig={{ baseUrl, apiPrefix, headers }} />
     </SettingsGroup>
   );
