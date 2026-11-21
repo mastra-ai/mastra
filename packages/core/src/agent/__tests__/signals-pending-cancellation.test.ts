@@ -2109,14 +2109,18 @@ describe('Agent signals: pending cancellation', () => {
       }
     });
 
-    it('drains an unadmitted message once while the forwarder reads the thread several lease checks behind', async () => {
+    /**
+     * A message forwarded to a run that dies without admitting it, while this runtime's thread reader reads each event,
+     * in publish order, `lagChecks` lease checks after it was published and the broker loses its first `lostProbes`
+     * probes. Returns how many probes the forwarder published.
+     */
+    async function recoverUnadmittedForward({ lagChecks, lostProbes = 0 }: { lagChecks: number; lostProbes?: number }) {
       vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
       const pubsub = new ControlledLeasePubSub();
       const scope = { resourceId: 'lagging-probe', threadId: 'lagging-probe' };
       const key = `${scope.resourceId}\u0000${scope.threadId}`;
       const topic = agentThreadStreamTopicForKey(key);
       const runId = 'lagging-probe-run';
-      const lagChecks = 6;
       const model = createTextStreamModel('recovered');
       const agent = new Agent({
         id: 'lagging-probe',
@@ -2132,14 +2136,18 @@ describe('Agent signals: pending cancellation', () => {
         if (new Error().stack?.includes('checkLease')) checks++;
         return getLeaseOwner(leaseKey);
       };
-      // Once lagging, the forwarder's thread reader reads each event, in publish order, `lagChecks` lease checks after
-      // it was published.
       let lagging = false;
+      const lost = new Set<string>();
       const held: Array<{ at: number; deliver: () => void }> = [];
       const subscribe = pubsub.subscribe.bind(pubsub);
       pubsub.subscribe = async (subscribedTopic, cb) =>
         subscribe(subscribedTopic, event => {
           if (subscribedTopic !== topic || (!lagging && held.length === 0)) return cb(event);
+          if (event.data?.type === 'forwarded-lease-probe') {
+            // Every reader of the thread misses a lost probe.
+            if (lost.size < lostProbes) lost.add(event.data.probeId);
+            if (lost.has(event.data.probeId)) return;
+          }
           held.push({ at: checks, deliver: () => void cb(event) });
         });
       const releaseDue = () => {
@@ -2175,7 +2183,7 @@ describe('Agent signals: pending cancellation', () => {
         // The run it went to dies without admitting it or publishing anything, and the reader falls behind.
         pubsub.owners.delete(key);
         lagging = true;
-        for (let tick = 0; tick < 32 && model.doStreamCalls.length === 0; tick++) {
+        for (let tick = 0; tick < 64 && model.doStreamCalls.length === 0; tick++) {
           await vi.advanceTimersByTimeAsync(AGENT_LEASE_RENEW_INTERVAL_MS);
           await pubsub.flush();
           releaseDue();
@@ -2183,9 +2191,9 @@ describe('Agent signals: pending cancellation', () => {
           await nextTick();
         }
         await vi.waitFor(() => expect(model.doStreamCalls).toHaveLength(1));
-        expect(pubsub.publishedData.filter(data => data.type === 'forwarded-lease-probe').length).toBeGreaterThan(1);
+        const probes = pubsub.publishedData.filter(data => data.type === 'forwarded-lease-probe').length;
         // Every later probe comes back too, and none of them runs it again.
-        for (let tick = 0; tick < lagChecks + 1; tick++) {
+        for (let tick = 0; tick < lagChecks + 2; tick++) {
           await vi.advanceTimersByTimeAsync(AGENT_LEASE_RENEW_INTERVAL_MS);
           checks++;
           releaseDue();
@@ -2194,10 +2202,21 @@ describe('Agent signals: pending cancellation', () => {
         }
         expect(held).toHaveLength(0);
         expect(model.doStreamCalls).toHaveLength(1);
+        return probes;
       } finally {
         observer.unsubscribe();
         follower.resetForTests();
       }
+    }
+
+    it('drains an unadmitted message once while the forwarder reads the thread several lease checks behind', async () => {
+      // Each probe comes back a check after the next one is published.
+      expect(await recoverUnadmittedForward({ lagChecks: 6 })).toBeGreaterThan(1);
+    });
+
+    it('drains an unadmitted message once after the broker loses more probes than one lease loss keeps', async () => {
+      // The forwarder keeps eight probes valid, so it must keep publishing past them.
+      expect(await recoverUnadmittedForward({ lagChecks: 0, lostProbes: 9 })).toBe(10);
     });
 
     it('keeps a run that took the thread again while the lease was being read', async () => {

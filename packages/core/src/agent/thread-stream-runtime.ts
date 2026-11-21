@@ -277,7 +277,7 @@ const AGENT_THREAD_LEASE_TTL_MS = AGENT_LEASE_TTL_MS;
 const AGENT_THREAD_LEASE_RENEW_INTERVAL_MS = AGENT_LEASE_RENEW_INTERVAL_MS;
 /** Lease checks a forwarder waits for its probe to come back before publishing a new one. */
 const FORWARDED_LEASE_PROBE_RETRY_CHECKS = 5;
-/** Probes one lease loss keeps valid; once this many are out, the forwarder waits for one instead of publishing more. */
+/** Probes one lease loss keeps valid; a retry past this many stops honouring the oldest. */
 const FORWARDED_LEASE_PROBES_PER_EPISODE = 8;
 /**
  * TTL for a suspended run's warm in-memory state — the parked thread-run record
@@ -3565,8 +3565,11 @@ export class AgentThreadStreamRuntime {
    * A probe that has not come back after a few checks is followed by another, in case the broker dropped it, but the
    * earlier ones stay valid: a reader that lags by more than the retry interval still reads one of them back, and
    * any of them proves it has passed every admission published before it. The probes of one lease loss are dropped
-   * together when the lease names a covered run again or the forwards stop being tracked, and at most
-   * `FORWARDED_LEASE_PROBES_PER_EPISODE` are kept. A probe whose publish fails is dropped alone.
+   * together when a check sees the lease name a covered run again or the forwards stop being tracked. At most
+   * `FORWARDED_LEASE_PROBES_PER_EPISODE` stay valid; a retry beyond that drops the oldest, so a reader more than that
+   * many retry intervals behind waits until it catches up within them. A probe whose publish fails is dropped alone.
+   * A run that regains the lease, admits a forward and lets go again between two checks is not seen, so a probe
+   * published before that admission can still queue the forward a second time.
    */
   #watchForwardedIdleLease(state: AgentThreadRuntimeState, pubsub: PubSub | undefined, key: string) {
     if (state.forwardedIdleLeaseChecks.has(key)) return;
@@ -3594,7 +3597,7 @@ export class AgentThreadStreamRuntime {
         if (entry.runId === holder) {
           entry.leaseGone = false;
           // The run holds the lease again and may admit the forward after the probe, which the reader would then
-          // read first. That lease loss is over, so its probe must not queue anything.
+          // read first. That lease loss is over, so its probes must not queue anything.
           if (episode && [...episode.probes.values()].some(probe => probe.signalIds.has(signalId))) {
             state.forwardedIdleLeaseProbes.delete(key);
           }
@@ -3603,15 +3606,13 @@ export class AgentThreadStreamRuntime {
       }
       if (ended.size === 0) return;
       const current = state.forwardedIdleLeaseProbes.get(key);
-      if (
-        current &&
-        (checks - current.publishedAtCheck < FORWARDED_LEASE_PROBE_RETRY_CHECKS ||
-          current.probes.size >= FORWARDED_LEASE_PROBES_PER_EPISODE)
-      )
-        return;
+      if (current && checks - current.publishedAtCheck < FORWARDED_LEASE_PROBE_RETRY_CHECKS) return;
       const probeId = globalThis.crypto.randomUUID();
       const probes = current ?? { publishedAtCheck: checks, probes: new Map() };
       const retriedAtCheck = probes.publishedAtCheck;
+      if (probes.probes.size >= FORWARDED_LEASE_PROBES_PER_EPISODE) {
+        probes.probes.delete(probes.probes.keys().next().value!);
+      }
       probes.publishedAtCheck = checks;
       probes.probes.set(probeId, {
         signalIds: new Set([...forwarded].filter(([, entry]) => ended.has(entry.runId)).map(([signalId]) => signalId)),
