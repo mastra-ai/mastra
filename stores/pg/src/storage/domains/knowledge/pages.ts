@@ -13,6 +13,7 @@ import type {
   KnowledgeNoteListOutput,
   KnowledgePage,
   KnowledgePageActivityAction,
+  KnowledgePageActivityInput,
   KnowledgePageActivityEvent,
   KnowledgePageBodyLink,
   KnowledgePageLinkCounts,
@@ -1680,13 +1681,12 @@ export class PgKnowledgePages implements KnowledgePageStore {
     return hits;
   }
 
-  async listPageActivity(input: {
-    read: KnowledgeReadScope;
-    scopeId?: string;
-    pageId?: string;
-    cursor?: string;
-    limit?: number;
-  }): Promise<{ events: KnowledgePageActivityEvent[]; nextCursor?: string }> {
+  async listPageActivity(
+    input: KnowledgePageActivityInput,
+  ): Promise<{ events: KnowledgePageActivityEvent[]; nextCursor?: string }> {
+    if (input.before !== undefined && input.cursor !== undefined) {
+      throw new RangeError('Knowledge activity takes either a cursor or a before position, not both');
+    }
     const core = await loadPagesCore();
     const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const params = new Params();
@@ -1694,8 +1694,15 @@ export class PgKnowledgePages implements KnowledgePageStore {
     const where = [filter.readable('s'), `(a."noteId" IS NULL OR ${this.#noteVisible(filter, 'a."noteId"')})`];
     if (input.scopeId) where.push(`s."id" = ${params.add(input.scopeId)}`);
     if (input.pageId) where.push(`a."pageId" = ${params.add(input.pageId)}`);
-    if (input.cursor) {
-      const [createdAt, id] = decodeCursor(input.cursor, 2);
+    if (input.since) where.push(`a."createdAt" >= ${params.add(iso(input.since))}::timestamptz`);
+    if (input.until) where.push(`a."createdAt" < ${params.add(iso(input.until))}::timestamptz`);
+    const position = input.before
+      ? [iso(input.before.createdAt), input.before.id]
+      : input.cursor
+        ? decodeCursor(input.cursor, 2)
+        : undefined;
+    if (position) {
+      const [createdAt, id] = position;
       where.push(`(a."createdAt", a."id") < (${params.add(createdAt)}::timestamptz, ${params.add(id)})`);
     }
     const rows = await this.#rows(
@@ -1704,17 +1711,15 @@ export class PgKnowledgePages implements KnowledgePageStore {
        WHERE ${where.join(' AND ')} ORDER BY a."createdAt" DESC, a."id" DESC LIMIT ${limit + 1}`,
       params.values,
     );
-    const events = rows.slice(0, limit).map(
-      (row): KnowledgePageActivityEvent => ({
-        id: String(row.id),
-        action: String(row.action) as KnowledgePageActivityAction,
-        scopeId: String(row.scopeId),
-        pageId: String(row.pageId),
-        ...(row.noteId == null ? {} : { noteId: String(row.noteId) }),
-        provenance: parseJson<KnowledgeProvenance>(row.provenance),
-        createdAt: new Date(row.createdAt as string | Date),
-      }),
-    );
+    const events = rows.slice(0, limit).map((row): KnowledgePageActivityEvent => ({
+      id: String(row.id),
+      action: String(row.action) as KnowledgePageActivityAction,
+      scopeId: String(row.scopeId),
+      pageId: String(row.pageId),
+      ...(row.noteId == null ? {} : { noteId: String(row.noteId) }),
+      provenance: parseJson<KnowledgeProvenance>(row.provenance),
+      createdAt: new Date(row.createdAt as string | Date),
+    }));
     const last = events[events.length - 1];
     return {
       events,

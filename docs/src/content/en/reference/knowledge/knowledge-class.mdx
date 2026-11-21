@@ -75,7 +75,7 @@ export const knowledge = new Knowledge({
     name: 'tools',
     type: 'boolean | { read?: boolean | { maxTokens?: number }; write?: boolean }',
     description:
-      'Tools an attached agent gets. `true` gives all five: `knowledge_list`, `knowledge_search`, `knowledge_read`, `knowledge_page` and `knowledge_note`. `{ read: true }` gives the first three. `{ write: true }` gives the last two. `{ read: { maxTokens } }` turns on read and caps each `knowledge_read` body or `match` result, and each `knowledge_list` result, at `maxTokens`: 1,000 by default, at least 100. See [Read pages](/docs/knowledge/agents-and-tools#read-pages).',
+      'Tools an attached agent gets. `true` gives all six: `knowledge_list`, `knowledge_search`, `knowledge_read`, `knowledge_activity`, `knowledge_page` and `knowledge_note`. `{ read: true }` gives the first four. `{ write: true }` gives the last two. `{ read: { maxTokens } }` turns on read and caps each `knowledge_read` body or `match` result, and each `knowledge_list` result, at `maxTokens`: 1,000 by default, at least 100. See [Read pages](/docs/knowledge/agents-and-tools#read-pages).',
     isOptional: true,
     defaultValue: 'false',
   },
@@ -140,7 +140,7 @@ Returns the Knowledge tools for explicit wiring, such as an agent that isn't att
 
 ```typescript
 const tools = knowledge.createTools({ write: false })
-// knowledge_list, knowledge_search, knowledge_read
+// knowledge_list, knowledge_search, knowledge_read, knowledge_activity
 ```
 
 `principals` fixes the scope addresses every call acts as, for a host that runs the tools outside an agent run, such as an MCP server acting for an external agent. Each address must match a declared scope type, the store's declarations included. A call made with one that doesn't is refused. `createTools()` throws only for an empty list. The call's own run scopes are then ignored, and access follows the scope rules for these principals. Set them from the host's own authentication, never from the request. `author` is recorded on writes made through these tools.
