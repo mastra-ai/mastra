@@ -1,3 +1,4 @@
+import type { ObservationHistoryPageInput, ObservationHistoryPage } from '@internal/core/memory';
 import type { MastraMessageContentV2 } from '../../../agent';
 import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
 import type { RunFence } from '../../run-fencing';
@@ -50,6 +51,16 @@ export abstract class MemoryStorage extends StorageDomain {
 
   /** Supports groupId, generation bounds, and ordering in OM history queries. */
   readonly supportsObservationalMemoryHistorySearch?: boolean = false;
+
+  /** Supports tuple-ordered history pages and atomically commits observationHistory with observations. */
+  readonly supportsObservationHistoryPaging?: boolean = false;
+
+  /** Supports exclusive reverse pages and atomically initializes the initial observationHistory cursor. */
+  readonly supportsObservationHistoryBootstrap?: boolean = false;
+
+  async listObservationHistory(_input: ObservationHistoryPageInput): Promise<ObservationHistoryPage<MastraDBMessage>> {
+    throw new Error('Bounded observation history is not implemented by this adapter');
+  }
 
   /**
    * Whether this adapter's `updateThread` treats an omitted `title`/`metadata`

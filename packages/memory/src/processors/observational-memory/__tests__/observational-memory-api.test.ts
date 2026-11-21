@@ -1041,7 +1041,6 @@ name: Tyler
           thread: { id, resourceId, title: id, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
         });
       }
-      await storage.saveMessages({ messages });
       const beforeObservation = vi.fn(() => ({ messages: [] }));
       const observerModel = createMockObserverModel();
       const prompts = capturePrompts(observerModel);
@@ -1052,6 +1051,8 @@ name: Tyler
         hooks: { beforeObservation },
       });
       const record = await resourceOm.getOrCreateRecord(threadId, resourceId);
+      // Exercise active OM history, rather than the initial newest-only bootstrap.
+      await storage.saveMessages({ messages });
       await storage.setPendingMessageTokens(record.id, 600);
       const result = await resourceOm.observe({
         threadId,

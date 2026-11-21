@@ -1,6 +1,8 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import type { BufferedObservationChunk, ObservationalMemoryRecord } from '@mastra/core/storage';
 
+import { getObservationHistoryState } from './history-loader';
+
 /**
  * Find the index of the last completed observation boundary (end marker) in a message's parts.
  * Returns -1 if no completed observation is found.
@@ -215,7 +217,9 @@ export function filterObservedMessages(opts: {
 }): void {
   const { messageList, record } = opts;
   const allMessages = getObservableMessages(messageList);
-  const useMarkerBoundaryPruning = opts.useMarkerBoundaryPruning ?? true;
+  const persistedHistory = record ? getObservationHistoryState(record) : undefined;
+  const historyState = persistedHistory?.complete ? undefined : persistedHistory;
+  const useMarkerBoundaryPruning = !historyState && (opts.useMarkerBoundaryPruning ?? true);
   const preserveMessageIds = opts.preserveMessageIds ?? new Set<string>();
   const observedIds = new Set<string>(Array.isArray(record?.observedMessageIds) ? record.observedMessageIds : []);
 
@@ -259,10 +263,13 @@ export function filterObservedMessages(opts: {
     }
   } else if (record) {
     const pendingToolResultIds = collectPendingToolResultIds(allMessages, observedIds);
-    const derivedCursor =
-      opts.fallbackCursor ??
-      getLastObservedMessageCursor(allMessages.filter(msg => !!msg?.id && observedIds.has(msg.id) && !!msg.createdAt));
-    const lastObservedAt = record.lastObservedAt;
+    const derivedCursor = historyState
+      ? historyState.after
+      : (opts.fallbackCursor ??
+        getLastObservedMessageCursor(
+          allMessages.filter(msg => !!msg?.id && observedIds.has(msg.id) && !!msg.createdAt),
+        ));
+    const lastObservedAt = historyState ? undefined : record.lastObservedAt;
     const messagesToRemove: string[] = [];
 
     for (const msg of allMessages) {
@@ -277,7 +284,14 @@ export function filterObservedMessages(opts: {
         continue;
       }
 
-      if (derivedCursor && isMessageAtOrBeforeCursor(msg, derivedCursor)) {
+      const coveredByCursor =
+        derivedCursor &&
+        (historyState
+          ? !!msg.createdAt &&
+            (new Date(msg.createdAt).getTime() - Date.parse(derivedCursor.createdAt) ||
+              Buffer.compare(Buffer.from(msg.id), Buffer.from(derivedCursor.id))) <= 0
+          : isMessageAtOrBeforeCursor(msg, derivedCursor));
+      if (coveredByCursor) {
         if (hasPendingPair) continue;
         messagesToRemove.push(msg.id);
         continue;

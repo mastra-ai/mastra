@@ -9,6 +9,14 @@
  * into the table schema they get from `@mastra/core`, so the columns exist even when the
  * installed core predates them.
  */
+export type {
+  ObservationHistoryCursor,
+  ObservationHistoryState,
+  ObservationHistoryPageInput,
+  ObservationHistoryPage,
+} from './history';
+export { mergeObservationHistory } from './history';
+
 export const OBSERVATIONAL_MEMORY_LIFECYCLE_COLUMNS = {
   // id of the next generation once this one is retired; null while live
   supersededBy: { type: 'text', nullable: true },

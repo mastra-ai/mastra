@@ -26,6 +26,7 @@ export interface ObservationRunOpts {
   threadId: string;
   resourceId?: string;
   messages: MastraDBMessage[];
+  observationHistory?: import('../history-loader').ObservationHistoryState;
 
   /**
    * Live MessageList for the in-flight agent turn, when observation runs inside

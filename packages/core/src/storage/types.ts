@@ -1385,6 +1385,8 @@ export interface ObservationalMemoryRecord {
  * Input for creating a new observational memory record
  */
 export interface CreateObservationalMemoryInput {
+  /** Initial lower history boundary, atomically persisted by paging-capable adapters. */
+  observationHistory?: import('@internal/core/memory').ObservationHistoryState;
   threadId: string | null;
   resourceId: string;
   scope: ObservationalMemoryScope;
@@ -1398,6 +1400,8 @@ export interface CreateObservationalMemoryInput {
  * Uses cursor-based message tracking via lastObservedAt instead of message IDs.
  */
 export interface UpdateActiveObservationsInput {
+  /** Committed bounded-history prefix. Only sent to adapters supporting observation history paging. */
+  observationHistory?: import('@internal/core/memory').ObservationHistoryState;
   id: string;
   observations: string;
   tokenCount: number;

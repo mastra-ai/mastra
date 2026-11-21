@@ -96,57 +96,70 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
   async prepare() {
     const { record, threadId: currentThreadId, messages: currentThreadMessages } = this.opts;
 
-    const { threads: allThreads } = await this.storage.listThreads({ filter: { resourceId: this.resourceId } });
-    const threadMetadataMap = new Map<string, { lastObservedAt?: string }>();
+    if (this.opts.observationHistory) {
+      for (const message of currentThreadMessages) {
+        const tid = message.threadId ?? currentThreadId;
+        const messages = this.messagesByThread.get(tid) ?? [];
+        messages.push(message);
+        this.messagesByThread.set(tid, messages);
+      }
+      for (const tid of this.messagesByThread.keys()) {
+        const thread = await this.storage.getThreadById({ threadId: tid });
+        const metadata = getThreadOMMetadata(thread?.metadata);
+        if (metadata) this.priorMetadataByThread.set(tid, metadata);
+      }
+    } else {
+      const { threads: allThreads } = await this.storage.listThreads({ filter: { resourceId: this.resourceId } });
+      const threadMetadataMap = new Map<string, { lastObservedAt?: string }>();
 
-    for (const thread of allThreads) {
-      const omMetadata = getThreadOMMetadata(thread.metadata);
-      threadMetadataMap.set(thread.id, { lastObservedAt: omMetadata?.lastObservedAt });
-      if (omMetadata) {
-        this.priorMetadataByThread.set(thread.id, omMetadata);
+      for (const thread of allThreads) {
+        const omMetadata = getThreadOMMetadata(thread.metadata);
+        threadMetadataMap.set(thread.id, { lastObservedAt: omMetadata?.lastObservedAt });
+        if (omMetadata) {
+          this.priorMetadataByThread.set(thread.id, omMetadata);
+        }
+      }
+
+      for (const thread of allThreads) {
+        const threadLastObservedAt = threadMetadataMap.get(thread.id)?.lastObservedAt;
+        const startDate = threadLastObservedAt ? new Date(new Date(threadLastObservedAt).getTime() + 1) : undefined;
+
+        const result = await this.storage.listMessages({
+          threadId: thread.id,
+          perPage: false,
+          orderBy: { field: 'createdAt', direction: 'ASC' },
+          filter: startDate ? { dateRange: { start: startDate } } : undefined,
+        });
+
+        const messages = result.messages.filter(msg => msg.role !== 'system');
+        if (messages.length > 0) {
+          this.messagesByThread.set(thread.id, messages);
+        }
+      }
+
+      if (currentThreadMessages.length > 0) {
+        const existingCurrentThreadMsgs = this.messagesByThread.get(currentThreadId) ?? [];
+        const messageMap = new Map<string, MastraDBMessage>();
+
+        for (const msg of existingCurrentThreadMsgs) {
+          if (msg.id) messageMap.set(msg.id, msg);
+        }
+        for (const msg of currentThreadMessages) {
+          if (msg.id) messageMap.set(msg.id, msg);
+        }
+
+        this.messagesByThread.set(currentThreadId, Array.from(messageMap.values()));
+      }
+
+      for (const [tid, msgs] of this.messagesByThread) {
+        const filtered = msgs.filter(m => !this.deps.observedMessageIds.has(m.id));
+        if (filtered.length > 0) {
+          this.messagesByThread.set(tid, filtered);
+        } else {
+          this.messagesByThread.delete(tid);
+        }
       }
     }
-
-    for (const thread of allThreads) {
-      const threadLastObservedAt = threadMetadataMap.get(thread.id)?.lastObservedAt;
-      const startDate = threadLastObservedAt ? new Date(new Date(threadLastObservedAt).getTime() + 1) : undefined;
-
-      const result = await this.storage.listMessages({
-        threadId: thread.id,
-        perPage: false,
-        orderBy: { field: 'createdAt', direction: 'ASC' },
-        filter: startDate ? { dateRange: { start: startDate } } : undefined,
-      });
-
-      const messages = result.messages.filter(msg => msg.role !== 'system');
-      if (messages.length > 0) {
-        this.messagesByThread.set(thread.id, messages);
-      }
-    }
-
-    if (currentThreadMessages.length > 0) {
-      const existingCurrentThreadMsgs = this.messagesByThread.get(currentThreadId) ?? [];
-      const messageMap = new Map<string, MastraDBMessage>();
-
-      for (const msg of existingCurrentThreadMsgs) {
-        if (msg.id) messageMap.set(msg.id, msg);
-      }
-      for (const msg of currentThreadMessages) {
-        if (msg.id) messageMap.set(msg.id, msg);
-      }
-
-      this.messagesByThread.set(currentThreadId, Array.from(messageMap.values()));
-    }
-
-    for (const [tid, msgs] of this.messagesByThread) {
-      const filtered = msgs.filter(m => !this.deps.observedMessageIds.has(m.id));
-      if (filtered.length > 0) {
-        this.messagesByThread.set(tid, filtered);
-      } else {
-        this.messagesByThread.delete(tid);
-      }
-    }
-
     let totalMessages = 0;
     for (const msgs of this.messagesByThread.values()) {
       totalMessages += msgs.length;
@@ -172,7 +185,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
 
     for (const threadId of threadsBySize) {
       const threadTokens = this.threadTokenCounts.get(threadId) ?? 0;
-      if (accumulatedTokens >= threshold) break;
+      if (!this.opts.observationHistory && accumulatedTokens >= threshold) break;
       threadsToObserve.push(threadId);
       accumulatedTokens += threadTokens;
     }
@@ -312,6 +325,9 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
   async process(_output: ObserverOutput, existingObservations: string): Promise<ProcessedObservation> {
     const { record } = this.opts;
 
+    if (this.opts.observationHistory && this.threadOrder.some(threadId => !this.multiThreadResults.has(threadId))) {
+      throw new Error('Observer omitted a thread from the bounded history prefix; no cursor was committed');
+    }
     this.observationResults = [];
     for (const threadId of this.threadOrder) {
       const threadMessages = this.messagesByThread.get(threadId) ?? [];
