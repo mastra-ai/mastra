@@ -728,7 +728,8 @@ type AgentThreadRuntimeState = {
   /**
    * Idle messages this runtime forwarded to another process's lease-owning run, keyed by thread key and then
    * signal ID. A forward can reach the owner after its run has finished locally, and the owner then drops it, so
-   * each copy is kept until the owner presents the message as pending on that run (its admission) and is queued
+   * each copy is kept until the owner admits it on that run (`user-message-admitted`, or the pending presentation
+   * from owners that predate it) and is queued
    * again here if the run ends first, or if the lease stops naming that run (see `forwardedIdleLeaseChecks`).
    */
   forwardedIdleSignalsByThread: Map<string, Map<string, ForwardedIdleSignal>>;
@@ -2215,15 +2216,18 @@ export class AgentThreadStreamRuntime {
           )
         )
           return;
-        const queue = queues.get(key) ?? [];
         const signal = createSignal(data.signal);
+        // Issued before the message is queued, so a broker that keeps publish order (Redis Streams' single writer)
+        // stores it ahead of anything the run publishes for it. Not awaited: if the run ended during the wait, the
+        // forwarder would settle its copy on this event while this runtime never queued it, losing the message.
+        if (this.#pendingUserMessageChunk(runId, signal, 'pending')) {
+          this.#publish(pubsub, key, { type: 'user-message-admitted', signalId: signal.id, admittedRunId: runId });
+        }
+        const queue = queues.get(key) ?? [];
         queue.push(signal);
         queues.set(key, queue);
         subscription.admittedSignalIds.add(data.signal.id);
         this.#publishPendingUserMessage(pubsub, key, runId, signal, 'pending');
-        if (this.#pendingUserMessageChunk(runId, signal, 'pending')) {
-          this.#publish(pubsub, key, { type: 'user-message-admitted', signalId: signal.id, admittedRunId: runId });
-        }
         this.#notifyPendingSignals(state, key, signal);
       } else if (data?.type === 'user-message-admitted') {
         this.#settleForwardedIdleSignal(state, key, data.signalId, data.admittedRunId);
@@ -6077,9 +6081,10 @@ export class AgentThreadStreamRuntime {
         return true;
       }
       const ownerRunId = owns.owner ? threadLeaseRunId(owns.owner) : undefined;
-      // Only user messages have an admission the owner announces (their pending presentation), so only
+      // Only user messages have an admission the owner announces (`user-message-admitted`), so only
       // they can be held until admitted without risking a second delivery. Known limit: if the owner admits it
-      // but that presentation is lost before its run ends, the held copy is queued again and the message runs twice.
+      // but that admission's publish fails, the held copy is queued again when the run ends and the message runs twice.
+      // If the owner dies after admitting it but before running it, the held copy is already settled and the message is lost.
       // A forward to a run this runtime registered and then lost to a takeover is kept by the lost-segment guard in
       // the control subscription's terminal handler; that narrow window has no in-process test.
       if (owns.owner && ownerRunId && this.#pendingUserMessageChunk(ownerRunId, pendingIdle.signal, 'pending')) {

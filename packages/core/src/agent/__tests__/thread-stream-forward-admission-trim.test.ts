@@ -19,7 +19,7 @@ import { LeasePubSub } from './thread-stream-test-utils';
  */
 class LaggingReaderPubSub extends LeasePubSub {
   lagNewSubscribers = false;
-  #lagging: Array<{ topic: string; read: (event: any) => void }> = [];
+  #lagging: Array<{ topic: string; read: (event: any) => void; caughtUp: () => Promise<void> }> = [];
   #paused = false;
 
   override async subscribe(topic: string, cb: EventCallback): Promise<void> {
@@ -31,10 +31,19 @@ class LaggingReaderPubSub extends LeasePubSub {
       seen.add(event.id);
       tail = tail.then(() => new Promise<void>(resolve => setTimeout(resolve, 0))).then(() => cb(event));
     };
-    if (lags) this.#lagging.push({ topic, read });
+    if (lags) this.#lagging.push({ topic, read, caughtUp: () => tail });
     return super.subscribe(topic, event => {
       if (!(lags && this.#paused)) read(event);
     });
+  }
+
+  laggingReaders() {
+    return this.#lagging.length;
+  }
+
+  /** Resolves once every lagging reader has handled everything it has read. */
+  async caughtUp() {
+    await Promise.all(this.#lagging.map(reader => reader.caughtUp()));
   }
 
   pause() {
@@ -100,6 +109,8 @@ describe('forwarded user message admission', () => {
     pubsub.lagNewSubscribers = true;
     const followerSubscription = await follower.subscribeToThread(agent, scope, pubsub);
     pubsub.lagNewSubscribers = false;
+    // The follower's thread control subscription and its stream reader both lag.
+    expect(pubsub.laggingReaders()).toBe(2);
     for (const subscription of [ownerSubscription, followerSubscription]) {
       void (async () => {
         for await (const _ of subscription.stream);
@@ -139,7 +150,7 @@ describe('forwarded user message admission', () => {
       );
 
       pubsub.resume();
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await pubsub.caughtUp();
       await vi.waitFor(() => expect(pubsub.owners.size).toBe(0));
       expect(idleBRuns()).toBe(1);
     } finally {
