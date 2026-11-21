@@ -23,6 +23,7 @@ import {
 import { useExperimentsItemUsage } from '@mastra/react/hooks/experiments';
 import { useMemo, useState } from 'react';
 import type { CSSProperties, MouseEvent } from 'react';
+import { useRenameExperiment } from '../../hooks/use-rename-experiment';
 import { ComparisonItemPanel } from './comparison-item-panel';
 import { ComparisonSideSummary, ComparisonSideTitle } from './comparison-side-header';
 import type { ComparisonSideMetrics, ScorerSummary } from './comparison-side-header';
@@ -96,6 +97,7 @@ export function ExperimentsComparison({
   const [selectedItemId, setSelectedItemId] = useState<string>();
   const [featuredTraceId, setFeaturedTraceId] = useState<string>();
   const traceQuery = useTraceQueryAvailable();
+  const renameHandlerFor = useRenameExperiment();
   // One drawer at a time: the item and the trace replace each other.
   const openItem = (itemId: string) => {
     setFeaturedTraceId(undefined);
@@ -226,6 +228,7 @@ export function ExperimentsComparison({
                 label={columnLabel(index)}
                 experiment={experimentsById[experimentId] ?? undefined}
                 onSetBaseline={index > 0 && onSetBaseline ? () => onSetBaseline(experimentId) : undefined}
+                onRename={experimentsById[experimentId] ? renameHandlerFor(experimentsById[experimentId]) : undefined}
               />
             </div>
           ))}

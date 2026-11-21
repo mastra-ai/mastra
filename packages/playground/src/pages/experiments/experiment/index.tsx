@@ -6,6 +6,7 @@ import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/se
 import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
 import {
   DeleteExperimentDialog,
+  ExperimentHeaderActions,
   ExperimentKpis,
   ExperimentResultsSection,
 } from '@mastra/playground-ui/domains/experiments';
@@ -26,8 +27,8 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
-import { ExperimentHeaderActions } from '@/domains/experiments/components/experiment-header-actions';
 import { ExperimentItemSidePanel } from '@/domains/experiments/components/experiment-item-side-panel';
+import { RerunExperimentButton } from '@/domains/experiments/components/rerun-experiment-button';
 import { ExperimentRouteItemPanelProvider } from '@/domains/experiments/context/experiment-route-item-panel-provider';
 import {
   ExperimentCrumb,
@@ -35,6 +36,7 @@ import {
   ExperimentCrumbStatusIcon,
 } from '@/domains/experiments/experiment-crumb';
 import { useExperimentResultsSelection } from '@/domains/experiments/hooks/use-experiment-results-selection';
+import { useRenameExperiment } from '@/domains/experiments/hooks/use-rename-experiment';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import type { CrumbDef } from '@/domains/navigation/crumbs';
 
@@ -118,6 +120,8 @@ function ExperimentPage() {
   });
   const usage = experimentId ? usageByExperimentId[experimentId] : undefined;
 
+  const renameHandlerFor = useRenameExperiment();
+
   const selection = useExperimentResultsSelection({
     datasetId,
     experimentId: experimentId ?? '',
@@ -193,7 +197,12 @@ function ExperimentPage() {
         <PageLayout
           breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
           headerActions={
-            <ExperimentHeaderActions experiment={experiment} onDeleteClick={() => setDeleteDialogOpen(true)} />
+            <ExperimentHeaderActions
+              experiment={experiment}
+              rerunSlot={<RerunExperimentButton experiment={experiment} />}
+              onRename={renameHandlerFor(experiment)}
+              onDeleteClick={() => setDeleteDialogOpen(true)}
+            />
           }
         >
           <h1 className="sr-only">{experimentId}</h1>

@@ -299,7 +299,9 @@ describe('ComparisonSideTitle', () => {
 
   describe('when the experiment has a name', () => {
     const openMenu = () => {
-      renderColumn(<ComparisonSideTitle role="baseline" label="Baseline" experiment={namedExperiment} />);
+      renderColumn(
+        <ComparisonSideTitle role="baseline" label="Baseline" experiment={namedExperiment} onRename={async () => {}} />,
+      );
       fireEvent.click(screen.getByRole('button', { name: 'entity-extraction / model-a' }));
     };
 
@@ -333,7 +335,7 @@ describe('ComparisonSideTitle', () => {
     });
   });
 
-  describe('when the experiment belongs to no dataset', () => {
+  describe('when the host cannot rename the experiment', () => {
     it('does not offer to rename it', async () => {
       renderColumn(<ComparisonSideTitle role="baseline" label="Baseline" experiment={datasetlessExperiment} />);
       fireEvent.click(screen.getByRole('button', { name: 'entity-extraction / model-a' }));

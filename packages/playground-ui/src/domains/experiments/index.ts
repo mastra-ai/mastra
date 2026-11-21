@@ -30,6 +30,10 @@ export type {
   ExperimentItemPanelContextValue,
   ExperimentItemPanelProviderProps,
 } from './context/experiment-item-panel-context';
+export { ExperimentHeaderActions } from './components/experiment-header-actions';
+export type { ExperimentHeaderActionsProps } from './components/experiment-header-actions';
+export { RenameExperimentDialog } from './components/rename-experiment-dialog';
+export type { RenameExperimentDialogProps, RenameExperimentPatch } from './components/rename-experiment-dialog';
 export { ExperimentKpis } from './components/experiment-kpis';
 export type { ExperimentKpisProps } from './components/experiment-kpis';
 export { ExperimentResultsSection } from './components/experiment-results-section';

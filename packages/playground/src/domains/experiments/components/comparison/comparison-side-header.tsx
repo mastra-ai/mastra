@@ -4,8 +4,13 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { getShortId } from '@mastra/playground-ui/components/Text';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { ComparisonMetricList, ComparisonSection, ScorerLabel } from '@mastra/playground-ui/domains/experiments';
-import type { ComparisonMetric } from '@mastra/playground-ui/domains/experiments';
+import {
+  ComparisonMetricList,
+  ComparisonSection,
+  RenameExperimentDialog,
+  ScorerLabel,
+} from '@mastra/playground-ui/domains/experiments';
+import type { ComparisonMetric, RenameExperimentPatch } from '@mastra/playground-ui/domains/experiments';
 import type { ComparisonRole } from '@mastra/playground-ui/domains/experiments/components/comparison/build-comparison-rows';
 import { ComparisonDatasetVersion } from '@mastra/playground-ui/domains/experiments/components/comparison/comparison-dataset-version';
 import {
@@ -38,7 +43,6 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
 import { useState } from 'react';
-import { RenameExperimentDialog } from '../rename-experiment-dialog';
 
 export interface ScorerSummary {
   scorerId: string;
@@ -69,15 +73,15 @@ export interface ComparisonSideTitleProps {
   experiment?: DatasetExperiment;
   /** Makes this contender the baseline. Omitted on the baseline itself. */
   onSetBaseline?: () => void;
+  /** When provided, the menu offers to rename the experiment. */
+  onRename?: (patch: RenameExperimentPatch) => Promise<void>;
 }
 
 /** Title of one comparison side: a menu to view or rename the experiment, and its Baseline/Contender badge. */
-export function ComparisonSideTitle({ role, label, experiment, onSetBaseline }: ComparisonSideTitleProps) {
+export function ComparisonSideTitle({ role, label, experiment, onSetBaseline, onRename }: ComparisonSideTitleProps) {
   const { Link } = useLinkComponent();
   const [renameOpen, setRenameOpen] = useState(false);
   const shortId = experiment ? (getShortId(experiment.id) ?? experiment.id) : null;
-  // The rename route is dataset-scoped, so caller-run experiments without a dataset can't be renamed.
-  const canRename = Boolean(experiment?.datasetId);
 
   return (
     <div className="flex min-w-0 items-center gap-2">
@@ -95,7 +99,7 @@ export function ComparisonSideTitle({ role, label, experiment, onSetBaseline }: 
             <DropdownMenu.Item render={<Link href={`/experiments/${experiment.id}`} />}>
               <IconChainLink3 /> View experiment
             </DropdownMenu.Item>
-            {canRename && (
+            {onRename && (
               <DropdownMenu.Item onSelect={() => setRenameOpen(true)}>
                 <IconPencil /> Rename experiment
               </DropdownMenu.Item>
@@ -104,7 +108,9 @@ export function ComparisonSideTitle({ role, label, experiment, onSetBaseline }: 
         </DropdownMenu>
       )}
       {/* Mounted on demand so the form state is seeded from the experiment each time it opens. */}
-      {experiment && renameOpen && <RenameExperimentDialog experiment={experiment} open onOpenChange={setRenameOpen} />}
+      {experiment && onRename && renameOpen && (
+        <RenameExperimentDialog experiment={experiment} open onOpenChange={setRenameOpen} onRename={onRename} />
+      )}
       <div className="ml-auto shrink-0">
         {onSetBaseline ? (
           <Tooltip>

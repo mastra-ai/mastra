@@ -1,4 +1,5 @@
 import type { DatasetExperiment } from '@mastra/client-js';
+import { useState } from 'react';
 import {
   Dialog,
   DialogAction,
@@ -8,51 +9,51 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@mastra/playground-ui/components/Dialog';
-import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
-import { Form } from '@mastra/playground-ui/components/Form';
-import { Input } from '@mastra/playground-ui/components/Input';
-import { toast } from '@mastra/playground-ui/utils/toast';
-import { useDatasetMutations } from '@mastra/react/hooks/datasets';
-import { useState } from 'react';
+} from '@/ds/components/Dialog';
+import { Field, FieldLabel } from '@/ds/components/Field';
+import { Form } from '@/ds/components/Form';
+import { Input } from '@/ds/components/Input';
+import { toast } from '@/utils/toast';
+
+export type RenameExperimentPatch = { name: string; description: string };
 
 export interface RenameExperimentDialogProps {
   experiment: DatasetExperiment;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Saves the trimmed name and description; a rejection keeps the dialog open. */
+  onRename: (patch: RenameExperimentPatch) => Promise<void>;
 }
 
 /**
  * Edits an experiment's name and description. Mount it on demand (`{open && ...}`)
  * so the form state is seeded from the experiment each time it opens.
  */
-export function RenameExperimentDialog({ experiment, open, onOpenChange }: RenameExperimentDialogProps) {
+export function RenameExperimentDialog({ experiment, open, onOpenChange, onRename }: RenameExperimentDialogProps) {
   const [name, setName] = useState(experiment.name ?? '');
   const [description, setDescription] = useState(experiment.description ?? '');
-  const { updateExperiment } = useDatasetMutations();
+  const [isSaving, setIsSaving] = useState(false);
 
   const canSave = Boolean(name.trim());
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSave || updateExperiment.isPending || !experiment.datasetId) return;
+    if (!canSave || isSaving) return;
 
+    setIsSaving(true);
     try {
-      await updateExperiment.mutateAsync({
-        datasetId: experiment.datasetId,
-        experimentId: experiment.id,
-        name: name.trim(),
-        description: description.trim(),
-      });
+      await onRename({ name: name.trim(), description: description.trim() });
       toast.success('Experiment renamed');
       onOpenChange(false);
     } catch (error) {
       toast.error(`Failed to rename experiment: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} pending={updateExperiment.isPending}>
+    <Dialog open={open} onOpenChange={onOpenChange} pending={isSaving}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Rename Experiment</DialogTitle>
@@ -82,7 +83,7 @@ export function RenameExperimentDialog({ experiment, open, onOpenChange }: Renam
           <DialogFooter>
             <DialogCancel>Cancel</DialogCancel>
             <DialogAction type="submit" disabled={!canSave}>
-              {updateExperiment.isPending ? 'Saving...' : 'Save'}
+              {isSaving ? 'Saving...' : 'Save'}
             </DialogAction>
           </DialogFooter>
         </Form>
