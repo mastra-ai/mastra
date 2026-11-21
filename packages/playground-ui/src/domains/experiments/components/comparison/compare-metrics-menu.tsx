@@ -1,11 +1,10 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import type { CompareMetricKey } from '@mastra/playground-ui/domains/experiments/components/comparison/use-compare-metric-preferences';
-import { useCompareMetricPreferences } from '@mastra/playground-ui/domains/experiments/components/comparison/use-compare-metric-preferences';
-import { IconColumns3 } from '@mastra/playground-ui/icons/central/IconColumns3';
-import { useCompareExperiments } from '@mastra/react/hooks/datasets';
+import type { CompareExperimentsResponse } from '@mastra/client-js';
 import { useMemo } from 'react';
-import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
+import type { CompareMetricKey } from './use-compare-metric-preferences';
+import { useCompareMetricPreferences } from './use-compare-metric-preferences';
+import { Button } from '@/ds/components/Button';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { IconColumns3 } from '@/ds/icons/central/IconColumns3';
 
 const RUN_METRICS: { key: CompareMetricKey; label: string; usage?: boolean }[] = [
   { key: 'cost', label: 'Cost', usage: true },
@@ -16,17 +15,14 @@ const RUN_METRICS: { key: CompareMetricKey; label: string; usage?: boolean }[] =
 ];
 
 export interface CompareMetricsMenuProps {
-  datasetId: string;
-  baselineId: string;
-  contenderIds: string[];
+  /** The comparison shown, whose scorers can be hidden too. */
+  comparison?: CompareExperimentsResponse;
+  /** Offers the cost and token metrics. */
+  supportsMetrics: boolean;
 }
 
 /** Picks which metrics the compare page shows. The choice is kept in localStorage. */
-export function CompareMetricsMenu({ datasetId, baselineId, contenderIds }: CompareMetricsMenuProps) {
-  const experimentIds = useMemo(() => [baselineId, ...contenderIds], [baselineId, contenderIds]);
-  // Same query as the grid, so React Query serves it from cache.
-  const { data: comparison } = useCompareExperiments({ datasetId, experimentIds, baselineId });
-  const { supportsMetrics } = useObservabilityStorageCapabilities();
+export function CompareMetricsMenu({ comparison, supportsMetrics }: CompareMetricsMenuProps) {
   const { isHidden, toggle, reset } = useCompareMetricPreferences();
 
   const scorerIds = useMemo(

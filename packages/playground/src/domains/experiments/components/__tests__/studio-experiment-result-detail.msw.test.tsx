@@ -6,7 +6,7 @@ import { delay, http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { experimentTraceFeedback } from '../../__tests__/fixtures/experiment-item-route';
-import { ExperimentResultDetail } from '../experiment-result-detail';
+import { StudioExperimentResultDetail } from '../studio-experiment-result-detail';
 import { noScorers } from './fixtures/target-registries';
 import {
   metricsCapableCapabilities,
@@ -79,7 +79,7 @@ function renderDetail(result: DatasetExperimentResult, withFeedback = false) {
   const tree = (current: DatasetExperimentResult) => (
     <Wrapper>
       <TestLinkProvider>
-        <ExperimentResultDetail result={current} onClose={() => {}} withFeedback={withFeedback} />
+        <StudioExperimentResultDetail result={current} onClose={() => {}} withFeedback={withFeedback} />
       </TestLinkProvider>
     </Wrapper>
   );
@@ -97,7 +97,7 @@ beforeEach(() => {
 
 afterEach(() => cleanup());
 
-describe('ExperimentResultDetail usage', () => {
+describe('StudioExperimentResultDetail usage', () => {
   describe('when the result has no trace', () => {
     it('fetches nothing and shows no usage', async () => {
       serveTrace({ capabilities: metricsCapableCapabilities, rootEntityType: EntityType.AGENT });
@@ -171,7 +171,7 @@ describe('ExperimentResultDetail usage', () => {
   });
 });
 
-describe('ExperimentResultDetail feedback', () => {
+describe('StudioExperimentResultDetail feedback', () => {
   describe('when feedback is shown', () => {
     it('counts the feedback on the result trace in its tab', async () => {
       serveTrace({ capabilities: metricsUnavailableCapabilities, rootEntityType: EntityType.AGENT });

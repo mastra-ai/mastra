@@ -1,18 +1,12 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { Badge } from '@mastra/playground-ui/components/Badge';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { getShortId } from '@mastra/playground-ui/components/Text';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import {
-  ComparisonMetricList,
-  ComparisonSection,
-  RenameExperimentDialog,
-  ScorerLabel,
-} from '@mastra/playground-ui/domains/experiments';
-import type { ComparisonMetric, RenameExperimentPatch } from '@mastra/playground-ui/domains/experiments';
-import type { ComparisonRole } from '@mastra/playground-ui/domains/experiments/components/comparison/build-comparison-rows';
-import { ComparisonDatasetVersion } from '@mastra/playground-ui/domains/experiments/components/comparison/comparison-dataset-version';
+import { useState } from 'react';
+import { RenameExperimentDialog } from '../rename-experiment-dialog';
+import type { RenameExperimentPatch } from '../rename-experiment-dialog';
+import { ComparisonMetricList, ScorerLabel } from './comparison-metric-list';
+import type { ComparisonMetric } from './comparison-metric-list';
+import { ComparisonSection } from './comparison-section';
+import type { ComparisonRole } from '@/domains/experiments/components/comparison/build-comparison-rows';
+import { ComparisonDatasetVersion } from '@/domains/experiments/components/comparison/comparison-dataset-version';
 import {
   costDeltaFormatter,
   diff,
@@ -20,29 +14,33 @@ import {
   formatDurationDelta,
   formatScore,
   formatTokenCount,
-} from '@mastra/playground-ui/domains/experiments/components/comparison/comparison-metric-format';
-import { sideVariant } from '@mastra/playground-ui/domains/experiments/components/comparison/constants';
-import { useCompareMetricPreferences } from '@mastra/playground-ui/domains/experiments/components/comparison/use-compare-metric-preferences';
-import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
-import { IconCalendar1 } from '@mastra/playground-ui/icons/central/IconCalendar1';
-import { IconChainLink3 } from '@mastra/playground-ui/icons/central/IconChainLink3';
-import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
-import { IconClock } from '@mastra/playground-ui/icons/central/IconClock';
-import { IconCoins } from '@mastra/playground-ui/icons/central/IconCoins';
-import { IconExclamationCircle } from '@mastra/playground-ui/icons/central/IconExclamationCircle';
-import { IconGauge } from '@mastra/playground-ui/icons/central/IconGauge';
-import { IconHashtag } from '@mastra/playground-ui/icons/central/IconHashtag';
-import { IconHistory } from '@mastra/playground-ui/icons/central/IconHistory';
-import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
-import { IconStar } from '@mastra/playground-ui/icons/central/IconStar';
-import { IconTarget } from '@mastra/playground-ui/icons/central/IconTarget';
-import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
-import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { focusRing } from '@mastra/playground-ui/primitives/transitions';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { formatDate } from '@mastra/playground-ui/utils/date-format';
-import { formatDuration } from '@mastra/playground-ui/utils/duration';
-import { useState } from 'react';
+} from '@/domains/experiments/components/comparison/comparison-metric-format';
+import { sideVariant } from '@/domains/experiments/components/comparison/constants';
+import { useCompareMetricPreferences } from '@/domains/experiments/components/comparison/use-compare-metric-preferences';
+import { Badge } from '@/ds/components/Badge';
+import { Button } from '@/ds/components/Button';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { getShortId } from '@/ds/components/Text';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { AgentIcon } from '@/ds/icons/AgentIcon';
+import { IconCalendar1 } from '@/ds/icons/central/IconCalendar1';
+import { IconChainLink3 } from '@/ds/icons/central/IconChainLink3';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
+import { IconClock } from '@/ds/icons/central/IconClock';
+import { IconCoins } from '@/ds/icons/central/IconCoins';
+import { IconExclamationCircle } from '@/ds/icons/central/IconExclamationCircle';
+import { IconGauge } from '@/ds/icons/central/IconGauge';
+import { IconHashtag } from '@/ds/icons/central/IconHashtag';
+import { IconHistory } from '@/ds/icons/central/IconHistory';
+import { IconPencil } from '@/ds/icons/central/IconPencil';
+import { IconStar } from '@/ds/icons/central/IconStar';
+import { IconTarget } from '@/ds/icons/central/IconTarget';
+import { ScorersIcon } from '@/ds/icons/ScorersIcon';
+import { focusRing } from '@/ds/primitives/transitions';
+import { useLinkComponent } from '@/lib/framework';
+import { cn } from '@/utils/cn';
+import { formatDate } from '@/utils/date-format';
+import { formatDuration } from '@/utils/duration';
 
 export interface ScorerSummary {
   scorerId: string;
@@ -79,7 +77,7 @@ export interface ComparisonSideTitleProps {
 
 /** Title of one comparison side: a menu to view or rename the experiment, and its Baseline/Contender badge. */
 export function ComparisonSideTitle({ role, label, experiment, onSetBaseline, onRename }: ComparisonSideTitleProps) {
-  const { Link } = useLinkComponent();
+  const { Link, paths } = useLinkComponent();
   const [renameOpen, setRenameOpen] = useState(false);
   const shortId = experiment ? (getShortId(experiment.id) ?? experiment.id) : null;
 
@@ -96,7 +94,7 @@ export function ComparisonSideTitle({ role, label, experiment, onSetBaseline, on
             }
           />
           <DropdownMenu.Content align="start" className="min-w-48">
-            <DropdownMenu.Item render={<Link href={`/experiments/${experiment.id}`} />}>
+            <DropdownMenu.Item render={<Link href={paths.experimentLink(experiment.id)} />}>
               <IconChainLink3 /> View experiment
             </DropdownMenu.Item>
             {onRename && (

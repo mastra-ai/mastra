@@ -110,6 +110,7 @@ export type {
   ComparisonRow,
   ComparisonScore,
   ComparisonSide,
+  BuildComparisonRowsParams,
   ScoresByItemId,
 } from './components/comparison/build-comparison-rows';
 export { itemMetrics } from './components/comparison/item-metrics';
@@ -124,3 +125,16 @@ export { ComparisonSideCell } from './components/comparison/comparison-side-cell
 export type { ComparisonSideCellProps } from './components/comparison/comparison-side-cell';
 export { useCompareMetricPreferences } from './components/comparison/use-compare-metric-preferences';
 export type { CompareMetricKey } from './components/comparison/use-compare-metric-preferences';
+export { ExperimentsComparison } from './components/comparison/experiments-comparison';
+export type { ExperimentsComparisonProps } from './components/comparison/experiments-comparison';
+export { ComparisonSideSummary, ComparisonSideTitle } from './components/comparison/comparison-side-header';
+export type {
+  ComparisonSideMetrics,
+  ComparisonSideSummaryProps,
+  ComparisonSideTitleProps,
+  ScorerSummary,
+} from './components/comparison/comparison-side-header';
+export { CompareMetricsMenu } from './components/comparison/compare-metrics-menu';
+export type { CompareMetricsMenuProps } from './components/comparison/compare-metrics-menu';
+export { ComparisonItemPanel } from './components/comparison/comparison-item-panel';
+export type { ComparisonItemPanelProps } from './components/comparison/comparison-item-panel';

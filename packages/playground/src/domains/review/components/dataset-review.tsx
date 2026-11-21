@@ -37,7 +37,7 @@ import { useInfiniteCompletedItems, useInfiniteReviewItems } from '@mastra/react
 import type { ReactNode } from 'react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { ProposalTag } from './proposal-tag';
-import { ExperimentResultDetail } from '@/domains/experiments/components/experiment-result-detail';
+import { StudioExperimentResultDetail } from '@/domains/experiments/components/studio-experiment-result-detail';
 import { LLMProviders, LLMModels } from '@/domains/llm';
 import { BulkTagPicker } from '@/domains/shared/components/bulk-tag-picker';
 
@@ -553,7 +553,7 @@ export function DatasetReview({
   }
 
   const detailPanel = (
-    <ExperimentResultDetail
+    <StudioExperimentResultDetail
       withFeedback={withFeedback}
       result={featuredItem ?? undefined}
       title={`Review item ${featuredItem?.id ?? ''}`}

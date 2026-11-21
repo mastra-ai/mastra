@@ -1,12 +1,13 @@
-import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
-import { DatasetItemPanel } from '@mastra/playground-ui/domains/datasets';
+import type { DatasetItem } from '@mastra/client-js';
+import { DatasetItemPanel } from '@/domains/datasets';
+import { DataPanel } from '@/ds/components/DataPanel';
 
-import { useDatasetItem } from '@mastra/react/hooks/datasets';
-
-interface ComparisonItemPanelProps {
+export interface ComparisonItemPanelProps {
   datasetId: string;
   /** Item opened from a comparison row; `undefined` closes the panel. */
   itemId?: string;
+  item?: DatasetItem;
+  isLoading: boolean;
   onClose: () => void;
 }
 
@@ -14,12 +15,7 @@ interface ComparisonItemPanelProps {
  * The dataset item behind a comparison row, in the same side panel as on the dataset page.
  * It stays mounted while closed so it animates in and out.
  */
-export function ComparisonItemPanel({ datasetId, itemId, onClose }: ComparisonItemPanelProps) {
-  const { data: item, isLoading } = useDatasetItem({
-    datasetId,
-    itemId: itemId ?? '',
-    queryOptions: { enabled: Boolean(datasetId) && Boolean(itemId) },
-  });
+export function ComparisonItemPanel({ datasetId, itemId, item, isLoading, onClose }: ComparisonItemPanelProps) {
   return (
     <DatasetItemPanel
       datasetId={datasetId}

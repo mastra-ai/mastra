@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ExperimentResultPanel } from '../experiment-result-panel';
+import { agentTraceUsage } from './fixtures/experiment-item-usage';
 import {
   agentFailedResult,
   agentMarkdownResult,
@@ -11,7 +12,6 @@ import {
   agentToolCallsResult,
   workflowResult,
 } from './fixtures/experiment-results';
-import { agentTraceUsage } from './fixtures/experiment-usage';
 import { expectComputedTag, expectInheritsTagForeground } from '@/test/computed-tag';
 import { TestLinkProvider } from '@/test/link-provider';
 

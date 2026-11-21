@@ -58,7 +58,7 @@ export interface ComparisonRow {
  */
 export type ScoresByItemId = Record<string, Array<Pick<ClientScoreRowData, 'scorerId' | 'reason'>>>;
 
-interface BuildComparisonRowsParams {
+export interface BuildComparisonRowsParams {
   comparison: CompareExperimentsResponse | undefined;
   /** Compared experiment ids, baseline first. */
   experimentIds: string[];

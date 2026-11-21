@@ -44,3 +44,9 @@ export const datasetlessExperiment: DatasetExperiment = {
   ...namedExperiment,
   datasetId: null,
 };
+
+/** Baseline and contender of the `comparison` fixtures, keyed by experiment id. */
+export const comparedExperimentsById: Record<string, DatasetExperiment> = {
+  'exp-baseline': { ...namedExperiment, id: 'exp-baseline', name: 'Baseline run' },
+  'exp-contender': { ...namedExperiment, id: 'exp-contender', name: 'Contender run' },
+};

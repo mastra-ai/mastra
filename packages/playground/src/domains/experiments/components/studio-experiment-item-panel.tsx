@@ -1,19 +1,16 @@
-import type { ExperimentItemPanelProps as SharedExperimentItemPanelProps } from '@mastra/playground-ui/domains/experiments';
-import {
-  ExperimentItemPanel as SharedExperimentItemPanel,
-  useExperimentItemPanel,
-} from '@mastra/playground-ui/domains/experiments';
+import type { ExperimentItemPanelProps } from '@mastra/playground-ui/domains/experiments';
+import { ExperimentItemPanel, useExperimentItemPanel } from '@mastra/playground-ui/domains/experiments';
 import { useDatasetMutations, useScoresByExperimentId } from '@mastra/react/hooks/datasets';
 import { useExperimentResultDetailData } from '../hooks/use-experiment-result-detail-data';
 
-export interface ExperimentItemPanelProps {
+export interface StudioExperimentItemPanelProps {
   withFeedback: boolean;
   /** `drawer` (default) for a standalone overlay; `inline` when hosted in the route side panel. */
-  variant?: SharedExperimentItemPanelProps['variant'];
+  variant?: ExperimentItemPanelProps['variant'];
 }
 
 /** The shared item panel wired to Studio's scores, review mutations, trace panel, feedback and usage. */
-export function ExperimentItemPanel({ withFeedback, variant }: ExperimentItemPanelProps) {
+export function StudioExperimentItemPanel({ withFeedback, variant }: StudioExperimentItemPanelProps) {
   const { currentItemId, experimentId, datasetId, experimentStatus, results } = useExperimentItemPanel();
   const result = currentItemId ? results.find(r => r.itemId === currentItemId) : undefined;
 
@@ -30,7 +27,7 @@ export function ExperimentItemPanel({ withFeedback, variant }: ExperimentItemPan
   });
 
   return (
-    <SharedExperimentItemPanel
+    <ExperimentItemPanel
       {...data}
       variant={variant}
       scoresByItemId={scoresByItemId}

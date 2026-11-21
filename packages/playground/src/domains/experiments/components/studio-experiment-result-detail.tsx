@@ -1,9 +1,9 @@
-import type { ExperimentResultDetailProps as SharedExperimentResultDetailProps } from '@mastra/playground-ui/domains/experiments';
-import { ExperimentResultDetail as SharedExperimentResultDetail } from '@mastra/playground-ui/domains/experiments';
+import type { ExperimentResultDetailProps } from '@mastra/playground-ui/domains/experiments';
+import { ExperimentResultDetail } from '@mastra/playground-ui/domains/experiments';
 import { useExperimentResultDetailData } from '../hooks/use-experiment-result-detail-data';
 
-export type ExperimentResultDetailProps = Omit<
-  SharedExperimentResultDetailProps,
+export type StudioExperimentResultDetailProps = Omit<
+  ExperimentResultDetailProps,
   'tracePanel' | 'feedbackTabSlot' | 'feedbackCount' | 'usage' | 'isUsageLoading'
 > & {
   /** Shows the Feedback tabs and fetches their feedback. */
@@ -11,7 +11,7 @@ export type ExperimentResultDetailProps = Omit<
 };
 
 /** The shared result detail with Studio's trace panel, feedback and usage, used by the review queue. */
-export function ExperimentResultDetail({ withFeedback, ...props }: ExperimentResultDetailProps) {
+export function StudioExperimentResultDetail({ withFeedback, ...props }: StudioExperimentResultDetailProps) {
   const data = useExperimentResultDetailData({ traceId: props.result?.traceId, scores: props.scores, withFeedback });
-  return <SharedExperimentResultDetail {...props} {...data} />;
+  return <ExperimentResultDetail {...props} {...data} />;
 }

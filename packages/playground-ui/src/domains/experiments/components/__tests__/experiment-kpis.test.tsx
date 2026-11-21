@@ -5,7 +5,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ExperimentKpis } from '../experiment-kpis';
 import type { ExperimentKpisProps } from '../experiment-kpis';
-import { experimentTotalsUsage } from './fixtures/experiment-usage';
+import { experimentTotalsUsage } from './fixtures/experiment-item-usage';
 import { experiments } from './fixtures/experiments';
 
 // Completed run: 10:00 → 10:05, 10 items.

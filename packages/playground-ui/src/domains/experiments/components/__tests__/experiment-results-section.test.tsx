@@ -6,13 +6,13 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ExperimentItemPanelProvider } from '../../context/experiment-item-panel-context';
 import { ExperimentResultsSection } from '../experiment-results-section';
+import { tracedItemUsage } from './fixtures/experiment-item-usage';
 import {
   agentFailedResult,
   agentMarkdownResult,
   agentTracedResult,
   workflowResult,
 } from './fixtures/experiment-results';
-import { tracedItemUsage } from './fixtures/experiment-usage';
 import { TestLinkProvider } from '@/test/link-provider';
 
 afterEach(cleanup);

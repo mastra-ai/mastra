@@ -1,42 +1,51 @@
-import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
-import { sectionStackClass } from '@mastra/playground-ui/domains/experiments';
-import {
-  buildComparisonRows,
-  sideDurationMs,
-} from '@mastra/playground-ui/domains/experiments/components/comparison/build-comparison-rows';
-import type { ComparisonRow } from '@mastra/playground-ui/domains/experiments/components/comparison/build-comparison-rows';
-import { ComparisonItemPayload } from '@mastra/playground-ui/domains/experiments/components/comparison/comparison-item-payload';
-import { totalTokens } from '@mastra/playground-ui/domains/experiments/components/comparison/comparison-metric-format';
-import { ComparisonSideCell } from '@mastra/playground-ui/domains/experiments/components/comparison/comparison-side-cell';
-import { columnLabel } from '@mastra/playground-ui/domains/experiments/components/comparison/constants';
-import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import {
-  useAllDatasetExperimentResultsQueries,
-  useCompareExperiments,
-  useDatasetExperimentsQueries,
-  useScoresByExperimentIdsQueries,
-} from '@mastra/react/hooks/datasets';
-import { useExperimentsItemUsage } from '@mastra/react/hooks/experiments';
+import type { CompareExperimentsResponse, DatasetExperiment } from '@mastra/client-js';
 import { useMemo, useState } from 'react';
-import type { CSSProperties, MouseEvent } from 'react';
-import { useRenameExperiment } from '../../hooks/use-rename-experiment';
-import { ComparisonItemPanel } from './comparison-item-panel';
+import type { CSSProperties, MouseEvent, ReactNode } from 'react';
+import type { RenameExperimentPatch } from '../rename-experiment-dialog';
+import { buildComparisonRows, sideDurationMs } from './build-comparison-rows';
+import type { BuildComparisonRowsParams, ComparisonRow } from './build-comparison-rows';
+import { ComparisonItemPayload } from './comparison-item-payload';
+import { totalTokens } from './comparison-metric-format';
+import { sectionStackClass } from './comparison-section';
+import { ComparisonSideCell } from './comparison-side-cell';
 import { ComparisonSideSummary, ComparisonSideTitle } from './comparison-side-header';
 import type { ComparisonSideMetrics, ScorerSummary } from './comparison-side-header';
-import { ComparisonTracePanel } from './comparison-trace-panel';
-import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
+import { columnLabel } from './constants';
+import { Notice } from '@/ds/components/Notice';
+import { Spinner } from '@/ds/components/Spinner';
+import { Txt } from '@/ds/components/Txt';
+import { focusRingInset } from '@/ds/primitives/transitions';
+import { cn } from '@/utils/cn';
 
-interface ExperimentsComparisonProps {
-  datasetId: string;
-  baselineId: string;
-  /** Experiments compared against the baseline, in column order. */
-  contenderIds: string[];
+export interface ExperimentsComparisonProps {
+  /** The baseline first, then the contenders in column order. */
+  experimentIds: string[];
+  comparison?: CompareExperimentsResponse;
+  experimentsById: Record<string, DatasetExperiment | undefined>;
+  /** Every result of each experiment, keyed by experiment id. */
+  resultsById?: BuildComparisonRowsParams['resultsById'];
+  /** Scores of each experiment grouped by item id, keyed by experiment id; they carry the scorer reasons. */
+  scoresById?: BuildComparisonRowsParams['scoresById'];
+  /** Usage of each experiment, keyed by experiment id. */
+  usageById?: BuildComparisonRowsParams['usageById'];
+  /** Shows a spinner instead of the table, e.g. while the comparison or experiments load. */
+  isLoading: boolean;
+  /** Keeps the cells and run metrics loading while the results load. */
+  isResultsLoading: boolean;
+  error?: Error;
+  /** Shows the cost and token metrics. */
+  supportsMetrics: boolean;
   /** Makes the given contender the baseline. */
   onSetBaseline?: (experimentId: string) => void;
+  /** When provided, each column title offers to rename its experiment. */
+  onRenameExperiment?: (experiment: DatasetExperiment, patch: RenameExperimentPatch) => Promise<void>;
+  /**
+   * Renders the dataset item of a clicked row, e.g. a `ComparisonItemPanel`. It stays rendered
+   * while closed (`itemId` undefined) so a drawer can animate. Omit it and rows don't open.
+   */
+  itemPanel?: (item: { itemId?: string; onClose: () => void }) => ReactNode;
+  /** Renders the trace of a cell, like `itemPanel`. Omit it and cells offer no trace link. */
+  tracePanel?: (trace: { traceId?: string; onClose: () => void }) => ReactNode;
 }
 
 const cell = 'min-w-0 px-4 py-3';
@@ -62,6 +71,14 @@ const isFromControl = (event: MouseEvent<HTMLElement>) =>
 /** Selecting text to copy it shouldn't open the item. */
 const hasTextSelection = () => Boolean(window.getSelection()?.toString());
 
+const renameHandler = (
+  experiment: DatasetExperiment | undefined,
+  onRenameExperiment: ExperimentsComparisonProps['onRenameExperiment'],
+) =>
+  experiment && onRenameExperiment
+    ? (patch: RenameExperimentPatch) => onRenameExperiment(experiment, patch)
+    : undefined;
+
 const isNumber = (value: number | null): value is number => value != null;
 
 const mean = (values: number[]) =>
@@ -75,7 +92,10 @@ const average = (rows: ComparisonRow[], index: number, scorerId: string) =>
   );
 
 const columnMetrics = (rows: ComparisonRow[], index: number): ComparisonSideMetrics => {
-  const sides = rows.map(row => row.sides[index]).filter(side => side?.present);
+  const sides = rows.flatMap(row => {
+    const side = row.sides[index];
+    return side?.present ? [side] : [];
+  });
   return {
     errorCount: sides.filter(side => side.error).length,
     averageScore: mean(sides.flatMap(side => side.scores.map(score => score.value)).filter(isNumber)),
@@ -88,16 +108,23 @@ const columnMetrics = (rows: ComparisonRow[], index: number): ComparisonSideMetr
  * row, with each experiment side by side so a change reads as a diff against the baseline.
  */
 export function ExperimentsComparison({
-  datasetId,
-  baselineId,
-  contenderIds,
+  experimentIds,
+  comparison,
+  experimentsById,
+  resultsById,
+  scoresById,
+  usageById,
+  isLoading,
+  isResultsLoading,
+  error,
+  supportsMetrics,
   onSetBaseline,
+  onRenameExperiment,
+  itemPanel,
+  tracePanel,
 }: ExperimentsComparisonProps) {
-  const experimentIds = useMemo(() => [baselineId, ...contenderIds], [baselineId, contenderIds]);
   const [selectedItemId, setSelectedItemId] = useState<string>();
   const [featuredTraceId, setFeaturedTraceId] = useState<string>();
-  const traceQuery = useTraceQueryAvailable();
-  const renameHandlerFor = useRenameExperiment();
   // One drawer at a time: the item and the trace replace each other.
   const openItem = (itemId: string) => {
     setFeaturedTraceId(undefined);
@@ -107,41 +134,6 @@ export function ExperimentsComparison({
     setSelectedItemId(undefined);
     setFeaturedTraceId(traceId);
   };
-
-  const {
-    data: comparison,
-    isLoading,
-    error,
-  } = useCompareExperiments({
-    datasetId,
-    experimentIds,
-    baselineId,
-    queryOptions: { enabled: Boolean(datasetId) && Boolean(baselineId) && contenderIds.length > 0 },
-  });
-
-  const { data: experimentsById, isLoading: isExperimentsLoading } = useDatasetExperimentsQueries({
-    datasetId,
-    experimentIds,
-  });
-
-  const experimentRefs = useMemo(
-    () => experimentIds.map(id => ({ id, status: experimentsById[id]?.status })),
-    [experimentIds, experimentsById],
-  );
-
-  const { data: resultsById, isLoading: isResultsLoading } = useAllDatasetExperimentResultsQueries({
-    datasetId,
-    experiments: experimentRefs,
-  });
-  // Scorer reasons live in the scores store, not on the result rows.
-  const { data: scoresById } = useScoresByExperimentIdsQueries({ experiments: experimentRefs });
-
-  const { supportsMetrics, isLoading: isCapabilitiesLoading } = useObservabilityStorageCapabilities();
-  // Filtered by experiment id, so it runs alongside the results instead of waiting for their trace ids.
-  const { data: usageById, isLoading: isUsageLoading } = useExperimentsItemUsage({
-    experiments: experimentRefs,
-    supportsMetrics,
-  });
 
   const rows = useMemo(
     () => buildComparisonRows({ comparison, experimentIds, resultsById, scoresById, usageById }),
@@ -166,7 +158,7 @@ export function ExperimentsComparison({
   const metrics = useMemo(
     () =>
       experimentIds.map((experimentId, index): ComparisonSideMetrics => {
-        const summary = usageById[experimentId]?.summary;
+        const summary = usageById?.[experimentId]?.summary;
         return {
           ...columnMetrics(rows, index),
           cost: summary?.estimatedCost,
@@ -177,7 +169,7 @@ export function ExperimentsComparison({
     [rows, experimentIds, usageById],
   );
 
-  if (isLoading || isExperimentsLoading || isCapabilitiesLoading || isUsageLoading) {
+  if (isLoading) {
     // Centred on the viewport, like the app boot spinner, so swapping from one to the other doesn't shift.
     return (
       <div className="pointer-events-none fixed inset-0 flex items-center justify-center">
@@ -189,7 +181,7 @@ export function ExperimentsComparison({
   if (error) {
     return (
       <Notice variant="warning" title="Error loading comparison">
-        <Notice.Message>{error instanceof Error ? error.message : 'Unknown error'}</Notice.Message>
+        <Notice.Message>{error.message}</Notice.Message>
       </Notice>
     );
   }
@@ -202,7 +194,7 @@ export function ExperimentsComparison({
     );
   }
 
-  const baselineExperiment = experimentsById[baselineId];
+  const baselineExperiment = experimentsById[experimentIds[0] ?? ''];
 
   return (
     <>
@@ -226,9 +218,9 @@ export function ExperimentsComparison({
               <ComparisonSideTitle
                 role={index === 0 ? 'baseline' : 'contender'}
                 label={columnLabel(index)}
-                experiment={experimentsById[experimentId] ?? undefined}
+                experiment={experimentsById[experimentId]}
                 onSetBaseline={index > 0 && onSetBaseline ? () => onSetBaseline(experimentId) : undefined}
-                onRename={experimentsById[experimentId] ? renameHandlerFor(experimentsById[experimentId]) : undefined}
+                onRename={renameHandler(experimentsById[experimentId], onRenameExperiment)}
               />
             </div>
           ))}
@@ -237,7 +229,7 @@ export function ExperimentsComparison({
         <div role="row" aria-label="Summary" className={cn(gridRow, 'border-b')}>
           <div role="cell" aria-label="Items" className={cell} />
           {experimentIds.map((experimentId, index) => {
-            const experiment = experimentsById[experimentId] ?? undefined;
+            const experiment = experimentsById[experimentId];
             return (
               <div key={experimentId} role="cell" aria-label={columnLabel(index)} className={cell}>
                 <ComparisonSideSummary
@@ -264,18 +256,13 @@ export function ExperimentsComparison({
             row={row}
             isLoading={isResultsLoading}
             showUsage={supportsMetrics}
-            onOpen={() => openItem(row.itemId)}
-            onShowTrace={showTrace}
+            onOpen={itemPanel ? () => openItem(row.itemId) : undefined}
+            onShowTrace={tracePanel ? showTrace : undefined}
           />
         ))}
       </div>
-      <ComparisonItemPanel datasetId={datasetId} itemId={selectedItemId} onClose={() => setSelectedItemId(undefined)} />
-      {/* Stays mounted so the drawer animates in and out, like on the traces page. */}
-      <ComparisonTracePanel
-        traceId={featuredTraceId}
-        onClose={() => setFeaturedTraceId(undefined)}
-        withFeedback={traceQuery.enabled}
-      />
+      {itemPanel?.({ itemId: selectedItemId, onClose: () => setSelectedItemId(undefined) })}
+      {tracePanel?.({ traceId: featuredTraceId, onClose: () => setFeaturedTraceId(undefined) })}
     </>
   );
 }
@@ -286,8 +273,9 @@ interface ComparisonRowViewProps {
   row: ComparisonRow;
   isLoading: boolean;
   showUsage: boolean;
-  onOpen: () => void;
-  onShowTrace: (traceId: string) => void;
+  /** Opens the row's item; rows without it are not interactive. */
+  onOpen?: () => void;
+  onShowTrace?: (traceId: string) => void;
 }
 
 /** One item of the comparison. Expanding a section expands the same section in every column of the row. */
@@ -307,20 +295,21 @@ function ComparisonRowView({ row, isLoading, showUsage, onOpen, onShowTrace }: C
     <div
       role="row"
       aria-label={row.itemId}
-      tabIndex={0}
+      tabIndex={onOpen ? 0 : undefined}
       onClick={event => {
-        if (isFromControl(event) || hasTextSelection()) return;
+        if (!onOpen || isFromControl(event) || hasTextSelection()) return;
         onOpen();
       }}
       onKeyDown={event => {
-        if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return;
+        if (!onOpen || event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return;
         event.preventDefault();
         onOpen();
       }}
       className={cn(
         gridRow,
-        'cursor-pointer border-b transition-colors duration-normal ease-out-custom hover:bg-fill-subtle',
-        focusRingInset,
+        'border-b',
+        onOpen && 'cursor-pointer transition-colors duration-normal ease-out-custom hover:bg-fill-subtle',
+        onOpen && focusRingInset,
       )}
     >
       <div role="cell" className={cn(cell, sectionStackClass)}>
