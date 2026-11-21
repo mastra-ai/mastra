@@ -156,6 +156,18 @@ export class LocalFilesystem extends MastraFilesystem {
   private readonly _contained: boolean;
   private _allowedPaths: string[];
   private readonly _instructionsOverride?: InstructionsOption;
+  /** basePath and allowedPaths, for O(1) membership checks */
+  private _configuredRootSet: Set<string>;
+  /**
+   * Last resolved canonical form of each configured root, and the reverse
+   * index used to find candidate roots by walking a path's ancestors. Entries
+   * are hints: a check re-resolves the root it relies on before trusting it,
+   * so a retargeted root symlink still takes effect on the next operation.
+   * Each contained operation then resolves one root instead of all of them,
+   * and finds it without scanning every root (#30224).
+   */
+  private readonly _canonicalRoots = new Map<string, string>();
+  private readonly _rootsByCanonical = new Map<string, Set<string>>();
 
   /**
    * The absolute base path on disk where files are stored.
@@ -204,6 +216,9 @@ export class LocalFilesystem extends MastraFilesystem {
   setAllowedPaths(pathsOrUpdater: string[] | ((current: readonly string[]) => string[])): void {
     const newPaths = typeof pathsOrUpdater === 'function' ? pathsOrUpdater(this._allowedPaths) : pathsOrUpdater;
     this._allowedPaths = newPaths.map(p => resolveToBasePath(this._basePath, p));
+    this._configuredRootSet = new Set(this._configuredRoots());
+    this._canonicalRoots.clear();
+    this._rootsByCanonical.clear();
   }
 
   constructor(options: LocalFilesystemOptions) {
@@ -213,6 +228,7 @@ export class LocalFilesystem extends MastraFilesystem {
     this._contained = options.contained ?? true;
     this.readOnly = options.readOnly;
     this._allowedPaths = (options.allowedPaths ?? []).map(p => resolveToBasePath(this._basePath, p));
+    this._configuredRootSet = new Set(this._configuredRoots());
     this._instructionsOverride = options.instructions;
   }
 
@@ -290,17 +306,77 @@ export class LocalFilesystem extends MastraFilesystem {
     return currentPath;
   }
 
+  private _configuredRoots(): string[] {
+    return [this._basePath, ...this._allowedPaths];
+  }
+
+  private _rememberRoot(root: string, resolvedRoot: string | undefined): string | undefined {
+    const previous = this._canonicalRoots.get(root);
+    if (previous !== undefined && previous !== resolvedRoot) {
+      const roots = this._rootsByCanonical.get(previous);
+      roots?.delete(root);
+      if (roots?.size === 0) this._rootsByCanonical.delete(previous);
+    }
+    // A check still in flight when setAllowedPaths ran must not re-add a removed root.
+    if (resolvedRoot === undefined || !this._configuredRootSet.has(root)) {
+      this._canonicalRoots.delete(root);
+    } else {
+      this._canonicalRoots.set(root, resolvedRoot);
+      const roots = this._rootsByCanonical.get(resolvedRoot) ?? new Set<string>();
+      roots.add(root);
+      this._rootsByCanonical.set(resolvedRoot, roots);
+    }
+    return resolvedRoot;
+  }
+
+  /**
+   * Configured roots whose last resolved form is `resolvedPath` or one of its
+   * ancestors, innermost first. Costs one lookup per path segment, however
+   * many roots are configured.
+   */
+  private _cachedRootsContaining(resolvedPath: string): string[] {
+    const candidates: string[] = [];
+    for (let current = resolvedPath; ;) {
+      for (const root of this._rootsByCanonical.get(current) ?? []) {
+        if (this._configuredRootSet.has(root)) candidates.push(root);
+      }
+      const parent = nodePath.dirname(current);
+      if (parent === current) return candidates;
+      current = parent;
+    }
+  }
+
   private _isWithinAnyRoot(absolutePath: string): boolean {
-    const roots = [this._basePath, ...this._allowedPaths];
     const resolvedPath = this._resolvePathForContainment(absolutePath);
     if (!resolvedPath) {
       return false;
     }
 
-    return roots.some(root => {
-      const resolvedRoot = this._resolvePathForContainment(root);
-      return resolvedRoot ? this._isWithinRoot(resolvedPath, resolvedRoot) : false;
-    });
+    // A root that fails to resolve only fails the check when no other root
+    // contains the path.
+    let rootError: unknown;
+    const isWithin = (root: string) => {
+      try {
+        const resolvedRoot = this._rememberRoot(root, this._resolvePathForContainment(root));
+        return resolvedRoot ? this._isWithinRoot(resolvedPath, resolvedRoot) : false;
+      } catch (error) {
+        this._rememberRoot(root, undefined);
+        rootError ??= error;
+        return false;
+      }
+    };
+
+    // Re-resolve only the roots that contained this path last time.
+    if (this._cachedRootsContaining(resolvedPath).some(isWithin)) return true;
+
+    // None still does (new, missing or retargeted roots): resolve every root,
+    // without stopping at a match, so later operations take the path above.
+    let within = false;
+    for (const root of this._configuredRoots()) {
+      if (isWithin(root)) within = true;
+    }
+    if (!within && rootError !== undefined) throw rootError;
+    return within;
   }
 
   private toBuffer(content: FileContent): Buffer {
@@ -389,15 +465,42 @@ export class LocalFilesystem extends MastraFilesystem {
     }
   }
 
-  private async containedRoots(): Promise<string[]> {
-    const roots: string[] = [];
-    for (const root of [this._basePath, ...this._allowedPaths]) {
-      try {
-        roots.push(await fs.realpath(root));
-      } catch (error) {
-        if (!isEnoentError(error)) throw error;
-      }
+  private async _realpathRoot(root: string): Promise<string | undefined> {
+    try {
+      return this._rememberRoot(root, await fs.realpath(root));
+    } catch (error) {
+      if (!isEnoentError(error)) throw error;
+      return this._rememberRoot(root, undefined);
     }
+  }
+
+  /**
+   * Canonical roots, resolved for this operation, to check `canonicalPath`
+   * against. Returns the first freshly resolved root that contains it, or
+   * every existing root when no cached root does. As in `_isWithinAnyRoot`, a
+   * root that fails to resolve only fails the check when no other root
+   * contains the path.
+   */
+  private async containedRoots(canonicalPath: string): Promise<string[]> {
+    let rootError: unknown;
+    const realpathRoot = (root: string) =>
+      this._realpathRoot(root).catch((error: unknown) => {
+        this._rememberRoot(root, undefined);
+        rootError ??= error;
+        return undefined;
+      });
+
+    for (const root of this._cachedRootsContaining(canonicalPath)) {
+      const resolvedRoot = await realpathRoot(root);
+      if (resolvedRoot && this._isWithinRoot(canonicalPath, resolvedRoot)) return [resolvedRoot];
+    }
+
+    const roots: string[] = [];
+    for (const root of this._configuredRoots()) {
+      const resolvedRoot = await realpathRoot(root);
+      if (resolvedRoot) roots.push(resolvedRoot);
+    }
+    if (rootError !== undefined && !roots.some(root => this._isWithinRoot(canonicalPath, root))) throw rootError;
     return roots;
   }
 
@@ -411,8 +514,8 @@ export class LocalFilesystem extends MastraFilesystem {
     absolutePath: string,
     metadataOnly = false,
   ): Promise<{ handle: FileHandle; canonicalPath: string }> {
-    const roots = await this.containedRoots();
     const checkedPath = await fs.realpath(absolutePath);
+    const roots = await this.containedRoots(checkedPath);
     this.assertCanonicalPathContained(checkedPath, absolutePath, roots);
     // O_PATH opens a metadata-only descriptor without requiring file read permission on Linux.
     const flags = metadataOnly
@@ -879,8 +982,8 @@ export class LocalFilesystem extends MastraFilesystem {
       }
     } catch (error) {
       if (!(error instanceof Error) || !('code' in error) || error.code !== 'EACCES') throw error;
-      const roots = await this.containedRoots();
       const before = await fs.realpath(absolutePath);
+      const roots = await this.containedRoots(before);
       this.assertCanonicalPathContained(before, absolutePath, roots);
       const stats = await fs.stat(absolutePath);
       const after = await fs.realpath(absolutePath);

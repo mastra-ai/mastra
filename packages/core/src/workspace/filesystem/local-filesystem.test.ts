@@ -964,6 +964,67 @@ describe('LocalFilesystem', () => {
         expect(content).toBe('external content');
       });
 
+      // Technical: containment re-resolves the root that held a path last time
+      // first; if that root now fails to resolve, the other roots still decide. (#30224)
+      it('should still allow a file through another root after the root that last held it breaks', async () => {
+        const releaseA = path.join(outsideDir, 'release-a');
+        const releaseB = path.join(outsideDir, 'release-b');
+        await fs.mkdir(releaseA);
+        await fs.mkdir(releaseB);
+        await fs.writeFile(path.join(releaseB, 'notes.md'), 'B');
+        const linkA = path.join(tempDir, 'link-a');
+        const linkB = path.join(tempDir, 'link-b');
+        await fs.symlink(releaseA, linkA);
+        await fs.symlink(releaseB, linkB);
+
+        const fsWithAllowed = new LocalFilesystem({
+          basePath: tempDir,
+          contained: true,
+          allowedPaths: [linkA, linkB],
+        });
+        await expect(fsWithAllowed.readFile(path.join(releaseB, 'notes.md'), { encoding: 'utf-8' })).resolves.toBe('B');
+
+        // link-a now points at release-b; link-b becomes a self-referencing loop.
+        await fs.rm(linkA);
+        await fs.symlink(releaseB, linkA);
+        await fs.rm(linkB);
+        await fs.symlink(linkB, linkB);
+
+        await expect(fsWithAllowed.readFile(path.join(releaseB, 'notes.md'), { encoding: 'utf-8' })).resolves.toBe('B');
+        expect(fsWithAllowed.resolveAbsolutePath(path.join(releaseB, 'notes.md'))).toBe(
+          path.join(releaseB, 'notes.md'),
+        );
+      });
+
+      it('should block a removed allowed path that was already in use', async () => {
+        const fsWithAllowed = new LocalFilesystem({
+          basePath: tempDir,
+          contained: true,
+          allowedPaths: [outsideDir],
+        });
+        const external = path.join(outsideDir, 'external.txt');
+        await expect(fsWithAllowed.readFile(external, { encoding: 'utf-8' })).resolves.toBe('external content');
+
+        fsWithAllowed.setAllowedPaths([]);
+
+        await expect(fsWithAllowed.readFile(external, { encoding: 'utf-8' })).rejects.toThrow(PermissionError);
+        await expect(fsWithAllowed.stat(external)).rejects.toThrow(PermissionError);
+      });
+
+      it('should still allow other allowed paths when one is a symlink loop', async () => {
+        const loop = path.join(tempDir, 'loop');
+        await fs.symlink(loop, loop);
+        const fsWithAllowed = new LocalFilesystem({
+          basePath: tempDir,
+          contained: true,
+          allowedPaths: [loop, outsideDir],
+        });
+
+        await expect(
+          fsWithAllowed.readFile(path.join(outsideDir, 'external.txt'), { encoding: 'utf-8' }),
+        ).resolves.toBe('external content');
+      });
+
       it('should block path traversal that escapes all roots', async () => {
         const restrictedFs = new LocalFilesystem({
           basePath: tempDir,
