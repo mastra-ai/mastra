@@ -188,13 +188,16 @@ describe('releaseParkedRun ownership', () => {
 
     const observed = await observer.observe('run-observed');
     expect(observer.runRegistry.size).toBe(0);
-    await observer.releaseParkedRun('run-observed');
-
+    // An observer holds no run, so it has nothing to release.
+    expect(await observer.releaseParkedRun('run-observed')).toBe(false);
     expect(getRunRegistryEntry('run-observed', mastra)).toBe(ownerEntry);
+    // Nor does ending the observation take the owner's entry with it.
+    observed.cleanup();
+    expect(getRunRegistryEntry('run-observed', mastra)).toBe(ownerEntry);
+
     expect(owner.runRegistry.size).toBe(1);
     expect(await owner.releaseParkedRun('run-observed')).toBe(true);
     expect(getRunRegistryEntry('run-observed', mastra)).toBeUndefined();
-    observed.detach();
     reader.releaseLock();
   });
 });

@@ -12904,8 +12904,8 @@ export class Agent<
   protected readonly executionRunRegistry = new ExtendedRunRegistry();
   /** Each run's outstanding stream releases, so a host tearing down a parked run can release it (#30743). */
   readonly #streamCleanups = new Map<string, Set<RunCleanup>>();
-  /** An observer's tracked release, mapped to the detach a parked-run release uses instead: an observer owns no entry. */
-  readonly #observerDetaches = new WeakMap<RunCleanup, () => void>();
+  /** Tracked releases of observers: an observer holds no run, so they alone don't make a run releasable. */
+  readonly #observerCleanups = new WeakSet<RunCleanup>();
   /** Runs with a resume() setting up or executing, which a parked-run release must leave alone. */
   readonly #resumesInProgress = new Map<string, number>();
 
@@ -12976,7 +12976,7 @@ export class Agent<
     const streamCleanups = [...(this.#streamCleanups.get(runId) ?? [])];
     const run = workflow.runs.get(runId);
     // Only this agent's local state shows it parked the run; with none, the run (and its entry) is another's.
-    if (!localEntry && streamCleanups.length === 0 && !run) return false;
+    if (!localEntry && !run && streamCleanups.every(cleanup => this.#observerCleanups.has(cleanup))) return false;
     if (this.#resumesInProgress.has(runId)) return false;
 
     let snapshot: WorkflowRunState | undefined;
@@ -13001,7 +13001,7 @@ export class Agent<
 
     // Checked before anything is released, so `false` always means nothing was.
     if (run && !engine.releaseParkedRun(workflow, runId, run, snapshot.status)) return false;
-    for (const cleanup of streamCleanups) (this.#observerDetaches.get(cleanup) ?? cleanup.run)();
+    for (const cleanup of streamCleanups) cleanup.run();
     if (localEntry) this.executionRunRegistry.cleanup(runId);
     // The global slot may hold another instance's later execution of the run; only this one's own entry goes.
     if (localEntry?.executionFence && globalEntry?.executionFence === localEntry.executionFence) {
@@ -16514,13 +16514,15 @@ export class Agent<
             : this.#executionStreamBus.scheduleCleanup(cleanup),
         release: () => {
           streamCleanup?.();
+          // Without a local entry, the observed entry is another instance's: an observer leaves it to its owner.
           if (
             observedFence &&
-            (this.#unverifiedReaderFences.has(observedFence) ||
+            (!localEntry ||
+              this.#unverifiedReaderFences.has(observedFence) ||
               !observedFence.ownsRunTopics() ||
               getRunRegistryEntry(runId, this.#mastra)?.executionFence !== observedFence ||
-              (localEntry &&
-                (this.executionRunRegistry.get(runId) !== localEntry || localEntry.executionFence !== observedFence)))
+              this.executionRunRegistry.get(runId) !== localEntry ||
+              localEntry.executionFence !== observedFence)
           ) {
             return;
           }
@@ -16531,6 +16533,7 @@ export class Agent<
       },
       { tracked: false },
     );
+    this.#observerCleanups.add(runCleanup);
     const performCleanup = runCleanup.run;
     const scheduleAutoCleanup = runCleanup.schedule;
 
@@ -16825,7 +16828,6 @@ export class Agent<
       this.#forgetStreamCleanup(runId, runCleanup);
       stream.detach();
     };
-    this.#observerDetaches.set(runCleanup, detach);
 
     // This output belongs to this observer alone, so a consumer that stops
     // reading fullStream (break/return/throw out of `for await`) should detach
