@@ -345,7 +345,7 @@ import {
   resolveBlockAfter,
   resolveBufferTokens,
 } from './thresholds';
-import { TokenCounter } from './token-counter';
+import { TokenCounter, takeNewTokenEstimates } from './token-counter';
 import type { TokenCounterModelContext } from './token-counter';
 import { applyTextTransform } from './transform-hooks';
 import type {
@@ -1769,6 +1769,40 @@ export class ObservationalMemory {
         },
       ],
     });
+  }
+
+  /**
+   * @internal Write the token counts OM made for stored messages back to storage, so the next
+   * request reads them instead of counting the same parts again. Each stored part takes the count
+   * of the in-memory part at the same position when that part is still the same part.
+   */
+  async persistTokenEstimates(messages: MastraDBMessage[]): Promise<void> {
+    const counted = messages.filter(takeNewTokenEstimates);
+    if (counted.length === 0) return;
+    const live = new Map(counted.map(message => [message.id, message]));
+    const { messages: stored } = await this.storage.listMessagesById({ messageIds: [...live.keys()] });
+    const updates: { id: string; content: MastraDBMessage['content'] }[] = [];
+    for (const row of stored) {
+      const liveParts = live.get(row.id)?.content.parts ?? [];
+      let changed = false;
+      const parts = row.content.parts.map((part, index) => {
+        const livePart = liveParts[index] as any;
+        const tokenEstimate = livePart?.providerMetadata?.mastra?.tokenEstimate;
+        const samePart =
+          livePart?.type === part.type &&
+          (part.type !== 'text' || livePart.text === part.text) &&
+          (part.type !== 'tool-invocation' || livePart.toolInvocation?.toolCallId === part.toolInvocation.toolCallId);
+        if (!tokenEstimate || !samePart) return part;
+        changed = true;
+        const providerMetadata = (part as any).providerMetadata ?? {};
+        return {
+          ...part,
+          providerMetadata: { ...providerMetadata, mastra: { ...providerMetadata.mastra, tokenEstimate } },
+        };
+      });
+      if (changed) updates.push({ id: row.id, content: { ...row.content, parts } });
+    }
+    if (updates.length > 0) await this.storage.updateMessages({ messages: updates });
   }
 
   /**

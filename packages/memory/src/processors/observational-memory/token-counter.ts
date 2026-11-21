@@ -286,6 +286,21 @@ function getPartCacheEntry(part: CacheablePart, key: string): TokenEstimateCache
   return getCacheEntry(getPartMastraMetadata(part)?.tokenEstimate, key);
 }
 
+/** Parts that got a trusted count in memory which storage doesn't have yet. */
+const countedParts = new WeakSet<object>();
+
+/**
+ * True when OM counted a part of `message` that had no stored count. Each part is reported once,
+ * so the caller can write the counts back to storage.
+ */
+export function takeNewTokenEstimates(message: MastraDBMessage): boolean {
+  let found = false;
+  for (const part of message.content?.parts ?? []) {
+    if (part && countedParts.delete(part)) found = true;
+  }
+  return found;
+}
+
 function setPartCacheEntry(part: CacheablePart, key: string, entry: TokenEstimateCacheEntry): void {
   const mastraMetadata = ensurePartMastraMetadata(part);
   mastraMetadata.tokenEstimate = mergeCacheEntry(mastraMetadata.tokenEstimate, key, entry);
@@ -1378,6 +1393,7 @@ export class TokenCounter {
     const tokens = this.countString(payload);
     const entry = { v: TRUSTED_TOKEN_ESTIMATE_VERSION, source: TRUSTED_TOKEN_ESTIMATE_SOURCE, key, tokens };
     setPartCacheEntry(part, key, entry);
+    countedParts.add(part);
     return tokens;
   }
 
