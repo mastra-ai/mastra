@@ -8,6 +8,7 @@ import { resolveDeliveryFailureUpdate } from './delivery-policy';
 import { readNotificationRoutingRequirement } from './routing';
 import { createNotificationSignal, createNotificationSummarySignal, summarizeNotifications } from './signals';
 import type { NotificationsStorage } from './storage';
+import { isNotificationDue } from './storage';
 import type { NotificationDeliveryDecision, NotificationDeliveryThreadState, NotificationRecord } from './types';
 
 type NotificationDispatchAgent = {
@@ -95,6 +96,21 @@ async function sendNotificationSignalToAgent(
   return result;
 }
 
+/**
+ * Awaits a signal's routing outcome. `accepted` rejects when the signal could
+ * not be routed/started, and resolves `blocked` when no run picked it up (a
+ * suspended thread, or a claimed owner holding the handover lease). Surface
+ * both to the caller so the notification is recorded as a failed delivery and
+ * retried, instead of being stamped delivered.
+ */
+async function awaitNotificationDelivery(result: SendAgentSignalResult): Promise<void> {
+  const accepted = await result.accepted;
+  if (accepted.action === 'blocked') {
+    throw new Error(`Notification signal was blocked: ${accepted.reason}`);
+  }
+  await result.persisted;
+}
+
 /** The scopes every record of a summary names, or none when they differ. */
 function sharedScopes(records: NotificationRecord[]): string[] | undefined {
   const scopes = records.map(record => readNotificationRoutingRequirement(record.metadata)?.scopes);
@@ -162,6 +178,13 @@ const groupKey = (record: NotificationRecord): string | undefined => {
   return [record.agentId, record.resourceId, record.threadId].join('\0');
 };
 
+/**
+ * Records a failed delivery attempt and reports whether the record left the due
+ * list. A record dismissed or delivered between the read that picked it up and
+ * this write is left untouched (so a dismissal is never resurrected), and a
+ * record that reaches the attempt cap is marked `failed`. Either way it is no
+ * longer due; a record that failed below the cap stays due for a later pass.
+ */
 async function recordDeliveryFailure({
   storage,
   record,
@@ -172,14 +195,18 @@ async function recordDeliveryFailure({
   record: NotificationRecord;
   now: Date;
   error: unknown;
-}) {
+}): Promise<boolean> {
+  const current = await storage.getNotification({ threadId: record.threadId, id: record.id });
+  if (!current || current.status !== 'pending') return true;
+  const update = resolveDeliveryFailureUpdate(current);
   await storage.updateNotification({
     id: record.id,
     threadId: record.threadId,
-    ...resolveDeliveryFailureUpdate(record),
+    ...update,
     lastDeliveryAttemptAt: now,
     lastDeliveryError: errorMessage(error),
   });
+  return update.status === 'failed';
 }
 
 async function sendNotificationRecord({
@@ -232,10 +259,9 @@ async function sendNotificationRecord({
   });
   const result = await sendNotificationSignalToAgent(agent, signal, target);
   // `accepted` rejects when the signal could not be routed/started (e.g. a
-  // misconfigured agent). Let that propagate so the caller records the
-  // notification as a failed delivery.
-  await result.accepted;
-  await result.persisted;
+  // misconfigured agent), and resolves `blocked` when no run picked it up. Let
+  // both propagate so the caller records the notification as a failed delivery.
+  await awaitNotificationDelivery(result);
   const updated = await storage.updateNotification({
     id: current.id,
     threadId: current.threadId,
@@ -303,10 +329,10 @@ async function sendNotificationSummary({
           : {}),
       });
   const result = await sendNotificationSignalToAgent(agent, signal, target);
-  // `accepted` rejects when the signal could not be routed/started; let it
-  // propagate so the caller records the notifications as failed deliveries.
-  await result.accepted;
-  await result.persisted;
+  // `accepted` rejects when the signal could not be routed/started, and resolves
+  // `blocked` when no run picked it up; let both propagate so the caller records
+  // the notifications as failed deliveries.
+  await awaitNotificationDelivery(result);
 
   const updatedRecords: NotificationRecord[] = [];
   for (const record of records) {
@@ -354,18 +380,33 @@ export async function dispatchDueNotifications({
   // Notification ids are unique per thread, not across threads.
   const key = (record: NotificationRecord) => `${record.threadId}\0${record.id}`;
   const acted = () => result.delivered.length + result.failed.length;
+  // `left` is the number of records this pass has already read that are still due
+  // (held for another process, failed below the attempt cap, or summarized but
+  // still due for the full delivery). The page sizing relies on it being exact:
+  // every one of those records still sits at the head of the due list, so a page
+  // of `left + (limit - acted)` reaches past them to at least one unread record.
   let left = 0;
   while (acted() < limit) {
     const actedBefore = acted();
     const pageSize = left + limit - actedBefore;
     const page = await storage.listDueNotifications({ now, limit: pageSize, ...(resourceId ? { resourceId } : {}) });
-    const due = page.filter(record => !seen.has(key(record)));
+    // `pageSize` reaches past the records this pass left due, so the page can hold
+    // more unread records than the budget that is left. Hand `dispatchRecords` no
+    // more than that budget, and mark only those read: `limit` bounds the records a
+    // pass delivers or fails, not the ones it leaves for the next pass.
+    const unread = page.filter(record => !seen.has(key(record)));
+    const due = unread.slice(0, limit - actedBefore);
     for (const record of due) seen.add(key(record));
-    await dispatchRecords({ mastra, storage, now, due, result });
-    const leftThisPage = due.length - (acted() - actedBefore);
-    left += leftThisPage;
-    // The due list ran out, or nothing was left ahead of the records still unread.
-    if (page.length < pageSize || leftThisPage === 0) break;
+    const departed = await dispatchRecords({ mastra, storage, now, due, result });
+    // Only records that left the due list stop counting toward `left`; a record
+    // acted on but still due (failed below the cap, held, or summarized with a
+    // `deliverAt` still to come) keeps its slot.
+    left += due.length - departed;
+    // Stop once there is nothing left to read: the due list ran out (a short page)
+    // and this pass selected every unseen record on it. A short page whose slice
+    // left records unread must keep paging, or they would never be processed; a
+    // page with no unread records must stop rather than spin.
+    if (due.length === 0 || (page.length < pageSize && due.length === unread.length)) break;
   }
   return result;
 }
@@ -382,9 +423,16 @@ async function dispatchRecords({
   now: Date;
   due: NotificationRecord[];
   result: DispatchDueNotificationsResult;
-}): Promise<void> {
+}): Promise<number> {
   const groups = new Map<string, DueDispatchGroup>();
   const ungroupedIndividual: NotificationRecord[] = [];
+  // How many of `due` left the due list (delivered, or failed at the cap). The
+  // caller uses this to keep the records still due from eating the next page.
+  let departed = 0;
+  const fail = async (record: NotificationRecord, error: unknown) => {
+    if (await recordDeliveryFailure({ storage, record, now, error })) departed += 1;
+    failed.push({ record, error: errorMessage(error) });
+  };
 
   for (const record of due) {
     const key = groupKey(record);
@@ -393,8 +441,7 @@ async function dispatchRecords({
         const error = new Error(
           `Notification ${record.id} cannot be summarized without agentId, resourceId, and threadId`,
         );
-        await recordDeliveryFailure({ storage, record, now, error });
-        failed.push({ record, error: error.message });
+        await fail(record, error);
       } else {
         ungroupedIndividual.push(record);
       }
@@ -424,8 +471,7 @@ async function dispatchRecords({
       batchThreadState = await getBatchThreadState({ mastra, group });
     } catch (error) {
       for (const record of records) {
-        await recordDeliveryFailure({ storage, record, now, error });
-        failed.push({ record, error: errorMessage(error) });
+        await fail(record, error);
       }
       continue;
     }
@@ -453,10 +499,14 @@ async function dispatchRecords({
           if (!result) continue;
           delivered.push(...result.records);
           signals.push(result.signal);
+          // A summary clears only `summaryAt`. A high-priority record keeps its
+          // `deliverAt`, so it stays due for the full delivery — counting it as
+          // departed would undercount `left` and let the next page shrink to a
+          // page of already-seen records.
+          departed += result.records.filter(record => !isNotificationDue(record, now)).length;
         } catch (error) {
           for (const record of item.records) {
-            await recordDeliveryFailure({ storage, record, now, error });
-            failed.push({ record, error: errorMessage(error) });
+            await fail(record, error);
           }
         }
         continue;
@@ -467,9 +517,9 @@ async function dispatchRecords({
         if (!result) continue;
         delivered.push(result.record);
         signals.push(result.signal);
+        departed += 1;
       } catch (error) {
-        await recordDeliveryFailure({ storage, record: item.record, now, error });
-        failed.push({ record: item.record, error: errorMessage(error) });
+        await fail(item.record, error);
       }
     }
   }
@@ -486,9 +536,11 @@ async function dispatchRecords({
       if (!result) continue;
       delivered.push(result.record);
       signals.push(result.signal);
+      departed += 1;
     } catch (error) {
-      await recordDeliveryFailure({ storage, record, now, error });
-      failed.push({ record, error: errorMessage(error) });
+      await fail(record, error);
     }
   }
+
+  return departed;
 }

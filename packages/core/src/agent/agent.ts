@@ -11294,6 +11294,15 @@ export class Agent<
       );
     }
 
+    // Several inputs in one batch can coalesce into a single stored record, so
+    // `records` can hold stale snapshots of the same notification (same id).
+    // Track the latest saved version per id: repeated failures in one batch must
+    // count up from the last write, not each recompute from the same snapshot.
+    const latestRecords = new Map<string, NotificationRecord>();
+    for (const record of records) {
+      latestRecords.set(record.id, record);
+    }
+
     const threadState = agentThreadStreamRuntime.getThreadState(
       { resourceId: target.resourceId, threadId: target.threadId },
       this.getPubSub(),
@@ -11330,10 +11339,11 @@ export class Agent<
           id: record.id,
           threadId: record.threadId,
           deliverAt: now,
-          ...resolveDeliveryFailureUpdate(record),
+          ...resolveDeliveryFailureUpdate(latestRecords.get(record.id) ?? record),
           lastDeliveryAttemptAt: new Date(),
           lastDeliveryError: entry.error instanceof Error ? entry.error.message : String(entry.error),
         });
+        latestRecords.set(record.id, failed);
         needsDispatcher = true;
         results.push({
           record: failed,
@@ -11404,6 +11414,12 @@ export class Agent<
           let summaryAccepted: SendAgentSignalAccepted<OUTPUT>;
           try {
             summaryAccepted = await result.accepted;
+            // `blocked` means no run picked the summary signal up. Treat it like
+            // a rejected routing so the catch below restores `summaryAt` and
+            // records a failed delivery, instead of stamping `summarySignalId`.
+            if (summaryAccepted.action === 'blocked') {
+              throw new Error(`Notification summary signal was blocked: ${summaryAccepted.reason}`);
+            }
           } catch (error) {
             const failed = await notifications.updateNotification({
               id: updated.id,
@@ -11411,10 +11427,16 @@ export class Agent<
               // `summaryAt` was cleared to emit this summary. Restore it so the
               // record stays due and the dispatcher can retry it.
               summaryAt: now,
-              ...resolveDeliveryFailureUpdate(updated),
+              ...resolveDeliveryFailureUpdate(latestRecords.get(updated.id) ?? updated),
               lastDeliveryAttemptAt: new Date(),
               lastDeliveryError: error instanceof Error ? error.message : 'Notification summary signal was rejected',
             });
+            latestRecords.set(updated.id, failed);
+            // The emit-now branch cleared `summaryAt` before sending, so the
+            // arming check above saw no schedule and left `needsDispatcher`
+            // false. This catch restored `summaryAt`, so activate the dispatcher
+            // here too, or the record stays pending with no pass to retry it.
+            needsDispatcher = true;
             results.push({ record: failed, decision });
             continue;
           }
@@ -11466,6 +11488,13 @@ export class Agent<
       let delivered: SendAgentSignalAccepted<OUTPUT>;
       try {
         delivered = await result.accepted;
+        // `blocked` means no run picked the signal up (a suspended thread, or a
+        // claimed owner holding the handover lease). Treat it like a rejected
+        // routing so the catch below records a failed delivery and retries,
+        // rather than falling through to stamp the record `delivered`.
+        if (delivered.action === 'blocked') {
+          throw new Error(`Notification signal was blocked: ${delivered.reason}`);
+        }
       } catch (error) {
         // An immediate `deliver` record carries no schedule: without one a
         // failed attempt leaves it pending forever, because no dispatch pass
@@ -11478,11 +11507,12 @@ export class Agent<
           id: record.id,
           threadId: record.threadId,
           deliverAt: now,
-          ...resolveDeliveryFailureUpdate(record),
+          ...resolveDeliveryFailureUpdate(latestRecords.get(record.id) ?? record),
           lastDeliveryAttemptAt: new Date(),
           lastDeliveryError: error instanceof Error ? error.message : 'Notification signal was rejected',
           deliveryReason: decision.reason,
         });
+        latestRecords.set(record.id, failed);
         needsDispatcher = true;
         results.push({ record: failed, decision });
         continue;
@@ -11491,6 +11521,7 @@ export class Agent<
       // The routing policy can resolve to `persist`/`discard` (no run picked the
       // signal up). Don't mark the notification `delivered` in that case — the
       // record stays in its current state with the emitted signal attached.
+      // (`blocked` is handled above as a failed delivery, not here.)
       if (delivered.action === 'persist' || delivered.action === 'discard') {
         results.push({
           record,

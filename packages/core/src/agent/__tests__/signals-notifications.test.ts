@@ -614,6 +614,142 @@ describe('Agent signals: state and notification signals', () => {
     }
   });
 
+  it('keeps an immediate notification record pending when the runtime blocks delivery', async () => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'blocked-notification-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'blocked-notification-agent',
+      name: 'Blocked Notification Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('unused'),
+      notifications: {
+        deliveryPolicy: {
+          decide: () => ({ action: 'deliver' }),
+        },
+      },
+    });
+    const mastra = new Mastra({ agents: { blockedNotificationAgent: agent }, storage, logger: false });
+    const ensureDispatch = vi.spyOn(mastra, '__ensureNotificationDispatchReady').mockResolvedValue(undefined as any);
+    const sendSignal = vi.spyOn(agentThreadStreamRuntime, 'sendSignal').mockReturnValue({
+      accepted: Promise.resolve({ action: 'blocked', reason: 'thread-blocked', runId: 'run-blocked' }),
+      signal: createSignal({ type: 'notification', tagName: 'notification', contents: 'Blocked' }),
+    } as any);
+
+    try {
+      const result = await agent.sendNotificationSignal(
+        { source: 'github', kind: 'ci-status', priority: 'high', summary: 'Blocked notification' },
+        { resourceId: 'notification-user', threadId: 'notification-thread' },
+      );
+
+      expect(result.record).toMatchObject({
+        status: 'pending',
+        deliveryAttempts: 1,
+        lastDeliveryError: 'Notification signal was blocked: thread-blocked',
+      });
+      expect(result.record.deliveredSignalId).toBeUndefined();
+      expect(result.record.deliverAt).toBeInstanceOf(Date);
+      expect(ensureDispatch).toHaveBeenCalled();
+
+      const stored = await notifications.getNotification({ threadId: 'notification-thread', id: result.record.id });
+      expect(stored).toMatchObject({ status: 'pending', deliveryAttempts: 1 });
+      expect(stored?.deliveredSignalId).toBeUndefined();
+
+      const due = await notifications.listDueNotifications({ now: new Date(Date.now() + 1000) });
+      expect(due.map(record => record.id)).toContain(result.record.id);
+    } finally {
+      sendSignal.mockRestore();
+      ensureDispatch.mockRestore();
+    }
+  });
+
+  it('keeps a blocked notification summary due for retry', async () => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'blocked-summary-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'blocked-summary-agent',
+      name: 'Blocked Summary Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('unused'),
+      notifications: {
+        deliveryPolicy: {
+          decide: ({ now }) => ({ action: 'summarize', summaryAt: now, reason: 'test-summary-now' }),
+        },
+      },
+    });
+    const mastra = new Mastra({ agents: { blockedSummaryAgent: agent }, storage, logger: false });
+    const ensureDispatch = vi.spyOn(mastra, '__ensureNotificationDispatchReady').mockResolvedValue(undefined as any);
+    const sendSignal = vi.spyOn(agentThreadStreamRuntime, 'sendSignal').mockReturnValue({
+      accepted: Promise.resolve({ action: 'blocked', reason: 'thread-blocked', runId: 'run-blocked' }),
+      signal: createSignal({ type: 'notification', tagName: 'notification-summary', contents: 'Blocked' }),
+    } as any);
+
+    try {
+      const result = await agent.sendNotificationSignal(
+        { source: 'github', kind: 'ci-status', priority: 'medium', summary: 'Blocked summary' },
+        { resourceId: 'summary-user', threadId: 'summary-thread' },
+      );
+
+      expect(result.record).toMatchObject({
+        status: 'pending',
+        deliveryAttempts: 1,
+        lastDeliveryError: 'Notification summary signal was blocked: thread-blocked',
+      });
+      const stored = await notifications.getNotification({ threadId: 'summary-thread', id: result.record.id });
+      expect(stored?.summaryAt).toBeInstanceOf(Date);
+      expect(stored?.summarySignalId).toBeUndefined();
+      // Emitting the summary cleared `summaryAt` before sending, so this catch is
+      // what restores the record's due time. It must also arm the dispatcher, or
+      // nothing ever retries it.
+      expect(ensureDispatch).toHaveBeenCalled();
+      await expect(notifications.listDueNotifications({ now: new Date() })).resolves.toMatchObject([
+        { id: result.record.id },
+      ]);
+    } finally {
+      sendSignal.mockRestore();
+      ensureDispatch.mockRestore();
+    }
+  });
+
+  it('counts each blocked attempt when a batch coalesces into one record', async () => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'coalesced-attempt-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'coalesced-attempt-agent',
+      name: 'Coalesced Attempt Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('unused'),
+      notifications: {
+        deliveryPolicy: {
+          decide: () => ({ action: 'deliver' }),
+        },
+      },
+    });
+    new Mastra({ agents: { coalescedAttemptAgent: agent }, storage, logger: false });
+    const sendSignal = vi.spyOn(agentThreadStreamRuntime, 'sendSignal').mockReturnValue({
+      accepted: Promise.resolve({ action: 'blocked', reason: 'thread-blocked', runId: 'run-blocked' }),
+      signal: createSignal({ type: 'notification', tagName: 'notification', contents: 'Blocked' }),
+    } as any);
+
+    try {
+      const results = await agent.sendNotificationSignal(
+        [
+          { source: 'github', kind: 'ci-status', priority: 'high', summary: 'First', dedupeKey: 'coalesced-ci' },
+          { source: 'github', kind: 'ci-status', priority: 'high', summary: 'Second', dedupeKey: 'coalesced-ci' },
+        ],
+        { resourceId: 'coalesced-user', threadId: 'coalesced-thread' },
+      );
+
+      // Both inputs coalesce into one stored record, so its two blocked attempts
+      // must count up from the last write (2), not each overwrite it with 1.
+      expect(results[0]!.record.id).toBe(results[1]!.record.id);
+      await expect(
+        notifications.getNotification({ threadId: 'coalesced-thread', id: results[0]!.record.id }),
+      ).resolves.toMatchObject({ status: 'pending', deliveryAttempts: 2 });
+    } finally {
+      sendSignal.mockRestore();
+    }
+  });
+
   it('batches active high notifications for full delivery and active medium or low notifications for summaries', async () => {
     let releaseFirst!: () => void;
     const firstFinished = new Promise<void>(resolve => {
