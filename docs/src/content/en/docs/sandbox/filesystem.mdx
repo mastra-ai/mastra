@@ -205,6 +205,29 @@ const workspace = new Workspace({ filesystem })
 
 Use manual composition when another part of your application needs the composite as a filesystem provider. For normal sandbox mounting, the `mounts` option performs the same routing setup with less configuration.
 
+### Relative paths and the default mount
+
+Relative paths resolve from the virtual root, so they normally include a mount name. With a single `/data` mount, `read_file('/data/note.txt')` and `read_file('data/note.txt')` both work, while `read_file('note.txt')` fails with `No mount for path`.
+
+Set `defaultMount` to resolve otherwise-unmatched relative paths inside one mount:
+
+```typescript
+const filesystem = new CompositeFilesystem({
+  mounts: {
+    '/data': new LocalFilesystem({ basePath: './data' }),
+  },
+  defaultMount: '/data',
+})
+```
+
+With `defaultMount: '/data'`:
+
+- `read_file('note.txt')` reads `note.txt` from the `/data` mount, and `write_file('reports/summary.md')` writes into it.
+- `defaultMount` must match a configured mount path, otherwise the constructor throws.
+- Mount-prefixed paths keep their meaning. `data/note.txt` and `/data/note.txt` still resolve through `/data`, and `/note.txt` still fails because no mount matches it.
+- `/` and `.` still list the virtual mount directories.
+- Relative paths that climb above the mount root, such as `../note.txt`, stay unresolved.
+
 ## Mount availability
 
 File tools and composite routing work without a sandbox mount. When a remote sandbox and filesystem provider support mounting, `mounts` automatically uses FUSE to make the files visible to commands. `LocalSandbox` uses symlinks instead.
