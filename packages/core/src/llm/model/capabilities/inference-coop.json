@@ -47,12 +47,6 @@
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "tinfoil/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "tinfoil/deepseek-v4-1-flash": [
       {
         "type": "effort",
@@ -63,6 +57,12 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "tinfoil/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ]
   }
