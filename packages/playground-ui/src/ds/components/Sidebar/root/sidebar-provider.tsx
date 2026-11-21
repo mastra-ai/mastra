@@ -97,7 +97,20 @@ export function SidebarProvider({
 
   const [state, setState] = React.useState<SidebarState>(initial.state);
   const [width, setWidthState] = React.useState<number>(initial.width);
-  const [isMobile, setIsMobile] = React.useState(false);
+  const mobileQuery = `(max-width: ${mobileBreakpoint - 1}px)`;
+  const subscribeToMobile = React.useCallback(
+    (onChange: () => void) => {
+      const mq = window.matchMedia(mobileQuery);
+      mq.addEventListener('change', onChange);
+      return () => mq.removeEventListener('change', onChange);
+    },
+    [mobileQuery],
+  );
+  const isMobile = React.useSyncExternalStore(
+    subscribeToMobile,
+    () => window.matchMedia(mobileQuery).matches,
+    () => false,
+  );
   const [openMobile, setOpenMobileState] = React.useState(false);
   const [mobileDrawerPresent, setMobileDrawerPresent] = React.useState(false);
   const openMobileRef = React.useRef(false);
@@ -108,15 +121,6 @@ export function SidebarProvider({
 
   const scopeRef = React.useRef<HTMLDivElement | null>(null);
   const panelRef = React.useRef<HTMLDivElement | null>(null);
-
-  React.useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const mq = window.matchMedia(`(max-width: ${mobileBreakpoint - 1}px)`);
-    const update = () => setIsMobile(mq.matches);
-    update();
-    mq.addEventListener('change', update);
-    return () => mq.removeEventListener('change', update);
-  }, [mobileBreakpoint]);
 
   const setOpenMobile = React.useCallback((open: boolean) => {
     openMobileRef.current = open;
