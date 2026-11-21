@@ -1,6 +1,8 @@
 import { useRef } from 'react';
 import type { ReactNode } from 'react';
 
+import { RepositoryProviderIcon } from './repository-list';
+import type { RepositoryProvider } from './repository-list';
 import { Button } from '@/ds/components/Button';
 import {
   DrawerBody,
@@ -16,11 +18,9 @@ import { SearchInput } from '@/ds/components/SearchInput';
 import { Txt } from '@/ds/components/Txt';
 import { IconArrowRotateClockwise } from '@/ds/icons/central/IconArrowRotateClockwise';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+
 import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { SettingsItem, SettingsItemIcon, SettingsSkeleton } from '@/ds/new/settings';
-
-import { RepositoryProviderIcon } from './repository-list';
-import type { RepositoryProvider } from './repository-list';
 
 export interface AddRepositoryOption {
   /** Unique across providers. */
@@ -64,7 +64,7 @@ export function AddRepositoryDrawerContent({
   unavailableMessage,
   emptyMessage,
   onRefresh,
-  refreshLabel = "Refresh repositories",
+  refreshLabel = 'Refresh repositories',
   refreshing,
   addingKey,
   onAdd,
@@ -92,13 +92,7 @@ export function AddRepositoryDrawerContent({
             className="min-w-0 flex-1"
           />
           {onRefresh && (
-            <Button
-              variant="ghost"
-              size="icon-md"
-              aria-label={refreshLabel}
-              disabled={refreshing}
-              onClick={onRefresh}
-            >
+            <Button variant="ghost" size="icon-md" aria-label={refreshLabel} disabled={refreshing} onClick={onRefresh}>
               <IconArrowRotateClockwise className={refreshing ? 'motion-safe:animate-spin' : undefined} />
             </Button>
           )}

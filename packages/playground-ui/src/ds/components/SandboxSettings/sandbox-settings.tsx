@@ -148,7 +148,7 @@ function SettingRow({
     // A default that is one of the choices is marked on that choice, and picking it clears the setting;
     // otherwise a separate "Default" item does.
     const defaultIsChoice = choices.some(choice => String(choice.value) === placeholder);
-    const unsetKey = defaultIsChoice ? placeholder! : UNSET;
+    const unsetKey = defaultIsChoice && placeholder !== undefined ? placeholder : UNSET;
     const labelOf = (key: string) => {
       const choiceLabel = choices.find(choice => String(choice.value) === key)?.label ?? key;
       return defaultIsChoice && key === placeholder ? `${choiceLabel} (default)` : choiceLabel;
