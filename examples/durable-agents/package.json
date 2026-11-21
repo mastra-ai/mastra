@@ -15,7 +15,6 @@
   "license": "ISC",
   "packageManager": "pnpm@10.18.2",
   "dependencies": {
-    "@inngest/realtime": "^0.4.5",
     "@mastra/core": "1.0.0-beta.20",
     "@mastra/deployer": "1.0.0-beta.20",
     "@mastra/inngest": "1.0.0-beta.11",

@@ -41,9 +41,6 @@ importers:
 
   .:
     dependencies:
-      '@inngest/realtime':
-        specifier: ^0.4.5
-        version: 0.4.7(@opentelemetry/core@2.12.1(@opentelemetry/api@1.10.0))(react@19.3.1)(zod@4.6.7)
       '@mastra/core':
         specifier: link:../../packages/core
         version: link:../../packages/core
@@ -91,13 +88,6 @@ packages:
 
   '@inngest/ai@0.1.8':
     resolution: {integrity: sha512-DiZ6r3R5FiS0h2p4pzoUIHdjukEDZpDXuG9Z+4s1beOcUn0pBAEovBdlokFCzMLVECXfrkqWWxZEQvgiY6a2ew==}
-
-  '@inngest/realtime@0.4.7':
-    resolution: {integrity: sha512-CtmQFXlhtR0DHOJ5KngTSsk5lJXgr+Ro25HaAtdZjvDJjzo9tS0ut5e5SpGClUZkSBqdvpIKw8VBLonJ5j1JqQ==}
-    deprecated: This package is deprecated. Realtime functionality is now built into the inngest package.
-    peerDependencies:
-      react: '>=18.0.0'
-      zod: 4.6.7
 
   '@ioredis/commands@2.0.0':
     resolution: {integrity: sha512-vrx0AE/T0h7cRZwfo1M39Cr+ZhZrkf0V8mQN75wucKCxCLD9l/VX6no3gFvrLqD1IlG/1LtzWovqEw3t0Vr9zg==}
@@ -1107,28 +1097,6 @@ snapshots:
       yargs: 18.2.0
 
   '@inngest/ai@0.1.8': {}
-
-  '@inngest/realtime@0.4.7(@opentelemetry/core@2.12.1(@opentelemetry/api@1.10.0))(react@19.3.1)(zod@4.6.7)':
-    dependencies:
-      '@standard-schema/spec': 1.1.0
-      debug: 4.4.3
-      inngest: 4.26.2(@opentelemetry/core@2.12.1(@opentelemetry/api@1.10.0))(react@19.3.1)(zod@4.6.7)
-      react: 19.3.1
-      zod: 4.6.7
-    transitivePeerDependencies:
-      - '@opentelemetry/core'
-      - '@sveltejs/kit'
-      - '@vercel/node'
-      - aws-lambda
-      - encoding
-      - express
-      - fastify
-      - h3
-      - hono
-      - koa
-      - next
-      - supports-color
-      - typescript
 
   '@ioredis/commands@2.0.0': {}
 
@@ -2199,7 +2167,8 @@ snapshots:
     dependencies:
       long: 5.3.2
 
-  react@19.3.1: {}
+  react@19.3.1:
+    optional: true
 
   redis-errors@1.2.0: {}
 
