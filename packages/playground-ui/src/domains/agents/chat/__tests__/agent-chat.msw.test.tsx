@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { screen } from '@testing-library/react';
+import { MastraClientError } from '@mastra/client-js';
+import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -21,8 +22,22 @@ function renderChat(status: number) {
 
 describe('AgentChat', () => {
   it('shows the composer for a thread that has no messages yet', async () => {
-    renderChat(404);
-    expect(await screen.findByPlaceholderText('Enter your message')).toBeTruthy();
+    const { queryClient } = renderChat(404);
+    await waitFor(() => {
+      expect(
+        queryClient
+          .getQueryCache()
+          .getAll()
+          .some(
+            query =>
+              query.state.status === 'error' &&
+              query.state.fetchStatus === 'idle' &&
+              query.state.error instanceof MastraClientError &&
+              query.state.error.status === 404,
+          ),
+      ).toBe(true);
+    });
+    expect(screen.getByPlaceholderText('Enter your message')).toBeTruthy();
     expect(screen.queryByRole('alert')).toBeNull();
   });
 

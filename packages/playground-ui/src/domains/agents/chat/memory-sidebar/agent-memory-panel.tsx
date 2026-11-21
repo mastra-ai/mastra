@@ -89,7 +89,7 @@ export function AgentMemoryPanel({
 
   return (
     <div className="flex min-w-0 flex-col">
-      {clone && <div className="border-b border-border p-4">{clone}</div>}
+      {clone}
 
       {supportsRecentMessages && (
         <div className="border-b border-border p-4">
