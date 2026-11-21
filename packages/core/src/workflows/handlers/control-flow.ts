@@ -13,6 +13,7 @@ import type { DefaultExecutionEngine } from '../default';
 import { workflowChildTermination as workflowTermination } from '../execution-outcome';
 import { isFrameworkCondition } from '../framework-condition';
 import { buildStepResultAccessors } from '../run-journal';
+import { isWorkflowRunOwnershipLostError } from '../run-ownership';
 import type { ConditionFunction, InnerOutput, LoopConditionFunction } from '../step';
 import { getEntryId } from '../step-entry';
 import type {
@@ -1268,7 +1269,12 @@ export async function executeForeach(
           });
         } catch (err) {
           checkpointError = err instanceof Error ? err : new Error(String(err));
-          engine.getLogger()?.error('Failed to checkpoint foreach progress', { stepId, runId, error: checkpointError });
+          // A lost run was already reported once; it isn't a checkpoint failure.
+          if (!isWorkflowRunOwnershipLostError(err)) {
+            engine
+              .getLogger()
+              ?.error('Failed to checkpoint foreach progress', { stepId, runId, error: checkpointError });
+          }
           checkpointClosed = true;
         }
       }

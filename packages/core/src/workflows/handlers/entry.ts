@@ -10,6 +10,7 @@ import { WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import { workflowChildTermination as workflowTermination } from '../execution-outcome';
 import type { RunJournal } from '../run-journal';
+import { currentWorkflowRunClaim, isWorkflowRunOwnershipLostError } from '../run-ownership';
 import type {
   EntryExecutionResult,
   ExecutionContext,
@@ -247,7 +248,11 @@ export async function persistStepUpdate(
     return;
   }
 
+  const claim = currentWorkflowRunClaim(runId);
+
   const write = async () => {
+    // Checked when the write runs, not when it was queued: an earlier write may have been refused since.
+    claim?.throwIfLost();
     if (!evaluateBeforeDurableOperation && !persistencePredicate?.({ stepResults, workflowStatus })) {
       return;
     }
@@ -327,11 +332,17 @@ export async function persistStepUpdate(
     engine.setLastPersistedStatus(runId, workflowStatus);
   };
 
-  await engine.wrapDurableOperation(operationId, () =>
-    // Engines that replay memoized durable operations (Inngest) record each write as its own
-    // durable step, so only the in-process engine needs writes kept in call order.
-    engine.requiresDurableContextSerialization() ? write() : engine.serializeSnapshotWrite(runId, write),
-  );
+  try {
+    await engine.wrapDurableOperation(operationId, () =>
+      // Engines that replay memoized durable operations (Inngest) record each write as its own
+      // durable step, so only the in-process engine needs writes kept in call order.
+      engine.requiresDurableContextSerialization() ? write() : engine.serializeSnapshotWrite(runId, write),
+    );
+  } catch (error) {
+    // The refusal already marked the execution lost (see `WorkflowRunClaim`); stop it, once, in execute().
+    if (claim?.lost && !isWorkflowRunOwnershipLostError(error)) throw claim.lostError(error);
+    throw error;
+  }
 }
 
 export interface ExecuteEntryParams extends ObservabilityContext {
@@ -398,11 +409,20 @@ export async function executeEntry(
     else await engine.endChildSpan({ span, operationId: `${operationId}.end`, endOptions: termination });
     return result;
   } catch (error) {
-    await engine.errorChildSpan({
-      span,
-      operationId: `${operationId}.error`,
-      errorOptions: { ...workflowTermination({ status: 'failed', error }), error: getErrorFromUnknown(error) },
-    });
+    if (isWorkflowRunOwnershipLostError(error)) {
+      // Not a failure: the run goes on in the process that took it over.
+      await engine.endChildSpan({
+        span,
+        operationId: `${operationId}.end`,
+        endOptions: workflowTermination({ status: 'waiting' }),
+      });
+    } else {
+      await engine.errorChildSpan({
+        span,
+        operationId: `${operationId}.error`,
+        errorOptions: { ...workflowTermination({ status: 'failed', error }), error: getErrorFromUnknown(error) },
+      });
+    }
     throw error;
   }
 }

@@ -74,6 +74,7 @@ import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, Standa
 import type { StorageListWorkflowRunsInput } from '../storage';
 import type { WorkflowsStorage } from '../storage/domains/workflows/base';
 import type { WorkflowRunHeader } from '../storage/domains/workflows/journal';
+import { coverNestedRun } from '../storage/run-fencing';
 import type { RunOwnershipRecord } from '../storage/run-fencing';
 import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../stream/types';
@@ -101,7 +102,7 @@ import { derivePredicateLabel, evaluatePredicate } from './predicate';
 import type { Predicate } from './predicate';
 import { loadedStepResults, residentStepResults } from './run-journal';
 import type { ParentStateLink, StateBase } from './run-journal';
-import { claimWorkflowRunOwnership } from './run-ownership';
+import { claimWorkflowRunOwnership, currentWorkflowRunClaim, UNCLAIMED_WORKFLOW_RUN } from './run-ownership';
 import type { WorkflowRunOwnership } from './run-ownership';
 import { createRunStorage } from './run-storage';
 import type { RunStorage } from './run-storage';
@@ -3583,6 +3584,9 @@ export class Workflow<
     // The nested run takes the parent run's version. Only a storage v2 parent hands over its
     // state link, and it stores the nested run's state as its changes to a version of the parent's.
     const inheritedState = !restart && !isResume ? await parentState?.(startState) : undefined;
+    // The nested run's writes, from its first snapshot on, carry the claim its parent's execution holds.
+    const knownNestedRunId = isResume ? resume.runId : runId;
+    if (parentWorkflow && knownNestedRunId) coverNestedRun(parentWorkflow.runId, knownNestedRunId);
     // Nothing may await between this and createRun(), which takes it synchronously.
     this.#nestedRun = {
       storageVersion: parentState ? 2 : 1,
@@ -3591,6 +3595,7 @@ export class Workflow<
     const run = isResume
       ? await this.createRun({ runId: resume.runId, resourceId, pubsub: nestedPubsub, parentWorkflow })
       : await this.createRun({ runId, resourceId, pubsub: nestedPubsub, parentWorkflow });
+    if (parentWorkflow) coverNestedRun(parentWorkflow.runId, run.runId);
     const nestedAbortCb = () => {
       abort();
     };
@@ -3720,6 +3725,10 @@ export class Workflow<
       abortSignal.removeEventListener('abort', parentAbortCb);
       unwatch();
     }
+
+    // The nested run stopped because another process took the parent's run over. Stop the parent's
+    // step too, before it hands back state or records anything.
+    if (parentWorkflow) currentWorkflowRunClaim(parentWorkflow.runId)?.throwIfLost();
 
     // On storage v2 `res.steps` is a loader. The suspended and failed results read here are never
     // evicted, so the ones it holds are enough.
@@ -4295,6 +4304,8 @@ export class Run<
   #observerHandlers: (() => void)[] = [];
 
   #recoverable: boolean;
+  /** Counts the executions this Run started in this process, to tell whether a newer one started since. */
+  #executionCount = 0;
 
   get mastra() {
     return this.#mastra;
@@ -4753,7 +4764,7 @@ export class Run<
       }
     }
 
-    const result = await this.#executeOwned(
+    const { result, superseded } = await this.#executeOwned(
       () =>
         this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>({
           workflowId: this.workflowId,
@@ -4781,9 +4792,12 @@ export class Run<
       held,
     );
 
-    this.workflowRunStatus = result.status;
-    if (result.status !== 'suspended') {
-      this.cleanup?.();
+    // A newer execution of this run is using this Run in this process; it keeps the status and cache entry.
+    if (!superseded) {
+      this.workflowRunStatus = result.status;
+      if (result.status !== 'suspended') {
+        this.cleanup?.();
+      }
     }
     result.traceId = traceId;
     result.spanId = spanId;
@@ -5488,31 +5502,52 @@ export class Run<
       shouldPersistSnapshot({ workflowStatus: 'running', stepResults: {} }) ||
       (!this.isInternalWorkflow && shouldPersistSnapshot({ workflowStatus: 'waiting', stepResults: {} }));
     if (!this.#recoverable || (this.parentWorkflow && !nested) || !swept) {
-      return { release: async () => {} };
+      return UNCLAIMED_WORKFLOW_RUN;
     }
     return claimWorkflowRunOwnership({
-      store: await this.#mastra?.getStorage()?.getStore('workflows'),
+      // The store the run's writes go to (see `runStorage`), so they carry the claim it holds.
+      store: await (this.executionEngine.mastra ?? this.#mastra)?.getStorage()?.getStore('workflows'),
       runId: this.runId,
       force,
       logger: this.#mastra?.getLogger(),
     });
   }
 
-  /** Runs `execute` under the run's lease: `held`, when the caller hands one over, or a new claim. */
+  /**
+   * Runs `execute` under the run's lease: `held`, when the caller hands one over, or a new claim.
+   * Its writes carry that claim, or `fencedBy`'s when the run executes under another run's lease
+   * (a nested run resumed while it holds its parent's). See {@link #ownershipOutcome} for `lost`
+   * and `superseded`.
+   */
   async #executeOwned<T>(
     execute: () => Promise<T>,
     held?: WorkflowRunOwnership | { owner: RunOwnershipRecord | null },
-  ): Promise<T> {
+    { fencedBy }: { fencedBy?: WorkflowRunOwnership } = {},
+  ): Promise<{ result: T; lost: boolean; superseded: boolean }> {
+    const execution = ++this.#executionCount;
     const ownership = held ?? (await this.#claimOwnership(true));
     if (!('release' in ownership)) {
-      return execute();
+      return { result: await execute(), lost: false, superseded: false };
     }
 
+    const fence = fencedBy ?? ownership;
     try {
-      return await execute();
+      const result = await fence.run(this.runId, execute);
+      return { result, ...this.#ownershipOutcome(fence, execution) };
     } finally {
       await ownership.release();
     }
+  }
+
+  /**
+   * After an execution: `lost` when another execution took the run over (through this run's claim,
+   * or the parent's claim a nested run writes under), and `superseded` when, on top of that, a
+   * newer execution started on this Run in this process. A superseded execution leaves the Run's
+   * status, cache entry and stream to the newer one.
+   */
+  #ownershipOutcome(ownership: WorkflowRunOwnership, execution: number): { lost: boolean; superseded: boolean } {
+    const lost = ownership.lost || currentWorkflowRunClaim(this.runId)?.lost === true;
+    return { lost, superseded: lost && execution !== this.#executionCount };
   }
 
   /**
@@ -5857,6 +5892,8 @@ export class Run<
           takeLease: () => WorkflowRunOwnership | undefined;
           /** Releases that lease unless it was handed over. */
           releaseLease: () => Promise<void>;
+          /** The parent's lease while this run holds it; this run's writes carry it. */
+          lease?: WorkflowRunOwnership;
         }
       | undefined;
     // This nested run's own lease, when it could not take its parent's (see below).
@@ -5957,6 +5994,7 @@ export class Run<
       claimedParent = {
         run: parentRun,
         snapshot: parentSnapshot,
+        lease: parentLease,
         takeLease: () => {
           if (leaseHandedOver) {
             return undefined;
@@ -5986,14 +6024,20 @@ export class Run<
       };
     }
 
-    const releaseParentClaim = async () => {
+    const releaseParentClaim = async ({ runLost = false }: { runLost?: boolean } = {}) => {
       if (!claimedParent) {
         return;
       }
 
-      // Suspended first: a released lease on a `running` parent would read as a crashed resume.
+      const parent = claimedParent;
+      // Suspended first: a released lease on a `running` parent would read as a crashed resume. Not
+      // once this run or the parent's lease was lost: another process drives the parent now.
       try {
-        await claimedParent.run.runStorage.updateHeader({ status: 'suspended', expectedStatus: 'running' });
+        if (!runLost && !parent.lease?.lost) {
+          const suspendParent = () =>
+            parent.run.runStorage.updateHeader({ status: 'suspended', expectedStatus: 'running' });
+          await (parent.lease ? parent.lease.run(parent.run.runId, suspendParent) : suspendParent());
+        }
       } catch (releaseError) {
         this.#mastra
           ?.getLogger()
@@ -6042,10 +6086,20 @@ export class Run<
           storedState: this.runStorage.storedState(snapshot),
         }),
       params.takeHeldOwnership?.() ?? ownLease,
+      { fencedBy: claimedParent?.lease },
     )
-      .then(async result => {
-        if (!params.isVNext && result.status !== 'suspended') {
+      .then(async ({ result, lost, superseded }) => {
+        // A newer execution in this process may be feeding this Run's stream.
+        if (!superseded && !params.isVNext && result.status !== 'suspended') {
           this.closeStreamAction?.().catch(() => {});
+        }
+        if (lost) {
+          // Another process drives the run (and its parent) now: leave both as they are in storage.
+          await releaseParentClaim({ runLost: true });
+          if (!superseded) this.cleanup?.();
+          result.traceId = traceId;
+          result.spanId = spanId;
+          return result;
         }
         this.workflowRunStatus = result.status;
         if (result.status !== 'suspended') {
@@ -6296,39 +6350,40 @@ export class Run<
     const traceId = workflowSpan?.externalTraceId;
     const spanId = workflowSpan?.id;
 
+    const execution = ++this.#executionCount;
     let result: WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>;
     try {
-      result = await this.executionEngine.execute<
-        TState,
-        TInput,
-        WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>
-      >({
-        workflowId: this.workflowId,
-        runId: this.runId,
-        parentWorkflow: this.parentWorkflow,
-        resourceId: this.resourceId,
-        disableScorers: this.disableScorers,
-        graph: this.executionGraph,
-        serializedStepGraph: this.serializedStepGraph,
-        restart: restartData,
-        pubsub: this.pubsub,
-        retryConfig: this.retryConfig,
-        requestContext: requestContextToUse as RequestContext,
-        actor,
-        abortController: this.abortController,
-        outputWriter,
-        outputOptions,
-        workflowSpan,
-        storageVersion: this.storageVersion,
-        storedState: this.runStorage.storedState(snapshot),
-      });
+      result = await ownership.run(this.runId, () =>
+        this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>({
+          workflowId: this.workflowId,
+          runId: this.runId,
+          parentWorkflow: this.parentWorkflow,
+          resourceId: this.resourceId,
+          disableScorers: this.disableScorers,
+          graph: this.executionGraph,
+          serializedStepGraph: this.serializedStepGraph,
+          restart: restartData,
+          pubsub: this.pubsub,
+          retryConfig: this.retryConfig,
+          requestContext: requestContextToUse as RequestContext,
+          actor,
+          abortController: this.abortController,
+          outputWriter,
+          outputOptions,
+          workflowSpan,
+          storageVersion: this.storageVersion,
+          storedState: this.runStorage.storedState(snapshot),
+        }),
+      );
     } finally {
       await ownership.release();
     }
 
-    this.workflowRunStatus = result.status;
-    if (result.status !== 'suspended') {
-      this.cleanup?.();
+    if (!this.#ownershipOutcome(ownership, execution).superseded) {
+      this.workflowRunStatus = result.status;
+      if (result.status !== 'suspended') {
+        this.cleanup?.();
+      }
     }
 
     result.traceId = traceId;
@@ -6497,8 +6552,9 @@ export class Run<
     };
 
     let result: WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>;
+    let superseded: boolean;
     try {
-      result = await this.#executeOwned(() =>
+      ({ result, superseded } = await this.#executeOwned(() =>
         this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>({
           workflowId: this.workflowId,
           runId: this.runId,
@@ -6520,15 +6576,17 @@ export class Run<
           storageVersion: this.storageVersion,
           inheritedState,
         }),
-      );
+      ));
     } catch (error) {
       await releaseClaimIfUnused();
       throw error;
     }
 
-    this.workflowRunStatus = result.status;
-    if (result.status !== 'suspended') {
-      this.cleanup?.();
+    if (!superseded) {
+      this.workflowRunStatus = result.status;
+      if (result.status !== 'suspended') {
+        this.cleanup?.();
+      }
     }
 
     result.traceId = traceId;
