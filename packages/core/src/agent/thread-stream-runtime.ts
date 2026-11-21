@@ -3566,8 +3566,8 @@ export class AgentThreadStreamRuntime {
    * earlier ones stay valid: a reader that lags by more than the retry interval still reads one of them back, and
    * any of them proves it has passed every admission published before it. The probes of one lease loss are dropped
    * together when a check sees the lease name a covered run again or the forwards stop being tracked. At most
-   * `FORWARDED_LEASE_PROBES_PER_EPISODE` stay valid; a retry beyond that drops the oldest, so a reader more than that
-   * many retry intervals behind waits until it catches up within them. A probe whose publish fails is dropped alone.
+   * `FORWARDED_LEASE_PROBES_PER_EPISODE` stay valid; a published retry beyond that drops the oldest, so a reader that
+   * stays more than that many retry intervals behind waits until its lag shrinks. A probe whose publish fails is dropped alone.
    * A run that regains the lease, admits a forward and lets go again between two checks is not seen, so a probe
    * published before that admission can still queue the forward a second time.
    */
@@ -3610,9 +3610,6 @@ export class AgentThreadStreamRuntime {
       const probeId = globalThis.crypto.randomUUID();
       const probes = current ?? { publishedAtCheck: checks, probes: new Map() };
       const retriedAtCheck = probes.publishedAtCheck;
-      if (probes.probes.size >= FORWARDED_LEASE_PROBES_PER_EPISODE) {
-        probes.probes.delete(probes.probes.keys().next().value!);
-      }
       probes.publishedAtCheck = checks;
       probes.probes.set(probeId, {
         signalIds: new Set([...forwarded].filter(([, entry]) => ended.has(entry.runId)).map(([signalId]) => signalId)),
@@ -3621,6 +3618,9 @@ export class AgentThreadStreamRuntime {
       state.forwardedIdleLeaseProbes.set(key, probes);
       try {
         await this.#publishAndWait(pubsub, key, { type: 'forwarded-lease-probe', probeId });
+        if (probes.probes.size > FORWARDED_LEASE_PROBES_PER_EPISODE) {
+          probes.probes.delete(probes.probes.keys().next().value!);
+        }
       } catch (error) {
         probes.probes.delete(probeId);
         probes.publishedAtCheck = retriedAtCheck;
