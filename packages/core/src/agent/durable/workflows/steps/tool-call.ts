@@ -867,6 +867,7 @@ export function createDurableToolCallStep() {
       }
       // Replayed step transcripts supply context only, not messages to persist.
       let contextMessageList = messageList;
+      let recoveredMessageList: MessageList | undefined;
       // An evented step can run in another process than the LLM step that produced this
       // tool call; that process's list then lacks the assistant message (#30123).
       const missingInvocation =
@@ -884,21 +885,27 @@ export function createDurableToolCallStep() {
             }).deserialize(messageListState)
           : undefined;
         contextMessageList ??= transcript;
+        // A saved row is newer than any transcript copy: a sibling's resume may have cleared its metadata.
+        const persisted =
+          missingInvocation && memory && state?.threadId
+            ? (await memory.recall({ threadId: state.threadId, resourceId: state.resourceId, perPage: false })).messages
+                .reverse()
+                .find(hasInvocation)
+            : undefined;
         const invocation = missingInvocation
-          ? [...(transcript?.get.all.db() ?? [])].reverse().find(hasInvocation)
+          ? (persisted ?? [...(transcript?.get.all.db() ?? [])].reverse().find(hasInvocation))
           : undefined;
         // Persist it with this step's suspension metadata, as the LLM step's process would have.
+        // A throwaway list keeps the long-lived registry list from holding a copy that drifts from storage.
         if (invocation) {
-          if (messageList) messageList.add(invocation, 'response');
-          else {
-            resumeMessageList = createRunMessageList({
-              mastra,
-              threadId: state?.threadId,
-              resourceId: state?.resourceId,
-            }).add(invocation, 'response');
-          }
+          recoveredMessageList = createRunMessageList({
+            mastra,
+            threadId: state?.threadId,
+            resourceId: state?.resourceId,
+          }).add(invocation, 'response');
         }
       }
+      const persistMessageList = recoveredMessageList ?? messageList ?? resumeMessageList;
 
       // Every flush from this step re-checks run ownership inside the save
       // queue, so a superseded execution cannot write memory (#23734).
@@ -927,7 +934,7 @@ export function createDurableToolCallStep() {
       };
 
       // Remote workers have no registry message list; persist updates through the recovered resume list.
-      const doFlush = async (messagesToFlush = messageList ?? resumeMessageList, beforePersist = assertOwned) => {
+      const doFlush = async (messagesToFlush = persistMessageList, beforePersist = assertOwned) => {
         if (!messagesToFlush && processorDataParts.length) {
           const invocation = [...(contextMessageList?.get.all.db() ?? [])].reverse().find(hasInvocation);
           if (invocation) {
@@ -1035,7 +1042,7 @@ export function createDurableToolCallStep() {
         approvalToolName?: string;
         approvalArgs?: unknown;
       }) => {
-        const metadataMessageList = messageList ?? resumeMessageList;
+        const metadataMessageList = persistMessageList;
         if (!metadataMessageList) return;
         const metadataKey = opts.type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
         const entry = {

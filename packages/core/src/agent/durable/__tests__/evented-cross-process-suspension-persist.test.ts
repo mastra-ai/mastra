@@ -26,11 +26,16 @@ import { Agent } from '../../agent';
 import { MessageList } from '../../message-list';
 import { DurableStepIds } from '../constants';
 import { createEventedAgent } from '../create-evented-agent';
-import { globalRunRegistry } from '../run-registry';
+import { clearResumeInFlight, globalRunRegistry } from '../run-registry';
 
-type Boundary = 'same-process' | 'fresh-worker' | 'stale-message-list';
+// 'starting-process-tools': every tool step runs in the starting process with one
+// long-lived stale list, except the resume step, which runs in a fresh worker.
+type Boundary = 'same-process' | 'fresh-worker' | 'stale-message-list' | 'starting-process-tools';
 
 class CrossProcessToolStepPubSub extends EventEmitterPubSub {
+  private toolSteps = 0;
+  private startingList: MessageList | undefined;
+
   constructor(private readonly boundary: Boundary) {
     super();
   }
@@ -42,12 +47,21 @@ class CrossProcessToolStepPubSub extends EventEmitterPubSub {
       topic === 'workflows' &&
       event.type === 'workflow.step.run' &&
       data?.workflowId === DurableStepIds.AGENTIC_EXECUTION &&
-      data.executionPath?.join(',') === TOOL_STEP_PATH.join(',')
+      // One tool step per sibling call: [3,0], [3,1], ...
+      data.executionPath?.length === 2 &&
+      data.executionPath[0] === TOOL_STEP_PATH[0]
     ) {
       // The tool step belongs to the nested execution workflow; the registry is
       // keyed by the agent run, the only run in these tests.
+      const step = this.toolSteps++;
       for (const [runId, entry] of [...globalRunRegistry.entries()]) {
-        if (this.boundary === 'fresh-worker') {
+        if (this.boundary === 'starting-process-tools') {
+          if (!this.startingList && entry.messageList) {
+            this.startingList = new MessageList({ threadId: 'thread-1', resourceId: 'user-1' });
+            this.startingList.add(entry.messageList.get.input.db(), 'memory');
+          }
+          entry.messageList = step === 1 ? undefined : this.startingList;
+        } else if (this.boundary === 'fresh-worker') {
           globalRunRegistry.delete(runId);
         } else if (entry.messageList) {
           const stale = new MessageList({ threadId: 'thread-1', resourceId: 'user-1' });
@@ -86,7 +100,11 @@ describe('evented agent cross-process tool suspension persistence (#30123)', () 
   let pubsub: EventEmitterPubSub | undefined;
   let mastra: Mastra | undefined;
 
+  const resumedRuns: string[] = [];
+
   afterEach(async () => {
+    // The resumed segment ends suspended on call-2, so call-1's in-flight marker outlives the test.
+    for (const runId of resumedRuns.splice(0)) clearResumeInFlight(runId, 'call-1');
     await mastra?.stopWorkers();
     globalRunRegistry.clear();
     await pubsub?.close();
@@ -160,55 +178,60 @@ describe('evented agent cross-process tool suspension persistence (#30123)', () 
     15_000,
   );
 
-  it('saves the next sibling suspension on the existing assistant row when it suspends in another process after a resume', async () => {
-    pubsub = new CrossProcessToolStepPubSub('fresh-worker');
-    const storage = new InMemoryStore();
-    const memory = new MockMemory({ storage });
-    const askColour = createTool({
-      id: 'askColour',
-      description: 'Asks the user for a colour',
-      inputSchema: z.object({ question: z.string() }),
-      suspendSchema: z.object({ question: z.string() }),
-      resumeSchema: z.object({ colour: z.string() }),
-      execute: async (input, context: any) => {
-        if (!context?.agent?.resumeData) return await context.agent.suspend({ question: input.question });
-        return { colour: context.agent.resumeData.colour };
-      },
-    });
-    const agent = new Agent({
-      id: 'colour-agent',
-      name: 'colour-agent',
-      instructions: 'Ask for a colour.',
-      model: makeModel(['call-1', 'call-2']) as any,
-      tools: { askColour },
-      memory,
-    });
-    const evented = createEventedAgent({ agent });
-    mastra = new Mastra({ logger: false, storage, pubsub, agents: { [evented.id]: evented } });
-    await mastra.startWorkers();
-    const durable = mastra.getAgentById(evented.id);
-    const threadMemory = { thread: 'thread-1', resource: 'user-1' };
-    const waitForSuspension = async (output: any) => {
-      for await (const chunk of output.fullStream) {
-        if (chunk.type === 'tool-call-suspended') return chunk.payload.toolCallId as string;
-      }
-    };
+  it.each<Boundary>(['fresh-worker', 'starting-process-tools'])(
+    'saves the next sibling suspension on the existing assistant row when it suspends in another process after a resume (%s)',
+    async boundary => {
+      pubsub = new CrossProcessToolStepPubSub(boundary);
+      const storage = new InMemoryStore();
+      const memory = new MockMemory({ storage });
+      const askColour = createTool({
+        id: 'askColour',
+        description: 'Asks the user for a colour',
+        inputSchema: z.object({ question: z.string() }),
+        suspendSchema: z.object({ question: z.string() }),
+        resumeSchema: z.object({ colour: z.string() }),
+        execute: async (input, context: any) => {
+          if (!context?.agent?.resumeData) return await context.agent.suspend({ question: input.question });
+          return { colour: context.agent.resumeData.colour };
+        },
+      });
+      const agent = new Agent({
+        id: 'colour-agent',
+        name: 'colour-agent',
+        instructions: 'Ask for a colour.',
+        model: makeModel(['call-1', 'call-2']) as any,
+        tools: { askColour },
+        memory,
+      });
+      const evented = createEventedAgent({ agent });
+      mastra = new Mastra({ logger: false, storage, pubsub, agents: { [evented.id]: evented } });
+      await mastra.startWorkers();
+      const durable = mastra.getAgentById(evented.id);
+      const threadMemory = { thread: 'thread-1', resource: 'user-1' };
+      const waitForSuspension = async (output: any) => {
+        for await (const chunk of output.fullStream) {
+          if (chunk.type === 'tool-call-suspended') return chunk.payload.toolCallId as string;
+        }
+      };
 
-    const first = await durable.stream('Ask me twice', { memory: threadMemory });
-    expect(await waitForSuspension(first.output)).toBe('call-1');
-    first.cleanup();
-    await new Promise(r => setTimeout(r, 200));
+      const first = await durable.stream('Ask me twice', { memory: threadMemory });
+      expect(await waitForSuspension(first.output)).toBe('call-1');
+      first.cleanup();
+      await new Promise(r => setTimeout(r, 200));
+      resumedRuns.push(first.runId);
 
-    // The evented loop runs sibling tool calls one at a time, so call-2 only runs once call-1 resumes.
-    const resumed = await (durable as any).resumeStream(
-      { colour: 'blue' },
-      { runId: first.runId, toolCallId: 'call-1', memory: threadMemory },
-    );
-    expect(await waitForSuspension(resumed)).toBe('call-2');
+      // The evented loop runs sibling tool calls one at a time, so call-2 only runs once call-1 resumes.
+      const resumed = await (durable as any).resumeStream(
+        { colour: 'blue' },
+        { runId: first.runId, toolCallId: 'call-1', memory: threadMemory },
+      );
+      expect(await waitForSuspension(resumed)).toBe('call-2');
 
-    const { messages } = await memory.recall({ threadId: 'thread-1', resourceId: 'user-1', perPage: false });
-    expect(messages.map(m => m.role)).toEqual(['user', 'assistant']);
-    const assistant = messages[1]!;
-    expect(Object.keys((assistant.content.metadata as any)?.suspendedTools ?? {})).toEqual(['call-2']);
-  }, 15_000);
+      const { messages } = await memory.recall({ threadId: 'thread-1', resourceId: 'user-1', perPage: false });
+      expect(messages.map(m => m.role)).toEqual(['user', 'assistant']);
+      const assistant = messages[1]!;
+      expect(Object.keys((assistant.content.metadata as any)?.suspendedTools ?? {})).toEqual(['call-2']);
+    },
+    15_000,
+  );
 });
