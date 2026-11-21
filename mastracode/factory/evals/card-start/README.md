@@ -17,7 +17,7 @@ Needs `ANTHROPIC_API_KEY` (or the key for `--model`).
 pnpm --filter ./mastracode/factory exec tsx evals/card-start/run.ts --runs 5 [--ref <git-ref>] [--model anthropic/claude-opus-5-5]
 ```
 
-Writes `results/<base>..<head>.json` with the per-scenario table, the comparison and every item's tool calls, replies and scores.
+Writes `results/<base>..<head>.json` (git-ignored) with the per-scenario table, the comparison and every item's tool calls, replies and scores.
 
 ## Recorded results
 
