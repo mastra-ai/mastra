@@ -3277,6 +3277,63 @@ export class Workflow<
   }
 
   /**
+   * Stores a `running` snapshot holding only the input of a run that isn't stored yet. A caller
+   * that commits a side effect before the run's first checkpoint writes it first, so a crash in
+   * between still leaves a run that recovery finds and `restart()` starts from its first step.
+   * Does nothing when the run is already stored or the snapshot policy doesn't persist `running`
+   * snapshots. Returns whether it wrote the snapshot.
+   * @internal
+   */
+  async __persistRestartableStart({
+    runId,
+    resourceId,
+    input,
+    requestContext,
+  }: {
+    runId: string;
+    resourceId?: string;
+    input: TInput;
+    requestContext?: RequestContext;
+  }): Promise<boolean> {
+    if (!this.#options.shouldPersistSnapshot({ workflowStatus: 'running', stepResults: {} })) return false;
+    const { storageVersion, existsInStorage } = await this.resolveRunStorage({
+      runId,
+      reopen: true,
+      cachedRun: this.#runs.get(runId),
+      lookUpStoredRun: true,
+    });
+    if (existsInStorage) return false;
+    // No active paths and no step results: `restart()` treats this as a run that hasn't
+    // started its first step (see createRestartExecutionParams).
+    const snapshot: WorkflowRunState = {
+      runId,
+      status: 'running',
+      value: {},
+      context: { input } as WorkflowRunState['context'],
+      requestContext: withoutAuthToken((requestContext ?? new RequestContext()).toJSON()),
+      activePaths: [],
+      activeStepsPath: {},
+      serializedStepGraph: this.serializedStepGraph,
+      suspendedPaths: {},
+      resumeLabels: {},
+      waitingPaths: {},
+      timestamp: Date.now(),
+    };
+    await createRunStorage({
+      storageVersion,
+      workflowName: this.id,
+      runId,
+      getStore: async () => (this.executionEngine.mastra ?? this.#mastra)?.getStorage()?.getStore('workflows'),
+    }).writeSnapshot(
+      this.#options.pruneSnapshot && storageVersion === 1
+        ? this.#options.pruneSnapshot({ snapshot, workflowStatus: 'running' })
+        : snapshot,
+      resourceId,
+    );
+    return true;
+  }
+
+  /**
    * Creates a new workflow run instance and stores a snapshot of the workflow in the storage
    * @param options Optional configuration for the run
    * @param options.runId Optional custom run ID, defaults to a random UUID
