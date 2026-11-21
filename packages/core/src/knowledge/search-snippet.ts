@@ -17,54 +17,6 @@ export function knowledgeSearchQuery(query: string): string {
   return query.replace(/["`\u201C\u201D]/g, ' ').trim();
 }
 
-/**
- * Lowercases `body` for matching, and maps a lowercased index back to the source. Lowercasing keeps
- * the length for nearly all text; where a code point changes length (e.g. `İ` → `i̇`), a shift is
- * recorded, so mapping back is a binary search over those few points rather than a per-character map.
- */
-function lowered(body: string): { text: string; source: (index: number) => number } {
-  const text = body.toLowerCase();
-  if (text.length === body.length) return { text, source: index => index };
-  const shifts: Array<{ lowered: number; source: number }> = [];
-  const widths = new Map<number, number>();
-  let delta = 0;
-  for (let i = 0; i < body.length;) {
-    if (body.charCodeAt(i) < 0x80) {
-      i++;
-      continue;
-    }
-    const point = body.codePointAt(i)!;
-    const width = point > 0xffff ? 2 : 1;
-    let lowerWidth = widths.get(point);
-    if (lowerWidth === undefined) {
-      lowerWidth = String.fromCodePoint(point).toLowerCase().length;
-      widths.set(point, lowerWidth);
-    }
-    i += width;
-    if (lowerWidth !== width) {
-      delta += lowerWidth - width;
-      shifts.push({ lowered: i + delta, source: i });
-    }
-  }
-  return {
-    text,
-    source: index => {
-      let lo = 0;
-      let hi = shifts.length - 1;
-      let found = -1;
-      while (lo <= hi) {
-        const mid = (lo + hi) >> 1;
-        if (shifts[mid]!.lowered <= index) {
-          found = mid;
-          lo = mid + 1;
-        } else hi = mid - 1;
-      }
-      const shift = found < 0 ? 0 : shifts[found]!.lowered - shifts[found]!.source;
-      return Math.min(body.length, Math.max(0, index - shift));
-    },
-  };
-}
-
 const isLowSurrogate = (code: number) => code >= 0xdc00 && code <= 0xdfff;
 const isHighSurrogate = (code: number) => code >= 0xd800 && code <= 0xdbff;
 const isSpace = (char: string | undefined) => char !== undefined && /\s/.test(char);
@@ -73,24 +25,24 @@ const isSpace = (char: string | undefined) => char !== undefined && /\s/.test(ch
  * A bounded excerpt of `body` around the query words, or `undefined` when the body contains none of
  * them. Uses the same words as keyword search (case-insensitive substrings). Each word's first
  * {@link OCCURRENCES_PER_WORD} occurrences anchor candidate windows; the window holding the most
- * distinct words wins, earliest on ties. Cost is one lowercase copy plus at most one linear scan per
- * word: a body with no match is scanned once per word, end to end.
+ * distinct words wins, earliest on ties. Matching is Unicode case folding, which agrees with lowercasing
+ * except for rare characters such as `İ`. Cost is at most one linear scan of the body per word, with
+ * no copy of it: a body with no match is scanned once per word, end to end.
  */
 export function knowledgeBodySnippet(body: string | undefined, query: string): string | undefined {
   if (!body) return undefined;
   const words = knowledgeSearchWords(knowledgeSearchQuery(query));
   if (!words.length) return undefined;
 
-  const { text, source } = lowered(body);
-
+  // Case-insensitive search on the body itself, so match offsets are offsets into the text the
+  // snippet is cut from: no lowercased copy, and nothing to map back when lowercasing changes length.
   const hits: Array<{ word: number; start: number; end: number }> = [];
   words.forEach((word, w) => {
-    let from = 0;
+    const pattern = new RegExp(word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'giu');
     for (let n = 0; n < OCCURRENCES_PER_WORD; n++) {
-      const at = text.indexOf(word, from);
-      if (at < 0) break;
-      hits.push({ word: w, start: source(at), end: source(at + word.length) });
-      from = at + word.length;
+      const match = pattern.exec(body);
+      if (!match) break;
+      hits.push({ word: w, start: match.index, end: match.index + match[0].length });
     }
   });
   if (!hits.length) return undefined;

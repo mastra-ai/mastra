@@ -67,6 +67,39 @@ describe('knowledgeBodySnippet', () => {
     expect(knowledgeBodySnippet(`İ😀İ ${'w '.repeat(150)}needle 😀`, 'NEEDLE')).toMatch(/needle 😀$/);
   });
 
+  it('slices the exact original text around matches anywhere in long, densely length-changing bodies', () => {
+    // Seeded mix of characters whose lowercase is longer (İ), astral (😀), CJK and ASCII, across
+    // many 4096-unit mapping chunks, with the matched word written in varying case.
+    let seed = 7;
+    const next = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
+    const pieces = ['İ', 'İİİ', '😀', '漢字', 'a', ' ', 'word ', 'İ ', '\n'];
+    const spellings = ['needle', 'NEEDLE', 'Needle', 'nEEDLE'];
+    for (let round = 0; round < 40; round++) {
+      let body = '';
+      const target = Math.floor(next() * 30_000);
+      while (body.length < target) body += pieces[Math.floor(next() * pieces.length)];
+      const placed = spellings[round % spellings.length]!;
+      const at = body.length;
+      body += `${placed} `;
+      while (body.length < target + 20_000) body += pieces[Math.floor(next() * pieces.length)];
+      const snippet = knowledgeBodySnippet(body, 'needle');
+      expect(snippet, `round ${round}`).toBeDefined();
+      const window = text(snippet);
+      expect(body).toContain(window);
+      expect(window).toContain(placed);
+      expect(body.indexOf(window)).toBeLessThanOrEqual(at);
+    }
+  });
+
+  it('returns nothing for a long length-changing body without the words', () => {
+    expect(knowledgeBodySnippet(`İ${'漢字'.repeat(100_000)}`, 'alpha beta')).toBeUndefined();
+  });
+
+  it('treats regex characters in query words literally', () => {
+    expect(knowledgeBodySnippet('We moved the service to C++ (v2.1) last year.', 'c++ (v2.1)')).toContain('C++ (v2.1)');
+    expect(knowledgeBodySnippet('version v2x1 only', 'v2.1')).toBeUndefined();
+  });
+
   it('never splits a surrogate pair at either edge', () => {
     const emoji = '😀';
     const body = `${emoji.repeat(300)}approval${emoji.repeat(300)}`;
