@@ -2109,6 +2109,97 @@ describe('Agent signals: pending cancellation', () => {
       }
     });
 
+    it('drains an unadmitted message once while the forwarder reads the thread several lease checks behind', async () => {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+      const pubsub = new ControlledLeasePubSub();
+      const scope = { resourceId: 'lagging-probe', threadId: 'lagging-probe' };
+      const key = `${scope.resourceId}\u0000${scope.threadId}`;
+      const topic = agentThreadStreamTopicForKey(key);
+      const runId = 'lagging-probe-run';
+      const lagChecks = 6;
+      const model = createTextStreamModel('recovered');
+      const agent = new Agent({
+        id: 'lagging-probe',
+        name: 'Lagging probe',
+        instructions: 'Test',
+        model,
+        memory: new MockMemory(),
+        pubsub,
+      });
+      let checks = 0;
+      const getLeaseOwner = pubsub.getLeaseOwner.bind(pubsub);
+      pubsub.getLeaseOwner = async (leaseKey: string) => {
+        if (new Error().stack?.includes('checkLease')) checks++;
+        return getLeaseOwner(leaseKey);
+      };
+      // Once lagging, the forwarder's thread reader reads each event, in publish order, `lagChecks` lease checks after
+      // it was published.
+      let lagging = false;
+      const held: Array<{ at: number; deliver: () => void }> = [];
+      const subscribe = pubsub.subscribe.bind(pubsub);
+      pubsub.subscribe = async (subscribedTopic, cb) =>
+        subscribe(subscribedTopic, event => {
+          if (subscribedTopic !== topic || (!lagging && held.length === 0)) return cb(event);
+          held.push({ at: checks, deliver: () => void cb(event) });
+        });
+      const releaseDue = () => {
+        while (held.length > 0 && checks - held[0]!.at >= lagChecks) held.shift()!.deliver();
+      };
+      const follower = new AgentThreadStreamRuntime();
+      const observer = await follower.subscribeToThread(agent, scope, pubsub);
+      try {
+        pubsub.owners.set(key, 'old-remote-run');
+        await pubsub.publish(topic, {
+          type: 'agent.thread-stream',
+          runId: 'old-remote-run',
+          data: {
+            type: 'run-registered',
+            runId: 'old-remote-run',
+            streamId: 'old-stream',
+            streamSeq: 1,
+            agentId: agent.id,
+          },
+        });
+        await vi.waitFor(() => expect(observer.activeRunId()).toBe('old-remote-run'));
+        await follower.queueMessage(agent, 'recover me', scope, pubsub).accepted;
+        pubsub.owners.set(key, runId);
+        await pubsub.publish(topic, {
+          type: 'agent.thread-stream',
+          runId: 'old-remote-run',
+          data: { type: 'run-completed', runId: 'old-remote-run', streamId: 'old-stream' },
+        });
+        await vi.waitFor(() =>
+          expect(pubsub.publishedData.some(data => data.type === 'signal-enqueued' && data.runId === runId)).toBe(true),
+        );
+        await pubsub.flush();
+        // The run it went to dies without admitting it or publishing anything, and the reader falls behind.
+        pubsub.owners.delete(key);
+        lagging = true;
+        for (let tick = 0; tick < 32 && model.doStreamCalls.length === 0; tick++) {
+          await vi.advanceTimersByTimeAsync(AGENT_LEASE_RENEW_INTERVAL_MS);
+          await pubsub.flush();
+          releaseDue();
+          await pubsub.flush();
+          await nextTick();
+        }
+        await vi.waitFor(() => expect(model.doStreamCalls).toHaveLength(1));
+        expect(pubsub.publishedData.filter(data => data.type === 'forwarded-lease-probe').length).toBeGreaterThan(1);
+        // Every later probe comes back too, and none of them runs it again.
+        for (let tick = 0; tick < lagChecks + 1; tick++) {
+          await vi.advanceTimersByTimeAsync(AGENT_LEASE_RENEW_INTERVAL_MS);
+          checks++;
+          releaseDue();
+          await pubsub.flush();
+          await nextTick();
+        }
+        expect(held).toHaveLength(0);
+        expect(model.doStreamCalls).toHaveLength(1);
+      } finally {
+        observer.unsubscribe();
+        follower.resetForTests();
+      }
+    });
+
     it('keeps a run that took the thread again while the lease was being read', async () => {
       vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
       const pubsub = new ControlledLeasePubSub();
