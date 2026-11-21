@@ -65,8 +65,6 @@ export interface ChannelConnectionDocs {
 /** Providers present in src/providers but not part of the documented release. */
 export const EXCLUDED_PROVIDERS: ReadonlySet<string> = new Set([
   'anthropic',
-  'elevenlabs',
-  'gitlab',
   'google-analytics',
   'stripe',
   'twitter-v2',
@@ -93,6 +91,15 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     summary: 'send and manage messages, and manage channels, threads, roles, members, and webhooks',
     emit: true,
   },
+  elevenlabs: {
+    name: 'ElevenLabs',
+    logo: { slug: 'elevenlabs', mono: true },
+    canonicalPage: 'voice/elevenlabs.mdx',
+    ownership: 'handwritten-with-partial',
+    summary:
+      'convert text to speech, transcribe audio and video, clone voices, compose music, manage conversational AI agents, voices and voice settings, and pronunciation dictionaries, and read and delete history items, dubbing projects, conversations, and knowledge-base documents',
+    emit: true,
+  },
   fireflies: {
     name: 'Fireflies.ai',
     logo: { src: 'https://app.nango.dev/images/template-logos/fireflies.svg' },
@@ -110,6 +117,16 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     ownership: 'handwritten-with-partial',
     summary:
       'search code and repositories, manage issues, pull requests, branches, files, and releases, and inspect and rerun workflow runs',
+    emit: true,
+  },
+  gitlab: {
+    name: 'GitLab',
+    logo: { slug: 'gitlab' },
+    canonicalPage: 'other/gitlab.mdx',
+    ownership: 'generated-page',
+    category: 'Other providers',
+    summary:
+      'manage projects, groups, issues, merge requests, branches, files, commits, and releases, and run, cancel, and retry pipelines and jobs',
     emit: true,
   },
   'google-calendar': {
@@ -283,6 +300,16 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     category: 'Other providers',
     summary: 'send email and broadcasts, and manage contacts, segments, domains, templates, and webhooks',
     note: "Connect Resend with an API key that has **Full access** permission. A **Sending access** key fails to connect because Mastra checks a new key by listing your domains, which sending access keys can't do.",
+    emit: true,
+  },
+  sendgrid: {
+    name: 'SendGrid',
+    logo: { src: 'https://app.nango.dev/images/template-logos/sendgrid.svg' },
+    canonicalPage: 'other/sendgrid.mdx',
+    ownership: 'generated-page',
+    category: 'Other providers',
+    summary:
+      'send email, and manage marketing contacts, lists, segments, custom fields, dynamic templates, sender identities, and suppressions',
     emit: true,
   },
   'sharepoint-online': {

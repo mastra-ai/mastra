@@ -1296,6 +1296,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'other/gitlab',
+          label: 'GitLab',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/gitlab?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
           id: 'other/incident-io',
           label: 'incident.io',
           customProps: {
@@ -1326,6 +1334,14 @@ const sidebars = {
           customProps: {
             icon: 'https://cdn.simpleicons.org/sanity/black?viewbox=auto&size=28',
             iconDark: 'https://cdn.simpleicons.org/sanity/white?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'other/sendgrid',
+          label: 'SendGrid',
+          customProps: {
+            icon: 'https://app.nango.dev/images/template-logos/sendgrid.svg',
           },
         },
         {
