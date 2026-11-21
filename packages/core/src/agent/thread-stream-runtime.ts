@@ -700,13 +700,16 @@ type ForwardedIdleSignal = {
 /** One lease loss. Every probe published during it carries `id`; any coming back proves the reader caught up. */
 type ForwardedIdleLeaseEpisode = {
   id: string;
-  /** The forwards whose run had lost the lease on two checks when the episode started. */
-  signalIds: Set<string>;
+  /**
+   * The forwards whose run had lost the lease on two checks when the episode started. Held by entry, not signal id:
+   * a message queued again and re-forwarded under the same id is a new forward this episode does not cover.
+   */
+  entries: Set<ForwardedIdleSignal>;
   /** The thread's active stream when the lease was read at the start of the episode. */
   streamBeforeRead: string | undefined;
   /** The lease check that published the latest probe, or `undefined` until one publishes. */
   publishedAtCheck: number | undefined;
-  /** Probes published so far, for logs only. */
+  /** Probes published so far; carried on each probe for tracing. */
   seq: number;
 };
 
@@ -3590,12 +3593,12 @@ export class AgentThreadStreamRuntime {
       checks++;
       const episode = state.forwardedIdleLeaseEpisodes.get(key);
       const ended = new Set<string>();
-      for (const [signalId, entry] of forwarded) {
+      for (const entry of forwarded.values()) {
         if (entry.runId === holder) {
           entry.leaseGone = false;
           // The run holds the lease again and may admit the forward after the probe, which the reader would then
           // read first. That lease loss is over, so its probes must not queue anything.
-          if (episode?.signalIds.has(signalId) && state.forwardedIdleLeaseEpisodes.get(key) === episode) {
+          if (episode?.entries.has(entry) && state.forwardedIdleLeaseEpisodes.get(key) === episode) {
             state.forwardedIdleLeaseEpisodes.delete(key);
           }
         } else if (entry.leaseGone) ended.add(entry.runId);
@@ -3612,9 +3615,7 @@ export class AgentThreadStreamRuntime {
       if (!current) {
         current = {
           id: globalThis.crypto.randomUUID(),
-          signalIds: new Set(
-            [...forwarded].filter(([, entry]) => ended.has(entry.runId)).map(([signalId]) => signalId),
-          ),
+          entries: new Set([...forwarded.values()].filter(entry => ended.has(entry.runId))),
           streamBeforeRead,
           publishedAtCheck: undefined,
           seq: 0,
@@ -3651,7 +3652,7 @@ export class AgentThreadStreamRuntime {
   ) {
     const forwarded = state.forwardedIdleSignalsByThread.get(key);
     if (!forwarded) return;
-    const lapsed = [...forwarded].filter(([signalId, entry]) => episode.signalIds.has(signalId) && entry.leaseGone);
+    const lapsed = [...forwarded].filter(([, entry]) => episode.entries.has(entry) && entry.leaseGone);
     if (lapsed.length === 0) return;
     for (const [signalId] of lapsed) forwarded.delete(signalId);
     if (forwarded.size === 0) this.#stopTrackingForwards(state, key);
@@ -3662,7 +3663,7 @@ export class AgentThreadStreamRuntime {
     for (const runId of new Set(lapsed.map(([, entry]) => entry.runId))) {
       // The lease has dropped that run, so a remote run this runtime saw register but never saw end (its observer
       // unsubscribed) no longer holds the thread; left marked active, it would keep the drain waiting. A run that
-      // registered here, or a stream that took the slot since the lease was read, is not that remote run.
+      // registered here, or a stream that took the slot since the episode's first lease read, is not that remote run.
       // The drain still runs either way: it waits while any run holds the thread.
       if (
         !state.threadRunsById.has(runId) &&
