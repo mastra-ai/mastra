@@ -43,7 +43,7 @@ import { readAccumulatedSteps } from './workflows/shared/accumulated-steps';
 import { latestMessageListState } from './workflows/shared/message-list-state';
 
 export type DurableWorkflow = ReturnType<typeof createDurableAgenticWorkflow>;
-type DurableRun = Awaited<ReturnType<DurableWorkflow['createRun']>>;
+export type DurableRun = Awaited<ReturnType<DurableWorkflow['createRun']>>;
 export type ExecutionCompletion = { result: Awaited<ReturnType<DurableRun['start']>> } | { error: unknown };
 export type ExecutionOutcome = { owner: 'agent'; status?: string; error?: Error } | { owner: 'workers'; error?: Error };
 
@@ -930,6 +930,26 @@ export class DurableExecutionEngine {
     if (status !== 'suspended' && workflow.runs.get(runId) === run) {
       workflow.runs.delete(runId);
     }
+  }
+
+  /**
+   * Drops a run parked at a suspension from the workflow's run map; resume() rebuilds it from its snapshot.
+   * Returns `false`, leaving the run mapped, unless the run is parked.
+   */
+  releaseParkedRun(
+    workflow: DurableWorkflow,
+    runId: string,
+    run: DurableRun,
+    persistedStatus: WorkflowRunState['status'],
+  ): boolean {
+    if (workflow.runs.get(runId) !== run || !this.isRunParked(run, persistedStatus)) return false;
+    workflow.runs.delete(runId);
+    return true;
+  }
+
+  /** Whether a run whose snapshot is stored with `persistedStatus` sits parked at a suspension. */
+  protected isRunParked(run: DurableRun, _persistedStatus: WorkflowRunState['status']): boolean {
+    return run.workflowRunStatus === 'suspended';
   }
 
   finishExecution(

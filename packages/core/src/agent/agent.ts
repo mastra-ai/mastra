@@ -261,6 +261,7 @@ import type { PreparationOptions, PreparationResult } from './durable/preparatio
 import { prepareForDurableExecution, SCOPES_ALREADY_APPLIED, RESUMED_SPAN_DATA } from './durable/preparation';
 import { createRunAbortController } from './durable/run-abort';
 import { createRunCleanup } from './durable/run-cleanup';
+import type { CreateRunCleanupOptions, RunCleanup } from './durable/run-cleanup';
 import { recordRunSavedMessages } from './durable/run-message-refs';
 import {
   getRunRegistryEntry,
@@ -12901,6 +12902,111 @@ export class Agent<
   }
 
   protected readonly executionRunRegistry = new ExtendedRunRegistry();
+  /** Each run's outstanding stream releases, so a host tearing down a parked run can release it (#30743). */
+  readonly #streamCleanups = new Map<string, Set<RunCleanup>>();
+  /** Runs with a resume() setting up or executing, which a parked-run release must leave alone. */
+  readonly #resumesInProgress = new Map<string, number>();
+
+  /** {@link createRunCleanup}, tracked per run until it releases (unless `tracked` is false). */
+  #createStreamCleanup(
+    runId: string,
+    options: CreateRunCleanupOptions,
+    { tracked = true }: { tracked?: boolean } = {},
+  ): RunCleanup {
+    const forget = () => this.#forgetStreamCleanup(runId, cleanup);
+    const { release, releaseOnTimer } = options;
+    const cleanup = createRunCleanup({
+      ...options,
+      release: () => {
+        release();
+        forget();
+      },
+      ...(releaseOnTimer
+        ? {
+            releaseOnTimer: () => {
+              releaseOnTimer();
+              forget();
+            },
+          }
+        : {}),
+    });
+    if (tracked) this.#trackStreamCleanup(runId, cleanup);
+    return cleanup;
+  }
+
+  #trackStreamCleanup(runId: string, cleanup: RunCleanup): void {
+    if (cleanup.done) return;
+    let cleanups = this.#streamCleanups.get(runId);
+    if (!cleanups) this.#streamCleanups.set(runId, (cleanups = new Set()));
+    cleanups.add(cleanup);
+  }
+
+  /** Stops tracking a stream release, as when the stream it would release was never set up. */
+  #forgetStreamCleanup(runId: string, cleanup: RunCleanup): void {
+    const cleanups = this.#streamCleanups.get(runId);
+    cleanups?.delete(cleanup);
+    if (cleanups?.size === 0) this.#streamCleanups.delete(runId);
+  }
+
+  /** Marks a resume of the run as in progress until the returned release is called. */
+  #markResuming(runId: string): () => void {
+    this.#resumesInProgress.set(runId, (this.#resumesInProgress.get(runId) ?? 0) + 1);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const pending = (this.#resumesInProgress.get(runId) ?? 1) - 1;
+      if (pending > 0) this.#resumesInProgress.set(runId, pending);
+      else this.#resumesInProgress.delete(runId);
+    };
+  }
+
+  /**
+   * Releases this process's hold on a durable run parked at a suspension, keeping its snapshot.
+   * Backs {@link DurableAgent.releaseParkedRun}.
+   */
+  protected async releaseParkedExecution(runId: string): Promise<boolean> {
+    const engine = this.executionEngine;
+    const workflow = this.getWorkflow();
+    const localEntry = this.executionRunRegistry.get(runId);
+    const globalEntry = getRunRegistryEntry(runId, this.#mastra);
+    const fence = globalEntry?.executionFence;
+    const streamCleanups = [...(this.#streamCleanups.get(runId) ?? [])];
+    const run = workflow.runs.get(runId);
+    // Only this agent's local state shows it parked the run; with none, the run (and its entry) is another's.
+    if (!localEntry && streamCleanups.length === 0 && !run) return false;
+    if (this.#resumesInProgress.has(runId)) return false;
+
+    let snapshot: WorkflowRunState | undefined;
+    try {
+      snapshot = await engine.loadRunSnapshot(runId);
+    } catch {
+      return false;
+    }
+    if (snapshot?.status !== 'suspended') return false;
+    // A resume that started while the snapshot was read registers its own segment.
+    const currentCleanups = this.#streamCleanups.get(runId);
+    if (
+      this.#resumesInProgress.has(runId) ||
+      this.executionRunRegistry.get(runId) !== localEntry ||
+      getRunRegistryEntry(runId, this.#mastra) !== globalEntry ||
+      globalEntry?.executionFence !== fence ||
+      (currentCleanups?.size ?? 0) !== streamCleanups.length ||
+      streamCleanups.some(cleanup => !currentCleanups?.has(cleanup))
+    ) {
+      return false;
+    }
+
+    // Checked before anything is released, so `false` always means nothing was.
+    if (run && !engine.releaseParkedRun(workflow, runId, run, snapshot.status)) return false;
+    for (const cleanup of streamCleanups) cleanup.run();
+    if (localEntry) this.executionRunRegistry.cleanup(runId);
+    // The global slot may hold another instance's later execution of the run; only this one's own entry goes.
+    if (localEntry?.executionFence && globalEntry?.executionFence === localEntry.executionFence) {
+      globalRunRegistry.delete(runId);
+    }
+    return true;
+  }
 
   #timedOutExecutions = new WeakSet<ExecutionFence>();
 
@@ -14022,7 +14128,7 @@ export class Agent<
     // and the recovery error paths. Revokes continuation before unsubscribing
     // the pubsub reader, then tears down the owned registry entries. Runs at
     // most once.
-    const runCleanup = createRunCleanup({
+    const runCleanup = this.#createStreamCleanup(runId, {
       scheduleTimer: cleanup => this.scheduleReaderCleanup(executionFence, cleanup),
       release: () => {
         agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
@@ -14042,6 +14148,8 @@ export class Agent<
       if (settlement !== 'superseded' && this.executionEngine.shouldReportRecoveryFailure(error)) {
         await this.#reportRecoveryFailure(runId, error, executionFence.generation);
       }
+      // Its release reads the stream's output, which is set up only below.
+      this.#forgetStreamCleanup(runId, runCleanup);
       releaseLocalRecovery();
       throw error;
     }
@@ -14060,6 +14168,8 @@ export class Agent<
       scheduleAutoCleanup,
       executionFence,
     }).catch(error => {
+      // The setup rolled back what it registered; its release reads an output that never existed.
+      this.#forgetStreamCleanup(runId, runCleanup);
       releaseLocalRecovery();
       throw error;
     });
@@ -14728,7 +14838,7 @@ export class Agent<
       }
     };
 
-    const runCleanup = createRunCleanup({
+    const runCleanup = this.#createStreamCleanup(runId, {
       scheduleTimer: cleanup => this.scheduleReaderCleanup(executionFence, cleanup),
       release: () => {
         agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
@@ -15009,6 +15119,7 @@ export class Agent<
       }
       releaseResumeMarker = release;
     }
+    const releaseResuming = this.#markResuming(runId);
     try {
       // An abort on another server leaves the run canceled in storage.
       if (await this.#isRunCanceledInStorage(runId)) throw abortedRunError();
@@ -15016,6 +15127,8 @@ export class Agent<
     } catch (error) {
       releaseResumeMarker();
       throw error;
+    } finally {
+      releaseResuming();
     }
   }
 
@@ -15512,7 +15625,7 @@ export class Agent<
     // its own. The topic stays when the run's latest execution here (this one
     // or a later resume()) lost the run: whoever took it over, in any process,
     // writes to it. Runs at most once.
-    const runCleanup = createRunCleanup({
+    const runCleanup = this.#createStreamCleanup(runId, {
       scheduleTimer: cleanup => this.scheduleReaderCleanup(executionFence, cleanup),
       release: () => {
         agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
@@ -15675,6 +15788,8 @@ export class Agent<
     // Wait for subscription to be ready, then resume workflow
     const requestContext = resolvedOptions.requestContext;
 
+    // Held from before resume() returns until this segment settles (suspends again or ends).
+    const releaseResuming = this.#markResuming(runId);
     const workflowExecution = executionFence.run(() =>
       ready
         .then(async () => {
@@ -15774,6 +15889,7 @@ export class Agent<
       trackedResumeEntry.workflowExecution = workflowExecution;
     }
     void workflowExecution.then(releaseResumeMarker, releaseResumeMarker);
+    void workflowExecution.then(releaseResuming, releaseResuming);
 
     const resumeStreamOptions: AgentExecutionOptions<TOutput> = {
       ...resolvedOptions,
@@ -16384,28 +16500,35 @@ export class Agent<
     const localEntry = this.executionRunRegistry.get(runId);
     const observedEntry = localEntry ?? getRunRegistryEntry(runId, this.#mastra);
     const observedFence = observedEntry?.executionFence;
-    const runCleanup = createRunCleanup({
-      scheduleTimer: cleanup =>
-        observedFence
-          ? this.scheduleReaderCleanup(observedFence, cleanup)
-          : this.#executionStreamBus.scheduleCleanup(cleanup),
-      release: () => {
-        streamCleanup?.();
-        if (
-          observedFence &&
-          (this.#unverifiedReaderFences.has(observedFence) ||
-            !observedFence.ownsRunTopics() ||
-            getRunRegistryEntry(runId, this.#mastra)?.executionFence !== observedFence ||
-            (localEntry &&
-              (this.executionRunRegistry.get(runId) !== localEntry || localEntry.executionFence !== observedFence)))
-        ) {
-          return;
-        }
-        this.executionRunRegistry.cleanup(runId);
-        deleteRunRegistryEntry(runId, this.#mastra);
-        this.clearPubsubTopic(runId, observedEntry);
+    // Set when a bare idle timeout ends this observer, possibly before its setup below finishes.
+    let idledOut = false;
+    // Tracked only once the observer is attached: a detached or failed observer holds nothing to release.
+    const runCleanup = this.#createStreamCleanup(
+      runId,
+      {
+        scheduleTimer: cleanup =>
+          observedFence
+            ? this.scheduleReaderCleanup(observedFence, cleanup)
+            : this.#executionStreamBus.scheduleCleanup(cleanup),
+        release: () => {
+          streamCleanup?.();
+          if (
+            observedFence &&
+            (this.#unverifiedReaderFences.has(observedFence) ||
+              !observedFence.ownsRunTopics() ||
+              getRunRegistryEntry(runId, this.#mastra)?.executionFence !== observedFence ||
+              (localEntry &&
+                (this.executionRunRegistry.get(runId) !== localEntry || localEntry.executionFence !== observedFence)))
+          ) {
+            return;
+          }
+          this.executionRunRegistry.cleanup(runId);
+          deleteRunRegistryEntry(runId, this.#mastra);
+          this.clearPubsubTopic(runId, observedEntry);
+        },
       },
-    });
+      { tracked: false },
+    );
     const performCleanup = runCleanup.run;
     const scheduleAutoCleanup = runCleanup.schedule;
 
@@ -16662,13 +16785,17 @@ export class Agent<
       onFinish: options?.onFinish,
       onStreamFinished: completeTerminalLifecycle,
       onError: async ({ error, runDead }) => {
+        // Before the caller's callback, so a slow one can't let the setup below track this observer.
+        if (runDead === false) idledOut = true;
         try {
           await options?.onError?.({ error });
         } finally {
           // A bare idle timeout (runDead === false) only means this observer
           // stopped hearing from the run — it may still be alive elsewhere, so
-          // don't tear down its registry entry or replay history.
+          // don't tear down its registry entry or replay history. The observer
+          // itself is gone, though, so a parked-run release no longer owes it a cleanup.
           if (runDead !== false) completeTerminalLifecycle();
+          else this.#forgetStreamCleanup(runId, runCleanup);
         }
       },
       onAbort: async data => {
@@ -16688,8 +16815,14 @@ export class Agent<
       tracingContext: observedAgentSpan ? { currentSpan: observedAgentSpan } : undefined,
       messageList,
     });
-    const { output, ready, detach } = stream;
+    const { output, ready } = stream;
     streamCleanup = stream.cleanup;
+    let detached = false;
+    const detach = () => {
+      detached = true;
+      this.#forgetStreamCleanup(runId, runCleanup);
+      stream.detach();
+    };
 
     // This output belongs to this observer alone, so a consumer that stops
     // reading fullStream (break/return/throw out of `for await`) should detach
@@ -16709,6 +16842,7 @@ export class Agent<
       detach();
       throw error;
     }
+    if (!detached && !idledOut) this.#trackStreamCleanup(runId, runCleanup);
 
     const cleanup = () => {
       if (abortPending) {
