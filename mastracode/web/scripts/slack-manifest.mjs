@@ -60,8 +60,11 @@ const manifest = {
       display_name: values.name,
       always_online: true,
     },
-    assistant_view: {
-      assistant_description: 'AI assistant powered by Mastra',
+    // Slack says it will deprecate `assistant_view`, and its DM threads keep
+    // the composer locked while a status shows. Slack rejects a manifest that
+    // declares both views.
+    agent_view: {
+      agent_description: 'AI assistant powered by Mastra',
     },
   },
   oauth_config: {

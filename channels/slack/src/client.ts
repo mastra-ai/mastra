@@ -271,6 +271,29 @@ export class SlackManifestClient {
   }
 
   /**
+   * Export an existing Slack app's current manifest.
+   */
+  async exportManifest(appId: string): Promise<SlackAppManifest> {
+    await this.rotateToken();
+
+    const response = await fetch(`${SLACK_API_BASE}/apps.manifest.export`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.#token}`,
+      },
+      body: JSON.stringify({ app_id: appId }),
+      signal: AbortSignal.timeout(SLACK_API_TIMEOUT_MS),
+    });
+
+    const data = (await response.json()) as { ok: boolean; error?: string; manifest?: SlackAppManifest };
+    if (!data.ok || !data.manifest) {
+      throw new Error(`App manifest export failed: ${data.error ?? 'missing_manifest'}`);
+    }
+    return data.manifest;
+  }
+
+  /**
    * Update an existing Slack app's manifest.
    */
   async updateApp(appId: string, manifest: SlackAppManifest): Promise<void> {
