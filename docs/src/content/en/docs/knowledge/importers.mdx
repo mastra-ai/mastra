@@ -24,7 +24,7 @@ Knowledge importers are experimental. Their API may change between releases.
 Each importer instance is one configured source, called a binding. It has an `id` and a `target`, the place in Knowledge its pages go, written `<scope>#<path>`. A run of a binding:
 
 1. Calls your importer's `import(ctx)` method.
-1. Collects the items it writes with `ctx.items`, and applies them to Knowledge in numbered batches. Each batch is applied in one storage transaction, together with the cursor you saved with `ctx.state`. A saved cursor never covers items that weren't written.
+1. Collects the items it writes with `ctx.items`, and applies them to Knowledge in numbered batches. Each batch is applied in one storage transaction, together with the cursor you saved with `ctx.state`. Accepted writes and cursor state commit together. A cursor can advance past refused items. Resend those items explicitly.
 1. Ends with a result that counts what was created, updated, left unchanged, moved, removed or refused.
 
 Items name things by `sourceId`, the source's own stable ID. Your importer never names pages or paths. An item with `parent` set is placed under the page of that parent item. An item without one is placed directly under the target.
