@@ -197,20 +197,36 @@ const NAMED_JOBS = {
   'Prebuild\tMemory Tests': 'job:memory',
   'Prebuild\tMastra Code E2E / Mastra Code E2E': 'job:mastracode-e2e',
   'Prebuild\tMastra Code E2E / Mastra Code web host OM scenarios': 'job:mastracode-om',
+  // Before r308 E merged it into `Validate repository files`; runs in the window still use it.
   'Quality assurance\tValidate changeset packages': 'job:qa/changeset-check',
 };
+const CHANGESET_STEPS = new Set([
+  'Test changeset package validator',
+  'Reject unknown or ignored changeset packages',
+  'Check whether this PR adds changesets',
+  'Validate changeset release plan',
+]);
 
 /**
  * The tier keys one CI job ran, and which of them failed. `log` is only read for the jobs that
  * run several packages with `pnpm -r` (light stores, workspace unit tests): a package whose
  * script started (`stores/lance test$ …`) but never printed `Done` failed. Jobs that aren't
- * tiered as a whole (unit and package-E2E file lists, builds, gates) return nothing.
+ * tiered as a whole (unit and package-E2E file lists, builds, gates) return nothing. `steps` (the
+ * jobs API's) is only read for `Validate repository files`, where just the changeset steps
+ * belong to job:qa/changeset-check.
  * @returns {{ ran: string[], failed: string[] }}
  */
-export function jobKeysFor(workflow, name, log = () => '') {
+export function jobKeysFor(workflow, name, log = () => '', steps = []) {
   const one = key => ({ ran: [key], failed: [key] });
   const named = NAMED_JOBS[`${workflow}\t${name}`];
   if (named) return one(named);
+  if (workflow === 'Quality assurance' && name === 'Validate repository files') {
+    const own = steps.filter(
+      step => CHANGESET_STEPS.has(step.name) && step.conclusion && step.conclusion !== 'skipped',
+    );
+    const key = ['job:qa/changeset-check'];
+    return { ran: own.length ? key : [], failed: own.some(step => step.conclusion === 'failure') ? key : [] };
+  }
   let m;
   if (workflow === 'Workspace Cloud Tests' && (m = /^test-cloud \(([\w-]+)\)$/.exec(name)))
     return one(`job:workspace-cloud/${m[1]}`);
@@ -664,7 +680,7 @@ function versioningCommand(tiers, { runId, date, escapesOut }) {
   const ran = [];
   const failedJobs = [];
   for (const job of jobs) {
-    const keys = jobKeysFor(job.workflow_name, job.name, () => jobLog(job.id));
+    const keys = jobKeysFor(job.workflow_name, job.name, () => jobLog(job.id), job.steps);
     ran.push(...keys.ran);
     if (job.conclusion === 'failure') failedJobs.push(...keys.failed);
   }
@@ -729,7 +745,7 @@ function dailyCommand(tiers, { days, date, budgetMinutes }) {
     for (const job of jobs.filter(j => j.conclusion === 'failure')) {
       const failedOn = job.completed_at?.slice(0, 10) ?? run.created_at.slice(0, 10);
       if (!isFileListJob(job.name)) {
-        const { failed } = jobKeysFor(job.workflow_name, job.name, () => jobLog(job.id));
+        const { failed } = jobKeysFor(job.workflow_name, job.name, () => jobLog(job.id), job.steps);
         const settled = Date.now() - Date.parse(job.completed_at ?? run.created_at) >= JOB_SETTLE_MS;
         const verdict = passedLater(job) ? 'flake' : settled ? 'fail' : 'unresolved';
         const settlesAt = new Date(Date.parse(job.completed_at ?? run.created_at) + JOB_SETTLE_MS).toISOString();

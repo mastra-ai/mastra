@@ -335,6 +335,35 @@ test('maps CI job names to tier keys', () => {
   assert.deepEqual(key('Prebuild', 'Unit and E2E Tests / Affected UNIT Test'), []);
 });
 
+test('the merged repository-files job fails job:qa/changeset-check only from its changeset steps', () => {
+  const qa = steps => jobKeysFor('Quality assurance', 'Validate repository files', () => '', steps);
+  const step = (name, conclusion) => ({ name, conclusion });
+  const changesetSteps = [
+    step('Check test tier', 'success'),
+    step('Test changeset package validator', 'skipped'),
+    step('Reject unknown or ignored changeset packages', 'success'),
+    step('Check whether this PR adds changesets', 'success'),
+    step('Validate changeset release plan', 'skipped'),
+  ];
+  // Another validator failing doesn't count against the changeset key.
+  assert.deepEqual(qa([step('Run README validator', 'failure'), ...changesetSteps]), {
+    ran: ['job:qa/changeset-check'],
+    failed: [],
+  });
+  assert.deepEqual(
+    qa([
+      step('Run README validator', 'success'),
+      ...changesetSteps.with(1, step('Test changeset package validator', 'failure')),
+    ]),
+    { ran: ['job:qa/changeset-check'], failed: ['job:qa/changeset-check'] },
+  );
+  assert.deepEqual(qa(changesetSteps.with(4, step('Validate changeset release plan', 'failure'))).failed, [
+    'job:qa/changeset-check',
+  ]);
+  // Setup failed: no changeset step ran.
+  assert.deepEqual(qa(changesetSteps.map(s => step(s.name, 'skipped'))), { ran: [], failed: [] });
+});
+
 test('a folded job fails only the packages that started and never finished', () => {
   // Lines as pnpm -r prints them in the light-stores job (run 41359171549).
   const log = [
