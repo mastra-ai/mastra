@@ -50,4 +50,4 @@ Added the `playground-ui/no-page-width` rule and a `pageRules` preset. Turn it o
 overrides: [{ files: ['src/pages/**/*.tsx'], rules: pageRules }];
 ```
 
-Added `playground-ui/page-layout-props` to the `recommended` preset. It flags the removed `container`, `fit` and `narrow` variants and the `mask` prop on `PageLayout`, and says which variant to use instead.
+Added `playground-ui/page-layout-props` to the `recommended` preset. It flags a `PageLayout` with no `variant`, the removed `container`, `fit` and `narrow` variants, the `mask` prop, and props a variant does not take (breadcrumbs on a form, `body` on a form or settings page). Each message says which variant or prop to use instead.

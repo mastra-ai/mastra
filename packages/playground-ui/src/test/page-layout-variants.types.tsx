@@ -1,5 +1,7 @@
 // Type-level checks for PageLayout. `tsc` (the package typecheck) checks this file; each line under
 // `@ts-expect-error` must fail to compile, so a variant that starts accepting another variant's props breaks the build.
+// Those lines are wrong on purpose, so the lint rule that flags the same mistakes is off here.
+/* oxlint-disable playground-ui/page-layout-props */
 import { PageLayout } from '@/ds/components/PageLayout';
 
 export const pageLayoutVariantChecks = (
