@@ -141,6 +141,55 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect((await (await knowledge.getStorage()).importers!.listNodes('b1', { unsettled: true })).items).toEqual([]);
     });
 
+    it('rewrites resolved links to a page and its subtree when settling moves it under a late parent', async () => {
+      const { knowledge, run, page } = setup();
+      await run([
+        upsert({
+          sourceId: 'a',
+          links: [
+            { sourceId: 'b', rel: 'see' },
+            { sourceId: 'c', rel: 'deep' },
+          ],
+        }),
+        upsert({ sourceId: 'b', parent: 'p' }),
+        upsert({ sourceId: 'c', parent: 'b' }),
+      ]);
+      expect((await page('notion/a'))?.body).toBe(
+        'body of a\n\nLinks:\n- deep: [[docs:acme#notion/b/c]]\n- see: [[docs:acme#notion/b]]',
+      );
+
+      // a isn't sent again; settling b under p moves c with it.
+      expect(await run([upsert({ sourceId: 'p' })])).toMatchObject({ outcome: 'succeeded', counts: { moved: 1 } });
+      const linker = await page('notion/a');
+      expect(linker?.body).toBe(
+        'body of a\n\nLinks:\n- deep: [[docs:acme#notion/p/b/c]]\n- see: [[docs:acme#notion/p/b]]',
+      );
+      const storage = await knowledge.getStorage();
+      const moved = [(await page('notion/p/b'))!.id, (await page('notion/p/b/c'))!.id];
+      for (const id of moved) expect(await storage.listPageBodyLinkSources({ toPageIds: [id] })).toContain(linker!.id);
+      expect(await run([upsert({ sourceId: 'p' })])).toMatchObject({ counts: { unchanged: 1, moved: 0, updated: 0 } });
+    });
+
+    it('rewrites resolved links to a page the source moved to another parent', async () => {
+      const { run, page } = setup();
+      await run([
+        upsert({ sourceId: 'p1' }),
+        upsert({ sourceId: 'p2' }),
+        upsert({ sourceId: 'b', parent: 'p1' }),
+        upsert({ sourceId: 'a', links: [{ sourceId: 'b' }] }),
+      ]);
+      expect((await page('notion/a'))?.body).toBe('body of a\n\nLinks:\n- [[docs:acme#notion/p1/b]]');
+
+      expect(await run([upsert({ sourceId: 'b', parent: 'p2' })])).toMatchObject({
+        outcome: 'succeeded',
+        counts: { moved: 1, updated: 1 },
+      });
+      expect((await page('notion/a'))?.body).toBe('body of a\n\nLinks:\n- [[docs:acme#notion/p2/b]]');
+      expect(await run([upsert({ sourceId: 'b', parent: 'p2' })])).toMatchObject({
+        counts: { unchanged: 1, moved: 0, updated: 0 },
+      });
+    });
+
     it('a run that imports nothing does not chain on a parent that never arrives', async () => {
       const { run, page } = setup();
       await run([upsert({ sourceId: 'orphan', parent: 'never' })]);

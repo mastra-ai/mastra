@@ -122,7 +122,7 @@ To put a folder in the tree before you have its content, declare it. A declared 
 await ctx.items.declare({ sourceId: `folder-${folder.id}`, title: folder.name })
 ```
 
-Upsert the same `sourceId` later to give it a body. Items can also link to each other with `links: [{ sourceId: '42' }]`. Each link becomes a page link after the item it points to is imported. Knowledge repairs links in the same bounded batches as moves.
+Upsert the same `sourceId` later to give it a body. Items can also link to each other with `links: [{ sourceId: '42' }]`. Each link becomes a page link after the item it points to is imported, and it follows that page when the page moves. Knowledge repairs links in the same bounded batches as moves.
 
 ## Remove items
 

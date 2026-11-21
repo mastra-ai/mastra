@@ -6,7 +6,12 @@ import type {
   KnowledgeImportersStorage,
 } from '../../storage/domains/knowledge/importers';
 import type { KnowledgePage, KnowledgeProvenance } from '../../storage/domains/knowledge/pages';
-import { refreshKnowledgeLinksTo, syncKnowledgePageBodyLinks } from '../links';
+import {
+  MAX_KNOWLEDGE_LINK_REFRESH_SOURCES,
+  knowledgeSubtree,
+  refreshKnowledgeLinksTo,
+  syncKnowledgePageBodyLinks,
+} from '../links';
 import type {
   KnowledgeImportCounts,
   KnowledgeImportDeclaration,
@@ -363,6 +368,95 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     return { body: withLinks(item.body.trim(), lines), unresolved };
   };
 
+  type Relinked = { sourceId: string; page: KnowledgePage; keys: string[] };
+  /**
+   * Moves an owned page under `parentId`, then rewrites this binding's link lines that name it or
+   * a page in its subtree by its old path. Generated links are paths, so without this a page that
+   * links to a moved page and isn't sent again would keep pointing at where it was. Linking pages
+   * come from the link index, read before the move; past {@link MAX_KNOWLEDGE_LINK_REFRESH_SOURCES}
+   * the rest keep the old path until they're next upserted, as core leaves other linkers. Returns
+   * the moved page and the pages it rewrote; the caller counts them once its op lands.
+   */
+  const moveOwned = async (
+    page: KnowledgePage,
+    keys: string[],
+    parent: { page: KnowledgePage; keys: string[] },
+  ): Promise<{ page: KnowledgePage; keys: string[]; relinked: Relinked[] }> => {
+    const subtree = await knowledgeSubtree(storage, page);
+    const byId = new Map(subtree.map(p => [p.id, p]));
+    const relative = (p: KnowledgePage) => {
+      const rel: string[] = [];
+      for (let at: KnowledgePage | undefined = p; at && at.id !== page.id; at = byId.get(at.parentId ?? '')) {
+        rel.unshift(at.key!);
+      }
+      return rel;
+    };
+    let sources: string[] = [];
+    try {
+      sources = await storage.listPageBodyLinkSources({ toPageIds: [...byId.keys()] });
+    } catch (error) {
+      if (!(error instanceof KnowledgeUnsupportedCapabilityError)) throw error;
+    }
+    const moved = await storage.movePage({
+      id: page.id,
+      expectedVersion: page.version,
+      parentId: parent.page.id,
+      provenance,
+    });
+    const movedKeys = [...parent.keys, moved.key!];
+    const renamed = new Map(
+      subtree.map(p => [ref([...keys, ...relative(p)]), ref([...movedKeys, ...relative(p)])] as const),
+    );
+
+    const relinked: Relinked[] = [];
+    for (const id of [...new Set(sources)].sort().slice(0, MAX_KNOWLEDGE_LINK_REFRESH_SOURCES)) {
+      const node = await importers.getNodeByPage(id);
+      if (!node || node.bindingId !== binding.id) continue;
+      let current: { page: KnowledgePage; keys: string[] };
+      try {
+        current = await owned(id, node.sourceId);
+      } catch (error) {
+        if (!refusalFor(error)) throw error;
+        continue;
+      }
+      const body = current.page.body ?? '';
+      const at = body.startsWith(`${LINKS_HEADING}\n`) ? 0 : body.lastIndexOf(`\n\n${LINKS_HEADING}\n`);
+      if (at < 0) continue;
+      let changed = false;
+      const lines = body
+        .slice(at)
+        .split('\n')
+        .filter(line => line.startsWith('- '))
+        .map(line =>
+          line.replace(/\[\[([^\]]+)\]\]$/, (whole, linked: string) => {
+            const next = renamed.get(linked);
+            if (next === undefined) return whole;
+            changed = true;
+            return `[[${next}]]`;
+          }),
+        );
+      if (!changed) continue;
+      const rewritten = await storage.updatePage({
+        id,
+        expectedVersion: current.page.version,
+        body: withLinks(body.slice(0, at).trim(), lines),
+        provenance,
+      });
+      await syncLinks(() => syncKnowledgePageBodyLinks(storage, rewritten));
+      relinked.push({ sourceId: node.sourceId, page: rewritten, keys: current.keys });
+    }
+    const self = relinked.find(r => r.page.id === moved.id);
+    return { page: self?.page ?? moved, keys: movedKeys, relinked };
+  };
+  const recordRelinked = (relinked: Relinked[], embeds: KnowledgeImportEmbedJob[]) => {
+    for (const { sourceId, page, keys } of relinked) {
+      result.applied = true;
+      result.counts.updated++;
+      embeds.push({ kind: 'index', pageId: page.id });
+      result.changes.push({ sourceId, pageId: page.id, change: 'updated', title: page.name, path: ref(keys) });
+    }
+  };
+
   const write = async (
     item: KnowledgeImportDeclaration & Partial<Pick<KnowledgeImportItem, 'body' | 'description' | 'links' | 'aliases'>>,
     hasBody: boolean,
@@ -378,8 +472,8 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
       : { page: anchor, keys: anchorPath };
     if (existing && destination.page.id === existing.pageId) throw new KnowledgeImportRefusalError('invalid');
 
-    const rendered = hasBody ? await renderBody(item as KnowledgeImportItem) : undefined;
-    const fields = {
+    let rendered = hasBody ? await renderBody(item as KnowledgeImportItem) : undefined;
+    let fields = {
       name: item.title,
       ...(item.description !== undefined ? { description: item.description } : {}),
       ...(rendered ? { body: rendered.body } : {}),
@@ -389,6 +483,7 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     let change: KnowledgeImporterChangeKind | 'unchanged';
     let moved = false;
     let renamed = false;
+    let relinked: Relinked[] = [];
 
     if (!existing) {
       page = await storage.createPage({
@@ -411,13 +506,13 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
           throw new KnowledgeImportRefusalError('invalid');
         }
         await assertSubtreeOwned(page.id);
-        page = await storage.movePage({
-          id: page.id,
-          expectedVersion: page.version,
-          parentId: destination.page.id,
-          provenance,
-        });
+        ({ page, relinked } = await moveOwned(page, current.keys, destination));
         moved = true;
+        // Its own links into its subtree were rendered at the old path.
+        if (hasBody) {
+          rendered = await renderBody(item as KnowledgeImportItem);
+          fields = { ...fields, body: rendered.body };
+        }
       }
       const same =
         fields.name === page.name &&
@@ -427,7 +522,8 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
         renamed = fields.name !== page.name;
         page = await storage.updatePage({ id: page.id, expectedVersion: page.version, ...fields, provenance });
       }
-      change = !same ? 'updated' : moved ? 'moved' : 'unchanged';
+      const rewrote = relinked.some(r => r.page.id === page.id);
+      change = !same || rewrote ? 'updated' : moved ? 'moved' : 'unchanged';
     }
 
     await importers.saveNode({
@@ -450,7 +546,7 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
         }
       });
     }
-    return { page, change, moved };
+    return { page, change, moved, relinked };
   };
 
   // Removes child-first: deepest current page first, so a parent removed with its children is deleted, not stubbed.
@@ -523,7 +619,11 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
           result.applied = true;
           return;
         }
-        const { page, change, moved } = await write(op.item, op.op === 'upsert');
+        const { page, change, moved, relinked } = await write(op.item, op.op === 'upsert');
+        recordRelinked(
+          relinked.filter(r => r.page.id !== page.id),
+          embeds,
+        );
         if (change === 'unchanged') {
           result.counts.unchanged++;
           return;
@@ -608,13 +708,13 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
           throw new KnowledgeImportRefusalError('invalid');
         }
         await assertSubtreeOwned(page.id);
-        page = await storage.movePage({
-          id: page.id,
-          expectedVersion: page.version,
-          parentId: destination.page.id,
-          provenance,
-        });
-        keys = [...destination.keys, page.key!];
+        let rewrote: Relinked[];
+        ({ page, keys, relinked: rewrote } = await moveOwned(page, keys, destination));
+        recordRelinked(
+          rewrote.filter(r => r.page.id !== page.id),
+          embeds,
+        );
+        if (rewrote.some(r => r.page.id === page.id)) relinked = true;
         moved = true;
         await syncLinks(() => refreshKnowledgeLinksTo(storage, [page], { withDescendants: true }));
       }
