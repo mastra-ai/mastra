@@ -7,6 +7,7 @@ packages:
 
 import { IntegrationGrid } from '@site/src/components/integrations/grid';
 import { getIntegrationItems } from '@site/src/components/integrations/data';
+import { ProviderLogo } from '@site/src/components/connect/provider-logo';
 
 # Connect
 
@@ -195,6 +196,26 @@ Each integration page shows the provider ID, what the provider offers, and its s
   ...getIntegrationItems('Voice', ['voice/openai']),
 ]}
 />
+
+### Coming soon
+
+These providers are in the platform catalog but you can't connect them yet. [`mastra connect list`](/reference/cli/mastra#mastra-connect-list) marks them as coming soon.
+
+| Provider | Provider ID |
+| - | - |
+| <ProviderLogo src="https://app.nango.dev/images/template-logos/airtable-mcp.svg" /> Airtable | `airtable-mcp` |
+| <ProviderLogo src="https://app.nango.dev/images/template-logos/anthropic.svg" /> Anthropic | `anthropic` |
+| <ProviderLogo src="https://app.nango.dev/images/template-logos/beehiiv.svg" /> beehiiv | `beehiiv` |
+| <ProviderLogo src="https://app.nango.dev/images/template-logos/elevenlabs.svg" /> ElevenLabs | `elevenlabs` |
+| <ProviderLogo src="https://app.nango.dev/images/template-logos/figma.svg" /> Figma | `figma` |
+| <ProviderLogo src="https://app.nango.dev/images/template-logos/gitlab.svg" /> GitLab | `gitlab` |
+| <ProviderLogo src="https://app.nango.dev/images/template-logos/google-ads.svg" /> Google Ads | `google-ads` |
+| <ProviderLogo src="https://app.nango.dev/images/template-logos/google-analytics.svg" /> Google Analytics | `google-analytics` |
+| <ProviderLogo src="https://app.nango.dev/images/template-logos/grafana.svg" /> Grafana | `grafana` |
+| <ProviderLogo src="https://app.nango.dev/images/template-logos/granola-mcp.svg" /> Granola | `granola-mcp` |
+| <ProviderLogo src="https://app.nango.dev/images/template-logos/pylon.svg" /> Pylon | `pylon` |
+| <ProviderLogo src="https://app.nango.dev/images/template-logos/replicate.svg" /> Replicate | `replicate` |
+| <ProviderLogo src="https://app.nango.dev/images/template-logos/sendgrid.svg" /> SendGrid | `sendgrid` |
 
 ## Troubleshooting
 
