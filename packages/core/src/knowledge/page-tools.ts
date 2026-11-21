@@ -1565,6 +1565,10 @@ function activityDate(name: 'since' | 'until', value: string): Date {
   }
   const date = new Date(dateOnly ? `${trimmed}T00:00:00.000Z` : trimmed);
   if (Number.isNaN(date.getTime())) refuse();
+  // An offset can carry the instant out of years 1-9999 (0001-01-01T00:00:00+14:00 is year 0).
+  // Stores compare four-digit ISO text and PostgreSQL has no year zero, so keep inside that range.
+  const utcYear = date.getUTCFullYear();
+  if (utcYear < 1 || utcYear > 9999) refuse();
   return date;
 }
 

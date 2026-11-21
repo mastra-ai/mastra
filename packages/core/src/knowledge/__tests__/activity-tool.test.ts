@@ -319,7 +319,7 @@ describe('knowledge_activity: refusals before any listing', () => {
   });
 
   it('refuses impossible calendar dates instead of rolling them over', async () => {
-    const { call } = await setup();
+    const { store, call } = await setup();
     for (const since of [
       '2026-02-30',
       '2026-02-29',
@@ -333,7 +333,17 @@ describe('knowledge_activity: refusals before any listing', () => {
     for (const since of ['2026-07-01T09:30:00+14:01', '2026-07-01T09:30:00-14:59', '2026-07-01T09:30:00+13:60']) {
       await expect(call({ since })).rejects.toThrow(/must be a date/);
     }
-    // The outer offsets and four-digit years before 100 are valid.
+    // Year zero, and offsets that carry the instant out of years 1-9999 either way, are refused
+    // before the store is asked.
+    const list = vi.spyOn(store, 'listPageActivity');
+    for (const since of ['0000-01-01', '0001-01-01T00:00:00+14:00', '9999-12-31T23:59:59-14:00']) {
+      await expect(call({ since })).rejects.toThrow(/must be a date/);
+    }
+    expect(list).not.toHaveBeenCalled();
+    list.mockRestore();
+    // The outer offsets and four-digit years before 100 are valid while the instant stays in range.
+    await expect(call({ until: '0001-01-01T14:00:00+14:00' })).resolves.toMatchObject({ changes: [] });
+    await expect(call({ since: '9999-12-31T09:59:59-14:00' })).resolves.toMatchObject({ changes: [] });
     for (const until of [
       '2026-07-01T09:30:00+14:00',
       '2026-07-01T09:30:00-14:00',
