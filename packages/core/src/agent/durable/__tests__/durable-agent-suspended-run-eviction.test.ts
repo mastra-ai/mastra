@@ -322,8 +322,11 @@ describe('an observer ended by a bare idle timeout', () => {
       }
       return (getStore as any)(...args);
     });
-    await agent.observe('run-idle-early', { idleTimeoutMs: 5, onError });
-    gated.mockRestore();
+    try {
+      await agent.observe('run-idle-early', { idleTimeoutMs: 5, onError });
+    } finally {
+      gated.mockRestore();
+    }
     expect(gatedReads).toBeGreaterThan(0);
     expect(onError).toHaveBeenCalledTimes(1);
 
