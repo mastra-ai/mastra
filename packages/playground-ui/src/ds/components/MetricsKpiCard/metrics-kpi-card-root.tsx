@@ -12,7 +12,7 @@ export type MetricsKpiCardRootProps = {
 export function MetricsKpiCardRoot({ children, className, busy }: MetricsKpiCardRootProps) {
   return (
     <Card className={cn('min-w-72 flex-1 px-4 py-3', className)} aria-busy={busy || undefined}>
-      <div className="grid gap-1.5">{children}</div>
+      <div className="grid grid-cols-1 gap-1.5">{children}</div>
     </Card>
   );
 }
