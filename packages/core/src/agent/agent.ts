@@ -12909,7 +12909,7 @@ export class Agent<
   /** Runs with a resume() setting up or executing, which a parked-run release must leave alone. */
   readonly #resumesInProgress = new Map<string, number>();
 
-  /** {@link createRunCleanup}, tracked per run until it releases (unless `tracked` is false). */
+  /** {@link createRunCleanup}, tracked per run until its release runs, even if it throws (unless `tracked` is false). */
   #createStreamCleanup(
     runId: string,
     options: CreateRunCleanupOptions,
