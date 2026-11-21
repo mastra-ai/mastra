@@ -207,19 +207,39 @@ async function writeSecureEnv(envPath: string, content: string): Promise<boolean
   }
 }
 
+const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * Whether a value can be written unquoted on one `.env` line and read back unchanged. Rejects
+ * line breaks and whitespace, which would end the value or start a second entry, and `#`,
+ * quotes, `$`, backticks and backslashes, which dotenv parsers treat as comments, quoting,
+ * expansion or escapes.
+ */
+export function isDotenvSafeValue(value: string): boolean {
+  return /^[^\s#"'`$\\]*$/.test(value);
+}
+
 /**
  * Write an API key that arrived after the template was adapted (the Gateway key is created
  * while the template clones). Starts from `.env`, or `.env.example` when there is no `.env` yet.
+ * `extraEnv` holds settings the key needs to work, such as a non-default gateway URL.
+ * Returns false without touching `.env` when a key is not a valid variable name or a value
+ * is not safe to write unquoted (see `isDotenvSafeValue`).
  */
 export async function writeManagedApiKey({
   projectPath,
   apiKeyEnv,
   apiKey,
+  extraEnv = {},
 }: {
   projectPath: string;
   apiKeyEnv: string;
   apiKey: string;
+  extraEnv?: Record<string, string>;
 }): Promise<boolean> {
+  const entries: [string, string][] = [[apiKeyEnv, apiKey], ...Object.entries(extraEnv)];
+  if (entries.some(([key, value]) => !ENV_KEY_PATTERN.test(key) || !isDotenvSafeValue(value))) return false;
+
   const envPath = path.join(projectPath, '.env');
   let source = '';
   for (const candidate of [envPath, path.join(projectPath, '.env.example')]) {
@@ -231,10 +251,13 @@ export async function writeManagedApiKey({
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return false;
     }
   }
-  const result = setEnvValue(source, apiKeyEnv, apiKey);
-  const content = result.applied
-    ? result.content
-    : `${source}${source && !source.endsWith('\n') ? '\n' : ''}${apiKeyEnv}=${apiKey}\n`;
+  let content = source;
+  for (const [key, value] of entries) {
+    const result = setEnvValue(content, key, value);
+    content = result.applied
+      ? result.content
+      : `${content}${content && !content.endsWith('\n') ? '\n' : ''}${key}=${value}\n`;
+  }
   return writeSecureEnv(envPath, content);
 }
 

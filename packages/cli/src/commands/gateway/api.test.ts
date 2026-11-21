@@ -11,6 +11,10 @@ vi.mock('../auth/client.js', () => ({
 const { platformFetch } = await import('../auth/client.js');
 const { createGatewayApiKey, creditsPageUrl, getGatewayCredits, revokeGatewayApiKey } = await import('./api');
 
+// Shaped like real v2 organization keys and key ids, with obviously fake hex.
+const V2_API_KEY = `msk-gateway-${'0123456789abcdef'.repeat(3)}`;
+const V2_KEY_ID = 'abcdef0123456789abcdef01';
+
 function respond(status: number, body: unknown) {
   return { ok: status < 400, status, json: async () => body } as Response;
 }
@@ -43,19 +47,19 @@ describe('createGatewayApiKey', () => {
   });
 
   it('keeps the key id of an organization v2 key so it can be revoked', async () => {
-    vi.mocked(platformFetch).mockResolvedValueOnce(respond(201, { keyId: 'gk_1', apiKey: 'msk_v2' }));
+    vi.mocked(platformFetch).mockResolvedValueOnce(respond(201, { keyId: V2_KEY_ID, apiKey: V2_API_KEY }));
 
     await expect(createGatewayApiKey('token', 'org-1', 'my-app')).resolves.toEqual({
-      apiKey: 'msk_v2',
-      keyId: 'gk_1',
+      apiKey: V2_API_KEY,
+      keyId: V2_KEY_ID,
     });
     expect(requestBody(0)).toEqual({ name: 'my-app', keyLabel: 'my-app' });
   });
 
   it.each([null, ''])('ignores a key id of %j', async keyId => {
-    vi.mocked(platformFetch).mockResolvedValueOnce(respond(201, { keyId, apiKey: 'msk_v2' }));
+    vi.mocked(platformFetch).mockResolvedValueOnce(respond(201, { keyId, apiKey: V2_API_KEY }));
 
-    await expect(createGatewayApiKey('token', 'org-1', 'my-app')).resolves.toEqual({ apiKey: 'msk_v2' });
+    await expect(createGatewayApiKey('token', 'org-1', 'my-app')).resolves.toEqual({ apiKey: V2_API_KEY });
   });
 
   it('surfaces failures', async () => {
