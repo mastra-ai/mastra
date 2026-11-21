@@ -563,6 +563,42 @@ describe('subscribeToThread withInitialHistory', () => {
     }
   });
 
+  it('reports a run handed back at shutdown as interrupted, then its recovered outcome (#30480)', async () => {
+    const { emit, pubsub, subscribe } = setup(() => []);
+    pubsub.owners.set([resourceId, threadId].join('\u0000'), runId);
+    const { subscription, collected, consumed } = await subscribe();
+    try {
+      await emit({ type: 'run-registered', runId, streamId: 'old', streamSeq: 1, generation: 1 });
+      await emit({ type: 'run-completed', runId, streamId: 'old', status: 'interrupted', persisted: false });
+      await emit({ type: 'run-completed', runId, streamId: 'old', status: 'interrupted', persisted: false });
+      await emit({ type: 'run-registered', runId, streamId: 'new', streamSeq: 2, generation: 2 });
+      await emit({ type: 'run-completed', runId, streamId: 'new', status: 'success', persisted: true });
+      await nextTicks(10);
+      expect(collected.filter(p => p.type === 'thread-run-status').map(p => p.payload)).toEqual([
+        { status: 'interrupted' },
+        { status: 'success' },
+      ]);
+    } finally {
+      subscription.unsubscribe();
+      await consumed;
+    }
+  });
+
+  it('a retained superseded hand-back does not hide the recovered outcome from a late subscriber', async () => {
+    const { emit, subscribe } = setup(() => []);
+    await emit({ type: 'run-registered', runId, streamId: 'old', streamSeq: 1, generation: 1 });
+    await emit({ type: 'run-completed', runId, streamId: 'old', status: 'interrupted', persisted: false });
+    await emit({ type: 'run-registered', runId, streamId: 'new', streamSeq: 2, generation: 2, supersedes: true });
+    await emit({ type: 'run-completed', runId, streamId: 'new', status: 'success', persisted: true });
+    const { subscription, collected, consumed } = await subscribe(true);
+    await nextTicks(10);
+    const statuses = collected.filter(p => p.type === 'thread-run-status').map(p => p.payload.status);
+    expect(statuses.at(-1)).toBe('success');
+    expect(statuses).not.toContain('failed');
+    subscription.unsubscribe();
+    await consumed;
+  });
+
   it.each(['failed', 'canceled'] as const)(
     'reports a retained %s outcome without replaying unsaved output',
     async status => {
