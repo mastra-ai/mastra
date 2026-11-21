@@ -12919,15 +12919,22 @@ export class Agent<
     const { release, releaseOnTimer } = options;
     const cleanup = createRunCleanup({
       ...options,
+      // Forgotten even when the release throws, so a failed release is not retried by a later one.
       release: () => {
-        release();
-        forget();
+        try {
+          release();
+        } finally {
+          forget();
+        }
       },
       ...(releaseOnTimer
         ? {
             releaseOnTimer: () => {
-              releaseOnTimer();
-              forget();
+              try {
+                releaseOnTimer();
+              } finally {
+                forget();
+              }
             },
           }
         : {}),
@@ -13011,7 +13018,8 @@ export class Agent<
     if (localEntry?.executionFence && globalEntry?.executionFence === localEntry.executionFence) {
       globalRunRegistry.delete(runId);
     }
-    if (failures.length > 0) throw failures[0];
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) throw new AggregateError(failures, `Releasing parked run ${runId} failed`);
     return true;
   }
 

@@ -10,5 +10,6 @@ Added `durableAgent.releaseParkedRun(runId)` to drop this process's hold on a ru
 // A host is done with a run parked on an approval, but the run may be resumed later.
 const released = await durableAgent.releaseParkedRun(runId);
 // false: this agent does not hold the run, it is not suspended, or a resume took it over.
-// It rejects, with nothing released, if the run's snapshot can't be read from storage.
+// It rejects if the run's snapshot can't be read (nothing is released), or if releasing one of
+// the run's streams throws (the rest is still released).
 ```

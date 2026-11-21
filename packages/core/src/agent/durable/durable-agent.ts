@@ -854,7 +854,8 @@ export class DurableAgent<
    * Returns `false` (and releases nothing) unless this agent holds the run, its snapshot is
    * stored as suspended, and no resume took the run over meanwhile.
    * Rejects, with nothing released, when reading the run's snapshot fails.
-   * If one of the run's stream releases throws, the rest of the hold is still released before it rejects.
+   * If one of the run's stream releases throws, it rejects after the rest of the hold is released, so a
+   * rejection doesn't by itself mean the run is still held.
    *
    * Discard any stream or run handle of the parked execution first: a later resume builds a
    * new run, and a handle kept from before the release does not see it.

@@ -118,6 +118,8 @@ describe('releaseParkedRun', () => {
     expect(agent.runRegistry.size).toBe(0);
     expect(getRunRegistryEntry('run-throws', mastra)).toBeUndefined();
     expect(await storedStatus(storage, 'run-throws')).toBe('suspended');
+    // The failed release is not kept around for a later release to retry.
+    expect(await agent.releaseParkedRun('run-throws')).toBe(false);
     reader.releaseLock();
   });
 
