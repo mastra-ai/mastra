@@ -3,7 +3,7 @@ import type { AgentConfig, ToolsInput } from '../../../agent';
 import type { MessageListInput } from '../../../agent/message-list';
 import type { MastraServerCache } from '../../../cache';
 import type { ServerConfig } from '../../../server/types';
-import type { ObservabilityEntrypoint, TracingOptions } from '../../../observability';
+import type { ObservabilityEntrypoint, TracingOptions, TracingPolicy } from '../../../observability';
 import type { PubSub } from '../../../events/pubsub';
 import type { MastraMemory } from '../../../memory';
 import type { MemoryConfigInternal } from '../../../memory/types';
@@ -442,6 +442,7 @@ export interface RunLoopScenarioOptions {
    * the same agent+storage must persist across calls.
    */
   sharedAgent?: { agent: any; mastra: any };
+  tracingPolicy?: TracingPolicy;
   /**
    * Build the agent via file-system routing (`assembleAgentFromFsEntry`) instead
    * of `new Agent(...)`, then register it through `Mastra.__registerFsAgents`.
