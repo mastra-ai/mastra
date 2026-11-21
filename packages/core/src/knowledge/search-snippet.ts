@@ -17,25 +17,115 @@ export function knowledgeSearchQuery(query: string): string {
   return query.replace(/["`\u201C\u201D]/g, ' ').trim();
 }
 
-const isLowSurrogate = (code: number) => code >= 0xdc00 && code <= 0xdfff;
-const isHighSurrogate = (code: number) => code >= 0xd800 && code <= 0xdbff;
-const isSpace = (char: string | undefined) => char !== undefined && /\s/.test(char);
+/** Source code units per chunk when lowercasing the body and mapping offsets back. */
+const MAP_CHUNK = 4096;
 
 /**
- * A bounded excerpt of `body` around the query words, or `undefined` when the body contains none of
- * them. Uses the same words as keyword search (case-insensitive substrings). Each word's first
- * {@link OCCURRENCES_PER_WORD} occurrences anchor candidate windows; the window holding the most
- * distinct words wins, earliest on ties. Matching is Unicode case folding, which agrees with lowercasing
- * except for rare characters such as `İ`. Cost is at most one linear scan of the body per word, with
- * no copy of it: a body with no match is scanned once per word, end to end.
+ * Exact `toLowerCase()` substring matches of each word, as `[start, end)` offsets into `body`, the
+ * way keyword search matches. The body is lowercased chunk by chunk, so each chunk's lowercased
+ * length is known: lowercasing keeps the length for nearly all text, and where it doesn't (`İ` →
+ * `i̇`) only the chunks a match lands in are walked code point by code point to map offsets back. A
+ * body with no match returns before any mapping.
  */
-export function knowledgeBodySnippet(body: string | undefined, query: string): string | undefined {
-  if (!body) return undefined;
-  const words = knowledgeSearchWords(knowledgeSearchQuery(query));
-  if (!words.length) return undefined;
+function lowercaseHits(body: string, words: string[]): Array<{ word: number; start: number; end: number }> {
+  const sourceStarts: number[] = [];
+  const loweredStarts: number[] = [];
+  const pieces: string[] = [];
+  let loweredLength = 0;
+  for (let s = 0; s < body.length;) {
+    let e = Math.min(body.length, s + MAP_CHUNK);
+    if (e < body.length && isHighSurrogate(body.charCodeAt(e - 1))) e++;
+    const piece = body.slice(s, e).toLowerCase();
+    sourceStarts.push(s);
+    loweredStarts.push(loweredLength);
+    pieces.push(piece);
+    loweredLength += piece.length;
+    s = e;
+  }
+  sourceStarts.push(body.length);
+  loweredStarts.push(loweredLength);
+  // Σ is the one character whose lowercase depends on its neighbours, which a chunk edge can hide;
+  // its lowercase is one unit either way, so the chunk offsets still hold.
+  const text = body.includes('Σ') ? body.toLowerCase() : pieces.join('');
 
-  // Case-insensitive search on the body itself, so match offsets are offsets into the text the
-  // snippet is cut from: no lowercased copy, and nothing to map back when lowercasing changes length.
+  const found: Array<{ word: number; at: number; length: number }> = [];
+  words.forEach((word, w) => {
+    let from = 0;
+    for (let n = 0; n < OCCURRENCES_PER_WORD; n++) {
+      const at = text.indexOf(word, from);
+      if (at < 0) break;
+      found.push({ word: w, at, length: word.length });
+      from = at + word.length;
+    }
+  });
+  if (!found.length || loweredLength === body.length) {
+    return found.map(({ word, at, length }) => ({ word, start: at, end: at + length }));
+  }
+
+  const walked = new Map<number, Array<{ lowered: number; source: number; width: number; lowerWidth: number }>>();
+  const widths = new Map<number, number>();
+  const source = (index: number, edge: 'start' | 'end') => {
+    let chunk = 0;
+    for (let lo = 0, hi = sourceStarts.length - 2; lo <= hi;) {
+      const mid = (lo + hi) >> 1;
+      if (loweredStarts[mid]! <= index) {
+        chunk = mid;
+        lo = mid + 1;
+      } else hi = mid - 1;
+    }
+    const sourceStart = sourceStarts[chunk]!;
+    const loweredStart = loweredStarts[chunk]!;
+    const sourceEnd = sourceStarts[chunk + 1]!;
+    if (loweredStarts[chunk + 1]! - loweredStart === sourceEnd - sourceStart) {
+      return Math.min(body.length, sourceStart + (index - loweredStart));
+    }
+    let changes = walked.get(chunk);
+    if (!changes) {
+      changes = [];
+      for (let i = sourceStart, l = loweredStart; i < sourceEnd;) {
+        const point = body.codePointAt(i)!;
+        const width = point > 0xffff ? 2 : 1;
+        let lowerWidth = point < 0x80 ? 1 : widths.get(point);
+        if (lowerWidth === undefined) {
+          lowerWidth = String.fromCodePoint(point).toLowerCase().length;
+          widths.set(point, lowerWidth);
+        }
+        if (lowerWidth !== width) changes.push({ lowered: l, source: i, width, lowerWidth });
+        i += width;
+        l += lowerWidth;
+      }
+      walked.set(chunk, changes);
+    }
+    let last = -1;
+    for (let lo = 0, hi = changes.length - 1; lo <= hi;) {
+      const mid = (lo + hi) >> 1;
+      if (changes[mid]!.lowered <= index) {
+        last = mid;
+        lo = mid + 1;
+      } else hi = mid - 1;
+    }
+    if (last < 0) return sourceStart + (index - loweredStart);
+    const change = changes[last]!;
+    const into = index - change.lowered;
+    // Inside a code point whose lowercase has a different length: widen to the whole code point.
+    if (into === 0) return change.source;
+    if (into < change.lowerWidth) return edge === 'start' ? change.source : change.source + change.width;
+    return Math.min(body.length, change.source + change.width + (into - change.lowerWidth));
+  };
+  return found.map(({ word, at, length }) => ({ word, start: source(at, 'start'), end: source(at + length, 'end') }));
+}
+
+/**
+ * The same matches as {@link lowercaseHits} without lowercasing the body, when that is provably
+ * equivalent: every word is ASCII and the body has neither `İ` (lowercases to `i̇`, does not case-fold
+ * to `i`) nor `ſ` (case-folds to `s`, does not lowercase to it). For ASCII words those are the only
+ * characters where Unicode case folding and lowercasing disagree. `undefined` when not equivalent.
+ */
+function foldedAsciiHits(
+  body: string,
+  words: string[],
+): Array<{ word: number; start: number; end: number }> | undefined {
+  if (words.some(word => /[^\x00-\x7f]/.test(word)) || /[\u0130\u017f]/.test(body)) return undefined;
   const hits: Array<{ word: number; start: number; end: number }> = [];
   words.forEach((word, w) => {
     const pattern = new RegExp(word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'giu');
@@ -45,6 +135,27 @@ export function knowledgeBodySnippet(body: string | undefined, query: string): s
       hits.push({ word: w, start: match.index, end: match.index + match[0].length });
     }
   });
+  return hits;
+}
+
+const isLowSurrogate = (code: number) => code >= 0xdc00 && code <= 0xdfff;
+const isHighSurrogate = (code: number) => code >= 0xd800 && code <= 0xdbff;
+const isSpace = (char: string | undefined) => char !== undefined && /\s/.test(char);
+
+/**
+ * A bounded excerpt of `body` around the query words, or `undefined` when the body contains none of
+ * them. Uses the same words as keyword search (case-insensitive substrings). Each word's first
+ * {@link OCCURRENCES_PER_WORD} occurrences anchor candidate windows; the window holding the most
+ * distinct words wins, earliest on ties. A body matches exactly when `body.toLowerCase()` contains
+ * the word, as in keyword search. Cost: a scan per word, plus one lowercase copy of the body unless
+ * the words are ASCII and the body has no `İ` or `ſ`; offsets are mapped only for actual matches.
+ */
+export function knowledgeBodySnippet(body: string | undefined, query: string): string | undefined {
+  if (!body) return undefined;
+  const words = knowledgeSearchWords(knowledgeSearchQuery(query));
+  if (!words.length) return undefined;
+
+  const hits = foldedAsciiHits(body, words) ?? lowercaseHits(body, words);
   if (!hits.length) return undefined;
 
   let best: { start: number; anchor: number; score: number } | undefined;

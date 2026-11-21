@@ -70,6 +70,53 @@ describe('knowledge_search body snippets (r397, in-memory store)', () => {
     expect(result.results[0].page.snippet).toBe('Our refund policy is simple.');
   });
 
+  // The snippet matches exactly as keyword search does (`toLowerCase()` substrings), so a body the
+  // store matched always gets one and a body it did not match never does.
+  it('shows a snippet when the body matched only because lowercasing İ yields i̇', async () => {
+    const { mine } = run();
+    await mine('knowledge_page', {
+      op: 'write',
+      scope: 'resource:u-1',
+      name: 'Turkey',
+      body: 'Flew to İSTANBUL in May.',
+    });
+    for (const query of ['İstanbul', 'i']) {
+      const result = await mine('knowledge_search', { query });
+      expect(
+        result.results.map((hit: Result) => hit.page.name),
+        query,
+      ).toEqual(['Turkey']);
+      expect(result.results[0].page.snippet, query).toBe('Flew to İSTANBUL in May.');
+    }
+  });
+
+  it('shows no snippet when the body only case-folds to the word, as keyword search did not match it', async () => {
+    const { mine } = run();
+    await mine('knowledge_page', {
+      op: 'write',
+      scope: 'resource:u-1',
+      name: 'κόσμοσ glossary',
+      body: 'Ο κόσμος είναι μεγάλος.',
+    });
+    await mine('knowledge_page', {
+      op: 'write',
+      scope: 'resource:u-1',
+      name: 'Mass schedule',
+      body: 'Old spelling: Maſs at noon.',
+    });
+    for (const [query, name] of [
+      ['κόσμοσ', 'κόσμοσ glossary'],
+      ['mass', 'Mass schedule'],
+    ] as const) {
+      const result = await mine('knowledge_search', { query });
+      expect(
+        result.results.map((hit: Result) => hit.page.name),
+        query,
+      ).toEqual([name]);
+      expect(result.results[0].page.snippet, query).toBeUndefined();
+    }
+  });
+
   it('keeps total snippet cost bounded at the result limit on large bodies', async () => {
     const { mine } = run();
     const big = `${'İ'.repeat(5_000)} ${'filler text '.repeat(40_000)}`;
