@@ -83,7 +83,7 @@ export function NewBoardPage() {
 
   return (
     <PageLayout
-      kind="form"
+      variant="form"
       backHref={`/factories/${factory.id}`}
       backLabel={factory.name}
       title="New board"

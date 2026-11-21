@@ -63,7 +63,7 @@ const resourceList = (
   </ul>
 );
 
-const workspacePanels = (
+const panels = (
   <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_16rem]">
     <ul className="grid content-start gap-2 overflow-y-auto border-r border-border p-4">
       {Array.from({ length: 40 }, (_, index) => (
@@ -84,14 +84,14 @@ const meta = {
   tags: ['autodocs'],
   parameters: {
     layout: 'fullscreen',
-    controls: { include: ['kind', 'breadcrumbs', 'headerActions', 'actionRow', 'header', 'body', 'children'] },
+    controls: { include: ['variant', 'breadcrumbs', 'headerActions', 'actionRow', 'header', 'body', 'children'] },
     docs: {
       description: {
         component: [
-          'The frame of every page: its width, gutter, scrolling and way back. Pick the `kind` that matches the page, and each kind takes only the props that make sense for it.',
-          '- `kind="page"`: lists, dashboards, detail pages and explorers. Full width with the standard gutter, up to 1536px on very wide screens. Add `body="workspace"` when the body is panels that scroll on their own (chat, board, editor, graph): it fills the rest of the page edge to edge.',
-          '- `kind="settings"`: a settings page. Breadcrumbs and a title over a 640px column of `SettingsGroup`s. See Layout/PageLayout/Settings.',
-          '- `kind="form"`: a create or edit form. A back link and the title over a 640px column, and no breadcrumbs. See Layout/PageLayout/Form.',
+          'The frame of every page: its width, gutter, scrolling and way back. Pick the `variant` that matches the page, and each variant takes only the props that make sense for it.',
+          '- `variant="page"`: lists, dashboards, detail pages and explorers. Full width with the standard gutter, up to 1536px on very wide screens. Add `body="full"` when the body is panels that scroll on their own (chat, board, editor, graph): it fills the rest of the page edge to edge.',
+          '- `variant="settings"`: a settings page. Breadcrumbs and a title over a 640px column of `SettingsGroup`s. See Layout/PageLayout/Settings.',
+          '- `variant="form"`: a create or edit form. A back link and the title over a 640px column, and no breadcrumbs. See Layout/PageLayout/Form.',
           'The frame is configured, not composed: what goes inside (`PageHeader`, `SettingsGroup`, `EmptyState`, `DashboardGrid`, panels) stays free.',
         ].join('\n\n'),
       },
@@ -107,10 +107,10 @@ const meta = {
         </StoryFrame>
       ),
   ],
-  args: { kind: 'page', breadcrumbs: crumbs, headerActions, children: resourceList },
+  args: { variant: 'page', breadcrumbs: crumbs, headerActions, children: resourceList },
   argTypes: {
-    kind: { control: false },
-    body: { control: 'inline-radio', options: ['scroll', 'workspace'] },
+    variant: { control: false },
+    body: { control: 'inline-radio', options: ['scroll', 'full'] },
     breadcrumbs: slotArg,
     headerActions: slotArg,
     actionRow: slotArg,
@@ -133,8 +133,8 @@ export const Page: Story = {
   },
 };
 
-export const Workspace: Story = {
-  args: { body: 'workspace', children: workspacePanels },
+export const FullBody: Story = {
+  args: { body: 'full', children: panels },
   parameters: {
     docs: {
       description: {
@@ -275,7 +275,7 @@ export const TopBarSpacingComparison: Story = {
           With top bar (default)
         </Txt>
         <StoryFrame>
-          <PageLayout kind="page" breadcrumbs={crumbs} headerActions={headerActions} header={<ComparisonHeader />}>
+          <PageLayout variant="page" breadcrumbs={crumbs} headerActions={headerActions} header={<ComparisonHeader />}>
             {resourceList}
           </PageLayout>
         </StoryFrame>
@@ -285,7 +285,7 @@ export const TopBarSpacingComparison: Story = {
           No bar + breathing spacing
         </Txt>
         <StoryFrame>
-          <PageLayout kind="page" header={<ComparisonHeader spacing="breathing" />}>
+          <PageLayout variant="page" header={<ComparisonHeader spacing="breathing" />}>
             {resourceList}
           </PageLayout>
         </StoryFrame>
@@ -295,7 +295,7 @@ export const TopBarSpacingComparison: Story = {
           No bar + breathing spacing + Back link
         </Txt>
         <StoryFrame>
-          <PageLayout kind="page" header={<ComparisonHeader spacing="breathing" eyebrow={backLink} />}>
+          <PageLayout variant="page" header={<ComparisonHeader spacing="breathing" eyebrow={backLink} />}>
             {resourceList}
           </PageLayout>
         </StoryFrame>
@@ -305,7 +305,7 @@ export const TopBarSpacingComparison: Story = {
           No bar (default unchanged)
         </Txt>
         <StoryFrame>
-          <PageLayout kind="page" header={<ComparisonHeader />}>
+          <PageLayout variant="page" header={<ComparisonHeader />}>
             {resourceList}
           </PageLayout>
         </StoryFrame>

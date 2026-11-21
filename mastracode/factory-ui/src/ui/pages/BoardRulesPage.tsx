@@ -36,7 +36,7 @@ export function BoardRulesPage() {
 
   return (
     <PageLayout
-      kind="settings"
+      variant="settings"
       header={
         <>
           <PageHeader>

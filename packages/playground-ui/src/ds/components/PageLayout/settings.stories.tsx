@@ -61,14 +61,14 @@ const meta = {
   parameters: {
     layout: 'fullscreen',
     controls: {
-      include: ['kind', 'breadcrumbs', 'headerActions', 'title', 'titleAccessory', 'action', 'header', 'children'],
+      include: ['variant', 'breadcrumbs', 'headerActions', 'title', 'titleAccessory', 'action', 'header', 'children'],
     },
     docs: {
       description: {
         component: [
-          'The frame for a settings page someone browses to and changes in place. It is `<PageLayout kind="settings">`: breadcrumbs and actions in the top bar, then a centered 640px column with the title above its `SettingsGroup`s.',
+          'The frame for a settings page someone browses to and changes in place. It is `<PageLayout variant="settings">`: breadcrumbs and actions in the top bar, then a centered 640px column with the title above its `SettingsGroup`s.',
           'The title is inset to line up with the section titles, and sections sit 28px apart. Build the sections from the parts in New/Settings.',
-          'Use `kind="form"` for a create or edit form, and `kind="page"` for every other page.',
+          'Use `variant="form"` for a create or edit form, and `variant="page"` for every other page.',
         ].join('\n\n'),
       },
     },
@@ -80,9 +80,9 @@ const meta = {
       </StoryFrame>
     ),
   ],
-  args: { kind: 'settings', breadcrumbs: crumbs, title: 'Organization', children: sections },
+  args: { variant: 'settings', breadcrumbs: crumbs, title: 'Organization', children: sections },
   argTypes: {
-    kind: { control: false },
+    variant: { control: false },
     title: { control: 'text' },
     breadcrumbs: { control: false },
     headerActions: { control: false },

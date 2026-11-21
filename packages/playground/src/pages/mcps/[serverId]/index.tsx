@@ -40,7 +40,7 @@ export const McpServerPage = () => {
     ) : undefined;
 
   return (
-    <PageLayout kind="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} header={header}>
+    <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} header={header}>
       <MCPDetail isLoading={isLoading} server={server} />
       {serverId && (
         <>

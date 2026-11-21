@@ -153,7 +153,7 @@ export function DatasetPage({
   if (isLoading) return null;
 
   const shell = (content: ReactNode) => (
-    <PageLayout kind="page" breadcrumbs={<DatasetBreadcrumbs datasetId={datasetId} datasetsHref={datasetsHref} />}>
+    <PageLayout variant="page" breadcrumbs={<DatasetBreadcrumbs datasetId={datasetId} datasetsHref={datasetsHref} />}>
       <h1 className="sr-only">Dataset</h1>
       <div />
       <div className="flex h-full items-center justify-center">{content}</div>
@@ -224,8 +224,8 @@ export function DatasetPage({
       <div className="flex h-full min-h-0">
         <div className="h-full min-w-0 flex-1">
           <PageLayout
-            kind="page"
-            body="workspace"
+            variant="page"
+            body="full"
             breadcrumbs={
               <DatasetBreadcrumbs
                 datasetId={datasetId}

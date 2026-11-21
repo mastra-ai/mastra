@@ -22,7 +22,7 @@ export default function Scorers() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout kind="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Scorers</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
@@ -31,7 +31,7 @@ export default function Scorers() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <PageLayout kind="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Scorers</h1>
         <PermissionDenied variant="fill" resource="scorers" />
       </PageLayout>
@@ -40,7 +40,7 @@ export default function Scorers() {
 
   if (error) {
     return (
-      <PageLayout kind="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Scorers</h1>
         <EmptyState tone="error" variant="fill" titleSlot="Failed to load scorers" descriptionSlot={error.message} />
       </PageLayout>
@@ -50,7 +50,7 @@ export default function Scorers() {
   if (Object.keys(scorers).length === 0 && !isLoading) {
     return (
       <PageLayout
-        kind="page"
+        variant="page"
         breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
         headerActions={<ScorersHeaderCreateAction />}
       >
@@ -69,7 +69,7 @@ export default function Scorers() {
 
   return (
     <PageLayout
-      kind="page"
+      variant="page"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={<ScorersHeaderCreateAction />}
       actionRow={

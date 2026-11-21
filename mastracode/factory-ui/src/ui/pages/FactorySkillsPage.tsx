@@ -42,7 +42,7 @@ export function FactorySkillsPage() {
 
   return (
     <PageLayout
-      kind="settings"
+      variant="settings"
       header={
         <PageHeader>
           <PageHeader.Title>Skills</PageHeader.Title>

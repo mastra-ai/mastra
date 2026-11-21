@@ -35,7 +35,7 @@ const EMPTY_RESULTS: never[] = [];
 
 function ExperimentPageShell({ crumbs, children }: { crumbs: CrumbDef[]; children?: ReactNode }) {
   return (
-    <PageLayout kind="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+    <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <h1 className="sr-only">Experiment</h1>
       <div />
       <div className="flex h-full items-center justify-center">{children}</div>
@@ -170,7 +170,7 @@ function ExperimentPage() {
     >
       <div className="h-full">
         <PageLayout
-          kind="page"
+          variant="page"
           breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
           headerActions={
             <ExperimentHeaderActions experiment={experiment} onDeleteClick={() => setDeleteDialogOpen(true)} />

@@ -22,7 +22,7 @@ export function FactorySkillPage() {
 
   return (
     <PageLayout
-      kind="form"
+      variant="form"
       backHref={skillsPath}
       backLabel="Skills"
       title={skillName ?? 'New skill'}

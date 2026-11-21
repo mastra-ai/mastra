@@ -15,7 +15,7 @@ type MetricsPageLayoutProps = {
 export function MetricsPageLayout({ children, filterFields }: MetricsPageLayoutProps) {
   return (
     <PageLayout
-      kind="page"
+      variant="page"
       breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}
       actionRow={
         <ActionRow>

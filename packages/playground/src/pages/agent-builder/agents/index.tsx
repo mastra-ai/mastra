@@ -101,7 +101,7 @@ export default function AgentBuilderAgentsPage() {
 
   return (
     <PageLayout
-      kind="page"
+      variant="page"
       actionRow={
         <>
           <ActionRow className="items-start">

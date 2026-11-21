@@ -8,7 +8,7 @@ export function CreateFactoryPage() {
   const factory = useActiveFactory();
   return (
     <PageLayout
-      kind="form"
+      variant="form"
       backHref={`/factories/${factory.id}`}
       backLabel={factory.name}
       title="New Factory"

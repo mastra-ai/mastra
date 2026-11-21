@@ -1,7 +1,7 @@
 export { PageLayout } from './page-layout';
 export type {
   PageLayoutFormProps,
-  PageLayoutKind,
+  PageLayoutVariant,
   PageLayoutPageProps,
   PageLayoutProps,
   PageLayoutSettingsProps,

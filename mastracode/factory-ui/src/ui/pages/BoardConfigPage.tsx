@@ -101,7 +101,7 @@ export function BoardConfigPage() {
 
   if (phaseKey) {
     return (
-      <PageLayout kind="settings" header={configHeader} {...slots}>
+      <PageLayout variant="settings" header={configHeader} {...slots}>
         {body}
       </PageLayout>
     );
@@ -109,8 +109,8 @@ export function BoardConfigPage() {
 
   return (
     <PageLayout
-      kind="page"
-      body="workspace"
+      variant="page"
+      body="full"
       header={configHeader && <div className={cn(SETTINGS_COLUMN, 'pb-3')}>{configHeader}</div>}
       {...slots}
     >

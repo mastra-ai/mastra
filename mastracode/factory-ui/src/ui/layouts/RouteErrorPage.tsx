@@ -13,7 +13,7 @@ const pageLoadError =
 export function AppRouteErrorPage() {
   const slots = useSidebarHeaderSlots();
   return (
-    <PageLayout kind="page" {...slots}>
+    <PageLayout variant="page" {...slots}>
       <RouteErrorPage />
     </PageLayout>
   );

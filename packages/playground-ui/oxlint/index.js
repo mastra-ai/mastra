@@ -321,22 +321,25 @@ function placeholderText(context) {
 }
 
 const PAGE_WIDTH_MESSAGE =
-  'Take the page width from PageLayout (kind="page", "settings" or "form") instead of a centred max-w-* column of its own.';
+  'Take the page width from PageLayout (variant="page", "settings" or "form") instead of a centred max-w-* column of its own.';
 
 const centredPageColumn = classStrings('^(?=[\\s\\S]*(^|\\s)mx-auto(\\s|$))(?=[\\s\\S]*(^|\\s)max-w-)');
 const noPageWidth = selectorRule(() => centredPageColumn.map(selector => ({ selector, message: PAGE_WIDTH_MESSAGE })));
 
-const PAGE_LAYOUT_PROP_MESSAGES = {
-  variant:
-    'PageLayout has no variant. Pick a kind: kind="form" for a form, kind="settings" for a settings page, kind="page" otherwise, with body="workspace" when its panels scroll on their own.',
-  mask: 'PageLayout has no mask. Drop the prop.',
+const PAGE_LAYOUT = "JSXOpeningElement[name.name='PageLayout']";
+// The variants PageLayout used to take, and what each became.
+const REMOVED_PAGE_LAYOUT_VARIANTS = {
+  container: 'PageLayout has no container variant. Use variant="page".',
+  fit: 'PageLayout has no fit variant. Use variant="page" body="full" for panels that scroll on their own.',
+  narrow: 'PageLayout has no narrow variant. Use variant="form" for a form and variant="settings" for a settings page.',
 };
-const pageLayoutProps = selectorRule(() =>
-  Object.entries(PAGE_LAYOUT_PROP_MESSAGES).map(([prop, message]) => ({
-    selector: `JSXOpeningElement[name.name='PageLayout'] > JSXAttribute[name.name='${prop}']`,
+const pageLayoutProps = selectorRule(() => [
+  ...Object.entries(REMOVED_PAGE_LAYOUT_VARIANTS).map(([value, message]) => ({
+    selector: `${PAGE_LAYOUT} > JSXAttribute[name.name='variant'][value.value='${value}']`,
     message,
   })),
-);
+  { selector: `${PAGE_LAYOUT} > JSXAttribute[name.name='mask']`, message: 'PageLayout has no mask. Drop the prop.' },
+]);
 
 const plugin = {
   meta: { name: 'playground-ui' },

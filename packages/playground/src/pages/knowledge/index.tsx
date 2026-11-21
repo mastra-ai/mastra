@@ -30,7 +30,7 @@ const crumbs = [navCrumb('/knowledge')];
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <PageLayout kind="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+    <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <h1 className="sr-only">Knowledge</h1>
       {children}
     </PageLayout>

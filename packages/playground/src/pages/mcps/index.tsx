@@ -23,7 +23,7 @@ const MCPs = () => {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout kind="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">MCP Servers</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
@@ -32,7 +32,7 @@ const MCPs = () => {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <PageLayout kind="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">MCP Servers</h1>
         <PermissionDenied variant="fill" resource="MCP servers" />
       </PageLayout>
@@ -41,7 +41,7 @@ const MCPs = () => {
 
   if (error) {
     return (
-      <PageLayout kind="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">MCP Servers</h1>
         <EmptyState
           tone="error"
@@ -55,7 +55,7 @@ const MCPs = () => {
 
   if (mcpServers.length === 0 && !isLoading) {
     return (
-      <PageLayout kind="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">MCP Servers</h1>
         <div className="flex flex-col gap-6">
           <BuiltinMcpServerSection />
@@ -67,7 +67,7 @@ const MCPs = () => {
 
   return (
     <PageLayout
-      kind="page"
+      variant="page"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       actionRow={
         <ActionRow>

@@ -31,12 +31,12 @@ const meta = {
   parameters: {
     layout: 'padded',
     controls: {
-      include: ['kind', 'breadcrumbs', 'headerActions', 'title', 'titleAccessory', 'action', 'header', 'children'],
+      include: ['variant', 'breadcrumbs', 'headerActions', 'title', 'titleAccessory', 'action', 'header', 'children'],
     },
     docs: {
       description: {
         component:
-          "Every settings page in Studio, Factory and Platform is built from these. `<PageLayout kind='settings'>` is the 640px column; each `SettingsGroup` is a `SettingsTitle` above one `SettingsContainer` card. A card holds `SettingsRow`s (a setting: label, description, control) or a list: a `SettingsListHeader` with a count and the list's action, then `SettingsItem`s. An empty list is one `SettingsEmptyRow` holding the empty text and that same action. The card owns all row spacing, so rows carry no padding of their own.",
+          "Every settings page in Studio, Factory and Platform is built from these. `<PageLayout variant='settings'>` is the 640px column; each `SettingsGroup` is a `SettingsTitle` above one `SettingsContainer` card. A card holds `SettingsRow`s (a setting: label, description, control) or a list: a `SettingsListHeader` with a count and the list's action, then `SettingsItem`s. An empty list is one `SettingsEmptyRow` holding the empty text and that same action. The card owns all row spacing, so rows carry no padding of their own.",
       },
     },
   },
@@ -47,7 +47,7 @@ const meta = {
       </ThemeProvider>
     ),
   ],
-  args: { kind: 'settings', children: null },
+  args: { variant: 'settings', children: null },
 } satisfies Meta<PageLayoutSettingsProps>;
 
 export default meta;
@@ -74,7 +74,7 @@ export const Page: Story = {
   render: args => (
     <div className="flex h-152 bg-sidebar p-2">
       <MainCard>
-        <PageLayout kind="settings" title={args.title}>
+        <PageLayout variant="settings" title={args.title}>
           <SettingsGroup>
             <SettingsTitle>Organization</SettingsTitle>
             <SettingsContainer>
@@ -162,7 +162,7 @@ export const Page: Story = {
 /** A view-only value, a row whose control takes the full width, and a fieldset of switches. */
 export const Controls: Story = {
   render: () => (
-    <PageLayout kind="settings">
+    <PageLayout variant="settings">
       <SettingsGroup>
         <SettingsTitle>Environment</SettingsTitle>
         <SettingsContainer>
@@ -191,7 +191,7 @@ export const Controls: Story = {
 /** Loading states: `SettingsSkeleton` in place of rows (`row`) or list items (`item`), inside the same card. */
 export const Loading: Story = {
   render: () => (
-    <PageLayout kind="settings" title="General">
+    <PageLayout variant="settings" title="General">
       <SettingsGroup>
         <SettingsTitle>Organization</SettingsTitle>
         <SettingsContainer>

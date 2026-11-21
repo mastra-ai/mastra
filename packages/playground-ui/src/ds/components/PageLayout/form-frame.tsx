@@ -16,7 +16,7 @@ export interface FormFrameProps {
   children: ReactNode;
 }
 
-/** The frame behind `<PageLayout kind="form">`. */
+/** The frame behind `<PageLayout variant="form">`. */
 export function FormFrame({
   backHref,
   backLabel,

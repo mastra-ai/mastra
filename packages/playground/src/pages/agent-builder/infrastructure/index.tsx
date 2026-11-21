@@ -5,7 +5,7 @@ import { InfrastructureOverview } from '@/domains/agent-builder/components/infra
 
 export const AgentBuilderInfrastructure = () => (
   <PageLayout
-    kind="settings"
+    variant="settings"
     header={
       <PageHeader>
         <PageHeader.Title>Infrastructure</PageHeader.Title>

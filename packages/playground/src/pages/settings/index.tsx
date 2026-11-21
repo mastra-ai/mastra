@@ -5,7 +5,7 @@ import { StudioConnectionSettings } from '@/domains/configuration/components/stu
 
 export const StudioSettingsPage = () => {
   return (
-    <PageLayout kind="settings" title="Settings">
+    <PageLayout variant="settings" title="Settings">
       <SettingsGroup>
         <SettingsTitle info="Stored in this browser.">General</SettingsTitle>
         <SettingsContainer>

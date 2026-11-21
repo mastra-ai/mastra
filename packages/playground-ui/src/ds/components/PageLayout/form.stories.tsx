@@ -60,14 +60,14 @@ const meta = {
   parameters: {
     layout: 'fullscreen',
     controls: {
-      include: ['kind', 'backHref', 'backLabel', 'title', 'isLoading', 'LinkComponent', 'aside', 'children'],
+      include: ['variant', 'backHref', 'backLabel', 'title', 'isLoading', 'LinkComponent', 'aside', 'children'],
     },
     docs: {
       description: {
         component: [
-          'The frame for any create or edit form page, such as New alert, New project or Edit destination. It is `<PageLayout kind="form">`: no breadcrumb bar, holding a centered 640px column (the settings width) under a back link and the page title.',
+          'The frame for any create or edit form page, such as New alert, New project or Edit destination. It is `<PageLayout variant="form">`: no breadcrumb bar, holding a centered 640px column (the settings width) under a back link and the page title.',
           'The back link, the title, each `SettingsTitle` and the field labels share one left edge, and sections sit 28px apart. The back link is the only way out, so there is no breadcrumb to show the same thing twice. Pass the app router link as `LinkComponent`.',
-          'Use `kind="settings"` for a settings page that someone browses to and changes in place. Use `kind="page"` for every other page: lists, dashboards, detail pages and explorers.',
+          'Use `variant="settings"` for a settings page that someone browses to and changes in place. Use `variant="page"` for every other page: lists, dashboards, detail pages and explorers.',
         ].join('\n\n'),
       },
     },
@@ -83,14 +83,14 @@ const meta = {
       ),
   ],
   args: {
-    kind: 'form',
+    variant: 'form',
     backHref: '#alerts',
     backLabel: 'Alerts',
     title: 'New alert',
     children: <AlertSections />,
   },
   argTypes: {
-    kind: { control: false },
+    variant: { control: false },
     title: { control: 'text' },
     aside: { control: false },
     children: { control: false },

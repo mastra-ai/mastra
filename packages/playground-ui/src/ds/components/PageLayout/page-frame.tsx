@@ -9,13 +9,13 @@ export interface PageFrameProps {
   headerActions?: ReactNode;
   actionRow?: ReactNode;
   header?: ReactNode;
-  body?: 'scroll' | 'workspace';
+  body?: 'scroll' | 'full';
 }
 
 const scrollBodyWithHeader =
   'flex h-full min-h-min flex-col [&>:last-child:is([data-slot=empty-state-fill],[data-slot=spinner-fill],.h-full,:has(>[data-slot=empty-state-fill]),:has(>[data-slot=spinner-fill]))]:grow [&>:last-child:is([data-slot=empty-state-fill],[data-slot=spinner-fill],.h-full,:has(>[data-slot=empty-state-fill]),:has(>[data-slot=spinner-fill]))]:basis-0';
 
-/** The frame every page kind renders into: the header bar, the action row and the scrolling body. */
+/** The frame every page variant renders into: the header bar, the action row and the scrolling body. */
 export function PageFrame({
   children,
   breadcrumbs,
@@ -24,7 +24,7 @@ export function PageFrame({
   header,
   body = 'scroll',
 }: PageFrameProps) {
-  const workspace = body === 'workspace';
+  const full = body === 'full';
 
   return (
     <div data-slot="page-layout" className="flex h-full min-h-0 flex-col">
@@ -44,21 +44,21 @@ export function PageFrame({
       <main className="flex min-h-0 flex-1 flex-col">
         <ScrollArea className="min-h-0 flex-1">
           <ScrollAreaViewport
-            className={workspace ? 'p-0' : 'p-4'}
+            className={full ? 'p-0' : 'p-4'}
             contentClassName={
-              workspace
+              full
                 ? // Locked to the viewport height, so the panels inside scroll on their own instead of the page.
                   cn('grid size-full min-h-0 grid-cols-1', header ? 'grid-rows-[auto_minmax(0,1fr)]' : 'grid-rows-1')
                 : cn('mx-auto w-full max-w-(--breakpoint-2xl)', header ? scrollBodyWithHeader : 'h-full min-h-min')
             }
           >
             {header && (
-              <div data-slot="page-layout-header" className={workspace ? 'p-4' : 'pb-6'}>
+              <div data-slot="page-layout-header" className={full ? 'p-4' : 'pb-6'}>
                 {header}
               </div>
             )}
-            {workspace ? (
-              <div data-slot="page-layout-workspace" className="grid min-h-0 min-w-0 grid-cols-1 grid-rows-1">
+            {full ? (
+              <div data-slot="page-layout-full" className="grid min-h-0 min-w-0 grid-cols-1 grid-rows-1">
                 {children}
               </div>
             ) : (

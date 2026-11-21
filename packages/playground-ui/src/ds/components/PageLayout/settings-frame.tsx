@@ -16,7 +16,7 @@ export interface SettingsFrameProps {
   children: ReactNode;
 }
 
-/** The frame behind `<PageLayout kind="settings">`. */
+/** The frame behind `<PageLayout variant="settings">`. */
 export function SettingsFrame({
   breadcrumbs,
   headerActions,

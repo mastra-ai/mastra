@@ -9,7 +9,7 @@ describe('PageLayout', () => {
   describe('when breadcrumbs and header actions are provided', () => {
     it('renders them inside a header above the main content', () => {
       render(
-        <PageLayout kind="page" breadcrumbs={<span>Crumbs</span>} headerActions={<button>Act</button>}>
+        <PageLayout variant="page" breadcrumbs={<span>Crumbs</span>} headerActions={<button>Act</button>}>
           <p>Body</p>
         </PageLayout>,
       );
@@ -24,7 +24,7 @@ describe('PageLayout', () => {
   describe('when an action row is provided', () => {
     it('pins it between the header and the scrollable body', () => {
       render(
-        <PageLayout kind="page" breadcrumbs={<span>Crumbs</span>} actionRow={<input aria-label="Filter" />}>
+        <PageLayout variant="page" breadcrumbs={<span>Crumbs</span>} actionRow={<input aria-label="Filter" />}>
           <p>Body</p>
         </PageLayout>,
       );
@@ -44,7 +44,7 @@ describe('PageLayout', () => {
       'scrolls the body in an overlay scroll area with no reserved gutter',
       header => {
         render(
-          <PageLayout kind="page" header={header}>
+          <PageLayout variant="page" header={header}>
             <p>Body</p>
           </PageLayout>,
         );
@@ -60,7 +60,7 @@ describe('PageLayout', () => {
   describe('when a header is provided', () => {
     it('renders it inside main before the body', () => {
       render(
-        <PageLayout kind="page" header={<h1>Title</h1>}>
+        <PageLayout variant="page" header={<h1>Title</h1>}>
           <p>Body</p>
         </PageLayout>,
       );
@@ -74,22 +74,22 @@ describe('PageLayout', () => {
     });
   });
 
-  describe('workspace', () => {
+  describe('full body', () => {
     it.each([undefined, <h1 key="title">Title</h1>])(
       'sits beside the header in the scrolling body, so the frame can hand it the remaining height',
       header => {
         render(
-          <PageLayout kind="page" body="workspace" header={header}>
+          <PageLayout variant="page" body="full" header={header}>
             <p>Panels</p>
           </PageLayout>,
         );
 
-        const workspace = screen.getByText('Panels').closest('[data-slot="page-layout-workspace"]');
+        const fullBody = screen.getByText('Panels').closest('[data-slot="page-layout-full"]');
         const viewport = screen.getByText('Panels').closest<HTMLElement>('[style*="overflow"]');
-        expect(workspace).not.toBeNull();
-        expect(workspace?.parentElement?.parentElement).toBe(viewport);
+        expect(fullBody).not.toBeNull();
+        expect(fullBody?.parentElement?.parentElement).toBe(viewport);
         if (header) {
-          expect(workspace?.previousElementSibling?.getAttribute('data-slot')).toBe('page-layout-header');
+          expect(fullBody?.previousElementSibling?.getAttribute('data-slot')).toBe('page-layout-header');
         }
       },
     );
@@ -98,7 +98,7 @@ describe('PageLayout', () => {
   describe('when neither breadcrumbs nor header actions are provided', () => {
     it('does not render a header', () => {
       render(
-        <PageLayout kind="page">
+        <PageLayout variant="page">
           <p>Body</p>
         </PageLayout>,
       );

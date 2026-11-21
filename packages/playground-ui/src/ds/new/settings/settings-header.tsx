@@ -4,7 +4,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
-// On a settings page (`PageLayout kind="settings"`), section titles and descriptions sit 10px inside the card's edge, in line with
+// On a settings page (`PageLayout variant="settings"`), section titles and descriptions sit 10px inside the card's edge, in line with
 // the inset page title. Anywhere else (forms, other pages) they line up with the page's left edge and field labels.
 // The inset is a custom property, so a caller's `ps-*` class still wins. Written out in full so Tailwind finds it.
 const settingsInset =

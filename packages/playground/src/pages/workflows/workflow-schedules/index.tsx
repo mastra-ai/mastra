@@ -30,7 +30,7 @@ function WorkflowSchedules() {
   }
 
   return (
-    <PageLayout kind="page">
+    <PageLayout variant="page">
       <h1 className="sr-only">Schedules</h1>
       {content}
     </PageLayout>

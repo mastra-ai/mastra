@@ -26,7 +26,7 @@ export function EditDatasetPage({ datasetId, datasetsHref, onDone }: EditDataset
 
   const shell = (content: ReactNode) => (
     <PageLayout
-      kind="page"
+      variant="page"
       breadcrumbs={
         <DatasetBreadcrumbs datasetId={datasetId} datasetsHref={datasetsHref}>
           <Crumb as="span" isCurrent>

@@ -119,7 +119,7 @@ export default function AgentBuilderLibraryPage() {
   return (
     <>
       <PageLayout
-        kind="page"
+        variant="page"
         actionRow={
           <>
             <ActionRow className="items-start">

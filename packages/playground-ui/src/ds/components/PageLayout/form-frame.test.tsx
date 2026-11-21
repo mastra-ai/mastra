@@ -6,10 +6,10 @@ import { PageLayout } from './index';
 
 afterEach(cleanup);
 
-describe('PageLayout kind="form"', () => {
+describe('PageLayout variant="form"', () => {
   it('shows a back link and the page title, with no breadcrumb bar', () => {
     render(
-      <PageLayout kind="form" backHref="/alerts" backLabel="Alerts" title="New alert">
+      <PageLayout variant="form" backHref="/alerts" backLabel="Alerts" title="New alert">
         <section>Conditions</section>
       </PageLayout>,
     );
@@ -26,7 +26,7 @@ describe('PageLayout kind="form"', () => {
 
   it('shows only the title when the form has no back link', () => {
     render(
-      <PageLayout kind="form" title="New skill">
+      <PageLayout variant="form" title="New skill">
         <section>Fields</section>
       </PageLayout>,
     );
@@ -37,7 +37,7 @@ describe('PageLayout kind="form"', () => {
 
   it('puts the back link above the title', () => {
     render(
-      <PageLayout kind="form" backHref="/alerts" backLabel="Alerts" title="New alert">
+      <PageLayout variant="form" backHref="/alerts" backLabel="Alerts" title="New alert">
         <section>Conditions</section>
       </PageLayout>,
     );
@@ -49,7 +49,7 @@ describe('PageLayout kind="form"', () => {
 
   it('marks the title busy while the page loads', () => {
     render(
-      <PageLayout kind="form" backHref="/alerts/1" backLabel="Alert" title="Edit alert" isLoading>
+      <PageLayout variant="form" backHref="/alerts/1" backLabel="Alert" title="Edit alert" isLoading>
         <section>Conditions</section>
       </PageLayout>,
     );
@@ -65,7 +65,13 @@ describe('PageLayout kind="form"', () => {
     }
 
     render(
-      <PageLayout kind="form" backHref="/projects" backLabel="Projects" title="New project" LinkComponent={RouterLink}>
+      <PageLayout
+        variant="form"
+        backHref="/projects"
+        backLabel="Projects"
+        title="New project"
+        LinkComponent={RouterLink}
+      >
         <section>Repository</section>
       </PageLayout>,
     );
@@ -77,7 +83,7 @@ describe('PageLayout kind="form"', () => {
 
   it('puts the aside after the title and before the form, so small screens show it above the fields', () => {
     render(
-      <PageLayout kind="form" backHref="/alerts" backLabel="Alerts" title="New alert" aside={<p>Backtest</p>}>
+      <PageLayout variant="form" backHref="/alerts" backLabel="Alerts" title="New alert" aside={<p>Backtest</p>}>
         <label>
           Name
           <input />

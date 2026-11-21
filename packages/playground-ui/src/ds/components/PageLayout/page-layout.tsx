@@ -6,7 +6,7 @@ import type { LinkComponent } from '@/ds/types/link-component';
 
 /** Lists, dashboards, detail pages and explorers: the full width, up to 1536px on very wide screens. */
 export interface PageLayoutPageProps {
-  kind: 'page';
+  variant: 'page';
   /** Left side of the page header row. */
   breadcrumbs?: ReactNode;
   /** Right side of the page header row. */
@@ -18,16 +18,16 @@ export interface PageLayoutPageProps {
   /**
    * How the body fills the page.
    * - `scroll` (default): the page scrolls as one.
-   * - `workspace`: the body takes the remaining height edge to edge and never scrolls, so the panels,
+   * - `full`: the body takes the remaining height edge to edge and never scrolls, so the panels,
    *   editor, graph, board or chat inside scroll on their own.
    */
-  body?: 'scroll' | 'workspace';
+  body?: 'scroll' | 'full';
   children: ReactNode;
 }
 
 /** A settings page someone browses to and changes in place: a centered 640px column of `SettingsGroup`s. */
 export interface PageLayoutSettingsProps {
-  kind: 'settings';
+  variant: 'settings';
   /** Left side of the page header row. */
   breadcrumbs?: ReactNode;
   /** Right side of the page header row. */
@@ -49,7 +49,7 @@ export interface PageLayoutSettingsProps {
  * with an optional back link above it. There is no breadcrumb bar, so a form shows one way back at most.
  */
 export interface PageLayoutFormProps {
-  kind: 'form';
+  variant: 'form';
   /** Where the back link goes. Shown with `backLabel`; leave both out when the app's navigation is the way out. */
   backHref?: string;
   /** The back link's text, such as the page it returns to. */
@@ -67,32 +67,32 @@ export interface PageLayoutFormProps {
 
 export type PageLayoutProps = PageLayoutPageProps | PageLayoutSettingsProps | PageLayoutFormProps;
 
-export type PageLayoutKind = PageLayoutProps['kind'];
+export type PageLayoutVariant = PageLayoutProps['variant'];
 
 /**
- * The frame of every page: its width, gutter, scrolling and way back. Pick the `kind` that matches the page,
- * and each kind takes only the props that make sense for it.
+ * The frame of every page: its width, gutter, scrolling and way back. Pick the `variant` that matches the page,
+ * and each variant takes only the props that make sense for it.
  *
- * - `kind="form"`: a create or edit form. A title with an optional back link, no breadcrumbs, 640px column.
- * - `kind="settings"`: a settings page. Breadcrumbs and a title over a 640px column of `SettingsGroup`s.
- * - `kind="page"`: every other page (lists, dashboards, detail pages, explorers). Full width.
- *   Add `body="workspace"` when the body is panels that scroll on their own (chat, board, editor, graph).
+ * - `variant="form"`: a create or edit form. A title with an optional back link, no breadcrumbs, 640px column.
+ * - `variant="settings"`: a settings page. Breadcrumbs and a title over a 640px column of `SettingsGroup`s.
+ * - `variant="page"`: every other page (lists, dashboards, detail pages, explorers). Full width.
+ *   Add `body="full"` when the body is panels that scroll on their own (chat, board, editor, graph).
  *
  * The frame is configured, not composed: what goes inside (`PageHeader`, `SettingsGroup`, `EmptyState`,
  * `DashboardGrid`, panels…) stays free.
  */
 export function PageLayout(props: PageLayoutProps) {
-  switch (props.kind) {
+  switch (props.variant) {
     case 'form': {
-      const { kind: _kind, ...rest } = props;
+      const { variant: _variant, ...rest } = props;
       return <FormFrame {...rest} />;
     }
     case 'settings': {
-      const { kind: _kind, ...rest } = props;
+      const { variant: _variant, ...rest } = props;
       return <SettingsFrame {...rest} />;
     }
     case 'page': {
-      const { kind: _kind, ...rest } = props;
+      const { variant: _variant, ...rest } = props;
       return <PageFrame {...rest} />;
     }
   }

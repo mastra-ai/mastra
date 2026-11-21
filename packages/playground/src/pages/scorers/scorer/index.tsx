@@ -221,7 +221,7 @@ export default function Scorer() {
 
     return (
       <PageLayout
-        kind="page"
+        variant="page"
         breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
         actionRow={
           !hasError && scorerActionsMenu ? (
@@ -250,7 +250,7 @@ export default function Scorer() {
 
   return (
     <PageLayout
-      kind="page"
+      variant="page"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       actionRow={
         <ActionRow>

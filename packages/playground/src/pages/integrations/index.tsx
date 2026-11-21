@@ -62,7 +62,7 @@ export default function IntegrationsPage() {
   };
 
   return (
-    <PageLayout kind="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+    <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <h1 className="sr-only">Integrations</h1>
       <div className="max-w-3xl space-y-6">
         <Txt as="p" variant="body" tone="muted">

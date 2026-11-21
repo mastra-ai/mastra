@@ -36,7 +36,7 @@ export function BoardIntakePage() {
 
   return (
     <PageLayout
-      kind="settings"
+      variant="settings"
       header={
         <PageHeader>
           <PageHeader.Title>Routing</PageHeader.Title>

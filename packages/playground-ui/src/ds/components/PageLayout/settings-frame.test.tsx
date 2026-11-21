@@ -2,11 +2,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { PageLayout } from './index';
 
-describe('PageLayout kind="settings"', () => {
+describe('PageLayout variant="settings"', () => {
   it('renders the page title, accessory, action, and sections', () => {
     const output = renderToStaticMarkup(
       <PageLayout
-        kind="settings"
+        variant="settings"
         title="Project settings"
         titleAccessory={<span>Studio</span>}
         action={<button type="button">Save</button>}
@@ -25,7 +25,7 @@ describe('PageLayout kind="settings"', () => {
 
   it('leaves the title out when the app already names the page', () => {
     const output = renderToStaticMarkup(
-      <PageLayout kind="settings">
+      <PageLayout variant="settings">
         <section>General settings</section>
       </PageLayout>,
     );
@@ -36,7 +36,7 @@ describe('PageLayout kind="settings"', () => {
 
   it('renders an app header in place of the title, with the same inset', () => {
     const output = renderToStaticMarkup(
-      <PageLayout kind="settings" title="Ignored" header={<h1 id="announced">Repositories</h1>}>
+      <PageLayout variant="settings" title="Ignored" header={<h1 id="announced">Repositories</h1>}>
         <section>Sections</section>
       </PageLayout>,
     );
@@ -49,7 +49,7 @@ describe('PageLayout kind="settings"', () => {
 
   it('owns the page frame, with the breadcrumb bar when given breadcrumbs', () => {
     const output = renderToStaticMarkup(
-      <PageLayout kind="settings" breadcrumbs={<nav aria-label="Breadcrumb">Settings</nav>} title="Members">
+      <PageLayout variant="settings" breadcrumbs={<nav aria-label="Breadcrumb">Settings</nav>} title="Members">
         <section>Sections</section>
       </PageLayout>,
     );

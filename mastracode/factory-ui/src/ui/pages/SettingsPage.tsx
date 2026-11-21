@@ -78,7 +78,7 @@ export function SettingsPageLayout({
   });
 
   return (
-    <PageLayout kind="settings" {...slots} header={header}>
+    <PageLayout variant="settings" {...slots} header={header}>
       {children}
     </PageLayout>
   );
