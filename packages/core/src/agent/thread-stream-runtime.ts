@@ -921,7 +921,8 @@ type AgentThreadStreamRuntimeEvent =
   // Without a streamId the sender found the run through the thread lease, not a stream it watches.
   | { type: 'run-abort-requested'; runId: string; streamId?: string; clearPendingSignals?: boolean }
   | { type: 'signals-cancelled'; signalIds: string[] }
-  | { type: 'user-message-presentation'; chunk: UserMessagePendingChunk | UserMessageCancelledChunk }
+  // runId is the run whose trim removes the entry; a cancellation has no owning run.
+  | { type: 'user-message-presentation'; runId?: string; chunk: UserMessagePendingChunk | UserMessageCancelledChunk }
   | { type: 'user-message-delivered'; signalId: string }
   | { type: 'run-aborted'; runId: string; streamId?: string; superseded?: boolean }
   | { type: 'run-failed'; runId: string; streamId?: string; error: string }
@@ -3621,8 +3622,9 @@ export class AgentThreadStreamRuntime {
     const topic = this.#threadTopic(key);
     await resolvedPubSub.publish(topic, {
       type: event.type,
-      // Thread-scoped control events use the thread key as their envelope correlation ID.
-      runId: 'runId' in event ? event.runId : key,
+      // Events tied to a run carry its ID so that run's trim removes them; thread-scoped
+      // control events fall back to the thread key.
+      runId: ('runId' in event ? event.runId : undefined) ?? key,
       data: event,
     });
   }
@@ -4733,7 +4735,7 @@ export class AgentThreadStreamRuntime {
     status: 'pending' | 'queued',
   ) {
     const chunk = this.#pendingUserMessageChunk(runId, signal, status);
-    if (chunk) this.#publish(pubsub, key, { type: 'user-message-presentation', chunk });
+    if (chunk) this.#publish(pubsub, key, { type: 'user-message-presentation', runId, chunk });
   }
 
   #publishCancelledUserMessages(pubsub: PubSub | undefined, key: string, signalIds: string[]) {
