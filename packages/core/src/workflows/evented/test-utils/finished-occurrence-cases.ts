@@ -1025,58 +1025,85 @@ export function describeFinishedOccurrenceCases({
       expect((await storedRun(run.runId))?.status).toBe('success');
     }, 20_000);
 
-    // A suspend that declined its snapshot deletes the record it left, unless a cancel replaced it
-    // while the suspend was being published.
-    it('keeps the record of a run canceled while its declined suspend is published', async () => {
-      const suspendHandled = deferred<void>();
-      const processor = WorkflowEventProcessor.prototype as unknown as {
-        processWorkflowSuspend: (...args: unknown[]) => Promise<void>;
-      };
-      const handleSuspend = processor.processWorkflowSuspend;
-      vi.spyOn(processor, 'processWorkflowSuspend').mockImplementation(async function (
-        this: unknown,
-        ...args: unknown[]
-      ) {
-        try {
-          await handleSuspend.apply(this, args);
-        } finally {
-          suspendHandled.resolve();
-        }
-      });
-      let run: { cancel(): Promise<void> } | undefined;
-      const a = await startReplica(
-        createWorkflow({
-          id: 'finished',
-          inputSchema: Num,
-          outputSchema: Num,
-          options: { shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'canceled' },
-        })
-          .then(
-            createStep({
-              id: 'gate',
-              inputSchema: Num,
-              outputSchema: Num,
-              resumeSchema: z.object({ ok: z.boolean() }),
-              execute: async ({ inputData, resumeData, suspend }) => {
-                if (!resumeData) {
-                  await suspend({});
-                }
-                return inputData;
-              },
-            }),
-          )
-          .commit(),
-        undefined,
-        undefined,
-        event => (event.type === 'workflow.suspend' ? run?.cancel() : undefined),
-      );
-      const created = await a.workflow.createRun({ runId: uniqueRunId() });
-      run = created;
-      expect((await created.start({ inputData: { n: 1 } })).status).toBe('suspended');
-      await suspendHandled.promise;
+    // A suspend that declined its snapshot deletes the guarded-only running record it left, but not a
+    // cancel's record that replaced it, however late the cancel lands before the delete.
+    it.each([1, 2] as const)(
+      'keeps the record of a run canceled just before its declined suspend deletes it (storage v%i)',
+      async storageVersion => {
+        const store = (await getStorage().getStore('workflows'))!;
+        // Storage v1 stores a declined run's record only for step guards.
+        if (storageVersion === 1 && !store.supportsWorkflowStepGuards()) return;
+        const suspendHandled = deferred<void>();
+        const processor = WorkflowEventProcessor.prototype as unknown as {
+          processWorkflowSuspend: (...args: unknown[]) => Promise<void>;
+        };
+        const handleSuspend = processor.processWorkflowSuspend;
+        vi.spyOn(processor, 'processWorkflowSuspend').mockImplementation(async function (
+          this: unknown,
+          ...args: unknown[]
+        ) {
+          try {
+            await handleSuspend.apply(this, args);
+          } finally {
+            suspendHandled.resolve();
+          }
+        });
+        let run: { runId: string; cancel(): Promise<void> } | undefined;
+        let canceledBeforeDelete = false;
+        let statusAfterDelete: string | undefined;
+        // Every replica's store shares the prototype, so the cancel lands after the suspend's last read.
+        const storeProto = Object.getPrototypeOf(store) as WorkflowsStorage;
+        const deleteRun = storeProto.deleteWorkflowRunById;
+        vi.spyOn(storeProto, 'deleteWorkflowRunById').mockImplementation(async function (
+          this: WorkflowsStorage,
+          ...args: Parameters<WorkflowsStorage['deleteWorkflowRunById']>
+        ) {
+          if (run && args[0].runId === run.runId && !canceledBeforeDelete) {
+            canceledBeforeDelete = true;
+            await run.cancel();
+            expect((await storedRun(run.runId))?.status).toBe('canceled');
+            const deleted = await deleteRun.apply(this, args);
+            // Read before the cancel's own event can store the run again.
+            statusAfterDelete = (await storedRun(run.runId))?.status;
+            return deleted;
+          }
+          return deleteRun.apply(this, args);
+        });
+        const a = await startReplica(
+          createWorkflow({
+            id: 'finished',
+            inputSchema: Num,
+            outputSchema: Num,
+            options: { storageVersion, shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'canceled' },
+          })
+            .then(
+              createStep({
+                id: 'gate',
+                inputSchema: Num,
+                outputSchema: Num,
+                resumeSchema: z.object({ ok: z.boolean() }),
+                execute: async ({ inputData, resumeData, suspend }) => {
+                  if (!resumeData) {
+                    await suspend({});
+                  }
+                  return inputData;
+                },
+              }),
+            )
+            .commit(),
+        );
+        const created = await a.workflow.createRun({ runId: uniqueRunId() });
+        run = created;
+        expect((await created.start({ inputData: { n: 1 } })).status).toBe('suspended');
+        await suspendHandled.promise;
 
-      expect((await storedRun(created.runId))?.status).toBe('canceled');
-    }, 20_000);
+        // The suspend chose the guarded-only record for deletion, and the cancel landed first.
+        expect(canceledBeforeDelete).toBe(true);
+        expect(statusAfterDelete).toBe('canceled');
+        expect((await storedRun(created.runId))?.status).toBe('canceled');
+      },
+      20_000,
+    );
 
     // A workflow that skips running snapshots leaves the stored active path at the step that last
     // saved one, here the step that suspended. The check can't tell from it whether the run went

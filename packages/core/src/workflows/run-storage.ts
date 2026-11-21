@@ -6,7 +6,7 @@ import type { StatePatchOp } from '../storage/domains/workflows/state-patch';
 import type { UpdateWorkflowStateOptions } from '../storage/types';
 import type { WorkflowStepCompletionGuard, WorkflowStepStartGuard } from '../storage/workflow-step-guard';
 import { stubStepResult } from './run-journal';
-import type { StepResult, WorkflowRunState } from './types';
+import type { StepResult, WorkflowRunState, WorkflowRunStatus } from './types';
 import { waitForSuspendedSnapshot } from './utils';
 
 /**
@@ -61,7 +61,11 @@ export interface RunStorage {
   /** A foreach step's write: the store merges `result.output` into the stored array by index. */
   mergeStepResult(write: StepResultWrite): Promise<StepWriteResult | undefined>;
   writeState(write: StateWrite & { requestContext: Record<string, any> }): Promise<void>;
-  delete(): Promise<void>;
+  /**
+   * With `expectedStatus`, deletes the run only while its stored status is one of these values,
+   * checked atomically with the delete; a store that can't guarantee that keeps the run.
+   */
+  delete(opts?: { expectedStatus?: WorkflowRunStatus }): Promise<void>;
 }
 
 type StepResults = Record<string, StepResult<any, any, any, any>>;
@@ -252,9 +256,18 @@ class RunStorageV1 implements RunStorage {
     });
   }
 
-  async delete(): Promise<void> {
+  async delete(opts?: { expectedStatus?: WorkflowRunStatus }): Promise<void> {
     const store = await this.#getStore();
-    await store?.deleteWorkflowRunById({ workflowName: this.#workflowName, runId: this.#runId });
+    if (opts?.expectedStatus === undefined) {
+      await store?.deleteWorkflowRunById({ workflowName: this.#workflowName, runId: this.#runId });
+    } else if (store?.supportsGuardedRunDeletes()) {
+      await store.deleteWorkflowRunById({
+        workflowName: this.#workflowName,
+        runId: this.#runId,
+        storageVersion: 1,
+        expectedStatus: opts.expectedStatus,
+      });
+    }
   }
 
   async loadDriveStartState(): Promise<undefined> {
@@ -495,9 +508,18 @@ class RunStorageV2 implements RunStorage {
     });
   }
 
-  async delete(): Promise<void> {
+  async delete(opts?: { expectedStatus?: WorkflowRunStatus }): Promise<void> {
     const store = await this.#getStore();
-    await store?.deleteWorkflowRunById({ workflowName: this.#workflowName, runId: this.#runId });
+    if (opts?.expectedStatus === undefined) {
+      await store?.deleteWorkflowRunById({ workflowName: this.#workflowName, runId: this.#runId });
+    } else if (store?.supportsGuardedRunDeletes()) {
+      await store.deleteWorkflowRunById({
+        workflowName: this.#workflowName,
+        runId: this.#runId,
+        storageVersion: 2,
+        expectedStatus: opts.expectedStatus,
+      });
+    }
   }
 }
 

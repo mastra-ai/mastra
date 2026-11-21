@@ -1854,12 +1854,12 @@ export class WorkflowEventProcessor extends EventProcessor {
       data: { ...args, workflow: undefined, state: finalState },
     });
 
-    // Retain recovery records until suspend propagation succeeds. A cancel during publication
-    // replaces the record with a canceled one to keep, so only the record this suspend left goes.
+    // Retain recovery records until suspend propagation succeeds. A cancel landing any time before
+    // the delete replaces the record with a canceled one to keep, so the delete only goes through
+    // while the stored run is still running; a store that can't check that atomically keeps it.
     if (deleteGuardedOnlyRecord) {
       try {
-        const header = await runStorage.loadHeader();
-        if (header?.guardedOnlySnapshot === true && header.status === 'running') await runStorage.delete();
+        await runStorage.delete({ expectedStatus: 'running' });
       } catch (error) {
         this.mastra
           .getLogger()

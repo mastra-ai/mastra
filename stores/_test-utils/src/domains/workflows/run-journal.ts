@@ -1806,6 +1806,33 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         expect(await store.loadWorkflowSnapshot({ ...run, storageVersion: 1 })).toEqual(snapshot);
       });
 
+      it('deletes a run only while its status matches the guard', async ctx => {
+        if (!store.supportsGuardedRunDeletes()) ctx.skip();
+        for (const storageVersion of [1, 2] as const) {
+          const run = { workflowName, runId: `guarded-delete-v${storageVersion}` };
+          const running = makeSnapshot(run.runId, { status: 'running' });
+          const write = (snapshot: WorkflowRunState) =>
+            storageVersion === 1
+              ? store.persistWorkflowSnapshot({ ...run, snapshot })
+              : checkpoint(run.runId, snapshot);
+          await write(running);
+          await (storageVersion === 1
+            ? store.updateWorkflowState({ ...run, storageVersion, opts: { status: 'canceled' } })
+            : store.updateWorkflowRunHeader({ ...run, opts: { status: 'canceled' } }));
+
+          await expect(
+            store.deleteWorkflowRunById({ ...run, storageVersion, expectedStatus: 'running' }),
+          ).resolves.toBe(false);
+          expect(await store.loadWorkflowSnapshot({ ...run, storageVersion })).toMatchObject({ status: 'canceled' });
+
+          await write(running);
+          await expect(
+            store.deleteWorkflowRunById({ ...run, storageVersion, expectedStatus: ['running'] }),
+          ).resolves.toBe(true);
+          expect(await store.loadWorkflowSnapshot({ ...run, storageVersion })).toBeNull();
+        }
+      });
+
       it('rejects a stale fence when deleting a v1 snapshot', async ctx => {
         if (!(await store.supportsRunFencing())) ctx.skip();
         const run = { workflowName, runId: 'fenced-v1-delete' };
