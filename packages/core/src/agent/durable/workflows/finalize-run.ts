@@ -428,14 +428,9 @@ export async function runDurableFinishSideEffects({
   let titleGeneration: Promise<void> | undefined;
   let titleForStream: Promise<string | undefined> | undefined;
 
-  // Same exclusions as the persistence block above: an observational-memory run writes no
-  // messages here, and titling it would create a thread row holding a title and nothing else.
-  if (
-    durableState?.threadId &&
-    durableState?.resourceId &&
-    !durableState.observationalMemory &&
-    !durableState.memoryConfig?.readOnly
-  ) {
+  // Observational-memory runs are titled too, as with the regular Agent: the OM processor persists
+  // the turn itself. The title write is update-only, so a thread deleted meanwhile stays deleted.
+  if (durableState?.threadId && durableState?.resourceId && !durableState.memoryConfig?.readOnly) {
     const titleArgs: GenerateThreadTitleArgs = {
       threadId: durableState.threadId,
       resourceId: durableState.resourceId,
@@ -858,7 +853,6 @@ export async function generateDurableThreadTitle({
   agent,
   memory,
   threadId,
-  resourceId,
   memoryConfig,
   messageListState,
   requestContext,
@@ -888,25 +882,19 @@ export async function generateDurableThreadTitle({
   );
   if (!title) return undefined;
 
-  // genTitle is a model round trip, so another writer may have created the thread in the
-  // meantime. Re-read before falling back to createThread, which upserts the whole row and
-  // would drop metadata that writer stored.
-  const currentThread = thread ?? (await memory.getThreadById({ threadId }));
-
-  if (currentThread) {
-    await memory.updateThread({
-      id: threadId,
-      title,
-      metadata: currentThread.metadata ?? {},
-      memoryConfig,
-    });
-  } else {
-    await memory.createThread({
-      threadId,
-      resourceId,
-      memoryConfig,
-      title,
-    });
+  // Update-only write, as with the regular Agent (#25203): preparation created the thread, so a
+  // missing row means it was deleted while the title was generating, and an upsert would resurrect
+  // it. Omitting metadata keeps whatever other writers (e.g. the OM cursor) stored meanwhile.
+  if (!(await memory.getThreadById({ threadId }))) {
+    agent.__getLogger().debug('Skipping generated title save: thread was deleted', { threadId });
+    return undefined;
+  }
+  try {
+    await memory.updateThread({ id: threadId, title, memoryConfig });
+  } catch (error) {
+    // A delete can still land between the check and the update; only swallow that case.
+    if (!(await memory.getThreadById({ threadId }))) return undefined;
+    throw error;
   }
   return title;
 }
