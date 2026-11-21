@@ -15,6 +15,7 @@ import type {
   ThreadScheduler,
   ThreadScheduleSource,
 } from '@mastra/code-sdk/schedules';
+import { formatDuration } from '../format-duration.js';
 import { askModalQuestion } from '../modal-question.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -60,15 +61,8 @@ export function formatNextFire(nextFireAt: number, now = Date.now()): string {
   const time = at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
   const sameDay = at.toDateString() === new Date(now).toDateString();
   const when = sameDay ? time : `${at.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${time}`;
-  const totalSeconds = Math.max(0, Math.ceil((nextFireAt - now) / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  const delta = hours
-    ? `${hours}h${minutes ? ` ${minutes}m` : ''}`
-    : minutes
-      ? `${minutes}m${seconds ? ` ${seconds}s` : ''}`
-      : `${seconds}s`;
+  // Round up so a fire due in 0.4s reads "in 1s", not "in 0s".
+  const delta = formatDuration(Math.ceil((nextFireAt - now) / 1000) * 1000);
   return `${when} (in ${delta})`;
 }
 

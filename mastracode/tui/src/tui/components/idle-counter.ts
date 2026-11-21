@@ -3,11 +3,9 @@
  */
 
 import { Container, Text, truncateToWidth } from '@earendil-works/pi-tui';
+import { formatDuration } from '../format-duration.js';
 import type { TUIState } from '../state.js';
-import { formatStatusDuration } from '../status-duration.js';
 import { BOX_INDENT, theme } from '../theme.js';
-
-export { formatStatusDuration } from '../status-duration.js';
 
 const MINUTE_MS = 60_000;
 
@@ -75,7 +73,7 @@ export function formatIdleStatusTimingSegments(
   }
 
   const idleMs = now - state.lastAgentRunEndedAt;
-  const idle = idleMs >= MINUTE_MS ? `${formatStatusDuration(idleMs)} idle` : '';
+  const idle = idleMs >= MINUTE_MS ? `${formatDuration(idleMs, { precision: 'm' })} idle` : '';
   return idle ? { summary: '', idle } : null;
 }
 

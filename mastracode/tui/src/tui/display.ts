@@ -11,6 +11,7 @@ import {
   reconcileChatBoundarySpacers,
 } from './chat-boundary-reconciliation.js';
 import type { ChatSpacingKind } from './components/chat-spacing.js';
+import { formatDuration } from './format-duration.js';
 import type { NotificationMode, NotificationReason } from './notify.js';
 import { sendNotification } from './notify.js';
 import type { TUIState } from './state.js';
@@ -75,8 +76,8 @@ export function showProgress(state: TUIState, label: string): () => void {
   const started = Date.now();
   let frame = 0;
   const draw = () => {
-    const seconds = Math.floor((Date.now() - started) / 1000);
-    text.setText(`${theme.fg('accent', PROGRESS_FRAMES[frame]!)} ${label}  ${theme.fg('muted', `${seconds}s`)}`);
+    const elapsed = formatDuration(Date.now() - started);
+    text.setText(`${theme.fg('accent', PROGRESS_FRAMES[frame]!)} ${label}  ${theme.fg('muted', elapsed)}`);
     frame = (frame + 1) % PROGRESS_FRAMES.length;
     state.ui.requestRender();
   };
@@ -120,11 +121,10 @@ export function showFormattedError(
   const retryable = 'error' in event && event.retryable === true;
   const retryDelay = 'error' in event ? event.retryDelay : undefined;
   if (retryable && retryDelay) {
-    const seconds = retryDelay / 1000;
     const retryAttempt = 'retryAttempt' in event ? event.retryAttempt : undefined;
     const maxRetries = 'maxRetries' in event ? event.maxRetries : undefined;
     const retryProgress = retryAttempt && maxRetries ? ` ${retryAttempt}/${maxRetries}` : '';
-    errorText += theme.fg('muted', ` (retry${retryProgress} in ${seconds}s)`);
+    errorText += theme.fg('muted', ` (retry${retryProgress} in ${formatDuration(retryDelay, { precision: 'ms' })})`);
   }
 
   const lines: Text[] = [new Text(theme.fg('error', errorText), 1, 0)];
