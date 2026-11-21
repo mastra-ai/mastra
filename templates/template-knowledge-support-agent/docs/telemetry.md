@@ -8,6 +8,6 @@ Mastra Observability stores filtered traces and approved metric samples as spans
 
 Stored spans use bounded operation names and outcomes, timestamps, numeric values, and opaque correlation IDs. Metric samples use `metadata.value`, with operation and status in `metadata.labels`. Supported estimates appear in `metadata.costContext`. The exporter filters private prompts, model outputs, credentials, customer identifiers, and Knowledge references out of the persisted records.
 
-To inspect stored data as a local operator, use the application's LibSQL database and the native `listTraces` and `getTrace` methods on `await storage.getStore('observability')`. The configured storage and exporter live in [index.ts](../src/mastra/index.ts) and [observability.ts](../src/mastra/observability.ts).
+To inspect stored data as a local operator, use the application's LibSQL database and the native `listTraces` and `getTrace` methods on `await store.getStore('observability')`, where `store` is the store returned by `mastra.getStorage()`. The store and exporter are wired in [bootstrap.ts](../src/mastra/bootstrap.ts). Exporter configuration lives in [observability.ts](../src/mastra/observability.ts).
 
 Run `node --test --test-concurrency=1 tests/integration/demo.test.ts` to verify lifecycle outcomes, usage samples, and redaction against a disposable database and scripted model provider.

@@ -10,6 +10,7 @@ import { exampleProfiles, exampleStudioRole } from '../../src/examples/retail-po
 import type { Profile } from '../../src/mastra/identity.ts';
 import { principals, resourceId } from '../../src/mastra/identity.ts';
 import type { KnowledgePage } from '@mastra/core/knowledge';
+import { Memory } from '@mastra/memory';
 import { startModelServer, type ModelScript } from './model-server.ts';
 
 interface RuntimeOptions {
@@ -65,11 +66,18 @@ async function configureRuntime(
   process.env.OPENAI_API_KEY = 'synthetic-model-key';
   const port = 43000 + Math.floor(Math.random() * 10000);
   const base = `http://127.0.0.1:${port}`;
-  const runtime = (await import(
+  const { mastra } = (await import(
     `../../src/mastra/index.ts?fixture=${randomBytes(6).toString('hex')}`
   )) as typeof import('../../src/mastra/index.ts');
+  const store = mastra.getStorage();
+  assert.ok(store, 'The Mastra store is configured');
+  const supportKnowledge = mastra.getKnowledge('support');
   const pages: KnowledgePage[] = [];
+  let memory: Memory;
   try {
+    const agentMemory = await mastra.getAgent('support').getMemory();
+    assert.ok(agentMemory instanceof Memory, 'The support agent has Memory');
+    memory = agentMemory;
     if (options.syntheticKnowledge !== false) {
       for (const [index, credential] of credentials.entries()) {
         if (index === 3) {
@@ -77,20 +85,20 @@ async function configureRuntime(
           continue;
         }
         const scope = principals(credential.profile)[1]!;
-        const { page } = await runtime.supportKnowledge.upsertPage({
+        const { page } = await supportKnowledge.upsertPage({
           scope,
           path: 'cases/synthetic',
           name: `SYNTHETIC case ${index}`,
           body: `SYNTHETIC_PRIVATE_${index}`,
           author: 'synthetic-fixture',
         });
-        await runtime.supportKnowledge.addNote({
+        await supportKnowledge.addNote({
           scope,
           path: 'cases/synthetic',
           text: `SYNTHETIC_NOTE_${index}`,
           author: 'synthetic-fixture',
         });
-        await runtime.supportKnowledge.upsertPage({
+        await supportKnowledge.upsertPage({
           scope: `docs:${credential.profile.tenantId}`,
           path: 'manual',
           name: 'SYNTHETIC documentation',
@@ -99,7 +107,7 @@ async function configureRuntime(
         });
         pages.push(page);
       }
-      await runtime.supportKnowledge.addNote({
+      await supportKnowledge.addNote({
         scope: 'docs:north',
         path: 'manual',
         text: 'SYNTHETIC_FOREIGN_STAMP_1',
@@ -107,7 +115,7 @@ async function configureRuntime(
         author: 'synthetic-fixture',
       });
       for (const tenant of ['north', 'south']) {
-        await runtime.supportKnowledge.upsertPage({
+        await supportKnowledge.upsertPage({
           scope: `tenant:${tenant}`,
           path: 'policies/safe-changes',
           name: 'Synthetic safety policy',
@@ -117,7 +125,7 @@ async function configureRuntime(
       }
     }
   } catch (error) {
-    await runtime.storage.close().catch(() => undefined);
+    await store.close().catch(() => undefined);
     throw error;
   }
   let child: RuntimeProcess | undefined;
@@ -284,7 +292,10 @@ async function configureRuntime(
     child = undefined;
   }
   return {
-    ...runtime,
+    mastra,
+    storage: store,
+    memory,
+    supportKnowledge,
     directory,
     model,
     credentials,
@@ -302,7 +313,7 @@ async function configureRuntime(
       const errors: unknown[] = [];
       for (const cleanup of [
         stop,
-        () => runtime.storage.close(),
+        () => store.close(),
         () => model.close(),
         () => rm(directory, { recursive: true, force: true }),
       ]) {
