@@ -163,4 +163,61 @@ describe('Observational Memory token counts for stored history', () => {
     const pending = record?.pendingMessageTokens ?? 0;
     expect(pending).toBeGreaterThan(trueTotal + history.length * DRIFT);
   });
+  it("saves the Agent's final reply with its token counts", async () => {
+    const { memory, agent } = open(join(dbDir, 'reply.db'));
+    const threadId = randomUUID();
+    await memory.saveThread({
+      thread: { id: threadId, resourceId: RESOURCE, title: 't', createdAt: new Date(), updatedAt: new Date() },
+    });
+    const turn = await agent.stream('Hello there.', { memory: { thread: threadId, resource: RESOURCE } });
+    await turn.consumeStream();
+    expect(await turn.text).toBe('OK.');
+
+    const stored = (await memory.recall({ threadId, resourceId: RESOURCE, perPage: false })).messages;
+    const reply = stored.find(message => message.role === 'assistant');
+    const textPart = reply?.content.parts.find(part => part.type === 'text');
+    expect(textPart).toMatchObject({ type: 'text', text: 'OK.' });
+    expect(trustedEntries(textPart)).toHaveLength(1);
+  });
+  it('does not copy a count onto a tool result that was edited after OM counted it', async () => {
+    const { memory } = open(join(dbDir, 'tool-edit.db'));
+    const threadId = randomUUID();
+    await memory.saveThread({
+      thread: { id: threadId, resourceId: RESOURCE, title: 't', createdAt: new Date(), updatedAt: new Date() },
+    });
+    const toolPart = (result: string) => ({
+      type: 'tool-invocation' as const,
+      toolInvocation: { state: 'result' as const, toolCallId: 'call-1', toolName: 'lookup', args: { q: 'x' }, result },
+    });
+    const id = `${threadId}-tool`;
+    await memory.saveMessages({
+      messages: [
+        {
+          id,
+          threadId,
+          resourceId: RESOURCE,
+          role: 'assistant',
+          createdAt: new Date(Date.UTC(2026, 10, 1)),
+          content: { format: 2, parts: [toolPart('original result')] },
+        },
+      ],
+    });
+
+    // OM loads and counts the message.
+    const engine = (await memory.omEngine)!;
+    const [live] = (await memory.recall({ threadId, resourceId: RESOURCE, perPage: false })).messages;
+    engine.getTokenCounter().countMessages([live!]);
+    expect(trustedEntries(live!.content.parts[0]).length).toBeGreaterThan(0);
+
+    // The result is edited in storage before the write-back runs. Same message, same tool call ID.
+    await memory.updateMessages({
+      messages: [{ id, content: { format: 2, parts: [toolPart('a much longer edited result '.repeat(20))] } } as any],
+    });
+
+    await engine.persistTokenEstimates([live!]);
+
+    const [stored] = (await memory.recall({ threadId, resourceId: RESOURCE, perPage: false })).messages;
+    expect((stored!.content.parts[0] as any).toolInvocation.result).toContain('edited result');
+    expect(trustedEntries(stored!.content.parts[0])).toEqual([]);
+  });
 });

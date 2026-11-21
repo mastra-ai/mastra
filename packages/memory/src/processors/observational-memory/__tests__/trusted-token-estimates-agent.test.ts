@@ -78,10 +78,9 @@ describe('trusted token counts across requests', () => {
 
     const stored = await storedTextParts(first.memory);
     expect(stored.map(part => part.text)).toEqual([longUser, longReply]);
-    // The input was counted before it was saved, so its count is stored with it. The reply is
-    // saved before OM sees it (as on main), so it carries no count yet.
+    // The input and the final reply are both counted before they're saved, so their counts are stored with them.
     expect(trustedEntries(stored[0]!)).toHaveLength(1);
-    expect(trustedEntries(stored[1]!)).toEqual([]);
+    expect(trustedEntries(stored[1]!)).toHaveLength(1);
 
     const counted: string[] = [];
     const original = TokenCounter.prototype.countString;
@@ -94,8 +93,7 @@ describe('trusted token counts across requests', () => {
     await second.agent.generate('Anything else?', { memory: { thread: THREAD, resource: RESOURCE } });
 
     expect(counted).not.toContain(longUser);
-    // Counted once in the new request, then read back from the part for the rest of it.
-    expect(counted.filter(text => text === longReply)).toHaveLength(1);
+    expect(counted).not.toContain(longReply);
   });
 
   // A cache map whose top level also has an unrelated `source` field, with a trusted entry nested

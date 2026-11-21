@@ -381,6 +381,12 @@ type InvocationModelResolution<TModel> = {
   routingThresholds?: string;
 };
 
+/** A part's content without its metadata, for checking that a stored part is the part OM counted. */
+function partContent(part: Record<string, unknown>): string {
+  const { providerMetadata: _providerMetadata, ...content } = part;
+  return JSON.stringify(content);
+}
+
 /**
  * ObservationalMemory - A three-agent memory system for long conversations.
  *
@@ -1040,8 +1046,7 @@ export class ObservationalMemory {
     const resolved = {
       ...tiered,
       model: (await this.resolveModelFunction(tiered.model, options?.requestContext)) as
-        | ResolvedInvocationModel
-        | 'auto',
+        ResolvedInvocationModel | 'auto',
     };
     if (resolved.model !== 'auto') {
       return resolved as InvocationModelResolution<ResolvedInvocationModel>;
@@ -1774,7 +1779,10 @@ export class ObservationalMemory {
   /**
    * @internal Write the token counts OM made for stored messages back to storage, so the next
    * request reads them instead of counting the same parts again. Each stored part takes the count
-   * of the in-memory part at the same position when that part is still the same part.
+   * of the in-memory part at the same position when that part's content is unchanged.
+   *
+   * This re-saves each message whole, so an edit or marker written to the same message between
+   * the read and the write here is overwritten. That risk is accepted for now.
    */
   async persistTokenEstimates(messages: MastraDBMessage[]): Promise<void> {
     const counted = messages.filter(takeNewTokenEstimates);
@@ -1788,10 +1796,7 @@ export class ObservationalMemory {
       const parts = row.content.parts.map((part, index) => {
         const livePart = liveParts[index] as any;
         const tokenEstimate = livePart?.providerMetadata?.mastra?.tokenEstimate;
-        const samePart =
-          livePart?.type === part.type &&
-          (part.type !== 'text' || livePart.text === part.text) &&
-          (part.type !== 'tool-invocation' || livePart.toolInvocation?.toolCallId === part.toolInvocation.toolCallId);
+        const samePart = livePart?.type === part.type && partContent(livePart) === partContent(part);
         if (!tokenEstimate || !samePart) return part;
         changed = true;
         const providerMetadata = (part as any).providerMetadata ?? {};
@@ -2204,8 +2209,7 @@ export class ObservationalMemory {
   ): { threadId: string; resourceId?: string } | null {
     // First try RequestContext (set by Memory)
     const memoryContext = requestContext?.get('MastraMemory') as
-      | { thread?: { id: string }; resourceId?: string }
-      | undefined;
+      { thread?: { id: string }; resourceId?: string } | undefined;
 
     if (memoryContext?.thread?.id) {
       return {

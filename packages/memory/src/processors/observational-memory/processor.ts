@@ -592,6 +592,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         if (memoryContext?.memoryConfig?.readOnly) return messageList;
 
         const persistenceMessageList = messageList.cloneForPersistence();
+        // The final reply has had no step after it to count it. Count it now, so it's saved with
+        // its counts and the next request reads them instead of counting it again.
+        this.engine.getTokenCounter().countMessages(persistenceMessageList.get.response.db());
 
         // Retrieve the turn from shared processor state — in production, the input
         // and output processors are separate instances (see comment in processInputStep).
