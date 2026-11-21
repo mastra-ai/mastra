@@ -4,18 +4,16 @@ import { WORKSPACE_TOOLS } from '../constants';
 import { extractLinesWithLimit, formatWithLineNumbers } from '../line-utils';
 import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
 import type { MediaToolResult } from './media';
-import { DEFAULT_MAX_MEDIA_BYTES, mediaToModelOutput } from './media';
+import {
+  DEFAULT_MAX_MEDIA_BYTES,
+  DEFAULT_MEDIA_TYPES,
+  MEDIA_SNIFF_BYTES,
+  contentMediaType,
+  isUtf8Text,
+  mediaToModelOutput,
+} from './media';
 import { applyTokenLimit } from './output-helpers';
 import { startWorkspaceSpan } from './tracing';
-
-/**
- * Default mime types surfaced to the model as media parts. The list is
- * intentionally the intersection of image formats supported by the major
- * model providers (Anthropic, OpenAI, Gemini) plus `application/pdf`.
- * `image/*` is *not* used so we don't surface exotic subtypes like SVG/BMP
- * that some providers reject. Override `mediaTypes` to broaden this.
- */
-const DEFAULT_MEDIA_TYPES: string[] = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'];
 
 /**
  * `application/*` mime types that are actually text content and safe to read
@@ -122,59 +120,6 @@ function buildMediaTypeCheck(
       return mimeType === pattern;
     });
   };
-}
-
-/** Bytes decoded from the start of a media file to check its signature. PDF allows its header anywhere in the first 1 KiB. */
-const MEDIA_SNIFF_BYTES = 1024;
-
-const startsWithBytes = (bytes: Uint8Array, prefix: number[], offset = 0) =>
-  bytes.length >= offset + prefix.length && prefix.every((byte, index) => bytes[offset + index] === byte);
-
-/**
- * Media types with a fixed signature, and how to recognize each from a file's first bytes.
- * Other configured types (e.g. SVG, HEIC, audio) have no reliable signature here and are
- * trusted by extension.
- */
-const MEDIA_SIGNATURES: [mediaType: string, matches: (bytes: Uint8Array) => boolean][] = [
-  ['image/png', bytes => startsWithBytes(bytes, [0x89, 0x50, 0x4e, 0x47])],
-  ['image/jpeg', bytes => startsWithBytes(bytes, [0xff, 0xd8, 0xff])],
-  // `GIF87a` or `GIF89a`.
-  [
-    'image/gif',
-    bytes =>
-      startsWithBytes(bytes, [0x47, 0x49, 0x46, 0x38, 0x37, 0x61]) ||
-      startsWithBytes(bytes, [0x47, 0x49, 0x46, 0x38, 0x39, 0x61]),
-  ],
-  [
-    'image/webp',
-    bytes => startsWithBytes(bytes, [0x52, 0x49, 0x46, 0x46]) && startsWithBytes(bytes, [0x57, 0x45, 0x42, 0x50], 8),
-  ],
-  // A version header such as `%PDF-1.7`, which readers accept anywhere in the first 1 KiB.
-  ['application/pdf', bytes => /%PDF-\d\.\d/.test(Buffer.from(bytes).toString('latin1'))],
-];
-
-const SIGNED_MEDIA_TYPES = new Set([...MEDIA_SIGNATURES.map(([mediaType]) => mediaType), 'image/jpg']);
-
-/**
- * The media type to send for a file whose extension maps to `declared`. For types with a known
- * signature, this is the type the bytes show (so a PNG named `.jpg` goes as `image/png`), or
- * undefined when they show none: an HTML error page saved as `.pdf` is not a PDF, and providers
- * reject it with a 400 that also fails every later call carrying the same history.
- */
-function contentMediaType(head: Uint8Array, declared: string): string | undefined {
-  if (!SIGNED_MEDIA_TYPES.has(declared.split(';', 1)[0]!.trim().toLowerCase())) return declared;
-  return MEDIA_SIGNATURES.find(([, matches]) => matches(head))?.[0];
-}
-
-/** Whether a whole file is UTF-8 text: no NUL bytes and no invalid sequences. */
-function isUtf8Text(content: Uint8Array): boolean {
-  if (content.includes(0)) return false;
-  try {
-    new TextDecoder('utf-8', { fatal: true }).decode(content);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 export const readFileTool = createTool({
