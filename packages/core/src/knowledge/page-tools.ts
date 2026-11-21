@@ -1516,15 +1516,52 @@ function pinTool(host: KnowledgePageToolHost, onChange?: (context: unknown) => v
 const ACTIVITY_DEFAULT_LIMIT = 25;
 const ACTIVITY_MAX_LIMIT = 100;
 
-/** `2026-07-01` (UTC midnight) or a full ISO date-time; anything else is refused. */
+// Batches one call may read. Events that turn out unreadable at hydration fill no entries, so
+// without this a run of hidden changes could make one call scan the whole interval.
+const ACTIVITY_MAX_BATCHES = 8;
+
+const ACTIVITY_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const ACTIVITY_DATE_TIME =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(\.\d{1,3})?)?(Z|([+-])(\d{2}):(\d{2}))$/;
+
+/**
+ * `2026-07-01` (UTC midnight) or a date-time with an explicit zone (`Z` or `±hh:mm`). A date-time
+ * without a zone would be read in the host's zone, and an impossible date (`2026-02-30`) would be
+ * rolled over by `Date`, so both are refused.
+ */
 function activityDate(name: 'since' | 'until', value: string): Date {
   const trimmed = value.trim();
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? new Date(`${trimmed}T00:00:00.000Z`) : new Date(trimmed);
-  if (!/^\d{4}-\d{2}-\d{2}/.test(trimmed) || Number.isNaN(date.getTime())) {
+  const refuse = (): never => {
     throw new Error(
-      `${name} must be an ISO date like "2026-07-01" or date-time like "2026-07-01T09:30:00Z"; got "${value}".`,
+      `${name} must be a date like "2026-07-01" or a date-time with a zone like "2026-07-01T09:30:00Z" or "2026-07-01T09:30:00+02:00"; got "${value}".`,
     );
+  };
+  const dateOnly = ACTIVITY_DATE.exec(trimmed);
+  const dateTime = dateOnly ? undefined : ACTIVITY_DATE_TIME.exec(trimmed);
+  const match = dateOnly ?? dateTime ?? refuse();
+  const [year, month, day, hour = 0, minute = 0, second = 0] = [1, 2, 3, 4, 5, 6].map(index =>
+    match[index] === undefined ? undefined : Number(match[index]),
+  ) as number[];
+  // Every field must survive a UTC round trip unchanged, which rules out day 30 of February,
+  // hour 24, minute 60 and the like.
+  const wall = new Date(Date.UTC(year!, month! - 1, day!, hour, minute, second));
+  if (
+    wall.getUTCFullYear() !== year ||
+    wall.getUTCMonth() !== month! - 1 ||
+    wall.getUTCDate() !== day ||
+    wall.getUTCHours() !== hour ||
+    wall.getUTCMinutes() !== minute ||
+    wall.getUTCSeconds() !== second
+  ) {
+    refuse();
   }
+  if (dateTime?.[9] !== undefined) {
+    const offsetHours = Number(dateTime[10]);
+    const offsetMinutes = Number(dateTime[11]);
+    if (offsetHours > 14 || offsetMinutes > 59) refuse();
+  }
+  const date = new Date(dateOnly ? `${trimmed}T00:00:00.000Z` : trimmed);
+  if (Number.isNaN(date.getTime())) refuse();
   return date;
 }
 
@@ -1573,7 +1610,7 @@ function activityTool(host: KnowledgePageToolHost) {
     id: 'knowledge_activity',
     description:
       'What changed in Knowledge over a period: page creates, edits, moves, merges and deletes, and notes added, restamped, removed or restored, newest first, with who made each change. ' +
-      'Give `since` and/or `until` (ISO dates or date-times; at least one); `from` narrows it to one page or scope. ' +
+      'Give `since` and/or `until` (a date like 2026-07-01, or a date-time with a zone like 2026-07-01T09:30:00Z; at least one); `from` narrows it to one page or scope. ' +
       "A note entry shows the note's current text (marked `current`), not its text when the change happened; a removed note shows no text. " +
       `One result holds at most \`limit\` changes and about ${maxTokens.toLocaleString('en-US')} tokens of them; when it stops early, \`more\` is true and \`cursor\` continues (pass the same since, until and from).`,
     inputSchema: {
@@ -1582,7 +1619,8 @@ function activityTool(host: KnowledgePageToolHost) {
         since: {
           type: 'string',
           minLength: 1,
-          description: 'Changes at or after this time, e.g. "2026-07-01" (UTC midnight) or "2026-07-01T09:30:00Z".',
+          description:
+            'Changes at or after this time, e.g. "2026-07-01" (UTC midnight), "2026-07-01T09:30:00Z" or "2026-07-01T09:30:00+02:00". A date-time needs a zone.',
         },
         until: { type: 'string', minLength: 1, description: 'Changes before this time, same formats as since.' },
         from: {
@@ -1641,7 +1679,10 @@ function activityTool(host: KnowledgePageToolHost) {
       let position = cursor ? { createdAt: new Date(cursor.before[0]), id: cursor.before[1] } : undefined;
       let more = false;
       let stopped = false;
-      while (!stopped && entries.length < limit) {
+      let batches = 0;
+      while (!stopped && entries.length < limit && batches < ACTIVITY_MAX_BATCHES) {
+        batches++;
+        const startedAt = position;
         const batch = await run.storage.listPageActivity({
           read: run.read,
           ...filter,
@@ -1707,6 +1748,10 @@ function activityTool(host: KnowledgePageToolHost) {
           if (entries.length >= limit) break;
         }
         if (!more) break;
+        // A continuation that moved nowhere would be read again forever.
+        if (position === startedAt) {
+          throw new Error('knowledge_activity: the store returned a continuation without any changes; stopping.');
+        }
         if (!stopped && entries.length >= limit) break;
       }
       const hasMore = stopped || more;

@@ -231,7 +231,7 @@ Lists what changed in Knowledge over a period, newest first, so an agent can ans
     name: 'since',
     type: 'string',
     description:
-      'Changes at or after this time: an ISO date such as `2026-07-01` (UTC midnight) or date-time. Give `since`, `until` or both.',
+      'Changes at or after this time: a date such as `2026-07-01` (UTC midnight), or a date-time with a zone such as `2026-07-01T09:30:00Z` or `2026-07-01T09:30:00+02:00`. A date-time without a zone, or a date that doesn't exist, is refused. Give `since`, `until` or both.',
     isOptional: true,
   },
   { name: 'until', type: 'string', description: 'Changes before this time, in the same formats.', isOptional: true },

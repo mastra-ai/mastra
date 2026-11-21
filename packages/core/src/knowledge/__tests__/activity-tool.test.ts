@@ -189,6 +189,49 @@ describe('knowledge_activity: what changed over a period', () => {
 });
 
 describe('knowledge_activity: continuation', () => {
+  it('bounds the batches one call reads when changes turn out unreadable, and resumes past them without gaps', async () => {
+    const { T0, store, call, acme, page } = await setup();
+    const visible = await page(T0 + 1000, acme.id, 'Still visible');
+    const hidden: string[] = [];
+    for (let index = 0; index < 30; index++) {
+      hidden.push((await page(T0 + 2000 + index * 10, acme.id, `Gone ${index}`)).id);
+    }
+    // Listed under the run's read, then unreadable by the time they're hydrated.
+    const original = store.getPage.bind(store);
+    vi.spyOn(store, 'getPage').mockImplementation(async input =>
+      hidden.includes(input.id) ? undefined : original(input),
+    );
+    const list = vi.spyOn(store, 'listPageActivity');
+
+    const seen: any[] = [];
+    let cursor: string | undefined;
+    let calls = 0;
+    do {
+      list.mockClear();
+      const result = await call({ since: day(T0), limit: 2, ...(cursor ? { cursor } : {}) });
+      calls++;
+      // Each call stops at its batch budget, even with nothing to show.
+      expect(list.mock.calls.length).toBeLessThanOrEqual(8);
+      seen.push(...result.changes);
+      expect(JSON.stringify(result)).not.toMatch(/Gone \d+/);
+      for (const id of hidden) expect(JSON.stringify(result)).not.toContain(id);
+      cursor = result.more ? result.cursor : undefined;
+      if (result.more) expect(result.cursor).toEqual(expect.any(String));
+    } while (cursor && calls < 10);
+
+    // 30 hidden changes at 2 per batch take more than one call's 8 batches.
+    expect(calls).toBeGreaterThan(1);
+    expect(seen.map(change => change.page.name)).toEqual(['Still visible']);
+    expect(seen[0].page.ref).toBe(visible.id);
+  });
+
+  it('stops instead of looping when the store returns a continuation without changes', async () => {
+    const { T0, store, call } = await setup();
+    const list = vi.spyOn(store, 'listPageActivity').mockResolvedValue({ events: [], nextCursor: 'stuck' });
+    await expect(call({ since: day(T0) })).rejects.toThrow(/continuation without any changes/);
+    expect(list).toHaveBeenCalledTimes(1);
+  });
+
   it('resumes after the last change a token-limited result returned, every change exactly once', async () => {
     const { T0, store, call, acme, page, note } = await setup({ maxTokens: 300 });
     // Seeded note sizes, so the small budget stops mid-batch at varying points.
@@ -261,9 +304,44 @@ describe('knowledge_activity: refusals before any listing', () => {
 
   it('refuses bad dates and an empty range', async () => {
     const { call } = await setup();
-    await expect(call({ since: 'last quarter' })).rejects.toThrow(/ISO date/);
-    await expect(call({ since: '2026-13-45' })).rejects.toThrow(/ISO date/);
+    await expect(call({ since: 'last quarter' })).rejects.toThrow(/must be a date/);
+    await expect(call({ since: '2026-13-45' })).rejects.toThrow(/must be a date/);
     await expect(call({ since: '2026-07-01', until: '2026-07-01' })).rejects.toThrow(/earlier than until/);
+  });
+
+  it('refuses a date-time without a zone, which would be read in the host zone', async () => {
+    const { store, call } = await setup();
+    const list = vi.spyOn(store, 'listPageActivity');
+    for (const since of ['2026-07-01T09:30:00', '2026-07-01T09:30', '2026-07-01 09:30:00Z']) {
+      await expect(call({ since })).rejects.toThrow(/with a zone/);
+    }
+    expect(list).not.toHaveBeenCalled();
+  });
+
+  it('refuses impossible calendar dates instead of rolling them over', async () => {
+    const { call } = await setup();
+    for (const since of [
+      '2026-02-30',
+      '2026-02-29',
+      '2026-04-31T00:00:00Z',
+      '2026-07-01T24:00:00Z',
+      '2026-07-01T09:60:00Z',
+      '2026-07-01T09:30:00+15:00',
+    ]) {
+      await expect(call({ since })).rejects.toThrow(/must be a date/);
+    }
+    // A real leap day is fine.
+    await expect(call({ until: '2028-02-29' })).resolves.toMatchObject({ changes: [] });
+  });
+
+  it('reads an explicit offset as that instant', async () => {
+    const { T0, call, acme, page } = await setup();
+    await page(T0 + 1000, acme.id, 'At one second');
+    // The same instants written in +02:00.
+    const plusTwo = (ms: number) => new Date(ms + 2 * 3_600_000).toISOString().replace('Z', '+02:00');
+    const before = await call({ since: plusTwo(T0 + 500), until: plusTwo(T0 + 1500) });
+    expect(before.changes.map((change: any) => change.page.name)).toEqual(['At one second']);
+    expect((await call({ since: plusTwo(T0 + 1500) })).changes).toEqual([]);
   });
 
   it('refuses a store without date support, on a first call and on a resume', async () => {
