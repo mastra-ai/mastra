@@ -1443,18 +1443,51 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     fence?: RunFence;
   }): Promise<StorageThreadType> {
     const check = this.#runFenceCheck(fence, 'updateThread');
-    const thread = await this.getThreadById({ threadId: id });
-    if (!thread) {
-      throw new MastraError({
+    const notFound = () =>
+      new MastraError({
         id: createStorageErrorId('MONGODB', 'UPDATE_THREAD', 'NOT_FOUND'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.THIRD_PARTY,
         details: { threadId: id, status: 404 },
         text: `Thread ${id} not found`,
       });
-    }
 
     const now = new Date();
+    if (metadata === undefined) {
+      // Leave metadata alone: rewriting it from an earlier read would drop a
+      // metadata write that landed in between.
+      let updated: any;
+      try {
+        const collection = await this.getCollection(TABLE_THREADS);
+        updated = await withRunFence(this.#connector, check, session =>
+          collection.findOneAndUpdate(
+            { id },
+            { $set: { ...(title !== undefined ? { title } : {}), updatedAt: now } },
+            { returnDocument: 'after', session },
+          ),
+        );
+      } catch (error) {
+        if (isRunFenceConflictError(error)) throw error;
+        throw new MastraError(
+          {
+            id: createStorageErrorId('MONGODB', 'UPDATE_THREAD', 'FAILED'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: { threadId: id },
+          },
+          error,
+        );
+      }
+      if (!updated) throw notFound();
+      return {
+        ...updated,
+        metadata: typeof updated.metadata === 'string' ? safelyParseJSON(updated.metadata) : updated.metadata,
+      };
+    }
+
+    const thread = await this.getThreadById({ threadId: id });
+    if (!thread) throw notFound();
+
     const updatedThread = {
       ...thread,
       title: title ?? thread.title,
