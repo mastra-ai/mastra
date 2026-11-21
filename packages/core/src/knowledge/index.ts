@@ -371,6 +371,12 @@ export class Knowledge extends MastraBase {
     return this.#pins !== false;
   }
 
+  /** Which tool groups `createTools()` and `getInstructions()` include by default. @internal */
+  get __toolGroups(): { read: boolean; write: boolean } {
+    const { read, write } = this.#groups();
+    return { read, write };
+  }
+
   /** The run's principals as a stable key; throws when the run has none or holds an undeclared scope. @internal */
   __principalsKey(context: KnowledgeRunContext): string {
     return knowledgeRunPrincipals(this.#runtime, context).sort().join('\n');
@@ -402,7 +408,7 @@ export class Knowledge extends MastraBase {
     const budget = this.#pins || resolvePins(true);
     if (!budget) return [];
     const run = await KnowledgeRun.start(this.#runtime, await this.getStorage(), context);
-    return knowledgeDeliveredPins(run, budget);
+    return knowledgeDeliveredPins(run, budget, this.#groups().read);
   }
 
   /** @internal */
