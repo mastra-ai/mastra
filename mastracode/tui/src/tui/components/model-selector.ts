@@ -217,6 +217,14 @@ export class ModelSelectorComponent extends Box implements Focusable {
       return a.modelName.localeCompare(b.modelName);
     });
 
+    // Keep the current model's Fast or standard entry right below it, not further down the list.
+    if (currentModelId && sorted[0]?.id === currentModelId) {
+      const standardId = parseCodexModelSelection(currentModelId).modelId;
+      const twinId = standardId === currentModelId ? `${currentModelId}:fast` : standardId;
+      const twinIndex = sorted.findIndex(model => model.id === twinId);
+      if (twinIndex > 1) sorted.splice(1, 0, ...sorted.splice(twinIndex, 1));
+    }
+
     return sorted;
   }
 
