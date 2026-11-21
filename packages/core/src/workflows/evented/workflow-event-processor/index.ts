@@ -140,6 +140,11 @@ export type ProcessorArgs = {
    * from) so the persisted run snapshot records the schedule's `resourceId`.
    */
   resourceId?: string;
+  /**
+   * Set by the start of an execution that stores a guarded-only running record, to the id that
+   * record carries; its suspend deletes the record only while it still carries this id.
+   */
+  guardedOnlySnapshotId?: string;
 };
 
 type StoredParentWorkflow = Omit<ParentWorkflow, 'stepGraph' | 'stepResults' | 'input' | 'parentWorkflow'> &
@@ -160,6 +165,8 @@ export type ParentWorkflow = {
   resumeSteps: string[];
   resumeData: any;
   input: any;
+  /** The parent execution's {@link ProcessorArgs.guardedOnlySnapshotId}, handed back when the child reports. */
+  guardedOnlySnapshotId?: string;
   parentContext?: {
     workflowId: string;
     input: any;
@@ -857,7 +864,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   private serializeParentWorkflow(parent: ParentWorkflow): StoredParentWorkflow {
-    const { stepResults: _, input: __, parentWorkflow, ...continuation } = parent;
+    const { stepResults: _, input: __, guardedOnlySnapshotId: ___, parentWorkflow, ...continuation } = parent;
     return {
       ...continuation,
       parentWorkflow: parentWorkflow ? this.serializeParentWorkflow(parentWorkflow) : undefined,
@@ -1282,7 +1289,11 @@ export class WorkflowEventProcessor extends EventProcessor {
       !resumeSteps?.length;
     // Time travel rewrites the run's history, so its reset step results are stored even when running
     // snapshots are declined. Otherwise the old results stay stored and replayed steps merge into them.
+    // Identifies the record this execution stores, so its suspend deletes only that record. Carried on
+    // its events rather than read back: another execution may store the run id in the meantime.
+    let guardedOnlySnapshotId: string | undefined;
     if (shouldPersist || requiresGuardedSnapshot || timeTravel) {
+      if (!persistRequested) guardedOnlySnapshotId = globalThis.crypto.randomUUID();
       const runningSnapshot: WorkflowRunState = {
         activePaths: restart ? (executionPath ?? restart.activePaths) : [],
         parentWorkflow: parentWorkflow
@@ -1304,7 +1315,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         status: 'running',
         // Stored only because guards or storage v2 need it, so a suspend that declines its snapshot removes it.
         guardedOnlySnapshot: !persistRequested,
-        ...(!persistRequested && { guardedOnlySnapshotId: globalThis.crypto.randomUUID() }),
+        ...(guardedOnlySnapshotId && { guardedOnlySnapshotId }),
         value: initialState,
         // A cancel sent before the first step result reads its execution claim from here.
         requestContext: withoutAuthToken(requestContext),
@@ -1386,6 +1397,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         perStep,
         state: initialState,
         outputOptions,
+        guardedOnlySnapshotId,
         forEachIndex,
       },
     });
@@ -1662,6 +1674,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     timeTravel,
     perStep,
     outputOptions,
+    guardedOnlySnapshotId,
   }: Pick<
     ProcessorArgs,
     | 'prevResult'
@@ -1673,6 +1686,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     | 'timeTravel'
     | 'perStep'
     | 'outputOptions'
+    | 'guardedOnlySnapshotId'
   > & {
     parentWorkflow: ParentWorkflow;
     nestedRunId: string;
@@ -1711,6 +1725,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           parentWorkflow: parentWorkflow.parentWorkflow,
           requestContext,
           actor,
+          guardedOnlySnapshotId: parentWorkflow.guardedOnlySnapshotId,
           retryCount: 0,
         },
         step,
@@ -1741,6 +1756,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         perStep,
         state,
         ...(outputOptions ? { outputOptions } : {}),
+        guardedOnlySnapshotId: parentWorkflow.guardedOnlySnapshotId,
         nestedRunId, // Pass nested workflow's runId for step retrieval
       },
     });
@@ -1764,6 +1780,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       stepResults,
       state,
       outputOptions,
+      guardedOnlySnapshotId,
     } = args;
 
     // Extract final state from stepResults or args
@@ -1826,6 +1843,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           parentContext: parentWorkflow,
           state: finalState,
           outputOptions,
+          guardedOnlySnapshotId: parentWorkflow.guardedOnlySnapshotId,
           nestedRunId: runId, // Pass nested workflow's runId for step retrieval
         },
       });
@@ -1836,13 +1854,17 @@ export class WorkflowEventProcessor extends EventProcessor {
     // record is guarded-only running, this suspend declined its snapshot, and resume() refuses a
     // run whose stored status is not suspended, so no resume can write a record before the delete.
     const runStorage = this.#runStorage(args.workflowId, runId);
-    let guardedOnlySnapshotId: string | undefined;
-    if (!restart && !timeTravel && !resumeSteps?.length) {
+    let cleanupSnapshotId: string | undefined;
+    if (guardedOnlySnapshotId !== undefined && !restart && !timeTravel && !resumeSteps?.length) {
       try {
         const header = await runStorage.loadHeader();
         // Never delete a resumable snapshot.
-        if (header?.guardedOnlySnapshot === true && header.status === 'running') {
-          guardedOnlySnapshotId = header.guardedOnlySnapshotId;
+        if (
+          header?.guardedOnlySnapshot === true &&
+          header.status === 'running' &&
+          header.guardedOnlySnapshotId === guardedOnlySnapshotId
+        ) {
+          cleanupSnapshotId = guardedOnlySnapshotId;
         }
       } catch (error) {
         this.mastra
@@ -1862,9 +1884,9 @@ export class WorkflowEventProcessor extends EventProcessor {
     // are kept. The delete goes through only while the stored run is still running and still carries
     // the id this execution gave its guarded-only record; a store that can't check that atomically
     // keeps it, as does a record stored without an id.
-    if (guardedOnlySnapshotId !== undefined) {
+    if (cleanupSnapshotId !== undefined) {
       try {
-        await runStorage.delete({ expectedStatus: 'running', expectedGuardedOnlySnapshotId: guardedOnlySnapshotId });
+        await runStorage.delete({ expectedStatus: 'running', expectedGuardedOnlySnapshotId: cleanupSnapshotId });
       } catch (error) {
         this.mastra
           .getLogger()
@@ -1896,6 +1918,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       stepResults,
       state,
       outputOptions,
+      guardedOnlySnapshotId,
       workflow,
       executionPath,
     } = args;
@@ -1953,6 +1976,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           parentContext: parentWorkflow,
           state: finalState,
           outputOptions,
+          guardedOnlySnapshotId: parentWorkflow.guardedOnlySnapshotId,
           nestedRunId: runId, // Pass nested workflow's runId for step retrieval
         },
       });
@@ -2024,6 +2048,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       perStep,
       state,
       outputOptions,
+      guardedOnlySnapshotId,
       forEachIndex,
     } = args;
     // Get current state from stepResults.__state or from passed state
@@ -2077,6 +2102,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           // the possibly-undefined state parameter, to ensure final state is preserved
           state: currentState,
           outputOptions,
+          guardedOnlySnapshotId,
         });
       }
       return this.errorWorkflow(
@@ -2165,6 +2191,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           perStep,
           state: currentState,
           outputOptions,
+          guardedOnlySnapshotId,
         },
         {
           pubsub: this.#pubsub,
@@ -2191,6 +2218,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           perStep,
           state: currentState,
           outputOptions,
+          guardedOnlySnapshotId,
         },
         {
           pubsub: this.#pubsub,
@@ -2218,6 +2246,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           perStep,
           state: currentState,
           outputOptions,
+          guardedOnlySnapshotId,
         },
         {
           pubsub: this.#pubsub,
@@ -2246,6 +2275,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           perStep,
           state: currentState,
           outputOptions,
+          guardedOnlySnapshotId,
         },
         {
           pubsub: this.#pubsub,
@@ -2274,6 +2304,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           perStep,
           state: currentState,
           outputOptions,
+          guardedOnlySnapshotId,
           forEachIndex,
         },
         {
@@ -2522,6 +2553,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             actor: args.actor,
             state: bodyState,
             outputOptions: args.outputOptions,
+            guardedOnlySnapshotId: args.guardedOnlySnapshotId,
           },
         });
       } catch (publishError) {
@@ -2754,6 +2786,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       perStep,
       state,
       outputOptions,
+      guardedOnlySnapshotId,
       forEachIndex,
       step,
       actor,
@@ -3208,6 +3241,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               parentWorkflow,
               activeStepsPath,
               resumeData,
+              guardedOnlySnapshotId,
             },
             executionPath: nestedExecutionPath as any,
             runId: nestedRunId,
@@ -3222,6 +3256,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             initialState: currentState,
             state: currentState,
             outputOptions,
+            guardedOnlySnapshotId,
             forEachIndex,
           },
         });
@@ -3279,6 +3314,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               parentWorkflow,
               activeStepsPath,
               resumeData,
+              guardedOnlySnapshotId,
             },
             executionPath: snapshot?.suspendedPaths?.[nestedSteps[0]!] as any,
             runId: nestedRunId,
@@ -3293,6 +3329,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             initialState: currentState,
             state: currentState,
             outputOptions,
+            guardedOnlySnapshotId,
             forEachIndex,
           },
         });
@@ -3336,6 +3373,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               parentWorkflow,
               activeStepsPath,
               resumeData,
+              guardedOnlySnapshotId,
             },
             executionPath: timeTravelParams.executionPath,
             runId: nestedRunId,
@@ -3349,6 +3387,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             initialState: currentState,
             state: currentState,
             outputOptions,
+            guardedOnlySnapshotId,
           },
         });
       } else if (nestedDispatch === 'restart') {
@@ -3400,6 +3439,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               timeTravel,
               perStep,
               outputOptions,
+              guardedOnlySnapshotId,
             });
             return;
           }
@@ -3426,6 +3466,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               parentContext,
               state: nestedState,
               outputOptions,
+              guardedOnlySnapshotId,
               nestedRunId,
             },
           });
@@ -3472,6 +3513,7 @@ export class WorkflowEventProcessor extends EventProcessor {
                 parentWorkflow,
                 activeStepsPath,
                 resumeData: nestedResumeData,
+                guardedOnlySnapshotId,
               },
               executionPath: (nestedSuspendedPaths[suspendedNestedStepId] ??
                 snapshot.activeStepsPath?.[suspendedNestedStepId]) as any,
@@ -3492,6 +3534,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               initialState: snapshot.value ?? currentState,
               state: snapshot.value ?? currentState,
               outputOptions,
+              guardedOnlySnapshotId,
             },
           });
           return;
@@ -3519,6 +3562,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               parentWorkflow,
               activeStepsPath,
               resumeData,
+              guardedOnlySnapshotId,
             },
             executionPath: restartParams.activePaths,
             runId: nestedRunId,
@@ -3535,6 +3579,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             initialState: restartParams.state,
             state: restartParams.state,
             outputOptions,
+            guardedOnlySnapshotId,
           },
         });
       } else if (nestedDispatch === 'start') {
@@ -3586,6 +3631,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               parentWorkflow,
               activeStepsPath,
               resumeData,
+              guardedOnlySnapshotId,
             },
             executionPath: [0],
             runId: nestedRunId,
@@ -3599,6 +3645,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             initialState: currentState,
             state: currentState,
             outputOptions,
+            guardedOnlySnapshotId,
           },
         });
       }
@@ -3786,6 +3833,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           perStep,
           state: updatedState,
           outputOptions,
+          guardedOnlySnapshotId,
         },
       });
     }
@@ -3818,6 +3866,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           perStep,
           state: updatedState,
           outputOptions,
+          guardedOnlySnapshotId,
         },
         'success',
         false,
@@ -3844,6 +3893,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             actor,
             state: currentState,
             outputOptions,
+            guardedOnlySnapshotId,
           },
         });
         return;
@@ -3888,6 +3938,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           retryCount: retryCount + 1,
           state: currentState,
           outputOptions,
+          guardedOnlySnapshotId,
           resumeData,
           perStep,
         },
@@ -3922,6 +3973,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           perStep,
           state: updatedState,
           outputOptions,
+          guardedOnlySnapshotId,
         },
       });
       return;
@@ -3982,6 +4034,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           perStep,
           state: updatedState,
           outputOptions,
+          guardedOnlySnapshotId,
           forEachIndex,
         },
       });
@@ -4022,6 +4075,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     actor,
     state,
     outputOptions,
+    guardedOnlySnapshotId,
   }: {
     workflow: Workflow;
     workflowId: string;
@@ -4045,6 +4099,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     actor?: ActorSignal;
     state: Record<string, any>;
     outputOptions?: { includeState?: boolean; includeResumeLabels?: boolean };
+    guardedOnlySnapshotId?: string;
   }) {
     const baseState = resolveCurrentState({ stepResults, state });
     // Merge each branch's setState() delta key-by-key on top of the resolved
@@ -4155,6 +4210,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           restart,
           state: currentState,
           outputOptions,
+          guardedOnlySnapshotId,
         },
       });
       return;
@@ -4193,6 +4249,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         restart,
         state: currentState,
         outputOptions,
+        guardedOnlySnapshotId,
       },
     });
   }
@@ -4215,6 +4272,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     perStep,
     state,
     outputOptions,
+    guardedOnlySnapshotId,
     forEachIndex,
     nestedRunId,
   }: ProcessorArgs) {
@@ -4294,6 +4352,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           actor,
           state: currentState,
           outputOptions,
+          guardedOnlySnapshotId,
         },
       });
       return;
@@ -4349,6 +4408,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             perStep,
             state: currentState,
             outputOptions,
+            guardedOnlySnapshotId,
           });
         }
 
@@ -4542,6 +4602,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               actor,
               state: currentState,
               outputOptions,
+              guardedOnlySnapshotId,
             },
           });
           return;
@@ -4576,6 +4637,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               perStep,
               state: currentState,
               outputOptions,
+              guardedOnlySnapshotId,
             },
             {
               pubsub: this.#pubsub,
@@ -4694,6 +4756,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               restart,
               state: currentState,
               outputOptions,
+              guardedOnlySnapshotId,
             },
           });
 
@@ -4720,6 +4783,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             perStep,
             state: currentState,
             outputOptions,
+            guardedOnlySnapshotId,
           },
           {
             pubsub: this.#pubsub,
@@ -4855,6 +4919,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           actor,
           state: currentState,
           outputOptions,
+          guardedOnlySnapshotId,
         },
       });
 
@@ -4904,6 +4969,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           actor,
           state: currentState,
           outputOptions,
+          guardedOnlySnapshotId,
         });
         return;
       }
@@ -4961,6 +5027,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           restart,
           state: currentState,
           outputOptions,
+          guardedOnlySnapshotId,
         },
       });
 
@@ -5054,6 +5121,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         actor,
         state: currentState,
         outputOptions,
+        guardedOnlySnapshotId,
       });
     } else if (step?.type === 'foreach') {
       // Get the original array from the foreach step's stored payload
@@ -5077,6 +5145,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           restart,
           state: currentState,
           outputOptions,
+          guardedOnlySnapshotId,
           forEachIndex,
         },
       });
@@ -5095,6 +5164,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         actor,
         state: currentState,
         outputOptions,
+        guardedOnlySnapshotId,
       });
     } else {
       const nextExecutionPath = executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]);
@@ -5116,6 +5186,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           restart,
           state: currentState,
           outputOptions,
+          guardedOnlySnapshotId,
         },
       });
     }

@@ -93,6 +93,7 @@ export async function processWorkflowLoop(
     perStep,
     state,
     outputOptions,
+    guardedOnlySnapshotId,
   }: ProcessorArgs,
   {
     pubsub,
@@ -200,6 +201,7 @@ export async function processWorkflowLoop(
     perStep,
     state: currentState,
     outputOptions,
+    guardedOnlySnapshotId,
   };
   const loopEndData = {
     parentWorkflow,
@@ -216,6 +218,7 @@ export async function processWorkflowLoop(
     perStep,
     state: currentState,
     outputOptions,
+    guardedOnlySnapshotId,
   };
 
   if (step.loopType === 'dountil') {
@@ -289,6 +292,7 @@ async function advanceForEach(
     perStep,
     state,
     outputOptions,
+    guardedOnlySnapshotId,
     forEachIndex,
   }: ProcessorArgs,
   {
@@ -397,6 +401,7 @@ async function advanceForEach(
         actor,
         state: currentState,
         outputOptions,
+        guardedOnlySnapshotId,
       },
     });
   };
@@ -427,6 +432,7 @@ async function advanceForEach(
           actor,
           state: currentState,
           outputOptions,
+          guardedOnlySnapshotId,
         },
       });
       return;
@@ -463,6 +469,7 @@ async function advanceForEach(
           perStep,
           state: currentState,
           outputOptions,
+          guardedOnlySnapshotId,
         },
       });
       return;
@@ -558,6 +565,7 @@ async function advanceForEach(
               perStep,
               state: currentState,
               outputOptions,
+              guardedOnlySnapshotId,
             },
           });
         } catch {
@@ -695,6 +703,7 @@ async function advanceForEach(
             perStep,
             state: currentState,
             outputOptions,
+            guardedOnlySnapshotId,
           },
         });
       }
@@ -784,6 +793,7 @@ async function advanceForEach(
         perStep,
         state: currentState,
         outputOptions,
+        guardedOnlySnapshotId,
       },
     });
 
@@ -841,6 +851,7 @@ async function advanceForEach(
           perStep,
           state: currentState,
           outputOptions,
+          guardedOnlySnapshotId,
         },
       });
     }
@@ -892,6 +903,7 @@ async function advanceForEach(
       perStep,
       state: currentState,
       outputOptions,
+      guardedOnlySnapshotId,
     },
   });
 }

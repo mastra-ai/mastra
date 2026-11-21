@@ -1190,6 +1190,77 @@ export function describeFinishedOccurrenceCases({
       20_000,
     );
 
+    // A newer execution can store the run id while this one is still running, before its suspend
+    // reaches cleanup; the suspend must delete only the record this execution wrote.
+    it.each([1, 2] as const)(
+      'keeps a newer execution stored under the run id before its declined suspend is handled (storage v%i)',
+      async storageVersion => {
+        const store = (await getStorage().getStore('workflows'))!;
+        if (storageVersion === 1 && !store.supportsWorkflowStepGuards()) return;
+        const suspendHandled = deferred<void>();
+        let runId: string | undefined;
+        const processor = WorkflowEventProcessor.prototype as unknown as {
+          processWorkflowSuspend: (...args: unknown[]) => Promise<void>;
+        };
+        const handleSuspend = processor.processWorkflowSuspend;
+        vi.spyOn(processor, 'processWorkflowSuspend').mockImplementation(async function (
+          this: unknown,
+          ...args: unknown[]
+        ) {
+          try {
+            const declined = (await storedRun(runId!))!;
+            expect(declined).toMatchObject({ status: 'running', guardedOnlySnapshot: true });
+            await createRunStorage({
+              storageVersion,
+              workflowName: 'finished',
+              runId: runId!,
+              getStore: async () => store,
+            }).writeSnapshot({
+              ...declined,
+              timestamp: Date.now(),
+              guardedOnlySnapshotId: `${declined.guardedOnlySnapshotId}-replacement`,
+            });
+            await handleSuspend.apply(this, args);
+          } finally {
+            suspendHandled.resolve();
+          }
+        });
+        const a = await startReplica(
+          createWorkflow({
+            id: 'finished',
+            inputSchema: Num,
+            outputSchema: Num,
+            options: { storageVersion, shouldPersistSnapshot: () => false },
+          })
+            .then(
+              createStep({
+                id: 'gate',
+                inputSchema: Num,
+                outputSchema: Num,
+                resumeSchema: z.object({ ok: z.boolean() }),
+                execute: async ({ inputData, resumeData, suspend }) => {
+                  if (!resumeData) {
+                    await suspend({});
+                  }
+                  return inputData;
+                },
+              }),
+            )
+            .commit(),
+        );
+        const created = await a.workflow.createRun({ runId: uniqueRunId() });
+        runId = created.runId;
+        expect((await created.start({ inputData: { n: 1 } })).status).toBe('suspended');
+        await suspendHandled.promise;
+
+        expect(await storedRun(created.runId)).toMatchObject({
+          status: 'running',
+          guardedOnlySnapshotId: expect.stringMatching(/-replacement$/),
+        });
+      },
+      20_000,
+    );
+
     // A workflow that skips running snapshots leaves the stored active path at the step that last
     // saved one, here the step that suspended. The check can't tell from it whether the run went
     // past a finished step, so a late delivery runs the step again instead of leaving the run stuck.
