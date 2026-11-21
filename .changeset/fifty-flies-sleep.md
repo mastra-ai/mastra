@@ -1,13 +1,15 @@
 ---
-'@mastra/core': patch
+'@mastra/core': minor
 ---
 
-Fixed thread subscribers seeing a run as `failed` when `mastra.shutdown()` handed it back mid-run, for example during a rolling restart, even though durable recovery then finished the same run. `subscribeToThread({ withRunStatus: true })` now reports that hand-back as `{ status: "interrupted" }`, which is not final, so the recovered output and its final status follow on the same subscription. A real failure still reports `failed`. Fixes [#30480](https://github.com/mastra-ai/mastra/issues/30480).
+Added an `interrupted` thread run status. Thread subscribers no longer see a durable agent's run as `failed` when `mastra.shutdown()` stops it mid-run, for example during a rolling restart, and recovery then finishes the same run. `subscribeToThread({ withRunStatus: true })` now reports that run as `{ status: "interrupted" }`, which is not final, so the recovered output and its final status follow on the same subscription. A real failure still reports `failed`, and so does a regular agent's run that shutdown stops, because nothing recovers it. Fixes [#30480](https://github.com/mastra-ai/mastra/issues/30480).
 
 ```ts
 for await (const chunk of subscription.stream) {
-  if (chunk.type === 'thread-run-status' && chunk.payload.status === 'interrupted') {
+  if (chunk.type === "thread-run-status" && chunk.payload.status === "interrupted") {
     // Show "recovering" and keep listening for the final outcome.
   }
 }
 ```
+
+`useChat` from `@mastra/react` still treats `interrupted` as the end of the run.

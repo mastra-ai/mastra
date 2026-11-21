@@ -284,8 +284,10 @@ describeForAllEngines('thread runs at shutdown', (engine: EngineVariant) => {
     await observer.mastra.shutdown({ drainTimeout: 200 });
   }, 20_000);
 
-  // #30480: recovery can continue a handed-back run under the same runId, so the hand-back isn't its final outcome.
-  it('reports a handed-back run as interrupted, not failed, to run-status followers', async () => {
+  // #30480: recovery can continue a handed-back durable run under the same runId, so the hand-back isn't its final
+  // outcome. Nothing recovers a regular agent's run, so its hand-back stays a failure.
+  const handBackStatus = isDurableEngineVariant(engine) ? 'interrupted' : 'failed';
+  it(`reports a handed-back run as ${handBackStatus} to run-status followers`, async () => {
     const threadId = `shutdown-status-${engine}`;
     for (let i = 0; i < 60; i++) {
       llm.on(
@@ -318,10 +320,10 @@ describeForAllEngines('thread runs at shutdown', (engine: EngineVariant) => {
     await running.mastra.shutdown({ drainTimeout: 200 });
     running.pubsub.dead = true;
 
-    await vi.waitFor(() => expect(statuses).toEqual(['interrupted']), { timeout: 5_000 });
-    // Past the lease TTL: nothing turns the hand-back into a final outcome.
+    await vi.waitFor(() => expect(statuses).toEqual([handBackStatus]), { timeout: 5_000 });
+    // Past the lease TTL: the lease watch reports nothing more.
     await new Promise(resolve => setTimeout(resolve, 900));
-    expect(statuses).toEqual(['interrupted']);
+    expect(statuses).toEqual([handBackStatus]);
 
     subscription.unsubscribe();
     await observer.mastra.shutdown({ drainTimeout: 200 });
