@@ -234,6 +234,8 @@ export function createEventedEngineTestSuite({
           inputData: options.inputData as any,
           nestedStepsContext: options.nestedStepsContext as any,
           resumeData: options.resumeData as any,
+          outputOptions: options.outputOptions,
+          initialState: options.initialState as any,
         });
 
         return withLoadedSteps(result);

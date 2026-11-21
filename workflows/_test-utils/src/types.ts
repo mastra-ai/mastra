@@ -909,6 +909,10 @@ export interface TimeTravelWorkflowOptions {
   nestedStepsContext?: Record<string, Record<string, StepResult>>;
   /** Resume data to pass to the step (for suspended workflow time travel) */
   resumeData?: unknown;
+  /** Output options (e.g., includeState to return state in result) */
+  outputOptions?: ExecuteWorkflowOptions['outputOptions'];
+  /** Explicit starting state for the replay; overrides the state saved in the snapshot */
+  initialState?: Record<string, unknown>;
 }
 
 /**
