@@ -1,6 +1,6 @@
 ---
 title: "Reference: CyberRefusalHandler | Processors"
-description: "The CyberRefusalHandler retries once when an OpenAI or Anthropic cybersecurity safeguard refuses a step."
+description: "The CyberRefusalHandler retries once when an OpenAI or Anthropic cybersecurity safeguard refuses a step, and can fall back to other models."
 packages:
   - "@mastra/core"
 ---
@@ -57,9 +57,69 @@ Output-step retries count against `maxProcessorRetries`, and unlike the error la
 
 [`createCodingAgent()`](/reference/coding-agent/create-coding-agent) includes the handler in both lanes by default.
 
+## Falling back to another model
+
+A refusal that survives the retry ends the step unless the handler has a model to switch to. By default (`fallbackModels: 'auto'`) it switches once to the model the provider itself sends that model's cyber refusals to, through the model router on the same provider:
+
+| Refused model | Auto fallback | Source |
+| - | - | - |
+| `anthropic/claude-fable-5`, `anthropic/claude-fable-5-1` | `anthropic/claude-opus-4-8` | [Claude Fable 5 announcement](https://www.anthropic.com/news/claude-fable-5-mythos-5) |
+| `anthropic/claude-opus-5-5` | `anthropic/claude-opus-4-8` | [Claude Opus 5.5 announcement](https://www.anthropic.com/news/claude-opus-5-5) |
+| `anthropic/claude-sonnet-5-5` | `anthropic/claude-sonnet-5` | [Claude Sonnet 5.5 announcement](https://www.anthropic.com/news/claude-sonnet-5-5) |
+| `openai/gpt-5.3-codex` | `openai/gpt-5.2` | [Codex fallback notice](https://github.com/openai/codex/issues/12088) |
+
+Refusals from other models end the step as before. The table is exported as `CYBER_REFUSAL_AUTO_FALLBACKS`, and `getCyberRefusalAutoFallback(modelId)` looks up one model. The auto fallback is called through the model router, so it needs the provider's API key in the environment.
+
+Pass `fallbackModels` to choose the models yourself. When the retried step is refused again, the handler retries it on the first fallback model, and if that model refuses too, on the next one. Once it runs out of fallback models, the refusal stands as before.
+
+The switch happens in `processInputStep`, which is also where the handler sees which model is running, so register the same instance in `inputProcessors` as well. Without it, refusals end the step as before:
+
+```typescript title="src/mastra/agents/coding-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { CyberRefusalHandler, StreamErrorRetryProcessor } from '@mastra/core/processors'
+
+const cyberRefusals = new CyberRefusalHandler({
+  fallbackModels: ['__GATEWAY_ANTHROPIC_MODEL_SONNET__'],
+})
+
+export const agent = new Agent({
+  id: 'coding-agent',
+  name: 'Coding Agent',
+  instructions: 'You are a coding agent.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  inputProcessors: [cyberRefusals],
+  errorProcessors: [cyberRefusals, new StreamErrorRetryProcessor()],
+  outputProcessors: [cyberRefusals],
+  maxProcessorRetries: 5,
+})
+```
+
+The fallback model stays in use for the rest of that run, keeping the run's earlier tool work. The next run starts on the agent's own model again.
+
+To choose the model when the refusal happens, pass a function. It receives the fallback `attempt` (`0` for the first) and the run's `requestContext`, and returns a model or `undefined` when there is none left:
+
+```typescript
+new CyberRefusalHandler({
+  fallbackModels: ({ attempt, requestContext }) => pickFallbackFor(requestContext, attempt),
+})
+```
+
+Each switch is a processor retry, so it counts against `maxProcessorRetries`.
+
 ## Constructor parameters
 
-The `CyberRefusalHandler` takes no constructor parameters.
+<PropertiesTable
+  content={[
+  {
+    name: 'fallbackModels',
+    type: "'auto' | CyberRefusalFallbackModel[] | ((context: { attempt: number; requestContext?: RequestContext }) => CyberRefusalFallbackModel | undefined | Promise<CyberRefusalFallbackModel | undefined>)",
+    description:
+      'Models to switch to when a refusal survives the retry, in order, or a function that picks one when the refusal happens. Each entry takes anything an agent `model` accepts: a model router string, a provider model instance, or `{ id, model }`. The fallback lasts for the rest of the run. `auto` uses the provider fallbacks listed above. Requires the handler in `inputProcessors` too.',
+    isOptional: true,
+    defaultValue: "'auto'",
+  },
+]}
+/>
 
 ## Properties
 
@@ -78,17 +138,23 @@ The `CyberRefusalHandler` takes no constructor parameters.
     isOptional: false,
   },
   {
+    name: 'processInputStep',
+    type: '(args: ProcessInputStepArgs) => Promise<ProcessInputStepResult | undefined>',
+    description: 'Records the running model for `auto`, and uses the fallback model for each step after a switch.',
+    isOptional: false,
+  },
+  {
     name: 'processAPIError',
     type: '(args: ProcessAPIErrorArgs) => Promise<ProcessAPIErrorResult | void>',
     description:
-      'Handles OpenAI cybersecurity refusals by sending a `continue` system reminder and signaling retry. Only triggers on the first retry attempt.',
+      'Handles OpenAI cybersecurity refusals by sending a `continue` system reminder and signaling retry. A repeated refusal switches to the next fallback model, when there is one.',
     isOptional: false,
   },
   {
     name: 'processOutputStep',
-    type: '(args: ProcessOutputStepArgs) => ProcessorMessageResult',
+    type: '(args: ProcessOutputStepArgs) => MessageList | Promise<MessageList>',
     description:
-      'Handles Anthropic cybersecurity classifier refusals by aborting the step with `retry: true`. Only triggers on the first retry attempt.',
+      'Handles Anthropic cybersecurity classifier refusals by aborting the step with `retry: true`. A repeated refusal switches to the next fallback model, when there is one.',
     isOptional: false,
   },
 ]}
