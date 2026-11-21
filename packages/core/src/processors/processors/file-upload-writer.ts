@@ -67,7 +67,7 @@ export async function uploadFiles<T extends SandboxUpload>(
     const { root, existing } = await inspect(sandbox, files, abortSignal);
     const placed = files.map(file => ({
       ...file,
-      path: root ? `${root.replace(/\/+$/, '')}/${file.path}` : file.path,
+      path: under(root, file.path),
     }));
     written = placed.filter((_, index) => !existing.has(files[index]!.path));
     if (written.length > 0) await write(sandbox, written, token, abortSignal);
@@ -107,6 +107,28 @@ function workingDirectoryOf(sandbox: WorkspaceSandbox): string | undefined {
 }
 
 const absolute = (directory: string | undefined) => (directory?.startsWith('/') ? directory : undefined);
+
+// Where a file lands, given the directory commands run in.
+const under = (root: string | undefined, path: string) => (root ? `${root.replace(/\/+$/, '')}/${path}` : path);
+
+/**
+ * Whether the sandbox is stopped rather than gone. A stopped sandbox keeps the
+ * files it was given, and only a sandbox that runs commands has to be started
+ * before it can be asked what it has.
+ */
+export function isStopped(sandbox: WorkspaceSandbox): boolean {
+  return sandbox.status === 'stopped' && typeof sandbox.executeCommand === 'function';
+}
+
+/**
+ * The path a file is at, worked out without running a command: a stopped
+ * sandbox is not started to learn the directory its commands would run in. The
+ * sandbox's own working directory is used where the provider knows it, and the
+ * path stays relative where it does not.
+ */
+export function placementPathOf(sandbox: WorkspaceSandbox, relativePath: string): string {
+  return under(absolute(workingDirectoryOf(sandbox)), relativePath);
+}
 
 function directoriesOf(files: SandboxUpload[]): string[] {
   return [...new Set(files.map(file => file.path.slice(0, file.path.lastIndexOf('/'))))];
