@@ -268,6 +268,13 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
     description:
       'Serve MCP Apps only to clients that declare MCP Apps support. Other clients see the server as if it had no apps. See [Serving apps only to supporting clients](#serving-apps-only-to-supporting-clients).',
   },
+  {
+    name: 'appViewTools',
+    type: 'string[]',
+    isOptional: true,
+    description:
+      'Names of tools that act on app views a host already shows, such as a tool that changes what a view displays. They are listed and callable only for clients the server serves apps to.',
+  },
 ]}
 />
 
@@ -1759,7 +1766,7 @@ const server = new MCPServer({
 
 A client that doesn't declare the extension sees the server as if it had no apps. The server hides its `ui://` resources, app links on tools and tool results, app-only tools, and the MCP Apps capability from that client.
 
-The declaration is read on every request. Clients on the 2026-07-28 protocol send it with each request. Clients on older protocol versions declare it once, at `initialize`. Over stateless HTTP, the server answers that `initialize` with an `Mcp-Session-Id`, and the client sends it back on every later request. That id only marks the client as one that renders apps: the server keeps no record of it, and it grants no access. A client that doesn't declare the extension gets no session id, and the rest of its stateless traffic is unchanged.
+The declaration is read on every request. Clients on the 2026-07-28 protocol send it with each request. Clients on older protocol versions declare it once, at `initialize`. Over stateless HTTP, the server answers that `initialize` with an `Mcp-Session-Id`, which the client sends back on every later request so the server knows it renders apps. The server stores nothing for this id, and the id grants no access. A client that doesn't declare the extension gets no session id, so its stateless traffic is unchanged.
 
 ## Events (experimental)
 
