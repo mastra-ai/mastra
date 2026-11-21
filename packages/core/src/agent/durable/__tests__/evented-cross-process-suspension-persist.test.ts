@@ -26,10 +26,10 @@ import { Agent } from '../../agent';
 import { MessageList } from '../../message-list';
 import { DurableStepIds } from '../constants';
 import { createEventedAgent } from '../create-evented-agent';
-import { clearResumeInFlight, globalRunRegistry } from '../run-registry';
+import { globalRunRegistry } from '../run-registry';
 
-// 'starting-process-tools': every tool step runs in the starting process with the
-// list its LLM step built, which goes stale once another process resumes a call, except the resume step, which runs in a fresh worker.
+// 'starting-process-tools': each tool call runs in the starting process with the list
+// its LLM step built, which goes stale once another process resumes a call; each resume runs in a fresh worker.
 type Boundary = 'same-process' | 'fresh-worker' | 'stale-message-list' | 'starting-process-tools';
 
 class CrossProcessToolStepPubSub extends EventEmitterPubSub {
@@ -58,7 +58,7 @@ class CrossProcessToolStepPubSub extends EventEmitterPubSub {
         if (this.boundary === 'starting-process-tools') {
           // The starting process keeps the list its LLM step built, assistant message included.
           this.startingList ??= entry.messageList;
-          entry.messageList = step === 1 ? undefined : this.startingList;
+          entry.messageList = step % 2 === 1 ? undefined : this.startingList;
         } else if (this.boundary === 'fresh-worker') {
           globalRunRegistry.delete(runId);
         } else if (entry.messageList) {
@@ -115,14 +115,7 @@ describe('evented agent cross-process tool suspension persistence (#30123)', () 
   let pubsub: EventEmitterPubSub | undefined;
   let mastra: Mastra | undefined;
 
-  const resumedRuns: string[] = [];
-
   afterEach(async () => {
-    // The resumed segment ends suspended on call-2, so call-1's in-flight marker outlives the test.
-    for (const runId of resumedRuns.splice(0)) {
-      clearResumeInFlight(runId, 'call-1');
-      clearResumeInFlight(runId, 'call-2');
-    }
     await mastra?.stopWorkers();
     globalRunRegistry.clear();
     await pubsub?.close();
@@ -304,7 +297,6 @@ describe('evented agent cross-process tool suspension persistence (#30123)', () 
       expect(await waitForSuspension(first.output)).toBe('call-1');
       first.cleanup();
       await new Promise(r => setTimeout(r, 200));
-      resumedRuns.push(first.runId);
 
       // The evented loop runs sibling tool calls one at a time, so call-2 only runs once call-1 resumes.
       const resumed = await (durable as any).resumeStream(
@@ -325,7 +317,6 @@ describe('evented agent cross-process tool suspension persistence (#30123)', () 
       );
       for await (const chunk of completed.fullStream) if (chunk.type === 'finish') break;
       await new Promise(r => setTimeout(r, 200));
-      resumedRuns.push(first.runId);
 
       const { messages: final } = await memory.recall({ threadId: 'thread-1', resourceId: 'user-1', perPage: false });
       const toolAssistant = final.find(m => m.content.parts.some(part => part.type === 'tool-invocation'))!;

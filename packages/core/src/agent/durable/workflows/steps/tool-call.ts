@@ -870,7 +870,7 @@ export function createDurableToolCallStep() {
         const messageListState = await readMessageListState(params, llmOutput ?? {});
         // A copy: the state's messages are the run's own transcript objects, saved back with the
         // run's state, so metadata this step writes on them would outlive a later resume's clear.
-        // JSON rather than structuredClone: message metadata can hold callbacks.
+        // JSON, as workflow storage keeps it; structuredClone would throw on a callback in metadata.
         return messageListState
           ? createRunMessageList({
               mastra,
