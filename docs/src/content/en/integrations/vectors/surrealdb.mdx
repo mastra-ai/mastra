@@ -1,0 +1,317 @@
+---
+title: "SurrealDB | Vector Stores"
+description: "The SurrealVector class provides vector search in SurrealDB using HNSW indexes, with metadata filters applied inside the search."
+packages:
+  - "@mastra/core"
+  - "@mastra/surrealdb"
+---
+
+# SurrealDB vector store
+
+The `SurrealVector` class provides vector search in [SurrealDB](https://surrealdb.com). Each index is a table whose `embedding` field has an HNSW index; queries run as SurrealQL nearest-neighbour searches with the metadata filter applied during the search, so a selective filter still returns `topK` matches.
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/surrealdb@latest
+```
+
+## Usage example
+
+```typescript
+import { SurrealVector } from '@mastra/surrealdb'
+
+const store = new SurrealVector({
+  id: 'surrealdb-vector',
+  url: process.env.SURREALDB_URL!,
+  username: process.env.SURREALDB_USERNAME!,
+  password: process.env.SURREALDB_PASSWORD!,
+  namespace: 'mastra',
+  database: 'my_app',
+})
+
+await store.createIndex({ indexName: 'docs', dimension: 1536 })
+
+await store.upsert({
+  indexName: 'docs',
+  vectors: embeddings,
+  metadata: chunks.map(chunk => ({ text: chunk.text, source: 'faq' })),
+})
+
+const results = await store.query({
+  indexName: 'docs',
+  queryVector,
+  topK: 5,
+  filter: { source: 'faq' },
+})
+```
+
+`SurrealVector` and `SurrealDBStore` can share one connection:
+
+```typescript
+import { SurrealDBStore, SurrealVector } from '@mastra/surrealdb'
+
+const storage = new SurrealDBStore({ id: 'surrealdb-storage', url, username, password })
+const vector = new SurrealVector({ id: 'surrealdb-vector', connector: storage.connector })
+```
+
+## Constructor options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this vector store instance',
+  },
+  {
+    name: 'url',
+    type: 'string',
+    isOptional: true,
+    description:
+      'SurrealDB endpoint, for example `ws://localhost:8000`. Required unless `db` or `connector` is passed.',
+  },
+  {
+    name: 'username',
+    type: 'string',
+    isOptional: true,
+    description: 'System user to sign in with, together with `password`.',
+  },
+  {
+    name: 'password',
+    type: 'string',
+    isOptional: true,
+    description: 'Password of the system user.',
+  },
+  {
+    name: 'authLevel',
+    type: "'root' | 'namespace' | 'database'",
+    isOptional: true,
+    defaultValue: "'root'",
+    description: 'Level of the system user.',
+  },
+  {
+    name: 'token',
+    type: 'string',
+    isOptional: true,
+    description: 'Access token to authenticate with instead of a username and password.',
+  },
+  {
+    name: 'db',
+    type: 'Surreal',
+    isOptional: true,
+    description: 'An existing, connected and authenticated `Surreal` client.',
+  },
+  {
+    name: 'connector',
+    type: 'SurrealDBConnector',
+    isOptional: true,
+    description: 'A connection shared with a `SurrealDBStore` (`storage.connector`).',
+  },
+  {
+    name: 'namespace',
+    type: 'string',
+    isOptional: true,
+    defaultValue: "'mastra'",
+    description: 'Namespace for the vector tables.',
+  },
+  {
+    name: 'database',
+    type: 'string',
+    isOptional: true,
+    defaultValue: "'mastra'",
+    description: 'Database for the vector tables.',
+  },
+  {
+    name: 'efSearch',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '64',
+    description:
+      'HNSW candidate list size used at query time. Higher values are more accurate and slower. The value used is never lower than `topK`.',
+  },
+]}
+/>
+
+## Methods
+
+### `createIndex()`
+
+Creates a table for the index and an HNSW index on its `embedding` field. Creating an index that already exists with the same dimension does nothing.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description:
+      'Name of the index (and its table). Letters, digits and underscores, starting with a letter or underscore.',
+  },
+  {
+    name: 'dimension',
+    type: 'number',
+    description: 'Vector dimension (must match your embedding model)',
+  },
+  {
+    name: 'metric',
+    type: "'cosine' | 'euclidean' | 'dotproduct'",
+    isOptional: true,
+    defaultValue: 'cosine',
+    description:
+      'Distance metric. SurrealDB HNSW indexes support cosine and euclidean distance; `dotproduct` indexes are searched exactly, without an HNSW index.',
+  },
+]}
+/>
+
+### `upsert()`
+
+Adds vectors, or replaces vectors with the same ids. Large batches are written in chunks of 500.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to upsert into',
+  },
+  {
+    name: 'vectors',
+    type: 'number[][]',
+    description: 'Array of embedding vectors',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, any>[]',
+    isOptional: true,
+    description: 'Metadata for each vector',
+  },
+  {
+    name: 'ids',
+    type: 'string[]',
+    isOptional: true,
+    description: 'Optional vector IDs (auto-generated if not provided)',
+  },
+  {
+    name: 'deleteFilter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Deletes the vectors matching this filter in the same transaction as the first batch',
+  },
+]}
+/>
+
+### `query()`
+
+Searches for similar vectors with optional metadata filtering.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to search in',
+  },
+  {
+    name: 'queryVector',
+    type: 'number[]',
+    description: 'Query vector to find similar vectors for',
+  },
+  {
+    name: 'topK',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '10',
+    description: 'Number of results to return',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Metadata filters, using the operators described in `SURREALDB_PROMPT`',
+  },
+  {
+    name: 'includeVector',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description: 'Whether to include vector data in results',
+  },
+]}
+/>
+
+Scores are `1 - distance` for cosine, `1 / (1 + distance)` for euclidean and the dot product for `dotproduct`.
+
+### `describeIndex()`
+
+Returns the dimension, metric and vector count of an index.
+
+```typescript
+const { dimension, metric, count } = await store.describeIndex({ indexName: 'docs' })
+```
+
+### `listIndexes()`
+
+Returns the names of every index created by `SurrealVector`.
+
+### `deleteIndex()`
+
+Removes the index and its table. Deleting an index that doesn't exist does nothing.
+
+### `updateVector()`
+
+Updates the vector and/or metadata of one vector by `id`, or of every vector matching `filter`.
+
+```typescript
+await store.updateVector({
+  indexName: 'docs',
+  id: 'doc-1',
+  update: { metadata: { source: 'faq' } },
+})
+await store.updateVector({
+  indexName: 'docs',
+  filter: { source: 'draft' },
+  update: { metadata: { source: 'faq' } },
+})
+```
+
+### `deleteVector()`
+
+Deletes one vector by `id`.
+
+### `deleteVectors()`
+
+Deletes vectors by `ids`, or every vector matching `filter`.
+
+```typescript
+await store.deleteVectors({ indexName: 'docs', filter: { source: 'draft' } })
+```
+
+### `disconnect()`
+
+Closes the connection when the vector store opened it.
+
+## Metadata filtering
+
+Filters use MongoDB-style operators: `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`, `$all`, `$elemMatch`, `$size`, `$exists`, `$regex`, `$contains`, `$and`, `$or`, `$nor` and `$not`. Nested fields use dot notation. Field names and values are always passed to SurrealDB as query parameters.
+
+```typescript
+const results = await store.query({
+  indexName: 'docs',
+  queryVector,
+  topK: 10,
+  filter: {
+    $and: [
+      { category: { $in: ['guides', 'faq'] } },
+      { 'author.team': 'docs' },
+      { tags: { $all: ['public'] } },
+    ],
+  },
+})
+```
+
+`SURREALDB_PROMPT` describes the supported operators for agents that build filters with the vector query tool.
+
+## Related
+
+- [SurrealDB storage](/integrations/databases/surrealdb)
+- [Metadata filters](/reference/rag/metadata-filters)
