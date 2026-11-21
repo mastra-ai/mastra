@@ -1890,12 +1890,15 @@ export class EventedWorkflow<
           storageVersion,
         });
 
+      const wasCached = this.runs.get(runIdToUse) === run;
       this.cacheRun(run);
 
       // Sync status from storage to in-memory run (fixes status tracking across workflow instances)
       if (stored) {
         run.workflowRunStatus = stored.status;
       }
+      // A reopen does not execute, so no later settle would evict a run stored as suspended.
+      if (stored?.status === 'suspended' && !wasCached) hooks.registration.evict();
 
       if (!existsInStorage && shouldPersistSnapshot) {
         const initialSnapshot: WorkflowRunState = {

@@ -304,7 +304,8 @@ describe.each(engines)('$engine engine: suspended run eviction', ({ createWorkfl
     } finally {
       gate.release();
     }
-    expect(workflow.runs.get(run.runId)).toBe(run);
+    // Still suspended and unwatched, so the reopens leave it weakly held.
+    expect(workflow.runs.has(run.runId)).toBe(false);
   });
 
   it('keeps a run another open of its id started while an earlier open read storage', async () => {
@@ -499,6 +500,31 @@ describe.each(engines)('$engine engine: suspended run eviction', ({ createWorkfl
     const reopened = await workflow.createRun({ runId });
     expect(reopened.resourceId).toBe('user-1');
     expect((await reopened.resume({ step: 'approve', resumeData: { by: 'ana' } })).status).toBe('success');
+  });
+
+  it('frees a reopened suspended run once nothing holds it', async () => {
+    const { workflow } = await setup();
+    const runId = await suspendUnheld(workflow, new FinalizationRegistry(() => {}), () => true, evented);
+    let collected = false;
+    const registry = new FinalizationRegistry(() => (collected = true));
+    await (async () => {
+      const reopened = await workflow.createRun({ runId });
+      expect(reopened.workflowRunStatus).toBe('suspended');
+      registry.register(reopened, undefined);
+    })();
+    expect(workflow.runs.has(runId)).toBe(false);
+    await expect
+      .poll(
+        async () => {
+          collectGarbage();
+          await new Promise(resolve => setTimeout(resolve, 10));
+          return collected;
+        },
+        { timeout: 10_000, interval: 50 },
+      )
+      .toBe(true);
+    const resumed = await workflow.createRun({ runId });
+    expect((await resumed.resume({ step: 'approve', resumeData: { by: 'ana' } })).status).toBe('success');
   });
 
   // Only the default engine keeps a per-run persistence override.

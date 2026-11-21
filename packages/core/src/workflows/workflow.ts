@@ -3493,6 +3493,7 @@ export class Workflow<
             this.engineType === 'default' && this.#options.autoRestartActiveRuns !== false && this.type !== 'processor',
         });
 
+      const wasCached = this.runs.get(runIdToUse) === run;
       this.cacheRun(run);
 
       if (options?.shouldPersistSnapshot) {
@@ -3503,6 +3504,8 @@ export class Workflow<
         run.workflowRunStatus = stored.status;
         run.parentWorkflow = stored.parentWorkflow ?? run.parentWorkflow;
       }
+      // A reopen does not execute, so no later settle would evict a run stored as suspended.
+      if (stored?.status === 'suspended' && !wasCached) hooks.registration.evict();
 
       if (!existsInStorage && shouldPersistSnapshot) {
         const initialSnapshot: WorkflowRunState = {
