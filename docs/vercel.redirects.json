@@ -2409,6 +2409,11 @@
       "source": "/docs/mastra-platform/regions",
       "destination": "/docs/mastra-platform/deploy/regions",
       "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/alerts",
+      "destination": "/docs/mastra-platform/observability/alerts",
+      "permanent": true
     }
   ]
 }
