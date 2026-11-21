@@ -1,10 +1,10 @@
 import type { ComponentProps } from 'react';
-import { use } from 'react';
+import { use, useMemo } from 'react';
 
 import { ChatShellComposerInputContext } from '../ChatShell/chat-shell-context';
 import { ScrollArea } from '../ScrollArea';
-import { useComposerEngagement } from './use-composer-engagement';
-import { useComposerStatusPresence } from './use-composer-status-presence';
+import { attachComposerEngagement, claimComposerPress } from './composer-engagement';
+import { observeComposerStatus } from './composer-status-presence';
 import { textFieldAutofillProps } from '@/ds/primitives/password-manager-autofill';
 import { mergeRefs } from '@/lib/merge-refs';
 import { cn } from '@/lib/utils';
@@ -26,20 +26,16 @@ export interface ComposerInputProps extends ComponentProps<'textarea'> {
  * One line until the input is focused or holds a draft, then opens a row above the actions for the
  * input. Positioned so an overlay `ComposerHeader` can anchor to its top edge.
  */
-export function Composer({ ref, className, onFocus, onPointerDownCapture, ...props }: ComposerProps) {
-  const engagement = useComposerEngagement();
+export function Composer({ ref, className, onPointerDownCapture, ...props }: ComposerProps) {
+  const rootRef = useMemo(() => mergeRefs(ref, attachComposerEngagement), [ref]);
   return (
     <form
-      ref={mergeRefs(ref, engagement.rootRef)}
+      ref={rootRef}
       data-slot="composer"
       className={cn('relative', className)}
-      onFocus={event => {
-        onFocus?.(event);
-        engagement.onFocus(event);
-      }}
       onPointerDownCapture={event => {
         onPointerDownCapture?.(event);
-        engagement.onPointerDownCapture();
+        claimComposerPress(event);
       }}
       {...props}
     />
@@ -123,10 +119,11 @@ export function ComposerInput({
   ...props
 }: ComposerInputProps) {
   const shellInputRef = use(ChatShellComposerInputContext);
+  const inputRef = useMemo(() => mergeRefs(ref, shellInputRef), [ref, shellInputRef]);
   return (
     <ScrollArea maxHeight={maxHeight ?? (variant === 'textarea' ? '16rem' : '13rem')}>
       <textarea
-        ref={mergeRefs(ref, shellInputRef)}
+        ref={inputRef}
         data-slot="composer-input"
         data-variant={variant}
         className={cn(
@@ -190,10 +187,10 @@ export function ComposerActionsDetail({ className, ...props }: ComponentProps<'d
  * changes it, so the composer's bottom edge stays put.
  */
 export function ComposerStatus({ ref, className, ...props }: ComponentProps<'div'>) {
-  const statusRef = useComposerStatusPresence();
+  const statusRef = useMemo(() => mergeRefs(ref, observeComposerStatus), [ref]);
   return (
     <div
-      ref={mergeRefs(ref, statusRef)}
+      ref={statusRef}
       data-slot="composer-status"
       className={cn(
         'mx-auto flex min-h-control-sm w-full max-w-3xl min-w-0 items-center gap-3 px-3 text-caption text-muted-foreground',

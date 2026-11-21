@@ -2,7 +2,7 @@
 
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useEffect, useRef, useState } from 'react';
+import { StrictMode, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -123,6 +123,67 @@ describe('Composer engagement', () => {
     await userEvent.tab({ shift: true });
 
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Transcript link' }));
+    expect(composer().dataset.engaged).toBeUndefined();
+  });
+
+  it('stays open when the press that opened it began outside', async () => {
+    function ReplyScreen() {
+      const inputRef = useRef<HTMLTextAreaElement>(null);
+      return (
+        <>
+          <button type="button" onPointerDown={() => inputRef.current?.focus()}>
+            Reply
+          </button>
+          <Composer aria-label="Message composer">
+            <ComposerBox>
+              <ComposerInput ref={inputRef} aria-label="Message" placeholder="Ask Mastra Code" />
+            </ComposerBox>
+          </Composer>
+        </>
+      );
+    }
+    render(<ReplyScreen />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Reply' }));
+
+    expect(composer().dataset.engaged).toBe('true');
+  });
+
+  it('closes when a press lands in another composer on the page', async () => {
+    render(
+      <>
+        <Composer aria-label="Thread composer">
+          <ComposerBox>
+            <ComposerInput aria-label="Thread message" placeholder="Reply" />
+          </ComposerBox>
+        </Composer>
+        <Composer aria-label="Side composer">
+          <ComposerBox>
+            <ComposerActions>
+              <button type="button">Side attach</button>
+            </ComposerActions>
+          </ComposerBox>
+        </Composer>
+      </>,
+    );
+    await userEvent.click(screen.getByRole('textbox', { name: 'Thread message' }));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Side attach' }));
+
+    expect(screen.getByRole('form', { name: 'Thread composer' }).dataset.engaged).toBeUndefined();
+  });
+
+  it('behaves the same under StrictMode', async () => {
+    render(
+      <StrictMode>
+        <ChatScreen />
+      </StrictMode>,
+    );
+
+    await userEvent.click(screen.getByRole('textbox', { name: 'Message' }));
+    expect(composer().dataset.engaged).toBe('true');
+
+    await userEvent.click(screen.getByText('Transcript'));
     expect(composer().dataset.engaged).toBeUndefined();
   });
 });
