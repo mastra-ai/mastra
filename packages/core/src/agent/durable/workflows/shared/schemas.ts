@@ -206,6 +206,18 @@ export const baseIterationStateSchema = z.object({
   usageAggregationVersion: z.literal(1).optional(),
   // Last step result for continuation check
   lastStepResult: z.any().optional(),
+  // Set when a `processToolResult` hook rejected a result. Carried across the
+  // iterations that follow it, since the loop keeps its continuation decision
+  // for a blocked result and the hook's `persist` is only applied at the end.
+  toolResultTripwire: z
+    .object({
+      reason: z.string(),
+      retry: z.boolean().optional(),
+      metadata: z.unknown().optional(),
+      processorId: z.string().optional(),
+      persist: z.enum(['none', 'partial']).optional(),
+    })
+    .optional(),
   // Step-finish waits here until the loop's continuation policy resolves.
   deferredStepFinishChunk: z.any().optional(),
   // Background task tracking

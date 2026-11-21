@@ -73,6 +73,7 @@ export interface TripwireChunk {
     retry?: boolean;
     metadata?: unknown;
     processorId?: string;
+    persist?: 'none' | 'partial';
   };
 }
 
@@ -99,6 +100,7 @@ export function createTripWireFromChunk(chunk: TripwireChunk): TripWire {
     {
       retry: payload.retry,
       metadata: payload.metadata,
+      persist: payload.persist,
     },
     payload.processorId,
   );

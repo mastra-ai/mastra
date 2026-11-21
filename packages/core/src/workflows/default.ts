@@ -598,7 +598,16 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           params.stepSpan?.error({
             ...workflowTermination(
               e instanceof TripWire
-                ? { status: 'tripwire', tripwire: { reason: e.message, processorId: e.processorId } }
+                ? {
+                    status: 'tripwire',
+                    tripwire: {
+                      reason: e.message,
+                      retry: e.options?.retry,
+                      metadata: e.options?.metadata,
+                      processorId: e.processorId,
+                      persist: e.options?.persist,
+                    },
+                  }
                 : { status: 'failed', error: errorInstance },
             ),
             error: mastraError,
@@ -620,6 +629,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                       retry: e.options?.retry,
                       metadata: e.options?.metadata,
                       processorId: e.processorId,
+                      persist: e.options?.persist,
                     }
                   : undefined,
             },
@@ -710,6 +720,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           retry: tripwireData.options?.retry,
           metadata: tripwireData.options?.metadata,
           processorId: tripwireData.processorId,
+          persist: tripwireData.options?.persist,
         };
       } else if (tripwireData && typeof tripwireData === 'object' && 'reason' in tripwireData) {
         // Use 'tripwire' status for plain tripwire data objects (already serialized)

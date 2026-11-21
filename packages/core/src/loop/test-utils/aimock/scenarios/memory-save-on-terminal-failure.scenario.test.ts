@@ -16,7 +16,15 @@ import { InMemoryStore } from '../../../../storage';
 import { createTool } from '../../../../tools';
 import { TOOL_ABORT_NOTICE } from '../../../shared/tool-abort-grace';
 import { describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { createRecordingModel } from '../parity';
+import type { ModelTape } from '../parity';
 import type { EngineVariant } from '../types';
+
+const TAPE_HEAD = [
+  { type: 'stream-start', warnings: [] },
+  { type: 'response-metadata', id: 'r', modelId: 'm', timestamp: new Date(0) },
+];
+const TAPE_USAGE = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
 /**
  * A run that ends without a finish chunk must still save the turn.
@@ -1515,4 +1523,557 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
     },
     TEST_TIMEOUT_MS,
   );
+
+  // A guardrail that blocks a reply can ask memory to keep the turn instead of rolling it back
+  // (`abort(reason, { persist: 'partial' })`). Here nothing was saved before the trip, so the
+  // keep-save must write the user message and the completed tool step to the thread.
+  it(
+    'finish keeps the turn when an output processor opts in with persist: partial',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-finish-tripwire-partial-${engine}`;
+      const keeper: Processor = {
+        id: 'keeping-guardrail',
+        processOutputResult: ({ abort }) => abort('Kept by the aborter', { persist: 'partial' }),
+      };
+      const { output } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Echo first, then answer.',
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        agentOutputProcessors: [keeper],
+        stopWhen: stepCountIs(5),
+        tools: { echoTool },
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            { toolCalls: [{ id: 'call_echo', name: 'echoTool', arguments: { input: 'first' } }] },
+          );
+          llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'The echo ran.' });
+        },
+      });
+      expect(output.tripwire).toMatchObject({ reason: 'Kept by the aborter', processorId: 'keeping-guardrail' });
+
+      await vi.waitFor(
+        async () => {
+          const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+          expect(messages.map(message => message.role)).toContain('assistant');
+        },
+        { timeout: 5_000, interval: 100 },
+      );
+      const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+      expect(messages.some(message => message.role === 'user')).toBe(true);
+      expect(toolResultIds(messages)).toContain('call_echo');
+      expect(JSON.stringify(messages)).toContain('The echo ran.');
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // A provider-executed result can be rejected too, and its raw value is already in the stream's
+  // collected chunks when `processToolResult` runs. A keep-save that materializes those chunks must
+  // leave the rejected result out while keeping the call, or the value the processor refused lands
+  // in history and in the next turn's model input.
+  // Durable engines only: they keep the turn after this mid-stream bail, so the rejection would show
+  // up in the thread there. The in-process engines end the run before the output-processor pass and
+  // save nothing at all on this path.
+  const itKeptTurnEngine = engine === 'durable' || engine === 'evented' ? it : it.skip;
+  itKeptTurnEngine(
+    'keeps the turn without the tool result a processToolResult hook rejected',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-tool-result-partial-${engine}`;
+      const REJECTED = 'CARD-4242-DO-NOT-STORE';
+      let blocked = 0;
+      const rejector: Processor = {
+        id: 'rejecting-tool-result',
+        processToolResult: ({ abort }) => {
+          blocked++;
+          abort('Rejected by policy', { persist: 'partial' });
+        },
+      };
+      const recording = createRecordingModel({
+        tapes: [
+          [
+            ...TAPE_HEAD,
+            { type: 'text-start', id: 't1' },
+            { type: 'text-delta', id: 't1', delta: 'Looking that up. ' },
+            { type: 'text-end', id: 't1' },
+            { type: 'tool-input-start', id: 'call_lookup', toolName: 'lookup', providerExecuted: true },
+            { type: 'tool-input-delta', id: 'call_lookup', delta: '{"q":"card"}' },
+            { type: 'tool-input-end', id: 'call_lookup' },
+            {
+              type: 'tool-result',
+              toolCallId: 'call_lookup',
+              toolName: 'lookup',
+              result: { secret: REJECTED },
+              providerExecuted: true,
+            },
+            { type: 'finish', finishReason: 'tool-calls', usage: TAPE_USAGE },
+          ],
+          // Reached only if the run continues past the rejected result.
+          [
+            ...TAPE_HEAD,
+            { type: 'text-start', id: 't2' },
+            { type: 'text-delta', id: 't2', delta: 'Continued after the rejection.' },
+            { type: 'text-end', id: 't2' },
+            { type: 'finish', finishReason: 'stop', usage: TAPE_USAGE },
+          ],
+        ] satisfies ModelTape[],
+      });
+
+      const { output } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Look the card up, then answer.',
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        agentOutputProcessors: [rejector],
+        model: () => recording.model,
+        stopWhen: stepCountIs(5),
+        tools: {
+          lookup: createTool({
+            id: 'lookup',
+            description: 'Looks a card up.',
+            inputSchema: z.object({ q: z.string() }),
+            execute: async () => ({ secret: 'executed locally' }),
+          }),
+        },
+        fixtures: () => {},
+      });
+
+      expect(blocked).toBe(1);
+      expect(output.tripwire).toMatchObject({ reason: 'Rejected by policy', persist: 'partial' });
+
+      const messages = await vi.waitFor(
+        async () => {
+          const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+          expect(messages.map(message => message.role)).toContain('assistant');
+          return messages;
+        },
+        { timeout: 5_000, interval: 100 },
+      );
+      const saved = JSON.stringify(messages);
+      // The rejected value never reaches the thread, but the call it belonged to stays.
+      expect(saved).not.toContain(REJECTED);
+      expect(saved).toContain('call_lookup');
+      expect(saved).toContain('Looking that up.');
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // The default for a rejected tool result is the rollback: a `processToolResult` abort that does not
+  // ask to keep the turn leaves nothing of it in the thread, exactly as an output processor abort does.
+  // A client-executed tool reaches the hook through the tool-call step, not the stream, so this is the
+  // route where the durable engines used to save the turn regardless of the aborter's choice.
+  // Same engines as the keep tests above: the in-process engines save nothing on this path, so they
+  // have no turn to roll back.
+  itKeptTurnEngine(
+    'rolls the turn back when a processToolResult hook rejects a client tool result',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-tool-result-default-${engine}`;
+      let blocked = 0;
+      const rejector: Processor = {
+        id: 'rejecting-tool-result',
+        processToolResult: ({ abort }) => {
+          blocked++;
+          abort('Rejected by policy');
+        },
+      };
+
+      const { output } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Look the card up, then answer.',
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        agentOutputProcessors: [rejector],
+        stopWhen: stepCountIs(5),
+        tools: { echoTool },
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            { toolCalls: [{ id: 'call_echo', name: 'echoTool', arguments: { input: 'first' } }] },
+          );
+          llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Continued after the rejection.' });
+        },
+      });
+
+      expect(blocked).toBe(1);
+      expect(output.tripwire).toMatchObject({ reason: 'Rejected by policy' });
+
+      // Absence can't be polled for; give a late write time to land.
+      await new Promise(resolve => setTimeout(resolve, 1_000));
+      const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+      expect(messages.map(message => message.role)).toEqual(['user']);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // The same route when the aborter asks for the turn: the choice decides what memory does with it, and
+  // the rejected result stays out either way.
+  itKeptTurnEngine(
+    'keeps the turn when a processToolResult hook opts in with persist: partial',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-tool-result-client-partial-${engine}`;
+      let blocked = 0;
+      const rejector: Processor = {
+        id: 'rejecting-tool-result',
+        processToolResult: ({ abort }) => {
+          blocked++;
+          abort('Rejected by policy', { persist: 'partial' });
+        },
+      };
+
+      const { output } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Look the card up, then answer.',
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        agentOutputProcessors: [rejector],
+        stopWhen: stepCountIs(5),
+        tools: { echoTool },
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            { toolCalls: [{ id: 'call_echo', name: 'echoTool', arguments: { input: 'first' } }] },
+          );
+          llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Continued after the rejection.' });
+        },
+      });
+
+      expect(blocked).toBe(1);
+      expect(output.tripwire).toMatchObject({ reason: 'Rejected by policy', persist: 'partial' });
+
+      const { messages } = await vi.waitFor(
+        async () => {
+          const recalled = await memory.recall({ threadId, resourceId: RESOURCE });
+          expect(recalled.messages.map(message => message.role)).toContain('assistant');
+          return recalled;
+        },
+        { timeout: 5_000, interval: 100 },
+      );
+      const saved = JSON.stringify(messages);
+      expect(saved).toContain('call_echo');
+      expect(saved).toContain('Continued after the rejection.');
+      // The blocked result was never committed, so the call it belonged to is still waiting.
+      expect(toolResultIds(messages)).toEqual([]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // A stream processor can stop a reply that has already streamed text. The text accepted before the
+  // trip belongs to the turn, and the aborter's choice decides whether memory keeps it.
+  // Same engines as the rejected tool result above: the in-process engines save nothing on this bail.
+  itKeptTurnEngine(
+    'keeps the text accepted before a stream processor aborted',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-stream-partial-${engine}`;
+      let deltas = 0;
+      let rejected = '';
+      const breaker: Processor = {
+        id: 'stream-keeper',
+        processOutputStream: async ({ part, abort }) => {
+          if (part.type === 'text-delta' && ++deltas === 2) {
+            // The chunk that trips the run is never accepted, so memory must not hold it.
+            rejected = part.payload.text as string;
+            abort('Stream stopped by policy', { persist: 'partial' });
+          }
+          return part;
+        },
+      };
+
+      const { output } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Answer slowly.',
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        agentOutputProcessors: [breaker],
+        collectChunks: true,
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            { content: 'KEPT-THEN-STOPPED' },
+            { chunkSize: 4, latency: 10 },
+          );
+        },
+      });
+
+      expect(deltas).toBeGreaterThanOrEqual(2);
+      expect(output.tripwire).toMatchObject({ reason: 'Stream stopped by policy', persist: 'partial' });
+
+      // Absence can't be polled for; give a late write time to land.
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+      const saved = JSON.stringify(messages);
+      expect(saved).toContain('KEPT');
+      // The delta the processor refused never reaches the thread.
+      expect(rejected).not.toBe('');
+      expect(saved).not.toContain(rejected);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // The deadline sibling: the per-step saves already in the thread must survive a tripwire when
+  // the aborter opted in, instead of being rolled back as they are by default.
+  itStoppedStep(
+    'total-timeout keeps per-step saves when an output processor opts in with persist: partial',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-timeout-tripwire-partial-${engine}`;
+      const keeper: Processor = {
+        id: 'deadline-keeper',
+        processOutputResult: ({ abort }) => abort('Kept at the deadline', { persist: 'partial' }),
+      };
+      const hang = Promise.withResolvers<unknown>();
+      try {
+        const result = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Echo first, then wait.',
+          memory,
+          threadId,
+          resourceId: RESOURCE,
+          savePerStep: true,
+          agentOutputProcessors: [keeper],
+          stopWhen: stepCountIs(5),
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          expectStreamError: true,
+          collectChunks: true,
+          tools: {
+            echoTool,
+            hanging: createTool({
+              id: 'hanging',
+              description: 'Never returns.',
+              inputSchema: z.object({}),
+              execute: async () => hang.promise,
+            }),
+          },
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 0 },
+              { toolCalls: [{ id: 'call_echo', name: 'echoTool', arguments: { input: 'first' } }] },
+            );
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 1 },
+              { toolCalls: [{ id: 'call_hang', name: 'hanging', arguments: {} }] },
+            );
+          },
+        });
+        expect(result.chunks!.some(chunk => chunk.type === 'tool-result')).toBe(true);
+        expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
+
+        // On Inngest the worker keeps the stopped turn after the caller's error.
+        await vi.waitFor(
+          async () => {
+            const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+            expect(messages.map(message => message.role)).toContain('assistant');
+          },
+          { timeout: 5_000, interval: 100 },
+        );
+      } finally {
+        hang.resolve({});
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // The keep-save writes memory, so it has to check write access like every other save. The FGA
+  // only starts denying once the guardrail has tripped, so the denial is the only thing that can
+  // stop the write. In-process engines only: the durable engines authorize `memory:write` during
+  // preparation and their keep-save reuses that grant, so the denial is not observable there.
+  const itInProcessEngine = engine === 'normal' || engine === 'fs' ? it : it.skip;
+  itInProcessEngine(
+    'finish does not keep the turn when the caller cannot write memory',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-finish-keep-fga-${engine}`;
+      // Pre-create the thread: a run that creates it authorizes `memory:write` up front, so the
+      // keep-save would reuse that grant instead of asking again.
+      await memory.createThread({ threadId, resourceId: RESOURCE });
+      let tripped = false;
+      const denied: string[] = [];
+      const fga: IFGAProvider = {
+        check: async (_user, { resource, permission }) =>
+          !(tripped && String(permission) === 'memory:write' && resource.id === threadId),
+        require: async (user, { resource, permission }) => {
+          if (tripped && String(permission) === 'memory:write' && resource.id === threadId) {
+            denied.push(resource.id);
+            throw new FGADeniedError(user, resource, permission);
+          }
+        },
+        filterAccessible: async (_user, resources) => resources,
+      };
+      const keeper: Processor = {
+        id: 'keeping-guardrail',
+        processOutputResult: ({ abort }) => {
+          tripped = true;
+          abort('Kept but not authorized', { persist: 'partial' });
+        },
+      };
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'reader' });
+      const { output } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Echo first, then answer.',
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        agentOutputProcessors: [keeper],
+        server: { fga },
+        requestContext,
+        stopWhen: stepCountIs(5),
+        tools: { echoTool },
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            { toolCalls: [{ id: 'call_echo', name: 'echoTool', arguments: { input: 'first' } }] },
+          );
+          llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'The echo ran.' });
+        },
+      });
+      expect(output.tripwire).toMatchObject({ reason: 'Kept but not authorized' });
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      expect(denied).toContain(threadId);
+      const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+      expect(JSON.stringify(messages)).not.toContain('The echo ran.');
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // A keep-save needs a resource id to authorize against. Without one it has to fail closed
+  // instead of writing the thread the run pointed at. Durable engines only: their ordinary save
+  // insists on both ids, so their keep-save has to as well. The in-process loop authorizes the
+  // thread directly, the way its own save does.
+  const itDurableEngine = engine === 'durable' || engine === 'evented' ? it : it.skip;
+  itDurableEngine(
+    'finish does not keep the turn when the run has no resource id',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-finish-keep-no-resource-${engine}`;
+      const keeper: Processor = {
+        id: 'keeping-guardrail',
+        processOutputResult: ({ abort }) => abort('Kept without a resource id', { persist: 'partial' }),
+      };
+      const { output } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Echo first, then answer.',
+        memory,
+        threadId,
+        agentOutputProcessors: [keeper],
+        stopWhen: stepCountIs(5),
+        tools: { echoTool },
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            { toolCalls: [{ id: 'call_echo', name: 'echoTool', arguments: { input: 'first' } }] },
+          );
+          llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'The echo ran.' });
+        },
+      });
+      expect(output.tripwire).toMatchObject({ reason: 'Kept without a resource id' });
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const { messages } = await memory.recall({ threadId });
+      expect(messages.map(message => message.role)).not.toContain('assistant');
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // The deadline keep-save needs the same ids as the finish one, so without a resource id it must
+  // not write the cut-off turn either. The deadline save itself also requires a resource id, so the
+  // keep-save is the only writer that could put the turn in the thread.
+  itDurableEngine(
+    'total-timeout does not keep the turn when the run has no resource id',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-timeout-keep-no-resource-${engine}`;
+      const keeper: Processor = {
+        id: 'deadline-keeper',
+        processOutputResult: ({ abort }) => abort('Kept without a resource id', { persist: 'partial' }),
+      };
+      const hang = Promise.withResolvers<unknown>();
+      try {
+        const result = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Echo first, then wait.',
+          memory,
+          threadId,
+          agentOutputProcessors: [keeper],
+          stopWhen: stepCountIs(5),
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          expectStreamError: true,
+          collectChunks: true,
+          tools: {
+            echoTool,
+            hanging: createTool({
+              id: 'hanging',
+              description: 'Never returns.',
+              inputSchema: z.object({}),
+              execute: async () => hang.promise,
+            }),
+          },
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 0 },
+              { toolCalls: [{ id: 'call_echo', name: 'echoTool', arguments: { input: 'first' } }] },
+            );
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 1 },
+              { toolCalls: [{ id: 'call_hang', name: 'hanging', arguments: {} }] },
+            );
+          },
+        });
+        expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
+        await new Promise(resolve => setTimeout(resolve, 1_000));
+
+        const { messages } = await memory.recall({ threadId });
+        expect(messages.map(message => message.role)).not.toContain('assistant');
+      } finally {
+        hang.resolve({});
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+});
+
+// What the retry note in the memory docs promises: the store writes by message id, so a client that
+// reuses the id on a retry overwrites the earlier row while a fresh id stores the turn twice.
+// Engine-independent: the write-by-id contract belongs to the store, not to any one engine.
+it('a retry reusing the user message id keeps one row, a new id stores the turn twice', async () => {
+  const memory = new MockMemory();
+  const threadId = `${THREAD}-retry-dedupe`;
+  const userMessage = (id: string) => ({
+    id,
+    role: 'user' as const,
+    createdAt: new Date(),
+    threadId,
+    resourceId: RESOURCE,
+    content: { format: 2 as const, content: 'Hello', parts: [{ type: 'text' as const, text: 'Hello' }] },
+  });
+
+  await memory.saveMessages({ messages: [userMessage('retry-id')] });
+  // The retry reuses the id, as a client that wants dedupe does.
+  await memory.saveMessages({ messages: [userMessage('retry-id')] });
+  let { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+  expect(messages.filter(message => message.role === 'user')).toHaveLength(1);
+
+  // A fresh id on the retry leaves the earlier row in place.
+  await memory.saveMessages({ messages: [userMessage('fresh-id')] });
+  ({ messages } = await memory.recall({ threadId, resourceId: RESOURCE }));
+  expect(messages.filter(message => message.role === 'user')).toHaveLength(2);
 });

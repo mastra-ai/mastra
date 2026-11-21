@@ -182,6 +182,9 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
       retry: z.boolean().optional(),
       metadata: z.unknown().optional(),
       processorId: z.string().optional(),
+      // What memory keeps for the blocked turn; without it the value the step emitted is
+      // stripped here and the keep falls back to the rollback.
+      persist: z.enum(['none', 'partial']).optional(),
     })
     .optional(),
   error: serializedErrorSchema.optional(),
@@ -2582,6 +2585,7 @@ export function createDurableToolCallStep() {
                 retry: processorError.options?.retry,
                 metadata: processorError.options?.metadata,
                 processorId: processorError.processorId,
+                persist: processorError.options?.persist,
               };
               if (pubsub) {
                 try {

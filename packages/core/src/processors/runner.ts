@@ -731,7 +731,15 @@ export class ProcessorRunner {
     // Check for tripwire status - this means a processor in the workflow called abort()
     if (result.status === 'tripwire') {
       const tripwireData = (
-        result as { tripwire?: { reason?: string; retry?: boolean; metadata?: unknown; processorId?: string } }
+        result as {
+          tripwire?: {
+            reason?: string;
+            retry?: boolean;
+            metadata?: unknown;
+            processorId?: string;
+            persist?: 'none' | 'partial';
+          };
+        }
       ).tripwire;
       // Re-throw as TripWire so the agent handles it properly
       throw new TripWire(
@@ -739,6 +747,7 @@ export class ProcessorRunner {
         {
           retry: tripwireData?.retry,
           metadata: tripwireData?.metadata,
+          persist: tripwireData?.persist,
         },
         tripwireData?.processorId || workflow.id,
       );
@@ -1476,6 +1485,7 @@ export class ProcessorRunner {
                       retry: r.tripwireOptions?.retry,
                       metadata: r.tripwireOptions?.metadata,
                       processorId: r.processorId,
+                      persist: r.tripwireOptions?.persist,
                     },
                   });
                   break;
@@ -1520,6 +1530,7 @@ export class ProcessorRunner {
                   retry: opts?.retry,
                   metadata: opts?.metadata,
                   processorId: pid,
+                  persist: opts?.persist,
                 },
               });
             };

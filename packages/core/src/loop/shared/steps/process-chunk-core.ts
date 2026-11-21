@@ -76,6 +76,7 @@ export async function processAndEmitChunk<OUTPUT = undefined>(
         retry: opts?.retry,
         metadata: opts?.metadata,
         processorId,
+        persist: opts?.persist,
       },
     } as ChunkType<OUTPUT>);
   };

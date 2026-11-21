@@ -951,7 +951,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 streamWriter,
                 options.abortSignal,
               );
-              const enqueueTripwire = (r?: string, opts?: { retry?: boolean; metadata?: unknown }, pid?: string) => {
+              const enqueueTripwire = (
+                r?: string,
+                opts?: { retry?: boolean; metadata?: unknown; persist?: 'none' | 'partial' },
+                pid?: string,
+              ) => {
                 controller.enqueue({
                   type: 'tripwire',
                   payload: {
@@ -959,6 +963,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     retry: opts?.retry,
                     metadata: opts?.metadata,
                     processorId: pid,
+                    persist: opts?.persist,
                   },
                 } as ChunkType<OUTPUT>);
               };
@@ -1035,6 +1040,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     retry: r.tripwireOptions?.retry,
                     metadata: r.tripwireOptions?.metadata,
                     processorId: r.processorId,
+                    persist: r.tripwireOptions?.persist,
                   },
                 } as ChunkType<OUTPUT>);
                 break;
@@ -1575,6 +1581,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 retry: chunk.payload?.retry,
                 metadata: chunk.payload?.metadata,
                 processorId: chunk.payload?.processorId,
+                persist: chunk.payload?.persist,
               };
               // Tracing must not change how the stream settles.
               try {
@@ -1696,6 +1703,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     retry: stepTripwire?.retry,
                     metadata: stepTripwire?.metadata,
                     processorId: stepTripwire?.processorId,
+                    // A stream processor's tripwire chunk already recorded the aborter's
+                    // choice; the step only has one when the *step* processor tripped.
+                    // Keep the earlier value rather than dropping it here.
+                    persist: stepTripwire?.persist ?? self.#tripwire?.persist,
                   };
                 }
               }
@@ -1989,6 +2000,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     retry: error.options?.retry,
                     metadata: error.options?.metadata,
                     processorId: error.processorId,
+                    persist: error.options?.persist,
                   };
                   outputResultTripwire = self.#tripwire;
                   // A tripwire rejects the output without erasing it; keep `text` in sync with
@@ -2303,7 +2315,15 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                       },
                     );
                   } catch (processorError) {
-                    if (processorError instanceof TripWire) await self.#options.onDeadlineTripwire?.(turn);
+                    if (processorError instanceof TripWire) {
+                      await self.#options.onDeadlineTripwire?.(turn, {
+                        reason: processorError.message,
+                        retry: processorError.options?.retry,
+                        metadata: processorError.options?.metadata,
+                        processorId: processorError.processorId,
+                        persist: processorError.options?.persist,
+                      });
+                    }
                     throw processorError;
                   }
                 })().catch(processorError => {

@@ -457,6 +457,8 @@ export interface TripwirePayload<TMetadata = unknown> {
   metadata?: TMetadata;
   /** The ID of the processor that triggered the tripwire */
   processorId?: string;
+  /** What memory keeps for the blocked turn; `'partial'` keeps the run's saved messages */
+  persist?: 'none' | 'partial';
 }
 
 /**
@@ -1345,7 +1347,7 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
   /** @internal Runs before the total-deadline output pass saves the turn. Throwing or resolving `false` skips that pass. */
   beforeDeadlineSave?: () => Promise<boolean | void>;
   /** @internal Runs when an output processor trips during the total-deadline pass. */
-  onDeadlineTripwire?: (turn: MessageList) => Promise<void>;
+  onDeadlineTripwire?: (turn: MessageList, tripwire?: StepTripwireData) => Promise<void>;
   /** The run's abort signal, forwarded to output processors. */
   abortSignal?: AbortSignal;
   transportRef?: StreamTransportRef;
@@ -1368,6 +1370,8 @@ export interface StepTripwireData {
   metadata?: unknown;
   /** ID of the processor that triggered the tripwire */
   processorId?: string;
+  /** What memory keeps for the blocked turn; `'partial'` skips the rollback of saved messages */
+  persist?: 'none' | 'partial';
 }
 
 /**
