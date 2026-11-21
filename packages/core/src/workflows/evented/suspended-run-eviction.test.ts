@@ -709,7 +709,7 @@ describe('reopen of a storage v1 run', () => {
 describe.each(engines)(
   '$engine engine: deleting one storage version of a run',
   ({ createWorkflow, createStep, evented }) => {
-    it('keeps the held instance of a v2 run when its v1 record is deleted', async () => {
+    it('forgets a run instance only when the delete covers its storage version', async () => {
       const workflow = createWorkflow({
         id: 'versions',
         inputSchema: z.object({}),
@@ -736,6 +736,7 @@ describe.each(engines)(
         const versions = mastra.getWorkflow('versions');
         const held = await versions.createRun();
         expect((await held.start({ inputData: {} })).status).toBe('suspended');
+        await expect.poll(() => versions.runs.has(held.runId)).toBe(false);
 
         await versions.deleteWorkflowRunById(held.runId, { storageVersion: 1 });
         expect(await versions.createRun({ runId: held.runId })).toBe(held);
@@ -745,6 +746,7 @@ describe.each(engines)(
 
         const cached = await versions.createRun();
         expect(versions.runs.get(cached.runId)).toBe(cached);
+        expect(cached.storageVersion).toBe(2);
         await versions.deleteWorkflowRunById(cached.runId, { storageVersion: 1 });
         expect(versions.runs.get(cached.runId)).toBe(cached);
         await versions.deleteWorkflowRunById(cached.runId);
