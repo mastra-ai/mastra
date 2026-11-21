@@ -2954,11 +2954,13 @@ export class EventedRun<
       await ack?.();
     };
 
-    this.mastra?.pubsub.subscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
-
-    return this.trackWatcher(() => {
+    const unwatch = this.trackWatcher(() => {
       this.mastra?.pubsub.unsubscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
     });
+    // A watcher that never subscribed receives nothing, so it must not keep a suspended run cached.
+    this.mastra?.pubsub.subscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => unwatch());
+
+    return unwatch;
   }
 
   async watchAsync(cb: (event: WorkflowStreamEvent) => void | Promise<void>): Promise<() => void> {
@@ -2971,7 +2973,12 @@ export class EventedRun<
       await ack?.();
     };
 
-    await this.mastra?.pubsub.subscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
+    const subscribed = await this.mastra?.pubsub.subscribe(`workflow.events.v2.${this.runId}`, watchCb).then(
+      () => true,
+      () => false,
+    );
+    // A watcher that never subscribed receives nothing, so it must not keep a suspended run cached.
+    if (subscribed === false) return async () => {};
 
     const unwatch = this.trackWatcher(() =>
       this.mastra?.pubsub.unsubscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {}),

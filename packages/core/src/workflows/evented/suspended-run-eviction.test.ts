@@ -355,6 +355,29 @@ describe.each(engines)('$engine engine: suspended run eviction', ({ createWorkfl
     expect((await other.getWorkflowRunById(run.runId))?.resourceId).toBe('user-1');
   });
 
+  it.runIf(evented).each(['watch', 'watchAsync'] as const)(
+    'does not count a %s whose subscription failed as a watcher',
+    async method => {
+      const { workflow } = await setup();
+      const run = await workflow.createRun();
+      const pubsub = mastra!.pubsub as any;
+      const subscribe = pubsub.subscribe.bind(pubsub);
+      let failed = false;
+      pubsub.subscribe = async (topic: string, cb: unknown) => {
+        if (topic === `workflow.events.v2.${run.runId}` && !failed) {
+          failed = true;
+          throw new Error('subscribe failed');
+        }
+        return subscribe(topic, cb);
+      };
+      if (method === 'watch') run.watch(() => {});
+      else await run.watchAsync(() => {});
+      expect(failed).toBe(true);
+      expect((await run.start({ inputData: {} })).status).toBe('suspended');
+      await expect.poll(() => workflow.runs.has(run.runId)).toBe(false);
+    },
+  );
+
   it('does not reopen a held run resumed after its record was deleted', async () => {
     const { workflow } = await setup();
     const held = await workflow.createRun();
