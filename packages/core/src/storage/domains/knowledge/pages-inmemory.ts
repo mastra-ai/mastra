@@ -718,6 +718,7 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     const scope = this.#page(input.id);
     if (!scope.isScope) throw new Error(`Knowledge page ${scope.id} isn't a scope page`);
     if (!scope.deletedAt) throw new Error(`Knowledge scope ${scope.address} is not removed`);
+    if (scope.declaration !== input.declaration) throw new KnowledgeConflictError(scope.id);
     if (scope.parentId !== null && this.#page(scope.parentId).deletedAt) {
       throw new Error(`Knowledge scope ${scope.address} can't be restored while its parent scope is removed`);
     }

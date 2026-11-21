@@ -864,9 +864,11 @@ export interface KnowledgePageStore {
   /**
    * Brings a removed scope back with the same id (its notes and activity stay attached), bumps its
    * version and logs `scope-restored`. Refuses a scope that isn't removed and one whose parent scope is
-   * removed. Removed template pages stay removed. Core checks the current declaration first.
+   * removed. Removed template pages stay removed. Core checks the current declaration first and passes
+   * the `declaration` it checked; the store compares it on the locked row and throws
+   * `KnowledgeConflictError` when it changed (a declaration rename doesn't bump the version).
    */
-  restoreScope(input: { id: string; provenance: KnowledgeProvenance }): Promise<KnowledgePage>;
+  restoreScope(input: { id: string; declaration: string; provenance: KnowledgeProvenance }): Promise<KnowledgePage>;
 
   // Notes
   getNote(input: { id: string; read: KnowledgeReadScope; includeDeleted?: boolean }): Promise<KnowledgeNote | null>;

@@ -1363,12 +1363,17 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     return toPage(updated);
   }
 
-  async restoreScope(input: { id: string; provenance: KnowledgeProvenance }): Promise<KnowledgePage> {
+  async restoreScope(input: {
+    id: string;
+    declaration: string;
+    provenance: KnowledgeProvenance;
+  }): Promise<KnowledgePage> {
     return this.#atomic('restoreScope', async session => {
       const scope = await this.#page(input.id, session);
       if (!scope) throw new KnowledgeNotFoundError('page', input.id);
       if (!scope.isScope) throw new Error(`Knowledge page ${input.id} isn't a scope page`);
       if (!scope.deletedAt) throw new Error(`Knowledge scope ${scope.address} is not removed`);
+      if (scope.declaration !== input.declaration) throw new KnowledgeConflictError(input.id);
       // Claiming the parent both checks it is live and conflicts with a concurrent removal of it.
       if (scope.parentId !== null) {
         await this.#claimParent(session, scope.parentId, new Date()).catch(error => {
@@ -1382,7 +1387,8 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       const updated = await (
         await this.#c('pages')
       ).findOneAndUpdate(
-        { id: input.id, version: scope.version, deletedAt: { $exists: true } },
+        // A declaration rename doesn't bump the version, so the declaration is part of the condition.
+        { id: input.id, version: scope.version, declaration: input.declaration, deletedAt: { $exists: true } },
         {
           $set: { updatedAt: now, updatedBy: input.provenance },
           $unset: { deletedAt: '', deletedBy: '' },

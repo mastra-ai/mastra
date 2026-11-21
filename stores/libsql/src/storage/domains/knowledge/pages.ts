@@ -1113,12 +1113,17 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     return toPage((await this.#pageRow(tx, input.id))!);
   }
 
-  async restoreScope(input: { id: string; provenance: KnowledgeProvenance }): Promise<KnowledgePage> {
+  async restoreScope(input: {
+    id: string;
+    declaration: string;
+    provenance: KnowledgeProvenance;
+  }): Promise<KnowledgePage> {
     return this.#transaction(async tx => {
       const row = await this.#pageRow(tx, input.id);
       if (!row) throw new KnowledgeNotFoundError('page', input.id);
       if (Number(row.isScope) !== 1) throw new Error(`Knowledge page ${input.id} isn't a scope page`);
       if (str(row.deletedAt) === undefined) throw new Error(`Knowledge scope ${String(row.address)} is not removed`);
+      if (str(row.declaration) !== input.declaration) throw new KnowledgeConflictError(input.id);
       const parentId = str(row.parentId);
       if (parentId !== undefined) {
         const parent = await this.#pageRow(tx, parentId);

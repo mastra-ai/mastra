@@ -56,6 +56,31 @@ describe('Knowledge host scope removal', () => {
     await expect(call(['org:acme'], 'knowledge_read', { page: 'docs:acme#start' })).rejects.toThrow(/not found/);
   });
 
+  it('leaves a scope removed when its declaration is renamed between the check and the restore', async () => {
+    const { knowledge } = setup();
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'notes', name: 'Notes' });
+    await knowledge.removePage({ scope: 'docs:acme', path: 'notes' });
+    for (const path of ['start/faq', 'start']) await knowledge.removeTemplatePage({ scope: 'docs:acme', path });
+    const removed = await knowledge.removeScope({ scope: 'docs:acme' });
+
+    // Another host renames the declaration after this restore read and checked the scope.
+    const pages = await knowledge.getStorage();
+    const restore = pages.restoreScope.bind(pages);
+    pages.restoreScope = async input => {
+      await pages.renameScopeDeclaration({ from: 'docs:$orgId', to: 'docs:$tenantId', check: () => {} });
+      return restore(input);
+    };
+    await expect(knowledge.restoreScope({ id: removed!.id })).rejects.toThrow(
+      expect.objectContaining({ name: 'KnowledgeConflictError' }),
+    );
+
+    const after = (await pages.getPage({ id: removed!.id, read: 'all' }))!;
+    expect(after).toMatchObject({ declaration: 'docs:$tenantId' });
+    expect(after.deletedAt).toBeInstanceOf(Date);
+    const activity = await pages.listPageActivity({ scopeId: removed!.id, read: 'all' });
+    expect(activity.events.map(event => event.action)).not.toContain('scope-restored');
+  });
+
   it('removes an empty scope, refuses writes to it, and restores it with the same id', async () => {
     const { knowledge, storage, call } = setup();
     await knowledge.removeTemplatePage({ scope: 'docs:acme', path: 'start/faq' }).catch(() => {});

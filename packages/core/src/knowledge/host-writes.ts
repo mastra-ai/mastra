@@ -386,7 +386,13 @@ export async function restoreKnowledgeScope(
   if (host.runtime.compiled.match(scope.address)?.declaration !== scope.declaration) {
     throw new Error(`Knowledge scope "${scope.address}" does not match a declared scope type.`);
   }
-  const restored = await storage.restoreScope({ id: scope.id, provenance: provenanceOf(input) });
+  // The store re-checks this declaration on the locked row: a rename between here and there must not
+  // bring back a scope under a declaration nobody checked.
+  const restored = await storage.restoreScope({
+    id: scope.id,
+    declaration: scope.declaration!,
+    provenance: provenanceOf(input),
+  });
   await updateKnowledgeLinks(host.warn, () => refreshKnowledgeLinksTo(storage, [restored]));
   return restored;
 }

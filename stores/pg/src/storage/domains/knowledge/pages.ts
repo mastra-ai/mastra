@@ -1298,7 +1298,11 @@ export class PgKnowledgePages implements KnowledgePageStore {
     return toPage(rows[0]!);
   }
 
-  async restoreScope(input: { id: string; provenance: KnowledgeProvenance }): Promise<KnowledgePage> {
+  async restoreScope(input: {
+    id: string;
+    declaration: string;
+    provenance: KnowledgeProvenance;
+  }): Promise<KnowledgePage> {
     return this.#tx(async tx => {
       const [unlockedRow] = await this.#rows(tx, `SELECT * FROM ${this.#pages} WHERE "id" = $1`, [input.id]);
       if (!unlockedRow) throw new KnowledgeNotFoundError('page', input.id);
@@ -1307,6 +1311,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
       await this.#lockScopeAddress(tx, unlocked.address!);
       const scope = (await this.#lockPage(tx, input.id))!;
       if (!scope.deletedAt) throw new Error(`Knowledge scope ${scope.address} is not removed`);
+      if (scope.declaration !== input.declaration) throw new KnowledgeConflictError(scope.id);
       if (scope.parentId !== null) {
         const parent = await this.#lockPage(tx, scope.parentId);
         if (!parent || parent.deletedAt) {

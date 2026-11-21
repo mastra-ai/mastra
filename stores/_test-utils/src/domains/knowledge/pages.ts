@@ -371,7 +371,7 @@ export function createKnowledgePageStoreTests(
         expect(await counts()).toEqual({ [ORG]: 1, [TEAM]: 1 });
         await store.removeScope({ id: team.id, expectedVersion: team.version, provenance: host });
         expect(await counts()).toEqual({ [ORG]: 1 });
-        await store.restoreScope({ id: team.id, provenance: host });
+        await store.restoreScope({ id: team.id, declaration: TEAM, provenance: host });
         expect(await counts()).toEqual({ [ORG]: 1, [TEAM]: 1 });
       });
 
@@ -420,7 +420,7 @@ export function createKnowledgePageStoreTests(
         await store.removeTemplatePage({ id: overview.id, expectedVersion: overview.version, provenance: host });
         const current = (await store.getScopesByAddress(['account:acme:1']))[0]!;
         const removed = await store.removeScope({ id: acct.id, expectedVersion: current.version, provenance: host });
-        const restored = await store.restoreScope({ id: acct.id, provenance: host });
+        const restored = await store.restoreScope({ id: acct.id, declaration: ACCOUNT, provenance: host });
         expect(restored).toMatchObject({ id: acct.id, address: 'account:acme:1' });
         expect(restored.deletedAt).toBeUndefined();
         expect(restored.version).toBe(removed.version + 1);
@@ -434,11 +434,28 @@ export function createKnowledgePageStoreTests(
       it('refuses to restore a scope whose parent scope is removed, or one that is not removed', async () => {
         const acme = await scope('org:acme', ORG);
         const team = await scope('team:acme:eng', TEAM, acme.id);
-        await rejectsNamed(store.restoreScope({ id: team.id, provenance: host }), /not removed/i);
+        await rejectsNamed(store.restoreScope({ id: team.id, declaration: TEAM, provenance: host }), /not removed/i);
         await store.removeScope({ id: team.id, expectedVersion: team.version, provenance: host });
         const parent = (await store.getScopesByAddress(['org:acme']))[0]!;
         await store.removeScope({ id: acme.id, expectedVersion: parent.version, provenance: host });
-        await rejectsNamed(store.restoreScope({ id: team.id, provenance: host }), /parent/i);
+        await rejectsNamed(store.restoreScope({ id: team.id, declaration: TEAM, provenance: host }), /parent/i);
+      });
+
+      it('refuses to restore a scope whose declaration was renamed after the caller checked it', async () => {
+        const acme = await scope('org:acme', ORG);
+        const team = await scope('team:acme:eng', TEAM, acme.id);
+        await store.removeScope({ id: team.id, expectedVersion: team.version, provenance: host });
+        // A rename re-keys removed rows too and doesn't bump their version.
+        await store.renameScopeDeclaration({ from: TEAM, to: 'team:$orgId:$squadId', check: () => {} });
+        await rejectsNamed(
+          store.restoreScope({ id: team.id, declaration: TEAM, provenance: host }),
+          'KnowledgeConflictError',
+        );
+        const after = (await store.getPage({ id: team.id, read: 'all' }))!;
+        expect(after.declaration).toBe('team:$orgId:$squadId');
+        expect(after.deletedAt).toBeDefined();
+        const activity = await store.listPageActivity({ scopeId: team.id, read: 'all' });
+        expect(activity.events.map(event => event.action)).not.toContain('scope-restored');
       });
 
       if (options.reopen) {
