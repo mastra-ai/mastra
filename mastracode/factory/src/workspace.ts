@@ -1298,6 +1298,29 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         });
     };
     const sessionEntry = constructSessionEntry();
+    // A credential-vault sandbox acts with its owner's vault grant (the sandbox
+    // is created with `userId: session.userId`), so only the owner may create or
+    // reuse it; an org-visible session gives other members no share of that
+    // credential. The platform decides the mode when the sandbox starts, so a
+    // non-owner's resolution starts it to learn the mode before getting the
+    // workspace, and an unknown mode refuses.
+    const refuseVaultForNonOwner = async (): Promise<void> => {
+      if (userId === session.userId) return;
+      const sandbox = sessionEntry.sandbox as WorkspaceSandbox & { vault?: boolean };
+      if (!('vault' in sandbox)) return;
+      if (sandbox.vault === undefined) {
+        try {
+          await sandbox.start?.();
+        } catch {
+          // An unreadable mode stays undefined and refuses below.
+        }
+      }
+      if (sandbox.vault !== false) {
+        throw new Error(
+          `Factory session ${session.sessionId} uses its owner's credential vault and is not available to the current user`,
+        );
+      }
+    };
     // The session's working directory as the agent sees it: the checkout
     // when the environment holds one repository, the workspace root with a
     // directory per repository when it holds several (D2). The file routes
@@ -1707,6 +1730,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // materialization exists to avoid. Token reconciliation below no-ops
       // until the leader registers the injector, and the next reuse after
       // materialization completes reconciles against the live sandbox.
+      await refuseVaultForNonOwner();
       return reconcileRegisteredWorkspace(existing);
     }
 
@@ -2109,6 +2133,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     }
 
     fireEagerStart();
+    await refuseVaultForNonOwner();
     return workspace;
   };
   return (context: DynamicWorkspaceContext) => timed('workspace.resolve', () => resolve(context));

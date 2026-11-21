@@ -2866,6 +2866,78 @@ describe('GitHub session workspace preparation', () => {
 
       expect(lastGhToken()).toBe('ghp_org_pat');
     });
+
+    describe('owner-only vault sessions', () => {
+      const owner = { organizationId: 'org-1', workosId: 'owner-1' };
+      const member = { organizationId: 'org-1', workosId: 'member-2' };
+      const notAvailable = /uses its owner's credential vault and is not available to the current user/;
+
+      it('refuses a non-owner who opens an org-visible vault session first', async () => {
+        mocks.vault = true;
+        const { workspace } = await createLocalFactory();
+        addProject();
+        addSession({ id: 'session-a', userId: 'owner-1', visibility: 'org' });
+
+        await expect(
+          workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', member) }),
+        ).rejects.toThrow(notAvailable);
+      });
+
+      it('refuses a non-owner the vault workspace the owner already opened', async () => {
+        mocks.vault = true;
+        const { workspace } = await createLocalFactory();
+        addProject();
+        addSession({ id: 'session-a', userId: 'owner-1', visibility: 'org' });
+        const opened = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', owner) });
+        expect(opened).toBeDefined();
+
+        await expect(
+          workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', member) }),
+        ).rejects.toThrow(notAvailable);
+        // The owner keeps reusing it.
+        await expect(
+          workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', owner) }),
+        ).resolves.toBe(opened);
+      });
+
+      it('refuses a non-owner when the vault mode cannot be learned', async () => {
+        mocks.vault = undefined;
+        mocks.vaultOnRefresh = new Error('proxy unavailable');
+        const { workspace } = await createLocalFactory();
+        addProject();
+        addSession({ id: 'session-a', userId: 'owner-1', visibility: 'org' });
+
+        await expect(
+          workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', member) }),
+        ).rejects.toThrow(notAvailable);
+      });
+
+      it('opens a vault session for its owner', async () => {
+        mocks.vault = true;
+        const { workspace } = await createLocalFactory();
+        addProject();
+        addSession({ id: 'session-a', userId: 'owner-1', visibility: 'org' });
+
+        await expect(
+          workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', owner) }),
+        ).resolves.toBeDefined();
+      });
+
+      it('opens a token-mode session to non-owners on create and on reuse', async () => {
+        mocks.vault = false;
+        const { workspace } = await createLocalFactory();
+        addProject();
+        addSession({ id: 'session-a', userId: 'owner-1', visibility: 'org' });
+
+        const opened = await workspace({
+          requestContext: createGithubRequestContext('project-1', 'session-a', member),
+        });
+        expect(opened).toBeDefined();
+        await expect(
+          workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', member) }),
+        ).resolves.toBe(opened);
+      });
+    });
   });
 
   it('installs the reviewer PAT for review-board sessions', async () => {

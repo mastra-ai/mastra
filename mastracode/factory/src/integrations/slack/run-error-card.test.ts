@@ -4,6 +4,7 @@ import { ProviderAuthRequiredError } from '@mastra/code-sdk/auth/provider-auth-e
 import type { AuthCredential } from '@mastra/code-sdk/auth/types';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
+import { PlatformApiError } from '@mastra/platform-workspace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { slackRunErrorCard } from './run-error-card.js';
@@ -69,6 +70,12 @@ function codexPlanRefusal() {
 
 function rendered(card: unknown) {
   return JSON.stringify(card);
+}
+
+const VAULT_URL = 'https://platform.example.com/orgs/org-1/settings/vault';
+
+function vaultNotEnabled(message: string) {
+  return new PlatformApiError(403, JSON.stringify({ error: { type: 'vault_not_enabled', message } }));
 }
 
 describe('slackRunErrorCard', () => {
@@ -212,6 +219,40 @@ describe('slackRunErrorCard', () => {
     expect(card).toContain('Request timed out');
     expect(card).toContain('Open session');
     expect(card).toContain(SLACK_SESSION_URL);
+  });
+
+  it('offers Enable vault, linking the URL the platform sent, when sandbox create needs the vault', () => {
+    const refusal = vaultNotEnabled(
+      `The acting user has not enabled the vault for this organization. Enable it at ${VAULT_URL}.`,
+    );
+    const card = rendered(slackRunErrorCard(new Error('Sandbox start failed', { cause: refusal }), slackRun()));
+
+    expect(card).toContain('Credential vault not enabled');
+    expect(card).toContain('The acting user has not enabled the vault for this organization');
+    expect(card).toContain('Enable vault');
+    expect(card).toContain(JSON.stringify(VAULT_URL));
+    expect(card).not.toContain('Open session');
+  });
+
+  it('opens the session instead when the vault refusal carries no URL', () => {
+    const card = rendered(
+      slackRunErrorCard(vaultNotEnabled('The acting user has not enabled the vault for this organization'), slackRun()),
+    );
+
+    expect(card).toContain('Credential vault not enabled');
+    expect(card).not.toContain('Enable vault');
+    expect(card).toContain('Open session');
+  });
+
+  it('offers no Enable vault for another platform refusal', () => {
+    const refusal = new PlatformApiError(
+      403,
+      JSON.stringify({ error: { type: 'vault_user_not_member', message: `Not a member. See ${VAULT_URL}` } }),
+    );
+    const card = rendered(slackRunErrorCard(refusal, slackRun()));
+
+    expect(card).not.toContain('Credential vault not enabled');
+    expect(card).not.toContain('Enable vault');
   });
 
   it('still explains the failure when the run has no session or no public URL', () => {
