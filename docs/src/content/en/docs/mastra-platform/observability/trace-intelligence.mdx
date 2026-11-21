@@ -22,7 +22,7 @@ Trace Intelligence is available by invitation for selected Mastra platform proje
 
 1. Submit the [Trace Intelligence private beta form](https://mastra.ai/trace-intelligence) to request access.
 1. Confirm that [Mastra platform Observability](/docs/mastra-platform/observability/overview) is enabled and that completed agent traces appear under **Traces**.
-1. Requires at least `@mastra/core@1.53.0` and `mastra@1.20.2`. Upgrade your project then deploy or redeploy Studio for the enrolled project. Local Studio and server-only deployments aren't supported during the private beta.
+1. Upgrade your project to at least `@mastra/core@1.53.0` and `mastra@1.20.2`, then deploy or redeploy Studio for the enrolled project. Local Studio and server-only deployments aren't supported during the private beta.
 1. Open the deployed Studio and select **Intelligence** in the sidebar.
 1. Send representative traffic to your agent and allow time for analysis.
 
@@ -79,21 +79,10 @@ A theme can persist, disappear, split, merge, or return across snapshots. Treat 
 
 1. Open **Intelligence** to see the entity index. Search or sort the index, then select an entity to open its analysis.
 1. Select a theme in the flow to open its details and filter every column to traces containing that theme.
-1. The details panel shows the theme's description, its share of the snapshot, paged example summaries, and a trend of its trace count over time.
+1. Review the details panel: the theme's description, its share of the snapshot, paged example summaries, and a trend of its trace count over time.
 1. Select **Clear filter** to restore the complete flow.
 
 Entities appear while their signals are still collecting or processing. The index shows each entity's analyzed trace count, ready and enabled signal counts, lifecycle status, and last update.
-
-### Configure a custom signal
-
-Organization admins can configure custom signals without leaving Intelligence:
-
-1. Return to the entity index and select **Signal settings**.
-1. Select **Create signal**, provide a stable signal name, display label, description, and signal instructions, then save it. Definitions and their versions are shared across the organization.
-1. Enable the signal under **Current project**. Project enablement affects only the current project and applies to newly processed traces.
-1. Open an entity from the index and follow its signal status as it moves from collecting to processing and ready.
-
-You can edit a custom signal's label, description, or instructions. Instruction changes create a new version and apply only to new traces. You can also archive definitions that should no longer be available or restore archived definitions later.
 
 You can also:
 
@@ -103,6 +92,17 @@ You can also:
 - Switch to **Compare** to see which themes grew, shrank, entered the range, or left the range between two points in time, or **Lifelines** to follow each theme's share across the whole selected range.
 
 Filtering the flow by a theme is unavailable for snapshots with more than 2,000 traces. Selecting a theme still opens its details there without filtering the flow.
+
+## Configure a custom signal
+
+Organization admins can configure custom signals without leaving Intelligence:
+
+1. Return to the entity index and select **Signal settings**.
+1. Select **Create signal**, provide a stable signal name, display label, description, and signal instructions, then save it. Definitions and their versions are shared across the organization.
+1. Enable the signal under **Current project**. Project enablement affects only the current project and applies to newly processed traces.
+1. Open an entity from the index and follow its signal status as it moves from collecting to processing and ready.
+
+You can edit a custom signal's label, description, or instructions. Instruction changes create a new version and apply only to new traces. You can also archive definitions that should no longer be available or restore archived definitions later.
 
 ## Troubleshooting
 

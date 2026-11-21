@@ -204,6 +204,7 @@ exceptions:
   - 'Knowledge'
   - 'Langfuse'
   - 'Memory'
+  - 'Metrics'
   - 'Microsoft'
   - 'Microsoft Word'
   - 'Neon'
