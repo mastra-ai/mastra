@@ -12904,6 +12904,8 @@ export class Agent<
   protected readonly executionRunRegistry = new ExtendedRunRegistry();
   /** Each run's outstanding stream releases, so a host tearing down a parked run can release it (#30743). */
   readonly #streamCleanups = new Map<string, Set<RunCleanup>>();
+  /** An observer's tracked release, mapped to the detach a parked-run release uses instead: an observer owns no entry. */
+  readonly #observerDetaches = new WeakMap<RunCleanup, () => void>();
   /** Runs with a resume() setting up or executing, which a parked-run release must leave alone. */
   readonly #resumesInProgress = new Map<string, number>();
 
@@ -12999,7 +13001,7 @@ export class Agent<
 
     // Checked before anything is released, so `false` always means nothing was.
     if (run && !engine.releaseParkedRun(workflow, runId, run, snapshot.status)) return false;
-    for (const cleanup of streamCleanups) cleanup.run();
+    for (const cleanup of streamCleanups) (this.#observerDetaches.get(cleanup) ?? cleanup.run)();
     if (localEntry) this.executionRunRegistry.cleanup(runId);
     // The global slot may hold another instance's later execution of the run; only this one's own entry goes.
     if (localEntry?.executionFence && globalEntry?.executionFence === localEntry.executionFence) {
@@ -16823,6 +16825,7 @@ export class Agent<
       this.#forgetStreamCleanup(runId, runCleanup);
       stream.detach();
     };
+    this.#observerDetaches.set(runCleanup, detach);
 
     // This output belongs to this observer alone, so a consumer that stops
     // reading fullStream (break/return/throw out of `for await`) should detach

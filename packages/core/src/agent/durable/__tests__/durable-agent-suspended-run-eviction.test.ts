@@ -162,6 +162,41 @@ describe('releaseParkedRun ownership', () => {
     expect(owner.runRegistry.size).toBe(0);
     reader.releaseLock();
   });
+
+  it("leaves the parked owner's global entry to an agent that only observes the run", async () => {
+    const storage = new InMemoryStore();
+    const ask = createTool({
+      id: 'ask',
+      description: 'suspends until answered',
+      inputSchema: z.object({}),
+      suspendSchema: z.object({ q: z.string() }),
+      resumeSchema: z.object({ a: z.string() }),
+      execute: async (_input, ctx) => (ctx.agent?.resumeData ? 'ok' : ctx.agent?.suspend({ q: '?' })),
+    });
+    const owner = createDurableAgent({
+      agent: new Agent({ id: 'a', name: 'a', instructions: 'x', model: model() as any, tools: { ask } }),
+    });
+    const observer = createDurableAgent({
+      agent: new Agent({ id: 'a', name: 'a', instructions: 'x', model: model() as any, tools: { ask } }),
+    });
+    const mastra = new Mastra({ storage, logger: false, agents: { owner, observer } });
+    const { fullStream } = await owner.stream('hi', { runId: 'run-observed' });
+    const reader = (fullStream as ReadableStream<any>).getReader();
+    await expect.poll(() => storedStatus(storage, 'run-observed')).toBe('suspended');
+    const ownerEntry = getRunRegistryEntry('run-observed', mastra);
+    expect(ownerEntry?.executionFence).toBe(owner.runRegistry.get('run-observed')?.executionFence);
+
+    const observed = await observer.observe('run-observed');
+    expect(observer.runRegistry.size).toBe(0);
+    await observer.releaseParkedRun('run-observed');
+
+    expect(getRunRegistryEntry('run-observed', mastra)).toBe(ownerEntry);
+    expect(owner.runRegistry.size).toBe(1);
+    expect(await owner.releaseParkedRun('run-observed')).toBe(true);
+    expect(getRunRegistryEntry('run-observed', mastra)).toBeUndefined();
+    observed.detach();
+    reader.releaseLock();
+  });
 });
 
 describe('an observer that stops watching', () => {
