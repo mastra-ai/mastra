@@ -58,10 +58,10 @@ function setup(storage = new InMemoryStore()) {
   const agent = createDurableAgent({
     agent: new Agent({ id: 'a', name: 'a', instructions: 'x', model: model() as any, tools: { ask } }),
   });
-  new Mastra({ storage, logger: false, agents: { a: agent } });
+  const mastra = new Mastra({ storage, logger: false, agents: { a: agent } });
   const workflow = agent.getWorkflow();
   const nested = (workflow as any).steps['durable-agentic-execution'];
-  return { agent, workflow, nested, storage };
+  return { agent, workflow, nested, storage, mastra };
 }
 
 async function suspend(agent: ReturnType<typeof setup>['agent'], runId: string) {
@@ -198,6 +198,21 @@ describe('releaseParkedRun ownership', () => {
     expect(owner.runRegistry.size).toBe(1);
     expect(await owner.releaseParkedRun('run-observed')).toBe(true);
     expect(getRunRegistryEntry('run-observed', mastra)).toBeUndefined();
+    reader.releaseLock();
+  });
+});
+
+describe('releaseParkedRun on an agent that both runs and observes a run', () => {
+  it('releases the run and its entry', async () => {
+    const { agent, storage, mastra } = setup();
+    const { fullStream } = await agent.stream('hi', { runId: 'run-self-observed' });
+    const reader = (fullStream as ReadableStream<any>).getReader();
+    await expect.poll(() => storedStatus(storage, 'run-self-observed')).toBe('suspended');
+    await agent.observe('run-self-observed');
+
+    expect(await agent.releaseParkedRun('run-self-observed')).toBe(true);
+    expect(agent.runRegistry.size).toBe(0);
+    expect(getRunRegistryEntry('run-self-observed', mastra)).toBeUndefined();
     reader.releaseLock();
   });
 });

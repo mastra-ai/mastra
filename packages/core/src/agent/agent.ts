@@ -12904,7 +12904,7 @@ export class Agent<
   protected readonly executionRunRegistry = new ExtendedRunRegistry();
   /** Each run's outstanding stream releases, so a host tearing down a parked run can release it (#30743). */
   readonly #streamCleanups = new Map<string, Set<RunCleanup>>();
-  /** Tracked releases of observers: an observer holds no run, so they alone don't make a run releasable. */
+  /** Releases created by observe(): an observer holds no run, so they alone don't make a run releasable. */
   readonly #observerCleanups = new WeakSet<RunCleanup>();
   /** Runs with a resume() setting up or executing, which a parked-run release must leave alone. */
   readonly #resumesInProgress = new Map<string, number>();
@@ -16514,11 +16514,15 @@ export class Agent<
             : this.#executionStreamBus.scheduleCleanup(cleanup),
         release: () => {
           streamCleanup?.();
-          // Without a local entry, the observed entry is another instance's: an observer leaves it to its owner.
+          // Without a local entry, any registry entry is another instance's, so an observer leaves it to its owner.
+          // The topic goes only when no instance has ever held the run here.
+          if (!localEntry) {
+            if (!observedEntry && !getRunRegistryEntry(runId, this.#mastra)) this.clearPubsubTopic(runId);
+            return;
+          }
           if (
             observedFence &&
-            (!localEntry ||
-              this.#unverifiedReaderFences.has(observedFence) ||
+            (this.#unverifiedReaderFences.has(observedFence) ||
               !observedFence.ownsRunTopics() ||
               getRunRegistryEntry(runId, this.#mastra)?.executionFence !== observedFence ||
               this.executionRunRegistry.get(runId) !== localEntry ||
