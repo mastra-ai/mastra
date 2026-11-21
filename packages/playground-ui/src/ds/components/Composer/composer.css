@@ -1,7 +1,3 @@
-[data-composer-tone] {
-  --composer-tone-color: var(--brand-green-indicator);
-}
-
 .composer-tone-label {
   --composer-tone-color: var(--muted-foreground);
 

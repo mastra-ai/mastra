@@ -69,14 +69,12 @@ export type ComposerTone = 'default' | 'green' | 'purple' | 'orange';
 
 export interface ComposerRingProps extends ComponentProps<'div'> {
   busy?: boolean;
-  tone?: ComposerTone;
 }
 
-export function ComposerRing({ busy = false, tone = 'green', className, children, ...props }: ComposerRingProps) {
+export function ComposerRing({ busy = false, className, children, ...props }: ComposerRingProps) {
   return (
     <div
       data-slot="composer-ring"
-      data-composer-tone={tone}
       data-busy={busy ? 'true' : 'false'}
       className={cn('composer-ring relative mx-auto w-full max-w-3xl rounded-(--composer-radius)', className)}
       {...props}
