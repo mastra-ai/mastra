@@ -104,14 +104,14 @@ The `channels` property accepts a `ChannelConfig` object with the following fiel
     isOptional: true,
     defaultValue: '{ maxMessages: 10, addSystemMessage: true }',
     description:
-      "How the agent picks up context about the current thread. `maxMessages` sets how many platform messages are saved to memory on first mention: the thread's first message plus up to `maxMessages - 1` recent messages, with an omitted-count marker between them when needed (set to `0` to disable; only applies to non-DM threads). `addSystemMessage: false` skips the built-in system message that tells the agent which channel/platform a request came from.",
+      "How the agent picks up context about the current thread. `maxMessages` sets how many platform messages are saved to memory on first mention: the thread's first message plus up to `maxMessages - 1` recent messages, with an omitted-count marker between them when needed (set to `0` to disable; only applies to non-DM threads). `addSystemMessage: false` skips the built-in system message that tells the agent which channel/platform a request came from. This is the default for every platform; a platform can override `maxMessages` for itself with its own `threadContext` (see [Per-adapter options](#per-adapter-options)).",
   },
   {
     name: 'chatOptions',
     type: "Omit<ChatConfig, 'adapters' | 'state' | 'userName'>",
     isOptional: true,
     description:
-      'Additional options passed directly to the [Chat SDK](https://chat-sdk.dev/docs/usage). Use for advanced configuration such as `dedupeTtlMs`, `fallbackStreamingPlaceholderText`, `lockScope`, and `messageHistory`. `logger` defaults to the Mastra logger. Set it to use a different logger or a Chat SDK log level.',
+      'Additional options passed directly to the [Chat SDK](https://chat-sdk.dev/docs/usage). Use for advanced configuration such as `dedupeTtlMs`, `fallbackStreamingPlaceholderText`, `lockScope`, and `messageHistory`. `logger` defaults to the Mastra logger. Set it to use a different logger or a Chat SDK log level. `dedupeTtlMs` here is the default for every platform; one platform can use a different window by setting `dedupeTtlMs` on its adapter instead (see [Per-adapter options](#per-adapter-options)).',
   },
   {
     name: 'resolveResourceId',
@@ -206,6 +206,13 @@ const agent = new Agent({
       'CORS configuration for this adapter webhook route. Use this for browser-based channel adapters that need cross-origin credentials.',
   },
   {
+    name: 'dedupeTtlMs',
+    type: 'number',
+    isOptional: true,
+    description:
+      'Deduplication window for this platform, in milliseconds. Overrides the instance-wide `chatOptions.dedupeTtlMs` for this platform only, so one platform can wait longer between retries than the others. Platforms without it keep the instance-wide window; when neither is set, the Chat SDK default (10 minutes) applies.',
+  },
+  {
     name: 'formatError',
     type: '(error: Error, context: { requestContext?: RequestContext }) => PostableMessage',
     isOptional: true,
@@ -275,6 +282,13 @@ const agent = new Agent({
     defaultValue: 'true',
     description:
       'Control the platform typing indicator. `true` uses built-in defaults (`is typing…` on text, `is calling {tool}…` on tool-call, `is waiting for approval…` on tool-call-approval). `false` suppresses typing entirely — useful when a live streaming widget (e.g. `toolDisplay: "grouped"` in Slack) already conveys progress. Pass a function to set custom status copy per chunk; return a string to set the status, or `false`/`null`/`undefined` to leave it unchanged. Compose with `defaultTypingStatus` (exported from `@mastra/core/channels`) to fall back to defaults for chunks you don\'t handle.',
+  },
+  {
+    name: 'threadContext',
+    type: '{ maxMessages?: number }',
+    isOptional: true,
+    description:
+      "Overrides the instance-wide `threadContext.maxMessages` for this platform. `maxMessages` is how many platform messages are saved to memory on first mention: the thread's first message plus up to `maxMessages - 1` recent ones (set to `0` to disable the history fetch for this platform). Platforms without it keep the instance-wide window. `addSystemMessage` stays instance-wide and cannot be set per adapter.",
   },
 ]}
 />

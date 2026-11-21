@@ -124,6 +124,36 @@ Memory's `lastMessages` option limits how many messages reach the prompt. Its de
 
 Mastra also adds a short system message that tells the agent which channel and platform the request came from, such as whether the message came from a direct message or public channel. Set `threadContext: { addSystemMessage: false }` to skip it.
 
+One `AgentChannels` serves every platform, so `threadContext` and `chatOptions` apply to all of them. To give one platform its own values, set `threadContext.maxMessages` or `dedupeTtlMs` on that adapter instead; every platform that doesn't set its own keeps the instance-wide default:
+
+```typescript title="src/mastra/agents/your-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createDiscordAdapter } from '@chat-adapter/discord'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+export const yourAgent = new Agent({
+  id: 'your-agent',
+  name: 'Your Agent',
+  instructions: 'You are a helpful assistant.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  channels: {
+    adapters: {
+      slack: {
+        adapter: createSlackAdapter(),
+        // Slack retries webhooks quickly, so dedupe over a shorter window.
+        dedupeTtlMs: 60_000,
+        // Save a wider slice of thread history for Slack mentions.
+        threadContext: { maxMessages: 25 },
+      },
+      discord: createDiscordAdapter(),
+    },
+    // Defaults for every platform that doesn't set its own value.
+    threadContext: { maxMessages: 10 },
+    chatOptions: { dedupeTtlMs: 600_000 },
+  },
+})
+```
+
 ## Tool approval
 
 Tools with `requireApproval: true` render as interactive cards with Approve and Deny buttons:
@@ -303,7 +333,7 @@ channels: {
 },
 ```
 
-Platform retries sometimes deliver an event more than once. Adapters use channel state for deduplication, which [storage](/docs/storage) can preserve across restarts. Because this protection is best effort, custom-handler side effects should be idempotent so duplicate delivery can't repeat work such as ticket creation.
+Platform retries sometimes deliver an event more than once. Adapters use channel state for deduplication, which [storage](/docs/storage) can preserve across restarts. The deduplication window defaults to 10 minutes; tune it instance-wide with `chatOptions.dedupeTtlMs` or per platform with an adapter's `dedupeTtlMs`. Because this protection is best effort, custom-handler side effects should be idempotent so duplicate delivery can't repeat work such as ticket creation.
 
 ### Batched messages
 
