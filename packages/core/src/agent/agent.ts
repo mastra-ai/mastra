@@ -7603,6 +7603,7 @@ export class Agent<
           // current tool span onto the workflow to maintain continuity of the trace
           execute: async (inputData, context) => {
             const invocationActor = getInvocationActor(context);
+            const abortSignal = context?.abortSignal;
             const savedMastraMemory = requestContext.get('MastraMemory');
             let runIdToUse: string | undefined;
             try {
@@ -7623,11 +7624,15 @@ export class Agent<
                 resourceId,
               });
 
+              abortSignal?.throwIfAborted();
               const run = await workflow.createRun({ runId: runIdToUse, resourceId });
 
               // Aborting the tool (parent abort, background cancel or timeout) must stop the run it started.
-              const abortSignal = context?.abortSignal;
-              abortSignal?.throwIfAborted();
+              if (abortSignal?.aborted) {
+                // createRun stored a pending run; cancel it rather than leave it orphaned.
+                await run.cancel();
+                abortSignal.throwIfAborted();
+              }
               const cancelRun = () => {
                 // An event listener has no caller to surface a cancel failure to.
                 run.cancel().catch(error => {
@@ -7760,7 +7765,7 @@ export class Agent<
               }
 
               // An aborted call is a cancellation, not a workflow failure.
-              if (context?.abortSignal?.aborted) throw err;
+              if (abortSignal?.aborted) throw err;
 
               const mastraError = new MastraError(
                 {

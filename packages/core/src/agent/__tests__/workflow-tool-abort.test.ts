@@ -7,7 +7,7 @@
  */
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
@@ -21,7 +21,26 @@ const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
 function workflowCallThenAnswerModel() {
   let call = 0;
+  let generateCall = 0;
   return new MockLanguageModelV2({
+    doGenerate: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+      usage,
+      ...(generateCall++ === 0
+        ? {
+            finishReason: 'tool-calls' as const,
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: 'call-1',
+                toolName: 'workflow-review',
+                input: JSON.stringify({ inputData: { count: TOTAL } }),
+              },
+            ],
+          }
+        : { finishReason: 'stop' as const, content: [{ type: 'text' as const, text: 'ok' }] }),
+    }),
     doStream: async () => ({
       stream: convertArrayToReadableStream(
         call++ === 0
@@ -85,33 +104,87 @@ async function waitFor(cond: () => boolean | Promise<boolean>, timeoutMs = 5000)
   }
 }
 
+function trackSetup(agent: Agent, review: ReturnType<typeof createReviewWorkflow>['review']) {
+  const createRunSpy = vi.spyOn(review, 'createRun');
+  const trackSpy = vi.spyOn((agent as any).logger, 'trackException');
+  const runStatus = async () => {
+    const runId = createRunSpy.mock.calls[0]?.[0]?.runId;
+    expect(runId).toBeTruthy();
+    return (await review.getWorkflowRunById(runId!))?.status;
+  };
+  const trackedWorkflowFailure = () =>
+    trackSpy.mock.calls.some(([error]: any[]) => error?.id === 'AGENT_WORKFLOW_TOOL_EXECUTION_FAILED');
+  return { createRunSpy, runStatus, trackedWorkflowFailure };
+}
+
 describe('workflow tool abort (#29890)', () => {
-  it('cancels the workflow run when the agent call is aborted', async () => {
+  it.each(['stream', 'generate'] as const)(
+    'cancels the workflow run when the agent %s call is aborted',
+    async method => {
+      const { review, progress } = createReviewWorkflow();
+      const agent = new Agent({
+        id: 'abort-agent',
+        name: 'Abort Agent',
+        instructions: 'Review items',
+        model: workflowCallThenAnswerModel() as LanguageModelV2,
+        workflows: { review },
+      });
+      new Mastra({ logger: false, storage: new MockStore(), agents: { agent } });
+      const { runStatus, trackedWorkflowFailure } = trackSetup(agent, review);
+
+      const controller = new AbortController();
+      const done =
+        method === 'stream'
+          ? agent.stream('review', { abortSignal: controller.signal }).then(output => output.consumeStream())
+          : agent.generate('review', { abortSignal: controller.signal });
+      const settled = done.catch(() => {});
+
+      await waitFor(() => progress.itemsDone >= 5);
+      controller.abort();
+      const itemsAtAbort = progress.itemsDone;
+      await settled;
+      await waitFor(async () => (await runStatus()) === 'canceled');
+      await sleep(ITEM_MS * 5);
+
+      expect(progress.itemsDone).toBeLessThanOrEqual(itemsAtAbort + 1);
+      expect(trackedWorkflowFailure()).toBe(false);
+    },
+  );
+
+  it('cancels a run created while the call was being aborted', async () => {
     const { review, progress } = createReviewWorkflow();
     const agent = new Agent({
-      id: 'abort-agent',
-      name: 'Abort Agent',
+      id: 'race-agent',
+      name: 'Race Agent',
       instructions: 'Review items',
       model: workflowCallThenAnswerModel() as LanguageModelV2,
       workflows: { review },
     });
     new Mastra({ logger: false, storage: new MockStore(), agents: { agent } });
+    const { createRunSpy, runStatus, trackedWorkflowFailure } = trackSetup(agent, review);
 
     const controller = new AbortController();
-    const output = await agent.stream('review', { abortSignal: controller.signal });
-    const consumed = output.consumeStream().catch(() => {});
+    const createRun = review.createRun.bind(review);
+    createRunSpy.mockImplementationOnce(async options => {
+      const run = await createRun(options);
+      controller.abort();
+      return run;
+    });
 
-    await waitFor(() => progress.itemsDone >= 5);
-    controller.abort();
-    const itemsAtAbort = progress.itemsDone;
-    await consumed;
-    await sleep(ITEM_MS * 10);
+    await agent
+      .stream('review', { abortSignal: controller.signal })
+      .then(output => output.consumeStream())
+      .catch(() => {});
+    await sleep(ITEM_MS * 5);
 
-    expect(progress.itemsDone).toBeLessThanOrEqual(itemsAtAbort + 1);
+    expect(await runStatus()).toBe('canceled');
+    expect(progress.itemsDone).toBe(0);
+    expect(trackedWorkflowFailure()).toBe(false);
   });
 
-  it('cancels the workflow run when its background task is cancelled', async () => {
+  it.each(['cancel', 'timeout'] as const)('cancels the workflow run when its background task hits %s', async how => {
     const { review, progress } = createReviewWorkflow();
+    const timeoutMs = how === 'timeout' ? ITEM_MS * 5 : 60_000;
     const agent = new Agent({
       id: 'bg-abort-agent',
       name: 'BG Abort Agent',
@@ -119,7 +192,7 @@ describe('workflow tool abort (#29890)', () => {
       model: workflowCallThenAnswerModel() as LanguageModelV2,
       workflows: { review },
       memory: new MockMemory(),
-      backgroundTasks: { tools: { review: { enabled: true, timeoutMs: 60_000 } } },
+      backgroundTasks: { tools: { review: { enabled: true, timeoutMs } } },
     });
     const mastra = new Mastra({
       logger: false,
@@ -127,24 +200,27 @@ describe('workflow tool abort (#29890)', () => {
       backgroundTasks: { enabled: true },
       agents: { agent },
     });
+    const { runStatus } = trackSetup(agent, review);
     await mastra.startWorkers();
 
     try {
       const memory = { thread: 'thread-1', resource: 'resource-1' };
       await (await agent.stream('review', { memory })).consumeStream();
-
-      await waitFor(() => progress.itemsDone >= 5);
       const manager = mastra.backgroundTaskManager!;
-      const { tasks } = await manager.listTasks({ threadId: memory.thread });
-      const task = tasks.find(t => t.toolName === 'workflow-review')!;
+      const findTask = async () =>
+        (await manager.listTasks({ threadId: memory.thread })).tasks.find(t => t.toolName === 'workflow-review');
+
+      await waitFor(() => progress.itemsDone >= 2);
+      const task = (await findTask())!;
       expect(task).toBeDefined();
-
-      await manager.cancel(task.id);
+      if (how === 'cancel') await manager.cancel(task.id);
+      await waitFor(async () => (await runStatus()) === 'canceled');
       const itemsAtCancel = progress.itemsDone;
-      await sleep(ITEM_MS * 10);
+      await sleep(ITEM_MS * 5);
 
-      expect((await manager.getTask(task.id))?.status).toBe('cancelled');
+      expect((await manager.getTask(task.id))?.status).toBe(how === 'cancel' ? 'cancelled' : 'timed_out');
       expect(progress.itemsDone).toBeLessThanOrEqual(itemsAtCancel + 1);
+      expect(progress.itemsDone).toBeLessThan(TOTAL);
     } finally {
       await mastra.backgroundTaskManager?.shutdown();
     }
