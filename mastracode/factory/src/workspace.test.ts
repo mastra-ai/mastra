@@ -2900,16 +2900,80 @@ describe('GitHub session workspace preparation', () => {
         ).resolves.toBe(opened);
       });
 
-      it('refuses a non-owner when the vault mode cannot be learned', async () => {
+      // A workspace tool call as `caller`, through the hook the workspace installs.
+      const toolCall = (resolved: Awaited<ReturnType<typeof workspace>>, caller: Record<string, unknown>) =>
+        resolved.getToolsConfig()!.hooks!.beforeToolCall!({
+          toolName: 'execute_command',
+          workspaceToolName: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
+          input: { command: 'echo hi' },
+          context: { requestContext: createGithubRequestContext('project-1', 'session-a', caller) },
+        } as never);
+
+      it('lets a non-owner view an unstarted session without starting its sandbox, and refuses its first tool call', async () => {
+        // A real PlatformSandbox reports no mode until it starts or is asked.
         mocks.vault = undefined;
-        mocks.vaultOnRefresh = new Error('proxy unavailable');
-        const { workspace } = await createLocalFactory();
+        const { resolver } = await createLocalFactory();
+        addProject({ setupCommand: 'pnpm i' });
+        addSession({ id: 'session-a', userId: 'owner-1', visibility: 'org' });
+
+        const viewed = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a', member) });
+        const sandbox = mocks.createSandbox.mock.results[0]!.value;
+        expect(sandbox.start).not.toHaveBeenCalled();
+        expect(mocks.runSetupCommand).not.toHaveBeenCalled();
+        // With no VM the mode is still unknown, so the tool call that would start
+        // it (with the owner's vault grant) refuses, and nothing starts.
+        await expect(toolCall(viewed, member)).rejects.toThrow(notAvailable);
+        expect(sandbox.start).not.toHaveBeenCalled();
+        // Once the owner's start reports vault, the non-owner's resolution refuses too.
+        await (viewed as any).sandbox.getInfo();
+        sandbox.vault = true;
+        await expect(
+          resolver({ requestContext: createGithubRequestContext('project-1', 'session-a', member) }),
+        ).rejects.toThrow(notAvailable);
+        expect(await toolCall(viewed, owner)).toBeUndefined();
+      });
+
+      it('asks the platform, without starting, for the mode of a reopened session', async () => {
+        mocks.vault = undefined;
+        mocks.vaultOnRefresh = true;
+        const { resolver } = await createLocalFactory();
         addProject();
         addSession({ id: 'session-a', userId: 'owner-1', visibility: 'org' });
 
         await expect(
-          workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', member) }),
+          resolver({ requestContext: createGithubRequestContext('project-1', 'session-a', member) }),
         ).rejects.toThrow(notAvailable);
+        const sandbox = mocks.createSandbox.mock.results[0]!.value;
+        expect(sandbox.refreshVault).toHaveBeenCalled();
+        expect(sandbox.start).not.toHaveBeenCalled();
+      });
+
+      it('refuses a non-owner tool call when the vault mode cannot be learned', async () => {
+        mocks.vault = undefined;
+        mocks.vaultOnRefresh = new Error('proxy unavailable');
+        const { resolver } = await createLocalFactory();
+        addProject();
+        addSession({ id: 'session-a', userId: 'owner-1', visibility: 'org' });
+
+        const viewed = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a', member) });
+        await expect(toolCall(viewed, member)).rejects.toThrow(notAvailable);
+        expect(mocks.createSandbox.mock.results[0]!.value.start).not.toHaveBeenCalled();
+      });
+
+      it('does not eagerly start an unknown-mode sandbox for a non-owner', async () => {
+        mocks.vault = undefined;
+        const github = fakeGithubIntegration();
+        const resolver = createWorkspaceFactory({
+          sandbox: new CallbackFactorySandbox(mocks.createSandbox as any),
+          github: github as any,
+          sandboxStart: 'eager',
+        });
+        addProject();
+        addSession({ id: 'session-a', userId: 'owner-1', visibility: 'org' });
+
+        await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a', member) });
+        await new Promise(resolve => setTimeout(resolve, 0));
+        expect(mocks.createSandbox.mock.results[0]!.value.start).not.toHaveBeenCalled();
       });
 
       it('opens a vault session for its owner', async () => {
@@ -2923,7 +2987,7 @@ describe('GitHub session workspace preparation', () => {
         ).resolves.toBeDefined();
       });
 
-      it('opens a token-mode session to non-owners on create and on reuse', async () => {
+      it('opens a token-mode session to non-owners on create, on reuse and for tool calls', async () => {
         mocks.vault = false;
         const { workspace } = await createLocalFactory();
         addProject();
@@ -2936,6 +3000,7 @@ describe('GitHub session workspace preparation', () => {
         await expect(
           workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', member) }),
         ).resolves.toBe(opened);
+        expect(await toolCall(opened, member)).toBeUndefined();
       });
     });
   });

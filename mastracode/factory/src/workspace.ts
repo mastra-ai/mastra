@@ -17,6 +17,7 @@ import type {
   SkillSourceEntry,
   SkillSourceStat,
   WorkspaceSandbox,
+  WorkspaceToolsConfig,
 } from '@mastra/core/workspace';
 import { getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
 import { REVIEW_CONTEXT } from './boards/define-board.js';
@@ -1301,25 +1302,52 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // A credential-vault sandbox acts with its owner's vault grant (the sandbox
     // is created with `userId: session.userId`), so only the owner may create or
     // reuse it; an org-visible session gives other members no share of that
-    // credential. The platform decides the mode when the sandbox starts, so a
-    // non-owner's resolution starts it to learn the mode before getting the
-    // workspace, and an unknown mode refuses.
-    const refuseVaultForNonOwner = async (): Promise<void> => {
-      if (userId === session.userId) return;
-      const sandbox = sessionEntry.sandbox as WorkspaceSandbox & { vault?: boolean };
-      if (!('vault' in sandbox)) return;
-      if (sandbox.vault === undefined) {
+    // credential. Learning the mode never starts the sandbox: `refreshVault()`
+    // asks the platform about an existing VM and is a no-op before one exists.
+    // A resolution refuses a non-owner only once the mode is known to be vault,
+    // so viewing a session never boots its VM; a non-owner's workspace tool call
+    // (the first thing that would start or use the VM) refuses unless the mode
+    // is known to be token.
+    const vaultSandbox = sessionEntry.sandbox as WorkspaceSandbox & {
+      vault?: boolean;
+      refreshVault?: () => Promise<unknown>;
+    };
+    const ownsVault = (callerId: string | undefined) => callerId === session.userId || !('vault' in vaultSandbox);
+    const vaultRefusal = () =>
+      new Error(
+        `Factory session ${session.sessionId} uses its owner's credential vault and is not available to the current user`,
+      );
+    const learnVaultMode = async (): Promise<boolean | undefined> => {
+      if (vaultSandbox.vault === undefined && typeof vaultSandbox.refreshVault === 'function') {
         try {
-          await sandbox.start?.();
+          await vaultSandbox.refreshVault();
         } catch {
-          // An unreadable mode stays undefined and refuses below.
+          // An unreadable mode stays undefined.
         }
       }
-      if (sandbox.vault !== false) {
-        throw new Error(
-          `Factory session ${session.sessionId} uses its owner's credential vault and is not available to the current user`,
-        );
-      }
+      return vaultSandbox.vault;
+    };
+    const refuseVaultForNonOwner = async (): Promise<void> => {
+      if (ownsVault(userId)) return;
+      if ((await learnVaultMode()) === true) throw vaultRefusal();
+    };
+    await refuseVaultForNonOwner();
+    const planGuard = FACTORY_WORKSPACE_TOOLS.hooks?.beforeToolCall;
+    const toolsConfig: WorkspaceToolsConfig = {
+      ...FACTORY_WORKSPACE_TOOLS,
+      hooks: {
+        ...FACTORY_WORKSPACE_TOOLS.hooks,
+        beforeToolCall: hookContext => {
+          const requestContext = (hookContext.context as { requestContext?: { get: (key: string) => unknown } })
+            ?.requestContext;
+          const callerId = getFactoryAuthUserId(getFactoryAuthUserFromContext(requestContext));
+          if (ownsVault(callerId) || vaultSandbox.vault === false) return planGuard?.(hookContext);
+          return learnVaultMode().then(mode => {
+            if (mode !== false) throw vaultRefusal();
+            return planGuard?.(hookContext);
+          });
+        },
+      },
     };
     // The session's working directory as the agent sees it: the checkout
     // when the environment holds one repository, the workspace root with a
@@ -1665,7 +1693,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     let existing = mastra?.getWorkspaceById(workspaceId, { optional: true }) as Workspace | undefined;
     existing ??= constructedWorkspaces.get(workspaceId);
     if (existing) {
-      existing.setToolsConfig(FACTORY_WORKSPACE_TOOLS);
+      existing.setToolsConfig(toolsConfig);
       // The skill cache does not recheck the source on get(), so rescan when the
       // session's role flips; otherwise a cached review skill outlives the review binding.
       // Likewise when the project's skill-override revision moves: a save or revert
@@ -1730,7 +1758,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // materialization exists to avoid. Token reconciliation below no-ops
       // until the leader registers the injector, and the next reuse after
       // materialization completes reconciles against the live sandbox.
-      await refuseVaultForNonOwner();
       return reconcileRegisteredWorkspace(existing);
     }
 
@@ -2084,7 +2111,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       name: 'Mastra Code Factory Session Workspace',
       filesystem,
       sandbox: sessionSandbox as unknown as ConstructorParameters<typeof Workspace>[0]['sandbox'],
-      tools: FACTORY_WORKSPACE_TOOLS,
+      tools: toolsConfig,
       skills: skillPaths,
       // Project skill roots live in the sandbox checkout; guard them so skill
       // discovery before materialization (e.g. kickoff skill resolution in the
@@ -2132,8 +2159,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       throw new Error(`Factory session ${session.sessionId} was retired during workspace materialization`);
     }
 
-    fireEagerStart();
-    await refuseVaultForNonOwner();
+    // An eager start would create the VM with the owner's vault grant, so a
+    // non-owner's resolution only starts it once the mode is known to be token.
+    if (ownsVault(userId) || vaultSandbox.vault === false) fireEagerStart();
     return workspace;
   };
   return (context: DynamicWorkspaceContext) => timed('workspace.resolve', () => resolve(context));
