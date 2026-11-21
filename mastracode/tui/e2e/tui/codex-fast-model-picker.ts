@@ -38,6 +38,8 @@ export const codexFastModelPickerScenario = {
 
     terminal.submit('/model');
     await runtime.waitForScreenText(/Select Model/i, terminal, 8_000);
+    // Without typing, the current model's Fast entry sits right below it.
+    await runtime.waitForScreenText(/→ openai\/(\S+) ✓[^\n]*\n[^\n]*?openai\/\1:fast\s/, terminal, 8_000);
     terminal.write('gpt-6.2-sol');
     await runtime.waitForScreenText(/openai\/gpt-6\.2-sol:fast/i, terminal, 8_000);
     terminal.write(':fast');
@@ -50,7 +52,11 @@ export const codexFastModelPickerScenario = {
 
     terminal.submit('/model');
     await runtime.waitForScreenText(/Select Model/i, terminal, 8_000);
-    await runtime.waitForScreenText(/→ openai\/gpt-6\.2-sol:fast ✓/i, terminal, 8_000);
+    await runtime.waitForScreenText(
+      /→ openai\/gpt-6\.2-sol:fast ✓[^\n]*\n[^\n]*?openai\/gpt-6\.2-sol\s/i,
+      terminal,
+      8_000,
+    );
     terminal.write('\x1b');
     await runtime.waitForScreenTextAbsent(/Select Model/i, terminal, 8_000);
 

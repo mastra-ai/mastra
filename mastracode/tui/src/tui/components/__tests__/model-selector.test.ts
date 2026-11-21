@@ -120,6 +120,30 @@ describe('Codex fast model selection', () => {
     selector.handleInput('\r');
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: codex.id }));
   });
+
+  it('shows the current model next to its Fast or standard twin on a long list', () => {
+    const others = Array.from({ length: 20 }, (_, index) => ({
+      id: `openai/gpt-4-${String(index).padStart(2, '0')}`,
+      provider: 'openai',
+      modelName: `gpt-4-${String(index).padStart(2, '0')}`,
+      hasApiKey: true,
+    }));
+    const firstRows = (currentModelId: string) =>
+      new ModelSelectorComponent({
+        tui: { requestRender: vi.fn() } as unknown as TUI,
+        models: [...others, codex, fast],
+        currentModelId,
+        onSelect: vi.fn(),
+        onCancel: vi.fn(),
+      })
+        .render(100)
+        .map(line => stripAnsi(line).trim())
+        .filter(line => line.includes('openai/'))
+        .slice(0, 2);
+
+    expect(firstRows(codex.id)).toEqual(['→ openai/gpt-6.2-sol ✓', 'openai/gpt-6.2-sol:fast']);
+    expect(firstRows(fast.id)).toEqual(['→ openai/gpt-6.2-sol:fast ✓', 'openai/gpt-6.2-sol']);
+  });
 });
 
 describe('MastraCode gateway catalog models', () => {
