@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { confirmationReferenceSchema } from './confirmation.ts';
 import { validateSupportRecord } from '../knowledge/seed-manifest.ts';
+import { supportRecordEnvelope } from '../knowledge/support-record-envelope.ts';
 import { assertKnowledgeNoteTextWithinBound, assertKnowledgePageDescriptionWithinBound } from '@mastra/core/knowledge';
 
 const text = (max: number) =>
@@ -164,9 +165,26 @@ export const proposalSchema = z
           path: ['candidate'],
           message: 'Shared text contains private links, credentials, or payment-like data',
         });
+      const privateIdentifiers = [
+        proposal.reviewer.customerId,
+        source.sourceActorId,
+        source.threadId,
+        source.messageId,
+        ...candidate.evidence.map(item => item.ref),
+      ];
+      const normalized = sharedText.toLowerCase();
+      if (privateIdentifiers.some(value => normalized.includes(value.toLowerCase())))
+        context.addIssue({
+          code: 'custom',
+          path: ['candidate'],
+          message: 'Shared text contains private identifiers or references',
+        });
     }
     try {
-      if (candidate.action === 'note') assertKnowledgeNoteTextWithinBound(publishedText(proposal));
+      const publication = publishedText(proposal);
+      if (!supportRecordEnvelope(publication))
+        throw new Error('The published support record must be a standalone fence');
+      if (candidate.action === 'note') assertKnowledgeNoteTextWithinBound(publication);
       else assertKnowledgePageDescriptionWithinBound(candidate.record.summary);
     } catch (error) {
       context.addIssue({ code: 'custom', message: (error as Error).message });

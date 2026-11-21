@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process';
 import { cp, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { knowledgeScopeAddress } from '@mastra/core/knowledge';
 import { runtimeFixture } from './runtime.ts';
 import { demoCorpus } from './demo-corpus.ts';
 import { datasets } from '../../src/examples/datasets.ts';
@@ -64,6 +65,7 @@ export async function demoFixture(example: 'retail-pos' | 'software-integration'
   const reviewerProfile = alternate
     ? integrationReviewers[0]!
     : exampleReviewers.find(profile => profile.id === 'retailops-reviewer')!;
+  const customerScope = knowledgeScopeAddress('customer:$tenantId:$customerId', { ...reviewerProfile });
   let selected: Candidate;
   let reuse: string | undefined;
   const f = await runtimeFixture({
@@ -77,6 +79,15 @@ export async function demoFixture(example: 'retail-pos' | 'software-integration'
         assert.ok(selected, 'Review scenario must select a candidate');
         if (!allTools.length)
           return { tool: { name: 'knowledge_search', arguments: { query: alternate ? 'authentication' : 'network' } } };
+        for (const tool of allTools) {
+          const { results } = parsedTool(tool);
+          assert.ok(Array.isArray(results), 'Curator must receive a Knowledge search result');
+          for (const result of results) {
+            // Both page and note hits include the containing page.
+            assert.equal(result.page.scope ?? result.page.address, customerScope);
+            assert.equal(result.page.ref.split('#', 1)[0], customerScope);
+          }
+        }
         const evidence = JSON.stringify(allTools);
         assert.doesNotMatch(
           evidence,
@@ -351,10 +362,16 @@ export async function snapshot(f: Fixture) {
     cursor = batch.nextCursor;
   } while (cursor);
   return Promise.all(
-    pages.map(async page => ({
-      page,
-      notes: (await store.listNotes({ pageId: page.id, read: 'all', limit: 100 })).notes,
-    })),
+    pages.map(async page => {
+      const notes = [];
+      let cursor: string | undefined;
+      do {
+        const batch = await store.listNotes({ pageId: page.id, read: 'all', cursor, limit: 100 });
+        notes.push(...batch.notes);
+        cursor = batch.nextCursor;
+      } while (cursor);
+      return { page, notes };
+    }),
   );
 }
 export function providerInput(f: Fixture, start: number) {

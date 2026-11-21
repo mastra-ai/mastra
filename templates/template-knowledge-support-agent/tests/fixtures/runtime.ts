@@ -14,6 +14,18 @@ import type { KnowledgePage } from '@mastra/core/knowledge';
 import { Memory } from '@mastra/memory';
 import { startModelServer, type ModelScript } from './model-server.ts';
 
+export const syntheticSafetyPolicy = `## Before changes
+
+Preserve pending work and obtain authorization before disruptive changes.
+
+## Prohibited actions
+
+Do not reset while offline payments are pending.
+
+## When uncertain
+
+Ask the authorized lead to check the recovery plan.`;
+
 interface RuntimeOptions {
   generatedCredentials?: boolean;
   studioRole?: string;
@@ -155,7 +167,7 @@ async function configureRuntime(
           scope: `tenant:${tenant}`,
           path: 'policies/safe-changes',
           name: 'Synthetic safety policy',
-          body: 'Preserve pending work. Obtain authorization before any disruptive change. Do not reset while offline payments are pending.',
+          body: syntheticSafetyPolicy,
           author: 'synthetic-fixture',
         });
       }
@@ -180,6 +192,7 @@ async function configureRuntime(
   async function request(path: string, owner = 0, options: RequestInit = {}) {
     return fetch(`${base()}/api${path}`, {
       ...options,
+      signal: options.signal ?? AbortSignal.timeout(30000),
       headers: {
         authorization: `Bearer ${credentials[owner]!.token}`,
         'content-type': 'application/json',

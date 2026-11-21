@@ -60,16 +60,12 @@ async function fixture() {
     let code = 0;
     const dataset = options.dataset === null ? [] : ['--dataset', options.dataset ?? 'retail-pos'];
     try {
-      const result = await execute(
-        join(dirname(process.execPath), 'npm'),
-        ['run', 'knowledge:seed', '--', ...dataset, ...(options.args ?? [])],
-        {
-          cwd: root,
-          env: { ...environment, SUPPORT_DATABASE_URL: options.url ?? url, SUPPORT_EXAMPLE: options.example },
-          timeout: 30000,
-          maxBuffer: 2_000_000,
-        },
-      );
+      const result = await execute('npm', ['run', 'knowledge:seed', '--', ...dataset, ...(options.args ?? [])], {
+        cwd: root,
+        env: { ...environment, SUPPORT_DATABASE_URL: options.url ?? url, SUPPORT_EXAMPLE: options.example },
+        timeout: 30000,
+        maxBuffer: 2_000_000,
+      });
       stdout = result.stdout;
       stderr = result.stderr;
     } catch (error) {
@@ -172,6 +168,7 @@ test('seed_rejects_an_invalid_rendered_policy_without_changing_stored_knowledge'
     await f.saveManifest(manifest);
 
     const policyPath = join(dirname(f.manifestFile), 'policy.md');
+    const complete = await readFile(policyPath, 'utf8');
     const instructions = 'Before a disruptive change, confirm authorization and preserve pending work. ';
     const oversized = `# Safe changes\n\n${instructions.repeat(10).trim()}`;
     assert.ok(oversized.length < 800, 'The source fits before seed attribution and links are added');
@@ -179,6 +176,15 @@ test('seed_rejects_an_invalid_rendered_policy_without_changing_stored_knowledge'
 
     for (const [body, reason] of [
       [oversized, /exceeds the 800-character limit/u],
+      ['This page contains no policy. The safety procedure is not yet available.', /substantive policy instructions/u],
+      [
+        complete.replace(/(## Prohibited actions\n\n)[^\n]+/u, '$1[[connection-guide]]'),
+        /substantive policy instructions under the Prohibited actions heading/u,
+      ],
+      [
+        complete.replace('## Prohibited actions', '[[connection-guide]]## Prohibited actions'),
+        /substantive policy instructions under the Prohibited actions heading/u,
+      ],
       ['# Safe changes\n\n[[connection-guide]]', /substantive policy instructions/u],
       [
         '# Safe changes\n\n> Source: Archived product documentation from the regional equipment maintenance library.',
@@ -204,8 +210,10 @@ test('seed_rejects_an_invalid_rendered_policy_without_changing_stored_knowledge'
         assert.deepEqual(await f.snapshot(), before, 'The active policy version and other Knowledge must be preserved');
       }
     }
-    await writeFile(policyPath, `# Safe changes\n\n> ${instructions.trim()}\n\n${recordOnly}`);
-    await f.cli();
+    const updated = complete.replace(/(## Before changes\n\n)[^\n]+/u, `$1> ${instructions.trim()}`);
+    await writeFile(policyPath, updated);
+    await f.cli({ args: ['--dry-run'] });
+    assert.equal(page((await f.cli()).report, 'safety-policy').status, 'updated');
   } finally {
     await f.close();
   }
@@ -234,6 +242,12 @@ test('seed preserves wiki syntax in code alongside managed prose links', { timeo
       '> ~~~text',
       '> [[docs:north#guides/connectivity]] [[quoted-placeholder]]',
       '> ~~~',
+      '',
+      '````markdown',
+      '```support-record',
+      '{"example": true}',
+      '```',
+      '````',
     ].join('\n');
     await writeFile(caseFile, `${code}\n\nSee [[connection-guide]].\n`);
     const report = (await f.cli()).report;

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { TABLE_SCHEMAS } from '@mastra/core/storage';
+import { TABLE_SCHEMAS, TABLE_SPANS } from '@mastra/core/storage';
 import { setTimeout } from 'node:timers/promises';
 import { demoCorpus } from '../fixtures/demo-corpus.ts';
 import {
@@ -315,18 +315,6 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
   try {
     await f.seed();
     await f.start();
-    const id = await thread(f);
-    await turn(f, id, `F5:diagnostic network ${sentinels.prompt} ${sentinels.credential} ${sentinels.payment}`);
-    const saved = JSON.stringify(await json(await f.request(`/memory/threads/${id}/messages?agentId=support`)));
-    for (const sentinel of [sentinels.prompt, sentinels.credential, sentinels.payment])
-      assert.ok(saved.includes(sentinel), 'Positive private-payload control must be stored in Memory');
-    const source = await confirm(f, id);
-    const lifecycle = await approveLifecycle(f, source);
-    await turn(f, await thread(f, f.otherCustomer!), 'F5:reuse network', f.otherCustomer!);
-    await turn(f, await thread(f), 'F5:diagnostic network with previous history');
-    await turn(f, await thread(f), 'F5:insufficient fluxcapacitor');
-    assert.equal((await f.request('/observability/traces')).status, 403);
-    assert.equal((await f.request(`/memory/threads/${id}/messages?agentId=support`, f.otherCustomer!)).status, 403);
     const beforeFailure = await snapshot(f);
     const failureThread = await thread(f);
     const failuresBefore = f.model.failures.length;
@@ -351,6 +339,35 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
       ),
       'Failed model cannot leave invented assistant guidance',
     );
+    // Persist this trace before any other agent run can write to the fixture database.
+    let failedTraceId: string | undefined;
+    for (let attempt = 0; attempt < 30; attempt++) {
+      const runs = await sql(
+        f,
+        `SELECT traceId, outcome, error FROM ${TABLE_SPANS} WHERE name = 'agent_run' AND endedAt IS NOT NULL`,
+      );
+      if (runs.length) {
+        assert.equal(runs.length, 1);
+        assert.equal(runs[0]!.outcome, 'error');
+        assert.ok(runs[0]!.error);
+        failedTraceId = runs[0]!.traceId;
+        break;
+      }
+      await setTimeout(200);
+    }
+    assert.ok(failedTraceId, 'The request that received a 503 must persist an error span');
+    const id = await thread(f);
+    await turn(f, id, `F5:diagnostic network ${sentinels.prompt} ${sentinels.credential} ${sentinels.payment}`);
+    const saved = JSON.stringify(await json(await f.request(`/memory/threads/${id}/messages?agentId=support`)));
+    for (const sentinel of [sentinels.prompt, sentinels.credential, sentinels.payment])
+      assert.ok(saved.includes(sentinel), 'Positive private-payload control must be stored in Memory');
+    const source = await confirm(f, id);
+    const lifecycle = await approveLifecycle(f, source);
+    await turn(f, await thread(f, f.otherCustomer!), 'F5:reuse network', f.otherCustomer!);
+    await turn(f, await thread(f), 'F5:diagnostic network with previous history');
+    await turn(f, await thread(f), 'F5:insufficient fluxcapacitor');
+    assert.equal((await f.request('/observability/traces')).status, 403);
+    assert.equal((await f.request(`/memory/threads/${id}/messages?agentId=support`, f.otherCustomer!)).status, 403);
     const requiredLifecycle = [
       ['authorization', 'success'],
       ['authorization', 'denied'],
@@ -396,7 +413,11 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
       if (!samples.some(row => row.name === 'mastra_model_total_output_tokens' && row.metadata.value === 8))
         missing.push('model output tokens');
       if (!samples.some(row => row.metadata.costContext?.estimatedCost > 0)) missing.push('native cost estimate');
-      if (!rows.some(row => row.name === 'agent_run' && row.outcome === 'error' && row.error))
+      if (
+        !rows.some(
+          row => row.traceId === failedTraceId && row.name === 'agent_run' && row.outcome === 'error' && row.error,
+        )
+      )
         missing.push('failed agent run');
       if (!rows.some(row => row.name === 'agent_run' && row.outcome === 'success'))
         missing.push('successful agent run');
@@ -413,7 +434,7 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
     assert.ok(rows.length > 0, 'Inspect actual persisted spans, not terminal logs');
     const telemetry = await f.storage.getStore('observability');
     assert.ok(telemetry);
-    const trace = await telemetry.getTrace({ traceId: rows.find(row => row.name === 'agent_run')!.traceId });
+    const trace = await telemetry.getTrace({ traceId: failedTraceId });
     assert.ok(trace?.spans.length, 'Native export/readback must contain real spans');
     const exported = JSON.stringify({ tables, trace });
     const forbidden = [

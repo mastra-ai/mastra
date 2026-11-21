@@ -4,6 +4,7 @@ import { supportConfiguration } from '../../examples/support.ts';
 import { principals, type Profile } from '../identity.ts';
 import { recordOperation } from '../observability.ts';
 import { MAX_SUPPORT_RECORD_BODY_LENGTH, validateSupportRecord, type SupportRecord } from './seed-manifest.ts';
+import { supportRecordEnvelope } from './support-record-envelope.ts';
 
 // Search prioritizes relevant pages beyond the enumeration window. Neither native search nor
 // this bounded fallback promises exhaustive ranking across an arbitrarily large history.
@@ -25,10 +26,8 @@ export type History = {
 
 function record(body = ''): SupportRecord | undefined {
   if (body.length > MAX_SUPPORT_RECORD_BODY_LENGTH) throw new Error('Support record exceeds the read bound');
-  const envelopes = [...body.matchAll(/^```support-record\n([\s\S]*?)\n```[ \t]*$/gmu)];
-  if (!envelopes.length && !body.includes('```support-record')) return;
-  if (envelopes.length !== 1) throw new Error('Invalid support record');
-  return validateSupportRecord(JSON.parse(envelopes[0]![1]!));
+  const envelope = supportRecordEnvelope(body);
+  if (envelope) return validateSupportRecord(JSON.parse(envelope.value));
 }
 
 /** Scoped native search, verified canonical ancestry, and a bounded small-corpus fallback. */

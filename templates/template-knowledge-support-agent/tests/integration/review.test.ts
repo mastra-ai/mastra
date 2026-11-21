@@ -11,6 +11,7 @@ import { runtimeFixture } from '../fixtures/runtime.ts';
 import { resourceId } from '../../src/mastra/identity.ts';
 import { seedDataset } from '../../src/mastra/knowledge/seed.ts';
 import { acquireWriterLock } from '../../src/mastra/knowledge/writer-lock.ts';
+import { publishedText } from '../../src/mastra/review/contracts.ts';
 import type { Candidate, Proposal } from '../../src/mastra/review/contracts.ts';
 
 type Fixture = Awaited<ReturnType<typeof runtimeFixture>>;
@@ -486,6 +487,46 @@ test('review detects exact duplicates and publishes new content in a large scope
     const second = await pending(f, input);
     assert.equal(second.proposal.candidate.action, 'duplicate');
     assert.equal((await resume(f, second)).result.status, 'duplicate');
+
+    const store = await f.supportKnowledge.getStorage();
+    const target = f.pages[0]!;
+    const supplement = candidate('legacy-note', {
+      action: 'note',
+      target: { path: 'cases/synthetic', expectedVersion: 1 },
+      evidence: [],
+    });
+    f.select(supplement);
+    const legacyRun = await pending(f, input);
+    const legacy = await store.addNote({
+      pageId: target.id,
+      text: publishedText(legacyRun.proposal),
+      stampScopeIds: [target.scopeId],
+      mentions: [],
+      provenance: { author: 'review:morgan' },
+    });
+    assert.notEqual(legacy.id, legacyRun.proposal.id);
+    assert.equal((await resume(f, legacyRun)).result.reference, `${evidence}?note=${legacy.id}`);
+
+    const duplicate = await pending(f, input);
+    const duplicateResult = await resume(f, duplicate);
+    assert.equal(duplicateResult.status, 'failed');
+    assert.match(JSON.stringify(duplicateResult), /duplicate note now exists/u);
+
+    await store.removeNote({ id: legacy.id, deletedBy: 'fixture', provenance: { author: 'fixture' } });
+    const deletedRun = await pending(f, input);
+    const deleted = await store.addNote({
+      pageId: target.id,
+      text: publishedText(deletedRun.proposal),
+      stampScopeIds: [target.scopeId],
+      mentions: [],
+      provenance: { author: 'review:morgan' },
+    });
+    await store.removeNote({ id: deleted.id, deletedBy: 'fixture', provenance: { author: 'fixture' } });
+    const replay = await resume(f, deletedRun);
+    assert.equal(replay.status, 'failed');
+    assert.match(JSON.stringify(replay), /Conflicting prior note effect/u);
+    assert.equal(await store.getNote({ id: deletedRun.proposal.id, read: 'all', includeDeleted: true }), null);
+    assert.equal((await resume(f, await pending(f, input))).result.status, 'published');
   } finally {
     await f.close();
   }
@@ -584,13 +625,20 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
         { ...input, audience: 'tenant' },
       ],
       [
+        {
+          content: `Verified finding for ${input.threadId.toUpperCase()}`,
+          publicSource: { ref: publicRef, version: 1 },
+        },
+        { ...input, audience: 'tenant' },
+        /Shared text contains private identifiers or references/u,
+      ],
+      [
         { content: 'password=synthetic-secret', publicSource: { ref: publicRef, version: 1 } },
         { ...input, audience: 'tenant' },
       ],
       [{ publicSource: null }, { ...input, audience: 'tenant' }],
       [{}, { ...input, sourceActorId: 'morgan' }],
       [{}, { ...input, messageId: 'missing-turn' }],
-      [{}, await confirmation(f, 1)],
     ] as Array<[Partial<Candidate>, typeof input, RegExp?]>) {
       await unchanged(async () => {
         const selected = candidate(`invalid-${++serial}`, changes);
@@ -603,6 +651,13 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
         }
       });
     }
+    const foreignSource = await confirmation(f, 1);
+    await unchanged(async () => {
+      f.select(candidate('foreign-confirmation'));
+      const requests = f.model.requests.length;
+      assert.equal((await begin(f, foreignSource)).state.status, 'failed');
+      assert.equal(f.model.requests.length, requests, 'A foreign confirmation must never reach the curator');
+    });
 
     const staleEvidence = await next();
     const staleTarget = await next({
@@ -1023,14 +1078,14 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
       { action: 'note', target: { path, expectedVersion: page.version }, evidence: [] },
       freshInput,
     );
-    for (let index = 0; index < 1000; index++)
+    for (let index = 0; index < 1001; index++)
       await f.supportKnowledge.addNote({ scope: customer, path, text: `Existing observation ${index}` });
     const noteRef = await interruptAndRecover(interruptedNote, undefined, () =>
       f.supportKnowledge.addNote({ scope: customer, path, text: 'An unrelated observation after the commit' }),
     );
     assert.equal(noteRef, `${customer}#${path}?note=${interruptedNote.proposal.id}`);
     const store = await f.supportKnowledge.getStorage();
-    assert.deepEqual(await store.countNotes({ pageIds: [page.id], read: 'all' }), { [page.id]: 1002 });
+    assert.deepEqual(await store.countNotes({ pageIds: [page.id], read: 'all' }), { [page.id]: 1003 });
   } finally {
     await f.close();
   }

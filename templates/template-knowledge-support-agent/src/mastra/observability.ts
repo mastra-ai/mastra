@@ -190,7 +190,6 @@ export class PayloadFreeStorageExporter extends MastraStorageExporter {
         ...(metric.costContext ? { costContext: safeCost(metric.costContext) } : {}),
       },
     };
-    await super._exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: span });
     await super._exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: span });
   }
 

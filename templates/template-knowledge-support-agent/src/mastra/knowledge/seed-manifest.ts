@@ -14,6 +14,7 @@ import {
 } from '@mastra/core/knowledge';
 import { validateProfile, type Profile } from '../identity.ts';
 import { requiredPolicyContentIssue } from './required-policy.ts';
+import { supportRecordEnvelope } from './support-record-envelope.ts';
 
 export interface DatasetConfiguration {
   id: string;
@@ -309,13 +310,10 @@ export async function prepareDataset(
       MAX_SUPPORT_RECORD_BODY_LENGTH,
       true,
     );
-    const envelopes = [...body.matchAll(/^```support-record\n([\s\S]*?)\n```[ \t]*$/gmu)];
-    if (envelopes.length > 1 || (envelopes.length && obj.record !== undefined))
-      throw new Error('Duplicate support record envelope');
-    if (body.includes('```support-record') && !envelopes.length) throw new Error('Malformed support record envelope');
-    const envelope = envelopes[0];
+    const envelope = supportRecordEnvelope(body);
+    if (envelope && obj.record !== undefined) throw new Error('Duplicate support record envelope');
     const record = envelope
-      ? validateSupportRecord(JSON.parse(envelope[1]!))
+      ? validateSupportRecord(JSON.parse(envelope.value))
       : obj.record === undefined
         ? undefined
         : validateSupportRecord(obj.record);
@@ -361,10 +359,9 @@ export async function prepareDataset(
       });
       const fence =
         envelope && record.summary === summary && record.applicability === applicability
-          ? envelope[0]
+          ? envelope.raw
           : `\`\`\`support-record\n${JSON.stringify(record, null, 2)}\n\`\`\``;
-      if (envelope)
-        markdown = page.body.slice(0, envelope.index) + fence + page.body.slice(envelope.index + envelope[0].length);
+      if (envelope) markdown = page.body.slice(0, envelope.start) + fence + page.body.slice(envelope.end);
       else generated.push(fence);
     }
     let hasHttpsSource = false;

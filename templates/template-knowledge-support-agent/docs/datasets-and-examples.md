@@ -10,6 +10,12 @@ The default retail support example uses Square Terminal reference summaries and 
 | `it-helpdesk`          | Portuguese Windows configuration guide, its own standing policy, and approved fictional history for two access groups. |
 | `retail-pos`           | Earlier retail example with the `north-*` and `south-store` profiles.                                                  |
 
+## Write a required safety policy
+
+Use the Markdown headings `## Before changes`, `## Prohibited actions`, and `## When uncertain` once each. Under each heading, give concrete instructions in the use case's language. Keep the rendered page within 800 characters, including seed attribution and links, so the native pin can deliver the full policy.
+
+If a database still has the earlier prose format, rerun `npm run knowledge:seed` for the selected example to refresh the bundled policy. For the earlier North and South retail profiles, run `npm run knowledge:seed -- --dataset retail-pos`. Update the Markdown in any custom dataset before reseeding it.
+
 ## Add a support case
 
 1. Add a Markdown file next to the [retail history manifest](../knowledge-datasets/retail-pos/history-manifest.json). Describe the reported symptom, what the technician observed, and what remains open or how the fix was verified.

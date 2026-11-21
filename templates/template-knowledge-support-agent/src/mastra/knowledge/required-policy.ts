@@ -5,24 +5,58 @@ import { gfmAutolinkLiteral } from 'micromark-extension-gfm-autolink-literal';
 type MarkdownNode = { type: string; value?: string; children?: MarkdownNode[] };
 
 function instructionText(node: MarkdownNode): string {
-  if (['heading', 'link', 'linkReference', 'definition', 'image', 'imageReference', 'html', 'code'].includes(node.type))
+  if (
+    [
+      'heading',
+      'link',
+      'linkReference',
+      'definition',
+      'image',
+      'imageReference',
+      'html',
+      'code',
+      'inlineCode',
+    ].includes(node.type)
+  )
     return '';
-  return node.value ?? node.children?.map(instructionText).join(' ') ?? '';
+  if (node.type === 'paragraph' && /^\s*Source:/u.test(node.children?.[0]?.value ?? '')) return '';
+  if (node.value !== undefined) return node.value.replace(/\[\[[^\r\n]*?\]\]|^[ \t]*Source:.*$/gmu, '');
+  return node.children?.map(instructionText).join(' ') ?? '';
 }
 
 const maxPolicyCharacters = 800;
+const requiredSections = ['Before changes', 'Prohibited actions', 'When uncertain'];
 
 export function requiredPolicyContentIssue(body: string): string | undefined {
   if (body.length > maxPolicyCharacters) return `Rendered body exceeds the ${maxPolicyCharacters}-character limit`;
 
-  // Seed attribution, headings, links, and code blocks alone cannot satisfy a mandatory policy.
-  const markdown = body.replace(/<!--[\s\S]*?-->|\[\[[\s\S]*?\]\]|^[ \t]*(?:>[ \t]*)*Source:.*$/gmu, '');
-  const document = fromMarkdown(markdown, {
+  // The page is delivered as Markdown by the native pin. Only guidance under a named section counts.
+  const document = fromMarkdown(body, {
     extensions: [gfmAutolinkLiteral()],
     mdastExtensions: [gfmAutolinkLiteralFromMarkdown()],
   });
-  const text = instructionText(document).trim();
-  const words = text.toLowerCase().match(/[a-z]{2,}/gu) ?? [];
-  if (text.length < 40 || words.length < 6 || new Set(words).size < 4 || !/[a-z]{3}/iu.test(text))
-    return 'Expected substantive policy instructions after removing headings, links, attribution, and code blocks';
+  const sections = new Map<string, string[]>();
+  let instructions: string[] | undefined;
+  for (const node of document.children) {
+    if (node.type !== 'heading') {
+      instructions?.push(instructionText(node));
+      continue;
+    }
+    instructions = undefined;
+    if (node.depth !== 2 || node.children.length !== 1 || node.children[0]?.type !== 'text') continue;
+    const name = node.children[0].value;
+    if (!requiredSections.includes(name)) continue;
+    if (sections.has(name)) return `Duplicate required policy section ${name}`;
+    instructions = [];
+    sections.set(name, instructions);
+  }
+  for (const name of requiredSections) {
+    const words =
+      sections
+        .get(name)
+        ?.join(' ')
+        .toLowerCase()
+        .match(/[\p{L}]{2,}/gu) ?? [];
+    if (new Set(words).size < 3) return `Expected substantive policy instructions under the ${name} heading`;
+  }
 }

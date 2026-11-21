@@ -58,9 +58,16 @@ export async function startModelServer(script?: ModelScript) {
       } catch {}
     }
     const shouldRead = !read && toolMessages.length === 1 && requestedPage;
+    const toolCall = (name: string, args: Record<string, unknown>) => {
+      const serialized = JSON.stringify(args);
+      if (typeof serialized !== 'string') throw new Error('Model tool arguments must be JSON serializable');
+      return { id: `fixture-call-${requests.length}`, type: 'function', function: { name, arguments: serialized } };
+    };
     let scripted: ScriptedReply | undefined;
+    let scriptedTool: ReturnType<typeof toolCall> | undefined;
     try {
       scripted = script?.(body);
+      if (scripted?.tool && !scripted.httpError) scriptedTool = toolCall(scripted.tool.name, scripted.tool.arguments);
     } catch (error) {
       response.writeHead(400, { 'content-type': 'application/json' });
       response.end(
@@ -81,24 +88,13 @@ export async function startModelServer(script?: ModelScript) {
       );
       return;
     }
-    const tool = scripted?.tool
-      ? {
-          id: `fixture-call-${requests.length}`,
-          type: 'function',
-          function: { name: scripted.tool.name, arguments: JSON.stringify(scripted.tool.arguments) },
-        }
-      : script
-        ? undefined
-        : !hasTool || shouldRead
-          ? {
-              id: `fixture-call-${requests.length}`,
-              type: 'function',
-              function: {
-                name: requestedPage ? 'knowledge_read' : 'knowledge_search',
-                arguments: JSON.stringify(requestedPage ? { page: requestedPage } : { query: 'SYNTHETIC' }),
-              },
-            }
-          : undefined;
+    const tool = script
+      ? scriptedTool
+      : !hasTool || shouldRead
+        ? requestedPage
+          ? toolCall('knowledge_read', { page: requestedPage })
+          : toolCall('knowledge_search', { query: 'SYNTHETIC' })
+        : undefined;
     const content = tool ? null : (scripted?.content ?? 'Synthetic evidence inspected. Local platform is ready.');
     if (body.stream) {
       response.writeHead(200, { 'content-type': 'text/event-stream' });

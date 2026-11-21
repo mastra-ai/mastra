@@ -13,7 +13,7 @@ import { hasSeededHttpsSource } from '../knowledge/seed-manifest.ts';
 import { withWriterLock } from '../knowledge/writer-lock.ts';
 import { createPostgresWriterKnowledge } from '../knowledge/index.ts';
 import type { LocalProfile } from '../server/access.ts';
-import { hasDuplicatePage } from './duplicate.ts';
+import { hasDuplicatePage, matchingNoteIds } from './duplicate.ts';
 import {
   candidateSchema,
   digest,
@@ -123,28 +123,6 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
     return result;
   }
 
-  function safeShared(proposal: Proposal) {
-    const { candidate, reviewer: profile, source } = proposal;
-    const text = [
-      candidate.title,
-      candidate.content,
-      candidate.record.summary,
-      candidate.record.applicability,
-      ...candidate.record.topicTags,
-    ].join('\n');
-    const forbidden = [
-      profile.customerId,
-      source.sourceActorId,
-      source.threadId,
-      source.messageId,
-      ...candidate.evidence.map(item => item.ref),
-    ];
-    requireReview(
-      !forbidden.some(value => text.toLowerCase().includes(value.toLowerCase())),
-      'Shared text contains private identifiers or references',
-    );
-  }
-
   async function validate(proposal: Proposal, authenticated?: Profile, activeKnowledge = knowledge) {
     const identity = (kind: Proposal['bindings'][number]['kind'], ref: string, current: KnowledgePage) => {
       const binding = proposal.bindings.find(item => item.kind === kind && item.ref === ref);
@@ -169,7 +147,6 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
       identity('evidence', evidence.ref, current);
     }
     if (proposal.source.audience === 'tenant' && ['page', 'note', 'update'].includes(proposal.candidate.action)) {
-      safeShared(proposal);
       const source = proposal.candidate.publicSource!;
       requireReview(
         source.ref.startsWith(`${knowledgeScopeAddress('docs:$tenantId', { ...proposal.reviewer })}#`),
@@ -353,27 +330,16 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
         const prior = await store.getNote({ id: proposal.id, read: 'all', includeDeleted: true });
         if (prior) return priorEffect(prior);
 
-        const noteLimit = 1000;
-        const notes: KnowledgeNote[] = [];
-        let cursor: string | undefined;
-        do {
-          // Older publications used storage-generated IDs and could publish the 1,001st note.
-          const limit = Math.min(100, noteLimit + 1 - notes.length);
-          const batch = await store.listNotes({ pageId: current.id, read: 'all', cursor, limit });
-          notes.push(...batch.notes);
-          cursor = batch.nextCursor;
-        } while (cursor && notes.length <= noteLimit);
-        const owned = notes.filter(note => note.text.startsWith(marker));
-        if (owned.length) {
-          requireReview(owned.length === 1, 'Conflicting prior note effect');
-          return priorEffect(owned[0]!);
+        const legacyIds = await matchingNoteIds(current.id, marker, 'legacy-marker', postgres);
+        requireReview(legacyIds.length <= 1, 'Conflicting prior note effect');
+        if (legacyIds[0]) {
+          const legacy = await store.getNote({ id: legacyIds[0], read: 'all', includeDeleted: true });
+          requireReview(legacy, 'Prior note effect is missing');
+          return priorEffect(legacy);
         }
-        requireReview(!cursor && notes.length <= noteLimit, 'Note reconciliation exceeds its bound');
         await validate(proposal, authenticated, activeKnowledge);
-        requireReview(
-          !notes.some(note => note.text.includes(proposal.candidate.content)),
-          'A duplicate note now exists; reevaluate',
-        );
+        const duplicates = await matchingNoteIds(current.id, proposal.candidate.content, 'live-content', postgres);
+        requireReview(duplicates.length === 0, 'A duplicate note now exists; reevaluate');
         reviewer(authenticated ?? proposal.reviewer);
         const note = await store.addNote({
           id: proposal.id,

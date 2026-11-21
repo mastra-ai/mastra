@@ -5,6 +5,7 @@ import { once } from 'node:events';
 import { createServer } from 'node:http';
 import { createConnection } from 'node:net';
 import test from 'node:test';
+import { setTimeout } from 'node:timers/promises';
 import { knowledgeScopeAddress } from '@mastra/core/knowledge';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import { GET_KNOWLEDGE_TREE_ROUTE } from '@mastra/server/handlers/knowledge';
@@ -76,25 +77,64 @@ test('dev uses its fixture settings and never probes a different listener', { ti
   }
 });
 
-test('the model fixture closes connections with incomplete request bodies', { timeout: 5000 }, async () => {
+test('the model fixture closes connections with incomplete request bodies', { timeout: 10000 }, async t => {
   const model = await startModelServer();
   const { port } = new URL(model.url);
   const socket = createConnection({ host: '127.0.0.1', port: Number(port) });
-  try {
-    await once(socket, 'connect');
-    const accepted = once(socket, 'data');
-    socket.write(
-      'POST /v1/chat/completions HTTP/1.1\r\nHost: localhost\r\nExpect: 100-continue\r\nContent-Length: 100\r\n\r\n',
-    );
-    assert.match(String((await accepted)[0]), /100 Continue/u);
-    socket.write('{');
-    // Closing an active request can reset the peer connection.
-    socket.on('error', () => {});
-    const closed = new Promise<void>(resolve => socket.once('close', () => resolve()));
-    await model.close();
-    await closed;
-  } finally {
+  // Closing an active request can reset the peer connection.
+  socket.on('error', () => {});
+  const closed = new Promise<void>(resolve => socket.once('close', () => resolve()));
+  let closing: Promise<void> | undefined;
+  t.after(async () => {
     socket.destroy();
+    await (closing ?? model.close());
+  });
+  socket.setTimeout(2000, () => socket.destroy(new Error('Timed out reading the interim response')));
+  await once(socket, 'connect');
+  socket.write(
+    'POST /v1/chat/completions HTTP/1.1\r\nHost: localhost\r\nExpect: 100-continue\r\nContent-Length: 100\r\n\r\n',
+  );
+  let interim = '';
+  for await (const chunk of socket.iterator({ destroyOnReturn: false })) {
+    interim += chunk.toString();
+    if (interim.includes('\r\n\r\n')) break;
+  }
+  assert.match(interim, /^HTTP\/1\.1 100 Continue\r\n\r\n/u);
+  socket.setTimeout(0);
+  socket.write('{');
+  const deadline = new AbortController();
+  try {
+    closing = model.close();
+    await Promise.race([
+      Promise.all([closing, closed]),
+      setTimeout(2000, undefined, { signal: deadline.signal }).then(() => {
+        assert.fail('The model server did not close the incomplete request');
+      }),
+    ]);
+  } finally {
+    deadline.abort();
+  }
+});
+
+test('the model fixture returns an error for non-JSON tool arguments and stays available', async () => {
+  const model = await startModelServer(body =>
+    body.stream
+      ? { tool: { name: 'knowledge_search', arguments: { query: 1n } } }
+      : { content: 'The fixture is still available.' },
+  );
+  try {
+    const request = (stream: boolean) =>
+      fetch(`${model.url}/chat/completions`, {
+        method: 'POST',
+        body: JSON.stringify({ stream, messages: [{ role: 'user', content: 'Find synthetic evidence' }] }),
+        signal: AbortSignal.timeout(2000),
+      });
+    const failed = await json(await request(true), 400);
+    assert.equal(failed.error.type, 'fixture_assertion');
+    const successful = await json(await request(false));
+    assert.equal(successful.choices[0].message.content, 'The fixture is still available.');
+  } finally {
+    await model.close();
   }
 });
 

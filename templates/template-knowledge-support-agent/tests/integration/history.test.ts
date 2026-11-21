@@ -6,8 +6,8 @@ import { datasets } from '../../src/examples/datasets.ts';
 import { seedDataset } from '../../src/mastra/knowledge/seed.ts';
 import { resourceId } from '../../src/mastra/identity.ts';
 import { hasDuplicatePage } from '../../src/mastra/review/duplicate.ts';
-import { generateHistoryCorpus } from '../fixtures/history-corpus.ts';
-import { runtimeFixture } from '../fixtures/runtime.ts';
+import { generateHistoryCorpus, historyRecord, reviewedNote } from '../fixtures/history-corpus.ts';
+import { runtimeFixture, syntheticSafetyPolicy } from '../fixtures/runtime.ts';
 
 const profile = exampleProfiles[0]!;
 test(
@@ -71,6 +71,22 @@ test(
         older.records.some(record => record.summary === 'OLDER_RELEVANT'),
         'A six-year-old record survives 600 newer unrelated cases',
       );
+      const scope = 'customer:north:store-1';
+      const path = 'cases/markdown-example';
+      const example = `\`\`\`\`markdown\n${historyRecord('EXAMPLE_ONLY', ['connectivity', 'printing'], '2026-11-20')}\n\`\`\`\``;
+      await f.supportKnowledge.upsertPage({ scope, path, name: 'Markdown example', body: example });
+      await f.supportKnowledge.addNote({
+        scope,
+        path,
+        text: reviewedNote(example),
+        author: 'review:synthetic-reviewer',
+      });
+      const afterExample = await prepareHistory(f.supportKnowledge, profile, 'network printer');
+      assert.deepEqual(
+        afterExample.records.map(record => record.ref),
+        expected,
+        'Code samples cannot become history',
+      );
       await corpus.addMalformedRecords();
       const degraded = await prepareHistory(f.supportKnowledge, profile, 'network printer');
       assert.equal(degraded.status, 'partial');
@@ -128,7 +144,7 @@ test(
         scope: 'tenant:north',
         path: 'policies/safe-changes',
         name: 'Safety policy',
-        body: 'Preserve pending work. Obtain authorization before disruptive changes. Do not reset while offline payments are pending.',
+        body: syntheticSafetyPolicy,
         author: 'synthetic-fixture',
       });
       await f.start();
