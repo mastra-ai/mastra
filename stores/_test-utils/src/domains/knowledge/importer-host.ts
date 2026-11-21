@@ -192,6 +192,47 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect(await run([])).toMatchObject({ outcome: 'succeeded', chain: false, counts: { moved: 0, updated: 0 } });
     });
 
+    it('goes back for deferred linkers when the settle slice that moved their target ends at its move cap', async () => {
+      const { knowledge, run, page } = setup();
+      const linkers = Array.from({ length: 105 }, (_, i) =>
+        upsert({ sourceId: `a${String(i).padStart(3, '0')}`, links: [{ sourceId: 'b' }] }),
+      );
+      // b and z000–z049 wait for p: 51 moves, so the slice that moves b stops at the 50-move cap with
+      // z049 still ahead of its cursor.
+      const waiting = Array.from({ length: 50 }, (_, i) =>
+        upsert({ sourceId: `z${String(i).padStart(3, '0')}`, parent: 'p' }),
+      );
+      await run([...linkers, upsert({ sourceId: 'b', parent: 'p' }), ...waiting]);
+
+      expect(await run([upsert({ sourceId: 'p' })])).toMatchObject({ outcome: 'succeeded' });
+      for (const { item } of linkers as Extract<KnowledgeImporterOp, { op: 'upsert' }>[]) {
+        expect((await page(`notion/${item.sourceId}`))?.body).toBe(
+          `body of ${item.sourceId}\n\nLinks:\n- [[docs:acme#notion/p/b]]`,
+        );
+      }
+      expect(await page('notion/p/z049')).toBeTruthy();
+      const storage = await knowledge.getStorage();
+      expect((await storage.importers!.listNodes('b1', { unsettled: true })).items).toEqual([]);
+    }, 30_000);
+
+    it('counts a page that links into its own subtree when deciding whether a move left linkers behind', async () => {
+      const { knowledge, run, page } = setup();
+      // The linking list's first 101 are a000–a099 and b itself; c000 is the 101st other linker.
+      const linkers = [...Array.from({ length: 100 }, (_, i) => `a${String(i).padStart(3, '0')}`), 'c000'].map(
+        sourceId => upsert({ sourceId, links: [{ sourceId: 'b' }] }),
+      );
+      await run([...linkers, upsert({ sourceId: 'b', parent: 'p', links: [{ sourceId: 'b' }] })]);
+
+      expect(await run([upsert({ sourceId: 'p' })])).toMatchObject({ outcome: 'succeeded' });
+      for (const { item } of linkers as Extract<KnowledgeImporterOp, { op: 'upsert' }>[]) {
+        expect((await page(`notion/${item.sourceId}`))?.body).toBe(
+          `body of ${item.sourceId}\n\nLinks:\n- [[docs:acme#notion/p/b]]`,
+        );
+      }
+      const storage = await knowledge.getStorage();
+      expect((await storage.importers!.listNodes('b1', { unsettled: true })).items).toEqual([]);
+    }, 30_000);
+
     it('rewrites resolved links to a page the source moved to another parent', async () => {
       const { run, page } = setup();
       await run([

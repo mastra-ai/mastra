@@ -454,7 +454,9 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     const linking = await importers.listLinkingNodes(binding.id, targets, {
       limit: MAX_KNOWLEDGE_LINK_REFRESH_SOURCES + 1,
     });
-    if (linking.items.filter(id => id !== self).length > MAX_KNOWLEDGE_LINK_REFRESH_SOURCES) deferredLinkers = true;
+    if (linking.next || linking.items.filter(id => id !== self).length > MAX_KNOWLEDGE_LINK_REFRESH_SOURCES) {
+      deferredLinkers = true;
+    }
     for (const sourceId of linking.items.filter(id => id !== self).slice(0, MAX_KNOWLEDGE_LINK_REFRESH_SOURCES)) {
       const node = await importers.getNode(binding.id, sourceId);
       if (!node) continue;
@@ -708,7 +710,7 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
       });
       for (const node of page.items) {
         if (examined >= budget.candidates || moves >= budget.moves || Date.now() >= budget.until) {
-          return { pending: true, cursor: after ?? null, settled };
+          return { pending: true, cursor: resumeAt(), settled };
         }
         examined++;
         after = node.sourceId;
@@ -729,7 +731,13 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
         }
         return { pending: false, cursor: null, settled };
       }
-      if (examined >= budget.candidates) return { pending: true, cursor: after ?? null, settled };
+      if (examined >= budget.candidates) return { pending: true, cursor: resumeAt(), settled };
+    }
+
+    // A slice that deferred linker repairs may have queued them behind its cursor; the next one
+    // starts from the first unsettled node instead.
+    function resumeAt() {
+      return deferredLinkers ? null : (after ?? null);
     }
   }
 
