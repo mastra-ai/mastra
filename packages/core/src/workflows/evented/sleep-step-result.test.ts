@@ -88,7 +88,7 @@ describe.each(engines)(
     });
 
     it.each([false, true])('stays unfinished when the run is canceled mid-sleep (sleepUntil: %s)', async until => {
-      const { workflow, mastra, chargeInputs } = await setup(until, 200);
+      const { workflow, mastra, chargeInputs } = await setup(until, 1000);
       try {
         const run = await workflow.createRun();
         const events: string[] = [];
@@ -100,7 +100,7 @@ describe.each(engines)(
         });
         await run.cancel();
         expect((await started).status).toBe('canceled');
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 1100));
 
         const stored = await workflow.getWorkflowRunById(run.runId);
         expect(stored?.status).toBe('canceled');
