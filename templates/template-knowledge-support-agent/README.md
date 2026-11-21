@@ -43,7 +43,7 @@ Support teams repeat investigations when manuals, customer history, and confirme
 
 ## Deploy to Mastra Platform
 
-Attach a managed database to your target environment and set `DATABASE_PROVIDER` there. The platform injects the corresponding connection variables. Keep the local `.env` for Studio and configure `OPENAI_API_KEY` and the hosted OAuth introspection variables in the target environment. [Managed database variables](https://mastra.ai/docs/mastra-platform/system-environment-variables#managed-database-variables)
+Attach a managed database to your target environment and set `DATABASE_PROVIDER` there. The platform injects the corresponding connection variables. Keep the local `.env` for Studio and configure `OPENAI_API_KEY` in the target environment. [Managed database variables](https://mastra.ai/docs/mastra-platform/system-environment-variables#managed-database-variables)
 
 | `DATABASE_PROVIDER` | Database         | Injected variables                       |
 | ------------------- | ---------------- | ---------------------------------------- |
@@ -52,6 +52,8 @@ Attach a managed database to your target environment and set `DATABASE_PROVIDER`
 | `postgres`          | PostgreSQL (VPC) | `DATABASE_URL`                           |
 
 With `DATABASE_PROVIDER` unset, the template detects a single attached Turso or PostgreSQL database from its variables. When both are attached, set the provider explicitly. Redis (VPC) is unsupported because the Mastra Redis adapter implements Memory, Workflows, and Scores without a Knowledge storage domain. [Mastra Redis adapter](https://mastra.ai/integrations/databases/redis#key-structure)
+
+Set `MASTRA_ORGANIZATION_ID` to the organization that owns the deployment. Keep `MASTRA_PLATFORM_STUDIO_AUTH=disabled` so Studio uses the template's Mastra sign-in provider and scoped API authorization. Leave `SUPPORT_OAUTH_*` unset for this mode. Sign in with your Mastra account to access the shared example customer. Each account has its own conversations, and organization admins can review findings. Use external OAuth for deployments that assign different customers to different users. [Hosted authentication](docs/hosted-staging.md#mastra-platform-sign-in)
 
 For a new database, set `SUPPORT_SEED_ON_STARTUP=true` in the target environment and run `npm run build` to package the example dataset. Deploy that bundle with `npx mastra deploy --skip-build --env-file .env.production`. Use a separate `.env.production` containing only values you want to upload. It can contain just a comment when the dashboard holds all settings. Remove `SUPPORT_SEED_ON_STARTUP` after the first successful start. [Hosted staging](docs/hosted-staging.md)
 

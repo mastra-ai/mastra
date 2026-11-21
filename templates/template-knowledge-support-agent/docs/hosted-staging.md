@@ -1,6 +1,6 @@
 # Provider-neutral staging
 
-The default is a local Studio with a file database and temporary local credentials. Hosted mode runs the same Mastra HTTP API from its built bundle, using an external LibSQL or PostgreSQL service and OAuth 2 token introspection. Use your hosting platform's process manager, inbound HTTPS termination and secret injection.
+The default is a local Studio with a file database and temporary local credentials. Hosted mode runs the same Mastra HTTP API from its built bundle with remote LibSQL or PostgreSQL. On Mastra Platform, sign in with a Mastra account or configure external OAuth. Self-hosted deployments use OAuth 2 token introspection.
 
 ## Supported topology
 
@@ -18,13 +18,21 @@ The PostgreSQL reference exercises two processes against one healthy PostgreSQL 
 
 ### Mastra Platform
 
-Set `DATABASE_PROVIDER` to `turso`, `neon`, or `postgres` in the target environment. The seed and the server use the same provider variables. Turso reads `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`. Neon and VPC PostgreSQL both pass `DATABASE_URL` through to the PostgreSQL driver, including its connection options. The built server defaults to `0.0.0.0` on the platform. Set the OAuth variables and `OPENAI_API_KEY` described below.
+Set `DATABASE_PROVIDER` to `turso`, `neon`, or `postgres` in the target environment. The seed and the server use the same provider variables. Turso reads `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`. Neon and VPC PostgreSQL both pass `DATABASE_URL` through to the PostgreSQL driver, including its connection options. The built server defaults to `0.0.0.0` on the platform. Set `OPENAI_API_KEY` for the model and configure sign-in as described below.
 
 For Turso, run a single writable application instance with the default lock at `.local/support.writer.sqlite`. Run the initial seed before the app starts serving requests. During later runs, stop other writers or run the seed where it shares the same lock file. With multiple concurrent writers, including release overlap, mount a shared POSIX volume at the same absolute `SUPPORT_WRITER_LOCK_FILE` path for all writers, or choose Neon or PostgreSQL. The lock file coordinates writes and holds no Knowledge data.
 
 For a fresh database, including VPC PostgreSQL, set `SUPPORT_SEED_ON_STARTUP=true` on the target environment. Run `npm run build` to package the example datasets, then run `npx mastra deploy --skip-build --env-file .env.production` with a deployment-specific env file. Start with one replica so it can load the selected example's initial dataset before accepting requests. Remove the setting after the first successful start. For later builds with the usual `mastra build`, use the existing seeded database.
 
 You can also run the seed command from a checkout that can reach Turso or Neon. VPC PostgreSQL is reachable from the deployed server, so use the startup option to load its initial dataset. [Mastra Platform hosted databases](https://mastra.ai/docs/mastra-platform/database)
+
+### Mastra Platform sign-in
+
+In the target environment, set `MASTRA_ORGANIZATION_ID` to the organization that owns this deployment and `MASTRA_PLATFORM_STUDIO_AUTH=disabled`. The second setting lets the template register Mastra's own sign-in provider with its scoped authorization for Studio and API requests. Open Studio and sign in with your Mastra account. [Mastra Platform Studio auth](https://mastra.ai/docs/mastra-platform/deploy/studio#bring-your-own-auth)
+
+The signed-in account must belong to the configured organization. The template grants access to the first profile's tenant and customer in the selected example's initial dataset. With the default dataset, that is RetailOps Store 42. Conversations belong to the individual account. Members can use the support agent, viewers have read access, and organization admins and owners can run reviews. Configure external OAuth to assign each user to a separate tenant or customer.
+
+On Mastra Platform, leaving the OAuth URL, token, and issuer unset selects Mastra sign-in. Setting any one of those values selects external OAuth and requires all four OAuth settings. Keep `MASTRA_PLATFORM_STUDIO_AUTH=disabled` when using the template's external OAuth authorization.
 
 ### Self-hosting
 
@@ -123,3 +131,5 @@ A restored checkpoint may precede a publication that an external client already 
 Build the bundle with `npx mastra build`. With `sqld` and `openssl` on your PATH, run `node tests/hosted/verify.mjs` to exercise two loopback workers and a disposable TCP database. The check creates its own HTTPS identity service and scripted model, verifies isolation and approval across restart, then restores the database into a fresh process. Set `SQLD_BIN` or `OPENSSL_BIN` if those executables are outside your PATH.
 
 To run the same suite against PostgreSQL 16, use `SUPPORT_TEST_BACKEND=postgres node tests/hosted/verify.mjs`. It initializes a disposable trust-authenticated loopback cluster, starts two built workers without a shared lock file, and backs up/restores with `pg_dump`/`pg_restore`. PostgreSQL executables must be on your `PATH`, or set `POSTGRES_BIN` to their directory (for example, `/opt/homebrew/opt/postgresql@16/bin` on Homebrew). Never point this check at a production database.
+
+To include a simulated Mastra Platform deployment and test Mastra account sign-in, run `npm run build` followed by `SUPPORT_TEST_PROVIDER=postgres node tests/hosted/verify.mjs`.

@@ -8,7 +8,7 @@ import { createServer as createPortServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { Client } from 'pg';
 import { startModelServer } from '../fixtures/model-server.ts';
@@ -39,6 +39,24 @@ const issuer = 'https://identity.example.invalid';
 const audience = 'knowledge-support';
 const token = () => randomBytes(32).toString('base64url');
 const [technician, reviewer, outsider, resourceSecret] = Array.from({ length: 4 }, token);
+const platformOrg = 'org-hosted-proof';
+const [platformMember, secondPlatformMember, platformAdmin, platformViewer, foreignPlatformUser] = Array.from(
+  { length: 5 },
+  token,
+);
+
+const platformUsers = new Map(
+  [
+    [platformMember, 'member', 'member', platformOrg],
+    [secondPlatformMember, 'colleague', 'member', platformOrg],
+    [platformAdmin, 'reviewer', 'admin', platformOrg],
+    [platformViewer, 'viewer', 'viewer', platformOrg],
+    [foreignPlatformUser, 'outsider', 'admin', 'org-other'],
+  ].map(([credential, id, role, organizationId]) => [
+    credential,
+    { user: { id, firstName: id, lastName: 'Example' }, role, organizationId, memberOrgIds: [organizationId] },
+  ]),
+);
 
 function databaseEnv(url) {
   if (!provider) return { SUPPORT_DATABASE_URL: url };
@@ -271,10 +289,14 @@ async function holdWriterLock(env, url) {
   throw new Error(`Writer lock holder failed: ${proc.output()}`);
 }
 
-function request(worker, route, access, body) {
+function request(worker, route, access, body, headers = {}) {
   return fetch(worker.url + route, {
     method: body === undefined ? 'GET' : 'POST',
-    headers: { ...(access ? { authorization: `Bearer ${access}` } : {}), 'content-type': 'application/json' },
+    headers: {
+      ...(access ? { authorization: `Bearer ${access}` } : {}),
+      'content-type': 'application/json',
+      ...headers,
+    },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     signal: AbortSignal.timeout(30000),
   });
@@ -306,6 +328,93 @@ const turn = (worker, id, question) =>
     }),
   );
 
+async function verifyPlatformSignIn(db, worker, env, identityUrl) {
+  const environment = {
+    ...env,
+    MASTRA_ORGANIZATION_ID: platformOrg,
+    MASTRA_SHARED_API_URL: identityUrl,
+    MASTRA_PLATFORM_STUDIO_AUTH: 'disabled',
+  };
+  for (const name of Object.keys(environment)) {
+    if (name.startsWith('SUPPORT_OAUTH_')) delete environment[name];
+  }
+
+  const platform = await worker(db, { environment, access: platformMember });
+  const studioRequest = (server, route, account, body, headers = {}) =>
+    request(server, route, undefined, body, {
+      'x-mastra-client-type': 'studio',
+      ...(account ? { cookie: `__Host-wos-session=${account}` } : {}),
+      ...headers,
+    });
+  const studio = (...args) => studioRequest(platform, ...args);
+  const { url: signIn } = await json(studio('/api/auth/sso/login'));
+  assert.equal(new URL(signIn).origin, identityUrl);
+  assert.equal(new URL(signIn).searchParams.get('organization_id'), platformOrg);
+  assert.equal((await studio('/api/knowledge')).status, 401);
+  assert.equal((await studio('/api/knowledge', foreignPlatformUser)).status, 401);
+  assert.equal(await json(studio('/api/auth/me', foreignPlatformUser)), null);
+  assert.equal((await json(studio('/api/auth/me', platformMember))).id, 'member');
+  await json(studio(pageRoute(source), platformViewer));
+  assert.equal((await studio(pageRoute('tenant:fieldretail#policies/safe-changes'), platformAdmin)).status, 404);
+
+  const thread = randomUUID();
+  const question = {
+    messages: [{ role: 'user', content: 'Check the Wi-Fi network' }],
+    memory: { thread },
+  };
+  const generate = '/api/agents/support/generate';
+  assert.equal((await studio(generate, platformViewer, question)).status, 403);
+  const result = await json(studio(generate, platformMember, question));
+  assert.match(result.text, /guides\/network/u);
+  const route = `/api/memory/threads/${thread}?agentId=support`;
+  assert.equal((await studio(route, secondPlatformMember)).status, 403);
+  const ownThread = await json(studio(route, platformMember));
+  assert.equal(
+    ownThread.resourceId,
+    JSON.stringify(['retailops', 'store-42', JSON.stringify(['mastra-platform', platformOrg, 'member'])]),
+  );
+  const confirmation = { threadId: thread, observation: 'The guest network was selected.', outcome: confirmed };
+  assert.equal(
+    (await studio('/support/confirmations', platformMember, confirmation, { 'content-type': 'text/plain' })).status,
+    403,
+  );
+  assert.equal(
+    (await studio('/support/confirmations', platformMember, confirmation, { 'sec-fetch-site': 'same-site' })).status,
+    403,
+  );
+  const { confirmationReference } = await json(
+    studio('/support/confirmations', platformMember, confirmation, { 'sec-fetch-site': 'same-origin' }),
+    201,
+  );
+  const reviewRoute = '/api/workflows/review/create-run';
+  assert.equal((await studio(reviewRoute, platformMember, {})).status, 403);
+  const { runId } = await json(studio(reviewRoute, platformAdmin, {}));
+  const proposed = await json(
+    studio(`/api/workflows/review/start-async?runId=${runId}`, platformAdmin, {
+      inputData: { confirmationReference, audience: 'private' },
+    }),
+  );
+  assert.equal(proposed.status, 'suspended');
+  await stop(platform.proc);
+
+  const preload = join(lab, 'injected-studio-auth.mjs');
+  await writeFile(
+    preload,
+    `import { MastraAuthStudio } from ${JSON.stringify(import.meta.resolve('@mastra/auth-studio'))};
+import * as bundle from ${JSON.stringify(pathToFileURL(join(template, '.mastra/output/mastra.mjs')).href)};
+const mastra = Object.values(bundle).find(value => typeof value?.setStudio === 'function');
+mastra.setStudio({ auth: new MastraAuthStudio() });
+`,
+  );
+  const injected = await worker(db, { environment, access: platformMember, preload });
+  const denied = await json(studioRequest(injected, '/api/agents', platformMember), 403);
+  assert.match(denied.error, /MASTRA_PLATFORM_STUDIO_AUTH/u);
+  await stop(injected.proc);
+  console.log(
+    'Mastra sign-in proof passed: organization and customer scope, distinct conversations, review access, cookie POST protection, and injected Studio auth guard.',
+  );
+}
+
 let identityServer;
 let model;
 let proofFailed = false;
@@ -330,6 +439,16 @@ try {
   identityServer = createHttpsServer(
     { key: await readFile(keyFile), cert: await readFile(certificate) },
     async (req, res) => {
+      if (req.method === 'GET' && (req.url === '/auth/me' || req.url === '/auth/verify')) {
+        const credential =
+          req.url === '/auth/me'
+            ? req.headers.cookie?.match(/^wos-session=(.+)$/u)?.[1]
+            : req.headers.authorization?.slice(7);
+        const user = platformUsers.get(credential);
+        if (!user) res.writeHead(401).end();
+        else res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(user));
+        return;
+      }
       if (
         req.method !== 'POST' ||
         req.url !== '/introspect' ||
@@ -428,21 +547,21 @@ try {
     delete env.SUPPORT_DATABASE_AUTH_TOKEN;
   }
 
-  async function worker(db, seedOnStartup = false) {
+  async function worker(db, { seedOnStartup = false, environment = env, access = technician, preload } = {}) {
     const port = await freePort();
     const url = `http://${host}:${port}`;
     const proc = start(
       process.execPath,
-      ['index.mjs'],
+      [...(preload ? ['--import', preload] : []), 'index.mjs'],
       {
-        ...env,
+        ...environment,
         PORT: String(port),
         ...databaseEnv(db.url),
         ...(seedOnStartup ? { SUPPORT_SEED_ON_STARTUP: 'true' } : {}),
       },
       join(template, '.mastra/output'),
     );
-    await ready(proc, `${url}/api/knowledge`, technician);
+    await ready(proc, `${url}/api/knowledge`, access);
     return { proc, url };
   }
 
@@ -455,7 +574,7 @@ try {
       timeout: 30000,
     });
   // VPC PostgreSQL must seed a fresh database from the deploy artifact before serving support requests.
-  const bootstrapped = provider === 'postgres' ? await worker(db, true) : undefined;
+  const bootstrapped = provider === 'postgres' ? await worker(db, { seedOnStartup: true }) : undefined;
   if (bootstrapped) await json(request(bootstrapped, pageRoute('tenant:retailops#policies/safe-changes'), technician));
   const seeded = await seed();
   assert.match(seeded.stdout, /retail-pos-docs/u);
@@ -589,6 +708,10 @@ try {
   assert.deepEqual(afterBackup.result, beforeBackup.result);
   const visibleRecords = JSON.stringify([afterBackup, restoredMemory, restoredPage, published]);
   for (const secret of [technician, reviewer, outsider, resourceSecret]) assert.ok(!visibleRecords.includes(secret));
+  if (provider === 'postgres') {
+    await stop(restored.proc);
+    await verifyPlatformSignIn(restoredDb, worker, env, `https://${host}:${identityPort}`);
+  }
   console.log(
     `Hosted proof passed (${provider ?? backend}): two built workers, HTTPS identity, scope isolation, contention and owner exit${backend === 'postgres' ? ', interrupted seed rollback' : ''}, approval after restart, history reuse, and restored Knowledge, Memory, and audit.`,
   );

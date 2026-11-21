@@ -1,6 +1,14 @@
 import { validateProfile, type Profile } from '../identity.ts';
 import type { LocalProfile } from './access.ts';
 
+export function hasHostedOAuthConfiguration() {
+  return Boolean(
+    process.env.SUPPORT_OAUTH_INTROSPECTION_URL ||
+    process.env.SUPPORT_OAUTH_INTROSPECTION_TOKEN ||
+    process.env.SUPPORT_OAUTH_ISSUER,
+  );
+}
+
 /** RFC 7662 introspection. Tokens exist only in the incoming request and outbound form. */
 export function createHostedIdentity() {
   const endpoint = process.env.SUPPORT_OAUTH_INTROSPECTION_URL;

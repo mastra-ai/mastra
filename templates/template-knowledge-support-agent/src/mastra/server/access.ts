@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import type { MastraAuthConfig } from '@mastra/core/server';
 import { getWebRequest } from '@mastra/core/server';
 import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
+import type { RequestContext } from '@mastra/core/request-context';
 import { MASTRA_KNOWLEDGE_PRINCIPALS_KEY } from '@mastra/server/server-adapter';
 import type { Memory } from '@mastra/memory';
 import { principals, resourceId, validateProfile } from '../identity.ts';
@@ -50,31 +51,20 @@ export function loadCredentials(file: string, studioRole: string | undefined): C
   });
 }
 
-export function createAuth(
-  credentials: CredentialSource,
+export function createSupportAuthorization(
   memory: Memory,
-  reviewWorkflow?: ReviewWorkflow,
-  identity?: {
-    authenticateToken: (token: string) => Promise<LocalProfile | null>;
-    reviewerAuthority: ReviewerAuthority;
-  },
+  reviewWorkflow: ReviewWorkflow,
+  authority: ReviewerAuthority,
 ) {
-  const authenticateToken =
-    identity?.authenticateToken ??
-    (async (token: string) =>
-      currentCredentials(credentials).find(entry => entry.token === token && entry.expiresAt > Date.now())?.profile ??
-      null);
   const authorizeStudioRoute = createStudioAccess(memory);
-  const authorizeReviewRoute =
-    reviewWorkflow &&
-    createReviewAccess(reviewWorkflow, identity?.reviewerAuthority ?? createReviewerAuthority(credentials));
-  const authorize: NonNullable<MastraAuthConfig<LocalProfile | null>['authorize']> = async (
-    path,
-    method,
-    profile,
-    context,
+  const authorizeReviewRoute = createReviewAccess(reviewWorkflow, authority);
+  return async (
+    path: string,
+    method: string,
+    request: Request | undefined,
+    profile: LocalProfile | null,
+    requestContext: RequestContext,
   ) => {
-    const request = getWebRequest(context.req);
     const started = performance.now();
     if (!profile || !request) {
       recordOperation('authorization', 'denied', started);
@@ -82,16 +72,32 @@ export function createAuth(
     }
 
     const owner = resourceId(profile);
-    const requestContext = context.get('requestContext');
     requestContext.set(MASTRA_RESOURCE_ID_KEY, owner);
     requestContext.set(MASTRA_KNOWLEDGE_PRINCIPALS_KEY, principals(profile));
 
-    const review = await authorizeReviewRoute?.(path, method, request, owner, profile);
+    const review = await authorizeReviewRoute(path, method, request, owner, profile);
     const confirmation = await authorizeConfirmation(path, method, request, owner, memory);
     const allowed = confirmation ?? review ?? (await authorizeStudioRoute(path, method, request, owner));
     recordOperation('authorization', allowed ? 'success' : 'denied', started);
     return allowed;
   };
+}
+
+export type SupportAuthorization = ReturnType<typeof createSupportAuthorization>;
+
+export function createAuth(
+  credentials: CredentialSource,
+  authorize: SupportAuthorization,
+  authenticateToken = async (token: string) =>
+    currentCredentials(credentials).find(entry => entry.token === token && entry.expiresAt > Date.now())?.profile ??
+    null,
+) {
+  const authorizeRequest: NonNullable<MastraAuthConfig<LocalProfile | null>['authorize']> = (
+    path,
+    method,
+    profile,
+    context,
+  ) => authorize(path, method, getWebRequest(context.req), profile, context.get('requestContext'));
 
   return {
     authenticateToken,
@@ -100,6 +106,6 @@ export function createAuth(
       const header = request.headers.get('authorization');
       return header?.startsWith('Bearer ') ? authenticateToken(header.slice(7)) : null;
     },
-    authorize,
+    authorize: authorizeRequest,
   };
 }
