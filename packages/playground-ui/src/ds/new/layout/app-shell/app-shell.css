@@ -1,9 +1,19 @@
 /* With the app shell mounted the page scrolls inside its card, so the document
    bouncing would drag the whole shell along. Pages without the shell scroll the
-   document and keep the native bounce. The x axis stays free for
-   swipe-to-navigate. */
+   document and keep the native bounce.
+   - y: `overscroll-behavior-y: none` stops the vertical bounce.
+   - x: Chrome bounces the document sideways whenever its x axis is scrollable
+     (`overflow-x` not hidden), even with nothing to scroll. Hiding it stops the
+     bounce; `overscroll-behavior-x` stays `auto` so two-finger swipe back and
+     forward keeps working (`none` would turn that off too). */
 html:has([data-slot='app-shell']) {
   overscroll-behavior-y: none;
+}
+
+/* On body, not html: body's overflow passes to the document only while html's is
+   visible, so this keeps Studio's `overflow-hidden` body working. */
+body:has([data-slot='app-shell']) {
+  overflow-x: hidden;
 }
 
 [data-sidebar-reveal][data-sidebar-mobile-present='true'] [data-slot='app-shell'] {
