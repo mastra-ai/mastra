@@ -330,7 +330,7 @@ const PAGE_LAYOUT = "JSXOpeningElement[name.name='PageLayout']";
 // The variants PageLayout used to take, and what each became.
 const REMOVED_PAGE_LAYOUT_VARIANTS = {
   container: 'PageLayout has no container variant. Use variant="page".',
-  fit: 'PageLayout has no fit variant. Use variant="page" body="full" for panels that scroll on their own.',
+  fit: 'PageLayout has no fit variant. Use variant="page" body="fixed" for panels that scroll on their own.',
   narrow: 'PageLayout has no narrow variant. Use variant="form" for a form and variant="settings" for a settings page.',
 };
 const pageLayoutProps = selectorRule(() => [

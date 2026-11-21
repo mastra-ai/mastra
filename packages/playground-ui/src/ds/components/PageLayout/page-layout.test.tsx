@@ -74,22 +74,22 @@ describe('PageLayout', () => {
     });
   });
 
-  describe('full body', () => {
+  describe('fixed body', () => {
     it.each([undefined, <h1 key="title">Title</h1>])(
       'sits beside the header in the scrolling body, so the frame can hand it the remaining height',
       header => {
         render(
-          <PageLayout variant="page" body="full" header={header}>
+          <PageLayout variant="page" body="fixed" header={header}>
             <p>Panels</p>
           </PageLayout>,
         );
 
-        const fullBody = screen.getByText('Panels').closest('[data-slot="page-layout-full"]');
+        const fixedBody = screen.getByText('Panels').closest('[data-slot="page-layout-fixed"]');
         const viewport = screen.getByText('Panels').closest<HTMLElement>('[style*="overflow"]');
-        expect(fullBody).not.toBeNull();
-        expect(fullBody?.parentElement?.parentElement).toBe(viewport);
+        expect(fixedBody).not.toBeNull();
+        expect(fixedBody?.parentElement?.parentElement).toBe(viewport);
         if (header) {
-          expect(fullBody?.previousElementSibling?.getAttribute('data-slot')).toBe('page-layout-header');
+          expect(fixedBody?.previousElementSibling?.getAttribute('data-slot')).toBe('page-layout-header');
         }
       },
     );

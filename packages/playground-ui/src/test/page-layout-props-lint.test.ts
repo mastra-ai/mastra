@@ -16,7 +16,7 @@ tester.run('page-layout-props', plugin.rules['page-layout-props'], {
   valid: [
     {
       name: 'allows the page variants',
-      code: '<><PageLayout variant="page" body="full" breadcrumbs={crumbs}>{panels}</PageLayout><PageLayout variant="settings">{body}</PageLayout><PageLayout variant="form" title="New">{body}</PageLayout></>;',
+      code: '<><PageLayout variant="page" body="fixed" breadcrumbs={crumbs}>{panels}</PageLayout><PageLayout variant="settings">{body}</PageLayout><PageLayout variant="form" title="New">{body}</PageLayout></>;',
     },
     { name: 'allows a variant forwarded from a wrapper', code: '<PageLayout variant={variant}>{body}</PageLayout>;' },
     { name: 'ignores variant on other components', code: '<EmptyState variant="fill" />;' },

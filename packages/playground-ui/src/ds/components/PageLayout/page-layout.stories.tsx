@@ -89,7 +89,7 @@ const meta = {
       description: {
         component: [
           'The frame of every page: its width, gutter, scrolling and way back. Pick the `variant` that matches the page, and each variant takes only the props that make sense for it.',
-          '- `variant="page"`: lists, dashboards, detail pages and explorers. Full width with the standard gutter, up to 1536px on very wide screens. Add `body="full"` when the body is panels that scroll on their own (chat, board, editor, graph): it fills the rest of the page edge to edge.',
+          '- `variant="page"`: lists, dashboards, detail pages and explorers. Full width with the standard gutter, up to 1536px on very wide screens. Add `body="fixed"` when the body is panels that scroll on their own (chat, board, editor, graph): it fills the rest of the page edge to edge.',
           '- `variant="settings"`: a settings page. Breadcrumbs and a title over a 640px column of `SettingsGroup`s. See Layout/PageLayout/Settings.',
           '- `variant="form"`: a create or edit form. A back link and the title over a 640px column, and no breadcrumbs. See Layout/PageLayout/Form.',
           'The frame is configured, not composed: what goes inside (`PageHeader`, `SettingsGroup`, `EmptyState`, `DashboardGrid`, panels) stays free.',
@@ -110,7 +110,7 @@ const meta = {
   args: { variant: 'page', breadcrumbs: crumbs, headerActions, children: resourceList },
   argTypes: {
     variant: { control: false },
-    body: { control: 'inline-radio', options: ['scroll', 'full'] },
+    body: { control: 'inline-radio', options: ['scroll', 'fixed'] },
     breadcrumbs: slotArg,
     headerActions: slotArg,
     actionRow: slotArg,
@@ -133,8 +133,8 @@ export const Page: Story = {
   },
 };
 
-export const FullBody: Story = {
-  args: { body: 'full', children: panels },
+export const FixedBody: Story = {
+  args: { body: 'fixed', children: panels },
   parameters: {
     docs: {
       description: {

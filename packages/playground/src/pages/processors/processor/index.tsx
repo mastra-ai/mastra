@@ -55,7 +55,7 @@ export function Processor() {
   }
 
   return (
-    <PageLayout variant="page" body="full" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+    <PageLayout variant="page" body="fixed" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <h1 className="sr-only">{processorId}</h1>
       <div className="h-full w-full overflow-y-hidden">
         <ProcessorPanel processorId={processorId!} />

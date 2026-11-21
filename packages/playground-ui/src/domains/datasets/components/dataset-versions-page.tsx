@@ -83,7 +83,7 @@ export function DatasetVersionsPage({
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout variant="page" body="full" breadcrumbs={crumbs}>
+      <PageLayout variant="page" body="fixed" breadcrumbs={crumbs}>
         <h1 className="sr-only">Versions</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
@@ -92,7 +92,7 @@ export function DatasetVersionsPage({
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <PageLayout variant="page" body="full" breadcrumbs={crumbs}>
+      <PageLayout variant="page" body="fixed" breadcrumbs={crumbs}>
         <h1 className="sr-only">Versions</h1>
         <PermissionDenied variant="fill" resource="datasets" />
       </PageLayout>
@@ -102,7 +102,7 @@ export function DatasetVersionsPage({
   const [versionANumber, versionBNumber] = versionNumbers;
   if (versionANumber === undefined || versionBNumber === undefined) {
     return (
-      <PageLayout variant="page" body="full" breadcrumbs={crumbs}>
+      <PageLayout variant="page" body="fixed" breadcrumbs={crumbs}>
         <h1 className="sr-only">Versions</h1>
         <div className="grid h-full min-w-min content-start items-start overflow-auto">
           <div className="py-5 text-center text-muted-foreground">
@@ -125,7 +125,7 @@ export function DatasetVersionsPage({
   };
 
   return (
-    <PageLayout variant="page" body="full" breadcrumbs={crumbs}>
+    <PageLayout variant="page" body="fixed" breadcrumbs={crumbs}>
       <h1 className="sr-only">Versions</h1>
       <div className="h-full overflow-hidden px-[3vw] pb-4">
         <div className="grid h-full grid-rows-[auto_1fr] gap-4">

@@ -9,7 +9,7 @@ export interface PageFrameProps {
   headerActions?: ReactNode;
   actionRow?: ReactNode;
   header?: ReactNode;
-  body?: 'scroll' | 'full';
+  body?: 'scroll' | 'fixed';
 }
 
 const scrollBodyWithHeader =
@@ -24,7 +24,7 @@ export function PageFrame({
   header,
   body = 'scroll',
 }: PageFrameProps) {
-  const full = body === 'full';
+  const fixed = body === 'fixed';
 
   return (
     <div data-slot="page-layout" className="flex h-full min-h-0 flex-col">
@@ -44,21 +44,21 @@ export function PageFrame({
       <main className="flex min-h-0 flex-1 flex-col">
         <ScrollArea className="min-h-0 flex-1">
           <ScrollAreaViewport
-            className={full ? 'p-0' : 'p-4'}
+            className={fixed ? 'p-0' : 'p-4'}
             contentClassName={
-              full
+              fixed
                 ? // Locked to the viewport height, so the panels inside scroll on their own instead of the page.
                   cn('grid size-full min-h-0 grid-cols-1', header ? 'grid-rows-[auto_minmax(0,1fr)]' : 'grid-rows-1')
                 : cn('mx-auto w-full max-w-(--breakpoint-2xl)', header ? scrollBodyWithHeader : 'h-full min-h-min')
             }
           >
             {header && (
-              <div data-slot="page-layout-header" className={full ? 'p-4' : 'pb-6'}>
+              <div data-slot="page-layout-header" className={fixed ? 'p-4' : 'pb-6'}>
                 {header}
               </div>
             )}
-            {full ? (
-              <div data-slot="page-layout-full" className="grid min-h-0 min-w-0 grid-cols-1 grid-rows-1">
+            {fixed ? (
+              <div data-slot="page-layout-fixed" className="grid min-h-0 min-w-0 grid-cols-1 grid-rows-1">
                 {children}
               </div>
             ) : (

@@ -14,8 +14,8 @@ export const pageLayoutVariantChecks = (
     <PageLayout variant="form" backHref="/alerts" backLabel="Alerts" title="New alert" breadcrumbs={<span />}>
       <p />
     </PageLayout>
-    {/* @ts-expect-error only a plain page can have a full body */}
-    <PageLayout variant="settings" body="full">
+    {/* @ts-expect-error only a plain page can have a fixed body */}
+    <PageLayout variant="settings" body="fixed">
       <p />
     </PageLayout>
     {/* @ts-expect-error every page names its variant */}

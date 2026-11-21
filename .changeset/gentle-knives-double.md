@@ -4,7 +4,7 @@
 
 Simplified page frames to one component, `PageLayout`, with a required `variant` that says what the page is for. Each variant takes only the props that make sense for it, so a page can no longer pick its own width, gutter or scroll mode, and a form can no longer show breadcrumbs next to its back link.
 
-- `variant="page"`: lists, dashboards, detail pages and explorers. The full width with the standard gutter, up to 1536px on very wide screens. Takes `breadcrumbs`, `headerActions`, `actionRow` and `header`. Add `body="full"` when the body is panels, an editor, a graph, a board or a chat that scroll on their own: it takes the remaining height edge to edge, as `variant="fit"` did.
+- `variant="page"`: lists, dashboards, detail pages and explorers. The full width with the standard gutter, up to 1536px on very wide screens. Takes `breadcrumbs`, `headerActions`, `actionRow` and `header`. Add `body="fixed"` when the body is panels, an editor, a graph, a board or a chat that scroll on their own: it takes the remaining height edge to edge, as `variant="fit"` did.
 - `variant="settings"`: settings pages. A centered 640px column of `SettingsGroup`s under the title. Takes `breadcrumbs`, `headerActions`, `title`, `titleAccessory`, `action` and `header`.
 - `variant="form"`: create and edit forms. A centered 640px column under the title, with an optional back link above it and no breadcrumb bar. Takes `backHref`, `backLabel`, `title`, `isLoading`, `LinkComponent` and `aside`, for a live preview beside the form when the column is wide enough.
 
@@ -29,7 +29,7 @@ The old `container`, `fit` and `narrow` variants and the `mask` prop are gone, a
 
 // After
 <PageLayout variant="page" breadcrumbs={crumbs}>{list}</PageLayout>
-<PageLayout variant="page" body="full" breadcrumbs={crumbs}>
+<PageLayout variant="page" body="fixed" breadcrumbs={crumbs}>
   <AgentPanels />
 </PageLayout>
 <PageLayout variant="settings" breadcrumbs={crumbs} title="Project settings">

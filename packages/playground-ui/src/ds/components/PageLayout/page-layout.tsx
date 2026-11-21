@@ -18,10 +18,10 @@ export interface PageLayoutPageProps {
   /**
    * How the body fills the page.
    * - `scroll` (default): the page scrolls as one.
-   * - `full`: the body takes the remaining height edge to edge and never scrolls, so the panels,
+   * - `fixed`: the body takes the remaining height edge to edge and never scrolls, so the panels,
    *   editor, graph, board or chat inside scroll on their own.
    */
-  body?: 'scroll' | 'full';
+  body?: 'scroll' | 'fixed';
   children: ReactNode;
 }
 
@@ -76,7 +76,7 @@ export type PageLayoutVariant = PageLayoutProps['variant'];
  * - `variant="form"`: a create or edit form. A title with an optional back link, no breadcrumbs, 640px column.
  * - `variant="settings"`: a settings page. Breadcrumbs and a title over a 640px column of `SettingsGroup`s.
  * - `variant="page"`: every other page (lists, dashboards, detail pages, explorers). Full width.
- *   Add `body="full"` when the body is panels that scroll on their own (chat, board, editor, graph).
+ *   Add `body="fixed"` when the body is panels that scroll on their own (chat, board, editor, graph).
  *
  * The frame is configured, not composed: what goes inside (`PageHeader`, `SettingsGroup`, `EmptyState`,
  * `DashboardGrid`, panels…) stays free.

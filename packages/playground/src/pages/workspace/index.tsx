@@ -319,7 +319,7 @@ export default function Workspace() {
   return (
     <PageLayout
       variant="page"
-      body="full"
+      body="fixed"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={
         <div className="flex items-center gap-2">

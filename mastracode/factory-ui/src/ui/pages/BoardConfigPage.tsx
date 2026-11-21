@@ -110,7 +110,7 @@ export function BoardConfigPage() {
   return (
     <PageLayout
       variant="page"
-      body="full"
+      body="fixed"
       header={configHeader && <div className={cn(SETTINGS_COLUMN, 'pb-3')}>{configHeader}</div>}
       {...slots}
     >

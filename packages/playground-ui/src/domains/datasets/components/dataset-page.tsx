@@ -225,7 +225,7 @@ export function DatasetPage({
         <div className="h-full min-w-0 flex-1">
           <PageLayout
             variant="page"
-            body="full"
+            body="fixed"
             breadcrumbs={
               <DatasetBreadcrumbs
                 datasetId={datasetId}

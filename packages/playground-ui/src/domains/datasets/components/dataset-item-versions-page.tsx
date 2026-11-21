@@ -149,7 +149,7 @@ export function DatasetItemVersionsPage({
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout variant="page" body="full" breadcrumbs={crumbs}>
+      <PageLayout variant="page" body="fixed" breadcrumbs={crumbs}>
         <h1 className="sr-only">Item Version History</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
@@ -158,7 +158,7 @@ export function DatasetItemVersionsPage({
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <PageLayout variant="page" body="full" breadcrumbs={crumbs}>
+      <PageLayout variant="page" body="fixed" breadcrumbs={crumbs}>
         <h1 className="sr-only">Item Version History</h1>
         <PermissionDenied variant="fill" resource="datasets" />
       </PageLayout>
@@ -167,7 +167,7 @@ export function DatasetItemVersionsPage({
 
   if (!datasetId || !itemId) {
     return (
-      <PageLayout variant="page" body="full" breadcrumbs={crumbs}>
+      <PageLayout variant="page" body="fixed" breadcrumbs={crumbs}>
         <h1 className="sr-only">Item Version History</h1>
         <div className="grid h-full min-w-min content-start items-start overflow-auto">
           <div className="py-5 text-center text-muted-foreground">
@@ -188,7 +188,7 @@ export function DatasetItemVersionsPage({
   return (
     <PageLayout
       variant="page"
-      body="full"
+      body="fixed"
       breadcrumbs={crumbs}
       headerActions={
         canDiff && (

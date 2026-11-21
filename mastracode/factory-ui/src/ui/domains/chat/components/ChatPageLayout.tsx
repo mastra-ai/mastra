@@ -69,7 +69,7 @@ export function ChatPageLayout({
           </div>
         </div>
       ) : null}
-      <PageLayout variant="page" body="full">
+      <PageLayout variant="page" body="fixed">
         {children}
       </PageLayout>
     </div>

@@ -48,7 +48,7 @@ Every page renders inside one `PageLayout`, and its `variant` sets the width, gu
 
 - **`variant="form"`**: a create or edit form. A 640px column under a title and optional back link (`backHref` + `backLabel`), with no breadcrumbs. `aside` adds a live preview.
 - **`variant="settings"`**: a settings page someone browses to and changes in place. Breadcrumbs and a title over a 640px column of `SettingsGroup`s.
-- **`variant="page"`**: everything else (lists, dashboards, detail pages, explorers). Full width, up to 1536px. Add `body="full"` when the body is panels that scroll on their own (chat, board, editor, graph, dataset panels).
+- **`variant="page"`**: everything else (lists, dashboards, detail pages, explorers). Full width, up to 1536px. Add `body="fixed"` when the body is panels that scroll on their own (chat, board, editor, graph, dataset panels).
 
 Each variant accepts only its own props, so a wrong combination doesn't compile. Never center a `max-w-*` column on a page yourself: the `playground-ui/no-page-width` lint rule flags it.
 

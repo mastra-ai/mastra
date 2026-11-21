@@ -14,7 +14,7 @@ function CompareExperimentsPage() {
   return (
     <PageLayout
       variant="page"
-      body="full"
+      body="fixed"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={<CompareHeaderActions />}
     >

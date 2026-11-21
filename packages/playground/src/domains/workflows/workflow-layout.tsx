@@ -91,7 +91,7 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
   const page = (content: React.ReactNode) => (
     <PageLayout
       variant="page"
-      body="full"
+      body="fixed"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={<WorkflowHeader />}
     >
