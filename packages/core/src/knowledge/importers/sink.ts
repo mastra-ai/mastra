@@ -428,6 +428,9 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
    * that follow. `self` is left to the caller, which writes its body anyway. Returns the moved page
    * and the pages it rewrote; the caller counts them once its op lands.
    */
+  // Set once a move leaves linking pages for settle to repair: they may sort before the settle
+  // cursor, so a pass that reaches the end then starts again from the first unsettled node.
+  let deferredLinkers = false;
   const moveOwned = async (
     self: string,
     page: KnowledgePage,
@@ -451,6 +454,7 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     const linking = await importers.listLinkingNodes(binding.id, targets, {
       limit: MAX_KNOWLEDGE_LINK_REFRESH_SOURCES + 1,
     });
+    if (linking.items.filter(id => id !== self).length > MAX_KNOWLEDGE_LINK_REFRESH_SOURCES) deferredLinkers = true;
     for (const sourceId of linking.items.filter(id => id !== self).slice(0, MAX_KNOWLEDGE_LINK_REFRESH_SOURCES)) {
       const node = await importers.getNode(binding.id, sourceId);
       if (!node) continue;
@@ -460,6 +464,7 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
       } catch (error) {
         // It stays unsettled; a settle slice tries it again.
         if (!refusalFor(error)) throw error;
+        deferredLinkers = true;
         continue;
       }
       const out = await relink(node, current.page);
@@ -717,7 +722,13 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
           if (!refusalFor(error)) throw error;
         }
       }
-      if (!page.next) return { pending: false, cursor: null, settled };
+      if (!page.next) {
+        if (deferredLinkers) {
+          const behind = await importers.listNodes(binding.id, { unsettled: true, limit: 1 });
+          if (behind.items.length > 0) return { pending: true, cursor: null, settled };
+        }
+        return { pending: false, cursor: null, settled };
+      }
       if (examined >= budget.candidates) return { pending: true, cursor: after ?? null, settled };
     }
   }

@@ -170,6 +170,28 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect(await run([upsert({ sourceId: 'p' })])).toMatchObject({ counts: { unchanged: 1, moved: 0, updated: 0 } });
     });
 
+    it('repairs linking pages that sort before the settle cursor when settling moves their target past the cap', async () => {
+      const { knowledge, run, page } = setup();
+      const linkers = Array.from({ length: 105 }, (_, i) =>
+        upsert({ sourceId: `a${String(i).padStart(3, '0')}`, links: [{ sourceId: 'b' }] }),
+      );
+      await run([...linkers, upsert({ sourceId: 'b', parent: 'p' }), upsert({ sourceId: 'orphan', parent: 'never' })]);
+
+      // Settling b under p happens after the cursor has passed a000–a104; the same run goes back for
+      // them once, and still finishes with the orphan whose parent never arrives left waiting.
+      expect(await run([upsert({ sourceId: 'p' })])).toMatchObject({ outcome: 'succeeded', chain: false });
+      for (const { item } of linkers as Extract<KnowledgeImporterOp, { op: 'upsert' }>[]) {
+        expect((await page(`notion/${item.sourceId}`))?.body).toBe(
+          `body of ${item.sourceId}\n\nLinks:\n- [[docs:acme#notion/p/b]]`,
+        );
+      }
+      const storage = await knowledge.getStorage();
+      expect((await storage.importers!.listNodes('b1', { unsettled: true })).items.map(n => n.sourceId)).toEqual([
+        'orphan',
+      ]);
+      expect(await run([])).toMatchObject({ outcome: 'succeeded', chain: false, counts: { moved: 0, updated: 0 } });
+    });
+
     it('rewrites resolved links to a page the source moved to another parent', async () => {
       const { run, page } = setup();
       await run([
