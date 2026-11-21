@@ -1,5 +1,5 @@
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../../api/config';
@@ -55,13 +55,6 @@ function errorMessage(error: unknown): string {
  */
 export function CreateFactoryWizard() {
   const navigate = useNavigate();
-  const onPage = useRef(true);
-  useEffect(() => {
-    onPage.current = true;
-    return () => {
-      onPage.current = false;
-    };
-  }, []);
   const location = useLocation();
   const { factoryId } = useParams<{ factoryId: string }>();
   const { baseUrl } = useApiConfig();
@@ -78,10 +71,7 @@ export function CreateFactoryWizard() {
     draft,
     onFactoryCreated: factory => flow.rememberFactory(factory),
     onRepositoryLinked: linkedRepositoryId => flow.rememberLinkedRepository(linkedRepositoryId),
-    onCreated: async factory => {
-      await flow.clear();
-      if (onPage.current) void navigate(factoryHomePath(factory));
-    },
+    onCreated: () => flow.clear(),
   });
 
   const committing = createFactory.isPending;
@@ -159,7 +149,10 @@ export function CreateFactoryWizard() {
             query={value}
             savingModelId={createFactory.isPending ? createFactory.variables?.modelId : undefined}
             error={createFactory.error ? errorMessage(createFactory.error) : undefined}
-            onPick={(_providerId, modelId) => createFactory.mutate({ modelId })}
+            onPick={(_providerId, modelId) =>
+              // Per-call callbacks skip once the wizard unmounts, so leaving mid-create keeps the person where they went.
+              createFactory.mutate({ modelId }, { onSuccess: factory => void navigate(factoryHomePath(factory)) })
+            }
           />
         )}
       </CreateFactoryPalette>
