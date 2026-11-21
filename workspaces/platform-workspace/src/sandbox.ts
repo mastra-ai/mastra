@@ -158,6 +158,8 @@ interface ExecLeaseResponse {
 interface CachedExecLease extends ExecLease {
   provider: string;
   sandboxId: string;
+  /** The `_sandboxId` this lease was minted for; a lease never serves another VM. */
+  boundTo: string;
   providerResourceId: string;
   expiresAtMs: number | null;
 }
@@ -197,12 +199,24 @@ interface CreateSandboxResponse {
    * than fall back on a missing-field ambiguity).
    */
   instanceUrl?: string | null;
+  /**
+   * `true` when the platform provisioned the sandbox in credential-vault mode.
+   * Provision, reattach and `GET /sandbox/:id` responses report it when it is
+   * on; a response without it means the sandbox is not vault.
+   */
+  vault?: boolean;
+  /** `true` when `POST /sandbox` reattached a live sandbox instead of provisioning one. */
+  reattached?: boolean;
 }
 
 /** Max attempts for `POST /sandbox` when the proxy returns transient 5xx errors. */
 const CREATE_MAX_ATTEMPTS = 3;
 /** Base delay between create retries; multiplied by the attempt number. */
 const CREATE_RETRY_BASE_DELAY_MS = 2_000;
+/** Max attempts for the `GET /sandbox/:id` vault-mode read before the start fails. */
+const VAULT_READ_MAX_ATTEMPTS = 4;
+/** Base delay between vault-mode read retries; multiplied by the attempt number. */
+const VAULT_READ_RETRY_BASE_DELAY_MS = 1_000;
 
 /**
  * Observability handle for a template that was requested but is still being
@@ -364,6 +378,76 @@ const FILE_COMMAND_TIMEOUT_MS = 10 * 60_000;
  * input as `command` allows arbitrary shell syntax execution on the remote
  * sandbox.
  */
+const GITHUB_TOKEN_ENV = /^(GH_TOKEN(_\d+)?|GITHUB_TOKEN|GH_ENTERPRISE_TOKEN|GITHUB_ENTERPRISE_TOKEN)$/;
+const GIT_CONFIG_ENV = /^GIT_CONFIG_(COUNT|KEY_\d+|VALUE_\d+)$/;
+
+/**
+ * Whether git would apply a config key's credential to github.com. Scoped
+ * `http.<url>.*` and `credential.<url>.*` keys count when their URL's host is
+ * github.com or a subdomain, with or without a scheme, path, trailing slash
+ * or trailing dot on the host (git resolves `github.com.` to github.com),
+ * including `*` wildcards git allows in the host: git matches `*` within one
+ * label, so a pattern applies when its last two labels can match `github.com`
+ * (any leading labels can match some subdomain, e.g. `gist.github.*`). Unscoped `http.extraHeader`,
+ * `http.cookieFile` and `credential.*` keys apply to every host, so they count too.
+ */
+function appliesToGithub(key: string): boolean {
+  const lower = key.toLowerCase();
+  const first = lower.indexOf('.');
+  const last = lower.lastIndexOf('.');
+  if (first < 0) return false;
+  const section = lower.slice(0, first);
+  if (section !== 'http' && section !== 'credential') return false;
+  if (first === last) {
+    const variable = lower.slice(last + 1);
+    return section === 'credential' || variable === 'extraheader' || variable === 'cookiefile';
+  }
+  const host = lower
+    .slice(first + 1, last)
+    .replace(/^[a-z][a-z0-9+.-]*:\/\//, '')
+    .replace(/^[^/@]*@/, '')
+    .split(/[/:]/)[0]!
+    .replace(/\.+$/, '');
+  if (host === 'github.com' || host.endsWith('.github.com')) return true;
+  if (!host.includes('*')) return false;
+  const labels = host.split('.');
+  if (labels.length < 2) return false;
+  const labelMatches = (label: string, target: string) =>
+    new RegExp(
+      '^' +
+        label
+          .split('*')
+          .map(part => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
+          .join('[^.]*') +
+        '$',
+    ).test(target);
+  return labelMatches(labels.at(-2)!, 'github') && labelMatches(labels.at(-1)!, 'com');
+}
+
+/**
+ * Drops GitHub credentials from a per-call env: the token variables `gh` reads, and the
+ * `GIT_CONFIG_*` pairs git would apply to github.com (see {@link appliesToGithub}).
+ * Other pairs (GitLab auth) are kept and renumbered without gaps, because git
+ * reads indices 0..GIT_CONFIG_COUNT-1.
+ */
+function withoutGithubCredentials<T extends Record<string, string | undefined>>(env: T): T {
+  const result: Record<string, string | undefined> = Object.fromEntries(
+    Object.entries(env).filter(([name]) => !GITHUB_TOKEN_ENV.test(name) && !GIT_CONFIG_ENV.test(name)),
+  );
+  const count = Number(env.GIT_CONFIG_COUNT);
+  if (env.GIT_CONFIG_COUNT === undefined || !Number.isInteger(count) || count < 0) return result as T;
+  let kept = 0;
+  for (let index = 0; index < count; index++) {
+    const key = env[`GIT_CONFIG_KEY_${index}`];
+    if (key === undefined || appliesToGithub(key)) continue;
+    result[`GIT_CONFIG_KEY_${kept}`] = key;
+    result[`GIT_CONFIG_VALUE_${kept}`] = env[`GIT_CONFIG_VALUE_${index}`];
+    kept++;
+  }
+  if (kept > 0) result.GIT_CONFIG_COUNT = String(kept);
+  return result as T;
+}
+
 function buildCommand(command: string, args?: string[]): string {
   return args?.length ? `${command} ${args.map(shellQuote).join(' ')}` : command;
 }
@@ -578,6 +662,19 @@ export class PlatformSandbox extends MastraSandbox {
   templatePending?: SandboxTemplatePending;
 
   /**
+   * Whether the platform provisioned this sandbox in credential-vault mode.
+   * A vault sandbox holds only placeholder GitHub tokens, and its git and `gh`
+   * traffic to GitHub goes through the vault, which adds the real credential.
+   *
+   * Set only from the platform's provision, reattach and get responses; a
+   * successful response without `vault` means the sandbox is not vault.
+   * `undefined` while no sandbox is attached (before the first start, after
+   * it is destroyed). Callers must never read the mode from the sandbox's own
+   * env, which code inside the sandbox controls.
+   */
+  vault: boolean | undefined = undefined;
+
+  /**
    * The platform's id for the provisioned sandbox, as returned by the create
    * or reattach response. Persist this to reattach later via the `sandboxId`
    * option. Undefined until the sandbox has been started in this process; a
@@ -694,7 +791,7 @@ export class PlatformSandbox extends MastraSandbox {
    * `POST /exec-lease` round-trips when the sandbox is doing N parallel execs.
    * Cleared (regardless of success or failure) when the request settles.
    */
-  private _leaseInFlight: Promise<CachedExecLease> | null = null;
+  private _leaseInFlight: { sandboxId: string; promise: Promise<CachedExecLease> } | null = null;
   /**
    * True when this sandbox was constructed with a caller-supplied `id` (the
    * recovery key the proxy hashes into an on-provider checkpoint name).
@@ -884,12 +981,14 @@ export class PlatformSandbox extends MastraSandbox {
           this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
           // Reattach responses never carry templatePending — the field is
           // set only by the create route. Leave the instance's value alone.
+          this.vault = json.vault === true;
           this._populateAddressFromResponse(json);
           this._logStartComplete(json.id, startedAt, requestMs, 'reattach');
           return { outcome: 'connected' };
         }
         this._failIfReattachRequired('destroyed');
         this._sandboxId = undefined;
+        this.vault = undefined;
       } catch (error) {
         // 404: the proxy never issued this id. 410: it did, and has since
         // marked the record destroyed (idle GC, manual delete). Neither is
@@ -897,6 +996,7 @@ export class PlatformSandbox extends MastraSandbox {
         if (!(error instanceof PlatformApiError) || (error.status !== 404 && error.status !== 410)) throw error;
         this._failIfReattachRequired(String(error.status), error);
         this._sandboxId = undefined;
+        this.vault = undefined;
       }
     }
 
@@ -952,9 +1052,52 @@ export class PlatformSandbox extends MastraSandbox {
     this._sandboxId = json.id;
     this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
     this.templatePending = json.templatePending;
+    // A reattach by recovery id confirms the mode from the sandbox record
+    // before anyone hands the sandbox credentials. Until then a reattached
+    // sandbox is not known to be non-vault, and a failed read fails the start.
+    this.vault = json.vault === true ? true : json.reattached ? undefined : false;
+    if (json.reattached) await this.refreshVault();
     this._populateAddressFromResponse(json);
     this._logStartComplete(json.id, startedAt, requestMs, 'provision');
     return { outcome: 'created' };
+  }
+
+  /**
+   * Ask the platform for this sandbox's credential-vault mode
+   * (`GET /sandbox/:id`). Only a successful response sets the mode: `vault: true`
+   * means vault, anything else means not vault. Network errors, 429 and 5xx are
+   * retried with backoff; when retries run out the error propagates and `vault`
+   * is left unchanged, so callers never fall back to handing out credentials.
+   * A 404/410 means the sandbox is gone: its state is cleared like any other
+   * destroyed sandbox and the error propagates, so the next start provisions.
+   */
+  async refreshVault(): Promise<boolean | undefined> {
+    const sandboxId = this._sandboxId;
+    if (!sandboxId) return this.vault;
+    for (let attempt = 1; ; attempt++) {
+      let json: CreateSandboxResponse;
+      try {
+        const response = await this._request(`/sandbox/${encodeURIComponent(sandboxId)}`);
+        json = (await response.json()) as CreateSandboxResponse;
+      } catch (error) {
+        if (error instanceof PlatformApiError && (error.status === 404 || error.status === 410)) {
+          this._clearDestroyedState(sandboxId);
+          throw error;
+        }
+        const transient = !(error instanceof PlatformApiError) || error.status >= 500 || error.status === 429;
+        if (!transient || attempt >= VAULT_READ_MAX_ATTEMPTS) throw error;
+        this.logger.warn(`[PlatformSandbox] vault-mode read for ${sandboxId} failed (attempt ${attempt}); retrying`, {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        await new Promise(resolve => setTimeout(resolve, VAULT_READ_RETRY_BASE_DELAY_MS * attempt));
+        // A replacement sandbox provisioned meanwhile has its own mode.
+        if (this._sandboxId !== sandboxId) return this.vault;
+        continue;
+      }
+      // A replacement sandbox provisioned while this read was in flight has its own mode.
+      if (this._sandboxId === sandboxId) this.vault = json.vault === true;
+      return this.vault;
+    }
   }
 
   private async _prepareLazyTemplate(): Promise<void> {
@@ -1258,6 +1401,7 @@ export class PlatformSandbox extends MastraSandbox {
     // Clear local state so a subsequent start() creates a fresh remote sandbox
     // instead of taking the reattach branch and pointing exec at a deleted resource.
     this._sandboxId = undefined;
+    this.vault = undefined;
     this._createdAt = null;
     // Drop the exec lease with the sandbox — the JWT is tied to the provider
     // instance id and would be rejected against a fresh one.
@@ -1399,10 +1543,13 @@ export class PlatformSandbox extends MastraSandbox {
    * the cached `'running'` state (see `MastraSandbox._start`).
    */
   private _clearDestroyedState(destroyedSandboxId: string): void {
+    // A late answer about a VM that has since been replaced says nothing about the current one.
+    if (this._sandboxId !== undefined && this._sandboxId !== destroyedSandboxId) return;
     this._probeGeneration++;
     this._probeTarget = null;
     this._transportReadyPromise = null;
     this._sandboxId = undefined;
+    this.vault = undefined;
     this._createdAt = null;
     this._lease = null;
     this._addressRegistry?.delete(destroyedSandboxId);
@@ -1444,6 +1591,7 @@ export class PlatformSandbox extends MastraSandbox {
   ): Promise<CommandResult> {
     await this.ensureRunning();
     if (!this._sandboxId) throw new SandboxNotReadyError(this.id);
+    const sandboxId = this._sandboxId;
 
     const started = Date.now();
     const fullCommand = buildCommand(command, args);
@@ -1459,7 +1607,7 @@ export class PlatformSandbox extends MastraSandbox {
     const { cwd, ...restOptions } = options ?? {};
     const execCommand = commandInCwd(fullCommand, cwd, this.workingDirectory);
     const execCallOptions: ExecuteCommandOptions =
-      Object.keys(sandboxEnv).length > 0 ? { ...restOptions, env: { ...sandboxEnv, ...options?.env } } : restOptions;
+      Object.keys(sandboxEnv).length > 0 ? { ...restOptions, env: { ...sandboxEnv, ...restOptions.env } } : restOptions;
 
     // Wait for the transport to become ready before proceeding. During the
     // sidecar boot window (immediately after start()), concurrent execs all
@@ -1486,6 +1634,7 @@ export class PlatformSandbox extends MastraSandbox {
         execCommand,
         effectiveTimeout,
         execCallOptions,
+        sandboxId,
       );
       if (privateNet) {
         const privateExit = privateNet.exitCode ?? 124;
@@ -1511,7 +1660,7 @@ export class PlatformSandbox extends MastraSandbox {
     // `PlatformApiError` for other `/exec-lease` errors (404/500/501).
     // See ./direct-exec.ts and `docs/factory/direct-sandbox-connection.md`
     // in the Platform repo.
-    const result = await this._runDirectExec(execCommand, effectiveTimeout, execCallOptions, once ? 1 : 2);
+    const result = await this._runDirectExec(execCommand, effectiveTimeout, execCallOptions, sandboxId, once ? 1 : 2);
     // `_runDirectExec` throws on transport failure (see its jsdoc), so a
     // `null` exitCode here can only mean `timedOut: true` — the sandbox
     // never got to send an exit frame because we cut the command short.
@@ -1556,11 +1705,21 @@ export class PlatformSandbox extends MastraSandbox {
    * NodeJS.ProcessEnv). The sandbox's own env is already merged in by
    * `executeCommand` before a transport sees these options. Returns undefined
    * when there is nothing to send.
+   *
+   * GitHub credentials are dropped unless the VM is known not to be vault and
+   * is still the one the command was started for (`sandboxId`). This runs
+   * right before each dispatch, after the VM is acquired, because the caller
+   * built its env before then.
    */
-  private _execEnv(options: ExecuteCommandOptions | undefined): Record<string, string> | undefined {
+  private _execEnv(
+    options: ExecuteCommandOptions | undefined,
+    sandboxId: string,
+    lease?: CachedExecLease,
+  ): Record<string, string> | undefined {
     if (!options?.env) return undefined;
+    const env = this._acceptsGithubCredentials(sandboxId, lease) ? options.env : withoutGithubCredentials(options.env);
     const filtered = Object.fromEntries(
-      Object.entries(options.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+      Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined),
     );
     return Object.keys(filtered).length > 0 ? filtered : undefined;
   }
@@ -1569,10 +1728,9 @@ export class PlatformSandbox extends MastraSandbox {
     fullCommand: string,
     effectiveTimeout: number | undefined,
     options: ExecuteCommandOptions | undefined,
+    sandboxId: string,
     attempts = 2,
   ): Promise<{ exitCode: number | null; stdout: string; stderr: string; timedOut: boolean }> {
-    const filteredEnv = this._execEnv(options);
-
     let lastResult: Awaited<ReturnType<typeof execViaLease>> | undefined;
     let lastLease: CachedExecLease | undefined;
     let attemptsMade = 0;
@@ -1597,6 +1755,7 @@ export class PlatformSandbox extends MastraSandbox {
           this._lease = null;
           const priorSandboxId = this._sandboxId;
           this._sandboxId = undefined;
+          this.vault = undefined;
           // Reset lifecycle status too: the next `ensureRunning()` must re-run
           // the full start lifecycle (acquisition + `onStart` hook) so a
           // replacement VM is set up, not just leased.
@@ -1615,6 +1774,7 @@ export class PlatformSandbox extends MastraSandbox {
       lastLease = lease;
       attemptsMade = attempt + 1;
       const leaseCwd = options?.cwd ?? this.workingDirectory;
+      const filteredEnv = this._execEnv(options, sandboxId, lease);
       const execOptions = {
         command: fullCommand,
         ...(leaseCwd !== undefined && { cwd: leaseCwd }),
@@ -1681,8 +1841,9 @@ export class PlatformSandbox extends MastraSandbox {
     fullCommand: string,
     effectiveTimeout: number | undefined,
     options: ExecuteCommandOptions | undefined,
+    sandboxId: string,
   ): Promise<PrivateNetExecResult | undefined> {
-    const filteredEnv = this._execEnv(options);
+    const filteredEnv = this._execEnv(options, sandboxId);
 
     const privateNetCwd = options?.cwd ?? this.workingDirectory;
     const execOptions: PrivateNetExecOptions = {
@@ -1748,8 +1909,8 @@ export class PlatformSandbox extends MastraSandbox {
    * Return a cached exec lease, minting a fresh one when the cache is empty
    * or the JWT is within {@link LEASE_REFRESH_MARGIN_MS} of `expiresAt`.
    *
-   * Callers are expected to be on the "sandbox is running" path; we don't
-   * re-check `_sandboxId` here because `executeCommand` already gated on it.
+   * Throws when no sandbox is attached. The lease is bound to the sandbox id
+   * current at the call, and is neither reused nor cached for a different VM.
    */
   private async _ensureLease(): Promise<CachedExecLease> {
     const now = Date.now();
@@ -1757,13 +1918,18 @@ export class PlatformSandbox extends MastraSandbox {
     // A null `expiresAtMs` means the provider didn't disclose a TTL — treat
     // that as "refresh every call" rather than "cache forever", so a token
     // that turns out to be short-lived can't wedge the sandbox until restart.
-    if (this._lease && this._lease.expiresAtMs !== null && this._lease.expiresAtMs - LEASE_REFRESH_MARGIN_MS > now) {
-      return this._lease;
-    }
-    // Coalesce concurrent mints on a cold/expired cache.
-    if (this._leaseInFlight) return this._leaseInFlight;
     if (!this._sandboxId) throw new SandboxNotReadyError(this.id);
     const sandboxId = this._sandboxId;
+    if (
+      this._lease &&
+      this._lease.boundTo === sandboxId &&
+      this._lease.expiresAtMs !== null &&
+      this._lease.expiresAtMs - LEASE_REFRESH_MARGIN_MS > now
+    ) {
+      return this._lease;
+    }
+    // Coalesce concurrent mints on a cold/expired cache, but only for the same VM.
+    if (this._leaseInFlight?.sandboxId === sandboxId) return this._leaseInFlight.promise;
     const inFlight = (async () => {
       const response = await this._request(`/sandbox/${encodeURIComponent(sandboxId)}/exec-lease`, {
         method: 'POST',
@@ -1773,6 +1939,7 @@ export class PlatformSandbox extends MastraSandbox {
       const lease: CachedExecLease = {
         provider: json.provider,
         sandboxId: json.sandboxId,
+        boundTo: sandboxId,
         providerResourceId: json.providerResourceId,
         jwt: json.jwt,
         wsEndpoint: json.wsEndpoint,
@@ -1783,16 +1950,18 @@ export class PlatformSandbox extends MastraSandbox {
         // rather than silently caching a broken lease forever.
         expiresAtMs: expiresAtMs !== null && !Number.isNaN(expiresAtMs) ? expiresAtMs : null,
       };
-      this._lease = lease;
+      // A mint that lands after its VM was replaced must not become the cache.
+      if (this._sandboxId === sandboxId) this._lease = lease;
       return lease;
     })();
-    this._leaseInFlight = inFlight;
+    const entry = { sandboxId, promise: inFlight };
+    this._leaseInFlight = entry;
     try {
       return await inFlight;
     } finally {
       // Clear on both success and failure so a failed mint doesn't wedge
       // future callers into awaiting the same rejected promise forever.
-      if (this._leaseInFlight === inFlight) this._leaseInFlight = null;
+      if (this._leaseInFlight === entry) this._leaseInFlight = null;
     }
   }
 
@@ -1887,6 +2056,7 @@ export class PlatformSandbox extends MastraSandbox {
   async [withCommands]<T>(operation: CommandsApiOperation, fn: (commands: CommandsApi) => Promise<T>): Promise<T> {
     await this.ensureRunning();
     if (!this._sandboxId) throw new SandboxNotReadyError(this.id);
+    const sandboxId = this._sandboxId;
     let current = await this._commandsHandle(operation, 1);
     const call = async <R>(invoke: (commands: CommandsApi) => Promise<R>): Promise<R> => {
       try {
@@ -1907,12 +2077,31 @@ export class PlatformSandbox extends MastraSandbox {
       }
     };
     return fn({
-      run: (command, opts) => call(commands => commands.run(command, opts)),
+      // Settled at dispatch, after the lease is in hand: a vault VM, or one that was
+      // replaced meanwhile, never gets a real GitHub credential.
+      run: (command, opts) =>
+        call(commands =>
+          commands.run(
+            command,
+            opts.envs && !this._acceptsGithubCredentials(sandboxId, current.lease)
+              ? { ...opts, envs: withoutGithubCredentials(opts.envs) }
+              : opts,
+          ),
+        ),
       connect: (pid, opts) => call(commands => commands.connect(pid, opts)),
       list: () => call(commands => commands.list()),
       kill: pid => call(commands => commands.kill(pid)),
       sendStdin: (pid, data) => call(commands => commands.sendStdin(pid, data)),
     });
+  }
+
+  /**
+   * Whether a command started for `sandboxId` may carry GitHub credentials:
+   * only when that VM is still the current one and the platform reported it
+   * is not vault.
+   */
+  private _acceptsGithubCredentials(sandboxId: string, lease?: CachedExecLease): boolean {
+    return this.vault === false && this._sandboxId === sandboxId && (!lease || lease.boundTo === sandboxId);
   }
 
   /** The commands handle for the current lease, rebuilt only when the lease changes. */
@@ -1939,6 +2128,7 @@ export class PlatformSandbox extends MastraSandbox {
         this._lease = null;
         const priorSandboxId = this._sandboxId;
         this._sandboxId = undefined;
+        this.vault = undefined;
         this.status = 'stopped';
         throw new SandboxDestroyedError(
           `Sandbox ${priorSandboxId ?? '(unknown)'} was destroyed; /exec-lease returned 410`,

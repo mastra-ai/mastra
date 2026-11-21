@@ -12,11 +12,11 @@ import { memorySettingsLink, modelSettingsLink } from './channel-reply-processor
 import { sessionLinkFromRequest } from './channel-session-link-processor.js';
 
 export function slackRunErrorCard(error: Error, { requestContext }: ChannelErrorContext) {
-  const { title, message, recoveries, model } = describeRunError(error);
+  const { title, message, recoveries, model, vaultUrl } = describeRunError(error);
   const requestId = providerRequestId(error);
   const facts = [model && `Model: ${model}`, requestId && `Request id: ${requestId}`].filter(Boolean).join(' · ');
   const credential = model && recoveries.includes('credentials') ? credentialLine(requestContext, model) : undefined;
-  const links = requestContext ? recoveryLinks(requestContext, recoveries) : [];
+  const links = requestContext ? recoveryLinks(requestContext, recoveries, vaultUrl) : [];
   return Card({
     title: `❌ ${title}`,
     children: [
@@ -41,7 +41,7 @@ function credentialLine(requestContext: RequestContext | undefined, failedModel:
   return `Runs on ${credential.label} · ${credential.ownerId ? 'Personal credential' : 'Shared by the organization'}`;
 }
 
-function recoveryLinks(requestContext: RequestContext, recoveries: RunErrorRecovery[]) {
+function recoveryLinks(requestContext: RequestContext, recoveries: RunErrorRecovery[], vaultUrl?: string) {
   const factoryProjectId = readFactorySessionScope(requestContext)?.factoryProjectId;
   const settingsUrl = factoryProjectId && modelSettingsLink(factoryProjectId);
   const memoryUrl = factoryProjectId && memorySettingsLink(factoryProjectId);
@@ -56,6 +56,8 @@ function recoveryLinks(requestContext: RequestContext, recoveries: RunErrorRecov
         return memoryUrl ? [{ url: memoryUrl, label: 'Change memory model' }] : [];
       case 'credits':
         return [];
+      case 'vault':
+        return vaultUrl ? [{ url: vaultUrl, label: 'Enable vault' }] : [];
       // A reply in the thread continues the run; a mention in a new thread starts a new session.
       case 'continue':
       case 'new_session':

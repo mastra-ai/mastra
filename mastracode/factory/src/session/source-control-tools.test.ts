@@ -686,6 +686,73 @@ describe('createSourceControlTools', () => {
       ).rejects.toThrow("Repository 'nope/x' is not in this Factory's environment.");
     });
 
+    describe("a non-owner on the owner's credential-vault sandbox", () => {
+      // A PlatformSandbox reports its vault mode once it starts or is asked.
+      function vaultSandbox(vault: boolean | undefined, refresh?: boolean | Error) {
+        const fake = fakeSandbox();
+        const start = vi.fn(async () => {});
+        const sandbox = Object.assign(fake.sandbox, {
+          vault,
+          start,
+          refreshVault: vi.fn(async () => {
+            if (refresh instanceof Error) throw refresh;
+            if (refresh !== undefined) sandbox.vault = refresh;
+          }),
+        });
+        return { ...fake, sandbox, start };
+      }
+      const asMember = async (setup: Awaited<ReturnType<typeof fixture>>) =>
+        createSourceControlTools({
+          requestContext: requestContext({ userId: 'member-2' }),
+          providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
+          audit: setup.audit,
+        });
+      const refused = /uses its owner's credential vault and is not available to the current user/;
+
+      it.each([
+        ['no VM exists yet', undefined, undefined],
+        ["the platform can't report the mode", undefined, new Error('proxy unavailable')],
+        ['the mode is vault', true, undefined],
+        ['the platform reports vault', undefined, true],
+      ] as const)(
+        'refuses source_control_push_branch when %s, without starting or running anything',
+        async (_name, vault, refresh) => {
+          const setup = await fixture();
+          const built = await asMember(setup);
+          const { sandbox, executions, start } = vaultSandbox(vault, refresh);
+
+          await expect(
+            (built.source_control_push_branch!.execute as any)({}, { workspace: { sandbox } }),
+          ).rejects.toThrow(refused);
+          expect(start).not.toHaveBeenCalled();
+          expect(executions).toHaveLength(0);
+          expect(setup.getRepositoryAccess).not.toHaveBeenCalled();
+        },
+      );
+
+      it('lets a non-owner push a token-mode session', async () => {
+        const setup = await fixture();
+        const built = await asMember(setup);
+        const { sandbox, pushes } = vaultSandbox(false);
+
+        await expect(
+          (built.source_control_push_branch!.execute as any)({}, { workspace: { sandbox } }),
+        ).resolves.toMatchObject({ pushed: true, branch: 'factory/issue-1' });
+        expect(pushes()).toHaveLength(1);
+      });
+
+      it('lets the owner push their own vault session', async () => {
+        const setup = await fixture();
+        const built = await tools(setup);
+        const { sandbox, pushes } = vaultSandbox(true);
+
+        await expect(
+          (built.source_control_push_branch!.execute as any)({}, { workspace: { sandbox } }),
+        ).resolves.toMatchObject({ pushed: true });
+        expect(pushes()).toHaveLength(1);
+      });
+    });
+
     it("pushes the session's own repository by default and records the row", async () => {
       const setup = await fixture();
       const built = await tools(setup);

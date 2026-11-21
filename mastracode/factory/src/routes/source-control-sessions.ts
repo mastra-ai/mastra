@@ -11,6 +11,8 @@ import { z } from 'zod';
 import { reclaimDeletedSessionSandbox } from '../integrations/github/sandbox-release.js';
 import { isValidGitRef } from '../sandbox/git-ref.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
+import { peekSessionSandbox } from '../sandbox/session-sandbox.js';
+import { assertVaultSandboxCaller, vaultOwnerRefusal } from '../sandbox/vault.js';
 import { seedSessionOrg } from '../session/org-seed.js';
 import {
   isRunBound,
@@ -59,6 +61,11 @@ export interface SourceControlSessionRoutesOptions {
   sessionRetirement?: SessionRetirementCoordinator;
   /** Whether the host sandbox can recreate a session's sandbox (false for local). */
   sandboxRecreateSupported?: boolean;
+  /**
+   * Whether this host's sandboxes can act with their owner's credential vault (the platform provider). The
+   * Files-tab start then refuses a non-owner whose session has no sandbox yet to confirm token mode.
+   */
+  vaultSandboxes?: boolean;
   /** How long recreate waits for an aborted run to settle before destroying. */
   abortSettleTimeoutMs?: number;
   workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'hasRunBindingForSession'> &
@@ -649,6 +656,33 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         }
         const controller = options.controller;
         if (!controller) return c.json({ error: 'Sessions are not available on this server.' }, 503);
+
+        // A vault sandbox acts with its owner's credential vault, so only the owner may start it. Anyone else
+        // (an org admin) needs the session already online with a sandbox the platform confirms is token mode;
+        // learning the mode never starts it, and an unknown mode, or an offline session on a host whose sandboxes
+        // can use the vault, is refused.
+        if (resolved.tenant.userId !== session.userId) {
+          const online = await controller.getSession(session.sessionId);
+          const existing = online?.getWorkspace()?.sandbox ?? peekSessionSandbox(session.sessionId)?.sandbox;
+          const refusal = existing
+            ? await assertVaultSandboxCaller(existing, {
+                ownerId: session.userId,
+                callerId: resolved.tenant.userId,
+                sessionId: session.sessionId,
+              }).then(
+                () => undefined,
+                (error: unknown) => error,
+              )
+            : options.vaultSandboxes
+              ? vaultOwnerRefusal(session.sessionId)
+              : undefined;
+          if (refusal) {
+            return c.json(
+              { error: "Only the session's owner can start a sandbox that may use their credential vault." },
+              403,
+            );
+          }
+        }
 
         try {
           const live =

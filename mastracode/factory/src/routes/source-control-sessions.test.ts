@@ -22,6 +22,7 @@ import {
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { createTerminalStageCleanup } from '../rules/terminal-cleanup.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
+import { sandboxHostMayUseCredentialVault } from '../sandbox/vault-host.js';
 import {
   FACTORY_OPEN_RUNS_SETTING,
   listSessionOpenRuns,
@@ -1634,6 +1635,7 @@ describe('session sandbox recreate', () => {
     options: {
       sessionRetirement?: SessionRetirementCoordinator;
       sandboxRecreateSupported?: boolean;
+      vaultSandboxes?: boolean;
       isOrganizationAdmin?: (orgId: string, userId: string) => Promise<boolean>;
       controller?: RouteOptions['controller'];
       abortSettleTimeoutMs?: number;
@@ -1656,6 +1658,7 @@ describe('session sandbox recreate', () => {
         ...(options.controller ? { controller: options.controller } : {}),
         ...(options.sessionRetirement ? { sessionRetirement: options.sessionRetirement } : {}),
         sandboxRecreateSupported: options.sandboxRecreateSupported ?? true,
+        ...(options.vaultSandboxes !== undefined ? { vaultSandboxes: options.vaultSandboxes } : {}),
         ...(options.abortSettleTimeoutMs !== undefined ? { abortSettleTimeoutMs: options.abortSettleTimeoutMs } : {}),
       }),
     );
@@ -1740,6 +1743,143 @@ describe('session sandbox recreate', () => {
 
       expect(response.status).toBe(403);
       expect(start).not.toHaveBeenCalled();
+    });
+
+    describe("an org admin on someone else's credential-vault session", () => {
+      const admin = { workosId: 'admin-2', organizationId: 'org-1' };
+      function vaultSandbox(vault: boolean | undefined, refresh?: boolean | Error) {
+        const sandbox = {
+          vault,
+          start: vi.fn(async () => {}),
+          refreshVault: vi.fn(async () => {
+            if (refresh instanceof Error) throw refresh;
+            if (refresh !== undefined) sandbox.vault = refresh;
+          }),
+        };
+        return sandbox;
+      }
+
+      it.each([
+        ['the mode is vault', true, undefined],
+        ['no VM exists yet', undefined, undefined],
+        ["the platform can't report the mode", undefined, new Error('proxy unavailable')],
+        ['the platform reports vault', undefined, true],
+      ] as const)('refuses to start it when %s', async (_name, vault, refresh) => {
+        const { seed, sourceControl, session } = await seedRecreateSession('user-1');
+        const sandbox = vaultSandbox(vault, refresh);
+        const controller = fakeController({ getWorkspace: () => ({ sandbox }) });
+        const app = buildRecreateApp(seed, sourceControl, {
+          controller,
+          caller: admin,
+          vaultSandboxes: true,
+          isOrganizationAdmin: async () => true,
+        });
+
+        const response = await app.request(startPath(session.sessionId), { method: 'POST' });
+
+        expect(response.status).toBe(403);
+        expect(sandbox.start).not.toHaveBeenCalled();
+      });
+
+      it('refuses to bring an offline session online as its owner', async () => {
+        const { seed, sourceControl, session } = await seedRecreateSession('user-1');
+        const sandbox = vaultSandbox(undefined);
+        const controller = fakeController(null, { getWorkspace: () => ({ sandbox }) });
+        const app = buildRecreateApp(seed, sourceControl, {
+          controller,
+          caller: admin,
+          vaultSandboxes: true,
+          isOrganizationAdmin: async () => true,
+        });
+
+        const response = await app.request(startPath(session.sessionId), { method: 'POST' });
+
+        expect(response.status).toBe(403);
+        expect(controller.createSession).not.toHaveBeenCalled();
+        expect(sandbox.start).not.toHaveBeenCalled();
+      });
+
+      it('starts a session the platform confirms is token mode', async () => {
+        const { seed, sourceControl, session } = await seedRecreateSession('user-1');
+        const sandbox = vaultSandbox(undefined, false);
+        const controller = fakeController({ getWorkspace: () => ({ sandbox }) });
+        const app = buildRecreateApp(seed, sourceControl, {
+          controller,
+          caller: admin,
+          vaultSandboxes: true,
+          isOrganizationAdmin: async () => true,
+        });
+
+        const response = await app.request(startPath(session.sessionId), { method: 'POST' });
+
+        expect(response.status).toBe(200);
+        expect(sandbox.start).toHaveBeenCalledTimes(1);
+      });
+
+      it('refuses an offline custom-callback sandbox, which can still attach the owner vault', async () => {
+        const { seed, sourceControl, session } = await seedRecreateSession('user-1');
+        const start = vi.fn(async () => {});
+        const controller = fakeController(null, { getWorkspace: () => ({ sandbox: { start } }) });
+        const app = buildRecreateApp(seed, sourceControl, {
+          controller,
+          caller: admin,
+          vaultSandboxes: sandboxHostMayUseCredentialVault('custom'),
+          isOrganizationAdmin: async () => true,
+        });
+
+        const response = await app.request(startPath(session.sessionId), { method: 'POST' });
+
+        expect(response.status).toBe(403);
+        expect(controller.createSession).not.toHaveBeenCalled();
+        expect(start).not.toHaveBeenCalled();
+      });
+
+      it('lets an admin bring an offline e2b sandbox online', async () => {
+        const { seed, sourceControl, session } = await seedRecreateSession('user-1');
+        const start = vi.fn(async () => {});
+        const controller = fakeController(null, { getWorkspace: () => ({ sandbox: { start } }) });
+        const app = buildRecreateApp(seed, sourceControl, {
+          controller,
+          caller: admin,
+          vaultSandboxes: sandboxHostMayUseCredentialVault('e2b'),
+          isOrganizationAdmin: async () => true,
+        });
+
+        const response = await app.request(startPath(session.sessionId), { method: 'POST' });
+
+        expect(response.status).toBe(200);
+        expect(controller.createSession).toHaveBeenCalledTimes(1);
+        expect(start).toHaveBeenCalledTimes(1);
+      });
+
+      it('brings an offline session online for an admin on a host whose sandboxes have no vault', async () => {
+        const { seed, sourceControl, session } = await seedRecreateSession('user-1');
+        const start = vi.fn(async () => {});
+        const controller = fakeController(null, { getWorkspace: () => ({ sandbox: { start } }) });
+        const app = buildRecreateApp(seed, sourceControl, {
+          controller,
+          caller: admin,
+          isOrganizationAdmin: async () => true,
+        });
+
+        const response = await app.request(startPath(session.sessionId), { method: 'POST' });
+
+        expect(response.status).toBe(200);
+        expect(controller.createSession).toHaveBeenCalledTimes(1);
+        expect(start).toHaveBeenCalledTimes(1);
+      });
+
+      it('lets the owner start their own vault session', async () => {
+        const { seed, sourceControl, session } = await seedRecreateSession('user-1');
+        const sandbox = vaultSandbox(true);
+        const controller = fakeController({ getWorkspace: () => ({ sandbox }) });
+        const app = buildRecreateApp(seed, sourceControl, { controller, vaultSandboxes: true });
+
+        const response = await app.request(startPath(session.sessionId), { method: 'POST' });
+
+        expect(response.status).toBe(200);
+        expect(sandbox.start).toHaveBeenCalledTimes(1);
+      });
     });
 
     it('returns 500 with the message when the start fails', async () => {

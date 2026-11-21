@@ -7,13 +7,22 @@ import {
   providerModelId,
 } from '@mastra/core/error';
 
-export type RunErrorRecovery = 'continue' | 'credentials' | 'credits' | 'model' | 'memory_model' | 'new_session';
+export type RunErrorRecovery =
+  | 'continue'
+  | 'credentials'
+  | 'credits'
+  | 'model'
+  | 'memory_model'
+  | 'new_session'
+  | 'vault';
 
 export interface RunErrorDescription {
   title: string;
   message: string;
   recoveries: RunErrorRecovery[];
   model?: string;
+  /** Where the vault gets enabled, taken from the platform's `vault_not_enabled` error message. */
+  vaultUrl?: string;
 }
 
 export interface RunErrorIdentity {
@@ -40,6 +49,16 @@ export function describeRunError(error: RunErrorIdentity): RunErrorDescription {
 }
 
 function explainRunError(error: RunErrorIdentity, memoryFailure: boolean): Omit<RunErrorDescription, 'model'> {
+  const vaultRefusal = vaultNotEnabledMessage(error);
+  if (vaultRefusal !== undefined) {
+    const vaultUrl = vaultRefusal.match(/https?:\/\/[^\s<>()"']+/)?.[0]?.replace(/[.,;:!?]+$/, '');
+    return {
+      title: 'Credential vault not enabled',
+      message: `${vaultRefusal.replace(/\.?$/, '.')} Enable the vault, then send a message to continue the run.`,
+      recoveries: ['vault', 'continue'],
+      ...(vaultUrl ? { vaultUrl } : {}),
+    };
+  }
   if (error.name === PROVIDER_AUTH_REQUIRED_ERROR) {
     return { title: 'Provider sign-in required', message: error.message, recoveries: ['credentials', 'model'] };
   }
@@ -130,6 +149,20 @@ function explainRunError(error: RunErrorIdentity, memoryFailure: boolean): Omit<
     case 'unknown':
       return describeUnclassifiedError(error);
   }
+}
+
+/**
+ * The platform's message when sandbox create fails with `PlatformApiError` code `vault_not_enabled`.
+ * Matched by shape rather than `instanceof`: the error comes from `@mastra/platform-workspace` and may be wrapped.
+ */
+function vaultNotEnabledMessage(error: unknown, depth = 0): string | undefined {
+  if (depth > 4 || typeof error !== 'object' || error === null) return undefined;
+  if ('name' in error && error.name === 'PlatformApiError' && 'code' in error && error.code === 'vault_not_enabled') {
+    const proxyMessage = 'proxyMessage' in error ? error.proxyMessage : undefined;
+    if (typeof proxyMessage === 'string' && proxyMessage) return proxyMessage;
+    return 'message' in error && typeof error.message === 'string' ? error.message : '';
+  }
+  return vaultNotEnabledMessage('cause' in error ? error.cause : undefined, depth + 1);
 }
 
 const MASTRA_GATEWAY_HOST = /(?:^|\.)gateway(?:-api)?\.mastra\.ai$/;

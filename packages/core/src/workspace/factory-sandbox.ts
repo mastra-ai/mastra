@@ -37,6 +37,13 @@ export interface FactorySandboxContext {
    */
   factoryName?: string;
   /**
+   * Id of the user who owns the session, in the host's user namespace. Hosts
+   * that bind sandboxes or their credentials to a user (e.g. Platform's
+   * credential vault) send it as the acting user. Absent when factory has no
+   * owner for the call.
+   */
+  userId?: string;
+  /**
    * The provider's physical sandbox id persisted from a prior start, when the
    * session has been started before. Providers that reattach by physical id
    * (e.g. Railway) MUST forward it to the sandbox constructor so resume
