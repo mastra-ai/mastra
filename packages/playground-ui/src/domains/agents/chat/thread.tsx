@@ -32,6 +32,7 @@ import { ChatShell } from '@/ds/components/ChatShell';
 import {
   Composer,
   ComposerActions,
+  ComposerActionsDetail,
   ComposerActionsEnd,
   ComposerActionsStart,
   ComposerBox,
@@ -261,9 +262,13 @@ const ThreadContent = ({
             </ChatShell.Content>
             <ChatShell.Dock
               data-testid={landingShown ? 'thread-landing' : undefined}
-              className={landingShown ? 'static flex flex-1 flex-col justify-center py-12 before:hidden' : undefined}
+              className={
+                landingShown
+                  ? 'static flex flex-1 flex-col justify-end pt-12 pb-[max(--spacing(12),30dvh)] before:hidden'
+                  : undefined
+              }
             >
-              {landingShown ? null : <ChatShell.ScrollButton />}
+              {landingShown ? null : <ChatShell.ScrollButton busy={isRunning} />}
               <ChatShell.Column className={landingShown ? 'gap-6 px-1 md:px-1' : 'gap-2 px-1 md:px-1'}>
                 {landingShown ? (
                   <>
@@ -527,17 +532,17 @@ const ComposerActionRow = ({
     <>
       <ComposerActionsStart>
         {canExecute && <AttachFileMenu />}
-        {runOptionsSlot}
+        <ComposerActionsDetail>{runOptionsSlot}</ComposerActionsDetail>
       </ComposerActionsStart>
       <ComposerActionsEnd>
         {showModelSwitcher && agentId && (
           <>
             {modelSwitcher}
-            {modelSettings?.(agentId)}
+            <ComposerActionsDetail>{modelSettings?.(agentId)}</ComposerActionsDetail>
           </>
         )}
         {canExecute && speechInput?.({ agentId, onTranscript: onSetText })}
-        {canExecute && agentId && voiceCallButton}
+        {canExecute && agentId && <ComposerActionsDetail>{voiceCallButton}</ComposerActionsDetail>}
         <ComposerSendButton
           canExecute={canExecute}
           isEmpty={isEmpty}
