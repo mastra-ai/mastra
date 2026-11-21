@@ -21,11 +21,14 @@ const operations = new StoreOperationsMySQL({ pool, database });
 const createStore = () => new KnowledgeMySQL({ pool, operations });
 afterAll(() => pool.end());
 
-createKnowledgePageStoreTests(async () => {
-  const store = createStore();
-  await store.dangerouslyReset();
-  return store;
-});
+createKnowledgePageStoreTests(
+  async () => {
+    const store = createStore();
+    await store.dangerouslyReset();
+    return store;
+  },
+  { reopen: createStore },
+);
 
 createKnowledgeSchemaResetTests(async () => {
   const store = createStore();

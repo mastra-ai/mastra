@@ -107,8 +107,9 @@ beforeAll(async () => {
   await pool.query('CREATE SCHEMA IF NOT EXISTS knowledge_contract_test');
 });
 
-createKnowledgePageStoreTests(() => new KnowledgePG({ pool, schemaName: 'knowledge_contract_test' }));
-createKnowledgeHostWriteTests(() => new KnowledgePG({ pool, schemaName: 'knowledge_contract_test' }));
+const contractStore = () => new KnowledgePG({ pool, schemaName: 'knowledge_contract_test' });
+createKnowledgePageStoreTests(contractStore, { reopen: contractStore });
+createKnowledgeHostWriteTests(contractStore);
 
 const LEGACY_SCHEMA = 'knowledge_legacy_test';
 const legacyTable = (name: string) => `"${LEGACY_SCHEMA}"."${name}"`;

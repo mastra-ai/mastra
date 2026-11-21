@@ -278,6 +278,19 @@ export abstract class KnowledgeStorage extends StorageDomain implements Knowledg
   deletePage(_input: Parameters<KnowledgePageStore['deletePage']>[0]): ReturnType<KnowledgePageStore['deletePage']> {
     return Promise.reject(new KnowledgeUnsupportedCapabilityError('deletePage'));
   }
+  removeTemplatePage(
+    _input: Parameters<KnowledgePageStore['removeTemplatePage']>[0],
+  ): ReturnType<KnowledgePageStore['removeTemplatePage']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('removeTemplatePage'));
+  }
+  removeScope(_input: Parameters<KnowledgePageStore['removeScope']>[0]): ReturnType<KnowledgePageStore['removeScope']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('removeScope'));
+  }
+  restoreScope(
+    _input: Parameters<KnowledgePageStore['restoreScope']>[0],
+  ): ReturnType<KnowledgePageStore['restoreScope']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('restoreScope'));
+  }
   getNote(_input: Parameters<KnowledgePageStore['getNote']>[0]): ReturnType<KnowledgePageStore['getNote']> {
     return Promise.reject(new KnowledgeUnsupportedCapabilityError('getNote'));
   }

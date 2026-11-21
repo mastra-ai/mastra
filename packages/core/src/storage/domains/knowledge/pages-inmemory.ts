@@ -1,6 +1,7 @@
 import {
   KNOWLEDGE_SEARCH_WEIGHTS,
   knowledgePageKeyProblem,
+  KnowledgeScopeRemovedError,
   knowledgeSearchWords,
 } from '@internal/core/knowledge-compat';
 import { KnowledgeConflictError, KnowledgeNotFoundError } from './base';
@@ -243,6 +244,15 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     return undefined;
   }
 
+  /** Whether a template page with this key under this parent was removed (by any row, live or not). */
+  #templateRemoved(parentId: string, key: string): boolean {
+    return this.#activity.some(event => {
+      if (event.action !== 'template-removed') return false;
+      const page = this.#pages.get(event.pageId);
+      return page?.parentId === parentId && page.key === key;
+    });
+  }
+
   #materializeTemplates(
     scopeId: string,
     parentId: string,
@@ -253,6 +263,7 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
       const problem = knowledgePageKeyProblem(template.key);
       if (problem) throw new Error(problem);
       let page = this.#childByKey(parentId, template.key);
+      if (!page && this.#templateRemoved(parentId, template.key)) continue;
       if (!page) {
         page = this.#newPage({
           scopeId,
@@ -275,6 +286,7 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     let scope = this.#scopeByAddress(input.address);
     const created = !scope;
     let parentConflict: { existingParentId: string | null; requestedParentId: string | null } | undefined;
+    if (scope?.deletedAt) throw new KnowledgeScopeRemovedError(input.address);
     if (scope) {
       if (scope.parentId === null && input.parentId != null) {
         if (!this.#page(input.parentId).isScope) {
@@ -327,7 +339,7 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
   async getScopesByAddress(addresses: string[]) {
     const wanted = new Set(addresses);
     return [...this.#pages.values()]
-      .filter(page => page.isScope && wanted.has(page.address!))
+      .filter(page => page.isScope && !page.deletedAt && wanted.has(page.address!))
       .sort(byPosition)
       .map(clone);
   }
@@ -367,7 +379,10 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     const scopes = [...this.#pages.values()]
       .filter(
         page =>
-          page.isScope && page.parentId === input.parentId && (!input.read || this.#pageReadable(page, input.read)),
+          page.isScope &&
+          !page.deletedAt &&
+          page.parentId === input.parentId &&
+          (!input.read || this.#pageReadable(page, input.read)),
       )
       .sort(byPosition);
     const { items, nextCursor } = paginate(scopes, input.cursor, input.limit);
@@ -425,7 +440,7 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
   async countChildScopes(input: Parameters<Store['countChildScopes']>[0]) {
     const counts = new Map(input.parentIds.map(id => [id, 0]));
     for (const page of this.#pages.values()) {
-      if (!page.isScope || page.parentId === null || !counts.has(page.parentId)) continue;
+      if (!page.isScope || page.deletedAt || page.parentId === null || !counts.has(page.parentId)) continue;
       if (!this.#pageReadable(page, input.read)) continue;
       counts.set(page.parentId, counts.get(page.parentId)! + 1);
     }
@@ -676,6 +691,52 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     for (const kind of PIN_KINDS) this.#pins.delete(pinKey(page.id, kind));
     this.#log('page-deleted', page, { author: input.deletedBy });
     return clone(page);
+  }
+
+  async removeTemplatePage(input: Parameters<Store['removeTemplatePage']>[0]) {
+    const page = this.#livePage(input.id);
+    if (page.isScope) throw new Error(`Knowledge scope page ${page.id} isn't a template page`);
+    this.#checkVersion(page.id, page.version, input.expectedVersion);
+    if (this.#children(page.id).length) throw new KnowledgePageHasChildrenError(page.id);
+    this.#softDelete(page, input.provenance);
+    this.#log('template-removed', page, input.provenance);
+    return clone(page);
+  }
+
+  async removeScope(input: Parameters<Store['removeScope']>[0]) {
+    const scope = this.#livePage(input.id);
+    if (!scope.isScope) throw new Error(`Knowledge page ${scope.id} isn't a scope page`);
+    this.#checkVersion(scope.id, scope.version, input.expectedVersion);
+    if (this.#children(scope.id).length) throw new KnowledgePageHasChildrenError(scope.id);
+    this.#softDelete(scope, input.provenance);
+    this.#log('scope-removed', scope, input.provenance);
+    return clone(scope);
+  }
+
+  async restoreScope(input: Parameters<Store['restoreScope']>[0]) {
+    const scope = this.#page(input.id);
+    if (!scope.isScope) throw new Error(`Knowledge page ${scope.id} isn't a scope page`);
+    if (!scope.deletedAt) throw new Error(`Knowledge scope ${scope.address} is not removed`);
+    if (scope.parentId !== null && this.#page(scope.parentId).deletedAt) {
+      throw new Error(`Knowledge scope ${scope.address} can't be restored while its parent scope is removed`);
+    }
+    delete scope.deletedAt;
+    delete scope.deletedBy;
+    scope.version++;
+    scope.updatedAt = this.#now();
+    scope.updatedBy = clone(input.provenance);
+    this.#log('scope-restored', scope, input.provenance);
+    return clone(scope);
+  }
+
+  #softDelete(page: KnowledgePage, provenance: KnowledgeProvenance): void {
+    const now = this.#now();
+    page.deletedAt = now;
+    page.deletedBy = provenance.author;
+    page.version++;
+    page.updatedAt = now;
+    page.updatedBy = clone(provenance);
+    for (const kind of PIN_KINDS) this.#pins.delete(pinKey(page.id, kind));
   }
 
   // Notes

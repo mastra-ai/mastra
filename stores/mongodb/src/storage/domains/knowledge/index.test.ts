@@ -11,7 +11,8 @@ const uri =
   process.env.MONGODB_RS_URL ||
   'mongodb://mongodb:mongodb@localhost:27018/?authSource=admin&directConnection=true&serverSelectionTimeoutMS=2000';
 
-createKnowledgePageStoreTests(() => new KnowledgeMongoDB({ uri, dbName: 'knowledge_contract_test' }));
+const contractStore = () => new KnowledgeMongoDB({ uri, dbName: 'knowledge_contract_test' });
+createKnowledgePageStoreTests(contractStore, { reopen: contractStore });
 
 const LEGACY_DB = 'knowledge_legacy_test';
 const client = new MongoClient(uri);

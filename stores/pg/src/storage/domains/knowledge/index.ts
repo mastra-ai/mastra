@@ -229,6 +229,21 @@ export class KnowledgePG extends KnowledgeStorage {
   ): ReturnType<KnowledgePageStore['deletePage']> {
     return this.#pages.deletePage(input);
   }
+  override removeTemplatePage(
+    input: Parameters<KnowledgePageStore['removeTemplatePage']>[0],
+  ): ReturnType<KnowledgePageStore['removeTemplatePage']> {
+    return this.#pages.removeTemplatePage(input);
+  }
+  override removeScope(
+    input: Parameters<KnowledgePageStore['removeScope']>[0],
+  ): ReturnType<KnowledgePageStore['removeScope']> {
+    return this.#pages.removeScope(input);
+  }
+  override restoreScope(
+    input: Parameters<KnowledgePageStore['restoreScope']>[0],
+  ): ReturnType<KnowledgePageStore['restoreScope']> {
+    return this.#pages.restoreScope(input);
+  }
 
   override getNote(input: Parameters<KnowledgePageStore['getNote']>[0]): ReturnType<KnowledgePageStore['getNote']> {
     return this.#pages.getNote(input);
