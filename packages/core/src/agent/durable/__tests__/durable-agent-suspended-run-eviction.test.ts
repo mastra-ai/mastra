@@ -1,0 +1,227 @@
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { describe, it, expect, vi } from 'vitest';
+import { z } from 'zod';
+import { Mastra } from '../../../mastra';
+import { InMemoryStore } from '../../../storage/mock';
+import { createTool } from '../../../tools';
+import { Agent } from '../../agent';
+import { DurableStepIds } from '../constants';
+import { createDurableAgent } from '../create-durable-agent';
+
+const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+
+/** First call suspends on `ask`; once resumed, the model answers with text. */
+function model() {
+  return new MockLanguageModelV2({
+    doStream: async ({ prompt }) => {
+      const resumed = prompt.some(message => message.role === 'tool');
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream<any>(
+          resumed
+            ? [
+                { type: 'stream-start', warnings: [] },
+                { type: 'text-start', id: 't' },
+                { type: 'text-delta', id: 't', delta: 'done' },
+                { type: 'text-end', id: 't' },
+                { type: 'finish', finishReason: 'stop', usage },
+              ]
+            : [
+                { type: 'stream-start', warnings: [] },
+                {
+                  type: 'tool-call',
+                  toolCallType: 'function',
+                  toolCallId: `call-${Math.random()}`,
+                  toolName: 'ask',
+                  input: '{}',
+                },
+                { type: 'finish', finishReason: 'tool-calls', usage },
+              ],
+        ),
+      };
+    },
+  });
+}
+
+function setup(storage = new InMemoryStore()) {
+  const ask = createTool({
+    id: 'ask',
+    description: 'suspends until answered',
+    inputSchema: z.object({}),
+    suspendSchema: z.object({ q: z.string() }),
+    resumeSchema: z.object({ a: z.string() }),
+    execute: async (_input, ctx) => (ctx.agent?.resumeData ? 'ok' : ctx.agent?.suspend({ q: '?' })),
+  });
+  const agent = createDurableAgent({
+    agent: new Agent({ id: 'a', name: 'a', instructions: 'x', model: model() as any, tools: { ask } }),
+  });
+  new Mastra({ storage, logger: false, agents: { a: agent } });
+  const workflow = agent.getWorkflow();
+  const nested = (workflow as any).steps['durable-agentic-execution'];
+  return { agent, workflow, nested, storage };
+}
+
+async function suspend(agent: ReturnType<typeof setup>['agent'], runId: string) {
+  const { fullStream, cleanup } = await agent.stream('hi', { runId, closeOnSuspend: true });
+  for await (const _chunk of fullStream) {
+    // drain to the suspension
+  }
+  cleanup();
+}
+
+async function storedStatus(storage: InMemoryStore, runId: string) {
+  const run = await (await storage.getStore('workflows'))!.getWorkflowRunById({ runId });
+  const snapshot = typeof run?.snapshot === 'string' ? JSON.parse(run.snapshot) : run?.snapshot;
+  return snapshot?.status;
+}
+
+async function resumeText(agent: ReturnType<typeof setup>['agent'], runId: string) {
+  const resumed = await agent.resume(runId, { a: 'yes' });
+  let text = '';
+  for await (const chunk of resumed.fullStream as AsyncIterable<any>) {
+    if (chunk.type === 'text-delta') text += chunk.payload.text;
+  }
+  resumed.cleanup();
+  return text;
+}
+
+describe('releaseParkedRun', () => {
+  it('releases a parked run and keeps its snapshot', async () => {
+    const { agent, storage } = setup();
+    const { fullStream } = await agent.stream('hi', { runId: 'run-parked' });
+    const reader = (fullStream as ReadableStream<any>).getReader();
+    await expect.poll(() => storedStatus(storage, 'run-parked')).toBe('suspended');
+    expect(agent.runRegistry.size).toBe(1);
+
+    expect(await agent.releaseParkedRun('run-parked')).toBe(true);
+    expect(agent.runRegistry.size).toBe(0);
+    expect(await storedStatus(storage, 'run-parked')).toBe('suspended');
+    reader.releaseLock();
+    expect(await resumeText(agent, 'run-parked')).toBe('done');
+  });
+
+  it('leaves a run alone while a resume of it is setting up', async () => {
+    const { agent, storage } = setup();
+    const { fullStream } = await agent.stream('hi', { runId: 'run-resuming' });
+    const reader = (fullStream as ReadableStream<any>).getReader();
+    await expect.poll(() => storedStatus(storage, 'run-resuming')).toBe('suspended');
+
+    const resumed = resumeText(agent, 'run-resuming');
+    expect(await agent.releaseParkedRun('run-resuming')).toBe(false);
+    reader.releaseLock();
+    expect(await resumed).toBe('done');
+  });
+
+  it('leaves a run alone while its resumed execution runs', async () => {
+    const { agent, storage } = setup();
+    const { fullStream } = await agent.stream('hi', { runId: 'run-executing' });
+    const reader = (fullStream as ReadableStream<any>).getReader();
+    await expect.poll(() => storedStatus(storage, 'run-executing')).toBe('suspended');
+
+    // resume() has returned; its execution has not claimed the run yet.
+    const resumed = await agent.resume('run-executing', { a: 'yes' });
+    expect(await agent.releaseParkedRun('run-executing')).toBe(false);
+    reader.releaseLock();
+    let text = '';
+    for await (const chunk of resumed.fullStream as AsyncIterable<any>) {
+      if (chunk.type === 'text-delta') text += chunk.payload.text;
+    }
+    resumed.cleanup();
+    expect(text).toBe('done');
+  });
+});
+
+describe('releaseParkedRun ownership', () => {
+  it('leaves a run another agent parked to that agent', async () => {
+    const storage = new InMemoryStore();
+    const ask = createTool({
+      id: 'ask',
+      description: 'suspends until answered',
+      inputSchema: z.object({}),
+      suspendSchema: z.object({ q: z.string() }),
+      resumeSchema: z.object({ a: z.string() }),
+      execute: async (_input, ctx) => (ctx.agent?.resumeData ? 'ok' : ctx.agent?.suspend({ q: '?' })),
+    });
+    const owner = createDurableAgent({
+      agent: new Agent({ id: 'owner', name: 'owner', instructions: 'x', model: model() as any, tools: { ask } }),
+    });
+    const other = createDurableAgent({
+      agent: new Agent({ id: 'other', name: 'other', instructions: 'x', model: model() as any, tools: { ask } }),
+    });
+    new Mastra({ storage, logger: false, agents: { owner, other } });
+    const { fullStream } = await owner.stream('hi', { runId: 'run-owned' });
+    const reader = (fullStream as ReadableStream<any>).getReader();
+    await expect.poll(() => storedStatus(storage, 'run-owned')).toBe('suspended');
+
+    expect(await other.releaseParkedRun('run-owned')).toBe(false);
+    expect(owner.runRegistry.size).toBe(1);
+    expect(await owner.releaseParkedRun('run-owned')).toBe(true);
+    expect(owner.runRegistry.size).toBe(0);
+    reader.releaseLock();
+  });
+});
+
+describe('an observer that stops watching', () => {
+  it('leaves no stream release behind after it detaches', async () => {
+    const { agent, workflow, storage } = setup();
+    await suspend(agent, 'run-detached');
+    await agent.releaseParkedRun('run-detached');
+    expect(workflow.runs.size).toBe(0);
+
+    const observed = await agent.observe('run-detached');
+    observed.detach();
+
+    expect(await agent.releaseParkedRun('run-detached')).toBe(false);
+    expect(await storedStatus(storage, 'run-detached')).toBe('suspended');
+  });
+
+  it('leaves no stream release behind when its setup fails', async () => {
+    const { agent, workflow } = setup();
+    await suspend(agent, 'run-observe-fails');
+    await agent.releaseParkedRun('run-observe-fails');
+    expect(workflow.runs.size).toBe(0);
+
+    const getStorage = vi.spyOn(agent.getMastraInstance()!, 'getStorage').mockImplementationOnce(() => {
+      throw new Error('storage unavailable');
+    });
+    await expect(agent.observe('run-observe-fails')).rejects.toThrow('storage unavailable');
+    getStorage.mockRestore();
+
+    expect(await agent.releaseParkedRun('run-observe-fails')).toBe(false);
+  });
+});
+
+describe('a failed recovery', () => {
+  it('leaves no stream release behind', async () => {
+    const { agent, workflow, storage } = setup();
+    await suspend(agent, 'run-recover');
+    await agent.releaseParkedRun('run-recover');
+    expect(workflow.runs.size).toBe(0);
+    const store = (await storage.getStore('workflows'))!;
+    const setStatus = async (status: 'running' | 'suspended') => {
+      const stored = await store.getWorkflowRunById({
+        runId: 'run-recover',
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+      });
+      const snapshot = typeof stored!.snapshot === 'string' ? JSON.parse(stored!.snapshot) : stored!.snapshot;
+      await store.persistWorkflowSnapshot({
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+        runId: 'run-recover',
+        snapshot: { ...snapshot, status },
+      });
+    };
+    // A run that crashed mid-step, which recover() restarts.
+    await setStatus('running');
+
+    const getWorkflow = vi.spyOn(agent, 'getWorkflow').mockImplementationOnce(() => {
+      throw new Error('workflow unavailable');
+    });
+    await expect(agent.recover('run-recover')).rejects.toThrow('workflow unavailable');
+    getWorkflow.mockRestore();
+
+    // Nothing of the failed recovery is held, so a release finds nothing to release.
+    await setStatus('suspended');
+    await expect(agent.releaseParkedRun('run-recover')).resolves.toBe(false);
+  });
+});

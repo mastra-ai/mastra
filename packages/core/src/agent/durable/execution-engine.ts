@@ -932,6 +932,13 @@ export class DurableExecutionEngine {
     }
   }
 
+  /** Drops a run parked at a suspension from the workflow's run map; resume() rebuilds it from its snapshot. */
+  releaseParkedRun(workflow: DurableWorkflow, runId: string, run: DurableRun): void {
+    if (run.workflowRunStatus === 'suspended' && workflow.runs.get(runId) === run) {
+      workflow.runs.delete(runId);
+    }
+  }
+
   finishExecution(
     _runId: string,
     _executionFence: ExecutionFence | undefined,
