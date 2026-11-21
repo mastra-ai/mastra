@@ -24,38 +24,33 @@
   ],
   "structuredOutput": ["deepseek-v4-flash", "gemma4", "glm5.3", "glm5.3-flash", "qwen3.6", "qwen3.8-flash"],
   "reasoning": {
+    "glm5.3": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "mimo-v2.6-flash": [
       {
         "type": "toggle"
       }
     ],
-    "qwen3.6": [
+    "glm5.3-flash": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 0,
-        "max": 32768
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "deepseek-v4-flash": [
+    "deepseek-v4-pro": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "hy4": [
       {
         "type": "effort",
         "values": ["none", "low", "high"]
-      }
-    ],
-    "qwen3.8-max": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
       }
     ],
     "gemma4": [
@@ -69,16 +64,15 @@
         "max": 32768
       }
     ],
-    "glm5.3": [
+    "qwen3.6": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "glm5.3-flash": [
+        "values": ["none", "low", "medium", "high", "max"]
+      },
       {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+        "type": "budget_tokens",
+        "min": 0,
+        "max": 32768
       }
     ],
     "qwen3.8-flash": [
@@ -92,16 +86,22 @@
         "max": 32768
       }
     ],
+    "deepseek-v4-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "kimi-k3.1-pro": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-v4-pro": [
+    "qwen3.8-max": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ]
   }

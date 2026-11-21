@@ -24,9 +24,10 @@
     "tinfoil/gpt-oss-120b"
   ],
   "reasoning": {
-    "regolo/qwen3.5-122b": [
+    "greenpt/deepseek-v4.1-flash": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
     "greenpt/glm-5.3-flash": [
@@ -41,16 +42,15 @@
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "greenpt/deepseek-v4.1-flash": [
+    "regolo/qwen3.5-122b": [
       {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
+        "type": "toggle"
       }
     ],
-    "tinfoil/deepseek-v4-1-flash": [
+    "tinfoil/gpt-oss-120b": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "tinfoil/glm-5.3": [
@@ -59,10 +59,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "tinfoil/gpt-oss-120b": [
+    "tinfoil/deepseek-v4-1-flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ]
   }
