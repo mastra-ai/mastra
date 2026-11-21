@@ -4637,7 +4637,7 @@ export class Run<
   /**
    * Evicts a suspended run from the workflow's run cache when its snapshot is stored as
    * suspended, or as finished by another instance, and nothing in-process still depends on this instance. `resume()` rebuilds
-   * the run from storage, so keeping it only pins memory until the process exits (#30774).
+   * the run from storage, so keeping it only pins memory until the process exits (see #30774).
    */
   protected async releaseIfSuspended(): Promise<void> {
     const registration = this.#registration;
