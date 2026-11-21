@@ -14338,13 +14338,14 @@ export class Agent<
     // stored user message that no run answers, so make the run recoverable first (#30791).
     try {
       await persistDurableRunInput(runId, workflowInput, this.#mastra, async () => {
-        const written = await this.getWorkflow().__persistRestartableStart({
+        await this.getWorkflow().__persistRestartableStart({
           runId,
           resourceId: workflowInput.state?.resourceId,
           input: workflowInput,
           requestContext: getRunRegistryEntry(runId, this.#mastra)?.requestContext,
+          // A write that rejects may still have committed, so the row counts as ours from here.
+          onWrite: () => this.#restartableStarts.add(runId),
         });
-        if (written) this.#restartableStarts.add(runId);
       });
     } catch (error) {
       await this.#discardRestartableStart(runId, workflowInput.agentId);

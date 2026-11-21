@@ -12,6 +12,7 @@ import { InMemoryStore } from '../../../storage';
 import { Agent } from '../../agent';
 import { DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
+import { createEventedAgent } from '../create-evented-agent';
 import { createGate, createRestartScenario } from './restart-harness';
 
 const runId = 'run-input-before-checkpoint';
@@ -224,4 +225,74 @@ describe('start row written before the input save (#30791)', () => {
     expect(await loopRow('r-start-fails')).toBeNull();
     expect((await agent.listActiveRuns()).runs).toEqual([]);
   });
+});
+
+describe('start row whose write commits and then rejects (#30791)', () => {
+  it.each([
+    { kind: 'durable', storageVersion: 1 },
+    { kind: 'durable', storageVersion: 2 },
+    { kind: 'evented', storageVersion: 1 },
+    { kind: 'evented', storageVersion: 2 },
+  ] as const)(
+    '$kind agent (storage v$storageVersion) reports the failure and leaves nothing for recovery',
+    async ({ kind, storageVersion }) => {
+      const storage = new InMemoryStore();
+      const memory = new MockMemory({ storage });
+      const prompts: string[][] = [];
+      const built = new Agent({
+        id: 'ambiguous-start',
+        name: 'Ambiguous start',
+        instructions: 'Reply.',
+        model: createModel(prompts),
+        memory,
+      });
+      const agent =
+        kind === 'durable'
+          ? createDurableAgent({ agent: built, storageVersion })
+          : createEventedAgent({ agent: built, storageVersion });
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+        agents: { 'ambiguous-start': agent as any },
+        recovery: { durableAgents: 'auto' },
+      });
+      if (kind === 'evented') await mastra.startWorkers();
+      const workflows = (await mastra.getStorage()!.getStore('workflows'))! as any;
+      // The storage commits the start row, then reports the write as failed.
+      let rejected = false;
+      const failAfterCommit =
+        <T extends (...args: any[]) => Promise<any>>(write: T, isStart: (arg: any) => boolean) =>
+        async (arg: any) => {
+          await write(arg);
+          if (!rejected && arg.workflowName === DurableStepIds.AGENTIC_LOOP && isStart(arg)) {
+            rejected = true;
+            throw new Error('write acknowledgement lost');
+          }
+        };
+      const onlyInput = (context: object | undefined) => Object.keys(context ?? {}).join() === 'input';
+      workflows.persistWorkflowSnapshot = failAfterCommit(workflows.persistWorkflowSnapshot.bind(workflows), arg =>
+        onlyInput(arg.snapshot?.context),
+      );
+      workflows.writeWorkflowRunCheckpoint = failAfterCommit(
+        workflows.writeWorkflowRunCheckpoint.bind(workflows),
+        arg => onlyInput(arg.steps),
+      );
+      const saves = vi.spyOn(memory, 'saveMessages');
+
+      try {
+        const stream = await agent.stream('hello', { runId: 'r-ambiguous', memory: { thread: 't-am', resource: 'u' } });
+        const errors: unknown[] = [];
+        for await (const chunk of stream.fullStream) if (chunk.type === 'error') errors.push(chunk.payload?.error);
+        expect(rejected).toBe(true);
+        expect(String(errors[0])).toContain('write acknowledgement lost');
+        expect(saves).not.toHaveBeenCalled();
+        expect((await agent.listActiveRuns()).runs).toEqual([]);
+        await mastra.recoverAllDurableAgents();
+        await new Promise(resolve => setTimeout(resolve, 100));
+        expect(prompts).toEqual([]);
+      } finally {
+        await mastra.stopWorkers?.();
+      }
+    },
+  );
 });

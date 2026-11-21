@@ -3281,7 +3281,7 @@ export class Workflow<
    * that commits a side effect before the run's first checkpoint writes it first, so a crash in
    * between still leaves a run that recovery finds and `restart()` starts from its first step.
    * Does nothing when the run is already stored or the snapshot policy doesn't persist `running`
-   * snapshots. Returns whether it wrote the snapshot.
+   * snapshots. `onWrite` runs right before the write, which may commit even when it rejects.
    * @internal
    */
   async __persistRestartableStart({
@@ -3289,20 +3289,22 @@ export class Workflow<
     resourceId,
     input,
     requestContext,
+    onWrite,
   }: {
     runId: string;
     resourceId?: string;
     input: TInput;
     requestContext?: RequestContext;
-  }): Promise<boolean> {
-    if (!this.#options.shouldPersistSnapshot({ workflowStatus: 'running', stepResults: {} })) return false;
+    onWrite: () => void;
+  }): Promise<void> {
+    if (!this.#options.shouldPersistSnapshot({ workflowStatus: 'running', stepResults: {} })) return;
     const { storageVersion, existsInStorage } = await this.resolveRunStorage({
       runId,
       reopen: true,
       cachedRun: this.#runs.get(runId),
       lookUpStoredRun: true,
     });
-    if (existsInStorage) return false;
+    if (existsInStorage) return;
     // No active paths and no step results: `restart()` treats this as a run that hasn't
     // started its first step (see createRestartExecutionParams).
     const snapshot: WorkflowRunState = {
@@ -3319,6 +3321,7 @@ export class Workflow<
       waitingPaths: {},
       timestamp: Date.now(),
     };
+    onWrite();
     await createRunStorage({
       storageVersion,
       workflowName: this.id,
@@ -3330,7 +3333,6 @@ export class Workflow<
         : snapshot,
       resourceId,
     );
-    return true;
   }
 
   /**
