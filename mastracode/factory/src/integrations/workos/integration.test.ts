@@ -139,5 +139,6 @@ describe('WorkOSAuditIntegration', () => {
 
     expect(response.status).toBe(502);
     expect(await response.json()).toEqual({ error: 'portal_link_failed' });
+    expect(generateLink).toHaveBeenCalledTimes(1);
   });
 });

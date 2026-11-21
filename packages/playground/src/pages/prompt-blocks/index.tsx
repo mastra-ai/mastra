@@ -63,7 +63,7 @@ export default function PromptBlocks() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Prompts</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
@@ -72,7 +72,7 @@ export default function PromptBlocks() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Prompts</h1>
         <PermissionDenied variant="fill" resource="prompt blocks" />
       </PageLayout>
@@ -81,7 +81,7 @@ export default function PromptBlocks() {
 
   if (error) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Prompts</h1>
         <EmptyState
           tone="error"
@@ -95,7 +95,7 @@ export default function PromptBlocks() {
 
   if (promptBlocks.length === 0 && !isLoading && page === 0) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Prompts</h1>
         <NoPromptBlocksInfo />
       </PageLayout>
@@ -104,6 +104,7 @@ export default function PromptBlocks() {
 
   return (
     <PageLayout
+      variant="page"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={<PromptBlocksHeaderCreateAction />}
       actionRow={
