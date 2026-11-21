@@ -24,6 +24,7 @@ export class EventedExecutionEngine extends DurableExecutionEngine {
 
   // The local run learns of a worker's suspension only from the start result, which can trail the
   // stored snapshot (until then it reads pending or running): it is parked once the snapshot says so.
+  // A stored suspended snapshot is the workers' final write for the segment, so none still uses the run.
   protected override isRunParked(run: DurableRun, persistedStatus: WorkflowRunState['status']): boolean {
     return persistedStatus === 'suspended' && PARKABLE_LOCAL_STATUSES.has(run.workflowRunStatus);
   }

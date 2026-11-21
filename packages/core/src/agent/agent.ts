@@ -16785,6 +16785,8 @@ export class Agent<
       onFinish: options?.onFinish,
       onStreamFinished: completeTerminalLifecycle,
       onError: async ({ error, runDead }) => {
+        // Before the caller's callback, so a slow one can't let the setup below track this observer.
+        if (runDead === false) idledOut = true;
         try {
           await options?.onError?.({ error });
         } finally {
@@ -16793,10 +16795,7 @@ export class Agent<
           // don't tear down its registry entry or replay history. The observer
           // itself is gone, though, so a parked-run release no longer owes it a cleanup.
           if (runDead !== false) completeTerminalLifecycle();
-          else {
-            idledOut = true;
-            this.#forgetStreamCleanup(runId, runCleanup);
-          }
+          else this.#forgetStreamCleanup(runId, runCleanup);
         }
       },
       onAbort: async data => {
