@@ -644,6 +644,93 @@ describe('PlatformGitLabIntegration', () => {
     expect(JSON.stringify(resolved)).not.toContain('platform-token');
   });
 
+  describe('self-hosted connections', () => {
+    const selfHosted = {
+      id: 'a1b_selfhosted',
+      integrationId: 'gitlab-self-hosted',
+      status: 'active',
+      accountLabel: 'ops',
+    };
+
+    function stubPlatform(context: (connectionId: string) => Response) {
+      const fetchMock = vi.fn<typeof fetch>(async input => {
+        const url = String(input);
+        if (url.includes('/v2/projects/proj_factory/connections')) {
+          return json({ connections: [platformConnections[0], selfHosted] });
+        }
+        const contextMatch = url.match(/\/v2\/connections\/([^/]+)\/context$/);
+        if (contextMatch) return context(decodeURIComponent(contextMatch[1]!));
+        if (url.includes('a1b_mastra/proxy')) return json([project(10, 'mastra/platform')]);
+        if (url.includes('a1b_selfhosted/proxy')) {
+          return json([{ ...project(7, 'ops/infra'), web_url: 'https://gitlab.example.com/ops/infra' }]);
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      return fetchMock;
+    }
+
+    function discovering(): PlatformGitLabIntegration {
+      return new PlatformGitLabIntegration({
+        connect: {
+          baseUrl: 'https://integrations.example.com',
+          projectId: 'proj_factory',
+          accessToken: 'platform-token',
+        },
+      });
+    }
+
+    it('lists projects on the instance the connection was made for', async () => {
+      const fetchMock = stubPlatform(() =>
+        json({ connection_config: { hostname: 'GitLab.Example.com' }, metadata: null }),
+      );
+
+      const sources = await discovering().intake.listSources({ orgId: 'org-1', userId: 'user-1' });
+
+      expect(sources.map(source => [source.name, decodeSourceId(source.id)])).toEqual([
+        ['mastra/platform', { version: 2, host: 'gitlab.com', projectId: '10' }],
+        ['ops/infra', { version: 2, host: 'gitlab.example.com', projectId: '7' }],
+      ]);
+      const contextReads = fetchMock.mock.calls.map(([url]) => String(url)).filter(url => url.endsWith('/context'));
+      expect(contextReads).toEqual(['https://integrations.example.com/v2/connections/a1b_selfhosted/context']);
+    });
+
+    it.each([
+      ['no hostname', { connection_config: {}, metadata: null }],
+      ['a null connection config', { connection_config: null, metadata: null }],
+      ['a hostname with a path', { connection_config: { hostname: 'gitlab.example.com/evil' }, metadata: null }],
+      [
+        'a URL instead of a hostname',
+        { connection_config: { hostname: 'https://gitlab.example.com' }, metadata: null },
+      ],
+    ])('refuses a self-hosted connection with %s instead of assuming gitlab.com', async (_, body) => {
+      stubPlatform(() => json(body));
+
+      await expect(discovering().intake.listSources({ orgId: 'org-1', userId: 'user-1' })).rejects.toThrow(
+        'Self-hosted GitLab connection a1b_selfhosted has no valid instance hostname.',
+      );
+    });
+
+    it('registers self-hosted connect sessions separately and lists both kinds under gitlab', () => {
+      const registrations = discovering()
+        .platformConnectProviders()
+        .map(({ provider, integrationId, connectionIntegrationIds }) => ({
+          provider,
+          integrationId,
+          connectionIntegrationIds,
+        }));
+
+      expect(registrations).toEqual([
+        { provider: 'gitlab', integrationId: 'gitlab', connectionIntegrationIds: ['gitlab', 'gitlab-self-hosted'] },
+        {
+          provider: 'gitlab-self-hosted',
+          integrationId: 'gitlab-self-hosted',
+          connectionIntegrationIds: ['gitlab-self-hosted'],
+        },
+      ]);
+    });
+  });
+
   it('tries another account only when the first account cannot access a canonical project', async () => {
     const fetchMock = vi.fn<typeof fetch>(async input => {
       const url = String(input);

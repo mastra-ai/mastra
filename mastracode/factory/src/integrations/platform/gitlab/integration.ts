@@ -5,7 +5,7 @@ import type { IntegrationConnection } from '../../../capabilities/connection.js'
 import type { IntegrationContext } from '../../base.js';
 import { GitLabApiClient, GitLabApiError } from '../../gitlab/api.js';
 import type { GitLabRuleOverrides } from '../../gitlab/default-rules.js';
-import { gitlabConnection, GitLabIntegrationBase } from '../../gitlab/integration.js';
+import { gitlabConnection, GitLabIntegrationBase, normalizeGitLabHost } from '../../gitlab/integration.js';
 import type { GitLabStatusConnection } from '../../gitlab/integration.js';
 import { attachGitLabRules } from '../../gitlab/rules.js';
 import { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
@@ -25,8 +25,14 @@ interface PlatformGitLabContext {
   repositoryAccessToken: () => Promise<string>;
 }
 
-/** The Platform's GitLab (OAuth) integration. It is the only GitLab credential flow Factory discovers. */
+/** The Platform's gitlab.com (OAuth) integration. */
 const GITLAB_INTEGRATION_ID = 'gitlab';
+/**
+ * The Platform's self-managed GitLab integration: an access token plus the
+ * instance hostname, which the connection context carries.
+ */
+const GITLAB_SELF_HOSTED_INTEGRATION_ID = 'gitlab-self-hosted';
+const GITLAB_INTEGRATION_IDS = [GITLAB_INTEGRATION_ID, GITLAB_SELF_HOSTED_INTEGRATION_ID];
 
 export interface PlatformGitLabIntegrationConfig {
   rules?: GitLabRuleOverrides;
@@ -60,13 +66,14 @@ export class PlatformGitLabIntegration
   readonly #pollingEnabled: boolean;
   readonly #pollingIntervalMs: number | undefined;
   #reconcileWorker: IssueReconcileWorker | undefined;
+  readonly #hosts = new Map<string, Promise<string>>();
 
   constructor(config: PlatformGitLabIntegrationConfig = {}) {
     super(config.rules);
     const connectionId = config.connectionId?.trim() || process.env.MASTRA_GITLAB_CONNECTION_ID?.trim() || undefined;
     this.binding = new PlatformConnectBinding({
       integrationId: 'gitlab',
-      providerKeys: [GITLAB_INTEGRATION_ID],
+      providerKeys: GITLAB_INTEGRATION_IDS,
       ...(config.connect ? { connect: config.connect } : {}),
       linkOrgConnectionsAtBoot: true,
       ...(connectionId ? { filter: (connection: PlatformConnection) => connection.id === connectionId } : {}),
@@ -89,7 +96,13 @@ export class PlatformGitLabIntegration
       {
         provider: 'gitlab',
         integrationId: GITLAB_INTEGRATION_ID,
-        connectionIntegrationIds: [GITLAB_INTEGRATION_ID],
+        connectionIntegrationIds: GITLAB_INTEGRATION_IDS,
+        binding: this.binding,
+      },
+      {
+        provider: GITLAB_SELF_HOSTED_INTEGRATION_ID,
+        integrationId: GITLAB_SELF_HOSTED_INTEGRATION_ID,
+        connectionIntegrationIds: [GITLAB_SELF_HOSTED_INTEGRATION_ID],
         binding: this.binding,
       },
     ];
@@ -112,7 +125,7 @@ export class PlatformGitLabIntegration
   }
 
   protected async activeContexts(): Promise<PlatformGitLabContext[]> {
-    return (await this.#activeConnections()).map(connection => this.#context(connection));
+    return Promise.all((await this.#activeConnections()).map(connection => this.#context(connection)));
   }
 
   protected async contextById(connectionId: string): Promise<PlatformGitLabContext> {
@@ -173,14 +186,13 @@ export class PlatformGitLabIntegration
     return (await this.listConnections()).filter(connection => connection.status === 'active');
   }
 
-  #context(connection: PlatformConnection): PlatformGitLabContext {
+  async #context(connection: PlatformConnection): Promise<PlatformGitLabContext> {
     return {
       id: connection.id,
       label: connection.accountLabel,
       api: new GitLabApiClient({ client: this.binding, connectionId: connection.id }),
       connection: gitlabConnection(connection.id),
-      // Platform does not currently expose the connected GitLab instance host.
-      host: 'gitlab.com',
+      host: await this.#host(connection),
       repositoryAccessToken: async () => {
         // Fetch for each git operation so an expiring OAuth token is refreshed by Platform.
         // Never persist or log the returned credential.
@@ -200,6 +212,39 @@ export class PlatformGitLabIntegration
         return token;
       },
     };
+  }
+
+  /** gitlab.com for OAuth connections; a self-hosted connection's instance comes from its context, read once. */
+  #host(connection: PlatformConnection): Promise<string> {
+    if (connection.integrationId !== GITLAB_SELF_HOSTED_INTEGRATION_ID) return Promise.resolve('gitlab.com');
+    let host = this.#hosts.get(connection.id);
+    if (!host) {
+      host = this.binding.connect.getContext(connection.id).then(context => {
+        const hostname = selfHostedHostname(context.connection_config?.hostname);
+        if (!hostname) {
+          throw new GitLabApiError(
+            `Self-hosted GitLab connection ${connection.id} has no valid instance hostname.`,
+            502,
+          );
+        }
+        return hostname;
+      });
+      host.catch(() => this.#hosts.delete(connection.id));
+      this.#hosts.set(connection.id, host);
+    }
+    return host;
+  }
+}
+
+/** The hostname alone: the host goes into API and clone URLs, so a scheme, path, or credentials are refused. */
+function selfHostedHostname(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const host = normalizeGitLabHost(value);
+  if (!host) return undefined;
+  try {
+    return new URL(`https://${host}`).host === host ? host : undefined;
+  } catch {
+    return undefined;
   }
 }
 
