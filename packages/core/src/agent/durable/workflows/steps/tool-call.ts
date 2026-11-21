@@ -868,12 +868,15 @@ export function createDurableToolCallStep() {
       const readTranscript = async () => {
         const llmOutput = await getStepResultAsync?.<DurableLLMStepOutput>(DurableStepIds.LLM_EXECUTION);
         const messageListState = await readMessageListState(params, llmOutput ?? {});
+        // A copy: the state's messages are the run's own transcript objects, saved back with the
+        // run's state, so metadata this step writes on them would outlive a later resume's clear.
+        // JSON rather than structuredClone: message metadata can hold callbacks.
         return messageListState
           ? createRunMessageList({
               mastra,
               threadId: state?.threadId,
               resourceId: state?.resourceId,
-            }).deserialize(messageListState)
+            }).deserialize(JSON.parse(JSON.stringify(messageListState)))
           : undefined;
       };
       // Replayed step transcripts supply context only; persisting goes through persistMessageList.

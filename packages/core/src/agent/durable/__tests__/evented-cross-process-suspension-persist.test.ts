@@ -74,23 +74,39 @@ class CrossProcessToolStepPubSub extends EventEmitterPubSub {
 }
 
 function makeModel(toolCallIds = ['call-1']) {
+  let calls = 0;
   return new MockLanguageModelV2({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
-      stream: convertArrayToReadableStream<any>([
-        { type: 'stream-start', warnings: [] },
-        { type: 'response-metadata', id: 'id-0', modelId: 'mock-model', timestamp: new Date(0) },
-        ...toolCallIds.map(toolCallId => ({
-          type: 'tool-call',
-          toolCallType: 'function',
-          toolCallId,
-          toolName: 'askColour',
-          input: '{"question":"Favourite colour?"}',
-          providerExecuted: false,
-        })),
-        { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
-      ]),
+      // Once the tool results are in, the model answers instead of calling the tools again.
+      stream: convertArrayToReadableStream<any>(
+        calls++ > 0
+          ? [
+              { type: 'stream-start', warnings: [] },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Thanks.' },
+              { type: 'text-end', id: 'text-1' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            ]
+          : [
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model', timestamp: new Date(0) },
+              ...toolCallIds.map(toolCallId => ({
+                type: 'tool-call',
+                toolCallType: 'function',
+                toolCallId,
+                toolName: 'askColour',
+                input: '{"question":"Favourite colour?"}',
+                providerExecuted: false,
+              })),
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ],
+      ),
     }),
   });
 }
@@ -103,7 +119,10 @@ describe('evented agent cross-process tool suspension persistence (#30123)', () 
 
   afterEach(async () => {
     // The resumed segment ends suspended on call-2, so call-1's in-flight marker outlives the test.
-    for (const runId of resumedRuns.splice(0)) clearResumeInFlight(runId, 'call-1');
+    for (const runId of resumedRuns.splice(0)) {
+      clearResumeInFlight(runId, 'call-1');
+      clearResumeInFlight(runId, 'call-2');
+    }
     await mastra?.stopWorkers();
     globalRunRegistry.clear();
     await pubsub?.close();
@@ -245,8 +264,8 @@ describe('evented agent cross-process tool suspension persistence (#30123)', () 
     15_000,
   );
 
-  it.each<Boundary>(['fresh-worker', 'starting-process-tools'])(
-    'saves the next sibling suspension on the existing assistant row when it suspends in another process after a resume (%s)',
+  it.each<Boundary>(['fresh-worker', 'starting-process-tools', 'stale-message-list'])(
+    'saves the next sibling suspension on the existing assistant row when it suspends in another process after a resume, and clears both once answered (%s)',
     async boundary => {
       pubsub = new CrossProcessToolStepPubSub(boundary);
       const storage = new InMemoryStore();
@@ -298,6 +317,31 @@ describe('evented agent cross-process tool suspension persistence (#30123)', () 
       expect(messages.map(m => m.role)).toEqual(['user', 'assistant']);
       const assistant = messages[1]!;
       expect(Object.keys((assistant.content.metadata as any)?.suspendedTools ?? {})).toEqual(['call-2']);
+
+      // Answering call-2 completes the run; neither answered call may be left pending.
+      const completed = await (durable as any).resumeStream(
+        { colour: 'green' },
+        { runId: first.runId, toolCallId: 'call-2', memory: threadMemory },
+      );
+      for await (const chunk of completed.fullStream) if (chunk.type === 'finish') break;
+      await new Promise(r => setTimeout(r, 200));
+      resumedRuns.push(first.runId);
+
+      const { messages: final } = await memory.recall({ threadId: 'thread-1', resourceId: 'user-1', perPage: false });
+      const toolAssistant = final.find(m => m.content.parts.some(part => part.type === 'tool-invocation'))!;
+      const results = Object.fromEntries(
+        final.flatMap(m =>
+          m.content.parts.flatMap(part =>
+            part.type === 'tool-invocation' && part.toolInvocation.state === 'result'
+              ? [[part.toolInvocation.toolCallId, part.toolInvocation.result]]
+              : [],
+          ),
+        ),
+      );
+      expect(results).toEqual({ 'call-1': { colour: 'blue' }, 'call-2': { colour: 'green' } });
+      const finalMetadata = toolAssistant.content.metadata as any;
+      expect(Object.keys(finalMetadata?.suspendedTools ?? {})).toEqual([]);
+      expect(Object.keys(finalMetadata?.pendingToolApprovals ?? {})).toEqual([]);
     },
     15_000,
   );
