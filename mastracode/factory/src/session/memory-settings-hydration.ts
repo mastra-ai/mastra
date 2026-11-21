@@ -39,6 +39,16 @@ export async function hydrateSessionMemorySettings(
   try {
     const record = await sourceControl.sessions.getBySessionId(session.identity.getId());
     await seedSessionOrg(session, record?.orgId);
+    // A rebuilt session loses its Factory address, but its source-control row
+    // still names it. Mirror `startUserSessionConversation`, which seeds the
+    // project when the session is first created, so a restart keeps the
+    // project's Knowledge scope instead of narrowing to the org alone.
+    if (record?.factoryProjectId) {
+      await session.state.set({
+        factoryProjectId: record.factoryProjectId,
+        ...(record.projectRepositoryId ? { projectRepositoryId: record.projectRepositoryId } : {}),
+      });
+    }
   } catch (error) {
     console.warn('[Factory session hydration] Unable to resolve the session organization.', error);
     if (!session.state.get()?.factoryOrgId) await seedSessionOrg(session, undefined);

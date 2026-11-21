@@ -1,3 +1,4 @@
+import { resolveKnowledgeSessionScopes } from '@mastra/code-sdk/knowledge-scope';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 
 import { describe, expect, it, vi } from 'vitest';
@@ -19,11 +20,12 @@ function createSession(state: MastraCodeState = {}) {
   } satisfies MemorySettingsHydrationSession;
 }
 
-function sourceControlRow(): SourceControlSession {
+function sourceControlRow(overrides: Partial<SourceControlSession> = {}): SourceControlSession {
   return {
     id: 'row-1',
     sessionId: 'session-1',
     projectRepositoryId: 'repo-1',
+    factoryProjectId: 'project-1',
     orgId: 'org-1',
     userId: 'user-1',
     branch: 'user/session-1',
@@ -37,6 +39,7 @@ function sourceControlRow(): SourceControlSession {
     firstMeaningfulExecAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
+    ...overrides,
   };
 }
 
@@ -107,5 +110,53 @@ describe('hydrateSessionMemorySettings', () => {
     );
     expect(session.state.set).toHaveBeenCalledWith({ factoryOrgUnresolved: true });
     warn.mockRestore();
+  });
+
+  it('restores the Factory project and repository onto a rebuilt user session', async () => {
+    const session = createSession({ factoryOrgUnresolved: true });
+
+    await hydrateSessionMemorySettings(session, createDependencies());
+
+    expect(session.state.set).toHaveBeenCalledWith({
+      factoryProjectId: 'project-1',
+      projectRepositoryId: 'repo-1',
+    });
+    const state = session.state.get() as MastraCodeState;
+    expect(state.factoryProjectId).toBe('project-1');
+    expect(state.projectRepositoryId).toBe('repo-1');
+  });
+
+  it('leaves the project unset when the row names no Factory', async () => {
+    const session = createSession();
+    const dependencies = createDependencies(sourceControlRow({ factoryProjectId: null }));
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
+    const state = session.state.get() as MastraCodeState;
+    expect(state.factoryProjectId).toBeUndefined();
+    expect(state.projectRepositoryId).toBeUndefined();
+  });
+
+  it('restores the project without a repository link when the row has none', async () => {
+    const session = createSession({ factoryOrgUnresolved: true });
+
+    await hydrateSessionMemorySettings(session, createDependencies(sourceControlRow({ projectRepositoryId: null })));
+
+    expect(session.state.set).toHaveBeenCalledWith({ factoryProjectId: 'project-1' });
+    expect(session.state.set).not.toHaveBeenCalledWith(
+      expect.objectContaining({ projectRepositoryId: expect.anything() }),
+    );
+  });
+
+  it('keeps the project Knowledge scope after a rebuild', async () => {
+    const session = createSession({ factoryOrgUnresolved: true });
+
+    await hydrateSessionMemorySettings(session, createDependencies());
+
+    expect(resolveKnowledgeSessionScopes(session.state.get(), ['org:org-1'])).toEqual({
+      resolved: true,
+      scopes: ['org:org-1', 'project:project-1'],
+    });
   });
 });
