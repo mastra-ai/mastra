@@ -584,7 +584,7 @@ describe('subscribeToThread withInitialHistory', () => {
     }
   });
 
-  it('replays a retained hand-back and its recovered outcome to a late subscriber without failing it', async () => {
+  it('a retained superseded hand-back does not hide the recovered outcome from a late subscriber', async () => {
     const { emit, subscribe } = setup(() => []);
     await emit({ type: 'run-registered', runId, streamId: 'old', streamSeq: 1, generation: 1 });
     await emit({ type: 'run-completed', runId, streamId: 'old', status: 'interrupted', persisted: false });
