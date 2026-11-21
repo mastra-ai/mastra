@@ -41,6 +41,7 @@ import {
   ProcessorStepSchema,
   createProcessorSendSignal,
 } from '../../processors';
+import { PROCESSOR_ABORT_SIGNAL } from '../../processors/abort-signal-scope';
 import {
   OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX,
   endOutputStreamSpanAtStepEnd,
@@ -807,14 +808,21 @@ function createStepFromProcessor<TProcessorId extends string>(
       metrics,
       mastra,
       runId: workflowRunId,
+      abortSignal: runAbortSignal,
     }) => {
       const observabilityContext = resolveObservabilityContext({ tracing, tracingContext, loggerVNext, metrics });
+      // Never read the signal from the payload: a serializing pubsub encodes it as `{}`.
+      // Abort on either the caller's signal or a cancel of this processor workflow run.
+      const scopedSignal = mastra?.__getRunScope(workflowRunId)?.get(PROCESSOR_ABORT_SIGNAL);
+      const abortSignal =
+        scopedSignal && runAbortSignal
+          ? AbortSignal.any([scopedSignal, runAbortSignal])
+          : (scopedSignal ?? runAbortSignal);
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
       // we need access to all possible properties
       const input = inputData as ProcessorStepOutput & {
         processorStates?: Map<string, ProcessorState>;
-        abortSignal?: AbortSignal;
         lateSignalSink?: ProcessorLateSignalSink;
       };
       const {
@@ -854,8 +862,6 @@ function createStepFromProcessor<TProcessorId extends string>(
         providerExecuted,
         // Shared processor states map for accessing persisted state
         processorStates,
-        // Abort signal for cancelling in-flight processor work (e.g. OM observations)
-        abortSignal,
         // Receives sendSignal calls made after the creating durable step returned
         lateSignalSink,
       } = input;
