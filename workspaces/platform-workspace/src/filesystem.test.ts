@@ -42,6 +42,49 @@ describe('PlatformFilesystem', () => {
     expect(fetchMock.mock.calls[1]![1].method).toBeUndefined();
   });
 
+  it('maps paths under mountPath to the bucket root', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(response(null, { status: 204 })));
+    const fs = new PlatformFilesystem({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      bucketName: 'dev-bucket',
+      mountPath: '/workspace',
+      fetch: fetchMock,
+    });
+    await fs._init();
+
+    await fs.writeFile('/workspace/proof.txt', 'a');
+    await fs.writeFile('proof.txt', 'a');
+    await fs.writeFile('/workspace/dir/b.txt', 'a');
+    await fs.writeFile('/workspacex/c.txt', 'a');
+
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      'https://proxy.test/v1/railway/projects/proj_123/fs/dev-bucket/proof.txt',
+      'https://proxy.test/v1/railway/projects/proj_123/fs/dev-bucket/proof.txt',
+      'https://proxy.test/v1/railway/projects/proj_123/fs/dev-bucket/dir/b.txt',
+      'https://proxy.test/v1/railway/projects/proj_123/fs/dev-bucket/workspacex/c.txt',
+    ]);
+  });
+
+  it('keeps /workspace as a real folder without mountPath', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi.fn().mockResolvedValue(response(null, { status: 204 }));
+    const fs = new PlatformFilesystem({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      bucketName: 'dev-bucket',
+      fetch: fetchMock,
+    });
+    await fs._init();
+
+    await fs.writeFile('/workspace/proof.txt', 'a');
+
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(
+      'https://proxy.test/v1/railway/projects/proj_123/fs/dev-bucket/workspace/proof.txt',
+    );
+  });
+
   it('uses the regional workspace proxy URL for filesystem requests', async () => {
     vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
     vi.stubEnv('MASTRA_PLATFORM_REGION', 'us');

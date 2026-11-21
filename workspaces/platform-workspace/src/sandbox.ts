@@ -84,6 +84,14 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
   /** Boot-only fallback checkpoint for a fresh sandbox whose primary recovery key has no state. */
   seedCheckpointName?: string;
   /**
+   * Name of a project bucket to mount at `/workspace` with s3fs (E2B only).
+   * The platform issues S3 keys valid for this bucket and this sandbox only;
+   * the sandbox never sees the storage credential. Mount progress is reported
+   * on {@link PlatformSandbox.bucketMount}. A failed mount does not fail
+   * `start()`: commands just don't see the bucket.
+   */
+  mountBucket?: string;
+  /**
    * Template builder or a lazy resolver for one. The resolver runs only when
    * start() must provision a fresh sandbox. Platform content-addresses the
    * serialized definition and starts or reuses its provider build without
@@ -197,7 +205,23 @@ interface CreateSandboxResponse {
    * than fall back on a missing-field ambiguity).
    */
   instanceUrl?: string | null;
+  /** S3 gateway keys for the requested `mountBucket`. Only on create and recovery-id reattach. */
+  bucketMount?: BucketMountCredentials;
 }
+
+interface BucketMountCredentials {
+  endpoint: string;
+  bucket: string;
+  region: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+}
+
+export type BucketMountState = 'pending' | 'mounting' | 'mounted' | 'unavailable' | 'error';
+
+/** Where {@link PlatformSandboxOptions.mountBucket} is mounted in the sandbox. */
+export const BUCKET_MOUNT_PATH = '/workspace';
+const BUCKET_MOUNT_PASSWD_FILE = '/tmp/.passwd-s3fs-workspace';
 
 /** Max attempts for `POST /sandbox` when the proxy returns transient 5xx errors. */
 const CREATE_MAX_ATTEMPTS = 3;
@@ -578,6 +602,12 @@ export class PlatformSandbox extends MastraSandbox {
   templatePending?: SandboxTemplatePending;
 
   /**
+   * State of the {@link PlatformSandboxOptions.mountBucket} mount. `unavailable`
+   * means the sandbox image has no s3fs. Undefined when no bucket was requested.
+   */
+  bucketMount?: { state: BucketMountState; error?: string };
+
+  /**
    * The platform's id for the provisioned sandbox, as returned by the create
    * or reattach response. Persist this to reattach later via the `sandboxId`
    * option. Undefined until the sandbox has been started in this process; a
@@ -734,6 +764,9 @@ export class PlatformSandbox extends MastraSandbox {
    * instead of pinning the sandbox to the lease path for its lifetime.
    */
   private _probeTarget: { sandboxId: string; instanceUrl: string } | null = null;
+  private readonly _mountBucket?: string;
+  /** Keys from the latest create response, consumed by the start hook. */
+  private _pendingBucketMount?: BucketMountCredentials;
 
   constructor(options: PlatformSandboxOptions = {}) {
     // Railway has no commands API; it keeps the exec-backed manager.
@@ -771,6 +804,68 @@ export class PlatformSandbox extends MastraSandbox {
     this._e2bCommandsFactory = options.e2bCommandsFactory ?? commandsForLease;
     this._privateNetFetch = options.privateNetFetch;
     this._addressRegistry = options.addressRegistry;
+    this._mountBucket = options.mountBucket;
+    if (this._mountBucket) {
+      this.bucketMount = { state: 'pending' };
+      this.setOnStart(previous => async args => {
+        await previous?.(args);
+        await this._mountPendingBucket();
+      });
+    }
+  }
+
+  /**
+   * Mount the bucket from the last create response at {@link BUCKET_MOUNT_PATH}.
+   * Never throws: a mount failure leaves the sandbox usable without it.
+   */
+  private async _mountPendingBucket(): Promise<void> {
+    const keys = this._pendingBucketMount;
+    this._pendingBucketMount = undefined;
+    if (!keys) return;
+    this.bucketMount = { state: 'mounting' };
+    try {
+      const run = async (command: string) => {
+        const result = await this.executeCommand(command);
+        if (result.exitCode !== 0)
+          throw new Error(`${command.split(' ')[0]} failed: ${result.stderr || result.stdout}`);
+        return result;
+      };
+      const path = shellQuote(BUCKET_MOUNT_PATH);
+      if ((await this.executeCommand(`mountpoint -q ${path}`)).exitCode === 0) {
+        this.bucketMount = { state: 'mounted' };
+        return;
+      }
+      if ((await this.executeCommand('command -v s3fs')).exitCode !== 0) {
+        this.bucketMount = { state: 'unavailable', error: 's3fs is not installed in the sandbox image' };
+        this.logger.warn('platform-workspace bucket mount unavailable: s3fs is not installed', {
+          sandboxId: this._sandboxId,
+        });
+        return;
+      }
+      await this._withE2BFiles('mount', files =>
+        files.write(BUCKET_MOUNT_PASSWD_FILE, `${keys.accessKeyId}:${keys.secretAccessKey}`),
+      );
+      await run(`chmod 600 ${BUCKET_MOUNT_PASSWD_FILE}`);
+      const options = [
+        `passwd_file=${BUCKET_MOUNT_PASSWD_FILE}`,
+        `url=${keys.endpoint.replace(/\/$/, '')}`,
+        'use_path_request_style',
+        'sigv4',
+        `endpoint=${keys.region}`,
+        'allow_other',
+      ]
+        .map(option => `-o ${shellQuote(option)}`)
+        // Files are owned by the sandbox user, not root.
+        .concat('-o uid=$(id -u) -o gid=$(id -g)');
+      await run(`sudo mkdir -p ${path} && sudo s3fs ${shellQuote(keys.bucket)} ${path} ${options.join(' ')}`);
+      // s3fs daemonizes before checking the bucket, so exit 0 doesn't prove the mount attached.
+      await run(`mountpoint -q ${path}`);
+      this.bucketMount = { state: 'mounted' };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.bucketMount = { state: 'error', error: message };
+      this.logger.warn('platform-workspace bucket mount failed', { sandboxId: this._sandboxId, error: message });
+    }
   }
 
   private generateId(): string {
@@ -919,6 +1014,7 @@ export class PlatformSandbox extends MastraSandbox {
         networkIsolation: this._networkIsolation,
         publicPorts: this._publicPorts,
         env: this._env,
+        mountBucket: this._mountBucket,
       });
     // Provisioning is observed to fail intermittently with proxy 500s while
     // the provider is under load. A create either succeeds (201) or fails
@@ -952,6 +1048,7 @@ export class PlatformSandbox extends MastraSandbox {
     this._sandboxId = json.id;
     this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
     this.templatePending = json.templatePending;
+    this._pendingBucketMount = json.bucketMount;
     this._populateAddressFromResponse(json);
     this._logStartComplete(json.id, startedAt, requestMs, 'provision');
     return { outcome: 'created' };
