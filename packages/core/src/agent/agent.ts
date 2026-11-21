@@ -12904,14 +12904,29 @@ export class Agent<
   protected readonly executionRunRegistry = new ExtendedRunRegistry();
   /**
    * What this process holds of each run, so a host tearing down a parked run can release all of it (#30743):
-   * the outstanding stream releases, and per stream release the output whose parked thread-runtime record it
-   * owns. That record outlives its stream release (a warm resume reuses it) until the run is released.
+   * the outstanding stream releases, and (weakly) each stream's output, whose parked thread-runtime record is
+   * this process's to evict. That record outlives its stream release (a warm resume reuses it) until the run is
+   * released; it references its output, so a collected output means its record is already gone.
    * Only {@link releaseRunHold} changes it.
    */
   readonly #runHolds = new Map<
     string,
-    { cleanups: Set<RunCleanup>; parkedOutputs: Map<RunCleanup, MastraModelOutput<any>> }
+    { cleanups: Set<RunCleanup>; parkedOutputs: Set<WeakRef<MastraModelOutput<any>>> }
   >();
+  /**
+   * Drops a held output once it is collected: a parked record references its output, so an output nothing
+   * references parks no record (the TTL sweep, a resume or completion let it go) and the hold need not keep it.
+   */
+  // Runtimes without FinalizationRegistry (see the thread runtime's threadless-run finalizer) prune the run's
+  // collected outputs when one of its segments ends instead.
+  readonly #parkedOutputFinalizer =
+    typeof FinalizationRegistry === 'function'
+      ? new FinalizationRegistry<{ runId: string; parked: WeakRef<MastraModelOutput<any>> }>(({ runId, parked }) => {
+          const hold = this.#runHolds.get(runId);
+          if (!hold?.parkedOutputs.delete(parked)) return;
+          if (hold.cleanups.size === 0 && hold.parkedOutputs.size === 0) this.#runHolds.delete(runId);
+        })
+      : undefined;
   /** Releases created by observe(): an observer holds no run, so they alone don't make a run releasable. */
   readonly #observerCleanups = new WeakSet<RunCleanup>();
   /** Runs with a resume() setting up or executing, which a parked-run release must leave alone. */
@@ -12954,14 +12969,17 @@ export class Agent<
   #trackStreamCleanup(runId: string, cleanup: RunCleanup): void {
     if (cleanup.done) return;
     let hold = this.#runHolds.get(runId);
-    if (!hold) this.#runHolds.set(runId, (hold = { cleanups: new Set(), parkedOutputs: new Map() }));
+    if (!hold) this.#runHolds.set(runId, (hold = { cleanups: new Set(), parkedOutputs: new Set() }));
     hold.cleanups.add(cleanup);
   }
 
   /** Records that the thread-runtime record a stream release's `output` parks is this process's to evict. */
   #holdParkedOutput(runId: string, cleanup: RunCleanup, output: MastraModelOutput<any>): void {
     const hold = this.#runHolds.get(runId);
-    if (hold?.cleanups.has(cleanup)) hold.parkedOutputs.set(cleanup, output);
+    if (!hold?.cleanups.has(cleanup)) return;
+    const parked = new WeakRef(output);
+    hold.parkedOutputs.add(parked);
+    this.#parkedOutputFinalizer?.register(output, { runId, parked });
   }
 
   /**
@@ -12979,22 +12997,8 @@ export class Agent<
     if (segment) {
       const hold = this.#runHolds.get(runId);
       hold?.cleanups.delete(segment);
-      let pubsub: PubSub | undefined;
-      try {
-        pubsub = this.getPubSub();
-      } catch {
-        // Pruning is opportunistic; a later segment end or the run's release prunes what this one could not.
-        return;
-      }
-      // A record that is gone or running again (TTL sweep, resume, completion) is no longer this hold's to evict.
-      for (const [heldRunId, { cleanups, parkedOutputs }] of this.#runHolds) {
-        for (const [cleanup, output] of parkedOutputs) {
-          if (!cleanups.has(cleanup) && !agentThreadStreamRuntime.ownsParkedRun(output, pubsub)) {
-            parkedOutputs.delete(cleanup);
-          }
-        }
-        if (cleanups.size === 0 && parkedOutputs.size === 0) this.#runHolds.delete(heldRunId);
-      }
+      for (const parked of hold?.parkedOutputs ?? []) if (!parked.deref()) hold?.parkedOutputs.delete(parked);
+      if (hold?.cleanups.size === 0 && hold.parkedOutputs.size === 0) this.#runHolds.delete(runId);
       return;
     }
     const hold = this.#runHolds.get(runId);
@@ -13002,9 +13006,10 @@ export class Agent<
     runEachStep(
       [
         // Evicted first: closing a continuation drops one of the ways a record is matched to its stream.
-        ...[...(hold?.parkedOutputs.values() ?? [])].map(
-          output => () => void agentThreadStreamRuntime.evictParkedRun(output, this.getPubSub()),
-        ),
+        ...[...(hold?.parkedOutputs.values() ?? [])].map(output => () => {
+          const parked = output.deref();
+          if (parked) agentThreadStreamRuntime.evictParkedRun(parked, this.getPubSub());
+        }),
         ...[...(hold?.cleanups ?? [])].map(cleanup => () => cleanup.run()),
         ...(releaseEntries ? [releaseEntries] : []),
       ],

@@ -4941,11 +4941,6 @@ export class AgentThreadStreamRuntime {
     return true;
   }
 
-  /** Whether {@link evictParkedRun} would drop a record for `ownerOutput`. */
-  ownsParkedRun<OUTPUT>(ownerOutput: MastraModelOutput<OUTPUT>, pubsub?: PubSub): boolean {
-    return this.#findParkedRecord(this.#getState(pubsub), ownerOutput) !== undefined;
-  }
-
   #findParkedRecord<OUTPUT>(state: AgentThreadRuntimeState, ownerOutput: MastraModelOutput<OUTPUT>) {
     for (const [streamId, record] of state.threadRunsByStreamId) {
       if (record.runId !== ownerOutput.runId || record.lifecycle !== 'suspended') continue;
