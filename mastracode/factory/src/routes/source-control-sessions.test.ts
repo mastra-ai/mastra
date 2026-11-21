@@ -22,6 +22,7 @@ import {
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { createTerminalStageCleanup } from '../rules/terminal-cleanup.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
+import { sandboxHostMayUseCredentialVault } from '../sandbox/vault-host.js';
 import {
   FACTORY_OPEN_RUNS_SETTING,
   listSessionOpenRuns,
@@ -1813,6 +1814,42 @@ describe('session sandbox recreate', () => {
 
         expect(response.status).toBe(200);
         expect(sandbox.start).toHaveBeenCalledTimes(1);
+      });
+
+      it('refuses an offline custom-callback sandbox, which can still attach the owner vault', async () => {
+        const { seed, sourceControl, session } = await seedRecreateSession('user-1');
+        const start = vi.fn(async () => {});
+        const controller = fakeController(null, { getWorkspace: () => ({ sandbox: { start } }) });
+        const app = buildRecreateApp(seed, sourceControl, {
+          controller,
+          caller: admin,
+          vaultSandboxes: sandboxHostMayUseCredentialVault('custom'),
+          isOrganizationAdmin: async () => true,
+        });
+
+        const response = await app.request(startPath(session.sessionId), { method: 'POST' });
+
+        expect(response.status).toBe(403);
+        expect(controller.createSession).not.toHaveBeenCalled();
+        expect(start).not.toHaveBeenCalled();
+      });
+
+      it('lets an admin bring an offline e2b sandbox online', async () => {
+        const { seed, sourceControl, session } = await seedRecreateSession('user-1');
+        const start = vi.fn(async () => {});
+        const controller = fakeController(null, { getWorkspace: () => ({ sandbox: { start } }) });
+        const app = buildRecreateApp(seed, sourceControl, {
+          controller,
+          caller: admin,
+          vaultSandboxes: sandboxHostMayUseCredentialVault('e2b'),
+          isOrganizationAdmin: async () => true,
+        });
+
+        const response = await app.request(startPath(session.sessionId), { method: 'POST' });
+
+        expect(response.status).toBe(200);
+        expect(controller.createSession).toHaveBeenCalledTimes(1);
+        expect(start).toHaveBeenCalledTimes(1);
       });
 
       it('brings an offline session online for an admin on a host whose sandboxes have no vault', async () => {

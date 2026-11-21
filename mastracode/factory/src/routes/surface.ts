@@ -31,6 +31,7 @@ import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import { workItemSource } from '../rules/types.js';
 import type { FactoryRuleActor } from '../rules/types.js';
+import { sandboxHostMayUseCredentialVault } from '../sandbox/vault-host.js';
 import { secretKeyMismatchHint, secretKeyProblem } from '../secret-encryption.js';
 import {
   createSourceControlSessionLookup,
@@ -865,8 +866,11 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           // A local sandbox's destroy keeps the session directory, so recreate
           // couldn't deliver the fresh checkout it promises there.
           sandboxRecreateSupported: deps.sandbox !== undefined && deps.sandbox.provider !== 'local',
-          // Only platform sandboxes run with their owner's credential vault.
-          vaultSandboxes: deps.sandbox?.provider === 'platform',
+          // Fail closed: only the providers factory ships without a credential vault
+          // may be started offline by someone other than the owner. A custom
+          // callback (`provider: 'custom'`) and anything unrecognized can still
+          // return a vault sandbox.
+          vaultSandboxes: sandboxHostMayUseCredentialVault(deps.sandbox?.provider),
           ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
           ...(deps.moveThread ? { moveThread: deps.moveThread } : {}),
           ...(deps.renameThread ? { renameThread: deps.renameThread } : {}),

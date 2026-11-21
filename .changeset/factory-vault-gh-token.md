@@ -23,7 +23,7 @@ if (vault === false) {
 
 `FactorySandboxContext` gains an optional `userId`, the session owner. Factory sets it on every session sandbox, and `PlatformFactorySandbox` sends it as the acting user (`x-acting-user-id`) on every workspace-proxy request, which the proxy requires to create and run a vault sandbox. Sandboxes without an owner send no acting user, as before.
 
-A vault sandbox carries its owner's GitHub credential, so only the session owner can open it. Other members of the organization are refused an org-visible vault session, both when they would create its sandbox and when they would reuse the one the owner already opened. A session whose mode can't be read is refused too. Token-mode sessions stay open to the organization.
+A vault sandbox carries its owner's GitHub credential, so only the session owner can open it. Other members of the organization are refused an org-visible vault session, both when they would create its sandbox and when they would reuse the one the owner already opened. A session whose mode can't be read is refused too. Token-mode sessions stay open to the organization. That refusal also covers a custom sandbox callback and any provider factory does not ship itself: only `local`, `docker`, and `e2b` are treated as unable to attach a credential vault. An admin can still start those offline.
 
 When sandbox create fails because the owner hasn't enabled the vault (`PlatformApiError` code `vault_not_enabled`), the Slack run-error card explains it and shows an **Enable vault** button that links to the URL in the platform's message.
 
