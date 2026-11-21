@@ -61,6 +61,11 @@ export interface SourceControlSessionRoutesOptions {
   sessionRetirement?: SessionRetirementCoordinator;
   /** Whether the host sandbox can recreate a session's sandbox (false for local). */
   sandboxRecreateSupported?: boolean;
+  /**
+   * Whether this host's sandboxes can act with their owner's credential vault (the platform provider). The
+   * Files-tab start then refuses a non-owner whose session has no sandbox yet to confirm token mode.
+   */
+  vaultSandboxes?: boolean;
   /** How long recreate waits for an aborted run to settle before destroying. */
   abortSettleTimeoutMs?: number;
   workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'hasRunBindingForSession'> &
@@ -654,7 +659,8 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
 
         // A vault sandbox acts with its owner's credential vault, so only the owner may start it. Anyone else
         // (an org admin) needs the session already online with a sandbox the platform confirms is token mode;
-        // learning the mode never starts it, and an offline session or an unknown mode is refused.
+        // learning the mode never starts it, and an unknown mode, or an offline session on a host whose sandboxes
+        // can use the vault, is refused.
         if (resolved.tenant.userId !== session.userId) {
           const online = await controller.getSession(session.sessionId);
           const existing = online?.getWorkspace()?.sandbox ?? peekSessionSandbox(session.sessionId)?.sandbox;
@@ -667,7 +673,9 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
                 () => undefined,
                 (error: unknown) => error,
               )
-            : vaultOwnerRefusal(session.sessionId);
+            : options.vaultSandboxes
+              ? vaultOwnerRefusal(session.sessionId)
+              : undefined;
           if (refusal) {
             return c.json(
               { error: "Only the session's owner can start a sandbox that may use their credential vault." },
