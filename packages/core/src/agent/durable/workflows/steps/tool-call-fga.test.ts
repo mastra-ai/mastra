@@ -118,6 +118,53 @@ describe('durable tool-call FGA error propagation', () => {
     }
   });
 
+  it('denies reading the thread to recover a cross-process tool call before storage (#30123)', async () => {
+    const runId = 'durable-tool-memory-read-denied';
+    const denial = new Error('memory read denied');
+    denial.name = 'FGADeniedError';
+    const require = vi.fn(async (_user: unknown, { permission }: { permission: string }) => {
+      if (permission === 'memory:read') throw denial;
+    });
+    const fgaProvider: IFGAProvider = {
+      check: vi.fn(),
+      require,
+      filterAccessible: vi.fn(),
+    };
+    const recall = vi.fn().mockResolvedValue({ messages: [] });
+    const flushMessages = vi.fn();
+    toolRequiresApproval.mockResolvedValueOnce(true);
+    // A live list without the assistant tool call, as in a worker other than the LLM step's.
+    globalRunRegistry.set(runId, {
+      tools: { secureTool: { execute: vi.fn() } },
+      saveQueueManager: { flushMessages },
+      memory: { recall },
+      messageList: new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' }),
+    } as any);
+
+    try {
+      await expect(
+        (createDurableToolCallStep() as any).execute(
+          makeParams(runId, {
+            mastra: { getLogger: () => undefined, getServer: () => ({ fga: fgaProvider }) },
+            getInitData: () => ({
+              runId,
+              agentId: 'agent-1',
+              options: { actor: { actorKind: 'user' } },
+              requestContextEntries: { user: { id: 'user-1' } },
+              state: { threadId: 'thread-1', resourceId: 'resource-1', threadExists: true },
+            }),
+          }),
+        ),
+      ).rejects.toBe(denial);
+
+      expect(require).toHaveBeenCalledWith({ id: 'user-1' }, expect.objectContaining({ permission: 'memory:read' }));
+      expect(recall).not.toHaveBeenCalled();
+      expect(flushMessages).not.toHaveBeenCalled();
+    } finally {
+      globalRunRegistry.delete(runId);
+    }
+  });
+
   it('denies suspension-time message flushing for a system actor before storage', async () => {
     const runId = 'durable-tool-memory-write-denied-system-actor';
     const denial = new Error('memory write denied');

@@ -865,47 +865,77 @@ export function createDurableToolCallStep() {
           }).add(messages, 'memory');
         }
       }
-      // Replayed step transcripts supply context only, not messages to persist.
-      let contextMessageList = messageList;
-      let recoveredMessageList: MessageList | undefined;
-      // An evented step can run in another process than the LLM step that produced this
-      // tool call; that process's list then lacks the assistant message (#30123).
-      const missingInvocation =
-        workflowResumeData === undefined &&
-        !!state?.threadId &&
-        !(messageList ?? resumeMessageList)?.get.all.db().some(hasInvocation);
-      if (!contextMessageList || missingInvocation) {
+      const readTranscript = async () => {
         const llmOutput = await getStepResultAsync?.<DurableLLMStepOutput>(DurableStepIds.LLM_EXECUTION);
         const messageListState = await readMessageListState(params, llmOutput ?? {});
-        const transcript = messageListState
+        return messageListState
           ? createRunMessageList({
               mastra,
               threadId: state?.threadId,
               resourceId: state?.resourceId,
             }).deserialize(messageListState)
           : undefined;
-        contextMessageList ??= transcript;
+      };
+      // Replayed step transcripts supply context only; persisting goes through persistMessageList.
+      let transcript = messageList ? undefined : await readTranscript();
+      const contextMessageList = messageList ?? transcript;
+      let persistMessageList = messageList ?? resumeMessageList;
+
+      const authorizeMemory = (permission: Parameters<typeof authorizeDurableMemory>[1]['permission']) => {
+        const authorizationRequestContext =
+          registryEntry?.requestContext ?? restoreRequestContext(initData.requestContextEntries, requestContext);
+        return authorizeDurableMemory(getDurableMemoryAuthorizationChecks(registryEntry), {
+          mastra: mastra as Mastra | undefined,
+          user: authorizationRequestContext.get('user'),
+          threadId: state!.threadId!,
+          resourceId: state!.resourceId!,
+          agentId: initData.agentId,
+          requestContext: authorizationRequestContext,
+          permission,
+          actor: agentOptions.actor,
+        });
+      };
+
+      // An evented step can run in another process than the LLM step that produced this
+      // tool call; that process's list then lacks the assistant message (#30123). Called
+      // before recording suspension or approval metadata, the only writes that need it.
+      let recoveryAttempted = false;
+      const recoverInvocation = async () => {
+        if (recoveryAttempted) return;
+        recoveryAttempted = true;
+        if (
+          workflowResumeData !== undefined ||
+          !saveQueueManager ||
+          !memory ||
+          !state?.threadId ||
+          !state.resourceId ||
+          state.memoryConfig?.readOnly ||
+          persistMessageList?.get.all.db().some(hasInvocation)
+        ) {
+          return;
+        }
+        // Recovery exists only to write, so check that before reading the thread.
+        await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE);
+        await authorizeMemory(MastraFGAPermissions.MEMORY_READ);
         // A saved row is newer than any transcript copy: a sibling's resume may have cleared its metadata.
-        const persisted =
-          missingInvocation && memory && state?.threadId
-            ? (await memory.recall({ threadId: state.threadId, resourceId: state.resourceId, perPage: false })).messages
-                .reverse()
-                .find(hasInvocation)
-            : undefined;
-        const invocation = missingInvocation
-          ? (persisted ?? [...(transcript?.get.all.db() ?? [])].reverse().find(hasInvocation))
-          : undefined;
-        // Persist it with this step's suspension metadata, as the LLM step's process would have.
+        const { messages } = await memory.recall({
+          threadId: state.threadId,
+          resourceId: state.resourceId,
+          perPage: false,
+        });
+        transcript ??= await readTranscript();
+        const invocation =
+          [...messages].reverse().find(hasInvocation) ??
+          [...(transcript?.get.all.db() ?? [])].reverse().find(hasInvocation);
         // A throwaway list keeps the long-lived registry list from holding a copy that drifts from storage.
         if (invocation) {
-          recoveredMessageList = createRunMessageList({
+          persistMessageList = createRunMessageList({
             mastra,
-            threadId: state?.threadId,
-            resourceId: state?.resourceId,
+            threadId: state.threadId,
+            resourceId: state.resourceId,
           }).add(invocation, 'response');
         }
-      }
-      const persistMessageList = recoveredMessageList ?? messageList ?? resumeMessageList;
+      };
 
       // Every flush from this step re-checks run ownership inside the save
       // queue, so a superseded execution cannot write memory (#23734).
@@ -955,19 +985,6 @@ export function createDurableToolCallStep() {
           state.resourceId &&
           !state.memoryConfig?.readOnly
         ) {
-          const authorizationRequestContext =
-            registryEntry?.requestContext ?? restoreRequestContext(initData.requestContextEntries, requestContext);
-          const authorizeMemory = (permission: Parameters<typeof authorizeDurableMemory>[1]['permission']) =>
-            authorizeDurableMemory(getDurableMemoryAuthorizationChecks(registryEntry), {
-              mastra: mastra as Mastra | undefined,
-              user: authorizationRequestContext.get('user'),
-              threadId: state.threadId!,
-              resourceId: state.resourceId!,
-              agentId: initData.agentId,
-              requestContext: authorizationRequestContext,
-              permission,
-              actor: agentOptions.actor,
-            });
           await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE);
           if (!threadExists) await authorizeMemory(MastraFGAPermissions.MEMORY_READ);
         }
@@ -1302,6 +1319,7 @@ export function createDurableToolCallStep() {
         await stopGoalActivity({ agentId: initData.agentId, runId });
 
         // Add approval metadata to message before persisting
+        await recoverInvocation();
         addToolMetadata({ type: 'approval', resumeSchema: approvalResumeSchema });
 
         // Flush messages before suspension
@@ -1720,6 +1738,7 @@ export function createDurableToolCallStep() {
           await stopGoalActivity({ agentId: initData.agentId, runId });
 
           // Add approval metadata to message before persisting
+          await recoverInvocation();
           addToolMetadata({
             type: 'approval',
             resumeSchema: approvalResumeSchema,
@@ -1794,6 +1813,7 @@ export function createDurableToolCallStep() {
         };
 
         // Add suspension metadata to message before persisting
+        await recoverInvocation();
         addToolMetadata({
           type: 'suspension',
           suspendPayload,
