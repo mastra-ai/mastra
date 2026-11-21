@@ -103,6 +103,7 @@ function isWorkItemSource(value: unknown): value is WorkItemSource {
     value === 'github-dependabot-alert' ||
     value === 'vanta-vulnerability' ||
     value === 'detail-finding' ||
+    value === 'platform-alert' ||
     value === 'manual'
   );
 }

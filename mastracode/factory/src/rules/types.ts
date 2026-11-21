@@ -13,6 +13,7 @@ export type WorkItemSource =
   | 'github-dependabot-alert'
   | 'vanta-vulnerability'
   | 'detail-finding'
+  | 'platform-alert'
   | 'manual';
 
 export function externalSourceForWorkItem(
@@ -41,7 +42,9 @@ export function externalSourceForWorkItem(
                       ? ['vanta', 'vulnerability']
                       : source === 'detail-finding'
                         ? ['detail', 'finding']
-                        : ['factory', 'manual'];
+                        : source === 'platform-alert'
+                          ? ['mastra-alerts', 'alert']
+                          : ['factory', 'manual'];
   return { integrationId, type, externalId: sourceKey, ...(url ? { url } : {}) };
 }
 
@@ -75,6 +78,7 @@ export function workItemSource(source: ExternalWorkItemSource | null): WorkItemS
   if (source.integrationId === 'incidentio') return 'incidentio-follow-up';
   if (source.integrationId === 'vanta') return 'vanta-vulnerability';
   if (source.integrationId === 'detail') return 'detail-finding';
+  if (source.integrationId === 'mastra-alerts') return 'platform-alert';
   // Only GitHub, GitLab, Linear, Jira, and incident.io have provider-specific
   // rules; anything else (a Slack thread, say) is a plain work item, not a
   // mislabeled GitHub issue.
@@ -138,6 +142,7 @@ export const FACTORY_RULE_SOURCES = [
   'dependabotAlert',
   'vantaVulnerability',
   'detailFinding',
+  'platformAlert',
   'manual',
 ] as const;
 export type FactoryRuleSource = (typeof FACTORY_RULE_SOURCES)[number];
@@ -188,6 +193,14 @@ export const FACTORY_DEPENDABOT_EVENTS = ['alertObserved', 'alertClosed'] as con
 export type FactoryDependabotEventName = (typeof FACTORY_DEPENDABOT_EVENTS)[number];
 export const FACTORY_VANTA_EVENTS = ['vulnerabilityObserved', 'vulnerabilityClosed'] as const;
 export type FactoryVantaEventName = (typeof FACTORY_VANTA_EVENTS)[number];
+export const FACTORY_PLATFORM_ALERT_EVENTS = [
+  'alertOpened',
+  'alertRefired',
+  'alertSeverityRaised',
+  'alertResolved',
+  'alertThreadLinked',
+] as const;
+export type FactoryPlatformAlertEventName = (typeof FACTORY_PLATFORM_ALERT_EVENTS)[number];
 
 export type FactoryRuleJsonValue =
   | null
@@ -234,7 +247,18 @@ export type FactoryRuleActor =
   | { type: 'system'; id: string };
 
 export interface FactoryRuleIngressIdentity {
-  type: 'human' | 'agent' | 'toolResult' | 'github' | 'gitlab' | 'linear' | 'jira' | 'incidentio' | 'vanta' | 'rule';
+  type:
+    | 'human'
+    | 'agent'
+    | 'toolResult'
+    | 'github'
+    | 'gitlab'
+    | 'linear'
+    | 'jira'
+    | 'incidentio'
+    | 'vanta'
+    | 'platform-alert'
+    | 'rule';
   id: string;
 }
 
@@ -657,6 +681,53 @@ export interface FactoryVantaRuleContext extends FactoryRuleContextBase {
   };
 }
 
+/** A Mastra Alerts event as Platform's alert event log carries it (no secrets). */
+export interface PlatformAlertEvent {
+  eventId: string;
+  type: 'alert.opened' | 'alert.severity_raised' | 'alert.resolved' | 'alert.thread_linked';
+  occurredAt: string;
+  organizationId: string;
+  incident: {
+    id: string;
+    fingerprint: string;
+    eventType: string;
+    severity: 'info' | 'warning' | 'error' | 'critical';
+    openedAt: string;
+    resolvedAt: string | null;
+    eventCount: number;
+  };
+  /** What a card is keyed on: the rule (re-fires land on one card), else the fingerprint. */
+  workKey: { kind: 'rule'; ruleId: string } | { kind: 'fingerprint'; fingerprint: string };
+  projectId: string | null;
+  region: 'us' | 'eu';
+  product?: string;
+  environmentName?: string;
+  serviceId?: string;
+  rule?: { id: string; name: string; conditionSummary: string; windowSeconds: number; url: string };
+  summary: string;
+  repo?: { owner: string; name: string; defaultBranch: string; projectRoot?: string };
+  slack?: { teamId: string; channelId: string; ts: string };
+  capped?: true;
+}
+
+export interface FactoryPlatformAlertRuleContext extends FactoryRuleContextBase {
+  boardEvent?: BoardEventFacts;
+  item?: FactoryRuleItemContext;
+  board?: FactoryRuleBoard;
+  itemRevision?: number;
+  boardClosure?: FactoryRuleBoardClosure;
+  phase?: FactoryRulePhaseContext;
+  intake?: FactoryRuleIntakeTarget;
+  event: FactoryPlatformAlertEventName;
+  alert: PlatformAlertEvent;
+  /** The source key a new card files under: the work key plus its generation. */
+  sourceKey: string;
+  /** The card this alert's previous generation filed, when a re-fire came after the cooldown. */
+  previousCardId?: string;
+  /** Lowest severity that files a card. */
+  severityFloor: PlatformAlertEvent['incident']['severity'];
+}
+
 export type FactoryRuleHandler<TContext> = (
   context: Readonly<TContext>,
 ) => FactoryRuleDecision | void | Promise<FactoryRuleDecision | void>;
@@ -933,6 +1004,8 @@ export function factoryRuleSourceForWorkItem(source: WorkItemSource): FactoryRul
       return 'vantaVulnerability';
     case 'detail-finding':
       return 'detailFinding';
+    case 'platform-alert':
+      return 'platformAlert';
     case 'manual':
       return 'manual';
   }

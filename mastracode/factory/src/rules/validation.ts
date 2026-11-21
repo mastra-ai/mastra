@@ -50,6 +50,7 @@ const WORK_ITEM_SOURCES: readonly WorkItemSource[] = [
   'github-dependabot-alert',
   'vanta-vulnerability',
   'detail-finding',
+  'platform-alert',
   'manual',
 ];
 const REJECTION_CODES: readonly FactoryRuleRejectionCode[] = [
