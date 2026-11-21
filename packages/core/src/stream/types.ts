@@ -958,10 +958,13 @@ export type NetworkChunkType<OUTPUT = undefined> =
 /** Emitted only by `subscribeToThread({ withInitialHistory })`, before any other chunk. */
 export type ThreadHistoryChunk = BaseChunkType & { type: 'thread-history'; payload: ThreadHistoryPayload };
 
-/** A thread run's outcome, independent of stored-message replay. Suspension is resumable. */
+/**
+ * A thread run's outcome, independent of stored-message replay. Suspension is resumable. `interrupted` means the
+ * process running it shut down mid-run: recovery can continue it under the same runId, so it isn't final either.
+ */
 export type ThreadRunStatusChunk = BaseChunkType & {
   type: 'thread-run-status';
-  payload: { status: 'success' | 'failed' | 'aborted' | 'suspended' };
+  payload: { status: 'success' | 'failed' | 'aborted' | 'suspended' | 'interrupted' };
 };
 
 export type AgentChunkType<OUTPUT = undefined> =

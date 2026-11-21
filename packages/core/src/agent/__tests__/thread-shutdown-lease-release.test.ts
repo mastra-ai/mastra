@@ -284,6 +284,49 @@ describeForAllEngines('thread runs at shutdown', (engine: EngineVariant) => {
     await observer.mastra.shutdown({ drainTimeout: 200 });
   }, 20_000);
 
+  // #30480: recovery can continue a handed-back run under the same runId, so the hand-back isn't its final outcome.
+  it('reports a handed-back run as interrupted, not failed, to run-status followers', async () => {
+    const threadId = `shutdown-status-${engine}`;
+    for (let i = 0; i < 60; i++) {
+      llm.on(
+        { userMessage: 'keep running for status', sequenceIndex: i },
+        { toolCalls: [{ id: `call_status_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    const shared = new SharedLeases();
+    const events = new EventEmitter();
+    events.setMaxListeners(0);
+    const memory = new MockMemory();
+    const counter = { ticks: 0 };
+    const running = replica(shared, events, memory, { tick: tickTool(counter) });
+    const observer = replica(shared, events, memory, {});
+    const subscription = await observer.agent.subscribeToThread({
+      resourceId: RESOURCE,
+      threadId,
+      withRunStatus: true,
+    });
+    const statuses: string[] = [];
+    void (async () => {
+      for await (const part of subscription.stream) {
+        if (part.type === 'thread-run-status') statuses.push(part.payload.status);
+      }
+    })();
+
+    await startStream(running.agent, 'keep running for status', threadId, {});
+    await vi.waitFor(() => expect(counter.ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+
+    await running.mastra.shutdown({ drainTimeout: 200 });
+    running.pubsub.dead = true;
+
+    await vi.waitFor(() => expect(statuses).toEqual(['interrupted']), { timeout: 5_000 });
+    // Past the lease TTL: nothing turns the hand-back into a final outcome.
+    await new Promise(resolve => setTimeout(resolve, 900));
+    expect(statuses).toEqual(['interrupted']);
+
+    subscription.unsubscribe();
+    await observer.mastra.shutdown({ drainTimeout: 200 });
+  }, 20_000);
+
   // Only non-durable runs resume in the process that holds their thread run; durable resumes go through recovery.
   it.skipIf(isDurableEngineVariant(engine))(
     'stops the resumed segment of a run still parked on a sibling suspension and frees its thread',
