@@ -7,7 +7,7 @@ import { createSupportAgent } from './agents/support-agent.ts';
 import { createKnowledge } from './knowledge/index.ts';
 import { seedHostedExample } from './knowledge/seed-on-startup.ts';
 import { createAuth, createReviewerAuthority, createSupportAuthorization, loadCredentials } from './server/access.ts';
-import { hostedMode, serverHost, storageConfiguration } from './database.ts';
+import { hostedMode, serverHost, storageConfiguration } from './database/database.ts';
 import { createStorage } from './storage.ts';
 import { createHostedIdentity, hasHostedOAuthConfiguration } from './server/hosted-identity.ts';
 import { createPlatformIdentity, platformAuthMiddleware } from './server/platform-identity.ts';

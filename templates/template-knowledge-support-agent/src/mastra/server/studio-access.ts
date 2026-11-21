@@ -28,7 +28,7 @@ import { GET_SYSTEM_PACKAGES_ROUTE } from '@mastra/server/handlers/system';
 import { LIST_TOOLS_ROUTE } from '@mastra/server/handlers/tools';
 import type { Memory } from '@mastra/memory';
 import { MemoryPG } from '@mastra/pg';
-import { hostedMode } from '../database.ts';
+import { hostedMode } from '../database/database.ts';
 import { withWriterLock, WriterBusyError } from '../knowledge/writer-lock.ts';
 
 type RoutePolicy = (input: {

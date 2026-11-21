@@ -1,6 +1,6 @@
 import { LibSQLStore } from '@mastra/libsql';
 import { PostgresStore } from '@mastra/pg';
-import type { StorageConfiguration } from './database.ts';
+import type { StorageConfiguration } from './database/database.ts';
 
 /** Knowledge, Memory and workflow checkpoints always use the same native store. */
 export function createStorage(id: string, configuration: StorageConfiguration) {

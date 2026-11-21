@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import { mkdir, writeFile, chmod, rm } from 'node:fs/promises';
 import { resolve, dirname, delimiter } from 'node:path';
 import { runtimeExample } from '../src/examples/runtime.ts';
-import { storageConfiguration } from '../src/mastra/database.ts';
+import { storageConfiguration } from '../src/mastra/database/database.ts';
 
 const { profiles: exampleProfiles, reviewers: exampleReviewers, role: exampleStudioRole } = runtimeExample;
 const database = storageConfiguration();

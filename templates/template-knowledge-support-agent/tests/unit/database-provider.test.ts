@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { resolveDatabaseConnection } from '../../src/mastra/database-provider.ts';
+import { resolveDatabaseConnection } from '../../src/mastra/database/database-provider.ts';
 
 const databaseUrl = 'postgresql://support:synthetic%40password@example.invalid/support?sslmode=require';
 const turso = { TURSO_DATABASE_URL: 'libsql://support.example.invalid', TURSO_AUTH_TOKEN: 'example-token' };

@@ -8,7 +8,7 @@ import {
   databaseUrlForPath,
   storageConfiguration,
   type StorageConfiguration,
-} from '../database.ts';
+} from '../database/database.ts';
 
 // PostgreSQL advisory locks are database-scoped. Keep these namespace keys stable across workers and releases.
 const postgresWriterKey = [0x4b534147, 0x57524954];
