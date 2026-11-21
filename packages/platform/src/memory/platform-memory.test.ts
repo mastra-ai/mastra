@@ -125,8 +125,14 @@ function fakeMemoryApi() {
       });
     }
     if ((m = path.match(/^\/threads\/([^/]+)$/))) {
-      const t = thread(decodeURIComponent(m[1]!));
-      return t ? json(t) : json({ title: 'Not found' }, 404);
+      const id = decodeURIComponent(m[1]!);
+      const stored = threads.get(id);
+      if (!stored) return json({ title: 'Not found' }, 404);
+      if (method === 'PATCH') {
+        if (body.title !== undefined) stored.title = body.title;
+        if (body.metadata !== undefined) stored.metadata = body.metadata;
+      }
+      return json(thread(id));
     }
     if (path === '/threads' && method === 'GET') {
       const page = Number(url.searchParams.get('page') ?? 0);
@@ -187,6 +193,24 @@ describe('PlatformMemory', () => {
     });
     return { agent, memory };
   }
+
+  it('saves a generated title for a new hosted thread by default', async () => {
+    const { agent, memory } = agentWith([]);
+    await agent.generate('Help me plan a trip.', { memory: { thread: 'untitled', resource: 'user' } });
+
+    await expect.poll(async () => (await memory.client.getThread('untitled'))?.title).toBe('Noted.');
+  });
+
+  it('leaves the hosted thread untitled when title generation is disabled for the run', async () => {
+    const prompts: unknown[] = [];
+    const { agent, memory } = agentWith(prompts);
+    await agent.generate('Help me plan a trip.', {
+      memory: { thread: 'untitled', resource: 'user', options: { generateTitle: false } },
+    });
+
+    expect(prompts).toHaveLength(1);
+    expect((await memory.client.getThread('untitled'))?.title).toBe('');
+  });
 
   it('paginates across multiple threads and reports full message counts', async () => {
     const { memory } = agentWith([]);
@@ -371,7 +395,9 @@ describe('PlatformMemory', () => {
   it("keeps a read-only run read-only but still gives it the thread's stored context", async () => {
     const prompts: any[] = [];
     const { agent } = agentWith(prompts);
-    await agent.generate('My name is Ada.', { memory: { thread: 'thread_ro', resource: 'user_1' } });
+    await agent.generate('My name is Ada.', {
+      memory: { thread: 'thread_ro', resource: 'user_1', options: { generateTitle: false } },
+    });
     api.observe('<observations>\n* User prefers TypeScript.\n</observations>');
     const stored = structuredClone(api.messages.get('thread_ro'));
     const before = api.requests.length;

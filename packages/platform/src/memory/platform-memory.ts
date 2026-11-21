@@ -202,8 +202,13 @@ export class PlatformMemory extends MastraMemory {
   readonly client: PlatformMemoryClient;
 
   constructor(options: PlatformMemoryOptions = {}) {
-    super({ id: options.id ?? 'platform-memory', name: 'PlatformMemory' });
+    super({ id: options.id ?? 'platform-memory', name: 'PlatformMemory', options: { generateTitle: true } });
     this.client = options.client ?? new PlatformMemoryClient(options);
+  }
+
+  override getMergedThreadConfig(config?: MemoryConfigInternal): MemoryConfigInternal {
+    const merged = super.getMergedThreadConfig(config);
+    return merged.readOnly ? { ...merged, generateTitle: false } : merged;
   }
 
   // The instance runs the real @mastra/memory processors; these only ship the message list
