@@ -277,8 +277,6 @@ const AGENT_THREAD_LEASE_TTL_MS = AGENT_LEASE_TTL_MS;
 const AGENT_THREAD_LEASE_RENEW_INTERVAL_MS = AGENT_LEASE_RENEW_INTERVAL_MS;
 /** Lease checks a forwarder waits for its probe to come back before publishing a new one. */
 const FORWARDED_LEASE_PROBE_RETRY_CHECKS = 5;
-/** Probes one lease loss keeps valid; a retry past this many stops honouring the oldest. */
-const FORWARDED_LEASE_PROBES_PER_EPISODE = 8;
 /**
  * TTL for a suspended run's warm in-memory state — the parked thread-run record
  * (swept by #sweepStaleSuspendedRecords). The Mastra internal-workflow registry
@@ -699,18 +697,17 @@ type ForwardedIdleSignal = {
   leaseGone?: boolean;
 };
 
-type ForwardedIdleLeaseProbe = {
-  /** The forwards whose run had lost the lease on two checks when the probe was published. */
+/** One lease loss. Every probe published during it carries `id`; any coming back proves the reader caught up. */
+type ForwardedIdleLeaseEpisode = {
+  id: string;
+  /** The forwards whose run had lost the lease on two checks when the episode started. */
   signalIds: Set<string>;
-  /** The thread's active stream when the lease was read. */
+  /** The thread's active stream when the lease was read at the start of the episode. */
   streamBeforeRead: string | undefined;
-};
-
-/** The probes published during one lease loss, by probe id. Any of them coming back proves the reader caught up. */
-type ForwardedIdleLeaseProbes = {
-  /** The lease check that published the latest probe. */
-  publishedAtCheck: number;
-  probes: Map<string, ForwardedIdleLeaseProbe>;
+  /** The lease check that published the latest probe, or `undefined` until one publishes. */
+  publishedAtCheck: number | undefined;
+  /** Probes published so far, for logs only. */
+  seq: number;
 };
 
 type AgentThreadRuntimeState = {
@@ -754,11 +751,10 @@ type AgentThreadRuntimeState = {
   /** Per thread key, the timer that checks the lease while `forwardedIdleSignalsByThread` holds messages for it. */
   forwardedIdleLeaseChecks: Map<string, ReturnType<typeof setInterval>>;
   /**
-   * Per thread key, the probes lease checks published during the current lease loss before queueing held forwards
-   * again, and the forwards each may queue once this runtime's thread reader reads it back
-   * (see `#watchForwardedIdleLease`).
+   * Per thread key, the current lease loss whose probes may queue held forwards again once this runtime's thread
+   * reader reads one back (see `#watchForwardedIdleLease`).
    */
-  forwardedIdleLeaseProbes: Map<string, ForwardedIdleLeaseProbes>;
+  forwardedIdleLeaseEpisodes: Map<string, ForwardedIdleLeaseEpisode>;
   /**
    * Runs the suspended-run TTL sweep evicted, mapped to when their lease was last
    * known to be extended. The sweep keeps their lease, so until it lapses an idle
@@ -953,7 +949,7 @@ type AgentThreadStreamRuntimeEvent =
   // the run's trim keeps it for a forwarder that reads the thread after that run ended.
   | { type: 'user-message-admitted'; signalId: string; admittedRunId: string }
   // A forwarder's lease check, read back by its own thread reader once that reader is past every earlier admission.
-  | { type: 'forwarded-lease-probe'; probeId: string }
+  | { type: 'forwarded-lease-probe'; episodeId: string; seq: number }
   | { type: 'run-aborted'; runId: string; streamId?: string; superseded?: boolean }
   | { type: 'run-failed'; runId: string; streamId?: string; error: string }
   | { type: 'signal-enqueued'; runId: string; signal: SerializableAgentSignal; sourceId: string; preRun?: boolean }
@@ -1054,7 +1050,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     pendingIdleSignalsByThread: new Map(),
     forwardedIdleSignalsByThread: new Map(),
     forwardedIdleLeaseChecks: new Map(),
-    forwardedIdleLeaseProbes: new Map(),
+    forwardedIdleLeaseEpisodes: new Map(),
     sweptLeasedRunIds: new Map(),
     pendingLeaseRenewals: new Map(),
     drainingIdleSignalsByThread: new Map(),
@@ -2259,10 +2255,10 @@ export class AgentThreadStreamRuntime {
       } else if (data?.type === 'user-message-admitted') {
         this.#settleForwardedIdleSignal(state, key, data.signalId, data.admittedRunId);
       } else if (data?.type === 'forwarded-lease-probe') {
-        const probe = state.forwardedIdleLeaseProbes.get(key)?.probes.get(data.probeId);
-        if (probe) {
-          state.forwardedIdleLeaseProbes.delete(key);
-          await this.#requeueLeaseGoneForwards(state, resolvedPubSub, key, probe);
+        const episode = state.forwardedIdleLeaseEpisodes.get(key);
+        if (episode?.id === data.episodeId) {
+          state.forwardedIdleLeaseEpisodes.delete(key);
+          await this.#requeueLeaseGoneForwards(state, resolvedPubSub, key, episode);
         }
       } else if (data?.type === 'user-message-presentation') {
         // Owners that predate user-message-admitted only announce the admission this way.
@@ -3552,7 +3548,7 @@ export class AgentThreadStreamRuntime {
     state.forwardedIdleSignalsByThread.delete(key);
     clearInterval(state.forwardedIdleLeaseChecks.get(key));
     state.forwardedIdleLeaseChecks.delete(key);
-    state.forwardedIdleLeaseProbes.delete(key);
+    state.forwardedIdleLeaseEpisodes.delete(key);
   }
 
   /**
@@ -3562,14 +3558,15 @@ export class AgentThreadStreamRuntime {
    * the check publishes a probe on the thread and queues them only once the reader reads that probe back. On a broker
    * that delivers a topic in order to every reader (Redis Streams), the reader has by then handled every admission
    * published before the probe, which includes any admission for those forwards: the owner sends it before it lets go.
-   * A probe that has not come back after a few checks is followed by another, in case the broker dropped it, but the
-   * earlier ones stay valid: a reader that lags by more than the retry interval still reads one of them back, and
-   * any of them proves it has passed every admission published before it. The probes of one lease loss are dropped
-   * together when a check sees the lease name a covered run again or the forwards stop being tracked. At most
-   * `FORWARDED_LEASE_PROBES_PER_EPISODE` stay valid; a published retry beyond that drops the oldest, so a reader that
-   * stays more than that many retry intervals behind waits until its lag shrinks. A probe whose publish fails is
-   * dropped alone. A run that regains the lease, admits a forward and lets go again between two checks is not seen,
-   * so a probe published before that admission can still queue the forward a second time.
+   * A probe that has not come back after a few checks is followed by another, in case the broker dropped it. All
+   * probes of one lease loss carry the same episode id, and only that id is kept, so a reader that lags by any number
+   * of retries still reads one back: every probe of the episode is published after the lease was seen gone twice,
+   * and the owner publishes its admission before releasing the lease, so any probe of the current episode that this
+   * runtime's ordered reader reads back proves every admission published before it has been handled. A probe whose
+   * id is not the current episode's is ignored. The episode ends when a check sees the lease name a covered run
+   * again, or when the forwards stop being tracked; a later loss starts a new episode with a new id. A failed publish
+   * leaves the episode as it was. A run that regains the lease, admits a forward and lets go again between two
+   * checks is not seen, so a probe published before that admission can still queue the forward a second time.
    */
   #watchForwardedIdleLease(state: AgentThreadRuntimeState, pubsub: PubSub | undefined, key: string) {
     if (state.forwardedIdleLeaseChecks.has(key)) return;
@@ -3591,44 +3588,42 @@ export class AgentThreadStreamRuntime {
         return;
       const holder = owner === undefined ? undefined : forwardedSignalRunId(owner);
       checks++;
-      const episode = state.forwardedIdleLeaseProbes.get(key);
+      const episode = state.forwardedIdleLeaseEpisodes.get(key);
       const ended = new Set<string>();
       for (const [signalId, entry] of forwarded) {
         if (entry.runId === holder) {
           entry.leaseGone = false;
           // The run holds the lease again and may admit the forward after the probe, which the reader would then
           // read first. That lease loss is over, so its probes must not queue anything.
-          if (episode && [...episode.probes.values()].some(probe => probe.signalIds.has(signalId))) {
-            state.forwardedIdleLeaseProbes.delete(key);
+          if (episode?.signalIds.has(signalId) && state.forwardedIdleLeaseEpisodes.get(key) === episode) {
+            state.forwardedIdleLeaseEpisodes.delete(key);
           }
         } else if (entry.leaseGone) ended.add(entry.runId);
         else entry.leaseGone = true;
       }
       if (ended.size === 0) return;
-      const current = state.forwardedIdleLeaseProbes.get(key);
-      if (current && checks - current.publishedAtCheck < FORWARDED_LEASE_PROBE_RETRY_CHECKS) return;
-      const probeId = globalThis.crypto.randomUUID();
-      const probes = current ?? { publishedAtCheck: checks, probes: new Map() };
-      const retriedAtCheck = probes.publishedAtCheck;
-      probes.publishedAtCheck = checks;
-      probes.probes.set(probeId, {
-        signalIds: new Set([...forwarded].filter(([, entry]) => ended.has(entry.runId)).map(([signalId]) => signalId)),
-        streamBeforeRead,
-      });
-      state.forwardedIdleLeaseProbes.set(key, probes);
-      try {
-        await this.#publishAndWait(pubsub, key, { type: 'forwarded-lease-probe', probeId });
-        if (probes.probes.size > FORWARDED_LEASE_PROBES_PER_EPISODE) {
-          probes.probes.delete(probes.probes.keys().next().value!);
-        }
-      } catch (error) {
-        probes.probes.delete(probeId);
-        probes.publishedAtCheck = retriedAtCheck;
-        if (probes.probes.size === 0 && state.forwardedIdleLeaseProbes.get(key) === probes) {
-          state.forwardedIdleLeaseProbes.delete(key);
-        }
-        throw error;
+      let current = state.forwardedIdleLeaseEpisodes.get(key);
+      if (
+        current?.publishedAtCheck !== undefined &&
+        checks - current.publishedAtCheck < FORWARDED_LEASE_PROBE_RETRY_CHECKS
+      ) {
+        return;
       }
+      if (!current) {
+        current = {
+          id: globalThis.crypto.randomUUID(),
+          signalIds: new Set(
+            [...forwarded].filter(([, entry]) => ended.has(entry.runId)).map(([signalId]) => signalId),
+          ),
+          streamBeforeRead,
+          publishedAtCheck: undefined,
+          seq: 0,
+        };
+        state.forwardedIdleLeaseEpisodes.set(key, current);
+      }
+      const seq = ++current.seq;
+      await this.#publishAndWait(pubsub, key, { type: 'forwarded-lease-probe', episodeId: current.id, seq });
+      current.publishedAtCheck = checks;
     };
     // A slow lease read must not overlap the next tick: two overlapping reads would count as two checks.
     const check = setInterval(() => {
@@ -3645,18 +3640,18 @@ export class AgentThreadStreamRuntime {
   }
 
   /**
-   * Queue again the forwards `probe` covered that are still held and whose run still lacks the lease, once this
-   * runtime's thread reader has read the probe back.
+   * Queue again the forwards `episode` covered that are still held and whose run still lacks the lease, once this
+   * runtime's thread reader has read one of its probes back.
    */
   async #requeueLeaseGoneForwards(
     state: AgentThreadRuntimeState,
     pubsub: PubSub | undefined,
     key: string,
-    probe: ForwardedIdleLeaseProbe,
+    episode: ForwardedIdleLeaseEpisode,
   ) {
     const forwarded = state.forwardedIdleSignalsByThread.get(key);
     if (!forwarded) return;
-    const lapsed = [...forwarded].filter(([signalId, entry]) => probe.signalIds.has(signalId) && entry.leaseGone);
+    const lapsed = [...forwarded].filter(([signalId, entry]) => episode.signalIds.has(signalId) && entry.leaseGone);
     if (lapsed.length === 0) return;
     for (const [signalId] of lapsed) forwarded.delete(signalId);
     if (forwarded.size === 0) this.#stopTrackingForwards(state, key);
@@ -3671,7 +3666,7 @@ export class AgentThreadStreamRuntime {
       // The drain still runs either way: it waits while any run holds the thread.
       if (
         !state.threadRunsById.has(runId) &&
-        state.activeThreadStreamIds.get(key) === probe.streamBeforeRead &&
+        state.activeThreadStreamIds.get(key) === episode.streamBeforeRead &&
         state.activeThreadRunIds.get(key) === runId
       ) {
         state.activeThreadRunIds.delete(key);
@@ -4747,7 +4742,7 @@ export class AgentThreadStreamRuntime {
     state.forwardedIdleSignalsByThread.clear();
     for (const check of state.forwardedIdleLeaseChecks.values()) clearInterval(check);
     state.forwardedIdleLeaseChecks.clear();
-    state.forwardedIdleLeaseProbes.clear();
+    state.forwardedIdleLeaseEpisodes.clear();
     state.sweptLeasedRunIds.clear();
     state.pendingLeaseRenewals.clear();
     state.leaseRetakes.clear();
