@@ -178,6 +178,103 @@ export interface ComputerPosition {
   y: number;
 }
 
+/** Screen-space rectangle in the same pixel coordinates as the computer tools. */
+export interface AccessibilityBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** One accessible object in an {@link AccessibilitySnapshot}. */
+export interface AccessibilityNode {
+  /** Snapshot-scoped reference to pass to `act` / `setText`. */
+  ref: string;
+  role: string;
+  name: string;
+  states: string[];
+  actions: string[];
+  value?: string;
+  bounds?: AccessibilityBounds;
+  /** Depth below the root (0 = application). */
+  depth: number;
+}
+
+/** A read of the desktop's accessibility tree. Refs are valid only for this snapshot. */
+export interface AccessibilitySnapshot {
+  snapshotId: string;
+  nodes: AccessibilityNode[];
+  /** True when `maxDepth` or `maxNodes` cut the tree short. */
+  truncated: boolean;
+}
+
+/** Options for {@link ComputerAccessibility.getTree}. */
+export interface AccessibilityTreeOptions {
+  /** Only include the application with this name. */
+  app?: string;
+  maxDepth?: number;
+  maxNodes?: number;
+}
+
+/**
+ * Optional semantic (accessibility-bus) control of a {@link SandboxComputer}.
+ *
+ * A ref names one accessible object as seen in one snapshot. Implementations
+ * must throw {@link AccessibilityRefError} rather than act whenever they
+ * cannot show the ref still names the same object: a ref never acts on a
+ * different control.
+ */
+export interface ComputerAccessibility {
+  /** Read the accessibility tree. */
+  getTree(options?: AccessibilityTreeOptions): Promise<AccessibilitySnapshot>;
+  /** Invoke a named action (e.g. `click`) on the object a ref names. */
+  act(ref: string, action: string): Promise<void>;
+  /** Replace the text of the editable object a ref names. */
+  setText(ref: string, text: string): Promise<void>;
+}
+
+/** Why an accessibility ref was refused. `gone` means it could not be resolved safely. */
+export type AccessibilityRefErrorReason = 'malformed' | 'generation' | 'snapshot-missing' | 'gone' | 'changed';
+
+const ACCESSIBILITY_REF_ERROR_REASONS: readonly AccessibilityRefErrorReason[] = [
+  'malformed',
+  'generation',
+  'snapshot-missing',
+  'gone',
+  'changed',
+];
+
+/** Thrown when an accessibility ref no longer provably names the object it was read from. */
+export class AccessibilityRefError extends Error {
+  override readonly name = 'AccessibilityRefError';
+  readonly ref: string;
+  readonly reason: AccessibilityRefErrorReason;
+
+  constructor(ref: string, reason: AccessibilityRefErrorReason, message?: string) {
+    super(message ?? accessibilityRefErrorMessage(ref, reason));
+    this.ref = ref;
+    this.reason = reason;
+  }
+}
+
+/** Default {@link AccessibilityRefError} message. */
+export function accessibilityRefErrorMessage(ref: string, reason: AccessibilityRefErrorReason): string {
+  return `Accessibility ref ${ref} is no longer valid (${reason}); read the tree again`;
+}
+
+/**
+ * Recognise an {@link AccessibilityRefError}, including one thrown by another
+ * copy of `@mastra/core` (matched by `name`, a string `ref` and a valid `reason`).
+ */
+export function isAccessibilityRefError(
+  error: unknown,
+): error is Pick<AccessibilityRefError, 'name' | 'ref' | 'reason'> & Error {
+  if (error instanceof AccessibilityRefError) return true;
+  if (!(error instanceof Error) || error.name !== 'AccessibilityRefError') return false;
+  const { ref, reason } = error as Partial<AccessibilityRefError>;
+  return typeof ref === 'string' && ACCESSIBILITY_REF_ERROR_REASONS.includes(reason as AccessibilityRefErrorReason);
+}
+
 /**
  * Optional computer-use (desktop) capability for sandboxes that run a GUI
  * desktop environment.
@@ -243,6 +340,13 @@ export interface SandboxComputer {
    * unavailable. Optional — not all providers expose a viewer.
    */
   streamUrl?(): Promise<string | null>;
+
+  /**
+   * Semantic control through the desktop's accessibility tree. Optional —
+   * when present, the workspace also emits the
+   * `mastra_workspace_computer_accessibility_*` tools.
+   */
+  accessibility?: ComputerAccessibility;
 }
 
 /**
@@ -271,6 +375,22 @@ export function supportsComputer(
     typeof computer.press === 'function' &&
     typeof computer.getScreenSize === 'function' &&
     typeof computer.getCursorPosition === 'function'
+  );
+}
+
+/**
+ * Type guard: does this sandbox support the computer capability **and** its
+ * optional accessibility part?
+ */
+export function supportsComputerAccessibility(
+  sandbox: WorkspaceSandbox,
+): sandbox is WorkspaceSandbox & { computer: SandboxComputer & { accessibility: ComputerAccessibility } } {
+  if (!supportsComputer(sandbox)) return false;
+  const accessibility = sandbox.computer.accessibility;
+  return (
+    typeof accessibility?.getTree === 'function' &&
+    typeof accessibility.act === 'function' &&
+    typeof accessibility.setText === 'function'
   );
 }
 

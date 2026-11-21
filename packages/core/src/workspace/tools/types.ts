@@ -291,8 +291,9 @@ export interface ComputerToolConfig extends WorkspaceToolConfig {
   /**
    * For action tools (click/type/scroll/…): attach a fresh screenshot to the
    * tool result after the action completes, so computer-use loops see the
-   * resulting desktop state without an extra screenshot call. Default: true.
-   * Ignored by the screenshot tool itself.
+   * resulting desktop state without an extra screenshot call. Default: true,
+   * except for the accessibility tools (default: false — the tree is the
+   * cheaper read). Ignored by the screenshot tool itself.
    */
   screenshotAfterAction?: boolean;
   /**

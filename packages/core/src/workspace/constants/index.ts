@@ -43,6 +43,9 @@ export const WORKSPACE_TOOLS = {
     SCROLL: `${WORKSPACE_TOOLS_PREFIX}_computer_scroll` as const,
     GET_SCREEN_INFO: `${WORKSPACE_TOOLS_PREFIX}_computer_get_screen_info` as const,
     WAIT: `${WORKSPACE_TOOLS_PREFIX}_computer_wait` as const,
+    ACCESSIBILITY_TREE: `${WORKSPACE_TOOLS_PREFIX}_computer_accessibility_tree` as const,
+    ACCESSIBILITY_ACT: `${WORKSPACE_TOOLS_PREFIX}_computer_accessibility_act` as const,
+    ACCESSIBILITY_SET_TEXT: `${WORKSPACE_TOOLS_PREFIX}_computer_accessibility_set_text` as const,
   },
   SEARCH: {
     SEARCH: `${WORKSPACE_TOOLS_PREFIX}_search` as const,
