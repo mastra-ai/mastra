@@ -142,7 +142,7 @@ async function withPostgresWriter<T>(connectionString: string, operation: (clien
 }
 
 type LibSQLConfiguration = Extract<StoreConfiguration, { backend: 'libsql' }>;
-type WriterContext = { libsql: LibSQLConfiguration; postgres?: never } | { libsql?: never; postgres: DbClient };
+export type WriterContext = { libsql: LibSQLConfiguration; postgres?: never } | { libsql?: never; postgres: DbClient };
 
 export async function withWriterLock<T>(
   operation: (context: WriterContext) => Promise<T>,

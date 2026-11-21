@@ -19,6 +19,7 @@ const bounds = {
   records: 3,
 };
 type Evidence = SupportRecord & { ref: string };
+type PageLocation = Pick<KnowledgePage, 'id' | 'scopeId' | 'isScope' | 'key' | 'parentId' | 'version'>;
 export type History = {
   status: 'ready' | 'empty' | 'no-relevant-records' | 'partial' | 'unavailable';
   records: Evidence[];
@@ -28,6 +29,10 @@ function record(body = ''): SupportRecord | undefined {
   if (body.length > MAX_SUPPORT_RECORD_BODY_LENGTH) throw new Error('Support record exceeds the read bound');
   const envelope = supportRecordEnvelope(body);
   if (envelope) return validateSupportRecord(JSON.parse(envelope.value));
+}
+
+function location({ id, scopeId, isScope, key, parentId, version }: KnowledgePage): PageLocation {
+  return { id, scopeId, isScope, key, parentId, version };
 }
 
 /** Scoped native search, verified canonical ancestry, and a bounded small-corpus fallback. */
@@ -70,12 +75,12 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
     };
     // Search tags as well as question words: a tag may be absent from title and prose.
     const queries = [...new Set([...topics, ...words])];
-    // The fallback covers omitted queries when enumeration completes and reports partial when it cannot.
+    // Enumeration and note listing can establish complete coverage even if search fails, reaches
+    // its hit limit, or omits queries.
     for (const query of queries.slice(0, bounds.queries)) {
       try {
         const hits = await store.searchPages({ query, scopeIds: [customer.id], read, limit: bounds.hits });
         historyReadable = true;
-        if (hits.length >= bounds.hits) partial = true;
         for (const hit of hits) {
           add(hit.page);
           if (hit.type === 'note' && candidateIds.has(hit.page.id)) {
@@ -85,7 +90,7 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
           }
         }
       } catch {
-        partial = true;
+        // Scoped enumeration can still find the evidence.
       }
     }
     // Preserve exhaustive behavior for small customer scopes, including note-only matches and
@@ -116,17 +121,20 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
     if (!historyReadable) return finish('unavailable');
     // A search or list snapshot can outlive a deletion. Use only the pages still readable here.
     const ids = [...candidateIds];
-    const candidates = new Map<string, KnowledgePage>();
+    const candidateBodies = new Map<string, string | undefined>();
+    const pages = new Map<string, PageLocation>();
     for (let index = 0; index < ids.length; index += bounds.batch) {
       try {
         const current = await store.getPages({ ids: ids.slice(index, index + bounds.batch), read });
-        for (const page of current)
-          if (page.scopeId === customer.id && !page.isScope && !page.deletedAt) candidates.set(page.id, page);
+        for (const page of current) {
+          if (page.scopeId !== customer.id || page.isScope || page.deletedAt) continue;
+          pages.set(page.id, location(page));
+          candidateBodies.set(page.id, page.body);
+        }
       } catch {
         partial = true;
       }
     }
-    const pages = new Map(candidates);
     // Search hits have no canonical path. Resolve parents in batches using the public store API,
     // then reject foreign scopes, missing/deleted ancestors, cycles, and paths outside allowed roots.
     for (let depth = 0; depth < MAX_KNOWLEDGE_PAGE_DEPTH; depth++) {
@@ -137,7 +145,8 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
       for (let index = 0; index < missing.length; index += bounds.batch) {
         try {
           const parents = await store.getPages({ ids: missing.slice(index, index + bounds.batch), read });
-          for (const page of parents) if (page.scopeId === customer.id && !page.deletedAt) pages.set(page.id, page);
+          for (const page of parents)
+            if (page.scopeId === customer.id && !page.deletedAt) pages.set(page.id, location(page));
         } catch {
           partial = true;
         }
@@ -145,15 +154,31 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
     }
     let noteCounts: Record<string, number> = {};
     try {
-      noteCounts = await store.countNotes({ pageIds: [...candidates.keys()], read });
+      noteCounts = await store.countNotes({ pageIds: [...candidateBodies.keys()], read });
     } catch {
       partial = true;
     }
-    const pagesToInspect = candidates.values();
-    async function inspect(page: KnowledgePage) {
+    async function scanNotes(pageId: string, visit: (note: KnowledgeNote) => void) {
+      let cursor: string | undefined;
+      let count = 0;
+      do {
+        const batch = await store.listNotes({ pageId, read, cursor, limit: bounds.batch });
+        for (const note of batch.notes.slice(0, bounds.notes - count)) {
+          count++;
+          visit(note);
+        }
+        cursor = batch.nextCursor;
+        if (cursor && count >= bounds.notes) {
+          partial = true;
+          break;
+        }
+      } while (cursor);
+    }
+    const pagesToInspect = candidateBodies.entries();
+    async function inspect(pageId: string, body: string | undefined) {
       const path: string[] = [];
-      const ancestry = new Map<string, KnowledgePage>();
-      let current: KnowledgePage | undefined = page;
+      const ancestry = new Map<string, PageLocation>();
+      let current = pages.get(pageId);
       while (current && current.id !== customer.id && path.length < MAX_KNOWLEDGE_PAGE_DEPTH) {
         if (ancestry.has(current.id) || current.scopeId !== customer.id || current.isScope || !current.key) break;
         ancestry.set(current.id, current);
@@ -174,14 +199,15 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
       const evidence: Evidence[] = [];
       inspected++;
       try {
-        const parsed = record(page.body);
+        const parsed = record(body);
         if (parsed) evidence.push({ ...parsed, ref });
       } catch {
         partial = true;
       }
       const seenNotes = new Set<string>();
-      const includeNote = (note: KnowledgeNote) => {
-        if (seenNotes.has(note.id) || note.pageId !== page.id) return;
+      const noteEvidence: Array<{ id: string; version: number; listed: boolean; record: Evidence }> = [];
+      const includeNote = (note: KnowledgeNote, listed: boolean) => {
+        if (seenNotes.has(note.id) || note.pageId !== pageId || note.deletedAt) return;
         seenNotes.add(note.id);
         if (
           !/^<!-- knowledge-review:[a-f0-9-]{36}:[a-f0-9]{64} -->\nReviewed by: /u.test(note.text) ||
@@ -191,40 +217,60 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
         try {
           if (note.text.length > 8000) throw new Error('Approved note exceeds the read bound');
           const parsed = record(note.text);
-          if (parsed?.state === 'approved') evidence.push({ ...parsed, ref: `${ref}?note=${note.id}` });
+          if (parsed?.state === 'approved')
+            noteEvidence.push({
+              id: note.id,
+              version: note.version,
+              listed,
+              record: { ...parsed, ref: `${ref}?note=${note.id}` },
+            });
         } catch {
           partial = true;
         }
       };
-      if (noteCounts[page.id] !== 0) {
+      if (noteCounts[pageId] !== 0) {
         try {
-          let cursor: string | undefined;
-          let count = 0;
-          do {
-            const batch = await store.listNotes({ pageId: page.id, read, cursor, limit: bounds.batch });
-            for (const note of batch.notes.slice(0, bounds.notes - count)) {
-              count++;
-              includeNote(note);
-            }
-            cursor = batch.nextCursor;
-            if (cursor && count >= bounds.notes) {
-              partial = true;
-              break;
-            }
-          } while (cursor);
+          await scanNotes(pageId, note => includeNote(note, true));
         } catch {
           partial = true;
         }
       }
-      // Only re-read search hits outside the current scoped listing.
-      for (const id of noteHits.get(page.id) ?? []) {
+      // Retrieve search hits outside the bounded listing.
+      for (const id of noteHits.get(pageId) ?? []) {
         if (seenNotes.has(id)) continue;
         try {
           const note = await store.getNote({ id, read });
-          if (note) includeNote(note);
+          if (note) includeNote(note, false);
         } catch {
           partial = true;
         }
+      }
+      // Removing or editing a note does not change its parent page's revision.
+      const listedVersions = new Map<string, number>();
+      if (noteEvidence.some(note => note.listed)) {
+        try {
+          await scanNotes(pageId, note => {
+            if (note.pageId === pageId && !note.deletedAt) listedVersions.set(note.id, note.version);
+          });
+        } catch {
+          partial = true;
+        }
+      }
+      for (const observed of noteEvidence) {
+        try {
+          let currentVersion = listedVersions.get(observed.id);
+          if (!observed.listed) {
+            const note = await store.getNote({ id: observed.id, read });
+            if (note?.id === observed.id && note.pageId === pageId && !note.deletedAt) currentVersion = note.version;
+          }
+          if (currentVersion === observed.version) {
+            evidence.push(observed.record);
+            continue;
+          }
+        } catch {
+          // A failed recheck leaves the note unverified.
+        }
+        partial = true;
       }
       if (!evidence.length) return;
       try {
@@ -253,8 +299,8 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
       partial = true;
     }
     await Promise.all(
-      Array.from({ length: Math.min(bounds.noteConcurrency, candidates.size) }, async () => {
-        for (let next = pagesToInspect.next(); !next.done; next = pagesToInspect.next()) await inspect(next.value);
+      Array.from({ length: Math.min(bounds.noteConcurrency, candidateBodies.size) }, async () => {
+        for (const [pageId, body] of pagesToInspect) await inspect(pageId, body);
       }),
     );
   } catch {

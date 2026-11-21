@@ -21,9 +21,11 @@ import { createKnowledge, createPostgresWriterKnowledge } from '../knowledge/ind
 import { upsertPageAtRevision } from '../knowledge/versioned-page.ts';
 import type { LocalProfile } from '../server/access.ts';
 import { hasDuplicatePage, matchingNoteIds } from './duplicate.ts';
+import { withPublicationReceipt } from './publication-receipt.ts';
 import {
   candidateSchema,
   digest,
+  proposalDraftSchema,
   proposalSchema,
   publishedText,
   reviewStartInputSchema,
@@ -180,12 +182,6 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
       const current = await page(targetRef, [proposal.destination.scope], activeKnowledge);
       requireReview(current.version === proposal.candidate.target.expectedVersion, 'Target revision changed');
       const binding = identity('target', targetRef, current);
-      requireReview(
-        proposal.destination.path.startsWith(`${supportConfiguration.customerRoots[0]}/`) ||
-          (proposal.source.audience === 'tenant' &&
-            proposal.destination.path.startsWith(`${supportConfiguration.sharedRoot}/`)),
-        'Target must be an allowed finding or case record',
-      );
       if (proposal.candidate.action === 'update')
         requireReview(
           current.createdBy.author?.startsWith('review:') && current.body?.startsWith('<!-- knowledge-review:'),
@@ -242,7 +238,7 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
     );
     const candidate = candidateSchema.parse(response.object);
     const id = randomUUID();
-    const proposal: Proposal = {
+    const draft = proposalDraftSchema.parse({
       id,
       owner: resourceId(current),
       reviewer: plainProfile(current),
@@ -258,11 +254,10 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
           candidate.target?.path ??
           `${input.audience === 'private' ? supportConfiguration.customerRoots[0] : supportConfiguration.sharedRoot}/review-${id}`,
       },
-      revision: '',
-    };
+    });
     const bind = async (kind: Proposal['bindings'][number]['kind'], ref: string, allowed: string[]) => {
       const current = await page(ref, allowed);
-      proposal.bindings.push({ kind, ref, id: current.id, version: current.version, digest: pageDigest(current) });
+      draft.bindings.push({ kind, ref, id: current.id, version: current.version, digest: pageDigest(current) });
     };
     for (const evidence of candidate.evidence) await bind('evidence', evidence.ref, [customer(current)]);
     if (input.audience === 'tenant' && candidate.publicSource && ['page', 'note', 'update'].includes(candidate.action))
@@ -271,9 +266,8 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
         knowledgeScopeAddress('docs:$tenantId', { ...plainProfile(current) }),
       ]);
     if (candidate.target)
-      await bind('target', `${proposal.destination.scope}#${proposal.destination.path}`, [proposal.destination.scope]);
-    proposal.revision = digest({ ...proposal, revision: undefined });
-    proposalSchema.parse(proposal);
+      await bind('target', `${draft.destination.scope}#${draft.destination.path}`, [draft.destination.scope]);
+    const proposal = proposalSchema.parse({ ...draft, revision: digest(draft) });
     await validate(proposal, current);
     if (['page', 'note', 'update'].includes(candidate.action) && (await duplicate(proposal))) {
       proposal.candidate = { ...candidate, action: 'duplicate', target: null };
@@ -292,26 +286,31 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
     requireReview(
       currentReviewer.id === proposal.reviewer.id &&
         currentReviewer.actorId === proposal.reviewer.actorId &&
+        currentReviewer.actorId === reviewerId &&
         resourceId(currentReviewer) === proposal.owner,
       'Reviewer does not own this approval',
     );
     if (decision.decision === 'reject') return result('rejected');
     if (['duplicate', 'contradiction', 'insufficient-evidence'].includes(proposal.candidate.action))
       return result(proposal.candidate.action as 'duplicate' | 'contradiction' | 'insufficient-evidence');
-    return withWriterLock(async ({ postgres }) => {
+    return withWriterLock(async writerContext => {
+      const { postgres } = writerContext;
       if (postgres) await knowledge.getStorage();
       const activeKnowledge = postgres ? createPostgresWriterKnowledge(postgres) : knowledge;
-      // Reconcile an exact previous effect before checking revisions that this update itself changed.
       const store = await activeKnowledge.getStorage();
-      const [home] = await store.getScopesByAddress([proposal.destination.scope]);
-      const current =
-        home &&
-        (await store.getPageByPath({ scopeId: home.id, path: proposal.destination.path.split('/'), read: 'all' }));
+      const currentPage = async () => {
+        const [home] = await store.getScopesByAddress([proposal.destination.scope]);
+        return (
+          home &&
+          (await store.getPageByPath({ scopeId: home.id, path: proposal.destination.path.split('/'), read: 'all' }))
+        );
+      };
       const body = publishedText(proposal),
         marker = `<!-- knowledge-review:${proposal.id}:`;
       const author = `review:${reviewerId}`;
       const reference = `${proposal.destination.scope}#${proposal.destination.path}`;
       if (proposal.candidate.action === 'note') {
+        const current = await currentPage();
         requireReview(current, 'Note target is missing');
         const mentions = [
           ...new Set(
@@ -363,59 +362,80 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
         });
         return result('published', `${reference}?note=${note.id}`);
       }
-      if (current?.body?.startsWith(marker)) {
-        requireReview(
-          current.body === body &&
-            current.name === proposal.candidate.title &&
-            current.description === proposal.candidate.record.summary &&
-            current.updatedBy.author === author,
-          'Conflicting prior page effect',
-        );
-        if (proposal.candidate.action === 'update') {
-          const target = proposal.bindings.find(binding => binding.kind === 'target' && binding.ref === reference);
+      return withPublicationReceipt(
+        writerContext,
+        { proposalId: proposal.id, revision: proposal.revision, reviewerId, reference },
+        async receipts => {
+          const receipt = await receipts.find();
+          if (receipt) {
+            requireReview(
+              receipt.reviewer_id === reviewerId && receipt.reference === reference,
+              'Conflicting prior publication receipt',
+            );
+            reviewer(authenticated ?? proposal.reviewer);
+            return result('published', receipt.reference);
+          }
+          const current = await currentPage();
+          // Approvals written before receipts were introduced can still reconcile an exact current effect.
+          if (current?.body?.startsWith(marker)) {
+            requireReview(
+              current.body === body &&
+                current.name === proposal.candidate.title &&
+                current.description === proposal.candidate.record.summary &&
+                current.updatedBy.author === author,
+              'Conflicting prior page effect',
+            );
+            if (proposal.candidate.action === 'update') {
+              const target = proposal.bindings.find(binding => binding.kind === 'target' && binding.ref === reference);
+              requireReview(
+                target &&
+                  target.id === current.id &&
+                  target.version === proposal.candidate.target?.expectedVersion &&
+                  current.version === target.version + 1,
+                'Prior update effect does not match the bound target successor',
+              );
+            } else {
+              requireReview(
+                current.version === 1 && current.createdBy.author === author,
+                'Conflicting prior page creation',
+              );
+            }
+            reviewer(authenticated ?? proposal.reviewer);
+            await receipts.record();
+            return result('published', reference);
+          }
+          if (proposal.candidate.action === 'page') requireReview(!current, 'Page destination already exists');
+          const expected = await validate(proposal, authenticated, activeKnowledge);
           requireReview(
-            target &&
-              target.id === current.id &&
-              target.version === proposal.candidate.target?.expectedVersion &&
-              current.version === target.version + 1,
-            'Prior update effect does not match the bound target successor',
+            !(await duplicate(proposal, activeKnowledge, postgres)),
+            'A duplicate finding now exists; reevaluate',
           );
-        } else {
-          requireReview(
-            current.version === 1 && current.createdBy.author === author,
-            'Conflicting prior page creation',
-          );
-        }
-        reviewer(authenticated ?? proposal.reviewer);
-        return result('published', reference);
-      }
-      if (proposal.candidate.action === 'page') requireReview(!current, 'Page destination already exists');
-      const expected = await validate(proposal, authenticated, activeKnowledge);
-      requireReview(
-        !(await duplicate(proposal, activeKnowledge, postgres)),
-        'A duplicate finding now exists; reevaluate',
+          reviewer(authenticated ?? proposal.reviewer);
+          const writer = postgres ? activeKnowledge : createKnowledge(memory.storage);
+          try {
+            await receipts.write(mutations =>
+              upsertPageAtRevision(
+                writer,
+                store,
+                {
+                  ...proposal.destination,
+                  name: proposal.candidate.title,
+                  description: proposal.candidate.record.summary,
+                  body,
+                  author,
+                },
+                expected ?? null,
+                mutations,
+              ),
+            );
+          } catch (error) {
+            if (error instanceof KnowledgeConflictError)
+              throw new ReviewConflict('Page destination changed; reevaluate', { cause: error });
+            throw error;
+          }
+          return result('published', reference);
+        },
       );
-      reviewer(authenticated ?? proposal.reviewer);
-      const writer = postgres ? activeKnowledge : createKnowledge(memory.storage);
-      try {
-        await upsertPageAtRevision(
-          writer,
-          store,
-          {
-            ...proposal.destination,
-            name: proposal.candidate.title,
-            description: proposal.candidate.record.summary,
-            body,
-            author,
-          },
-          expected ?? null,
-        );
-      } catch (error) {
-        if (error instanceof KnowledgeConflictError)
-          throw new ReviewConflict('Page destination changed; reevaluate', { cause: error });
-        throw error;
-      }
-      return result('published', reference);
     });
   }
   return { reviewer, prepare, publish };

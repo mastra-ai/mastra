@@ -218,6 +218,32 @@ test('a complete fallback finds matches beyond the search query cap', { timeout:
   }
 });
 
+test('complete enumeration recovers from saturated history search', { timeout: 30000 }, async () => {
+  const f = await runtimeFixture({ syntheticKnowledge: false });
+  try {
+    const scope = 'customer:north:store-1';
+    await f.supportKnowledge.upsertPage({ scope, path: 'cases', name: 'Network cases' });
+    for (let index = 0; index < 99; index++) {
+      await f.supportKnowledge.upsertPage({
+        scope,
+        path: `cases/network-${index}`,
+        name: `Network case ${index}`,
+        body: historyRecord(`Network finding ${index}`),
+      });
+    }
+    const store = await f.supportKnowledge.getStorage();
+    const [home] = await store.getScopesByAddress([scope]);
+    assert.ok(home);
+    const read = await f.supportKnowledge.readScopeFor([scope]);
+    assert.equal((await store.searchPages({ query: 'network', scopeIds: [home.id], read, limit: 100 })).length, 100);
+    const history = await prepareHistory(f.supportKnowledge, profile, 'network');
+    assert.equal(history.status, 'ready');
+    assert.equal(history.records.length, 3);
+  } finally {
+    await f.close();
+  }
+});
+
 test('a page or note removed after native search does not enter scoped history', { timeout: 30000 }, async () => {
   const f = await runtimeFixture({ syntheticKnowledge: false });
   try {
@@ -290,6 +316,12 @@ test(
         text: reviewedNote(historyRecord('CURRENT_NOTE')),
         author: 'review:synthetic-reviewer',
       });
+      const removed = await supportKnowledge.addNote({
+        scope,
+        path: stablePath,
+        text: reviewedNote(historyRecord('REMOVED_NOTE')),
+        author: 'review:synthetic-reviewer',
+      });
       const { page: moving } = await supportKnowledge.upsertPage({
         scope,
         path: movingPath,
@@ -302,10 +334,11 @@ test(
       const getNote = store.getNote.bind(store);
       const listNotes = store.listNotes.bind(store);
       let matchingHits = 0;
-      let redundantReads = 0;
       let moved = false;
+      let removedAfterListing = false;
+      let listedNotePointReads = 0;
       store.getNote = input => {
-        if (input.id === note.id) redundantReads++;
+        if (input.read !== 'all' && (input.id === note.id || input.id === removed.id)) listedNotePointReads++;
         return getNote(input);
       };
       const search = store.searchPages.bind(store);
@@ -325,7 +358,12 @@ test(
             author: 'review:synthetic-reviewer',
           });
         }
-        return listNotes(input);
+        const listed = await listNotes(input);
+        if (!removedAfterListing && listed.notes.some(note => note.id === removed.id)) {
+          await supportKnowledge.removeNote({ id: removed.id, author: 'synthetic-fixture' });
+          removedAfterListing = true;
+        }
+        return listed;
       };
       const result = await prepareHistory(supportKnowledge, profile, 'network printer');
       assert.ok(
@@ -333,6 +371,8 @@ test(
         'The real store must return the note hit and move the ancestor during listing',
       );
       assert.equal(result.status, 'partial');
+      assert.ok(removedAfterListing, 'The real store must list the approved note before it is removed');
+      assert.equal(listedNotePointReads, 0, 'Listed notes must be verified in a scoped batch');
       assert.deepEqual(
         result.records.map(record => [record.summary, record.ref]),
         [
@@ -340,7 +380,6 @@ test(
           ['CURRENT_NOTE', `${scope}#${stablePath}?note=${note.id}`],
         ],
       );
-      assert.equal(redundantReads, 0);
     } finally {
       await f.close();
     }

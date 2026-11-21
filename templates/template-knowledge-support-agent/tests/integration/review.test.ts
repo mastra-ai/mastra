@@ -12,6 +12,7 @@ import { runtimeFixture } from '../fixtures/runtime.ts';
 import { resourceId } from '../../src/mastra/identity.ts';
 import { seedDataset } from '../../src/mastra/knowledge/seed.ts';
 import { acquireWriterLock } from '../../src/mastra/knowledge/writer-lock.ts';
+import { upsertPageAtRevision } from '../../src/mastra/knowledge/versioned-page.ts';
 import { publishedText } from '../../src/mastra/review/contracts.ts';
 import { createReviewService } from '../../src/mastra/review/service.ts';
 import type { Candidate, Proposal } from '../../src/mastra/review/contracts.ts';
@@ -212,8 +213,8 @@ async function turn(f: Fixture, id: string, content: string, owner = 0) {
     await post(f, '/agents/support/generate', { messages: [{ role: 'user', content }], memory: { thread: id } }, owner),
   );
 }
-async function confirmation(f: Fixture, owner = 0) {
-  const id = await thread(f, owner);
+async function confirmation(f: Fixture, owner = 0, threadId?: string) {
+  const id = threadId ?? (await thread(f, owner));
   await turn(
     f,
     id,
@@ -370,6 +371,50 @@ test('publication preserves operator edits made after it checks the destination'
   }
 });
 
+test('a short thread ID blocks explicit references and permits ordinary shared wording', async () => {
+  const f = await fixture();
+  try {
+    // Older saved conversations can have short IDs even though new Studio threads get UUIDs.
+    await f.memory.createThread({ threadId: 'it', resourceId: resourceId(f.credentials[0]!.profile) });
+    await f.start();
+    const input = { ...(await confirmation(f, 0, 'it')), audience: 'tenant' as const };
+    assert.equal(input.threadId, 'it');
+    const publicSource = { ref: publicRef, version: 1 };
+    f.select(candidate('short-thread', { content: 'Wait for the link light to turn green.', publicSource }));
+    assert.equal((await resume(f, await pending(f, input))).result.status, 'published');
+
+    const leaked = candidate('explicit-thread', { content: 'See internal thread (_IT_).', publicSource });
+    f.select(leaked);
+    const run = await begin(f, input);
+    assert.equal(run.state.status, 'failed');
+    assert.deepEqual(f.emittedCandidate(), leaked);
+    assert.match(JSON.stringify(run.state), /Shared text contains private identifiers or references/u);
+  } finally {
+    await f.close();
+  }
+});
+
+test('guarded writes resolve the same paths as native Knowledge', async () => {
+  const f = await runtimeFixture();
+  try {
+    const knowledge = f.supportKnowledge;
+    const store = await knowledge.getStorage();
+    const scope = 'docs:north';
+    const { page } = await knowledge.upsertPage({ scope, path: 'guides', name: 'Guides', body: 'Original' });
+    const updated = await upsertPageAtRevision(
+      knowledge,
+      store,
+      { scope, path: '/guides/', name: 'Guides', body: 'Revised' },
+      page,
+    );
+    assert.equal(updated.page.id, page.id);
+    assert.equal(updated.page.version, page.version + 1);
+    assert.equal(updated.page.body, 'Revised');
+  } finally {
+    await f.close();
+  }
+});
+
 test('approval_publishes_scoped_content_and_a_new_thread_reuses_knowledge', { timeout: 180000 }, async () => {
   const f = await fixture();
   try {
@@ -446,6 +491,24 @@ test('approval_publishes_scoped_content_and_a_new_thread_reuses_knowledge', { ti
     const audit = await inspect(f, shared.runId);
     assert.deepEqual(audit.steps['review-decision'].output.decision, decision(shared.proposal));
     assert.deepEqual(audit.steps['review-decision'].output.proposal.candidate, shared.proposal.candidate);
+
+    const tenantCasePath = 'cases/tenant-network';
+    const { page: tenantCase } = await f.supportKnowledge.upsertPage({
+      scope: 'tenant:north',
+      path: tenantCasePath,
+      name: 'Existing tenant-wide network case',
+    });
+    f.select(
+      candidate('tenant-case-note', {
+        action: 'note',
+        target: { path: tenantCasePath, expectedVersion: tenantCase.version },
+        evidence: [],
+        publicSource: { ref: publicRef, version: 1 },
+      }),
+    );
+    const tenantNote = await resume(f, await pending(f, { ...input, audience: 'tenant' }));
+    assert.equal(tenantNote.result.status, 'published');
+    assert.match(tenantNote.result.reference, /^tenant:north#cases\/tenant-network\?note=/u);
   } finally {
     await f.close();
   }
@@ -515,6 +578,26 @@ test(
         ).status,
         403,
       );
+
+      f.select(
+        candidate('receipt-write-failure', {
+          action: 'update',
+          target: { path: accepted.proposal.destination.path, expectedVersion: 1 },
+          evidence: [],
+        }),
+      );
+      const rollback = await pending(f, input);
+      await sql(
+        f,
+        `CREATE TRIGGER reject_publication_receipt BEFORE INSERT ON support_review_publications
+      WHEN NEW.proposal_id = '${rollback.proposal.id}'
+      BEGIN SELECT RAISE(ABORT, 'synthetic publication receipt constraint'); END`,
+      );
+      const failedReceipt = await resume(f, rollback);
+      assert.equal(failedReceipt.status, 'failed');
+      assert.match(JSON.stringify(failedReceipt), /synthetic publication receipt constraint/u);
+      assert.deepEqual(await snapshot(f), before, 'A failed receipt insert must roll back the native page update');
+      await sql(f, 'DROP TRIGGER reject_publication_receipt');
 
       f.select(candidate('transient-write-contention'));
       const busy = await pending(f, input);
@@ -673,7 +756,11 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
 
     // Invalid candidates and source selection fail through the same native start path.
     for (const [changes, source, expectedError] of [
-      [{ evidence: [{ ref: 'customer:north:store-2#cases/synthetic', version: 1 }] }, input],
+      [
+        { evidence: [{ ref: 'customer:north:store-2#cases/synthetic', version: 1 }] },
+        input,
+        /Evidence is outside the permitted scope/u,
+      ],
       [{ evidence: [{ ref: `${customer}#cases/../synthetic`, version: 1 }] }, input, /Invalid scoped page reference/u],
       [{ evidence: [{ ref: `${customer}#cases/missing`, version: 1 }] }, input, /Evidence or target is missing/u],
       [
@@ -695,14 +782,24 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
         input,
         /Knowledge note text exceeds the 250 token limit/u,
       ],
-      [{ action: 'update', target: { path: 'cases/synthetic', expectedVersion: 1 } }, input],
+      [
+        { action: 'update', target: { path: 'cases/synthetic', expectedVersion: 1 } },
+        input,
+        /Only review-owned findings may be updated/u,
+      ],
+      [
+        { action: 'note', target: { path: 'learnings/missing', expectedVersion: 1 } },
+        input,
+        /Target must be an allowed finding or case record/u,
+      ],
       [
         { content: 'Private store-1 information', publicSource: { ref: publicRef, version: 1 } },
         { ...input, audience: 'tenant' },
+        /Shared text contains private identifiers or references/u,
       ],
       [
         {
-          content: `Verified finding for ${input.threadId.toUpperCase()}`,
+          content: `Verified finding for _case-${input.threadId.toUpperCase()}_`,
           publicSource: { ref: publicRef, version: 1 },
         },
         { ...input, audience: 'tenant' },
@@ -711,20 +808,33 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
       [
         { content: 'password=synthetic-secret', publicSource: { ref: publicRef, version: 1 } },
         { ...input, audience: 'tenant' },
+        /Shared text contains private links, credentials, or payment-like data/u,
       ],
-      [{ publicSource: null }, { ...input, audience: 'tenant' }],
-      [{}, { ...input, sourceActorId: 'morgan' }],
-      [{}, { ...input, messageId: 'missing-turn' }],
-    ] as Array<[Partial<Candidate>, typeof input, RegExp?]>) {
+      [
+        { publicSource: null },
+        { ...input, audience: 'tenant' },
+        /Shared findings require public evidence and shareable applicability/u,
+      ],
+    ] as Array<[Partial<Candidate>, typeof input, RegExp]>) {
       await unchanged(async () => {
         const selected = candidate(`invalid-${++serial}`, changes);
         f.select(selected);
         const run = await begin(f, source);
         assert.equal(run.state.status, 'failed', JSON.stringify(run.state));
-        if (expectedError) {
-          assert.deepEqual(f.emittedCandidate(), selected, 'The model must deliver the candidate before validation');
-          assert.match(JSON.stringify(run.state), expectedError);
-        }
+        assert.deepEqual(f.emittedCandidate(), selected, 'The model must deliver the candidate before validation');
+        assert.match(JSON.stringify(run.state), expectedError);
+      });
+    }
+    for (const [source, expectedError] of [
+      [{ ...input, sourceActorId: 'morgan' }, /Reviewer must differ from source technician/u],
+      [{ ...input, messageId: 'missing-turn' }, /Attributable technician turn required/u],
+    ] as const) {
+      await unchanged(async () => {
+        const requests = f.model.requests.length;
+        const run = await begin(f, source);
+        assert.equal(run.state.status, 'failed', JSON.stringify(run.state));
+        assert.match(JSON.stringify(run.state), expectedError);
+        assert.equal(f.model.requests.length, requests, 'Invalid sources must fail before the curator runs');
       });
     }
     const foreignSource = await confirmation(f, 1);
@@ -905,6 +1015,7 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
       interrupted: Awaited<ReturnType<typeof next>>,
       expectedVersion?: number,
       afterCommit?: () => Promise<unknown>,
+      superseded = false,
     ) {
       const marker = `knowledge-review:${interrupted.proposal.id}:`;
       const note = interrupted.proposal.candidate.action === 'note';
@@ -995,7 +1106,7 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
       );
       const recovered = await json(await post(f, `/workflows/review/restart-async?runId=${interrupted.runId}`, {}));
       assert.deepEqual(await snapshot(f), beforeRetry, 'Recovery must preserve the stored Knowledge');
-      assert.deepEqual(await effects(), written, 'Recovery must preserve the single original effect');
+      assert.deepEqual(await effects(), superseded ? [] : written, 'Recovery must never reapply the original effect');
       assert.equal(
         recovered.status,
         'success',
@@ -1037,14 +1148,33 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
       freshInput,
     );
     assert.equal(
-      await interruptAndRecover(interruptedUpdate, original.version + 1, () =>
-        f.supportKnowledge.upsertPage({
-          scope: customer,
-          path: 'cases/separate-evidence',
-          name: 'Separately revised evidence',
-          body: 'Another technician added details after the update committed.',
-          author: 'synthetic-fixture',
-        }),
+      await interruptAndRecover(
+        interruptedUpdate,
+        original.version + 1,
+        async () => {
+          await f.supportKnowledge.upsertPage({
+            scope: customer,
+            path: 'cases/separate-evidence',
+            name: 'Separately revised evidence',
+            body: 'Another technician added details after the update committed.',
+            author: 'synthetic-fixture',
+          });
+          await f.start();
+          const successor = await next(
+            {
+              action: 'update',
+              target: { path: interrupted.proposal.destination.path, expectedVersion: original.version + 1 },
+              evidence: [],
+            },
+            freshInput,
+          );
+          assert.equal((await resume(f, successor)).result.status, 'published');
+          const successorEffect = (await snapshot(f)).find(item => item.page.id === original.id)!.page;
+          assert.equal(successorEffect.version, original.version + 2);
+          assert.match(successorEffect.body!, new RegExp(`knowledge-review:${successor.proposal.id}:`));
+          await f.stop();
+        },
+        true,
       ),
       originalRef,
     );

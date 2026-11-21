@@ -12,14 +12,18 @@ import { observability } from '../../src/mastra/observability.ts';
 
 test('aborted Knowledge tools persist aborted metrics', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'support-aborted-tool-'));
-  const url = pathToFileURL(join(directory, 'observability.db')).href;
-  const storage = new LibSQLStore({ id: 'aborted-tool', url });
-  const mastra = new Mastra({ storage, observability, logger: false });
-  const instance = mastra.observability?.getDefaultInstance();
-  const client = createClient({ url });
+  const cleanups: Array<() => void | Promise<void>> = [() => rm(directory, { recursive: true, force: true })];
   const errors: unknown[] = [];
   try {
+    const url = pathToFileURL(join(directory, 'observability.db')).href;
+    const storage = new LibSQLStore({ id: 'aborted-tool', url });
+    cleanups.unshift(() => storage.close());
+    const client = createClient({ url });
+    cleanups.unshift(() => client.close());
+    const mastra = new Mastra({ storage, observability, logger: false });
+    const instance = mastra.observability?.getDefaultInstance();
     assert.ok(instance);
+    cleanups.unshift(() => instance.shutdown());
     instance.startSpan({ name: 'knowledge_list', type: SpanType.TOOL_CALL }).end({ outcome: 'abort' });
     await instance.flush();
     const { rows } = await client.execute(`
@@ -46,12 +50,7 @@ test('aborted Knowledge tools persist aborted metrics', async () => {
   } catch (error) {
     errors.push(error);
   } finally {
-    for (const cleanup of [
-      () => instance?.shutdown(),
-      () => client.close(),
-      () => storage.close(),
-      () => rm(directory, { recursive: true, force: true }),
-    ]) {
+    for (const cleanup of cleanups) {
       try {
         await cleanup();
       } catch (error) {

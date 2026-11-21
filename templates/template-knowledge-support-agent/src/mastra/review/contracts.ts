@@ -4,6 +4,7 @@ import { confirmationReferenceSchema, confirmationReferenceString } from './conf
 import { validateSupportRecord } from '../knowledge/seed-manifest.ts';
 import { supportRecordEnvelope } from '../knowledge/support-record-envelope.ts';
 import { assertKnowledgeNoteTextWithinBound, assertKnowledgePageDescriptionWithinBound } from '@mastra/core/knowledge';
+import { supportConfiguration } from '../../examples/support.ts';
 
 const text = (max: number) =>
   z
@@ -122,7 +123,7 @@ export function publishedText(proposal: Parameters<typeof renderPublication>[0])
   return renderPublication(proposal).body;
 }
 
-export const proposalSchema = z
+const proposalFields = z
   .object({
     id: z.uuid(),
     owner: identifier.max(1000),
@@ -145,61 +146,83 @@ export const proposalSchema = z
     destination: z.object({ scope: text(1000), path: pathSchema.max(500) }).strict(),
     revision: z.string().length(64),
   })
-  .strict()
-  .superRefine((proposal, context) => {
-    const { candidate, source } = proposal;
-    if (candidate.action !== 'page' && candidate.action !== 'note' && candidate.action !== 'update') return;
-    if (source.audience === 'tenant' && (!candidate.publicSource || candidate.record.applicability.length < 15)) {
+  .strict();
+
+function validateDestination(
+  { candidate, destination, source }: Pick<z.infer<typeof proposalFields>, 'candidate' | 'destination' | 'source'>,
+  context: z.RefinementCtx,
+) {
+  if (
+    (candidate.action === 'page' || candidate.action === 'note' || candidate.action === 'update') &&
+    !destination.path.startsWith(`${supportConfiguration.customerRoots[0]}/`) &&
+    !(source.audience === 'tenant' && destination.path.startsWith(`${supportConfiguration.sharedRoot}/`))
+  )
+    context.addIssue({
+      code: 'custom',
+      path: ['destination', 'path'],
+      message: 'Target must be an allowed finding or case record',
+    });
+}
+
+export const proposalDraftSchema = proposalFields.omit({ revision: true }).superRefine(validateDestination);
+export const proposalSchema = proposalFields.superRefine(validateDestination).superRefine((proposal, context) => {
+  const { candidate, source } = proposal;
+  if (candidate.action !== 'page' && candidate.action !== 'note' && candidate.action !== 'update') return;
+  if (source.audience === 'tenant' && (!candidate.publicSource || candidate.record.applicability.length < 15)) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Shared findings require public evidence and shareable applicability',
+    });
+    return;
+  }
+  if (source.audience === 'tenant') {
+    const sharedText = [
+      candidate.title,
+      candidate.content,
+      candidate.record.summary,
+      candidate.record.applicability,
+      ...candidate.record.topicTags,
+    ].join('\n');
+    if (
+      /\[\[|\]\(|(?:customer|resource|thread):|https?:\/\/|\b(?:bearer\s+\S+|sk-[a-z0-9]{12,}|(?:api[_ -]?key|password|secret|token)\s*[:=])|(?:\d[ -]?){13,19}/iu.test(
+        sharedText,
+      )
+    )
       context.addIssue({
         code: 'custom',
-        message: 'Shared findings require public evidence and shareable applicability',
+        path: ['candidate'],
+        message: 'Shared text contains private links, credentials, or payment-like data',
       });
-      return;
-    }
-    if (source.audience === 'tenant') {
-      const sharedText = [
-        candidate.title,
-        candidate.content,
-        candidate.record.summary,
-        candidate.record.applicability,
-        ...candidate.record.topicTags,
-      ].join('\n');
-      if (
-        /\[\[|\]\(|(?:customer|resource|thread):|https?:\/\/|\b(?:bearer\s+\S+|sk-[a-z0-9]{12,}|(?:api[_ -]?key|password|secret|token)\s*[:=])|(?:\d[ -]?){13,19}/iu.test(
-          sharedText,
-        )
-      )
-        context.addIssue({
-          code: 'custom',
-          path: ['candidate'],
-          message: 'Shared text contains private links, credentials, or payment-like data',
-        });
-      const privateIdentifiers = [
-        proposal.reviewer.customerId,
-        source.sourceActorId,
-        source.threadId,
-        source.messageId,
-        ...candidate.evidence.map(item => item.ref),
-      ];
-      const normalized = sharedText.toLowerCase();
-      if (privateIdentifiers.some(value => normalized.includes(value.toLowerCase())))
-        context.addIssue({
-          code: 'custom',
-          path: ['candidate'],
-          message: 'Shared text contains private identifiers or references',
-        });
-    }
-    try {
-      const publication = renderPublication(proposal);
-      const parsed = supportRecordEnvelope(publication.body);
-      if (parsed?.start !== publication.start || parsed.end !== publication.end || parsed.value !== publication.value)
-        throw new Error('The published support record must be a standalone fence');
-      if (candidate.action === 'note') assertKnowledgeNoteTextWithinBound(publication.body);
-      else assertKnowledgePageDescriptionWithinBound(candidate.record.summary);
-    } catch (error) {
-      context.addIssue({ code: 'custom', message: (error as Error).message });
-    }
-  });
+    const privateIdentifiers = [
+      proposal.reviewer.customerId,
+      source.sourceActorId,
+      source.messageId,
+      ...candidate.evidence.map(item => item.ref),
+    ];
+    const normalized = sharedText.toLowerCase();
+    const threadId = source.threadId.toLowerCase();
+    // UUIDs can also be embedded in formatted or prefixed references.
+    const mentionsThread = z.uuid().safeParse(threadId).success
+      ? normalized.includes(threadId)
+      : new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${threadId}(?![\\p{L}\\p{M}\\p{N}])`, 'iu').test(sharedText);
+    if (mentionsThread || privateIdentifiers.some(value => normalized.includes(value.toLowerCase())))
+      context.addIssue({
+        code: 'custom',
+        path: ['candidate'],
+        message: 'Shared text contains private identifiers or references',
+      });
+  }
+  try {
+    const publication = renderPublication(proposal);
+    const parsed = supportRecordEnvelope(publication.body);
+    if (parsed?.start !== publication.start || parsed.end !== publication.end || parsed.value !== publication.value)
+      throw new Error('The published support record must be a standalone fence');
+    if (candidate.action === 'note') assertKnowledgeNoteTextWithinBound(publication.body);
+    else assertKnowledgePageDescriptionWithinBound(candidate.record.summary);
+  } catch (error) {
+    context.addIssue({ code: 'custom', message: (error as Error).message });
+  }
+});
 export const approvalDecisionSchema = z
   .object({ proposal: proposalSchema, decision: decisionSchema, reviewerId: identifier })
   .strict();

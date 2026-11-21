@@ -267,6 +267,7 @@ test('seed_rejects_an_invalid_rendered_policy_without_changing_stored_knowledge'
     const initial = (await f.cli()).report;
     const before = await f.snapshot();
     const manifest = await f.readManifest();
+    const originalTitle = manifest.pages[0]!.title;
     manifest.pages[0]!.title = 'Revised network checks';
     await f.saveManifest(manifest);
 
@@ -341,6 +342,18 @@ test('seed_rejects_an_invalid_rendered_policy_without_changing_stored_knowledge'
     await writeFile(policyPath, updated);
     await f.cli({ args: ['--dry-run'] });
     assert.equal(page((await f.cli()).report, 'safety-policy').status, 'updated');
+    assert.equal(page((await f.cli()).report, 'safety-policy').status, 'unchanged');
+
+    await writeFile(policyPath, complete);
+    manifest.pages[0]!.title = originalTitle;
+    await f.saveManifest(manifest);
+    await f.cli({ args: ['--dry-run'] });
+    assert.equal(page((await f.cli()).report, 'safety-policy').status, 'updated');
+    const restored = await f.knowledge((_, store) =>
+      store.getPage({ id: page(initial, 'safety-policy').id!, read: 'all' }),
+    );
+    assert.equal(restored?.name, stored?.name);
+    assert.equal(restored?.body, stored?.body);
   } finally {
     await f.close();
   }

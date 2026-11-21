@@ -6,6 +6,9 @@ import {
   type KnowledgeUpsertPageInput,
   type KnowledgeUpsertPageResult,
 } from '@mastra/core/knowledge';
+import { knowledgePagePath } from '@mastra/core/storage';
+
+export type PageMutations = Pick<KnowledgeStorage, 'createPage' | 'updatePage'>;
 
 /** Guard native leaf writes while preserving scope, parent, and link handling. */
 export async function upsertPageAtRevision(
@@ -13,10 +16,11 @@ export async function upsertPageAtRevision(
   storage: KnowledgeStorage,
   input: KnowledgeUpsertPageInput & { body: string },
   expected: Pick<KnowledgePage, 'id' | 'version'> | null,
+  mutations: PageMutations = storage,
 ): Promise<KnowledgeUpsertPageResult> {
   const { scope: scopeAddress, path: keyPath } = input;
   const destination = `${scopeAddress}#${keyPath}`;
-  const path = keyPath.split('/');
+  const path = knowledgePagePath(keyPath);
   // Abort the native retry on a leaf conflict. The native upsert still manages scope, parent and link writes.
   const conflict = new Error(`Destination changed: ${destination}`);
   const createPage: KnowledgeStorage['createPage'] = async input => {
@@ -29,7 +33,7 @@ export async function upsertPageAtRevision(
         : scope;
     if (parent?.id !== input.parentId) throw conflict;
     try {
-      return await storage.createPage(input);
+      return await mutations.createPage(input);
     } catch (error) {
       if ((error as Error)?.name === 'KnowledgePageKeyConflictError') throw conflict;
       throw error;
@@ -42,7 +46,7 @@ export async function upsertPageAtRevision(
     const current = scope && (await storage.getPageByPath({ scopeId: scope.id, path, read: 'all' }));
     if (current?.id !== expected.id || current.version !== expected.version) throw conflict;
     try {
-      return await storage.updatePage(input);
+      return await mutations.updatePage(input);
     } catch (error) {
       if (['KnowledgeNotFoundError', 'KnowledgeConflictError'].includes((error as Error)?.name)) throw conflict;
       throw error;

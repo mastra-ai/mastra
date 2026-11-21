@@ -422,10 +422,26 @@ test('http_agent_and_memory_reject_foreign_scope_and_thread', { timeout: 120000 
       .getStorage()
       .then(store => store.getPage({ id: fixture.pages[2]!.id, read: 'all' }));
     const foreignReadStart = fixture.model.requests.length;
-    await json(await generate(fixture, independent.id, 0, `READ_PAGE:${fixture.pages[2]!.id}`));
-    assert.ok(fixture.model.requests.length > foreignReadStart);
-    const latest = JSON.stringify(fixture.model.requests.slice(foreignReadStart));
-    assert.doesNotMatch(latest, /SYNTHETIC_PRIVATE_2/u);
+    const foreignPageId = fixture.pages[2]!.id;
+    await json(await generate(fixture, independent.id, 0, `READ_PAGE:${foreignPageId}`));
+    const foreignRead = fixture.model.requests.slice(foreignReadStart);
+    const transcript = foreignRead.at(-1)?.messages as
+      | Array<{
+          role: string;
+          tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }>;
+          tool_call_id?: string;
+          content?: string;
+        }>
+      | undefined;
+    const call = transcript
+      ?.flatMap(message => message.tool_calls ?? [])
+      .find(
+        call => call.function.name === 'knowledge_read' && JSON.parse(call.function.arguments).page === foreignPageId,
+      );
+    assert.ok(call, 'The agent must attempt to read the foreign page');
+    const denied = transcript?.find(message => message.role === 'tool' && message.tool_call_id === call.id);
+    assert.match(denied?.content ?? '', /denied|not found|not readable/iu);
+    assert.doesNotMatch(JSON.stringify(foreignRead), /SYNTHETIC_PRIVATE_2/u);
     const after = await fixture.supportKnowledge
       .getStorage()
       .then(store => store.getPage({ id: fixture.pages[2]!.id, read: 'all' }));

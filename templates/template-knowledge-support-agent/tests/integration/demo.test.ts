@@ -449,10 +449,16 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
       await setTimeout(200);
     }
     assert.ok(rows.length > 0, 'Inspect actual persisted spans, not terminal logs');
+    const failedAgent = rows.find(
+      row => row.traceId === failedTraceId && row.name === 'agent_run' && row.outcome === 'error' && row.error,
+    );
+    assert.ok(failedAgent, 'SQL must contain the failed agent span');
     const telemetry = await f.storage.getStore('observability');
     assert.ok(telemetry);
     const trace = await telemetry.getTrace({ traceId: failedTraceId });
-    assert.ok(trace?.spans.length, 'Native export/readback must contain real spans');
+    const failedSpan = trace?.spans.find(span => span.spanId === failedAgent.spanId);
+    assert.equal(failedSpan?.outcome, 'error', 'Native readback must retain the failed agent span and outcome');
+    assert.ok(failedSpan.error);
     const exported = JSON.stringify({ tables, trace });
     const forbidden = [
       ...Object.values(sentinels).filter(value => value !== sentinels.policy),

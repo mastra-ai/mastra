@@ -18,7 +18,7 @@ The bundled policies are approved for their configured references. To publish a 
 
 Repeat the dry run until every policy revision is approved, then apply the seed. Replace the approval file atomically when updating a running server. Keep the current revision listed until the new seed succeeds so existing chats can continue during the update.
 
-To recover an older bundled policy, rerun `npm run knowledge:seed` for the selected example. For the legacy North retail profile, run `npm run knowledge:seed -- --dataset retail-pos`.
+To recover an older policy, restore its Markdown file and any changed policy fields in the dataset manifest from the revision you want to recover. Run `npm run knowledge:seed -- --dry-run` for the selected example and confirm that the rendered digest has bundled approval or is listed in the trusted approval file. Keep the currently published digest approved until recovery succeeds. Then apply with `npm run knowledge:seed`. For the legacy North retail profile, use `npm run knowledge:seed -- --dataset retail-pos --dry-run` to verify and `npm run knowledge:seed -- --dataset retail-pos` to apply.
 
 ## Add a support case
 
