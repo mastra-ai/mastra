@@ -910,14 +910,15 @@ export function createDurableToolCallStep() {
           !state?.threadId ||
           !state.resourceId ||
           state.memoryConfig?.readOnly ||
-          persistMessageList?.get.all.db().some(hasInvocation)
+          persistMessageList?.get.response.db().some(hasInvocation)
         ) {
           return;
         }
         // The LLM step's transcript identifies this turn's message; a tool call id alone may recur in older turns.
         transcript ??= await readTranscript();
         const current = [...(transcript?.get.all.db() ?? [])].reverse().find(hasInvocation);
-        if (!current) return;
+        // A list already holding this message (e.g. drained by a sibling's flush) is handled by addToolMetadata.
+        if (!current || persistMessageList?.get.all.db().some(message => message.id === current.id)) return;
         // Recovery exists only to write, so check that first; the read check gates the recall.
         await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE);
         await authorizeMemory(MastraFGAPermissions.MEMORY_READ);

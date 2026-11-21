@@ -65,7 +65,8 @@ class CrossProcessToolStepPubSub extends EventEmitterPubSub {
           globalRunRegistry.delete(runId);
         } else if (entry.messageList) {
           const stale = new MessageList({ threadId: 'thread-1', resourceId: 'user-1' });
-          stale.add(entry.messageList.get.input.db(), 'memory');
+          // The starting process's list: recalled history plus this turn's input, no response.
+          stale.add([...entry.messageList.get.remembered.db(), ...entry.messageList.get.input.db()], 'memory');
           entry.messageList = stale;
         }
       }
