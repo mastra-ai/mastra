@@ -3,12 +3,8 @@ import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Client, type Pool } from 'pg';
 import type { DbClient, TxClient } from '@mastra/pg';
-import {
-  canonicalDatabasePath,
-  databaseUrlForPath,
-  storageConfiguration,
-  type StorageConfiguration,
-} from '../database/database.ts';
+import { canonicalDatabasePath, databaseUrlForPath } from '../database/database-file.ts';
+import { resolveStoreConfiguration, type StoreConfiguration } from '../database/store.ts';
 
 // PostgreSQL advisory locks are database-scoped. Keep these namespace keys stable across workers and releases.
 const postgresWriterKey = [0x4b534147, 0x57524954];
@@ -131,14 +127,14 @@ async function withPostgresWriter<T>(connectionString: string, operation: (clien
   }
 }
 
-type LibSQLConfiguration = Extract<StorageConfiguration, { backend: 'libsql' }>;
+type LibSQLConfiguration = Extract<StoreConfiguration, { backend: 'libsql' }>;
 type WriterContext = { libsql: LibSQLConfiguration; postgres?: never } | { libsql?: never; postgres: DbClient };
 
 export async function withWriterLock<T>(
   operation: (context: WriterContext) => Promise<T>,
   databaseUrl?: string,
 ): Promise<T> {
-  const configuration = storageConfiguration(databaseUrl);
+  const configuration = resolveStoreConfiguration(process.env, databaseUrl);
   if (configuration.backend === 'postgres')
     return withPostgresWriter(configuration.connectionString, postgres => operation({ postgres }));
   const lock = await acquireLibSQLWriterLock(configuration);
@@ -160,7 +156,7 @@ export class WriterBusyError extends Error {
 
 /** Acquire the sidecar lock for a LibSQL writer. */
 export async function acquireWriterLock(databaseUrl?: string) {
-  const configuration = storageConfiguration(databaseUrl);
+  const configuration = resolveStoreConfiguration(process.env, databaseUrl);
   if (configuration.backend === 'postgres') throw new Error('Use withWriterLock for PostgreSQL writes');
   return acquireLibSQLWriterLock(configuration);
 }

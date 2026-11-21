@@ -1,6 +1,6 @@
 import { createClient } from '@libsql/client';
 import type { DbClient } from '@mastra/pg';
-import { storageConfiguration } from '../database/database.ts';
+import { resolveStoreConfiguration } from '../database/store.ts';
 
 /** The ranked Knowledge search cannot guarantee an exact body substring match. */
 export async function hasDuplicatePage(
@@ -20,7 +20,7 @@ export async function hasDuplicatePage(
     return match !== null;
   }
 
-  const database = storageConfiguration();
+  const database = resolveStoreConfiguration();
   if (database.backend !== 'libsql') throw new Error('PostgreSQL duplicate lookup requires the configured client');
   const client = createClient({ url: database.url, authToken: database.authToken });
   try {

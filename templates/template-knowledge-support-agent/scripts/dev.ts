@@ -3,10 +3,10 @@ import { spawn } from 'node:child_process';
 import { mkdir, writeFile, chmod, rm } from 'node:fs/promises';
 import { resolve, dirname, delimiter } from 'node:path';
 import { runtimeExample } from '../src/examples/runtime.ts';
-import { storageConfiguration } from '../src/mastra/database/database.ts';
+import { resolveStoreConfiguration } from '../src/mastra/database/store.ts';
 
 const { profiles: exampleProfiles, reviewers: exampleReviewers, role: exampleStudioRole } = runtimeExample;
-const database = storageConfiguration();
+const database = resolveStoreConfiguration();
 if (database.backend !== 'libsql' || database.lockFile)
   throw new Error('Use the built bundle for hosted mode. npm run dev launches local Studio.');
 

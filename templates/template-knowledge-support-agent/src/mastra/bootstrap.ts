@@ -6,8 +6,7 @@ import { createSupportAgent } from './agents/support-agent.ts';
 import { createKnowledge } from './knowledge/index.ts';
 import { seedHostedExample } from './knowledge/seed-on-startup.ts';
 import { createAuth, createReviewerAuthority, createSupportAuthorization, loadCredentials } from './server/access.ts';
-import { hostedMode, serverHost, storageConfiguration } from './database/database.ts';
-import { createStore } from './database/store.ts';
+import { createStore, hostedMode, resolveStoreConfiguration } from './database/store.ts';
 import { createHostedIdentity, hasHostedOAuthConfiguration } from './server/hosted-identity.ts';
 import { createPlatformIdentity, platformAuthMiddleware } from './server/platform-identity.ts';
 import { createReviewService } from './review/service.ts';
@@ -16,8 +15,15 @@ import { createReviewWorkflow } from './workflows/review-workflow.ts';
 import { datasets } from '../examples/datasets.ts';
 import { runtimeExample } from '../examples/runtime.ts';
 
+function serverHost(hosted: boolean, onPlatform: boolean) {
+  if (!hosted) return '127.0.0.1';
+  const host = process.env.SUPPORT_HOST ?? (onPlatform ? '0.0.0.0' : undefined);
+  if (!host || !/^[a-zA-Z0-9.:-]+$/u.test(host)) throw new Error('Hosted mode requires SUPPORT_HOST');
+  return host;
+}
+
 export async function bootstrap() {
-  const database = storageConfiguration();
+  const database = resolveStoreConfiguration();
   const hosted = hostedMode(database);
   const onPlatform = Boolean(process.env.MASTRA_ENVIRONMENT_ID);
   const store = createStore('support', database);
@@ -55,7 +61,7 @@ export async function bootstrap() {
     agents: { support },
     workflows: { review },
     server: {
-      host: serverHost(hosted),
+      host: serverHost(hosted, onPlatform),
       port: Number(process.env.PORT ?? 4111),
       auth,
       middleware: onPlatform ? (platform?.middleware ?? platformAuthMiddleware()) : undefined,
