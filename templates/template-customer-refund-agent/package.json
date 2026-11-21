@@ -96,6 +96,9 @@
     },
     "readdir-glob": {
       "minimatch": "11.0.9"
+    },
+    "serve-handler": {
+      "minimatch": "11.0.9"
     }
   }
 }

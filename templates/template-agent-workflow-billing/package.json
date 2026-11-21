@@ -33,7 +33,7 @@
     "@mastra/core": "latest",
     "@mastra/libsql": "latest",
     "@mastra/memory": "1.41.0",
-    "autumn-js": "1.5.72",
+    "autumn-js": "1.6.27",
     "fzstd": "0.1.1",
     "hono": "4.13.16",
     "jose": "6.2.15",
@@ -50,6 +50,10 @@
     "@hono/node-server": "2.1.6",
     "readdir-glob": {
       "minimatch": "11.0.9"
-    }
+    },
+    "serve-handler": {
+      "minimatch": "11.0.9"
+    },
+    "undici@6": "7.30.2"
   }
 }
