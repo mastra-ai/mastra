@@ -117,7 +117,7 @@
     "hono": "^4.13.13",
     "local-pkg": "^1.2.1",
     "resolve.exports": "^2.0.4",
-    "rollup": "^4.65.0",
+    "rollup": "^4.68.3",
     "rollup-plugin-esbuild": "^6.2.1",
     "semver": "^7.8.5",
     "tinyglobby": "^0.2.17",
