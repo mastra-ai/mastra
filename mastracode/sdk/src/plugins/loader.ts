@@ -281,6 +281,13 @@ async function resolvePluginExtractors(
       throw new Error('Plugin extractors must be Extractor instances or extractor configs with a name');
     }
     if (entry instanceof Extractor) return entry;
+    // An instance from another @mastra/memory copy can't be rebuilt without losing its mode, hooks
+    // or dynamic config, so only plain configs are accepted from outside the host's class.
+    if (Object.getPrototypeOf(entry) !== Object.prototype && Object.getPrototypeOf(entry) !== null) {
+      throw new Error(
+        `Plugin extractor "${entry.name}" is an Extractor instance from a different @mastra/memory copy; pass a plain extractor config instead`,
+      );
+    }
     let extractor = built.get(entry);
     if (!extractor) {
       extractor = new Extractor(entry);
