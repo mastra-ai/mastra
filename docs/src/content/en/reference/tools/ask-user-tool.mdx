@@ -99,10 +99,15 @@ The model calls this tool with the following parameters:
 
 ## Suspend payload
 
-The `tool-call-suspended` event carries a `suspendPayload` with the same shape as the input:
+The `tool-call-suspended` event carries an `AskUserSuspendPayload`, exported from `@mastra/core/tools`. Its `kind` is `INTERACTIVE_TOOL_SUSPENSION_KINDS.askUser` (`'user_question_request'`), so consumers can identify the interaction without relying on the tool name:
 
 <PropertiesTable
   content={[
+  {
+    name: 'kind',
+    type: "'user_question_request'",
+    description: 'Identifies a user question suspension.',
+  },
   {
     name: 'question',
     type: 'string',

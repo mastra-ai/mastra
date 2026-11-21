@@ -12,6 +12,8 @@ export {
   validateToolOutput,
 } from './validation';
 export * from './code-mode';
+export { INTERACTIVE_TOOL_SUSPENSION_KINDS } from './builtin/interactive-suspension';
+export type { InteractiveToolSuspensionKind, RequestAccessSuspendPayload } from './builtin/interactive-suspension';
 export { askUserTool, formatQuestionAnswer } from './builtin/ask-user';
 export type { AskUserAnswer, AskUserOption, AskUserSelectionMode, AskUserSuspendPayload } from './builtin/ask-user';
 export { webFetchTool } from './builtin/web-fetch';

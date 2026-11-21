@@ -91,6 +91,43 @@ beforeEach(() => {
 });
 
 describe('PermissionRequest hooks fire at event receipt (#20861)', () => {
+  it.each([
+    ['user_question_request', 'ask_question'],
+    ['plan_approval_request', 'plan_approval'],
+    ['sandbox_access_request', 'sandbox_access'],
+  ])('dispatches %s by kind while the queue is blocked', async (kind, permissionKind) => {
+    const manager = createRecordingManager();
+    const { listener, releaseBlocker } = createHarness(manager);
+    const blocked = listener({ type: 'blocking_prompt' });
+    await Promise.resolve();
+    const suspendPayload = { kind, question: 'Continue?', path: '/tmp/shared' };
+    const pending = listener({
+      type: 'tool_suspended',
+      toolCallId: 'by-kind',
+      toolName: 'renamed_tool',
+      suspendPayload,
+    });
+    expect(manager.runPermissionRequest).toHaveBeenCalledWith(
+      permissionKind,
+      'by-kind',
+      'renamed_tool',
+      suspendPayload,
+    );
+    releaseBlocker.resolve();
+    await Promise.all([blocked, pending]);
+  });
+
+  it('does not treat an explicit unknown kind as a legacy built-in', async () => {
+    const manager = createRecordingManager();
+    const { listener } = createHarness(manager);
+    await listener({
+      type: 'tool_suspended',
+      toolCallId: 'custom',
+      toolName: 'ask_user',
+      suspendPayload: { kind: 'custom_interaction' },
+    });
+    expect(manager.runPermissionRequest).not.toHaveBeenCalled();
+  });
   it('dispatches tool_approval while the queue is blocked by a pending prompt', async () => {
     const manager = createRecordingManager();
     const { listener, releaseBlocker, handled } = createHarness(manager);

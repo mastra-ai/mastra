@@ -6,7 +6,8 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
-import { createTool } from '@mastra/core/tools';
+import type { RequestAccessSuspendPayload } from '@mastra/core/tools';
+import { createTool, INTERACTIVE_TOOL_SUSPENSION_KINDS } from '@mastra/core/tools';
 import { LocalFilesystem } from '@mastra/core/workspace';
 import { z } from 'zod';
 import type { MastraCodeState } from '../schema.js';
@@ -33,7 +34,7 @@ export const requestSandboxAccessTool = createTool({
   description: `Request permission to access a directory outside the current project. Use this when you need to read or write files in a directory that is not within the project root. The user will be prompted to approve or deny the request.`,
   inputSchema: requestSandboxAccessInputSchema,
   suspendSchema: z.object({
-    kind: z.literal('sandbox_access_request'),
+    kind: z.literal(INTERACTIVE_TOOL_SUSPENSION_KINDS.requestAccess),
     path: z.string(),
     reason: z.string(),
   }),
@@ -71,7 +72,11 @@ export const requestSandboxAccessTool = createTool({
             isError: true,
           };
         }
-        await suspend({ kind: 'sandbox_access_request', path: absolutePath, reason });
+        await suspend({
+          kind: INTERACTIVE_TOOL_SUSPENSION_KINDS.requestAccess,
+          path: absolutePath,
+          reason,
+        } satisfies RequestAccessSuspendPayload);
         return;
       }
 

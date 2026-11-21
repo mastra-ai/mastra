@@ -6,6 +6,7 @@ import { Container, Text } from '@earendil-works/pi-tui';
 
 import { parseError } from '@mastra/code-sdk/utils/errors';
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
+import { INTERACTIVE_TOOL_SUSPENSION_KINDS } from '@mastra/core/tools';
 import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
@@ -15,6 +16,7 @@ import type { NotificationMode, NotificationReason } from './notify.js';
 import { sendNotification } from './notify.js';
 import type { TUIState } from './state.js';
 import { theme } from './theme.js';
+import { classifyToolSuspension } from './tool-suspension.js';
 
 class InfoMessageComponent extends Container {
   constructor(lines: Text[]) {
@@ -221,12 +223,12 @@ export function notifyForInputRequest(state: TUIState, event: AgentControllerEve
     }
     if (event.type === 'tool_suspended') {
       const payload = (event.suspendPayload ?? {}) as Record<string, unknown>;
-      // Sandbox check first, mirroring the dispatch routing order.
-      if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
+      const kind = classifyToolSuspension(event.suspendPayload, event.toolName);
+      if (kind === INTERACTIVE_TOOL_SUSPENSION_KINDS.requestAccess) {
         notify(state, 'sandbox_access', `Sandbox access requested: ${String(payload.path ?? '')}`);
-      } else if (event.toolName === 'ask_user') {
+      } else if (kind === INTERACTIVE_TOOL_SUSPENSION_KINDS.askUser) {
         notify(state, 'ask_question', String(payload.question ?? ''));
-      } else if (event.toolName === 'submit_plan') {
+      } else if (kind === INTERACTIVE_TOOL_SUSPENSION_KINDS.submitPlan) {
         const planPath = String(payload.path ?? '');
         notify(
           state,
@@ -280,12 +282,12 @@ export function runPermissionHooksForEvent(state: TUIState, event: AgentControll
     }
     if (event.type === 'tool_suspended') {
       const payload = (event.suspendPayload ?? {}) as Record<string, unknown>;
-      // Sandbox check first, mirroring the dispatch routing order.
-      if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
+      const kind = classifyToolSuspension(event.suspendPayload, event.toolName);
+      if (kind === INTERACTIVE_TOOL_SUSPENSION_KINDS.requestAccess) {
         hookMgr.runPermissionRequest('sandbox_access', event.toolCallId, event.toolName, payload).catch(() => {});
-      } else if (event.toolName === 'ask_user') {
+      } else if (kind === INTERACTIVE_TOOL_SUSPENSION_KINDS.askUser) {
         hookMgr.runPermissionRequest('ask_question', event.toolCallId, event.toolName, payload).catch(() => {});
-      } else if (event.toolName === 'submit_plan') {
+      } else if (kind === INTERACTIVE_TOOL_SUSPENSION_KINDS.submitPlan) {
         hookMgr.runPermissionRequest('plan_approval', event.toolCallId, event.toolName, payload).catch(() => {});
       }
     }

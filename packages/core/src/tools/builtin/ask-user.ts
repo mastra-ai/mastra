@@ -1,6 +1,7 @@
 import { z } from 'zod/v4';
 
 import { createTool } from '../tool';
+import { INTERACTIVE_TOOL_SUSPENSION_KINDS } from './interactive-suspension';
 
 /**
  * A structured choice rendered by the host for an `ask_user` prompt.
@@ -35,6 +36,7 @@ export type AskUserAnswer = string | string[];
  * Hosts read this to render the question, choices, and selection mode.
  */
 export interface AskUserSuspendPayload {
+  kind: typeof INTERACTIVE_TOOL_SUSPENSION_KINDS.askUser;
   question: string;
   options?: AskUserOption[];
   selectionMode?: AskUserSelectionMode;
@@ -96,6 +98,7 @@ export const askUserTool = createTool({
       ),
   }),
   suspendSchema: z.object({
+    kind: z.literal(INTERACTIVE_TOOL_SUSPENSION_KINDS.askUser),
     question: z.string(),
     options: z.array(optionSchema).optional(),
     selectionMode: z.enum(['single_select', 'multi_select']).optional(),
@@ -119,7 +122,12 @@ export const askUserTool = createTool({
 
       const suspend = context?.agent?.suspend;
       if (suspend) {
-        await suspend({ question, options, selectionMode: resolvedSelectionMode });
+        await suspend({
+          kind: INTERACTIVE_TOOL_SUSPENSION_KINDS.askUser,
+          question,
+          options,
+          selectionMode: resolvedSelectionMode,
+        });
         return;
       }
 

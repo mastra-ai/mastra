@@ -1,6 +1,7 @@
 import { z } from 'zod/v4';
 
 import { createTool } from '../tool';
+import { INTERACTIVE_TOOL_SUSPENSION_KINDS } from './interactive-suspension';
 
 const SUBMIT_PLAN_TOOL_ID = 'submit_plan';
 
@@ -11,6 +12,7 @@ const SUBMIT_PLAN_TOOL_ID = 'submit_plan';
  * from it, and fill `title`/`plan` for approval rendering and history replay.
  */
 export interface SubmitPlanSuspendPayload {
+  kind: typeof INTERACTIVE_TOOL_SUSPENSION_KINDS.submitPlan;
   toolId?: typeof SUBMIT_PLAN_TOOL_ID;
   path: string;
   title?: string;
@@ -76,6 +78,7 @@ export const submitPlanTool = createTool({
       ),
   }),
   suspendSchema: z.object({
+    kind: z.literal(INTERACTIVE_TOOL_SUSPENSION_KINDS.submitPlan),
     toolId: z.literal(SUBMIT_PLAN_TOOL_ID).optional(),
     path: z.string(),
     title: z.string().optional(),
@@ -135,7 +138,7 @@ export const submitPlanTool = createTool({
       if (suspend) {
         // The host validates `path`, reads that file to render the approval UI, and
         // fills title/plan into the resume payload for history replay.
-        await suspend({ toolId: SUBMIT_PLAN_TOOL_ID, path });
+        await suspend({ kind: INTERACTIVE_TOOL_SUSPENSION_KINDS.submitPlan, toolId: SUBMIT_PLAN_TOOL_ID, path });
         return;
       }
 
