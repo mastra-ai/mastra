@@ -414,4 +414,73 @@ describe('evented agent cross-process tool suspension persistence (#30123)', () 
     },
     15_000,
   );
+
+  it('keeps an answered sibling cleared when the next one writes a data part and suspends while memory cannot be read', async () => {
+    const crossProcess = new CrossProcessToolStepPubSub('starting-process-tools');
+    pubsub = crossProcess;
+    const storage = new InMemoryStore();
+    const memory = new MockMemory({ storage });
+    const recall = memory.recall.bind(memory);
+    // The third tool step is call-2 in the starting process, whose list still holds call-1's suspension.
+    vi.spyOn(memory, 'recall').mockImplementation(async args => {
+      if (crossProcess.toolSteps === 3) throw new Error('storage unavailable');
+      return recall(args);
+    });
+    const askColour = createTool({
+      id: 'askColour',
+      description: 'Asks the user for a colour',
+      inputSchema: z.object({ question: z.string() }),
+      suspendSchema: z.object({ question: z.string() }),
+      resumeSchema: z.object({ colour: z.string() }),
+      execute: async (input, context: any) => {
+        if (context?.agent?.resumeData) return { colour: context.agent.resumeData.colour };
+        await context.writer?.custom({ type: 'data-progress', data: { asking: true } });
+        return await context.agent.suspend({ question: input.question });
+      },
+    });
+    const agent = new Agent({
+      id: 'colour-agent',
+      name: 'colour-agent',
+      instructions: 'Ask for a colour.',
+      model: makeModel(['call-1', 'call-2']) as any,
+      tools: { askColour },
+      memory,
+    });
+    const evented = createEventedAgent({ agent });
+    mastra = new Mastra({ logger: false, storage, pubsub, agents: { [evented.id]: evented } });
+    await mastra.startWorkers();
+    const durable = mastra.getAgentById(evented.id) as any;
+    const threadMemory = { thread: 'thread-1', resource: 'user-1' };
+    const waitForPause = async (output: any) => {
+      for await (const chunk of output.fullStream) {
+        if (chunk.type === 'tool-call-suspended') return chunk.payload.toolCallId as string;
+      }
+    };
+
+    const first = await durable.stream('Ask me twice', { memory: threadMemory });
+    expect(await waitForPause(first.output)).toBe('call-1');
+    first.cleanup();
+    resumedRuns.push(first.runId);
+    await new Promise(r => setTimeout(r, 200));
+
+    const resumed = await durable.resumeStream(
+      { colour: 'blue' },
+      { runId: first.runId, toolCallId: 'call-1', memory: threadMemory },
+    );
+    expect(await waitForPause(resumed)).toBe('call-2');
+    expect(crossProcess.toolSteps).toBe(3);
+
+    const { messages } = await recall({ threadId: 'thread-1', resourceId: 'user-1', perPage: false });
+    const assistant = messages.find(m => m.content.parts.some(part => part.type === 'tool-invocation'))!;
+    expect(Object.keys((assistant.content.metadata as any)?.suspendedTools ?? {})).not.toContain('call-1');
+    const workflows = (await storage.getStore('workflows'))!;
+    await vi.waitFor(async () => {
+      const persisted = await workflows.getWorkflowRunById({
+        runId: first.runId,
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+      });
+      const snapshot = typeof persisted?.snapshot === 'string' ? JSON.parse(persisted.snapshot) : persisted?.snapshot;
+      expect(snapshot?.status).toBe('suspended');
+    });
+  }, 15_000);
 });

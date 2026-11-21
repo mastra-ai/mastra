@@ -308,6 +308,14 @@ async function flushMessagesBeforeSuspension({
   }
 }
 
+/** Thrown from a save's `beforePersist` to skip saving a tool call message that could not be checked. */
+class UnverifiedToolCallMessageError extends Error {
+  constructor() {
+    super('Skipped saving a tool call message that could not be checked against storage');
+    this.name = 'UnverifiedToolCallMessageError';
+  }
+}
+
 class DurableOutputProcessorError extends Error {
   constructor(error: unknown) {
     super(error instanceof Error ? error.message : String(error), { cause: error });
@@ -903,15 +911,28 @@ export function createDurableToolCallStep() {
       // tool call; that process's list then lacks the assistant message (#30123). Called
       // before recording suspension or approval metadata, the only writes that need it.
       let recoveryAttempted = false;
-      // Recovery could not read storage: the saved copy is unknown, so annotate no copy.
-      let skipToolMetadata = false;
+      // Recovery could not read storage, so the copy of the tool call message at hand may still carry a
+      // sibling's answered suspension. Nothing in this step changes that copy, and every memory write
+      // from the step passes its save through skipUnverified; the suspension lives in workflow state.
+      let invocationUnverified = false;
+      // Runs inside the save queue, just before the drain, so a recovery that fails while the save waits still counts.
+      const skipUnverified = (list: MessageList, guard: () => Promise<void>) => async () => {
+        await guard();
+        if (invocationUnverified && list.get.response.db().some(hasInvocation)) {
+          logger?.warn?.('Skipped saving a tool call message that could not be checked against storage', {
+            runId,
+            toolCallId,
+          });
+          throw new UnverifiedToolCallMessageError();
+        }
+      };
       // Like flushMessagesBeforeSuspension: a storage failure must not stop the suspension, a fence error must.
       const readForRecovery = async <T>(read: () => Promise<T>): Promise<{ value: T } | undefined> => {
         try {
           return { value: await read() };
         } catch (error) {
           if (isExecutionFenceError(error)) throw error;
-          skipToolMetadata = true;
+          invocationUnverified = true;
           logger?.warn?.('Failed to read the tool call message before durable tool suspension', {
             runId,
             toolCallId,
@@ -1021,7 +1042,15 @@ export function createDurableToolCallStep() {
           if (!threadExists) await authorizeMemory(MastraFGAPermissions.MEMORY_READ);
         }
         let flushedDataParts: typeof processorDataParts = [];
-        if (messagesToFlush && processorDataParts.length) {
+        // Attaching data parts would mark that unverified copy for saving, so they are held (and dropped
+        // if this step suspends): the trade-off for never saving a copy that may undo a sibling's resume.
+        if (invocationUnverified && processorDataParts.length) {
+          logger?.warn?.('Not saving data parts on a tool call message that could not be checked against storage', {
+            runId,
+            toolCallId,
+          });
+        }
+        if (messagesToFlush && processorDataParts.length && !invocationUnverified) {
           const invocation = [...messagesToFlush.get.all.db()].reverse().find(hasInvocation);
           if (invocation) {
             flushedDataParts = processorDataParts.splice(0);
@@ -1041,7 +1070,7 @@ export function createDurableToolCallStep() {
           onThreadCreated: () => {
             threadExists = true;
           },
-          beforePersist,
+          beforePersist: messagesToFlush && skipUnverified(messagesToFlush, beforePersist),
         });
         if (!flushed) {
           logger?.warn?.('Failed to persist messages before durable tool suspension', {
@@ -1092,7 +1121,8 @@ export function createDurableToolCallStep() {
         approvalArgs?: unknown;
       }) => {
         const metadataMessageList = persistMessageList;
-        if (!metadataMessageList || skipToolMetadata) return;
+        // Annotating the unverified copy would mark it for saving; see skipUnverified.
+        if (!metadataMessageList || invocationUnverified) return;
         const metadataKey = opts.type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
         const entry = {
           toolCallId,
@@ -2176,17 +2206,25 @@ export function createDurableToolCallStep() {
                   logger: logger as any,
                   flush,
                 });
-              await applyTo(messageList, async () => {
-                const threadId = state?.threadId;
-                if (saveQueueManager && threadId && !state?.memoryConfig?.readOnly) {
-                  // Like a late suspend, the result can land after the run settled: the write carries its claim.
-                  await runFencedToClaim(claimFenceArgs, () =>
-                    saveQueueManager.flushMessages(messageList, threadId, state.memoryConfig, {
-                      beforePersist: assertNotSuperseded,
-                    }),
-                  );
-                }
-              });
+              // Changing an unverified copy would leave it marked for any later flush to save.
+              if (!invocationUnverified) {
+                await applyTo(messageList, async () => {
+                  const threadId = state?.threadId;
+                  if (saveQueueManager && threadId && !state?.memoryConfig?.readOnly) {
+                    // Like a late suspend, the result can land after the run settled: the write carries its claim.
+                    try {
+                      await runFencedToClaim(claimFenceArgs, () =>
+                        saveQueueManager.flushMessages(messageList, threadId, state.memoryConfig, {
+                          // A suspension may have failed recovery while the result was being applied.
+                          beforePersist: skipUnverified(messageList, assertNotSuperseded),
+                        }),
+                      );
+                    } catch (error) {
+                      if (!(error instanceof UnverifiedToolCallMessageError)) throw error;
+                    }
+                  }
+                });
+              }
               if (info.disposition !== 'awaited' && liveEntry) {
                 // Later steps rebuild the transcript from workflow state; they apply this result too.
                 recordBackgroundResult(liveEntry, params.taskId, params.toolCallId, reconciliationComplete).apply =
@@ -2217,7 +2255,8 @@ export function createDurableToolCallStep() {
           },
 
           onExecution: async (params: any) => {
-            if (!messageList) return;
+            // Like onResult: an unverified copy of the tool call message is not changed or saved.
+            if (!messageList || invocationUnverified) return;
 
             await applyBackgroundToolExecution({
               params,
@@ -2243,10 +2282,11 @@ export function createDurableToolCallStep() {
               try {
                 await runFencedToClaim(claimFenceArgs, () =>
                   saveQueueManager.flushMessages(messageList, threadId, state.memoryConfig, {
-                    beforePersist: assertNotSuperseded,
+                    beforePersist: skipUnverified(messageList, assertNotSuperseded),
                   }),
                 );
               } catch (error) {
+                if (error instanceof UnverifiedToolCallMessageError) return;
                 if (!isExecutionFenceError(error)) throw error;
                 logger?.debug?.('[DurableAgent] Skipped background-task metadata flush: execution superseded', {
                   runId,
