@@ -42,3 +42,36 @@ export async function learnSandboxGithubAuth(sandbox: object): Promise<SandboxGi
 export function sandboxAcceptsGithubToken(sandbox: object): boolean {
   return sandboxGithubAuth(sandbox) === 'token';
 }
+
+/**
+ * Refuse `callerId` a credential-vault sandbox bound to `ownerId` unless the
+ * mode is known to be token. A vault sandbox acts with its owner's vault grant,
+ * so nobody else may start or run commands in it. Learning the mode never
+ * starts the sandbox: `refreshVault()` asks the platform about an existing VM
+ * and is a no-op before one exists, so an unknown or unreadable mode refuses.
+ */
+export async function assertVaultSandboxCaller(
+  sandbox: object,
+  {
+    ownerId,
+    callerId,
+    sessionId,
+  }: { ownerId: string | null | undefined; callerId: string | undefined; sessionId: string },
+): Promise<void> {
+  if (!('vault' in sandbox) || (callerId !== undefined && callerId === ownerId)) return;
+  const reporting = sandbox as VaultReportingSandbox;
+  if (reporting.vault === undefined && typeof reporting.refreshVault === 'function') {
+    try {
+      await reporting.refreshVault();
+    } catch {
+      // An unreadable mode stays unknown and refuses below.
+    }
+  }
+  if (reporting.vault !== false) throw vaultOwnerRefusal(sessionId);
+}
+
+export function vaultOwnerRefusal(sessionId: string): Error {
+  return new Error(
+    `Factory session ${sessionId} uses its owner's credential vault and is not available to the current user`,
+  );
+}

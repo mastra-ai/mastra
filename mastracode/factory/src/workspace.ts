@@ -61,7 +61,7 @@ import {
   resolveSessionWorkdir,
 } from './sandbox/session-sandbox.js';
 import type { FactorySandboxContext, SessionEnvironmentGate, SessionSetupGate } from './sandbox/session-sandbox.js';
-import { learnSandboxGithubAuth, sandboxAcceptsGithubToken } from './sandbox/vault.js';
+import { assertVaultSandboxCaller, learnSandboxGithubAuth, sandboxAcceptsGithubToken } from './sandbox/vault.js';
 import { repositoryDirectoryName } from './sandbox/workdir.js';
 import {
   clearSessionEnvironment,
@@ -1308,30 +1308,20 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // so viewing a session never boots its VM; a non-owner's workspace tool call
     // (the first thing that would start or use the VM) refuses unless the mode
     // is known to be token.
-    const vaultSandbox = sessionEntry.sandbox as WorkspaceSandbox & {
-      vault?: boolean;
-      refreshVault?: () => Promise<unknown>;
-    };
+    const vaultSandbox = sessionEntry.sandbox as WorkspaceSandbox & { vault?: boolean };
     const ownsVault = (callerId: string | undefined) => callerId === session.userId || !('vault' in vaultSandbox);
-    const vaultRefusal = () =>
-      new Error(
-        `Factory session ${session.sessionId} uses its owner's credential vault and is not available to the current user`,
-      );
-    const learnVaultMode = async (): Promise<boolean | undefined> => {
-      if (vaultSandbox.vault === undefined && typeof vaultSandbox.refreshVault === 'function') {
-        try {
-          await vaultSandbox.refreshVault();
-        } catch {
-          // An unreadable mode stays undefined.
-        }
-      }
-      return vaultSandbox.vault;
-    };
-    const refuseVaultForNonOwner = async (): Promise<void> => {
-      if (ownsVault(userId)) return;
-      if ((await learnVaultMode()) === true) throw vaultRefusal();
-    };
-    await refuseVaultForNonOwner();
+    const vaultCaller = (callerId: string | undefined) => ({
+      ownerId: session.userId,
+      callerId,
+      sessionId: session.sessionId,
+    });
+    if (!ownsVault(userId)) {
+      // Refuse here only once the mode is known to be vault; an unknown mode
+      // refuses at the first tool call instead, so viewing never boots the VM.
+      await assertVaultSandboxCaller(vaultSandbox, vaultCaller(userId)).catch(error => {
+        if (vaultSandbox.vault === true) throw error;
+      });
+    }
     const planGuard = FACTORY_WORKSPACE_TOOLS.hooks?.beforeToolCall;
     const toolsConfig: WorkspaceToolsConfig = {
       ...FACTORY_WORKSPACE_TOOLS,
@@ -1342,10 +1332,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             ?.requestContext;
           const callerId = getFactoryAuthUserId(getFactoryAuthUserFromContext(requestContext));
           if (ownsVault(callerId) || vaultSandbox.vault === false) return planGuard?.(hookContext);
-          return learnVaultMode().then(mode => {
-            if (mode !== false) throw vaultRefusal();
-            return planGuard?.(hookContext);
-          });
+          return assertVaultSandboxCaller(vaultSandbox, vaultCaller(callerId)).then(() => planGuard?.(hookContext));
         },
       },
     };
