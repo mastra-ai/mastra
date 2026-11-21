@@ -914,19 +914,20 @@ export function createDurableToolCallStep() {
         ) {
           return;
         }
-        // Recovery exists only to write, so check that before reading the thread.
+        // The LLM step's transcript identifies this turn's message; a tool call id alone may recur in older turns.
+        transcript ??= await readTranscript();
+        const current = [...(transcript?.get.all.db() ?? [])].reverse().find(hasInvocation);
+        if (!current) return;
+        // Recovery exists only to write, so check that first; the read check gates the recall.
         await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE);
         await authorizeMemory(MastraFGAPermissions.MEMORY_READ);
-        // A saved row is newer than any transcript copy: a sibling's resume may have cleared its metadata.
+        // A saved row is newer than the transcript copy: a sibling's resume may have cleared its metadata.
         const { messages } = await memory.recall({
           threadId: state.threadId,
           resourceId: state.resourceId,
           perPage: false,
         });
-        transcript ??= await readTranscript();
-        const invocation =
-          [...messages].reverse().find(hasInvocation) ??
-          [...(transcript?.get.all.db() ?? [])].reverse().find(hasInvocation);
+        const invocation = messages.find((message: MastraDBMessage) => message.id === current.id) ?? current;
         // A throwaway list keeps the long-lived registry list from holding a copy that drifts from storage.
         if (invocation) {
           persistMessageList = createRunMessageList({

@@ -178,6 +178,74 @@ describe('evented agent cross-process tool suspension persistence (#30123)', () 
     15_000,
   );
 
+  it.each<Boundary>(['fresh-worker', 'stale-message-list'])(
+    'saves the suspension on this turn, not an older turn that reused the tool call id (%s)',
+    async boundary => {
+      pubsub = new CrossProcessToolStepPubSub(boundary);
+      const storage = new InMemoryStore();
+      const memory = new MockMemory({ storage });
+      await memory.saveThread({
+        thread: { id: 'thread-1', resourceId: 'user-1', title: '', createdAt: new Date(0), updatedAt: new Date(0) },
+      });
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'old-assistant',
+            role: 'assistant',
+            threadId: 'thread-1',
+            resourceId: 'user-1',
+            createdAt: new Date(0),
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    state: 'result',
+                    toolCallId: 'call-1',
+                    toolName: 'askColour',
+                    args: { question: 'Favourite colour?' },
+                    result: { colour: 'red' },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      });
+      const askColour = createTool({
+        id: 'askColour',
+        description: 'Asks the user for a colour',
+        inputSchema: z.object({ question: z.string() }),
+        suspendSchema: z.object({ question: z.string() }),
+        execute: async (input, context: any) => context.agent.suspend({ question: input.question }),
+      });
+      const agent = new Agent({
+        id: 'colour-agent',
+        name: 'colour-agent',
+        instructions: 'Ask for a colour.',
+        model: makeModel() as any,
+        tools: { askColour },
+        memory,
+      });
+      const evented = createEventedAgent({ agent });
+      mastra = new Mastra({ logger: false, storage, pubsub, agents: { [evented.id]: evented } });
+      await mastra.startWorkers();
+
+      const { output, cleanup } = await mastra.getAgentById(evented.id).stream('Ask me again', {
+        memory: { thread: 'thread-1', resource: 'user-1' },
+      });
+      for await (const chunk of output.fullStream) if (chunk.type === 'tool-call-suspended') break;
+      cleanup();
+
+      const { messages } = await memory.recall({ threadId: 'thread-1', resourceId: 'user-1', perPage: false });
+      expect(messages.map(m => m.role)).toEqual(['assistant', 'user', 'assistant']);
+      expect((messages[0]!.content.metadata as any)?.suspendedTools).toBeUndefined();
+      expect(Object.keys((messages[2]!.content.metadata as any)?.suspendedTools ?? {})).toEqual(['call-1']);
+    },
+    15_000,
+  );
+
   it.each<Boundary>(['fresh-worker', 'starting-process-tools'])(
     'saves the next sibling suspension on the existing assistant row when it suspends in another process after a resume (%s)',
     async boundary => {

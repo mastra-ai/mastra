@@ -140,11 +140,34 @@ describe('durable tool-call FGA error propagation', () => {
       memory: { recall },
       messageList: new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' }),
     } as any);
+    // The LLM step's transcript, which carries the assistant tool call.
+    const messageListState = new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' })
+      .add(
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          createdAt: new Date(),
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'secureTool', args: {} },
+              },
+            ],
+          },
+        },
+        'response',
+      )
+      .serialize();
 
     try {
       await expect(
         (createDurableToolCallStep() as any).execute(
           makeParams(runId, {
+            getState: async () => ({ messageListState }),
             mastra: { getLogger: () => undefined, getServer: () => ({ fga: fgaProvider }) },
             getInitData: () => ({
               runId,
@@ -157,7 +180,7 @@ describe('durable tool-call FGA error propagation', () => {
         ),
       ).rejects.toBe(denial);
 
-      expect(require).toHaveBeenCalledWith({ id: 'user-1' }, expect.objectContaining({ permission: 'memory:read' }));
+      expect(require.mock.calls.map(([, { permission }]) => permission)).toEqual(['memory:write', 'memory:read']);
       expect(recall).not.toHaveBeenCalled();
       expect(flushMessages).not.toHaveBeenCalled();
     } finally {
