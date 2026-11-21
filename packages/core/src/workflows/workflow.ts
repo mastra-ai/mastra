@@ -2169,15 +2169,20 @@ export class Workflow<
         reattach: () => {
           const run = getRun();
           const live = this.liveRun(runId);
-          if (live && live !== run) return;
+          if ((live && live !== run) || this.#forgottenRuns.has(run)) return;
           this.cacheRun(run);
         },
       },
     };
   }
 
+  /** Instances dropped by {@link forgetRun}: a handle still held must not cache itself again. */
+  #forgottenRuns = new WeakSet<object>();
+
   /** Drops this process's instance of a run, cached or held. */
   protected forgetRun(runId: string) {
+    const live = this.liveRun(runId);
+    if (live) this.#forgottenRuns.add(live);
     this.#runs.delete(runId);
     this.#evictedRuns.delete(runId);
     this.executionEngine.clearRunPersistenceOverride(runId);

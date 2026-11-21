@@ -354,6 +354,19 @@ describe.each(engines)('$engine engine: suspended run eviction', ({ createWorkfl
     expect((await other.getWorkflowRunById(run.runId))?.resourceId).toBe('user-1');
   });
 
+  it('does not reopen a held run resumed after its record was deleted', async () => {
+    const { workflow } = await setup();
+    const held = await workflow.createRun();
+    expect((await held.start({ inputData: {} })).status).toBe('suspended');
+    await expect.poll(() => workflow.runs.has(held.runId)).toBe(false);
+
+    await workflow.deleteWorkflowRunById(held.runId);
+    await held.resume({ step: 'approve', resumeData: { by: 'ana' } }).catch(() => {});
+    const reopened = await workflow.createRun({ runId: held.runId });
+    expect(reopened).not.toBe(held);
+    expect(reopened.workflowRunStatus).toBe('pending');
+  });
+
   it('does not reopen a held run whose record was deleted', async () => {
     const { workflow } = await setup();
     const held = await workflow.createRun();
