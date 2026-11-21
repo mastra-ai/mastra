@@ -742,6 +742,13 @@ describe.each(engines)(
 
         await versions.deleteWorkflowRunById(held.runId, { storageVersion: 2 });
         expect(await versions.createRun({ runId: held.runId })).not.toBe(held);
+
+        const cached = await versions.createRun();
+        expect(versions.runs.get(cached.runId)).toBe(cached);
+        await versions.deleteWorkflowRunById(cached.runId, { storageVersion: 1 });
+        expect(versions.runs.get(cached.runId)).toBe(cached);
+        await versions.deleteWorkflowRunById(cached.runId);
+        expect(versions.runs.has(cached.runId)).toBe(false);
       } finally {
         if (evented) await mastra.stopWorkers();
       }
