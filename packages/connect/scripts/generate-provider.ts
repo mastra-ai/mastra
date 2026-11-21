@@ -1200,6 +1200,30 @@ const GITLAB_UPDATE_IDENTIFIERS: Readonly<Record<string, readonly string[]>> = {
   'update-release': ['project_id', 'tag_name'],
 };
 
+/**
+ * JSON for a generated source string. `JSON.stringify` leaves `<`, `>`, `/`,
+ * and the line separators U+2028/U+2029 raw, which can break out of the
+ * generated module. Those characters are written as JSON escapes instead.
+ */
+export function codeSafeJson(value: unknown): string {
+  return JSON.stringify(value).replace(/[<>/\u2028\u2029]/g, character => {
+    switch (character) {
+      case '<':
+        return '\\u003c';
+      case '>':
+        return '\\u003e';
+      case '/':
+        return '\\u002f';
+      case '\u2028':
+        return '\\u2028';
+      case '\u2029':
+        return '\\u2029';
+      default:
+        return character;
+    }
+  });
+}
+
 /** Rejects an update call with no field to change (false, 0, and "" count as values). */
 function requireGitLabUpdateField(action: ExtractedAction, identifiers: readonly string[]): ExtractedAction {
   let rewrites = 0;
@@ -1208,7 +1232,7 @@ function requireGitLabUpdateField(action: ExtractedAction, identifiers: readonly
     rewrites++;
     return statement.replace(
       /;\s*$/,
-      `.refine(data => Object.entries(data).some(([key, value]) => !${JSON.stringify(identifiers)}.includes(key) && value !== undefined), { message: 'Provide at least one field to update.' });`,
+      `.refine(data => Object.entries(data).some(([key, value]) => !${codeSafeJson(identifiers)}.includes(key) && value !== undefined), { message: 'Provide at least one field to update.' });`,
     );
   });
   if (rewrites !== 1)

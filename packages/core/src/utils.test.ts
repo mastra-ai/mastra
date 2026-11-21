@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
@@ -11,6 +12,7 @@ import {
   boundedStringify,
   deepMerge,
   ensureSerializable,
+  ensureToolProperties,
   isBoundedSerializable,
   fetchWithRetry,
   generateEmptyFromSchema,
@@ -152,6 +154,33 @@ describe('isVercelTool', () => {
       execute: async () => ({}),
     });
     expect(isVercelTool(tool)).toBe(false);
+  });
+});
+
+describe('ensureToolProperties tool ids', () => {
+  it('derives a stable id from the tool description', () => {
+    const description = 'Looks up the weather for a city';
+    const tools = ensureToolProperties({
+      weather: {
+        description,
+        parameters: z.object({ city: z.string() }),
+      },
+    });
+    const expected = createHash('sha256').update(description).digest('hex').slice(0, 8);
+
+    expect(tools.weather).toMatchObject({ id: `tool-${expected}` });
+  });
+
+  it('keeps an id the caller already set', () => {
+    const tools = ensureToolProperties({
+      weather: {
+        id: 'weather-tool',
+        description: 'Looks up the weather for a city',
+        parameters: z.object({ city: z.string() }),
+      },
+    });
+
+    expect(tools.weather).toMatchObject({ id: 'weather-tool' });
   });
 });
 

@@ -11,6 +11,7 @@ import { openOfficePackage } from '../parsers/office-package.ts';
 import { xml, content, all, children } from '../parsers/xml.ts';
 import { checkLocalContent } from '../processing/local-filter.ts';
 import { containsRestricted } from '../review/validation.ts';
+import { readBackOfficeText } from './office-text.ts';
 import { elements, descendants, spanText, xmlText } from './xml-spans.ts';
 import { isFormattingMetadata } from './formatting-metadata.ts';
 
@@ -175,14 +176,7 @@ export function validateDocument(
       const readback =
         target.mode === 'xlsx.cell'
           ? spanText(slice, descendants(elements(slice), 'is')[0]!)
-          : slice
-              .replace(/(<\/[^>]+>)\s+(<[^>]+>)/g, '$1$2')
-              .replace(/<[^>]*>/g, '')
-              .replace(/&lt;/g, '<')
-              .replace(/&gt;/g, '>')
-              .replace(/&quot;/g, '"')
-              .replace(/&apos;/g, "'")
-              .replace(/&amp;/g, '&');
+          : readBackOfficeText(slice);
       if (readback !== value) throw new Error('ANSWER_READBACK_MISMATCH');
       shift += inserted.length - (target.end - target.start);
     }

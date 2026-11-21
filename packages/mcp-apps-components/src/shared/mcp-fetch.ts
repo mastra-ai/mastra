@@ -293,9 +293,11 @@ export function createMcpFetch(app: App, getOpened: () => OpenedTraceFilter | un
         }
         return json(result);
       } catch (error) {
-        // A tool error is the route's answer; anything else means the tool isn't offered to this caller.
-        const message = error instanceof Error ? error.message : String(error);
-        return json({ error: message }, error instanceof ToolError ? 400 : 404);
+        // A tool error is the route's answer. Anything else is a host failure: the message and stack
+        // stay in the host log, and the client only hears that this route isn't available.
+        if (error instanceof ToolError) return json({ error: error.message }, 400);
+        console.error('MCP Apps tool call failed', error);
+        return json({ error: 'Not available in this app' }, 404);
       }
     }
     return json({ error: `Not available in this app: ${method} ${path}` }, 404);
