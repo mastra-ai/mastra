@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
-import { Header } from '../Header';
-import { ScrollArea, ScrollAreaViewport } from '../ScrollArea';
-import type { ScrollAreaMask } from '../ScrollArea';
-import { cn } from '@/lib/utils';
+import { FormFrame } from './form-frame';
+import { PageFrame } from './page-frame';
+import { SettingsFrame } from './settings-frame';
+import type { LinkComponent } from '@/ds/types/link-component';
 
-export interface PageLayoutProps {
-  children: ReactNode;
+/** Lists, dashboards, detail pages and explorers: the full width, up to 1536px on very wide screens. */
+export interface PageLayoutPageProps {
+  variant: 'page';
   /** Left side of the page header row. */
   breadcrumbs?: ReactNode;
   /** Right side of the page header row. */
@@ -15,84 +16,84 @@ export interface PageLayoutProps {
   /** Page-level header (e.g. `PageHeader`) rendered inside the body container, above children. */
   header?: ReactNode;
   /**
-   * `container` pads the body (default); `narrow` centers the body in a max-width column;
-   * `fit` lets the body fill the page edge to edge.
+   * How the body fills the page.
+   * - `scroll` (default): the page scrolls as one.
+   * - `full`: the body takes the remaining height edge to edge and never scrolls, so the panels,
+   *   editor, graph, board or chat inside scroll on their own.
    */
-  variant?: 'container' | 'fit' | 'narrow';
-  /**
-   * Fade the body's scrolled edges, using the same values as `ScrollArea`'s `mask`. Off by default.
-   * `{ y: true }` fades the top and bottom; `{ bottom: '3rem' }` sets one side's depth.
-   * A fade covers whatever sits at that edge, so leave it off for `fit` bodies that hold tables with sticky headers.
-   */
-  mask?: ScrollAreaMask;
+  body?: 'scroll' | 'full';
+  children: ReactNode;
 }
 
-export function PageLayout({
-  children,
-  breadcrumbs,
-  headerActions,
-  actionRow,
-  header,
-  variant = 'container',
-  mask = false,
-}: PageLayoutProps) {
-  const headerSlot = header ? (
-    <div data-slot="page-layout-header" className={cn(variant === 'fit' && 'p-4')}>
-      {header}
-    </div>
-  ) : null;
+/** A settings page someone browses to and changes in place: a centered 640px column of `SettingsGroup`s. */
+export interface PageLayoutSettingsProps {
+  variant: 'settings';
+  /** Left side of the page header row. */
+  breadcrumbs?: ReactNode;
+  /** Right side of the page header row. */
+  headerActions?: ReactNode;
+  /** The page title. Leave it out when the app's own header already names the page. */
+  title?: ReactNode;
+  /** Shown beside the title (a status badge, a count…). */
+  titleAccessory?: ReactNode;
+  /** Shown at the end of the title row. */
+  action?: ReactNode;
+  /** A header of the app's own in place of `title` (a `PageHeader` whose title takes focus), with the same inset. */
+  header?: ReactNode;
+  /** `SettingsGroup`s, 28px apart. */
+  children: ReactNode;
+}
 
-  return (
-    <div data-slot="page-layout" className="flex h-full min-h-0 flex-col">
-      {(breadcrumbs || headerActions) && (
-        <Header className="min-h-header-default shrink-0 gap-2 overflow-hidden px-2">
-          {breadcrumbs}
-          {headerActions && (
-            <div className="ml-auto flex shrink-0 items-center gap-2 overflow-hidden">{headerActions}</div>
-          )}
-        </Header>
-      )}
-      {actionRow && (
-        <div data-slot="page-layout-action-row" className="flex shrink-0 flex-col gap-2 px-4 pt-4">
-          {actionRow}
-        </div>
-      )}
-      <main className="flex min-h-0 flex-1 flex-col">
-        <ScrollArea mask={mask} className="min-h-0 flex-1">
-          <ScrollAreaViewport
-            className={cn(variant === 'container' && 'p-4')}
-            contentClassName={cn(
-              variant === 'container' && 'h-full min-h-min',
-              variant === 'narrow' && 'grid min-h-full grid-cols-1',
-              // `fit` hands the remaining body height to its child (panels, graphs, tables that own their scroll).
-              variant === 'fit' &&
-                (header
-                  ? 'grid h-full grid-cols-1 grid-rows-[auto_minmax(0,1fr)]'
-                  : 'grid h-full grid-cols-1 grid-rows-1'),
-            )}
-          >
-            {variant === 'narrow' ? (
-              // Horizontal gutter is the variant's contract; keep px/py explicit rather than the `p-4` shorthand.
-              // eslint-disable-next-line tailwindcss/enforces-shorthand
-              <div
-                data-slot="page-layout-container"
-                className={cn(
-                  'mx-auto grid min-h-full w-full max-w-5xl grid-cols-1 p-4',
-                  header ? 'grid-rows-[auto_1fr]' : 'grid-rows-[1fr]',
-                )}
-              >
-                {headerSlot}
-                {children}
-              </div>
-            ) : (
-              <>
-                {headerSlot}
-                {children}
-              </>
-            )}
-          </ScrollAreaViewport>
-        </ScrollArea>
-      </main>
-    </div>
-  );
+/**
+ * A create or edit form (New alert, New project, Edit destination): a centered 640px column under the title,
+ * with an optional back link above it. There is no breadcrumb bar, so a form shows one way back at most.
+ */
+export interface PageLayoutFormProps {
+  variant: 'form';
+  /** Where the back link goes. Shown with `backLabel`; leave both out when the app's navigation is the way out. */
+  backHref?: string;
+  /** The back link's text, such as the page it returns to. */
+  backLabel?: string;
+  title: ReactNode;
+  /** Shows a skeleton in place of the title while the page loads. */
+  isLoading?: boolean;
+  /** The app's router link, so the back link navigates without a reload. It renders an `<a>` otherwise. */
+  LinkComponent?: LinkComponent;
+  /** A live preview beside the form when the column is wide enough, above the fields otherwise. */
+  aside?: ReactNode;
+  /** Sections (`SettingsGroup`s), 28px apart. */
+  children: ReactNode;
+}
+
+export type PageLayoutProps = PageLayoutPageProps | PageLayoutSettingsProps | PageLayoutFormProps;
+
+export type PageLayoutVariant = PageLayoutProps['variant'];
+
+/**
+ * The frame of every page: its width, gutter, scrolling and way back. Pick the `variant` that matches the page,
+ * and each variant takes only the props that make sense for it.
+ *
+ * - `variant="form"`: a create or edit form. A title with an optional back link, no breadcrumbs, 640px column.
+ * - `variant="settings"`: a settings page. Breadcrumbs and a title over a 640px column of `SettingsGroup`s.
+ * - `variant="page"`: every other page (lists, dashboards, detail pages, explorers). Full width.
+ *   Add `body="full"` when the body is panels that scroll on their own (chat, board, editor, graph).
+ *
+ * The frame is configured, not composed: what goes inside (`PageHeader`, `SettingsGroup`, `EmptyState`,
+ * `DashboardGrid`, panels…) stays free.
+ */
+export function PageLayout(props: PageLayoutProps) {
+  switch (props.variant) {
+    case 'form': {
+      const { variant: _variant, ...rest } = props;
+      return <FormFrame {...rest} />;
+    }
+    case 'settings': {
+      const { variant: _variant, ...rest } = props;
+      return <SettingsFrame {...rest} />;
+    }
+    case 'page': {
+      const { variant: _variant, ...rest } = props;
+      return <PageFrame {...rest} />;
+    }
+  }
 }

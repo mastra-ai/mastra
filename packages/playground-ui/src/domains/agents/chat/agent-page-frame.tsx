@@ -17,7 +17,7 @@ export function AgentPageFrame({
   children: ReactNode;
 }) {
   return (
-    <PageLayout variant="fit" breadcrumbs={breadcrumbs} headerActions={headerActions}>
+    <PageLayout variant="page" body="full" breadcrumbs={breadcrumbs} headerActions={headerActions}>
       <h1 className="sr-only">{agentId}</h1>
       <AgentPageBody tabs={tabs}>{children}</AgentPageBody>
     </PageLayout>

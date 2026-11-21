@@ -320,6 +320,27 @@ function placeholderText(context) {
   };
 }
 
+const PAGE_WIDTH_MESSAGE =
+  'Take the page width from PageLayout (variant="page", "settings" or "form") instead of a centred max-w-* column of its own.';
+
+const centredPageColumn = classStrings('^(?=[\\s\\S]*(^|\\s)mx-auto(\\s|$))(?=[\\s\\S]*(^|\\s)max-w-)');
+const noPageWidth = selectorRule(() => centredPageColumn.map(selector => ({ selector, message: PAGE_WIDTH_MESSAGE })));
+
+const PAGE_LAYOUT = "JSXOpeningElement[name.name='PageLayout']";
+// The variants PageLayout used to take, and what each became.
+const REMOVED_PAGE_LAYOUT_VARIANTS = {
+  container: 'PageLayout has no container variant. Use variant="page".',
+  fit: 'PageLayout has no fit variant. Use variant="page" body="full" for panels that scroll on their own.',
+  narrow: 'PageLayout has no narrow variant. Use variant="form" for a form and variant="settings" for a settings page.',
+};
+const pageLayoutProps = selectorRule(() => [
+  ...Object.entries(REMOVED_PAGE_LAYOUT_VARIANTS).map(([value, message]) => ({
+    selector: `${PAGE_LAYOUT} > JSXAttribute[name.name='variant'][value.value='${value}']`,
+    message,
+  })),
+  { selector: `${PAGE_LAYOUT} > JSXAttribute[name.name='mask']`, message: 'PageLayout has no mask. Drop the prop.' },
+]);
+
 const plugin = {
   meta: { name: 'playground-ui' },
   rules: {
@@ -332,12 +353,18 @@ const plugin = {
     'placeholder-text': { meta: { type: 'suggestion', schema: false }, create: placeholderText },
     'no-text-separators': noTextSeparators,
     'no-text-layout-spacing': noTextLayoutSpacing,
+    'no-page-width': { meta: { type: 'suggestion', schema: false }, create: noPageWidth },
+    'page-layout-props': { meta: { type: 'problem', schema: false }, create: pageLayoutProps },
   },
 };
 
 export const copyRules = {
   'playground-ui/no-text-separators': 'error',
   'playground-ui/no-text-layout-spacing': 'error',
+};
+
+export const pageRules = {
+  'playground-ui/no-page-width': 'error',
 };
 
 export const copyRuleExclusions = {
@@ -355,6 +382,7 @@ export const recommended = {
   'playground-ui/font-mono': 'error',
   'playground-ui/no-barrel-imports': 'error',
   'playground-ui/placeholder-text': 'error',
+  'playground-ui/page-layout-props': 'error',
   ...copyRules,
 };
 

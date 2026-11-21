@@ -2,16 +2,16 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import type { AnchorHTMLAttributes } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { FormLayout } from './index';
+import { PageLayout } from './index';
 
 afterEach(cleanup);
 
-describe('FormLayout', () => {
+describe('PageLayout variant="form"', () => {
   it('shows a back link and the page title, with no breadcrumb bar', () => {
     render(
-      <FormLayout backHref="/alerts" backLabel="Alerts" title="New alert">
+      <PageLayout variant="form" backHref="/alerts" backLabel="Alerts" title="New alert">
         <section>Conditions</section>
-      </FormLayout>,
+      </PageLayout>,
     );
 
     const back = screen.getByRole('link', { name: 'Back to Alerts' });
@@ -24,11 +24,22 @@ describe('FormLayout', () => {
     expect(main.textContent).toContain('Conditions');
   });
 
+  it('shows only the title when the form has no back link', () => {
+    render(
+      <PageLayout variant="form" title="New skill">
+        <section>Fields</section>
+      </PageLayout>,
+    );
+
+    expect(screen.getByRole('heading', { level: 1, name: 'New skill' })).toBeTruthy();
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+
   it('puts the back link above the title', () => {
     render(
-      <FormLayout backHref="/alerts" backLabel="Alerts" title="New alert">
+      <PageLayout variant="form" backHref="/alerts" backLabel="Alerts" title="New alert">
         <section>Conditions</section>
-      </FormLayout>,
+      </PageLayout>,
     );
 
     const back = screen.getByRole('link', { name: 'Back to Alerts' });
@@ -38,9 +49,9 @@ describe('FormLayout', () => {
 
   it('marks the title busy while the page loads', () => {
     render(
-      <FormLayout backHref="/alerts/1" backLabel="Alert" title="Edit alert" isLoading>
+      <PageLayout variant="form" backHref="/alerts/1" backLabel="Alert" title="Edit alert" isLoading>
         <section>Conditions</section>
-      </FormLayout>,
+      </PageLayout>,
     );
 
     const title = screen.getByRole('heading', { level: 1 });
@@ -54,13 +65,37 @@ describe('FormLayout', () => {
     }
 
     render(
-      <FormLayout backHref="/projects" backLabel="Projects" title="New project" LinkComponent={RouterLink}>
+      <PageLayout
+        variant="form"
+        backHref="/projects"
+        backLabel="Projects"
+        title="New project"
+        LinkComponent={RouterLink}
+      >
         <section>Repository</section>
-      </FormLayout>,
+      </PageLayout>,
     );
 
     const back = screen.getByRole('link', { name: 'Back to Projects' });
     expect(back.hasAttribute('data-router-link')).toBe(true);
     expect(back.getAttribute('href')).toBe('/projects');
+  });
+
+  it('puts the aside after the title and before the form, so small screens show it above the fields', () => {
+    render(
+      <PageLayout variant="form" backHref="/alerts" backLabel="Alerts" title="New alert" aside={<p>Backtest</p>}>
+        <label>
+          Name
+          <input />
+        </label>
+      </PageLayout>,
+    );
+
+    const title = screen.getByRole('heading', { level: 1 });
+    const aside = screen.getByText('Backtest');
+    const field = screen.getByRole('textbox', { name: 'Name' });
+    expect(title.compareDocumentPosition(aside) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(aside.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole('complementary')).toBeNull();
   });
 });

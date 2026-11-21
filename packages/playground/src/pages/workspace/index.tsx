@@ -224,7 +224,7 @@ export default function Workspace() {
   // Show loading while fetching workspace list
   if (isLoadingWorkspaces) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Workspaces</h1>
         <Spinner fill />
       </PageLayout>
@@ -234,7 +234,7 @@ export default function Workspace() {
   // If session expired (401 error)
   if (isSessionExpired) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Workspaces</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
@@ -244,7 +244,7 @@ export default function Workspace() {
   // If permission denied (403 error)
   if (isPermissionDenied) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Workspaces</h1>
         <PermissionDenied variant="fill" resource="workspaces" />
       </PageLayout>
@@ -254,7 +254,7 @@ export default function Workspace() {
   // If workspace v1 is not supported by the server's @mastra/core version
   if (isWorkspaceNotSupported) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Workspaces</h1>
         <WorkspaceNotSupported />
       </PageLayout>
@@ -265,7 +265,7 @@ export default function Workspace() {
   const genericError = workspacesError || workspaceInfoError;
   if (genericError) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Workspaces</h1>
         <EmptyState
           tone="error"
@@ -280,7 +280,7 @@ export default function Workspace() {
   // If the workspace feature is configured but no workspaces exist yet, show empty state
   if (!isLoadingWorkspaces && workspaces.length === 0) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Workspaces</h1>
         <NoWorkspacesInfo />
       </PageLayout>
@@ -291,7 +291,7 @@ export default function Workspace() {
   // Also wait for workspaces list to load to avoid showing this before 403 is detected
   if (!isLoadingInfo && !isLoadingWorkspaces && !isWorkspaceConfigured) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Workspaces</h1>
         <WorkspaceNotConfigured />
       </PageLayout>
@@ -318,7 +318,8 @@ export default function Workspace() {
 
   return (
     <PageLayout
-      variant="fit"
+      variant="page"
+      body="full"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={
         <div className="flex items-center gap-2">
@@ -365,7 +366,11 @@ export default function Workspace() {
                 canWrite
                   ? async path => {
                       try {
-                        await createDirectory.mutateAsync({ path, recursive: true, workspaceId: effectiveWorkspaceId });
+                        await createDirectory.mutateAsync({
+                          path,
+                          recursive: true,
+                          workspaceId: effectiveWorkspaceId,
+                        });
                       } catch (error) {
                         toast.error(`Failed to create ${path}: ${errorMessage(error)}`);
                         throw error;

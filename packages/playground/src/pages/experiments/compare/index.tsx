@@ -13,7 +13,8 @@ const crumbs = [
 function CompareExperimentsPage() {
   return (
     <PageLayout
-      variant="fit"
+      variant="page"
+      body="full"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={<CompareHeaderActions />}
     >
