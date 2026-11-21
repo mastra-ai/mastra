@@ -283,6 +283,12 @@ interface FinishPayload<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
     usage: LanguageModelUsage;
     /** Steps array - uses MastraStepResult which extends AI SDK StepResult with tripwire data */
     steps?: MastraStepResult<Tools>[];
+    /**
+     * Number of steps that count against `maxSteps` (processor retry steps don't).
+     * Set on slimmed copies of this chunk, such as thread subscription broadcasts,
+     * which drop `steps`.
+     */
+    stepCount?: number;
   };
   metadata: {
     providerMetadata?: ProviderMetadata;

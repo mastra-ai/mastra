@@ -11,11 +11,16 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import { z } from 'zod/v4';
+
 import { PubSub } from '../../events/pubsub';
 import type { Event } from '../../events/types';
+import { Mastra } from '../../mastra';
 import type { MastraModelOutput } from '../../stream/base/output';
-import type { Agent } from '../agent';
+import { createTool } from '../../tools';
+import { Agent } from '../agent';
 import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
 
 class CapturePubSub extends PubSub {
   events: Array<{ topic: string; event: Event }> = [];
@@ -46,7 +51,7 @@ function fakeOutput(runId: string, parts: unknown[]): MastraModelOutput<any> {
 }
 
 const MARKER = 'RAW_MODEL_REQUEST_BODY_'.repeat(64);
-const agent = { id: 'sanitize-agent' } as Agent<any, any, any, any>;
+const agent = { id: 'sanitize-agent' } as unknown as Agent<any, any, any, any>;
 
 describe('thread-stream broadcast sanitization', () => {
   it('drops raw model request bookkeeping from broadcast parts without mutating the originals', async () => {
@@ -110,10 +115,15 @@ describe('thread-stream broadcast sanitization', () => {
     expect(broadcastStepStart!.payload).toEqual({ messageId: 'msg-1', warnings: [] });
     for (const part of [broadcastStepFinish!, broadcastFinish!]) {
       expect(part.payload.metadata).toEqual({ providerMetadata: { test: { keep: true } } });
-      expect(part.payload.output).toEqual({ usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } });
       expect('messages' in part.payload).toBe(false);
       expect(part.payload.stepResult).toEqual({ reason: 'stop' });
     }
+    expect(broadcastStepFinish!.payload.output).toEqual({ usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } });
+    // The run's finish keeps how many steps it took, without the steps themselves.
+    expect(broadcastFinish!.payload.output).toEqual({
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      stepCount: 1,
+    });
 
     // The caller's chunks are untouched — only the broadcast copies are rewritten.
     expect(stepStart.payload.request.body).toBe(MARKER);
@@ -178,7 +188,7 @@ describe('thread-stream broadcast sanitization', () => {
     const broadcastChildDelegation = broadcast.payload.output;
     const broadcastChildFinish = broadcastChildDelegation.payload.output;
 
-    expect(broadcastChildFinish.payload.output).toEqual({ text: 'child answer' });
+    expect(broadcastChildFinish.payload.output).toEqual({ text: 'child answer', stepCount: 1 });
     expect(broadcastChildFinish.payload.metadata).toEqual({ providerMetadata: { test: { keep: true } } });
     expect('messages' in broadcastChildFinish.payload).toBe(false);
     expect(JSON.stringify(broadcast)).not.toContain(MARKER);
@@ -250,5 +260,103 @@ describe('thread-stream broadcast sanitization', () => {
     // The raw chunks embed the marker 14 times (~21 KB); the sanitized
     // broadcast retains only control metadata and text.
     expect(broadcastJson.length).toBeLessThan(rawSize / 10);
+  });
+
+  // Subscribers such as Studio tell a run that used its whole maxSteps budget from one a
+  // stopWhen ended early by its step count, so the broadcast finish keeps that count. (#29612)
+  describe('step count on the broadcast finish', () => {
+    const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+
+    it.each([
+      { maxSteps: 3, stopOnFirstStep: false, stepCount: 3 },
+      { maxSteps: 10, stopOnFirstStep: true, stepCount: 1 },
+    ])(
+      'carries $stepCount for a real run with maxSteps $maxSteps (stopWhen on step 1: $stopOnFirstStep)',
+      async ({ maxSteps, stopOnFirstStep, stepCount }) => {
+        let calls = 0;
+        const realAgent = new Agent({
+          id: 'step-count-agent',
+          name: 'Step count agent',
+          instructions: 'Keep looking things up.',
+          tools: {
+            lookup: createTool({
+              id: 'lookup',
+              description: 'look something up',
+              inputSchema: z.object({}),
+              execute: async () => ({ found: true }),
+            }),
+          },
+          model: new MockLanguageModelV2({
+            doStream: async () => ({
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start' as const, warnings: [] },
+                { type: 'tool-call' as const, toolCallId: `call-${++calls}`, toolName: 'lookup', input: '{}' },
+                { type: 'finish' as const, finishReason: 'tool-calls' as const, usage },
+              ]),
+            }),
+          }),
+        });
+        new Mastra({ agents: { realAgent }, logger: false });
+        const memory = { thread: 'step-count-thread', resource: 'step-count-user' };
+        const subscription = await realAgent.subscribeToThread({
+          threadId: memory.thread,
+          resourceId: memory.resource,
+        });
+        try {
+          const output = await realAgent.stream('go', {
+            maxSteps,
+            ...(stopOnFirstStep ? { stopWhen: () => true } : {}),
+            memory,
+          });
+          const local = await output.getFullOutput();
+          expect(local.steps).toHaveLength(stepCount);
+
+          let broadcastFinish: any;
+          for await (const part of subscription.stream) {
+            if (part.type === 'finish') {
+              broadcastFinish = part;
+              break;
+            }
+          }
+          expect(broadcastFinish.payload.stepResult.reason).toBe('tool-calls');
+          expect(broadcastFinish.payload.output.steps).toBeUndefined();
+          expect(broadcastFinish.payload.output.stepCount).toBe(stepCount);
+        } finally {
+          subscription.unsubscribe();
+        }
+      },
+    );
+
+    it('does not count processor retry steps, which the step limit ignores', async () => {
+      const runtime = new AgentThreadStreamRuntime();
+      const pubsub = new CapturePubSub();
+      const finish = {
+        type: 'finish',
+        payload: {
+          stepResult: { reason: 'tool-calls' },
+          output: {
+            usage,
+            steps: [{ finishReason: 'retry' }, { finishReason: 'tool-calls' }, { finishReason: 'tool-calls' }],
+          },
+        },
+      };
+      await runtime.registerRun(
+        agent,
+        fakeOutput('retry-run', [finish]),
+        { memory: { thread: 'retry-thread', resource: 'sanitize-user' } },
+        pubsub,
+      );
+      const broadcastFinish = async () =>
+        pubsub.events
+          .map(({ event }) => event.data as { type?: string; part?: { type: string; payload: Record<string, any> } })
+          .find(data => data?.type === 'stream-part' && data.part?.type === 'finish')?.part;
+      const deadline = Date.now() + 2000;
+      while (!(await broadcastFinish()) && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      expect((await broadcastFinish())?.payload.output).toEqual({ usage, stepCount: 2 });
+    });
   });
 });
