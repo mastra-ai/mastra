@@ -1105,4 +1105,19 @@ describe('WorkingMemoryExtractor schema enforcement', () => {
     expect(result.values).toEqual({ topic: 'paint' });
     expect(result.failures).toEqual([{ slug: 'working-memory', error: expect.stringContaining('preferredColor') }]);
   });
+
+  it('skips a user extractor whose instructions throw, keeping the rest', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const broken = new Extractor({
+      name: 'broken',
+      instructions: () => {
+        throw new Error('boom');
+      },
+    });
+    const fine = new Extractor({ name: 'fine', instructions: 'keep me' });
+    const resolved = await resolveExtractors([broken, fine], {} as any);
+    expect(resolved.map(e => e.slug)).toEqual(['fine']);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('"broken"'), expect.any(Error));
+    warn.mockRestore();
+  });
 });

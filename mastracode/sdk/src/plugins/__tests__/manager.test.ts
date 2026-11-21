@@ -296,6 +296,47 @@ describe('PluginManager', () => {
     expect(manager.getPluginSignalProviders().map(entry => entry.value.id)).toEqual(['contributor-signals']);
   });
 
+  it('collects OM extractors from active plugins, skips slugs another plugin took, and rekeys on change', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    // Instances, or plain configs Mastra Code builds itself (no @mastra/memory import needed).
+    const write = (dir: string, id: string, observation: string[], reflection: string[], asConfig = false) => {
+      fs.mkdirSync(path.join(dir, 'src'), { recursive: true });
+      const make = (names: string[]) =>
+        `[${names.map(n => (asConfig ? `{ name: '${n}', instructions: 'test' }` : `new Extractor({ name: '${n}', instructions: 'test' })`)).join(', ')}]`;
+      fs.writeFileSync(
+        path.join(dir, 'src/index.ts'),
+        `import { Extractor } from '@mastra/memory';
+        export default { id: '${id}', extractors: { observation: ${make(observation)}, reflection: ${make(reflection)} } };`,
+      );
+    };
+    const first = makeResolvableDir('extractors-a');
+    const second = makeResolvableDir('extractors-b');
+    write(first, 'acme.vis', ['vis state'], ['vis state']);
+    // 'vis-state' is already taken by acme.vis.
+    write(second, 'acme.other', ['vis state', 'other notes'], [], true);
+
+    const manager = new PluginManager({ projectRoot, homeDir });
+    const errors: string[] = [];
+    manager.onPluginError(event => errors.push(`${event.pluginId}: ${event.message}`));
+    await manager.installLocal(first, 'project');
+    await manager.installLocal(second, 'project');
+
+    const set = manager.getPluginExtractors();
+    expect(set.observation.every(e => typeof e.slug === 'string' && 'internal' in e)).toBe(true);
+    expect(set.observation.map(e => e.slug)).toEqual(['vis-state', 'other-notes']);
+    expect(set.reflection.map(e => e.slug)).toEqual(['vis-state']);
+    expect(errors.some(e => e.includes('"vis state"') && e.includes('Duplicate'))).toBe(true);
+
+    const keyBefore = set.key;
+    await manager.setEnabled('acme.vis', 'project', false);
+    const after = manager.getPluginExtractors();
+    expect(after.observation.map(e => e.slug)).toEqual(['vis-state', 'other-notes']);
+    expect(after.reflection).toEqual([]);
+    expect(after.key).not.toBe(keyBefore);
+  });
+
   describe('when a reload of an active plugin fails', () => {
     // A working plugin that reloads into a throwing `signalProviders` resolver —
     // the shape of a bad update to an installed plugin.

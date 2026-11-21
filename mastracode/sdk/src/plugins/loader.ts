@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 
 import { isSignalProvider } from '@mastra/core/signals';
 import type { SignalProvider } from '@mastra/core/signals';
+import { Extractor } from '@mastra/memory';
 
 import type {
   MastraCodePlugin,
@@ -16,11 +17,18 @@ import type {
   MastraCodePluginToolEntries,
   MastraCodePluginTools,
   MastraCodeToolRenderConfig,
+  MastraCodePluginExtractor,
 } from '../plugin.js';
 import { getPluginRoot } from './paths.js';
 import type { PluginPathOptions } from './paths.js';
 import { loadPluginRegistry, mergePluginRegistries } from './registry.js';
-import type { LoadedPlugin, LoadedPluginProcessors, PluginRegistry, ScopedInstalledPluginRecord } from './types.js';
+import type {
+  LoadedPlugin,
+  LoadedPluginExtractors,
+  LoadedPluginProcessors,
+  PluginRegistry,
+  ScopedInstalledPluginRecord,
+} from './types.js';
 
 export type LoadPluginRecordOptions = PluginPathOptions & {
   /** Lazy accessors for Mastra Code's runtime, passed on to plugin field resolvers. */
@@ -97,6 +105,7 @@ export async function loadPluginRecord(
     };
     const { tools, renderConfigs } = await resolvePluginTools(plugin, context);
     const processors = await resolvePluginProcessors(plugin, context);
+    const extractors = await resolvePluginExtractors(plugin, context);
     const signalProviders = await resolvePluginSignalProviders(plugin, context);
     const instructions = await resolvePluginInstructions(plugin, context);
 
@@ -111,6 +120,7 @@ export async function loadPluginRecord(
       renderConfigs,
       toolNames: Object.keys(tools).sort(),
       processors,
+      extractors,
       signalProviders,
       skillPaths: resolveExistingAssetDirs(pluginRoot, 'skills'),
       commandPaths: resolveExistingAssetDirs(pluginRoot, 'commands'),
@@ -206,6 +216,14 @@ function validatePluginExport(value: unknown): MastraCodePlugin {
   }
 
   if (
+    plugin.extractors !== undefined &&
+    (typeof plugin.extractors !== 'object' || Array.isArray(plugin.extractors)) &&
+    typeof plugin.extractors !== 'function'
+  ) {
+    throw new Error('Plugin extractors must be an object or function');
+  }
+
+  if (
     plugin.signalProviders !== undefined &&
     !Array.isArray(plugin.signalProviders) &&
     typeof plugin.signalProviders !== 'function'
@@ -239,6 +257,45 @@ async function resolvePluginProcessors(
     throw new Error('Plugin processors function must return an array or object');
   }
   return normalizePluginProcessorEntries(entries);
+}
+
+async function resolvePluginExtractors(
+  plugin: MastraCodePlugin,
+  context: MastraCodePluginContext,
+): Promise<LoadedPluginExtractors> {
+  if (!plugin.extractors) return { observation: [], reflection: [] };
+  const entries = typeof plugin.extractors === 'function' ? await plugin.extractors(context) : plugin.extractors;
+  if (!entries || typeof entries !== 'object' || Array.isArray(entries)) {
+    throw new Error('Plugin extractors function must return an object with observation and/or reflection arrays');
+  }
+  const observation = entries.observation ?? [];
+  const reflection = entries.reflection ?? [];
+  if (!Array.isArray(observation) || !Array.isArray(reflection)) {
+    throw new Error('Plugin extractor lanes must be arrays');
+  }
+  // A config is built with Mastra Code's own @mastra/memory, so a plugin needs no copy of it.
+  // The same config in both lanes becomes one extractor.
+  const built = new Map<object, Extractor<any>>();
+  const toExtractor = (entry: MastraCodePluginExtractor): Extractor<any> => {
+    if (!entry || typeof entry !== 'object' || typeof entry.name !== 'string') {
+      throw new Error('Plugin extractors must be Extractor instances or extractor configs with a name');
+    }
+    if (entry instanceof Extractor) return entry;
+    // An instance from another @mastra/memory copy can't be rebuilt without losing its mode, hooks
+    // or dynamic config, so only plain configs are accepted from outside the host's class.
+    if (Object.getPrototypeOf(entry) !== Object.prototype && Object.getPrototypeOf(entry) !== null) {
+      throw new Error(
+        `Plugin extractor "${entry.name}" is an Extractor instance from a different @mastra/memory copy; pass a plain extractor config instead`,
+      );
+    }
+    let extractor = built.get(entry);
+    if (!extractor) {
+      extractor = new Extractor(entry);
+      built.set(entry, extractor);
+    }
+    return extractor;
+  };
+  return { observation: observation.map(toExtractor), reflection: reflection.map(toExtractor) };
 }
 
 async function resolvePluginSignalProviders(

@@ -121,7 +121,7 @@ import {
 import { getToolCategory } from './permissions.js';
 import { PluginManager } from './plugins/manager.js';
 import { PluginSignalLane } from './plugins/signal-lane.js';
-import type { PluginProcessorEntries } from './plugins/types.js';
+import type { PluginExtractorSet, PluginProcessorEntries } from './plugins/types.js';
 import { PlanRejectionAbortProcessor } from './processors/plan-rejection-abort.js';
 import { createAmazonBedrockGateway } from './providers/amazon-bedrock-gateway.js';
 import { setAuthStorage } from './providers/claude-max.js';
@@ -925,12 +925,15 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     ...(config?.scopes ?? []),
     ...(knowledgeOption === true && !(config?.scopes ?? []).length ? [`org:${LOCAL_KNOWLEDGE_ORG_ID}`] : []),
   ];
+  const NO_PLUGIN_EXTRACTORS: PluginExtractorSet = { observation: [], reflection: [], key: '' };
   const dynamicMemory =
     config?.memory === undefined
       ? getDynamicMemory(storage, vector, config?.settingsPath, {
           disableSettingsOmSeed: config?.disableSettingsOmSeed,
           embedder,
           embedderOptions: config?.embedderOptions,
+          // Read per request (the manager is created below); plugins load before the first one.
+          readExtractors: () => pluginManager?.getPluginExtractors() ?? NO_PLUGIN_EXTRACTORS,
         })
       : undefined;
   const memory =
