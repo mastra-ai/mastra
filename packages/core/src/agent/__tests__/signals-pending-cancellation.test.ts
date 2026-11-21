@@ -2096,32 +2096,18 @@ describe('Agent signals: pending cancellation', () => {
         const signalId = forwardedTo('run-b')[0]!.signal.id;
         expect(forwardedTo('run-a')[0]!.signal.id).toBe(signalId);
         await pubsub.flush();
-        // Run B admits it and lets go; the reader misses the lease once and reads the old loss's probe first.
+        // Run B lets go before this reader reads its admission: the reader misses the lease once, then reads the old
+        // loss's probe.
         pubsub.owners.delete(key);
         await tick();
         for (const deliver of heldProbes) deliver();
         await vi.waitFor(() => expect(prompts().some(prompt => prompt.includes('other message'))).toBe(true));
-        // Run C's message is queued again, but the old loss does not cover the re-forward to run B.
-        // Let that run finish, so a wrongly queued message would start next.
-        const settle = async () => {
-          const running = () => {
-            const ids = (type: string) =>
-              pubsub.publishedData.filter(data => data.type === type).map(data => data.runId);
-            const completed = new Set(ids('run-completed'));
-            return ids('run-registered').filter(runId => !completed.has(runId));
-          };
-          for (let i = 0; i < 100 && running().length > 0; i++) {
-            await tick();
-            await new Promise(resolve => setTimeout(resolve, 10));
-          }
-          expect(running()).toEqual([]);
-        };
-        await settle();
-        for (let i = 0; i < 20; i++) {
-          await tick();
-          await new Promise(resolve => setTimeout(resolve, 10));
-        }
-        await settle();
+        // Run C's message is queued again, but the old loss does not cover the re-forward to run B: it stays held, so
+        // the forwarder keeps checking the lease and starts a lease loss of its own for it.
+        const probes = () => pubsub.publishedData.filter(data => data.type === 'forwarded-lease-probe').length;
+        const probesBefore = probes();
+        for (let i = 0; i < 4 && probes() === probesBefore; i++) await tick();
+        expect(probes()).toBeGreaterThan(probesBefore);
         expect(prompts().some(prompt => prompt.includes('reforwarded message'))).toBe(false);
         await pubsub.publish(topic, {
           type: 'agent.thread-stream',

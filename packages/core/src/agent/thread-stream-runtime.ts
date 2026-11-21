@@ -3566,10 +3566,12 @@ export class AgentThreadStreamRuntime {
    * of retries still reads one back: every probe of the episode is published after the lease was seen gone twice,
    * and the owner publishes its admission before releasing the lease, so any probe of the current episode that this
    * runtime's ordered reader reads back proves every admission published before it has been handled. A probe whose
-   * id is not the current episode's is ignored. The episode ends when a check sees the lease name a covered run
-   * again, or when the forwards stop being tracked; a later loss starts a new episode with a new id. A failed publish
-   * leaves the episode as it was. A run that regains the lease, admits a forward and lets go again between two
-   * checks is not seen, so a probe published before that admission can still queue the forward a second time.
+   * id is not the current episode's is ignored, and an episode covers only the forwards it started with, so a
+   * message queued again and re-forwarded since is not one of them. The episode ends when a check sees the lease
+   * name a covered run again, or when the forwards stop being tracked; a later loss starts a new episode with a new
+   * id. A failed publish leaves the episode as it was. A run that regains the lease, admits a forward and lets go
+   * again between two checks is not seen, so a probe published before that admission can still queue the forward a
+   * second time.
    */
   #watchForwardedIdleLease(state: AgentThreadRuntimeState, pubsub: PubSub | undefined, key: string) {
     if (state.forwardedIdleLeaseChecks.has(key)) return;
