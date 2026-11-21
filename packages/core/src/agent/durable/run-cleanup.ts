@@ -56,3 +56,20 @@ export function createRunCleanup({ scheduleTimer, release, releaseOnTimer }: Cre
     },
   };
 }
+
+/**
+ * Runs every step even when earlier ones throw, then rethrows: the one error as is,
+ * several as an AggregateError with `message`.
+ */
+export function runEachStep(steps: ReadonlyArray<() => void>, message: string): void {
+  const failures: unknown[] = [];
+  for (const step of steps) {
+    try {
+      step();
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1) throw new AggregateError(failures, message);
+}

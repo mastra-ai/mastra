@@ -260,7 +260,7 @@ import { persistDurableRunInput } from './durable/persist-run-input';
 import type { PreparationOptions, PreparationResult } from './durable/preparation';
 import { prepareForDurableExecution, SCOPES_ALREADY_APPLIED, RESUMED_SPAN_DATA } from './durable/preparation';
 import { createRunAbortController } from './durable/run-abort';
-import { createRunCleanup } from './durable/run-cleanup';
+import { createRunCleanup, runEachStep } from './durable/run-cleanup';
 import type { CreateRunCleanupOptions, RunCleanup } from './durable/run-cleanup';
 import { recordRunSavedMessages } from './durable/run-message-refs';
 import {
@@ -12906,6 +12906,8 @@ export class Agent<
   readonly #streamCleanups = new Map<string, Set<RunCleanup>>();
   /** Releases created by observe(): an observer holds no run, so they alone don't make a run releasable. */
   readonly #observerCleanups = new WeakSet<RunCleanup>();
+  /** Per stream release, how it drops the warm thread-runtime state of its run's parked segment. */
+  readonly #parkedRuntimeEvictions = new WeakMap<RunCleanup, () => void>();
   /** Runs with a resume() setting up or executing, which a parked-run release must leave alone. */
   readonly #resumesInProgress = new Map<string, number>();
 
@@ -12913,7 +12915,7 @@ export class Agent<
   #createStreamCleanup(
     runId: string,
     options: CreateRunCleanupOptions,
-    { tracked = true }: { tracked?: boolean } = {},
+    { tracked = true, evictParked }: { tracked?: boolean; evictParked?: () => void } = {},
   ): RunCleanup {
     const forget = () => this.#forgetStreamCleanup(runId, cleanup);
     const { release, releaseOnTimer } = options;
@@ -12939,6 +12941,7 @@ export class Agent<
           }
         : {}),
     });
+    if (evictParked) this.#parkedRuntimeEvictions.set(cleanup, evictParked);
     if (tracked) this.#trackStreamCleanup(runId, cleanup);
     return cleanup;
   }
@@ -13005,21 +13008,22 @@ export class Agent<
     // Checked before anything is released, so `false` always means nothing was.
     if (run && !engine.releaseParkedRun(workflow, runId, run, snapshot.status)) return false;
     // The workflow run is gone now, so a failing stream release must not strand the rest of the hold.
-    const failures: unknown[] = [];
-    for (const cleanup of streamCleanups) {
-      try {
-        cleanup.run();
-      } catch (error) {
-        failures.push(error);
-      }
-    }
-    if (localEntry) this.executionRunRegistry.cleanup(runId);
-    // The global slot may hold another instance's later execution of the run; only this one's own entry goes.
-    if (localEntry?.executionFence && globalEntry?.executionFence === localEntry.executionFence) {
-      globalRunRegistry.delete(runId);
-    }
-    if (failures.length === 1) throw failures[0];
-    if (failures.length > 1) throw new AggregateError(failures, `Releasing parked run ${runId} failed`);
+    runEachStep(
+      [
+        ...streamCleanups.flatMap(cleanup => {
+          const evictParked = this.#parkedRuntimeEvictions.get(cleanup);
+          return evictParked ? [() => cleanup.run(), evictParked] : [() => cleanup.run()];
+        }),
+        () => {
+          if (localEntry) this.executionRunRegistry.cleanup(runId);
+          // The global slot may hold another instance's later execution of the run; only this one's own entry goes.
+          if (localEntry?.executionFence && globalEntry?.executionFence === localEntry.executionFence) {
+            globalRunRegistry.delete(runId);
+          }
+        },
+      ],
+      `Releasing parked run ${runId} failed`,
+    );
     return true;
   }
 
@@ -14143,14 +14147,22 @@ export class Agent<
     // and the recovery error paths. Revokes continuation before unsubscribing
     // the pubsub reader, then tears down the owned registry entries. Runs at
     // most once.
-    const runCleanup = this.#createStreamCleanup(runId, {
-      scheduleTimer: cleanup => this.scheduleReaderCleanup(executionFence, cleanup),
-      release: () => {
-        agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
-        streamCleanup?.();
-        cleanupOwnedRegistryState();
+    const runCleanup = this.#createStreamCleanup(
+      runId,
+      {
+        scheduleTimer: cleanup => this.scheduleReaderCleanup(executionFence, cleanup),
+        release: () =>
+          runEachStep(
+            [
+              () => agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub()),
+              () => streamCleanup?.(),
+              cleanupOwnedRegistryState,
+            ],
+            `Releasing run ${runId} failed`,
+          ),
       },
-    });
+      { evictParked: () => agentThreadStreamRuntime.evictParkedRun(output, this.getPubSub()) },
+    );
     const performCleanup = runCleanup.run;
     const scheduleAutoCleanup = runCleanup.schedule;
 
@@ -14853,16 +14865,24 @@ export class Agent<
       }
     };
 
-    const runCleanup = this.#createStreamCleanup(runId, {
-      scheduleTimer: cleanup => this.scheduleReaderCleanup(executionFence, cleanup),
-      release: () => {
-        agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
-        streamCleanup?.();
-        releaseRunState();
+    const runCleanup = this.#createStreamCleanup(
+      runId,
+      {
+        scheduleTimer: cleanup => this.scheduleReaderCleanup(executionFence, cleanup),
+        release: () =>
+          runEachStep(
+            [
+              () => agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub()),
+              () => streamCleanup?.(),
+              releaseRunState,
+            ],
+            `Releasing run ${runId} failed`,
+          ),
+        // Generate's timer releases state without disposing its draining reader.
+        ...(methodType === 'generate' ? { releaseOnTimer: releaseRunState } : {}),
       },
-      // Generate's timer releases state without disposing its draining reader.
-      ...(methodType === 'generate' ? { releaseOnTimer: releaseRunState } : {}),
-    });
+      { evictParked: () => agentThreadStreamRuntime.evictParkedRun(output, this.getPubSub()) },
+    );
     const performCleanup = runCleanup.run;
     // Schedule automatic registry cleanup after stream ends
     const scheduleAutoCleanup = runCleanup.schedule;
@@ -15640,25 +15660,33 @@ export class Agent<
     // its own. The topic stays when the run's latest execution here (this one
     // or a later resume()) lost the run: whoever took it over, in any process,
     // writes to it. Runs at most once.
-    const runCleanup = this.#createStreamCleanup(runId, {
-      scheduleTimer: cleanup => this.scheduleReaderCleanup(executionFence, cleanup),
-      release: () => {
-        agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
-        streamCleanup?.();
-        if (this.#releaseSegment(runId, segment, entry)) {
-          if (getRunRegistryEntry(runId, this.#mastra) === globalEntryForAbort) {
-            globalRunRegistry.delete(runId);
-            if (
-              !this.#unverifiedReaderFences.has(executionFence) &&
-              !lostResumeRace &&
-              (globalEntryForAbort?.executionFence ?? executionFence).ownsRunTopics()
-            ) {
-              this.clearPubsubTopic(runId, globalEntryForAbort);
-            }
-          }
-        }
+    const runCleanup = this.#createStreamCleanup(
+      runId,
+      {
+        scheduleTimer: cleanup => this.scheduleReaderCleanup(executionFence, cleanup),
+        release: () =>
+          runEachStep(
+            [
+              () => agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub()),
+              () => streamCleanup?.(),
+              () => {
+                if (!this.#releaseSegment(runId, segment, entry)) return;
+                if (getRunRegistryEntry(runId, this.#mastra) !== globalEntryForAbort) return;
+                globalRunRegistry.delete(runId);
+                if (
+                  !this.#unverifiedReaderFences.has(executionFence) &&
+                  !lostResumeRace &&
+                  (globalEntryForAbort?.executionFence ?? executionFence).ownsRunTopics()
+                ) {
+                  this.clearPubsubTopic(runId, globalEntryForAbort);
+                }
+              },
+            ],
+            `Releasing run ${runId} failed`,
+          ),
       },
-    });
+      { evictParked: () => agentThreadStreamRuntime.evictParkedRun(output, this.getPubSub()) },
+    );
     const performCleanup = runCleanup.run;
     const scheduleAutoCleanup = runCleanup.schedule;
 
@@ -16525,28 +16553,34 @@ export class Agent<
           observedFence
             ? this.scheduleReaderCleanup(observedFence, cleanup)
             : this.#executionStreamBus.scheduleCleanup(cleanup),
-        release: () => {
-          streamCleanup?.();
-          // Without a local entry, any registry entry is another instance's, so an observer leaves it to its owner.
-          // The topic goes only when no instance has ever held the run here.
-          if (!localEntry) {
-            if (!observedEntry && !getRunRegistryEntry(runId, this.#mastra)) this.clearPubsubTopic(runId);
-            return;
-          }
-          if (
-            observedFence &&
-            (this.#unverifiedReaderFences.has(observedFence) ||
-              !observedFence.ownsRunTopics() ||
-              getRunRegistryEntry(runId, this.#mastra)?.executionFence !== observedFence ||
-              this.executionRunRegistry.get(runId) !== localEntry ||
-              localEntry.executionFence !== observedFence)
-          ) {
-            return;
-          }
-          this.executionRunRegistry.cleanup(runId);
-          deleteRunRegistryEntry(runId, this.#mastra);
-          this.clearPubsubTopic(runId, observedEntry);
-        },
+        release: () =>
+          runEachStep(
+            [
+              () => streamCleanup?.(),
+              () => {
+                // Without a local entry, any registry entry is another instance's, so an observer leaves it to its owner.
+                // The topic goes only when no instance has ever held the run here.
+                if (!localEntry) {
+                  if (!observedEntry && !getRunRegistryEntry(runId, this.#mastra)) this.clearPubsubTopic(runId);
+                  return;
+                }
+                if (
+                  observedFence &&
+                  (this.#unverifiedReaderFences.has(observedFence) ||
+                    !observedFence.ownsRunTopics() ||
+                    getRunRegistryEntry(runId, this.#mastra)?.executionFence !== observedFence ||
+                    this.executionRunRegistry.get(runId) !== localEntry ||
+                    localEntry.executionFence !== observedFence)
+                ) {
+                  return;
+                }
+                this.executionRunRegistry.cleanup(runId);
+                deleteRunRegistryEntry(runId, this.#mastra);
+                this.clearPubsubTopic(runId, observedEntry);
+              },
+            ],
+            `Releasing observer of run ${runId} failed`,
+          ),
       },
       { tracked: false },
     );

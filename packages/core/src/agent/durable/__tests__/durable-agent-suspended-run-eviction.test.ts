@@ -5,6 +5,7 @@ import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage/mock';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
+import { agentThreadStreamRuntime } from '../../thread-stream-runtime';
 import { DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
@@ -72,6 +73,10 @@ async function suspend(agent: ReturnType<typeof setup>['agent'], runId: string) 
   cleanup();
 }
 
+function streamPubSub(agent: ReturnType<typeof setup>['agent']) {
+  return (agent as any).__getStreamBus(true).forRun((agent as any).__usesSharedRunLog()).pubsub;
+}
+
 async function storedStatus(storage: InMemoryStore, runId: string) {
   const run = await (await storage.getStore('workflows'))!.getWorkflowRunById({ runId });
   const snapshot = typeof run?.snapshot === 'string' ? JSON.parse(run.snapshot) : run?.snapshot;
@@ -108,18 +113,47 @@ describe('releaseParkedRun', () => {
     const { fullStream } = await agent.stream('hi', { runId: 'run-throws' });
     const reader = (fullStream as ReadableStream<any>).getReader();
     await expect.poll(() => storedStatus(storage, 'run-throws')).toBe('suspended');
-    const getPubSub = vi.spyOn(agent as any, 'getPubSub').mockImplementation(() => {
+    const unsubscribe = vi.spyOn(streamPubSub(agent), 'unsubscribe');
+    const getPubSub = vi.spyOn(agent as any, 'getPubSub').mockImplementationOnce(() => {
       throw new Error('stream release failed');
     });
 
     await expect(agent.releaseParkedRun('run-throws')).rejects.toThrow('stream release failed');
     getPubSub.mockRestore();
+    // The reader is still unsubscribed after the continuation close threw.
+    expect(unsubscribe).toHaveBeenCalledWith('agent.stream.run-throws', expect.any(Function));
     expect(workflow.runs.size).toBe(0);
     expect(agent.runRegistry.size).toBe(0);
     expect(getRunRegistryEntry('run-throws', mastra)).toBeUndefined();
     expect(await storedStatus(storage, 'run-throws')).toBe('suspended');
     // The failed release is not kept around for a later release to retry.
     expect(await agent.releaseParkedRun('run-throws')).toBe(false);
+    reader.releaseLock();
+  });
+
+  it('reports every failure when several stream release steps throw', async () => {
+    const { agent, workflow, storage, mastra } = setup();
+    const { fullStream } = await agent.stream('hi', { runId: 'run-throws-twice' });
+    const reader = (fullStream as ReadableStream<any>).getReader();
+    await expect.poll(() => storedStatus(storage, 'run-throws-twice')).toBe('suspended');
+    const unsubscribe = vi.spyOn(streamPubSub(agent), 'unsubscribe');
+    // Both the continuation close and the runtime eviction read it.
+    const getPubSub = vi.spyOn(agent as any, 'getPubSub').mockImplementation(() => {
+      throw new Error('pubsub unavailable');
+    });
+
+    const failure = await agent.releaseParkedRun('run-throws-twice').catch(error => error);
+    getPubSub.mockRestore();
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors.map(error => (error as Error).message)).toEqual([
+      'pubsub unavailable',
+      'pubsub unavailable',
+    ]);
+    expect(unsubscribe).toHaveBeenCalledWith('agent.stream.run-throws-twice', expect.any(Function));
+    expect(workflow.runs.size).toBe(0);
+    expect(agent.runRegistry.size).toBe(0);
+    expect(getRunRegistryEntry('run-throws-twice', mastra)).toBeUndefined();
+    expect(await storedStatus(storage, 'run-throws-twice')).toBe('suspended');
     reader.releaseLock();
   });
 
@@ -476,5 +510,85 @@ describe('releaseParkedRun on the evented engine', () => {
     expect(workflow.runs.has('run-evented')).toBe(false);
     reader.releaseLock();
     expect(await resumeText(agent as any, 'run-evented')).toBe('done');
+  });
+});
+
+describe('releaseParkedRun on a thread-bound stream', () => {
+  const memory = { thread: 'thread-1', resource: 'user-1' };
+
+  it('drops the parked thread-runtime record, then resumes cold', async () => {
+    const { agent, storage, mastra } = setup();
+    const { fullStream } = await agent.stream('hi', { runId: 'run-thread', memory });
+    const reader = (fullStream as ReadableStream<any>).getReader();
+    await expect.poll(() => storedStatus(storage, 'run-thread')).toBe('suspended');
+    await expect.poll(() => agentThreadStreamRuntime.isRunParked('run-thread', mastra.pubsub)).toBe(true);
+
+    expect(await agent.releaseParkedRun('run-thread')).toBe(true);
+    expect(agentThreadStreamRuntime.isRunParked('run-thread', mastra.pubsub)).toBe(false);
+    reader.releaseLock();
+    expect(await storedStatus(storage, 'run-thread')).toBe('suspended');
+    const resumed = await agent.resume('run-thread', { a: 'yes' }, { memory });
+    let text = '';
+    for await (const chunk of resumed.fullStream as AsyncIterable<any>) {
+      if (chunk.type === 'text-delta') text += chunk.payload.text;
+    }
+    resumed.cleanup();
+    expect(text).toBe('done');
+  });
+
+  it("leaves a later resume's parked record in place", async () => {
+    const storage = new InMemoryStore();
+    const ask = createTool({
+      id: 'ask',
+      description: 'suspends until answered',
+      inputSchema: z.object({}),
+      suspendSchema: z.object({ q: z.string() }),
+      resumeSchema: z.object({ a: z.string() }),
+      execute: async (_input, ctx) => (ctx.agent?.resumeData ? 'ok' : ctx.agent?.suspend({ q: '?' })),
+    });
+    const asksForever = () =>
+      new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream<any>([
+            { type: 'stream-start', warnings: [] },
+            {
+              type: 'tool-call',
+              toolCallType: 'function',
+              toolCallId: `call-${Math.random()}`,
+              toolName: 'ask',
+              input: '{}',
+            },
+            { type: 'finish', finishReason: 'tool-calls', usage },
+          ]),
+        }),
+      });
+    const older = createDurableAgent({
+      agent: new Agent({ id: 'a', name: 'a', instructions: 'x', model: asksForever() as any, tools: { ask } }),
+    });
+    const newer = createDurableAgent({
+      agent: new Agent({ id: 'a', name: 'a', instructions: 'x', model: asksForever() as any, tools: { ask } }),
+    });
+    const mastra = new Mastra({ storage, logger: false, agents: { older, newer } });
+    const { fullStream } = await older.stream('hi', { runId: 'run-thread-successor', memory });
+    const reader = (fullStream as ReadableStream<any>).getReader();
+    await expect.poll(() => storedStatus(storage, 'run-thread-successor')).toBe('suspended');
+
+    const resumed = await newer.resume('run-thread-successor', { a: 'yes' }, { memory });
+    const resumedReader = (resumed.fullStream as ReadableStream<any>).getReader();
+    // Read the resumed segment to its own suspension.
+    for (;;) {
+      const { done, value } = await resumedReader.read();
+      if (done || value.type === 'tool-call-suspended') break;
+    }
+    await expect.poll(() => storedStatus(storage, 'run-thread-successor')).toBe('suspended');
+    await expect.poll(() => agentThreadStreamRuntime.isRunParked('run-thread-successor', mastra.pubsub)).toBe(true);
+
+    expect(await older.releaseParkedRun('run-thread-successor')).toBe(true);
+    expect(agentThreadStreamRuntime.isRunParked('run-thread-successor', mastra.pubsub)).toBe(true);
+    reader.releaseLock();
+    resumedReader.releaseLock();
+    resumed.cleanup();
   });
 });
