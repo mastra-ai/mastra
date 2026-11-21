@@ -1,11 +1,12 @@
 import type { DatasetExperiment } from '@mastra/client-js';
+import { RUNNING_MESSAGES } from '@mastra/playground-ui/domains/experiments/components/experiment-run-messages';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DATASET_ID,
   EXPERIMENT_ID,
@@ -22,7 +23,6 @@ import { newerExperimentsPage } from './fixtures/experiment-lookup';
 import { queuedExperiment, runningExperiment, runningExperimentWithoutStart } from './fixtures/experiment-run-progress';
 import { renamedPostgresWithMetrics } from '@/domains/configuration/hooks/__tests__/fixtures/observability-storage-capabilities';
 import { emptyUsageBreakdown } from '@/domains/experiments/components/__tests__/fixtures/experiment-usage';
-import { RUNNING_MESSAGES } from '@/domains/experiments/components/experiment-run-messages';
 import ExperimentPage from '@/pages/experiments/experiment';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL } from '@/test/render';
