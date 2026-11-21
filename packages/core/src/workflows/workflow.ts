@@ -2101,9 +2101,7 @@ export class Workflow<
   #forgetEvictedRun = new FinalizationRegistry<{ runId: string; ref: WeakRef<object> }>(({ runId, ref }) => {
     if (this.#evictedRuns.get(runId) !== ref) return;
     this.#evictedRuns.delete(runId);
-    if (!this.#runs.has(runId) && !this.#runOpenings.has(runId)) {
-      this.executionEngine.clearRunPersistenceOverride(runId);
-    }
+    if (!this.#runs.has(runId)) this.executionEngine.clearRunPersistenceOverride(runId);
   });
 
   /** Reopens of a run id in flight, so concurrent reopens resolve to one instance. */
@@ -2152,8 +2150,8 @@ export class Workflow<
       cleanup: () => {
         const run = getRun();
         if (this.#evictedRuns.get(runId)?.deref() === run) this.#evictedRuns.delete(runId);
-        const cached = this.#runs.get(runId);
-        if (cached && cached !== run) return;
+        const live = this.liveRun(runId);
+        if (live && live !== run) return;
         this.#runs.delete(runId);
         onFinished?.();
       },
@@ -4036,8 +4034,9 @@ export class Workflow<
     }
 
     await workflowsStore.deleteWorkflowRunById({ runId, workflowName: this.id, ...options });
-    // A held instance would otherwise come back from a reopen of the deleted run.
-    this.forgetRun(runId);
+    // A held instance would otherwise come back from a reopen of the deleted run. Queued behind
+    // opens in flight, so one that read the record before the delete cannot cache it after.
+    await this.openRunOnce(runId, async () => this.forgetRun(runId));
   }
 
   protected async getWorkflowRunSteps({ runId, workflowId }: { runId: string; workflowId: string }) {
@@ -4284,11 +4283,8 @@ const TERMINAL_WORKFLOW_RUN_STATUSES = new Set<WorkflowRunStatus>([
  * Represents a workflow run that can be executed
  */
 
-/**
- * How a run reaches its workflow's in-memory run cache.
- * @internal
- */
-export interface RunRegistration {
+/** How a run reaches its workflow's in-memory run cache. */
+interface RunRegistration {
   /** Drops the run from the cache, if it is still the cached instance. */
   evict(): void;
   /** Re-adds the run when it executes again and no other instance holds its slot. */
@@ -4556,7 +4552,6 @@ export class Run<
     return execution;
   }
 
-  /** Whether no execution began after the one that started at `epoch`. */
   /**
    * Marks the run canceled, so executions already begun keep the cancel over the status they return.
    * With none active, nothing else will release the run, so it leaves the cache now.
@@ -4572,6 +4567,7 @@ export class Run<
     if (epoch > this.#canceledAtEpoch) this.workflowRunStatus = status;
   }
 
+  /** Whether no execution began after the one that started at `epoch`. */
   protected isLatestExecution(epoch: number): boolean {
     return epoch === this.#executionEpoch;
   }

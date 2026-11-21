@@ -105,7 +105,7 @@ import type { ClassifierStepOptions } from '../step-factories';
 import { forwardAgentStreamChunk } from '../stream-utils';
 import type { StreamChunkWriter } from '../stream-utils';
 import { Workflow, Run } from '../workflow';
-import type { AgentStepOptions, RunRegistration } from '../workflow';
+import type { AgentStepOptions } from '../workflow';
 import { EventedExecutionEngine } from './execution-engine';
 import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk, withoutAuthToken } from './helpers';
 import type { TripwireChunk } from './helpers';
@@ -1951,7 +1951,7 @@ export class EventedRun<
       delay?: number;
     };
     cleanup?: () => void;
-    registration?: RunRegistration;
+    registration?: { evict(): void; reattach(): void };
     workflowSteps: Record<string, StepWithComponent>;
     validateInputs?: boolean;
     inputSchema?: StandardSchemaWithJSON<TInput>;

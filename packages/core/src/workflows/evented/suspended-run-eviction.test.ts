@@ -366,6 +366,31 @@ describe.each(engines)('$engine engine: suspended run eviction', ({ createWorkfl
     expect(reopened.workflowRunStatus).toBe('pending');
   });
 
+  it('does not keep a run whose record was deleted while an open of it read storage', async () => {
+    const { workflow } = await setup();
+    const held = await workflow.createRun();
+    expect((await held.start({ inputData: {} })).status).toBe('suspended');
+    await expect.poll(() => workflow.runs.has(held.runId)).toBe(false);
+    const store = (await mastra!.getStorage()!.getStore('workflows'))!;
+    // The open has read the suspended record, and waits before it acts on that.
+    const gate = gateFirst(store, { afterRead: true });
+    const opening = workflow.createRun({ runId: held.runId });
+    let deleted: Promise<void> | undefined;
+    try {
+      await gate.entered;
+      deleted = workflow.deleteWorkflowRunById(held.runId);
+      await Promise.race([deleted, new Promise(resolve => setTimeout(resolve, 50))]);
+    } finally {
+      gate.release();
+    }
+    await opening;
+    await deleted;
+    expect(workflow.runs.has(held.runId)).toBe(false);
+    const reopened = await workflow.createRun({ runId: held.runId });
+    expect(reopened).not.toBe(held);
+    expect(reopened.workflowRunStatus).toBe('pending');
+  });
+
   it('frees an evicted run nobody holds, with its persistence override', async () => {
     const { workflow } = await setup();
     const engine = (workflow as any).executionEngine;
