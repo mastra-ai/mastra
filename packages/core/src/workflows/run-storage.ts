@@ -62,11 +62,14 @@ export interface RunStorage {
   mergeStepResult(write: StepResultWrite): Promise<StepWriteResult | undefined>;
   writeState(write: StateWrite & { requestContext: Record<string, any> }): Promise<void>;
   /**
-   * With `expectedStatus`, deletes the run only while its stored status is one of these values,
-   * checked atomically with the delete; a store that can't guarantee that keeps the run.
+   * With a guard, deletes the run only while its stored status is `expectedStatus` and its record
+   * carries `expectedGuardedOnlySnapshotId`, checked atomically with the delete; a store that can't
+   * guarantee that keeps the run.
    */
-  delete(opts?: { expectedStatus?: WorkflowRunStatus }): Promise<void>;
+  delete(opts?: RunDeleteGuard): Promise<void>;
 }
+
+type RunDeleteGuard = { expectedStatus: WorkflowRunStatus; expectedGuardedOnlySnapshotId: string };
 
 type StepResults = Record<string, StepResult<any, any, any, any>>;
 
@@ -256,16 +259,16 @@ class RunStorageV1 implements RunStorage {
     });
   }
 
-  async delete(opts?: { expectedStatus?: WorkflowRunStatus }): Promise<void> {
+  async delete(opts?: RunDeleteGuard): Promise<void> {
     const store = await this.#getStore();
-    if (opts?.expectedStatus === undefined) {
+    if (!opts) {
       await store?.deleteWorkflowRunById({ workflowName: this.#workflowName, runId: this.#runId });
     } else if (store?.supportsGuardedRunDeletes()) {
       await store.deleteWorkflowRunById({
         workflowName: this.#workflowName,
         runId: this.#runId,
         storageVersion: 1,
-        expectedStatus: opts.expectedStatus,
+        ...opts,
       });
     }
   }
@@ -508,16 +511,16 @@ class RunStorageV2 implements RunStorage {
     });
   }
 
-  async delete(opts?: { expectedStatus?: WorkflowRunStatus }): Promise<void> {
+  async delete(opts?: RunDeleteGuard): Promise<void> {
     const store = await this.#getStore();
-    if (opts?.expectedStatus === undefined) {
+    if (!opts) {
       await store?.deleteWorkflowRunById({ workflowName: this.#workflowName, runId: this.#runId });
     } else if (store?.supportsGuardedRunDeletes()) {
       await store.deleteWorkflowRunById({
         workflowName: this.#workflowName,
         runId: this.#runId,
         storageVersion: 2,
-        expectedStatus: opts.expectedStatus,
+        ...opts,
       });
     }
   }

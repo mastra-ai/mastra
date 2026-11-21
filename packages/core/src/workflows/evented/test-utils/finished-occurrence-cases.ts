@@ -16,6 +16,7 @@ import type { Event } from '../../../events/types';
 import { Mastra } from '../../../mastra';
 import type { MastraStorage } from '../../../storage';
 import type { WorkflowsStorage } from '../../../storage/domains/workflows/base';
+import { createRunStorage } from '../../run-storage';
 import { getEntryWorkflow } from '../../step-entry';
 import type { StepFlowEntry } from '../../types';
 import type { Workflow } from '../../workflow';
@@ -1101,6 +1102,90 @@ export function describeFinishedOccurrenceCases({
         expect(canceledBeforeDelete).toBe(true);
         expect(statusAfterDelete).toBe('canceled');
         expect((await storedRun(created.runId))?.status).toBe('canceled');
+      },
+      20_000,
+    );
+
+    // The same run id can be stored again by a newer execution after the suspend is published; its
+    // running record, guarded-only like the declined one, is not the record the suspend left.
+    it.each([1, 2] as const)(
+      'keeps a newer execution stored under the run id before its declined suspend deletes it (storage v%i)',
+      async storageVersion => {
+        const store = (await getStorage().getStore('workflows'))!;
+        if (storageVersion === 1 && !store.supportsWorkflowStepGuards()) return;
+        const suspendHandled = deferred<void>();
+        const processor = WorkflowEventProcessor.prototype as unknown as {
+          processWorkflowSuspend: (...args: unknown[]) => Promise<void>;
+        };
+        const handleSuspend = processor.processWorkflowSuspend;
+        vi.spyOn(processor, 'processWorkflowSuspend').mockImplementation(async function (
+          this: unknown,
+          ...args: unknown[]
+        ) {
+          try {
+            await handleSuspend.apply(this, args);
+          } finally {
+            suspendHandled.resolve();
+          }
+        });
+        let runId: string | undefined;
+        let replacedBeforeDelete = false;
+        const storeProto = Object.getPrototypeOf(store) as WorkflowsStorage;
+        const deleteRun = storeProto.deleteWorkflowRunById;
+        vi.spyOn(storeProto, 'deleteWorkflowRunById').mockImplementation(async function (
+          this: WorkflowsStorage,
+          ...args: Parameters<WorkflowsStorage['deleteWorkflowRunById']>
+        ) {
+          if (runId && args[0].runId === runId && !replacedBeforeDelete) {
+            replacedBeforeDelete = true;
+            const declined = (await storedRun(runId))!;
+            expect(declined).toMatchObject({ status: 'running', guardedOnlySnapshot: true });
+            await createRunStorage({
+              storageVersion,
+              workflowName: 'finished',
+              runId,
+              getStore: async () => store,
+            }).writeSnapshot({
+              ...declined,
+              timestamp: Date.now(),
+              guardedOnlySnapshotId: `${declined.guardedOnlySnapshotId}-replacement`,
+            });
+          }
+          return deleteRun.apply(this, args);
+        });
+        const a = await startReplica(
+          createWorkflow({
+            id: 'finished',
+            inputSchema: Num,
+            outputSchema: Num,
+            options: { storageVersion, shouldPersistSnapshot: () => false },
+          })
+            .then(
+              createStep({
+                id: 'gate',
+                inputSchema: Num,
+                outputSchema: Num,
+                resumeSchema: z.object({ ok: z.boolean() }),
+                execute: async ({ inputData, resumeData, suspend }) => {
+                  if (!resumeData) {
+                    await suspend({});
+                  }
+                  return inputData;
+                },
+              }),
+            )
+            .commit(),
+        );
+        const created = await a.workflow.createRun({ runId: uniqueRunId() });
+        runId = created.runId;
+        expect((await created.start({ inputData: { n: 1 } })).status).toBe('suspended');
+        await suspendHandled.promise;
+
+        expect(replacedBeforeDelete).toBe(true);
+        expect(await storedRun(created.runId)).toMatchObject({
+          status: 'running',
+          guardedOnlySnapshotId: expect.stringMatching(/-replacement$/),
+        });
       },
       20_000,
     );

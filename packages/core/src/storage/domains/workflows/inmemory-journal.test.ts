@@ -169,6 +169,30 @@ describe('WorkflowsInMemory v1 methods on storage v2 runs', () => {
     await store.dangerouslyClearAll();
     expect((await store.listWorkflowRuns()).total).toBe(0);
   });
+
+  it.each([1, 2] as const)(
+    'keeps a newer running record stored under the same run id as the guarded one (storage v%i)',
+    async storageVersion => {
+      const { store } = setup();
+      const run = { workflowName: 'wf', runId: `guarded-replaced-v${storageVersion}` };
+      const write = (guardedOnlySnapshotId?: string) => {
+        const snapshot = makeSnapshot(run.runId, { guardedOnlySnapshot: true, guardedOnlySnapshotId });
+        return storageVersion === 1
+          ? store.persistWorkflowSnapshot({ ...run, snapshot })
+          : store.writeWorkflowRunCheckpoint({ ...run, header: makeHeader(run.runId, snapshot), steps: {}, state: {} });
+      };
+      const guarded = { storageVersion, expectedStatus: 'running' as const, expectedGuardedOnlySnapshotId: 'first' };
+      for (const replacement of ['second', undefined]) {
+        await write(replacement);
+        await store.deleteWorkflowRunById({ ...run, ...guarded });
+        expect(await store.loadWorkflowSnapshot({ ...run, storageVersion })).toMatchObject({ status: 'running' });
+      }
+
+      await write('first');
+      await store.deleteWorkflowRunById({ ...run, ...guarded });
+      expect(await store.loadWorkflowSnapshot({ ...run, storageVersion })).toBeNull();
+    },
+  );
 });
 
 describe('WorkflowsInMemory storage v2 methods', () => {

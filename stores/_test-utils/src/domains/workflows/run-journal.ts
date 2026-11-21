@@ -1829,6 +1829,40 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         }
       });
 
+      it('keeps a newer running record stored under the same run id as the guarded one', async ctx => {
+        if (!store.supportsGuardedRunDeletes()) ctx.skip();
+        for (const storageVersion of [1, 2] as const) {
+          const run = { workflowName, runId: `guarded-replaced-v${storageVersion}` };
+          const write = (snapshot: WorkflowRunState) =>
+            storageVersion === 1
+              ? store.persistWorkflowSnapshot({ ...run, snapshot })
+              : checkpoint(run.runId, snapshot);
+          const guarded = {
+            storageVersion,
+            expectedStatus: 'running' as const,
+            expectedGuardedOnlySnapshotId: 'first',
+          };
+          // A later execution's record, with its own id or none, is not the one the guard names.
+          for (const replacement of ['second', undefined]) {
+            await write(
+              makeSnapshot(run.runId, {
+                status: 'running',
+                guardedOnlySnapshot: replacement !== undefined,
+                guardedOnlySnapshotId: replacement,
+              }),
+            );
+            await store.deleteWorkflowRunById({ ...run, ...guarded });
+            expect(await store.loadWorkflowSnapshot({ ...run, storageVersion })).toMatchObject({ status: 'running' });
+          }
+
+          await write(
+            makeSnapshot(run.runId, { status: 'running', guardedOnlySnapshot: true, guardedOnlySnapshotId: 'first' }),
+          );
+          await store.deleteWorkflowRunById({ ...run, ...guarded });
+          expect(await store.loadWorkflowSnapshot({ ...run, storageVersion })).toBeNull();
+        }
+      });
+
       it('rejects a stale fence when deleting a v1 snapshot', async ctx => {
         if (!(await store.supportsRunFencing())) ctx.skip();
         const run = { workflowName, runId: 'fenced-v1-delete' };

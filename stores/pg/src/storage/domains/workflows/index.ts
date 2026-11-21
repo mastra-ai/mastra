@@ -397,10 +397,14 @@ export class WorkflowsPG extends WorkflowsStorage {
 
   /** SQL for a snapshot's status. Legacy json/text columns can hold escapes that fail a jsonb cast (#11563). */
   async #statusExpression(column: string): Promise<string> {
+    return this.#snapshotFieldExpression(column, 'status');
+  }
+
+  async #snapshotFieldExpression(column: string, field: 'status' | 'guardedOnlySnapshotId'): Promise<string> {
     const snapshotType = await this.#db.getColumnType(TABLE_WORKFLOW_SNAPSHOT, 'snapshot');
     return snapshotType === 'jsonb'
-      ? `${column} ->> 'status'`
-      : `regexp_replace(${column}::text, '\\\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})', '', 'g')::jsonb ->> 'status'`;
+      ? `${column} ->> '${field}'`
+      : `regexp_replace(${column}::text, '\\\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})', '', 'g')::jsonb ->> '${field}'`;
   }
 
   private parseWorkflowRun(row: Record<string, any>): WorkflowRun {
@@ -2213,27 +2217,38 @@ export class WorkflowsPG extends WorkflowsStorage {
     storageVersion,
     fence,
     expectedStatus,
+    expectedGuardedOnlySnapshotId,
   }: {
     runId: string;
     workflowName: string;
     storageVersion?: 1 | 2;
     fence?: RunFence;
     expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+    expectedGuardedOnlySnapshotId?: string;
   }): Promise<void> {
     const resolvedFence = resolveRunFence(this, fence, runId);
     const expected = expectedStatus === undefined ? undefined : [expectedStatus].flat();
+    const guarded = expected !== undefined || expectedGuardedOnlySnapshotId !== undefined;
+    const matches = (record: { status: string | null; guardedOnlySnapshotId: string | null }) =>
+      (!expected || expected.includes(record.status as WorkflowRunStatus)) &&
+      (expectedGuardedOnlySnapshotId === undefined || record.guardedOnlySnapshotId === expectedGuardedOnlySnapshotId);
     const snapshotTable = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) });
     try {
       if (storageVersion === 1) {
-        // The status guard sits on the delete itself, so a concurrent status change can't land
-        // between the check and the delete.
-        const guard = expected ? ` AND ${await this.#statusExpression('snapshot')} = ANY($3::text[])` : '';
+        // The guards sit on the delete itself, so a concurrent write can't land between the check
+        // and the delete.
+        const params: unknown[] = [runId, workflowName];
+        let guard = '';
+        if (expected) {
+          params.push(expected);
+          guard += ` AND ${await this.#statusExpression('snapshot')} = ANY($${params.length}::text[])`;
+        }
+        if (expectedGuardedOnlySnapshotId !== undefined) {
+          params.push(expectedGuardedOnlySnapshotId);
+          guard += ` AND ${await this.#snapshotFieldExpression('snapshot', 'guardedOnlySnapshotId')} = $${params.length}`;
+        }
         await withRunFence(this.#db.client, this.#runOwnersTable(), resolvedFence, 'deleteWorkflowRunById', q =>
-          q.none(`DELETE FROM ${snapshotTable} WHERE run_id = $1 AND workflow_name = $2${guard}`, [
-            runId,
-            workflowName,
-            ...(expected ? [expected] : []),
-          ]),
+          q.none(`DELETE FROM ${snapshotTable} WHERE run_id = $1 AND workflow_name = $2${guard}`, params),
         );
         return;
       }
@@ -2242,18 +2257,22 @@ export class WorkflowsPG extends WorkflowsStorage {
         // The storage v2 header is locked first: its row lock waits out an in-flight append, and the
         // entries delete, a later statement, then sees that append's entries. The runs built on
         // this one's state are detached while its entries can still be read.
-        const run = await t.oneOrNone<{ stateShared: boolean; status: WorkflowRunStatus }>(
-          `SELECT "stateShared", status FROM ${this.#runsTable()} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
+        const run = await t.oneOrNone<{
+          stateShared: boolean;
+          status: WorkflowRunStatus;
+          guardedOnlySnapshotId: string | null;
+        }>(
+          `SELECT "stateShared", status, header ->> 'guardedOnlySnapshotId' AS "guardedOnlySnapshotId" FROM ${this.#runsTable()} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
           [workflowName, runId],
         );
-        if (expected && run && !expected.includes(run.status)) return;
-        if (expected && storageVersion !== 2) {
-          // Locked like the header, so the status checked is the one deleted.
-          const snapshot = await t.oneOrNone<{ status: string | null }>(
-            `SELECT ${await this.#statusExpression('snapshot')} AS status FROM ${snapshotTable} WHERE run_id = $1 AND workflow_name = $2 FOR UPDATE`,
+        if (guarded && run && !matches(run)) return;
+        if (guarded && storageVersion !== 2) {
+          // Locked like the header, so the record checked is the one deleted.
+          const snapshot = await t.oneOrNone<{ status: string | null; guardedOnlySnapshotId: string | null }>(
+            `SELECT ${await this.#statusExpression('snapshot')} AS status, ${await this.#snapshotFieldExpression('snapshot', 'guardedOnlySnapshotId')} AS "guardedOnlySnapshotId" FROM ${snapshotTable} WHERE run_id = $1 AND workflow_name = $2 FOR UPDATE`,
             [runId, workflowName],
           );
-          if (snapshot && !expected.includes(snapshot.status as WorkflowRunStatus)) return;
+          if (snapshot && !matches(snapshot)) return;
         }
         if (run?.stateShared) await this.#detachStateChildren(t, workflowName, runId);
         for (const table of [

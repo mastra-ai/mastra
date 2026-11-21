@@ -1775,17 +1775,24 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     storageVersion,
     fence,
     expectedStatus,
+    expectedGuardedOnlySnapshotId,
   }: {
     runId: string;
     workflowName: string;
     storageVersion?: 1 | 2;
     fence?: RunFence;
     expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+    expectedGuardedOnlySnapshotId?: string;
   }): Promise<void> {
     const check = this.#runFenceCheck(fence, runId, 'deleteWorkflowRunById');
+    const guarded = expectedStatus !== undefined || expectedGuardedOnlySnapshotId !== undefined;
+    const matches = (record: Record<string, unknown>) =>
+      (expectedStatus === undefined ||
+        matchesExpectedWorkflowStatus(record.status as WorkflowRunStatus, expectedStatus)) &&
+      (expectedGuardedOnlySnapshotId === undefined || record.guardedOnlySnapshotId === expectedGuardedOnlySnapshotId);
     return this.executeWithRetry(async () => {
       try {
-        if (storageVersion === 1 && expectedStatus === undefined) {
+        if (storageVersion === 1 && !guarded) {
           await withRunFence(this.#client, check, writer =>
             writer.execute({
               sql: `DELETE FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
@@ -1795,17 +1802,15 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
           return;
         }
         // Detaches the runs built on its state first, while its entries are still there to read.
-        // The write lock covers the status check too, so the status checked is the one deleted.
+        // The write lock covers the guard checks too, so the record checked is the one deleted.
         await inWriteTransaction(this.#client, async tx => {
           if (check) await assertRunFence(tx, check);
-          if (expectedStatus !== undefined && storageVersion !== 2) {
+          if (guarded && storageVersion !== 2) {
             const { rows } = await tx.execute({
-              sql: `SELECT json_extract(snapshot, '$.status') AS status FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
+              sql: `SELECT json_extract(snapshot, '$.status') AS status, json_extract(snapshot, '$.guardedOnlySnapshotId') AS guardedOnlySnapshotId FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
               args: [workflowName, runId],
             });
-            if (rows[0] && !matchesExpectedWorkflowStatus(rows[0].status as WorkflowRunStatus, expectedStatus)) {
-              return;
-            }
+            if (rows[0] && !matches(rows[0])) return;
             if (storageVersion === 1) {
               await tx.execute({
                 sql: `DELETE FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
@@ -1815,16 +1820,10 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
             }
           }
           const run = await tx.execute({
-            sql: `SELECT stateShared, status FROM ${TABLE_WORKFLOW_RUNS} WHERE workflow_name = ? AND run_id = ?`,
+            sql: `SELECT stateShared, status, json_extract(header, '$.guardedOnlySnapshotId') AS guardedOnlySnapshotId FROM ${TABLE_WORKFLOW_RUNS} WHERE workflow_name = ? AND run_id = ?`,
             args: [workflowName, runId],
           });
-          if (
-            expectedStatus !== undefined &&
-            run.rows[0] &&
-            !matchesExpectedWorkflowStatus(run.rows[0].status as WorkflowRunStatus, expectedStatus)
-          ) {
-            return;
-          }
+          if (guarded && run.rows[0] && !matches(run.rows[0])) return;
           if (Number(run.rows[0]?.stateShared)) await this.#detachStateChildren(tx, workflowName, runId);
           for (const table of [
             TABLE_WORKFLOW_RUNS,

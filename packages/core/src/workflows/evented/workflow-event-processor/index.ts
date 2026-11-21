@@ -1304,6 +1304,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         status: 'running',
         // Stored only because guards or storage v2 need it, so a suspend that declines its snapshot removes it.
         guardedOnlySnapshot: !persistRequested,
+        ...(!persistRequested && { guardedOnlySnapshotId: globalThis.crypto.randomUUID() }),
         value: initialState,
         // A cancel sent before the first step result reads its execution claim from here.
         requestContext: withoutAuthToken(requestContext),
@@ -1835,12 +1836,14 @@ export class WorkflowEventProcessor extends EventProcessor {
     // record is guarded-only running, this suspend declined its snapshot, and resume() refuses a
     // run whose stored status is not suspended, so no resume can write a record before the delete.
     const runStorage = this.#runStorage(args.workflowId, runId);
-    let deleteGuardedOnlyRecord = false;
+    let guardedOnlySnapshotId: string | undefined;
     if (!restart && !timeTravel && !resumeSteps?.length) {
       try {
         const header = await runStorage.loadHeader();
         // Never delete a resumable snapshot.
-        deleteGuardedOnlyRecord = header?.guardedOnlySnapshot === true && header.status === 'running';
+        if (header?.guardedOnlySnapshot === true && header.status === 'running') {
+          guardedOnlySnapshotId = header.guardedOnlySnapshotId;
+        }
       } catch (error) {
         this.mastra
           .getLogger()
@@ -1854,12 +1857,14 @@ export class WorkflowEventProcessor extends EventProcessor {
       data: { ...args, workflow: undefined, state: finalState },
     });
 
-    // Retain recovery records until suspend propagation succeeds. A cancel landing any time before
-    // the delete replaces the record with a canceled one to keep, so the delete only goes through
-    // while the stored run is still running; a store that can't check that atomically keeps it.
-    if (deleteGuardedOnlyRecord) {
+    // Retain recovery records until suspend propagation succeeds. Once it is published, a cancel can
+    // replace the record with a canceled one, and a newer execution can store the run id again; both
+    // are kept. The delete goes through only while the stored run is still running and still carries
+    // the id this execution gave its guarded-only record; a store that can't check that atomically
+    // keeps it, as does a record stored without an id.
+    if (guardedOnlySnapshotId !== undefined) {
       try {
-        await runStorage.delete({ expectedStatus: 'running' });
+        await runStorage.delete({ expectedStatus: 'running', expectedGuardedOnlySnapshotId: guardedOnlySnapshotId });
       } catch (error) {
         this.mastra
           .getLogger()
