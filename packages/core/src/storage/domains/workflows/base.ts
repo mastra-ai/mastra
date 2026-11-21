@@ -531,8 +531,7 @@ export abstract class WorkflowsStorage extends StorageDomain {
   /**
    * `expectedStatus` is an optional compare-and-delete guard, honored only by adapters where
    * `supportsGuardedRunDeletes()` is true: when the run is stored (in `storageVersion`'s store, or
-   * in either without it) with a status that is not one of these values, nothing is deleted and
-   * the call resolves to `false`. Adapters that honor the guard resolve to `true` otherwise.
+   * in either without it) with a status that is not one of these values, nothing is deleted.
    */
   abstract deleteWorkflowRunById(args: {
     runId: string;
@@ -540,5 +539,5 @@ export abstract class WorkflowsStorage extends StorageDomain {
     storageVersion?: 1 | 2;
     fence?: RunFence;
     expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
-  }): Promise<boolean | void>;
+  }): Promise<void>;
 }

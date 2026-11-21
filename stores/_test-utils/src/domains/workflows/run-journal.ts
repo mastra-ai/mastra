@@ -1820,15 +1820,11 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
             ? store.updateWorkflowState({ ...run, storageVersion, opts: { status: 'canceled' } })
             : store.updateWorkflowRunHeader({ ...run, opts: { status: 'canceled' } }));
 
-          await expect(
-            store.deleteWorkflowRunById({ ...run, storageVersion, expectedStatus: 'running' }),
-          ).resolves.toBe(false);
+          await store.deleteWorkflowRunById({ ...run, storageVersion, expectedStatus: 'running' });
           expect(await store.loadWorkflowSnapshot({ ...run, storageVersion })).toMatchObject({ status: 'canceled' });
 
           await write(running);
-          await expect(
-            store.deleteWorkflowRunById({ ...run, storageVersion, expectedStatus: ['running'] }),
-          ).resolves.toBe(true);
+          await store.deleteWorkflowRunById({ ...run, storageVersion, expectedStatus: ['running'] });
           expect(await store.loadWorkflowSnapshot({ ...run, storageVersion })).toBeNull();
         }
       });

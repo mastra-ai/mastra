@@ -1781,7 +1781,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     storageVersion?: 1 | 2;
     fence?: RunFence;
     expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
-  }): Promise<boolean> {
+  }): Promise<void> {
     const check = this.#runFenceCheck(fence, runId, 'deleteWorkflowRunById');
     return this.executeWithRetry(async () => {
       try {
@@ -1792,11 +1792,11 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
               args: [workflowName, runId],
             }),
           );
-          return true;
+          return;
         }
         // Detaches the runs built on its state first, while its entries are still there to read.
         // The write lock covers the status check too, so the status checked is the one deleted.
-        return await inWriteTransaction(this.#client, async tx => {
+        await inWriteTransaction(this.#client, async tx => {
           if (check) await assertRunFence(tx, check);
           if (expectedStatus !== undefined && storageVersion !== 2) {
             const { rows } = await tx.execute({
@@ -1804,14 +1804,14 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
               args: [workflowName, runId],
             });
             if (rows[0] && !matchesExpectedWorkflowStatus(rows[0].status as WorkflowRunStatus, expectedStatus)) {
-              return false;
+              return;
             }
             if (storageVersion === 1) {
               await tx.execute({
                 sql: `DELETE FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
                 args: [workflowName, runId],
               });
-              return true;
+              return;
             }
           }
           const run = await tx.execute({
@@ -1823,7 +1823,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
             run.rows[0] &&
             !matchesExpectedWorkflowStatus(run.rows[0].status as WorkflowRunStatus, expectedStatus)
           ) {
-            return false;
+            return;
           }
           if (Number(run.rows[0]?.stateShared)) await this.#detachStateChildren(tx, workflowName, runId);
           for (const table of [
@@ -1836,7 +1836,6 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
               args: [workflowName, runId],
             });
           }
-          return true;
         });
       } catch (error) {
         if (isRunFenceConflictError(error)) throw error;

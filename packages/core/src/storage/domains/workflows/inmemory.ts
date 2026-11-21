@@ -1187,21 +1187,20 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     storageVersion?: 1 | 2;
     fence?: RunFence;
     expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
-  }): Promise<boolean> {
+  }): Promise<void> {
     this.assertFence(fence, runId, 'deleteWorkflowRunById');
     const key = this.getWorkflowKey(workflowName, runId);
     if (expectedStatus !== undefined) {
       const header = storageVersion === 1 ? undefined : this.db.workflowRunHeaders.get(key)?.header;
       const stored = storageVersion === 2 ? undefined : this.db.workflows.get(key)?.snapshot;
       const snapshot = typeof stored === 'string' ? (JSON.parse(stored) as WorkflowRunState) : stored;
-      if (header && !matchesExpectedWorkflowStatus(header.status, expectedStatus)) return false;
-      if (snapshot && !matchesExpectedWorkflowStatus(snapshot.status, expectedStatus)) return false;
+      if (header && !matchesExpectedWorkflowStatus(header.status, expectedStatus)) return;
+      if (snapshot && !matchesExpectedWorkflowStatus(snapshot.status, expectedStatus)) return;
     }
     if (storageVersion !== 2) this.db.workflows.delete(key);
-    if (storageVersion === 1) return true;
+    if (storageVersion === 1) return;
     this.detachStateChildren(workflowName, runId);
     this.db.workflowRunHeaders.delete(key);
     this.db.workflowRunEntries.delete(key);
-    return true;
   }
 }
