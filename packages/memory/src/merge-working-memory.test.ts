@@ -11,21 +11,24 @@ const memoryConfig = { workingMemory: { enabled: true, schema, scope: 'resource'
 const createMemory = (options: Record<string, unknown> = memoryConfig) =>
   new Memory({ storage: new InMemoryStore(), options: options as any });
 
-/** Gives the in-memory adapter an atomic merge so the Memory-level logic can be exercised. */
-async function enableAtomicMerge(memory: Memory) {
+/** Spies on the in-memory adapter's atomic merge. */
+async function spyOnAtomicMerge(memory: Memory) {
   const store = (await (memory as any).getMemoryStore()) as MemoryStorage;
-  Object.defineProperty(store, 'supportsAtomicWorkingMemoryMerge', { value: true });
-  const merge = vi.fn(async ({ resourceId, merge }: { resourceId: string; merge: (e?: string) => string }) => {
-    const existing = await store.getResourceById({ resourceId });
-    return store.updateResource({ resourceId, workingMemory: merge(existing?.workingMemory ?? undefined) });
-  });
-  store.mergeResourceWorkingMemory = merge;
+  const merge = vi.spyOn(store, 'mergeResourceWorkingMemory');
   return { store, merge };
+}
+
+/** Makes the in-memory adapter report no atomic merge, like adapters that don't implement it. */
+async function disableAtomicMerge(memory: Memory) {
+  const store = (await (memory as any).getMemoryStore()) as MemoryStorage;
+  Object.defineProperty(store, 'supportsAtomicWorkingMemoryMerge', { value: false });
+  return store;
 }
 
 describe('Memory.mergeWorkingMemory', () => {
   it('rejects adapters without atomic merge support instead of silently replacing', async () => {
     const memory = createMemory();
+    await disableAtomicMerge(memory);
     expect(await memory.supportsAtomicWorkingMemoryMerge()).toBe(false);
     await expect(
       memory.mergeWorkingMemory({ threadId: 't', resourceId: 'r', workingMemory: { name: 'A' } }),
@@ -34,7 +37,7 @@ describe('Memory.mergeWorkingMemory', () => {
 
   it('deep-merges into existing working memory through the storage merge', async () => {
     const memory = createMemory();
-    const { store, merge } = await enableAtomicMerge(memory);
+    const { store, merge } = await spyOnAtomicMerge(memory);
     await store.updateResource({ resourceId: 'r', workingMemory: JSON.stringify({ name: 'A', tone: 'calm' }) });
 
     await memory.mergeWorkingMemory({ threadId: 't', resourceId: 'r', workingMemory: '{"city":"Oslo","tone":null}' });
@@ -46,7 +49,7 @@ describe('Memory.mergeWorkingMemory', () => {
 
   it('replaces stored working memory that is not a JSON object', async () => {
     const memory = createMemory();
-    const { store } = await enableAtomicMerge(memory);
+    const { store } = await spyOnAtomicMerge(memory);
     await store.updateResource({ resourceId: 'r', workingMemory: '["stale"]' });
 
     await memory.mergeWorkingMemory({ threadId: 't', resourceId: 'r', workingMemory: '{"city":"Oslo"}' });
@@ -85,7 +88,7 @@ describe('update-working-memory tool with schema', () => {
 
   it('uses the atomic storage merge when the adapter supports it', async () => {
     const memory = createMemory();
-    const { store, merge } = await enableAtomicMerge(memory);
+    const { store, merge } = await spyOnAtomicMerge(memory);
     await store.updateResource({ resourceId: 'r', workingMemory: JSON.stringify({ name: 'A' }) });
 
     expect(await runTool(memory, { tone: 'warm' })).toEqual({ success: true });
@@ -97,7 +100,7 @@ describe('update-working-memory tool with schema', () => {
 
   it('falls back to read-merge-write when the adapter lacks atomic merge', async () => {
     const memory = createMemory();
-    const store = (await (memory as any).getMemoryStore()) as MemoryStorage;
+    const store = await disableAtomicMerge(memory);
     await store.updateResource({ resourceId: 'r', workingMemory: JSON.stringify({ name: 'A' }) });
 
     expect(await runTool(memory, { tone: 'warm' })).toEqual({ success: true });
