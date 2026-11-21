@@ -80,6 +80,8 @@ interface SessionsState {
   sideSessions: SideSessionRow[];
   following: FollowedRow[];
   more: number;
+  /** Whether this session started any side session, including ones aged out or past the row cap: their reports stay readable. */
+  startedSideSessions: boolean;
 }
 
 function escapeText(value: string): string {
@@ -137,13 +139,15 @@ export class FactorySessionsStateProcessor implements Processor<'factory-session
     }
 
     const state = await this.#userState(scope);
-    if (state.sideSessions.length === 0 && state.following.length === 0) {
+    if (state.sideSessions.length === 0 && state.following.length === 0 && !state.startedSideSessions) {
       if (!cleared()) return;
       return this.#signal(EMPTY_CACHE_KEY, 'No sub-sessions or followed work items.', state, { entries: 0 });
     }
-    const cacheKey = cacheKeyFor(state);
+    const contents = this.#render(state);
+    // Keyed on the rendered text too, so a change to the guidance replaces an otherwise unchanged snapshot.
+    const cacheKey = cacheKeyFor({ state, contents });
     if (unchanged(cacheKey)) return;
-    return this.#signal(cacheKey, this.#render(state), state, {
+    return this.#signal(cacheKey, contents, state, {
       sideSessions: state.sideSessions.length,
       following: state.following.length,
     });
@@ -286,6 +290,7 @@ export class FactorySessionsStateProcessor implements Processor<'factory-session
         entry.section === 'following' ? [strip(entry.row as FollowedRow & { active: boolean })] : [],
       ),
       more: ordered.length - shown.length,
+      startedSideSessions: listed.length > 0,
     };
   }
 
@@ -312,7 +317,10 @@ export class FactorySessionsStateProcessor implements Processor<'factory-session
       }
     }
     if (state.more > 0) lines.push(`+${state.more} more`);
-    if (state.sideSessions.length > 0) {
+    if (state.sideSessions.length === 0 && state.following.length === 0) {
+      lines.push('No side sessions are active now; reports from earlier ones stay in notification_inbox.');
+    }
+    if (state.startedSideSessions) {
       lines.push(
         "A side session's report is its own account and can be wrong. Before you repeat a specific claim from it (files or tests changed, pushes, CI, review findings) or act on it (approve, request changes, merge), check that claim against the pull request or branch yourself. If you pass a report on before checking it, say that you have not checked it.",
       );
