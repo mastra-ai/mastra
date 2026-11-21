@@ -17,7 +17,7 @@ Support teams repeat investigations when manuals, customer history, and confirme
 
 1. **Open the project**
    - Run `npx create-mastra@latest knowledge-support-agent --template knowledge-support-agent`, then `cd knowledge-support-agent`.
-   - If you already have the template in a checkout, open its directory and run `npm ci`. In the monorepo the directory is `templates/template-knowledge-support-agent`.
+   - If you already have the template in a checkout, open its directory and run `npm install`. In the monorepo the directory is `templates/template-knowledge-support-agent`.
 2. **Add your API key**
    - Run `cp .env.example .env` and set the key from Prerequisites.
 3. **Load the example Knowledge**

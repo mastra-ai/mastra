@@ -97,7 +97,7 @@ Grant `support:technician` for support conversations and scoped Knowledge reads.
 
 ## Seed and build
 
-Install with `npm ci`, then run the seed from the template directory with the shared hosted database configuration.
+Install with `npm install`, then run the seed from the template directory with the shared hosted database configuration.
 
 ```sh
 npm run knowledge:seed -- --dry-run
