@@ -115,7 +115,8 @@ describe('toWindowsShellArgs', () => {
   });
 });
 
-describe('Windows package-manager .cmd shims', () => {
+// The cmd.exe stand-in is a Node script with a shebang, which only POSIX can execute directly.
+describe.skipIf(process.platform === 'win32')('Windows package-manager .cmd shims', () => {
   const dirs: string[] = [];
   afterEach(async () => {
     await Promise.all(dirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })));
