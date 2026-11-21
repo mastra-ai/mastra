@@ -58,17 +58,15 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
     const [customer] = await store.getScopesByAddress([scope]);
     if (!customer) return finish('empty');
     let historyReadable = false;
-    const candidates = new Map<string, KnowledgePage>();
-    const pages = new Map<string, KnowledgePage>();
+    const candidateIds = new Set<string>();
     const noteHits = new Map<string, Set<string>>();
     const add = (page: KnowledgePage) => {
       if (page.scopeId !== customer.id || page.isScope || page.deletedAt) return;
-      if (candidates.size >= bounds.candidates && !candidates.has(page.id)) {
+      if (candidateIds.size >= bounds.candidates && !candidateIds.has(page.id)) {
         partial = true;
         return;
       }
-      candidates.set(page.id, page);
-      pages.set(page.id, page);
+      candidateIds.add(page.id);
     };
     // Search tags as well as question words: a tag may be absent from title and prose.
     const queries = [...new Set([...topics, ...words])];
@@ -80,7 +78,7 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
         if (hits.length >= bounds.hits) partial = true;
         for (const hit of hits) {
           add(hit.page);
-          if (hit.type === 'note' && candidates.has(hit.page.id)) {
+          if (hit.type === 'note' && candidateIds.has(hit.page.id)) {
             const notes = noteHits.get(hit.page.id) ?? new Set<string>();
             notes.add(hit.note.id);
             noteHits.set(hit.page.id, notes);
@@ -116,6 +114,19 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
       partial = true;
     }
     if (!historyReadable) return finish('unavailable');
+    // A search or list snapshot can outlive a deletion. Use only the pages still readable here.
+    const ids = [...candidateIds];
+    const candidates = new Map<string, KnowledgePage>();
+    for (let index = 0; index < ids.length; index += bounds.batch) {
+      try {
+        const current = await store.getPages({ ids: ids.slice(index, index + bounds.batch), read });
+        for (const page of current)
+          if (page.scopeId === customer.id && !page.isScope && !page.deletedAt) candidates.set(page.id, page);
+      } catch {
+        partial = true;
+      }
+    }
+    const pages = new Map(candidates);
     // Search hits have no canonical path. Resolve parents in batches using the public store API,
     // then reject foreign scopes, missing/deleted ancestors, cycles, and paths outside allowed roots.
     for (let depth = 0; depth < MAX_KNOWLEDGE_PAGE_DEPTH; depth++) {

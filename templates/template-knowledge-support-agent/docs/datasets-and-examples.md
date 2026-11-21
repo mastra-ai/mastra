@@ -12,9 +12,13 @@ The default retail support example uses Square Terminal reference summaries and 
 
 ## Write a required safety policy
 
-Use the Markdown headings `## Before changes`, `## Prohibited actions`, and `## When uncertain` once each. Under each heading, give concrete instructions in the use case's language. Keep the rendered page within 800 characters, including seed attribution and links, so the native pin can deliver the full policy.
+Use the Markdown headings `## Before changes`, `## Prohibited actions`, and `## When uncertain` once each. Under each heading, give concrete instructions in the use case's language. Keep the rendered page within 800 characters after trimming surrounding whitespace, including seed attribution and links, so the native pin can deliver the full policy.
 
-If a database still has the earlier prose format, rerun `npm run knowledge:seed` for the selected example to refresh the bundled policy. For the earlier North and South retail profiles, run `npm run knowledge:seed -- --dataset retail-pos`. Update the Markdown in any custom dataset before reseeding it.
+The bundled policies are approved for their configured references. To publish a custom or revised policy, have an operator review the Markdown and its manifest fields, including links and source attribution. Run the seed with `--dry-run`. For an unapproved revision, the error includes the Knowledge reference and the SHA-256 of the rendered body. Add that digest to a trusted JSON file mapping references to arrays of approved digests, for example `{"tenant:example#policies/safe-changes": ["<64-character SHA-256>"]}`. Set `SUPPORT_POLICY_APPROVAL_FILE` to the same file path for the seed and runtime. Keep the file writable only by operators who can approve policy content.
+
+Repeat the dry run until every policy revision is approved, then apply the seed. Replace the approval file atomically when updating a running server. Keep the current revision listed until the new seed succeeds so existing chats can continue during the update.
+
+To recover an older bundled policy, rerun `npm run knowledge:seed` for the selected example. For the legacy North retail profile, run `npm run knowledge:seed -- --dataset retail-pos`.
 
 ## Add a support case
 

@@ -140,6 +140,7 @@ test(
           },
         }),
       );
+      await f.approvePolicy('tenant:north#policies/safe-changes', syntheticSafetyPolicy);
       await f.supportKnowledge.upsertPage({
         scope: 'tenant:north',
         path: 'policies/safe-changes',
@@ -217,13 +218,20 @@ test('a complete fallback finds matches beyond the search query cap', { timeout:
   }
 });
 
-test('a note removed after native search does not enter scoped history', { timeout: 30000 }, async () => {
+test('a page or note removed after native search does not enter scoped history', { timeout: 30000 }, async () => {
   const f = await runtimeFixture({ syntheticKnowledge: false });
   try {
     const { supportKnowledge } = f;
     const scope = 'customer:north:store-1';
     const path = 'cases/current-check';
+    const deletedPath = 'cases/deleted-check';
     await supportKnowledge.upsertPage({ scope, path, name: 'Current check', body: historyRecord('MATCHING_PAGE') });
+    const { page: deleted } = await supportKnowledge.upsertPage({
+      scope,
+      path: deletedPath,
+      name: 'Deleted check',
+      body: historyRecord('DELETED_PAGE'),
+    });
     const note = await supportKnowledge.addNote({
       scope,
       path,
@@ -234,21 +242,27 @@ test('a note removed after native search does not enter scoped history', { timeo
     const question = 'network printer';
     const baseline = await prepareHistory(supportKnowledge, profile, question);
     assert.ok(baseline.records.some(record => record.ref === noteRef));
+    assert.ok(baseline.records.some(record => record.ref === `${scope}#${deletedPath}`));
     const store = await supportKnowledge.getStorage();
     const search = store.searchPages.bind(store);
-    let removed = false;
+    let noteRemoved = false;
+    let pageRemoved = false;
     store.searchPages = async input => {
       const hits = await search(input);
-      if (!removed && hits.some(hit => hit.type === 'note' && hit.note.id === note.id)) {
-        removed = true;
+      if (!noteRemoved && hits.some(hit => hit.type === 'note' && hit.note.id === note.id)) {
+        noteRemoved = true;
         await supportKnowledge.removeNote({ id: note.id, author: 'synthetic-fixture' });
+      }
+      if (!pageRemoved && hits.some(hit => hit.page.id === deleted.id)) {
+        pageRemoved = true;
+        await supportKnowledge.removePage({ scope, path: deletedPath, author: 'synthetic-fixture' });
       }
       return hits;
     };
     const result = await prepareHistory(supportKnowledge, profile, question);
-    assert.ok(removed, 'The note must be removed after the scoped search returned it');
+    assert.ok(noteRemoved && pageRemoved, 'The scoped search returned both deleted entries');
     assert.ok(result.records.some(record => record.summary === 'MATCHING_PAGE'));
-    assert.ok(result.records.every(record => record.ref !== noteRef));
+    assert.ok(result.records.every(record => record.ref !== noteRef && record.ref !== `${scope}#${deletedPath}`));
   } finally {
     await f.close();
   }

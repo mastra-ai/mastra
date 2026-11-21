@@ -23,19 +23,26 @@ test('aborted Knowledge tools persist aborted metrics', async () => {
     instance.startSpan({ name: 'knowledge_list', type: SpanType.TOOL_CALL }).end({ outcome: 'abort' });
     await instance.flush();
     const { rows } = await client.execute(`
-      SELECT name, outcome, error, json_extract(metadata, '$.labels.status') AS status
+      SELECT name, outcome, error, json_extract(metadata, '$.labels.status') AS status,
+             json_extract(metadata, '$.value') AS value,
+             json_type(metadata, '$.value') AS valueType
       FROM mastra_ai_spans
       WHERE name = 'knowledge-list' OR json_extract(metadata, '$.labels.operation') = 'knowledge-list'
       ORDER BY name
     `);
     assert.ok(rows.some(row => row.name === 'knowledge-list' && row.outcome === 'abort' && !row.error));
+    const metrics = rows.filter(row => row.status !== null);
     assert.deepEqual(
-      rows.filter(row => row.status !== null).map(row => [row.name, row.status]),
+      metrics.map(row => [row.name, row.status]),
       [
         ['support_operation_count', 'abort'],
         ['support_operation_duration_ms', 'abort'],
       ],
     );
+    assert.ok(metrics.every(row => row.valueType === 'integer' || row.valueType === 'real'));
+    assert.equal(metrics[0]?.value, 1);
+    const duration = metrics[1]?.value;
+    assert.ok(typeof duration === 'number' && Number.isFinite(duration) && duration >= 0);
   } catch (error) {
     errors.push(error);
   } finally {

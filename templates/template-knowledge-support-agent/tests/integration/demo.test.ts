@@ -171,8 +171,22 @@ test('studio_demo_and_alternate_profile_use_the_same_lifecycle', { timeout: 3600
     ] as const) {
       assert.equal((await f.request(`/knowledge/support/pages/${encodeURIComponent(ref)}`)).status, 404);
       start = f.model.requests.length;
-      const denied = await turn(f, await thread(f), `F5:foreign READ=${ref}`);
-      assert.match(denied.text, /unavailable.*authorized scope/u);
+      const response = await post(f, '/agents/support/stream', {
+        messages: [{ role: 'user', content: `F5:foreign READ=${ref}` }],
+        memory: { thread: await thread(f) },
+      });
+      const denied = await response.text();
+      assert.equal(response.status, 200, denied);
+      const events = denied
+        .split('\n')
+        .filter(line => line.startsWith('data: {'))
+        .map(line => JSON.parse(line.slice(6)));
+      const failure = events.find(event => event.type === 'tool-error' && event.payload?.toolName === 'knowledge_read');
+      assert.ok(failure, denied);
+      assert.ok(JSON.stringify(failure.payload.error).includes('not found.'));
+      assert.equal(failure.payload.result, undefined);
+      assert.ok(!events.some(event => event.type === 'tool-result' && event.payload?.toolName === 'knowledge_read'));
+      assert.match(denied, /unavailable.*authorized scope/u);
       assert.doesNotMatch(
         providerInput(f, start),
         /RETAILOPS_STORE73_(?:SILVER|NOTE)|FIELDRETAIL_STORE42_(?:TEAL|NOTE)/u,

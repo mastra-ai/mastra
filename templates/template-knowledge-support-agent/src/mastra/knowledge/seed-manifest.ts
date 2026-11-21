@@ -14,7 +14,7 @@ import {
 } from '@mastra/core/knowledge';
 import { validateProfile, type Profile } from '../identity.ts';
 import { isCustomerHistoryPath } from '../../examples/support.ts';
-import { requiredPolicyContentIssue } from './required-policy.ts';
+import { readApprovedPolicyRevisions, requiredPolicyContentIssue } from './required-policy.ts';
 import { supportRecordEnvelope } from './support-record-envelope.ts';
 
 export interface DatasetConfiguration {
@@ -170,7 +170,20 @@ function canLink(from: ReturnType<typeof placement>, to: ReturnType<typeof place
 /** Conservative link grammar: managed wiki aliases/canonical refs, HTTPS/HTTP URLs, and local anchors. */
 function renderLinks(text: string, resolveAlias: (ref: string) => string) {
   const links = new Map<string, number>();
-  const rendered = text.replace(/\[\[([\s\S]*?)\]\]/gu, (_, raw: string) => {
+  const destinations: string[] = [];
+  const maskUrl = (value: string) => `\u0000url${destinations.push(value) - 1}\u0000`;
+  const inline = text.replace(/\]\(([^)]*)\)/gu, (_, target: string) => {
+    if (/[\r\n]/u.test(target)) throw new Error('Multiline Markdown destinations are unsupported');
+    if (target.includes('(') || /&(?:#(?:x[\da-f]+|\d+)|[a-z][a-z\d]*);/iu.test(target))
+      throw new Error('Ambiguous Markdown destinations are unsupported');
+    if (!/^#[a-zA-Z0-9_-]+$/u.test(target)) url(target);
+    return `](${maskUrl(target)})`;
+  });
+  if (/<\/?[a-z!]/iu.test(inline)) throw new Error('Unsupported or reserved Markdown syntax');
+  // Keep URL-like text intact for GFM autolinks and generated source attribution.
+  if (/\b(?:https?:\/\/|www\.)[^\s/?#]*@/iu.test(inline)) throw new Error('Unsafe Markdown URL authority');
+  const prose = inline.replace(/\b(?:https?:\/\/|www\.)[^\s<>\u0000]+/giu, maskUrl);
+  const rendered = prose.replace(/\[\[([\s\S]*?)\]\]/gu, (_, raw: string) => {
     if (raw !== raw.trim() || /[\[\]\r\n]/u.test(raw)) throw new Error('Ambiguous wiki link');
     const ref = resolveAlias(raw);
     links.set(ref, (links.get(ref) ?? 0) + 1);
@@ -179,19 +192,12 @@ function renderLinks(text: string, resolveAlias: (ref: string) => string) {
   const markdown = rendered.replace(/\[\[[^\[\]]+\]\]/gu, '\u0000');
   if (/<!--\s*knowledge-seed:|Seed note:|<\/?[a-z!]|\]\s*\[|\[(?:\\[\s\S]|[^\[\]\\])+\]:/iu.test(markdown))
     throw new Error('Unsupported or reserved Markdown syntax');
-  for (const match of rendered.matchAll(/\]\(([^)]*)\)/gu)) {
-    const target = match[1]!;
-    if (/[\r\n]/u.test(target)) throw new Error('Multiline Markdown destinations are unsupported');
-    if (target.includes('(') || /&(?:#(?:x[\da-f]+|\d+)|[a-z][a-z\d]*);/iu.test(target))
-      throw new Error('Ambiguous Markdown destinations are unsupported');
-    if (/^#[a-zA-Z0-9_-]+$/u.test(target)) continue;
-    url(target);
-  }
-  // GFM autolinks both HTTP(S) URLs and www. authorities.
-  if (/\b(?:https?:\/\/|www\.)[^\s/?#]*@/iu.test(rendered)) throw new Error('Unsafe Markdown URL authority');
   // A malformed wiki link must never turn into an unmanaged native reference.
   if (markdown.includes('[[')) throw new Error('Malformed wiki link');
-  return { text: rendered, links };
+  return {
+    text: rendered.replace(/\u0000url(\d+)\u0000/gu, (_, index: string) => destinations[Number(index)]!),
+    links,
+  };
 }
 
 type MarkdownNode = {
@@ -253,6 +259,7 @@ export function hasSeededHttpsSource(page: KnowledgePage) {
 export async function prepareDataset(
   config: DatasetConfiguration,
   requiredPolicyReference: (profile: Profile) => string,
+  policyApprovalFile = process.env.SUPPORT_POLICY_APPROVAL_FILE,
 ): Promise<PreparedDataset> {
   key(config.id, 'dataset ID');
   const profiles = new Map<string, Profile>();
@@ -340,6 +347,7 @@ export async function prepareDataset(
     mandatoryPolicyKeys.add(mapping.pageKey);
   }
   const byRef = new Map([...aliases.values()].map(page => [page.ref, page]));
+  const approved = await readApprovedPolicyRevisions(policyApprovalFile);
   const pages = [...aliases].map(([alias, page]) => {
     const lookup = (ref: string) => {
       const target = aliases.get(ref) ?? byRef.get(ref);
@@ -396,7 +404,7 @@ export async function prepareDataset(
         `Rendered page body in ${page.file} exceeds the ${MAX_SUPPORT_RECORD_BODY_LENGTH}-character read bound`,
       );
     if (mandatoryPolicyKeys.has(alias) || page.ref === requiredPolicyReference(page.placement.profile)) {
-      const issue = requiredPolicyContentIssue(body);
+      const issue = requiredPolicyContentIssue(body, page.ref, approved);
       if (issue) throw new Error(`Invalid required policy ${page.ref} in ${page.file}. ${issue}.`);
     }
     const noteKeys = new Set<string>();

@@ -7,13 +7,15 @@ import { tmpdir } from 'node:os';
 import test from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
-import { LibSQLStore } from '@mastra/libsql';
+import { KnowledgeLibSQL, LibSQLStore } from '@mastra/libsql';
 import type { Knowledge, KnowledgeStorage } from '@mastra/core/knowledge';
 import { createKnowledge } from '../../src/mastra/knowledge/index.ts';
 import { acquireWriterLock } from '../../src/mastra/knowledge/writer-lock.ts';
-import type { SeedReport } from '../../src/mastra/knowledge/seed.ts';
+import { seedDataset, type SeedReport } from '../../src/mastra/knowledge/seed.ts';
+import { datasets } from '../../src/examples/datasets.ts';
 import { principals } from '../../src/mastra/identity.ts';
 import { exampleProfiles } from '../../src/examples/retail-pos/profiles.ts';
+import { approvePolicyRevision } from '../fixtures/runtime.ts';
 
 const execute = promisify(execFile);
 const template = fileURLToPath(new URL('../..', import.meta.url));
@@ -39,11 +41,18 @@ interface Manifest {
 async function fixture() {
   const directory = await mkdtemp(join(tmpdir(), 'knowledge-seed-'));
   const root = join(directory, 'template');
-  await mkdir(join(root, 'scripts'), { recursive: true });
-  for (const entry of ['src', 'knowledge-datasets', 'package.json'])
-    await cp(join(template, entry), join(root, entry), { recursive: true });
-  await cp(join(template, 'scripts/seed-knowledge.ts'), join(root, 'scripts/seed-knowledge.ts'));
-  await symlink(join(template, 'node_modules'), join(root, 'node_modules'), 'dir');
+  const policyApprovalFile = join(directory, 'approved-policies.json');
+  try {
+    await mkdir(join(root, 'scripts'), { recursive: true });
+    for (const entry of ['src', 'knowledge-datasets', 'package.json'])
+      await cp(join(template, entry), join(root, entry), { recursive: true });
+    await cp(join(template, 'scripts/seed-knowledge.ts'), join(root, 'scripts/seed-knowledge.ts'));
+    await symlink(join(template, 'node_modules'), join(root, 'node_modules'), 'dir');
+    await writeFile(policyApprovalFile, '{}');
+  } catch (error) {
+    await rm(directory, { recursive: true, force: true }).catch(() => undefined);
+    throw error;
+  }
   const database = join(directory, 'support.db');
   const url = pathToFileURL(database).href;
   const manifestFile = join(root, 'knowledge-datasets/retail-pos/manifest.json');
@@ -51,6 +60,7 @@ async function fixture() {
     ...process.env,
     PATH: `${dirname(process.execPath)}:${process.env.PATH}`,
     SUPPORT_DATABASE_URL: url,
+    SUPPORT_POLICY_APPROVAL_FILE: policyApprovalFile,
   };
   async function cli(
     options: { dataset?: string | null; example?: string; args?: string[]; url?: string; code?: number } = {},
@@ -158,10 +168,103 @@ async function noFile(path: string) {
 }
 const quote = (text: string) => `'${text.replaceAll("'", "''")}'`;
 
+test('seed preserves a host page written after the destination was checked', async t => {
+  for (const scenario of ['create', 'update', 'relocate']) {
+    await t.test(scenario, async t => {
+      const f = await fixture();
+      try {
+        const seeded = (await f.cli()).report;
+        const config = { ...datasets['retail-pos']!, directory: dirname(f.manifestFile) };
+        const manifest = await f.readManifest();
+        const guide = manifest.pages[0]!;
+        const destination = scenario === 'create' ? 'guides/concurrent-page' : guide.path;
+        await f.saveManifest({
+          ...manifest,
+          pages:
+            scenario === 'create'
+              ? [{ ...guide, key: 'new-guide', path: destination }, ...manifest.pages]
+              : [{ ...guide, title: 'Seed update' }, ...manifest.pages.slice(1)],
+        });
+        await f.knowledge(async (host, storage) => {
+          const read = KnowledgeLibSQL.prototype.getPageByPath;
+          let reads = 0;
+          let writtenId: string | undefined;
+          const hook = t.mock.method(
+            KnowledgeLibSQL.prototype,
+            'getPageByPath',
+            async function (this: KnowledgeLibSQL, input: Parameters<KnowledgeLibSQL['getPageByPath']>[0]) {
+              const current = await read.call(this, input);
+              if (input.path.join('/') === destination && ++reads === (scenario === 'update' ? 3 : 2)) {
+                if (scenario === 'relocate') {
+                  await host.movePage({ scope: 'docs:north', path: 'guides', toScope: 'docs:south' });
+                }
+                const { page } = await host.upsertPage({
+                  scope: 'docs:north',
+                  path: destination,
+                  name: 'Operator update',
+                  body: 'Keep the operator’s change.',
+                  author: 'operator',
+                });
+                writtenId = page.id;
+              }
+              return current;
+            },
+          );
+          try {
+            await assert.rejects(seedDataset(config, { databaseUrl: f.url }), { name: 'KnowledgeConflictError' });
+          } finally {
+            hook.mock.restore();
+          }
+          assert.ok(writtenId);
+          const current = await storage.getPage({ id: writtenId, read: 'all' });
+          assert.equal(current?.name, 'Operator update');
+          assert.equal(current.body, 'Keep the operator’s change.');
+          assert.equal(current.updatedBy.author, 'operator');
+          if (scenario === 'relocate') {
+            const moved = await storage.getPage({ id: page(seeded, 'connection-guide').id!, read: 'all' });
+            assert.equal(moved?.name, guide.title);
+          }
+        });
+      } finally {
+        await f.close();
+      }
+    });
+  }
+});
+
+test('seed without retention reporting still resolves links and creates managed notes', async t => {
+  const f = await fixture();
+  try {
+    await f.knowledge(async (knowledge, storage) => {
+      const { page: host } = await knowledge.upsertPage({
+        scope: 'docs:north',
+        path: 'operator',
+        name: 'Operator guide',
+        body: 'See [[docs:north#guides/connectivity]].',
+      });
+      const links = () => storage.listPageLinks({ pageIds: [host.id], read: 'all', direction: 'out' });
+      assert.deepEqual(await links(), []);
+      const listPages = t.mock.method(KnowledgeLibSQL.prototype, 'listPages');
+      const report = await seedDataset(
+        { ...datasets['retail-pos']!, directory: dirname(f.manifestFile) },
+        { databaseUrl: f.url, reportRetention: false },
+      );
+      assert.equal(listPages.mock.callCount(), 0);
+      assert.equal(report.notes[0]?.status, 'created');
+      assert.deepEqual(
+        (await links()).map(edge => edge.toPageId),
+        [page(report, 'connection-guide').id],
+      );
+    });
+  } finally {
+    await f.close();
+  }
+});
+
 test('seed_rejects_an_invalid_rendered_policy_without_changing_stored_knowledge', { timeout: 30000 }, async () => {
   const f = await fixture();
   try {
-    await f.cli();
+    const initial = (await f.cli()).report;
     const before = await f.snapshot();
     const manifest = await f.readManifest();
     manifest.pages[0]!.title = 'Revised network checks';
@@ -177,6 +280,12 @@ test('seed_rejects_an_invalid_rendered_policy_without_changing_stored_knowledge'
     for (const [body, reason] of [
       [oversized, /exceeds the 800-character limit/u],
       ['This page contains no policy. The safety procedure is not yet available.', /substantive policy instructions/u],
+      [
+        ['Before changes', 'Prohibited actions', 'When uncertain']
+          .map(name => `## ${name}\n\nPolicy pending review.`)
+          .join('\n\n'),
+        /revision .* is not approved/u,
+      ],
       [
         complete.replace(/(## Prohibited actions\n\n)[^\n]+/u, '$1[[connection-guide]]'),
         /substantive policy instructions under the Prohibited actions heading/u,
@@ -218,6 +327,17 @@ test('seed_rejects_an_invalid_rendered_policy_without_changing_stored_knowledge'
       }
     }
     const updated = complete.replace(/(## Before changes\n\n)[^\n]+/u, `$1> **${instructions.trim()}**`);
+    const stored = await f.knowledge((_, store) =>
+      store.getPage({ id: page(initial, 'safety-policy').id!, read: 'all' }),
+    );
+    const renderAliases = (text: string) =>
+      text.trimEnd().replace('[[connection-guide]]', '[[docs:north#guides/connectivity]]');
+    assert.ok(stored?.body?.includes(renderAliases(complete)));
+    await approvePolicyRevision(
+      f.environment.SUPPORT_POLICY_APPROVAL_FILE,
+      'tenant:north#policies/safe-changes',
+      stored!.body!.replace(renderAliases(complete), renderAliases(updated)),
+    );
     await writeFile(policyPath, updated);
     await f.cli({ args: ['--dry-run'] });
     assert.equal(page((await f.cli()).report, 'safety-policy').status, 'updated');
@@ -280,7 +400,15 @@ test('seed preserves wiki syntax in code alongside managed prose links', { timeo
       '```',
       '````',
     ].join('\n');
-    await writeFile(caseFile, `${code}\n\nSee [[connection-guide]].\n`);
+    const inlineUrl = '[Guide](https://example.com/search?filter=[[connection-guide]])';
+    const literalRefUrl = '[Guide](https://example.com/search?filter=[[docs:north#guides/connectivity]])';
+    const bareUrl = 'https://example.com/search?filter=[[connection-guide]]&view=compact';
+    manifest.pages[2]!.notes![0]!.text = literalRefUrl;
+    await f.saveManifest(manifest);
+    await writeFile(
+      caseFile,
+      `${code}\n\n${inlineUrl}\n\n${literalRefUrl}\n\n${bareUrl}\n\nSee [[connection-guide]].\n`,
+    );
     const report = (await f.cli()).report;
     const casePage = page(report, 'store-case');
     const guide = page(report, 'connection-guide');
@@ -297,9 +425,15 @@ test('seed preserves wiki syntax in code alongside managed prose links', { timeo
         edges.map(edge => [edge.toPageId, edge.count]),
         [[guide.id, 1]],
       );
+      const [note] = await notes(store, caseId);
+      assert.ok(note?.text.includes(literalRefUrl));
+      assert.deepEqual(note.mentions, []);
       return store.getPage({ id: caseId, read: 'all' });
     });
     assert.ok(stored?.body?.includes(code));
+    assert.ok(stored?.body?.includes(inlineUrl));
+    assert.ok(stored?.body?.includes(literalRefUrl));
+    assert.ok(stored?.body?.includes(bareUrl));
     assert.ok(stored?.body?.includes(`See [[${guide.destination}]].`));
     assert.equal((await f.cli()).report.repairedLinks, false, 'A repeated seed preserves the corrected link index');
 

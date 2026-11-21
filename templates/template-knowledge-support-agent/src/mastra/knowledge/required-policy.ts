@@ -1,6 +1,17 @@
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import { gfmAutolinkLiteralFromMarkdown } from 'mdast-util-gfm-autolink-literal';
 import { gfmAutolinkLiteral } from 'micromark-extension-gfm-autolink-literal';
+import { z } from 'zod';
+import { bundledPolicyRevisions } from '../../examples/approved-policies.ts';
+
+const revisionsSchema = z.record(z.string(), z.array(z.string().regex(/^[a-f0-9]{64}$/u)));
+type ApprovedRevisions = z.infer<typeof revisionsSchema>;
+
+export async function readApprovedPolicyRevisions(file?: string): Promise<ApprovedRevisions> {
+  return file ? revisionsSchema.parse(JSON.parse(await readFile(file, 'utf8'))) : {};
+}
 
 type MarkdownNode = { type: string; value?: string; children?: MarkdownNode[] };
 
@@ -32,11 +43,12 @@ function instructionText(node: MarkdownNode): string {
 const maxPolicyCharacters = 800;
 const requiredSections = ['Before changes', 'Prohibited actions', 'When uncertain'];
 
-export function requiredPolicyContentIssue(body: string): string | undefined {
-  if (body.length > maxPolicyCharacters) return `Rendered body exceeds the ${maxPolicyCharacters}-character limit`;
+export function requiredPolicyContentIssue(body: string, ref: string, approved: ApprovedRevisions): string | undefined {
+  const rendered = body.trim();
+  if (rendered.length > maxPolicyCharacters) return `Rendered body exceeds the ${maxPolicyCharacters}-character limit`;
 
   // The page is delivered as Markdown by the native pin. Only guidance under a named section counts.
-  const document = fromMarkdown(body, {
+  const document = fromMarkdown(rendered, {
     extensions: [gfmAutolinkLiteral()],
     mdastExtensions: [gfmAutolinkLiteralFromMarkdown()],
   });
@@ -64,4 +76,7 @@ export function requiredPolicyContentIssue(body: string): string | undefined {
         .match(/[\p{L}]{2,}/gu) ?? [];
     if (new Set(words).size < 3) return `Expected substantive policy instructions under the ${name} heading`;
   }
+  const revision = createHash('sha256').update(rendered).digest('hex');
+  if (bundledPolicyRevisions[ref] !== revision && !approved[ref]?.includes(revision))
+    return `Rendered policy revision ${revision} is not approved`;
 }

@@ -1,9 +1,11 @@
 import {
+  KnowledgeConflictError,
   knowledgeLinkRefKey,
   type Knowledge,
   type KnowledgeNote,
   type KnowledgePage,
   type KnowledgeStorage,
+  type KnowledgeUpsertPageResult,
 } from '@mastra/core/knowledge';
 import { policyReference } from '../../examples/support.ts';
 import { createStore } from '../database/store.ts';
@@ -20,6 +22,8 @@ import {
 export interface SeedOptions {
   dryRun?: boolean;
   databaseUrl?: string;
+  reportRetention?: boolean;
+  policyApprovalFile?: string;
 }
 export interface SeedReport {
   dataset: string;
@@ -73,7 +77,79 @@ function exactNote(note: KnowledgeNote, wanted: PreparedNote, scopeId: string, m
   );
 }
 
-async function writeDataset(knowledge: Knowledge, dataset: PreparedDataset, report: SeedReport) {
+async function writePage(
+  knowledge: Knowledge,
+  storage: KnowledgeStorage,
+  wanted: PreparedPage,
+  scanned: KnowledgePage | null,
+  author: string,
+): Promise<KnowledgeUpsertPageResult> {
+  const destination = `${wanted.scope}#${wanted.path}`;
+  const path = wanted.path.split('/');
+  // Abort the native retry on a leaf conflict. The native upsert still manages scope, parent and link writes.
+  const conflict = new Error(`Seed destination changed: ${destination}`);
+  const createPage: KnowledgeStorage['createPage'] = async input => {
+    if (input.body === undefined) return storage.createPage(input); // Native parent scaffolding.
+    if (scanned) throw conflict;
+    const [scope] = await storage.getScopesByAddress([wanted.scope]);
+    const parent =
+      scope && path.length > 1
+        ? await storage.getPageByPath({ scopeId: scope.id, path: path.slice(0, -1), read: 'all' })
+        : scope;
+    if (parent?.id !== input.parentId) throw conflict;
+    try {
+      return await storage.createPage(input);
+    } catch (error) {
+      if ((error as Error)?.name === 'KnowledgePageKeyConflictError') throw conflict;
+      throw error;
+    }
+  };
+  const updatePage: KnowledgeStorage['updatePage'] = async input => {
+    if (!scanned || input.id !== scanned.id || input.expectedVersion !== scanned.version) throw conflict;
+    // Moving an ancestor can change the destination without bumping the leaf version.
+    const current = await storage.getPageByPath({ scopeId: scanned.scopeId, path, read: 'all' });
+    if (current?.id !== scanned.id || current.version !== scanned.version) throw conflict;
+    try {
+      return await storage.updatePage(input);
+    } catch (error) {
+      if (['KnowledgeNotFoundError', 'KnowledgeConflictError'].includes((error as Error)?.name)) throw conflict;
+      throw error;
+    }
+  };
+  const checkedStorage = new Proxy(storage, {
+    get(target, property) {
+      if (property === 'createPage') return createPage;
+      if (property === 'updatePage') return updatePage;
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  // This Knowledge instance is private to the seed. Limit the guard to one native upsert.
+  const getStorage = knowledge.getStorage;
+  knowledge.getStorage = async () => checkedStorage;
+  try {
+    const { scope, path, name, description, body } = wanted;
+    const result = await knowledge.upsertPage({ scope, path, name, description, body, author });
+    if (
+      result.status === 'unchanged' &&
+      (!scanned || result.page.id !== scanned.id || result.page.version !== scanned.version)
+    )
+      throw conflict;
+    return result;
+  } catch (error) {
+    if (error === conflict) throw new KnowledgeConflictError(destination);
+    throw error;
+  } finally {
+    knowledge.getStorage = getStorage;
+  }
+}
+
+async function writeDataset(
+  knowledge: Knowledge,
+  dataset: PreparedDataset,
+  report: SeedReport,
+  reportRetention: boolean,
+) {
   const storage = await knowledge.getStorage();
   const author = `seed:${dataset.id}`;
   const scopes = new Map(
@@ -83,25 +159,25 @@ async function writeDataset(knowledge: Knowledge, dataset: PreparedDataset, repo
     ]),
   );
   // Read every target before writes so a collision cannot leave earlier pages partially overwritten.
+  const scanned = new Map<PreparedPage, KnowledgePage | null>();
   for (const wanted of dataset.pages) {
     const scope = scopes.get(wanted.scope);
     const existing =
       scope && (await storage.getPageByPath({ scopeId: scope.id, path: wanted.path.split('/'), read: 'all' }));
     if (existing && !ownedPage(existing, wanted, author))
       throw new Error(`Destination is not owned by this seed: ${wanted.scope}#${wanted.path}`);
+    scanned.set(wanted, existing ?? null);
   }
-  const stored = new Map<string, KnowledgePage>();
+  const written = new Map<string, KnowledgeUpsertPageResult>();
+  // Write managed parents before their children so a child cannot create a managed parent as scaffolding.
+  const ordered = [...dataset.pages].sort((a, b) => a.path.split('/').length - b.path.split('/').length);
+  for (const wanted of ordered) {
+    const result = await writePage(knowledge, storage, wanted, scanned.get(wanted)!, author);
+    written.set(`${wanted.scope}#${wanted.path}`, result);
+  }
   for (const wanted of dataset.pages) {
-    const result = await knowledge.upsertPage({
-      scope: wanted.scope,
-      path: wanted.path,
-      name: wanted.name,
-      description: wanted.description,
-      body: wanted.body,
-      author,
-    });
     const destination = `${wanted.scope}#${wanted.path}`;
-    stored.set(destination, result.page);
+    const result = written.get(destination)!;
     report.pages.push({
       key: wanted.key,
       destination,
@@ -112,10 +188,10 @@ async function writeDataset(knowledge: Knowledge, dataset: PreparedDataset, repo
   }
   // Verify managed links after all their destinations exist. Repair only the seed's own pages.
   for (const wanted of dataset.pages) {
-    const current = stored.get(`${wanted.scope}#${wanted.path}`)!;
+    const { page: current } = written.get(`${wanted.scope}#${wanted.path}`)!;
     const links = [...wanted.links].map(([ref, count]) => ({
       ref: knowledgeLinkRefKey(ref),
-      toPageId: stored.get(ref)!.id,
+      toPageId: written.get(ref)!.page.id,
       count,
     }));
     const expected = new Map(
@@ -144,20 +220,19 @@ async function writeDataset(knowledge: Knowledge, dataset: PreparedDataset, repo
       const owned = existing.filter(
         item => item.text.split('\n')[0] === note.marker && item.provenance.author === author,
       );
-      const mentions = [...new Set(note.refs.map(ref => stored.get(ref)!.id))];
+      const mentions = note.refs.map(ref => written.get(ref)!.page.id);
       let kept = owned.find(item => exactNote(item, note, current.scopeId, mentions, author));
       let status: SeedReport['notes'][number]['status'] = 'unchanged';
       if (!kept) {
-        const previous = owned[0];
-        const input = { text: note.text, when: note.when, stamps: [wanted.scope], author };
-        // Native updateNote omission preserves the date. Clearing it requires add-then-prune.
-        if (previous && !(previous.when && !note.when)) {
-          kept = await knowledge.updateNote({ id: previous.id, ...input });
-          status = 'updated';
-        } else {
-          kept = await knowledge.addNote({ scope: wanted.scope, path: wanted.path, ...input });
-          status = previous ? 'updated' : 'created';
-        }
+        kept = await storage.addNote({
+          pageId: current.id,
+          text: note.text,
+          when: note.when,
+          stampScopeIds: [current.scopeId],
+          mentions,
+          provenance: { author },
+        });
+        status = owned.length ? 'updated' : 'created';
       }
       const duplicates = owned.filter(item => item.id !== kept.id);
       for (const duplicate of duplicates) await knowledge.removeNote({ id: duplicate.id, author });
@@ -165,7 +240,8 @@ async function writeDataset(knowledge: Knowledge, dataset: PreparedDataset, repo
       report.notes.push({ pageKey: wanted.key, key: note.key, status, id: kept.id });
     }
   }
-  const selectedIds = new Set([...stored.values()].map(page => page.id));
+  if (!reportRetention) return;
+  const selectedIds = new Set([...written.values()].map(({ page }) => page.id));
   const selectedNotes = new Set(dataset.pages.flatMap(page => page.notes.map(note => note.marker)));
   const pagePrefix = `<!-- knowledge-seed:page:${dataset.id}:`;
   const notePrefix = `Seed note: ${dataset.id}/`;
@@ -193,7 +269,7 @@ async function writeDataset(knowledge: Knowledge, dataset: PreparedDataset, repo
 
 /** CLI and deterministic checks use this same path. Validation and dry-run never initialize storage. */
 export async function seedDataset(config: DatasetConfiguration, options: SeedOptions = {}): Promise<SeedReport> {
-  const dataset = await prepareDataset(config, policyReference);
+  const dataset = await prepareDataset(config, policyReference, options.policyApprovalFile);
   const report: SeedReport = {
     dataset: dataset.id,
     version: dataset.version,
@@ -216,12 +292,17 @@ export async function seedDataset(config: DatasetConfiguration, options: SeedOpt
   }
   return withWriterLock(async ({ libsql, postgres }) => {
     if (postgres) {
-      await writeDataset(createPostgresWriterKnowledge(postgres, true), dataset, report);
+      await writeDataset(
+        createPostgresWriterKnowledge(postgres, true),
+        dataset,
+        report,
+        options.reportRetention ?? true,
+      );
       return report;
     }
     const store = createStore('knowledge-seed', libsql);
     try {
-      await writeDataset(createKnowledge(store), dataset, report);
+      await writeDataset(createKnowledge(store), dataset, report, options.reportRetention ?? true);
       return report;
     } finally {
       await store.close();

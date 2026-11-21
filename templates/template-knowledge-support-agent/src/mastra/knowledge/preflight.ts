@@ -4,18 +4,19 @@ import type { Knowledge } from '@mastra/core/knowledge';
 import type { InputProcessor } from '@mastra/core/processors';
 import { policyReference } from '../../examples/support.ts';
 import { principals, type Profile } from '../identity.ts';
-import { requiredPolicyContentIssue } from './required-policy.ts';
+import { readApprovedPolicyRevisions, requiredPolicyContentIssue } from './required-policy.ts';
 import { prepareHistory } from './history.ts';
 export { prepareHistory } from './history.ts';
 
-async function requiredPolicyReady(knowledge: Knowledge, profile: Profile) {
+async function requiredPolicyReady(knowledge: Knowledge, profile: Profile, approvalFile?: string) {
   const ref = policyReference(profile);
+  const approved = await readApprovedPolicyRevisions(approvalFile);
   const [scope, path] = ref.split('#') as [string, string];
   const read = await knowledge.readScopeFor(principals(profile));
   const store = await knowledge.getStorage();
   const [home] = await store.getScopesByAddress([scope]);
   const page = home ? await store.getPageByPath({ scopeId: home.id, path: path.split('/'), read }) : null;
-  return page?.body && !requiredPolicyContentIssue(page.body) ? ref : null;
+  return page?.body && !requiredPolicyContentIssue(page.body, ref, approved) ? { ref, approved } : null;
 }
 
 type Pin = { id: string; text: string; name?: string };
@@ -32,6 +33,7 @@ function fullPolicyBody(pin: Pin, ref: string) {
 }
 
 export function supportPreflight(knowledge: Knowledge): InputProcessor {
+  const approvalFile = process.env.SUPPORT_POLICY_APPROVAL_FILE;
   return {
     id: 'support-preflight',
     async processInput({ messages, messageList, requestContext, state, abort }) {
@@ -40,7 +42,7 @@ export function supportPreflight(knowledge: Knowledge): InputProcessor {
       const started = performance.now();
       let policyReady: Awaited<ReturnType<typeof requiredPolicyReady>>;
       try {
-        policyReady = await requiredPolicyReady(knowledge, profile);
+        policyReady = await requiredPolicyReady(knowledge, profile, approvalFile);
       } catch {
         recordOperation('policy', 'unavailable', started);
         return abort('Required safety policy is unavailable. Restore it before requesting actionable guidance.');
@@ -114,10 +116,10 @@ export function supportPreflight(knowledge: Knowledge): InputProcessor {
           }
         }
       }
-      const ref = state.requiredPolicy as string;
+      const { ref, approved } = state.requiredPolicy as NonNullable<Awaited<ReturnType<typeof requiredPolicyReady>>>;
       const delivered = [...pins.values()].some(pin => {
         const body = fullPolicyBody(pin, ref);
-        return body && !requiredPolicyContentIssue(body);
+        return body && !requiredPolicyContentIssue(body, ref, approved);
       });
       if (!delivered)
         return abort(

@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { localDatabasePath } from '../../src/mastra/database/database-file.ts';
 import { resolveStoreConfiguration } from '../../src/mastra/database/store.ts';
 
-const databaseUrl = 'postgresql://support:synthetic%40password@example.invalid/support?sslmode=require';
+const databaseUrl = 'postgresql://support:synthetic%40password@example.invalid/support?sslmode=verify-full';
 const turso = { TURSO_DATABASE_URL: 'libsql://support.example.invalid', TURSO_AUTH_TOKEN: 'example-token' };
 const platform = { MASTRA_ENVIRONMENT_ID: 'example-environment' };
 const local = { backend: 'libsql', url: pathToFileURL(resolve('.local/support.db')).href };
@@ -88,4 +88,29 @@ test('reports missing and invalid settings together without exposing credentials
     () => resolveStoreConfiguration({ ...turso, TURSO_DATABASE_URL: 'libsql://support.example.invalid:80?tls=0' }),
     /must not include query options/u,
   );
+});
+
+test('requires verified TLS for remote PostgreSQL with either database configuration', () => {
+  for (const envFor of [
+    (url: string) => ({ DATABASE_URL: url }),
+    (url: string) => ({ DATABASE_PROVIDER: 'postgres', DATABASE_URL: url }),
+    (url: string) => ({ DATABASE_PROVIDER: 'neon', DATABASE_URL: url }),
+    (url: string) => ({ SUPPORT_MODE: 'hosted', SUPPORT_DATABASE_URL: url }),
+  ]) {
+    for (const query of [
+      '',
+      '?sslmode=disable',
+      '?sslmode=require',
+      '?sslmode=verify-full&sslmode=disable',
+      '?sslmode=verify-full&ssl=0',
+    ]) {
+      assert.throws(
+        () => resolveStoreConfiguration(envFor(`postgres://example.invalid/support${query}`)),
+        /requires sslmode=verify-full/u,
+      );
+    }
+    for (const url of [databaseUrl, 'postgres://localhost/support', 'postgres://[::1]/support?sslmode=disable']) {
+      assert.deepEqual(resolveStoreConfiguration(envFor(url)), { backend: 'postgres', connectionString: url });
+    }
+  }
 });

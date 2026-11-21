@@ -39,22 +39,28 @@ function writerLockFile(env: NodeJS.ProcessEnv, fallback?: string) {
   return path;
 }
 
+function postgresConfiguration(parsed: URL, url: string, databaseNameError: string): StoreConfiguration {
+  if (!/^\/[^/]+$/u.test(parsed.pathname)) throw new Error(databaseNameError);
+  const modes = parsed.searchParams.getAll('sslmode');
+  const [mode] = modes;
+  if (
+    [...parsed.searchParams.keys()].some(key => key !== 'sslmode') ||
+    modes.length > 1 ||
+    (mode !== undefined && mode !== 'disable' && mode !== 'verify-full') ||
+    (!loopbackHosts.includes(parsed.hostname) && mode !== 'verify-full')
+  )
+    throw new Error('PostgreSQL requires sslmode=verify-full outside loopback; no other URL options are supported');
+  return { backend: 'postgres', connectionString: url };
+}
+
 function legacyHostedConfiguration(env: NodeJS.ProcessEnv, url: string): StoreConfiguration {
   const parsed = URL.parse(url);
   if (!parsed) throw new Error('Invalid hosted database URL');
   const loopback = loopbackHosts.includes(parsed.hostname);
   if (postgresProtocols.includes(parsed.protocol)) {
-    if (!parsed.hostname || !/^\/[^/]+$/u.test(parsed.pathname) || parsed.hash)
+    if (!parseDatabaseUrl(url, postgresProtocols))
       throw new Error('PostgreSQL requires a host and explicit database name');
-    const sslmode = parsed.searchParams.get('sslmode');
-    if (
-      [...parsed.searchParams.keys()].some(key => key !== 'sslmode') ||
-      parsed.searchParams.getAll('sslmode').length > 1 ||
-      (sslmode !== null && !['disable', 'verify-full'].includes(sslmode)) ||
-      (!loopback && sslmode !== 'verify-full')
-    )
-      throw new Error('PostgreSQL requires sslmode=verify-full outside loopback; no other URL options are supported');
-    return { backend: 'postgres', connectionString: url };
+    return postgresConfiguration(parsed, url, 'PostgreSQL requires a host and explicit database name');
   }
   if (!libsqlProtocols.includes(parsed.protocol) || (parsed.protocol === 'http:' && !loopback))
     throw new Error('Hosted database requires HTTPS or libsql (HTTP is allowed only on loopback)');
@@ -118,8 +124,7 @@ export function resolveStoreConfiguration(
       if (!postgresUrl.trim()) configurationError(['DATABASE_URL'], []);
       const parsed = parseDatabaseUrl(postgresUrl, postgresProtocols);
       if (!parsed) configurationError([], ['DATABASE_URL']);
-      if (!/^\/[^/]+$/u.test(parsed.pathname)) throw new Error('DATABASE_URL must include a PostgreSQL database name');
-      return { backend: 'postgres', connectionString: postgresUrl };
+      return postgresConfiguration(parsed, postgresUrl, 'DATABASE_URL must include a PostgreSQL database name');
     }
     default:
       throw new Error('DATABASE_PROVIDER must be local, turso, neon, or postgres');

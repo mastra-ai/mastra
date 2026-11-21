@@ -18,7 +18,7 @@ The PostgreSQL reference exercises two processes against one healthy PostgreSQL 
 
 ### Mastra Platform
 
-Set `DATABASE_PROVIDER` to `turso`, `neon`, or `postgres` in the target environment. The seed and the server use the same provider variables. Turso reads `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`. Neon and VPC PostgreSQL both pass `DATABASE_URL` through to the PostgreSQL driver, including its connection options. The built server defaults to `0.0.0.0` on the platform. Set `OPENAI_API_KEY` for the model and configure sign-in as described below.
+Set `DATABASE_PROVIDER` to `turso`, `neon`, or `postgres` in the target environment. The seed and the server use the same provider variables. Turso reads `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`. For Neon and PostgreSQL, set `DATABASE_URL` with an explicit database name and `?sslmode=verify-full` for remote connections. The URL accepts only the `sslmode` option. The built server defaults to `0.0.0.0` on the platform. Set `OPENAI_API_KEY` for the model and configure sign-in as described below.
 
 For Turso, run a single writable application instance with the default lock at `.local/support.writer.sqlite`. Run the initial seed before the app starts serving requests. During later runs, stop other writers or run the seed where it shares the same lock file. With multiple concurrent writers, including release overlap, mount a shared POSIX volume at the same absolute `SUPPORT_WRITER_LOCK_FILE` path for all writers, or choose Neon or PostgreSQL. The lock file coordinates writes and holds no Knowledge data.
 

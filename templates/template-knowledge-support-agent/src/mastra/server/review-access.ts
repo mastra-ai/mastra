@@ -1,5 +1,6 @@
 import type { ApiRoute } from '@mastra/core/server';
 import { findMatchingCustomRoute } from '@mastra/server/auth';
+import { z } from 'zod';
 import {
   CREATE_WORKFLOW_RUN_ROUTE,
   GET_WORKFLOW_BY_ID_ROUTE,
@@ -56,10 +57,15 @@ function onlyKeys(value: unknown, keys: readonly string[]): value is Record<stri
 const emptyObjectOption = (value: unknown) => value === undefined || onlyKeys(value, []);
 const onlyQueryKeys = (query: URLSearchParams, keys: readonly string[]) =>
   [...query.keys()].every(key => keys.includes(key));
-const optionalBooleanQuery = (query: URLSearchParams, key: string) => {
-  const value = query.get(key);
-  return value === null || value === 'true' || value === 'false';
-};
+
+function queryField(schema: typeof LIST_WORKFLOW_RUNS_ROUTE.queryParamSchema, name: string) {
+  if (!(schema instanceof z.ZodObject) || !schema.shape[name])
+    throw new Error(`Missing workflow route query field ${name}`);
+  return schema.shape[name];
+}
+
+const summaryQuery = queryField(LIST_WORKFLOW_RUNS_ROUTE.queryParamSchema, 'summary');
+const withNestedWorkflowsQuery = queryField(GET_WORKFLOW_RUN_BY_ID_ROUTE.queryParamSchema, 'withNestedWorkflows');
 
 const createRun: WritePolicy = ({ body, owner, runId, run }) =>
   (!runId || !!run) && onlyKeys(body, ['resourceId']) && (body.resourceId === undefined || body.resourceId === owner);
@@ -154,21 +160,25 @@ export function createReviewAccess(workflow: ReviewWorkflow, authority: Reviewer
   const readPolicies = new Map<ApiRoute, ReadPolicy>([
     [
       LIST_WORKFLOWS_ROUTE,
-      ({ url: { searchParams } }) =>
-        onlyQueryKeys(searchParams, ['partial']) && optionalBooleanQuery(searchParams, 'partial'),
+      ({ url: { searchParams } }) => {
+        const partial = searchParams.get('partial');
+        return (
+          onlyQueryKeys(searchParams, ['partial']) && (partial === null || partial === 'true' || partial === 'false')
+        );
+      },
     ],
     [GET_WORKFLOW_BY_ID_ROUTE, ({ url }) => !url.search],
     [
       LIST_WORKFLOW_RUNS_ROUTE,
       ({ url: { searchParams } }) =>
         onlyQueryKeys(searchParams, ['page', 'perPage', 'status', 'limit', 'offset', 'summary']) &&
-        optionalBooleanQuery(searchParams, 'summary'),
+        summaryQuery.safeParse(searchParams.get('summary') ?? undefined).success,
     ],
     [
       GET_WORKFLOW_RUN_BY_ID_ROUTE,
       async ({ url: { searchParams }, owner, params }) =>
         onlyQueryKeys(searchParams, ['fields', 'withNestedWorkflows']) &&
-        optionalBooleanQuery(searchParams, 'withNestedWorkflows') &&
+        withNestedWorkflowsQuery.safeParse(searchParams.get('withNestedWorkflows') ?? undefined).success &&
         (await workflow.getWorkflowRunById(params.runId!))?.resourceId === owner,
     ],
   ]);

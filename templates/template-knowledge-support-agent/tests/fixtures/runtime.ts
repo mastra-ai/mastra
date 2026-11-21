@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { mkdtemp, writeFile, rm, readFile } from 'node:fs/promises';
 import { createConnection } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -29,6 +29,12 @@ Do not reset while offline payments are pending.
 ## When uncertain
 
 Ask the authorized lead to check the recovery plan.`;
+
+export async function approvePolicyRevision(file: string, ref: string, body: string) {
+  const revisions = JSON.parse(await readFile(file, 'utf8')) as Record<string, string[]>;
+  (revisions[ref] ??= []).push(createHash('sha256').update(body.trim()).digest('hex'));
+  await writeFile(file, JSON.stringify(revisions));
+}
 
 interface RuntimeOptions {
   generatedCredentials?: boolean;
@@ -100,11 +106,14 @@ async function configureRuntime(
   const file = join(directory, 'access.json');
   await writeFile(file, JSON.stringify([...credentials, expired]), { mode: 0o600 });
   const databaseUrl = pathToFileURL(join(directory, 'support.db')).href;
+  const policyApprovalFile = join(directory, 'approved-policies.json');
+  await writeFile(policyApprovalFile, '{}');
   const overrides = {
     SUPPORT_DATABASE_URL: databaseUrl,
     SUPPORT_CREDENTIALS_FILE: file,
     SUPPORT_STUDIO_ROLE: studioRole,
     SUPPORT_MODEL_BASE_URL: model.url,
+    SUPPORT_POLICY_APPROVAL_FILE: policyApprovalFile,
     OPENAI_API_KEY: 'synthetic-model-key',
   };
   const { mastra, environment } = await withRuntimeEnvironment(overrides, async original => {
@@ -167,6 +176,11 @@ async function configureRuntime(
           author: 'synthetic-fixture',
         });
       for (const tenant of tenants) {
+        await approvePolicyRevision(
+          policyApprovalFile,
+          `tenant:${tenant}#policies/safe-changes`,
+          syntheticSafetyPolicy,
+        );
         await supportKnowledge.upsertPage({
           scope: `tenant:${tenant}`,
           path: 'policies/safe-changes',
@@ -194,14 +208,12 @@ async function configureRuntime(
     return launch;
   }
   async function request(path: string, owner = 0, options: RequestInit = {}) {
-    return fixtureFetch(`${base()}/api${path}`, {
-      ...options,
-      headers: {
-        authorization: `Bearer ${credentials[owner]!.token}`,
-        'content-type': 'application/json',
-        ...options.headers,
-      },
+    const headers = new Headers({
+      authorization: `Bearer ${credentials[owner]!.token}`,
+      'content-type': 'application/json',
     });
+    new Headers(options.headers).forEach((value, key) => headers.set(key, value));
+    return fixtureFetch(`${base()}/api${path}`, { ...options, headers });
   }
   async function start() {
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -372,6 +384,8 @@ async function configureRuntime(
       return base();
     },
     databaseUrl,
+    policyApprovalFile,
+    approvePolicy: (ref: string, body: string) => approvePolicyRevision(policyApprovalFile, ref, body),
     withEnvironment: <T>(operation: () => Promise<T>) => withRuntimeEnvironment(overrides, operation),
     request,
     start,

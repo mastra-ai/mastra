@@ -14,6 +14,7 @@ import { resourceId } from '../../src/mastra/identity.ts';
 
 const execute = promisify(execFile);
 const guide = 'docs:north#guides/connectivity';
+const policyRef = 'tenant:north#policies/safe-changes';
 const vendor = 'https://squareup.com/help/us/en/article/8350-troubleshoot-network-connection-on-square-terminal';
 type Fixture = Awaited<ReturnType<typeof runtimeFixture>>;
 type Message = { role: string; content?: string };
@@ -183,6 +184,11 @@ test('preflight_precedes_model_and_distinguishes_history_outcomes', { timeout: 1
     await casePage(f, 'a-newer', 'Ethernet recovered after cable reseating');
     await casePage(f, 'foreign', 'FOREIGN_CASE_MARKER', { customer: 'store-2' });
     await f.start();
+    assert.equal(
+      (await f.request('/memory/threads?agentId=support', 0, { headers: [['Authorization', 'Bearer invalid']] }))
+        .status,
+      401,
+    );
     const own = await thread(f);
     const before = f.model.requests.length;
     const text = await turn(f, own, 'Investigate network connectivity');
@@ -377,12 +383,16 @@ test('same_thread_gets_updated_policy_signal_and_rejects_pin_mutation', { timeou
     );
     assert.equal(f.model.requests.length - start, 1, 'Policy guidance needs no tool round trip');
     const policyFile = join(config.directory, 'policy.md');
-    await writeFile(
-      policyFile,
-      (await readFile(policyFile, 'utf8')) +
-        '\nPOLICY_REVISION_TWO: ask the authorized lead for a safe recovery review.\n',
-    );
-    const report = await seedDataset(config, { databaseUrl: f.databaseUrl });
+    const revision = '\n\nPOLICY_REVISION_TWO: ask the authorized lead for a safe recovery review.';
+    const body = (await readFile(policyFile, 'utf8')).trimEnd();
+    const store = await f.supportKnowledge.getStorage();
+    const [home] = await store.getScopesByAddress(['tenant:north']);
+    const policy = await store.getPageByPath({ scopeId: home!.id, path: ['policies', 'safe-changes'], read: 'all' });
+    const rendered = body.replace('[[connection-guide]]', `[[${guide}]]`);
+    assert.ok(policy?.body?.includes(rendered));
+    await f.approvePolicy(policyRef, policy!.body!.replace(rendered, rendered + revision));
+    await writeFile(policyFile, body + revision + '\n');
+    const report = await seedDataset(config, { databaseUrl: f.databaseUrl, policyApprovalFile: f.policyApprovalFile });
     assert.equal(report.pages.find(page => page.key === 'safety-policy')?.status, 'updated');
     const next = f.model.requests.length;
     assert.match(await turn(f, id, 'Still offline payments pending; what now?', 'stream'), /POLICY_REVISION_TWO/u);
@@ -422,18 +432,20 @@ test('same_thread_gets_updated_policy_signal_and_rejects_pin_mutation', { timeou
         name: `Reference ${index}: ${'technical setup and device documentation '.repeat(3)}`,
       });
     }
-    const completePolicy =
+    const policyInstructions =
       `${syntheticSafetyPolicy}\n\n` +
       'Preserve the original diagnostic labels in the incident report: ' +
       'A/B+C/D;'.repeat(36) +
       ' ' +
       'Record the final approval in the technician report.';
-    assert.ok(completePolicy.length < 800);
+    const completePolicy = policyInstructions.padEnd(800, '.');
+    assert.equal(completePolicy.length, 800);
+    await f.approvePolicy(policyRef, completePolicy);
     await f.supportKnowledge.upsertPage({
       scope: 'tenant:north',
       path: 'policies/safe-changes',
       name: 'Required safety procedure and verification '.repeat(4),
-      body: completePolicy,
+      body: completePolicy + '\n',
       author: 'synthetic-fixture',
     });
     const longPinStart = f.model.requests.length;
@@ -467,6 +479,7 @@ test('same_thread_gets_updated_policy_signal_and_rejects_pin_mutation', { timeou
       'x'.repeat(100),
       'x'.repeat(900),
       'This page contains no policy. The safety procedure is not yet available.',
+      syntheticSafetyPolicy.replace(/^(?!#).+\.$/gmu, 'Policy pending review.'),
       ...['Source:', '**Source:**', '**<!-- internal -->Source:**'].map(label =>
         syntheticSafetyPolicy.replace(/(## Prohibited actions\n\n)[^\n]+/u, `$1${label} North Branch Operations`),
       ),
@@ -543,6 +556,7 @@ test('turns use the delivered policy when an edit lands during preflight', { tim
     assert.equal((await generate(first.id)).text, 'Policy delivered.');
 
     const revised = `${original.body}\nAsk the network lead for an authorization record.`;
+    await f.approvePolicy(policyRef, revised);
     pendingEdit = revised;
     verifyMissingCounts = true;
     const deltaStart = f.model.requests.length;
@@ -561,7 +575,9 @@ test('turns use the delivered policy when an edit lands during preflight', { tim
 
     await f.supportKnowledge.upsertPage({ ...policy, name: original.name, body: revised, author: 'synthetic-fixture' });
     const fresh = await f.memory.createThread({ resourceId: resource });
-    pendingEdit = `${revised}\nDocument the authorized recovery plan in the work order.`;
+    const nextRevision = `${revised}\nDocument the authorized recovery plan in the work order.`;
+    await f.approvePolicy(policyRef, nextRevision);
+    pendingEdit = nextRevision;
     const snapshotStart = f.model.requests.length;
     assert.equal((await generate(fresh.id)).text, 'Policy delivered.');
     const snapshot = messages(f.model.requests[snapshotStart]!).find(message =>

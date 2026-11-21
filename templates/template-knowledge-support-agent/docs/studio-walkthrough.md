@@ -78,4 +78,4 @@ Browse and chat as `retailops-store-73` and `fieldretail-store-42` to see each p
 
 ## 6. Refresh the policy in the same chat
 
-Ask about factory-resetting a terminal with pending offline payments. Edit the [example team's policy](../knowledge-datasets/retail-pos/retail-policy.md), for example by adding a step to contact the on-duty lead. Apply it with `npm run knowledge:seed -- --dataset retail-pos-docs`, reload the Knowledge explorer, and continue the same chat. Look for the updated pinned Knowledge and guidance based on the revised policy.
+Ask about factory-resetting a terminal with pending offline payments. Edit the [example team's policy](../knowledge-datasets/retail-pos/retail-policy.md), for example by adding a step to contact the on-duty lead. Follow the [policy approval steps](datasets-and-examples.md#write-a-required-safety-policy) for each affected tenant reference. Apply with `npm run knowledge:seed -- --dataset retail-pos-docs`, reload the Knowledge explorer, and continue the same chat. Look for the updated pinned Knowledge and guidance based on the revised policy.

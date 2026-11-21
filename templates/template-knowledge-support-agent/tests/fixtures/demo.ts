@@ -153,7 +153,8 @@ export async function demoFixture(example: 'retail-pos' | 'software-integration'
       if (question.includes('F5:foreign')) {
         const ref = question.split('READ=')[1]!.split(' ')[0]!;
         if (!tools.length) return { tool: { name: 'knowledge_read', arguments: { page: ref, notes: true } } };
-        assert.match(tools[0]!.content!, /denied|not found|not readable|scope|access/iu);
+        const denial = tools[0]!.content!;
+        assert.ok(denial.startsWith(`Knowledge page "${ref}" not found.`), denial);
         assert.doesNotMatch(
           JSON.stringify(tools),
           /RETAILOPS_STORE73_(?:SILVER|NOTE)|FIELDRETAIL_STORE42_(?:TEAL|NOTE)/u,
@@ -258,9 +259,24 @@ export async function demoFixture(example: 'retail-pos' | 'software-integration'
     },
     async revisePolicy() {
       const path = join(copied, alternate ? 'software-integration/policy.md' : 'retail-pos/retail-policy.md');
-      await writeFile(path, `${await readFile(path, 'utf8')}\nExample team policy: ${sentinels.policy}.\n`);
+      const body = (await readFile(path, 'utf8')).trimEnd();
+      const revised = `${body}\n\nExample team policy: ${sentinels.policy}.`;
+      const store = await f.supportKnowledge.getStorage();
+      for (const scope of await store.getScopesByAddress(
+        alternate ? ['tenant:software'] : ['tenant:retailops', 'tenant:fieldretail'],
+      )) {
+        const current = await store.getPageByPath({
+          scopeId: scope.id,
+          path: ['policies', 'safe-changes'],
+          read: 'all',
+        });
+        assert.ok(current?.body?.includes(body));
+        await f.approvePolicy(`${scope.address}#policies/safe-changes`, current!.body!.replace(body, revised));
+      }
+      await writeFile(path, `${revised}\n`);
       return seedDataset(configs[alternate ? 'software-integration' : 'retail-pos-docs']!, {
         databaseUrl: f.databaseUrl,
+        policyApprovalFile: f.policyApprovalFile,
       });
     },
     candidate(label: string, shared = false): Candidate {
