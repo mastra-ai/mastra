@@ -65,6 +65,12 @@ export function routeToHandler(
         return catchAsyncResult(fn(event as TracingEvent), handler.name, 'tracing', logger);
       }
 
+      case 'span_filtered':
+        if (handler.onSpanFilteredEvent) {
+          return catchAsyncResult(handler.onSpanFilteredEvent(event), handler.name, 'span filtered', logger);
+        }
+        break;
+
       case 'log':
         if (handler.onLogEvent) {
           return catchAsyncResult(handler.onLogEvent(event as LogEvent), handler.name, 'log', logger);

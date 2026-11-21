@@ -107,13 +107,17 @@ export interface ObservabilityInstanceConfig {
    * for fine-grained filtering by type, attributes, entity, metadata, or any
    * combination.
    *
+   * The filter runs on each event of a span (start, update, end). To drop a
+   * span and keep its children attached to the trace, return the same answer
+   * for every event, for example by filtering on the span type or entity.
+   *
    * @example
    * ```typescript
    * spanFilter: (span) => {
    *   // Drop all model chunks
    *   if (span.type === SpanType.MODEL_CHUNK) return false;
-   *   // Only keep tool calls that failed
-   *   if (span.type === SpanType.TOOL_CALL && span.attributes?.success) return false;
+   *   // Drop the model inference spans of one agent
+   *   if (span.type === SpanType.MODEL_INFERENCE && span.entityName === 'judge') return false;
    *   return true;
    * }
    * ```

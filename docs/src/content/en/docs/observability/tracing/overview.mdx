@@ -564,7 +564,7 @@ export const mastra = new Mastra({
         exporters: [new MastraStorageExporter(), new LangfuseExporter()],
         excludeSpanTypes: [SpanType.MODEL_CHUNK, SpanType.MODEL_STEP],
         spanFilter: span => {
-          if (span.type === SpanType.TOOL_CALL && span.attributes?.success) {
+          if (span.type === SpanType.MODEL_INFERENCE && span.entityName === 'judge') {
             return false
           }
 
@@ -583,7 +583,9 @@ Filtering happens at export time in this order:
 1. `spanOutputProcessors` transform the remaining spans.
 1. `spanFilter` decides whether to keep the final exported span.
 
-If `spanFilter` throws, Mastra keeps the span and logs the error to avoid silent data loss. For the full span type list and more examples, see the [Span filtering reference](/reference/observability/tracing/span-filtering).
+If `spanFilter` throws, Mastra keeps the span and logs the error to avoid silent data loss.
+
+Mastra calls `spanFilter` on each event of a span: when it starts, on each update, and when it ends. To drop a span and keep its children attached to the trace, return the same answer for every event, for example by filtering on its type or entity. For the full span type list and more examples, see the [Span filtering reference](/reference/observability/tracing/span-filtering).
 
 ### Custom span formatters
 

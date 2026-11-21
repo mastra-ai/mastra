@@ -405,6 +405,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       span.errorInfo = cached.errorInfo;
     }
 
+    // No start event is emitted here. Snapshots from older versions lack the start verdict
+    // of `spanFilter`, so ask the filter again for those.
+    if (this.config.spanFilter && cached.isStartFiltered === undefined) this.judgeSpanStart(span);
+
     // Wire up lifecycle events (but skip SPAN_STARTED since it was already emitted)
     this.wireSpanLifecycle(span);
 
@@ -861,48 +865,56 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
   /** Process a span through output processors and export it, returning undefined if filtered out. */
   getSpanForExport(span: AnySpan): AnyExportedSpan | undefined {
+    return this.applySpanFilter(span, this.getUnfilteredSpanForExport(span));
+  }
+
+  /**
+   * Export a span before `spanFilter` judges it. Pass `alreadyProcessed` when
+   * the span already went through the output processors.
+   */
+  private getUnfilteredSpanForExport(span: AnySpan, alreadyProcessed = false): AnyExportedSpan | undefined {
     if (!span.isValid) return undefined;
     if (span.isInternal && !this.config.includeInternalSpans) return undefined;
-
-    // Check excludeSpanTypes before processing
     if (this.config.excludeSpanTypes?.includes(span.type)) return undefined;
 
-    const processedSpan = this.processSpan(span);
-    const exportedSpan = processedSpan?.exportSpan(this.config.includeInternalSpans);
-    if (!exportedSpan) return undefined;
+    const processedSpan = alreadyProcessed ? span : this.processSpan(span);
+    return processedSpan?.exportSpan(this.config.includeInternalSpans);
+  }
 
-    // Apply spanFilter on the exported span data
-    if (this.config.spanFilter) {
-      try {
-        if (!this.config.spanFilter(exportedSpan)) return undefined;
-      } catch (error) {
-        this.logger.error(`[Observability] spanFilter error`, error);
-        // On filter error, keep the span to avoid silent data loss
-      }
+  /** A `spanFilter` that throws keeps the span, to avoid silent data loss. */
+  private passesSpanFilter(exportedSpan: AnyExportedSpan): boolean {
+    if (!this.config.spanFilter) return true;
+    try {
+      return Boolean(this.config.spanFilter(exportedSpan));
+    } catch (error) {
+      this.logger.error(`[Observability] spanFilter error`, error);
+      return true;
     }
+  }
 
+  /**
+   * Ask `spanFilter` about an export view of a span. The filter sees the parent
+   * the span was created under. A view it keeps is then pointed at the nearest
+   * ancestor exporters received, past ancestors whose start the filter dropped.
+   */
+  private applySpanFilter(span: AnySpan, exportedSpan: AnyExportedSpan | undefined): AnyExportedSpan | undefined {
+    if (!exportedSpan || !this.passesSpanFilter(exportedSpan)) return undefined;
+    if (this.config.spanFilter && span instanceof BaseSpan) {
+      span.reparentPastFilteredStarts(exportedSpan, this.config.includeInternalSpans);
+    }
     return exportedSpan;
   }
 
-  /** Export an already-processed span, returning undefined if filtered out. */
-  private getProcessedSpanForExport(span: AnySpan): AnyExportedSpan | undefined {
-    if (!span.isValid) return undefined;
-    if (span.isInternal && !this.config.includeInternalSpans) return undefined;
-
-    if (this.config.excludeSpanTypes?.includes(span.type)) return undefined;
-
-    const exportedSpan = span.exportSpan(this.config.includeInternalSpans);
-    if (!exportedSpan) return undefined;
-
-    if (this.config.spanFilter) {
-      try {
-        if (!this.config.spanFilter(exportedSpan)) return undefined;
-      } catch (error) {
-        this.logger.error(`[Observability] spanFilter error`, error);
-        // On filter error, keep the span to avoid silent data loss
-      }
-    }
-
+  /**
+   * Ask `spanFilter` about a span's start. When the start is not exported, by
+   * the filter or by a span output processor, record that on the span. Its
+   * descendants then point at an ancestor exporters did receive, and exporters
+   * get no close for a span they never saw open.
+   * Returns the start view to export, if any.
+   */
+  private judgeSpanStart(span: AnySpan): AnyExportedSpan | undefined {
+    const exportedSpan = this.applySpanFilter(span, this.getUnfilteredSpanForExport(span));
+    if (!exportedSpan && this.config.spanFilter && span instanceof BaseSpan) span.isStartFiltered = true;
     return exportedSpan;
   }
 
@@ -911,7 +923,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * Routes through the ObservabilityBus so exporters receive it via onTracingEvent.
    */
   protected emitSpanStarted(span: AnySpan): void {
-    const exportedSpan = this.getSpanForExport(span);
+    const exportedSpan = this.judgeSpanStart(span);
     if (exportedSpan) {
       const event: TracingEvent = { type: TracingEventType.SPAN_STARTED, exportedSpan };
       this.emitTracingEvent(event);
@@ -957,15 +969,36 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       }
     }
 
-    const exportedSpan = spanWasProcessed
-      ? processedSpan
-        ? this.getProcessedSpanForExport(processedSpan)
-        : undefined
-      : this.getSpanForExport(span);
+    const unfilteredSpan = spanWasProcessed
+      ? processedSpan && this.getUnfilteredSpanForExport(processedSpan, true)
+      : this.getUnfilteredSpanForExport(span);
+    const exportedSpan = this.applySpanFilter(span, unfilteredSpan);
     if (exportedSpan) {
       const event: TracingEvent = { type: TracingEventType.SPAN_ENDED, exportedSpan };
       this.emitTracingEvent(event);
       return;
+    }
+
+    // No exporter received this span, so usage rolled up onto it would be lost.
+    // Its metrics are already emitted, so only the trace attribute goes to the
+    // next ancestor. A span whose start was exported keeps it: exporters that
+    // write a span when it starts already hold the usage there.
+    const internalUsage =
+      span instanceof BaseSpan && span.isStartFiltered
+        ? (span.attributes as { internalUsage?: UsageStats } | undefined)?.internalUsage
+        : undefined;
+    const usageTarget = internalUsage && this.findExportedAncestor(span);
+    if (usageTarget) this.addInternalUsage(usageTarget, internalUsage);
+
+    // `spanFilter` dropped the end of a span exporters saw start. Tell them, so
+    // an exporter that opened the span on its start event can close it.
+    if (unfilteredSpan && !span.isEvent && !(span instanceof BaseSpan && span.isStartFiltered)) {
+      this.observabilityBus.emit({
+        type: 'span_filtered',
+        traceId: unfilteredSpan.traceId,
+        spanId: unfilteredSpan.id,
+        endTime: unfilteredSpan.endTime ?? new Date(),
+      });
     }
 
     // The span ended but was filtered out, so no bridge will see its end event.
@@ -1091,8 +1124,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     // guarantees `attributes` is always at least `{}` (see spans/base.ts),
     // and the ancestor hasn't ended yet (we're inside a descendant's end()),
     // so the export will pick up the mutated field.
-    const attrs = ancestor.attributes as { internalUsage?: UsageStats };
-    attrs.internalUsage = addUsageStats(attrs.internalUsage, usage);
+    this.addInternalUsage(ancestor, usage);
 
     try {
       emitTokenMetricsForUsage(usage, provider, model, usageIncomplete, this.getMetricsContext(ancestor));
@@ -1101,15 +1133,19 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     }
   }
 
+  private addInternalUsage(span: AnySpan, usage: UsageStats): void {
+    const attrs = span.attributes as { internalUsage?: UsageStats };
+    attrs.internalUsage = addUsageStats(attrs.internalUsage, usage);
+  }
+
   /**
    * Walk up the parent chain to find the closest ancestor that will actually
    * reach exporters. Skips both internal-filtered ancestors and ancestors
    * whose type matches `excludeSpanTypes`, so the rollup target is one whose
    * mutated `internalUsage` attribute is visible in exported traces.
    *
-   * Note: this does not preemptively run `spanFilter` — that filter can be
-   * async and have side effects, so the rare case of a `spanFilter`-dropped
-   * ancestor falls through.
+   * Whether `spanFilter` keeps the end of that ancestor is not known yet. When
+   * it drops that end, `emitSpanEnded` passes the usage on to the next one.
    */
   private findExportedAncestor(span: AnySpan): AnySpan | undefined {
     let ancestor: AnySpan | undefined = span.parent;

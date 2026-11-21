@@ -1723,6 +1723,13 @@ export interface SpanSnapshot<TType extends SpanType> extends ExportedSpan<TType
   traceState?: TraceState;
   /** Version of the span's own entity, `null` when it has none. Absent in snapshots from older versions. */
   ownEntityVersionId?: string | null;
+  /**
+   * @internal Parent ids to export when `spanFilter` dropped the start of an ancestor.
+   * `parentSpanId` stays the parent the span was created under, which is what `spanFilter` sees.
+   */
+  reparented?: { parentSpanId?: string; externalParentSpanId?: string };
+  /** @internal Whether the span's start event was not exported while `spanFilter` is set. Absent in snapshots from older versions. */
+  isStartFiltered?: boolean;
 }
 
 /**
@@ -2329,6 +2336,19 @@ export type TracingEvent =
   | { type: TracingEventType.SPAN_STARTED; exportedSpan: AnyExportedSpan }
   | { type: TracingEventType.SPAN_UPDATED; exportedSpan: AnyExportedSpan }
   | { type: TracingEventType.SPAN_ENDED; exportedSpan: AnyExportedSpan };
+
+/**
+ * Sent when `spanFilter` drops the end of a span whose start was exported.
+ * It carries no span data. Exporters that open a span on its start event use
+ * it to close that span. Exporters that only act on span ends can ignore it.
+ */
+export interface SpanFilteredEvent {
+  type: 'span_filtered';
+  traceId: string;
+  spanId: string;
+  /** When the span ended */
+  endTime: Date;
+}
 
 /**
  * Interface for span processors

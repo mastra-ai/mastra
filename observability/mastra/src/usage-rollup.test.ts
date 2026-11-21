@@ -413,6 +413,76 @@ describe('internal MODEL_GENERATION usage rollup', () => {
     await localTracing.shutdown();
   });
 
+  it('keeps the usage in the trace when the filter drops the spans that hold it', async () => {
+    const localExporter = new CollectingExporter();
+    const localTracing = new DefaultObservabilityInstance({
+      serviceName: 'usage-rollup-test',
+      name: 'test-instance',
+      sampling: { type: SamplingStrategyType.ALWAYS },
+      exporters: [localExporter],
+      // Only failed spans are kept, so no exporter receives the step or the tool.
+      spanFilter: span => Boolean(span.errorInfo),
+    });
+
+    const workflowSpan = localTracing.startSpan({ type: SpanType.WORKFLOW_RUN, name: 'workflow' });
+    const stepSpan = workflowSpan.createChildSpan({ type: SpanType.WORKFLOW_STEP, name: 'step' });
+    const toolSpan = stepSpan.createChildSpan({ type: SpanType.TOOL_CALL, name: 'tool' });
+    toolSpan
+      .createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: "llm: 'mock'",
+        tracingPolicy: { internal: InternalSpans.ALL },
+      })
+      .end({
+        attributes: { provider: 'mock-provider', model: 'mock-model-id', usage: { inputTokens: 7, outputTokens: 3 } },
+      });
+    toolSpan.end();
+    stepSpan.end();
+    workflowSpan.error({ error: new Error('boom'), endSpan: true });
+    await localTracing.flush();
+
+    const exportedWorkflow = localExporter.endedSpans().find(span => span.type === SpanType.WORKFLOW_RUN);
+    expect((exportedWorkflow?.attributes as { internalUsage?: unknown }).internalUsage).toEqual({
+      inputTokens: 7,
+      outputTokens: 3,
+    });
+
+    await localTracing.shutdown();
+  });
+
+  it('does not count the usage twice when exporters received the start of the span that holds it', async () => {
+    const localExporter = new CollectingExporter();
+    const localTracing = new DefaultObservabilityInstance({
+      serviceName: 'usage-rollup-test',
+      name: 'test-instance',
+      sampling: { type: SamplingStrategyType.ALWAYS },
+      exporters: [localExporter],
+      // The tool is kept when it starts and dropped when it ends.
+      spanFilter: span => !(span.type === SpanType.TOOL_CALL && span.endTime),
+    });
+
+    const agentSpan = localTracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent' });
+    const toolSpan = agentSpan.createChildSpan({ type: SpanType.TOOL_CALL, name: 'tool' });
+    toolSpan
+      .createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: "llm: 'mock'",
+        tracingPolicy: { internal: InternalSpans.ALL },
+      })
+      .end({
+        attributes: { provider: 'mock-provider', model: 'mock-model-id', usage: { inputTokens: 7, outputTokens: 3 } },
+      });
+    toolSpan.end();
+    agentSpan.end();
+    await localTracing.flush();
+
+    // Exporters that write a span when it starts hold the usage on the tool.
+    const exportedAgent = localExporter.endedSpans().find(span => span.type === SpanType.AGENT_RUN);
+    expect((exportedAgent?.attributes as { internalUsage?: unknown }).internalUsage).toBeUndefined();
+
+    await localTracing.shutdown();
+  });
+
   it('does not roll up when includeInternalSpans is true', async () => {
     const localExporter = new CollectingExporter();
     const localTracing = new DefaultObservabilityInstance({
