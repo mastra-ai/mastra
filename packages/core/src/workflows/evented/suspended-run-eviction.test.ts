@@ -705,3 +705,46 @@ describe('reopen of a storage v1 run', () => {
     expect(reopened.resourceId).toBe('user-v1');
   });
 });
+
+describe.each(engines)(
+  '$engine engine: deleting one storage version of a run',
+  ({ createWorkflow, createStep, evented }) => {
+    it('keeps the held instance of a v2 run when its v1 record is deleted', async () => {
+      const workflow = createWorkflow({
+        id: 'versions',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        options: { storageVersion: 2 },
+      })
+        .then(
+          createStep({
+            id: 'gate',
+            inputSchema: z.object({}),
+            outputSchema: z.object({}),
+            execute: async ({ suspend }: any) => suspend({}),
+          }),
+        )
+        .commit();
+      const mastra = new Mastra({
+        logger: false,
+        storage: new MockStore(),
+        ...(evented ? { pubsub: new EventEmitterPubSub() } : {}),
+        workflows: { versions: workflow },
+      });
+      if (evented) await mastra.startWorkers();
+      try {
+        const versions = mastra.getWorkflow('versions');
+        const held = await versions.createRun();
+        expect((await held.start({ inputData: {} })).status).toBe('suspended');
+
+        await versions.deleteWorkflowRunById(held.runId, { storageVersion: 1 });
+        expect(await versions.createRun({ runId: held.runId })).toBe(held);
+
+        await versions.deleteWorkflowRunById(held.runId, { storageVersion: 2 });
+        expect(await versions.createRun({ runId: held.runId })).not.toBe(held);
+      } finally {
+        if (evented) await mastra.stopWorkers();
+      }
+    });
+  },
+);

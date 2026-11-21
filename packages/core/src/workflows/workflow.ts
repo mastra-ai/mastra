@@ -4051,7 +4051,9 @@ export class Workflow<
     // delete and dropping this process's instance; a held instance would otherwise come back.
     await this.openRunOnce(runId, async () => {
       await workflowsStore.deleteWorkflowRunById({ runId, workflowName: this.id, ...options });
-      this.forgetRun(runId);
+      // Deleting the other storage version's record leaves this instance's record, so it stays live.
+      const live = this.liveRun(runId);
+      if (!live || !options || live.storageVersion === options.storageVersion) this.forgetRun(runId);
     });
   }
 
