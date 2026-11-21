@@ -25,6 +25,10 @@ export { EXPERIMENT_STATUS_OPTIONS, getExperimentDatasetOptions } from './compon
 export { STATUS_LABEL, STATUS_VARIANT, experimentColumnLabels } from './components/experiment-columns';
 
 // Experiment page
+export { ExperimentPageLayout } from './components/experiment-page-layout';
+export type { ExperimentPageLayoutProps } from './components/experiment-page-layout';
+export { ExperimentBreadcrumbs } from './components/experiment-breadcrumbs';
+export type { ExperimentBreadcrumbsProps } from './components/experiment-breadcrumbs';
 export { ExperimentItemPanelProvider, useExperimentItemPanel } from './context/experiment-item-panel-context';
 export type {
   ExperimentItemPanelContextValue,
