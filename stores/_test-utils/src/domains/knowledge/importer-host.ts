@@ -269,6 +269,30 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       });
     });
 
+    it('a declare of a linker whose repair a move deferred still repairs it', async () => {
+      const { knowledge, run, page } = setup();
+      const linkers = Array.from({ length: 105 }, (_, i) =>
+        upsert({ sourceId: `l${String(i).padStart(3, '0')}`, links: [{ sourceId: 'b' }] }),
+      );
+      await run([
+        upsert({ sourceId: 'p1' }),
+        upsert({ sourceId: 'p2' }),
+        upsert({ sourceId: 'b', parent: 'p1' }),
+        ...linkers,
+      ]);
+      // The move rewrites l000–l099 and defers the rest; l104 is declared, unchanged, before settle reaches it.
+      expect(
+        await run([
+          upsert({ sourceId: 'b', parent: 'p2' }),
+          { op: 'declare', item: { sourceId: 'l104', title: 'L104' } },
+        ]),
+      ).toMatchObject({ outcome: 'succeeded' });
+      await run([]);
+      expect((await page('notion/l104'))?.body).toBe('body of l104\n\nLinks:\n- [[docs:acme#notion/p2/b]]');
+      const storage = await knowledge.getStorage();
+      expect((await storage.importers!.listNodes('b1', { unsettled: true })).items).toEqual([]);
+    });
+
     it('a run that imports nothing does not chain on a parent that never arrives', async () => {
       const { run, page } = setup();
       await run([upsert({ sourceId: 'orphan', parent: 'never' })]);

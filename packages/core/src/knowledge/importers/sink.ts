@@ -540,12 +540,15 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
         if (hasBody) {
           rendered = await renderBody(item as KnowledgeImportItem);
           fields = { ...fields, body: rendered.body! };
-        } else {
-          const out = await relink(existing, page);
-          page = out.page;
-          rewrote = out.changed;
-          rendered = { links: existing.links, section: out.section, unresolved: out.unresolved };
         }
+      }
+      // A declare keeps the body, so its links section is written again here from where its targets
+      // are now: it may be waiting on a repair a move deferred, and saving the node settles it.
+      if (!hasBody) {
+        const out = await relink(existing, page);
+        page = out.page;
+        rewrote = out.changed;
+        rendered = { links: existing.links, section: out.section, unresolved: out.unresolved };
       }
       const same =
         fields.name === page.name &&
