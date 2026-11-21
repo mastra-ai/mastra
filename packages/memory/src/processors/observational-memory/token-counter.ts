@@ -10,6 +10,7 @@ import {
   serializeToolResultForTokenCounting,
   toolErrorTextToString,
 } from './tool-result-helpers';
+import { coreClearsTrustedTokenEstimates } from './trusted-token-estimates';
 
 type TokenEstimateCacheEntry = {
   v: number;
@@ -57,6 +58,15 @@ const IMAGE_FILE_EXTENSIONS = new Set([
 ]);
 
 const TOKEN_ESTIMATE_CACHE_VERSION = 8;
+
+/**
+ * Trusted part estimates are read by presence, without hashing the payload. They are only valid
+ * while nobody edits the part without clearing them (Core's `clearTrustedTokenEstimates`), so they
+ * use their own version, source and key namespace: a v8 entry is never read or promoted as one.
+ */
+const TRUSTED_TOKEN_ESTIMATE_VERSION = 9;
+const TRUSTED_TOKEN_ESTIMATE_SOURCE = 'v9:tokenx';
+const TRUSTED_TOKEN_ESTIMATE_KEY_PREFIX = 'trusted:';
 
 /**
  * Cache `source` marker for token estimates supplied by the caller via
@@ -228,6 +238,48 @@ function mergeCacheEntry(
   }
 
   return entry;
+}
+
+function isTrustedPartEntry(entry: TokenEstimateCacheEntry | undefined, key: string): entry is TokenEstimateCacheEntry {
+  return Boolean(
+    entry &&
+    entry.v === TRUSTED_TOKEN_ESTIMATE_VERSION &&
+    entry.source === TRUSTED_TOKEN_ESTIMATE_SOURCE &&
+    entry.key === key &&
+    Number.isFinite(entry.tokens) &&
+    entry.tokens >= 0,
+  );
+}
+
+/**
+ * True when `value` holds only JSON data: primitives, plain objects and arrays, with no cycles.
+ * Only such values get a trusted estimate, so a by-reference object (a Buffer, a class instance)
+ * that someone edits in place can never sit behind a count that is read without checking.
+ */
+function isPlainJsonValue(value: unknown, ancestors: Set<object> = new Set()): boolean {
+  if (value === null || value === undefined) return true;
+  const type = typeof value;
+  if (type === 'string' || type === 'number' || type === 'boolean') return true;
+  if (type !== 'object') return false;
+  const object = value as object;
+  if (ancestors.has(object)) return false;
+  if (Array.isArray(object)) {
+    ancestors.add(object);
+    const plain = object.every(item => isPlainJsonValue(item, ancestors));
+    ancestors.delete(object);
+    return plain;
+  }
+  const prototype = Object.getPrototypeOf(object);
+  if (prototype !== Object.prototype && prototype !== null) return false;
+  ancestors.add(object);
+  for (const key of Object.keys(object)) {
+    if (!isPlainJsonValue((object as Record<string, unknown>)[key], ancestors)) {
+      ancestors.delete(object);
+      return false;
+    }
+  }
+  ancestors.delete(object);
+  return true;
 }
 
 function getPartCacheEntry(part: CacheablePart, key: string): TokenEstimateCacheEntry | undefined {
@@ -1240,6 +1292,8 @@ async function fetchGoogleAttachmentTokenEstimate(modelId: string, part: Cacheab
  */
 export class TokenCounter {
   private readonly cacheSource: string;
+  /** Trusted estimates are only for the stock estimator; a subclass overriding countString never reads or writes them. */
+  private readonly usesTrustedEstimates: boolean;
   private readonly defaultModelContext?: TokenCounterModelContext;
   private readonly inFlightAttachmentCounts = new Map<string, Promise<number | undefined>>();
   private readonly multimodalToolResultCounts = new WeakMap<object, { resultKey: string; tokens: number }>();
@@ -1252,6 +1306,8 @@ export class TokenCounter {
 
   constructor(options?: TokenCounterOptions) {
     this.cacheSource = `v${TOKEN_ESTIMATE_CACHE_VERSION}:${resolveEstimatorId()}`;
+    this.usesTrustedEstimates =
+      coreClearsTrustedTokenEstimates && this.countString === TokenCounter.prototype.countString;
     this.defaultModelContext = parseModelContext(options?.model);
   }
 
@@ -1288,6 +1344,40 @@ export class TokenCounter {
       tokens,
     });
 
+    return tokens;
+  }
+
+  /**
+   * Count one content-only piece of a part (its text, a tool's args or result) and keep the count
+   * on the part, read back by presence with no hashing. `getPayload` runs only on a miss, so a hit
+   * also skips serializing the value. `value` is checked for plain JSON before anything is trusted;
+   * anything else keeps the payload-keyed v8 path. Everything here runs synchronously, so the
+   * part cannot change between counting it and storing the count.
+   */
+  private readOrPersistTrustedPartEstimate(
+    part: CacheablePart,
+    kind: string,
+    getPayload: () => string,
+    value?: unknown,
+  ): number {
+    if (!this.usesTrustedEstimates) {
+      return this.readOrPersistPartEstimate(part, kind, getPayload());
+    }
+
+    const key = `${TRUSTED_TOKEN_ESTIMATE_KEY_PREFIX}${kind}`;
+    const cached = getPartCacheEntry(part, key);
+    if (isTrustedPartEntry(cached, key)) {
+      return cached.tokens;
+    }
+
+    const payload = getPayload();
+    if (value !== undefined && !isPlainJsonValue(value)) {
+      return this.readOrPersistPartEstimate(part, kind, payload);
+    }
+
+    const tokens = this.countString(payload);
+    const entry = { v: TRUSTED_TOKEN_ESTIMATE_VERSION, source: TRUSTED_TOKEN_ESTIMATE_SOURCE, key, tokens };
+    setPartCacheEntry(part, key, entry);
     return tokens;
   }
 
@@ -1735,8 +1825,8 @@ export class TokenCounter {
   /**
    * Count the name and the arguments of a tool call. Every state before the tool produces an
    * output holds the same call signature in the context window, so all of those states share
-   * these cache kinds. `buildEstimateKey` hashes the text, so a shared kind stays correct and
-   * keeps the estimate warm while the invocation moves from one state to the next.
+   * these cache kinds, and the estimate stays warm while the invocation moves from one state to
+   * the next. Name and args don't change across those states once the call stops streaming.
    */
   private countToolCallSignature(
     part: CacheablePart,
@@ -1744,16 +1834,23 @@ export class TokenCounter {
   ): { tokens: number; overheadDelta: number } {
     let tokens = 0;
     let overheadDelta = 0;
+    // Args of a call that is still streaming grow in place, so they keep the payload-keyed count.
+    const trusted = invocation.state !== 'partial-call';
+    const count = (kind: string, getPayload: () => string, value?: unknown) =>
+      trusted
+        ? this.readOrPersistTrustedPartEstimate(part, kind, getPayload, value)
+        : this.readOrPersistPartEstimate(part, kind, getPayload());
 
     if (invocation.toolName) {
-      tokens += this.readOrPersistPartEstimate(part, 'tool-call-name', invocation.toolName);
+      const toolName = invocation.toolName;
+      tokens += count('tool-call-name', () => toolName);
     }
     if (invocation.args !== undefined) {
-      if (typeof invocation.args === 'string') {
-        tokens += this.readOrPersistPartEstimate(part, 'tool-call-args', invocation.args);
+      const args = invocation.args;
+      if (typeof args === 'string') {
+        tokens += count('tool-call-args', () => args);
       } else {
-        const argsJson = JSON.stringify(invocation.args);
-        tokens += this.readOrPersistPartEstimate(part, 'tool-call-args-json', argsJson);
+        tokens += count('tool-call-args-json', () => JSON.stringify(args), args);
         overheadDelta -= 12;
       }
     }
@@ -1771,7 +1868,12 @@ export class TokenCounter {
     let extraMessageDelta = 0;
 
     if (part.type === 'text') {
-      return { tokens: this.readOrPersistPartEstimate(part, 'text', part.text), overheadDelta, extraMessageDelta };
+      const text = part.text;
+      return {
+        tokens: this.readOrPersistTrustedPartEstimate(part, 'text', () => text),
+        overheadDelta,
+        extraMessageDelta,
+      };
     }
 
     if (part.type === 'tool-invocation') {
@@ -1797,7 +1899,7 @@ export class TokenCounter {
         overheadDelta += signature.overheadDelta;
         const reason = invocation.approval?.reason;
         if (reason) {
-          tokens += this.readOrPersistPartEstimate(part, 'tool-approval-reason', reason);
+          tokens += this.readOrPersistTrustedPartEstimate(part, 'tool-approval-reason', () => reason);
         }
         return { tokens, overheadDelta, extraMessageDelta };
       }
@@ -1821,11 +1923,11 @@ export class TokenCounter {
           if (contentTokens !== undefined) {
             tokens += contentTokens;
           } else {
-            const formattedResult = serializeToolResultForTokenCounting(resultForCounting);
-            tokens += this.readOrPersistPartEstimate(
+            tokens += this.readOrPersistTrustedPartEstimate(
               part,
               usingStoredModelOutput ? 'tool-result-model-output-json' : 'tool-result-json',
-              formattedResult,
+              () => serializeToolResultForTokenCounting(resultForCounting),
+              resultForCounting,
             );
           }
 
@@ -1839,10 +1941,10 @@ export class TokenCounter {
               ? errorText
               : 'Tool execution failed'
             : '[empty result]';
-          tokens += this.readOrPersistPartEstimate(
+          tokens += this.readOrPersistTrustedPartEstimate(
             part,
             invocation.isError ? 'tool-result-error' : 'tool-result-json',
-            fallback,
+            () => fallback,
           );
         }
 
@@ -1859,7 +1961,7 @@ export class TokenCounter {
         const reason = invocation.approval?.reason?.trim()
           ? invocation.approval.reason
           : 'Tool call was not approved by the user';
-        tokens += this.readOrPersistPartEstimate(part, 'tool-result-denied', reason);
+        tokens += this.readOrPersistTrustedPartEstimate(part, 'tool-result-denied', () => reason);
         return { tokens, overheadDelta, extraMessageDelta };
       }
 
@@ -1870,7 +1972,7 @@ export class TokenCounter {
         overheadDelta += signature.overheadDelta;
         const errorText = toolErrorTextToString(invocation.errorText);
         const errorMessage = errorText.trim() ? errorText : 'Tool execution failed';
-        tokens += this.readOrPersistPartEstimate(part, 'tool-result-error', errorMessage);
+        tokens += this.readOrPersistTrustedPartEstimate(part, 'tool-result-error', () => errorMessage);
         return { tokens, overheadDelta, extraMessageDelta };
       }
 

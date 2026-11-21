@@ -16,6 +16,7 @@ import {
   omitResponseResultItemIds,
   preserveResponseItemIdsOnMerge,
 } from '../utils/response-item-metadata';
+import { clearTrustedTokenEstimates } from '../utils/token-estimates';
 import { sanitizeToolName } from '../utils/tool-name';
 import { unwrapLegacyToolOutput } from '../utils/unwrap-legacy-tool-output';
 import { AIV5Adapter } from './AIV5Adapter';
@@ -349,7 +350,7 @@ function rehydratePendingToolApprovals(parts: AIV6Type.UIMessage['parts'], metad
     }
 
     parts[toolPartIndex] = {
-      ...toolPart,
+      ...clearTrustedTokenEstimates(toolPart),
       state: 'approval-requested',
       approval: { id: approvalId },
     } as AIV6Type.UIMessage['parts'][number];

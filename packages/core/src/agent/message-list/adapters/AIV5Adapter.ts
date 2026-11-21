@@ -24,6 +24,7 @@ import type {
 import type { AIV5Type } from '../types';
 import { findToolCallArgs } from '../utils/provider-compat';
 import { preserveResponseItemIdsOnMerge } from '../utils/response-item-metadata';
+import { clearTrustedTokenEstimatesInPlace } from '../utils/token-estimates';
 import { sanitizeToolName } from '../utils/tool-name';
 import { normalizeToolOutput, unwrapLegacyToolOutput } from '../utils/unwrap-legacy-tool-output';
 
@@ -1024,6 +1025,7 @@ export class AIV5Adapter {
           const normalized = normalizeToolOutput(toolResultPart.output);
           matchingCall.state = normalized.isError ? 'output-error' : 'result';
           matchingCall.result = normalized.output;
+          clearTrustedTokenEstimatesInPlace(matchingV2Part);
           if (normalized.isError) {
             matchingCall.errorText =
               typeof normalized.output === 'string' ? normalized.output : JSON.stringify(normalized.output);

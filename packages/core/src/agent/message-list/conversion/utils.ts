@@ -6,6 +6,7 @@ import { CacheKeyGenerator } from '../cache/CacheKeyGenerator';
 import { TypeDetector } from '../detection/TypeDetector';
 import type { MastraDBMessage, MastraMessagePart } from '../state/types';
 import type { MessageInput } from '../types';
+import { clearTrustedTokenEstimates } from '../utils/token-estimates';
 
 /**
  * Convert CoreMessage content to a plain string.
@@ -93,7 +94,10 @@ export function messagesAreEqual(one: MessageInput, two: MessageInput): boolean 
 function projectPartsForPersistence(parts: MastraMessagePart[]): MastraMessagePart[] {
   return removeWorkingMemoryToolInvocationParts(parts).map(part =>
     part.type === 'text'
-      ? { ...part, text: removeWorkingMemoryTags(typeof part.text === 'string' ? part.text : '').trim() }
+      ? {
+          ...clearTrustedTokenEstimates(part),
+          text: removeWorkingMemoryTags(typeof part.text === 'string' ? part.text : '').trim(),
+        }
       : part,
   );
 }

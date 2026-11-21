@@ -105,19 +105,73 @@ export function resolveToolResultValue(
   };
 }
 
+const PREFIX_CHUNK_MIN_LENGTH = 256;
+
+function isAsciiAlphanumeric(code: number): boolean {
+  return (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+}
+
+function isSplitWhitespace(code: number): boolean {
+  return code === 32 || code === 10 || code === 9 || code === 13;
+}
+
+/**
+ * Returns a function that counts `estimateTokenCount(text.slice(0, end) + suffix)` without rescanning the
+ * whole prefix on every call.
+ *
+ * tokenx splits text into segments on whitespace and punctuation runs and sums a per-segment estimate.
+ * Letters and digits are never separators and whitespace always is, so the position between an ASCII
+ * letter or digit and a following whitespace character is always a segment boundary: the count of any
+ * string that shares the text up to such a position equals the count before it plus the count after it.
+ * The text is cut at those boundaries once, and each call only rescans the chunk it ends in.
+ */
+function createPrefixTokenCounter(text: string): (end: number, suffix?: string) => number {
+  const boundaries: number[] = [0];
+  const tokensBefore: number[] = [0];
+  let chunkStart = 0;
+  let runningTokens = 0;
+  for (let i = PREFIX_CHUNK_MIN_LENGTH; i < text.length; i++) {
+    if (
+      i - chunkStart >= PREFIX_CHUNK_MIN_LENGTH &&
+      isSplitWhitespace(text.charCodeAt(i)) &&
+      isAsciiAlphanumeric(text.charCodeAt(i - 1))
+    ) {
+      runningTokens += estimateTokenCount(text.slice(chunkStart, i));
+      boundaries.push(i);
+      tokensBefore.push(runningTokens);
+      chunkStart = i;
+    }
+  }
+
+  return (end, suffix = '') => {
+    let low = 0;
+    let high = boundaries.length - 1;
+    while (low < high) {
+      const mid = (low + high + 1) >> 1;
+      if (boundaries[mid]! <= end) low = mid;
+      else high = mid - 1;
+    }
+    return tokensBefore[low]! + estimateTokenCount(text.slice(boundaries[low]!, end) + suffix);
+  };
+}
+
 export function truncateStringByTokens(text: string, maxTokens: number): string {
   if (!text || maxTokens <= 0) {
     return '';
   }
 
-  const totalTokens = estimateTokenCount(text);
+  const countPrefixTokens = createPrefixTokenCounter(text);
+  const totalTokens = countPrefixTokens(text.length);
   if (totalTokens <= maxTokens) {
     return text;
   }
 
+  // The truncation marker starts with a newline, so the candidate's count only rescans the chunk where
+  // the visible text ends.
   const buildCandidate = (sliceEnd: number) => {
-    const visible = safeSlice(text, sliceEnd);
-    return `${visible}\n... [truncated ~${totalTokens - estimateTokenCount(visible)} tokens]`;
+    const visibleEnd = safeSlice(text, sliceEnd).length;
+    const suffix = `\n... [truncated ~${totalTokens - countPrefixTokens(visibleEnd)} tokens]`;
+    return { visibleEnd, suffix, tokens: countPrefixTokens(visibleEnd, suffix) };
   };
 
   let low = 0;
@@ -127,9 +181,8 @@ export function truncateStringByTokens(text: string, maxTokens: number): string 
   while (low <= high) {
     const mid = Math.floor((low + high) / 2);
     const candidate = buildCandidate(mid);
-    const candidateTokens = estimateTokenCount(candidate);
 
-    if (candidateTokens <= maxTokens) {
+    if (candidate.tokens <= maxTokens) {
       best = candidate;
       low = mid + 1;
     } else {
@@ -137,7 +190,7 @@ export function truncateStringByTokens(text: string, maxTokens: number): string 
     }
   }
 
-  return best;
+  return text.slice(0, best.visibleEnd) + best.suffix;
 }
 
 export function formatToolResultForObserver(
