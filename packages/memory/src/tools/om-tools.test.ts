@@ -3352,6 +3352,7 @@ describe('om-tools', () => {
         resourceId: 'res',
         topK: 11,
         filter: { observedAfter: new Date('2024-01-15T00:00:00.000Z') },
+        abortSignal: expect.any(AbortSignal),
       });
       expect(result.count).toBe(1);
       expect(result.results).toContain('Older Thread');

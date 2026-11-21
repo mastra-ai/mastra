@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
+import type { IMastraLogger } from '@mastra/core/logger';
 import type { MemoryConfigInternal } from '@mastra/core/memory';
 import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
@@ -124,6 +125,7 @@ export type RecallMemory = {
       observedAfter?: Date;
       observedBefore?: Date;
     };
+    abortSignal?: AbortSignal;
   }) => Promise<{ results: RecallSearchResult[] }>;
   getThreadById?: (args: { threadId: string }) => Promise<RecallThread | null>;
 };
@@ -340,6 +342,38 @@ export async function listThreadsForResource({
 export const SEARCH_NOT_CONFIGURED_MESSAGE =
   'Search is not configured. Enable it with `retrieval: { vector: true }` and configure a vector store and an embedder, or a vector store that generates embeddings itself, on your Memory instance.';
 
+/**
+ * How long recall waits for a search (embedding the query plus the vector lookup) before it stops waiting.
+ * Embedding retries 3 times after 2 s, 4 s and 8 s, so a rate-limited search can still succeed after ~15-23 s.
+ * Healthy hosted embedders answer in well under a second, so only a provider that hangs waits this long.
+ */
+const SEARCH_TIMEOUT_MS = 30_000;
+
+type SearchArgs = Omit<Parameters<NonNullable<RecallMemory['searchMessages']>>[0], 'abortSignal'>;
+
+/**
+ * Runs a vector search that stops waiting after `timeoutMs`, or when the run is aborted. The signal also
+ * cancels the embedding request, but an embedder that ignores it would keep the search waiting, so the
+ * search rejects on its own.
+ */
+function searchWithTimeout(memory: RecallMemory, args: SearchArgs, timeoutMs: number, runSignal?: AbortSignal) {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  const abortSignal = runSignal ? AbortSignal.any([timeout, runSignal]) : timeout;
+  return new Promise<{ results: RecallSearchResult[] }>((resolve, reject) => {
+    const onAbort = () =>
+      reject(runSignal?.aborted ? runSignal.reason : new Error(`search did not finish within ${timeoutMs}ms`));
+    if (abortSignal.aborted) return onAbort();
+    abortSignal.addEventListener('abort', onAbort, { once: true });
+    memory.searchMessages!({ ...args, abortSignal })
+      .then(resolve, reject)
+      .finally(() => abortSignal.removeEventListener('abort', onAbort));
+  });
+}
+
+function describeSearchFailure(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export async function searchMessagesForResource({
   memory,
   om,
@@ -353,6 +387,9 @@ export async function searchMessagesForResource({
   threadScope,
   includeThreadId = true,
   currentMessages = [],
+  searchTimeoutMs = SEARCH_TIMEOUT_MS,
+  abortSignal,
+  logger,
 }: {
   memory: RecallMemory;
   om?: OMTimelineEngine | null;
@@ -369,6 +406,11 @@ export async function searchMessagesForResource({
   includeThreadId?: boolean;
   /** Current conversation at tool execution time, not an ever-seen history. */
   currentMessages?: readonly MastraDBMessage[];
+  /** A search slower than this is abandoned and the agent is told to browse instead. */
+  searchTimeoutMs?: number;
+  /** The run's signal. Aborting it stops the search and rejects, rather than suggesting browsing. */
+  abortSignal?: AbortSignal;
+  logger?: IMastraLogger;
 }): Promise<{
   results: string;
   count: number;
@@ -393,7 +435,32 @@ export async function searchMessagesForResource({
     ...(afterDate ? { observedAfter: afterDate } : {}),
     ...(beforeDate ? { observedBefore: beforeDate } : {}),
   };
-  const { results } = await memory.searchMessages({ query, resourceId, topK: searchTopK, filter });
+  // A search that keeps failing is an operational fault the agent can't fix, so it's logged as an error.
+  const logError = (message: string) => (logger ? logger.error(message) : console.error(message));
+  // One budget covers the first search and the deeper one, so a recall never waits longer than searchTimeoutMs.
+  const deadline = Date.now() + searchTimeoutMs;
+  let results: RecallSearchResult[];
+  try {
+    ({ results } = await searchWithTimeout(
+      memory,
+      { query, resourceId, topK: searchTopK, filter },
+      searchTimeoutMs,
+      abortSignal,
+    ));
+  } catch (error) {
+    if (abortSignal?.aborted) throw error;
+    // Search depends on the embedder (often a hosted API) and the vector store. When either is down or
+    // slow, browsing still works, so point the agent there instead of failing the tool call. The error
+    // can carry provider details, so it goes to the log, not to the model.
+    logError(`[recall] Search failed, so recall suggested browsing instead (${describeSearchFailure(error)}).`);
+    // Keep a search scoped to one thread on that thread; thread-scope recall can only browse its own thread anyway.
+    const browse = !includeThreadId
+      ? 'use mode="messages" to page through messages'
+      : threadScope
+        ? `use mode="messages" with threadId="${threadScope}" to page through that thread's messages`
+        : 'use mode="messages" to page through messages, and mode="threads" to find other threads';
+    return { results: `Search is unavailable right now. Browse instead: ${browse}.`, count: 0 };
+  }
 
   if (results.length === 0) {
     return {
@@ -524,8 +591,19 @@ export async function searchMessagesForResource({
       }
     };
     await addCandidates(filteredMatches.slice(limitedMatches.length));
-    if (freshCount < clampedTopK && seen.size < candidateLimit && searchTopK < candidateLimit) {
-      const deeper = await memory.searchMessages({ query, resourceId, topK: candidateLimit, filter });
+    const remainingMs = deadline - Date.now();
+    if (remainingMs > 0 && freshCount < clampedTopK && seen.size < candidateLimit && searchTopK < candidateLimit) {
+      // The first search already produced results, so a failed deeper search only means fewer of them.
+      const deeper = await searchWithTimeout(
+        memory,
+        { query, resourceId, topK: candidateLimit, filter },
+        remainingMs,
+        abortSignal,
+      ).catch(error => {
+        if (abortSignal?.aborted) throw error;
+        logError(`[recall] Deeper search failed (${describeSearchFailure(error)}).`);
+        return { results: [] };
+      });
       await addCandidates(deeper.results);
     }
   }
@@ -1729,6 +1807,10 @@ export const recallTool = (
   options?: {
     retrievalScope?: 'thread' | 'resource';
     searchEnabled?: boolean;
+    /** How long a search may take before recall points the agent at browsing instead. */
+    searchTimeoutMs?: number;
+    /** Where recall logs searches it gave up on. Defaults to the console. */
+    logger?: IMastraLogger;
     /** Resolves the observational memory engine so search hits can be dated and paged by observation group. */
     getOMEngine?: () => Promise<OMTimelineEngine | null> | OMTimelineEngine | null;
   },
@@ -2008,6 +2090,9 @@ export const recallTool = (
           after,
           threadScope: !isResourceScope ? currentThreadId || undefined : resolvedExplicitThreadId || undefined,
           includeThreadId: isResourceScope,
+          searchTimeoutMs: options?.searchTimeoutMs,
+          abortSignal: context?.abortSignal,
+          logger: options?.logger,
         });
       }
 
