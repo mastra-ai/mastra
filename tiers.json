@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-11-20",
+  "updated": "2026-11-21",
   "scope": "all",
   "files": {
     ".github/scripts/ci-routing.test.ts": {
@@ -35431,8 +35431,8 @@
     },
     "job:mastracode-e2e": {
       "tier": "in",
-      "since": "2026-11-19",
-      "last_failure": "2026-11-19",
+      "since": "2026-11-21",
+      "last_failure": "2026-11-21",
       "reason": "versioning-fail",
       "pr_failures": {
         "131935295068": {
