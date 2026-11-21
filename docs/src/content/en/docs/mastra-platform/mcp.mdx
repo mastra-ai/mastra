@@ -1,0 +1,135 @@
+---
+title: 'MCP server | Mastra platform'
+description: 'Connect Claude Code, Codex, or another MCP client to Mastra platform to query traces, logs, metrics, scores, and feedback from chat, and to build dashboards.'
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# MCP server on Mastra platform
+
+The Mastra platform MCP server lets an AI assistant read your organization's [Observability](/docs/mastra-platform/observability/overview) data through the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro). Connect it to Claude Code, Codex, or another MCP client, then ask about your traces, logs, metrics, scores, and feedback in chat. The assistant can also chart the results and save the charts to dashboards on Mastra platform.
+
+## Connect your MCP client
+
+Before you start, ensure that you have a Mastra platform account and belong to the organization whose data you want to query.
+
+<Tabs>
+  <TabItem value="claude-code" label="Claude Code">
+    1. Add the server:
+
+       ```bash
+       claude mcp add --transport http mastra https://platform.mastra.ai/v1/mcp
+       ```
+
+    1. Start Claude Code and run `/mcp`.
+
+    1. Select **mastra**, then select the option to authenticate.
+  </TabItem>
+
+  <TabItem value="codex" label="Codex">
+    1. Add the server:
+
+       ```bash
+       codex mcp add mastra --url https://platform.mastra.ai/v1/mcp
+       ```
+
+    1. Sign in:
+
+       ```bash
+       codex mcp login mastra
+       ```
+  </TabItem>
+
+  <TabItem value="json" label="Other clients">
+    1. Add the server to your client's MCP configuration file. This example uses the `mcpServers` format that many clients accept. Some clients use a different format, such as VS Code, which expects a `servers` object in `.vscode/mcp.json`. Check your client's documentation for its file location and format.
+
+       ```json title="mcp.json"
+       {
+         "mcpServers": {
+           "mastra": {
+             "type": "http",
+             "url": "https://platform.mastra.ai/v1/mcp"
+           }
+         }
+       }
+       ```
+
+    1. Restart the client and follow its prompt to authenticate the **mastra** server.
+  </TabItem>
+</Tabs>
+
+When you authenticate, your browser opens the Mastra sign-in page. Sign in and select an organization. The connection then acts as you in that organization and can read only the data you can read. If you leave the organization or someone removes you from it, the connection loses access on its next request.
+
+To check the connection, ask the assistant "Which Mastra organization does this connection use?" It calls `whoami` and replies with your organization and user.
+
+## Ask questions
+
+Ask in plain language. The assistant picks the tools and fills in their parameters. For example:
+
+- "How many traces failed in the last 24 hours, grouped by agent?"
+- "Which tool calls were slowest this week, and what did they return?"
+- "Chart token cost per model over the last 7 days and add it to the Metrics dashboard."
+
+## Query one project
+
+By default, tools read data from the whole organization. To query one project, name it in your request, for example "in the `checkout` project". The assistant looks up the project with `list_projects` and passes its ID or slug to each tool.
+
+`list_scores` and `analyze_scores` always need a project, so name one when you ask about scores.
+
+## Available tools
+
+Most tools only read data. The dashboard tools can also create and change dashboards.
+
+### Traces and spans
+
+| Tool | Description |
+| - | - |
+| `query_traces` | Search traces by entity, status, time range, metadata, and other fields. |
+| `aggregate_traces` | Count traces and compute durations and error rates, optionally grouped and bucketed over time. |
+| `get_trace_query_fields` | List the fields that `query_traces` can filter and group on. |
+| `get_trace_query_values` | List the values recorded for one trace query field. |
+| `get_trace` | Get the spans in a trace, with their parent, name, type, timing, and status. |
+| `get_span` | Get one span, including its input, output, and attributes. |
+| `query_spans` | Search individual spans, such as model calls, tool calls, and workflow steps, across traces. |
+| `aggregate_spans` | Count spans and compute durations and token usage, optionally grouped and bucketed over time. |
+| `query_threads` | Search conversation threads by the traces recorded in them. |
+
+### Logs, metrics, scores, and feedback
+
+| Tool | Description |
+| - | - |
+| `list_logs` | List log records, filtered by level, trace, entity, or time range. |
+| `list_scores` | List scorer results, filtered by scorer, trace, entity, or time range. Needs a project. |
+| `list_feedback` | List user feedback, filtered by trace, entity, or time range. |
+| `analyze_metrics` | Aggregate metrics such as tokens, cost, latency, and counts as a single value, a breakdown by label, a time series, or percentiles. |
+| `analyze_scores` | Aggregate scorer results as a single value, a breakdown, a time series, or percentiles. Needs a project. |
+| `analyze_feedback` | Aggregate user feedback as a single value, a breakdown, a time series, or percentiles. |
+| `list_metric_names` | List metric names, a metric's label keys, or a label's values. |
+| `discover_observability` | List the metric names, labels, entities, environments, and tags that the organization or a project records. |
+
+### Dashboards
+
+| Tool | Description |
+| - | - |
+| `show_observability_dashboard` | Show charts as an interactive dashboard in the chat. |
+| `list_dashboards` | List the organization's or a project's dashboards. |
+| `get_dashboard` | Read a dashboard and its cards. |
+| `create_dashboard` | Create a dashboard, optionally with a first card. |
+| `rename_dashboard` | Rename a dashboard or change its description. You can't rename the Metrics dashboard. |
+| `add_dashboard_widget` | Add a card to a dashboard, such as a chart shown with `show_observability_dashboard`. |
+| `update_dashboard_widget` | Replace a card's chart or change its title. |
+| `remove_dashboard_widgets` | Remove cards from a dashboard. |
+
+### Account
+
+| Tool | Description |
+| - | - |
+| `whoami` | Show the organization and user the connection acts as. |
+| `list_projects` | List the organization's projects. |
+
+## Related
+
+- [Observability on Mastra platform](/docs/mastra-platform/observability/overview)
+- [Trace Intelligence on Mastra platform](/docs/mastra-platform/observability/trace-intelligence)
+- [Metrics API](/docs/mastra-platform/api#metrics-api)
