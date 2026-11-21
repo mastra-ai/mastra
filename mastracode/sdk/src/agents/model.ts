@@ -18,7 +18,7 @@ import {
 import { AMAZON_BEDROCK_GATEWAY_ID, createAmazonBedrockGateway } from '../providers/amazon-bedrock-gateway.js';
 import type { AnthropicPromptCacheScope } from '../providers/anthropic-prompt-cache.js';
 import { GOOGLE_VERTEX_GATEWAY_ID, createGoogleVertexGateway } from '../providers/google-vertex-gateway.js';
-import { normalizeLegacyModelId } from '../providers/model-ids.js';
+import { findRouteModelIndex, normalizeLegacyModelId, parseCodexModelSelection } from '../providers/model-ids.js';
 import { isThinkingLevelSetting } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
 import {
@@ -219,7 +219,8 @@ function resolveModelForRequest(modelId: string, options?: Parameters<typeof res
   // Older versions cataloged Bedrock, Copilot and Kimi under the MastraCode
   // gateway namespace, and Kimi under its own `kimi-for-coding` provider. Map
   // already-saved ids (packs, OM settings, thread metadata) to current ids.
-  const legacyNormalizedInput = normalizeLegacyModelId(modelId);
+  const { modelId: canonicalModelId, codexServiceTier } = parseCodexModelSelection(modelId);
+  const legacyNormalizedInput = normalizeLegacyModelId(canonicalModelId);
   // Deployed web registers a custom providers source (DB-backed, tenant
   // scoped); when registered it is authoritative and settings.json custom
   // providers are ignored. Undefined = local settings-based behavior.
@@ -344,6 +345,7 @@ function resolveModelForRequest(modelId: string, options?: Parameters<typeof res
     modelId: bareModelId,
     apiKey: auth?.apiKey ?? '',
     headers,
+    codexServiceTier,
   });
 }
 
@@ -529,7 +531,7 @@ export function getDynamicModel(
     pendingFallback && typeof pendingFallback.toEntryId === 'string' ? pendingFallback.toEntryId : undefined;
   const startIndex = pendingEntryId ? route?.findIndex(entry => entry.id === pendingEntryId) : 0;
   const activeRoute = route && startIndex !== undefined && startIndex >= 0 ? route.slice(startIndex) : undefined;
-  if (!activeRoute || activeRoute.length < 2 || activeRoute[0]?.modelId !== modelId) return primary;
+  if (!activeRoute || activeRoute.length < 2 || findRouteModelIndex(activeRoute, modelId) !== 0) return primary;
 
   const firstId =
     typeof activeRoute[0]?.id === 'string' && activeRoute[0].id.length > 0 ? activeRoute[0].id : undefined;
@@ -564,7 +566,7 @@ export function getDynamicModel(
 }
 
 function identifyModel(modelId: string, model: ResolvedModel): IdentifiedModelConfig {
-  return { model, id: toMemoryModelId(modelId) };
+  return { model, id: toMemoryModelId(parseCodexModelSelection(modelId).modelId) };
 }
 
 type MemoryRouteState = {

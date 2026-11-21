@@ -5,6 +5,7 @@
 
 import { Box, fuzzyFilter, getKeybindings, Input, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable, TUI } from '@earendil-works/pi-tui';
+import { parseCodexModelSelection } from '@mastra/code-sdk/providers/model-ids';
 import chalk from 'chalk';
 import { theme } from '../theme.js';
 import { PickerList } from './picker-list.js';
@@ -134,8 +135,13 @@ export class ModelSelectorComponent extends Box implements Focusable {
     this.tui = options.tui;
     this.title = options.title ?? 'Select Model';
     this.titleColor = options.titleColor;
-    this.allModels = this.sortModels(toCanonicalModelItems(options.models), options.currentModelId);
-    this.currentModelId = options.currentModelId;
+    const models = toCanonicalModelItems(options.models);
+    // A Fast selection marks its own row when the picker offers one, else its standard model's row.
+    this.currentModelId =
+      options.currentModelId && !models.some(model => model.id === options.currentModelId)
+        ? parseCodexModelSelection(options.currentModelId).modelId
+        : options.currentModelId;
+    this.allModels = this.sortModels(models, this.currentModelId);
     this.onSelectCallback = options.onSelect;
     this.onCancelCallback = options.onCancel;
     this.filteredModels = this.allModels;

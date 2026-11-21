@@ -88,6 +88,40 @@ describe('makeCustomModelItem', () => {
   });
 });
 
+describe('Codex fast model selection', () => {
+  const codex = { id: 'openai/gpt-6.2-sol', provider: 'openai', modelName: 'gpt-6.2-sol', hasApiKey: true };
+  const fast = { ...codex, id: 'openai/gpt-6.2-sol:fast', modelName: 'gpt-6.2-sol:fast' };
+
+  it('lists the Fast entry and keeps it selected when the session is on Fast', () => {
+    const onSelect = vi.fn();
+    const selector = new ModelSelectorComponent({
+      tui: { requestRender: vi.fn() } as unknown as TUI,
+      models: [...models, codex, fast],
+      currentModelId: fast.id,
+      onSelect,
+      onCancel: vi.fn(),
+    });
+
+    expect(selector.render(100).join('\n')).toContain('gpt-6.2-sol:fast');
+    selector.handleInput('\r');
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: fast.id }));
+  });
+
+  it('focuses the standard row when no Fast entry is offered', () => {
+    const onSelect = vi.fn();
+    const selector = new ModelSelectorComponent({
+      tui: { requestRender: vi.fn() } as unknown as TUI,
+      models: [...models, codex],
+      currentModelId: fast.id,
+      onSelect,
+      onCancel: vi.fn(),
+    });
+
+    selector.handleInput('\r');
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: codex.id }));
+  });
+});
+
 describe('MastraCode gateway catalog models', () => {
   const customProviderModels: ModelItem[] = ['gemma-4-31b', 'gemma-4-9b'].map(modelName => ({
     id: `mastracode/acme-local/${modelName}`,

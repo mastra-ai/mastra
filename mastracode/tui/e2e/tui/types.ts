@@ -54,6 +54,7 @@ export type ScenarioName =
   | 'clipboard-image-paste'
   | 'connect-command'
   | 'commit-attribution-prompt'
+  | 'codex-fast-model-picker'
   | 'custom-config-dir'
   | 'custom-pack-import-overwrite'
   | 'custom-pack-import-rename'
