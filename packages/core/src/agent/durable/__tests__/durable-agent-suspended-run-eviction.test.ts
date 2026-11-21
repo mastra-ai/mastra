@@ -277,7 +277,8 @@ describe('releaseParkedRun beside a successor execution', () => {
     const successorEntry = getRunRegistryEntry('run-successor', mastra);
     expect(successorEntry?.executionFence).toBe(newer.runRegistry.get('run-successor')?.executionFence);
 
-    await older.releaseParkedRun('run-successor');
+    expect(await older.releaseParkedRun('run-successor')).toBe(true);
+    expect(older.runRegistry.size).toBe(0);
     expect(getRunRegistryEntry('run-successor', mastra)).toBe(successorEntry);
     reader.releaseLock();
     resumed.cleanup();
@@ -300,6 +301,25 @@ describe('an observer ended by a bare idle timeout', () => {
     await expect.poll(() => onError.mock.calls.length).toBe(1);
 
     expect(await agent.releaseParkedRun('run-idle')).toBe(false);
+  });
+
+  it('leaves no stream release behind when the timeout fires before observe() returns', async () => {
+    const { agent, workflow, storage } = setup();
+    await suspend(agent, 'run-idle-early');
+    await agent.releaseParkedRun('run-idle-early');
+    expect(workflow.runs.size).toBe(0);
+    // Slow storage holds observe()'s setup past the idle timeout.
+    const getStore = storage.getStore.bind(storage);
+    const slow = vi.spyOn(storage, 'getStore').mockImplementation(async (...args: any[]) => {
+      await new Promise(resolve => setTimeout(resolve, 15));
+      return (getStore as any)(...args);
+    });
+    const onError = vi.fn();
+    await agent.observe('run-idle-early', { idleTimeoutMs: 5, onError });
+    slow.mockRestore();
+    expect(onError).toHaveBeenCalled();
+
+    expect(await agent.releaseParkedRun('run-idle-early')).toBe(false);
   });
 
   it('leaves no stream release behind when its caller awaits output.text', async () => {

@@ -2,7 +2,7 @@
 '@mastra/core': patch
 ---
 
-Fixed memory growth when an AgentController session is deleted while a durable agent run is parked at a suspension. Deleting the session now releases the run's in-memory state along with its stored snapshot.
+Fixed memory growth when an AgentController session is deleted while a durable agent run is parked at a suspension. Deleting the session now frees the run's in-memory state and deletes its stored snapshot, so the run can no longer be resumed.
 
 Added `durableAgent.releaseParkedRun(runId)` to drop this process's hold on a run parked at a suspension while keeping its snapshot, so it can still be resumed later.
 

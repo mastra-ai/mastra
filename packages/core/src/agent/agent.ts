@@ -12973,8 +12973,7 @@ export class Agent<
     const fence = globalEntry?.executionFence;
     const streamCleanups = [...(this.#streamCleanups.get(runId) ?? [])];
     const run = workflow.runs.get(runId);
-    // The global registry is shared by every agent on the Mastra instance: only local state shows this
-    // agent parked the run, so another agent leaves it (and its entry) to the owner.
+    // Only this agent's local state shows it parked the run; with none, the run (and its entry) is another's.
     if (!localEntry && streamCleanups.length === 0 && !run) return false;
     if (this.#resumesInProgress.has(runId)) return false;
 
@@ -13003,7 +13002,9 @@ export class Agent<
     for (const cleanup of streamCleanups) cleanup.run();
     if (localEntry) this.executionRunRegistry.cleanup(runId);
     // The global slot may hold another instance's later execution of the run; only this one's own entry goes.
-    if (globalEntry && globalEntry.executionFence === localEntry?.executionFence) globalRunRegistry.delete(runId);
+    if (localEntry?.executionFence && globalEntry?.executionFence === localEntry.executionFence) {
+      globalRunRegistry.delete(runId);
+    }
     return true;
   }
 
@@ -16499,6 +16500,8 @@ export class Agent<
     const localEntry = this.executionRunRegistry.get(runId);
     const observedEntry = localEntry ?? getRunRegistryEntry(runId, this.#mastra);
     const observedFence = observedEntry?.executionFence;
+    // Set when a bare idle timeout ends this observer, possibly before its setup below finishes.
+    let idledOut = false;
     // Tracked only once the observer is attached: a detached or failed observer holds nothing to release.
     const runCleanup = this.#createStreamCleanup(
       runId,
@@ -16790,7 +16793,10 @@ export class Agent<
           // don't tear down its registry entry or replay history. The observer
           // itself is gone, though, so a parked-run release no longer owes it a cleanup.
           if (runDead !== false) completeTerminalLifecycle();
-          else this.#forgetStreamCleanup(runId, runCleanup);
+          else {
+            idledOut = true;
+            this.#forgetStreamCleanup(runId, runCleanup);
+          }
         }
       },
       onAbort: async data => {
@@ -16837,7 +16843,7 @@ export class Agent<
       detach();
       throw error;
     }
-    if (!detached) this.#trackStreamCleanup(runId, runCleanup);
+    if (!detached && !idledOut) this.#trackStreamCleanup(runId, runCleanup);
 
     const cleanup = () => {
       if (abortPending) {
