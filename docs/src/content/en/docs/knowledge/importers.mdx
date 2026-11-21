@@ -1,0 +1,239 @@
+---
+title: "Importers"
+description: "Write a Knowledge importer that keeps pages in sync with another system, and run it from your app."
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/pg"
+---
+
+# Importers
+
+An importer keeps part of Knowledge in sync with another system, such as a help desk, a ticket tracker or a folder of uploaded files. You write a class that reads the source and hands Knowledge one item per document. Knowledge decides where each item goes, writes it as a page, and remembers which page came from which item. The next run then updates those pages instead of adding new ones.
+
+Use an importer when content lives somewhere else and changes there. To load content once from your own code, [write pages directly](/docs/knowledge/load-your-content) instead.
+
+:::alpha
+
+Knowledge importers are experimental. Their API may change between releases.
+
+:::
+
+## How an import run works
+
+Each importer instance is one configured source, called a binding. It has an `id` and a `target`, the place in Knowledge its pages go, written `<scope>#<path>`. A run of a binding:
+
+1. Calls your importer's `import(ctx)` method.
+1. Collects the items it writes with `ctx.items`, and applies them to Knowledge in numbered batches. Each batch is applied in one storage transaction, together with the cursor you saved with `ctx.state`. A saved cursor never covers items that weren't written.
+1. Ends with a result that counts what was created, updated, left unchanged, moved, removed or refused.
+
+Items name things by `sourceId`, the source's own stable ID. Your importer never names pages or paths. An item with `parent` set is placed under the page of that parent item. An item without one is placed directly under the target.
+
+Importers need a Knowledge store that supports transactions: `@mastra/libsql`, `@mastra/pg` or the in-memory store.
+
+## Write an importer
+
+This importer reads articles from a help desk's REST API. It declares a settings schema for the help desk URL and a credential slot for its API key, and saves the last article update time as its cursor so each run only reads what changed:
+
+```typescript title="src/mastra/importers/help-desk.ts"
+import { KnowledgeImporter, KnowledgeImporterSourceError } from '@mastra/core/knowledge'
+import type { KnowledgeImporterContext } from '@mastra/core/knowledge'
+import { z } from 'zod'
+
+const settings = z.object({
+  baseUrl: z.string().url(),
+  folder: z.string().optional(),
+})
+
+type Article = {
+  id: number
+  folderId: number | null
+  title: string
+  html: string
+  updatedAt: string
+  archived: boolean
+}
+
+export class HelpDeskImporter extends KnowledgeImporter({
+  id: 'help-desk',
+  label: 'Help desk',
+  description: 'Imports help desk articles and folders.',
+  settings,
+  credentials: {
+    apiKey: { description: 'Help desk API key' },
+  },
+}) {
+  async import(ctx: KnowledgeImporterContext<z.infer<typeof settings>, 'apiKey'>) {
+    const since = (await ctx.state.get('updatedSince')) ?? '1970-01-01T00:00:00Z'
+    let page = 1
+
+    while (!ctx.signal.aborted) {
+      const url = new URL('/api/articles', ctx.settings.baseUrl)
+      url.searchParams.set('updatedSince', since)
+      url.searchParams.set('page', String(page))
+
+      const response = await ctx.fetch(url, {
+        headers: { authorization: `Bearer ${ctx.credentials.apiKey}` },
+      })
+      if (!response.ok) {
+        throw new KnowledgeImporterSourceError('Help desk request failed', response.status)
+      }
+      const { articles, hasMore } = (await response.json()) as {
+        articles: Article[]
+        hasMore: boolean
+      }
+
+      for (const article of articles) {
+        if (article.archived) {
+          await ctx.items.remove(String(article.id))
+          continue
+        }
+        await ctx.items.upsert({
+          sourceId: String(article.id),
+          parent: article.folderId === null ? null : `folder-${article.folderId}`,
+          title: article.title,
+          body: htmlToMarkdown(article.html),
+        })
+      }
+
+      const last = articles.at(-1)
+      if (last) await ctx.state.set('updatedSince', last.updatedAt)
+      if (!hasMore) break
+      page++
+    }
+  }
+}
+```
+
+`htmlToMarkdown()` stands in for your own conversion. A few things the example relies on:
+
+- **Await every `ctx.items` call.** Items are buffered and sent in batches, so a call can wait for the previous batch to land.
+- **`ctx.state.set()` saves the cursor with the items before it.** Call it after the items it covers, never before.
+- **Use `ctx.fetch` and watch `ctx.signal`.** The signal fires when the run is canceled or reaches its time limit. `ctx.fetch` uses that signal unless you pass your own `signal`, which replaces it, so combine them with `AbortSignal.any()` if you need both. `ctx.fetch` doesn't retry, so handle rate limits and server errors yourself, for example by waiting for the source's `Retry-After` header before trying again.
+- **Throw `KnowledgeImporterSourceError` with the HTTP status** when the source fails. The run ends with a fixed error code, such as `source_auth_failed` for 401 or 403 and `source_rate_limited` for 429, and your error text stays in your own logs.
+
+## Place items in a tree
+
+Set `parent` to another item's `sourceId` to nest pages. You can send a child before its parent. Until the parent is imported, the child waits directly under the target. After the parent is written, Knowledge moves waiting children under it in bounded batches, in the same run or a later one. A move is refused when another binding owns a page under the child.
+
+To put a folder in the tree before you have its content, declare it. A declared item gets a page with a title and no body:
+
+```typescript title="src/mastra/importers/help-desk.ts"
+await ctx.items.declare({ sourceId: `folder-${folder.id}`, title: folder.name })
+```
+
+Upsert the same `sourceId` later to give it a body. Items can also link to each other with `links: [{ sourceId: '42' }]`. Each link becomes a page link after the item it points to is imported. Knowledge repairs links in the same bounded batches as moves.
+
+## Remove items
+
+Call `ctx.items.remove(sourceId)` only when the source says an item is gone, for example archived or deleted. An item that's missing from one run's results is left alone, so a partial read never deletes pages.
+
+When a removed item's page still has pages nested under it, Knowledge keeps it as a stub whose body says the item was removed from the source. Its children keep their place. If another binding's page or target sits under it, Knowledge refuses the removal.
+
+## Register and run the importer
+
+Pass each configured source as an importer instance in `importers`. Declare the target's scope type like any other scope:
+
+```typescript title="src/mastra/knowledge.ts"
+import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge'
+import { LibSQLStore } from '@mastra/libsql'
+import { HelpDeskImporter } from './importers/help-desk'
+
+export const knowledge = new Knowledge({
+  id: 'company',
+  storage: new LibSQLStore({ id: 'knowledge', url: 'file:./knowledge.db' }),
+  scopes: {
+    ...knowledgeMemoryScopes(),
+    'support:$orgId': {
+      description: 'Help desk articles',
+      belongsTo: 'org:$orgId',
+      access: [{ principal: 'org:$orgId', role: 'viewer' }],
+    },
+  },
+  importers: [
+    new HelpDeskImporter({
+      id: 'acme-help-desk',
+      target: 'support:acme#help-desk',
+      settings: { baseUrl: 'https://help.acme.example' },
+      credentials: { apiKey: process.env.HELP_DESK_API_KEY! },
+    }),
+  ],
+})
+```
+
+Keep a binding's `id` when you edit its settings: Knowledge tracks which pages each binding owns by that id. Knowledge refuses a binding whose target nests inside another binding's target.
+
+Run a binding with `knowledge.importers.run()`:
+
+```typescript title="src/sync-help-desk.ts"
+import { knowledge } from './mastra/knowledge'
+
+const result = await knowledge.importers!.run('acme-help-desk')
+
+if ('outcome' in result) {
+  console.log(result.outcome, result.counts)
+} else if (result.status === 'skipped') {
+  console.log('Another run of this binding is still going')
+} else {
+  console.log('The run ended, but Knowledge could not confirm its result')
+}
+```
+
+The first run prints `succeeded` with every article counted as `created`. Run it again with nothing changed in the help desk and every count is `0`: the saved cursor means no article is read again. An item your importer does send again without changes is counted as `unchanged` and its page isn't rewritten.
+
+Knowledge doesn't schedule runs. Call `run()` from your own scheduler, such as a cron job or a scheduled workflow. Only one run of a binding goes at a time. A second call while one is going returns `skipped`.
+
+### Read the run result
+
+A finished run has an `outcome` of `succeeded`, `failed` or `canceled`, and `counts` of what changed. When a run fails, `error.code` says why and `error.retryable` says whether running it again may help. When a run returns `status: 'unfinished'`, it ended but the runner couldn't confirm that Knowledge recorded its result, for example because a reply was lost. Errors from Knowledge that retrying can't fix are thrown from `run()`.
+
+A succeeded run sets `chain` to `true` to recommend another run right away. That happens when the importer still had more to read when it reached its pass or time limit, or when moving waiting pages made progress but didn't finish. A failed or canceled run never sets `chain`.
+
+Use `ctx.reportBacklog()` in your importer when it stops early on purpose, for example after a fixed number of pages. The run then calls `import` again while it has time, and sets `chain` when it doesn't.
+
+## Pages your importer doesn't own
+
+An importer only changes pages it created. When an item's place is taken by a page someone else wrote, or its page was moved out of the target by someone, Knowledge refuses that item and writes the rest of the run. Moves and removals are also refused when another binding's page or target sits under the page. People can add their own pages under imported pages. Those move along with their parent.
+
+Refused items are counted in `counts.refused`. Move or rename the page in the way, then send the item again. An importer that reads from a cursor may already have saved a cursor past the refused item, so a normal next run doesn't always send it. Reset that cursor, or have your importer send the item again some other way.
+
+## Import uploaded files
+
+Some content arrives in your app instead of being read from another system, such as files users upload. Keep the uploads in your own table, and write an importer that reads new rows after its cursor:
+
+```typescript title="src/mastra/importers/uploads.ts"
+import { KnowledgeImporter } from '@mastra/core/knowledge'
+import type { KnowledgeImporterContext } from '@mastra/core/knowledge'
+import { db } from '../db'
+
+export class UploadsImporter extends KnowledgeImporter({
+  id: 'uploads',
+  label: 'Uploaded files',
+}) {
+  async import(ctx: KnowledgeImporterContext) {
+    let after = Number((await ctx.state.get('lastUploadId')) ?? 0)
+
+    while (!ctx.signal.aborted) {
+      const rows = await db.uploads.listAfter(after, 100)
+      if (rows.length === 0) break
+
+      for (const upload of rows) {
+        if (upload.deletedAt) await ctx.items.remove(upload.fileId)
+        else
+          await ctx.items.upsert({ sourceId: upload.fileId, title: upload.name, body: upload.text })
+      }
+
+      after = rows.at(-1)!.id
+      await ctx.state.set('lastUploadId', String(after))
+    }
+  }
+}
+```
+
+`db.uploads.listAfter()` stands in for your own query. It returns upload events in the order they were recorded, including deletions, so a file replaced or deleted later is updated or removed on the next run.
+
+Call `run()` from the upload route after you save the row. When it returns `skipped`, a run is already going and may have read past the new row, so also run the binding on a schedule to pick up anything a skipped call left behind.
+
+## Next steps
+
+To check what an import wrote, [open Knowledge in Studio](/docs/studio/knowledge). For the methods importers use, see the [`Knowledge` class reference](/reference/knowledge/knowledge-class).
