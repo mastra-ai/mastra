@@ -2016,6 +2016,128 @@ describe('Agent signals: pending cancellation', () => {
       }
     });
 
+    it('ignores a probe of a lease loss for a message re-forwarded since under the same id', async () => {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+      const pubsub = new ControlledLeasePubSub();
+      const scope = { resourceId: 'reforwarded', threadId: 'reforwarded' };
+      const key = `${scope.resourceId}\u0000${scope.threadId}`;
+      const topic = agentThreadStreamTopicForKey(key);
+      const model = createTextStreamModel('done');
+      const agent = new Agent({
+        id: 'reforwarded',
+        name: 'Reforwarded',
+        instructions: 'Test',
+        model,
+        memory: new MockMemory(),
+        pubsub,
+      });
+      const heldProbes: Array<() => void> = [];
+      let holdingProbes = false;
+      const subscribe = pubsub.subscribe.bind(pubsub);
+      pubsub.subscribe = async (subscribedTopic, cb) =>
+        subscribe(subscribedTopic, event => {
+          if (subscribedTopic === topic && event.data?.type === 'forwarded-lease-probe') {
+            if (holdingProbes) heldProbes.push(() => void cb(event));
+            return;
+          }
+          return cb(event);
+        });
+      const tick = async () => {
+        await vi.advanceTimersByTimeAsync(AGENT_LEASE_RENEW_INTERVAL_MS);
+        await pubsub.flush();
+        await nextTick();
+      };
+      const forwardedTo = (runId: string) =>
+        pubsub.publishedData.filter(data => data.type === 'signal-enqueued' && data.runId === runId);
+      const forwardOnRunEnd = async (endingRunId: string, contents: string, ownerRunId: string) => {
+        pubsub.owners.set(key, endingRunId);
+        await pubsub.publish(topic, {
+          type: 'agent.thread-stream',
+          runId: endingRunId,
+          data: {
+            type: 'run-registered',
+            runId: endingRunId,
+            streamId: `${endingRunId}-stream`,
+            streamSeq: 1,
+            agentId: agent.id,
+          },
+        });
+        await vi.waitFor(() => expect(observer.activeRunId()).toBe(endingRunId));
+        await follower.queueMessage(agent, contents, scope, pubsub).accepted;
+        pubsub.owners.set(key, ownerRunId);
+        await pubsub.publish(topic, {
+          type: 'agent.thread-stream',
+          runId: endingRunId,
+          data: { type: 'run-completed', runId: endingRunId, streamId: `${endingRunId}-stream` },
+        });
+        await vi.waitFor(() => expect(forwardedTo(ownerRunId)).toHaveLength(1));
+        await pubsub.flush();
+      };
+      const follower = new AgentThreadStreamRuntime();
+      const observer = await follower.subscribeToThread(agent, scope, pubsub);
+      const prompts = () => model.doStreamCalls.map(call => JSON.stringify(call.prompt));
+      try {
+        await forwardOnRunEnd('first-remote-run', 'reforwarded message', 'run-a');
+        await forwardOnRunEnd('second-remote-run', 'other message', 'run-c');
+        // Runs A and C both die without admitting: one lease loss covers both forwards, and its probe stays in flight.
+        pubsub.owners.delete(key);
+        holdingProbes = true;
+        for (let i = 0; i < 8 && heldProbes.length === 0; i++) await tick();
+        expect(heldProbes.length).toBeGreaterThan(0);
+        holdingProbes = false;
+        // Run A's end arrives late, so its message is queued again and re-forwarded to run B under the same id.
+        pubsub.owners.set(key, 'run-b');
+        await pubsub.publish(topic, {
+          type: 'agent.thread-stream',
+          runId: 'run-a',
+          data: { type: 'run-completed', runId: 'run-a', streamId: 'run-a-stream' },
+        });
+        await vi.waitFor(() => expect(forwardedTo('run-b')).toHaveLength(1));
+        const signalId = forwardedTo('run-b')[0]!.signal.id;
+        expect(forwardedTo('run-a')[0]!.signal.id).toBe(signalId);
+        await pubsub.flush();
+        // Run B admits it and lets go; the reader misses the lease once and reads the old loss's probe first.
+        pubsub.owners.delete(key);
+        await tick();
+        for (const deliver of heldProbes) deliver();
+        await vi.waitFor(() => expect(prompts().some(prompt => prompt.includes('other message'))).toBe(true));
+        // Run C's message is queued again, but the old loss does not cover the re-forward to run B.
+        // Let that run finish, so a wrongly queued message would start next.
+        const settle = async () => {
+          const running = () => {
+            const ids = (type: string) =>
+              pubsub.publishedData.filter(data => data.type === type).map(data => data.runId);
+            const completed = new Set(ids('run-completed'));
+            return ids('run-registered').filter(runId => !completed.has(runId));
+          };
+          for (let i = 0; i < 100 && running().length > 0; i++) {
+            await tick();
+            await new Promise(resolve => setTimeout(resolve, 10));
+          }
+          expect(running()).toEqual([]);
+        };
+        await settle();
+        for (let i = 0; i < 20; i++) {
+          await tick();
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        await settle();
+        expect(prompts().some(prompt => prompt.includes('reforwarded message'))).toBe(false);
+        await pubsub.publish(topic, {
+          type: 'agent.thread-stream',
+          runId: 'run-b',
+          data: { type: 'user-message-admitted', signalId, admittedRunId: 'run-b' },
+        });
+        await pubsub.flush();
+        for (let i = 0; i < 12; i++) await tick();
+        expect(prompts().filter(prompt => prompt.includes('other message'))).toHaveLength(1);
+        expect(prompts().some(prompt => prompt.includes('reforwarded message'))).toBe(false);
+      } finally {
+        observer.unsubscribe();
+        follower.resetForTests();
+      }
+    });
+
     it('drains the message again when the run it was forwarded to loses its lease without an event', async () => {
       // Checks of the lease run on the interval timer, which is the only one faked.
       vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
