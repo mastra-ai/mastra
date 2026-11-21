@@ -54,10 +54,25 @@
         "type": "toggle"
       }
     ],
-    "kimi-k2.8-preview": [
+    "deepseek-v4.1-flash-economy": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "doubao-seed-2.0-lite": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
+      }
+    ],
+    "doubao-seed-2.0-mini": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
       }
     ],
     "deepseek-v4.1-flash": [
@@ -69,7 +84,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "doubao-seed-2.0-mini": [
+    "doubao-seed-2.1-lite": [
       {
         "type": "effort",
         "values": ["none", "low", "high"]
@@ -86,19 +101,21 @@
         "values": ["none", "low", "high"]
       }
     ],
-    "doubao-seed-2.0-lite": [
+    "kimi-k2.8-preview": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "doubao-seed-2.1-pro": [
       {
         "type": "effort",
         "values": ["none", "low", "high"]
       }
     ],
-    "deepseek-v4.1-flash-economy": [
+    "deepseek-v4-flash": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ],
     "kimi-k3": [
@@ -110,28 +127,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "kimi-k3.1-pro": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "doubao-seed-2.1-pro": [
+    "doubao-seed-evolving": [
       {
         "type": "effort",
         "values": ["none", "low", "high"]
-      }
-    ],
-    "doubao-seed-2.1-lite": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high"]
-      }
-    ],
-    "glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ],
     "glm-5.3": [
@@ -140,15 +139,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-v4-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "doubao-seed-evolving": [
+    "glm-5.3-flash": [
       {
         "type": "effort",
-        "values": ["none", "low", "high"]
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "kimi-k3.1-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }
