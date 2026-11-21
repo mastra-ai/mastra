@@ -871,7 +871,7 @@ OM decides when to observe from local token estimates, not from the provider's u
 
 OM caches estimates in message metadata so threshold checks don't recount the same content:
 
-- Per-part estimates are stored on `part.providerMetadata.mastra.tokenEstimate` and survive storage, so a later request reads them back instead of counting the part again.
+- Per-part estimates are stored on `part.providerMetadata.mastra.tokenEstimate` and are saved with the message. A later request reads them back instead of counting the part again.
 - The estimate for a text part or a plain-JSON tool call is read back as stored, without checking it against the part's content. If you edit a message part in place (in a processor or anywhere else), delete `part.providerMetadata.mastra.tokenEstimate` so OM counts it again. Otherwise OM keeps the old count for that part. Mastra's own APIs and built-in processors clear it for you.
 - Messages with string-only content (no parts) use a message-level cache.
 - Message and conversation overhead is recalculated every pass. Only payload estimates are cached.
@@ -990,7 +990,7 @@ const memory = new Memory({
 })
 ```
 
-Transform hooks are always awaited, on every path: manual `observe()` and `reflect()`, synchronous observation during a turn, and async buffering. If `beforeObservation` returns an empty `messages` array, the Observer call is skipped and those messages are still marked as observed. `beforeObservation` receives copies of the messages, so editing them in place changes only what the Observer sees, and OM counts whatever the hook leaves again. Edit only the messages you receive: if you reach other objects through them and edit those, delete `part.providerMetadata.mastra.tokenEstimate` on any message part you change. If a transform hook throws, the cycle fails before committing the transformed text. Extractor callbacks and other side effects that already ran aren't rolled back.
+Transform hooks are always awaited, on every path: manual `observe()` and `reflect()`, synchronous observation during a turn, and async buffering. If `beforeObservation` returns an empty `messages` array, the Observer call is skipped and those messages are still marked as observed. `beforeObservation` receives copies of the messages. Editing them in place changes only what the Observer sees, and OM counts whatever the hook leaves again. Edit only the messages you receive: if you reach other objects through them and edit those, delete `part.providerMetadata.mastra.tokenEstimate` on any message part you change. If a transform hook throws, the cycle fails before committing the transformed text. Extractor callbacks and other side effects that already ran aren't rolled back.
 
 `afterObservation` and `afterReflection` replace only the observation or reflection text. They don't touch the structured extractor values stored in thread metadata, and reflection extraction runs before `afterReflection`. Don't treat an after hook as a redaction boundary for everything in the cycle.
 
