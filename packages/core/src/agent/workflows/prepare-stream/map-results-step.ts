@@ -33,6 +33,7 @@ import {
   PROCESSOR_STATES_KEY,
 } from './run-scope-keys';
 import type { AgentCapabilities, PrepareMemoryStepOutput, PrepareToolsStepOutput } from './schema';
+import { createStoreAcceptedUserMessages } from './store-accepted-user-messages';
 
 interface MapResultsStepOptions<OUTPUT = undefined> {
   capabilities: AgentCapabilities;
@@ -242,12 +243,33 @@ export function createMapResultsStep<OUTPUT = undefined>({
     const latestMessage = messageList.get.all.db().at(-1);
     earlierTurnSnapshot = latestMessage?.role === 'assistant' ? structuredClone(latestMessage) : undefined;
 
+    // The early save needs the configured processors on their own, so resolve them here once and
+    // hand them on as the overrides instead of resolving a dynamic `outputProcessors` twice.
+    const configuredOutputProcessors =
+      options.outputProcessors ??
+      (memory && result.threadId
+        ? await capabilities.agent.listConfiguredOutputProcessors(result.requestContext)
+        : undefined);
+    const acceptedUserMessages = createStoreAcceptedUserMessages({
+      memory,
+      memoryConfig,
+      threadId: result.threadId,
+      resourceId: result.resourceId,
+      configuredOutputProcessors: configuredOutputProcessors ?? [],
+      requestContext: result.requestContext,
+      authorizeMemory,
+      logger: capabilities.logger,
+    });
+    // A turn an output processor blocks stores nothing, so the early row goes too. With savePerStep
+    // the per-step save already keeps the user message through a blocked turn, so it stays.
+    const undoEarlyUserSave = options.savePerStep ? undefined : acceptedUserMessages?.undo;
+
     // Resolve output processors - overrides replace user-configured but auto-derived (memory) are kept
     let effectiveOutputProcessors = capabilities.outputProcessors
       ? typeof capabilities.outputProcessors === 'function'
         ? await capabilities.outputProcessors({
             requestContext: result.requestContext!,
-            overrides: options.outputProcessors,
+            overrides: configuredOutputProcessors,
           })
         : options.outputProcessors || capabilities.outputProcessors
       : options.outputProcessors || [];
@@ -321,6 +343,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       resolvedScopes,
       requestContext: result.requestContext!,
       actor: options.actor,
+      storeAcceptedUserMessages: acceptedUserMessages?.store,
       mcp: options.mcp,
       ...createObservabilityContext({ currentSpan: agentSpan }),
       agentRunSpan: agentSpan,
@@ -363,8 +386,8 @@ export function createMapResultsStep<OUTPUT = undefined>({
         },
         // Like the finish path, a tripwire at the deadline removes what was already saved. Undo from the
         // deadline turn: it holds the streamed text a processor before the tripwire may have saved.
-        onDeadlineTripwire: (turn: MessageList) =>
-          undoSavedResponseMessages({
+        onDeadlineTripwire: async (turn: MessageList) => {
+          await undoSavedResponseMessages({
             memory,
             threadId: memoryData.thread?.id ?? threadIdFromArgs,
             memoryConfig,
@@ -373,7 +396,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
             earlierTurnSnapshot,
             logger: capabilities.logger,
             runId,
-          }),
+          });
+          await undoEarlyUserSave?.();
+        },
         onFinish: async (payload: any, context?: MastraOnFinishCallbackContext) => {
           if (payload.finishReason === 'error') {
             const provider = payload.model?.provider;
@@ -474,6 +499,10 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 logger: capabilities.logger,
                 runId,
               });
+              await undoEarlyUserSave?.();
+            } else if (payload.tripwire) {
+              // An input processor blocked a later step: the turn is not saved, so the early row goes too.
+              await undoEarlyUserSave?.();
             }
 
             try {

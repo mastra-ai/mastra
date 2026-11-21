@@ -248,7 +248,8 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3' | 'v4') {
 
       await stream.consumeStream();
 
-      expect(saveCallCount).toBe(1);
+      // v1 saves once at turn end; later versions also store the user message before the model request.
+      expect(saveCallCount).toBe(version === 'v1' ? 1 : 2);
 
       const result = await mockMemory.recall({ threadId: 'thread-2', resourceId: 'resource-2' });
       const messages = result.messages;

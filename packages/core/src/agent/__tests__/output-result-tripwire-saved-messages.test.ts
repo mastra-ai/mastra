@@ -266,7 +266,7 @@ describe('processOutputResult tripwire removes response messages saved earlier i
     expect(stored.some(message => textOf(message).includes(SECRET))).toBe(false);
   });
 
-  it('does not call deleteMessages when nothing was saved before the tripwire', async () => {
+  it('removes only the user message stored before the model request when nothing else was saved', async () => {
     const memory = new MockMemory();
     const agent = new Agent({
       id: 'no-save-agent',
@@ -283,7 +283,10 @@ describe('processOutputResult tripwire removes response messages saved earlier i
     await result.consumeStream();
 
     expect(result.tripwire?.reason).toBe('Content blocked by guardrail');
-    expect(deleteSpy).not.toHaveBeenCalled();
+    // The user message is stored before the model request so a reload shows it; the blocked turn takes it out again.
+    expect(deleteSpy).toHaveBeenCalledTimes(1);
+    expect(deleteSpy.mock.calls[0]![0]).toHaveLength(1);
+    expect(await storedMessages(memory, 'thread-no-save', 'resource-1')).toEqual([]);
   });
 
   it.each(['approve', 'decline'] as const)(

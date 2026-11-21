@@ -677,6 +677,15 @@ export interface AgentControllerDisplayState {
   /** Number of follow-up messages queued locally by the AgentController */
   queuedFollowUps: number;
 
+  // ── Sent messages not stored yet ─────────────────────────────────────
+  /**
+   * Messages this session sent that are not in thread storage yet, oldest first. A transcript rebuilt
+   * from stored history shows these after it, so a sent message is visible from the moment the send
+   * is acknowledged. An entry leaves once its message is stored (same `id` as the stored row), the run
+   * rejects it, it is cancelled, or the session switches threads.
+   */
+  pendingUserMessages: PendingUserMessage[];
+
   // ── Token usage ──────────────────────────────────────────────────────
   /** Cumulative token usage for the current thread */
   tokenUsage: TokenUsage;
@@ -755,6 +764,15 @@ export interface AgentControllerDisplayState {
   previousTasks: TaskItemSnapshot[];
 }
 
+/** A message this session sent that is not in thread storage yet. */
+export interface PendingUserMessage {
+  /** The id the stored message will have. */
+  id: string;
+  content: string;
+  /** How it was sent: a plain send, a steer, or a follow-up queued behind the running run. */
+  kind: 'message' | 'steer' | 'follow-up';
+}
+
 /**
  * Creates the default/initial `AgentControllerDisplayState`.
  */
@@ -763,6 +781,7 @@ export function defaultDisplayState(): AgentControllerDisplayState {
     isRunning: false,
     currentMessage: null,
     queuedFollowUps: 0,
+    pendingUserMessages: [],
     tokenUsage: createEmptyTokenUsage(),
     activeTools: new Map(),
     toolInputBuffers: new Map(),

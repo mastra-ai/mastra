@@ -2517,3 +2517,98 @@ describe('a retracted prompt', () => {
     ]);
   });
 });
+
+describe('sent messages the server has not stored yet', () => {
+  type PendingUserMessages = Array<{ id: string; content: string; kind: 'message' | 'steer' | 'follow-up' }>;
+
+  function snapshot(pendingUserMessages: PendingUserMessages) {
+    return {
+      type: 'event' as const,
+      event: { type: 'display_state_changed' as const, displayState: { isRunning: true, pendingUserMessages } },
+    };
+  }
+
+  function userTexts(state: TranscriptState): string[] {
+    return state.entries.flatMap(entry =>
+      entry.kind === 'message' && (entry.message.role === 'user' || entry.message.role === 'signal')
+        ? entry.message.content.parts.flatMap(part => (part.type === 'text' ? [part.text] : []))
+        : [],
+    );
+  }
+
+  const stored = [
+    dbMessage('user-1', 'user', [{ type: 'text', text: 'first' }]),
+    dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'reply' }]),
+  ];
+
+  it('shows a pending message after stored history when the page reloads', () => {
+    const reloaded = transcriptReducer(
+      createInitialTranscript({ messages: stored }),
+      snapshot([{ id: 'sig-2', content: 'follow up', kind: 'follow-up' }]),
+    );
+
+    expect(userTexts(reloaded)).toEqual(['first', 'follow up']);
+    expect(reloaded.entries.at(-1)).toMatchObject({ kind: 'message', id: 'sig-2' });
+  });
+
+  it('shows a message once when it is stored and still listed as pending', () => {
+    const withRow = [...stored, dbMessage('sig-2', 'user', [{ type: 'text', text: 'follow up' }])];
+    const reloaded = transcriptReducer(
+      createInitialTranscript({ messages: withRow }),
+      snapshot([{ id: 'sig-2', content: 'follow up', kind: 'follow-up' }]),
+    );
+
+    expect(userTexts(reloaded)).toEqual(['first', 'follow up']);
+  });
+
+  it('does not repeat the composer copy of a message it just sent', () => {
+    const sent = transcriptReducer(createInitialTranscript({ messages: stored }), {
+      type: 'localUser',
+      text: 'hello',
+    });
+    const listed = transcriptReducer(sent, snapshot([{ id: 'sig-3', content: 'hello', kind: 'message' }]));
+
+    expect(userTexts(listed)).toEqual(['first', 'hello']);
+  });
+
+  it('keeps a pending message on screen once the run takes it and it leaves the pending list', () => {
+    const listed = transcriptReducer(
+      createInitialTranscript({ messages: stored }),
+      snapshot([{ id: 'sig-2', content: 'follow up', kind: 'follow-up' }]),
+    );
+    const taken = transcriptReducer(listed, {
+      type: 'event',
+      event: {
+        type: 'message_start',
+        message: signalMessage({ id: 'sig-2', type: 'user', tagName: 'user', text: 'follow up' }),
+      },
+    });
+    const storedNow = transcriptReducer(taken, snapshot([]));
+
+    expect(userTexts(storedNow)).toEqual(['first', 'follow up']);
+  });
+
+  it('keeps a pending message on screen once a history refetch brings its stored row', () => {
+    const listed = transcriptReducer(
+      createInitialTranscript({ messages: stored }),
+      snapshot([{ id: 'sig-2', content: 'follow up', kind: 'follow-up' }]),
+    );
+    const refetched = transcriptReducer(listed, {
+      type: 'mergeWindow',
+      messages: [...stored, dbMessage('sig-2', 'user', [{ type: 'text', text: 'follow up' }])],
+    });
+    const storedNow = transcriptReducer(refetched, snapshot([]));
+
+    expect(userTexts(storedNow)).toEqual(['first', 'follow up']);
+  });
+
+  it('removes a pending message the server dropped without storing it', () => {
+    const listed = transcriptReducer(
+      createInitialTranscript({ messages: stored }),
+      snapshot([{ id: 'sig-2', content: 'never mind', kind: 'follow-up' }]),
+    );
+    const dropped = transcriptReducer(listed, snapshot([]));
+
+    expect(userTexts(dropped)).toEqual(['first']);
+  });
+});

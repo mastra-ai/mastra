@@ -1242,6 +1242,12 @@ export class AgentController<TState = {}> {
           orderBy: { field: 'createdAt', direction: 'ASC' },
         });
       },
+      storedMessageIds: async ({ threadId, messageIds }) => {
+        await this.initStorage();
+        if (!this.#resolveStorage()) return new Set();
+        const { messages } = await (await this.getMemoryStorage()).listMessagesById({ messageIds });
+        return new Set(messages.filter(message => message.threadId === threadId).map(message => message.id));
+      },
       firstUserMessages: ({ threadIds }) => this.queryFirstUserMessages({ threadIds }),
       getMetadata: ({ threadId, key }) => this.readThreadMetadataValue({ threadId, key }),
       setMetadata: ({ threadId, key, value }) => this.writeThreadMetadataValue({ threadId, key, value }),
