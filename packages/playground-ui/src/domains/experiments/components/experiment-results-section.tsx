@@ -1,18 +1,13 @@
 'use client';
 
-import type { DatasetExperimentResult } from '@mastra/client-js';
-import type { ExperimentStatus } from '@mastra/core/storage';
-import { ExperimentResultsList } from '@mastra/playground-ui/domains/experiments/components/experiment-results-list';
-import { getOptionalResultColumns } from '@mastra/playground-ui/domains/experiments/utils/result-output';
-import { useScoresByExperimentId } from '@mastra/react/hooks/datasets';
-
-import { useExperimentsItemUsage } from '@mastra/react/hooks/experiments';
+import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
+import type { ExperimentItemUsage } from '@mastra/react/hooks/experiments';
 import { useMemo, useCallback } from 'react';
 import { useExperimentItemPanel } from '../context/experiment-item-panel-context';
+import { getOptionalResultColumns } from '../utils/result-output';
+import { ExperimentResultsList } from './experiment-results-list';
 
 export type ExperimentResultsSectionProps = {
-  experimentId: string;
-  experimentStatus?: ExperimentStatus;
   results: DatasetExperimentResult[];
   isLoading: boolean;
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
@@ -21,19 +16,20 @@ export type ExperimentResultsSectionProps = {
   selectedIds: Set<string>;
   onToggleSelect: (resultId: string) => void;
   onToggleSelectAll: () => void;
-  /** Fetches per-item usage and shows the Cost and Tokens columns. */
+  /** Shows the Cost and Tokens columns. */
   supportsMetrics?: boolean;
+  /** Scores grouped by item id; adds one column per scorer found. */
+  scoresByItemId?: Record<string, Array<Pick<ClientScoreRowData, 'scorerId' | 'score' | 'reason'>>>;
+  /** Usage of each result's trace, keyed by trace id. */
+  usageByTraceId?: Record<string, ExperimentItemUsage>;
 };
 
 /**
- * Results section of an experiment. Clicking a row navigates to the
- * `items/:itemId` sub-route, which renders the detail as an overlay panel
- * (see ExperimentItemPage). Selection is owned by the page so the bulk
- * actions can render in the top area next to the page actions.
+ * Results section of an experiment, inside an `ExperimentItemPanelProvider`. Clicking a row opens
+ * (or closes) that item's panel and the open item's row is highlighted. Selection is owned by the
+ * page so the bulk actions can render in the top area next to the page actions.
  */
 export function ExperimentResultsSection({
-  experimentId,
-  experimentStatus,
   results,
   isLoading,
   setEndOfListElement,
@@ -43,27 +39,15 @@ export function ExperimentResultsSection({
   onToggleSelect,
   onToggleSelectAll,
   supportsMetrics = false,
+  scoresByItemId,
+  usageByTraceId,
 }: ExperimentResultsSectionProps) {
   const { currentItemId, openItem, close } = useExperimentItemPanel();
 
-  // Row highlight derives from the active `items/:itemId` route.
   const featuredResultId = useMemo(
     () => (currentItemId ? (results.find(r => r.itemId === currentItemId)?.id ?? null) : null),
     [results, currentItemId],
   );
-
-  const { data: scoresByExperimentId } = useScoresByExperimentId({
-    experimentId: experimentId,
-    experimentStatus: experimentStatus,
-    queryOptions: { enabled: Boolean(experimentId) },
-  });
-
-  const experimentRefs = useMemo(
-    () => [{ id: experimentId, status: experimentStatus }],
-    [experimentId, experimentStatus],
-  );
-  const { data: usageById } = useExperimentsItemUsage({ experiments: experimentRefs, supportsMetrics });
-  const usageByTraceId = usageById[experimentId]?.traces;
 
   const rows = useMemo(
     () =>
@@ -77,15 +61,15 @@ export function ExperimentResultsSection({
   );
 
   const scorerIds = useMemo(() => {
-    if (!scoresByExperimentId) return [];
+    if (!scoresByItemId) return [];
     const ids = new Set<string>();
-    for (const scores of Object.values(scoresByExperimentId)) {
+    for (const scores of Object.values(scoresByItemId)) {
       for (const score of scores) {
         ids.add(score.scorerId);
       }
     }
     return [...ids].sort();
-  }, [scoresByExperimentId]);
+  }, [scoresByItemId]);
 
   const handleResultClick = useCallback(
     (resultId: string) => {
@@ -125,7 +109,7 @@ export function ExperimentResultsSection({
         featuredResultId={featuredResultId}
         onResultClick={handleResultClick}
         columns={resultsListColumns}
-        scoresByItemId={scoresByExperimentId}
+        scoresByItemId={scoresByItemId}
         scorerIds={scorerIds}
         setEndOfListElement={setEndOfListElement}
         isFetchingNextPage={isFetchingNextPage}

@@ -1,11 +1,11 @@
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
+import { useExperimentItemPanel } from '@mastra/playground-ui/domains/experiments/context/experiment-item-panel-context';
 import { useExperimentResultDetailState } from '@mastra/playground-ui/domains/experiments/hooks/use-experiment-result-detail-state';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useDatasetMutations, useScoresByExperimentId } from '@mastra/react/hooks/datasets';
 
+import { useDatasetMutations, useScoresByExperimentId } from '@mastra/react/hooks/datasets';
 import { useCallback, useMemo } from 'react';
 import { ExperimentResultDetail } from '@/domains/experiments/components/experiment-result-detail';
-import { useExperimentItemPanel } from '@/domains/experiments/context/experiment-item-panel-context';
 
 export interface ExperimentItemPanelProps {
   withFeedback: boolean;

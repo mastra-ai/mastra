@@ -25,6 +25,15 @@ export { EXPERIMENT_STATUS_OPTIONS, getExperimentDatasetOptions } from './compon
 export { STATUS_LABEL, STATUS_VARIANT, experimentColumnLabels } from './components/experiment-columns';
 
 // Experiment page
+export { ExperimentItemPanelProvider, useExperimentItemPanel } from './context/experiment-item-panel-context';
+export type {
+  ExperimentItemPanelContextValue,
+  ExperimentItemPanelProviderProps,
+} from './context/experiment-item-panel-context';
+export { ExperimentKpis } from './components/experiment-kpis';
+export type { ExperimentKpisProps } from './components/experiment-kpis';
+export { ExperimentResultsSection } from './components/experiment-results-section';
+export type { ExperimentResultsSectionProps } from './components/experiment-results-section';
 export { ExperimentStatusIcon } from './components/experiment-stats';
 export { ExperimentRunProgress } from './components/experiment-run-progress';
 export type { ExperimentRunProgressProps } from './components/experiment-run-progress';

@@ -1,22 +1,16 @@
-import type { DatasetExperiment } from '@mastra/client-js';
-import { Metadata } from '@mastra/playground-ui/components/Metadata';
-import { MetricsCardGroup } from '@mastra/playground-ui/components/MetricsCardGroup';
-import {
-  formatCostValue,
-  formatTokenCount,
-  totalTokens,
-} from '@mastra/playground-ui/domains/experiments/components/comparison/comparison-metric-format';
-import { KpiCard } from '@mastra/playground-ui/domains/metrics/components';
-import { IconCoins } from '@mastra/playground-ui/icons/central/IconCoins';
-import { IconGauge } from '@mastra/playground-ui/icons/central/IconGauge';
-import { IconHashtag } from '@mastra/playground-ui/icons/central/IconHashtag';
-import { IconStopwatch } from '@mastra/playground-ui/icons/central/IconStopwatch';
-import { formatDate } from '@mastra/playground-ui/utils/date-format';
-import { formatDuration } from '@mastra/playground-ui/utils/duration';
-import { useScoresByExperimentId } from '@mastra/react/hooks/datasets';
-import { useExperimentsItemUsage } from '@mastra/react/hooks/experiments';
-import type { ExperimentMetrics } from '@mastra/react/hooks/experiments';
+import type { ClientScoreRowData, DatasetExperiment } from '@mastra/client-js';
+import type { ExperimentItemUsage, ExperimentMetrics } from '@mastra/react/hooks/experiments';
 import { useMemo } from 'react';
+import { formatCostValue, formatTokenCount, totalTokens } from './comparison/comparison-metric-format';
+import { KpiCard } from '@/domains/metrics/components';
+import { Metadata } from '@/ds/components/Metadata';
+import { MetricsCardGroup } from '@/ds/components/MetricsCardGroup';
+import { IconCoins } from '@/ds/icons/central/IconCoins';
+import { IconGauge } from '@/ds/icons/central/IconGauge';
+import { IconHashtag } from '@/ds/icons/central/IconHashtag';
+import { IconStopwatch } from '@/ds/icons/central/IconStopwatch';
+import { formatDate } from '@/utils/date-format';
+import { formatDuration } from '@/utils/duration';
 
 export interface ExperimentKpisProps {
   experiment: DatasetExperiment;
@@ -25,23 +19,21 @@ export interface ExperimentKpisProps {
     isLoading: boolean;
     isEnabled: boolean;
   };
+  /** Scores of the run grouped by item id; undefined while loading. */
+  scoresByItemId?: Record<string, Array<Pick<ClientScoreRowData, 'score'>>>;
+  /** Usage totals of the run; shown when `metrics.isEnabled`. */
+  usage?: ExperimentItemUsage;
+  isUsageLoading?: boolean;
 }
 
 /** Headline numbers for a run, shown above its results like the Metrics page KPIs. */
-export function ExperimentKpis({ experiment, metrics }: ExperimentKpisProps) {
-  const { data: scoresByItemId } = useScoresByExperimentId({
-    experimentId: experiment.id,
-    experimentStatus: experiment.status,
-    queryOptions: { enabled: Boolean(experiment.id) },
-  });
-  const experimentRefs = useMemo(
-    () => [{ id: experiment.id, status: experiment.status }],
-    [experiment.id, experiment.status],
-  );
-  const { data: usageById, isLoading: isUsageQueryLoading } = useExperimentsItemUsage({
-    experiments: experimentRefs,
-    supportsMetrics: metrics?.isEnabled ?? false,
-  });
+export function ExperimentKpis({
+  experiment,
+  metrics,
+  scoresByItemId,
+  usage,
+  isUsageLoading: isUsageQueryLoading = false,
+}: ExperimentKpisProps) {
   // Usage is only fetched once the run finishes, so an in-progress run reads as loading rather than empty.
   const isUsageLoading = experiment.status === 'running' || experiment.status === 'pending' || isUsageQueryLoading;
 
@@ -61,7 +53,6 @@ export function ExperimentKpis({ experiment, metrics }: ExperimentKpisProps) {
   })();
 
   // Same per-item breakdown as the results rows (shared query), so the totals match the rows and split input/output.
-  const usage = usageById[experiment.id]?.summary;
   const tokens = totalTokens(usage);
   const tokensDetail =
     usage?.inputTokens === undefined && usage?.outputTokens === undefined ? (

@@ -4,7 +4,11 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
-import { DeleteExperimentDialog } from '@mastra/playground-ui/domains/experiments';
+import {
+  DeleteExperimentDialog,
+  ExperimentKpis,
+  ExperimentResultsSection,
+} from '@mastra/playground-ui/domains/experiments';
 import { ExperimentResultsBulkActions } from '@mastra/playground-ui/domains/experiments/components/experiment-results-bulk-actions';
 import { ExperimentRunProgress } from '@mastra/playground-ui/domains/experiments/components/experiment-run-progress';
 import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
@@ -14,8 +18,9 @@ import {
   useDatasetExperimentResults,
   useDatasetMutations,
   useExperiment,
+  useScoresByExperimentId,
 } from '@mastra/react/hooks/datasets';
-import { useExperimentMetrics } from '@mastra/react/hooks/experiments';
+import { useExperimentMetrics, useExperimentsItemUsage } from '@mastra/react/hooks/experiments';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
@@ -23,9 +28,7 @@ import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 import { ExperimentHeaderActions } from '@/domains/experiments/components/experiment-header-actions';
 import { ExperimentItemSidePanel } from '@/domains/experiments/components/experiment-item-side-panel';
-import { ExperimentKpis } from '@/domains/experiments/components/experiment-kpis';
-import { ExperimentResultsSection } from '@/domains/experiments/components/experiment-results-section';
-import { ExperimentItemPanelProvider } from '@/domains/experiments/context/experiment-item-panel-context';
+import { ExperimentRouteItemPanelProvider } from '@/domains/experiments/context/experiment-route-item-panel-provider';
 import {
   ExperimentCrumb,
   ExperimentCrumbItemCount,
@@ -103,6 +106,18 @@ function ExperimentPage() {
     queryOptions: { enabled: Boolean(experimentId) && supportsMetrics && isSettled },
   });
 
+  // Shared by the KPIs, the results and the item panel.
+  const { data: scoresByItemId } = useScoresByExperimentId({
+    experimentId: experimentId ?? '',
+    experimentStatus: experiment?.status,
+    queryOptions: { enabled: Boolean(experimentId) && isSettled },
+  });
+  const { data: usageByExperimentId, isLoading: isUsageLoading } = useExperimentsItemUsage({
+    experiments: experimentId ? [{ id: experimentId, status: experiment?.status }] : [],
+    supportsMetrics,
+  });
+  const usage = experimentId ? usageByExperimentId[experimentId] : undefined;
+
   const selection = useExperimentResultsSelection({
     datasetId,
     experimentId: experimentId ?? '',
@@ -166,7 +181,7 @@ function ExperimentPage() {
   if (!datasetId || !experiment) return notFound;
 
   return (
-    <ExperimentItemPanelProvider
+    <ExperimentRouteItemPanelProvider
       experimentId={experimentId}
       datasetId={datasetId}
       experimentStatus={experiment.status}
@@ -184,7 +199,13 @@ function ExperimentPage() {
           <h1 className="sr-only">{experimentId}</h1>
           {isSettled ? (
             <div className="grid content-start gap-4">
-              <ExperimentKpis experiment={experiment} metrics={experimentMetrics} />
+              <ExperimentKpis
+                experiment={experiment}
+                metrics={experimentMetrics}
+                scoresByItemId={scoresByItemId}
+                usage={usage?.summary}
+                isUsageLoading={isUsageLoading}
+              />
               <div className="grid content-start gap-1">
                 <ExperimentResultsBulkActions
                   selectedResults={selection.selectedResults}
@@ -196,8 +217,6 @@ function ExperimentPage() {
                   tagVocabulary={selection.tagVocabulary}
                 />
                 <ExperimentResultsSection
-                  experimentId={experimentId}
-                  experimentStatus={experiment.status}
                   results={results ?? []}
                   isLoading={resultsLoading}
                   setEndOfListElement={setEndOfListElement}
@@ -207,6 +226,8 @@ function ExperimentPage() {
                   onToggleSelect={selection.toggleSelect}
                   onToggleSelectAll={selection.toggleSelectAll}
                   supportsMetrics={supportsMetrics}
+                  scoresByItemId={scoresByItemId}
+                  usageByTraceId={usage?.traces}
                 />
               </div>
             </div>
@@ -229,7 +250,7 @@ function ExperimentPage() {
           onSuccess={() => navigate('/experiments')}
         />
       </div>
-    </ExperimentItemPanelProvider>
+    </ExperimentRouteItemPanelProvider>
   );
 }
 

@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ExperimentItemPanel } from '../experiment-item-panel';
-import { ExperimentItemPanelProvider } from '@/domains/experiments/context/experiment-item-panel-context';
+import { ExperimentRouteItemPanelProvider } from '@/domains/experiments/context/experiment-route-item-panel-provider';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -58,7 +58,7 @@ function renderItemPage(results: DatasetExperimentResult[]) {
         <Route
           path="/experiments/:experimentId/items/:itemId"
           element={
-            <ExperimentItemPanelProvider
+            <ExperimentRouteItemPanelProvider
               experimentId="exp-1"
               datasetId="ds-1"
               experimentStatus="completed"
@@ -66,7 +66,7 @@ function renderItemPage(results: DatasetExperimentResult[]) {
               isLoadingResults={false}
             >
               <ExperimentItemPanel withFeedback />
-            </ExperimentItemPanelProvider>
+            </ExperimentRouteItemPanelProvider>
           }
         />
       </Routes>

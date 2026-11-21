@@ -1,9 +1,10 @@
 import type { DatasetExperimentResult } from '@mastra/client-js';
+import { useExperimentItemPanel } from '@mastra/playground-ui/domains/experiments/context/experiment-item-panel-context';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider, Outlet } from 'react-router';
-import { describe, expect, it } from 'vitest';
 
-import { ExperimentItemPanelProvider, useExperimentItemPanel } from '../experiment-item-panel-context';
+import { describe, expect, it } from 'vitest';
+import { ExperimentRouteItemPanelProvider } from '../experiment-route-item-panel-provider';
 
 const makeResult = (id: string, itemId: string): DatasetExperimentResult => ({
   id,
@@ -51,10 +52,15 @@ const renderWithRouter = (initialPath: string) => {
       {
         path: '/experiments/:experimentId',
         element: (
-          <ExperimentItemPanelProvider experimentId="exp-1" datasetId="ds-1" results={results} isLoadingResults={false}>
+          <ExperimentRouteItemPanelProvider
+            experimentId="exp-1"
+            datasetId="ds-1"
+            results={results}
+            isLoadingResults={false}
+          >
             <Probe />
             <Outlet />
-          </ExperimentItemPanelProvider>
+          </ExperimentRouteItemPanelProvider>
         ),
         children: [{ path: 'items/:itemId', element: null }],
       },

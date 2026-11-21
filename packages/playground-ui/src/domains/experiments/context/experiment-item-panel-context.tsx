@@ -1,9 +1,7 @@
 import type { DatasetExperimentResult } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
-import { useItemPanelKeyboardNav } from '@mastra/playground-ui/keyboard/use-item-panel-keyboard-nav';
-import { createContext, useCallback, useContext, useMemo } from 'react';
-
-import { useMatch, useNavigate } from 'react-router';
+import { createContext, useContext, useMemo } from 'react';
+import { useItemPanelKeyboardNav } from '@/lib/keyboard/use-item-panel-keyboard-nav';
 
 export type ExperimentItemPanelContextValue = {
   experimentId: string;
@@ -12,11 +10,9 @@ export type ExperimentItemPanelContextValue = {
   results: DatasetExperimentResult[];
   isLoadingResults: boolean;
   hasNextPage?: boolean;
-  /** Item id from the active `items/:itemId` child route, if any. */
   currentItemId?: string;
   openItem: (itemId: string) => void;
   close: () => void;
-  /** Close the panel and feature the result on the Review Queue page (via `?review=` search param). */
   /** Undefined at the list boundaries so callers can disable navigation. */
   goToPreviousItem?: () => void;
   goToNextItem?: () => void;
@@ -31,6 +27,10 @@ export type ExperimentItemPanelProviderProps = {
   results: DatasetExperimentResult[];
   isLoadingResults: boolean;
   hasNextPage?: boolean;
+  /** Item whose panel is open, e.g. from the host's `items/:itemId` route. */
+  currentItemId?: string;
+  onOpenItem: (itemId: string) => void;
+  onClose: () => void;
   children: React.ReactNode;
 };
 
@@ -41,38 +41,26 @@ export function ExperimentItemPanelProvider({
   results,
   isLoadingResults,
   hasNextPage,
+  currentItemId,
+  onOpenItem: openItem,
+  onClose: close,
   children,
 }: ExperimentItemPanelProviderProps) {
-  const navigate = useNavigate();
-  const match = useMatch('/experiments/:experimentId/items/:itemId');
-  const currentItemId = match?.params.itemId;
-
-  const openItem = useCallback(
-    (itemId: string) => {
-      void navigate(`/experiments/${experimentId}/items/${encodeURIComponent(itemId)}`);
-    },
-    [navigate, experimentId],
-  );
-
-  const close = useCallback(() => {
-    void navigate(`/experiments/${experimentId}`);
-  }, [navigate, experimentId]);
-
   const currentIndex = useMemo(
     () => (currentItemId ? results.findIndex(r => r.itemId === currentItemId) : -1),
     [results, currentItemId],
   );
 
   const goToPreviousItem = useMemo(() => {
-    if (currentIndex <= 0) return undefined;
-    const previousItemId = results[currentIndex - 1].itemId;
-    return () => openItem(previousItemId);
+    const previous = currentIndex > 0 ? results[currentIndex - 1] : undefined;
+    if (!previous) return undefined;
+    return () => openItem(previous.itemId);
   }, [currentIndex, results, openItem]);
 
   const goToNextItem = useMemo(() => {
-    if (currentIndex < 0 || currentIndex >= results.length - 1) return undefined;
-    const nextItemId = results[currentIndex + 1].itemId;
-    return () => openItem(nextItemId);
+    const next = currentIndex >= 0 ? results[currentIndex + 1] : undefined;
+    if (!next) return undefined;
+    return () => openItem(next.itemId);
   }, [currentIndex, results, openItem]);
 
   // Shared prev/next/close keyboard nav, active while an item is open, focus-independent.

@@ -1,7 +1,7 @@
+import { useExperimentItemPanel } from '@mastra/playground-ui/domains/experiments/context/experiment-item-panel-context';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { ExperimentItemPanel } from './experiment-item-panel';
 import type { ExperimentItemPanelProps } from './experiment-item-panel';
-import { useExperimentItemPanel } from '@/domains/experiments/context/experiment-item-panel-context';
 import { RouteSidePanel, useSelectedItemSidePanel } from '@/lib/route-side-panel';
 
 /**
