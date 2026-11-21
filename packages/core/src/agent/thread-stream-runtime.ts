@@ -3567,9 +3567,9 @@ export class AgentThreadStreamRuntime {
    * any of them proves it has passed every admission published before it. The probes of one lease loss are dropped
    * together when a check sees the lease name a covered run again or the forwards stop being tracked. At most
    * `FORWARDED_LEASE_PROBES_PER_EPISODE` stay valid; a published retry beyond that drops the oldest, so a reader that
-   * stays more than that many retry intervals behind waits until its lag shrinks. A probe whose publish fails is dropped alone.
-   * A run that regains the lease, admits a forward and lets go again between two checks is not seen, so a probe
-   * published before that admission can still queue the forward a second time.
+   * stays more than that many retry intervals behind waits until its lag shrinks. A probe whose publish fails is
+   * dropped alone. A run that regains the lease, admits a forward and lets go again between two checks is not seen,
+   * so a probe published before that admission can still queue the forward a second time.
    */
   #watchForwardedIdleLease(state: AgentThreadRuntimeState, pubsub: PubSub | undefined, key: string) {
     if (state.forwardedIdleLeaseChecks.has(key)) return;

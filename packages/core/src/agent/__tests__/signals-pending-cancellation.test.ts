@@ -2112,8 +2112,8 @@ describe('Agent signals: pending cancellation', () => {
     /**
      * A message forwarded to a run that dies without admitting it, while this runtime's thread reader reads each event,
      * in publish order, `lagChecks` lease checks after it was published, the broker loses the probes `lost` picks
-     * (numbered from 0 in publish order), and publishing fails for every probe after the first `publishedProbes`. Returns how many probes the
-     * forwarder published.
+     * (numbered from 0 in publish order), and publishing fails for every probe after the first `publishedProbes`.
+     * Returns how many probes the forwarder published successfully.
      */
     async function recoverUnadmittedForward({
       lagChecks,
