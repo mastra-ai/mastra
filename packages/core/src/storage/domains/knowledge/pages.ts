@@ -705,7 +705,10 @@ export interface KnowledgePageStore {
   materializeScope(input: MaterializeKnowledgeScopeInput): Promise<MaterializeKnowledgeScopeResult>;
   /** Scope pages by address, unfiltered (names and descriptions are not secret to the host). */
   getScopesByAddress(addresses: string[]): Promise<KnowledgePage[]>;
-  /** Every `declaration` key stored on scope pages, with how many scope pages carry it, in key order. */
+  /**
+   * Every `declaration` key stored on live scope pages, with how many carry it, in key order. Removed
+   * scopes don't count, so a declaration whose scopes were all removed can be dropped from config.
+   */
   listScopeDeclarations(): Promise<KnowledgeScopeDeclarationCount[]>;
   /**
    * Re-keys scope pages created from declaration `from` (and its template children, `from/<name>`)

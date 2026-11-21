@@ -363,6 +363,18 @@ export function createKnowledgePageStoreTests(
         }
       });
 
+      it('stops counting a removed scope toward its declaration, and counts it again once restored', async () => {
+        const acme = await scope('org:acme', ORG);
+        const team = await scope('team:acme:eng', TEAM, acme.id);
+        const counts = async () =>
+          Object.fromEntries((await store.listScopeDeclarations()).map(row => [row.declaration, row.scopes]));
+        expect(await counts()).toEqual({ [ORG]: 1, [TEAM]: 1 });
+        await store.removeScope({ id: team.id, expectedVersion: team.version, provenance: host });
+        expect(await counts()).toEqual({ [ORG]: 1 });
+        await store.restoreScope({ id: team.id, provenance: host });
+        expect(await counts()).toEqual({ [ORG]: 1, [TEAM]: 1 });
+      });
+
       it('never both removes a scope and moves or merges a page into it', async () => {
         for (let round = 0; round < 5; round++) {
           await store.dangerouslyClearAll();

@@ -347,7 +347,8 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
   async listScopeDeclarations() {
     const counts = new Map<string, number>();
     for (const page of this.#pages.values()) {
-      if (page.isScope && page.declaration) counts.set(page.declaration, (counts.get(page.declaration) ?? 0) + 1);
+      if (page.isScope && page.declaration && !page.deletedAt)
+        counts.set(page.declaration, (counts.get(page.declaration) ?? 0) + 1);
     }
     return [...counts]
       .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))

@@ -60,6 +60,20 @@ export interface KnowledgeRemovePageInput {
 }
 
 /** @experimental */
+export interface KnowledgeRemoveScopeInput {
+  /** Address of the scope to remove, e.g. `repo:acme:web`. */
+  scope: string;
+  author?: string;
+}
+
+/** @experimental */
+export interface KnowledgeRestoreScopeInput {
+  /** Id of the removed scope page, as returned by {@link Knowledge.removeScope}. */
+  id: string;
+  author?: string;
+}
+
+/** @experimental */
 export interface KnowledgeMovePageInput {
   /** Scope address and key path of the page to move, as in {@link KnowledgeUpsertPageInput}. */
   scope: string;
@@ -310,6 +324,84 @@ export async function removeKnowledgePage(
     await refreshKnowledgeLinksTo(storage, [deleted]);
   });
   return deleted;
+}
+
+/** @internal */
+export async function removeKnowledgeTemplatePage(
+  host: KnowledgeHostWriter,
+  input: KnowledgeRemovePageInput,
+): Promise<KnowledgePage | null> {
+  await host.runtime.resolve();
+  const keys = splitPath(input.path);
+  await host.runtime.checkDeclarations();
+  const storage = await host.getStorage();
+  const [scope] = await storage.getScopesByAddress([input.scope]);
+  if (!scope) return null;
+  const page = await storage.getPageByPath({ scopeId: scope.id, path: keys, read: 'all' });
+  if (!page) return null;
+  const template = await host.runtime.templatePageRef(page);
+  if (!template) throw new Error(`"${input.scope}#${input.path}" is not declared in config; use removePage.`);
+  const removed = await withChildrenMessage(
+    `"${template}" has child pages; remove them first.`,
+    storage.removeTemplatePage({ id: page.id, expectedVersion: page.version, provenance: provenanceOf(input) }),
+  );
+  await embed(host, index => index.removePage(page.id), UNEMBED_FAILED);
+  await updateKnowledgeLinks(host.warn, async () => {
+    await syncKnowledgePageBodyLinks(storage, removed);
+    await refreshKnowledgeLinksTo(storage, [removed]);
+  });
+  return removed;
+}
+
+/** @internal */
+export async function removeKnowledgeScope(
+  host: KnowledgeHostWriter,
+  input: KnowledgeRemoveScopeInput,
+): Promise<KnowledgePage | null> {
+  await host.runtime.resolve();
+  await host.runtime.checkDeclarations();
+  const storage = await host.getStorage();
+  const [scope] = await storage.getScopesByAddress([input.scope]);
+  if (!scope) return null;
+  const removed = await withChildrenMessage(
+    `"${input.scope}" still has pages or child scopes; remove them first.`,
+    storage.removeScope({ id: scope.id, expectedVersion: scope.version, provenance: provenanceOf(input) }),
+  );
+  await updateKnowledgeLinks(host.warn, () => refreshKnowledgeLinksTo(storage, [removed]));
+  return removed;
+}
+
+/** @internal */
+export async function restoreKnowledgeScope(
+  host: KnowledgeHostWriter,
+  input: KnowledgeRestoreScopeInput,
+): Promise<KnowledgePage> {
+  await host.runtime.resolve();
+  await host.runtime.checkDeclarations();
+  const storage = await host.getStorage();
+  const scope = await storage.getPage({ id: input.id, read: 'all' });
+  if (!scope) throw new KnowledgeNotFoundError('page', input.id);
+  if (!scope.isScope || !scope.address) throw new Error(`Knowledge page ${input.id} isn't a scope page.`);
+  // The address must still match the declaration the scope was created from, as every scope in use must.
+  if (host.runtime.compiled.match(scope.address)?.declaration !== scope.declaration) {
+    throw new Error(`Knowledge scope "${scope.address}" does not match a declared scope type.`);
+  }
+  const restored = await storage.restoreScope({ id: scope.id, provenance: provenanceOf(input) });
+  await updateKnowledgeLinks(host.warn, () => refreshKnowledgeLinksTo(storage, [restored]));
+  return restored;
+}
+
+function provenanceOf(input: { author?: string }): KnowledgeProvenance {
+  return { author: input.author ?? 'host' };
+}
+
+async function withChildrenMessage<T>(message: string, operation: Promise<T>): Promise<T> {
+  try {
+    return await operation;
+  } catch (error) {
+    if ((error as Error | undefined)?.name === 'KnowledgePageHasChildrenError') throw new Error(message);
+    throw error;
+  }
 }
 
 /**

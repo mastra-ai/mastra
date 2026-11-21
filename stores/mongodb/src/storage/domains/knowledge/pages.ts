@@ -736,7 +736,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       await this.#c('pages')
     )
       .aggregate([
-        { $match: { isScope: true, declaration: { $type: 'string' } } },
+        { $match: { isScope: true, declaration: { $type: 'string' }, ...live } },
         { $group: { _id: '$declaration', scopes: { $sum: 1 } } },
       ])
       .toArray();

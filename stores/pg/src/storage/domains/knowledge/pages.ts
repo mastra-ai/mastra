@@ -755,7 +755,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
     const rows = await this.#rows(
       this.#client,
       `SELECT "declaration", COUNT(*)::int AS "scopes" FROM ${this.#pages}
-       WHERE "isScope" AND "declaration" IS NOT NULL
+       WHERE "isScope" AND "declaration" IS NOT NULL AND "deletedAt" IS NULL
        GROUP BY "declaration" ORDER BY "declaration" COLLATE "C"`,
       [],
     );

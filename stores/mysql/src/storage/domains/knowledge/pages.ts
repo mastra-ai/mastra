@@ -651,7 +651,7 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
   async listScopeDeclarations(): Promise<KnowledgeScopeDeclarationCount[]> {
     const rows = await this.#query(
       this.#read,
-      `SELECT declaration, COUNT(*) AS scopes FROM ${T.pages} WHERE isScope = 1 AND declaration IS NOT NULL GROUP BY declaration ORDER BY declaration`,
+      `SELECT declaration, COUNT(*) AS scopes FROM ${T.pages} WHERE isScope = 1 AND declaration IS NOT NULL AND deletedAt IS NULL GROUP BY declaration ORDER BY declaration`,
     );
     return rows.map(row => ({ declaration: String(row.declaration), scopes: Number(row.scopes) }));
   }
