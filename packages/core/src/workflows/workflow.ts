@@ -3357,7 +3357,9 @@ export class Workflow<
         const v1Header = await loadStoredHeader(1);
         if (v1Header) {
           existsInStorage = true;
-          const resourceId = (await this.getWorkflowRunById(runId, { withNestedWorkflows: false }))?.resourceId;
+          const resourceId = (
+            await workflowsStore?.getWorkflowRunById({ runId, workflowName: this.id, storageVersion: 1 })
+          )?.resourceId;
           stored = { ...v1Header, resourceId };
           storageVersion = 1;
         }

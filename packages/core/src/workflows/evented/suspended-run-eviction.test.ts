@@ -13,6 +13,7 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
 import { createWorkflow as createDefaultWorkflow } from '../create';
+import { createRunStorage } from '../run-storage';
 import { createStep as createDefaultStep } from '../workflow';
 import { createStep as createEventedStep, createWorkflow as createEventedWorkflow } from '.';
 
@@ -576,3 +577,61 @@ function collectGarbage() {
     (globalThis as { gc?: () => void }).gc ?? (setFlagsFromString('--expose-gc'), runInNewContext('gc') as () => void);
   gc();
 }
+
+describe('reopen of a storage v1 run', () => {
+  it('keeps the resourceId of the v1 record when a v2 record of the run id appears', async () => {
+    const storage = new MockStore();
+    const workflow = createDefaultWorkflow({
+      id: 'versions',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      options: { storageVersion: 2 },
+    })
+      .then(
+        createDefaultStep({
+          id: 'noop',
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          execute: async () => ({}),
+        }),
+      )
+      .commit();
+    const mastra = new Mastra({ logger: false, storage, workflows: { versions: workflow } });
+    const store = (await storage.getStore('workflows'))!;
+    const runId = 'v1-run';
+    const snapshot = (status: 'suspended' | 'pending') =>
+      ({
+        runId,
+        status,
+        value: {},
+        context: {},
+        activePaths: [],
+        activeStepsPath: {},
+        serializedStepGraph: [],
+        suspendedPaths: {},
+        resumeLabels: {},
+        waitingPaths: {},
+        timestamp: Date.now(),
+      }) as any;
+    const runStorage = (storageVersion: 1 | 2) =>
+      createRunStorage({ storageVersion, workflowName: 'versions', runId, getStore: async () => store });
+    await runStorage(1).writeSnapshot(snapshot('suspended'), 'user-v1');
+    // Another writer stores the run id as v2 between the reopen's v1 header read and its resourceId read.
+    const read = store.getWorkflowRunById.bind(store);
+    let wrote = false;
+    store.getWorkflowRunById = async (...args: Parameters<typeof read>) => {
+      if (!wrote) {
+        wrote = true;
+        // Stored later, so it is the newest record of the run id.
+        await new Promise(resolve => setTimeout(resolve, 5));
+        await runStorage(2).writeSnapshot(snapshot('pending'), 'user-v2');
+      }
+      return read(...args);
+    };
+
+    const reopened = await mastra.getWorkflow('versions').createRun({ runId });
+    expect(wrote).toBe(true);
+    expect(reopened.workflowRunStatus).toBe('suspended');
+    expect(reopened.resourceId).toBe('user-v1');
+  });
+});
