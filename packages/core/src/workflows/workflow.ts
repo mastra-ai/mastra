@@ -2087,19 +2087,102 @@ export class Workflow<
 
   /**
    * Runs evicted from `#runs`, held weakly: while a caller still holds one, reopening its run id
-   * returns that same instance, so its watchers, events and cancel stay on the one handle.
+   * returns that same instance, so one run id never has two live instances in this process.
    */
   #evictedRuns = new Map<
     string,
     WeakRef<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion>>
   >();
-  #forgetEvictedRun = new FinalizationRegistry<string>(runId => {
-    if (!this.#evictedRuns.get(runId)?.deref()) this.#evictedRuns.delete(runId);
+
+  /**
+   * Forgets an evicted run once nobody holds it. Its persistence override goes with it: a later
+   * reopen builds a new instance from storage and options, as a reopen in a new process would.
+   */
+  #forgetEvictedRun = new FinalizationRegistry<{ runId: string; ref: WeakRef<object> }>(({ runId, ref }) => {
+    if (this.#evictedRuns.get(runId) !== ref) return;
+    this.#evictedRuns.delete(runId);
+    if (!this.#runs.has(runId) && !this.#runOpenings.has(runId)) {
+      this.executionEngine.clearRunPersistenceOverride(runId);
+    }
   });
 
-  /** The evicted instance of `runId` a caller still holds, if any. */
-  #heldEvictedRun(runId: string) {
-    return this.#evictedRuns.get(runId)?.deref();
+  /** Reopens of a run id in flight, so concurrent reopens resolve to one instance. */
+  #runOpenings = new Map<string, Promise<void>>();
+
+  /** The instance of `runId` live in this process: cached, or evicted but still held by a caller. */
+  protected liveRun(runId: string) {
+    return this.#runs.get(runId) ?? this.#evictedRuns.get(runId)?.deref();
+  }
+
+  /**
+   * Runs `open` once every earlier open of the same run id settled, so an open that finds no live
+   * instance builds the one instance later opens reuse.
+   */
+  protected openRunOnce<T>(runId: string, open: () => Promise<T>): Promise<T> {
+    const earlier = this.#runOpenings.get(runId);
+    const opening = earlier ? earlier.then(open) : open();
+    const settled = opening.then(
+      () => {},
+      () => {},
+    );
+    this.#runOpenings.set(runId, settled);
+    void settled.then(() => {
+      if (this.#runOpenings.get(runId) === settled) this.#runOpenings.delete(runId);
+    });
+    return opening;
+  }
+
+  /** Makes `run` the cached instance of its run id. */
+  protected cacheRun(run: Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion>) {
+    this.#runs.set(run.runId, run);
+    this.#evictedRuns.delete(run.runId);
+  }
+
+  /**
+   * The cache hooks a new run instance gets: `cleanup` drops it once finished and runs `onFinished`;
+   * `registration` evicts it to a weak hold while suspended and re-caches it when it executes again.
+   * Each acts only while `getRun()` is the run id's live instance.
+   */
+  protected runCacheHooks(
+    runId: string,
+    getRun: () => Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion>,
+    onFinished?: () => void,
+  ): { cleanup: () => void; registration: RunRegistration } {
+    return {
+      cleanup: () => {
+        const run = getRun();
+        if (this.#evictedRuns.get(runId)?.deref() === run) this.#evictedRuns.delete(runId);
+        const cached = this.#runs.get(runId);
+        if (cached && cached !== run) return;
+        this.#runs.delete(runId);
+        onFinished?.();
+      },
+      registration: {
+        // Unlike cleanup, eviction keeps the run's persistence override: the run is not finished,
+        // and a later resume of it must persist under the same policy.
+        evict: () => {
+          const run = getRun();
+          if (this.#runs.get(runId) !== run) return;
+          this.#runs.delete(runId);
+          const ref = new WeakRef(run);
+          this.#evictedRuns.set(runId, ref);
+          this.#forgetEvictedRun.register(run, { runId, ref });
+        },
+        reattach: () => {
+          const run = getRun();
+          const live = this.liveRun(runId);
+          if (live && live !== run) return;
+          this.cacheRun(run);
+        },
+      },
+    };
+  }
+
+  /** Drops this process's instance of a run, cached or held. */
+  protected forgetRun(runId: string) {
+    this.#runs.delete(runId);
+    this.#evictedRuns.delete(runId);
+    this.executionEngine.clearRunPersistenceOverride(runId);
   }
 
   #schedules: WorkflowScheduleConfig[];
@@ -3218,7 +3301,7 @@ export class Workflow<
   }): Promise<{
     storageVersion: 1 | 2;
     existsInStorage: boolean;
-    stored?: Pick<WorkflowRunState, 'status' | 'parentWorkflow'>;
+    stored?: Pick<WorkflowRunState, 'status' | 'parentWorkflow'> & { resourceId?: string };
   }> {
     // A v2 run can't be stored where the store has no journal, so only a stored v1 run may continue.
     // With autoStorageVersion, a new run takes v2 only where it can be stored as v2, on an engine
@@ -3256,20 +3339,23 @@ export class Workflow<
         getStore: async () => (this.executionEngine.mastra ?? this.#mastra)?.getStorage()?.getStore('workflows'),
       }).loadHeader();
     let existsInStorage = false;
-    let stored: Pick<WorkflowRunState, 'status' | 'parentWorkflow'> | undefined;
+    let stored: (Pick<WorkflowRunState, 'status' | 'parentWorkflow'> & { resourceId?: string }) | undefined;
 
     if (storageVersion === 2) {
-      // The header holds the status and parent this reads, so one header read replaces the
-      // existence check and a snapshot load.
-      const header = lookUpStoredRun ? await loadStoredHeader(2) : null;
-      if (header) {
+      // The header holds the status, parent and resource this reads, so one header read replaces
+      // the existence check and a snapshot load.
+      const storedHeader = lookUpStoredRun
+        ? await workflowsStore?.loadWorkflowRunHeader({ workflowName: this.id, runId })
+        : null;
+      if (storedHeader) {
         existsInStorage = true;
-        stored = header;
+        stored = { ...storedHeader.header, resourceId: storedHeader.resourceId };
       } else if (probeOtherVersion) {
         const v1Header = await loadStoredHeader(1);
         if (v1Header) {
           existsInStorage = true;
-          stored = v1Header;
+          const resourceId = (await this.getWorkflowRunById(runId, { withNestedWorkflows: false }))?.resourceId;
+          stored = { ...v1Header, resourceId };
           storageVersion = 1;
         }
       }
@@ -3285,7 +3371,11 @@ export class Workflow<
           header = await loadStoredHeader(2);
           if (header) storageVersion = 2;
         }
-        stored = { status: existingRun.status as WorkflowRunStatus, parentWorkflow: header?.parentWorkflow };
+        stored = {
+          status: existingRun.status as WorkflowRunStatus,
+          parentWorkflow: header?.parentWorkflow,
+          resourceId: existingRun.resourceId,
+        };
       }
     }
     if (unsupportedV2 && !existsInStorage) throwUnsupportedV2();
@@ -3339,121 +3429,108 @@ export class Workflow<
       }) ||
       globalThis.crypto.randomUUID();
 
-    const cachedRun = this.#runs.get(runIdToUse) ?? this.#heldEvictedRun(runIdToUse);
-    const shouldPersistSnapshot = (options?.shouldPersistSnapshot ?? this.#options.shouldPersistSnapshot)({
-      workflowStatus: cachedRun?.workflowRunStatus ?? 'pending',
-      stepResults: {},
-    });
-
-    // A freshly-minted run for a workflow that never persists a snapshot (e.g. the
-    // transient processor workflows from #17344) cannot have a stored row, so this
-    // existence read would be a guaranteed miss. Skipping it removes one storage
-    // round trip per streamed chunk on the agent output-processor hot path (#19015).
-    const lookUpStoredRun = shouldPersistSnapshot || !!options?.runId;
-    const { storageVersion, existsInStorage, stored } = await this.resolveRunStorage({
-      runId: runIdToUse,
-      reopen: !!options?.runId,
-      cachedRun,
-      nestedRun,
-      lookUpStoredRun,
-    });
-
-    // Return a new Run instance with object parameters
-    const run: Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion> =
-      this.#runs.get(runIdToUse) ??
-      this.#heldEvictedRun(runIdToUse) ??
-      new Run({
-        workflowId: this.id,
-        stateSchema: this.stateSchema,
-        inputSchema: this.inputSchema,
-        requestContextSchema: this.requestContextSchema,
-        runId: runIdToUse,
-        parentWorkflow: options?.parentWorkflow,
-        resourceId: options?.resourceId,
-        isInternalWorkflow: this.isInternal,
-        executionEngine: this.executionEngine,
-        executionGraph: this.executionGraph,
-        mastra: this.#mastra,
-        retryConfig: this.retryConfig,
-        serializedStepGraph: this.serializedStepGraph,
-        disableScorers: options?.disableScorers,
-        cleanup: () => {
-          if (this.#heldEvictedRun(runIdToUse) === run) this.#evictedRuns.delete(runIdToUse);
-          // A run evicted while suspended and then resumed through a held reference must
-          // not tear down a newer instance created for the same run id.
-          const cached = this.#runs.get(runIdToUse);
-          if (cached && cached !== run) return;
-          this.#runs.delete(runIdToUse);
-          this.executionEngine.clearRunPersistenceOverride(runIdToUse);
-        },
-        // Unlike cleanup, eviction keeps the run's persistence override: the run is not
-        // finished, and a later resume of it must persist under the same policy.
-        registration: {
-          evict: () => {
-            if (this.#runs.get(runIdToUse) !== run) return;
-            this.#runs.delete(runIdToUse);
-            this.#evictedRuns.set(runIdToUse, new WeakRef(run));
-            this.#forgetEvictedRun.register(run, runIdToUse);
-          },
-          reattach: () => {
-            if (!this.#runs.has(runIdToUse)) this.#runs.set(runIdToUse, run);
-          },
-        },
-        tracingPolicy: options?.tracingPolicy ?? this.#options?.tracingPolicy,
-        workflowSteps: this.steps,
-        validateInputs: this.#options?.validateInputs,
-        workflowEngineType: this.engineType,
-        pubsub: options?.pubsub,
-        storageVersion,
-        recoverable:
-          this.engineType === 'default' && this.#options.autoRestartActiveRuns !== false && this.type !== 'processor',
+    const open = async () => {
+      const cachedRun = this.liveRun(runIdToUse);
+      const shouldPersistSnapshot = (options?.shouldPersistSnapshot ?? this.#options.shouldPersistSnapshot)({
+        workflowStatus: cachedRun?.workflowRunStatus ?? 'pending',
+        stepResults: {},
       });
 
-    this.#runs.set(runIdToUse, run);
-    this.#evictedRuns.delete(runIdToUse);
-
-    if (options?.shouldPersistSnapshot) {
-      this.executionEngine.setRunPersistenceOverride(runIdToUse, options.shouldPersistSnapshot);
-    }
-
-    if (stored) {
-      run.workflowRunStatus = stored.status;
-      run.parentWorkflow = stored.parentWorkflow ?? run.parentWorkflow;
-    }
-
-    if (!existsInStorage && shouldPersistSnapshot) {
-      const initialSnapshot: WorkflowRunState = {
+      // A freshly-minted run for a workflow that never persists a snapshot (e.g. the
+      // transient processor workflows from #17344) cannot have a stored row, so this
+      // existence read would be a guaranteed miss. Skipping it removes one storage
+      // round trip per streamed chunk on the agent output-processor hot path (#19015).
+      const lookUpStoredRun = shouldPersistSnapshot || !!options?.runId;
+      const { storageVersion, existsInStorage, stored } = await this.resolveRunStorage({
         runId: runIdToUse,
-        status: 'pending',
-        parentWorkflow: options?.parentWorkflow,
-        // A nested run restarted before its first step only has this snapshot to rebuild from,
-        // so it must carry the parent's state alongside the input.
-        value: nestedRunStart?.state ?? {},
-        // @ts-expect-error - context type mismatch
-        context: nestedRunStart?.input ? { input: nestedRunStart.input } : {},
-        activePaths: [],
-        activeStepsPath: {},
-        serializedStepGraph: this.serializedStepGraph,
-        suspendedPaths: {},
-        resumeLabels: {},
-        waitingPaths: {},
-        result: undefined,
-        error: undefined,
-        timestamp: Date.now(),
-      };
-      await run.runStorage.writeSnapshot(
-        // Storage v2 doesn't prune; a nested workflow with the hook can still run as v2 under a v2 parent.
-        this.#options.pruneSnapshot && storageVersion === 1
-          ? this.#options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
-          : initialSnapshot,
-        options?.resourceId,
-        // The nested run starts from exactly that version of the parent's state.
-        { stateBase: nestedRunStart?.inheritedState?.ref },
-      );
-    }
+        reopen: !!options?.runId,
+        cachedRun,
+        nestedRun,
+        lookUpStoredRun,
+      });
 
-    run.inheritedState = nestedRunStart?.inheritedState;
-    return run;
+      // Read again after the storage await: a held instance may have been evicted meanwhile.
+      const hooks = this.runCacheHooks(
+        runIdToUse,
+        () => run,
+        () => this.executionEngine.clearRunPersistenceOverride(runIdToUse),
+      );
+      const run: Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion> =
+        this.liveRun(runIdToUse) ??
+        new Run({
+          workflowId: this.id,
+          stateSchema: this.stateSchema,
+          inputSchema: this.inputSchema,
+          requestContextSchema: this.requestContextSchema,
+          runId: runIdToUse,
+          parentWorkflow: options?.parentWorkflow,
+          // A reopen without a resourceId keeps the one the run was stored under.
+          resourceId: options?.resourceId ?? stored?.resourceId,
+          isInternalWorkflow: this.isInternal,
+          executionEngine: this.executionEngine,
+          executionGraph: this.executionGraph,
+          mastra: this.#mastra,
+          retryConfig: this.retryConfig,
+          serializedStepGraph: this.serializedStepGraph,
+          disableScorers: options?.disableScorers,
+          ...hooks,
+          tracingPolicy: options?.tracingPolicy ?? this.#options?.tracingPolicy,
+          workflowSteps: this.steps,
+          validateInputs: this.#options?.validateInputs,
+          workflowEngineType: this.engineType,
+          pubsub: options?.pubsub,
+          storageVersion,
+          recoverable:
+            this.engineType === 'default' && this.#options.autoRestartActiveRuns !== false && this.type !== 'processor',
+        });
+
+      this.cacheRun(run);
+
+      if (options?.shouldPersistSnapshot) {
+        this.executionEngine.setRunPersistenceOverride(runIdToUse, options.shouldPersistSnapshot);
+      }
+
+      if (stored) {
+        run.workflowRunStatus = stored.status;
+        run.parentWorkflow = stored.parentWorkflow ?? run.parentWorkflow;
+      }
+
+      if (!existsInStorage && shouldPersistSnapshot) {
+        const initialSnapshot: WorkflowRunState = {
+          runId: runIdToUse,
+          status: 'pending',
+          parentWorkflow: options?.parentWorkflow,
+          // A nested run restarted before its first step only has this snapshot to rebuild from,
+          // so it must carry the parent's state alongside the input.
+          value: nestedRunStart?.state ?? {},
+          // @ts-expect-error - context type mismatch
+          context: nestedRunStart?.input ? { input: nestedRunStart.input } : {},
+          activePaths: [],
+          activeStepsPath: {},
+          serializedStepGraph: this.serializedStepGraph,
+          suspendedPaths: {},
+          resumeLabels: {},
+          waitingPaths: {},
+          result: undefined,
+          error: undefined,
+          timestamp: Date.now(),
+        };
+        await run.runStorage.writeSnapshot(
+          // Storage v2 doesn't prune; a nested workflow with the hook can still run as v2 under a v2 parent.
+          this.#options.pruneSnapshot && storageVersion === 1
+            ? this.#options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
+            : initialSnapshot,
+          options?.resourceId,
+          // The nested run starts from exactly that version of the parent's state.
+          { stateBase: nestedRunStart?.inheritedState?.ref },
+        );
+      }
+
+      run.inheritedState = nestedRunStart?.inheritedState;
+      return run;
+    };
+    // Only a caller-named run id can already have an instance; a minted one opens directly.
+    return options?.runId ? this.openRunOnce(runIdToUse, open) : open();
   }
 
   async listScorers({
@@ -3959,8 +4036,8 @@ export class Workflow<
     }
 
     await workflowsStore.deleteWorkflowRunById({ runId, workflowName: this.id, ...options });
-    // deleting the run from the in memory runs
-    this.#runs.delete(runId);
+    // A held instance would otherwise come back from a reopen of the deleted run.
+    this.forgetRun(runId);
   }
 
   protected async getWorkflowRunSteps({ runId, workflowId }: { runId: string; workflowId: string }) {

@@ -1846,93 +1846,85 @@ export class EventedWorkflow<
       });
     }
 
-    const cachedRun = this.runs.get(runIdToUse);
-    const shouldPersistSnapshot = this.options?.shouldPersistSnapshot?.({
-      workflowStatus: cachedRun?.workflowRunStatus ?? 'pending',
-      stepResults: {},
-    });
-
-    // A freshly-minted run for a workflow that never persists a snapshot cannot have
-    // a stored row, so this existence read would be a guaranteed miss. Skipping it
-    // avoids a storage round trip on every createRun for transient workflows (#19015).
-    const { storageVersion, existsInStorage, stored } = await this.resolveRunStorage({
-      runId: runIdToUse,
-      reopen: !!options?.runId,
-      cachedRun,
-      nestedRun,
-      lookUpStoredRun: !!shouldPersistSnapshot || !!options?.runId,
-    });
-
-    // Return a new Run instance with object parameters
-    // Read again: the run may have been evicted and reopened while storage was read.
-    const run: Run<TEngineType, TSteps, TState, TInput, TOutput, unknown, TStorageVersion> =
-      this.runs.get(runIdToUse) ??
-      new EventedRun({
-        workflowId: this.id,
-        runId: runIdToUse,
-        parentWorkflow: stored?.parentWorkflow,
-        resourceId: options?.resourceId,
-        isInternalWorkflow: this.isInternal,
-        executionEngine: this.executionEngine,
-        executionGraph: this.executionGraph,
-        serializedStepGraph: this.serializedStepGraph,
-        mastra: this.mastra,
-        retryConfig: this.retryConfig,
-        cleanup: () => {
-          // A run evicted while suspended and then resumed through a held reference must
-          // not tear down a newer instance created for the same run id.
-          const cached = this.runs.get(runIdToUse);
-          if (!cached || cached === run) this.runs.delete(runIdToUse);
-        },
-        registration: {
-          evict: () => {
-            if (this.runs.get(runIdToUse) === run) this.runs.delete(runIdToUse);
-          },
-          reattach: () => {
-            if (!this.runs.has(runIdToUse)) this.runs.set(runIdToUse, run);
-          },
-        },
-        workflowSteps: this.steps,
-        validateInputs: this.options?.validateInputs,
-        inputSchema: this.inputSchema,
-        stateSchema: this.stateSchema,
-        workflowEngineType: this.engineType,
-        tracingPolicy: this.options?.tracingPolicy,
-        storageVersion,
+    const open = async () => {
+      const cachedRun = this.liveRun(runIdToUse);
+      const shouldPersistSnapshot = this.options?.shouldPersistSnapshot?.({
+        workflowStatus: cachedRun?.workflowRunStatus ?? 'pending',
+        stepResults: {},
       });
 
-    this.runs.set(runIdToUse, run);
-
-    // Sync status from storage to in-memory run (fixes status tracking across workflow instances)
-    if (stored) {
-      run.workflowRunStatus = stored.status;
-    }
-
-    if (!existsInStorage && shouldPersistSnapshot) {
-      const initialSnapshot: WorkflowRunState = {
+      // A freshly-minted run for a workflow that never persists a snapshot cannot have
+      // a stored row, so this existence read would be a guaranteed miss. Skipping it
+      // avoids a storage round trip on every createRun for transient workflows (#19015).
+      const { storageVersion, existsInStorage, stored } = await this.resolveRunStorage({
         runId: runIdToUse,
-        status: 'pending',
-        value: {},
-        context: {} as WorkflowRunState['context'],
-        activePaths: [],
-        serializedStepGraph: this.serializedStepGraph,
-        activeStepsPath: {},
-        suspendedPaths: {},
-        resumeLabels: {},
-        waitingPaths: {},
-        result: undefined,
-        error: undefined,
-        timestamp: Date.now(),
-      };
-      await run.runStorage.writeSnapshot(
-        this.options?.pruneSnapshot && run.storageVersion === 1
-          ? this.options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
-          : initialSnapshot,
-        options?.resourceId,
-      );
-    }
+        reopen: !!options?.runId,
+        cachedRun,
+        nestedRun,
+        lookUpStoredRun: !!shouldPersistSnapshot || !!options?.runId,
+      });
 
-    return run;
+      // Read again after the storage await: a held instance may have been evicted meanwhile.
+      const hooks = this.runCacheHooks(runIdToUse, () => run);
+      const run: Run<TEngineType, TSteps, TState, TInput, TOutput, unknown, TStorageVersion> =
+        this.liveRun(runIdToUse) ??
+        new EventedRun({
+          workflowId: this.id,
+          runId: runIdToUse,
+          parentWorkflow: stored?.parentWorkflow,
+          // A reopen without a resourceId keeps the one the run was stored under.
+          resourceId: options?.resourceId ?? stored?.resourceId,
+          isInternalWorkflow: this.isInternal,
+          executionEngine: this.executionEngine,
+          executionGraph: this.executionGraph,
+          serializedStepGraph: this.serializedStepGraph,
+          mastra: this.mastra,
+          retryConfig: this.retryConfig,
+          ...hooks,
+          workflowSteps: this.steps,
+          validateInputs: this.options?.validateInputs,
+          inputSchema: this.inputSchema,
+          stateSchema: this.stateSchema,
+          workflowEngineType: this.engineType,
+          tracingPolicy: this.options?.tracingPolicy,
+          storageVersion,
+        });
+
+      this.cacheRun(run);
+
+      // Sync status from storage to in-memory run (fixes status tracking across workflow instances)
+      if (stored) {
+        run.workflowRunStatus = stored.status;
+      }
+
+      if (!existsInStorage && shouldPersistSnapshot) {
+        const initialSnapshot: WorkflowRunState = {
+          runId: runIdToUse,
+          status: 'pending',
+          value: {},
+          context: {} as WorkflowRunState['context'],
+          activePaths: [],
+          serializedStepGraph: this.serializedStepGraph,
+          activeStepsPath: {},
+          suspendedPaths: {},
+          resumeLabels: {},
+          waitingPaths: {},
+          result: undefined,
+          error: undefined,
+          timestamp: Date.now(),
+        };
+        await run.runStorage.writeSnapshot(
+          this.options?.pruneSnapshot && run.storageVersion === 1
+            ? this.options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
+            : initialSnapshot,
+          options?.resourceId,
+        );
+      }
+
+      return run;
+    };
+    // Only a caller-named run id can already have an instance; a minted one opens directly.
+    return options?.runId ? this.openRunOnce(runIdToUse, open) : open();
   }
 }
 

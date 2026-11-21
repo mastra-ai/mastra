@@ -4307,7 +4307,6 @@ export class Session<TState = unknown> {
   /** Settles once the previous `sendMessage` carrying scopes is admitted, so scoped messages start in send order. */
   #scopedSendTail: Promise<void> = Promise.resolve();
   #deferredAbortOrigin: { bindingGeneration: number; localOnly: boolean } | undefined;
-  readonly #abortTeardowns = new Set<Promise<void>>();
   /** Thread-settings persistence handle, injected by the AgentController via {@link setStore}. */
   #store: ThreadSettingsStore | undefined;
   /** Resolves a tool name to its category, injected by the AgentController via {@link setCategoryResolver} (the category map is AgentController config). */
@@ -4786,15 +4785,13 @@ export class Session<TState = unknown> {
         this.#releaseApprovalGates({ threadId: abortThreadId });
         return;
       }
-      this.#trackAbortTeardown(
-        this.runEngine
-          .settleSuspendedToolCallsAsDenied(suspendedToolCalls)
-          .catch(error => this.emit({ type: 'error', error: getErrorFromUnknown(error) }))
-          .finally(() => {
-            this.#releaseApprovalGates({ threadId: abortThreadId });
-            return this.#releaseSuspendedRuns(suspendedToolCalls, gatedRunId);
-          }),
-      );
+      void this.runEngine
+        .settleSuspendedToolCallsAsDenied(suspendedToolCalls)
+        .catch(error => this.emit({ type: 'error', error: getErrorFromUnknown(error) }))
+        .finally(() => {
+          this.#releaseApprovalGates({ threadId: abortThreadId });
+          void this.#releaseSuspendedRuns(suspendedToolCalls, gatedRunId);
+        });
       return;
     }
 
@@ -4806,36 +4803,20 @@ export class Session<TState = unknown> {
       // and start a successor run before it lands. Bind the teardown to this
       // binding and abort mode so it cannot abort that successor.
       const origin = { bindingGeneration: this.run.bindingGeneration(), localOnly: this.#localOnlyAbort };
-      this.#trackAbortTeardown(
-        this.runEngine
-          .settleSuspendedToolCallsAsDenied(suspendedToolCalls)
-          .catch(error => this.emit({ type: 'error', error: getErrorFromUnknown(error) }))
-          .finally(() => {
-            this.completeDeferredAbort(origin);
-            // Release only after the teardown: a parked run's snapshot is kept so a
-            // later resume can find it, and this abort makes the run terminal.
-            return this.#releaseSuspendedRuns(suspendedToolCalls);
-          }),
-      );
+      void this.runEngine
+        .settleSuspendedToolCallsAsDenied(suspendedToolCalls)
+        .catch(error => this.emit({ type: 'error', error: getErrorFromUnknown(error) }))
+        .finally(() => {
+          this.completeDeferredAbort(origin);
+          // Release only after the teardown: a parked run's snapshot is kept so a
+          // later resume can find it, and this abort makes the run terminal.
+          void this.#releaseSuspendedRuns(suspendedToolCalls);
+        });
       return;
     }
 
     this.stream.abort({ localOnly: this.#localOnlyAbort });
     this.run.requestAbort();
-  }
-
-  #trackAbortTeardown(teardown: Promise<unknown>): void {
-    const tracked = teardown.then(
-      () => {},
-      () => {},
-    );
-    this.#abortTeardowns.add(tracked);
-    void tracked.finally(() => this.#abortTeardowns.delete(tracked));
-  }
-
-  /** Resolves once every parked run an abort is denying has been settled and released. */
-  async abortSettled(): Promise<void> {
-    while (this.#abortTeardowns.size > 0) await Promise.all(this.#abortTeardowns);
   }
 
   async #releaseSuspendedRuns(suspendedToolCalls: Array<{ runId: string }>, liveRunId?: string | null): Promise<void> {
@@ -4844,20 +4825,10 @@ export class Session<TState = unknown> {
       // A live gated run finalizes (and cleans up) itself.
       if (runId === liveRunId) continue;
       try {
-        // Drop this process's hold on the parked run (stream, registry entries, cached
-        // workflow run) while its snapshot still reads as suspended, then the snapshot.
-        await this.#releaseParkedRunInMemory(runId);
         await this.machinery.releaseSuspendedRun(runId);
       } catch (error) {
         this.emit({ type: 'error', error: getErrorFromUnknown(error) });
       }
-    }
-  }
-
-  async #releaseParkedRunInMemory(runId: string): Promise<void> {
-    for (const agent of new Set([this.machinery.getAgent(), ...(this.machinery.getAgents?.() ?? [])])) {
-      const release = (agent as { releaseParkedRun?: (runId: string) => Promise<boolean> }).releaseParkedRun;
-      if (typeof release === 'function' && (await release.call(agent, runId))) return;
     }
   }
 

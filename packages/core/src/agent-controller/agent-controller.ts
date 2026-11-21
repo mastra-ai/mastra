@@ -942,8 +942,6 @@ export class AgentController<TState = {}> {
       this.#sessionDeletionPromises.set(session, deletion.tolerantPromise!);
       session.abort({ localOnly: true });
       try {
-        // Denying the parked runs also releases them from memory; finish that first.
-        await session.abortSettled();
         await session.thread.clearAndReleaseLock();
       } finally {
         // Notify inside the finally: even when lock release fails the session
