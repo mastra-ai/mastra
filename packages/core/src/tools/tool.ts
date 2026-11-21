@@ -4,7 +4,7 @@ import { resolveCurrentSpan } from '../observability/utils';
 import { RequestContext } from '../request-context';
 import { getRequestContextInputSource, REQUEST_CONTEXT_INPUT_SOURCE } from '../request-context/input-source';
 import { toStandardSchema } from '../schema';
-import type { PublicSchema, StandardSchemaWithJSON, InferPublicSchema } from '../schema';
+import type { PublicSchema, StandardSchemaWithJSON, InferPublicSchema, InferPublicSchemaInput } from '../schema';
 import type { SuspendOptions } from '../workflows';
 import { consumeBuilderValidatedInput } from './builder-validation-context';
 import { createToolObserve } from './observe';
@@ -221,7 +221,14 @@ export class Tool<
   >,
   TId extends string = string,
   TRequestContext extends Record<string, any> | unknown = unknown,
-> implements ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext> {
+  TRawOutput = TSchemaOut,
+> implements Omit<
+  ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext, TRawOutput>,
+  // `execute` is intentionally not part of this check: the class overrides the
+  // callback contract with the runtime signature, which validates output and so
+  // returns the transformed `TSchemaOut` rather than the raw `TRawOutput`.
+  'execute'
+> {
   /** Unique identifier for the tool */
   id: TId;
 
@@ -235,7 +242,7 @@ export class Tool<
   inputSchema?: StandardSchemaWithJSON<TSchemaIn>;
 
   /** Schema for validating output structure */
-  outputSchema?: StandardSchemaWithJSON<TSchemaOut>;
+  outputSchema?: StandardSchemaWithJSON<TRawOutput, TSchemaOut>;
 
   /** Schema for suspend operation data */
   suspendSchema?: StandardSchemaWithJSON<TSuspendSchema>;
@@ -422,10 +429,10 @@ export class Tool<
    */
   constructor(
     opts: Omit<
-      ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext>,
+      ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext, TRawOutput>,
       'execute'
     > & {
-      execute?: ToolExecuteFunction<TSchemaIn, TSchemaOut, TContext, TRequestContext>;
+      execute?: ToolExecuteFunction<TSchemaIn, TRawOutput, TContext, TRequestContext>;
     },
   ) {
     (this as any)[MASTRA_TOOL_MARKER] = true;
@@ -761,6 +768,7 @@ export class Tool<
  */
 type SchemaLike = PublicSchema<any> | undefined;
 type InferSchema<T extends SchemaLike> = T extends PublicSchema<any> ? InferPublicSchema<T> : unknown;
+type InferSchemaInput<T extends SchemaLike> = T extends PublicSchema<any, any> ? InferPublicSchemaInput<T> : unknown;
 
 type CreateToolOpts<
   TId extends string,
@@ -778,7 +786,8 @@ type CreateToolOpts<
     InferSchema<TResumeSchema>,
     TContext,
     TId,
-    TRequestContext
+    TRequestContext,
+    InferSchemaInput<TOutputSchema>
   >,
   'inputSchema' | 'outputSchema' | 'suspendSchema' | 'resumeSchema' | 'execute'
 > & {
@@ -786,7 +795,7 @@ type CreateToolOpts<
   outputSchema?: TOutputSchema;
   suspendSchema?: TSuspendSchema;
   resumeSchema?: TResumeSchema;
-  execute?: ToolExecuteFunction<InferSchema<TInputSchema>, InferSchema<TOutputSchema>, TContext, TRequestContext>;
+  execute?: ToolExecuteFunction<InferSchema<TInputSchema>, InferSchemaInput<TOutputSchema>, TContext, TRequestContext>;
 };
 /**
  * Defines a tool with a description, input/output schemas, and an execution function.
@@ -831,7 +840,8 @@ export function createTool<
   InferSchema<TResumeSchema>,
   TContext,
   TId,
-  TRequestContext
+  TRequestContext,
+  InferSchemaInput<TOutputSchema>
 > {
   return new Tool(opts);
 }
