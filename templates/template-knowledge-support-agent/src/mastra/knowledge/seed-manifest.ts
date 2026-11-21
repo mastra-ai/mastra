@@ -1,5 +1,6 @@
 import { readFile, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { fromMarkdown } from 'mdast-util-from-markdown';
 import {
   assertKnowledgeNoteTextWithinBound,
   assertKnowledgePageDescriptionWithinBound,
@@ -23,6 +24,8 @@ export interface DatasetConfiguration {
   mandatoryPolicies: { profileId: string; pageKey: string; ref?: string }[];
 }
 
+export const MAX_SUPPORT_RECORD_BODY_LENGTH = 1_000_000;
+
 export interface SupportRecord {
   topicTags: string[];
   observedOn: string;
@@ -45,7 +48,8 @@ export interface PreparedPage {
   description: string;
   body: string;
   marker: string;
-  refs: string[];
+  links: Map<string, number>;
+  unexpectedBodyRefs: string[];
   notes: PreparedNote[];
 }
 export interface PreparedDataset {
@@ -60,11 +64,11 @@ function object(value: unknown, fields: string[], label: string): Record<string,
   if (Object.keys(obj).some(key => !fields.includes(key))) throw new Error(`Unknown field in ${label}`);
   return obj;
 }
-function string(value: unknown, label: string, max = 1000): string {
+function string(value: unknown, label: string, max = 1000, preserveIndentation = false): string {
   if (
     typeof value !== 'string' ||
     !value.trim() ||
-    value !== value.trim() ||
+    (!preserveIndentation && value !== value.trim()) ||
     value.length > max ||
     /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(value)
   ) {
@@ -163,11 +167,11 @@ function canLink(from: ReturnType<typeof placement>, to: ReturnType<typeof place
 
 /** Conservative link grammar: managed wiki aliases/canonical refs, HTTPS/HTTP URLs, and local anchors. */
 function renderLinks(text: string, resolveAlias: (ref: string) => string) {
-  const refs = new Set<string>();
+  const links = new Map<string, number>();
   const rendered = text.replace(/\[\[([\s\S]*?)\]\]/gu, (_, raw: string) => {
     if (raw !== raw.trim() || /[\[\]\r\n]/u.test(raw)) throw new Error('Ambiguous wiki link');
     const ref = resolveAlias(raw);
-    refs.add(ref);
+    links.set(ref, (links.get(ref) ?? 0) + 1);
     return `[[${ref}]]`;
   });
   const markdown = rendered.replace(/\[\[[^\[\]]+\]\]/gu, '\u0000');
@@ -185,11 +189,43 @@ function renderLinks(text: string, resolveAlias: (ref: string) => string) {
   if (/\b(?:https?:\/\/|www\.)[^\s/?#]*@/iu.test(rendered)) throw new Error('Unsafe Markdown URL authority');
   // A malformed wiki link must never turn into an unmanaged native reference.
   if (markdown.includes('[[')) throw new Error('Malformed wiki link');
-  return { text: rendered, refs: [...refs] };
+  return { text: rendered, links };
 }
 
-// Match the native indexer's code exclusion before deriving expected body edges.
-function indexableBodyRefs(body: string) {
+type MarkdownNode = {
+  type: string;
+  position?: { start: { offset?: number }; end: { offset?: number } };
+  children?: MarkdownNode[];
+};
+
+function renderBodyLinks(body: string, resolveAlias: (ref: string) => string, generatedOffset: number) {
+  const code: string[] = [];
+  const parts: string[] = [];
+  let offset = 0;
+  function maskCode(node: MarkdownNode) {
+    if (node.type !== 'code' && node.type !== 'inlineCode') {
+      node.children?.forEach(maskCode);
+      return;
+    }
+    const start = node.position?.start.offset;
+    const end = node.position?.end.offset;
+    if (start === undefined || end === undefined) return;
+    if (start < generatedOffset && end > generatedOffset)
+      throw new Error('Unclosed Markdown code block before generated page content');
+    parts.push(body.slice(offset, start), `\u0000${code.push(body.slice(start, end)) - 1}\u0000`);
+    offset = end;
+  }
+  maskCode(fromMarkdown(body));
+  parts.push(body.slice(offset));
+  const rendered = renderLinks(parts.join(''), resolveAlias);
+  return {
+    ...rendered,
+    text: rendered.text.replace(/\u0000(\d+)\u0000/gu, (_, index: string) => code[Number(index)]!),
+  };
+}
+
+// Installed Knowledge releases may index code forms such as indented blocks as prose.
+function nativeBodyRefs(body: string) {
   const prose = body
     .replace(/^(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^\1[ \t]*$|(?![\s\S]))/gmu, '')
     .replace(/(`+)[\s\S]*?\1/gu, '');
@@ -264,7 +300,15 @@ export async function prepareDataset(
     const description = obj.description === undefined ? undefined : line(obj.description, 'description', 1000);
     assertKnowledgePageDescriptionWithinBound(description);
     const file = string(obj.file, 'Markdown file', 500);
-    const body = string((await containedFile(root, file)).replace(/\r\n/g, '\n').trim(), 'Markdown body', 1_000_000);
+    const body = string(
+      (await containedFile(root, file))
+        .replace(/\r\n/g, '\n')
+        .replace(/^(?:[ \t]*\n)+/u, '')
+        .trimEnd(),
+      'Markdown body',
+      MAX_SUPPORT_RECORD_BODY_LENGTH,
+      true,
+    );
     const envelopes = [...body.matchAll(/^```support-record\n([\s\S]*?)\n```[ \t]*$/gmu)];
     if (envelopes.length > 1 || (envelopes.length && obj.record !== undefined))
       throw new Error('Duplicate support record envelope');
@@ -306,7 +350,8 @@ export async function prepareDataset(
     };
     const render = (text: string) => renderLinks(text, lookup).text;
     const envelope = page.envelope;
-    let markdown = render(envelope ? page.body.slice(0, envelope.index) : page.body);
+    let markdown = page.body;
+    const generated: string[] = [];
     if (page.record) {
       const { summary, applicability } = page.record;
       const record = validateSupportRecord({
@@ -318,27 +363,35 @@ export async function prepareDataset(
         envelope && record.summary === summary && record.applicability === applicability
           ? envelope[0]
           : `\`\`\`support-record\n${JSON.stringify(record, null, 2)}\n\`\`\``;
-      markdown += envelope ? fence + render(page.body.slice(envelope.index + envelope[0].length)) : `\n\n${fence}`;
+      if (envelope)
+        markdown = page.body.slice(0, envelope.index) + fence + page.body.slice(envelope.index + envelope[0].length);
+      else generated.push(fence);
     }
-    const parts = [markdown];
     let hasHttpsSource = false;
     if (page.input.source !== undefined) {
       const source = object(page.input.source, ['kind', 'url', 'verifiedOn', 'license'], 'source');
       const sourceUrl = source.url === undefined ? undefined : url(source.url);
       hasHttpsSource = sourceUrl !== undefined && /^https:\/\//iu.test(sourceUrl);
-      parts.push(
-        render(
-          `Source: ${line(source.kind, 'source kind')}${sourceUrl === undefined ? '' : ` (${sourceUrl})`}${source.verifiedOn === undefined ? '' : `; verified ${date(source.verifiedOn, 'source verification date')}`}${source.license === undefined ? '' : `; license: ${line(source.license, 'source license')}`}.`,
-        ),
+      generated.push(
+        `Source: ${line(source.kind, 'source kind')}${sourceUrl === undefined ? '' : ` (${sourceUrl})`}${source.verifiedOn === undefined ? '' : `; verified ${date(source.verifiedOn, 'source verification date')}`}${source.license === undefined ? '' : `; license: ${line(source.license, 'source license')}`}.`,
       );
     }
     if (page.input.links !== undefined) {
       const links = array(page.input.links, 'links', 100).map(value => lookup(key(value, 'link alias')));
       if (new Set(links).size !== links.length) throw new Error('Duplicate link alias');
-      parts.push(render(links.map(ref => `- [[${ref}]]`).join('\n')));
+      generated.push(links.map(ref => `- [[${ref}]]`).join('\n'));
     }
+    const renderedBody = renderBodyLinks(
+      [markdown, ...generated].filter(Boolean).join('\n\n'),
+      lookup,
+      markdown.length,
+    );
     const marker = pageMarker(config.id, alias);
-    const body = `${marker}\n${hasHttpsSource ? `${httpsSourceMarker}\n` : ''}${parts.filter(Boolean).join('\n\n')}\n`;
+    const body = `${marker}\n${hasHttpsSource ? `${httpsSourceMarker}\n` : ''}${renderedBody.text}\n`;
+    if ((page.record || page.input.kind === 'case') && body.length > MAX_SUPPORT_RECORD_BODY_LENGTH)
+      throw new Error(
+        `Rendered support record in ${page.file} exceeds the ${MAX_SUPPORT_RECORD_BODY_LENGTH}-character read bound`,
+      );
     if (mandatoryPolicyKeys.has(alias) || page.ref === requiredPolicyReference(page.placement.profile)) {
       const issue = requiredPolicyContentIssue(body);
       if (issue) throw new Error(`Invalid required policy ${page.ref} in ${page.file}. ${issue}.`);
@@ -357,10 +410,14 @@ export async function prepareDataset(
         key: noteKey,
         text,
         marker,
-        refs: rendered.refs,
+        refs: [...rendered.links.keys()],
         when: obj.date === undefined ? undefined : new Date(date(obj.date, 'note date')),
       };
     });
+    const links = new Map([...renderedBody.links].slice(0, MAX_KNOWLEDGE_PAGE_BODY_LINKS));
+    const unexpectedBodyRefs = nativeBodyRefs(body)
+      .filter(ref => !links.has(ref))
+      .map(knowledgeLinkRefKey);
     return {
       key: alias,
       scope: page.placement.scope,
@@ -369,7 +426,8 @@ export async function prepareDataset(
       description: page.description ?? '',
       body,
       marker,
-      refs: indexableBodyRefs(body),
+      links,
+      unexpectedBodyRefs,
       notes,
     };
   });

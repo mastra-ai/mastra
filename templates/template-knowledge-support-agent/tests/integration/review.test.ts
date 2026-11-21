@@ -166,12 +166,15 @@ async function fixture() {
         ],
       }),
     );
-    await seedDataset({
-      id: 'synthetic',
-      directory: f.directory,
-      profiles: [f.credentials[0]!.profile],
-      mandatoryPolicies: [],
-    });
+    await seedDataset(
+      {
+        id: 'synthetic',
+        directory: f.directory,
+        profiles: [f.credentials[0]!.profile],
+        mandatoryPolicies: [],
+      },
+      { databaseUrl: f.databaseUrl },
+    );
   } catch (error) {
     await f.close().catch(() => undefined);
     throw error;
@@ -438,7 +441,7 @@ test(
 
       f.select(candidate('transient-write-contention'));
       const busy = await pending(f, input);
-      const lock = await acquireWriterLock();
+      const lock = await acquireWriterLock(f.databaseUrl);
       try {
         assert.equal((await resume(f, busy)).status, 'suspended');
         assert.deepEqual(await snapshot(f), before);
@@ -676,7 +679,7 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
 
     // A live competing writer suspends publication after a durable decision without an effect.
     const busy = await next({ evidence: [] }, freshInput);
-    const lock = await acquireWriterLock();
+    const lock = await acquireWriterLock(f.databaseUrl);
     try {
       await unchanged(async () => {
         assert.equal((await resume(f, busy)).status, 'suspended');
@@ -734,7 +737,7 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
     // Repeat the timing boundary: each pair races for one approved suspended publication.
     for (let attempt = 0; attempt < 20; attempt++) {
       const racing = await next({ evidence: [] }, freshInput);
-      const held = await acquireWriterLock();
+      const held = await acquireWriterLock(f.databaseUrl);
       try {
         assert.equal((await resume(f, racing)).status, 'suspended');
       } finally {
@@ -838,7 +841,7 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
         [
           '--input-type=module',
           '-e',
-          "const { acquireWriterLock } = await import('./src/mastra/knowledge/writer-lock.ts'); await acquireWriterLock();",
+          `const { acquireWriterLock } = await import('./src/mastra/knowledge/writer-lock.ts'); await acquireWriterLock(${JSON.stringify(f.databaseUrl)});`,
         ],
         { timeout: 10000 },
       );
@@ -929,7 +932,7 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
           BEGIN INSERT INTO review_recovery_checkpoints VALUES(json(NEW.snapshot)); END`,
         );
       const before = await snapshot(f);
-      const held = boundary === 'before-publisher' ? await acquireWriterLock() : undefined;
+      const held = boundary === 'before-publisher' ? await acquireWriterLock(f.databaseUrl) : undefined;
       let completed;
       try {
         completed = await resume(f, interrupted);
@@ -1022,9 +1025,12 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
     );
     for (let index = 0; index < 1000; index++)
       await f.supportKnowledge.addNote({ scope: customer, path, text: `Existing observation ${index}` });
-    assert.match(await interruptAndRecover(interruptedNote), /\?note=/u);
+    const noteRef = await interruptAndRecover(interruptedNote, undefined, () =>
+      f.supportKnowledge.addNote({ scope: customer, path, text: 'An unrelated observation after the commit' }),
+    );
+    assert.equal(noteRef, `${customer}#${path}?note=${interruptedNote.proposal.id}`);
     const store = await f.supportKnowledge.getStorage();
-    assert.deepEqual(await store.countNotes({ pageIds: [page.id], read: 'all' }), { [page.id]: 1001 });
+    assert.deepEqual(await store.countNotes({ pageIds: [page.id], read: 'all' }), { [page.id]: 1002 });
   } finally {
     await f.close();
   }

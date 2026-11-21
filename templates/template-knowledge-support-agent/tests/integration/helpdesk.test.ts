@@ -94,9 +94,13 @@ test(
       return { runId, state };
     };
     try {
-      const seeded = await seedDataset(datasets['it-helpdesk']!);
+      const seeded = await seedDataset(datasets['it-helpdesk']!, { databaseUrl: f.databaseUrl });
       assert.equal(seeded.pages.length, 4);
-      assert.ok((await seedDataset(datasets['it-helpdesk']!)).pages.every(page => page.status === 'unchanged'));
+      assert.ok(
+        (await seedDataset(datasets['it-helpdesk']!, { databaseUrl: f.databaseUrl })).pages.every(
+          page => page.status === 'unchanged',
+        ),
+      );
       await f.start();
       const threadId = await newThread();
       const response = await json(

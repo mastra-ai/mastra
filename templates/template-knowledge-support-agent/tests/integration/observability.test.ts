@@ -17,6 +17,7 @@ test('aborted Knowledge tools persist aborted metrics', async () => {
   const mastra = new Mastra({ storage, observability, logger: false });
   const instance = mastra.observability?.getDefaultInstance();
   const client = createClient({ url });
+  const errors: unknown[] = [];
   try {
     assert.ok(instance);
     instance.startSpan({ name: 'knowledge_list', type: SpanType.TOOL_CALL }).end({ outcome: 'abort' });
@@ -35,10 +36,23 @@ test('aborted Knowledge tools persist aborted metrics', async () => {
         ['support_operation_duration_ms', 'abort'],
       ],
     );
+  } catch (error) {
+    errors.push(error);
   } finally {
-    await instance?.shutdown();
-    client.close();
-    await storage.close();
-    await rm(directory, { recursive: true, force: true });
+    for (const cleanup of [
+      () => instance?.shutdown(),
+      () => client.close(),
+      () => storage.close(),
+      () => rm(directory, { recursive: true, force: true }),
+    ]) {
+      try {
+        await cleanup();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
   }
+  if (errors.length === 1) throw errors[0];
+  if (errors.length)
+    throw new AggregateError(errors, 'Observability verification or cleanup failed', { cause: errors[0] });
 });

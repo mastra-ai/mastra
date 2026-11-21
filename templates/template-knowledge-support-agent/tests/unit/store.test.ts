@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
 import { pathToFileURL } from 'node:url';
+import { localDatabasePath } from '../../src/mastra/database/database-file.ts';
 import { resolveStoreConfiguration } from '../../src/mastra/database/store.ts';
 
 const databaseUrl = 'postgresql://support:synthetic%40password@example.invalid/support?sslmode=require';
@@ -11,6 +12,10 @@ const local = { backend: 'libsql', url: pathToFileURL(resolve('.local/support.db
 
 test('selects the persistent local store for development and requires a managed store on Mastra Platform', () => {
   assert.deepEqual(resolveStoreConfiguration({}), local);
+  assert.equal(localDatabasePath(local.url), resolve('.local/support.db'));
+  for (const invalid of ['file:', 'file::memory:', 'file:bad%00path']) {
+    assert.throws(() => localDatabasePath(invalid), /Expected a persistent local file database/u);
+  }
   assert.deepEqual(resolveStoreConfiguration({ DATABASE_PROVIDER: '  ' }), local);
   assert.deepEqual(resolveStoreConfiguration({ DATABASE_PROVIDER: 'local', DATABASE_URL: databaseUrl }), local);
   assert.deepEqual(resolveStoreConfiguration({ SUPPORT_MODE: 'local', ...turso, DATABASE_URL: databaseUrl }), local);

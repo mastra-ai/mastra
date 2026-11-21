@@ -180,6 +180,10 @@ test('seed_rejects_an_invalid_rendered_policy_without_changing_stored_knowledge'
     for (const [body, reason] of [
       [oversized, /exceeds the 800-character limit/u],
       ['# Safe changes\n\n[[connection-guide]]', /substantive policy instructions/u],
+      [
+        '# Safe changes\n\n> Source: Archived product documentation from the regional equipment maintenance library.',
+        /substantive policy instructions/u,
+      ],
       [`# Safe changes\n\n${recordOnly}`, /substantive policy instructions/u],
       [
         '# Safe changes\n\n[Reference catalog vendor handbook product documentation](https://example.com/manual)',
@@ -200,8 +204,64 @@ test('seed_rejects_an_invalid_rendered_policy_without_changing_stored_knowledge'
         assert.deepEqual(await f.snapshot(), before, 'The active policy version and other Knowledge must be preserved');
       }
     }
-    await writeFile(policyPath, `# Safe changes\n\n${instructions.trim()}\n\n${recordOnly}`);
+    await writeFile(policyPath, `# Safe changes\n\n> ${instructions.trim()}\n\n${recordOnly}`);
     await f.cli();
+  } finally {
+    await f.close();
+  }
+});
+
+test('seed preserves wiki syntax in code alongside managed prose links', { timeout: 30000 }, async () => {
+  const f = await fixture();
+  try {
+    const manifest = await f.readManifest();
+    manifest.pages[2]!.links = [];
+    await f.saveManifest(manifest);
+    const caseFile = join(dirname(f.manifestFile), manifest.pages[2]!.file);
+    const code = [
+      '    [[docs:north#guides/connectivity]] [[indented-placeholder]]',
+      '',
+      '`[[example-placeholder]]`',
+      '',
+      '```text',
+      '[[connection-guide]] [[example-placeholder]]',
+      '```',
+      '',
+      '~~~text',
+      '[[example-placeholder]]',
+      '~~~',
+      '',
+      '> ~~~text',
+      '> [[docs:north#guides/connectivity]] [[quoted-placeholder]]',
+      '> ~~~',
+    ].join('\n');
+    await writeFile(caseFile, `${code}\n\nSee [[connection-guide]].\n`);
+    const report = (await f.cli()).report;
+    const casePage = page(report, 'store-case');
+    const guide = page(report, 'connection-guide');
+    assert.ok(casePage.id);
+    const caseId = casePage.id;
+    const stored = await f.knowledge(async (_, store) => {
+      const edges = await store.listPageLinks({
+        pageIds: [caseId],
+        read: 'all',
+        direction: 'out',
+        kinds: ['body'],
+      });
+      assert.deepEqual(
+        edges.map(edge => [edge.toPageId, edge.count]),
+        [[guide.id, 1]],
+      );
+      return store.getPage({ id: caseId, read: 'all' });
+    });
+    assert.ok(stored?.body?.includes(code));
+    assert.ok(stored?.body?.includes(`See [[${guide.destination}]].`));
+    assert.equal((await f.cli()).report.repairedLinks, false, 'A repeated seed preserves the corrected link index');
+
+    const stable = await f.snapshot();
+    await writeFile(caseFile, '# Example\n\n~~~text\n[[example-placeholder]]');
+    assert.match((await f.cli({ code: 1 })).output, /Unclosed Markdown code block before generated page content/u);
+    assert.deepEqual(await f.snapshot(), stable);
   } finally {
     await f.close();
   }
@@ -491,30 +551,34 @@ test('seed_rejects_invalid_input_and_recovers_partial_note_update', { timeout: 1
     const first = (await f.cli()).report;
     const guide = page(first, 'connection-guide');
     const history = page(first, 'store-case');
-    const invalid: Array<[string, (manifest: Manifest) => void, RegExp?]> = [
+    const invalid: Array<[string, (manifest: Manifest) => void, RegExp]> = [
       [
         'schema version',
         manifest => {
           manifest.schemaVersion = 2;
         },
+        /Incompatible dataset manifest/u,
       ],
       [
         'duplicate alias',
         manifest => {
           manifest.pages[1]!.key = manifest.pages[0]!.key;
         },
+        /Duplicate page key/u,
       ],
       [
         'canonical collision',
         manifest => {
           manifest.pages.push({ ...manifest.pages[0]!, key: 'duplicate-destination' });
         },
+        /Duplicate or ambiguous canonical destination/u,
       ],
       [
         'unsafe destination',
         manifest => {
           manifest.pages[2]!.path = '../escape';
         },
+        /Expected a normalized path key/u,
       ],
       [
         'missing file',
@@ -535,6 +599,7 @@ test('seed_rejects_invalid_input_and_recovers_partial_note_update', { timeout: 1
         manifest => {
           manifest.pages[2]!.file = outside;
         },
+        /Expected a relative Markdown file/u,
       ],
       [
         'symlink escape',
@@ -548,6 +613,7 @@ test('seed_rejects_invalid_input_and_recovers_partial_note_update', { timeout: 1
         manifest => {
           manifest.pages[2]!.links = ['missing-alias'];
         },
+        /Unknown link alias or unmanaged reference: missing-alias/u,
       ],
       [
         'shared to private canonical reference',
@@ -556,12 +622,14 @@ test('seed_rejects_invalid_input_and_recovers_partial_note_update', { timeout: 1
             { key: 'unsafe', text: 'Private [[customer:north:store-1#cases/connection-check]]' },
           ];
         },
+        /Link crosses its audience: customer:north:store-1#cases\/connection-check/u,
       ],
       [
         'unmanaged native reference',
         manifest => {
           manifest.pages[2]!.notes![0]!.text = 'Unknown [[customer:north:store-1#unmanaged]]';
         },
+        /Unknown link alias or unmanaged reference: customer:north:store-1#unmanaged/u,
       ],
       [
         'wrong customer reference',
@@ -574,18 +642,21 @@ test('seed_rejects_invalid_input_and_recovers_partial_note_update', { timeout: 1
           });
           manifest.pages[2]!.links = ['other-case'];
         },
+        /Link crosses its audience: other-case/u,
       ],
       [
         'unsafe source URL',
         manifest => {
           manifest.pages[2]!.source = { kind: 'fixture', url: 'javascript:alert(1)' };
         },
+        /Unsafe source URL/u,
       ],
       [
         'credential-bearing source URL',
         manifest => {
           manifest.pages[2]!.source = { kind: 'fixture', url: 'https://secret:password@example.com/source' };
         },
+        /Unsafe source URL/u,
       ],
       [
         'array placement kind',
@@ -613,30 +684,35 @@ test('seed_rejects_invalid_input_and_recovers_partial_note_update', { timeout: 1
         manifest => {
           manifest.pages[1]!.kind = 'reference';
         },
+        /Invalid mandatory policy mapping/u,
       ],
       [
         'foreign mandatory policy',
         manifest => {
           manifest.pages[1]!.scope.profile = 'south-store';
         },
+        /Invalid mandatory policy mapping/u,
       ],
       [
         'invalid record',
         manifest => {
           manifest.pages[2]!.record!.observedOn = '2026-02-30';
         },
+        /Invalid observation date/u,
       ],
       [
         'invalid note date',
         manifest => {
           manifest.pages[2]!.notes![0]!.date = '2026-02-30';
         },
+        /Invalid note date/u,
       ],
       [
         'fixture ownership marker',
         manifest => {
           manifest.pages[2]!.notes![0]!.text = 'Seed note: retail-pos/store-case/injected';
         },
+        /Reserved seed marker in note text/u,
       ],
     ];
     const stable = await f.snapshot();
@@ -646,8 +722,7 @@ test('seed_rejects_invalid_input_and_recovers_partial_note_update', { timeout: 1
       mutate(manifest);
       await f.saveManifest(manifest);
       const rejected = await f.cli({ code: 1 });
-      if (expectedError) assert.match(rejected.output, expectedError, label);
-      else assert.ok(rejected.output.trim().length, label);
+      assert.match(rejected.output, expectedError, label);
       assert.deepEqual(await f.snapshot(), stable, `${label} changed stored Knowledge`);
     }
     await f.cli({ url: pathToFileURL(join(f.directory, 'invalid-fresh.db')).href, code: 1 });
@@ -667,6 +742,15 @@ test('seed_rejects_invalid_input_and_recovers_partial_note_update', { timeout: 1
       assert.deepEqual(await f.snapshot(), stable);
     }
     await writeFile(bodyPath, originalBody);
+    const caseFile = join(dirname(f.manifestFile), original.pages[2]!.file);
+    const caseBody = await readFile(caseFile, 'utf8');
+    const normalized = caseBody.trim();
+    const fullBody = normalized + '\n\n' + 'x'.repeat(1_000_000 - normalized.length - 2);
+    await writeFile(caseFile, fullBody);
+    const oversized = await f.cli({ code: 1 });
+    assert.match(oversized.output, /Rendered support record.*exceeds the 1000000-character read bound/u);
+    assert.deepEqual(await f.snapshot(), stable);
+    await writeFile(caseFile, caseBody);
     // Reject destination spellings whose CommonMark/GFM interpretation can bypass literal URL checks.
     const unsafeDestinations = [
       [

@@ -16,7 +16,7 @@ export function requiredPolicyContentIssue(body: string): string | undefined {
   if (body.length > maxPolicyCharacters) return `Rendered body exceeds the ${maxPolicyCharacters}-character limit`;
 
   // Seed attribution, headings, links, and code blocks alone cannot satisfy a mandatory policy.
-  const markdown = body.replace(/<!--[\s\S]*?-->|\[\[[\s\S]*?\]\]|^Source:.*$/gmu, '');
+  const markdown = body.replace(/<!--[\s\S]*?-->|\[\[[\s\S]*?\]\]|^[ \t]*(?:>[ \t]*)*Source:.*$/gmu, '');
   const document = fromMarkdown(markdown, {
     extensions: [gfmAutolinkLiteral()],
     mdastExtensions: [gfmAutolinkLiteralFromMarkdown()],

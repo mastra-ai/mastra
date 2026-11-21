@@ -40,9 +40,12 @@ export function loadCredentials(file: string, studioRole: string | undefined): C
 
   const data: unknown = JSON.parse(readFileSync(file, 'utf8'));
   if (!Array.isArray(data) || !data.length) throw new Error('Local credentials are missing');
+  const tokens = new Set<string>();
   return data.map(entry => {
     if (typeof entry.token !== 'string' || entry.token.length < 32 || !Number.isFinite(entry.expiresAt))
       throw new Error('Invalid local credentials');
+    if (tokens.has(entry.token)) throw new Error('Duplicate local credential token');
+    tokens.add(entry.token);
     const profile = entry.profile;
     if (profile?.role !== studioRole) throw new Error('Invalid local role');
     validateProfile(profile);

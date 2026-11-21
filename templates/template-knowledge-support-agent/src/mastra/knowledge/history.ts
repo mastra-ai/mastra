@@ -3,7 +3,7 @@ import type { Knowledge, KnowledgePage, KnowledgeNote } from '@mastra/core/knowl
 import { supportConfiguration } from '../../examples/support.ts';
 import { principals, type Profile } from '../identity.ts';
 import { recordOperation } from '../observability.ts';
-import { validateSupportRecord, type SupportRecord } from './seed-manifest.ts';
+import { MAX_SUPPORT_RECORD_BODY_LENGTH, validateSupportRecord, type SupportRecord } from './seed-manifest.ts';
 
 // Search prioritizes relevant pages beyond the enumeration window. Neither native search nor
 // this bounded fallback promises exhaustive ranking across an arbitrarily large history.
@@ -24,7 +24,7 @@ export type History = {
 };
 
 function record(body = ''): SupportRecord | undefined {
-  if (body.length > 1_000_000) throw new Error('Support record exceeds the read bound');
+  if (body.length > MAX_SUPPORT_RECORD_BODY_LENGTH) throw new Error('Support record exceeds the read bound');
   const envelopes = [...body.matchAll(/^```support-record\n([\s\S]*?)\n```[ \t]*$/gmu)];
   if (!envelopes.length && !body.includes('```support-record')) return;
   if (envelopes.length !== 1) throw new Error('Invalid support record');
@@ -61,7 +61,7 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
     let historyReadable = false;
     const candidates = new Map<string, KnowledgePage>();
     const pages = new Map<string, KnowledgePage>();
-    const noteHits = new Map<string, KnowledgeNote[]>();
+    const noteHits = new Map<string, Set<string>>();
     const add = (page: KnowledgePage) => {
       if (page.scopeId !== customer.id || page.isScope || page.deletedAt) return;
       if (candidates.size >= bounds.candidates && !candidates.has(page.id)) {
@@ -82,8 +82,8 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
         for (const hit of hits) {
           add(hit.page);
           if (hit.type === 'note' && candidates.has(hit.page.id)) {
-            const notes = noteHits.get(hit.page.id) ?? [];
-            if (!notes.some(note => note.id === hit.note.id)) notes.push(hit.note);
+            const notes = noteHits.get(hit.page.id) ?? new Set<string>();
+            notes.add(hit.note.id);
             noteHits.set(hit.page.id, notes);
           }
         }
@@ -186,9 +186,15 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
           partial = true;
         }
       };
-      // Native note hits already passed the scoped reader's stamps/mentions visibility checks.
-      // Keep relevant notes even when they fall outside the oldest-first listing window.
-      for (const note of noteHits.get(page.id) ?? []) includeNote(note);
+      // Keep relevant hits outside the listing window, using their current visibility and text.
+      for (const id of noteHits.get(page.id) ?? []) {
+        try {
+          const note = await store.getNote({ id, read });
+          if (note) includeNote(note);
+        } catch {
+          partial = true;
+        }
+      }
       if (noteCounts[page.id] === 0) return;
       try {
         let cursor: string | undefined;

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { createHash } from 'node:crypto';
 import { confirmationReferenceSchema } from './confirmation.ts';
 import { validateSupportRecord } from '../knowledge/seed-manifest.ts';
 import { assertKnowledgeNoteTextWithinBound, assertKnowledgePageDescriptionWithinBound } from '@mastra/core/knowledge';
@@ -90,6 +91,10 @@ export const candidateSchema = z
       context.addIssue({ code: 'custom', message: 'Content contains an unvalidated evidence link' });
   });
 
+export function digest(value: unknown) {
+  return createHash('sha256').update(JSON.stringify(value)).digest('hex');
+}
+
 export function publishedText(proposal: {
   id: string;
   revision: string;
@@ -141,6 +146,25 @@ export const proposalSchema = z
       });
       return;
     }
+    if (source.audience === 'tenant') {
+      const sharedText = [
+        candidate.title,
+        candidate.content,
+        candidate.record.summary,
+        candidate.record.applicability,
+        ...candidate.record.topicTags,
+      ].join('\n');
+      if (
+        /\[\[|\]\(|(?:customer|resource|thread):|https?:\/\/|\b(?:bearer\s+\S+|sk-[a-z0-9]{12,}|(?:api[_ -]?key|password|secret|token)\s*[:=])|(?:\d[ -]?){13,19}/iu.test(
+          sharedText,
+        )
+      )
+        context.addIssue({
+          code: 'custom',
+          path: ['candidate'],
+          message: 'Shared text contains private links, credentials, or payment-like data',
+        });
+    }
     try {
       if (candidate.action === 'note') assertKnowledgeNoteTextWithinBound(publishedText(proposal));
       else assertKnowledgePageDescriptionWithinBound(candidate.record.summary);
@@ -157,6 +181,14 @@ export const approvalSchema = approvalDecisionSchema
   .refine(({ proposal, decision }) => proposal.revision === decision.revision, {
     message: 'Decision revision mismatch',
     path: ['decision', 'revision'],
+  })
+  .refine(({ proposal }) => digest({ ...proposal, revision: undefined }) === proposal.revision, {
+    message: 'Approved revision mismatch',
+    path: ['proposal', 'revision'],
+  })
+  .refine(({ proposal, reviewerId }) => reviewerId === proposal.reviewer.actorId, {
+    message: 'Decision reviewer mismatch',
+    path: ['reviewerId'],
   });
 
 export function sameDecision(recorded: z.infer<typeof decisionSchema>, retry: z.infer<typeof decisionSchema>) {

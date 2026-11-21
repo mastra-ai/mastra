@@ -235,12 +235,14 @@ export async function demoFixture(example: 'retail-pos' | 'software-integration'
       reuse = reference;
     },
     async seed(id = alternate ? 'software-integration' : 'retail-pos-docs') {
-      return seedDataset(configs[id]!);
+      return seedDataset(configs[id]!, { databaseUrl: f.databaseUrl });
     },
     async revisePolicy() {
       const path = join(copied, alternate ? 'software-integration/policy.md' : 'retail-pos/retail-policy.md');
       await writeFile(path, `${await readFile(path, 'utf8')}\nExample team policy: ${sentinels.policy}.\n`);
-      return seedDataset(configs[alternate ? 'software-integration' : 'retail-pos-docs']!);
+      return seedDataset(configs[alternate ? 'software-integration' : 'retail-pos-docs']!, {
+        databaseUrl: f.databaseUrl,
+      });
     },
     candidate(label: string, shared = false): Candidate {
       return {
@@ -361,9 +363,19 @@ export function providerInput(f: Fixture, start: number) {
 export async function assertCitations(f: Fixture, text: string, owner = f.owner) {
   const refs = [...text.matchAll(/\[((?:docs|tenant|customer):[^\]\s]+)\]/gu)].map(match => match[1]!);
   assert.ok(refs.length, 'Scored answer must cite visible evidence');
-  for (const ref of refs) await read(f, ref, owner);
-  for (const match of text.matchAll(/https:\/\/[^\s)]+/gu))
-    assert.ok((demoCorpus.sources as readonly string[]).includes(match[0]), `Unsupported URL ${match[0]}`);
+  const evidence = new Map<string, string>();
+  for (const ref of new Set(refs)) {
+    const { page } = await read(f, ref, owner);
+    const source = /^Source: [^\n]* \((https:\/\/[^\s)]+)\)/mu.exec(page?.body ?? '');
+    if (source) evidence.set(ref, source[1]!);
+  }
+  for (const match of text.matchAll(/https?:\/\/[^\s)]+/giu)) {
+    const url = match[0];
+    assert.ok((demoCorpus.sources as readonly string[]).includes(url), `Unsupported URL ${url}`);
+    const ref = /\[((?:docs|tenant|customer):[^\]\s]+)\][ \t]*\($/u.exec(text.slice(0, match.index))?.[1];
+    assert.ok(ref, `URL ${url} must accompany a page citation`);
+    assert.equal(evidence.get(ref), url, `Public source URL does not match evidence ${ref}`);
+  }
   assert.doesNotMatch(text, /RETAILOPS_STORE73|FIELDRETAIL_STORE42|unsupported\.example/u);
 }
 export async function sql(f: Fixture, query: string, parameters: unknown[] = []): Promise<Record<string, any>[]> {

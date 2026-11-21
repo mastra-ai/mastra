@@ -5,6 +5,7 @@ import { mkdtemp, writeFile, rm, readFile } from 'node:fs/promises';
 import { createConnection } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { setTimeout } from 'node:timers/promises';
 import { exampleProfiles, exampleStudioRole } from '../../src/examples/retail-pos/profiles.ts';
 import type { Profile } from '../../src/mastra/identity.ts';
@@ -24,7 +25,30 @@ interface RuntimeOptions {
 interface RuntimeProcess {
   launcher: ReturnType<typeof spawn>;
   closed: boolean;
+  bound: boolean;
   error?: Error;
+}
+
+// Setup temporarily selects the database and model for the in-process Mastra import.
+let environmentQueue: Promise<unknown> = Promise.resolve();
+function withRuntimeEnvironment<T>(
+  overrides: Record<string, string>,
+  operation: (original: NodeJS.ProcessEnv) => Promise<T>,
+): Promise<T> {
+  const result = environmentQueue.then(async () => {
+    const original = { ...process.env };
+    Object.assign(process.env, overrides);
+    try {
+      return await operation(original);
+    } finally {
+      for (const key of Object.keys(overrides)) {
+        if (original[key] === undefined) delete process.env[key];
+        else process.env[key] = original[key];
+      }
+    }
+  });
+  environmentQueue = result.catch(() => undefined);
+  return result;
 }
 
 export async function runtimeFixture(options: RuntimeOptions = {}) {
@@ -59,16 +83,23 @@ async function configureRuntime(
   const expired = { ...credentials[0]!, token: randomBytes(32).toString('base64url'), expiresAt: Date.now() - 1 };
   const file = join(directory, 'access.json');
   await writeFile(file, JSON.stringify([...credentials, expired]), { mode: 0o600 });
-  process.env.SUPPORT_DATABASE_URL = `file:${join(directory, 'support.db')}`;
-  process.env.SUPPORT_CREDENTIALS_FILE = file;
-  process.env.SUPPORT_STUDIO_ROLE = studioRole;
-  process.env.SUPPORT_MODEL_BASE_URL = model.url;
-  process.env.OPENAI_API_KEY = 'synthetic-model-key';
-  const port = 43000 + Math.floor(Math.random() * 10000);
-  const base = `http://127.0.0.1:${port}`;
-  const { mastra } = (await import(
-    `../../src/mastra/index.ts?fixture=${randomBytes(6).toString('hex')}`
-  )) as typeof import('../../src/mastra/index.ts');
+  const databaseUrl = pathToFileURL(join(directory, 'support.db')).href;
+  const overrides = {
+    SUPPORT_DATABASE_URL: databaseUrl,
+    SUPPORT_CREDENTIALS_FILE: file,
+    SUPPORT_STUDIO_ROLE: studioRole,
+    SUPPORT_MODEL_BASE_URL: model.url,
+    OPENAI_API_KEY: 'synthetic-model-key',
+  };
+  const { mastra, environment } = await withRuntimeEnvironment(overrides, async original => {
+    const { mastra } = (await import(
+      `../../src/mastra/index.ts?fixture=${randomBytes(6).toString('hex')}`
+    )) as typeof import('../../src/mastra/index.ts');
+    return { mastra, environment: { ...original, ...overrides } };
+  });
+  const selectPort = () => 43000 + Math.floor(Math.random() * 10000);
+  let port = selectPort();
+  const base = () => `http://127.0.0.1:${port}`;
   const store = mastra.getStorage();
   assert.ok(store, 'The Mastra store is configured');
   const supportKnowledge = mastra.getKnowledge('support');
@@ -79,12 +110,14 @@ async function configureRuntime(
     assert.ok(agentMemory instanceof Memory, 'The support agent has Memory');
     memory = agentMemory;
     if (options.syntheticKnowledge !== false) {
+      const pagesByScope = new Map<string, KnowledgePage>();
       for (const [index, credential] of credentials.entries()) {
-        if (index === 3) {
-          pages.push(pages[0]!);
+        const scope = principals(credential.profile)[1]!;
+        const seeded = pagesByScope.get(scope);
+        if (seeded) {
+          pages.push(seeded);
           continue;
         }
-        const scope = principals(credential.profile)[1]!;
         const { page } = await supportKnowledge.upsertPage({
           scope,
           path: 'cases/synthetic',
@@ -105,16 +138,19 @@ async function configureRuntime(
           body: `SYNTHETIC_DOC_${credential.profile.tenantId}`,
           author: 'synthetic-fixture',
         });
+        pagesByScope.set(scope, page);
         pages.push(page);
       }
-      await supportKnowledge.addNote({
-        scope: 'docs:north',
-        path: 'manual',
-        text: 'SYNTHETIC_FOREIGN_STAMP_1',
-        stamps: ['customer:north:store-2'],
-        author: 'synthetic-fixture',
-      });
-      for (const tenant of ['north', 'south']) {
+      const tenants = new Set(credentials.map(credential => credential.profile.tenantId));
+      if (tenants.has('north'))
+        await supportKnowledge.addNote({
+          scope: 'docs:north',
+          path: 'manual',
+          text: 'SYNTHETIC_FOREIGN_STAMP_1',
+          stamps: ['customer:north:store-2'],
+          author: 'synthetic-fixture',
+        });
+      for (const tenant of tenants) {
         await supportKnowledge.upsertPage({
           scope: `tenant:${tenant}`,
           path: 'policies/safe-changes',
@@ -132,17 +168,17 @@ async function configureRuntime(
   let output = '';
   let activeCredentialFile: string | undefined;
   function launchEnvironment(generated: boolean) {
-    const environment: NodeJS.ProcessEnv = {
-      ...process.env,
+    const launch: NodeJS.ProcessEnv = {
+      ...environment,
       PORT: String(port),
       ...(options.example ? { SUPPORT_EXAMPLE: options.example } : {}),
     };
-    if (generated) delete environment.SUPPORT_CREDENTIALS_FILE;
-    if (generated && options.studioRole === undefined) delete environment.SUPPORT_STUDIO_ROLE;
-    return environment;
+    if (generated) delete launch.SUPPORT_CREDENTIALS_FILE;
+    if (generated && options.studioRole === undefined) delete launch.SUPPORT_STUDIO_ROLE;
+    return launch;
   }
   async function request(path: string, owner = 0, options: RequestInit = {}) {
-    return fetch(`${base}/api${path}`, {
+    return fetch(`${base()}/api${path}`, {
       ...options,
       headers: {
         authorization: `Bearer ${credentials[owner]!.token}`,
@@ -152,6 +188,14 @@ async function configureRuntime(
     });
   }
   async function start() {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (await launch()) return;
+      await stop();
+      port = selectPort();
+    }
+    throw new Error(`Dev could not bind after three port collisions: ${output}`);
+  }
+  async function launch() {
     output = '';
     activeCredentialFile = undefined;
     assert.equal(child, undefined, 'Stop the existing runtime before starting it again');
@@ -161,7 +205,7 @@ async function configureRuntime(
       env: launchEnvironment(!!options.generatedCredentials),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    const running: RuntimeProcess = { launcher, closed: false };
+    const running: RuntimeProcess = { launcher, closed: false, bound: false };
     child = running;
     launcher.once('close', () => {
       running.closed = true;
@@ -177,6 +221,13 @@ async function configureRuntime(
     });
     const deadline = Date.now() + 30000;
     while (Date.now() < deadline) {
+      if (!running.bound) {
+        const plain = output.replace(/\x1b\[[0-9;]*m/gu, '');
+        running.bound = plain
+          .split('\n')
+          .some(line => line.includes('API:') && line.split('API:').at(-1)?.trim() === `${base()}/api`);
+        if (!running.bound && /\bEADDRINUSE\b/u.test(plain)) return false;
+      }
       if (running.error) throw running.error;
       if (launcher.exitCode !== null || launcher.signalCode !== null) throw new Error(`Dev exited: ${output}`);
       if (options.generatedCredentials && !activeCredentialFile) {
@@ -193,7 +244,7 @@ async function configureRuntime(
           activeCredentialFile = match[1]!;
         }
       }
-      if (!options.generatedCredentials || activeCredentialFile) {
+      if (running.bound && (!options.generatedCredentials || activeCredentialFile)) {
         const remaining = deadline - Date.now();
         if (remaining <= 0) break;
         const signal = AbortSignal.timeout(Math.min(1000, remaining));
@@ -203,7 +254,7 @@ async function configureRuntime(
         });
         if (response?.status === 200) {
           await response.body?.cancel();
-          return;
+          return true;
         }
         if (response && response.status !== 503) {
           const diagnostic = await response.text().catch(() => 'Unable to read readiness response');
@@ -279,7 +330,7 @@ async function configureRuntime(
     const waitForShutdown = async () => {
       const deadline = Date.now() + 5000;
       do {
-        if (running.closed && (!pid || (await portReleased()))) return true;
+        if (running.closed && (!running.bound || (await portReleased()))) return true;
         await setTimeout(100);
       } while (Date.now() < deadline);
       return false;
@@ -301,7 +352,11 @@ async function configureRuntime(
     credentials,
     expired,
     pages,
-    base,
+    get base() {
+      return base();
+    },
+    databaseUrl,
+    withEnvironment: <T>(operation: () => Promise<T>) => withRuntimeEnvironment(overrides, operation),
     request,
     start,
     stop,

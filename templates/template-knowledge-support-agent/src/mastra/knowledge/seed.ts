@@ -1,4 +1,10 @@
-import type { Knowledge, KnowledgeNote, KnowledgePage, KnowledgeStorage } from '@mastra/core/knowledge';
+import {
+  knowledgeLinkRefKey,
+  type Knowledge,
+  type KnowledgeNote,
+  type KnowledgePage,
+  type KnowledgeStorage,
+} from '@mastra/core/knowledge';
 import { policyReference } from '../../examples/support.ts';
 import { createStore } from '../database/store.ts';
 import { createKnowledge, createPostgresWriterKnowledge } from './index.ts';
@@ -104,38 +110,35 @@ async function writeDataset(knowledge: Knowledge, dataset: PreparedDataset, repo
       version: result.page.version,
     });
   }
-  // Native writes usually resolve forward links when targets appear. Check the persisted index before repair.
+  // Verify managed links after all their destinations exist. Repair only the seed's own pages.
   for (const wanted of dataset.pages) {
     const current = stored.get(`${wanted.scope}#${wanted.path}`)!;
-    const expected = [...new Set(wanted.refs.map(ref => stored.get(ref)!.id).filter(id => id !== current.id))];
-    const indexed = (
-      await storage.listPageLinks({
+    const links = [...wanted.links].map(([ref, count]) => ({
+      ref: knowledgeLinkRefKey(ref),
+      toPageId: stored.get(ref)!.id,
+      count,
+    }));
+    const expected = new Map(
+      links.filter(link => link.toPageId !== current.id).map(link => [link.toPageId, link.count]),
+    );
+    async function indexMatches() {
+      const indexed = await storage.listPageLinks({
         pageIds: [current.id],
         read: 'all',
         direction: 'out',
         kinds: ['body'],
         limit: 1000,
-      })
-    ).map(edge => edge.toPageId);
-    if (!sameSet(indexed, expected)) {
-      report.repairedLinks = true;
-      break;
+      });
+      return indexed.length === expected.size && indexed.every(edge => expected.get(edge.toPageId) === edge.count);
     }
-  }
-  if (report.repairedLinks) await knowledge.reindexLinks();
-  for (const wanted of dataset.pages) {
-    const current = stored.get(`${wanted.scope}#${wanted.path}`)!;
-    const expected = [...new Set(wanted.refs.map(ref => stored.get(ref)!.id).filter(id => id !== current.id))];
-    const indexed = (
-      await storage.listPageLinks({
-        pageIds: [current.id],
-        read: 'all',
-        direction: 'out',
-        kinds: ['body'],
-        limit: 1000,
-      })
-    ).map(edge => edge.toPageId);
-    if (!sameSet(indexed, expected)) throw new Error('Knowledge link index repair did not converge');
+    const unexpectedReferences =
+      wanted.unexpectedBodyRefs.length &&
+      (await storage.listPageBodyLinkSources({ refs: wanted.unexpectedBodyRefs })).includes(current.id);
+    if (unexpectedReferences || !(await indexMatches())) {
+      await storage.replacePageBodyLinks({ pageId: current.id, links });
+      if (!(await indexMatches())) throw new Error('Knowledge link index repair did not converge');
+      report.repairedLinks = true;
+    }
     const existing = wanted.notes.length ? await allNotes(storage, current.id) : [];
     for (const note of wanted.notes) {
       const owned = existing.filter(

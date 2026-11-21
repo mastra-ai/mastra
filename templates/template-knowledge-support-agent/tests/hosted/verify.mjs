@@ -3,7 +3,7 @@ import { execFile, spawn } from 'node:child_process';
 import { generateKeyPairSync, randomBytes, randomUUID, sign } from 'node:crypto';
 import { once } from 'node:events';
 import { cp, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
-import { createServer as createHttpsServer } from 'node:https';
+import { createServer as createHttpsServer, request as httpsRequest } from 'node:https';
 import { createServer as createPortServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -560,7 +560,13 @@ try {
         return;
       }
       let body = '';
-      for await (const chunk of req) body += chunk;
+      try {
+        for await (const chunk of req) body += chunk;
+      } catch {
+        if (!req.destroyed && !res.destroyed) res.writeHead(400).end();
+        return;
+      }
+      if (req.aborted || res.destroyed) return;
       const access = new URLSearchParams(body).get('token');
       res
         .writeHead(200, { 'content-type': 'application/json' })
@@ -569,6 +575,29 @@ try {
   ).listen(0, host);
   await once(identityServer, 'listening');
   const { port: identityPort } = identityServer.address();
+
+  // A worker can disconnect after introspection starts but before its POST body is complete.
+  const interrupted = httpsRequest({
+    host,
+    port: identityPort,
+    ca: await readFile(certificate),
+    method: 'POST',
+    path: '/introspect',
+    signal: AbortSignal.timeout(5000),
+    headers: {
+      authorization: `Bearer ${resourceSecret}`,
+      expect: '100-continue',
+      'content-length': '100',
+    },
+  });
+  const accepted = once(interrupted, 'continue');
+  interrupted.flushHeaders();
+  await accepted;
+  interrupted.write('token=');
+  interrupted.on('error', () => {});
+  const disconnected = new Promise(resolve => interrupted.once('close', resolve));
+  interrupted.destroy();
+  await disconnected;
 
   model = await startModelServer(body => {
     const messages = body.messages ?? [];

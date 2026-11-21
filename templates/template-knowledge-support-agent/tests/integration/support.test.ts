@@ -105,7 +105,7 @@ async function seed(f: Fixture) {
   const directory = join(f.directory, 'dataset');
   await cp(datasets['retail-pos']!.directory, directory, { recursive: true });
   const config = { ...datasets['retail-pos']!, directory };
-  await seedDataset(config, { databaseUrl: process.env.SUPPORT_DATABASE_URL });
+  await seedDataset(config, { databaseUrl: f.databaseUrl });
   return config;
 }
 async function snapshot(f: Fixture) {
@@ -370,7 +370,7 @@ test('same_thread_gets_updated_policy_signal_and_rejects_pin_mutation', { timeou
       (await readFile(policyFile, 'utf8')) +
         '\nPOLICY_REVISION_TWO: ask the authorized lead for a safe recovery review.\n',
     );
-    const report = await seedDataset(config, { databaseUrl: process.env.SUPPORT_DATABASE_URL });
+    const report = await seedDataset(config, { databaseUrl: f.databaseUrl });
     assert.equal(report.pages.find(page => page.key === 'safety-policy')?.status, 'updated');
     const next = f.model.requests.length;
     assert.match(await turn(f, id, 'Still offline payments pending; what now?', 'stream'), /POLICY_REVISION_TWO/u);
@@ -403,6 +403,35 @@ test('same_thread_gets_updated_policy_signal_and_rejects_pin_mutation', { timeou
       assert.doesNotMatch(inputs, /SYNTHETIC_PRIVATE_2/u);
       assert.deepEqual(await snapshot(f), before, `Denied operation cannot mutate Knowledge: ${prompt}`);
     }
+    for (let index = 0; index < 200; index++) {
+      await f.supportKnowledge.upsertPage({
+        scope: 'docs:north',
+        path: `guides/listing-${index}`,
+        name: `Reference ${index}: ${'technical setup and device documentation '.repeat(3)}`,
+      });
+    }
+    const completePolicy =
+      'When offline payments are pending, preserve them. Before any change, obtain authorization. ' +
+      'Preserve the original diagnostic labels in the incident report: ' +
+      'A/B+C/D;'.repeat(36) +
+      ' ' +
+      'Record the final approval in the technician report.';
+    assert.ok(completePolicy.length < 800);
+    await f.supportKnowledge.upsertPage({
+      scope: 'tenant:north',
+      path: 'policies/safe-changes',
+      name: 'Required safety procedure and verification '.repeat(4),
+      body: completePolicy,
+      author: 'synthetic-fixture',
+    });
+    const longPinStart = f.model.requests.length;
+    await turn(f, await thread(f), 'Could I reset a terminal with offline payments pending?');
+    const saturatedRequest = f.model.requests[longPinStart];
+    assert.ok(saturatedRequest, 'The full policy must allow a model request even with the saturated listing');
+    const longPins = JSON.stringify(saturatedRequest.messages);
+    assert.ok(longPins.includes(completePolicy), 'The complete policy reaches the provider with the saturated listing');
+    assert.match(longPins, /Pages under .*knowledge_list/u);
+
     const calls = f.model.requests.length;
     await f.supportKnowledge.removePage({
       scope: 'tenant:north',
@@ -438,7 +467,7 @@ test('same_thread_gets_updated_policy_signal_and_rejects_pin_mutation', { timeou
     const longPolicy = await f.supportKnowledge.upsertPage({
       scope: 'tenant:north',
       path: 'policies/safe-changes',
-      name: 'Required '.repeat(600),
+      name: 'Required '.repeat(5000),
       body: 'Always preserve pending offline payments. Obtain authorization before any disruptive change.',
       author: 'synthetic-fixture',
     });

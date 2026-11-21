@@ -1,7 +1,7 @@
 import { confirmationMetadataSchema, confirmationText, decodeConfirmationReference } from './confirmation.ts';
 import type { Mastra } from '@mastra/core/mastra';
-import { createHash, randomUUID } from 'node:crypto';
-import { knowledgeScopeAddress, type Knowledge, type KnowledgePage } from '@mastra/core/knowledge';
+import { randomUUID } from 'node:crypto';
+import { knowledgeScopeAddress, type Knowledge, type KnowledgeNote, type KnowledgePage } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { knowledgeScopeReadable } from '@mastra/core/storage';
 import type { Memory } from '@mastra/memory';
@@ -16,6 +16,7 @@ import type { LocalProfile } from '../server/access.ts';
 import { hasDuplicatePage } from './duplicate.ts';
 import {
   candidateSchema,
+  digest,
   proposalSchema,
   publishedText,
   ReviewConflict,
@@ -27,9 +28,6 @@ import {
 } from './contracts.ts';
 
 export type ReviewerAuthority = (profile: Profile) => LocalProfile | null;
-export function digest(value: unknown) {
-  return createHash('sha256').update(JSON.stringify(value)).digest('hex');
-}
 function pageDigest(page: KnowledgePage) {
   return digest({
     id: page.id,
@@ -144,12 +142,6 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
     requireReview(
       !forbidden.some(value => text.toLowerCase().includes(value.toLowerCase())),
       'Shared text contains private identifiers or references',
-    );
-    requireReview(
-      !/\[\[|\]\(|(?:customer|resource|thread):|https?:\/\/|\b(?:bearer\s+\S+|sk-[a-z0-9]{12,}|(?:api[_ -]?key|password|secret|token)\s*[:=])|(?:\d[ -]?){13,19}/iu.test(
-        text,
-      ),
-      'Shared text contains private links, credentials, or payment-like data',
     );
   }
 
@@ -303,8 +295,6 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
 
   async function publish(approval: Approval, authenticated?: Profile) {
     const { proposal, decision, reviewerId } = approval;
-    requireReview(digest({ ...proposal, revision: undefined }) === proposal.revision, 'Approved revision mismatch');
-    requireReview(reviewerId === proposal.reviewer.actorId, 'Decision reviewer mismatch');
     const result = (
       status: 'published' | 'rejected' | 'duplicate' | 'contradiction' | 'insufficient-evidence',
       reference: string | null = null,
@@ -334,53 +324,64 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
       const reference = `${proposal.destination.scope}#${proposal.destination.path}`;
       if (proposal.candidate.action === 'note') {
         requireReview(current, 'Note target is missing');
+        const mentions = [
+          ...new Set(
+            proposal.bindings
+              .filter(binding => binding.kind === (proposal.source.audience === 'private' ? 'evidence' : 'public'))
+              .map(binding => binding.id),
+          ),
+        ].sort();
+        const priorEffect = (note: KnowledgeNote) => {
+          const target = proposal.bindings.find(binding => binding.kind === 'target' && binding.ref === reference);
+          requireReview(
+            target?.id === current.id && note.pageId === current.id,
+            'Prior note effect does not match the bound target',
+          );
+          requireReview(
+            !note.deletedAt &&
+              note.text === body &&
+              note.provenance.author === author &&
+              !note.when &&
+              JSON.stringify([...note.mentions].sort()) === JSON.stringify(mentions) &&
+              note.stampScopeIds.length === 1 &&
+              note.stampScopeIds[0] === current.scopeId,
+            'Conflicting prior note effect',
+          );
+          reviewer(authenticated ?? proposal.reviewer);
+          return result('published', `${reference}?note=${note.id}`);
+        };
+        const prior = await store.getNote({ id: proposal.id, read: 'all', includeDeleted: true });
+        if (prior) return priorEffect(prior);
+
         const noteLimit = 1000;
-        const notes = [];
+        const notes: KnowledgeNote[] = [];
         let cursor: string | undefined;
         do {
-          // Allow one extra slot to reconcile a publication that started at the scan limit.
+          // Older publications used storage-generated IDs and could publish the 1,001st note.
           const limit = Math.min(100, noteLimit + 1 - notes.length);
           const batch = await store.listNotes({ pageId: current.id, read: 'all', cursor, limit });
           notes.push(...batch.notes);
           cursor = batch.nextCursor;
-          requireReview(!cursor || notes.length <= noteLimit, 'Note reconciliation exceeds its bound');
-        } while (cursor);
+        } while (cursor && notes.length <= noteLimit);
         const owned = notes.filter(note => note.text.startsWith(marker));
         if (owned.length) {
-          const target = proposal.bindings.find(binding => binding.kind === 'target' && binding.ref === reference);
-          requireReview(target?.id === current.id, 'Prior note effect does not match the bound target');
-          const mentions = [
-            ...new Set(
-              proposal.bindings
-                .filter(binding => binding.kind === (proposal.source.audience === 'private' ? 'evidence' : 'public'))
-                .map(binding => binding.id),
-            ),
-          ].sort();
-          requireReview(
-            owned.length === 1 &&
-              owned[0]!.text === body &&
-              owned[0]!.provenance.author === author &&
-              !owned[0]!.when &&
-              JSON.stringify([...owned[0]!.mentions].sort()) === JSON.stringify(mentions) &&
-              owned[0]!.stampScopeIds.length === 1 &&
-              owned[0]!.stampScopeIds[0] === current.scopeId,
-            'Conflicting prior note effect',
-          );
-          reviewer(authenticated ?? proposal.reviewer);
-          return result('published', `${reference}?note=${owned[0]!.id}`);
+          requireReview(owned.length === 1, 'Conflicting prior note effect');
+          return priorEffect(owned[0]!);
         }
+        requireReview(!cursor && notes.length <= noteLimit, 'Note reconciliation exceeds its bound');
         await validate(proposal, authenticated, activeKnowledge);
-        requireReview(notes.length <= noteLimit, 'Note reconciliation exceeds its bound');
         requireReview(
           !notes.some(note => note.text.includes(proposal.candidate.content)),
           'A duplicate note now exists; reevaluate',
         );
         reviewer(authenticated ?? proposal.reviewer);
-        const note = await activeKnowledge.addNote({
-          ...proposal.destination,
+        const note = await store.addNote({
+          id: proposal.id,
+          pageId: current.id,
           text: body,
-          stamps: [proposal.destination.scope],
-          author,
+          stampScopeIds: [current.scopeId],
+          mentions,
+          provenance: { author },
         });
         return result('published', `${reference}?note=${note.id}`);
       }

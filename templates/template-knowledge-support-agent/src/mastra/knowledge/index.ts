@@ -23,7 +23,9 @@ export function createKnowledge(storage: MastraCompositeStore) {
       'customer:$tenantId:$customerId': { belongsTo: 'tenant:$tenantId', access: [...viewer] },
     },
     tools: { read: true, write: false },
-    pinnedContext: { maxPins: 2, maxTokens: 500 },
+    // The native renderer can split this budget evenly between both configured pins.
+    // Leave room for the 800-character policy, including its name and scoped reference.
+    pinnedContext: { maxPins: 2, maxTokens: 4000 },
   });
 }
 

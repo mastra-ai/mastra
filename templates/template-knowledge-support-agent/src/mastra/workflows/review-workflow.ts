@@ -71,9 +71,8 @@ export function createReviewWorkflow(service: ReviewService) {
         reviewerId: reviewer.actorId,
       });
       if (isValidationError(approval)) throw new ReviewConflict(approval.message);
-      if (!approval) throw new Error('Reviewer decision returned no approval');
       recordOperation('review-decision', 'resumed');
-      return approval;
+      return approval!;
     },
   });
   const publicationAttempt = createTool({
@@ -105,9 +104,8 @@ export function createReviewWorkflow(service: ReviewService) {
           { requestContext },
         );
         if (isValidationError(result)) throw new ReviewConflict(result.message);
-        if (!result) throw new Error('Publication attempt returned no result');
-        recordOperation('review-publication', result.status, started);
-        return result;
+        recordOperation('review-publication', result!.status, started);
+        return result!;
       } catch (error) {
         recordOperation('review-publication', 'error');
         if (!isRetryablePublicationError(error)) throw error;

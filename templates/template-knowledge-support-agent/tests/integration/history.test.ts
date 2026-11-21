@@ -96,7 +96,7 @@ test(
       const seedSamples: number[] = [];
       for (let i = 0; i < 5; i++) {
         const started = performance.now();
-        await seedDataset(datasets['retail-pos-docs']!, { databaseUrl: process.env.SUPPORT_DATABASE_URL });
+        await seedDataset(datasets['retail-pos-docs']!, { databaseUrl: f.databaseUrl });
         seedSamples.push(performance.now() - started);
       }
       const duplicateSamples: number[] = [];
@@ -105,7 +105,10 @@ test(
       assert.ok(home);
       for (let i = 0; i < 5; i++) {
         const started = performance.now();
-        assert.equal(await hasDuplicatePage(home.id, 'ABSENT_DUPLICATE_CANDIDATE', undefined), false);
+        assert.equal(
+          await f.withEnvironment(() => hasDuplicatePage(home.id, 'ABSENT_DUPLICATE_CANDIDATE', undefined)),
+          false,
+        );
         duplicateSamples.push(performance.now() - started);
       }
       seedSamples.sort((a, b) => a - b);
@@ -171,3 +174,29 @@ test(
     }
   },
 );
+
+test('a note removed after native search does not enter scoped history', { timeout: 30000 }, async () => {
+  const f = await runtimeFixture();
+  try {
+    const { supportKnowledge } = f;
+    const { noteRef } = await generateHistoryCorpus(supportKnowledge);
+    const id = noteRef.split('?note=')[1]!;
+    const store = await supportKnowledge.getStorage();
+    const search = store.searchPages.bind(store);
+    let removed = false;
+    store.searchPages = async input => {
+      const hits = await search(input);
+      if (!removed && hits.some(hit => hit.type === 'note' && hit.note.id === id)) {
+        removed = true;
+        await supportKnowledge.removeNote({ id, author: 'synthetic-fixture' });
+      }
+      return hits;
+    };
+    const result = await prepareHistory(supportKnowledge, profile, 'network printer');
+    assert.ok(removed, 'The note must be removed after the scoped search returned it');
+    assert.ok(result.records.some(record => record.summary === 'BEST_A'));
+    assert.ok(result.records.every(record => record.ref !== noteRef));
+  } finally {
+    await f.close();
+  }
+});

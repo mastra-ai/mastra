@@ -96,6 +96,15 @@ test('studio_demo_and_alternate_profile_use_the_same_lifecycle', { timeout: 3600
     assert.match(cold.text, /No customer history yet/u);
     assert.match(cold.text, /indicator.*pending/u);
     await assertCitations(f, cold.text);
+    await assert.rejects(
+      () => assertCitations(f, cold.text.replace(demoCorpus.sources[0], demoCorpus.sources[2])),
+      /Public source URL does not match evidence/u,
+    );
+    await assert.rejects(
+      () =>
+        assertCitations(f, cold.text.replace(demoCorpus.sources[0], demoCorpus.sources[0].replace('https:', 'http:'))),
+      /Unsupported URL/u,
+    );
     assert.match(providerInput(f, start), /knowledge_search/u);
     assert.match(providerInput(f, start), /knowledge_read/u);
     assert.doesNotMatch(providerInput(f, start), /RETAILOPS_STORE73|FIELDRETAIL_STORE42/u);
@@ -326,8 +335,10 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
       memory: { thread: failureThread },
     });
     assert.ok(failure.status >= 500, `Provider HTTP error must fail the agent request, got ${failure.status}`);
-    const failedBody = await failure.text();
-    assert.doesNotMatch(failedBody, /"text":"(?:Visible|Compare|Reviewed|Verified|Use only)/u);
+    const failedBody = await failure.json();
+    assert.equal(typeof failedBody.error, 'string');
+    assert.ok(failedBody.error.trim());
+    assert.ok(Object.keys(failedBody).every(key => key === 'error' || key === 'cause'));
     assert.ok(f.model.failures.length > failuresBefore);
     assert.ok(f.model.failures.slice(failuresBefore).every(item => item.status === 503));
     assert.deepEqual(await snapshot(f), beforeFailure, 'Provider failure cannot fabricate Knowledge or publication');

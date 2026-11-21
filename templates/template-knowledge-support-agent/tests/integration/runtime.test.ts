@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict';
 import { readFile, stat } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import { once } from 'node:events';
+import { createServer } from 'node:http';
+import { createConnection } from 'node:net';
 import test from 'node:test';
 import { knowledgeScopeAddress } from '@mastra/core/knowledge';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import { GET_KNOWLEDGE_TREE_ROUTE } from '@mastra/server/handlers/knowledge';
 import { resourceId, principals } from '../../src/mastra/identity.ts';
 import { runtimeFixture } from '../fixtures/runtime.ts';
+import { startModelServer } from '../fixtures/model-server.ts';
 
 async function json(response: Response, status = 200) {
   const body = await response.text();
@@ -34,6 +38,65 @@ async function generate(
     body: JSON.stringify({ messages: [{ role: 'user', content }], memory: { thread: id } }),
   });
 }
+
+test('dev uses its fixture settings and never probes a different listener', { timeout: 60000 }, async () => {
+  const first = await runtimeFixture();
+  let second: Awaited<ReturnType<typeof runtimeFixture>> | undefined;
+  let foreignRequests = 0;
+  const foreign = createServer((_request, response) => {
+    foreignRequests++;
+    response.writeHead(401).end();
+  });
+  try {
+    const profile = first.credentials[0]!.profile;
+    second = await runtimeFixture({
+      studioRole: 'different-role',
+      profiles: Array.from({ length: 4 }, (_, index) => ({
+        ...profile,
+        id: `fixture-profile-${index}`,
+        customerId: `fixture-customer-${index}`,
+      })),
+    });
+    assert.equal(new Set(second.pages.map(page => page.id)).size, 4);
+    const initialBase = first.base;
+    foreign.listen(Number(new URL(initialBase).port), '127.0.0.1');
+    await once(foreign, 'listening');
+
+    await first.start();
+    assert.notEqual(first.base, initialBase);
+    assert.equal(foreignRequests, 0);
+    const capabilities = await json(await first.request('/auth/capabilities'));
+    assert.equal(capabilities.user.id, first.credentials[0]!.profile.id);
+    const id = (await thread(first)).id;
+    assert.match((await json(await generate(first, id))).text, /Synthetic evidence inspected/u);
+    assert.ok(first.model.requests.length);
+    assert.equal(second.model.requests.length, 0);
+  } finally {
+    await Promise.all([first.close(), second?.close(), new Promise<void>(resolve => foreign.close(() => resolve()))]);
+  }
+});
+
+test('the model fixture closes connections with incomplete request bodies', { timeout: 5000 }, async () => {
+  const model = await startModelServer();
+  const { port } = new URL(model.url);
+  const socket = createConnection({ host: '127.0.0.1', port: Number(port) });
+  try {
+    await once(socket, 'connect');
+    const accepted = once(socket, 'data');
+    socket.write(
+      'POST /v1/chat/completions HTTP/1.1\r\nHost: localhost\r\nExpect: 100-continue\r\nContent-Length: 100\r\n\r\n',
+    );
+    assert.match(String((await accepted)[0]), /100 Continue/u);
+    socket.write('{');
+    // Closing an active request can reset the peer connection.
+    socket.on('error', () => {});
+    const closed = new Promise<void>(resolve => socket.once('close', () => resolve()));
+    await model.close();
+    await closed;
+  } finally {
+    socket.destroy();
+  }
+});
 
 test('local_studio_boots_and_scoped_state_survives_restart', { timeout: 120000 }, async () => {
   const fixture = await runtimeFixture({ generatedCredentials: true });

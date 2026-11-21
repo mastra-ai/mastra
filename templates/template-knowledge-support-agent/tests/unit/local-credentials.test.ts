@@ -18,6 +18,15 @@ test('local credential loading requires and enforces the configured Studio role'
     assert.deepEqual(loadCredentials(file, 'case-worker'), [credential]);
     assert.throws(() => loadCredentials(file, undefined), /A local Studio role is required/u);
 
+    const expired = { ...credential, expiresAt: 0 };
+    const otherProfile = { ...credential.profile, id: 'other-profile', customerId: 'other-customer' };
+    await writeFile(file, JSON.stringify([expired, { ...credential, profile: otherProfile }]));
+    assert.throws(() => loadCredentials(file, 'case-worker'), /Duplicate local credential token/u);
+
+    const rotation = { ...expired, token: 'previous-synthetic-credential-token' };
+    await writeFile(file, JSON.stringify([rotation, credential]));
+    assert.deepEqual(loadCredentials(file, 'case-worker'), [rotation, credential]);
+
     credential.profile.role = 'reviewer';
     await writeFile(file, JSON.stringify([credential]));
     assert.throws(() => loadCredentials(file, 'case-worker'), /Invalid local role/u);

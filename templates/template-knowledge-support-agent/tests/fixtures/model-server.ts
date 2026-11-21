@@ -138,7 +138,11 @@ export async function startModelServer(script?: ModelScript) {
     url: `http://127.0.0.1:${address.port}/v1`,
     requests,
     failures,
-    close: () => new Promise<void>(resolve => server.close(() => resolve())),
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        server.close(error => (error ? reject(error) : resolve()));
+        server.closeAllConnections();
+      }),
   };
 }
 
