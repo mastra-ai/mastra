@@ -378,6 +378,28 @@ describe.each(engines)('$engine engine: suspended run eviction', ({ createWorkfl
     },
   );
 
+  it('evicts a suspended run whose first stored-status read failed', async () => {
+    const { workflow } = await setup();
+    const run = await workflow.createRun();
+    const runStorage = (run as any).runStorage;
+    const loadHeader = runStorage.loadHeader.bind(runStorage);
+    let failures = 0;
+    let armed = false;
+    runStorage.loadHeader = async () => {
+      if (armed && failures === 0) {
+        failures++;
+        throw new Error('storage unavailable');
+      }
+      return loadHeader();
+    };
+    const unwatch = run.watch(() => {});
+    expect((await run.start({ inputData: {} })).status).toBe('suspended');
+    armed = true;
+    unwatch();
+    await expect.poll(() => workflow.runs.has(run.runId), { timeout: 5_000 }).toBe(false);
+    expect(failures).toBe(1);
+  });
+
   it('does not reopen a held run resumed after its record was deleted', async () => {
     const { workflow } = await setup();
     const held = await workflow.createRun();
@@ -497,7 +519,6 @@ describe.each(engines)('$engine engine: suspended run eviction', ({ createWorkfl
       expect(engine.getRunPersistenceOverride(runId)).toBe(persistAlways);
 
       const reopened = await workflow.createRun({ runId });
-      await new Promise(resolve => setTimeout(resolve, 50));
       expect(engine.getRunPersistenceOverride(runId)).toBeUndefined();
       expect((await reopened.resume({ step: 'approve', resumeData: { by: 'ana' } })).status).toBe('success');
     },

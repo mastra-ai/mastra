@@ -4643,21 +4643,23 @@ export class Run<
     const settled = () => this.#activeExecutions.size === 0;
     if (!registration || !settled() || this.workflowRunStatus !== 'suspended' || this.#liveWatchers > 0) return;
     const epoch = this.#executionEpoch;
+    const unchanged = () =>
+      epoch === this.#executionEpoch && settled() && this.workflowRunStatus === 'suspended' && this.#liveWatchers === 0;
     let storedStatus: WorkflowRunStatus | undefined;
-    try {
-      storedStatus = (await this.runStorage.loadHeader())?.status;
-    } catch {
-      return;
+    // No later event retries a failed read, so a transient storage error would keep the run cached.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        storedStatus = (await this.runStorage.loadHeader())?.status;
+        break;
+      } catch {
+        if (attempt === 2) return;
+        await new Promise(resolve => setTimeout(resolve, 100 * 2 ** attempt));
+        if (!unchanged()) return;
+      }
     }
     // A stored finish means another instance finished the run, which leaves this one stale.
     if (storedStatus !== 'suspended' && !(storedStatus && TERMINAL_WORKFLOW_RUN_STATUSES.has(storedStatus))) return;
-    if (
-      epoch !== this.#executionEpoch ||
-      !settled() ||
-      this.workflowRunStatus !== 'suspended' ||
-      this.#liveWatchers > 0
-    )
-      return;
+    if (!unchanged()) return;
     registration.evict();
   }
 
