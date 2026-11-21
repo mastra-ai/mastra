@@ -424,6 +424,30 @@ describe('CoreToolBuilder background override injection', () => {
       expect(properties).toHaveProperty('_background');
     });
 
+    it('honors an agent override of the tool-level model override policy', () => {
+      const tool = makeTool();
+      const fixed = new CoreToolBuilder({
+        originalTool: tool,
+        options: {
+          ...baseOptions(),
+          agentBackgroundConfig: { tools: { 'test-tool': { enabled: true, allowModelOverride: false } } },
+        },
+        backgroundTaskEnabled: true,
+      });
+      expect(extractJsonProperties(fixed)).not.toHaveProperty('_background');
+
+      const overrideable = new CoreToolBuilder({
+        originalTool: tool,
+        options: {
+          ...baseOptions(),
+          backgroundConfig: { enabled: true, allowModelOverride: false },
+          agentBackgroundConfig: { tools: { 'test-tool': { enabled: true, allowModelOverride: true } } },
+        },
+        backgroundTaskEnabled: true,
+      });
+      expect(extractJsonProperties(overrideable)).toHaveProperty('_background');
+    });
+
     it('does NOT inject _background when the agent whitelists other tools only', () => {
       const tool = makeTool();
       const builder = new CoreToolBuilder({
@@ -448,6 +472,29 @@ describe('CoreToolBuilder background override injection', () => {
       });
       expect(tool.inputSchema).toBe(originalSchema);
     });
+  });
+
+  it.each([
+    ['Zod v3', z3.object({ query: z3.string() })],
+    ['Zod v4', z4.object({ query: z4.string() })],
+  ])('omits _background for five fixed-background %s tools without changing the shared schema', (_kind, schema) => {
+    const tool = createTool({
+      id: 'fixed-tool',
+      description: 'Runs deferred without model overrides',
+      inputSchema: schema,
+      execute: vi.fn(),
+    });
+
+    const originalInputSchema = tool.inputSchema;
+    for (let index = 0; index < 5; index++) {
+      const builder = new CoreToolBuilder({
+        originalTool: tool,
+        options: { ...baseOptions(), backgroundConfig: { enabled: true, allowModelOverride: false } },
+        backgroundTaskEnabled: true,
+      });
+      expect(extractJsonProperties(builder)).not.toHaveProperty('_background');
+    }
+    expect(tool.inputSchema).toBe(originalInputSchema);
   });
 
   describe('Schema is left untouched when neither flag applies', () => {
