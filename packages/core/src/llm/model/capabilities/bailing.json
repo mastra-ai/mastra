@@ -8,11 +8,6 @@
         "type": "toggle"
       }
     ],
-    "Ling-3.1-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
     "Ling-3.0-tiny": [
       {
         "type": "toggle"
@@ -24,6 +19,11 @@
       }
     ],
     "Ling-3.0-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Ling-3.1-flash": [
       {
         "type": "toggle"
       }
