@@ -2,6 +2,7 @@
 import type { GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import type { ComponentProps } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { TRACE_FILTER_BAR_OPERATORS } from '../../../traces/trace-filters';
 import type { TraceFilterGroup, TraceFilterToken } from '../../../traces/trace-query-filters';
@@ -115,6 +116,12 @@ describe('spans filter bar composition', () => {
   });
 });
 
+/** The bar fed the way Studio feeds it: `useSpansFilterBarFields` loads its fields through the client. */
+function StudioSpansFilterBar(props: Omit<ComponentProps<typeof SpansFilterBar>, 'fields'>) {
+  const fields = useSpansFilterBarFields({ timeRange: spanTimeRange });
+  return <SpansFilterBar {...props} fields={fields} />;
+}
+
 describe('SpansFilterBar', () => {
   describe('when the span value suggestions fail to load', () => {
     it('shows the message from describeSuggestionsError', async () => {
@@ -125,9 +132,8 @@ describe('SpansFilterBar', () => {
         ),
       );
       const { queryClient } = renderWithProviders(
-        <SpansFilterBar
+        <StudioSpansFilterBar
           datePreset="last-24h"
-          timeRange={spanTimeRange}
           tokens={[]}
           groups={[]}
           onDatePresetChange={() => {}}

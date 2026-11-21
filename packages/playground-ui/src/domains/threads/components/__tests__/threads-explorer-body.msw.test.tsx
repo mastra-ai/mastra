@@ -13,7 +13,7 @@ import {
   threadQueryCapabilities,
   threadRowsPage,
 } from '../../__tests__/fixtures/threads';
-import { ThreadsExplorerBody } from '../threads-explorer-body';
+import { StudioThreadsExplorerBody } from './studio-threads-explorer-body';
 import { OBSERVABILITY_LIST_POLL_INTERVAL_MS } from '@/domains/observability/list-polling';
 import { savedViewFromSearchParams } from '@/domains/observability/saved-view-state';
 import { SavedViewsProvider } from '@/domains/observability/saved-views';
@@ -46,11 +46,7 @@ const setHandlers = (
 const renderBody = () => {
   const onSelectedThreadChange = vi.fn<(threadId: string | undefined) => void>();
   const { unmount } = renderWithProviders(
-    <ThreadsExplorerBody
-      selectedThreadId={undefined}
-      onSelectedThreadChange={onSelectedThreadChange}
-      onOpenScore={() => {}}
-    />,
+    <StudioThreadsExplorerBody selectedThreadId={undefined} onSelectedThreadChange={onSelectedThreadChange} />,
   );
   return { onSelectedThreadChange, unmount };
 };
@@ -70,12 +66,7 @@ const renderBodyAtUrl = (initial: string, savedViews?: SavedViewsSource) => {
   const body = (
     <SearchParamsHost initial={initial}>
       {urlState => (
-        <ThreadsExplorerBody
-          selectedThreadId={undefined}
-          onSelectedThreadChange={() => {}}
-          onOpenScore={() => {}}
-          urlState={urlState}
-        />
+        <StudioThreadsExplorerBody selectedThreadId={undefined} onSelectedThreadChange={() => {}} urlState={urlState} />
       )}
     </SearchParamsHost>
   );
@@ -97,7 +88,7 @@ function BodyWithOtherListsColumns() {
   const spans = useTraceColumnPreferences({ scope: 'spans' });
   return (
     <>
-      <ThreadsExplorerBody selectedThreadId={undefined} onSelectedThreadChange={() => {}} onOpenScore={() => {}} />
+      <StudioThreadsExplorerBody selectedThreadId={undefined} onSelectedThreadChange={() => {}} />
       <output data-testid="traces-columns">{traces.preferences.visibleColumns.join(',')}</output>
       <output data-testid="spans-columns">{spans.preferences.visibleColumns.join(',')}</output>
     </>

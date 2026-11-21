@@ -2,41 +2,41 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tabs, TabList, Tab, TabContent } from '@mastra/playground-ui/components/Tabs';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useObservabilityViews } from '@mastra/playground-ui/domains/observability/hooks/use-observability-views';
 import { SpansExplorerBody } from '@mastra/playground-ui/domains/spans/components/spans-explorer-body';
 import { ThreadsExplorerBody } from '@mastra/playground-ui/domains/threads/components/threads-explorer-body';
+import { TraceThreadPanel } from '@mastra/playground-ui/domains/traces/components/trace-thread-panel';
 import {
   DEFAULT_TRACES_FILTERS,
   DEFAULT_TRACES_SORT,
   EMPTY_TRACES_SELECTION,
   TRACES_SORT_FIELDS,
   TracesExplorer,
-  useTraceUsageColumns,
 } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
 import type {
   TracesExplorerCapabilities,
   TracesExplorerState,
-  TracesExplorerTraces,
   TracesFilters,
   TracesSort,
 } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
-import { useTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/hooks/use-trace-column-preferences';
-import { useTracesDiscoveryQuery } from '@mastra/playground-ui/domains/traces/hooks/use-traces-discovery-query';
-import { useTracesFilterSuggestionsQuery } from '@mastra/playground-ui/domains/traces/hooks/use-traces-filter-suggestions-query';
-import { useTracesHistogramQuery } from '@mastra/playground-ui/domains/traces/hooks/use-traces-histogram-query';
-import { useTracesListQuery } from '@mastra/playground-ui/domains/traces/hooks/use-traces-list-query';
-import { useTracesUsageQuery } from '@mastra/playground-ui/domains/traces/hooks/use-traces-usage-query';
-import { MastraReactProvider } from '@mastra/react';
-import { useObservabilityCapabilities } from '@mastra/react/hooks/capabilities';
+import { TRACE_COLUMN_CATALOGS } from '@mastra/playground-ui/domains/traces/trace-list-columns';
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { useApp } from '@modelcontextprotocol/ext-apps/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AppFrame, AppHost, AppState, AppToolbar, readStudioUrl } from '../../shared/host';
 import { applyTheme } from '../../shared/mcp-app';
-import { createMcpFetch } from '../../shared/mcp-fetch';
-import type { OpenedTraceFilter } from '../../shared/mcp-fetch';
+import type { OpenedTraceFilter } from '../../shared/mcp-tools';
 import { TraceView } from '../../shared/trace-view';
+import { resolveMcpViews } from './data/resolve-mcp-views';
+import { useMcpCapabilities } from './data/use-mcp-capabilities';
+import { useMcpSpansExplorer } from './data/use-mcp-spans-explorer';
+import { useMcpThreadsExplorer } from './data/use-mcp-threads-explorer';
+import type { UseMcpTracesArgs } from './data/use-mcp-traces-args';
+import { useMcpTracesDiscovery } from './data/use-mcp-traces-discovery';
+import { useMcpTracesFilterSuggestions } from './data/use-mcp-traces-filter-suggestions';
+import { useMcpTracesHistogram } from './data/use-mcp-traces-histogram';
+import { useMcpTracesList } from './data/use-mcp-traces-list';
+import { LegacyDataProvider, LegacyDataScope, useLegacyDataScopes } from './legacy-data-scope';
 import { LogsTab } from './logs-tab';
 import { MetricsTab } from './metrics-tab';
 import type { Drilldown, MetricsOpening } from './metrics-tab';
@@ -159,27 +159,19 @@ function TracesTab({
   app,
   opened,
   filters,
+  capabilities,
   onClearQuery,
 }: {
   app: App;
   opened: Opened;
   filters: TracesFilters;
+  capabilities: TracesExplorerCapabilities;
   onClearQuery: () => void;
 }) {
   const [state, setState] = useState<TracesExplorerState>({ selection: EMPTY_TRACES_SELECTION, filters });
   const query = traceQuery(opened.filter);
   const [sort, setSort] = useState(opened.sort);
   const traceId = state.selection.traceId;
-
-  if (traceId) {
-    return (
-      <TraceView
-        app={app}
-        traceId={traceId}
-        onBack={() => setState(s => ({ ...s, selection: EMPTY_TRACES_SELECTION }))}
-      />
-    );
-  }
   const params = encodeTraceFilters(state.filters);
   const context = [
     `The trace list's filters, as Studio URL params: ${params.toString() || 'none'}.`,
@@ -190,40 +182,55 @@ function TracesTab({
   return (
     // Studio's trace page can't apply the model's leftover query, so it would show more than this list.
     <AppState context={context} studioPath={query ? null : `/traces?${params}`}>
-      <div className="flex min-h-0 flex-1 flex-col">
+      {traceId && (
+        <TraceView
+          app={app}
+          traceId={traceId}
+          onBack={() => setState(s => ({ ...s, selection: EMPTY_TRACES_SELECTION }))}
+        />
+      )}
+      {/* The list stays mounted under an opened trace so its columns and pages are there on the way back. */}
+      <div className={traceId ? 'hidden' : 'flex min-h-0 flex-1 flex-col'}>
         {query && <OpenedQueryBar query={query} onClear={onClearQuery} />}
-        <TracesList state={state} onChange={setState} sort={sort} onSortChange={setSort} />
+        <TracesList
+          app={app}
+          opened={opened.filter}
+          capabilities={capabilities}
+          state={state}
+          onChange={setState}
+          sort={sort}
+          onSortChange={setSort}
+        />
       </div>
     </AppState>
   );
 }
 
 /**
- * The traces explorer, fed through the built-in MCP server's tools: the app's client calls them through
- * `createMcpFetch`, and the explorer's parts draw the records the Studio data hooks load with it.
+ * The traces explorer, fed through the built-in MCP server's tools: the explorer data hooks call them directly
+ * and the explorer's parts draw what they return.
  */
 function TracesList({
+  app,
+  opened,
+  capabilities,
   state,
   onChange,
   sort,
   onSortChange,
 }: {
+  app: App;
+  opened?: OpenedTraceFilter;
+  capabilities: TracesExplorerCapabilities;
   state: TracesExplorerState;
   onChange: (next: TracesExplorerState) => void;
   sort: TracesSort;
   onSortChange: (next: TracesSort) => void;
 }) {
-  const { data, isLoading } = useObservabilityCapabilities();
-  const capabilities = { data, isLoading };
-  const columns = useTraceColumnPreferences();
-  const traces = useTracesListQuery({
-    filters: state.filters,
-    sort,
-    columns: columns.preferences,
-    capabilities,
-    features: FEATURES,
-  });
-  const discovery = useTracesDiscoveryQuery({ filters: state.filters, capabilities, features: FEATURES });
+  const [columns, setColumns] = useState(TRACE_COLUMN_CATALOGS.traces.defaults);
+  const args: UseMcpTracesArgs = { app, opened, filters: state.filters, capabilities, features: FEATURES };
+  const traces = useMcpTracesList({ ...args, sort, columns });
+  const discovery = useMcpTracesDiscovery(args);
   return (
     <TracesExplorer
       metricsSupport={NO_METRICS}
@@ -232,8 +239,8 @@ function TracesList({
       onChange={onChange}
       sort={sort}
       onSortChange={onSortChange}
-      columns={columns.preferences}
-      onColumnsChange={columns.setPreferences}
+      columns={columns}
+      onColumnsChange={setColumns}
       capabilities={capabilities}
       traces={traces}
       discovery={discovery}
@@ -242,52 +249,82 @@ function TracesList({
       <TracesExplorer.Body
         toolbar={
           <div className="flex items-center justify-between gap-2">
-            <TracesFilterBar filters={state.filters} capabilities={capabilities} />
+            <TracesFilterBar {...args} />
             <TracesExplorer.ColumnsMenu />
           </div>
         }
-        chart={<TracesHistogram filters={state.filters} capabilities={capabilities} />}
+        chart={<TracesHistogram {...args} />}
       >
-        <TracesRows rows={traces.rows} />
+        <TracesExplorer.List />
       </TracesExplorer.Body>
     </TracesExplorer>
   );
 }
 
-type TracesQueryProps = { filters: TracesFilters; capabilities: TracesExplorerCapabilities };
-
-function TracesFilterBar({ filters, capabilities }: TracesQueryProps) {
-  const suggestions = useTracesFilterSuggestionsQuery({ filters, capabilities, features: FEATURES });
-  return <TracesExplorer.FilterBar suggestions={suggestions} />;
+function TracesFilterBar(args: UseMcpTracesArgs) {
+  return <TracesExplorer.FilterBar suggestions={useMcpTracesFilterSuggestions(args)} />;
 }
 
-function TracesHistogram({ filters, capabilities }: TracesQueryProps) {
-  return <TracesExplorer.Histogram data={useTracesHistogramQuery({ filters, capabilities, features: FEATURES })} />;
+function TracesHistogram(args: UseMcpTracesArgs) {
+  return <TracesExplorer.Histogram data={useMcpTracesHistogram(args)} />;
 }
 
-function TracesRows({ rows }: { rows: TracesExplorerTraces['rows'] }) {
-  const { usageEnabled } = useTraceUsageColumns();
-  const usage = useTracesUsageQuery({ traceIds: rows.map(row => row.traceId), enabled: usageEnabled });
-  return <TracesExplorer.List usage={usage} />;
-}
+type ListTabProps = { app: App; capabilities: TracesExplorerCapabilities };
 
-function SpansTab({ app }: { app: App }) {
+function SpansTab({ app, capabilities }: ListTabProps) {
   const [open, setOpen] = useState<{ traceId: string; spanId: string }>();
-  if (open)
-    return <TraceView app={app} traceId={open.traceId} spanId={open.spanId} onBack={() => setOpen(undefined)} />;
+  // The list stays mounted under an opened trace so its filters and pages are there on the way back.
+  return (
+    <>
+      {open && <TraceView app={app} traceId={open.traceId} spanId={open.spanId} onBack={() => setOpen(undefined)} />}
+      <div className={open ? 'hidden' : 'contents'}>
+        <SpansList app={app} capabilities={capabilities} onOpen={setOpen} />
+      </div>
+    </>
+  );
+}
+
+function SpansList({
+  app,
+  capabilities,
+  onOpen,
+}: ListTabProps & { onOpen: (span: { traceId: string; spanId: string }) => void }) {
+  const explorer = useMcpSpansExplorer(app, capabilities);
   return (
     <SpansExplorerBody
+      {...explorer}
       selection={undefined}
-      onSelectionChange={selection => selection && setOpen({ traceId: selection.traceId, spanId: selection.spanId })}
+      onSelectionChange={selection => selection && onOpen({ traceId: selection.traceId, spanId: selection.spanId })}
       renderPanel={() => null}
     />
   );
 }
 
-function ThreadsTab() {
+function ThreadsTab({ app, capabilities }: ListTabProps) {
   const [threadId, setThreadId] = useState<string>();
+  const explorer = useMcpThreadsExplorer(app, capabilities);
+  const flags = capabilities.data?.capabilities;
   return (
-    <ThreadsExplorerBody selectedThreadId={threadId} onSelectedThreadChange={setThreadId} onOpenScore={() => {}} />
+    <ThreadsExplorerBody
+      {...explorer}
+      selectedThreadId={threadId}
+      onSelectedThreadChange={setThreadId}
+      renderPanel={panel => (
+        // The drawer loads a thread's traces through the Studio data hooks, without the opened query.
+        <LegacyDataScope unfiltered>
+          <TraceThreadPanel
+            open={!!panel.threadId}
+            threadId={panel.threadId ?? ''}
+            depth={1}
+            closeLabel="Close"
+            withQueryTrace={flags?.traceQuery ?? true}
+            withFeedback={flags?.feedback ?? true}
+            onOpenScore={() => {}}
+            onClose={panel.onClose}
+          />
+        </LegacyDataScope>
+      )}
+    />
   );
 }
 
@@ -304,21 +341,24 @@ const VIEW_LABELS: Record<View, string> = {
  * or logs tab, opened on the drilldown's filters.
  */
 function Views({ app, opened, onClearQuery }: { app: App; opened: Opened; onClearQuery: () => void }) {
-  const trace = useObservabilityViews({ current: 'traces', features: FEATURES });
-  const { data, isLoading } = useObservabilityCapabilities();
+  const capabilities = useMcpCapabilities(app);
+  const { data, isLoading } = capabilities;
   const [view, setView] = useState<View>(opened.view);
   // Each drilldown remounts its tab on the new filters.
   const [traces, setTraces] = useState({ key: 0, filters: opened.filters });
   const [logs, setLogs] = useState({ key: 0, params: opened.logParams });
 
-  if (trace.isLoading || isLoading) {
+  if (isLoading) {
     return (
       <div className="flex min-h-25 items-center justify-center">
         <Spinner size="sm" aria-label="Loading observability" />
       </div>
     );
   }
-  const views: View[] = [...trace.views];
+  const lists = resolveMcpViews(capabilities, FEATURES);
+  const views: View[] = ['traces'];
+  if (lists.spans) views.push('spans');
+  if (lists.threads) views.push('threads');
   if (data?.capabilities.logs) views.push('logs');
   if (data?.capabilities.metrics) views.push('metrics');
   const current = views.includes(view) ? view : 'traces';
@@ -351,31 +391,42 @@ function Views({ app, opened, onClearQuery }: { app: App; opened: Opened; onClea
           <AppToolbar />
         </div>
         <TabContent value="traces" className="min-h-0 flex-1 overflow-auto">
-          <TracesTab key={traces.key} app={app} opened={opened} filters={traces.filters} onClearQuery={onClearQuery} />
+          <TracesTab
+            key={traces.key}
+            app={app}
+            opened={opened}
+            filters={traces.filters}
+            capabilities={capabilities}
+            onClearQuery={onClearQuery}
+          />
         </TabContent>
         {views.includes('spans') && (
           <TabContent value="spans" className="min-h-0 flex-1 overflow-auto">
-            <SpansTab app={app} />
+            <SpansTab app={app} capabilities={capabilities} />
           </TabContent>
         )}
         {views.includes('threads') && (
           <TabContent value="threads" className="min-h-0 flex-1 overflow-auto">
-            <ThreadsTab />
+            <ThreadsTab app={app} capabilities={capabilities} />
           </TabContent>
         )}
         {views.includes('logs') && (
           <TabContent value="logs" className="min-h-0 flex-1 overflow-auto">
-            <LogsTab
-              key={logs.key}
-              app={app}
-              initialParams={logs.params}
-              banner={logFilter && <OpenedQueryBar query={logFilter} onClear={onClearQuery} />}
-            />
+            <LegacyDataScope>
+              <LogsTab
+                key={logs.key}
+                app={app}
+                initialParams={logs.params}
+                banner={logFilter && <OpenedQueryBar query={logFilter} onClear={onClearQuery} />}
+              />
+            </LegacyDataScope>
           </TabContent>
         )}
         {views.includes('metrics') && (
           <TabContent value="metrics" className="min-h-0 flex-1 overflow-auto">
-            <MetricsTab onDrilldown={drilldown} logs={views.includes('logs')} opening={opened.metrics} />
+            <LegacyDataScope>
+              <MetricsTab onDrilldown={drilldown} logs={views.includes('logs')} opening={opened.metrics} />
+            </LegacyDataScope>
           </TabContent>
         )}
       </Tabs>
@@ -387,20 +438,22 @@ function Explorer({ app, opened: initial, studioUrl }: { app: App; opened: Opene
   const [opened, setOpened] = useState(initial);
   const filter = useRef(opened.filter);
   filter.current = opened.filter;
-  const customFetch = useMemo(() => createMcpFetch(app, () => filter.current), [app]);
+  const scopes = useLegacyDataScopes(app, () => filter.current);
+  // Serves the tabs' tool-call queries; the trace lists key on the opened query, so clearing it reloads them.
   const [queryClient] = useState(
     () => new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } }),
   );
-  // Clearing the opened query changes what every trace and log query returns.
+  // Clearing the opened query changes what every trace and log query returns: the trace lists reload on the
+  // new filter, and the logs drop what they loaded with the old one.
   const clearQuery = () => {
     setOpened(current => ({ ...current, filter: undefined }));
     filter.current = undefined;
-    void queryClient.resetQueries();
+    void scopes.opened.queryClient.resetQueries();
   };
 
   return (
     <QueryClientProvider client={queryClient}>
-      <MastraReactProvider baseUrl="https://mcp-app.mastra.invalid" customFetch={customFetch}>
+      <LegacyDataProvider scopes={scopes}>
         <TooltipProvider>
           <AppHost app={app} name="observability explorer" studioUrl={studioUrl}>
             <AppFrame fixed>
@@ -408,7 +461,7 @@ function Explorer({ app, opened: initial, studioUrl }: { app: App; opened: Opene
             </AppFrame>
           </AppHost>
         </TooltipProvider>
-      </MastraReactProvider>
+      </LegacyDataProvider>
     </QueryClientProvider>
   );
 }

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import type { ComponentProps } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { TraceFilterGroup, TraceFilterToken } from '../../../traces/trace-query-filters';
 import {
@@ -9,6 +10,7 @@ import {
   statusAndRunTokens,
   threadQueryCapabilities,
 } from '../../__tests__/fixtures/threads';
+import { useThreadsFilterBarFields } from '../../hooks/use-threads-filter-bar';
 import { ThreadsFilterBar } from '../threads-filter-bar';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -32,11 +34,16 @@ const getBarItems = () => [
 ];
 const getFilterInput = () => screen.getByRole('combobox', { name: 'Add filter' }) as HTMLInputElement;
 
+/** The bar fed the way Studio feeds it: `useThreadsFilterBarFields` loads its fields through the client. */
+function StudioThreadsFilterBar(props: Omit<ComponentProps<typeof ThreadsFilterBar>, 'fields'>) {
+  return <ThreadsFilterBar {...props} fields={useThreadsFilterBarFields()} />;
+}
+
 const renderBar = async (tokens: TraceFilterToken[]) => {
   setDiscoveryHandlers();
   const onFiltersChange = vi.fn<OnFiltersChange>();
   const { queryClient } = renderWithProviders(
-    <ThreadsFilterBar
+    <StudioThreadsFilterBar
       datePreset="last-24h"
       tokens={tokens}
       groups={[]}

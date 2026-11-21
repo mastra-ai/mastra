@@ -1,13 +1,19 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
-import { readResult } from './mcp-app';
+import { callTool, ToolError } from './mcp-app';
+import {
+  callCursorPage,
+  callOffsetPage,
+  fullTrace,
+  lightTrace,
+  queryArgs,
+  toAppCapabilities,
+  withOpenedFilter,
+} from './mcp-tools';
+import type { OpenedTraceFilter } from './mcp-tools';
+
+export type { OpenedTraceFilter } from './mcp-tools';
 
 type Args = Record<string, unknown>;
-
-/**
- * A query the app was opened with: `where` and `textSearch` apply to every trace query and aggregate the app
- * sends, and `logs` to every log list.
- */
-export type OpenedTraceFilter = { where?: unknown; textSearch?: unknown; logs?: Args };
 
 type ToolRoute = {
   method: 'GET' | 'POST';
@@ -139,121 +145,13 @@ const ROUTES: ToolRoute[] = [
   },
 ];
 
-/** Paging params of Mastra's list routes, which the routes coerce from strings and the tools take as integers. */
-const INTEGER_PARAMS = new Set(['page', 'perPage']);
-
-/** Query params as tool arguments: Mastra's list routes take complex values as JSON strings. */
-function queryArgs(params: URLSearchParams): Args {
-  const args: Args = {};
-  for (const [key, value] of params) {
-    if (INTEGER_PARAMS.has(key) && /^\d+$/.test(value)) {
-      args[key] = Number(value);
-      continue;
-    }
-    try {
-      const parsed: unknown = JSON.parse(value);
-      args[key] = typeof parsed === 'object' && parsed !== null ? parsed : value;
-    } catch {
-      args[key] = value;
-    }
-  }
-  return args;
-}
-
-function withOpenedFilter(args: Args, opened: OpenedTraceFilter | undefined): Args {
-  if (!opened) return args;
-  const next = { ...args };
-  if (opened.where) next.where = next.where ? { op: 'and', args: [opened.where, next.where] } : opened.where;
-  if (opened.textSearch && !next.textSearch) next.textSearch = opened.textSearch;
-  return next;
-}
-
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
-class ToolError extends Error {}
-
-async function call(app: App, tool: string, args: Args): Promise<unknown> {
-  const result = await app.callServerTool({ name: tool, arguments: args });
-  if (result.isError) {
-    throw new ToolError(result.content.find(block => block.type === 'text')?.text ?? `${tool} failed.`);
-  }
-  return readResult(result);
-}
-
-/**
- * The server cuts a page whose rows don't fit in one tool result and then drops its cursor, which would end
- * paging early. Asking again for only the rows that fit returns the same rows with their cursor.
- */
-async function callPage(app: App, route: ToolRoute, args: Args): Promise<unknown> {
+function callPage(app: App, route: ToolRoute, args: Args): Promise<unknown> {
   if (route.offsetRows) return callOffsetPage(app, route.tool, route.offsetRows, args);
-  const result = (await call(app, route.tool, args)) as Args | undefined;
-  const rows = route.rows && result?.truncated ? result[route.rows] : undefined;
-  const page = args.page as { limit?: number } | undefined;
-  if (!Array.isArray(rows) || rows.length === 0 || !page || rows.length >= (page.limit ?? Infinity)) return result;
-  return call(app, route.tool, { ...args, page: { ...page, limit: rows.length } });
-}
-
-type OffsetPage = Args & { pagination?: { hasMore?: boolean } };
-
-/**
- * The same for a list paged by `page` and `perPage`: the rest of a cut page is read as smaller pages that tile
- * it, sized to a divisor of `perPage` no larger than the rows that fit, and returned as the page asked for.
- */
-async function callOffsetPage(app: App, tool: string, key: string, args: Args): Promise<unknown> {
-  const result = (await call(app, tool, args)) as OffsetPage | undefined;
-  const rows = result?.truncated ? result[key] : undefined;
-  const { page = 0, perPage } = args as { page?: number; perPage?: unknown };
-  if (!Array.isArray(rows) || rows.length === 0 || typeof perPage !== 'number' || rows.length >= perPage) {
-    return result;
-  }
-  let size = rows.length;
-  while (perPage % size !== 0) size--;
-  const all: unknown[] = [];
-  let last: OffsetPage | undefined;
-  for (let part = 0; part < perPage / size; part++) {
-    last = (await callOffsetPage(app, tool, key, {
-      ...args,
-      page: (page * perPage) / size + part,
-      perPage: size,
-    })) as OffsetPage;
-    const partRows = (last[key] as unknown[] | undefined) ?? [];
-    all.push(...partRows);
-    if (!last.pagination?.hasMore || partRows.length < size) break;
-  }
-  return { ...last, [key]: all, pagination: { ...last!.pagination, page, perPage } };
-}
-
-/** `get_trace` pages long traces by `nextOffset`; Studio's light trace has every span. */
-async function lightTrace(app: App, traceId: string): Promise<unknown> {
-  const first = (await call(app, 'get_trace', { traceId })) as { spans: unknown[]; nextOffset?: number };
-  const spans = [...first.spans];
-  let offset = first.nextOffset;
-  while (offset !== undefined) {
-    const page = (await call(app, 'get_trace', { traceId, offset })) as { spans: unknown[]; nextOffset?: number };
-    if (page.spans.length === 0) break;
-    spans.push(...page.spans);
-    offset = page.nextOffset;
-  }
-  return { traceId, spans };
-}
-
-/** Span details fetched at once: enough to keep a long trace quick without flooding the host. */
-const FULL_TRACE_CONCURRENCY = 8;
-
-async function fullTrace(app: App, traceId: string): Promise<unknown> {
-  const { spans } = (await lightTrace(app, traceId)) as { spans: { spanId: string }[] };
-  const full: unknown[] = new Array(spans.length);
-  let next = 0;
-  const worker = async () => {
-    while (next < spans.length) {
-      const index = next++;
-      const { span } = (await call(app, 'get_span', { traceId, spanId: spans[index]!.spanId })) as { span: unknown };
-      full[index] = span;
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(FULL_TRACE_CONCURRENCY, spans.length) }, worker));
-  return { traceId, spans: full };
+  if (route.rows) return callCursorPage(app, route.tool, route.rows, args);
+  return callTool(app, route.tool, args);
 }
 
 /**
@@ -277,20 +175,7 @@ export function createMcpFetch(app: App, getOpened: () => OpenedTraceFilter | un
         if (route.fullTrace) return json(await fullTrace(app, args.traceId as string));
         if (route.tool === 'get_trace') return json(await lightTrace(app, args.traceId as string));
         const result = await callPage(app, route, args);
-        if (route.tool === 'get_observability_capabilities') {
-          // The tools don't take delta polling, so the lists reload their pages instead. Logs and metrics show
-          // only when this caller's tools serve them.
-          const { capabilities, tools, ...rest } = result as { capabilities: Args; tools?: Args };
-          return json({
-            ...rest,
-            capabilities: {
-              ...capabilities,
-              deltaPolling: false,
-              logs: capabilities.logs === true && tools?.logs === true,
-              metrics: capabilities.metrics === true && tools?.metrics === true,
-            },
-          });
-        }
+        if (route.tool === 'get_observability_capabilities') return json(toAppCapabilities(result));
         return json(result);
       } catch (error) {
         // A tool error is the route's answer; anything else means the tool isn't offered to this caller.
