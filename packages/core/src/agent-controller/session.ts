@@ -4847,9 +4847,7 @@ export class Session<TState = unknown> {
         // Drop this process's hold on the parked run (stream, registry entries, cached
         // workflow run) while its snapshot still reads as suspended, then the snapshot.
         // A failed in-memory release must not keep the snapshot from being deleted.
-        await this.#releaseParkedRunInMemory(runId).catch(error =>
-          this.emit({ type: 'error', error: getErrorFromUnknown(error) }),
-        );
+        await this.#releaseParkedRunInMemory(runId);
         await this.machinery.releaseSuspendedRun(runId);
       } catch (error) {
         this.emit({ type: 'error', error: getErrorFromUnknown(error) });
@@ -4860,7 +4858,13 @@ export class Session<TState = unknown> {
   async #releaseParkedRunInMemory(runId: string): Promise<void> {
     for (const agent of new Set([this.machinery.getAgent(), ...(this.machinery.getAgents?.() ?? [])])) {
       const release = (agent as { releaseParkedRun?: (runId: string) => Promise<boolean> }).releaseParkedRun;
-      if (typeof release === 'function' && (await release.call(agent, runId))) return;
+      if (typeof release !== 'function') continue;
+      try {
+        if (await release.call(agent, runId)) return;
+      } catch (error) {
+        // One agent's failure must not keep the others from releasing the run.
+        this.emit({ type: 'error', error: getErrorFromUnknown(error) });
+      }
     }
   }
 

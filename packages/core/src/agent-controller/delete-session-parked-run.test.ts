@@ -95,6 +95,47 @@ describe('deleteSession with a parked suspension (#30743)', () => {
     expect(runs).toHaveLength(0);
   });
 
+  it('reports a failed snapshot read instead of treating it as nothing to release', async () => {
+    const { agent, controller, storage } = await setup();
+    const session = await park(controller, 0);
+    const errors: Error[] = [];
+    session.subscribe(event => {
+      if (event.type === 'error') errors.push(event.error);
+    });
+    const engine = (agent as any).executionEngine;
+    const loadRunSnapshot = engine.loadRunSnapshot.bind(engine);
+    vi.spyOn(engine, 'loadRunSnapshot').mockImplementation(async (runId: any) => {
+      if (new Error().stack?.includes('releaseParkedExecution')) throw new Error('snapshot read failed');
+      return loadRunSnapshot(runId);
+    });
+    await controller.deleteSession({ sessionId: 's-0' });
+
+    expect(errors.map(error => error.message)).toContain('snapshot read failed');
+    const { runs } = await (await storage.getStore('workflows'))!.listWorkflowRuns({});
+    expect(runs).toHaveLength(0);
+  });
+
+  it('still tries the other agents when one fails to release the parked run', async () => {
+    const { agent, controller } = await setup();
+    const session = await park(controller, 0);
+    const errors: Error[] = [];
+    session.subscribe(event => {
+      if (event.type === 'error') errors.push(event.error);
+    });
+    const failing = { releaseParkedRun: vi.fn().mockRejectedValue(new Error('other agent failed')) };
+    const machinery = (session as any).machinery;
+    const getAgents = machinery.getAgents?.bind(machinery);
+    vi.spyOn(machinery, 'getAgent').mockReturnValue(failing);
+    machinery.getAgents = () => [failing, agent, ...(getAgents?.() ?? [])];
+    const releaseParkedRun = vi.spyOn(agent, 'releaseParkedRun');
+    await controller.deleteSession({ sessionId: 's-0' });
+
+    expect(failing.releaseParkedRun).toHaveBeenCalled();
+    expect(await releaseParkedRun.mock.results[0]?.value).toBe(true);
+    expect(errors.map(error => error.message)).toContain('other agent failed');
+    expect(agent.runRegistry.size).toBe(0);
+  });
+
   it('keeps the parked run in memory when the session moves to a new thread', async () => {
     const { agent, controller } = await setup();
     const session = await park(controller, 0);

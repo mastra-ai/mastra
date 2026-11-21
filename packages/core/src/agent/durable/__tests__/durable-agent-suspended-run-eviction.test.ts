@@ -339,69 +339,79 @@ describe('releaseParkedRun beside a successor execution', () => {
 });
 
 describe('an observer ended by a bare idle timeout', () => {
-  async function parkedAndReleased(runId: string) {
-    const { agent, workflow } = setup();
-    await suspend(agent, runId);
-    await agent.releaseParkedRun(runId);
-    expect(workflow.runs.size).toBe(0);
-    return agent;
+  type Setup = ReturnType<typeof setup>;
+  type IdleObserve = (s: Setup, runId: string) => Promise<void>;
+
+  /**
+   * Observes `runId` until the idle timeout ends the observer, twice: once after the parked run is
+   * released (nothing local is left, so nothing is releasable) and once while it is still parked.
+   * A timed-out observer's release left tracked would run with the parked run's release and clear
+   * the run's stream topics, which the parked run keeps for whoever resumes or observes it next.
+   */
+  async function expectNoReleaseLeftBehind(runId: string, idleObserve: IdleObserve) {
+    const released = setup();
+    await suspend(released.agent, runId);
+    await released.agent.releaseParkedRun(runId);
+    expect(released.workflow.runs.size).toBe(0);
+    await idleObserve(released, runId);
+    expect(await released.agent.releaseParkedRun(runId)).toBe(false);
+
+    const parked = setup();
+    await suspend(parked.agent, runId);
+    await idleObserve(parked, runId);
+    const clearTopic = vi.spyOn((parked.mastra as any).pubsub, 'clearTopic');
+    expect(await parked.agent.releaseParkedRun(runId)).toBe(true);
+    expect(clearTopic).not.toHaveBeenCalled();
   }
 
   it('leaves no stream release behind when nothing reads it', async () => {
-    const agent = await parkedAndReleased('run-idle');
-    const onError = vi.fn();
-    await agent.observe('run-idle', { idleTimeoutMs: 20, onError });
-    await expect.poll(() => onError.mock.calls.length).toBe(1);
-
-    expect(await agent.releaseParkedRun('run-idle')).toBe(false);
+    await expectNoReleaseLeftBehind('run-idle', async ({ agent }, runId) => {
+      const onError = vi.fn();
+      await agent.observe(runId, { idleTimeoutMs: 20, onError });
+      await expect.poll(() => onError.mock.calls.length).toBe(1);
+    });
   });
 
   it('leaves no stream release behind when the timeout fires before observe() returns', async () => {
-    const { agent, workflow, storage } = setup();
-    await suspend(agent, 'run-idle-early');
-    await agent.releaseParkedRun('run-idle-early');
-    expect(workflow.runs.size).toBe(0);
-    // observe()'s last setup read (the completion check) waits until the idle timeout has fired,
-    // so the timeout always lands before observe() returns.
-    let idled!: () => void;
-    const idleFired = new Promise<void>(resolve => (idled = resolve));
-    const onError = vi.fn(() => idled());
-    let gatedReads = 0;
-    const getStore = storage.getStore.bind(storage);
-    const gated = vi.spyOn(storage, 'getStore').mockImplementation(async (...args: any[]) => {
-      if (new Error().stack?.includes('isObservationComplete')) {
-        gatedReads++;
-        await idleFired;
+    await expectNoReleaseLeftBehind('run-idle-early', async ({ agent, storage }, runId) => {
+      // observe()'s last setup read (the completion check) waits until the idle timeout has fired,
+      // so the timeout always lands before observe() returns.
+      let idled!: () => void;
+      const idleFired = new Promise<void>(resolve => (idled = resolve));
+      const onError = vi.fn(() => idled());
+      let gatedReads = 0;
+      const getStore = storage.getStore.bind(storage);
+      const gated = vi.spyOn(storage, 'getStore').mockImplementation(async (...args: any[]) => {
+        if (new Error().stack?.includes('isObservationComplete')) {
+          gatedReads++;
+          await idleFired;
+        }
+        return (getStore as any)(...args);
+      });
+      try {
+        await agent.observe(runId, { idleTimeoutMs: 5, onError });
+      } finally {
+        gated.mockRestore();
       }
-      return (getStore as any)(...args);
+      expect(gatedReads).toBeGreaterThan(0);
+      expect(onError).toHaveBeenCalledTimes(1);
     });
-    try {
-      await agent.observe('run-idle-early', { idleTimeoutMs: 5, onError });
-    } finally {
-      gated.mockRestore();
-    }
-    expect(gatedReads).toBeGreaterThan(0);
-    expect(onError).toHaveBeenCalledTimes(1);
-
-    expect(await agent.releaseParkedRun('run-idle-early')).toBe(false);
   });
 
   it('leaves no stream release behind when its caller awaits output.text', async () => {
-    const agent = await parkedAndReleased('run-idle-text');
-    const observed = await agent.observe('run-idle-text', { idleTimeoutMs: 20 });
-    await observed.output.text.catch(() => undefined);
-
-    expect(await agent.releaseParkedRun('run-idle-text')).toBe(false);
+    await expectNoReleaseLeftBehind('run-idle-text', async ({ agent }, runId) => {
+      const observed = await agent.observe(runId, { idleTimeoutMs: 20 });
+      await observed.output.text.catch(() => undefined);
+    });
   });
 
   it('leaves no stream release behind when its caller reads fullStream', async () => {
-    const agent = await parkedAndReleased('run-idle-stream');
-    const observed = await agent.observe('run-idle-stream', { idleTimeoutMs: 20 });
-    for await (const _chunk of observed.fullStream as AsyncIterable<any>) {
-      // ends with the idle timeout's error chunk
-    }
-
-    expect(await agent.releaseParkedRun('run-idle-stream')).toBe(false);
+    await expectNoReleaseLeftBehind('run-idle-stream', async ({ agent }, runId) => {
+      const observed = await agent.observe(runId, { idleTimeoutMs: 20 });
+      for await (const _chunk of observed.fullStream as AsyncIterable<any>) {
+        // ends with the idle timeout's error chunk
+      }
+    });
   });
 });
 

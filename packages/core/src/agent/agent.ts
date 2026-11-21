@@ -12979,12 +12979,8 @@ export class Agent<
     if (!localEntry && !run && streamCleanups.every(cleanup => this.#observerCleanups.has(cleanup))) return false;
     if (this.#resumesInProgress.has(runId)) return false;
 
-    let snapshot: WorkflowRunState | undefined;
-    try {
-      snapshot = await engine.loadRunSnapshot(runId);
-    } catch {
-      return false;
-    }
+    // A failed read is not a miss: it propagates so the caller can report it.
+    const snapshot = await engine.loadRunSnapshot(runId);
     if (snapshot?.status !== 'suspended') return false;
     // A resume that started while the snapshot was read registers its own segment.
     const currentCleanups = this.#streamCleanups.get(runId);
