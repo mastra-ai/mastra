@@ -76,10 +76,15 @@ export async function listChannelAccounts(baseUrl: string): Promise<ChannelAccou
 /**
  * The "Sign in with Slack" entry point. A full-page navigation (not fetch):
  * the route replies with a redirect chain out to Slack's consent screen.
+ * `from: 'setup'` brings the member back to the Factory's setup page instead
+ * of its Slack settings.
  */
-export function connectSlackUrl(baseUrl: string, factoryProjectId?: string): string {
-  const query = factoryProjectId ? `?factoryId=${encodeURIComponent(factoryProjectId)}` : '';
-  return `${baseUrl}/connect/slack/oidc/start${query}`;
+export function connectSlackUrl(baseUrl: string, factoryProjectId?: string, from?: 'setup'): string {
+  const params = new URLSearchParams({
+    ...(factoryProjectId ? { factoryId: factoryProjectId } : {}),
+    ...(from ? { from } : {}),
+  }).toString();
+  return `${baseUrl}/connect/slack/oidc/start${params ? `?${params}` : ''}`;
 }
 
 /**

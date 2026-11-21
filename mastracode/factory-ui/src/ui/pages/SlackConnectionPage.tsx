@@ -1,13 +1,14 @@
 import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
-import { Link, useParams } from 'react-router';
+import { Link, useParams, useSearchParams } from 'react-router';
 
 import { useApiConfig } from '../../api/config';
 import {
@@ -73,6 +74,9 @@ export function SlackConnectionSettings() {
   const factoriesQuery = useFactoriesQuery();
   const disconnectMutation = useDisconnectChannelAccountMutation();
   const setDefaultFactoryMutation = useSetDefaultFactoryMutation();
+  // Sign in with Slack ends here with its outcome (`?slack=connected|error`).
+  const [params] = useSearchParams();
+  const outcome = params.get('slack');
 
   const accounts = accountsQuery.data?.accounts.filter(candidate => candidate.platform === 'slack') ?? [];
   const canConnect = accountsQuery.data?.canConnect ?? false;
@@ -119,6 +123,12 @@ export function SlackConnectionSettings() {
 
   return (
     <>
+      {outcome === 'connected' && accounts.length > 0 && (
+        <Notice variant="success">Slack is connected. Mention the agent in Slack and it runs as you.</Notice>
+      )}
+      {outcome === 'error' && (
+        <Notice variant="destructive">Slack sign-in didn&apos;t finish, so nothing was connected. Try again.</Notice>
+      )}
       {accountsQuery.isPending ? (
         <SettingsSubsection scope="personal" title="Connection">
           <SettingsContainer>

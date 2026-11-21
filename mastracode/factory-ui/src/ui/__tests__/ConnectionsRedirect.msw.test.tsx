@@ -13,19 +13,35 @@ function renderAt(url: string) {
   return router;
 }
 
+function stubSignedInWithOneFactory() {
+  server.use(
+    http.get(`${TEST_BASE_URL}/auth/me`, () =>
+      HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+      HttpResponse.json({ projects: [{ id: 'fp-1', name: 'First Factory', repositories: [] }] }),
+    ),
+  );
+}
+
 describe('Connections entry (/settings/connections)', () => {
   it('forwards to the first Factory Connections settings', async () => {
-    server.use(
-      http.get(`${TEST_BASE_URL}/auth/me`, () =>
-        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'First Factory', repositories: [] }] }),
-      ),
-    );
+    stubSignedInWithOneFactory();
 
     const router = renderAt('/settings/connections');
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/factories/fp-1/settings/connections'));
+  });
+
+  it("brings a Slack sign-in's outcome to the Slack settings, where it is shown", async () => {
+    stubSignedInWithOneFactory();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/channel-accounts`, () => HttpResponse.json({ accounts: [], canConnect: true })),
+    );
+
+    const router = renderAt('/settings/connections?slack=error');
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/factories/fp-1/settings/connections/slack'));
+    expect(router.state.location.search).toBe('?slack=error');
   });
 });

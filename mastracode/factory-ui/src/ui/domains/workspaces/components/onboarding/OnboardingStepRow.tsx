@@ -22,7 +22,12 @@ export function OnboardingNextRow({
   index?: number;
   hint?: string;
 }) {
-  const { label, ...meta } = ONBOARDING_SECTIONS[section];
+  const meta = ONBOARDING_SECTIONS[section];
+  return <StepNextRow label={meta.label} index={index ?? meta.index} hint={hint} />;
+}
+
+/** The same preview for steps that aren't onboarding sections (a member's Factory setup). */
+export function StepNextRow({ label, index, hint }: { label: string; index: number; hint?: string }) {
   return (
     <section aria-label={label} className={cn('flex min-h-14 items-center gap-3 px-4 py-3', ONBOARDING_FRAME_RADIUS)}>
       <span
@@ -30,7 +35,7 @@ export function OnboardingNextRow({
         aria-hidden="true"
       >
         <Txt as="span" variant="meta">
-          {index ?? meta.index}
+          {index}
         </Txt>
       </span>
       <Txt as="span" tone="muted" className="w-20 shrink-0">
@@ -72,29 +77,58 @@ export function OnboardingDoneRow({
           focusRingInset,
         )}
       >
-        <span
-          className="bg-foreground text-background grid size-6 shrink-0 place-items-center rounded-full"
-          aria-hidden="true"
-        >
-          <IconCheckmark2Medium className="size-icon-sm" />
-        </span>
-        <Txt as="span" tone="muted" className="w-20 shrink-0">
-          {label}
-        </Txt>
-        <span id={valueId} className="flex min-w-0 flex-1 items-baseline gap-2">
-          <Txt as="span" tone="ink" className="min-w-0 truncate">
-            {value}
-          </Txt>
-          {subValue && (
-            <Txt as="span" variant="meta" tone="muted" className="shrink-0 truncate max-[899px]:hidden">
-              {subValue}
-            </Txt>
-          )}
-        </span>
+        <DoneRowSummary label={label} value={value} subValue={subValue} valueId={valueId} />
         <Txt as="span" variant="caption" tone="muted" className="shrink-0">
           Change
         </Txt>
       </button>
     </section>
+  );
+}
+
+/** A finished step that can't be reopened from here (a member's Factory setup). */
+export function StepDoneRow({ label, value, subValue }: { label: string; value: string; subValue?: string }) {
+  return (
+    <section aria-label={label} className={cn('onboarding-card bg-card', ONBOARDING_FRAME_RADIUS)}>
+      <div className="flex min-h-14 w-full items-center gap-3 px-4 py-3">
+        <DoneRowSummary label={label} value={value} subValue={subValue} />
+      </div>
+    </section>
+  );
+}
+
+function DoneRowSummary({
+  label,
+  value,
+  subValue,
+  valueId,
+}: {
+  label: string;
+  value?: string;
+  subValue?: string;
+  valueId?: string;
+}) {
+  return (
+    <>
+      <span
+        className="bg-foreground text-background grid size-6 shrink-0 place-items-center rounded-full"
+        aria-hidden="true"
+      >
+        <IconCheckmark2Medium className="size-icon-sm" />
+      </span>
+      <Txt as="span" tone="muted" className="w-20 shrink-0">
+        {label}
+      </Txt>
+      <span id={valueId} className="flex min-w-0 flex-1 items-baseline gap-2">
+        <Txt as="span" tone="ink" className="min-w-0 truncate">
+          {value}
+        </Txt>
+        {subValue && (
+          <Txt as="span" variant="meta" tone="muted" className="shrink-0 truncate max-[899px]:hidden">
+            {subValue}
+          </Txt>
+        )}
+      </span>
+    </>
   );
 }

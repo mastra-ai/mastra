@@ -49,6 +49,15 @@ export function factorySettingsUrl(factoryProjectId: string, section: string): s
   return factoryUrl(factoryProjectId, `/settings/${section.split('/').map(encodeURIComponent).join('/')}`);
 }
 
+/**
+ * A member's setup page for a Factory: the steps (their own model, their Slack link) still missing before
+ * they can work in it. `query` carries where they came from, e.g. `{ from: 'slack' }`.
+ */
+export function factorySetupUrl(factoryProjectId: string, query?: Record<string, string>): string | undefined {
+  const search = query && Object.keys(query).length > 0 ? `?${new URLSearchParams(query)}` : '';
+  return factoryUrl(factoryProjectId, `/setup${search}`);
+}
+
 export function factoryRulesUrl(factoryProjectId: string, group?: string): string | undefined {
   return factoryUrl(factoryProjectId, group ? `/rules?${new URLSearchParams({ group })}` : '/rules');
 }
