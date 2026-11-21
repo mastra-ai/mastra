@@ -221,6 +221,19 @@ async function disconnect(client: RedisClientType): Promise<void> {
 }
 
 /**
+ * Send a command to the node that owns `streamKey`. A cluster client routes by
+ * the first key, so the stream key reaches the node the reader's blocking
+ * XREADGROUP is pinned to; a standalone client takes the plain form.
+ */
+async function sendToStreamNode<T>(client: RedisClientType, streamKey: string, args: string[]): Promise<T> {
+  const cluster = client as unknown as Partial<Pick<RedisClusterType, 'masters'>>;
+  if (Array.isArray(cluster.masters)) {
+    return (client as unknown as RedisClusterType).sendCommand<T>(streamKey, false, args);
+  }
+  return client.sendCommand<T>(args);
+}
+
+/**
  * Mastra PubSub backed by Redis Streams.
  *
  * - Each topic maps to a Redis stream key `<prefix>:<topic>`.
@@ -925,7 +938,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
       throw err;
     }
 
-    return {
+    const sub: Subscription = {
       members: new Map([[cb, {}]]),
       settling: new Map(),
       topic,
@@ -941,6 +954,22 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
       reclaimTimer: undefined,
       inFlight: new Map(),
     };
+
+    // Await this: a fire-and-forget capture would let an immediate unsubscribe()
+    // race it and lose the benefit. One extra round trip per reader, not per read.
+    await this.#captureReaderId(sub);
+    // A reconnect gives the reader a new connection id.
+    readClient.on('ready', () => void this.#captureReaderId(sub));
+    return sub;
+  }
+
+  /** Best effort: an uncaptured id just means stop waits out the block as before. */
+  async #captureReaderId(sub: Subscription): Promise<void> {
+    try {
+      sub.readerClientId = await sendToStreamNode<number>(sub.readClient, sub.streamKey, ['CLIENT', 'ID']);
+    } catch (err) {
+      this.#logger?.debug?.('redis-streams: CLIENT ID failed', { topic: sub.topic, err: errorText(err) });
+    }
   }
 
   /**
@@ -1105,7 +1134,32 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     return sub.teardown;
   }
 
+  /**
+   * Cancel a reader's blocking XREADGROUP so its connection can close promptly.
+   * Best effort: a missing or stale id (never captured, or captured before a
+   * reconnect) makes this a no-op and stop falls back to waiting out the block.
+   */
+  async #cancelBlockingRead(sub: Subscription): Promise<void> {
+    if (sub.readerClientId === undefined) return;
+    try {
+      await sendToStreamNode(this.#writeClient, sub.streamKey, [
+        'CLIENT',
+        'UNBLOCK',
+        String(sub.readerClientId),
+        'TIMEOUT',
+      ]);
+    } catch (err) {
+      this.#logger?.debug?.('redis-streams: CLIENT UNBLOCK failed', { topic: sub.topic, err: errorText(err) });
+    }
+  }
+
   async #stopSubscription(sub: Subscription): Promise<void> {
+    // Cancel the in-flight blocking XREADGROUP by unblocking the reader, so the
+    // close below does not wait out the rest of the block. CLIENT UNBLOCK only
+    // affects a client that is actually blocked: if a reply is already on its
+    // way it is a no-op and that batch is still returned and drained below.
+    await this.#cancelBlockingRead(sub);
+
     // Cancel the in-flight blocking XREADGROUP by closing the reader.
     try {
       await disconnect(sub.readClient);
@@ -1926,6 +1980,10 @@ interface Subscription {
   groupAnchor: '0' | '$';
   lastId: string | undefined;
   readClient: RedisClientType;
+  // The reader connection's CLIENT ID, so stop can cancel its blocking read.
+  // Undefined until captured, and stale after a reconnect — both degrade to
+  // waiting out the block.
+  readerClientId?: number;
   stopped: boolean;
   loop: Promise<void> | undefined;
   reclaimTimer: ReturnType<typeof setTimeout> | undefined;
