@@ -13012,7 +13012,8 @@ export class Agent<
       [
         ...streamCleanups.flatMap(cleanup => {
           const evictParked = this.#parkedRuntimeEvictions.get(cleanup);
-          return evictParked ? [() => cleanup.run(), evictParked] : [() => cleanup.run()];
+          // Evicted first: closing the continuation drops one of the ways the record is matched to its stream.
+          return evictParked ? [evictParked, () => cleanup.run()] : [() => cleanup.run()];
         }),
         () => {
           if (localEntry) this.executionRunRegistry.cleanup(runId);

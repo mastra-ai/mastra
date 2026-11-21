@@ -4936,7 +4936,7 @@ export class AgentThreadStreamRuntime {
   evictParkedRun<OUTPUT>(ownerOutput: MastraModelOutput<OUTPUT>, pubsub?: PubSub): boolean {
     const state = this.#getState(pubsub);
     for (const [streamId, record] of state.threadRunsByStreamId) {
-      if (record.lifecycle !== 'suspended') continue;
+      if (record.runId !== ownerOutput.runId || record.lifecycle !== 'suspended') continue;
       if (record.continuation?.sourceOutput !== ownerOutput && record.currentSegmentOutput !== ownerOutput) continue;
       this.#evictSuspendedRecord(state, pubsub, record, streamId, Date.now());
       return true;

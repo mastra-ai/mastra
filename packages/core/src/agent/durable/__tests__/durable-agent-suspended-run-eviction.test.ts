@@ -100,9 +100,13 @@ describe('releaseParkedRun', () => {
     const reader = (fullStream as ReadableStream<any>).getReader();
     await expect.poll(() => storedStatus(storage, 'run-parked')).toBe('suspended');
     expect(agent.runRegistry.size).toBe(1);
+    const unsubscribe = vi.spyOn(streamPubSub(agent), 'unsubscribe');
 
     expect(await agent.releaseParkedRun('run-parked')).toBe(true);
     expect(agent.runRegistry.size).toBe(0);
+    // Neither its reader nor its remote-abort listener (which holds the registry entry) stays subscribed.
+    expect(unsubscribe).toHaveBeenCalledWith('agent.stream.run-parked', expect.any(Function));
+    await vi.waitFor(() => expect(unsubscribe).toHaveBeenCalledWith('agent.control.run-parked', expect.any(Function)));
     expect(await storedStatus(storage, 'run-parked')).toBe('suspended');
     reader.releaseLock();
     expect(await resumeText(agent, 'run-parked')).toBe('done');
