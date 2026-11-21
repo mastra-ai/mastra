@@ -275,6 +275,8 @@ function isStaleRequest(expiresAt: number | undefined): boolean {
 /** Thread lease TTL and renew interval; shared with the durable execution lease. */
 const AGENT_THREAD_LEASE_TTL_MS = AGENT_LEASE_TTL_MS;
 const AGENT_THREAD_LEASE_RENEW_INTERVAL_MS = AGENT_LEASE_RENEW_INTERVAL_MS;
+/** Lease checks a forwarder waits for its probe to come back before publishing a new one. */
+const FORWARDED_LEASE_PROBE_RETRY_CHECKS = 5;
 /**
  * TTL for a suspended run's warm in-memory state — the parked thread-run record
  * (swept by #sweepStaleSuspendedRecords). The Mastra internal-workflow registry
@@ -695,6 +697,16 @@ type ForwardedIdleSignal = {
   leaseGone?: boolean;
 };
 
+type ForwardedIdleLeaseProbe = {
+  probeId: string;
+  /** The lease check that published it. */
+  publishedAtCheck: number;
+  /** The forwards whose run had lost the lease on two checks when the probe was published. */
+  signalIds: Set<string>;
+  /** The thread's active stream when the lease was read. */
+  streamBeforeRead: string | undefined;
+};
+
 type AgentThreadRuntimeState = {
   threadRunsById: Map<string, AgentThreadRunRecord<any>>;
   threadRunsByStreamId: Map<string, AgentThreadRunRecord<any>>;
@@ -735,6 +747,11 @@ type AgentThreadRuntimeState = {
   forwardedIdleSignalsByThread: Map<string, Map<string, ForwardedIdleSignal>>;
   /** Per thread key, the timer that checks the lease while `forwardedIdleSignalsByThread` holds messages for it. */
   forwardedIdleLeaseChecks: Map<string, ReturnType<typeof setInterval>>;
+  /**
+   * Per thread key, the probe a lease check published before queueing held forwards again, and the forwards it may
+   * queue once this runtime's thread reader reads it back (see `#watchForwardedIdleLease`).
+   */
+  forwardedIdleLeaseProbes: Map<string, ForwardedIdleLeaseProbe>;
   /**
    * Runs the suspended-run TTL sweep evicted, mapped to when their lease was last
    * known to be extended. The sweep keeps their lease, so until it lapses an idle
@@ -928,6 +945,8 @@ type AgentThreadStreamRuntimeEvent =
   // The owner admitted a forwarded message on admittedRunId. Unlike the presentation, it carries no runId of its own, so
   // the run's trim keeps it for a forwarder that reads the thread after that run ended.
   | { type: 'user-message-admitted'; signalId: string; admittedRunId: string }
+  // A forwarder's lease check, read back by its own thread reader once that reader is past every earlier admission.
+  | { type: 'forwarded-lease-probe'; probeId: string }
   | { type: 'run-aborted'; runId: string; streamId?: string; superseded?: boolean }
   | { type: 'run-failed'; runId: string; streamId?: string; error: string }
   | { type: 'signal-enqueued'; runId: string; signal: SerializableAgentSignal; sourceId: string; preRun?: boolean }
@@ -1028,6 +1047,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     pendingIdleSignalsByThread: new Map(),
     forwardedIdleSignalsByThread: new Map(),
     forwardedIdleLeaseChecks: new Map(),
+    forwardedIdleLeaseProbes: new Map(),
     sweptLeasedRunIds: new Map(),
     pendingLeaseRenewals: new Map(),
     drainingIdleSignalsByThread: new Map(),
@@ -2231,6 +2251,12 @@ export class AgentThreadStreamRuntime {
         this.#notifyPendingSignals(state, key, signal);
       } else if (data?.type === 'user-message-admitted') {
         this.#settleForwardedIdleSignal(state, key, data.signalId, data.admittedRunId);
+      } else if (data?.type === 'forwarded-lease-probe') {
+        const probe = state.forwardedIdleLeaseProbes.get(key);
+        if (probe?.probeId === data.probeId) {
+          state.forwardedIdleLeaseProbes.delete(key);
+          await this.#requeueLeaseGoneForwards(state, resolvedPubSub, key, probe);
+        }
       } else if (data?.type === 'user-message-presentation') {
         // Owners that predate user-message-admitted only announce the admission this way.
         const { chunk } = data;
@@ -2343,7 +2369,12 @@ export class AgentThreadStreamRuntime {
         type !== 'signals-cancelled' &&
         type !== 'run-abort-requested' &&
         type !== 'run-registered' &&
-        !((type === 'user-message-presentation' || type === 'user-message-admitted') && awaitingForwards) &&
+        !(
+          (type === 'user-message-presentation' ||
+            type === 'user-message-admitted' ||
+            type === 'forwarded-lease-probe') &&
+          awaitingForwards
+        ) &&
         !(
           (type === 'run-completed' || type === 'run-failed') &&
           // While a local run is active, its superseding runs are looked up in
@@ -3514,47 +3545,67 @@ export class AgentThreadStreamRuntime {
     state.forwardedIdleSignalsByThread.delete(key);
     clearInterval(state.forwardedIdleLeaseChecks.get(key));
     state.forwardedIdleLeaseChecks.delete(key);
+    state.forwardedIdleLeaseProbes.delete(key);
   }
 
   /**
    * Queues held forwards again once the lease stops naming the run they went to without this runtime seeing that
    * run end: its process died, or it ended before the forward was recorded. The lease must be gone on two checks in
-   * a row, so an admission the owner published just before letting go still arrives first.
+   * a row. Even then the owner may have admitted them before letting go while this runtime's thread reader lags, so
+   * the check publishes a probe on the thread and queues them only once the reader reads that probe back. On a broker
+   * that delivers a topic in order to every reader (Redis Streams), the reader has by then handled every admission
+   * published before the probe, which includes any admission for those forwards: the owner sends it before it lets go.
+   * Only one probe is outstanding per thread. It is dropped if its publish fails or the lease names a covered run
+   * again, and replaced if it has not come back after a few checks; a dropped or replaced probe queues nothing.
    */
   #watchForwardedIdleLease(state: AgentThreadRuntimeState, pubsub: PubSub | undefined, key: string) {
     if (state.forwardedIdleLeaseChecks.has(key)) return;
     const { provider, isFallback } = this.#resolveLeaseProvider(pubsub);
     if (isFallback) return;
     let checking = false;
+    let checks = 0;
     const checkLease = async () => {
       const forwarded = state.forwardedIdleSignalsByThread.get(key);
       if (!forwarded) return;
       const streamBeforeRead = state.activeThreadStreamIds.get(key);
       // Bounded, so a read that never returns frees the in-flight guard and the next tick retries.
       const owner = await this.#readLeaseOwnerInTime(provider, key);
+      // The forwards stopped being tracked (or were tracked again under a new watcher) while the lease was read.
+      if (
+        state.forwardedIdleSignalsByThread.get(key) !== forwarded ||
+        state.forwardedIdleLeaseChecks.get(key) !== check
+      )
+        return;
       const holder = owner === undefined ? undefined : forwardedSignalRunId(owner);
+      checks++;
+      const outstanding = state.forwardedIdleLeaseProbes.get(key);
       const ended = new Set<string>();
-      for (const entry of forwarded.values()) {
-        if (entry.runId === holder) entry.leaseGone = false;
-        else if (entry.leaseGone) ended.add(entry.runId);
+      for (const [signalId, entry] of forwarded) {
+        if (entry.runId === holder) {
+          entry.leaseGone = false;
+          // The run holds the lease again and may admit the forward after the probe, which the reader would then
+          // read first. That lease loss is over, so its probe must not queue anything.
+          if (outstanding?.signalIds.has(signalId)) state.forwardedIdleLeaseProbes.delete(key);
+        } else if (entry.leaseGone) ended.add(entry.runId);
         else entry.leaseGone = true;
       }
-      for (const runId of ended) {
-        if (this.#requeueUnadmittedForwards(state, key, runId)) {
-          // The lease has dropped that run, so a remote run this runtime saw register but never saw end (its observer
-          // unsubscribed) no longer holds the thread; left marked active, it would keep the drain waiting. A run that
-          // registered here, or a new stream that took the slot while the lease was read, is not that remote run.
-          // The drain still runs either way: it waits while any run holds the thread.
-          if (
-            !state.threadRunsById.has(runId) &&
-            state.activeThreadStreamIds.get(key) === streamBeforeRead &&
-            state.activeThreadRunIds.get(key) === runId
-          ) {
-            state.activeThreadRunIds.delete(key);
-            state.activeThreadStreamIds.delete(key);
-          }
-          await this.#drainPendingIdleSignals(state, pubsub, key, runId);
-        }
+      if (ended.size === 0) return;
+      const current = state.forwardedIdleLeaseProbes.get(key);
+      // Replace a probe that has not come back after a few checks, in case the broker dropped it. Its id stops
+      // matching, so a late delivery queues nothing.
+      if (current && checks - current.publishedAtCheck < FORWARDED_LEASE_PROBE_RETRY_CHECKS) return;
+      const probe: ForwardedIdleLeaseProbe = {
+        probeId: globalThis.crypto.randomUUID(),
+        publishedAtCheck: checks,
+        signalIds: new Set([...forwarded].filter(([, entry]) => ended.has(entry.runId)).map(([signalId]) => signalId)),
+        streamBeforeRead,
+      };
+      state.forwardedIdleLeaseProbes.set(key, probe);
+      try {
+        await this.#publishAndWait(pubsub, key, { type: 'forwarded-lease-probe', probeId: probe.probeId });
+      } catch (error) {
+        if (state.forwardedIdleLeaseProbes.get(key) === probe) state.forwardedIdleLeaseProbes.delete(key);
+        throw error;
       }
     };
     // A slow lease read must not overlap the next tick: two overlapping reads would count as two checks.
@@ -3569,6 +3620,43 @@ export class AgentThreadStreamRuntime {
     }, AGENT_THREAD_LEASE_RENEW_INTERVAL_MS);
     check.unref?.();
     state.forwardedIdleLeaseChecks.set(key, check);
+  }
+
+  /**
+   * Queue again the forwards `probe` covered that are still held and whose run still lacks the lease, once this
+   * runtime's thread reader has read the probe back.
+   */
+  async #requeueLeaseGoneForwards(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    probe: ForwardedIdleLeaseProbe,
+  ) {
+    const forwarded = state.forwardedIdleSignalsByThread.get(key);
+    if (!forwarded) return;
+    const lapsed = [...forwarded].filter(([signalId, entry]) => probe.signalIds.has(signalId) && entry.leaseGone);
+    if (lapsed.length === 0) return;
+    for (const [signalId] of lapsed) forwarded.delete(signalId);
+    if (forwarded.size === 0) this.#stopTrackingForwards(state, key);
+    state.pendingIdleSignalsByThread.set(key, [
+      ...lapsed.map(([, entry]) => entry.pendingIdle),
+      ...(state.pendingIdleSignalsByThread.get(key) ?? []),
+    ]);
+    for (const runId of new Set(lapsed.map(([, entry]) => entry.runId))) {
+      // The lease has dropped that run, so a remote run this runtime saw register but never saw end (its observer
+      // unsubscribed) no longer holds the thread; left marked active, it would keep the drain waiting. A run that
+      // registered here, or a stream that took the slot since the lease was read, is not that remote run.
+      // The drain still runs either way: it waits while any run holds the thread.
+      if (
+        !state.threadRunsById.has(runId) &&
+        state.activeThreadStreamIds.get(key) === probe.streamBeforeRead &&
+        state.activeThreadRunIds.get(key) === runId
+      ) {
+        state.activeThreadRunIds.delete(key);
+        state.activeThreadStreamIds.delete(key);
+      }
+      await this.#drainPendingIdleSignals(state, pubsub, key, runId);
+    }
   }
 
   /** Whether the thread lease may still name `runId`: it does, or the backend could not say. */
@@ -4637,6 +4725,7 @@ export class AgentThreadStreamRuntime {
     state.forwardedIdleSignalsByThread.clear();
     for (const check of state.forwardedIdleLeaseChecks.values()) clearInterval(check);
     state.forwardedIdleLeaseChecks.clear();
+    state.forwardedIdleLeaseProbes.clear();
     state.sweptLeasedRunIds.clear();
     state.pendingLeaseRenewals.clear();
     state.leaseRetakes.clear();
