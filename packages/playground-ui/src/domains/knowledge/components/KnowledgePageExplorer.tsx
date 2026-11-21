@@ -3,7 +3,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 
-import { REST_BATCH, isChildPlaceholder, isRestCircle, isScopeGroup, lazyGraph } from '../lib/graphShape';
+import {
+  REST_BATCH,
+  isChildPlaceholder,
+  isRestCircle,
+  isScopeGroup,
+  lazyGraph,
+  restRevealKey,
+} from '../lib/graphShape';
 import { scopeTitle } from '../lib/pageAddress';
 import { bodyLinkEdges, bodyLinkRefs, knowledgePageRefIndex } from '../lib/pageRefs';
 import { KnowledgePagesByRef } from '../lib/pagesByRefContext';
@@ -867,6 +874,8 @@ function useLazyTree(
   const [more, setMore] = useState<ReadonlyMap<string, string[]>>(() => new Map());
   const requests = useMemo(() => {
     const list: KnowledgeExplorerTreeRequest[] = [{ parentId: null }];
+    // Root scopes past the first chunk, as the tree's or the graph's "more" asks for them.
+    for (const cursor of more.get(KNOWLEDGE_TREE_ROOT) ?? []) list.push({ parentId: null, cursor });
     for (const id of expanded) {
       list.push({ parentId: id });
       for (const cursor of more.get(id) ?? []) list.push({ parentId: id, cursor });
@@ -971,6 +980,7 @@ export function KnowledgePageExplorer({
   const [allLinks, setAllLinks] = useState(false);
   const [dotCounts, setDotCounts] = useState(true);
   const lazy = useLazyTree(source, graph, selected.data, graphOpened);
+  const moreRoots = lazy.loadMore.has(KNOWLEDGE_TREE_ROOT);
   // With tree levels the graph loads like the tree: the focus (or the root scopes) and what sits around
   // it, never the whole instance. Without them it draws the host's bounded graph as it is.
   const drawnGraph = useMemo(
@@ -984,6 +994,7 @@ export function KnowledgePageExplorer({
             focusId: selectedPageId,
             openGroups,
             revealed,
+            moreRoots,
           })
         : {
             pages: graph.pages,
@@ -991,7 +1002,7 @@ export function KnowledgePageExplorer({
             wanted: [],
             hub: null,
           },
-    [lazyMode, lazy.pages, lazy.loaded, selectedPageId, openGroups, revealed, graph.pages],
+    [lazyMode, lazy.pages, lazy.loaded, selectedPageId, openGroups, revealed, moreRoots, graph.pages],
   );
   // The pages the focus needs are in (or failed to load): only then does the graph move to the new focus.
   const graphSettled = !lazyMode || drawnGraph.wanted.every(id => lazy.loaded.has(id) || lazy.failed.has(id));
@@ -1528,11 +1539,11 @@ export function KnowledgePageExplorer({
                     // A stand-in loads its parent's children; a scope group opens into its scopes.
                     if (isChildPlaceholder(page)) return page.parentId ? previewParent(page.parentId) : undefined;
                     if (isRestCircle(page)) {
-                      const parentId = page.parentId;
-                      if (!parentId) return undefined;
-                      setRevealed(current => new Map(current).set(parentId, (current.get(parentId) ?? 0) + REST_BATCH));
-                      // Past the children loaded so far, fetch the next chunk too.
-                      return lazy.loadMore.get(parentId)?.();
+                      const key = restRevealKey(page);
+                      if (key === null) return undefined;
+                      setRevealed(current => new Map(current).set(key, (current.get(key) ?? 0) + REST_BATCH));
+                      // Past the pages loaded so far, fetch the next chunk too.
+                      return lazy.loadMore.get(key)?.();
                     }
                     if (isScopeGroup(page)) return setOpenGroups(current => new Set(current).add(page.id));
                     // Hosts resolve a `?page=` with no view to the page view, so say graph outright.
