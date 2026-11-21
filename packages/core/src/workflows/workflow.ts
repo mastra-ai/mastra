@@ -4042,10 +4042,12 @@ export class Workflow<
       return;
     }
 
-    await workflowsStore.deleteWorkflowRunById({ runId, workflowName: this.id, ...options });
-    // A held instance would otherwise come back from a reopen of the deleted run. Queued behind
-    // opens in flight, so one that read the record before the delete cannot cache it after.
-    await this.openRunOnce(runId, async () => this.forgetRun(runId));
+    // Queued behind opens in flight, so an open cannot store or cache the run between the storage
+    // delete and dropping this process's instance; a held instance would otherwise come back.
+    await this.openRunOnce(runId, async () => {
+      await workflowsStore.deleteWorkflowRunById({ runId, workflowName: this.id, ...options });
+      this.forgetRun(runId);
+    });
   }
 
   protected async getWorkflowRunSteps({ runId, workflowId }: { runId: string; workflowId: string }) {

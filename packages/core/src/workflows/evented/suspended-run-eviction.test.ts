@@ -379,6 +379,33 @@ describe.each(engines)('$engine engine: suspended run eviction', ({ createWorkfl
     expect(reopened.workflowRunStatus).toBe('pending');
   });
 
+  it('does not leave two instances of a run deleted while a new open of it read storage', async () => {
+    const { workflow } = await setup();
+    const store = (await mastra!.getStorage()!.getStore('workflows'))!;
+    const runId = 'deleted-while-opening';
+    const storeDelete = store.deleteWorkflowRunById.bind(store);
+    let storeDeleteCalled!: () => void;
+    const storeDeleteStarted = new Promise<void>(resolve => (storeDeleteCalled = resolve));
+    store.deleteWorkflowRunById = async (...args: Parameters<typeof storeDelete>) => {
+      storeDeleteCalled();
+      return storeDelete(...args);
+    };
+    // The open has found no record, and waits before it stores and caches the new run.
+    const gate = gateFirst(store, { afterRead: true });
+    const opening = workflow.createRun({ runId });
+    await gate.entered;
+    const deleted = workflow.deleteWorkflowRunById(runId);
+    gate.release();
+    const opened = await opening;
+    await deleted;
+    await storeDeleteStarted;
+
+    // The record and this process's instance agree: either both survive or neither does.
+    const stored = await workflow.getWorkflowRunById(runId);
+    const reopened = await workflow.createRun({ runId });
+    expect(reopened === opened).toBe(!!stored);
+  });
+
   it('does not keep a run whose record was deleted while an open of it read storage', async () => {
     const { workflow } = await setup();
     const held = await workflow.createRun();
@@ -391,8 +418,8 @@ describe.each(engines)('$engine engine: suspended run eviction', ({ createWorkfl
     let deleted: Promise<void> | undefined;
     try {
       await gate.entered;
+      // Requested while the open is gated; it reaches storage only once the open settles.
       deleted = workflow.deleteWorkflowRunById(held.runId);
-      await Promise.race([deleted, new Promise(resolve => setTimeout(resolve, 50))]);
     } finally {
       gate.release();
     }
