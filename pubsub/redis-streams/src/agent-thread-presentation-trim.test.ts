@@ -63,8 +63,7 @@ describe('thread stream user message presentation trim over Redis (#30792)', () 
 
       releaseFirst();
       await stream.text;
-      await waitFor(async () => (await retainedPresentations()).length === 0, 5_000).catch(() => {});
-      expect(await retainedPresentations()).toEqual([]);
+      await waitFor(async () => (await retainedPresentations()).length === 0, 5_000);
 
       const subscription = await registered.subscribeToThread({ threadId, resourceId });
       const parts: any[] = [];

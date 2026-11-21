@@ -3622,7 +3622,8 @@ export class AgentThreadStreamRuntime {
     const topic = this.#threadTopic(key);
     await resolvedPubSub.publish(topic, {
       type: event.type,
-      // Thread-scoped control events use the thread key as their envelope correlation ID.
+      // Events tied to a run carry its ID so that run's trim removes them; thread-scoped
+      // control events fall back to the thread key.
       runId: ('runId' in event ? event.runId : undefined) ?? key,
       data: event,
     });

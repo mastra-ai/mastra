@@ -68,8 +68,7 @@ describe('user message presentation trim', () => {
     releaseFirst();
     await stream.text;
     await waitForCondition(() => completed.includes(stream.runId), 2_000);
-    await new Promise(resolve => setTimeout(resolve, 100));
-    expect(retained().filter(event => event.type === 'user-message-presentation')).toEqual([]);
+    await waitForCondition(() => !retained().some(event => event.type === 'user-message-presentation'), 2_000);
     watcher.unsubscribe();
 
     expect(await replayedPending(agent, threadId)).toEqual([]);
@@ -93,8 +92,7 @@ describe('user message presentation trim', () => {
     releaseFirst();
     await stream.text;
     await waitForCondition(() => completed.length === 2, 2_000);
-    await new Promise(resolve => setTimeout(resolve, 100));
-    expect(retained().filter(event => event.type === 'user-message-presentation')).toEqual([]);
+    await waitForCondition(() => !retained().some(event => event.type === 'user-message-presentation'), 2_000);
     watcher.unsubscribe();
 
     expect(await replayedPending(agent, threadId)).toEqual([]);
