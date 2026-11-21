@@ -74,7 +74,7 @@ class LaggingReaderPubSub extends LeasePubSub {
  * The owner admits and runs a forward while the forwarder's reader lags, then trims the run and lets go of the lease.
  * `leaseChecks` forwarder lease checks run before the lagging reader catches up.
  */
-async function forwardWhileLagging(leaseChecks: number) {
+async function forwardWhileLagging(leaseChecks: number, { delayFirstAdmissionMs = 0 } = {}) {
   const scope = { resourceId: 'forward-admission-user', threadId: 'forward-admission-thread' };
   const pubsub = new LaggingReaderPubSub();
   pubsub.retain = true;
@@ -91,8 +91,14 @@ async function forwardWhileLagging(leaseChecks: number) {
     return getLeaseOwner(key);
   };
   const publish = pubsub.publish.bind(pubsub);
+  let admissionDelayed = false;
   pubsub.publish = async (topic: string, event: any) => {
     if (event.type === 'run-completed') completed.push(event.runId);
+    if (delayFirstAdmissionMs > 0 && event.data?.type === 'user-message-admitted' && !admissionDelayed) {
+      // The first append fails transiently and the backend retries it after a delay, as Redis Streams' publish does.
+      admissionDelayed = true;
+      await new Promise(resolve => setTimeout(resolve, delayFirstAdmissionMs));
+    }
     await publish(topic, event);
     // The forwarder falls behind right after sending its forward.
     if (event.data?.type === 'signal-enqueued' && JSON.stringify(event.data.signal).includes('idle B')) {
@@ -188,6 +194,7 @@ async function forwardWhileLagging(leaseChecks: number) {
       // admission, so the probe found nothing left to queue again.
       const handled = pubsub.handledTypes;
       expect(handled).toContain('forwarded-lease-probe');
+      expect(handled.indexOf('user-message-admitted')).not.toBe(-1);
       expect(handled.indexOf('user-message-admitted')).toBeLessThan(handled.indexOf('forwarded-lease-probe'));
     }
   } finally {
@@ -212,4 +219,7 @@ describe('forwarded user message admission', () => {
 
   it('runs a forwarded message once when the forwarder lags through lease checks after the owner let go', () =>
     forwardWhileLagging(3));
+
+  it('runs a forwarded message once when the owner retries a failed admission append while its run goes on', () =>
+    forwardWhileLagging(0, { delayFirstAdmissionMs: 300 }));
 });

@@ -1093,6 +1093,8 @@ export class AgentThreadStreamRuntime {
   #statesByPubSub = new WeakMap<PubSub, AgentThreadRuntimeState>();
   #preparedRunsByAbortSignal = new WeakMap<AbortSignal, PreparedThreadRun>();
   #stalledLeaseReads = new WeakMap<LeaseProvider, Map<string, number>>();
+  /** Per thread topic, the last admission publish still in flight; later publishes to that topic wait for it. */
+  #admissionPublishesByPubSub = new WeakMap<PubSub, Map<string, Promise<void>>>();
   // Some runtimes, such as Cloudflare Workers with a compatibility date before 2025-05-05, do not provide
   // FinalizationRegistry. There, an abandoned output that is never consumed keeps its prepared run until the
   // run finishes, is aborted, or the runtime state is reset; every other cleanup path is unchanged.
@@ -2243,9 +2245,10 @@ export class AgentThreadStreamRuntime {
         )
           return;
         const signal = createSignal(data.signal);
-        // Issued before the message is queued, so a broker that keeps publish order (Redis Streams' single writer)
-        // stores it ahead of anything the run publishes for it. Not awaited: if the run ended during the wait, the
-        // forwarder would settle its copy on this event while this runtime never queued it, losing the message.
+        // Issued before the message is queued, and every later publish to this thread waits for it to settle, so a
+        // broker that keeps append order (Redis Streams' single writer) stores it ahead of anything the run publishes
+        // for it, even when its first append fails and is retried. Not awaited here: if the run ended during the wait,
+        // the forwarder would settle its copy on this event while this runtime never queued it, losing the message.
         if (this.#pendingUserMessageChunk(runId, signal, 'pending')) {
           this.#publish(pubsub, key, { type: 'user-message-admitted', signalId: signal.id, admittedRunId: runId });
         }
@@ -3625,8 +3628,21 @@ export class AgentThreadStreamRuntime {
         state.forwardedIdleLeaseEpisodes.set(key, current);
       }
       const seq = ++current.seq;
-      await this.#publishAndWait(pubsub, key, { type: 'forwarded-lease-probe', episodeId: current.id, seq });
-      current.publishedAtCheck = checks;
+      // Bounded like the lease read, so a publish that never settles frees the in-flight guard. Running out counts as
+      // a failed publish: the episode stays as it was and a later check publishes again.
+      let giveUp: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        this.#publishAndWait(pubsub, key, { type: 'forwarded-lease-probe', episodeId: current.id, seq }),
+        new Promise<never>((_, reject) => {
+          giveUp = setTimeout(
+            () => reject(new Error('Thread pubsub did not publish the lease probe')),
+            AGENT_THREAD_LEASE_RENEW_INTERVAL_MS,
+          );
+        }),
+      ]).finally(() => clearTimeout(giveUp));
+      if (state.forwardedIdleLeaseEpisodes.get(key) === current && current.seq === seq) {
+        current.publishedAtCheck = checks;
+      }
     };
     // A slow lease read must not overlap the next tick: two overlapping reads would count as two checks.
     const check = setInterval(() => {
@@ -3741,13 +3757,32 @@ export class AgentThreadStreamRuntime {
   async #publishAndWait(pubsub: PubSub | undefined, key: string, event: AgentThreadStreamRuntimeEvent) {
     const resolvedPubSub = this.#getPubSub(pubsub);
     const topic = this.#threadTopic(key);
-    await resolvedPubSub.publish(topic, {
-      type: event.type,
-      // Events tied to a run carry its ID so that run's trim removes them; thread-scoped
-      // control events fall back to the thread key.
-      runId: ('runId' in event ? event.runId : undefined) ?? key,
-      data: event,
+    let admissions = this.#admissionPublishesByPubSub.get(resolvedPubSub);
+    const pendingAdmission = admissions?.get(topic);
+    const publish = async () => {
+      if (pendingAdmission) await pendingAdmission;
+      await resolvedPubSub.publish(topic, {
+        type: event.type,
+        // Events tied to a run carry its ID so that run's trim removes them; thread-scoped
+        // control events fall back to the thread key.
+        runId: ('runId' in event ? event.runId : undefined) ?? key,
+        data: event,
+      });
+    };
+    if (event.type !== 'user-message-admitted') return publish();
+    // A forwarder settles its copy on the admission, so nothing this runtime publishes to the thread afterwards
+    // (the presentation, the run's end) may reach the stream ahead of it while the backend retries its append.
+    const published = publish();
+    const settled = published.catch(() => {});
+    if (!admissions) {
+      admissions = new Map();
+      this.#admissionPublishesByPubSub.set(resolvedPubSub, admissions);
+    }
+    admissions.set(topic, settled);
+    void settled.then(() => {
+      if (admissions.get(topic) === settled) admissions.delete(topic);
     });
+    return published;
   }
 
   async #deliverToClaimedThreadOwner(

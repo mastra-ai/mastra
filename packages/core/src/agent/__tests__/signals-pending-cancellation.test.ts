@@ -2747,6 +2747,44 @@ describe('Agent signals: pending cancellation', () => {
       }
     });
 
+    it('keeps checking the lease after a probe publish that never settles', async () => {
+      // The publish deadline is a timer too; time also runs on its own so the pubsub's zero-delay deliveries go out.
+      vi.useFakeTimers({
+        toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'],
+        shouldAdvanceTime: true,
+      });
+      const { scope, pubsub, model, getStreamCount, deliver, releaseFollowUp, cleanup } = await forwardToFollowUpRun(
+        'hung-probe-publish',
+        { silentRunEnds: true },
+      );
+      const publish = pubsub.publish.bind(pubsub);
+      try {
+        // The first probe publish hangs forever; later ones go through.
+        let hung = false;
+        pubsub.publish = (topic, event, options) => {
+          if (!hung && event.data?.type === 'forwarded-lease-probe') {
+            hung = true;
+            return new Promise<void>(() => {});
+          }
+          return publish(topic, event, options);
+        };
+        releaseFollowUp();
+        await vi.waitFor(() => expect(pubsub.owners.get(`${scope.resourceId}\u0000${scope.threadId}`)).toBeUndefined());
+        deliver();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(getStreamCount()).toBe(2);
+        for (let tick = 0; tick < 8 && getStreamCount() < 3; tick++) {
+          await vi.advanceTimersByTimeAsync(AGENT_LEASE_RENEW_INTERVAL_MS);
+        }
+        expect(hung).toBe(true);
+        await vi.waitFor(() => expect(getStreamCount()).toBe(3));
+        expect(JSON.stringify(model.doStreamCalls[2]?.prompt)).toContain('idle B');
+      } finally {
+        pubsub.publish = publish;
+        cleanup();
+      }
+    });
+
     it('keeps counting a forwarded message while it waits for the owner', async () => {
       const counts: number[] = [];
       const { getStreamCount, deliver, releaseFollowUp, cleanup } = await forwardToFollowUpRun('counted-forward', {
