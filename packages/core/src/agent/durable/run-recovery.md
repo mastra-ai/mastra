@@ -12,7 +12,7 @@ Recovery only takes runs that are orphaned. Whether a run is orphaned is decided
 
 The outer `durable-agentic-loop` snapshot is the restart source of truth. A nested `durable-agentic-execution` input cannot reconstruct the outer workflow's progress. An initial `pending` loop row without its own `context.input` is not corrupt, but is not restartable: `recover()` throws `DURABLE_AGENT_RECOVER_CHECKPOINT_NOT_AVAILABLE` without starting a recovered execution. If claim-time revalidation finds the row replaced by an initial pending row without workflow input, it throws the same error and releases the acquired claim. If the row was deleted, revalidation throws `DURABLE_AGENT_RECOVER_SNAPSHOT_NOT_FOUND` and releases the claim. A malformed input, wrong workflow kind, or foreign agent still fails its existing validation.
 
-Enable running-checkpoint persistence before starting the run. Even with persistence enabled, recovery is unavailable before the first running checkpoint is saved. Changing the configuration after a crash cannot reconstruct that checkpoint.
+Enable running-checkpoint persistence before starting the run. Even with persistence enabled, recovery is unavailable before the first running checkpoint is saved. A run that saves its accepted input to memory first stores a `running` loop row holding only that input (`Workflow.__persistRestartableStart`), which `restart()` starts from the first step, so a crash after the input save always leaves a recoverable run (#30791). Changing the configuration after a crash cannot reconstruct that checkpoint.
 
 ## Entry points
 
