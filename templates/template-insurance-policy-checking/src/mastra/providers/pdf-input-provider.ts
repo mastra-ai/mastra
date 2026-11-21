@@ -1,11 +1,20 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { z } from 'zod';
+import { pdfLimitsScriptPath, pdfParserCommand } from '../../../scripts/pdf-parser-command.js';
 import type { InputLimits } from '../config/input-limits-config.js';
 import { hashBytes, roleSchema, type InputProvider } from '../domain/case-contracts.js';
 import { IntakeError } from '../domain/operation-errors.js';
 import { projectRoot } from '../runtime/storage-paths.js';
+
+function pdfLimitsScript(): string {
+  // Running from source, the launcher sits next to pdf-parser-command.ts.
+  // Built output resolves it from the project root, same as the PDF worker.
+  if (existsSync(pdfLimitsScriptPath)) return pdfLimitsScriptPath;
+  return resolve(projectRoot(), 'scripts/pdf-limits.sh');
+}
 
 /** Build the PDF attachment contract using the configured document and encoded-byte limits. */
 export function attachmentSchema(limits: InputLimits) {
@@ -87,21 +96,11 @@ export async function extractPdf(
   workerPath = resolve(projectRoot(), 'scripts/pdf-worker.mjs'),
 ) {
   return new Promise<z.infer<typeof extractionSchema>['pages']>((resolveResult, reject) => {
-    // A static POSIX launcher applies CPU/core-dump limits before exec; arguments never enter shell source.
-    // The V8 heap bound is separate and does not impose a hard RSS ceiling.
-    const child = spawn(
-      '/bin/sh',
-      [
-        '-c',
-        'ulimit -c 0; ulimit -t 10; exec "$@"',
-        'pdf-parser',
-        process.execPath,
-        '--max-old-space-size=128',
-        '--max-semi-space-size=16',
-        workerPath,
-      ],
-      { stdio: ['pipe', 'pipe', 'ignore'] },
-    );
+    // A static POSIX launcher applies CPU/core-dump limits before exec. The worker path and
+    // Node binary are argv, not part of a shell script. The V8 heap bound is separate and
+    // does not impose a hard RSS ceiling.
+    const launched = pdfParserCommand(workerPath, process.execPath, pdfLimitsScript());
+    const child = spawn(launched.command, launched.args, { stdio: ['pipe', 'pipe', 'ignore'] });
     const chunks: Buffer[] = [];
     let outputSize = 0;
     let settled = false;
