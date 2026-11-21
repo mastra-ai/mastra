@@ -867,15 +867,36 @@ export function createDurableToolCallStep() {
       }
       // Replayed step transcripts supply context only, not messages to persist.
       let contextMessageList = messageList;
-      if (!contextMessageList) {
+      // An evented step can run in another process than the LLM step that produced this
+      // tool call; that process's list then lacks the assistant message (#30123).
+      const missingInvocation =
+        workflowResumeData === undefined &&
+        !!state?.threadId &&
+        !(messageList ?? resumeMessageList)?.get.all.db().some(hasInvocation);
+      if (!contextMessageList || missingInvocation) {
         const llmOutput = await getStepResultAsync?.<DurableLLMStepOutput>(DurableStepIds.LLM_EXECUTION);
         const messageListState = await readMessageListState(params, llmOutput ?? {});
-        if (messageListState) {
-          contextMessageList = createRunMessageList({
-            mastra,
-            threadId: state?.threadId,
-            resourceId: state?.resourceId,
-          }).deserialize(messageListState);
+        const transcript = messageListState
+          ? createRunMessageList({
+              mastra,
+              threadId: state?.threadId,
+              resourceId: state?.resourceId,
+            }).deserialize(messageListState)
+          : undefined;
+        contextMessageList ??= transcript;
+        const invocation = missingInvocation
+          ? [...(transcript?.get.all.db() ?? [])].reverse().find(hasInvocation)
+          : undefined;
+        // Persist it with this step's suspension metadata, as the LLM step's process would have.
+        if (invocation) {
+          if (messageList) messageList.add(invocation, 'response');
+          else {
+            resumeMessageList = createRunMessageList({
+              mastra,
+              threadId: state?.threadId,
+              resourceId: state?.resourceId,
+            }).add(invocation, 'response');
+          }
         }
       }
 
