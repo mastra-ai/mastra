@@ -423,13 +423,22 @@ describe.each(engines)('$engine engine: suspended run eviction', ({ createWorkfl
       if (execution === 'resume') expect((await run.start({ inputData: {} })).status).toBe('suspended');
       const store = (await mastra!.getStorage()!.getStore('workflows'))!;
       let canceled: Promise<void> | undefined;
+      let heldUntilCanceled = false;
+      let restore = () => {};
       if (evented) {
-        // The cancel races the suspended result back to the run.
-        const update = store.updateWorkflowState.bind(store);
-        store.updateWorkflowState = async args => {
-          const updated = await update(args);
-          if (args.opts.status === 'suspended') canceled ??= run.cancel();
-          return updated;
+        // The engine's suspended result waits until the cancel has finished, so it reaches the run late.
+        const engine = (run as any).executionEngine;
+        const execute = engine.execute;
+        engine.execute = async (...args: unknown[]) => {
+          const result = await execute.apply(engine, args);
+          if (result.status === 'suspended' && !canceled) {
+            await (canceled = run.cancel());
+            heldUntilCanceled = true;
+          }
+          return result;
+        };
+        restore = () => {
+          engine.execute = execute;
         };
       } else {
         // The cancel lands while the run releases its ownership lease, after the engine returned.
@@ -440,13 +449,18 @@ describe.each(engines)('$engine engine: suspended run eviction', ({ createWorkfl
         };
       }
 
-      if (execution === 'start') await run.start({ inputData: {} });
-      else await run.resume({ step: 'approve', resumeData: { by: 'again' } });
-      expect(canceled).toBeDefined();
-      await canceled;
-      expect(run.workflowRunStatus).toBe('canceled');
-      await expect.poll(() => workflow.runs.has(run.runId)).toBe(false);
-      expect((await workflow.getWorkflowRunById(run.runId))?.status).toBe('canceled');
+      try {
+        if (execution === 'start') await run.start({ inputData: {} });
+        else await run.resume({ step: 'approve', resumeData: { by: 'again' } });
+        expect(canceled).toBeDefined();
+        await canceled;
+        expect(heldUntilCanceled).toBe(evented);
+        expect(run.workflowRunStatus).toBe('canceled');
+        await expect.poll(() => workflow.runs.has(run.runId)).toBe(false);
+        expect((await workflow.getWorkflowRunById(run.runId))?.status).toBe('canceled');
+      } finally {
+        restore();
+      }
     },
   );
 });
