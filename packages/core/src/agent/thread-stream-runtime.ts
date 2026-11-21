@@ -1093,8 +1093,11 @@ export class AgentThreadStreamRuntime {
   #statesByPubSub = new WeakMap<PubSub, AgentThreadRuntimeState>();
   #preparedRunsByAbortSignal = new WeakMap<AbortSignal, PreparedThreadRun>();
   #stalledLeaseReads = new WeakMap<LeaseProvider, Map<string, number>>();
-  /** Per thread topic, the last admission publish still in flight; later publishes to that topic wait for it. */
-  #admissionPublishesByPubSub = new WeakMap<PubSub, Map<string, Promise<void>>>();
+  /**
+   * Per thread topic, the last admission or pending announcement publish still in flight; later publishes to that
+   * topic wait for it to settle.
+   */
+  #orderedPublishesByPubSub = new WeakMap<PubSub, Map<string, Promise<void>>>();
   // Some runtimes, such as Cloudflare Workers with a compatibility date before 2025-05-05, do not provide
   // FinalizationRegistry. There, an abandoned output that is never consumed keeps its prepared run until the
   // run finishes, is aborted, or the runtime state is reset; every other cleanup path is unchanged.
@@ -2245,10 +2248,10 @@ export class AgentThreadStreamRuntime {
         )
           return;
         const signal = createSignal(data.signal);
-        // Issued before the message is queued, and every later publish to this thread waits for it to settle, so a
-        // broker that keeps append order (Redis Streams' single writer) stores it ahead of anything the run publishes
-        // for it, even when its first append fails and is retried. Not awaited here: if the run ended during the wait,
-        // the forwarder would settle its copy on this event while this runtime never queued it, losing the message.
+        // Ordered ahead of the message being queued: later publishes to the thread wait for it to settle, so a broker
+        // that keeps append order (Redis Streams' single writer) stores it ahead of anything the run publishes for it,
+        // retries included. Not awaited: if the run ended during the wait, the forwarder would settle its copy on this
+        // event while this runtime never queued it, losing the message.
         if (this.#pendingUserMessageChunk(runId, signal, 'pending')) {
           this.#publish(pubsub, key, { type: 'user-message-admitted', signalId: signal.id, admittedRunId: runId });
         }
@@ -3757,10 +3760,10 @@ export class AgentThreadStreamRuntime {
   async #publishAndWait(pubsub: PubSub | undefined, key: string, event: AgentThreadStreamRuntimeEvent) {
     const resolvedPubSub = this.#getPubSub(pubsub);
     const topic = this.#threadTopic(key);
-    let admissions = this.#admissionPublishesByPubSub.get(resolvedPubSub);
-    const pendingAdmission = admissions?.get(topic);
-    const publish = async () => {
-      if (pendingAdmission) await pendingAdmission;
+    let ordered = this.#orderedPublishesByPubSub.get(resolvedPubSub);
+    const previous = ordered?.get(topic);
+    const published = (async () => {
+      if (previous) await previous;
       await resolvedPubSub.publish(topic, {
         type: event.type,
         // Events tied to a run carry its ID so that run's trim removes them; thread-scoped
@@ -3768,19 +3771,21 @@ export class AgentThreadStreamRuntime {
         runId: ('runId' in event ? event.runId : undefined) ?? key,
         data: event,
       });
-    };
-    if (event.type !== 'user-message-admitted') return publish();
-    // A forwarder settles its copy on the admission, so nothing this runtime publishes to the thread afterwards
-    // (the presentation, the run's end) may reach the stream ahead of it while the backend retries its append.
-    const published = publish();
+    })();
+    // A forwarder settles on the admission, and a run's end trims the pending announcement, so while the backend
+    // retries either append, nothing this runtime publishes to the thread afterwards may reach the stream ahead of it.
+    const orders =
+      event.type === 'user-message-admitted' ||
+      (event.type === 'user-message-presentation' && event.chunk.type === 'data-user-message-pending');
+    if (!orders) return published;
     const settled = published.catch(() => {});
-    if (!admissions) {
-      admissions = new Map();
-      this.#admissionPublishesByPubSub.set(resolvedPubSub, admissions);
+    if (!ordered) {
+      ordered = new Map();
+      this.#orderedPublishesByPubSub.set(resolvedPubSub, ordered);
     }
-    admissions.set(topic, settled);
+    ordered.set(topic, settled);
     void settled.then(() => {
-      if (admissions.get(topic) === settled) admissions.delete(topic);
+      if (ordered.get(topic) === settled) ordered.delete(topic);
     });
     return published;
   }
