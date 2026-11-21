@@ -3773,8 +3773,8 @@
     },
     "mastracode/factory/src/integrations/github/sandbox.test.ts": {
       "tier": "in",
-      "since": "2026-11-16",
-      "last_failure": "2026-11-16",
+      "since": "2026-11-21",
+      "last_failure": "2026-11-21",
       "reason": "versioning-fail",
       "pr_failures": {
         "131416374254": {
@@ -26801,8 +26801,8 @@
     },
     "packages/playground/src/domains/run-options/components/__tests__/run-options-popovers.test.tsx": {
       "tier": "in",
-      "since": "2026-11-20",
-      "last_failure": "2026-11-20",
+      "since": "2026-11-21",
+      "last_failure": "2026-11-21",
       "reason": "versioning-fail",
       "pr_failures": {
         "136575840339": {
