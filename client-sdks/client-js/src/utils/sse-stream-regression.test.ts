@@ -111,6 +111,76 @@ for (const process of [processMastraStream, processMastraNetworkStream]) {
       expect(stream.locked).toBe(false);
       expect(chunks).toEqual([]);
     });
+
+    it('stops the source when onChunk throws (#30788)', async () => {
+      let cancelled = false;
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(`${sse('first')}\n\n`));
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
+      const failure = new Error('handler failed');
+      // The source never closes, so the call can only settle through the error path.
+      await expect(
+        process({
+          stream,
+          onChunk: () => {
+            throw failure;
+          },
+        }),
+      ).rejects.toBe(failure);
+      expect(cancelled).toBe(true);
+      expect(stream.locked).toBe(false);
+    });
+
+    it('keeps the onChunk error when cancelling the source also fails (#30788)', async () => {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(`${sse('first')}\n\n`));
+        },
+        cancel() {
+          throw new Error('cancel failed');
+        },
+      });
+      const failure = new Error('handler failed');
+      await expect(
+        process({
+          stream,
+          onChunk: () => {
+            throw failure;
+          },
+        }),
+      ).rejects.toBe(failure);
+      expect(stream.locked).toBe(false);
+    });
+
+    it('returns the onChunk error while the source is still cancelling (#30788)', async () => {
+      let cancelCalled = false;
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(`${sse('first')}\n\n`));
+        },
+        cancel() {
+          cancelCalled = true;
+          // Cancelling a stream whose sibling is still open never settles.
+          return new Promise<void>(() => {});
+        },
+      });
+      const failure = new Error('handler failed');
+      await expect(
+        process({
+          stream,
+          onChunk: () => {
+            throw failure;
+          },
+        }),
+      ).rejects.toBe(failure);
+      expect(cancelCalled).toBe(true);
+      expect(stream.locked).toBe(false);
+    });
   });
 }
 
@@ -182,6 +252,41 @@ describe('MastraClient agent.stream SSE readers', () => {
     }
   });
 
+  it('closes the server response when onChunk throws (#30788)', async () => {
+    const disconnected = new Promise<void>(resolve => {
+      onDisconnect = resolve;
+    });
+    const result = await new MastraClient({ baseUrl, retries: 0 }).getAgent('cancel').stream('hi');
+    if (!result.body) throw new Error('Expected a response body');
+    await expect(
+      result.processDataStream({
+        onChunk: () => {
+          throw new Error('handler failed');
+        },
+      }),
+    ).rejects.toThrow('handler failed');
+    await disconnected;
+  });
+
+  it('returns the onChunk error while a clone of the response is open (#30788)', async () => {
+    const result = await new MastraClient({ baseUrl, retries: 0 }).getAgent('cancel').stream('hi');
+    if (!result.body) throw new Error('Expected a response body');
+    // The clone keeps the response open, so cancelling through it cannot settle. A hang
+    // here fails the test, and with it the handler error never reaches the caller.
+    const clone = result.clone();
+    try {
+      await expect(
+        result.processDataStream({
+          onChunk: () => {
+            throw new Error('handler failed');
+          },
+        }),
+      ).rejects.toThrow('handler failed');
+    } finally {
+      await clone.body?.cancel().catch(() => {});
+    }
+  });
+
   it('flushes an unterminated final event on the returned stream and removes DONE', async () => {
     wire = `${sse('hé🙂')}\n\ndata: [DONE]\n\n${sse('final')}`;
     const result = await new MastraClient({ baseUrl, retries: 0 }).getAgent('a').stream('hi');
@@ -192,5 +297,62 @@ describe('MastraClient agent.stream SSE readers', () => {
       },
     });
     expect(chunks).toEqual([event('hé🙂'), event('final')]);
+  });
+});
+
+// The network, observe and recover entry points build their own response, so each one must stop
+// its own request instead of cancelling the stream: a clone the caller holds keeps that stream
+// open, and nothing would end the request (#30788 review).
+describe('MastraClient streamed entry points stop their request (#30788 review)', () => {
+  const client = () => new MastraClient({ baseUrl: 'http://127.0.0.1:1', retries: 0 });
+
+  const openWire = () =>
+    new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(`${sse('first')}\n\ndata: {`));
+        },
+      }) as unknown as ReadableStream,
+      { status: 200, headers: { 'content-type': 'text/event-stream' } },
+    );
+
+  const expectRequestStopped = async (
+    open: () => Promise<{ processDataStream: (options: { onChunk: (chunk: any) => void }) => Promise<void> }>,
+  ) => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(openWire());
+    try {
+      const result = await open();
+      await expect(
+        result.processDataStream({
+          onChunk: () => {
+            throw new Error('handler failed');
+          },
+        }),
+      ).rejects.toThrow('handler failed');
+      const requestSignal = fetchSpy.mock.calls[0]?.[1]?.signal as AbortSignal | undefined;
+      expect(requestSignal?.aborted).toBe(true);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  };
+
+  it('stops the network request when onChunk throws', async () => {
+    await expectRequestStopped(() => client().getAgent('a').network('hi', {}));
+  });
+
+  it('stops the approve-network-tool-call request when onChunk throws', async () => {
+    await expectRequestStopped(() => client().getAgent('a').approveNetworkToolCall({ runId: 'run-1' }));
+  });
+
+  it('stops the decline-network-tool-call request when onChunk throws', async () => {
+    await expectRequestStopped(() => client().getAgent('a').declineNetworkToolCall({ runId: 'run-1' }));
+  });
+
+  it('stops the observe request when onChunk throws', async () => {
+    await expectRequestStopped(() => client().getAgent('a').observe({ runId: 'run-1' }));
+  });
+
+  it('stops the recover request when onChunk throws', async () => {
+    await expectRequestStopped(() => client().getAgent('a').recover({ runId: 'run-1' }));
   });
 });
