@@ -1,8 +1,9 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
+import { CONTINUE_RUN_ACTION_ID } from '@mastra/core/channels';
 import type { ChannelErrorContext } from '@mastra/core/channels';
 import { providerRequestId } from '@mastra/core/error';
 import type { RequestContext } from '@mastra/core/request-context';
-import { Actions, Card, CardText, LinkButton } from 'chat';
+import { Actions, Button, Card, CardText, LinkButton } from 'chat';
 
 import { readFactorySessionScope } from '../../rules/binding-context.js';
 import type { RunErrorRecovery } from '../../run-error.js';
@@ -17,13 +18,18 @@ export function slackRunErrorCard(error: Error, { requestContext }: ChannelError
   const facts = [model && `Model: ${model}`, requestId && `Request id: ${requestId}`].filter(Boolean).join(' · ');
   const credential = model && recoveries.includes('credentials') ? credentialLine(requestContext, model) : undefined;
   const links = requestContext ? recoveryLinks(requestContext, recoveries) : [];
+  // A click continues the run as if the clicker had replied in the thread.
+  const retry = recoveries.includes('continue')
+    ? [Button({ id: CONTINUE_RUN_ACTION_ID, label: 'Continue', style: 'primary' })]
+    : [];
+  const buttons = [...retry, ...links.map(link => LinkButton(link))];
   return Card({
     title: `❌ ${title}`,
     children: [
       CardText(message),
       ...(credential ? [CardText(credential, { style: 'muted' })] : []),
       ...(facts ? [CardText(facts, { style: 'muted' })] : []),
-      ...(links.length ? [Actions(links.map(link => LinkButton(link)))] : []),
+      ...(buttons.length ? [Actions(buttons)] : []),
     ],
   });
 }
