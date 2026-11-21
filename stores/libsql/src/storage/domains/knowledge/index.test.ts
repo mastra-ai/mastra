@@ -293,7 +293,7 @@ createKnowledgeImportersStorageTests(async () => {
               "SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name LIKE 'mastra\\_knowledge\\_importer\\_%' ESCAPE '\\'",
             )
           ).rows[0]!.n,
-        ) === 7,
+        ) === 8,
     },
     // One client's write transactions are serialized, which is what the lock tests observe.
     concurrentTransactions: true,

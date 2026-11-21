@@ -38,15 +38,24 @@ function importersOf(store: KnowledgeStorage): KnowledgeImportersStorage {
 const node = (
   sourceId: string,
   pageId: string,
-  extra: Partial<{ aliases: string[]; parentSourceId: string; unsettled: boolean }> = {},
+  extra: Partial<{
+    aliases: string[];
+    parentSourceId: string;
+    unsettled: boolean;
+    links: { sourceId: string; rel: string | null }[];
+    linkSection: string;
+    bindingId: string;
+  }> = {},
 ) => ({
-  bindingId: 'b1',
+  bindingId: extra.bindingId ?? 'b1',
   sourceId,
   pageId,
   kind: 'page',
   parentSourceId: extra.parentSourceId ?? null,
   aliases: extra.aliases ?? [],
   unresolvedLinks: [],
+  links: extra.links ?? [],
+  linkSection: extra.linkSection ?? null,
   stub: false,
   unsettled: extra.unsettled ?? false,
 });
@@ -428,6 +437,52 @@ export function createKnowledgeImportersStorageTests(createFixture: () => Promis
           'e',
         ]);
         expect((await importers.listNodes('b1')).items).toHaveLength(5);
+      });
+
+      it('finds the nodes that link to given source IDs, in byte order, and marks them unsettled', async () => {
+        await importers.registerBinding({ id: 'b2', importer: 'notion', target: 'org:acme#other' });
+        const section = 'Links:\n- see: [[org:acme#notion/t1]]';
+        await importers.saveNode(
+          node('a', 'page-a', {
+            links: [
+              { sourceId: 't1', rel: 'see' },
+              { sourceId: 't2', rel: null },
+            ],
+            linkSection: section,
+          }),
+        );
+        await importers.saveNode(node('c', 'page-c', { links: [{ sourceId: 't2', rel: null }] }));
+        await importers.saveNode(node('b', 'page-b', { links: [{ sourceId: 't1', rel: null }] }));
+        await importers.saveNode(node('d', 'page-d'));
+        await importers.saveNode(node('a', 'page-x', { bindingId: 'b2', links: [{ sourceId: 't1', rel: null }] }));
+        expect(await importers.getNode('b1', 'a')).toMatchObject({
+          links: [
+            { sourceId: 't1', rel: 'see' },
+            { sourceId: 't2', rel: null },
+          ],
+          linkSection: section,
+        });
+        expect(await importers.getNode('b1', 'd')).toMatchObject({ links: [], linkSection: null });
+
+        const first = await importers.listLinkingNodes('b1', ['t1', 't2'], { limit: 2 });
+        expect(first).toEqual({ items: ['a', 'b'], next: 'b' });
+        expect(await importers.listLinkingNodes('b1', ['t1', 't2'], { after: 'b' })).toEqual({
+          items: ['c'],
+          next: null,
+        });
+        expect((await importers.listLinkingNodes('b1', ['t3'])).items).toEqual([]);
+        expect((await importers.listLinkingNodes('b1', [])).items).toEqual([]);
+
+        await importers.markLinkingNodesUnsettled('b1', ['t2']);
+        expect((await importers.listNodes('b1', { unsettled: true })).items.map(n => n.sourceId)).toEqual(['a', 'c']);
+        expect(await importers.getNode('b2', 'a')).toMatchObject({ unsettled: false });
+
+        // Saving a node again replaces its links; deleting it drops them.
+        await importers.saveNode(node('a', 'page-a'));
+        expect((await importers.listLinkingNodes('b1', ['t1'])).items).toEqual(['b']);
+        await importers.deleteNode('b1', 'b');
+        expect((await importers.listLinkingNodes('b1', ['t1'])).items).toEqual([]);
+        expect((await importers.listLinkingNodes('b2', ['t1'])).items).toEqual(['a']);
       });
 
       it('replaces a node in place and refuses a page another node owns', async () => {

@@ -20,6 +20,7 @@ interface Executor {
 export const LIBSQL_KNOWLEDGE_IMPORTER_TABLES = {
   bindings: 'mastra_knowledge_importer_bindings',
   nodes: 'mastra_knowledge_importer_nodes',
+  nodeLinks: 'mastra_knowledge_importer_node_links',
   state: 'mastra_knowledge_importer_state',
   runs: 'mastra_knowledge_importer_runs',
   flushes: 'mastra_knowledge_importer_flushes',
@@ -49,11 +50,21 @@ export const KNOWLEDGE_IMPORTER_DDL = [
     parentSourceId TEXT,
     aliases TEXT NOT NULL DEFAULT '[]',
     unresolvedLinks TEXT NOT NULL DEFAULT '[]',
+    links TEXT NOT NULL DEFAULT '[]',
+    linkSection TEXT,
     stub INTEGER NOT NULL DEFAULT 0,
     unsettled INTEGER NOT NULL DEFAULT 0,
     updatedAt INTEGER NOT NULL,
     PRIMARY KEY (bindingId, sourceId)
   )`,
+  `CREATE TABLE IF NOT EXISTS "${T.nodeLinks}" (
+    bindingId TEXT NOT NULL,
+    sourceId TEXT NOT NULL,
+    targetSourceId TEXT NOT NULL,
+    PRIMARY KEY (bindingId, sourceId, targetSourceId),
+    FOREIGN KEY (bindingId, sourceId) REFERENCES "${T.nodes}" (bindingId, sourceId) ON DELETE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_kimp_node_links_target ON "${T.nodeLinks}" (bindingId, targetSourceId, sourceId)`,
   `CREATE TABLE IF NOT EXISTS "${T.state}" (
     bindingId TEXT NOT NULL REFERENCES "${T.bindings}" (id) ON DELETE CASCADE,
     key TEXT NOT NULL,
@@ -148,6 +159,8 @@ const toNode = (row: Row): KnowledgeImporterNodeRecord => ({
   parentSourceId: row.parentSourceId === null ? null : String(row.parentSourceId),
   aliases: JSON.parse(String(row.aliases)),
   unresolvedLinks: JSON.parse(String(row.unresolvedLinks)),
+  links: JSON.parse(String(row.links)),
+  linkSection: row.linkSection === null ? null : String(row.linkSection),
   stub: Number(row.stub) === 1,
   unsettled: Number(row.unsettled) === 1,
   updatedAt: new Date(Number(row.updatedAt)),
@@ -191,7 +204,7 @@ export class LibSQLKnowledgeImporters implements KnowledgeImportersStorage {
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#transaction(async tx => {
-      for (const table of [T.changes, T.flushes, T.runs, T.state, T.nodes, T.bindings]) {
+      for (const table of [T.changes, T.flushes, T.runs, T.state, T.nodeLinks, T.nodes, T.bindings]) {
         await tx.execute(`DELETE FROM "${table}"`);
       }
       await tx.execute(`UPDATE "${T.guard}" SET activePath = 'new', generation = 1, firstWriteAt = NULL`);
@@ -209,7 +222,9 @@ export class LibSQLKnowledgeImporters implements KnowledgeImportersStorage {
     });
     if (provisioned.rows.length === 0) return [];
     return [
-      ...[T.changes, T.flushes, T.runs, T.state, T.nodes, T.bindings].map(table => `DELETE FROM "${table}"`),
+      ...[T.changes, T.flushes, T.runs, T.state, T.nodeLinks, T.nodes, T.bindings].map(
+        table => `DELETE FROM "${table}"`,
+      ),
       `UPDATE "${T.guard}" SET generation = generation + 1, firstWriteAt = NULL`,
     ];
   }
@@ -429,13 +444,14 @@ export class LibSQLKnowledgeImporters implements KnowledgeImportersStorage {
   }
   async saveNode(node: Omit<KnowledgeImporterNodeRecord, 'updatedAt'>) {
     try {
-      await this.#transaction(tx =>
-        tx.execute({
-          sql: `INSERT INTO "${T.nodes}" (bindingId, sourceId, pageId, kind, parentSourceId, aliases, unresolvedLinks, stub, unsettled, updatedAt)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      await this.#transaction(async tx => {
+        await tx.execute({
+          sql: `INSERT INTO "${T.nodes}" (bindingId, sourceId, pageId, kind, parentSourceId, aliases, unresolvedLinks, links, linkSection, stub, unsettled, updatedAt)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (bindingId, sourceId) DO UPDATE SET
                   pageId = excluded.pageId, kind = excluded.kind, parentSourceId = excluded.parentSourceId,
-                  aliases = excluded.aliases, unresolvedLinks = excluded.unresolvedLinks, stub = excluded.stub,
+                  aliases = excluded.aliases, unresolvedLinks = excluded.unresolvedLinks, links = excluded.links,
+                  linkSection = excluded.linkSection, stub = excluded.stub,
                   unsettled = excluded.unsettled, updatedAt = excluded.updatedAt`,
           args: [
             node.bindingId,
@@ -445,12 +461,24 @@ export class LibSQLKnowledgeImporters implements KnowledgeImportersStorage {
             node.parentSourceId,
             JSON.stringify(node.aliases),
             JSON.stringify(node.unresolvedLinks),
+            JSON.stringify(node.links),
+            node.linkSection,
             node.stub ? 1 : 0,
             node.unsettled ? 1 : 0,
             Date.now(),
           ],
-        }),
-      );
+        });
+        await tx.execute({
+          sql: `DELETE FROM "${T.nodeLinks}" WHERE bindingId = ? AND sourceId = ?`,
+          args: [node.bindingId, node.sourceId],
+        });
+        for (const target of new Set(node.links.map(link => link.sourceId))) {
+          await tx.execute({
+            sql: `INSERT INTO "${T.nodeLinks}" (bindingId, sourceId, targetSourceId) VALUES (?, ?, ?)`,
+            args: [node.bindingId, node.sourceId, target],
+          });
+        }
+      });
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new Error(`Knowledge page ${node.pageId} is already mapped to another imported node`, { cause: error });
@@ -459,9 +487,16 @@ export class LibSQLKnowledgeImporters implements KnowledgeImportersStorage {
     }
   }
   async deleteNode(bindingId: string, sourceId: string) {
-    await this.#transaction(tx =>
-      tx.execute({ sql: `DELETE FROM "${T.nodes}" WHERE bindingId = ? AND sourceId = ?`, args: [bindingId, sourceId] }),
-    );
+    await this.#transaction(async tx => {
+      await tx.execute({
+        sql: `DELETE FROM "${T.nodeLinks}" WHERE bindingId = ? AND sourceId = ?`,
+        args: [bindingId, sourceId],
+      });
+      await tx.execute({
+        sql: `DELETE FROM "${T.nodes}" WHERE bindingId = ? AND sourceId = ?`,
+        args: [bindingId, sourceId],
+      });
+    });
   }
   async listNodes(
     bindingId: string,
@@ -477,6 +512,34 @@ export class LibSQLKnowledgeImporters implements KnowledgeImportersStorage {
     ).rows;
     const items = rows.slice(0, limit).map(toNode);
     return { items, next: rows.length > limit ? items[items.length - 1]!.sourceId : null };
+  }
+  async listLinkingNodes(
+    bindingId: string,
+    targetSourceIds: string[],
+    options: { after?: string; limit?: number } = {},
+  ): Promise<KnowledgeImporterPage<string>> {
+    const limit = options.limit ?? 500;
+    const rows = (
+      await this.#read.execute({
+        sql: `SELECT DISTINCT sourceId FROM "${T.nodeLinks}"
+              WHERE bindingId = ? AND targetSourceId IN (SELECT value FROM json_each(?)) AND (? IS NULL OR sourceId > ?)
+              ORDER BY sourceId LIMIT ?`,
+        args: [bindingId, JSON.stringify(targetSourceIds), options.after ?? null, options.after ?? null, limit + 1],
+      })
+    ).rows;
+    const items = rows.slice(0, limit).map(row => String(row.sourceId));
+    return { items, next: rows.length > limit ? items[items.length - 1]! : null };
+  }
+  async markLinkingNodesUnsettled(bindingId: string, targetSourceIds: string[]) {
+    await this.#transaction(tx =>
+      tx.execute({
+        sql: `UPDATE "${T.nodes}" SET unsettled = 1
+              WHERE bindingId = ? AND unsettled = 0 AND sourceId IN (
+                SELECT sourceId FROM "${T.nodeLinks}" WHERE bindingId = ? AND targetSourceId IN (SELECT value FROM json_each(?))
+              )`,
+        args: [bindingId, bindingId, JSON.stringify(targetSourceIds)],
+      }),
+    );
   }
   async findNodeByAlias(bindingId: string, alias: string) {
     const row = (

@@ -190,6 +190,85 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       });
     });
 
+    it("keeps a source's own Links: text byte for byte when links are rewritten or resolved", async () => {
+      const { run, page } = setup();
+      const own = 'Links:\n- [[docs:acme#notion/p1/b]]\n\nImportant paragraph';
+      await run([
+        upsert({ sourceId: 'p1' }),
+        upsert({ sourceId: 'p2' }),
+        upsert({ sourceId: 'b', parent: 'p1' }),
+        // Its own text names b's path, but it declares no links: the importer never rewrites it.
+        upsert({ sourceId: 'a', body: own }),
+        upsert({ sourceId: 'z', body: own, links: [{ sourceId: 'b' }] }),
+        upsert({ sourceId: 'w', body: own, links: [{ sourceId: 'q' }] }),
+      ]);
+      expect((await page('notion/a'))?.body).toBe(own);
+      expect((await page('notion/z'))?.body).toBe(`${own}\n\nLinks:\n- [[docs:acme#notion/p1/b]]`);
+      expect((await page('notion/w'))?.body).toBe(own);
+
+      // b moves and q arrives: z's links section follows b and w gains one, and neither touches the source's text.
+      await run([upsert({ sourceId: 'b', parent: 'p2' }), upsert({ sourceId: 'q' })]);
+      expect((await page('notion/a'))?.body).toBe(own);
+      expect((await page('notion/z'))?.body).toBe(`${own}\n\nLinks:\n- [[docs:acme#notion/p2/b]]`);
+      expect((await page('notion/w'))?.body).toBe(`${own}\n\nLinks:\n- [[docs:acme#notion/q]]`);
+    });
+
+    it('repairs the linking page a binding owns however many other pages link to the moved page', async () => {
+      const { knowledge, run, page } = setup();
+      await run([upsert({ sourceId: 'p1' }), upsert({ sourceId: 'p2' }), upsert({ sourceId: 'b', parent: 'p1' })]);
+      // 101 human pages link to b, and every one of their IDs sorts before any page the importer creates.
+      const storage = await knowledge.getStorage();
+      const [scope] = await storage.getScopesByAddress(['docs:acme']);
+      for (let i = 0; i <= 100; i++) {
+        await storage.createPage({
+          id: `00000000-0000-0000-0000-${String(i).padStart(12, '0')}`,
+          parentId: scope!.id,
+          key: `human-${i}`,
+          name: `Human ${i}`,
+          body: 'See [[docs:acme#notion/p1/b]]',
+          provenance: { author: 'human' },
+        });
+      }
+      await knowledge.reindexLinks();
+      await run([upsert({ sourceId: 'a', links: [{ sourceId: 'b' }] })]);
+
+      expect(await run([upsert({ sourceId: 'b', parent: 'p2' })])).toMatchObject({
+        outcome: 'succeeded',
+        counts: { moved: 1, updated: 1 },
+      });
+      expect((await page('notion/a'))?.body).toBe('body of a\n\nLinks:\n- [[docs:acme#notion/p2/b]]');
+      expect((await page('human-0'))?.body).toBe('See [[docs:acme#notion/p1/b]]');
+    });
+
+    it('repairs linking pages past the per-move cap in the settle work that follows', async () => {
+      const { knowledge, run, page } = setup();
+      const linkers = Array.from({ length: 105 }, (_, i) =>
+        upsert({ sourceId: `l${String(i).padStart(3, '0')}`, links: [{ sourceId: 'b' }] }),
+      );
+      await run([
+        upsert({ sourceId: 'p1' }),
+        upsert({ sourceId: 'p2' }),
+        upsert({ sourceId: 'b', parent: 'p1' }),
+        ...linkers,
+      ]);
+      expect((await page('notion/l104'))?.body).toBe('body of l104\n\nLinks:\n- [[docs:acme#notion/p1/b]]');
+
+      expect(await run([upsert({ sourceId: 'b', parent: 'p2' })])).toMatchObject({
+        outcome: 'succeeded',
+        counts: { moved: 1, updated: 105 },
+      });
+      for (const { item } of linkers as Extract<KnowledgeImporterOp, { op: 'upsert' }>[]) {
+        expect((await page(`notion/${item.sourceId}`))?.body).toBe(
+          `body of ${item.sourceId}\n\nLinks:\n- [[docs:acme#notion/p2/b]]`,
+        );
+      }
+      const storage = await knowledge.getStorage();
+      expect((await storage.importers!.listNodes('b1', { unsettled: true })).items).toEqual([]);
+      expect(await run([upsert({ sourceId: 'b', parent: 'p2' })])).toMatchObject({
+        counts: { unchanged: 1, moved: 0, updated: 0 },
+      });
+    });
+
     it('a run that imports nothing does not chain on a parent that never arrives', async () => {
       const { run, page } = setup();
       await run([upsert({ sourceId: 'orphan', parent: 'never' })]);

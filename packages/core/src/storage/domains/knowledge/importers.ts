@@ -31,6 +31,16 @@ export interface KnowledgeImporterNodeRecord {
   parentSourceId: string | null;
   aliases: string[];
   unresolvedLinks: string[];
+  /**
+   * The links the item declared, by target source ID, resolved or not. The store indexes them by
+   * target, so {@link KnowledgeImportersStorage.listLinkingNodes} finds the nodes linking to a page.
+   */
+  links: KnowledgeImporterNodeLink[];
+  /**
+   * The links section the sink appended to the page body, exactly as written, or null when it wrote
+   * none. Everything in the body before it is the source's own text, kept byte for byte.
+   */
+  linkSection: string | null;
   /** The page was kept as a stub after the source removed it, because pages are nested under it. */
   stub: boolean;
   /**
@@ -39,6 +49,11 @@ export interface KnowledgeImporterNodeRecord {
    */
   unsettled: boolean;
   updatedAt: Date;
+}
+
+export interface KnowledgeImporterNodeLink {
+  sourceId: string;
+  rel: string | null;
 }
 
 export type KnowledgeImporterRunStatus = 'running' | 'succeeded' | 'failed' | 'canceled' | 'skipped';
@@ -228,6 +243,17 @@ export abstract class KnowledgeImportersStorage {
     options?: { after?: string; limit?: number; unsettled?: boolean },
   ): Promise<KnowledgeImporterPage<KnowledgeImporterNodeRecord>>;
   abstract findNodeByAlias(bindingId: string, alias: string): Promise<KnowledgeImporterNodeRecord | null>;
+  /**
+   * The binding's nodes whose `links` name any of `targetSourceIds`, as source IDs, distinct, in byte
+   * order. Other bindings' nodes never appear.
+   */
+  abstract listLinkingNodes(
+    bindingId: string,
+    targetSourceIds: string[],
+    options?: { after?: string; limit?: number },
+  ): Promise<KnowledgeImporterPage<string>>;
+  /** Sets `unsettled` on every node {@link listLinkingNodes} would list, in one statement. */
+  abstract markLinkingNodesUnsettled(bindingId: string, targetSourceIds: string[]): Promise<void>;
 
   abstract getState(bindingId: string): Promise<Record<string, string>>;
   /** Upserts the given keys; keys not given stay. */

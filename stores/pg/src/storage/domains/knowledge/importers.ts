@@ -18,6 +18,7 @@ type Queryable = Pick<TxClient, 'none' | 'one' | 'oneOrNone' | 'any' | 'query'>;
 export const PG_KNOWLEDGE_IMPORTER_TABLES = {
   bindings: 'mastra_knowledge_importer_bindings',
   nodes: 'mastra_knowledge_importer_nodes',
+  nodeLinks: 'mastra_knowledge_importer_node_links',
   state: 'mastra_knowledge_importer_state',
   runs: 'mastra_knowledge_importer_runs',
   flushes: 'mastra_knowledge_importer_flushes',
@@ -67,11 +68,21 @@ export function pgKnowledgeImportersDDL(schemaName?: string): string[] {
       parent_source_id text,
       aliases text[] NOT NULL DEFAULT '{}',
       unresolved_links text[] NOT NULL DEFAULT '{}',
+      links jsonb NOT NULL DEFAULT '[]',
+      link_section text,
       stub boolean NOT NULL DEFAULT false,
       unsettled boolean NOT NULL DEFAULT false,
       updated_at timestamptz NOT NULL DEFAULT now(),
       PRIMARY KEY (binding_id, source_id)
     )`,
+    `CREATE TABLE IF NOT EXISTS ${t.nodeLinks} (
+      binding_id text NOT NULL,
+      source_id text NOT NULL,
+      target_source_id text NOT NULL,
+      PRIMARY KEY (binding_id, source_id, target_source_id),
+      FOREIGN KEY (binding_id, source_id) REFERENCES ${t.nodes} (binding_id, source_id) ON DELETE CASCADE
+    )`,
+    `CREATE INDEX IF NOT EXISTS mastra_knowledge_importer_node_links_target ON ${t.nodeLinks} (binding_id, target_source_id, source_id COLLATE "C")`,
     `CREATE TABLE IF NOT EXISTS ${t.state} (
       binding_id text NOT NULL REFERENCES ${t.bindings} (id) ON DELETE CASCADE,
       key text NOT NULL,
@@ -157,6 +168,8 @@ const toNode = (row: Row): KnowledgeImporterNodeRecord => ({
   parentSourceId: row.parent_source_id ?? null,
   aliases: row.aliases ?? [],
   unresolvedLinks: row.unresolved_links ?? [],
+  links: row.links ?? [],
+  linkSection: row.link_section ?? null,
   stub: row.stub,
   unsettled: row.unsettled,
   updatedAt: row.updated_at,
@@ -208,7 +221,9 @@ export class PgKnowledgeImporters implements KnowledgeImportersStorage {
   async dangerouslyClearAll(): Promise<void> {
     const t = this.#t;
     await this.#client.tx(async tx => {
-      await tx.query(`TRUNCATE ${t.changes}, ${t.flushes}, ${t.runs}, ${t.state}, ${t.nodes}, ${t.bindings}`);
+      await tx.query(
+        `TRUNCATE ${t.changes}, ${t.flushes}, ${t.runs}, ${t.state}, ${t.nodeLinks}, ${t.nodes}, ${t.bindings}`,
+      );
       await tx.query(`UPDATE ${t.guard} SET active_path = 'new', generation = 1, first_write_at = NULL`);
     });
   }
@@ -222,7 +237,9 @@ export class PgKnowledgeImporters implements KnowledgeImportersStorage {
     const provisioned = await this.#client.oneOrNone(`SELECT to_regclass($1) AS t`, [this.#t.guard]);
     if (!provisioned?.t) return;
     const t = this.#t;
-    await this.#client.query(`TRUNCATE ${t.changes}, ${t.flushes}, ${t.runs}, ${t.state}, ${t.nodes}, ${t.bindings}`);
+    await this.#client.query(
+      `TRUNCATE ${t.changes}, ${t.flushes}, ${t.runs}, ${t.state}, ${t.nodeLinks}, ${t.nodes}, ${t.bindings}`,
+    );
     await this.#client.query(`UPDATE ${t.guard} SET generation = generation + 1, first_write_at = NULL`);
   }
 
@@ -407,13 +424,14 @@ export class PgKnowledgeImporters implements KnowledgeImportersStorage {
   }
   async saveNode(node: Omit<KnowledgeImporterNodeRecord, 'updatedAt'>) {
     try {
-      await this.#client.tx(tx =>
-        tx.none(
-          `INSERT INTO ${this.#t.nodes} (binding_id, source_id, page_id, kind, parent_source_id, aliases, unresolved_links, stub, unsettled)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      await this.#client.tx(async tx => {
+        await tx.none(
+          `INSERT INTO ${this.#t.nodes} (binding_id, source_id, page_id, kind, parent_source_id, aliases, unresolved_links, links, link_section, stub, unsettled)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11)
            ON CONFLICT (binding_id, source_id) DO UPDATE SET
              page_id = EXCLUDED.page_id, kind = EXCLUDED.kind, parent_source_id = EXCLUDED.parent_source_id,
-             aliases = EXCLUDED.aliases, unresolved_links = EXCLUDED.unresolved_links, stub = EXCLUDED.stub,
+             aliases = EXCLUDED.aliases, unresolved_links = EXCLUDED.unresolved_links, links = EXCLUDED.links,
+             link_section = EXCLUDED.link_section, stub = EXCLUDED.stub,
              unsettled = EXCLUDED.unsettled, updated_at = clock_timestamp()`,
           [
             node.bindingId,
@@ -423,11 +441,25 @@ export class PgKnowledgeImporters implements KnowledgeImportersStorage {
             node.parentSourceId,
             node.aliases,
             node.unresolvedLinks,
+            JSON.stringify(node.links),
+            node.linkSection,
             node.stub,
             node.unsettled,
           ],
-        ),
-      );
+        );
+        await tx.none(`DELETE FROM ${this.#t.nodeLinks} WHERE binding_id = $1 AND source_id = $2`, [
+          node.bindingId,
+          node.sourceId,
+        ]);
+        const targets = [...new Set(node.links.map(link => link.sourceId))];
+        if (targets.length) {
+          await tx.none(
+            `INSERT INTO ${this.#t.nodeLinks} (binding_id, source_id, target_source_id)
+             SELECT $1, $2, unnest($3::text[])`,
+            [node.bindingId, node.sourceId, targets],
+          );
+        }
+      });
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new Error(`Knowledge page ${node.pageId} is already mapped to another imported node`, { cause: error });
@@ -455,6 +487,31 @@ export class PgKnowledgeImporters implements KnowledgeImportersStorage {
     );
     const items = rows.slice(0, limit).map(toNode);
     return { items, next: rows.length > limit ? items[items.length - 1]!.sourceId : null };
+  }
+  async listLinkingNodes(
+    bindingId: string,
+    targetSourceIds: string[],
+    options: { after?: string; limit?: number } = {},
+  ): Promise<KnowledgeImporterPage<string>> {
+    const limit = options.limit ?? 500;
+    const rows = await this.#client.any(
+      `SELECT DISTINCT source_id COLLATE "C" AS source_id FROM ${this.#t.nodeLinks}
+       WHERE binding_id = $1 AND target_source_id = ANY ($2::text[])
+         AND ($3::text IS NULL OR source_id COLLATE "C" > $3::text COLLATE "C")
+       ORDER BY source_id COLLATE "C" LIMIT $4`,
+      [bindingId, targetSourceIds, options.after ?? null, limit + 1],
+    );
+    const items = rows.slice(0, limit).map(row => row.source_id as string);
+    return { items, next: rows.length > limit ? items[items.length - 1]! : null };
+  }
+  async markLinkingNodesUnsettled(bindingId: string, targetSourceIds: string[]) {
+    await this.#client.none(
+      `UPDATE ${this.#t.nodes} SET unsettled = true
+       WHERE binding_id = $1 AND NOT unsettled AND source_id IN (
+         SELECT source_id FROM ${this.#t.nodeLinks} WHERE binding_id = $1 AND target_source_id = ANY ($2::text[])
+       )`,
+      [bindingId, targetSourceIds],
+    );
   }
   async findNodeByAlias(bindingId: string, alias: string) {
     const row = await this.#client.oneOrNone(

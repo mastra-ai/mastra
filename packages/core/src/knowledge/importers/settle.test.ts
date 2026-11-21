@@ -101,6 +101,36 @@ describe('importer settle', () => {
     ).toMatchObject({ unchanged: 1, updated: 0, moved: 0 });
   });
 
+  it('reindexes a page a settle slice moved and whose own links it rewrote', async () => {
+    const { knowledge, page, start } = setup();
+    const { flush } = await start();
+    // b waits for p and links to c, which sits under b: moving b moves c's path too.
+    await flush([
+      upsert({ sourceId: 'b', parent: 'p', links: [{ sourceId: 'c' }] }),
+      upsert({ sourceId: 'c', parent: 'b' }),
+    ]);
+    expect((await page('notion/b'))?.body).toBe('body of b\n\nLinks:\n- [[docs:acme#notion/b/c]]');
+    const storage = await knowledge.getStorage();
+    const result = await storage.transaction(async tx => {
+      const binding = (await tx.importers!.getBinding('b1'))!;
+      const [scope] = await tx.getScopesByAddress(['docs:acme']);
+      return applyKnowledgeImportFlush({
+        storage: tx,
+        importers: tx.importers!,
+        binding,
+        scope: scope!,
+        runId: 'r',
+        ops: [upsert({ sourceId: 'p' })],
+        provenance: { author: 'test' },
+        settle: { after: null, candidates: 200, moves: 50, until: Date.now() + 10_000 },
+      });
+    });
+    const moved = await page('notion/p/b');
+    expect(moved?.body).toBe('body of b\n\nLinks:\n- [[docs:acme#notion/p/b/c]]');
+    expect(result.embeds).toContainEqual({ kind: 'index', pageId: moved!.id });
+    expect(result.counts).toMatchObject({ created: 1, moved: 1, updated: 1 });
+  });
+
   it('settles at most 50 moves per flush, and empty flushes carry on until the pass ends', async () => {
     const { page, start } = setup();
     const { flush } = await start();

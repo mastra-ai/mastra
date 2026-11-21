@@ -236,6 +236,28 @@ export class InMemoryKnowledgeImportersStorage extends KnowledgeImportersStorage
     const items = nodes.slice(0, limit).map(n => structuredClone(n));
     return { items, next: nodes.length > limit ? items[items.length - 1]!.sourceId : null };
   }
+  #linking(bindingId: string, targetSourceIds: string[]) {
+    const targets = new Set(targetSourceIds);
+    return [...this.#s.nodes.values()].filter(
+      n => n.bindingId === bindingId && n.links.some(link => targets.has(link.sourceId)),
+    );
+  }
+  async listLinkingNodes(
+    bindingId: string,
+    targetSourceIds: string[],
+    options: { after?: string; limit?: number } = {},
+  ): Promise<KnowledgeImporterPage<string>> {
+    const limit = options.limit ?? 500;
+    const ids = this.#linking(bindingId, targetSourceIds)
+      .map(n => n.sourceId)
+      .filter(id => options.after === undefined || byteOrder(id, options.after) > 0)
+      .sort(byteOrder);
+    const items = ids.slice(0, limit);
+    return { items, next: ids.length > limit ? items[items.length - 1]! : null };
+  }
+  async markLinkingNodesUnsettled(bindingId: string, targetSourceIds: string[]) {
+    for (const n of this.#linking(bindingId, targetSourceIds)) n.unsettled = true;
+  }
   async findNodeByAlias(bindingId: string, alias: string) {
     const node = [...this.#s.nodes.values()].find(n => n.bindingId === bindingId && n.aliases.includes(alias));
     return node ? structuredClone(node) : null;

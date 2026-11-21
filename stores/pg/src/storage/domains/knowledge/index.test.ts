@@ -305,7 +305,7 @@ createKnowledgeImportersStorageTests(async () => {
               [IMPORTERS_UNPROVISIONED_SCHEMA],
             )
           ).rows[0].n,
-        ) === 7,
+        ) === 8,
     },
     concurrentTransactions: true,
     cleanup: async () => {
