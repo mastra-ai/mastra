@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { cp, readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { promisify } from 'node:util';
 import { knowledgeScopeAddress } from '@mastra/core/knowledge';
 import { runtimeFixture } from './runtime.ts';
@@ -234,7 +234,7 @@ export async function demoFixture(example: 'retail-pos' | 'software-integration'
   const configs = Object.fromEntries(
     Object.entries(datasets).map(([id, config]) => [
       id,
-      { ...config, directory: join(copied, id === 'software-integration' ? id : 'retail-pos') },
+      { ...config, directory: join(copied, basename(config.directory)) },
     ]),
   );
   const reviewer = profiles.length;

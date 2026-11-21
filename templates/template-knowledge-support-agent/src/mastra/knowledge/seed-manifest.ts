@@ -206,7 +206,7 @@ type MarkdownNode = {
   children?: MarkdownNode[];
 };
 
-function renderBodyLinks(body: string, resolveAlias: (ref: string) => string, generatedOffset: number) {
+function renderMarkdownLinks(body: string, resolveAlias: (ref: string) => string, generatedOffset = body.length) {
   const code: string[] = [];
   const parts: string[] = [];
   let offset = 0;
@@ -387,7 +387,7 @@ export async function prepareDataset(
       if (new Set(links).size !== links.length) throw new Error('Duplicate link alias');
       generated.push(links.map(ref => `- [[${ref}]]`).join('\n'));
     }
-    const renderedBody = renderBodyLinks(
+    const renderedBody = renderMarkdownLinks(
       [markdown, ...generated].filter(Boolean).join('\n\n'),
       lookup,
       markdown.length,
@@ -413,7 +413,7 @@ export async function prepareDataset(
       const noteKey = key(obj.key, 'note key');
       if (noteKeys.has(noteKey)) throw new Error('Duplicate note key');
       noteKeys.add(noteKey);
-      const rendered = renderLinks(string(obj.text, 'note text', 5000), lookup);
+      const rendered = renderMarkdownLinks(string(obj.text, 'note text', 5000), lookup);
       const marker = noteMarker(config.id, alias, noteKey);
       const text = `${marker}\n${rendered.text}${obj.author === undefined ? '' : `\nFixture author: ${line(obj.author, 'fixture author')}`}`;
       assertKnowledgeNoteTextWithinBound(text);

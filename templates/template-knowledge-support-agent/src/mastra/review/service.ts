@@ -1,7 +1,13 @@
-import { confirmationMetadataSchema, confirmationText, decodeConfirmationReference } from './confirmation.ts';
+import { confirmationMetadataSchema, confirmationText } from './confirmation.ts';
 import type { Mastra } from '@mastra/core/mastra';
 import { randomUUID } from 'node:crypto';
-import { knowledgeScopeAddress, type Knowledge, type KnowledgeNote, type KnowledgePage } from '@mastra/core/knowledge';
+import {
+  KnowledgeConflictError,
+  knowledgeScopeAddress,
+  type Knowledge,
+  type KnowledgeNote,
+  type KnowledgePage,
+} from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { knowledgeScopeReadable } from '@mastra/core/storage';
 import type { Memory } from '@mastra/memory';
@@ -11,7 +17,8 @@ import { createCuratorAgent } from '../agents/curator-agent.ts';
 import { resourceId, type Profile } from '../identity.ts';
 import { hasSeededHttpsSource } from '../knowledge/seed-manifest.ts';
 import { withWriterLock } from '../knowledge/writer-lock.ts';
-import { createPostgresWriterKnowledge } from '../knowledge/index.ts';
+import { createKnowledge, createPostgresWriterKnowledge } from '../knowledge/index.ts';
+import { upsertPageAtRevision } from '../knowledge/versioned-page.ts';
 import type { LocalProfile } from '../server/access.ts';
 import { hasDuplicatePage, matchingNoteIds } from './duplicate.ts';
 import {
@@ -19,12 +26,13 @@ import {
   digest,
   proposalSchema,
   publishedText,
+  reviewStartInputSchema,
   ReviewConflict,
   type Approval,
   type Candidate,
   type Proposal,
   type ReviewInput,
-  type ReviewStartInput,
+  type ReviewStartRequest,
 } from './contracts.ts';
 
 export type ReviewerAuthority = (profile: Profile) => LocalProfile | null;
@@ -133,6 +141,7 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
           binding.digest === pageDigest(current),
         'Bound evidence or target changed',
       );
+      return binding;
     };
     reviewer(authenticated ?? proposal.reviewer);
     requireReview(resourceId(proposal.reviewer) === proposal.owner, 'Proposal ownership mismatch');
@@ -167,13 +176,10 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
       );
     }
     if (proposal.candidate.target) {
-      const current = await page(
-        `${proposal.destination.scope}#${proposal.destination.path}`,
-        [proposal.destination.scope],
-        activeKnowledge,
-      );
+      const targetRef = `${proposal.destination.scope}#${proposal.destination.path}`;
+      const current = await page(targetRef, [proposal.destination.scope], activeKnowledge);
       requireReview(current.version === proposal.candidate.target.expectedVersion, 'Target revision changed');
-      identity('target', `${proposal.destination.scope}#${proposal.destination.path}`, current);
+      const binding = identity('target', targetRef, current);
       requireReview(
         proposal.destination.path.startsWith(`${supportConfiguration.customerRoots[0]}/`) ||
           (proposal.source.audience === 'tenant' &&
@@ -185,6 +191,7 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
           current.createdBy.author?.startsWith('review:') && current.body?.startsWith('<!-- knowledge-review:'),
           'Only review-owned findings may be updated',
         );
+      return binding;
     }
   }
 
@@ -206,11 +213,16 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
     );
   }
 
-  async function prepare(profile: Profile | undefined, received: ReviewStartInput, mastra?: Mastra): Promise<Proposal> {
+  async function prepare(
+    profile: Profile | undefined,
+    request: ReviewStartRequest,
+    mastra?: Mastra,
+  ): Promise<Proposal> {
     const current = reviewer(profile);
+    const received = reviewStartInputSchema.parse(request);
     const structured = 'confirmationReference' in received;
     const input: ReviewInput = structured
-      ? { ...decodeConfirmationReference(received.confirmationReference), audience: received.audience }
+      ? { ...received.confirmationReference, audience: received.audience }
       : received;
     const { curatorConfirmation, ...selected } = await confirmation(current, input, structured);
     const customerScope = customer(current);
@@ -378,19 +390,31 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
         return result('published', reference);
       }
       if (proposal.candidate.action === 'page') requireReview(!current, 'Page destination already exists');
-      await validate(proposal, authenticated, activeKnowledge);
+      const expected = await validate(proposal, authenticated, activeKnowledge);
       requireReview(
         !(await duplicate(proposal, activeKnowledge, postgres)),
         'A duplicate finding now exists; reevaluate',
       );
       reviewer(authenticated ?? proposal.reviewer);
-      await activeKnowledge.upsertPage({
-        ...proposal.destination,
-        name: proposal.candidate.title,
-        description: proposal.candidate.record.summary,
-        body,
-        author,
-      });
+      const writer = postgres ? activeKnowledge : createKnowledge(memory.storage);
+      try {
+        await upsertPageAtRevision(
+          writer,
+          store,
+          {
+            ...proposal.destination,
+            name: proposal.candidate.title,
+            description: proposal.candidate.record.summary,
+            body,
+            author,
+          },
+          expected ?? null,
+        );
+      } catch (error) {
+        if (error instanceof KnowledgeConflictError)
+          throw new ReviewConflict('Page destination changed; reevaluate', { cause: error });
+        throw error;
+      }
       return result('published', reference);
     });
   }

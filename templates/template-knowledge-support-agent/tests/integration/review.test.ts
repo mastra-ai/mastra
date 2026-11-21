@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { test } from 'node:test';
 import { TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
@@ -12,6 +13,7 @@ import { resourceId } from '../../src/mastra/identity.ts';
 import { seedDataset } from '../../src/mastra/knowledge/seed.ts';
 import { acquireWriterLock } from '../../src/mastra/knowledge/writer-lock.ts';
 import { publishedText } from '../../src/mastra/review/contracts.ts';
+import { createReviewService } from '../../src/mastra/review/service.ts';
 import type { Candidate, Proposal } from '../../src/mastra/review/contracts.ts';
 
 type Fixture = Awaited<ReturnType<typeof runtimeFixture>>;
@@ -303,6 +305,71 @@ async function sql(f: Fixture, query: string, parameters: string[] = []) {
   return JSON.parse(result.stdout) as Record<string, string>[];
 }
 
+test('publication preserves operator edits made after it checks the destination', { timeout: 120000 }, async () => {
+  const f = await fixture();
+  try {
+    await f.start();
+    const input = await confirmation(f);
+    f.select(candidate('initial-version', { evidence: [] }));
+    const initial = await pending(f, input);
+    assert.equal((await resume(f, initial)).result.status, 'published');
+    const actor = { ...f.credentials[reviewer]!.profile, review: true };
+    const service = createReviewService(f.supportKnowledge, f.memory, () => actor);
+    const store = await f.supportKnowledge.getStorage();
+    const getPageByPath = store.getPageByPath.bind(store);
+    for (const action of ['page', 'update'] as const) {
+      f.select(
+        candidate(`concurrent-${action}`, {
+          action,
+          evidence: [],
+          target: action === 'update' ? { path: initial.proposal.destination.path, expectedVersion: 1 } : null,
+        }),
+      );
+      const { proposal } = await pending(f, input);
+      const { scope, path } = proposal.destination;
+      const body = `Keep the operator's ${action}.`;
+      let operatorVersion: number | undefined;
+      store.getPageByPath = async lookup => {
+        const current = await getPageByPath(lookup);
+        if (
+          operatorVersion === undefined &&
+          lookup.path.join('/') === path &&
+          (action === 'page' ? lookup.read === 'all' && !current : lookup.read !== 'all' && current?.version === 1)
+        ) {
+          store.getPageByPath = getPageByPath;
+          const { page } = await f.supportKnowledge.upsertPage({ scope, path, name: 'Operator finding', body });
+          operatorVersion = page.version;
+        }
+        return current;
+      };
+      try {
+        await assert.rejects(
+          f.withEnvironment(() =>
+            service.publish(
+              {
+                proposal,
+                decision: decision(proposal),
+                reviewerId: actor.actorId,
+                decidedAt: new Date().toISOString(),
+              },
+              actor,
+            ),
+          ),
+          /Page destination changed/u,
+        );
+      } finally {
+        store.getPageByPath = getPageByPath;
+      }
+      assert.equal(operatorVersion, action === 'page' ? 1 : 2);
+      const persisted = (await snapshot(f)).find(item => item.page.body === body)?.page;
+      assert.equal(persisted?.name, 'Operator finding');
+      assert.equal(persisted.version, operatorVersion);
+    }
+  } finally {
+    await f.close();
+  }
+});
+
 test('approval_publishes_scoped_content_and_a_new_thread_reuses_knowledge', { timeout: 180000 }, async () => {
   const f = await fixture();
   try {
@@ -393,6 +460,7 @@ test(
       await f.start();
       const input = await confirmation(f);
       const valid = candidate('record-boundary');
+      valid.content += '\n\n> Confirmed after inspection';
       valid.record.topicTags = ['connectivity', 'a'.repeat(80)];
       f.select(valid);
       const accepted = await pending(f, input);
@@ -410,6 +478,14 @@ test(
       f.select(invalid);
       const rejected = await begin(f, input);
       assert.equal(rejected.state.status, 'failed', 'An unreadable record must fail before review approval');
+      assert.deepEqual(await snapshot(f), before);
+
+      const hiddenFence = candidate('hidden-record');
+      hiddenFence.content = `~~~support-record\n${JSON.stringify(hiddenFence.record)}\n~~~\n\n~~~markdown`;
+      f.select(hiddenFence);
+      const wrongFence = await begin(f, input);
+      assert.equal(wrongFence.state.status, 'failed');
+      assert.match(JSON.stringify(wrongFence.state), /published support record must be a standalone fence/u);
       assert.deepEqual(await snapshot(f), before);
 
       f.select(candidate('permanent-write-failure'));
@@ -898,7 +974,7 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
           '-e',
           `const { acquireWriterLock } = await import('./src/mastra/knowledge/writer-lock.ts'); await acquireWriterLock(${JSON.stringify(f.databaseUrl)});`,
         ],
-        { timeout: 10000 },
+        { cwd: fileURLToPath(new URL('../..', import.meta.url)), timeout: 10000 },
       );
       if (note) {
         const { scope, path } = interrupted.proposal.destination;

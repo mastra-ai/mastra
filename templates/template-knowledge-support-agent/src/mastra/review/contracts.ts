@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
-import { confirmationReferenceSchema } from './confirmation.ts';
+import { confirmationReferenceSchema, confirmationReferenceString } from './confirmation.ts';
 import { validateSupportRecord } from '../knowledge/seed-manifest.ts';
 import { supportRecordEnvelope } from '../knowledge/support-record-envelope.ts';
 import { assertKnowledgeNoteTextWithinBound, assertKnowledgePageDescriptionWithinBound } from '@mastra/core/knowledge';
@@ -26,17 +26,19 @@ export const reviewInputSchema = z
     audience: z.enum(['private', 'tenant']),
   })
   .strict();
-/** Normalize new references before persisting the unchanged proposal source contract. */
+const referenceRequest = z
+  .object({
+    confirmationReference: confirmationReferenceString,
+    audience: z.enum(['private', 'tenant']),
+  })
+  .strict();
+// Mastra uses the same input type for both the workflow and its first step.
+export const reviewStartRequestSchema = z.union([reviewInputSchema, referenceRequest]);
+export type ReviewStartRequest = z.input<typeof reviewStartRequestSchema>;
 export const reviewStartInputSchema = z.union([
   reviewInputSchema,
-  z
-    .object({
-      confirmationReference: confirmationReferenceSchema,
-      audience: z.enum(['private', 'tenant']),
-    })
-    .strict(),
+  referenceRequest.extend({ confirmationReference: confirmationReferenceSchema }),
 ]);
-export type ReviewStartInput = z.infer<typeof reviewStartInputSchema>;
 export const decisionSchema = z
   .object({
     decision: z.enum(['approve', 'reject']),
@@ -96,7 +98,7 @@ export function digest(value: unknown) {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
 
-export function publishedText(proposal: {
+function renderPublication(proposal: {
   id: string;
   revision: string;
   reviewer: { actorId: string };
@@ -110,7 +112,14 @@ export function publishedText(proposal: {
     source.audience === 'private'
       ? `Source technician: ${source.sourceActorId}\nConfirmed in thread: ${source.threadId}, turn: ${source.messageId}\nEvidence: ${candidate.evidence.map(item => `[[${item.ref}]] (v${item.version})`).join(', ')}`
       : `Public source: [[${candidate.publicSource!.ref}]] (v${candidate.publicSource!.version})`;
-  return `${marker}\n${attribution}\n${candidate.content}\n\n\`\`\`support-record\n${JSON.stringify(candidate.record)}\n\`\`\`\n\n${provenance}`;
+  const prefix = `${marker}\n${attribution}\n${candidate.content}\n\n`;
+  const value = JSON.stringify(candidate.record);
+  const fence = `\`\`\`support-record\n${value}\n\`\`\``;
+  return { body: `${prefix}${fence}\n\n${provenance}`, start: prefix.length, end: prefix.length + fence.length, value };
+}
+
+export function publishedText(proposal: Parameters<typeof renderPublication>[0]) {
+  return renderPublication(proposal).body;
 }
 
 export const proposalSchema = z
@@ -181,10 +190,11 @@ export const proposalSchema = z
         });
     }
     try {
-      const publication = publishedText(proposal);
-      if (!supportRecordEnvelope(publication))
+      const publication = renderPublication(proposal);
+      const parsed = supportRecordEnvelope(publication.body);
+      if (parsed?.start !== publication.start || parsed.end !== publication.end || parsed.value !== publication.value)
         throw new Error('The published support record must be a standalone fence');
-      if (candidate.action === 'note') assertKnowledgeNoteTextWithinBound(publication);
+      if (candidate.action === 'note') assertKnowledgeNoteTextWithinBound(publication.body);
       else assertKnowledgePageDescriptionWithinBound(candidate.record.summary);
     } catch (error) {
       context.addIssue({ code: 'custom', message: (error as Error).message });

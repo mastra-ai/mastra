@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   confirmationInputSchema,
+  confirmationMetadataSchema,
   confirmationReferenceSchema,
   decodeConfirmationReference,
   encodeConfirmationReference,
@@ -14,13 +15,13 @@ test('confirmation references support long Unicode actors and reject ambiguous l
     sourceActorId: '界'.repeat(200),
   };
   const reference = encodeConfirmationReference(locator);
-  assert.ok(reference.length > 1000 && reference.length <= 1280);
-  assert.equal(confirmationReferenceSchema.safeParse(reference).success, true);
+  assert.ok(reference.length > 1000);
+  assert.deepEqual(confirmationReferenceSchema.parse(reference), locator);
   assert.deepEqual(decodeConfirmationReference(reference), locator);
   for (const invalid of [
     reference + '=',
     reference + '\n',
-    'sc1.' + 'a'.repeat(1280),
+    'sc1.' + 'a'.repeat(2048),
     'sc1.' + Buffer.from(JSON.stringify({ ...locator, actorId: 'claimed' })).toString('base64url'),
   ])
     assert.equal(confirmationReferenceSchema.safeParse(invalid).success, false);
@@ -31,4 +32,13 @@ test('confirmation references support long Unicode actors and reject ambiguous l
   };
   assert.equal(confirmationInputSchema.safeParse(payload).success, true);
   assert.equal(confirmationInputSchema.safeParse({ ...payload, sourceActorId: 'claimed' }).success, false);
+  const sourceActorId = '\u0001'.repeat(200);
+  const metadata = confirmationMetadataSchema.parse({
+    ...payload,
+    version: 1,
+    sourceActorId,
+    confirmedAt: '2026-11-20T00:00:00Z',
+  });
+  const escaped = { ...locator, sourceActorId: metadata.sourceActorId };
+  assert.deepEqual(confirmationReferenceSchema.parse(encodeConfirmationReference(escaped)), escaped);
 });

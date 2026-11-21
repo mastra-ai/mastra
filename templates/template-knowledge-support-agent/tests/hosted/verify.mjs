@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import { generateKeyPairSync, randomBytes, randomUUID, sign } from 'node:crypto';
-import { once } from 'node:events';
+import { EventEmitter, once } from 'node:events';
 import { cp, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { createServer as createHttpsServer, request as httpsRequest } from 'node:https';
-import { createServer as createPortServer } from 'node:net';
+import { createConnection, createServer as createPortServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -397,6 +397,78 @@ async function holdWriterLock(env, db) {
   throw new Error(`Writer lock holder failed: ${proc.output()}`);
 }
 
+async function verifyStalledPostgresWriter(db, env) {
+  const destination = new URL(db.url);
+  const proxy = createPortServer();
+  let upstream;
+  let downstream;
+  proxy.on('connection', socket => {
+    downstream = socket;
+    upstream = createConnection({ host: destination.hostname, port: Number(destination.port) });
+    socket.on('error', () => upstream.destroy());
+    upstream.on('error', () => socket.destroy());
+    socket.on('close', () => upstream.destroy());
+    upstream.on('close', () => socket.destroy());
+    socket.pipe(upstream).pipe(socket);
+  });
+  proxy.listen(0, host);
+  await once(proxy, 'listening');
+  const proxyUrl = new URL(destination);
+  proxyUrl.port = String(proxy.address().port);
+  const imports = "import { withWriterLock } from './src/mastra/knowledge/writer-lock.ts';";
+  const proc = start(
+    process.execPath,
+    [
+      '--input-type=module',
+      '-e',
+      `${imports}
+      import assert from 'node:assert/strict';
+      import { once } from 'node:events';
+      import { isRetryablePublicationError } from './src/mastra/review/publication-errors.ts';
+      await withWriterLock(async ({ postgres }) => {
+        const ready = once(process, 'message');
+        process.send('writer-held');
+        await ready;
+        await postgres.query('SELECT 1');
+      }).then(
+        () => assert.fail('The stalled query unexpectedly succeeded'),
+        error => {
+          assert.equal(error.name, 'WriterSessionLostError');
+          assert.ok(isRetryablePublicationError(error));
+        }
+      );
+      process.disconnect();`,
+    ],
+    { ...env, ...databaseEnv({ url: proxyUrl.href }) },
+    template,
+    true,
+  );
+  try {
+    const [message] = await once(proc.child, 'message', { signal: AbortSignal.timeout(5000) });
+    assert.equal(message, 'writer-held');
+    assert.ok(upstream);
+    // Keep the TCP connection open while suppressing the next PostgreSQL reply.
+    upstream.pause();
+    proc.child.send('query');
+    const [code] = await Promise.race([
+      proc.exited,
+      delay(16000, undefined, { ref: false }).then(() => {
+        throw new Error('The stalled PostgreSQL writer did not exit');
+      }),
+    ]);
+    assert.equal(code, 0, proc.output());
+    await exec(
+      process.execPath,
+      ['--input-type=module', '-e', `${imports} await withWriterLock(({ postgres }) => postgres.query('SELECT 1'));`],
+      { cwd: template, env: { ...env, ...databaseEnv(db) }, timeout: 5000 },
+    );
+  } finally {
+    downstream?.destroy();
+    upstream?.destroy();
+    await Promise.all([stop(proc), new Promise(resolve => proxy.close(resolve))]);
+  }
+}
+
 function request(worker, route, access, body, headers = {}) {
   return fetch(worker.url + route, {
     method: body === undefined ? 'GET' : 'POST',
@@ -545,6 +617,7 @@ try {
     '-addext',
     'subjectAltName=DNS:localhost,IP:127.0.0.1',
   ]);
+  const incompleteProbe = new EventEmitter();
   identityServer = createHttpsServer(
     { key: await readFile(keyFile), cert: await readFile(certificate) },
     async (req, res) => {
@@ -567,13 +640,21 @@ try {
         return;
       }
       let body = '';
+      const isProbe = req.headers['x-support-incomplete-probe'] === 'true';
       try {
-        for await (const chunk of req) body += chunk;
+        for await (const chunk of req) {
+          if (isProbe && !body) incompleteProbe.emit('chunk');
+          body += chunk;
+        }
       } catch {
+        if (isProbe && !req.complete) incompleteProbe.emit('incomplete');
         if (!req.destroyed && !res.destroyed) res.writeHead(400).end();
         return;
       }
-      if (req.aborted || res.destroyed) return;
+      if (!req.complete || res.destroyed) {
+        if (isProbe && !req.complete) incompleteProbe.emit('incomplete');
+        return;
+      }
       const access = new URLSearchParams(body).get('token');
       res
         .writeHead(200, { 'content-type': 'application/json' })
@@ -584,27 +665,31 @@ try {
   const { port: identityPort } = identityServer.address();
 
   // A worker can disconnect after introspection starts but before its POST body is complete.
+  const probeDeadline = AbortSignal.timeout(5000);
   const interrupted = httpsRequest({
     host,
     port: identityPort,
     ca: await readFile(certificate),
     method: 'POST',
     path: '/introspect',
-    signal: AbortSignal.timeout(5000),
+    signal: probeDeadline,
     headers: {
       authorization: `Bearer ${resourceSecret}`,
       expect: '100-continue',
       'content-length': '100',
+      'x-support-incomplete-probe': 'true',
     },
   });
   const accepted = once(interrupted, 'continue');
   interrupted.flushHeaders();
   await accepted;
-  interrupted.write('token=');
   interrupted.on('error', () => {});
-  const disconnected = new Promise(resolve => interrupted.once('close', resolve));
+  const firstChunk = once(incompleteProbe, 'chunk', { signal: probeDeadline });
+  interrupted.write('token=');
+  await firstChunk;
+  const incomplete = once(incompleteProbe, 'incomplete', { signal: probeDeadline });
   interrupted.destroy();
-  await disconnected;
+  await incomplete;
 
   model = await startModelServer(body => {
     const messages = body.messages ?? [];
@@ -728,6 +813,7 @@ try {
   if (backend === 'postgres') {
     const report = JSON.parse(seeded.stdout.slice(seeded.stdout.indexOf('{')));
     await verifyInterruptedSeed(db, env, report.pages);
+    await verifyStalledPostgresWriter(db, env);
   }
   const first = bootstrapped ?? (await worker(db));
   const second = await worker(db);

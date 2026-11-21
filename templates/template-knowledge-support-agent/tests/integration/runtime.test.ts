@@ -139,7 +139,7 @@ test('the model fixture returns an error for non-JSON tool arguments and stays a
 });
 
 test('local_studio_boots_and_scoped_state_survives_restart', { timeout: 120000 }, async () => {
-  const fixture = await runtimeFixture({ generatedCredentials: true });
+  const fixture = await runtimeFixture({ generatedCredentials: 'empty' });
   try {
     await fixture.start();
     assert.match(await (await fetch(fixture.base)).text(), /<html/u);
@@ -152,7 +152,8 @@ test('local_studio_boots_and_scoped_state_survives_restart', { timeout: 120000 }
     await assert.rejects(fixture.start(), /Stop the existing runtime/u);
     assert.equal(fixture.credentialFile(), activeFile);
     assert.ok(fixture.output().includes(activeOutput), 'The rejected start must preserve the active launch output');
-    assert.equal((await stat(activeFile)).mode & 0o777, 0o600);
+    const fileInfo = await stat(activeFile);
+    if (process.platform !== 'win32') assert.equal(fileInfo.mode & 0o777, 0o600);
     const duplicate = await fixture.duplicateStart();
     assert.match(duplicate.output, /Another development server instance is already running/u);
     assert.notEqual(duplicate.file, activeFile);

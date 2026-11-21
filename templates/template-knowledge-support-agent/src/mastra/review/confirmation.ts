@@ -1,5 +1,14 @@
 import { z } from 'zod';
 
+const sourceActorId = z.string().min(1).max(200);
+const referencePrefix = 'sc1.';
+// A JSON-escaped UTF-16 code unit can take six bytes before base64url encoding.
+const maxReferenceLength = 2048;
+export const confirmationReferenceString = z
+  .string()
+  .max(maxReferenceLength)
+  .regex(/^sc1\.[A-Za-z0-9_-]+$/u);
+
 const text = z
   .string()
   .trim()
@@ -16,7 +25,7 @@ export const confirmationInputSchema = z
 export const confirmationMetadataSchema = confirmationInputSchema
   .extend({
     version: z.literal(1),
-    sourceActorId: z.string().min(1).max(200),
+    sourceActorId,
     confirmedAt: z.iso.datetime(),
   })
   .strict();
@@ -24,32 +33,31 @@ const locatorSchema = z
   .object({
     threadId: confirmationInputSchema.shape.threadId,
     messageId: z.uuid(),
-    sourceActorId: z.string().min(1).max(200),
+    sourceActorId,
   })
   .strict();
 export function confirmationText(input: z.infer<typeof confirmationInputSchema>) {
   return `Technician confirmation\nObservation: ${input.observation}\nOutcome: ${input.outcome}`;
 }
+function serializeLocator(locator: z.infer<typeof locatorSchema>) {
+  return referencePrefix + Buffer.from(JSON.stringify(locator)).toString('base64url');
+}
 export function encodeConfirmationReference(locator: z.infer<typeof locatorSchema>) {
-  const reference = `sc1.${Buffer.from(JSON.stringify(locatorSchema.parse(locator))).toString('base64url')}`;
-  // 200 UTF-16 actor characters may occupy 600 UTF-8 bytes, plus the bounded IDs and JSON.
-  if (reference.length > 1280) throw new Error('Confirmation reference exceeds its bound');
-  return reference;
+  return confirmationReferenceString.parse(serializeLocator(locatorSchema.parse(locator)));
 }
 export function decodeConfirmationReference(reference: string) {
-  if (!/^sc1\.[A-Za-z0-9_-]{1,1276}$/u.test(reference)) throw new Error('Invalid confirmation reference');
-  const locator = locatorSchema.parse(JSON.parse(Buffer.from(reference.slice(4), 'base64url').toString('utf8')));
-  if (encodeConfirmationReference(locator) !== reference) throw new Error('Invalid confirmation reference');
+  confirmationReferenceString.parse(reference);
+  const locator = locatorSchema.parse(
+    JSON.parse(Buffer.from(reference.slice(referencePrefix.length), 'base64url').toString('utf8')),
+  );
+  if (serializeLocator(locator) !== reference) throw new Error('Invalid confirmation reference');
   return locator;
 }
-export const confirmationReferenceSchema = z
-  .string()
-  .max(1280)
-  .refine(value => {
-    try {
-      decodeConfirmationReference(value);
-      return true;
-    } catch {
-      return false;
-    }
-  }, 'Invalid confirmation reference');
+export const confirmationReferenceSchema = z.string().transform((value, context) => {
+  try {
+    return decodeConfirmationReference(value);
+  } catch {
+    context.addIssue({ code: 'custom', message: 'Invalid confirmation reference' });
+    return z.NEVER;
+  }
+});

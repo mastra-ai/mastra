@@ -5,7 +5,7 @@ import { mkdtemp, writeFile, rm, readFile } from 'node:fs/promises';
 import { createConnection } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { setTimeout } from 'node:timers/promises';
 import { exampleProfiles, exampleStudioRole } from '../../src/examples/retail-pos/profiles.ts';
 import type { Profile } from '../../src/mastra/identity.ts';
@@ -13,6 +13,8 @@ import { principals, resourceId } from '../../src/mastra/identity.ts';
 import type { KnowledgePage } from '@mastra/core/knowledge';
 import { Memory } from '@mastra/memory';
 import { startModelServer, type ModelScript } from './model-server.ts';
+
+const template = fileURLToPath(new URL('../..', import.meta.url));
 
 export function fixtureFetch(url: string, options: RequestInit = {}) {
   return fetch(url, { ...options, signal: options.signal ?? AbortSignal.timeout(30000) });
@@ -37,7 +39,7 @@ export async function approvePolicyRevision(file: string, ref: string, body: str
 }
 
 interface RuntimeOptions {
-  generatedCredentials?: boolean;
+  generatedCredentials?: boolean | 'empty';
   studioRole?: string;
   modelScript?: ModelScript;
   profiles?: (Profile & { review?: boolean })[];
@@ -197,13 +199,14 @@ async function configureRuntime(
   let child: RuntimeProcess | undefined;
   let output = '';
   let activeCredentialFile: string | undefined;
-  function launchEnvironment(generated: boolean) {
+  function launchEnvironment(generated: boolean | 'empty') {
     const launch: NodeJS.ProcessEnv = {
       ...environment,
       PORT: String(port),
       ...(options.example ? { SUPPORT_EXAMPLE: options.example } : {}),
     };
-    if (generated) delete launch.SUPPORT_CREDENTIALS_FILE;
+    if (generated === 'empty') launch.SUPPORT_CREDENTIALS_FILE = '';
+    else if (generated) delete launch.SUPPORT_CREDENTIALS_FILE;
     if (generated && options.studioRole === undefined) delete launch.SUPPORT_STUDIO_ROLE;
     return launch;
   }
@@ -228,9 +231,9 @@ async function configureRuntime(
     output = '';
     activeCredentialFile = undefined;
     const launcher = spawn('npm', ['run', 'dev'], {
-      cwd: process.cwd(),
+      cwd: template,
       detached: true,
-      env: launchEnvironment(!!options.generatedCredentials),
+      env: launchEnvironment(options.generatedCredentials ?? false),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     const running: RuntimeProcess = { launcher, closed: false, bound: false };
@@ -297,7 +300,7 @@ async function configureRuntime(
   async function duplicateStart() {
     let duplicateOutput = '';
     const duplicate = spawn('npm', ['run', 'dev'], {
-      cwd: process.cwd(),
+      cwd: template,
       detached: true,
       env: launchEnvironment(true),
       stdio: ['ignore', 'pipe', 'pipe'],

@@ -8,6 +8,7 @@ import { resolveStoreConfiguration, type StoreConfiguration } from '../database/
 
 // PostgreSQL advisory locks are database-scoped. Keep these namespace keys stable across workers and releases.
 const postgresWriterKey = [0x4b534147, 0x57524954];
+const postgresDeadlineMs = 10_000;
 
 function writerClient(query: TxClient['query']): DbClient {
   let pending: Promise<unknown> = Promise.resolve();
@@ -90,18 +91,24 @@ export class WriterSessionLostError extends Error {
 }
 
 async function withPostgresWriter<T>(connectionString: string, operation: (client: DbClient) => Promise<T>) {
-  const connection = new Client({ connectionString, connectionTimeoutMillis: 10000 });
+  const connection = new Client({ connectionString, connectionTimeoutMillis: postgresDeadlineMs });
   let connectionError: Error | undefined;
   connection.on('error', error => {
     connectionError ??= error;
   });
   const client = writerClient(async (sql, values) => {
     if (connectionError) throw new WriterSessionLostError(connectionError);
+    const deadline = setTimeout(() => {
+      connectionError = new Error('PostgreSQL writer query deadline elapsed');
+      connection.connection.stream.destroy();
+    }, postgresDeadlineMs);
     try {
       return await connection.query(sql, values);
     } catch (error) {
-      if (connectionError) throw new WriterSessionLostError(error);
+      if (connectionError) throw new WriterSessionLostError(connectionError);
       throw error;
+    } finally {
+      clearTimeout(deadline);
     }
   });
   let connected = false;
@@ -109,7 +116,9 @@ async function withPostgresWriter<T>(connectionString: string, operation: (clien
     await connection.connect();
     connected = true;
     await client.none('BEGIN');
-    await client.none("SET LOCAL lock_timeout = '5s'");
+    await client.none(`SET LOCAL lock_timeout = '5s';
+      SET LOCAL statement_timeout = '30s';
+      SET LOCAL idle_in_transaction_session_timeout = '60s'`);
     const { acquired } = await client.one<{ acquired: boolean }>(
       'SELECT pg_try_advisory_xact_lock($1, $2) AS acquired',
       postgresWriterKey,
@@ -120,10 +129,15 @@ async function withPostgresWriter<T>(connectionString: string, operation: (clien
     if (commit.command !== 'COMMIT') throw new Error('PostgreSQL writer transaction was rolled back');
     return result;
   } catch (error) {
-    if (connected) await client.none('ROLLBACK').catch(() => undefined);
+    if (connected && !connectionError) await client.none('ROLLBACK').catch(() => undefined);
     throw error;
   } finally {
-    await connection.end();
+    const deadline = setTimeout(() => connection.connection.stream.destroy(), postgresDeadlineMs);
+    try {
+      await connection.end();
+    } finally {
+      clearTimeout(deadline);
+    }
   }
 }
 

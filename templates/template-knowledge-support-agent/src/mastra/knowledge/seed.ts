@@ -1,5 +1,4 @@
 import {
-  KnowledgeConflictError,
   knowledgeLinkRefKey,
   type Knowledge,
   type KnowledgeNote,
@@ -11,6 +10,7 @@ import { policyReference } from '../../examples/support.ts';
 import { createStore } from '../database/store.ts';
 import { createKnowledge, createPostgresWriterKnowledge } from './index.ts';
 import { withWriterLock } from './writer-lock.ts';
+import { upsertPageAtRevision } from './versioned-page.ts';
 import {
   prepareDataset,
   type DatasetConfiguration,
@@ -77,73 +77,6 @@ function exactNote(note: KnowledgeNote, wanted: PreparedNote, scopeId: string, m
   );
 }
 
-async function writePage(
-  knowledge: Knowledge,
-  storage: KnowledgeStorage,
-  wanted: PreparedPage,
-  scanned: KnowledgePage | null,
-  author: string,
-): Promise<KnowledgeUpsertPageResult> {
-  const destination = `${wanted.scope}#${wanted.path}`;
-  const path = wanted.path.split('/');
-  // Abort the native retry on a leaf conflict. The native upsert still manages scope, parent and link writes.
-  const conflict = new Error(`Seed destination changed: ${destination}`);
-  const createPage: KnowledgeStorage['createPage'] = async input => {
-    if (input.body === undefined) return storage.createPage(input); // Native parent scaffolding.
-    if (scanned) throw conflict;
-    const [scope] = await storage.getScopesByAddress([wanted.scope]);
-    const parent =
-      scope && path.length > 1
-        ? await storage.getPageByPath({ scopeId: scope.id, path: path.slice(0, -1), read: 'all' })
-        : scope;
-    if (parent?.id !== input.parentId) throw conflict;
-    try {
-      return await storage.createPage(input);
-    } catch (error) {
-      if ((error as Error)?.name === 'KnowledgePageKeyConflictError') throw conflict;
-      throw error;
-    }
-  };
-  const updatePage: KnowledgeStorage['updatePage'] = async input => {
-    if (!scanned || input.id !== scanned.id || input.expectedVersion !== scanned.version) throw conflict;
-    // Moving an ancestor can change the destination without bumping the leaf version.
-    const current = await storage.getPageByPath({ scopeId: scanned.scopeId, path, read: 'all' });
-    if (current?.id !== scanned.id || current.version !== scanned.version) throw conflict;
-    try {
-      return await storage.updatePage(input);
-    } catch (error) {
-      if (['KnowledgeNotFoundError', 'KnowledgeConflictError'].includes((error as Error)?.name)) throw conflict;
-      throw error;
-    }
-  };
-  const checkedStorage = new Proxy(storage, {
-    get(target, property) {
-      if (property === 'createPage') return createPage;
-      if (property === 'updatePage') return updatePage;
-      const value = Reflect.get(target, property, target);
-      return typeof value === 'function' ? value.bind(target) : value;
-    },
-  });
-  // This Knowledge instance is private to the seed. Limit the guard to one native upsert.
-  const getStorage = knowledge.getStorage;
-  knowledge.getStorage = async () => checkedStorage;
-  try {
-    const { scope, path, name, description, body } = wanted;
-    const result = await knowledge.upsertPage({ scope, path, name, description, body, author });
-    if (
-      result.status === 'unchanged' &&
-      (!scanned || result.page.id !== scanned.id || result.page.version !== scanned.version)
-    )
-      throw conflict;
-    return result;
-  } catch (error) {
-    if (error === conflict) throw new KnowledgeConflictError(destination);
-    throw error;
-  } finally {
-    knowledge.getStorage = getStorage;
-  }
-}
-
 async function writeDataset(
   knowledge: Knowledge,
   dataset: PreparedDataset,
@@ -172,7 +105,13 @@ async function writeDataset(
   // Write managed parents before their children so a child cannot create a managed parent as scaffolding.
   const ordered = [...dataset.pages].sort((a, b) => a.path.split('/').length - b.path.split('/').length);
   for (const wanted of ordered) {
-    const result = await writePage(knowledge, storage, wanted, scanned.get(wanted)!, author);
+    const { scope, path, name, description, body } = wanted;
+    const result = await upsertPageAtRevision(
+      knowledge,
+      storage,
+      { scope, path, name, description, body, author },
+      scanned.get(wanted)!,
+    );
     written.set(`${wanted.scope}#${wanted.path}`, result);
   }
   for (const wanted of dataset.pages) {

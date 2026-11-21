@@ -11,10 +11,9 @@ if (database.backend !== 'libsql' || database.lockFile)
   throw new Error('Use the built bundle for hosted mode. npm run dev launches local Studio.');
 
 const studioRole = process.env.SUPPORT_STUDIO_ROLE ?? exampleStudioRole;
-const generated = !process.env.SUPPORT_CREDENTIALS_FILE;
-const file =
-  process.env.SUPPORT_CREDENTIALS_FILE ?? resolve('.local', `access-${randomBytes(12).toString('hex')}.json`);
-if (generated) {
+const configuredFile = process.env.SUPPORT_CREDENTIALS_FILE || undefined;
+const file = configuredFile ?? resolve('.local', `access-${randomBytes(12).toString('hex')}.json`);
+if (!configuredFile) {
   await mkdir(resolve('.local'), { recursive: true, mode: 0o700 });
   await chmod(resolve('.local'), 0o700);
   await writeFile(
@@ -48,7 +47,7 @@ const child = spawn(process.execPath, ['node_modules/mastra/dist/index.js', 'dev
 });
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => child.kill(signal));
 async function finish(code: number) {
-  if (generated) await rm(file, { force: true });
+  if (!configuredFile) await rm(file, { force: true });
   process.exit(code);
 }
 child.once('error', () => {

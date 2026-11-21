@@ -152,11 +152,11 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
     const pagesToInspect = candidates.values();
     async function inspect(page: KnowledgePage) {
       const path: string[] = [];
-      const seen = new Set<string>();
+      const ancestry = new Map<string, KnowledgePage>();
       let current: KnowledgePage | undefined = page;
       while (current && current.id !== customer.id && path.length < MAX_KNOWLEDGE_PAGE_DEPTH) {
-        if (seen.has(current.id) || current.scopeId !== customer.id || current.isScope || !current.key) break;
-        seen.add(current.id);
+        if (ancestry.has(current.id) || current.scopeId !== customer.id || current.isScope || !current.key) break;
+        ancestry.set(current.id, current);
         path.unshift(current.key);
         if (current.parentId === customer.id) {
           current = customer;
@@ -171,10 +171,11 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
       const canonical = path.join('/');
       if (!isCustomerHistoryPath(canonical)) return;
       const ref = `${scope}#${canonical}`;
+      const evidence: Evidence[] = [];
       inspected++;
       try {
         const parsed = record(page.body);
-        if (parsed) records.push({ ...parsed, ref });
+        if (parsed) evidence.push({ ...parsed, ref });
       } catch {
         partial = true;
       }
@@ -190,13 +191,34 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
         try {
           if (note.text.length > 8000) throw new Error('Approved note exceeds the read bound');
           const parsed = record(note.text);
-          if (parsed?.state === 'approved') records.push({ ...parsed, ref: `${ref}?note=${note.id}` });
+          if (parsed?.state === 'approved') evidence.push({ ...parsed, ref: `${ref}?note=${note.id}` });
         } catch {
           partial = true;
         }
       };
-      // Keep relevant hits outside the listing window, using their current visibility and text.
+      if (noteCounts[page.id] !== 0) {
+        try {
+          let cursor: string | undefined;
+          let count = 0;
+          do {
+            const batch = await store.listNotes({ pageId: page.id, read, cursor, limit: bounds.batch });
+            for (const note of batch.notes.slice(0, bounds.notes - count)) {
+              count++;
+              includeNote(note);
+            }
+            cursor = batch.nextCursor;
+            if (cursor && count >= bounds.notes) {
+              partial = true;
+              break;
+            }
+          } while (cursor);
+        } catch {
+          partial = true;
+        }
+      }
+      // Only re-read search hits outside the current scoped listing.
       for (const id of noteHits.get(page.id) ?? []) {
+        if (seenNotes.has(id)) continue;
         try {
           const note = await store.getNote({ id, read });
           if (note) includeNote(note);
@@ -204,25 +226,31 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
           partial = true;
         }
       }
-      if (noteCounts[page.id] === 0) return;
+      if (!evidence.length) return;
       try {
-        let cursor: string | undefined;
-        let count = 0;
-        do {
-          const batch = await store.listNotes({ pageId: page.id, read, cursor, limit: bounds.batch });
-          for (const note of batch.notes.slice(0, bounds.notes - count)) {
-            count++;
-            includeNote(note);
-          }
-          cursor = batch.nextCursor;
-          if (cursor && count >= bounds.notes) {
-            partial = true;
-            break;
-          }
-        } while (cursor);
+        // A note can be added after its case or an ancestor moves. Recheck the full path
+        // in one scoped read after collecting evidence, including moves away and back.
+        const verified = await store.getPages({ ids: [...ancestry.keys()], read });
+        if (
+          verified.length === ancestry.size &&
+          verified.every(current => {
+            const prior = ancestry.get(current.id);
+            return (
+              prior &&
+              current.scopeId === customer.id &&
+              current.parentId === prior.parentId &&
+              current.key === prior.key &&
+              current.version === prior.version
+            );
+          })
+        ) {
+          records.push(...evidence);
+          return;
+        }
       } catch {
-        partial = true;
+        // A failed recheck leaves the evidence unverified.
       }
+      partial = true;
     }
     await Promise.all(
       Array.from({ length: Math.min(bounds.noteConcurrency, candidates.size) }, async () => {

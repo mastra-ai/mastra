@@ -267,3 +267,82 @@ test('a page or note removed after native search does not enter scoped history',
     await f.close();
   }
 });
+
+test(
+  'history keeps current notes and drops evidence from a case moved during retrieval',
+  { timeout: 30000 },
+  async () => {
+    const f = await runtimeFixture({ syntheticKnowledge: false });
+    try {
+      const { supportKnowledge } = f;
+      const scope = 'customer:north:store-1';
+      const stablePath = 'cases/current';
+      const movingPath = 'cases/batch/relocated';
+      await supportKnowledge.upsertPage({
+        scope,
+        path: stablePath,
+        name: 'Current case',
+        body: '\uFEFF' + historyRecord('CURRENT_PAGE'),
+      });
+      const note = await supportKnowledge.addNote({
+        scope,
+        path: stablePath,
+        text: reviewedNote(historyRecord('CURRENT_NOTE')),
+        author: 'review:synthetic-reviewer',
+      });
+      const { page: moving } = await supportKnowledge.upsertPage({
+        scope,
+        path: movingPath,
+        name: 'Relocated case',
+        body: historyRecord('PREVIOUS_PAGE'),
+      });
+      await supportKnowledge.addNote({ scope, path: movingPath, text: 'Existing intake note.' });
+      await supportKnowledge.upsertPage({ scope, path: 'archive', name: 'Archive' });
+      const store = await supportKnowledge.getStorage();
+      const getNote = store.getNote.bind(store);
+      const listNotes = store.listNotes.bind(store);
+      let matchingHits = 0;
+      let redundantReads = 0;
+      let moved = false;
+      store.getNote = input => {
+        if (input.id === note.id) redundantReads++;
+        return getNote(input);
+      };
+      const search = store.searchPages.bind(store);
+      store.searchPages = async input => {
+        const hits = await search(input);
+        matchingHits += hits.filter(hit => hit.type === 'note' && hit.note.id === note.id).length;
+        return hits;
+      };
+      store.listNotes = async input => {
+        if (input.pageId === moving.id && !moved) {
+          moved = true;
+          await supportKnowledge.movePage({ scope, path: 'cases/batch', parent: 'archive' });
+          await supportKnowledge.addNote({
+            scope,
+            path: 'archive/batch/relocated',
+            text: reviewedNote(historyRecord('POST_MOVE_NOTE')),
+            author: 'review:synthetic-reviewer',
+          });
+        }
+        return listNotes(input);
+      };
+      const result = await prepareHistory(supportKnowledge, profile, 'network printer');
+      assert.ok(
+        moved && matchingHits > 0,
+        'The real store must return the note hit and move the ancestor during listing',
+      );
+      assert.equal(result.status, 'partial');
+      assert.deepEqual(
+        result.records.map(record => [record.summary, record.ref]),
+        [
+          ['CURRENT_PAGE', `${scope}#${stablePath}`],
+          ['CURRENT_NOTE', `${scope}#${stablePath}?note=${note.id}`],
+        ],
+      );
+      assert.equal(redundantReads, 0);
+    } finally {
+      await f.close();
+    }
+  },
+);

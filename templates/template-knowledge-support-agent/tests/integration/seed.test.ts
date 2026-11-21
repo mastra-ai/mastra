@@ -403,12 +403,14 @@ test('seed preserves wiki syntax in code alongside managed prose links', { timeo
     const inlineUrl = '[Guide](https://example.com/search?filter=[[connection-guide]])';
     const literalRefUrl = '[Guide](https://example.com/search?filter=[[docs:north#guides/connectivity]])';
     const bareUrl = 'https://example.com/search?filter=[[connection-guide]]&view=compact';
-    manifest.pages[2]!.notes![0]!.text = literalRefUrl;
+    const noteExample = '`[[example-placeholder]] [[connection-guide]]`';
+    manifest.pages[2]!.notes![0]!.text = `${noteExample} ${literalRefUrl} See [[connection-guide]].`;
     await f.saveManifest(manifest);
     await writeFile(
       caseFile,
       `${code}\n\n${inlineUrl}\n\n${literalRefUrl}\n\n${bareUrl}\n\nSee [[connection-guide]].\n`,
     );
+    await f.cli({ args: ['--dry-run'] });
     const report = (await f.cli()).report;
     const casePage = page(report, 'store-case');
     const guide = page(report, 'connection-guide');
@@ -426,8 +428,8 @@ test('seed preserves wiki syntax in code alongside managed prose links', { timeo
         [[guide.id, 1]],
       );
       const [note] = await notes(store, caseId);
-      assert.ok(note?.text.includes(literalRefUrl));
-      assert.deepEqual(note.mentions, []);
+      assert.ok(note?.text.includes(`${noteExample} ${literalRefUrl} See [[${guide.destination}]].`));
+      assert.deepEqual(note.mentions, [guide.id]);
       return store.getPage({ id: caseId, read: 'all' });
     });
     assert.ok(stored?.body?.includes(code));
@@ -1026,7 +1028,7 @@ test('seed_rejects_invalid_input_and_recovers_partial_note_update', { timeout: 1
     const aliasPath = join(f.directory, 'database-alias.db');
     await symlink(f.database, aliasPath);
     const lock = await acquireWriterLock(pathToFileURL(aliasPath).href);
-    const encodedAlias = `file:${f.database.replace('support.db', 'support%2Edb')}`;
+    const encodedAlias = f.url.replace(/support\.db$/u, 'support%2Edb');
     let beforeContention: Awaited<ReturnType<typeof f.snapshot>>;
     try {
       beforeContention = await f.snapshot();
