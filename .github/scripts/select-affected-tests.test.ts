@@ -198,14 +198,73 @@ describe('Prebuild test tiers', () => {
   });
 
   test('the E2E registry publishes whenever the E2E workflow runs', () => {
-    // e2e-npm-import is not tiered and needs the registry, so its publisher can't be tiered either.
+    // npm import is not tiered and needs the registry, so its publisher can't be tiered either.
+    // It runs as steps of the shared e2e-light job, which has no job-level condition.
     const workflow = parse(readFileSync(new URL('../workflows/e2e-tests.yml', import.meta.url), 'utf8'));
-    const consumers = Object.entries(workflow.jobs as Record<string, { needs?: string | string[] }>)
+    type Job = { needs?: string | string[]; if?: string; steps: { name?: string; if?: string }[] };
+    const jobs = workflow.jobs as Record<string, Job>;
+    const consumers = Object.entries(jobs)
       .filter(([, job]) => [job.needs ?? []].flat().includes('publish-e2e-registry'))
       .map(([name]) => name);
 
-    expect(consumers).toContain('e2e-npm-import');
+    expect(consumers).toContain('e2e-light');
+    expect(jobs['e2e-light'].if).toBeUndefined();
+    const npmImport = jobs['e2e-light'].steps.filter(step => step.name?.startsWith('E2E npm import'));
+    expect(npmImport).toHaveLength(2);
+    for (const step of npmImport) expect(step.if ?? '').not.toContain('skip_jobs');
     expect(workflow.jobs['publish-e2e-registry'].if).toBeUndefined();
+  });
+
+  // Suites that share a runner must not share a time budget: every step has its own timeout and
+  // the job allows all of them, so a stalled build or suite can't run out the clock on the suites
+  // after it. npm import needs no build, so it runs before Build.
+  test.each([
+    ['e2e-tests.yml', 'e2e-light'],
+    ['mastracode-e2e.yml', 'mastracode-e2e'],
+  ])('%s %s gives every step its own budget', (file, jobId) => {
+    type Step = { name?: string; uses?: string; 'timeout-minutes'?: number };
+    const workflow = parse(readFileSync(new URL(`../workflows/${file}`, import.meta.url), 'utf8'));
+    const job = workflow.jobs[jobId] as { 'timeout-minutes': number; steps: Step[] };
+    const unbounded = job.steps.filter(step => !step['timeout-minutes']).map(step => step.name ?? step.uses);
+    expect(unbounded).toEqual([]);
+    const total = job.steps.reduce((sum, step) => sum + (step['timeout-minutes'] ?? 0), 0);
+    expect(job['timeout-minutes']).toBeGreaterThanOrEqual(total);
+    if (jobId === 'e2e-light') {
+      const names = job.steps.map(step => step.name);
+      expect(names).toContain('E2E npm import');
+      expect(names).toContain('Build');
+      expect(names.indexOf('E2E npm import')).toBeLessThan(names.indexOf('Build'));
+    }
+  });
+
+  // A failed shared Build (or registry download) skips every suite after it, selected or tiered
+  // out alike, so each selected suite gets a step that fails in its name: the tier updater then
+  // records the prerequisite failure for that suite only, and tiered-out suites stay skipped.
+  test('a failed Build or registry download fails each selected light suite by name', () => {
+    type Step = { name?: string; if?: string; run?: string };
+    const workflow = parse(readFileSync(new URL('../workflows/e2e-tests.yml', import.meta.url), 'utf8'));
+    const steps = (workflow.jobs['e2e-light'] as { steps: Step[] }).steps;
+    const names = steps.map(step => step.name);
+    const gated = steps.filter(
+      step => step.name?.endsWith(': install e2e test dependencies') && step.if?.includes('skip_jobs'),
+    );
+    expect(gated.length).toBeGreaterThanOrEqual(4);
+    for (const install of steps.filter(
+      step => /^E2E .+: install /.test(step.name ?? '') && step.if?.includes('skip_jobs'),
+    )) {
+      const label = /^E2E (.+?): /.exec(install.name!)![1];
+      const key = /'(job:e2e\/[\w-]+)'/.exec(install.if!)![1];
+      const blocked = steps.find(step => step.name === `E2E ${label}: not run, a prerequisite failed`);
+      expect(blocked, label).toBeDefined();
+      expect(names.indexOf(blocked!.name)).toBeGreaterThan(names.indexOf('Build'));
+      expect(blocked!.if).toContain('!cancelled()');
+      expect(blocked!.if).toContain(`!contains(fromJSON(inputs.skip_jobs), '${key}')`);
+      expect(blocked!.if).toContain("steps.build.outcome != 'success'");
+      expect(blocked!.if).toContain("steps.registry.outcome != 'success'");
+      expect(blocked!.run).toMatch(/exit 1/);
+    }
+    // npm import doesn't need the build, so it has no such step.
+    expect(names.some(name => name?.startsWith('E2E npm import: not run'))).toBe(false);
   });
 
   test('without tiers nothing is dropped', () => {
