@@ -2266,22 +2266,22 @@ export class WorkflowsPG extends WorkflowsStorage {
           [workflowName, runId],
         );
         if (guarded && run && !matches(run)) return;
+        let snapshot: { status: string | null; guardedOnlySnapshotId: string | null } | null = null;
         if (guarded && storageVersion !== 2) {
           // Locked like the header, so the record checked is the one deleted.
-          const snapshot = await t.oneOrNone<{ status: string | null; guardedOnlySnapshotId: string | null }>(
+          snapshot = await t.oneOrNone<{ status: string | null; guardedOnlySnapshotId: string | null }>(
             `SELECT ${await this.#statusExpression('snapshot')} AS status, ${await this.#snapshotFieldExpression('snapshot', 'guardedOnlySnapshotId')} AS "guardedOnlySnapshotId" FROM ${snapshotTable} WHERE run_id = $1 AND workflow_name = $2 FOR UPDATE`,
             [runId, workflowName],
           );
           if (snapshot && !matches(snapshot)) return;
         }
         if (run?.stateShared) await this.#detachStateChildren(t, workflowName, runId);
-        for (const table of [
-          this.#runsTable(),
-          this.#entriesTable(),
-          ...(storageVersion === 2
-            ? []
-            : [getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })]),
-        ]) {
+        // A row lock can't cover a row that isn't there yet, so a guarded delete only touches the
+        // rows it locked and checked: a run stored after the lookup is not deleted unchecked.
+        const tables = guarded
+          ? [...(run ? [this.#runsTable(), this.#entriesTable()] : []), ...(snapshot ? [snapshotTable] : [])]
+          : [this.#runsTable(), this.#entriesTable(), ...(storageVersion === 2 ? [] : [snapshotTable])];
+        for (const table of tables) {
           await t.none(`DELETE FROM ${table} WHERE run_id = $1 AND workflow_name = $2`, [runId, workflowName]);
         }
       });
