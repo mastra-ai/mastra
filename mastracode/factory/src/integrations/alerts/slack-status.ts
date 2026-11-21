@@ -381,45 +381,61 @@ export class AlertSlackStatus {
 
   /**
    * Puts the latest stage's reaction on the alert, removing a stale one another writer added. Only
-   * a reaction change Slack confirmed is recorded, so a refused one is redone on the next write. A
-   * cleanup that took off the recorded reaction clears the record, so it is put back.
+   * a reaction change Slack confirmed is recorded, so a refused one is redone on the next write.
    */
   async #syncReaction(card: Card, thread: AlertThreadRef): Promise<void> {
     for (let pass = 0; pass < SYNC_PASSES; pass++) {
-      const latest = await this.#current(card);
+      let latest = await this.#current(card);
       if (!latest) return;
+      if (latest.staleReactions?.length) {
+        for (const emoji of latest.staleReactions) await this.#takeOff(card, thread, emoji);
+        latest = await this.#current(card);
+        if (!latest) return;
+      }
       const want = reactionFor(latest);
       const have = latest.reaction ?? null;
-      for (const emoji of latest.staleReactions ?? []) {
-        if (
-          emoji === have ||
-          emoji === want ||
-          (await settled(this.#client.unreact(thread, thread.rootTs, emoji), 'no_reaction'))
-        ) {
-          await this.#setStale(card, list => list.filter(other => other !== emoji));
-        }
-      }
       if (want === have) return;
       if (have) {
-        if (!(await settled(this.#client.unreact(thread, thread.rootTs, have), 'no_reaction'))) return;
-        await this.#recordReaction(card, have, null);
+        if ((await this.#takeOff(card, thread, have)) === 'refused') return;
         continue;
       }
       if (!want || !(await settled(this.#client.react(thread, thread.rootTs, want), 'already_reacted'))) return;
       if (await this.#recordReaction(card, null, want)) continue;
-      // Another writer moved the reaction first: take back ours unless it is the one it recorded.
-      const now = await this.#current(card);
-      if (want !== (now?.reaction ?? null) && want !== reactionFor(now)) {
-        if (!(await settled(this.#client.unreact(thread, thread.rootTs, want), 'no_reaction'))) {
-          // Left for a later write to take back, though the recorded reaction is already right.
-          await this.#setStale(card, list => (list.includes(want) ? list : [...list, want]));
-        } else {
-          // A newer stage may have put it on and recorded it meanwhile: it is off now, so say so
-          // and let the next pass (or write) put it back.
-          await this.#recordReaction(card, want, null);
-        }
+      // Another writer moved the reaction first: take back ours, or queue it for a later write.
+      if ((await this.#takeOff(card, thread, want)) === 'refused') {
+        await this.#setStale(card, list => (list.includes(want) ? list : [...list, want]));
       }
     }
+  }
+
+  /**
+   * Every removal of a reaction goes through here. One the latest stage wants is never taken off
+   * (and leaves the stale list). One taken off is cleared from the record too, so the record
+   * matches Slack and a later write puts back what is wanted, even if a newer stage recorded it
+   * while the removal was in flight.
+   */
+  async #takeOff(card: Card, thread: AlertThreadRef, emoji: string): Promise<'kept' | 'removed' | 'refused'> {
+    if (reactionFor(await this.#current(card)) === emoji) {
+      await this.#setStale(card, list => list.filter(other => other !== emoji));
+      return 'kept';
+    }
+    if (!(await settled(this.#client.unreact(thread, thread.rootTs, emoji), 'no_reaction'))) return 'refused';
+    await updateCardMetadata(this.#workItems, { orgId: card.orgId, id: card.id, userId: STATUS_USER_ID }, current => {
+      const status = readAlertSlackStatus(current);
+      if (!status) return null;
+      const stale = (status.staleReactions ?? []).filter(other => other !== emoji);
+      const recorded = status.reaction === emoji;
+      if (!recorded && stale.length === (status.staleReactions ?? []).length) return null;
+      const { staleReactions: _, ...rest } = status;
+      return {
+        [ALERT_SLACK_STATUS_KEY]: {
+          ...rest,
+          ...(recorded ? { reaction: null } : {}),
+          ...(stale.length > 0 ? { staleReactions: stale } : {}),
+        },
+      };
+    });
+    return 'removed';
   }
 
   async #setStale(card: Card, change: (stale: string[]) => string[]): Promise<void> {
