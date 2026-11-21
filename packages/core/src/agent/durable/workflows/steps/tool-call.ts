@@ -921,7 +921,7 @@ export function createDurableToolCallStep() {
         // Recovery exists only to write, so check that first; the read check gates the recall.
         await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE);
         await authorizeMemory(MastraFGAPermissions.MEMORY_READ);
-        // A saved row is newer than the transcript copy: a sibling's resume may have cleared its metadata.
+        // The saved copy of this message wins: a sibling's resume may have cleared its metadata.
         const { messages } = await memory.recall({
           threadId: state.threadId,
           resourceId: state.resourceId,
@@ -929,13 +929,11 @@ export function createDurableToolCallStep() {
         });
         const invocation = messages.find((message: MastraDBMessage) => message.id === current.id) ?? current;
         // A throwaway list keeps the long-lived registry list from holding a copy that drifts from storage.
-        if (invocation) {
-          persistMessageList = createRunMessageList({
-            mastra,
-            threadId: state.threadId,
-            resourceId: state.resourceId,
-          }).add(invocation, 'response');
-        }
+        persistMessageList = createRunMessageList({
+          mastra,
+          threadId: state.threadId,
+          resourceId: state.resourceId,
+        }).add(invocation, 'response');
       };
 
       // Every flush from this step re-checks run ownership inside the save
