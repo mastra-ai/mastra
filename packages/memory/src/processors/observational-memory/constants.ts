@@ -56,17 +56,17 @@ Any messages following this reminder are newer and should take priority.`;
 
 /**
  * Preamble that introduces the observations block.
- * Context layout: `${prompt}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}`, then `<observations>`,
- * one entry per observation chunk, `</observations>`, then optional current-task and
- * suggested-response blocks.
+ * Context layout: `${prompt}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}`, then one
+ * `<observations>…</observations>` entry per observation chunk, oldest first, then optional
+ * current-task and suggested-response blocks.
  */
-export const OBSERVATION_CONTEXT_PROMPT = `The following observations block contains your memory of past conversations with this user.`;
+export const OBSERVATION_CONTEXT_PROMPT = `The following observations blocks contain your memory of past conversations with this user.`;
 
 /**
  * Preamble used when observations are thread-scoped: they describe earlier parts
  * of the current conversation, not other conversations.
  */
-export const OBSERVATION_CONTEXT_PROMPT_THREAD = `The following observations block contains your memory of earlier parts of this current conversation. Everything recorded here (including IDs, artifacts, and tool results) came from this conversation and is available for you to reuse.`;
+export const OBSERVATION_CONTEXT_PROMPT_THREAD = `The following observations blocks contain your memory of earlier parts of this current conversation. Everything recorded here (including IDs, artifacts, and tool results) came from this conversation and is available for you to reuse.`;
 
 /**
  * Returns the observations preamble matching the memory scope.
@@ -79,7 +79,7 @@ export function getObservationContextPrompt(scope: 'thread' | 'resource' = 'thre
 
 /**
  * Instructions that tell the model how to interpret and use observations.
- * Placed with the observations preamble, before the `<observations>` block.
+ * Placed with the observations preamble, before the `<observations>` blocks.
  */
 export const OBSERVATION_CONTEXT_INSTRUCTIONS = `IMPORTANT: When responding, reference specific details from these observations. Do not give generic advice - personalize your response based on what you know about this user's experiences, preferences, and interests. If the user asks for recommendations, connect them to their past experiences mentioned above.
 

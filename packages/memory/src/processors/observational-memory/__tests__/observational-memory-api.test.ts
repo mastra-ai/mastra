@@ -2821,55 +2821,81 @@ describe('buildContextSystemMessage()', () => {
       });
     };
 
-    const expectClosedBlock = (messages: string[], facts: string[]) => {
-      const open = messages.indexOf('<observations>');
-      const close = messages.indexOf('</observations>');
-      expect(open).toBeGreaterThanOrEqual(0);
-      expect(close).toBe(open + facts.length + 1);
-      facts.forEach((fact, i) => expect(messages[open + 1 + i]).toContain(fact));
-      expect(messages.filter(m => m === '</observations>')).toHaveLength(1);
+    // Each chunk is its own closed block, so the log ends on its newest chunk: a prompt-cache breakpoint on that
+    // message survives the next append, which only adds messages after it.
+    const expectChunkBlocks = (messages: string[], facts: string[]) => {
+      const blocks = messages.filter(m => m.startsWith('<observations>'));
+      expect(blocks).toHaveLength(facts.length);
+      blocks.forEach((block, i) => {
+        expect(block).toMatch(/^<observations>\n[\s\S]*\n<\/observations>$/);
+        expect(block).toContain(facts[i]!);
+      });
+      expect(messages).not.toContain('<observations>');
+      expect(messages).not.toContain('</observations>');
 
+      const lastBlock = messages.lastIndexOf(blocks.at(-1)!);
       const task = messages.findIndex(m => m.startsWith('<current-task>'));
       const suggested = messages.findIndex(m => m.startsWith('<suggested-response>'));
-      expect(task).toBeGreaterThan(close);
-      expect(suggested).toBeGreaterThan(close);
+      expect(task).toBe(lastBlock + 1);
+      expect(suggested).toBeGreaterThan(lastBlock);
     };
 
-    it('closes a single-chunk block before the continuation hints (thread scope)', async () => {
+    it('wraps a single chunk before the continuation hints (thread scope)', async () => {
       await seed(om, '- 🔴 Fact one');
 
       const messages = await om.buildContextSystemMessages({ threadId, resourceId });
 
-      expectClosedBlock(messages!, ['Fact one']);
+      expectChunkBlocks(messages!, ['Fact one']);
     });
 
-    it('closes a multi-chunk block before the continuation hints (thread scope)', async () => {
+    it('wraps each chunk in its own block (thread scope)', async () => {
       await seed(om, twoChunks);
 
       const messages = await om.buildContextSystemMessages({ threadId, resourceId });
 
-      expectClosedBlock(messages!, ['Fact one', 'Fact two']);
+      expectChunkBlocks(messages!, ['Fact one', 'Fact two']);
     });
 
-    it('closes a multi-chunk block before the continuation hints (resource scope)', async () => {
+    it('wraps each chunk in its own block (resource scope)', async () => {
       om = createOM(storage, { scope: 'resource' });
       await seed(om, twoChunks);
 
       const messages = await om.buildContextSystemMessages({ threadId, resourceId });
 
-      expectClosedBlock(messages!, ['Fact one', 'Fact two']);
+      expectChunkBlocks(messages!, ['Fact one', 'Fact two']);
     });
 
-    it('closes the block in the joined single-string form', async () => {
+    it('keeps every earlier message unchanged when a chunk is appended', async () => {
+      await seed(om, twoChunks);
+      const before = (await om.buildContextSystemMessages({ threadId, resourceId }))!;
+
+      const record = await om.getOrCreateRecord(threadId, resourceId);
+      await storage.updateActiveObservations({
+        id: record.id,
+        observations:
+          twoChunks + ObservationalMemory.createMessageBoundary(new Date('2025-01-01T11:00:00Z')) + '- 🔴 Fact three',
+        tokenCount: 15,
+        lastObservedAt: new Date('2025-01-02T00:00:00Z'),
+      });
+      const after = (await om.buildContextSystemMessages({ threadId, resourceId }))!;
+
+      // Everything up to the end of the log (the message before the continuation hints) must still be in place.
+      const logEnd = before.findIndex(m => m.startsWith('<current-task>')) - 1;
+      expect(after.slice(0, logEnd + 1)).toEqual(before.slice(0, logEnd + 1));
+      expect(after[logEnd + 1]).toContain('Fact three');
+    });
+
+    it('closes every block in the joined single-string form', async () => {
       await seed(om, twoChunks);
 
       const result = (await om.buildContextSystemMessage({ threadId, resourceId }))!;
 
-      const close = result.indexOf('</observations>');
-      expect(result.split('</observations>')).toHaveLength(2);
-      expect(close).toBeGreaterThan(result.indexOf('Fact two'));
-      expect(close).toBeLessThan(result.indexOf('<current-task>'));
-      expect(close).toBeLessThan(result.indexOf('<suggested-response>'));
+      expect(result.split('<observations>')).toHaveLength(3);
+      expect(result.split('</observations>')).toHaveLength(3);
+      const lastClose = result.lastIndexOf('</observations>');
+      expect(lastClose).toBeGreaterThan(result.indexOf('Fact two'));
+      expect(lastClose).toBeLessThan(result.indexOf('<current-task>'));
+      expect(lastClose).toBeLessThan(result.indexOf('<suggested-response>'));
     });
   });
 });
