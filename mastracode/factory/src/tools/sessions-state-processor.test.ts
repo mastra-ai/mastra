@@ -195,6 +195,21 @@ describe('FactorySessionsStateProcessor', () => {
     );
   });
 
+  it('tells a session with side sessions to check their claims, and a session that only follows items nothing', async () => {
+    const followsOnly = await setup();
+    await followsOnly.follow((await followsOnly.fileItem(7)).id);
+    expect((await followsOnly.step())!.contents).not.toContain("A side session's report");
+
+    const env = await setup();
+    await env.createSession('side-1', {
+      title: 'Review #7',
+      origin: { sessionId: 'parent', threadId: 'parent-thread' },
+    });
+    const contents = (await env.step())!.contents;
+    expect(contents).toContain("A side session's report is its own account and can be wrong.");
+    expect(contents).toContain('check that claim against the pull request or branch yourself');
+  });
+
   it("shows whether a followed item's session is running, idle or waiting", async () => {
     const env = await setup();
     const item = await env.fileItem(7);
