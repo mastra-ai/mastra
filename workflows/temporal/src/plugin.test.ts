@@ -56,6 +56,7 @@ async function writeTemporalWorkflowShim(projectRoot: string): Promise<void> {
       export const condition = (...args) => getMock().condition(...args);
       export const defineQuery = (...args) => getMock().defineQuery(...args);
       export const defineSignal = (...args) => getMock().defineSignal(...args);
+      export const defineUpdate = (...args) => getMock().defineUpdate(...args);
       export const executeChild = (...args) => getMock().executeChild(...args);
       export const proxyActivities = (...args) => getMock().proxyActivities(...args);
       export const setHandler = (...args) => getMock().setHandler(...args);
@@ -252,6 +253,7 @@ describe('Temporal prebuild integration', () => {
       condition: vi.fn(async () => true),
       defineQuery: vi.fn((name: string) => name),
       defineSignal: vi.fn((name: string) => name),
+      defineUpdate: vi.fn((name: string) => name),
       executeChild,
       proxyActivities,
       setHandler: vi.fn(),
@@ -369,6 +371,7 @@ describe('Temporal prebuild integration', () => {
         condition: async () => true,
         defineQuery: (name: string) => name,
         defineSignal: (name: string) => name,
+        defineUpdate: (name: string) => name,
         proxyActivities: () => activities,
         executeChild: (workflowType: string, { args }: { args: [never] }) => workflows[workflowType]!(...args),
         setHandler: () => {},
