@@ -80,7 +80,8 @@ runPeer<ResumeSpansPeerArgs>(async (peer): Promise<ResumeSpansPeerResult> => {
         if (chunk.type === 'finish' || chunk.type === 'error') break;
       }
     } finally {
-      stream.cleanup?.();
+      // A recovered run returns a durable stream with cleanup(); an approved tool call returns a plain model output.
+      if ('cleanup' in stream) stream.cleanup();
     }
     await mastra.observability?.flush?.();
     return result;
