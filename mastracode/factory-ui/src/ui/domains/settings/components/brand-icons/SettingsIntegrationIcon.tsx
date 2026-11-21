@@ -1,6 +1,7 @@
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { Siren } from 'lucide-react';
 
 import { VantaIcon } from '../../../../ui/icons';
 import gitlab from './gitlab.svg';
@@ -10,7 +11,15 @@ import linear from './linear.svg';
 
 const brandAssets = { gitlab, incidentio, jira, linear };
 
-type SettingsIntegrationProvider = 'github' | 'gitlab' | 'linear' | 'jira' | 'incidentio' | 'vanta' | 'slack';
+type SettingsIntegrationProvider =
+  | 'github'
+  | 'gitlab'
+  | 'linear'
+  | 'jira'
+  | 'incidentio'
+  | 'vanta'
+  | 'slack'
+  | 'mastra-alerts';
 
 export function SettingsIntegrationIcon({
   provider,
@@ -23,6 +32,9 @@ export function SettingsIntegrationIcon({
 
   if (provider === 'github') {
     return <GithubIcon aria-hidden="true" focusable="false" className={iconClassName} />;
+  }
+  if (provider === 'mastra-alerts') {
+    return <Siren aria-hidden="true" focusable="false" className={iconClassName} />;
   }
   if (provider === 'slack') {
     return <SlackIcon aria-hidden="true" focusable="false" className={iconClassName} />;

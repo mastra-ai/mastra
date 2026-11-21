@@ -70,6 +70,9 @@ export class PlatformAlertsIntegration implements FactoryIntegration {
   #status: AlertSlackStatus | undefined;
 
   readonly intake: Intake = {
+    // One org's alerts feed several projects, each taking the alerts its labels name
+    // (`platform-project:<id>`, `severity:warning`) or every alert no other project takes.
+    bindingLabelFilters: true,
     listSources: () => this.#listSources(),
     listItems: async () => ({ items: [], nextCursor: null }),
     listIssues: async () => ({ issues: [], nextCursor: null }),

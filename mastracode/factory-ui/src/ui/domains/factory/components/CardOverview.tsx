@@ -15,6 +15,7 @@ import { relatedWorkItemIndex } from '../services/relationships';
 import { genericExternalWorkItemUrl } from '../services/workItemPresentation';
 import type { WorkItem } from '../services/workItems';
 import { toMinute } from '../stageStays';
+import { AlertActivity } from './AlertActivity';
 import { CardDescription } from './CardDescription';
 import { CardSourceRow } from './CardSourceRow';
 import { ChangeRequestLink } from './ChangeRequestLink';
@@ -86,6 +87,7 @@ export function CardOverview({
           factoryId={factoryId}
           repositoryFailed={repositoryFailed}
         />
+        <AlertActivity item={item} />
       </section>
       {workspace?.({
         repository: repository && { slug: repository.slug, provider },

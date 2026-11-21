@@ -7,6 +7,7 @@ import { useIncidentioStatusQuery } from '../../../../hooks/useIncidentioData';
 import { useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import { activePlatformConnectionQueryOptions } from '../../../../hooks/usePlatformConnections';
+import { useMastraAlertsStatusQuery } from '../../settings/components/AlertsIntakeSection';
 
 export function useBoardFilterSources() {
   const { baseUrl } = useApiConfig();
@@ -17,6 +18,7 @@ export function useBoardFilterSources() {
   const incidentioStatus = useIncidentioStatusQuery();
   // Vanta connects through Platform only.
   const vantaConnected = useQuery(activePlatformConnectionQueryOptions(baseUrl, 'vanta'));
+  const alertsStatus = useMastraAlertsStatusQuery();
   const linearProjects = useLinearProjectsQuery(Boolean(linearStatus.data?.connected));
 
   const connectedSources = new Set([
@@ -26,6 +28,7 @@ export function useBoardFilterSources() {
     ...(jiraStatus.data?.enabled && jiraStatus.data.configured ? ['jira'] : []),
     ...(incidentioStatus.data?.enabled && incidentioStatus.data.configured ? ['incidentio'] : []),
     ...(vantaConnected.data ? ['vanta'] : []),
+    ...(alertsStatus.data?.connected ? ['platform'] : []),
   ]);
 
   return { connectedSources, linearProjects: linearProjects.data };

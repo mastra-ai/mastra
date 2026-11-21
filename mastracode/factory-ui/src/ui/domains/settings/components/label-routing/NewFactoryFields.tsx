@@ -5,13 +5,14 @@ import { useState } from 'react';
 import { RoutingNote } from './RoutingNote';
 import { parseLabels } from './routing';
 import type { Factory } from './routing';
+import { useRoutingTerms } from './terms';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
-/** `labels` empty: the factory takes all issues. */
-export type NewJiraRoute = { factoryProjectId: string; labels: string[] };
+/** `labels` empty: the factory takes all items. */
+export type NewRoute = { factoryProjectId: string; labels: string[] };
 
-/** The labels a factory starts with; none means it takes all issues. */
-export function NewJiraFactoryFields({
+/** The labels a factory starts with; none means it takes all items. */
+export function NewFactoryFields({
   factory,
   anotherTakesAll,
   error,
@@ -22,19 +23,20 @@ export function NewJiraFactoryFields({
   anotherTakesAll: boolean;
   error?: string;
   adding: boolean;
-  onAdd: (route: NewJiraRoute) => void;
+  onAdd: (route: NewRoute) => void;
 }) {
+  const terms = useRoutingTerms();
   const [labelsText, setLabelsText] = useState('');
   const [submitted, setSubmitted] = useState<string>();
-  const parsed = parseLabels(labelsText);
+  const parsed = parseLabels(labelsText, terms);
   const labelsError = 'error' in parsed ? parsed.error : undefined;
   const labels = 'labels' in parsed ? parsed.labels : [];
   const labelsReady = labelsError === undefined && (labels.length > 0 || !anotherTakesAll);
   const attempt = labelsText;
   const refusal = submitted === attempt ? error : undefined;
   const hint = anotherTakesAll
-    ? 'Another factory takes all issues, so name the labels this factory should take.'
-    : 'Leave labels empty to take all issues.';
+    ? `Another factory takes all ${terms.items}, so name the labels this factory should take.`
+    : `Leave labels empty to take all ${terms.items}.`;
 
   const add = () => {
     setSubmitted(attempt);

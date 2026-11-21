@@ -24,7 +24,6 @@ describe('alertsClientConfigFromEnv', () => {
   });
 });
 
-
 describe('PlatformAlertsIntegration connect', () => {
   afterEach(() => vi.unstubAllEnvs());
 
@@ -44,5 +43,14 @@ describe('PlatformAlertsIntegration connect', () => {
     expect(String(url)).toBe('https://api.example/v1/server/alerts/connection');
     expect(init?.method).toBe('PUT');
     expect(JSON.parse(String(init?.body))).toEqual({ factoryProjectId: 'proj-factory' });
+  });
+});
+
+describe('PlatformAlertsIntegration intake', () => {
+  it("lets several projects take slices of the org's alerts by label", () => {
+    const integration = new PlatformAlertsIntegration({
+      connect: { baseUrl: 'https://api.example', accessToken: 'tok' },
+    });
+    expect(integration.intake.bindingLabelFilters).toBe(true);
   });
 });

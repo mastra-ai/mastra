@@ -17,6 +17,7 @@ import { GithubIntakeSection } from './GithubIntakeSection';
 import { GitLabIntakeSection } from './GitLabIntakeSection';
 import { IncidentioIntakeSection, isIncidentioDirectConfigured } from './IncidentioIntakeSection';
 import { JiraIntakeSection } from './JiraIntakeSection';
+import { AlertsIntakeSection, MASTRA_ALERTS_INTEGRATION_ID, useMastraAlertsStatusQuery } from './AlertsIntakeSection';
 import { LinearIntakeSection } from './LinearIntakeSection';
 import { SettingsSubsection } from './SettingsSubsection';
 import { useVantaStatusQuery, VantaIntakeSection } from './VantaIntakeSection';
@@ -49,6 +50,7 @@ export function IntakeSection() {
   const incidentioConnections = usePlatformConnectionsQuery('incident-io');
   const vanta = useVantaStatusQuery();
   const vantaConnections = usePlatformConnectionsQuery('vanta', Boolean(vanta.data));
+  const alerts = useMastraAlertsStatusQuery();
 
   if (configQuery.isPending) return <IntakeSkeleton />;
   if (!configQuery.data) {
@@ -111,6 +113,10 @@ export function IntakeSection() {
     Boolean(vantaConnections.data?.length),
     vantaConnections.isError && isPlatformConnectUnavailableError(vantaConnections.error),
   );
+  const alertsListing = sourceListing(
+    Boolean(alerts.data?.connected || props.config[MASTRA_ALERTS_INTEGRATION_ID]?.enabled),
+    false,
+  );
   // Pass gated queries down: a new observer on an errored query refetches on mount and loops the gate.
   const sources = [
     {
@@ -158,6 +164,15 @@ export function IntakeSection() {
                 connectionsQuery={vantaConnections}
               />
             ),
+          },
+        ]
+      : []),
+    ...(alerts.data
+      ? [
+          {
+            id: 'mastra-alerts',
+            listing: alertsListing,
+            content: <AlertsIntakeSection {...props} listed={alertsListing !== 'available'} statusQuery={alerts} />,
           },
         ]
       : []),
