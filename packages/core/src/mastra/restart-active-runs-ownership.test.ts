@@ -204,6 +204,26 @@ describe('boot-time workflow recovery and run ownership (#25579)', () => {
       );
       expect((await workflowsStore.getRunOwnership({ runId: run.runId }))?.live).toBe(false);
     });
+
+    it('returns the stored result of a run that failed, and does not run its step again', async () => {
+      const { run, restarted, settledResult, storedAfterSettle, executions, workflowsStore } =
+        await raceRestartWithSettle(async () => {
+          throw new Error('step failed');
+        });
+      expect(settledResult.status).toBe('failed');
+
+      const result = await restarted;
+      expect(executions).toEqual([`A:${run.runId}`]);
+      expect(result.status).toBe('failed');
+      if (result.status === 'failed') {
+        expect(result.error).toBeInstanceOf(Error);
+        expect(result.error.message).toBe('step failed');
+      }
+      expect(await workflowsStore.getWorkflowRunById({ workflowName: 'recoverable-wf', runId: run.runId })).toEqual(
+        storedAfterSettle,
+      );
+      expect((await workflowsStore.getRunOwnership({ runId: run.runId }))?.live).toBe(false);
+    });
   });
 
   /** A parent run suspended in its nested `child` workflow, and the nested run's id. */
