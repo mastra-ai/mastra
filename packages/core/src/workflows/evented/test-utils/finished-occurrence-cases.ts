@@ -1106,6 +1106,67 @@ export function describeFinishedOccurrenceCases({
       20_000,
     );
 
+    // A loop's later iterations are published by the step that ran it; they must keep the execution's id.
+    it.each([1, 2] as const)(
+      'deletes the record of a declined suspend that follows a loop (storage v%i)',
+      async storageVersion => {
+        const store = (await getStorage().getStore('workflows'))!;
+        if (storageVersion === 1 && !store.supportsWorkflowStepGuards()) return;
+        const suspendHandled = deferred<void>();
+        const processor = WorkflowEventProcessor.prototype as unknown as {
+          processWorkflowSuspend: (...args: unknown[]) => Promise<void>;
+        };
+        const handleSuspend = processor.processWorkflowSuspend;
+        vi.spyOn(processor, 'processWorkflowSuspend').mockImplementation(async function (
+          this: unknown,
+          ...args: unknown[]
+        ) {
+          try {
+            await handleSuspend.apply(this, args);
+          } finally {
+            suspendHandled.resolve();
+          }
+        });
+        const a = await startReplica(
+          createWorkflow({
+            id: 'finished',
+            inputSchema: Num,
+            outputSchema: Num,
+            options: { storageVersion, shouldPersistSnapshot: () => false },
+          })
+            .dountil(
+              createStep({
+                id: 'count',
+                inputSchema: Num,
+                outputSchema: Num,
+                execute: async ({ inputData }) => ({ n: inputData.n + 1 }),
+              }),
+              async ({ inputData }) => inputData.n >= 3,
+            )
+            .then(
+              createStep({
+                id: 'gate',
+                inputSchema: Num,
+                outputSchema: Num,
+                resumeSchema: z.object({ ok: z.boolean() }),
+                execute: async ({ inputData, resumeData, suspend }) => {
+                  if (!resumeData) {
+                    await suspend({});
+                  }
+                  return inputData;
+                },
+              }),
+            )
+            .commit(),
+        );
+        const run = await a.workflow.createRun({ runId: uniqueRunId() });
+        expect((await run.start({ inputData: { n: 0 } })).status).toBe('suspended');
+        await suspendHandled.promise;
+        expect(await storedRun(run.runId)).toBeNull();
+      },
+      20_000,
+    );
+
     // The same run id can be stored again by a newer execution after the suspend is published; its
     // running record, guarded-only like the declined one, is not the record the suspend left.
     it.each([1, 2] as const)(

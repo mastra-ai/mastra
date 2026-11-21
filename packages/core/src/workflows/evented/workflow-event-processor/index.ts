@@ -1674,7 +1674,6 @@ export class WorkflowEventProcessor extends EventProcessor {
     timeTravel,
     perStep,
     outputOptions,
-    guardedOnlySnapshotId,
   }: Pick<
     ProcessorArgs,
     | 'prevResult'
@@ -1686,7 +1685,6 @@ export class WorkflowEventProcessor extends EventProcessor {
     | 'timeTravel'
     | 'perStep'
     | 'outputOptions'
-    | 'guardedOnlySnapshotId'
   > & {
     parentWorkflow: ParentWorkflow;
     nestedRunId: string;
@@ -3423,6 +3421,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             parentWorkflow,
             activeStepsPath,
             resumeData,
+            guardedOnlySnapshotId,
           };
           const nestedState = (snapshot.context as Record<string, any>)?.__state ?? snapshot.value ?? currentState;
           if (finishedResult) {
@@ -3439,7 +3438,6 @@ export class WorkflowEventProcessor extends EventProcessor {
               timeTravel,
               perStep,
               outputOptions,
-              guardedOnlySnapshotId,
             });
             return;
           }
@@ -3998,6 +3996,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           actor,
           retryCount,
           perStep,
+          guardedOnlySnapshotId,
         },
         step,
         stepResult,
