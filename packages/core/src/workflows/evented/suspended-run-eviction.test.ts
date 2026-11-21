@@ -415,6 +415,30 @@ describe.each(engines)('$engine engine: suspended run eviction', ({ createWorkfl
     expect((await reopened.resume({ step: 'approve', resumeData: { by: 'ana' } })).status).toBe('success');
   });
 
+  // Only the default engine keeps a per-run persistence override.
+  it.runIf(!evented)(
+    'drops the persistence override of a collected run that a reopen replaces before its finalizer runs',
+    async () => {
+      const { workflow } = await setup();
+      const engine = (workflow as any).executionEngine;
+      const registry = new FinalizationRegistry(() => {});
+      const persistAlways = () => true;
+      const runId = await suspendUnheld(workflow, registry, persistAlways, evented);
+      // Collected, but its finalizer runs in a later task; the reopen starts before that.
+      for (let i = 0; i < 100 && (workflow as any).liveRun(runId); i++) {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        collectGarbage();
+      }
+      expect((workflow as any).liveRun(runId)).toBeUndefined();
+      expect(engine.getRunPersistenceOverride(runId)).toBe(persistAlways);
+
+      const reopened = await workflow.createRun({ runId });
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(engine.getRunPersistenceOverride(runId)).toBeUndefined();
+      expect((await reopened.resume({ step: 'approve', resumeData: { by: 'ana' } })).status).toBe('success');
+    },
+  );
+
   it.each(['start', 'resume'] as const)(
     'releases a run canceled during %s after its suspension is written but before the run settles',
     async execution => {

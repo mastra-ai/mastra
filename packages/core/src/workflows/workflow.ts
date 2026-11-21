@@ -3448,6 +3448,10 @@ export class Workflow<
       });
 
       // Read again after the storage await: a held instance may have been evicted meanwhile.
+      if (!this.liveRun(runIdToUse) && this.#evictedRuns.delete(runIdToUse)) {
+        // Collected before its finalizer ran, which now finds no entry: its override goes with it here.
+        this.executionEngine.clearRunPersistenceOverride(runIdToUse);
+      }
       const hooks = this.runCacheHooks(
         runIdToUse,
         () => run,
