@@ -13,7 +13,7 @@
  * is published; everything else runs the real evented loop.
  */
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { Event } from '../../../events/types';
@@ -26,10 +26,11 @@ import { Agent } from '../../agent';
 import { MessageList } from '../../message-list';
 import { DurableStepIds } from '../constants';
 import { createEventedAgent } from '../create-evented-agent';
-import { globalRunRegistry } from '../run-registry';
+import { clearResumeInFlight, globalRunRegistry } from '../run-registry';
 
 // 'starting-process-tools': each tool call runs in the starting process with the list
-// its LLM step built, which goes stale once another process resumes a call; each resume runs in a fresh worker.
+// its LLM step built, which goes stale once another process resumes a call; each resume runs
+// without a registry message list. Tool steps alternate call, resume, call, resume.
 type Boundary = 'same-process' | 'fresh-worker' | 'stale-message-list' | 'starting-process-tools';
 
 class CrossProcessToolStepPubSub extends EventEmitterPubSub {
@@ -114,8 +115,14 @@ function makeModel(toolCallIds = ['call-1']) {
 describe('evented agent cross-process tool suspension persistence (#30123)', () => {
   let pubsub: EventEmitterPubSub | undefined;
   let mastra: Mastra | undefined;
+  const resumedRuns: string[] = [];
 
   afterEach(async () => {
+    // A resume that ends paused on the next call keeps its in-flight marker, and run ids repeat across tests.
+    for (const runId of resumedRuns.splice(0)) {
+      clearResumeInFlight(runId, 'call-1');
+      clearResumeInFlight(runId, 'call-2');
+    }
     await mastra?.stopWorkers();
     globalRunRegistry.clear();
     await pubsub?.close();
@@ -257,19 +264,25 @@ describe('evented agent cross-process tool suspension persistence (#30123)', () 
     15_000,
   );
 
-  it.each<Boundary>(['fresh-worker', 'starting-process-tools', 'stale-message-list'])(
-    'saves the next sibling suspension on the existing assistant row when it suspends in another process after a resume, and clears both once answered (%s)',
-    async boundary => {
+  const siblingBoundaries: Boundary[] = ['fresh-worker', 'starting-process-tools', 'stale-message-list'];
+  it.each(
+    siblingBoundaries.flatMap(boundary => (['suspension', 'approval'] as const).map(kind => ({ boundary, kind }))),
+  )(
+    'saves the next sibling $kind on the existing assistant row when it pauses in another process after a resume, and clears both once answered ($boundary)',
+    async ({ boundary, kind }) => {
       pubsub = new CrossProcessToolStepPubSub(boundary);
       const storage = new InMemoryStore();
       const memory = new MockMemory({ storage });
+      const pendingKey = kind === 'approval' ? 'pendingToolApprovals' : 'suspendedTools';
       const askColour = createTool({
         id: 'askColour',
         description: 'Asks the user for a colour',
         inputSchema: z.object({ question: z.string() }),
         suspendSchema: z.object({ question: z.string() }),
         resumeSchema: z.object({ colour: z.string() }),
+        requireApproval: kind === 'approval',
         execute: async (input, context: any) => {
+          if (kind === 'approval') return { colour: 'approved' };
           if (!context?.agent?.resumeData) return await context.agent.suspend({ question: input.question });
           return { colour: context.agent.resumeData.colour };
         },
@@ -285,54 +298,58 @@ describe('evented agent cross-process tool suspension persistence (#30123)', () 
       const evented = createEventedAgent({ agent });
       mastra = new Mastra({ logger: false, storage, pubsub, agents: { [evented.id]: evented } });
       await mastra.startWorkers();
-      const durable = mastra.getAgentById(evented.id);
+      const durable = mastra.getAgentById(evented.id) as any;
       const threadMemory = { thread: 'thread-1', resource: 'user-1' };
-      const waitForSuspension = async (output: any) => {
+      const waitForPause = async (output: any) => {
         for await (const chunk of output.fullStream) {
-          if (chunk.type === 'tool-call-suspended') return chunk.payload.toolCallId as string;
+          if (chunk.type === 'tool-call-suspended' || chunk.type === 'tool-call-approval') {
+            return chunk.payload.toolCallId as string;
+          }
         }
       };
+      const answer = (toolCallId: string, colour: string) =>
+        kind === 'approval'
+          ? durable.approveToolCall({ runId: first.runId, toolCallId, memory: threadMemory })
+          : durable.resumeStream({ colour }, { runId: first.runId, toolCallId, memory: threadMemory });
 
       const first = await durable.stream('Ask me twice', { memory: threadMemory });
-      expect(await waitForSuspension(first.output)).toBe('call-1');
+      expect(await waitForPause(first.output)).toBe('call-1');
       first.cleanup();
+      resumedRuns.push(first.runId);
       await new Promise(r => setTimeout(r, 200));
 
       // The evented loop runs sibling tool calls one at a time, so call-2 only runs once call-1 resumes.
-      const resumed = await (durable as any).resumeStream(
-        { colour: 'blue' },
-        { runId: first.runId, toolCallId: 'call-1', memory: threadMemory },
-      );
-      expect(await waitForSuspension(resumed)).toBe('call-2');
+      expect(await waitForPause(await answer('call-1', 'blue'))).toBe('call-2');
 
       const { messages } = await memory.recall({ threadId: 'thread-1', resourceId: 'user-1', perPage: false });
       expect(messages.map(m => m.role)).toEqual(['user', 'assistant']);
-      const assistant = messages[1]!;
-      expect(Object.keys((assistant.content.metadata as any)?.suspendedTools ?? {})).toEqual(['call-2']);
+      expect(Object.keys((messages[1]!.content.metadata as any)?.[pendingKey] ?? {})).toEqual(['call-2']);
 
       // Answering call-2 completes the run; neither answered call may be left pending.
-      const completed = await (durable as any).resumeStream(
-        { colour: 'green' },
-        { runId: first.runId, toolCallId: 'call-2', memory: threadMemory },
-      );
+      const completed = await answer('call-2', 'green');
       for await (const chunk of completed.fullStream) if (chunk.type === 'finish') break;
-      await new Promise(r => setTimeout(r, 200));
 
-      const { messages: final } = await memory.recall({ threadId: 'thread-1', resourceId: 'user-1', perPage: false });
-      const toolAssistant = final.find(m => m.content.parts.some(part => part.type === 'tool-invocation'))!;
-      const results = Object.fromEntries(
-        final.flatMap(m =>
-          m.content.parts.flatMap(part =>
-            part.type === 'tool-invocation' && part.toolInvocation.state === 'result'
-              ? [[part.toolInvocation.toolCallId, part.toolInvocation.result]]
-              : [],
+      await vi.waitFor(async () => {
+        const { messages: final } = await memory.recall({ threadId: 'thread-1', resourceId: 'user-1', perPage: false });
+        const results = Object.fromEntries(
+          final.flatMap(m =>
+            m.content.parts.flatMap(part =>
+              part.type === 'tool-invocation' && part.toolInvocation.state === 'result'
+                ? [[part.toolInvocation.toolCallId, part.toolInvocation.result]]
+                : [],
+            ),
           ),
-        ),
-      );
-      expect(results).toEqual({ 'call-1': { colour: 'blue' }, 'call-2': { colour: 'green' } });
-      const finalMetadata = toolAssistant.content.metadata as any;
-      expect(Object.keys(finalMetadata?.suspendedTools ?? {})).toEqual([]);
-      expect(Object.keys(finalMetadata?.pendingToolApprovals ?? {})).toEqual([]);
+        );
+        expect(results).toEqual(
+          kind === 'approval'
+            ? { 'call-1': { colour: 'approved' }, 'call-2': { colour: 'approved' } }
+            : { 'call-1': { colour: 'blue' }, 'call-2': { colour: 'green' } },
+        );
+        const metadata = final.find(m => m.content.parts.some(part => part.type === 'tool-invocation'))!.content
+          .metadata as any;
+        expect(Object.keys(metadata?.suspendedTools ?? {})).toEqual([]);
+        expect(Object.keys(metadata?.pendingToolApprovals ?? {})).toEqual([]);
+      });
     },
     15_000,
   );
