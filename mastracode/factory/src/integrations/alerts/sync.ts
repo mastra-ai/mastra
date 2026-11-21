@@ -27,6 +27,11 @@ export interface AlertProjectCursor {
    * `incidents`, the incidents still open when it was bound, so old fires do not file cards.
    */
   backfill?: { until: string; incidents: string[] };
+  /**
+   * Set once `projectBound` has set the project's board up for alerts. Kept apart from `after`, so a
+   * project that was bound before the setup existed still gets it, once, without losing its place.
+   */
+  boardSetUp?: true;
 }
 
 /** Cursor state for the one Platform org this Factory's credential reads, per bound project. */
@@ -55,6 +60,12 @@ export interface AlertSyncDeps {
    * `platform`, so the Alerts app posts the work-item link instead.
    */
   canReplyInThread?: (thread: { teamId: string; channelId: string }) => Promise<boolean>;
+  /**
+   * Sets a project up for alerts the first time it is bound (and again after it was unbound),
+   * before any of its events are applied. A throw leaves the project unstarted, so the next pass
+   * tries again.
+   */
+  projectBound?: (scope: { orgId: string; factoryProjectId: string }) => Promise<void>;
   /** A card create the dispatcher hasn't filed holds the cursor; past this many ticks, move on. */
   maxPendingTicks?: number;
   userId?: string;
@@ -144,8 +155,22 @@ export function createAlertSync(deps: AlertSyncDeps): () => Promise<IssueReconci
     for (const binding of bindings) {
       const factoryProjectId = binding.factoryProjectId;
       let place = projects[factoryProjectId];
-      if (!place) {
-        place = await startCursor();
+      const setUp = deps.projectBound && !place?.boardSetUp;
+      if (setUp) {
+        try {
+          await deps.projectBound!({ orgId, factoryProjectId });
+        } catch (error) {
+          // Tried again next pass; until then the project takes no alerts, so none skip its triage.
+          summary.failed++;
+          summary.errors.push({
+            projectId: factoryProjectId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          continue;
+        }
+      }
+      if (!place || setUp) {
+        place = { ...(place ?? (await startCursor())), ...(setUp ? { boardSetUp: true as const } : {}) };
         projects[factoryProjectId] = place;
         await save();
       }

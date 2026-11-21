@@ -28,6 +28,7 @@ import type { FactorySandbox } from '@mastra/core/workspace';
 
 import type { BoardRegistry } from '../boards/index.js';
 import type { IntakeItemLookup } from '../boards/intake-lookup.js';
+import type { IntegrationBoardSetup } from '../boards/integration-board-setup.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { Intake } from '../capabilities/intake.js';
 import type { VersionControl } from '../capabilities/version-control.js';
@@ -186,6 +187,11 @@ export interface IntegrationContext {
      * again. Absent where the boards domain isn't available.
      */
     notRouted?: NotRoutedLookup;
+    /**
+     * Adds a phase and an intake route to a project's stored boards, for an integration setting a
+     * project up. Absent where the boards domain isn't available.
+     */
+    boardSetup?: IntegrationBoardSetup;
   };
   /** System hooks integrations may invoke. */
   hooks?: IntegrationHooks;

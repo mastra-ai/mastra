@@ -6,9 +6,11 @@ import type { MastraWorker } from '@mastra/core/worker';
 import type { Intake, IntakeSource } from '../../../capabilities/intake.js';
 import { factoryWorkItemUrl } from '../../../links.js';
 import { loose } from '../../../routes/route.js';
+import type { StoredBoardScope } from '../../../storage/domains/boards/base.js';
 import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../../../storage/domains/work-items/base.js';
 import type { FactoryRunEndInput } from '../../../tools/reports.js';
+import { ALERT_TRIAGE_CONTEXT, setUpAlertTriage } from '../../alerts/board.js';
 import { AlertReadClient, buildAlertReadTools } from '../../alerts/read-tools.js';
 import type { AlertReadToken } from '../../alerts/read-tools.js';
 import { ALERT_INTEGRATION_ID, attachPlatformAlertRules } from '../../alerts/rules.js';
@@ -138,19 +140,23 @@ export class PlatformAlertsIntegration implements FactoryIntegration {
     };
   }
 
-  /** An alert card's run is linked to the alert's Slack thread, and the thread hears that it started. */
+  /**
+   * An alert card's triage run is linked to the alert's Slack thread, and the thread hears that it
+   * started. Runs in other seats (the pull request's review) stay out of the thread.
+   */
   async beforeWorkItemRun({
     item,
     binding,
     thread,
   }: Parameters<NonNullable<FactoryIntegration['beforeWorkItemRun']>>[0]) {
+    if (binding.role !== ALERT_TRIAGE_CONTEXT) return;
     if (!(await bindAlertRunThread({ item, binding, thread }))) return;
     await this.#status?.runStarted(item);
   }
 
   /** A run that ended without concluding, or failed, says so on the alert's status. */
   async afterWorkItemRun(input: FactoryRunEndInput): Promise<void> {
-    if (!this.#status || !this.#workItems) return;
+    if (!this.#status || !this.#workItems || input.role !== ALERT_TRIAGE_CONTEXT) return;
     const card = await this.#workItems.get({ orgId: input.orgId, id: input.workItemId });
     if (card?.externalSource?.integrationId !== ALERT_INTEGRATION_ID) return;
     await this.#status.runEnded(card, input.outcome);
@@ -189,6 +195,10 @@ export class PlatformAlertsIntegration implements FactoryIntegration {
     );
     if (!ingest) return [];
     const { projects, intake, generic } = ctx.storage;
+    const boardSetup = ctx.runtime?.boardSetup;
+    const logger = {
+      warn: (msg: string, meta?: Record<string, unknown>) => console.warn(`[mastra-alerts] ${msg}`, meta),
+    };
     const sync = createAlertSync({
       organizationId: async () => (await this.connection())?.organizationId ?? null,
       listEvents: afterEventId => {
@@ -209,6 +219,8 @@ export class PlatformAlertsIntegration implements FactoryIntegration {
       ingest,
       workItemUrl: ({ factoryProjectId, workItemId }) => factoryWorkItemUrl({ factoryProjectId, workItemId }),
       ...(status ? { canReplyInThread: (thread: { teamId: string; channelId: string }) => status.covers(thread) } : {}),
+      logger,
+      ...(boardSetup ? { projectBound: (scope: StoredBoardScope) => setUpAlertTriage(boardSetup, scope, logger) } : {}),
     });
     return [new IssueReconcileWorker({ integrationId: this.id, reconcile: sync, intervalMs: this.#pollIntervalMs })];
   }

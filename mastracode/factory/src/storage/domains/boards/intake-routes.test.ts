@@ -279,6 +279,23 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     expect((await names(boards, scope)).slice(-2)).toEqual([CATCH_ALL_INTAKE_ROUTE.name, 'Merged docs']);
   });
 
+  it('adds a route by name once when two clients ask unless named, and returns the one there', async () => {
+    const { boards, scope, secondClient } = await setup({ seeded: true });
+    const other = await secondClient();
+
+    const [a, b] = await Promise.all([
+      boards.createIntakeRouteUnlessNamed(scope, route('Alerts'), 'factory'),
+      other.createIntakeRouteUnlessNamed(scope, route('Alerts'), 'factory'),
+    ]);
+
+    expect(a.route.id).toBe(b.route.id);
+    expect([a.created, b.created].sort()).toEqual([false, true]);
+    expect((await names(boards, scope)).filter(name => name === 'Alerts')).toHaveLength(1);
+    // Without it, a same-named route is a second route, as before.
+    await boards.createIntakeRoute(scope, route('Alerts'), 'u');
+    expect((await names(boards, scope)).filter(name => name === 'Alerts')).toHaveLength(2);
+  });
+
   it('seeds the default routes once when two clients read a new project at once', async () => {
     const { boards, scope, secondClient } = await setup({ seeded: true });
     const other = await secondClient();

@@ -48,4 +48,4 @@ End with the handoff, short and scannable:
 - _Evidence:_ links a human can click to check you: the `dashboardUrl` of one or two failing traces and of the filtered list or logs you counted from, plus the suspect commit or config. Use the URLs exactly as the tools returned them; never write a bare trace id or build a URL yourself.
 - _Fix:_ the pull request, what it changes, the tests, and the risk — or why there is no code fix.
 
-Then request the stage transition the `factory-phase` signal allows.
+Then request the stage transition the `factory-phase` signal allows: Review when you opened a pull request, Planning when the fix needs a plan first, Intake when there is no code fix and a person should decide.

@@ -1,6 +1,7 @@
 import type { Card, FactoryRunBindingRecord } from '../../storage/domains/work-items/base.js';
 import type { WorkItemRunThread } from '../base.js';
 
+import { ALERT_TRIAGE_CONTEXT } from './board.js';
 import { ALERT_INTEGRATION_ID } from './rules.js';
 
 /** The alert's Slack thread, as attached to its card on `alert.thread_linked`. */
@@ -49,7 +50,8 @@ export async function bindAlertRunsOnThreadLink(input: {
   const bindings = await input.listRunBindings(input.card.orgId, input.card.factoryProjectId, input.card.id);
   let bound = 0;
   for (const binding of bindings) {
-    if (binding.status !== 'active') continue;
+    // Only the triage run joins the alert thread, as when a run starts after the thread is known.
+    if (binding.status !== 'active' || binding.role !== ALERT_TRIAGE_CONTEXT) continue;
     const session = await input.getSession(binding.sessionId);
     if (session && (await bindAlertRunThread({ item: input.card, binding, thread: session.thread }))) bound++;
   }

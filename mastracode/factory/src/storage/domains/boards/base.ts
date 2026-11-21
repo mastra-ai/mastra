@@ -1118,11 +1118,39 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     input: StoredIntakeRouteInput,
     actor: string,
   ): Promise<StoredIntakeRouteRecord> {
-    const id = randomUUID();
+    return (await this.#addIntakeRoute(scope, input, actor, false)).route;
+  }
+
+  /**
+   * Adds the route unless one by the same name is already there, decided under the routes' lock so
+   * two callers add one. `created` says whether this call added it.
+   */
+  async createIntakeRouteUnlessNamed(
+    scope: StoredBoardScope,
+    input: StoredIntakeRouteInput,
+    actor: string,
+  ): Promise<{ route: StoredIntakeRouteRecord; created: boolean }> {
+    return this.#addIntakeRoute(scope, input, actor, true);
+  }
+
+  async #addIntakeRoute(
+    scope: StoredBoardScope,
+    input: StoredIntakeRouteInput,
+    actor: string,
+    unlessNamed: boolean,
+  ): Promise<{ route: StoredIntakeRouteRecord; created: boolean }> {
+    let id: string = randomUUID();
+    let created = true;
     checkRouteEvents(input.on ?? DEFAULT_ROUTE_EVENTS, input.when ?? null);
     await this.#ensureIntakeRoutes(scope);
     await this.#transact(async ops => {
       const rows = await lockIntakeRoutes(ops, scope);
+      const named = unlessNamed ? rows.find(row => row.name === input.name) : undefined;
+      if (named) {
+        id = named.id;
+        created = false;
+        return;
+      }
       if (boardRouteCount(rows, input.target.boardKey) >= MAX_INTAKE_ROUTES_PER_BOARD) {
         throw new StoredBoardError(
           'intake_route_limit',
@@ -1159,7 +1187,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
         }
       }
     });
-    return (await this.getIntakeRoute(scope, id))!;
+    return { route: (await this.getIntakeRoute(scope, id))!, created };
   }
 
   /** Changes the fields `patch` names; the route keeps its place in the order. */
