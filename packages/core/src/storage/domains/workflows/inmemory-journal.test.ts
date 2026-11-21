@@ -239,7 +239,10 @@ describe('WorkflowsInMemory storage v2 methods', () => {
       ['b', ok(2)],
       ['c', ok(3)],
     ]);
-    expect(db.workflowRunEntries.get('wf-r1')!.map(e => e.seq)).toEqual([1, 2, 3, 4, 5, 6]);
+    // a's new entry replaced its first one, and remembers that entry's position.
+    const stored = db.workflowRunEntries.get('wf-r1')!;
+    expect(stored.map(e => e.seq)).toEqual([2, 3, 4, 5, 6]);
+    expect(stored.find(e => e.kind === 'step' && e.stepId === 'a')).toMatchObject({ seq: 5, firstSeq: 1 });
   });
 
   it('replaces all entries on a later checkpoint, keeping seq increasing', async () => {
@@ -680,7 +683,7 @@ describe('WorkflowsInMemory storage v2 step patches', () => {
     expect(await steps(store)).toEqual({ a: ok(1), each });
   });
 
-  it('applies only the patches after the latest full entry, and a checkpoint drops them', async () => {
+  it('applies only the patches after the latest full entry, which deletes the earlier ones, and a checkpoint drops them', async () => {
     const { db, store } = setup();
     await store.appendWorkflowRunEntries({ ...run, header, steps: {}, stepPatches: { stray: [progress(0, 1)] } });
     await store.appendWorkflowRunEntries({ ...run, header, steps: { each: running({}) } });
@@ -688,6 +691,13 @@ describe('WorkflowsInMemory storage v2 step patches', () => {
     await store.appendWorkflowRunEntries({ ...run, header, steps: { each: running({ 5: { output: 50 } }) } });
     await store.appendWorkflowRunEntries({ ...run, header, steps: {}, stepPatches: { each: [progress(6, 60)] } });
     expect(await steps(store)).toEqual({ each: running({ 5: { output: 50 }, 6: { output: 60 } }) });
+    // The second full entry deleted the first and its patch; a patch without a step entry stays (and is ignored).
+    expect(db.workflowRunEntries.get('wf-r1')!.map(e => [e.seq, e.kind, 'stepId' in e && e.stepId])).toEqual([
+      [1, 'step-patch', 'stray'],
+      [4, 'step', 'each'],
+      [5, 'step-patch', 'each'],
+    ]);
+    expect(db.workflowRunEntries.get('wf-r1')![1]).toMatchObject({ firstSeq: 2 });
 
     await store.writeWorkflowRunCheckpoint({ ...run, header, steps: { each: running({}) }, state: {} });
     expect(db.workflowRunEntries.get('wf-r1')!.map(e => e.kind)).toEqual(['step', 'state']);
@@ -936,6 +946,43 @@ describe('WorkflowsInMemory storage v2 state patches', () => {
   it('fails a draft of a run that is not stored', async () => {
     const { store } = setup();
     await expect(store.appendWorkflowRunStateDraft({ ...parent, state: {} })).rejects.toThrow();
+  });
+
+  it('drops the state entries below the oldest version in use and the drafts no run built on', async () => {
+    const { db, store } = setup();
+    const write = async (extra: Record<string, any>) =>
+      (await store.appendWorkflowRunEntries({ ...parent, header: makeHeader('r1'), steps: {}, ...extra }))!.lastSeq;
+    await store.writeWorkflowRunCheckpoint({ ...parent, header: makeHeader('r1'), steps: {}, state: { a: 1 } });
+    await write({ statePatch: [set(['b'], 1)] });
+    await write({ state: { a: 2 } });
+    const driveStart = await write({ statePatch: [set(['c'], 1)] });
+    await store.appendWorkflowRunStateDraft({ ...parent, on: { seq: driveStart }, ops: [set(['d'], 1)] });
+    const chained = await store.appendWorkflowRunStateDraft({
+      ...parent,
+      on: { seq: driveStart },
+      ops: [set(['e'], 1)],
+    });
+    const used = await store.appendWorkflowRunStateDraft({ ...parent, on: { ...chained, draft: true }, ops: [] });
+    await store.writeWorkflowRunCheckpoint({
+      ...child,
+      header: childOf('parent'),
+      steps: {},
+      stateBase: { ...parent, seq: used.seq, draft: true },
+    });
+    const lastSeq = await write({ startStateSeq: driveStart, statePatch: [set(['g'], 1)] });
+
+    await store.dropUnusedStateEntries({ ...parent, expectedLastSeq: lastSeq });
+
+    // The full state the drive start builds on and everything after it, but the unused draft (5).
+    expect(db.workflowRunEntries.get('parent-r1')!.map(e => [e.seq, e.kind])).toEqual([
+      [3, 'state'],
+      [4, 'state-patch'],
+      [6, 'state-draft'],
+      [7, 'state-draft'],
+      [8, 'state-patch'],
+    ]);
+    expect((await statesOf(store, parent)).state).toEqual({ a: 2, c: 1, g: 1 });
+    expect((await statesOf(store, child)).state).toEqual({ a: 2, c: 1, e: 1 });
   });
 
   it('keeps the state of the runs built on a deleted run', async () => {

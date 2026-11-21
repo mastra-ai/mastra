@@ -487,6 +487,77 @@ describe('evented step messages on storage v2', () => {
     expect(pruned).toEqual([]);
   });
 
+  it('prunes a finished run once, even when its workflow.end is delivered again', async () => {
+    // Pubsub is at-least-once. The first prune replaces the stored results with what the hook
+    // returned, so a redelivered end that pruned again would hand the hook its own output.
+    const pruned: string[] = [];
+    const big = createStep({
+      id: 'big',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      execute: async () => ({ data: BIG }),
+    });
+    const workflow = createWorkflow({
+      id: 'prune-once',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      options: {
+        storageVersion: 2,
+        pruneSnapshot: ({ snapshot, workflowStatus }) => {
+          pruned.push(workflowStatus);
+          return {
+            ...snapshot,
+            context: {
+              ...snapshot.context,
+              big: {
+                ...snapshot.context.big,
+                // Deliberately not idempotent: pruning a pruned run previews the preview.
+                output: { preview: JSON.stringify(snapshot.context.big!.output).slice(0, 60) },
+              },
+            },
+          };
+        },
+      },
+    })
+      .then(big)
+      .commit();
+
+    const storage = new MockStore();
+    const pubsub = new EventEmitterPubSub();
+    const ends: { topic: string; event: any }[] = [];
+    const publish = pubsub.publish.bind(pubsub);
+    pubsub.publish = async (topic, event) => {
+      if (topic === 'workflows' && event.type === 'workflow.end') ends.push({ topic, event });
+      return publish(topic, event);
+    };
+    const mastra = new Mastra({ logger: false, storage, workflows: { wf: workflow as any }, pubsub });
+    await mastra.startWorkers();
+    try {
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+      expect(result.status).toBe('success');
+      expect(pruned).toEqual(['success']);
+      const storedBig = async () =>
+        (await storage.stores.workflows!.loadWorkflowSnapshot({
+          workflowName: 'prune-once',
+          runId: run.runId,
+          storageVersion: 2,
+        }))!.context.big as { output: { preview: string } };
+      const once = await storedBig();
+      expect(once.output.preview.startsWith('{"data"')).toBe(true);
+
+      // Redeliver the end event and let the worker settle.
+      expect(ends.length).toBeGreaterThan(0);
+      await publish(ends[0]!.topic, ends[0]!.event);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(pruned).toEqual(['success']);
+      expect(await storedBig()).toEqual(once);
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+
   it('join parallel branches once when both write before either loads the other', async () => {
     let joins = 0;
     const arm = (id: string) =>
@@ -523,9 +594,9 @@ describe('evented step messages on storage v2', () => {
       return appended;
     };
     const loadSteps = store.loadWorkflowRunSteps.bind(store);
-    // Hold the branches' loads of each other until both have written.
+    // Hold the branches' loads of each other (the only reads bounded by a seq) until both have written.
     store.loadWorkflowRunSteps = async args => {
-      if (args.stepIds.length > 1) await both;
+      if (args.upToSeq !== undefined) await both;
       return loadSteps(args);
     };
 
@@ -533,6 +604,81 @@ describe('evented step messages on storage v2', () => {
     expect(result.status).toBe('success');
     expect(result.result).toEqual({ left: { left: true }, right: { right: true } });
     expect(joins).toBe(1);
+  });
+
+  it('join parallel branches once per loop iteration when both write before either loads the other', async () => {
+    let joins = 0;
+    // Each arm returns its own execution count, so a sibling's result from an earlier iteration
+    // is visibly different from this one's.
+    const runs = { left: 0, right: 0 };
+    const arm = (id: 'left' | 'right') =>
+      createStep({
+        id,
+        inputSchema: looseObject,
+        outputSchema: looseObject,
+        execute: async () => ({ [id]: runs[id]++ }),
+      });
+    const joined: Record<string, any>[] = [];
+    const after = createStep({
+      id: 'after',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      execute: async ({ inputData }) => {
+        joins++;
+        joined.push(inputData);
+        return inputData;
+      },
+    });
+    const body = createWorkflow({ id: 'join-body', inputSchema: looseObject, outputSchema: looseObject })
+      .parallel([arm('left'), arm('right')])
+      .then(after)
+      .commit();
+    const workflow = createWorkflow({
+      id: 'join-loop',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      options: { storageVersion: 2 },
+    })
+      .dowhile(body, async ({ iterationCount }) => iterationCount < 3)
+      .commit();
+
+    const storage = new MockStore();
+    const store = storage.stores.workflows!;
+    const successes = { left: 0, right: 0 };
+    let waiting: (() => void)[] = [];
+    const append = store.appendWorkflowRunEntries.bind(store);
+    store.appendWorkflowRunEntries = async args => {
+      const appended = await append(args);
+      for (const [id, result] of Object.entries(args.steps)) {
+        if ((id === 'left' || id === 'right') && result.status === 'success') successes[id]++;
+      }
+      if (successes.left === successes.right) {
+        const ready = waiting;
+        waiting = [];
+        for (const resolve of ready) resolve();
+      }
+      return appended;
+    };
+    const loadSteps = store.loadWorkflowRunSteps.bind(store);
+    // In every iteration, hold the branches' loads of each other until both have written.
+    store.loadWorkflowRunSteps = async args => {
+      if (args.upToSeq !== undefined && successes.left !== successes.right) {
+        await new Promise<void>(resolve => waiting.push(resolve));
+      }
+      return loadSteps(args);
+    };
+
+    const { result } = await runWorkflow(workflow, storage);
+    expect(result.status).toBe('success');
+    expect(successes).toEqual({ left: 3, right: 3 });
+    expect(joins).toBe(3);
+    // Iterations run one after another, so the nth call of each arm belongs to iteration n.
+    // A branch reused from the previous iteration would show up as a mismatch here.
+    expect(joined).toEqual([
+      { left: { left: 0 }, right: { right: 0 } },
+      { left: { left: 1 }, right: { right: 1 } },
+      { left: { left: 2 }, right: { right: 2 } },
+    ]);
   });
 });
 
