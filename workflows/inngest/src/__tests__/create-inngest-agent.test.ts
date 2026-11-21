@@ -1227,7 +1227,12 @@ describe('InngestAgent parity surface', () => {
         await publishStepAndFinish(durableAgent, runId);
         await vi.waitFor(() => expect(fired).toEqual(['onFinish:anon:acme']));
         const resumeEvent = sendSpy.mock.calls.map(([event]) => event as any).find(event => event.data?.resume);
-        expect(resumeEvent.data.requestContext).toEqual({ tenant: 'acme' });
+        // No user, roles or permissions from the starting run. The only other key is the
+        // framework's segment-span carrier (#30812); this resume opened no spans, so it is null.
+        expect(resumeEvent.data.requestContext).toEqual({
+          tenant: 'acme',
+          mastra__durableSegments: { [runId]: null },
+        });
       } finally {
         result.cleanup();
         sendSpy.mockRestore();
@@ -1696,6 +1701,8 @@ describe('InngestAgent parity surface', () => {
               userId: 'user-1',
               organizationId: 'org-2',
               requestId: 'request-1',
+              // The segment-span carrier every resume adds (#30812); no spans opened here.
+              mastra__durableSegments: { [runId]: null },
             },
             tracingOptions: {
               traceId: 'trace-1',
