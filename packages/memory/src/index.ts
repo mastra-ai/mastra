@@ -74,6 +74,7 @@ import type {
   SummarizeConversationResult,
 } from './processors/observational-memory/summarize';
 import { TokenCounter } from './processors/observational-memory/token-counter';
+import { clearTrustedTokenEstimates } from './processors/observational-memory/trusted-token-estimates';
 import type { WidenedObservationalMemoryModel } from './processors/observational-memory/types';
 import { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
 import { SUBCONSCIOUS_REMOVED_MESSAGE } from './removed-subconscious';
@@ -1789,10 +1790,9 @@ ${workingMemory}`;
       newMessage.content.parts = removeWorkingMemoryToolInvocationParts(newMessage.content.parts).map(part => {
         if (part?.type === 'text') {
           const text = typeof part.text === 'string' ? part.text : '';
-          return {
-            ...part,
-            text: removeWorkingMemoryTags(text).trim(),
-          };
+          const stripped = removeWorkingMemoryTags(text).trim();
+          if (stripped === part.text) return part;
+          return { ...clearTrustedTokenEstimates(part), text: stripped };
         }
         return part;
       });
@@ -2982,9 +2982,16 @@ Notes:
       }
       return null;
     };
-    messages = messages.flatMap(update => {
-      const stored = existingById.get(update.id);
+    messages = messages.flatMap(rawUpdate => {
+      const stored = existingById.get(rawUpdate.id);
       if (!stored) return [];
+      // Edited parts come from the caller: never trust a token count they carry.
+      const update = Array.isArray(rawUpdate.content?.parts)
+        ? {
+            ...rawUpdate,
+            content: { ...rawUpdate.content, parts: rawUpdate.content.parts.map(clearTrustedTokenEstimates) },
+          }
+        : rawUpdate;
       const effective = {
         ...stored,
         ...update,

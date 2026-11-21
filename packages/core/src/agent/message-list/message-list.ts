@@ -62,6 +62,7 @@ import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageList
 import { dropCrossProviderExecutedParts } from './utils/provider-compat';
 import { preserveResponseItemIdsOnMerge } from './utils/response-item-metadata';
 import { stampPart, stampToolPartUpdate } from './utils/stamp-part';
+import { clearTrustedTokenEstimates, clearTrustedTokenEstimatesInPlace } from './utils/token-estimates';
 import {
   advancesToolInvocationState,
   isClientToolInvocationUpdate,
@@ -1873,7 +1874,7 @@ export class MessageList {
         });
 
         return {
-          ...part,
+          ...clearTrustedTokenEstimates(part),
           toolInvocation: {
             ...part.toolInvocation,
             args: transformedArgs,
@@ -1891,7 +1892,7 @@ export class MessageList {
       if (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') {
         changed = true;
         return {
-          ...part,
+          ...clearTrustedTokenEstimates(part),
           data: this.transformToolStateDataForTranscript(
             part.data,
             part.type === 'data-tool-call-suspended' ? 'suspend' : 'approval',
@@ -2239,6 +2240,8 @@ export class MessageList {
       ...(part.title !== undefined && inputPart.title === undefined ? { title: part.title } : {}),
       ...(mergedProviderMetadata !== undefined ? { providerMetadata: mergedProviderMetadata } : {}),
     };
+    // The result (and any `modelOutput`) changed, so the part's stored count no longer applies.
+    clearTrustedTokenEstimatesInPlace(mergedPart);
     if (part.updatedAt !== undefined && mergedPart.updatedAt === undefined) mergedPart.updatedAt = part.updatedAt;
     stampToolPartUpdate(mergedPart, part.toolInvocation, inputPart.updatedAt);
     msg.content.parts![i] = mergedPart;
@@ -2702,6 +2705,10 @@ export class MessageList {
     }
 
     const messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
+    // Caller-supplied parts can't carry token counts Memory trusts without checking.
+    if (messageSource === 'input' && Array.isArray(messageV2.content?.parts)) {
+      messageV2.content.parts = messageV2.content.parts.map(part => clearTrustedTokenEstimates(part));
+    }
     if (messageDeclaresAuthoredTurn(message) && messageV2.role === 'user' && !messageDeclaresAuthoredTurn(messageV2)) {
       const metadata = messageV2.content.metadata ?? {};
       const mastra =
@@ -2786,7 +2793,10 @@ export class MessageList {
           const storedPart = messageV2.content.parts.find(
             part => part.type === 'text' && part.text.trim() === incomingPart.text.trim(),
           );
-          if (storedPart?.type === 'text') storedPart.text = incomingPart.text;
+          if (storedPart?.type === 'text' && storedPart.text !== incomingPart.text) {
+            storedPart.text = incomingPart.text;
+            clearTrustedTokenEstimatesInPlace(storedPart);
+          }
         }
         MessageMerger.merge(messageV2, withoutStaleToolStates(messageV2, replacementTarget));
       }

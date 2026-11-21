@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '../../agent/message-list';
+import { clearTrustedTokenEstimates } from '../../agent/message-list/utils/token-estimates';
 import type { Processor } from '../index';
 
 export interface UnicodeNormalizerOptions {
@@ -50,7 +51,7 @@ export class UnicodeNormalizer implements Processor<'unicode-normalizer'> {
           parts: message.content.parts?.map(part => {
             if (part.type === 'text' && 'text' in part && typeof part.text === 'string') {
               return {
-                ...part,
+                ...clearTrustedTokenEstimates(part),
                 text: this.normalizeText(part.text),
               };
             }

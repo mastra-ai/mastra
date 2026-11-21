@@ -3,6 +3,7 @@ import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import { estimateTokenCount } from 'tokenx';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { parseDataUri, resolveFilePartMediaTypeAndData } from '../../agent/message-list/prompt/image-utils';
+import { clearTrustedTokenEstimates } from '../../agent/message-list/utils/token-estimates';
 import { TripWire } from '../../agent/trip-wire';
 import { groupLinkedToolMessages } from '../../memory/load-message-history';
 import type { ChunkType } from '../../stream';
@@ -719,7 +720,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
             cumulativeTokens += this.countTokens(truncatedText);
 
             return {
-              ...part,
+              ...clearTrustedTokenEstimates(part),
               text: truncatedText,
             };
           }

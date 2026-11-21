@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { clearTrustedTokenEstimatesInPlace } from '@mastra/core/agent/message-list';
 import type { MastraToolInvocation } from '@mastra/core/agent/message-list';
 import probeImageSize from 'probe-image-size';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -931,7 +932,7 @@ describe('TokenCounter', () => {
       expect(reloaded.content.parts[0].providerMetadata?.mastra?.tokenEstimate).toBeTruthy();
     });
 
-    it('ignores stale cache entries when the cache key no longer matches', () => {
+    it('recounts a part whose trusted count was cleared after an edit', () => {
       const counter = new TokenCounter();
       const message = createMessage({
         format: 2,
@@ -941,13 +942,15 @@ describe('TokenCounter', () => {
       counter.countMessage(message);
       const firstEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
 
+      // Trusted counts are read by presence; whoever edits a part clears them (the documented contract).
       message.content.parts[0].text = 'Mutated text payload with different size and tokens';
+      clearTrustedTokenEstimatesInPlace(message.content.parts[0]);
       const recounted = counter.countMessage(message);
       const secondEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
 
       expect(recounted).toBeGreaterThan(0);
       expect(secondEntry).toBeTruthy();
-      expect(secondEntry.key).not.toBe(firstEntry.key);
+      expect(secondEntry.key).toBe(firstEntry.key);
       expect(secondEntry.tokens).not.toBe(firstEntry.tokens);
     });
 
@@ -1366,12 +1369,13 @@ describe('TokenCounter', () => {
         type: 'text',
         value: 'expanded output '.repeat(40),
       };
+      clearTrustedTokenEstimatesInPlace(message.content.parts[0]);
 
       const second = counter.countMessage(message);
       const secondEstimate = getCachedEstimateByKind(message.content.parts[0], 'tool-result-model-output-json');
 
       expect(second).toBeGreaterThan(first);
-      expect(secondEstimate.key).not.toBe(firstEstimate.key);
+      expect(secondEstimate.tokens).toBeGreaterThan(firstEstimate.tokens);
     });
 
     it('sanitizes and truncates raw tool results while counting tokens', () => {

@@ -1,5 +1,6 @@
 import type { ChunkType } from '../../stream/types';
 import type { MastraMessagePart, MastraProviderMetadata } from './state/types';
+import { clearTrustedTokenEstimatesInPlace } from './utils/token-estimates';
 
 const SPAN_CHUNK_TYPES = [
   'text-start',
@@ -98,6 +99,7 @@ export class MessagePartSpans {
         const open = this.#textParts.get(id);
         const part = open ?? this.#openTextPart(parts, id, providerMetadata);
         part.text += text;
+        clearTrustedTokenEstimatesInPlace(part);
         if (providerMetadata) part.providerMetadata = providerMetadata;
         return { part, created: !open };
       }
@@ -129,6 +131,7 @@ export class MessagePartSpans {
         part.reasoning = (part.reasoning ?? '') + text;
         const detail = part.details[0];
         if (detail?.type === 'text') detail.text = part.reasoning;
+        clearTrustedTokenEstimatesInPlace(part);
         if (providerMetadata) part.providerMetadata = providerMetadata;
         return { part, created: !open };
       }
