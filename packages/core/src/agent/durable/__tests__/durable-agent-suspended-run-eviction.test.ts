@@ -308,16 +308,24 @@ describe('an observer ended by a bare idle timeout', () => {
     await suspend(agent, 'run-idle-early');
     await agent.releaseParkedRun('run-idle-early');
     expect(workflow.runs.size).toBe(0);
-    // Slow storage holds observe()'s setup past the idle timeout.
+    // observe()'s last setup read (the completion check) waits until the idle timeout has fired,
+    // so the timeout always lands before observe() returns.
+    let idled!: () => void;
+    const idleFired = new Promise<void>(resolve => (idled = resolve));
+    const onError = vi.fn(() => idled());
+    let gatedReads = 0;
     const getStore = storage.getStore.bind(storage);
-    const slow = vi.spyOn(storage, 'getStore').mockImplementation(async (...args: any[]) => {
-      await new Promise(resolve => setTimeout(resolve, 15));
+    const gated = vi.spyOn(storage, 'getStore').mockImplementation(async (...args: any[]) => {
+      if (new Error().stack?.includes('isObservationComplete')) {
+        gatedReads++;
+        await idleFired;
+      }
       return (getStore as any)(...args);
     });
-    const onError = vi.fn();
     await agent.observe('run-idle-early', { idleTimeoutMs: 5, onError });
-    slow.mockRestore();
-    expect(onError).toHaveBeenCalled();
+    gated.mockRestore();
+    expect(gatedReads).toBeGreaterThan(0);
+    expect(onError).toHaveBeenCalledTimes(1);
 
     expect(await agent.releaseParkedRun('run-idle-early')).toBe(false);
   });

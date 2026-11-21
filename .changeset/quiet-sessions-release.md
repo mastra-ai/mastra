@@ -1,5 +1,5 @@
 ---
-'@mastra/core': patch
+'@mastra/core': minor
 ---
 
 Fixed memory growth when an AgentController session is deleted while a durable agent run is parked at a suspension. Deleting the session now frees the run's in-memory state and deletes its stored snapshot, so the run can no longer be resumed.
