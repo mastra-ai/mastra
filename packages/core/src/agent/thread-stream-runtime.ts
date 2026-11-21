@@ -924,6 +924,9 @@ type AgentThreadStreamRuntimeEvent =
   // runId is the run whose trim removes the entry; a cancellation has no owning run.
   | { type: 'user-message-presentation'; runId?: string; chunk: UserMessagePendingChunk | UserMessageCancelledChunk }
   | { type: 'user-message-delivered'; signalId: string }
+  // The owner admitted a forwarded message on admittedRunId. Unlike the presentation, it carries no runId of its own, so
+  // the run's trim keeps it for a forwarder that reads the thread after that run ended.
+  | { type: 'user-message-admitted'; signalId: string; admittedRunId: string }
   | { type: 'run-aborted'; runId: string; streamId?: string; superseded?: boolean }
   | { type: 'run-failed'; runId: string; streamId?: string; error: string }
   | { type: 'signal-enqueued'; runId: string; signal: SerializableAgentSignal; sourceId: string; preRun?: boolean }
@@ -2218,8 +2221,14 @@ export class AgentThreadStreamRuntime {
         queues.set(key, queue);
         subscription.admittedSignalIds.add(data.signal.id);
         this.#publishPendingUserMessage(pubsub, key, runId, signal, 'pending');
+        if (this.#pendingUserMessageChunk(runId, signal, 'pending')) {
+          this.#publish(pubsub, key, { type: 'user-message-admitted', signalId: signal.id, admittedRunId: runId });
+        }
         this.#notifyPendingSignals(state, key, signal);
+      } else if (data?.type === 'user-message-admitted') {
+        this.#settleForwardedIdleSignal(state, key, data.signalId, data.admittedRunId);
       } else if (data?.type === 'user-message-presentation') {
+        // Owners that predate user-message-admitted only announce the admission this way.
         const { chunk } = data;
         if (chunk.type === 'data-user-message-pending' && chunk.data.metadata?.status === 'pending') {
           this.#settleForwardedIdleSignal(state, key, chunk.data.id, chunk.runId);
@@ -2330,7 +2339,7 @@ export class AgentThreadStreamRuntime {
         type !== 'signals-cancelled' &&
         type !== 'run-abort-requested' &&
         type !== 'run-registered' &&
-        !(type === 'user-message-presentation' && awaitingForwards) &&
+        !((type === 'user-message-presentation' || type === 'user-message-admitted') && awaitingForwards) &&
         !(
           (type === 'run-completed' || type === 'run-failed') &&
           // While a local run is active, its superseding runs are looked up in
