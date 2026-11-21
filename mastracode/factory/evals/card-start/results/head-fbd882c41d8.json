@@ -1,0 +1,605 @@
+{
+  "label": "working tree",
+  "commit": "fbd882c41d8",
+  "model": "anthropic/claude-opus-5-5",
+  "runs": 5,
+  "summary": [
+    {
+      "scenario": "fix-now",
+      "expect": "start",
+      "passed": 5,
+      "runs": 5,
+      "claimsCardRunning": 0
+    },
+    {
+      "scenario": "go-for-it-after-discussion",
+      "expect": "start",
+      "passed": 5,
+      "runs": 5,
+      "claimsCardRunning": 0
+    },
+    {
+      "scenario": "just-do-it",
+      "expect": "start",
+      "passed": 5,
+      "runs": 5,
+      "claimsCardRunning": 0
+    },
+    {
+      "scenario": "file-for-next-sprint",
+      "expect": "file-only",
+      "passed": 5,
+      "runs": 5,
+      "claimsCardRunning": 0
+    },
+    {
+      "scenario": "track-so-we-dont-forget",
+      "expect": "file-only",
+      "passed": 5,
+      "runs": 5,
+      "claimsCardRunning": 0
+    },
+    {
+      "scenario": "side-session-investigation",
+      "expect": "side-session",
+      "passed": 5,
+      "runs": 5,
+      "claimsCardRunning": 0
+    },
+    {
+      "scenario": "side-session-pr-fix",
+      "expect": "side-session",
+      "passed": 5,
+      "runs": 5,
+      "claimsCardRunning": 0
+    }
+  ],
+  "rows": [
+    {
+      "scenario": "fix-now",
+      "expect": "start",
+      "run": 4,
+      "pass": true,
+      "why": "moved the card",
+      "claimsCardRunning": false,
+      "calls": [
+        "reply_in_thread",
+        "factory_list_work_items",
+        "factory_create_work_item",
+        "factory_inspect_work_item",
+        "factory_transition_work_item",
+        "factory_inspect_work_item",
+        "reply_in_thread"
+      ],
+      "replies": [
+        "On it — checking for an existing card, then starting the fix.",
+        "I filed [#42](https://factory.example/cards/card-1) for the empty-email crash in acme/web and moved it to Execute. No agent session shows as running on it yet. The card asks to handle a blank email with a normal validation error and add a test for it. I'm following the card and will post here when there's progress."
+      ]
+    },
+    {
+      "scenario": "fix-now",
+      "expect": "start",
+      "run": 2,
+      "pass": true,
+      "why": "moved the card",
+      "claimsCardRunning": false,
+      "calls": [
+        "reply_in_thread",
+        "factory_list_work_items",
+        "factory_create_work_item",
+        "factory_inspect_work_item",
+        "factory_transition_work_item",
+        "factory_inspect_work_item",
+        "reply_in_thread"
+      ],
+      "replies": [
+        "On it — checking for an existing card and getting a fix started.",
+        "I filed [#42](https://factory.example/cards/card-1) for the empty-email crash in acme/web and moved it to **Execute**, since it's a straightforward bug fix. No agent has started on it yet. I'll post here when work begins and when there's a PR."
+      ]
+    },
+    {
+      "scenario": "fix-now",
+      "expect": "start",
+      "run": 0,
+      "pass": true,
+      "why": "moved the card",
+      "claimsCardRunning": false,
+      "calls": [
+        "reply_in_thread",
+        "factory_list_work_items",
+        "factory_create_work_item",
+        "factory_inspect_work_item",
+        "factory_transition_work_item",
+        "factory_inspect_work_item",
+        "reply_in_thread"
+      ],
+      "replies": [
+        "On it — checking for an existing card, then starting the fix.",
+        "I filed [#42](https://factory.example/cards/card-1) for the empty-email crash in acme/web and moved it to Execute. It skipped Planning because the bug is small. No session is running on it yet, so the fix hasn't started. I'm following the card and will post here when the work begins or a PR is up."
+      ]
+    },
+    {
+      "scenario": "fix-now",
+      "expect": "start",
+      "run": 1,
+      "pass": true,
+      "why": "moved the card",
+      "claimsCardRunning": false,
+      "calls": [
+        "reply_in_thread",
+        "factory_list_work_items",
+        "factory_create_work_item",
+        "factory_inspect_work_item",
+        "factory_transition_work_item",
+        "factory_inspect_work_item",
+        "reply_in_thread"
+      ],
+      "replies": [
+        "On it. I'll check for an existing card, then get a fix started.",
+        "I filed [#42](https://factory.example/cards/card-1) for the empty-email crash in acme/web and moved it straight to **execute**. It's a small bug, so I skipped planning. No session has started on it yet. I'm following the card and will post here once the fix is underway or a PR is up."
+      ]
+    },
+    {
+      "scenario": "fix-now",
+      "expect": "start",
+      "run": 3,
+      "pass": true,
+      "why": "moved the card",
+      "claimsCardRunning": false,
+      "calls": [
+        "reply_in_thread",
+        "factory_list_work_items",
+        "factory_create_work_item",
+        "factory_inspect_work_item",
+        "factory_transition_work_item",
+        "factory_inspect_work_item",
+        "reply_in_thread"
+      ],
+      "replies": [
+        "On it — checking for an existing card, then starting the fix.",
+        "I filed [#42](https://factory.example/cards/card-1) for the empty-email crash in acme/web and moved it to **Execute**. I skipped planning because it's a clear bug. No agent session has started on the card yet. I'm following it and will post here once the fix is running or a PR is up."
+      ]
+    },
+    {
+      "scenario": "go-for-it-after-discussion",
+      "expect": "start",
+      "run": 0,
+      "pass": true,
+      "why": "moved the card",
+      "claimsCardRunning": false,
+      "calls": [
+        "reply_in_thread",
+        "factory_list_work_items",
+        "factory_create_work_item",
+        "factory_inspect_work_item",
+        "factory_transition_work_item",
+        "factory_inspect_work_item",
+        "reply_in_thread"
+      ],
+      "replies": [
+        "On it: filing a card for auto-collapsing idle phases and starting it.",
+        "I filed [#42](https://factory.example/cards/card-1) against acme/web and moved it to Execute. No session has picked it up yet, so the work hasn't started. I'll post here once it does.\n\nOne correction: earlier I said the board already stores when each phase was last opened, but I hadn't checked that. The card asks the run to confirm it first and to add the timestamp if it's missing."
+      ]
+    },
+    {
+      "scenario": "go-for-it-after-discussion",
+      "expect": "start",
+      "run": 1,
+      "pass": true,
+      "why": "moved the card",
+      "claimsCardRunning": false,
+      "calls": [
+        "reply_in_thread",
+        "factory_list_work_items",
+        "factory_create_work_item",
+        "factory_inspect_work_item",
+        "factory_transition_work_item",
+        "factory_inspect_work_item",
+        "reply_in_thread"
+      ],
+      "replies": [
+        "On it, filing a card for the auto-collapse and starting it.",
+        "I filed [#42](https://factory.example/cards/card-1) for acme/web and moved it to Execute. No session has started on it yet, so the work isn't running. The plan is to collapse any board phase that nobody has opened in 7 days, using the last-opened time the board already stores. You can still expand those phases by hand. I'm following the card and will post here when it moves."
+      ]
+    },
+    {
+      "scenario": "go-for-it-after-discussion",
+      "expect": "start",
+      "run": 3,
+      "pass": true,
+      "why": "moved the card",
+      "claimsCardRunning": false,
+      "calls": [
+        "reply_in_thread",
+        "factory_list_work_items",
+        "factory_create_work_item",
+        "factory_inspect_work_item",
+        "factory_transition_work_item",
+        "factory_inspect_work_item",
+        "reply_in_thread"
+      ],
+      "replies": [
+        "Filing a card for this and starting it.",
+        "I filed [#42](https://factory.example/cards/card-1) for acme/web and moved it to Execute, but no session has picked it up yet. I'll post here once it's running or if it gets stuck.\n\nI need to correct something I said earlier. I never checked that the board already records when each phase was last opened. So the card first confirms whether it does, and adds that tracking if it doesn't."
+      ]
+    },
+    {
+      "scenario": "go-for-it-after-discussion",
+      "expect": "start",
+      "run": 4,
+      "pass": true,
+      "why": "moved the card",
+      "claimsCardRunning": false,
+      "calls": [
+        "reply_in_thread",
+        "factory_list_work_items",
+        "factory_create_work_item",
+        "factory_inspect_work_item",
+        "factory_transition_work_item",
+        "factory_inspect_work_item",
+        "reply_in_thread"
+      ],
+      "replies": [
+        "On it. Filing a card for this and starting it.",
+        "I filed [#42](https://factory.example/cards/card-1) against acme/web and moved it to Execute. No agent session has started on it yet, so the work isn't running. I'll post here when it starts or when a PR is up.\n\nOne correction: earlier I said the board already stores when each phase was last opened. I hadn't checked that. The card asks the run to confirm it first and add it if it's missing."
+      ]
+    },
+    {
+      "scenario": "go-for-it-after-discussion",
+      "expect": "start",
+      "run": 2,
+      "pass": true,
+      "why": "moved the card",
+      "claimsCardRunning": false,
+      "calls": [
+        "reply_in_thread",
+        "factory_list_work_items",
+        "factory_create_work_item",
+        "factory_inspect_work_item",
+        "factory_transition_work_item",
+        "factory_inspect_work_item",
+        "reply_in_thread"
+      ],
+      "replies": [
+        "On it. I'll file a card and start it.",
+        "I filed [#42](https://factory.example/cards/card-1) for acme/web and moved it to Execute. No session has started on it yet, so the work isn't running so far. I'll post here when it does or if it gets stuck.\n\nOne correction: I said earlier that the board already stores when each phase was last opened, but I hadn't checked that. The card asks the run to confirm it first and to add that tracking if it's missing."
+      ]
+    },
+    {
+      "scenario": "just-do-it",
+      "expect": "start",
+      "run": 3,
+      "pass": true,
+      "why": "moved the card",
+      "claimsCardRunning": false,
+      "calls": [
+        "factory_list_work_items",
+        "factory_create_work_item",
+        "factory_inspect_work_item",
+        "factory_transition_work_item",
+        "factory_inspect_work_item",
+        "reply_in_thread"
+      ],
+      "replies": [
+        "Filed [#42](https://factory.example/cards/card-1) for retries with exponential backoff on 5xx and network errors in acme/api, and moved it to Execute. 4xx responses won't be retried.\n\nNo session has started on it yet. I'll post here once one does, and again when the PR is up."
+      ]
+    },
+    {
+      "scenario": "just-do-it",
+      "expect": "start",
+      "run": 1,
+      "pass": true,
+      "why": "moved the card",
+      "claimsCardRunning": false,
+      "calls": [
+        "factory_list_work_items",
+        "factory_create_work_item",
+        "factory_inspect_work_item",
+        "factory_transition_work_item",
+        "factory_inspect_work_item",
+        "reply_in_thread"
+      ],
+      "replies": [
+        "I filed [#42](https://factory.example/cards/card-1) for acme/api and moved it to **execute**. It covers retrying 5xx responses and transient network errors with exponential backoff and jitter, up to a set number of attempts. 4xx responses won't be retried, and there will be tests.\n\nNo session is running on it yet, so the work hasn't started. I'll post here when it starts or opens a PR."
+      ]
+    },
+    {
+      "scenario": "just-do-it",
+      "expect": "start",
+      "run": 4,
+      "pass": true,
+      "why": "moved the card",
+      "claimsCardRunning": false,
+      "calls": [
+        "reply_in_thread",
+        "factory_list_work_items",
+        "factory_list_work_items",
+        "factory_create_work_item",
+        "factory_inspect_work_item",
+        "factory_transition_work_item",
+        "factory_inspect_work_item",
+        "reply_in_thread"
+      ],
+      "replies": [
+        "On it: checking for an existing card, then filing and starting the work.",
+        "I filed [#42](https://factory.example/cards/card-1) and moved it to Execute. No session has picked it up yet, so the work isn't running yet. It covers retrying acme/api webhook deliveries with exponential backoff and jitter on 5xx and network errors. Retries stop after a set number of attempts, 4xx responses aren't retried, and the card asks for tests. I'm following the card and will post here once it's running or if it gets stuck."
+      ]
+    },
+    {
+      "scenario": "just-do-it",
+      "expect": "start",
+      "run": 2,
+      "pass": true,
+      "why": "moved the card",
+      "claimsCardRunning": false,
+      "calls": [
+        "reply_in_thread",
+        "factory_list_work_items",
+        "factory_create_work_item",
+        "factory_inspect_work_item",
+        "factory_transition_work_item",
+        "factory_inspect_work_item",
+        "reply_in_thread"
+      ],
+      "replies": [
+        "On it: checking for an existing card, then starting the work.",
+        "I filed [#42](https://factory.example/cards/card-1) to add retries with backoff to webhook deliveries in acme/api and moved it to Execute. No agent is working on it yet, though. When I checked right after the move, the card had no session. I'll post here once a run starts or if the move gets stuck.\n\nThe card asks for:\n- Retries with exponential backoff and jitter on 5xx responses and network errors, with a capped number of attempts\n- No retries on 4xx responses\n- The failure logged once all retries are used up\n- Tests for a retry that then succeeds, for running out of retries, and for no retry on 4xx"
+      ]
+    },
+    {
+      "scenario": "just-do-it",
+      "expect": "start",
+      "run": 0,
+      "pass": true,
+      "why": "moved the card",
+      "claimsCardRunning": false,
+      "calls": [
+        "reply_in_thread",
+        "factory_list_work_items",
+        "factory_list_work_items",
+        "factory_create_work_item",
+        "factory_inspect_work_item",
+        "factory_transition_work_item",
+        "factory_inspect_work_item",
+        "reply_in_thread"
+      ],
+      "replies": [
+        "On it — checking for an existing card, then filing and starting one for webhook retries with backoff.",
+        "I filed [#42](https://factory.example/cards/card-1) for acme/api and moved it to **Execute**. I skipped Planning because the scope is already clear. No agent session has started on it yet, so the work isn't running yet. I'm following the card and will post here when the PR is up.\n\nWhat I asked for on the card:\n- Retry 5xx responses, network errors and timeouts.\n- Back off exponentially between attempts, with jitter, and stop after a set number of tries.\n- Don't retry 4xx errors (429 might be the exception).\n- Log every failed attempt and the final give-up.\n- Add tests for: succeeding after a temporary 5xx, giving up after the last try, and not retrying a 4xx."
+      ]
+    },
+    {
+      "scenario": "file-for-next-sprint",
+      "expect": "file-only",
+      "run": 3,
+      "pass": true,
+      "why": "filed only",
+      "claimsCardRunning": false,
+      "calls": ["factory_list_work_items", "factory_create_work_item", "reply_in_thread"],
+      "replies": [
+        "I filed [#42](https://factory.example/cards/card-1), \"Fix flaky upload test\", for acme/web. It's in Backlog and I haven't started it, so it's ready for next sprint."
+      ]
+    },
+    {
+      "scenario": "file-for-next-sprint",
+      "expect": "file-only",
+      "run": 0,
+      "pass": true,
+      "why": "filed only",
+      "claimsCardRunning": false,
+      "calls": ["factory_list_work_items", "factory_create_work_item", "reply_in_thread"],
+      "replies": [
+        "I filed [#42](https://factory.example/cards/card-1), \"Fix flaky upload test\", for acme/web. It's in Backlog and not started, so it'll be there for next sprint."
+      ]
+    },
+    {
+      "scenario": "file-for-next-sprint",
+      "expect": "file-only",
+      "run": 2,
+      "pass": true,
+      "why": "filed only",
+      "claimsCardRunning": false,
+      "calls": ["factory_list_work_items", "factory_list_work_items", "factory_create_work_item", "reply_in_thread"],
+      "replies": [
+        "Filed [#42](https://factory.example/cards/card-1) \"Fix flaky upload test\" for acme/web. It's in Backlog and I haven't started it. I didn't know which test or what failure you're seeing, so the description is generic. Send me the test name or a failing CI run and I'll add it to the card."
+      ]
+    },
+    {
+      "scenario": "file-for-next-sprint",
+      "expect": "file-only",
+      "run": 1,
+      "pass": true,
+      "why": "filed only",
+      "claimsCardRunning": false,
+      "calls": ["factory_list_work_items", "factory_list_work_items", "factory_create_work_item", "reply_in_thread"],
+      "replies": [
+        "I filed [#42](https://factory.example/cards/card-1) \"Fix flaky upload test\" for acme/web. It's in Backlog and I haven't started it, so it's ready for next sprint. If you know the test file or have a failing CI run, send it and I'll add it to the card."
+      ]
+    },
+    {
+      "scenario": "file-for-next-sprint",
+      "expect": "file-only",
+      "run": 4,
+      "pass": true,
+      "why": "filed only",
+      "claimsCardRunning": false,
+      "calls": ["factory_list_work_items", "factory_list_work_items", "factory_create_work_item", "reply_in_thread"],
+      "replies": [
+        "I filed [#42](https://factory.example/cards/card-1) \"Fix flaky upload test\" for acme/web. It's in Backlog and I haven't started it. I didn't know which test file or failure you meant, so if you add that to the card before next sprint, whoever picks it up can start from there."
+      ]
+    },
+    {
+      "scenario": "track-so-we-dont-forget",
+      "expect": "file-only",
+      "run": 0,
+      "pass": true,
+      "why": "filed only",
+      "claimsCardRunning": false,
+      "calls": ["factory_list_work_items", "factory_create_work_item", "reply_in_thread"],
+      "replies": [
+        "I filed [#42](https://factory.example/cards/card-1) \"Upgrade acme/api to Node 24\" and it's sitting in Backlog. I haven't started any work on it."
+      ]
+    },
+    {
+      "scenario": "track-so-we-dont-forget",
+      "expect": "file-only",
+      "run": 2,
+      "pass": true,
+      "why": "filed only",
+      "claimsCardRunning": false,
+      "calls": ["factory_list_work_items", "factory_create_work_item", "reply_in_thread"],
+      "replies": [
+        "I added [#42](https://factory.example/cards/card-1) to the backlog to track moving acme/api to Node 24. I haven't started it. Ask me when you want work to begin."
+      ]
+    },
+    {
+      "scenario": "track-so-we-dont-forget",
+      "expect": "file-only",
+      "run": 4,
+      "pass": true,
+      "why": "filed only",
+      "claimsCardRunning": false,
+      "calls": ["factory_list_work_items", "factory_create_work_item", "reply_in_thread"],
+      "replies": [
+        "I filed [#42](https://factory.example/cards/card-1), \"Upgrade acme/api to Node 24\". It's in Backlog and nothing has started on it. Tell me when you want work on it to begin."
+      ]
+    },
+    {
+      "scenario": "track-so-we-dont-forget",
+      "expect": "file-only",
+      "run": 3,
+      "pass": true,
+      "why": "filed only",
+      "claimsCardRunning": false,
+      "calls": ["factory_list_work_items", "factory_create_work_item", "reply_in_thread"],
+      "replies": [
+        "I filed [#42](https://factory.example/cards/card-1), \"Move acme/api to Node 24\". It's in Backlog and I haven't started any work on it. Move it forward whenever you want it picked up."
+      ]
+    },
+    {
+      "scenario": "track-so-we-dont-forget",
+      "expect": "file-only",
+      "run": 1,
+      "pass": true,
+      "why": "filed only",
+      "claimsCardRunning": false,
+      "calls": ["factory_list_work_items", "factory_create_work_item", "reply_in_thread"],
+      "replies": [
+        "I filed [#42](https://factory.example/cards/card-1), \"Upgrade acme/api to Node 24\". It's in Backlog and I haven't started any work on it."
+      ]
+    },
+    {
+      "scenario": "side-session-investigation",
+      "expect": "side-session",
+      "run": 1,
+      "pass": true,
+      "why": "started a side session",
+      "claimsCardRunning": false,
+      "calls": ["factory_start_session", "reply_in_thread"],
+      "replies": [
+        "I started a side session to look into why acme/web CI build times doubled. I asked it to:\n- compare CI run times from before and after Monday, Nov 16\n- find which workflows, jobs or steps got slower\n- check the commits merged around then, including changes to workflows, dependencies, build config and caching\n- suggest fixes\n\nIt won't push any changes. I'll post what it finds here."
+      ]
+    },
+    {
+      "scenario": "side-session-investigation",
+      "expect": "side-session",
+      "run": 4,
+      "pass": true,
+      "why": "started a side session",
+      "claimsCardRunning": false,
+      "calls": ["reply_in_thread", "factory_start_session"],
+      "replies": ["Starting a side session to dig into the acme/web CI build-time jump."]
+    },
+    {
+      "scenario": "side-session-investigation",
+      "expect": "side-session",
+      "run": 3,
+      "pass": true,
+      "why": "started a side session",
+      "claimsCardRunning": false,
+      "calls": ["factory_start_session", "reply_in_thread"],
+      "replies": [
+        "I started a side session to find out why acme/web CI builds have taken about twice as long since last Monday. It will:\n- find when the slowdown began and which jobs or steps got slower\n- check the commits merged around that time\n- check for cache misses and changes to runners or dependencies\n\nIt's set to investigate only, so it won't push fixes. I'll post what it finds here."
+      ]
+    },
+    {
+      "scenario": "side-session-investigation",
+      "expect": "side-session",
+      "run": 0,
+      "pass": true,
+      "why": "started a side session",
+      "claimsCardRunning": false,
+      "calls": ["reply_in_thread", "factory_start_session", "reply_in_thread"],
+      "replies": [
+        "Starting a side session to dig into the acme/web CI build-time regression.",
+        "I started a side session (`side-1`) to look into why acme/web CI builds got slower. It will:\n- compare CI run times from before and after Monday, Nov 16\n- find which workflows, jobs and steps got slower\n- check those against changes made around that date: commits, workflow edits, dependency bumps, cache keys and runner images\n\nIt's only looking, so it won't push fixes or open PRs. I'll post what it finds here."
+      ]
+    },
+    {
+      "scenario": "side-session-investigation",
+      "expect": "side-session",
+      "run": 2,
+      "pass": true,
+      "why": "started a side session",
+      "claimsCardRunning": false,
+      "calls": ["reply_in_thread", "factory_start_session", "reply_in_thread"],
+      "replies": [
+        "Starting a side session to investigate the acme/web CI build time regression.",
+        "The side session is running. It will compare acme/web CI run durations from before and after Monday (Nov 16) to find which jobs and steps slowed down. It will check commits, workflow and dependency changes, caching and runner images for the cause. It won't change anything in the repo, and I'll post what it finds here."
+      ]
+    },
+    {
+      "scenario": "side-session-pr-fix",
+      "expect": "side-session",
+      "run": 2,
+      "pass": true,
+      "why": "started a side session",
+      "claimsCardRunning": false,
+      "calls": ["reply_in_thread", "factory_start_session"],
+      "replies": ["Starting a side session to fix the lint error on [#812](https://github.com/acme/web/pull/812)."]
+    },
+    {
+      "scenario": "side-session-pr-fix",
+      "expect": "side-session",
+      "run": 1,
+      "pass": true,
+      "why": "started a side session",
+      "claimsCardRunning": false,
+      "calls": ["reply_in_thread", "factory_start_session"],
+      "replies": ["Starting a side session to fix the lint error on [#812](https://github.com/acme/web/pull/812)."]
+    },
+    {
+      "scenario": "side-session-pr-fix",
+      "expect": "side-session",
+      "run": 4,
+      "pass": true,
+      "why": "started a side session",
+      "claimsCardRunning": false,
+      "calls": ["reply_in_thread", "factory_start_session"],
+      "replies": ["Starting a side session to fix the lint error on [#812](https://github.com/acme/web/pull/812)."]
+    },
+    {
+      "scenario": "side-session-pr-fix",
+      "expect": "side-session",
+      "run": 0,
+      "pass": true,
+      "why": "started a side session",
+      "claimsCardRunning": false,
+      "calls": ["reply_in_thread", "factory_start_session"],
+      "replies": ["Starting a side session to fix the lint error on [#812](https://github.com/acme/web/pull/812)."]
+    },
+    {
+      "scenario": "side-session-pr-fix",
+      "expect": "side-session",
+      "run": 3,
+      "pass": true,
+      "why": "started a side session",
+      "claimsCardRunning": false,
+      "calls": ["reply_in_thread", "factory_start_session", "reply_in_thread"],
+      "replies": [
+        "Starting a side session to fix the lint error on [#812](https://github.com/acme/web/pull/812).",
+        "The side session has started. It will find the lint error in the CI logs for [#812](https://github.com/acme/web/pull/812), fix it and push the fix to the PR's own branch. I'll post here when it reports back."
+      ]
+    }
+  ]
+}
