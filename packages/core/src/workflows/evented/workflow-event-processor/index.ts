@@ -34,6 +34,7 @@ import {
   RunFenceConflictError,
 } from '../../../storage/run-fencing';
 import { assertWorkflowStepGuard, isWorkflowStepConflictError } from '../../../storage/workflow-step-guard';
+import { waitMs } from '../../../utils/test-waits';
 import type { StepExecutionStrategy } from '../../../worker/types';
 import { getEntryId, getEntryRetries, getEntrySchemas, getEntryWorkflow } from '../../../workflows/step-entry';
 import type {
@@ -283,6 +284,17 @@ export class WorkflowEventProcessor extends EventProcessor {
   // so 3 transport-level redeliveries is enough headroom for transient
   // failures without keeping a poisoned event in flight for minutes.
   private static readonly MAX_DELIVERY_ATTEMPTS = 3;
+  // Delay before asking for retry n (1 or 2 within MAX_DELIVERY_ATTEMPTS) is
+  // BASE * FACTOR^(n-1), scaled by a random factor in [0.5, 1] so events that failed
+  // together don't retry together: about 0.5-1 s, then 2-4 s. Without it the transports
+  // redeliver at once and a dropped connection or a short outage spends the whole budget in
+  // milliseconds.
+  private static readonly DELIVERY_RETRY_BASE_MS = 1_000;
+  private static readonly DELIVERY_RETRY_FACTOR = 4;
+  // Pending retry delays, ended by stopRedeliveryWaits() so a stopping worker hands its
+  // events back at once instead of holding them through the drain.
+  #redeliveryWaits = new Set<() => void>();
+  #redeliveryWaitsStopped = false;
   /** TTL of the lease fencing a running `workflow.step.run`; renewed every ttl/3. */
   static STEP_FENCE_TTL_MS = 30_000;
   // Sentinel value stored in deliveryAttempts to mark an event whose terminal
@@ -5352,6 +5364,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
 
       if (!exhausted) {
+        await this.#waitBeforeRedelivery(attempts);
         return { ok: false, retry: true };
       }
 
@@ -5439,6 +5452,50 @@ export class WorkflowEventProcessor extends EventProcessor {
     this.pendingFailures.delete(eventKey);
     this.#setDeliveryAttempts(eventKey, WorkflowEventProcessor.TERMINAL_SENTINEL);
     return { ok: false, retry: false };
+  }
+
+  /**
+   * Waits out the retry delay for the `attempt`-th failed delivery of an event before the
+   * caller asks the transport to redeliver it. The wait runs inside the delivery, so the
+   * event stays unacked (a worker that dies meanwhile gets it redelivered) and a running
+   * step keeps its fence. Other deliveries are not held: transports run them concurrently.
+   */
+  async #waitBeforeRedelivery(attempt: number): Promise<void> {
+    if (this.#redeliveryWaitsStopped) return;
+    const nominal =
+      waitMs(WorkflowEventProcessor.DELIVERY_RETRY_BASE_MS, 0) *
+      WorkflowEventProcessor.DELIVERY_RETRY_FACTOR ** Math.max(0, attempt - 1);
+    const delay = nominal * (0.5 + Math.random() / 2);
+    if (delay <= 0) return;
+    await new Promise<void>(resolve => {
+      const done = () => {
+        clearTimeout(timer);
+        this.#redeliveryWaits.delete(done);
+        resolve();
+      };
+      // Not unref'd: with an in-process pubsub nothing else may keep the process alive while a
+      // caller awaits the run, and an unref'd timer would let it exit mid-retry.
+      // stopRedeliveryWaits() ends it on shutdown.
+      const timer = setTimeout(done, delay);
+      this.#redeliveryWaits.add(done);
+    });
+  }
+
+  /**
+   * Ends every pending retry delay and skips new ones until
+   * {@link resumeRedeliveryWaits}, so the deliveries are nacked right away. Called once a
+   * worker stops consuming, so the redelivery goes to another consumer instead of waiting
+   * out the drain.
+   * @internal
+   */
+  stopRedeliveryWaits(): void {
+    this.#redeliveryWaitsStopped = true;
+    for (const done of [...this.#redeliveryWaits]) done();
+  }
+
+  /** @internal */
+  resumeRedeliveryWaits(): void {
+    this.#redeliveryWaitsStopped = false;
   }
 
   /**
