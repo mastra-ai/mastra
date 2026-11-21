@@ -1,12 +1,14 @@
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
 import type { IMastraLogger } from '../../logger';
-import type { ShouldPersistSnapshotFn } from '../../workflows/types';
+import type { ShouldPersistSnapshotFn, WorkflowRunState } from '../../workflows/types';
 import { DurableExecutionEngine } from './execution-engine';
-import type { ExecutionCompletion, ExecutionOutcome } from './execution-engine';
+import type { DurableRun, ExecutionCompletion, ExecutionOutcome } from './execution-engine';
 import { DurableExecutionFenceError, EXECUTION_UNVERIFIED_ERROR_ID } from './execution-fence';
 import type { ExecutionFence } from './execution-fence';
 import { defaultShouldPersistSnapshot } from './workflows/create-durable-agentic-workflow';
+
+const PARKABLE_LOCAL_STATUSES = new Set<DurableRun['workflowRunStatus']>(['pending', 'running', 'suspended']);
 
 export class EventedExecutionEngine extends DurableExecutionEngine {
   #warnedUnfencedSharedExecution = false;
@@ -18,6 +20,12 @@ export class EventedExecutionEngine extends DurableExecutionEngine {
   // Evented execution can return before the suspended snapshot lands.
   override get suspendPersistedOnReturn(): boolean {
     return false;
+  }
+
+  // The local run learns of a worker's suspension only from the start result, which can trail the
+  // stored snapshot (until then it reads pending or running): it is parked once the snapshot says so.
+  protected override isRunParked(run: DurableRun, persistedStatus: WorkflowRunState['status']): boolean {
+    return persistedStatus === 'suspended' && PARKABLE_LOCAL_STATUSES.has(run.workflowRunStatus);
   }
 
   override prepareExecution(

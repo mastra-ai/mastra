@@ -12998,10 +12998,12 @@ export class Agent<
       return false;
     }
 
+    // Checked before anything is released, so `false` always means nothing was.
+    if (run && !engine.releaseParkedRun(workflow, runId, run, snapshot.status)) return false;
     for (const cleanup of streamCleanups) cleanup.run();
     if (localEntry) this.executionRunRegistry.cleanup(runId);
-    if (globalEntry) globalRunRegistry.delete(runId);
-    if (run) engine.releaseParkedRun(workflow, runId, run);
+    // The global slot may hold another instance's later execution of the run; only this one's own entry goes.
+    if (globalEntry && globalEntry.executionFence === localEntry?.executionFence) globalRunRegistry.delete(runId);
     return true;
   }
 
@@ -16785,8 +16787,10 @@ export class Agent<
         } finally {
           // A bare idle timeout (runDead === false) only means this observer
           // stopped hearing from the run — it may still be alive elsewhere, so
-          // don't tear down its registry entry or replay history.
+          // don't tear down its registry entry or replay history. The observer
+          // itself is gone, though, so a parked-run release no longer owes it a cleanup.
           if (runDead !== false) completeTerminalLifecycle();
+          else this.#forgetStreamCleanup(runId, runCleanup);
         }
       },
       onAbort: async data => {

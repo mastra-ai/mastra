@@ -7,6 +7,8 @@ import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
+import { createEventedAgent } from '../create-evented-agent';
+import { getRunRegistryEntry } from '../run-registry';
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
@@ -223,5 +225,142 @@ describe('a failed recovery', () => {
     // Nothing of the failed recovery is held, so a release finds nothing to release.
     await setStatus('suspended');
     await expect(agent.releaseParkedRun('run-recover')).resolves.toBe(false);
+  });
+});
+
+describe('releaseParkedRun beside a successor execution', () => {
+  it("leaves the global entry of another instance's later execution in place", async () => {
+    const storage = new InMemoryStore();
+    const ask = createTool({
+      id: 'ask',
+      description: 'suspends until answered',
+      inputSchema: z.object({}),
+      suspendSchema: z.object({ q: z.string() }),
+      resumeSchema: z.object({ a: z.string() }),
+      execute: async (_input, ctx) => (ctx.agent?.resumeData ? 'ok' : ctx.agent?.suspend({ q: '?' })),
+    });
+    // Asks again after every answer, so a resume parks the run once more.
+    const asksForever = () =>
+      new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream<any>([
+            { type: 'stream-start', warnings: [] },
+            {
+              type: 'tool-call',
+              toolCallType: 'function',
+              toolCallId: `call-${Math.random()}`,
+              toolName: 'ask',
+              input: '{}',
+            },
+            { type: 'finish', finishReason: 'tool-calls', usage },
+          ]),
+        }),
+      });
+    const older = createDurableAgent({
+      agent: new Agent({ id: 'a', name: 'a', instructions: 'x', model: asksForever() as any, tools: { ask } }),
+    });
+    const newer = createDurableAgent({
+      agent: new Agent({ id: 'a', name: 'a', instructions: 'x', model: asksForever() as any, tools: { ask } }),
+    });
+    const mastra = new Mastra({ storage, logger: false, agents: { older, newer } });
+    const { fullStream } = await older.stream('hi', { runId: 'run-successor' });
+    const reader = (fullStream as ReadableStream<any>).getReader();
+    await expect.poll(() => storedStatus(storage, 'run-successor')).toBe('suspended');
+
+    const resumed = await newer.resume('run-successor', { a: 'yes' }, { closeOnSuspend: true });
+    for await (const _chunk of resumed.fullStream as AsyncIterable<any>) {
+      // drain to the next suspension
+    }
+    await expect.poll(() => storedStatus(storage, 'run-successor')).toBe('suspended');
+    const successorEntry = getRunRegistryEntry('run-successor', mastra);
+    expect(successorEntry?.executionFence).toBe(newer.runRegistry.get('run-successor')?.executionFence);
+
+    await older.releaseParkedRun('run-successor');
+    expect(getRunRegistryEntry('run-successor', mastra)).toBe(successorEntry);
+    reader.releaseLock();
+    resumed.cleanup();
+  });
+});
+
+describe('an observer ended by a bare idle timeout', () => {
+  async function parkedAndReleased(runId: string) {
+    const { agent, workflow } = setup();
+    await suspend(agent, runId);
+    await agent.releaseParkedRun(runId);
+    expect(workflow.runs.size).toBe(0);
+    return agent;
+  }
+
+  it('leaves no stream release behind when nothing reads it', async () => {
+    const agent = await parkedAndReleased('run-idle');
+    const onError = vi.fn();
+    await agent.observe('run-idle', { idleTimeoutMs: 20, onError });
+    await expect.poll(() => onError.mock.calls.length).toBe(1);
+
+    expect(await agent.releaseParkedRun('run-idle')).toBe(false);
+  });
+
+  it('leaves no stream release behind when its caller awaits output.text', async () => {
+    const agent = await parkedAndReleased('run-idle-text');
+    const observed = await agent.observe('run-idle-text', { idleTimeoutMs: 20 });
+    await observed.output.text.catch(() => undefined);
+
+    expect(await agent.releaseParkedRun('run-idle-text')).toBe(false);
+  });
+
+  it('leaves no stream release behind when its caller reads fullStream', async () => {
+    const agent = await parkedAndReleased('run-idle-stream');
+    const observed = await agent.observe('run-idle-stream', { idleTimeoutMs: 20 });
+    for await (const _chunk of observed.fullStream as AsyncIterable<any>) {
+      // ends with the idle timeout's error chunk
+    }
+
+    expect(await agent.releaseParkedRun('run-idle-stream')).toBe(false);
+  });
+});
+
+describe('releaseParkedRun on the evented engine', () => {
+  it('drops the parked run from the workflow run map when it reports a release', async () => {
+    const storage = new InMemoryStore();
+    const ask = createTool({
+      id: 'ask',
+      description: 'suspends until answered',
+      inputSchema: z.object({}),
+      suspendSchema: z.object({ q: z.string() }),
+      resumeSchema: z.object({ a: z.string() }),
+      execute: async (_input, ctx) => (ctx.agent?.resumeData ? 'ok' : ctx.agent?.suspend({ q: '?' })),
+    });
+    const agent = createEventedAgent({
+      agent: new Agent({ id: 'ev', name: 'ev', instructions: 'x', model: model() as any, tools: { ask } }),
+    });
+    new Mastra({ storage, logger: false, agents: { agent } });
+    const workflow = agent.getWorkflow();
+    // Hold the run's start result back, as when the worker's finish event has not reached this process yet.
+    let deliverResult!: () => void;
+    const resultDelivered = new Promise<void>(resolve => (deliverResult = resolve));
+    const engine = (workflow as any).executionEngine;
+    const execute = engine.execute.bind(engine);
+    vi.spyOn(engine, 'execute').mockImplementation(async (...args: any[]) => {
+      const result = await execute(...args);
+      await resultDelivered;
+      return result;
+    });
+    const { fullStream } = await agent.stream('hi', { runId: 'run-evented' });
+    const reader = (fullStream as ReadableStream<any>).getReader();
+    await expect.poll(() => storedStatus(storage, 'run-evented')).toBe('suspended');
+    await expect.poll(() => workflow.runs.size).toBe(1);
+
+    const parked = workflow.runs.get('run-evented')!;
+    expect(parked.workflowRunStatus).not.toBe('suspended');
+    expect(await agent.releaseParkedRun('run-evented')).toBe(true);
+    expect(workflow.runs.has('run-evented')).toBe(false);
+    deliverResult();
+    // Once the delayed result lands, the released run stays out of the map.
+    await expect.poll(() => parked.workflowRunStatus).toBe('suspended');
+    expect(workflow.runs.has('run-evented')).toBe(false);
+    reader.releaseLock();
+    expect(await resumeText(agent as any, 'run-evented')).toBe('done');
   });
 });
