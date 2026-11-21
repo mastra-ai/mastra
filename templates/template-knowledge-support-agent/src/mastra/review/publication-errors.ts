@@ -46,5 +46,5 @@ export function isRetryablePublicationError(error: unknown): boolean {
       transient = true;
     error = cause;
   }
-  return transient;
+  return transient && !(error && typeof error === 'object');
 }

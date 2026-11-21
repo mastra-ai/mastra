@@ -113,6 +113,7 @@ async function withPostgresWriter<T>(connectionString: string, operation: (clien
     await connection.connect();
     connected = true;
     await client.none('BEGIN');
+    await client.none("SET LOCAL lock_timeout = '5s'");
     const { acquired } = await client.one<{ acquired: boolean }>(
       'SELECT pg_try_advisory_xact_lock($1, $2) AS acquired',
       postgresWriterKey,

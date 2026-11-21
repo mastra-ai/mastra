@@ -3,7 +3,9 @@ import type { Mastra } from '@mastra/core/mastra';
 import { createHash, randomUUID } from 'node:crypto';
 import { knowledgeScopeAddress, type Knowledge, type KnowledgePage } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
+import { knowledgeScopeReadable } from '@mastra/core/storage';
 import type { Memory } from '@mastra/memory';
+import { PostgresStore, type DbClient } from '@mastra/pg';
 import { supportConfiguration } from '../../examples/support.ts';
 import { createCuratorAgent } from '../agents/curator-agent.ts';
 import { resourceId, type Profile } from '../identity.ts';
@@ -11,6 +13,7 @@ import { hasSeededHttpsSource } from '../knowledge/seed-manifest.ts';
 import { withWriterLock } from '../knowledge/writer-lock.ts';
 import { createPostgresWriterKnowledge } from '../knowledge/index.ts';
 import type { LocalProfile } from '../server/access.ts';
+import { hasDuplicatePage } from './duplicate.ts';
 import {
   candidateSchema,
   proposalSchema,
@@ -96,6 +99,9 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
     }
     return {
       confirmation: text,
+      curatorConfirmation: metadata.success
+        ? { observation: metadata.data.observation, outcome: metadata.data.outcome }
+        : text,
       digest: digest({
         id: message.id,
         owner,
@@ -108,13 +114,9 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
 
   async function page(ref: string, allowed: string[], activeKnowledge = knowledge) {
     const split = ref.indexOf('#');
-    requireReview(split > 0 && !ref.includes('#', split + 1), 'Invalid evidence reference');
     const scope = ref.slice(0, split),
       path = ref.slice(split + 1);
-    requireReview(
-      allowed.includes(scope) && /^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/u.test(path),
-      'Evidence is outside the permitted scope',
-    );
+    requireReview(allowed.includes(scope), 'Evidence is outside the permitted scope');
     const read = await activeKnowledge.readScopeFor(allowed);
     const store = await activeKnowledge.getStorage();
     const [home] = await store.getScopesByAddress([scope]);
@@ -151,13 +153,7 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
     );
   }
 
-  async function validate(
-    proposal: Proposal,
-    checkTarget = true,
-    reconciledUpdate?: KnowledgePage,
-    authenticated?: Profile,
-    activeKnowledge = knowledge,
-  ) {
+  async function validate(proposal: Proposal, authenticated?: Profile, activeKnowledge = knowledge) {
     const identity = (kind: Proposal['bindings'][number]['kind'], ref: string, current: KnowledgePage) => {
       const binding = proposal.bindings.find(item => item.kind === kind && item.ref === ref);
       requireReview(
@@ -177,26 +173,6 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
     );
     for (const evidence of proposal.candidate.evidence) {
       const current = await page(evidence.ref, [customer(proposal.reviewer)], activeKnowledge);
-      if (reconciledUpdate && evidence.ref === `${proposal.destination.scope}#${proposal.destination.path}`) {
-        const originalTarget = proposal.bindings.find(
-          binding => binding.kind === 'target' && binding.ref === evidence.ref,
-        );
-        const originalEvidence = proposal.bindings.find(
-          binding => binding.kind === 'evidence' && binding.ref === evidence.ref,
-        );
-        requireReview(
-          originalTarget &&
-            originalEvidence &&
-            originalEvidence.id === originalTarget.id &&
-            originalEvidence.version === originalTarget.version &&
-            originalEvidence.digest === originalTarget.digest &&
-            evidence.version === originalTarget.version &&
-            current.id === reconciledUpdate.id &&
-            pageDigest(current) === pageDigest(reconciledUpdate),
-          'Bound update evidence does not match the reconciled effect',
-        );
-        continue;
-      }
       requireReview(current.version === evidence.version, 'Evidence revision changed');
       identity('evidence', evidence.ref, current);
     }
@@ -221,7 +197,7 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
         'Public source must be a current existing HTTPS source-backed page',
       );
     }
-    if (checkTarget && proposal.candidate.target) {
+    if (proposal.candidate.target) {
       const current = await page(
         `${proposal.destination.scope}#${proposal.destination.path}`,
         [proposal.destination.scope],
@@ -243,22 +219,22 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
     }
   }
 
-  async function duplicate(proposal: Proposal, activeKnowledge = knowledge) {
+  async function duplicate(proposal: Proposal, activeKnowledge = knowledge, postgres?: DbClient) {
     const store = await activeKnowledge.getStorage();
     const read = await activeKnowledge.readScopeFor([proposal.destination.scope]);
     const [home] = await store.getScopesByAddress([proposal.destination.scope]);
-    if (!home) return false;
-    let cursor: string | undefined,
-      count = 0;
-    do {
-      const batch = await store.listPages({ read, scopeId: home.id, cursor, limit: 100 });
-      for (const existing of batch.pages) {
-        requireReview(++count <= 1000, 'Duplicate check exceeds its bound');
-        if (existing.body?.includes(proposal.candidate.content)) return true;
-      }
-      cursor = batch.nextCursor;
-    } while (cursor);
-    return false;
+    if (!home || !knowledgeScopeReadable(home, read)) return false;
+    const targetId =
+      proposal.candidate.action === 'update'
+        ? proposal.bindings.find(binding => binding.kind === 'target')?.id
+        : undefined;
+    const storage = memory.storage;
+    return hasDuplicatePage(
+      home.id,
+      proposal.candidate.content,
+      targetId,
+      postgres ?? (storage instanceof PostgresStore ? storage.db : undefined),
+    );
   }
 
   async function prepare(profile: Profile | undefined, received: ReviewStartInput, mastra?: Mastra): Promise<Proposal> {
@@ -267,14 +243,14 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
     const input: ReviewInput = structured
       ? { ...decodeConfirmationReference(received.confirmationReference), audience: received.audience }
       : received;
-    const selected = await confirmation(current, input, structured);
+    const { curatorConfirmation, ...selected } = await confirmation(current, input, structured);
     const customerScope = customer(current);
     const curator = createCuratorAgent(knowledge, customerScope);
     if (mastra) curator.__registerMastra(mastra);
     const response = await curator.generate(
       JSON.stringify({
         audience: input.audience,
-        confirmation: selected.confirmation,
+        confirmation: curatorConfirmation,
         customerScope,
       }),
       {
@@ -317,7 +293,7 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
       await bind('target', `${proposal.destination.scope}#${proposal.destination.path}`, [proposal.destination.scope]);
     proposal.revision = digest({ ...proposal, revision: undefined });
     proposalSchema.parse(proposal);
-    await validate(proposal, true, undefined, current);
+    await validate(proposal, current);
     if (['page', 'note', 'update'].includes(candidate.action) && (await duplicate(proposal))) {
       proposal.candidate = { ...candidate, action: 'duplicate', target: null };
       proposal.revision = digest({ ...proposal, revision: undefined });
@@ -393,7 +369,7 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
           reviewer(authenticated ?? proposal.reviewer);
           return result('published', `${reference}?note=${owned[0]!.id}`);
         }
-        await validate(proposal, true, undefined, authenticated, activeKnowledge);
+        await validate(proposal, authenticated, activeKnowledge);
         requireReview(notes.length <= noteLimit, 'Note reconciliation exceeds its bound');
         requireReview(
           !notes.some(note => note.text.includes(proposal.candidate.content)),
@@ -431,19 +407,15 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
             'Conflicting prior page creation',
           );
         }
-        await validate(
-          proposal,
-          false,
-          proposal.candidate.action === 'update' ? current : undefined,
-          authenticated,
-          activeKnowledge,
-        );
         reviewer(authenticated ?? proposal.reviewer);
         return result('published', reference);
       }
       if (proposal.candidate.action === 'page') requireReview(!current, 'Page destination already exists');
-      await validate(proposal, true, undefined, authenticated, activeKnowledge);
-      requireReview(!(await duplicate(proposal, activeKnowledge)), 'A duplicate finding now exists; reevaluate');
+      await validate(proposal, authenticated, activeKnowledge);
+      requireReview(
+        !(await duplicate(proposal, activeKnowledge, postgres)),
+        'A duplicate finding now exists; reevaluate',
+      );
       reviewer(authenticated ?? proposal.reviewer);
       await activeKnowledge.upsertPage({
         ...proposal.destination,
@@ -455,6 +427,6 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
       return result('published', reference);
     });
   }
-  return { reviewer, prepare, validate, publish };
+  return { reviewer, prepare, publish };
 }
 export type ReviewService = ReturnType<typeof createReviewService>;

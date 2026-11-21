@@ -66,6 +66,11 @@ test('local_studio_boots_and_scoped_state_survives_restart', { timeout: 120000 }
     );
     assert.equal(expiredCapabilities.user, undefined);
     assert.deepEqual((await json(await fixture.request('/knowledge'))).instances, [{ key: 'support', id: 'support' }]);
+    const mixedCase = { headers: { authorization: `bEaReR ${fixture.credentials[0]!.token}` } };
+    assert.deepEqual((await json(await fixture.request('/knowledge', 0, mixedCase))).instances, [
+      { key: 'support', id: 'support' },
+    ]);
+    assert.equal((await json(await fixture.request('/auth/me', 0, mixedCase))).id, fixture.credentials[0]!.profile.id);
     const first = await thread(fixture);
     const result = await json(await generate(fixture, first.id));
     assert.match(result.text, /Synthetic evidence inspected/u);

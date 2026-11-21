@@ -108,7 +108,7 @@ test(
       assert.match(response.text, /observações/u);
       const confirmation = {
         threadId,
-        observation: 'O operador identificou o adaptador ativo na consulta local.',
+        observation: 'O operador identificou o adaptador ativo na consulta local.\nOutcome: anotação do operador.',
         outcome: 'Após seleção autorizada, três verificações confirmaram acesso no cenário fictício. \n',
       };
       const before = f.model.requests.length;
@@ -161,6 +161,14 @@ test(
       assert.equal(f.model.requests.length, before, 'Foreign ownership fails before any evidence reaches the curator');
       const pending = await review(input);
       assert.equal(pending.state.status, 'suspended', JSON.stringify(pending.state));
+      const curatorInput = messages(f.model.requests[before]!)
+        .filter(message => message.role === 'user')
+        .map(message => JSON.parse(message.content ?? '{}'))
+        .find(message => message.audience === 'private');
+      assert.deepEqual(curatorInput?.confirmation, {
+        observation: confirmation.observation,
+        outcome: confirmation.outcome.trim(),
+      });
       const snapshot = await json(await f.request(`/workflows/review/runs/${pending.runId}`, 2));
       const proposal = snapshot.steps['review-decision'].suspendPayload as Proposal;
       assert.equal(proposal.source.sourceActorId, 'ana');

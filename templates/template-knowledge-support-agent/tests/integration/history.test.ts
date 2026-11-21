@@ -5,6 +5,7 @@ import { exampleProfiles } from '../../src/examples/retail-pos/profiles.ts';
 import { datasets } from '../../src/examples/datasets.ts';
 import { seedDataset } from '../../src/mastra/knowledge/seed.ts';
 import { resourceId } from '../../src/mastra/identity.ts';
+import { hasDuplicatePage } from '../../src/mastra/review/duplicate.ts';
 import { generateHistoryCorpus } from '../fixtures/history-corpus.ts';
 import { runtimeFixture } from '../fixtures/runtime.ts';
 
@@ -91,9 +92,7 @@ test(
         'partial',
         'Incomplete coverage never claims no relevant records',
       );
-      // Observe the remaining writer scans separately. These are measurements, not latency gates.
-      // Seed runs its real global ownership/link-repair path. Duplicate timing covers only the
-      // same scoped page traversal used by review, without an LLM or a publication transaction.
+      // Measure the seed and duplicate lookup separately from the review workflow.
       const seedSamples: number[] = [];
       for (let i = 0; i < 5; i++) {
         const started = performance.now();
@@ -103,30 +102,21 @@ test(
       const duplicateSamples: number[] = [];
       const store = await f.supportKnowledge.getStorage();
       const [home] = await store.getScopesByAddress(['customer:north:store-1']);
-      const read = await f.supportKnowledge.readScopeFor(['customer:north:store-1']);
-      let scanned = 0;
+      assert.ok(home);
       for (let i = 0; i < 5; i++) {
         const started = performance.now();
-        let cursor: string | undefined;
-        scanned = 0;
-        do {
-          const batch = await store.listPages({ scopeId: home!.id, read, cursor, limit: 100 });
-          scanned += batch.pages.length;
-          assert.ok(batch.pages.every(page => !page.body?.includes('ABSENT_DUPLICATE_CANDIDATE')));
-          cursor = batch.nextCursor;
-        } while (cursor);
+        assert.equal(await hasDuplicatePage(home.id, 'ABSENT_DUPLICATE_CANDIDATE', undefined), false);
         duplicateSamples.push(performance.now() - started);
       }
       seedSamples.sort((a, b) => a - b);
       duplicateSamples.sort((a, b) => a - b);
       t.diagnostic(
         JSON.stringify({
-          remainingScansMs: {
+          writerTimingMs: {
             seed: { count: seedSamples.length, p95: seedSamples[Math.ceil(seedSamples.length * 0.95) - 1] },
-            duplicateTraversal: {
+            duplicateLookup: {
               count: duplicateSamples.length,
               p95: duplicateSamples[Math.ceil(duplicateSamples.length * 0.95) - 1],
-              scanned,
             },
           },
         }),

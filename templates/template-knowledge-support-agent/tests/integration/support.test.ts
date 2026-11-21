@@ -417,7 +417,13 @@ test('same_thread_gets_updated_policy_signal_and_rejects_pin_mutation', { timeou
     );
     assert.match(JSON.stringify(blocked), /Required safety policy.*missing or unusable/u);
     assert.equal(f.model.requests.length, calls);
-    for (const body of ['', '# Title only', 'x'.repeat(100), 'x'.repeat(900)]) {
+    for (const body of [
+      '',
+      '# Title only',
+      'x'.repeat(100),
+      'x'.repeat(900),
+      '# Safe changes\n\n```support-record\n{"summary":"Confirmed successful network recovery after checking the connection indicator."}\n```',
+    ]) {
       await f.supportKnowledge.upsertPage({
         scope: 'tenant:north',
         path: 'policies/safe-changes',

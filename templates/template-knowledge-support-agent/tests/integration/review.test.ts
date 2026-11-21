@@ -345,13 +345,14 @@ test('approval_publishes_scoped_content_and_a_new_thread_reuses_knowledge', { ti
       candidate('private-update', {
         action: 'update',
         target: { path: run.proposal.destination.path, expectedVersion: page.version },
+        content: run.proposal.candidate.content,
       }),
     );
     const update = await pending(f, input);
     assert.equal((await resume(f, update)).result.reference, reference);
     const updated = (await snapshot(f)).find(item => item.page.id === page.id)!.page;
     assert.equal(updated!.version, page.version + 1);
-    assert.match(updated!.body!, /Finding private-update/u);
+    assert.equal(updated.description, 'Verified cable recovery private-update');
 
     f.select(candidate('sanitized-shared', { publicSource: { ref: publicRef, version: 1 } }));
     const shared = await pending(f, { ...input, audience: 'tenant' });
@@ -457,6 +458,36 @@ test(
   },
 );
 
+test('review detects exact duplicates and publishes new content in a large scope', { timeout: 120000 }, async () => {
+  const f = await fixture();
+  try {
+    await f.start();
+    const input = await confirmation(f);
+    await sql(
+      f,
+      `WITH RECURSIVE sequence(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM sequence WHERE n < 1001)
+       INSERT INTO mastra_knowledge_pages
+         (id, scopeId, isScope, key, parentId, position, path, depth, name, canonicalName, body, version,
+          createdBy, updatedBy, createdAt, updatedAt)
+       SELECT 'bulk-' || n, page.scopeId, 0, 'bulk-' || n, page.parentId, page.position, parent.path || 'bulk-' || n || '/',
+              page.depth, 'Bulk page ' || n, 'bulk page ' || n, 'Unrelated fixture description.', 1,
+              page.createdBy, page.updatedBy, page.createdAt, page.updatedAt
+       FROM mastra_knowledge_pages page JOIN mastra_knowledge_pages parent ON parent.id = page.parentId
+       CROSS JOIN sequence WHERE page.id = ?`,
+      [f.pages[0]!.id],
+    );
+    const finding = candidate('large-scope', { content: 'Café diagnostic: literal 100%_\nSecond line.' });
+    f.select(finding);
+    const first = await pending(f, input);
+    assert.equal((await resume(f, first)).result.status, 'published');
+    const second = await pending(f, input);
+    assert.equal(second.proposal.candidate.action, 'duplicate');
+    assert.equal((await resume(f, second)).result.status, 'duplicate');
+  } finally {
+    await f.close();
+  }
+});
+
 test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 240000 }, async () => {
   const f = await fixture();
   try {
@@ -523,6 +554,7 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
     // Invalid candidates and source selection fail through the same native start path.
     for (const [changes, source, expectedError] of [
       [{ evidence: [{ ref: 'customer:north:store-2#cases/synthetic', version: 1 }] }, input],
+      [{ evidence: [{ ref: `${customer}#cases/../synthetic`, version: 1 }] }, input, /Invalid scoped page reference/u],
       [{ evidence: [{ ref: `${customer}#cases/missing`, version: 1 }] }, input, /Evidence or target is missing/u],
       [
         { publicSource: { ref: bodyOnlySource, version: 1 } },
@@ -735,7 +767,11 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
 
     // Reject terminal snapshot persistence after the actual Knowledge write. The last durable
     // publication checkpoint remains running, so the next process must reconcile that effect.
-    async function interruptAndRecover(interrupted: Awaited<ReturnType<typeof next>>, expectedVersion?: number) {
+    async function interruptAndRecover(
+      interrupted: Awaited<ReturnType<typeof next>>,
+      expectedVersion?: number,
+      afterCommit?: () => Promise<unknown>,
+    ) {
       const marker = `knowledge-review:${interrupted.proposal.id}:`;
       const note = interrupted.proposal.candidate.action === 'note';
       const effects = () =>
@@ -795,6 +831,7 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
       await f.stop();
       await sql(f, 'DROP TRIGGER fail_review_audit');
       await sql(f, 'DROP TRIGGER fail_review_audit_update');
+      await afterCommit?.();
       // The child exits with the writer transaction still open. The next process can take over.
       await execute(
         process.execPath,
@@ -846,15 +883,37 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
     const original = (await snapshot(f)).find(item =>
       item.page.body?.includes(`knowledge-review:${interrupted.proposal.id}:`),
     )!.page;
+    const secondEvidence = `${customer}#cases/separate-evidence`;
+    const { page: separate } = await f.supportKnowledge.upsertPage({
+      scope: customer,
+      path: 'cases/separate-evidence',
+      name: 'Separate evidence',
+      body: 'Independent evidence for the update.',
+      author: 'synthetic-fixture',
+    });
     const interruptedUpdate = await next(
       {
         action: 'update',
         target: { path: interrupted.proposal.destination.path, expectedVersion: original.version },
-        evidence: [{ ref: originalRef, version: original.version }],
+        evidence: [
+          { ref: originalRef, version: original.version },
+          { ref: secondEvidence, version: separate.version },
+        ],
       },
       freshInput,
     );
-    assert.equal(await interruptAndRecover(interruptedUpdate, original.version + 1), originalRef);
+    assert.equal(
+      await interruptAndRecover(interruptedUpdate, original.version + 1, () =>
+        f.supportKnowledge.upsertPage({
+          scope: customer,
+          path: 'cases/separate-evidence',
+          name: 'Separately revised evidence',
+          body: 'Another technician added details after the update committed.',
+          author: 'synthetic-fixture',
+        }),
+      ),
+      originalRef,
+    );
 
     // Preserve exact native checkpoints around the publisher, including the decision-only
     // window where the Knowledge writer has never run and the completed-step audit window.

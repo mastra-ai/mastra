@@ -19,6 +19,7 @@
     "test:integration": "node --test --test-concurrency=1 tests/integration/*.test.ts"
   },
   "dependencies": {
+    "@libsql/client": "^0.18.0",
     "@mastra/auth-studio": "latest",
     "@mastra/core": "latest",
     "@mastra/libsql": "latest",

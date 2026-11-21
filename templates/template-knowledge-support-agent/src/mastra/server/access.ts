@@ -85,6 +85,16 @@ export function createSupportAuthorization(
 
 export type SupportAuthorization = ReturnType<typeof createSupportAuthorization>;
 
+type AuthorizationRequest = Request | { raw?: Request; header?(name: string): string | undefined };
+
+export function bearerToken(request: AuthorizationRequest): string | undefined {
+  const header =
+    request instanceof Request
+      ? request.headers.get('authorization')
+      : (request.header?.('authorization') ?? request.raw?.headers.get('authorization'));
+  return header?.match(/^Bearer +(.+)$/iu)?.[1];
+}
+
 export function createAuth(
   credentials: CredentialSource,
   authorize: SupportAuthorization,
@@ -100,11 +110,13 @@ export function createAuth(
   ) => authorize(path, method, getWebRequest(context.req), profile, context.get('requestContext'));
 
   return {
-    authenticateToken,
+    // The adapter strips only the literal prefix. Read the original header when it is Bearer.
+    authenticateToken: (token: string, request?: AuthorizationRequest) =>
+      authenticateToken((request && bearerToken(request)) ?? token),
     mapUserToResourceId: (profile: LocalProfile | null) => (profile ? resourceId(profile) : undefined),
     getCurrentUser: async (request: Request) => {
-      const header = request.headers.get('authorization');
-      return header?.startsWith('Bearer ') ? authenticateToken(header.slice(7)) : null;
+      const token = bearerToken(request);
+      return token ? authenticateToken(token) : null;
     },
     authorize: authorizeRequest,
   };

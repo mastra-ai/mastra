@@ -50,4 +50,11 @@ test('publication retries only recognized transient failures, including wrapped 
     null,
   ])
     assert.equal(isRetryablePublicationError(error), false, String(error));
+
+  let uninspectedCause: Error = new ReviewConflict('Evidence changed');
+  for (let depth = 0; depth < 9; depth++) uninspectedCause = new Error('Storage wrapper', { cause: uninspectedCause });
+  const transient = Object.assign(new Error('Storage operation failed', { cause: uninspectedCause }), {
+    code: 'SQLITE_BUSY',
+  });
+  assert.equal(isRetryablePublicationError(transient), false);
 });

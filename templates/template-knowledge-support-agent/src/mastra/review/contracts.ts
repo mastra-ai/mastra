@@ -11,6 +11,11 @@ const text = (max: number) =>
     .max(max)
     .regex(/^[^\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]*$/u);
 const identifier = text(200);
+const pathSchema = z.string().regex(/^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/u);
+const pageReferenceSchema = text(1000).refine(ref => {
+  const separator = ref.indexOf('#');
+  return separator > 0 && pathSchema.safeParse(ref.slice(separator + 1)).success;
+}, 'Invalid scoped page reference');
 export const reviewInputSchema = z
   .object({
     threadId: z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/u),
@@ -37,7 +42,7 @@ export const decisionSchema = z
     reason: text(1000),
   })
   .strict();
-export const evidenceSchema = z.object({ ref: text(1000), version: z.number().int().positive() }).strict();
+export const evidenceSchema = z.object({ ref: pageReferenceSchema, version: z.number().int().positive() }).strict();
 export const recordSchema = z
   .object({
     topicTags: z
@@ -62,7 +67,7 @@ export const candidateSchema = z
     action: z.enum(['page', 'note', 'update', 'duplicate', 'contradiction', 'insufficient-evidence']),
     target: z
       .object({
-        path: z.string().regex(/^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/u),
+        path: pathSchema,
         expectedVersion: z.number().int().positive(),
       })
       .strict()
@@ -114,7 +119,7 @@ export const proposalSchema = z
         z
           .object({
             kind: z.enum(['evidence', 'public', 'target']),
-            ref: text(1000),
+            ref: pageReferenceSchema,
             id: identifier,
             version: z.number().int().positive(),
             digest: z.string().length(64),
@@ -122,7 +127,7 @@ export const proposalSchema = z
           .strict(),
       )
       .max(12),
-    destination: z.object({ scope: text(1000), path: text(500) }).strict(),
+    destination: z.object({ scope: text(1000), path: pathSchema.max(500) }).strict(),
     revision: z.string().length(64),
   })
   .strict()

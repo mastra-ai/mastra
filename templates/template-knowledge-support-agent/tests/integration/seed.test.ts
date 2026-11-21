@@ -175,10 +175,12 @@ test('seed_rejects_an_invalid_rendered_policy_without_changing_stored_knowledge'
     const instructions = 'Before a disruptive change, confirm authorization and preserve pending work. ';
     const oversized = `# Safe changes\n\n${instructions.repeat(10).trim()}`;
     assert.ok(oversized.length < 800, 'The source fits before seed attribution and links are added');
+    const recordOnly = '```support-record\n' + JSON.stringify(manifest.pages[2]!.record) + '\n```';
 
     for (const [body, reason] of [
       [oversized, /exceeds the 800-character limit/u],
       ['# Safe changes\n\n[[connection-guide]]', /substantive policy instructions/u],
+      [`# Safe changes\n\n${recordOnly}`, /substantive policy instructions/u],
       [
         '# Safe changes\n\n[Reference catalog vendor handbook product documentation](https://example.com/manual)',
         /substantive policy instructions/u,
@@ -198,6 +200,8 @@ test('seed_rejects_an_invalid_rendered_policy_without_changing_stored_knowledge'
         assert.deepEqual(await f.snapshot(), before, 'The active policy version and other Knowledge must be preserved');
       }
     }
+    await writeFile(policyPath, `# Safe changes\n\n${instructions.trim()}\n\n${recordOnly}`);
+    await f.cli();
   } finally {
     await f.close();
   }
@@ -233,7 +237,10 @@ test('seed_dry_run_apply_repeat_and_update_preserve_provenance', { timeout: 1200
       '[Reference](https://example.com?first=1&second=2)\n![Indicator](https://example.com/image.png)\nhttp://example.com/path@fixture\nwww.example.com/path@fixture';
     manifest.pages[2]!.notes![0]!.text += `\n${supportedNoteLinks}`;
     const supportedBodyPath = join(f.root, 'knowledge-datasets/retail-pos', manifest.pages[0]!.file);
-    await writeFile(supportedBodyPath, `${await readFile(supportedBodyPath, 'utf8')}\n${supportedLinks}\n`);
+    await writeFile(
+      supportedBodyPath,
+      `${await readFile(supportedBodyPath, 'utf8')}\n${supportedLinks}\n\n[[connection-guide]]\n[[safety-policy]]\n`,
+    );
     assert.ok((await readFile(supportedBodyPath, 'utf8')).includes(supportedLinks));
     const casePath = join(f.root, 'knowledge-datasets/retail-pos', manifest.pages[2]!.file);
     const caseEntry = manifest.pages[2]!;
@@ -297,6 +304,10 @@ test('seed_dry_run_apply_repeat_and_update_preserve_provenance', { timeout: 1200
       const storedGuide = await storage.getPage({ id: guide.id!, read: owner });
       assert.ok(storedGuide?.body?.includes(loadedManifest.pages[0]!.source!.url!));
       assert.ok(storedGuide?.body?.includes(supportedLinks));
+      assert.match(
+        storedGuide!.body!,
+        /\[\[docs:north#guides\/connectivity\]\]\n\[\[tenant:north#policies\/safe-changes\]\]/u,
+      );
       assert.match(storedGuide!.body!, /verified 2026-01-15; license: Apache-2.0/u);
       const linked = await storage.listPageLinks({
         pageIds: [guide.id!, policy.id!],
@@ -648,6 +659,7 @@ test('seed_rejects_invalid_input_and_recovers_partial_note_update', { timeout: 1
       '# Unsafe\n\n[private](customer:north:store-1#cases/connection-check)',
       '# Unsafe\n\n<!-- knowledge-seed:page:retail-pos:injected -->',
       '# Unsafe\n\n[[[safety-policy]]]',
+      '# Unsafe\n\n[Label][reference]',
     ]) {
       await writeFile(bodyPath, body);
       assert.equal(await readFile(bodyPath, 'utf8'), body);
@@ -783,8 +795,16 @@ test('seed_rejects_invalid_input_and_recovers_partial_note_update', { timeout: 1
     );
     const childExit = once(child, 'exit');
     try {
-      const ready = await Promise.race([
-        once(child.stdout!, 'data').then(([value]) => String(value)),
+      const marker = async () => {
+        let output = '';
+        for await (const value of child.stdout!.setEncoding('utf8')) {
+          output += value;
+          if (/^locked\r?\n/mu.test(output)) return;
+        }
+        throw new Error('Writer output ended before acquiring lock');
+      };
+      await Promise.race([
+        marker(),
         childExit.then(() => {
           throw new Error('Writer exited before acquiring lock');
         }),
@@ -793,7 +813,6 @@ test('seed_rejects_invalid_input_and_recovers_partial_note_update', { timeout: 1
           timer.unref();
         }),
       ]);
-      assert.match(ready, /locked/u);
       await f.cli({ code: 75 });
     } finally {
       child.kill('SIGKILL');

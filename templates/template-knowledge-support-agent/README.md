@@ -2,7 +2,7 @@
 
 Give a support agent your guides, policies, and case history in Mastra Knowledge. When a technician describes a problem in Studio, the agent retrieves evidence it can access, cites the sources, and asks for observations needed to narrow the diagnosis. A reviewer can publish a confirmed finding so another technician can reuse it in a later conversation.
 
-[![Deploy to Mastra](https://img.shields.io/badge/Deploy_to_Mastra-18181B?style=for-the-badge)](https://projects.mastra.ai/~/projects/create/https:/github.com/drantunes/mastra/tree/feat/template-knowledge-support-agent/templates/template-knowledge-support-agent)
+[![Deploy to Mastra](https://img.shields.io/badge/Deploy_to_Mastra-18181B?style=for-the-badge)](https://projects.mastra.ai/~/projects/create/https:/github.com/mastra-ai/template-knowledge-support-agent)
 
 ## Why we built this
 

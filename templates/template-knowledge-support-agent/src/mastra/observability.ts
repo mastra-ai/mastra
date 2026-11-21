@@ -19,9 +19,8 @@ export const operations = [
 ] as const;
 export type Operation = (typeof operations)[number];
 export const statuses = [
-  'success',
+  ...SPAN_OUTCOMES,
   'denied',
-  'error',
   'ready',
   'empty',
   'no-relevant-records',
@@ -115,13 +114,8 @@ export class PayloadFreeStorageExporter extends MastraStorageExporter {
           : operation === 'knowledge-list' && Array.isArray(output.entries)
             ? output.entries.length
             : undefined;
-    const outcome = SPAN_OUTCOMES.includes(span.outcome as (typeof SPAN_OUTCOMES)[number])
-      ? span.outcome
-      : span.endTime
-        ? span.errorInfo
-          ? 'error'
-          : 'unknown'
-        : undefined;
+    const reportedOutcome = SPAN_OUTCOMES.find(outcome => outcome === span.outcome);
+    const outcome = reportedOutcome ?? (span.endTime ? (span.errorInfo ? 'error' : 'unknown') : undefined);
     const safe: AnyExportedSpan = {
       id: this.opaque(span.id)!,
       traceId: this.opaque(span.traceId)!,
@@ -149,7 +143,7 @@ export class PayloadFreeStorageExporter extends MastraStorageExporter {
     if (event.type === 'span_ended' && operation) {
       const metrics = observability.getDefaultInstance()?.getMetricsContext?.();
       const status =
-        span.errorInfo || output.error || attributes.success === false || outcome === 'error' ? 'error' : 'success';
+        span.errorInfo || output.error || attributes.success === false ? 'error' : (reportedOutcome ?? 'success');
       metrics?.emit('support_operation_count', 1, { operation, status });
       if (resultCount !== undefined) metrics?.emit('support_result_count', resultCount, { operation, status });
       if (resultCount === 0)

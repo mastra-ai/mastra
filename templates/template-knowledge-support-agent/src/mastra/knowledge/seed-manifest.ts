@@ -163,8 +163,6 @@ function canLink(from: ReturnType<typeof placement>, to: ReturnType<typeof place
 
 /** Conservative link grammar: managed wiki aliases/canonical refs, HTTPS/HTTP URLs, and local anchors. */
 function renderLinks(text: string, resolveAlias: (ref: string) => string) {
-  if (/<!--\s*knowledge-seed:|Seed note:|<\/?[a-z!]|\]\s*\[|\[(?:\\[\s\S]|[^\[\]\\])+\]:/iu.test(text))
-    throw new Error('Unsupported or reserved Markdown syntax');
   const refs = new Set<string>();
   const rendered = text.replace(/\[\[([\s\S]*?)\]\]/gu, (_, raw: string) => {
     if (raw !== raw.trim() || /[\[\]\r\n]/u.test(raw)) throw new Error('Ambiguous wiki link');
@@ -172,6 +170,9 @@ function renderLinks(text: string, resolveAlias: (ref: string) => string) {
     refs.add(ref);
     return `[[${ref}]]`;
   });
+  const markdown = rendered.replace(/\[\[[^\[\]]+\]\]/gu, '\u0000');
+  if (/<!--\s*knowledge-seed:|Seed note:|<\/?[a-z!]|\]\s*\[|\[(?:\\[\s\S]|[^\[\]\\])+\]:/iu.test(markdown))
+    throw new Error('Unsupported or reserved Markdown syntax');
   for (const match of rendered.matchAll(/\]\(([^)]*)\)/gu)) {
     const target = match[1]!;
     if (/[\r\n]/u.test(target)) throw new Error('Multiline Markdown destinations are unsupported');
@@ -183,7 +184,7 @@ function renderLinks(text: string, resolveAlias: (ref: string) => string) {
   // GFM autolinks both HTTP(S) URLs and www. authorities.
   if (/\b(?:https?:\/\/|www\.)[^\s/?#]*@/iu.test(rendered)) throw new Error('Unsafe Markdown URL authority');
   // A malformed wiki link must never turn into an unmanaged native reference.
-  if (rendered.replace(/\[\[[^\[\]]+\]\]/gu, '').includes('[[')) throw new Error('Malformed wiki link');
+  if (markdown.includes('[[')) throw new Error('Malformed wiki link');
   return { text: rendered, refs: [...refs] };
 }
 

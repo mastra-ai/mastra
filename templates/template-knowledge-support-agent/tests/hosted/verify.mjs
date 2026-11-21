@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { generateKeyPairSync, randomBytes, randomUUID, sign } from 'node:crypto';
 import { once } from 'node:events';
 import { cp, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { createServer as createHttpsServer } from 'node:https';
@@ -27,7 +27,8 @@ const backend = provider
   : (process.env.SUPPORT_TEST_BACKEND ?? 'libsql');
 assert.ok(['libsql', 'postgres'].includes(backend), 'SUPPORT_TEST_BACKEND must be libsql or postgres');
 const postgresBin = process.env.POSTGRES_BIN;
-const postgres = (command, args) => exec(postgresBin ? join(postgresBin, command) : command, args, { timeout: 30000 });
+const postgres = (command, args, env = process.env) =>
+  exec(postgresBin ? join(postgresBin, command) : command, args, { env, timeout: 30000 });
 const host = '127.0.0.1';
 const source = 'docs:retailops#guides/network';
 const confirmed = 'The terminal selected the guest network. After authorized selection, three checks succeeded.';
@@ -58,9 +59,10 @@ const platformUsers = new Map(
   ]),
 );
 
-function databaseEnv(url) {
-  if (!provider) return { SUPPORT_DATABASE_URL: url };
-  return provider === 'turso' ? { TURSO_DATABASE_URL: url } : { DATABASE_URL: url };
+function databaseEnv({ url, authToken }) {
+  if (provider === 'turso') return { TURSO_DATABASE_URL: url, TURSO_AUTH_TOKEN: authToken };
+  if (provider) return { DATABASE_URL: url };
+  return { SUPPORT_DATABASE_URL: url, ...(authToken ? { SUPPORT_DATABASE_AUTH_TOKEN: authToken } : {}) };
 }
 
 function bearerProfile(sub, tenantId, customerId, scope) {
@@ -90,16 +92,33 @@ async function freePort() {
   return port;
 }
 
-function start(program, args, env = process.env, cwd = template) {
-  const child = spawn(program, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
+class PortCollision extends Error {}
+const addressInUse = /EADDRINUSE|address already in use/iu;
+
+async function bindWithRetry(launch) {
+  for (let retries = 4; ; retries--) {
+    try {
+      return await launch(await freePort());
+    } catch (error) {
+      if (!(error instanceof PortCollision) || retries === 0) throw error;
+    }
+  }
+}
+
+function start(program, args, env = process.env, cwd = template, ipc = false) {
+  const child = spawn(program, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe', ...(ipc ? ['ipc'] : [])] });
+  let boundPort;
+  child.on('message', message => {
+    if (message?.type === 'server-ready') boundPort = message.port;
+  });
   let output = '';
   for (const stream of [child.stdout, child.stderr])
     stream.on('data', chunk => {
       output = (output + chunk).slice(-5000);
     });
-  const exited = once(child, 'exit');
+  const exited = once(child, 'close');
   exited.catch(() => undefined);
-  const proc = { child, exited, output: () => output };
+  const proc = { child, exited, output: () => output, boundPort: () => boundPort };
   children.push(proc);
   return proc;
 }
@@ -128,58 +147,135 @@ async function stop(proc) {
   await waitForExit(proc);
 }
 
-async function ready(proc, url, access) {
-  for (let attempt = 0; attempt < 120 && proc.child.exitCode === null; attempt++) {
-    const response = await fetch(url, {
-      headers: access ? { authorization: `Bearer ${access}` } : {},
-      signal: AbortSignal.timeout(1000),
-    }).catch(() => undefined);
-    if (response?.ok) {
-      await response.body?.cancel();
-      return;
-    }
-    await response?.body?.cancel();
+async function ready(proc, url, check) {
+  for (let attempt = 0; attempt < 120 && proc.child.exitCode === null && proc.child.signalCode === null; attempt++) {
+    if (await check().catch(() => false)) return;
     await delay(100);
   }
-  throw new Error(`Hosted proof service failed readiness at ${url}\n${proc.output()}`);
+  if (proc.child.exitCode !== null || proc.child.signalCode !== null) await waitForExit(proc);
+  const message = `Hosted proof service failed readiness at ${url}\n${proc.output()}`;
+  if (addressInUse.test(proc.output())) throw new PortCollision(message);
+  throw new Error(message);
+}
+
+function querySqld(url, authToken) {
+  return fetch(`${url}/v2/pipeline`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${authToken}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql: 'SELECT 1' } }, { type: 'close' }] }),
+    signal: AbortSignal.timeout(1000),
+  });
 }
 
 async function database(directory) {
-  const port = await freePort();
   if (backend === 'postgres') {
-    await postgres('initdb', ['-D', directory, '-A', 'trust', '-U', 'support', '--no-locale', '--encoding=UTF8']);
+    const password = token();
+    const passwordFile = `${directory}.password`;
+    await writeFile(passwordFile, `${password}\n`, { mode: 0o600, flag: 'wx' });
+    try {
+      await postgres('initdb', [
+        '-D',
+        directory,
+        '-A',
+        'scram-sha-256',
+        '-U',
+        'support',
+        '--no-locale',
+        '--encoding=UTF8',
+        '--pwfile',
+        passwordFile,
+      ]);
+    } finally {
+      await rm(passwordFile, { force: true });
+    }
     clusters.push(directory);
-    await postgres('pg_ctl', [
-      '-D',
-      directory,
-      '-l',
-      `${directory}.log`,
-      '-o',
-      `-h ${host} -p ${port} -k ${lab}`,
-      '-t',
-      '20',
-      '-w',
-      'start',
-    ]);
+    const port = await bindWithRetry(async port => {
+      const log = `${directory}-${port}.log`;
+      try {
+        await postgres('pg_ctl', [
+          '-D',
+          directory,
+          '-l',
+          log,
+          '-o',
+          `-h ${host} -p ${port} -k ''`,
+          '-t',
+          '20',
+          '-w',
+          'start',
+        ]);
+      } catch (error) {
+        if (addressInUse.test(await readFile(log, 'utf8').catch(() => '')))
+          throw new PortCollision(`PostgreSQL port ${port} is already in use`, { cause: error });
+        throw error;
+      }
+      return port;
+    });
     const base = `postgresql://support@${host}:${port}`;
-    await postgres('createdb', ['--maintenance-db', `${base}/postgres`, 'support']);
+    const pgEnv = { ...process.env, PGPASSWORD: password };
+    const authenticatedUrl = name => `postgresql://support:${password}@${host}:${port}/${name}`;
+    const unauthenticated = new Client({ host, port, database: 'postgres', user: 'support', password: token() });
+    try {
+      await assert.rejects(unauthenticated.connect(), { code: '28P01' });
+    } finally {
+      await unauthenticated.end();
+    }
+    await postgres('createdb', ['--maintenance-db', `${base}/postgres`, 'support'], pgEnv);
     return {
-      url: `${base}/support`,
+      url: authenticatedUrl('support'),
       async restore() {
         const backup = join(lab, 'support.dump');
-        await postgres('pg_dump', ['--dbname', `${base}/support`, '--format=custom', '--file', backup]);
-        await postgres('createdb', ['--maintenance-db', `${base}/postgres`, 'restored_support']);
-        await postgres('pg_restore', ['--dbname', `${base}/restored_support`, '--no-owner', '--exit-on-error', backup]);
-        return { url: `${base}/restored_support` };
+        await postgres('pg_dump', ['--dbname', `${base}/support`, '--format=custom', '--file', backup], pgEnv);
+        await postgres('createdb', ['--maintenance-db', `${base}/postgres`, 'restored_support'], pgEnv);
+        await postgres(
+          'pg_restore',
+          ['--dbname', `${base}/restored_support`, '--no-owner', '--exit-on-error', backup],
+          pgEnv,
+        );
+        return { url: authenticatedUrl('restored_support') };
       },
     };
   }
-  const url = `http://${host}:${port}`;
-  const proc = start(process.env.SQLD_BIN ?? 'sqld', ['--http-listen-addr', `${host}:${port}`, '--db-path', directory]);
-  await ready(proc, `${url}/health`);
+  // sqld 0.24 reports the configured address rather than the assigned port when passed :0.
+  // Each instance proves readiness with a key that no other proof instance accepts.
+  const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+  const jwtKey = `${directory}.jwt.pem`;
+  await writeFile(jwtKey, publicKey.export({ format: 'pem', type: 'spki' }));
+  const claims = [JSON.stringify({ alg: 'EdDSA', typ: 'JWT' }), JSON.stringify({ a: 'rw' })]
+    .map(value => Buffer.from(value).toString('base64url'))
+    .join('.');
+  const authToken = `${claims}.${sign(null, Buffer.from(claims), privateKey).toString('base64url')}`;
+  const { proc, url } = await bindWithRetry(async port => {
+    const url = `http://${host}:${port}`;
+    const proc = start(process.env.SQLD_BIN ?? 'sqld', [
+      '--http-listen-addr',
+      `${host}:${port}`,
+      '--db-path',
+      directory,
+      '--auth-jwt-key-file',
+      jwtKey,
+    ]);
+    try {
+      await ready(proc, url, async () => {
+        const response = await querySqld(url, authToken);
+        if (response.ok) return (await response.json()).results?.[0]?.type === 'ok';
+        await response.body?.cancel();
+        return false;
+      });
+      const denied = await querySqld(url, token());
+      assert.equal(denied.status, 401);
+      await denied.body?.cancel();
+    } catch (error) {
+      await stop(proc);
+      if (addressInUse.test(proc.output())) throw new PortCollision(`sqld port ${port} is already in use`);
+      throw error;
+    }
+    return { proc, url };
+  });
   return {
     proc,
     url,
+    authToken,
     async restore() {
       await stop(proc);
       const restored = join(lab, 'restored');
@@ -208,7 +304,7 @@ async function stopPostgres(directory) {
   }
 }
 
-async function verifyInterruptedSeed(databaseUrl, env, [first, second]) {
+async function verifyInterruptedSeed(db, env, [first, second]) {
   const dataset = join(lab, 'revised-dataset');
   await cp(join(template, 'knowledge-datasets/retail-pos'), dataset, { recursive: true });
   const manifestPath = join(dataset, 'docs-manifest.json');
@@ -222,8 +318,8 @@ async function verifyInterruptedSeed(databaseUrl, env, [first, second]) {
     import { seedDataset } from './src/mastra/knowledge/seed.ts';
     await seedDataset({ ...datasets['retail-pos-docs'], directory: process.env.PROOF_REVISED_DATASET });`,
   ];
-  const workerEnv = { ...env, ...databaseEnv(databaseUrl), PROOF_REVISED_DATASET: dataset };
-  const admin = new Client({ connectionString: databaseUrl });
+  const workerEnv = { ...env, ...databaseEnv(db), PROOF_REVISED_DATASET: dataset };
+  const admin = new Client({ connectionString: db.url });
   await admin.connect();
   try {
     const snapshot = async () =>
@@ -253,10 +349,15 @@ async function verifyInterruptedSeed(databaseUrl, env, [first, second]) {
       assert.ok(lockOwner, `Revised seed did not reach the blocked page: ${interrupted.output()}`);
       const terminated = await admin.query('SELECT pg_terminate_backend($1, 5000) AS terminated', [lockOwner]);
       assert.equal(terminated.rows[0].terminated, true);
-      await admin.query('ROLLBACK');
       const [code] = await waitForExit(interrupted);
       assert.equal(code, 1, interrupted.output());
       assert.deepEqual(await snapshot(), original, 'Losing the writer session must roll back the entire seed');
+      await assert.rejects(
+        exec(process.execPath, args, { cwd: template, env: workerEnv, timeout: 15000 }),
+        error => error.code === 1 && /canceling statement due to lock timeout/u.test(error.stderr),
+      );
+      assert.deepEqual(await snapshot(), original, 'Lock timeout must roll back the entire seed');
+      await admin.query('ROLLBACK');
       await exec(process.execPath, args, { cwd: template, env: workerEnv, timeout: 30000 });
       const retried = await snapshot();
       assert.equal(retried.length, 2);
@@ -272,7 +373,7 @@ async function verifyInterruptedSeed(databaseUrl, env, [first, second]) {
   }
 }
 
-async function holdWriterLock(env, url) {
+async function holdWriterLock(env, db) {
   const proc = start(
     process.execPath,
     [
@@ -280,7 +381,7 @@ async function holdWriterLock(env, url) {
       '-e',
       "import { withWriterLock } from './src/mastra/knowledge/writer-lock.ts'; import { setInterval } from 'node:timers/promises'; await withWriterLock(async () => { console.log('writer-held'); for await (const _ of setInterval(1000)) {} });",
     ],
-    { ...env, ...databaseEnv(url) },
+    { ...env, ...databaseEnv(db) },
   );
   for (let attempt = 0; attempt < 100 && proc.child.exitCode === null; attempt++) {
     if (proc.output().includes('writer-held')) return proc;
@@ -352,6 +453,7 @@ async function verifyPlatformSignIn(db, worker, env, identityUrl) {
   assert.equal(new URL(signIn).searchParams.get('organization_id'), platformOrg);
   assert.equal((await studio('/api/knowledge')).status, 401);
   assert.equal((await studio('/api/knowledge', foreignPlatformUser)).status, 401);
+  await json(studio('/api/knowledge', undefined, undefined, { authorization: `bEaReR ${platformMember}` }));
   assert.equal(await json(studio('/api/auth/me', foreignPlatformUser)), null);
   assert.equal((await json(studio('/api/auth/me', platformMember))).id, 'member');
   await json(studio(pageRoute(source), platformViewer));
@@ -510,7 +612,6 @@ try {
     SUPPORT_MODE: 'hosted',
     SUPPORT_EXAMPLE: 'retail-pos',
     SUPPORT_HOST: host,
-    SUPPORT_DATABASE_AUTH_TOKEN: 'synthetic-hosted-db-token',
     SUPPORT_WRITER_LOCK_FILE: coordination,
     SUPPORT_OAUTH_INTROSPECTION_URL: `https://${host}:${identityPort}/introspect`,
     SUPPORT_OAUTH_INTROSPECTION_TOKEN: resourceSecret,
@@ -529,6 +630,7 @@ try {
     'TURSO_DATABASE_URL',
     'TURSO_AUTH_TOKEN',
     'SUPPORT_DATABASE_URL',
+    'SUPPORT_DATABASE_AUTH_TOKEN',
     'SUPPORT_SEED_ON_STARTUP',
   ])
     delete env[name];
@@ -537,32 +639,41 @@ try {
     delete env.SUPPORT_HOST;
     env.MASTRA_ENVIRONMENT_ID = 'reference-hosted-env';
     env.DATABASE_PROVIDER = provider;
-    if (provider === 'turso') {
-      env.TURSO_AUTH_TOKEN = env.SUPPORT_DATABASE_AUTH_TOKEN;
-      delete env.SUPPORT_DATABASE_AUTH_TOKEN;
-    }
   }
-  if (backend === 'postgres') {
-    delete env.SUPPORT_WRITER_LOCK_FILE;
-    delete env.SUPPORT_DATABASE_AUTH_TOKEN;
-  }
+  if (backend === 'postgres') delete env.SUPPORT_WRITER_LOCK_FILE;
 
   async function worker(db, { seedOnStartup = false, environment = env, access = technician, preload } = {}) {
-    const port = await freePort();
-    const url = `http://${host}:${port}`;
-    const proc = start(
-      process.execPath,
-      [...(preload ? ['--import', preload] : []), 'index.mjs'],
-      {
-        ...environment,
-        PORT: String(port),
-        ...databaseEnv(db.url),
-        ...(seedOnStartup ? { SUPPORT_SEED_ON_STARTUP: 'true' } : {}),
-      },
-      join(template, '.mastra/output'),
-    );
-    await ready(proc, `${url}/api/knowledge`, access);
-    return { proc, url };
+    // The bundled server's IPC message reports the configured port, so use it to confirm a nonzero bind.
+    return bindWithRetry(async port => {
+      const url = `http://${host}:${port}`;
+      const proc = start(
+        process.execPath,
+        [...(preload ? ['--import', preload] : []), 'index.mjs'],
+        {
+          ...environment,
+          PORT: String(port),
+          ...databaseEnv(db),
+          ...(seedOnStartup ? { SUPPORT_SEED_ON_STARTUP: 'true' } : {}),
+        },
+        join(template, '.mastra/output'),
+        true,
+      );
+      try {
+        await ready(proc, url, async () => {
+          if (proc.boundPort() !== port) return false;
+          const response = await fetch(`${url}/api/knowledge`, {
+            headers: { authorization: `Bearer ${access}` },
+            signal: AbortSignal.timeout(1000),
+          });
+          await response.body?.cancel();
+          return response.ok;
+        });
+      } catch (error) {
+        await stop(proc);
+        throw error;
+      }
+      return { proc, url };
+    });
   }
 
   const original = join(lab, 'primary');
@@ -570,7 +681,7 @@ try {
   const seed = () =>
     exec('npm', ['run', 'knowledge:seed'], {
       cwd: template,
-      env: { ...env, ...databaseEnv(db.url) },
+      env: { ...env, ...databaseEnv(db) },
       timeout: 30000,
     });
   // VPC PostgreSQL must seed a fresh database from the deploy artifact before serving support requests.
@@ -580,7 +691,7 @@ try {
   assert.match(seeded.stdout, /retail-pos-docs/u);
   if (backend === 'postgres') {
     const report = JSON.parse(seeded.stdout.slice(seeded.stdout.indexOf('{')));
-    await verifyInterruptedSeed(db.url, env, report.pages);
+    await verifyInterruptedSeed(db, env, report.pages);
   }
   const first = bootstrapped ?? (await worker(db));
   const second = await worker(db);
@@ -655,7 +766,7 @@ try {
   );
   profiles.set(reviewer, grant);
 
-  const holder = await holdWriterLock(env, db.url);
+  const holder = await holdWriterLock(env, db);
   try {
     await assert.rejects(seed, { code: 75 }, 'An admin seed sees the shared writer lock');
     const blocked = await json(
@@ -679,6 +790,15 @@ try {
   assert.equal(resumed.result.reference, reference);
   assert.equal(resumed.result.status, 'published');
   assert.deepEqual(resumed.result.decision, approval);
+  const { runId: duplicateRunId } = await json(request(second, '/api/workflows/review/create-run', reviewer, {}));
+  const duplicate = await json(
+    request(second, `/api/workflows/review/start-async?runId=${duplicateRunId}`, reviewer, {
+      inputData: { confirmationReference, audience: 'private' },
+    }),
+  );
+  assert.equal(duplicate.status, 'suspended');
+  const duplicateRun = await json(request(second, runRoute(duplicateRunId), reviewer));
+  assert.equal(duplicateRun.steps['review-decision'].suspendPayload.candidate.action, 'duplicate');
 
   const restarted = await worker(db);
   const published = await json(request(restarted, pageRoute(reference), technician));

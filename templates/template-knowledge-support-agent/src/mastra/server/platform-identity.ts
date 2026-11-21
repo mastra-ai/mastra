@@ -1,17 +1,19 @@
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { Middleware } from '@mastra/core/server';
+import type { MastraAuthRequest, Middleware } from '@mastra/core/server';
 import { isStudioClientTypeHeader, MASTRA_CLIENT_TYPE_HEADER } from '@mastra/server/server-adapter';
 import { validateProfile, type Profile } from '../identity.ts';
 import type { ReviewerAuthority } from '../review/service.ts';
-import type { LocalProfile, SupportAuthorization } from './access.ts';
+import { bearerToken, type LocalProfile, type SupportAuthorization } from './access.ts';
 
 class SupportPlatformAuth extends MastraAuthStudio {
+  override authenticateToken(token: string, request: MastraAuthRequest) {
+    return super.authenticateToken(bearerToken(request) ?? token, request);
+  }
+
   override getCurrentUser(request: Request) {
     // Use the same organization membership check for Studio's session status.
-    const authorization = request.headers.get('authorization');
-    const token = authorization?.startsWith('Bearer ') ? authorization.slice(7) : '';
-    return this.authenticateToken(token, request);
+    return this.authenticateToken('', request);
   }
 }
 
