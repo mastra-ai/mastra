@@ -50,6 +50,7 @@
     "@hono/node-server": "2.1.6",
     "readdir-glob": {
       "minimatch": "11.0.9"
-    }
+    },
+    "undici@<7.30.2": "7.30.2"
   }
 }
