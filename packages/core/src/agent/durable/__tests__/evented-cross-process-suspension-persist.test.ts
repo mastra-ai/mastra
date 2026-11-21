@@ -28,8 +28,8 @@ import { DurableStepIds } from '../constants';
 import { createEventedAgent } from '../create-evented-agent';
 import { clearResumeInFlight, globalRunRegistry } from '../run-registry';
 
-// 'starting-process-tools': every tool step runs in the starting process with one
-// long-lived stale list, except the resume step, which runs in a fresh worker.
+// 'starting-process-tools': every tool step runs in the starting process with the
+// list its LLM step built, which goes stale once another process resumes a call, except the resume step, which runs in a fresh worker.
 type Boundary = 'same-process' | 'fresh-worker' | 'stale-message-list' | 'starting-process-tools';
 
 class CrossProcessToolStepPubSub extends EventEmitterPubSub {
@@ -56,10 +56,8 @@ class CrossProcessToolStepPubSub extends EventEmitterPubSub {
       const step = this.toolSteps++;
       for (const [runId, entry] of [...globalRunRegistry.entries()]) {
         if (this.boundary === 'starting-process-tools') {
-          if (!this.startingList && entry.messageList) {
-            this.startingList = new MessageList({ threadId: 'thread-1', resourceId: 'user-1' });
-            this.startingList.add(entry.messageList.get.input.db(), 'memory');
-          }
+          // The starting process keeps the list its LLM step built, assistant message included.
+          this.startingList ??= entry.messageList;
           entry.messageList = step === 1 ? undefined : this.startingList;
         } else if (this.boundary === 'fresh-worker') {
           globalRunRegistry.delete(runId);

@@ -917,18 +917,26 @@ export function createDurableToolCallStep() {
         // The LLM step's transcript identifies this turn's message; a tool call id alone may recur in older turns.
         transcript ??= await readTranscript();
         const current = [...(transcript?.get.all.db() ?? [])].reverse().find(hasInvocation);
-        // A list already holding this message (e.g. drained by a sibling's flush) is handled by addToolMetadata.
-        if (!current || persistMessageList?.get.all.db().some(message => message.id === current.id)) return;
+        if (!current) return;
         // Recovery exists only to write, so check that first; the read check gates the recall.
         await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE);
         await authorizeMemory(MastraFGAPermissions.MEMORY_READ);
-        // The saved copy of this message wins: a sibling's resume may have cleared its metadata.
+        // The saved copy of this message wins: a sibling's resume in another process may have
+        // resolved its tool parts and cleared their metadata since this list last saw it.
         const { messages } = await memory.recall({
           threadId: state.threadId,
           resourceId: state.resourceId,
           perPage: false,
         });
-        const invocation = messages.find((message: MastraDBMessage) => message.id === current.id) ?? current;
+        const saved = messages.find((message: MastraDBMessage) => message.id === current.id);
+        const retained = persistMessageList?.get.all.db().find(message => message.id === current.id);
+        if (retained) {
+          // Not an unsaved response (checked above), so this copy holds no local writes and
+          // can only be stale. Suspending tools run one at a time, so no sibling writes it meanwhile.
+          if (saved) retained.content = saved.content;
+          return;
+        }
+        const invocation = saved ?? current;
         // A throwaway list keeps the long-lived registry list from holding a copy that drifts from storage.
         persistMessageList = createRunMessageList({
           mastra,
