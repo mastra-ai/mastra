@@ -34,6 +34,10 @@ export { ExperimentHeaderActions } from './components/experiment-header-actions'
 export type { ExperimentHeaderActionsProps } from './components/experiment-header-actions';
 export { RenameExperimentDialog } from './components/rename-experiment-dialog';
 export type { RenameExperimentDialogProps, RenameExperimentPatch } from './components/rename-experiment-dialog';
+export { ExperimentItemPanel } from './components/experiment-item-panel';
+export type { ExperimentItemPanelProps } from './components/experiment-item-panel';
+export { ExperimentResultDetail } from './components/experiment-result-detail';
+export type { ExperimentResultDetailProps } from './components/experiment-result-detail';
 export { ExperimentKpis } from './components/experiment-kpis';
 export type { ExperimentKpisProps } from './components/experiment-kpis';
 export { ExperimentResultsSection } from './components/experiment-results-section';

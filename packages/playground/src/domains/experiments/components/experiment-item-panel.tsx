@@ -1,91 +1,45 @@
-import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
-import { useExperimentItemPanel } from '@mastra/playground-ui/domains/experiments/context/experiment-item-panel-context';
-import { useExperimentResultDetailState } from '@mastra/playground-ui/domains/experiments/hooks/use-experiment-result-detail-state';
-import { toast } from '@mastra/playground-ui/utils/toast';
-
+import type { ExperimentItemPanelProps as SharedExperimentItemPanelProps } from '@mastra/playground-ui/domains/experiments';
+import {
+  ExperimentItemPanel as SharedExperimentItemPanel,
+  useExperimentItemPanel,
+} from '@mastra/playground-ui/domains/experiments';
 import { useDatasetMutations, useScoresByExperimentId } from '@mastra/react/hooks/datasets';
-import { useCallback, useMemo } from 'react';
-import { ExperimentResultDetail } from '@/domains/experiments/components/experiment-result-detail';
+import { useExperimentResultDetailData } from '../hooks/use-experiment-result-detail-data';
 
 export interface ExperimentItemPanelProps {
   withFeedback: boolean;
   /** `drawer` (default) for a standalone overlay; `inline` when hosted in the route side panel. */
-  variant?: 'drawer' | 'inline';
+  variant?: SharedExperimentItemPanelProps['variant'];
 }
 
-/**
- * Result panel for the `items/:itemId` child route. As a drawer, keep it mounted so it
- * animates in and out; `currentItemId` drives `open`. Inline, it renders only while an item is open.
- */
+/** The shared item panel wired to Studio's scores, review mutations, trace panel, feedback and usage. */
 export function ExperimentItemPanel({ withFeedback, variant }: ExperimentItemPanelProps) {
-  const {
-    currentItemId: itemId,
-    experimentId,
-    datasetId,
-    experimentStatus,
-    results,
-    isLoadingResults,
-    hasNextPage,
-    close,
-    goToPreviousItem,
-    goToNextItem,
-  } = useExperimentItemPanel();
-
-  const result = useMemo(() => (itemId ? results.find(r => r.itemId === itemId) : undefined), [results, itemId]);
+  const { currentItemId, experimentId, datasetId, experimentStatus, results } = useExperimentItemPanel();
+  const result = currentItemId ? results.find(r => r.itemId === currentItemId) : undefined;
 
   const { data: scoresByItemId } = useScoresByExperimentId({
-    experimentId: experimentId,
-    experimentStatus: experimentStatus,
+    experimentId,
+    experimentStatus,
     queryOptions: { enabled: Boolean(experimentId) },
   });
   const { updateExperimentResult } = useDatasetMutations();
-
-  const flagForReview = useCallback(
-    async (resultId: string) => {
-      try {
-        await updateExperimentResult.mutateAsync({ datasetId, experimentId, resultId, status: 'needs-review' });
-        toast('Result flagged for review');
-      } catch {
-        toast.error('Failed to flag result for review');
-      }
-    },
-    [datasetId, experimentId, updateExperimentResult],
-  );
-  const completeResult = useCallback(
-    async (resultId: string) => {
-      try {
-        await updateExperimentResult.mutateAsync({ datasetId, experimentId, resultId, status: 'complete' });
-        toast('Result marked as reviewed');
-      } catch {
-        toast.error('Failed to complete result');
-      }
-    },
-    [datasetId, experimentId, updateExperimentResult],
-  );
-
-  const resultScores = result ? scoresByItemId?.[result.itemId] : undefined;
-  const detailState = useExperimentResultDetailState(resultScores, result?.id);
+  const data = useExperimentResultDetailData({
+    traceId: result?.traceId,
+    scores: result ? scoresByItemId?.[result.itemId] : undefined,
+    withFeedback,
+  });
 
   return (
-    <ExperimentResultDetail
+    <SharedExperimentItemPanel
+      {...data}
       variant={variant}
-      result={result}
-      itemId={itemId}
-      fallback={
-        isLoadingResults || hasNextPage ? (
-          <DataPanel.LoadingData />
-        ) : (
-          <DataPanel.NoData>No loaded result for item "{itemId}".</DataPanel.NoData>
-        )
-      }
-      scores={resultScores}
-      state={detailState}
-      withFeedback={withFeedback}
-      onPrevious={goToPreviousItem}
-      onNext={goToNextItem}
-      onClose={close}
-      onComplete={result ? () => completeResult(result.id) : undefined}
-      onFlagForReview={result ? () => void flagForReview(result.id) : undefined}
+      scoresByItemId={scoresByItemId}
+      onFlagForReview={async resultId => {
+        await updateExperimentResult.mutateAsync({ datasetId, experimentId, resultId, status: 'needs-review' });
+      }}
+      onComplete={async resultId => {
+        await updateExperimentResult.mutateAsync({ datasetId, experimentId, resultId, status: 'complete' });
+      }}
     />
   );
 }
