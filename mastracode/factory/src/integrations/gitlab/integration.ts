@@ -37,6 +37,7 @@ import type { GitLabIssue, GitLabMergeRequest, GitLabNote, GitLabProject } from 
 import { resolveGitLabRules } from './default-rules.js';
 import type { GitLabEventRules, GitLabRuleOverrides } from './default-rules.js';
 import { gitlabIntakeLookup } from './intake-lookup.js';
+import { trimEdgeSlashes } from './path-slashes.js';
 import { attachGitLabReconciler } from './reconciler.js';
 import { gitlabReconciliationInterval } from './reconciliation-config.js';
 import { buildGitLabRoutes, ingestLinkedGitLabRepositoryBacklog } from './routes.js';
@@ -304,7 +305,7 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
       throw new GitLabApiError('GitLab issue must include a project and issue IID.', 400);
     }
 
-    const normalizePath = (value: string) => value.replace(/^\/+|\/+$/g, '').toLowerCase();
+    const normalizePath = (value: string) => trimEdgeSlashes(value).toLowerCase();
     const matches: Array<{
       connectionId: string;
       projectId: string;
@@ -957,7 +958,7 @@ function parseIssueLocator(value: string): {
   const shorthand = value.match(/^(.+?)#(\d+)$/);
   if (shorthand) {
     const issueIid = parsePositiveInteger(shorthand[2]!);
-    const projectPath = shorthand[1]!.replace(/^\/+|\/+$/g, '');
+    const projectPath = trimEdgeSlashes(shorthand[1]!);
     return issueIid && projectPath ? { projectPath, issueIid } : null;
   }
   try {

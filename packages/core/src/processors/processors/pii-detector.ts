@@ -192,6 +192,17 @@ export interface PIIDetectorOptions extends LastMessageOnlyOption {
 }
 
 /**
+ * Index where the trailing non-whitespace run starts. A string that ends in
+ * whitespace returns its length, the same place `/\S*$/` matches an empty run.
+ * One character at a time, so a long word cannot make the scan quadratic.
+ */
+export function trailingNonWhitespaceIndex(value: string): number {
+  let index = value.length;
+  while (index > 0 && !/\s/.test(value[index - 1]!)) index--;
+  return index;
+}
+
+/**
  * PIIDetector uses an internal Mastra agent to identify and redact
  * personally identifiable information for privacy compliance.
  *
@@ -1020,7 +1031,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
 
     let emitEnd = Math.min(
       combined.length - PIIDetector.REGEX_CARRYOVER_SIZE,
-      Math.max(combined.search(/\S*$/), combined.length - PIIDetector.MAX_WORD_HOLD),
+      Math.max(trailingNonWhitespaceIndex(combined), combined.length - PIIDetector.MAX_WORD_HOLD),
     );
     const regions = this.buildRedactionRegions(detections);
     for (const region of regions) {

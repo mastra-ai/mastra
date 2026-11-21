@@ -86,6 +86,32 @@ describe('Oracle storage table DDL', () => {
 });
 
 describe('Oracle storage index DDL', () => {
+  it('reads a direction only when it is a separate trailing word', () => {
+    expect(
+      generateOracleIndexSQL({
+        name: 'idx_case',
+        table: TABLE_THREADS,
+        columns: ['createdAt   desc'],
+      }),
+    ).toBe('CREATE INDEX "IDX_CASE" ON "MASTRA_THREADS" ("createdAt" DESC)');
+    expect(
+      generateOracleIndexSQL({
+        name: 'idx_name',
+        table: TABLE_THREADS,
+        columns: ['ASC'],
+      }),
+    ).toContain('(ASC)');
+    const started = Date.now();
+    expect(
+      generateOracleIndexSQL({
+        name: 'idx_long',
+        table: TABLE_THREADS,
+        columns: [`createdAt${' '.repeat(20_000)}DESC`],
+      }),
+    ).toBe('CREATE INDEX "IDX_LONG" ON "MASTRA_THREADS" ("createdAt" DESC)');
+    expect(Date.now() - started).toBeLessThan(500);
+  });
+
   it('generates default-safe indexes with Oracle identifier mapping', () => {
     expect(
       generateOracleIndexSQL({

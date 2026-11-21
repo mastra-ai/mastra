@@ -160,6 +160,16 @@ describe('findWorkspaces', () => {
     expect(byName['linked']!.location).toBe(join(root, 'packages', 'link').split('\\').join('/'));
   });
 
+  it('still finds a package when a glob ends in a very long slash run', async () => {
+    await writePackage(root, 'r', { workspaces: [`packages/*${'/'.repeat(50_000)}`, `x${'/'.repeat(20_000)}y`] });
+    await writePackage(join(root, 'packages', 'web'), 'web');
+
+    const started = Date.now();
+    const found = await findWorkspaces(root, { stopDir: tmpdir() });
+    expect(found?.map(workspace => workspace.package.name)).toEqual(['web']);
+    expect(Date.now() - started).toBeLessThan(1_000);
+  });
+
   it('accepts ./-prefixed, trailing-slash and brace globs', async () => {
     await writePackage(root, 'r', { workspaces: ['./apps/*/', '{libs,tools}/*'] });
     await writePackage(join(root, 'apps', 'web'), 'web');

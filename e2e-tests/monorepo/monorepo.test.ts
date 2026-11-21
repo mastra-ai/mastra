@@ -1040,6 +1040,7 @@ export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependenc
       const sourceDependencies = getPnpmImporterDependencies(sourceLockfile, '.');
       const outputDependencies = getPnpmImporterDependencies(outputLockfile, '.');
 
+      // >=0.2.0 is a bounded range. >=0 and >=0.0.0 are not, and must not be written through.
       expect(packageJson.dependencies['unicorn-magic']).toBe('>=0.2.0');
       expect(sourceDependencies.get('unicorn-magic')).toBe(sourcePinnedUnicornMagicVersion);
       expect(outputDependencies.get('unicorn-magic')).toBe(sourcePinnedUnicornMagicVersion);

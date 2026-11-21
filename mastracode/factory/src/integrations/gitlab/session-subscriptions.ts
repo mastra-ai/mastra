@@ -12,12 +12,11 @@ import type {
 } from '../../storage/domains/source-control/base.js';
 import type { GitLabIntegrationBase } from './integration.js';
 import { normalizeGitLabHost } from './integration.js';
+import { trimEdgeSlashes } from './path-slashes.js';
 import { subscribeToMergeRequest, unsubscribeFromMergeRequest } from './subscriptions.js';
 import type { GitLabSignalSubscriptionSource } from './subscriptions.js';
 
 type RepositorySessionState = { factoryProjectId?: string; projectRepositoryId?: string };
-
-const MERGE_REQUEST_URL = /^https?:\/\/([^/\s]+)\/(.+?)\/-\/merge_requests\/(\d+)\/?$/i;
 
 function sessionUserId(requestContext: RequestContext): string | undefined {
   return getFactoryAuthUserId(getFactoryAuthUserFromContext(requestContext));
@@ -43,15 +42,48 @@ interface SessionTarget {
 }
 
 function normalizePath(value: string): string {
-  return value.replace(/^\/+|\/+$/g, '').toLowerCase();
+  return trimEdgeSlashes(value).toLowerCase();
+}
+
+const MERGE_REQUEST_MARKER = '/-/merge_requests/';
+
+/** ASCII A-Z only. Full `toLowerCase()` can expand a character (İ → i + dot) and shift later indexes. */
+function asciiLower(value: string): string {
+  let lowered = '';
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index);
+    lowered += code >= 65 && code <= 90 ? String.fromCharCode(code + 32) : value[index];
+  }
+  return lowered;
 }
 
 export function parseMergeRequestUrl(url: string): { host: string; projectPath: string; iid: number } | undefined {
-  const match = url.trim().match(MERGE_REQUEST_URL);
-  if (!match) return undefined;
-  const iid = Number(match[3]);
+  const trimmed = url.trim();
+  const lower = asciiLower(trimmed);
+  let protocol: 'https://' | 'http://' | undefined;
+  if (lower.startsWith('https://')) protocol = 'https://';
+  else if (lower.startsWith('http://')) protocol = 'http://';
+  if (!protocol) return undefined;
+  const rest = trimmed.slice(protocol.length);
+
+  let hostEnd = 0;
+  while (hostEnd < rest.length && rest[hostEnd] !== '/' && !/\s/.test(rest[hostEnd]!)) hostEnd++;
+  if (hostEnd === 0 || rest[hostEnd] !== '/') return undefined;
+
+  const markerAt = asciiLower(rest).indexOf(MERGE_REQUEST_MARKER, hostEnd);
+  if (markerAt <= hostEnd) return undefined;
+  let projectPath = rest.slice(hostEnd + 1, markerAt);
+  let pathEnd = projectPath.length;
+  while (pathEnd > 0 && projectPath.charCodeAt(pathEnd - 1) === 47) pathEnd--;
+  projectPath = projectPath.slice(0, pathEnd);
+  if (!projectPath) return undefined;
+
+  let iidText = rest.slice(markerAt + MERGE_REQUEST_MARKER.length);
+  if (iidText.endsWith('/')) iidText = iidText.slice(0, -1);
+  if (!/^\d+$/.test(iidText)) return undefined;
+  const iid = Number(iidText);
   if (!Number.isSafeInteger(iid) || iid < 1) return undefined;
-  return { host: normalizeGitLabHost(match[1]!), projectPath: match[2]!.replace(/\/+$/, ''), iid };
+  return { host: normalizeGitLabHost(rest.slice(0, hostEnd)), projectPath, iid };
 }
 
 function parseMergeRequest(value: number | string, target: SessionTarget): number {

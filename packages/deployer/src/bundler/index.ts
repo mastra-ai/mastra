@@ -36,8 +36,43 @@ const PACKAGE_NAME_PATTERN = /^(?:@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+$/;
 const TARBALL_SUFFIX_PATTERN = /\.(?:tgz|tar\.gz|tar)$/i;
 /** npm reads a value starting like this as a path, whatever follows. A bare `~` is a semver range. */
 const FILE_SPEC_PREFIX_PATTERN = /^(?:\.|~[/\\]|[/\\]|[A-Za-z]:[/\\])/;
-/** A range admitting any published version: `*`, `x`, `>=0`, and any union containing one. */
-const UNBOUNDED_RANGE_PATTERN = /(?:^|\|\||\s)\s*(?:[*xX]|>=?\s*0(?:\.0)*(?:\.0)*)\s*(?:$|\|\|)/;
+function isJsWhitespace(value: string, index: number): boolean {
+  return index >= 0 && index < value.length && /\s/.test(value[index]!);
+}
+
+/**
+ * A range admitting any published version: `*`, `x`, `>=0`, `>=0.0.0`, and any
+ * `||` union containing one. `>=0.2.0` is bounded and is not matched.
+ */
+function hasUnboundedRange(range: string): boolean {
+  const leftBounded = (tokenStart: number): boolean => {
+    if (tokenStart === 0) return true;
+    if (isJsWhitespace(range, tokenStart - 1)) return true;
+    return range.charCodeAt(tokenStart - 2) === 124 && range.charCodeAt(tokenStart - 1) === 124;
+  };
+  const rightBounded = (tokenEnd: number): boolean => {
+    let index = tokenEnd;
+    while (isJsWhitespace(range, index)) index++;
+    return index === range.length || (range.charCodeAt(index) === 124 && range.charCodeAt(index + 1) === 124);
+  };
+
+  for (let index = 0; index < range.length; index++) {
+    const code = range.charCodeAt(index);
+    if (code === 42 || code === 120 || code === 88) {
+      if (leftBounded(index) && rightBounded(index + 1)) return true;
+      continue;
+    }
+    if (code !== 62) continue;
+    let cursor = index + 1;
+    if (range.charCodeAt(cursor) === 61) cursor++;
+    while (isJsWhitespace(range, cursor)) cursor++;
+    if (range.charCodeAt(cursor) !== 48) continue;
+    cursor++;
+    while (range.charCodeAt(cursor) === 46 && range.charCodeAt(cursor + 1) === 48) cursor += 2;
+    if (leftBounded(index) && rightBounded(cursor)) return true;
+  }
+  return false;
+}
 
 /**
  * Constraints declared by the source app, plus the packages some resolution field pins.
@@ -107,7 +142,7 @@ const isBoundedVersionSpec = (spec: string): boolean => {
       })()
     : spec;
 
-  return /\d/.test(range) && !UNBOUNDED_RANGE_PATTERN.test(range);
+  return /\d/.test(range) && !hasUnboundedRange(range);
 };
 
 const readManifest = async (manifestPath: string | undefined): Promise<Record<string, unknown> | undefined> => {

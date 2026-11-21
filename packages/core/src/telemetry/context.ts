@@ -13,18 +13,70 @@ export interface ServerTelemetryContext {
 const platformProjectIdSchema = z.uuid();
 let cachedGitProjectId2: Promise<string | undefined> | undefined;
 
+function isWhitespaceCode(code: number): boolean {
+  return /\s/.test(String.fromCharCode(code));
+}
+
+/** `user@host:path` and `[::1]:path`, including the odd splits the old SCP regex accepted. */
+function parseScpRemote(remote: string): { host: string; path: string } | null {
+  const parseHostAndPath = (start: number): { host: string; path: string } | null => {
+    if (remote[start] === '[') {
+      const end = remote.indexOf(']', start + 1);
+      if (end > start + 1 && remote[end + 1] === ':') {
+        const path = remote.slice(end + 2);
+        if (path) return { host: remote.slice(start, end + 1), path };
+      }
+    }
+    let hostEnd = start;
+    while (hostEnd < remote.length) {
+      const code = remote.charCodeAt(hostEnd);
+      if (code === 47 || code === 58 || isWhitespaceCode(code)) break;
+      hostEnd++;
+    }
+    if (hostEnd === start || remote[hostEnd] !== ':') return null;
+    const path = remote.slice(hostEnd + 1);
+    if (!path) return null;
+    return { host: remote.slice(start, hostEnd), path };
+  };
+
+  const at = remote.indexOf('@');
+  if (at > 0) {
+    let userIsToken = true;
+    for (let index = 0; index < at; index++) {
+      const code = remote.charCodeAt(index);
+      if (code === 47 || code === 64 || code === 58 || isWhitespaceCode(code)) {
+        userIsToken = false;
+        break;
+      }
+    }
+    if (userIsToken) {
+      const withUser = parseHostAndPath(at + 1);
+      if (withUser) return withUser;
+    }
+  }
+  return parseHostAndPath(0);
+}
+
+function trimEdgeSlashes(value: string): string {
+  let start = 0;
+  let end = value.length;
+  while (start < end && value.charCodeAt(start) === 47) start++;
+  while (end > start && value.charCodeAt(end - 1) === 47) end--;
+  return value.slice(start, end);
+}
+
 function normalizeGitRemote(remote: string): string | undefined {
   try {
     // Local paths have no cross-machine repository identity.
     if (/^(?:[a-z]:[\\/]|file:)/i.test(remote)) return undefined;
 
-    const scpRemote = /^(?:[^/@:\s]+@)?(\[[^\]]+\]|[^/:\s]+):(.+)$/.exec(remote);
-    const url = new URL(!remote.includes('://') && scpRemote ? `ssh://${scpRemote[1]}/${scpRemote[2]}` : remote);
+    const scpRemote = !remote.includes('://') ? parseScpRemote(remote) : null;
+    const url = new URL(scpRemote ? `ssh://${scpRemote.host}/${scpRemote.path}` : remote);
     if (!['https:', 'http:', 'ssh:', 'git:', 'git+ssh:'].includes(url.protocol) || !url.hostname) {
       return undefined;
     }
 
-    const repositoryPath = url.pathname.replace(/^\/+|\/+$/g, '').replace(/\.git$/, '');
+    const repositoryPath = trimEdgeSlashes(url.pathname).replace(/\.git$/, '');
     return repositoryPath ? `${url.hostname.toLowerCase()}/${repositoryPath}` : undefined;
   } catch {
     return undefined;

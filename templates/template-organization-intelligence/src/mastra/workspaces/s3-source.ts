@@ -12,6 +12,7 @@ import { S3Filesystem } from '@mastra/s3';
 
 import type { S3Source } from './catalog.js';
 import { normalizeS3Prefix } from './catalog.js';
+import { trimEdgeSlashes } from './s3-path.js';
 import { ExtractionError, MAX_RECORD_BYTES } from './extractors.js';
 
 export const MAX_S3_ENTRIES = 1_000;
@@ -185,7 +186,7 @@ export class BoundedS3Filesystem extends S3Filesystem {
   }
 
   async stat(path: string): Promise<FileStat> {
-    const normalized = path.replace(/^\/+|\/+$/g, '');
+    const normalized = trimEdgeSlashes(path);
     if (!normalized)
       return {
         name: '',
@@ -229,7 +230,7 @@ export class BoundedS3Filesystem extends S3Filesystem {
   }
 
   async exists(path: string): Promise<boolean> {
-    if (!path.replace(/^\/+|\/+$/g, '')) return true;
+    if (!trimEdgeSlashes(path)) return true;
     return (await this.isFile(path)) || (await this.isDirectory(path));
   }
 
@@ -246,7 +247,7 @@ export class BoundedS3Filesystem extends S3Filesystem {
   }
 
   async isDirectory(path: string): Promise<boolean> {
-    const requested = path.replace(/^\/+|\/+$/g, '');
+    const requested = trimEdgeSlashes(path);
     if (!requested) return true;
     try {
       const prefix = normalizeS3Prefix(this.source.prefix) + pathFor('', requested) + '/';
@@ -267,7 +268,7 @@ export class BoundedS3Filesystem extends S3Filesystem {
     path: string,
     options?: ListOptions,
   ): Promise<Array<{ name: string; type: 'file' | 'directory'; size?: number }>> {
-    const requested = path.replace(/^\/+|\/+$/g, '');
+    const requested = trimEdgeSlashes(path);
     const prefix = normalizeS3Prefix(this.source.prefix) + (requested ? pathFor('', requested) + '/' : '');
     const listed = await new ScopedS3Reader(this.source, this.client).list(prefix);
     if (!listed.complete) throw new Error('S3 directory listing is incomplete.');
