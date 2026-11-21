@@ -1,13 +1,12 @@
 import fs from 'node:fs';
-import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import type { MastraModelGatewayInterface } from '@mastra/core/llm';
 import { MIN_PRICED_MODELS, MODELS_DEV_API_URL, modelsDevToPricingModels, pickModelsDevCosts } from './models-dev';
 import type { ModelsDevCosts } from './models-dev';
+import pricingData from './pricing-data.json';
 import type { PricingModel } from './pricing-model';
 
-const DATA_FILE_NAME = 'pricing-data.json';
 const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const MIN_REFRESH_ATTEMPT_INTERVAL_MS = 60 * 60 * 1000;
 const REFRESH_TIMEOUT_MS = 5_000;
@@ -28,7 +27,6 @@ const AI_SDK_PROVIDER_NAMESPACE_ALIASES = new Map([
   ['vertex.maas', 'google-vertex'],
 ]);
 
-let cachedLoadError: string | null = null;
 let globalRegistry: PricingRegistry | null = null;
 let bundledRegistry: PricingRegistry | null = null;
 /** The part of a model router gateway that pricing reads. */
@@ -60,7 +58,7 @@ export class PricingRegistry {
    * cached in `~/.cache/mastra` instead, and refreshes from models.dev in the background once a day
    * and when a model has no price. Lookups never wait for a refresh.
    */
-  static getGlobal(): PricingRegistry | null {
+  static getGlobal(): PricingRegistry {
     if (!globalRegistry) {
       const cachedPricingModels = loadCachedPricingModels();
       globalRegistry = cachedPricingModels ? new PricingRegistry(cachedPricingModels) : getBundledRegistry();
@@ -83,7 +81,7 @@ export class PricingRegistry {
     // gateway that names a public provider cannot reprice direct calls to that provider.
     const match =
       this.find(args) ??
-      (this === bundledRegistry ? null : getBundledRegistry()?.find(args)) ??
+      (this === bundledRegistry ? null : getBundledRegistry().find(args)) ??
       gatewayRegistry?.find(args);
     if (match) {
       return match;
@@ -107,13 +105,8 @@ export class PricingRegistry {
   }
 }
 
-function getBundledRegistry(): PricingRegistry | null {
-  if (!bundledRegistry) {
-    const pricingModels = loadPricingModels();
-    if (pricingModels) {
-      bundledRegistry = new PricingRegistry(pricingModels);
-    }
-  }
+function getBundledRegistry(): PricingRegistry {
+  bundledRegistry ??= PricingRegistry.fromModelsDev(pricingData);
   return bundledRegistry;
 }
 
@@ -298,47 +291,6 @@ async function touchCacheFile(): Promise<void> {
     await fs.promises.utimes(CACHE_FILE(), now, now);
   } catch {
     // Nothing cached yet, or the cache folder is read-only.
-  }
-}
-
-function loadPricingModels(): Map<string, PricingModel> | null {
-  if (cachedLoadError) {
-    return null;
-  }
-
-  try {
-    return modelsDevToPricingModels(JSON.parse(fs.readFileSync(resolvePricingModelPath(), 'utf-8')));
-  } catch (error) {
-    cachedLoadError = error instanceof Error ? error.message : String(error);
-    return null;
-  }
-}
-
-function resolvePricingModelPath(): string {
-  const packageRoot = getPackageRoot();
-  const candidates = [
-    path.join(packageRoot, 'dist', 'metrics', DATA_FILE_NAME),
-    path.join(packageRoot, 'src', 'metrics', DATA_FILE_NAME),
-    path.join(process.cwd(), 'observability', 'mastra', 'src', 'metrics', DATA_FILE_NAME),
-    path.join(process.cwd(), 'src', 'metrics', DATA_FILE_NAME),
-  ];
-
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
-      return candidate;
-    }
-  }
-
-  throw new Error(`Unable to locate pricing data at any known path: ${candidates.join(', ')}`);
-}
-
-function getPackageRoot(): string {
-  try {
-    const require = createRequire(import.meta.url || 'file://');
-    const packageJsonPath = require.resolve('@mastra/observability/package.json');
-    return path.dirname(packageJsonPath);
-  } catch {
-    return process.cwd();
   }
 }
 

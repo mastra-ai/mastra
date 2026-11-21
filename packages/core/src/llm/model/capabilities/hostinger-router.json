@@ -21,21 +21,20 @@
     "kimi-k3"
   ],
   "reasoning": {
-    "kimi-k3": [
+    "claude-haiku-4.5": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
+      }
+    ],
+    "claude-sonnet-4.5": [
+      {
+        "type": "toggle"
       }
     ],
     "deepseek-v4.1-flash": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "claude-sonnet-4.5": [
-      {
-        "type": "toggle"
       }
     ],
     "claude-sonnet-5": [
@@ -47,9 +46,10 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "claude-haiku-4.5": [
+    "kimi-k3": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "claude-opus-5": [

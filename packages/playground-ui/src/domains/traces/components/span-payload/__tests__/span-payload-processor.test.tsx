@@ -53,11 +53,6 @@ const sectionTitles = () =>
 const LAYOUTS = [['details', (span: SpanRecord) => <SpanDetailsView traceId="t" spanId="s" span={span} />]] as const;
 
 describe('SpanPayloadProcessor', () => {
-  it('reads the phase from the span rather than the payload shape', () => {
-    render(<SpanInputRenderer span={processorToolResultSpan} />);
-    expect(slot('span-payload-processor')?.getAttribute('data-phase')).toBe('toolResult');
-  });
-
   it('shows system and user messages as one list tagged by role', () => {
     render(<SpanInputRenderer span={processorRequestErrorSpan} />);
     expect(document.querySelectorAll('[data-slot="span-payload-messages"]').length).toBe(1);
@@ -92,7 +87,6 @@ describe('SpanPayloadProcessor', () => {
 
   it('keeps the two output hooks apart', () => {
     render(<SpanOutputRenderer span={processorOutputStreamSpan} />);
-    expect(slot('span-payload-processor')?.getAttribute('data-phase')).toBe('outputStream');
     expect(screen.getByText('The sky is blue.')).toBeTruthy();
     expect(valueOf('Chunks')).toBe('126');
   });

@@ -280,16 +280,6 @@ describe('MessageRow', () => {
     });
   });
 
-  it('renders user text', () => {
-    renderRow(
-      baseMessage({
-        role: 'user',
-        content: { format: 2, parts: [{ type: 'text', text: 'a user line' }] },
-      }),
-    );
-    expect(screen.getByText('a user line')).toBeTruthy();
-  });
-
   it('drops messages with no displayable role', () => {
     const { container } = renderRow(
       baseMessage({

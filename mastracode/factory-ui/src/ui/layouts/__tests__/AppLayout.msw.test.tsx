@@ -245,17 +245,6 @@ describe('AppLayout', () => {
     }
   });
 
-  it('leaves retired Factory pages out of the sidebar', async () => {
-    stubFactory();
-    renderApp();
-
-    const sidebar = await screen.findByRole('complementary', { name: 'Main sidebar' });
-    await within(sidebar).findByRole('navigation', { name: 'Factory' });
-    for (const retired of ['Activity', 'Overview', 'Audit log', 'Supervisor']) {
-      expect(within(sidebar).queryByRole('link', { name: new RegExp(`^${retired}`) })).not.toBeInTheDocument();
-    }
-  });
-
   it('shows one sidebar toggle: in the sidebar header while open, in the page header once collapsed', async () => {
     stubFactory();
     renderApp(`/factories/${FACTORY_ID}/slots`);

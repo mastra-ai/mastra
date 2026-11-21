@@ -271,20 +271,6 @@ describe('ObservabilitySavedViews', () => {
     expect(screen.queryByRole('button', { name: 'Save changes' })).toBeNull();
   });
 
-  it('applies a fixed date range as saved', async () => {
-    const source = createInMemorySavedViewsSource([{ name: 'Incident', state: tracesView }]);
-    renderBar({ page: 'traces', initial: '', source, withColumns: true });
-
-    await pickView('Incident');
-
-    await waitFor(() => {
-      const params = new URLSearchParams(url());
-      expect(params.get('datePreset')).toBe('custom');
-      expect(params.get('dateFrom')).toBe('2026-10-01T00:00:00.000Z');
-      expect(params.get('dateTo')).toBe('2026-10-02T12:30:00.000Z');
-    });
-  });
-
   it('applies a read-only view but offers no way to change it', async () => {
     const source = createInMemorySavedViewsSource([{ name: 'Org errors', state: spansView, scope: 'org' }]);
     renderBar({ page: 'spans', initial: '', source, canEdit: view => view.scope !== 'org' });

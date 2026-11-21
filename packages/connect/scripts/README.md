@@ -59,7 +59,7 @@ Actions that need runtime helpers the platform proxy context doesn't implement, 
 
 Treat generated source as untrusted vendored code. Every template SHA update and generated diff requires security review before commit; passing automated checks is not sufficient.
 
-Provider responses that carry credentials an agent never needs, such as webhook signing secrets, are listed per action in `OUTPUT_SECRET_FIELDS` in `generate-provider.ts`. The generated tool removes those fields from its result and omits them from its output schema, and `src/__tests__/provider-actions.test.ts` covers the redaction.
+Provider responses that carry credentials an agent never needs, such as webhook signing secrets, are listed per action in `OUTPUT_SECRET_FIELDS` in `generate-provider.ts`. The generated tool removes those fields from its result and, when its output schema declares them, omits them from the schema too, and `src/__tests__/provider-actions.test.ts` covers the redaction.
 
 Templates that read `connection.credentials` get their `getConnection()` calls rewritten to `getConnectionWithCredentials()`, which fetches the raw credential from the platform's credential endpoint (the same one `credential()` uses). Every other exec receives a connection context without credentials, so only actions that genuinely need the secret ever see it.
 

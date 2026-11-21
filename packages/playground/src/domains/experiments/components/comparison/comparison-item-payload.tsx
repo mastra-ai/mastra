@@ -1,5 +1,4 @@
-import { ComparisonPayload } from './comparison-payload';
-import { ComparisonSection } from './comparison-section';
+import { ComparisonPayload, ComparisonSection } from '@mastra/playground-ui/domains/experiments';
 
 export interface ComparisonItemPayloadProps {
   label: string;

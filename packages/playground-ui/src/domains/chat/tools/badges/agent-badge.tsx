@@ -1,7 +1,6 @@
 import React from 'react';
 import type { ReactNode } from 'react';
 import Markdown from 'react-markdown';
-import { ToolCard } from '../tool-card';
 import type { ToolCardProps } from '../tool-card';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import type { MessageMetadata } from '@/domains/chat';
@@ -46,11 +45,12 @@ export interface AgentBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'>
   errorText?: string;
   onLoadPrevious?: () => void;
   isLoadingPrevious?: boolean;
-  /** Draws each tool call the sub-agent made; defaults to the live `ToolCard`. */
-  renderToolCard?: (props: ToolCardProps) => ReactNode;
+  /**
+   * Draws each tool call the sub-agent made. Required so this badge never imports the live
+   * `ToolCard` itself: a recorded card can draw it without pulling in the live chat.
+   */
+  renderToolCard: (props: ToolCardProps) => ReactNode;
 }
-
-const renderLiveToolCard = (props: ToolCardProps) => <ToolCard {...props} />;
 
 export const AgentBadge = ({
   agentId,
@@ -68,7 +68,7 @@ export const AgentBadge = ({
   errorText,
   onLoadPrevious,
   isLoadingPrevious = false,
-  renderToolCard = renderLiveToolCard,
+  renderToolCard,
 }: AgentBadgeProps) => {
   const routingDecision = metadata?.mode === 'network' ? metadata.routingDecision : undefined;
   const selectionReason =

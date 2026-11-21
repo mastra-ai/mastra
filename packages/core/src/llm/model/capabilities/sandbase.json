@@ -19,12 +19,13 @@
     "z-ai/glm-5.3-flash"
   ],
   "reasoning": {
-    "alibaba/qwen3.7-max": [
+    "moonshotai/kimi-k3": [
       {
         "type": "toggle"
       },
       {
-        "type": "budget_tokens"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "alibaba/qwen3.7-plus": [
@@ -35,13 +36,12 @@
         "type": "budget_tokens"
       }
     ],
-    "deepseek/deepseek-v4-flash": [
+    "alibaba/qwen3.7-max": [
       {
         "type": "toggle"
       },
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "budget_tokens"
       }
     ],
     "deepseek/deepseek-v4-pro": [
@@ -53,31 +53,13 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "moonshotai/kimi-k3": [
+    "deepseek/deepseek-v4-flash": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "openai/gpt-5.6-terra": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "openai/gpt-5.6-luna": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "openai/gpt-5.6-sol": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "z-ai/glm-5.3": [
@@ -90,6 +72,24 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "openai/gpt-5.6-sol": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "openai/gpt-5.6-luna": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "openai/gpt-5.6-terra": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

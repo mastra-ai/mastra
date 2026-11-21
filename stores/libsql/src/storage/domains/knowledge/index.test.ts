@@ -11,6 +11,7 @@ import {
   createKnowledgeImportersStorageTests,
   createKnowledgeLegacyUpgradeTests,
   createKnowledgeSchemaResetTests,
+  createKnowledgeHostWriteTests,
   createKnowledgePageStoreTests,
   createKnowledgeTransactionTests,
   knowledgeStoreThroughTransactions,
@@ -53,6 +54,7 @@ describe('Knowledge Core compatibility', () => {
 });
 
 createKnowledgePageStoreTests(() => new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' }));
+createKnowledgeHostWriteTests(() => new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' }));
 
 describe('through transaction views', () => {
   createKnowledgePageStoreTests(() =>

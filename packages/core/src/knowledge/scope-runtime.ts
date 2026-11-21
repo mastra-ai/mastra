@@ -265,6 +265,11 @@ export class KnowledgeScopeRuntime {
     );
   }
 
+  /** Refuses a stored scope row whose address now matches a different declaration, as materializing it would. */
+  assertCurrentScope(scope: KnowledgePage): void {
+    this.#assertCurrent(scope);
+  }
+
   async readScopeFor(principals: readonly string[]): Promise<Exclude<KnowledgeReadScope, 'all'>> {
     this.validatePrincipals(principals);
     await this.checkDeclarations();

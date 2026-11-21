@@ -27,12 +27,6 @@
     "qwen3.8-27b"
   ],
   "reasoning": {
-    "kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "qwen3.8-27b": [
       {
         "type": "effort",
@@ -45,19 +39,25 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
+    "kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "kimi-k3.1-pro": [
+    "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3-flash": [
+    "kimi-k3.1-pro": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

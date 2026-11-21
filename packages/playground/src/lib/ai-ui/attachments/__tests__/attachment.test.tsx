@@ -1,9 +1,9 @@
+import { AttachFileMenu } from '@mastra/playground-ui/domains/agents/chat/attachments/attach-file-menu';
+import { ComposerAttachments } from '@mastra/playground-ui/domains/agents/chat/attachments/attachment';
+
+import { ComposerAttachmentsProvider } from '@mastra/playground-ui/domains/agents/chat/attachments/composer-attachments';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-
-import { AttachFileMenu } from '../attach-file-menu';
-import { ComposerAttachments } from '../attachment';
-import { ComposerAttachmentsProvider } from '../composer-attachments';
 
 describe('composer attachment previews', () => {
   describe('when several text files are attached', () => {

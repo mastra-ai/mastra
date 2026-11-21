@@ -33,6 +33,18 @@
         "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ],
+    "muse-spark-1.3": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "muse-spark-1.3-contributor": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
     "muse-spark-1.2": [
       {
         "type": "effort",
@@ -45,25 +57,13 @@
         "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "muse-ember-1.0": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
     "muse-spark-1.2-contributor": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ],
-    "muse-spark-1.3-contributor": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "muse-spark-1.3": [
+    "muse-ember-1.0": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high", "xhigh", "max"]

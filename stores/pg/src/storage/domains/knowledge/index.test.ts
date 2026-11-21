@@ -1,6 +1,7 @@
 import {
   createKnowledgeImporterHostTests,
   createKnowledgeHostedImporterHostTests,
+  createKnowledgeHostWriteTests,
   createKnowledgeImportersStorageTests,
   createKnowledgeLegacyUpgradeTests,
   createKnowledgePageStoreTests,
@@ -112,6 +113,7 @@ beforeAll(async () => {
 });
 
 createKnowledgePageStoreTests(() => new KnowledgePG({ pool, schemaName: 'knowledge_contract_test' }));
+createKnowledgeHostWriteTests(() => new KnowledgePG({ pool, schemaName: 'knowledge_contract_test' }));
 
 describe('through transaction views', () => {
   beforeAll(async () => {

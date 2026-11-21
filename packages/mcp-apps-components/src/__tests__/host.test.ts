@@ -76,10 +76,10 @@ describe('observabilityWidgetPins', () => {
 describe('observabilityWidgetHost', () => {
   it("sends the host page's date preset, filters and project down, without pins", () => {
     const filters = [{ fieldId: 'environment', value: 'production' }];
-    const host = observabilityWidgetHost({ resourceUri: URI, datePreset: '7d', filters, projectId: 'project-1' });
+    const host = observabilityWidgetHost({ resourceUri: URI, datePreset: '7d', filters, project: 'project-1' });
 
     expect(host.hostContext!(widgetApp)).toEqual({
-      [OBSERVABILITY_WIDGET_VIEW_CONTEXT_KEY]: { datePreset: '7d', filters, projectId: 'project-1' },
+      [OBSERVABILITY_WIDGET_VIEW_CONTEXT_KEY]: { datePreset: '7d', filters, project: 'project-1' },
     });
     expect(host.hostContext!(otherApp)).toBeUndefined();
     expect(host.onModelContext).toBeUndefined();
@@ -105,12 +105,12 @@ describe('observabilityWidgetHost', () => {
   it('sends the project alongside the pinned ids when pins are passed too', () => {
     const host = observabilityWidgetHost({
       resourceUri: URI,
-      projectId: 'project-1',
+      project: 'project-1',
       pins: { pinnedIds: ['overview'], onPin: () => {}, onUnpin: () => {} },
     });
 
     expect(host.hostContext!(widgetApp)).toEqual({
-      [OBSERVABILITY_WIDGET_VIEW_CONTEXT_KEY]: { projectId: 'project-1' },
+      [OBSERVABILITY_WIDGET_VIEW_CONTEXT_KEY]: { project: 'project-1' },
       [OBSERVABILITY_WIDGET_PINNED_CONTEXT_KEY]: ['overview'],
     });
   });

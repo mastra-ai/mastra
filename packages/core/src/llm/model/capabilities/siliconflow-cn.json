@@ -113,6 +113,12 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "zai-org/GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "zai-org/GLM-4.5V": [
       {
         "type": "toggle"
@@ -124,13 +130,25 @@
         "values": ["high", "max"]
       }
     ],
-    "zai-org/GLM-5.3": [
+    "tencent/Hunyuan-A13B-Instruct": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
       }
     ],
-    "tencent/Hunyuan-A13B-Instruct": [
+    "deepseek-ai/DeepSeek-V4-Pro": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-R1": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "deepseek-ai/DeepSeek-V3.1-Terminus": [
       {
         "type": "toggle"
       }
@@ -146,17 +164,6 @@
         "type": "toggle"
       }
     ],
-    "deepseek-ai/DeepSeek-V3.1-Terminus": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Pro": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
     "deepseek-ai/DeepSeek-V4.1-Flash": [
       {
         "type": "toggle"
@@ -166,29 +173,30 @@
         "values": ["high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-R1": [
+    "Qwen/Qwen3.6-27B": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "budget_tokens",
         "min": 128,
         "max": 32768
       }
     ],
-    "Pro/zai-org/GLM-5": [
+    "Qwen/Qwen3.5-122B-A10B": [
       {
         "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
       }
     ],
-    "Pro/deepseek-ai/DeepSeek-V3.2": [
+    "Qwen/Qwen3-32B": [
       {
         "type": "toggle"
-      }
-    ],
-    "Pro/deepseek-ai/DeepSeek-V3.1-Terminus": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Pro/deepseek-ai/DeepSeek-R1": [
+      },
       {
         "type": "budget_tokens",
         "min": 128,
@@ -205,19 +213,13 @@
         "max": 32768
       }
     ],
-    "Qwen/Qwen3.6-27B": [
+    "Qwen/Qwen3.8-27B": [
       {
         "type": "toggle"
       },
       {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Qwen/Qwen3-14B": [
-      {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
       },
       {
         "type": "budget_tokens",
@@ -245,10 +247,7 @@
         "max": 32768
       }
     ],
-    "Qwen/Qwen3.5-122B-A10B": [
-      {
-        "type": "toggle"
-      },
+    "Qwen/Qwen3-VL-32B-Thinking": [
       {
         "type": "budget_tokens",
         "min": 128,
@@ -262,33 +261,9 @@
         "max": 32768
       }
     ],
-    "Qwen/Qwen3-32B": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
     "Qwen/Qwen3.5-35B-A3B": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Qwen/Qwen3.8-27B": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
       },
       {
         "type": "budget_tokens",
@@ -306,11 +281,36 @@
         "max": 32768
       }
     ],
-    "Qwen/Qwen3-VL-32B-Thinking": [
+    "Qwen/Qwen3-14B": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "budget_tokens",
         "min": 128,
         "max": 32768
+      }
+    ],
+    "Pro/zai-org/GLM-5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Pro/deepseek-ai/DeepSeek-R1": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Pro/deepseek-ai/DeepSeek-V3.1-Terminus": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Pro/deepseek-ai/DeepSeek-V3.2": [
+      {
+        "type": "toggle"
       }
     ]
   }

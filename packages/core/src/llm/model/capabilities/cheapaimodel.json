@@ -3,10 +3,13 @@
   "temperature": ["deepseek-v4-1-flash", "glm-5.3", "glm-5.3-flash", "grok-4.7"],
   "structuredOutput": ["deepseek-v4-1-flash", "glm-5.3", "glm-5.3-flash", "grok-4.7", "kimi-k3"],
   "reasoning": {
-    "grok-4.7": [
+    "deepseek-v4-1-flash": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
+        "values": ["low", "high", "max"]
       }
     ],
     "kimi-k3": [
@@ -15,13 +18,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-v4-1-flash": [
-      {
-        "type": "toggle"
-      },
+    "grok-4.7": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "glm-5.3": [

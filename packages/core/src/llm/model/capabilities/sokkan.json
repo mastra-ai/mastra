@@ -14,24 +14,24 @@
         "type": "toggle"
       }
     ],
-    "qwen/qwen3.6-35b-a3b-eu": [
-      {
-        "type": "toggle"
-      }
-    ],
     "qwen/qwen3.8-27b": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "openai/gpt-oss-20b": [
+    "qwen/qwen3.6-35b-a3b-eu": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "openai/gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "openai/gpt-oss-120b": [
+    "openai/gpt-oss-20b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]

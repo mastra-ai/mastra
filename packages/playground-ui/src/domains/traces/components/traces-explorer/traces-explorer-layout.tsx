@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { TracesExplorerBody } from './traces-explorer-body';
 import type { TracesExplorerBodyProps } from './traces-explorer-body';
-import { useTracesBodyLoading } from './use-traces-discovery';
+import { useTracesBodyLoading } from './use-traces-body-loading';
 import { PageLayout } from '@/ds/components/PageLayout';
 
 export type { TracesExplorerErrorRenderArgs } from './traces-explorer-body';

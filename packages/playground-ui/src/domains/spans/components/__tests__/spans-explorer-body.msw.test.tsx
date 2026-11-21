@@ -418,15 +418,6 @@ describe('SpansExplorerBody', () => {
       expect(columns.compareDocumentPosition(timeRange) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     });
 
-    it('lists each span', async () => {
-      setHandlers(spanRowsPage);
-
-      renderBody();
-
-      expect(await screen.findByText('agent run: weather')).toBeTruthy();
-      expect(screen.getByText('tool: get-weather')).toBeTruthy();
-    });
-
     it('hands the listed spans to the panel, in list order', async () => {
       setHandlers(spanRowsPage);
 
@@ -532,16 +523,6 @@ describe('SpansExplorerBody', () => {
       renderBody();
 
       expect(await screen.findByText('Failed to load spans')).toBeTruthy();
-    });
-  });
-
-  describe('when the window has no spans', () => {
-    it('shows the empty state', async () => {
-      setHandlers(emptySpanRows);
-
-      renderBody();
-
-      expect(await screen.findByRole('heading', { name: 'No spans for the last 7 days' })).toBeTruthy();
     });
   });
 

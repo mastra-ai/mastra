@@ -1,7 +1,7 @@
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
-import { useDatasetItem } from '@mastra/react/hooks/datasets';
+import { DatasetItemPanel } from '@mastra/playground-ui/domains/datasets';
 
-import { DatasetItemPanel } from '@/domains/datasets/components/items/dataset-item-panel';
+import { useDatasetItem } from '@mastra/react/hooks/datasets';
 
 interface ComparisonItemPanelProps {
   datasetId: string;
