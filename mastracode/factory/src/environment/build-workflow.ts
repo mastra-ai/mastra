@@ -10,7 +10,7 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { maskSandboxEnvValues } from '../sandbox/sandbox-env.js';
-import { resolveProjectEnvironment } from '../workspace.js';
+import { resolveProjectEnvironment } from './session-environment.js';
 import {
   ENVIRONMENT_BUILD_TRIGGERS,
   environmentBuildContextWithEnv,

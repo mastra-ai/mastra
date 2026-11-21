@@ -7,7 +7,7 @@
 import type { Mastra } from '@mastra/core/mastra';
 import type { FactorySandboxContext } from '@mastra/core/workspace';
 import type { RepositoryPushEvent } from '../integrations/base.js';
-import { resolveProjectEnvironment } from '../workspace.js';
+import { resolveProjectEnvironment } from './session-environment.js';
 import { probeSchedulesAvailable } from './build-schedule.js';
 import type { ScheduleService } from './build-schedule.js';
 import { createEnvironmentBuildWorkflow, ENVIRONMENT_BUILD_WORKFLOW_ID } from './build-workflow.js';
