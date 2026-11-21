@@ -307,7 +307,7 @@ function parseActivationTTLConfig(
   return parsed;
 }
 
-import { addRelativeTimeToObservations } from './date-utils';
+import { addObservationDateGaps, buildObservationDateHints } from './date-utils';
 import { omDebug, omError } from './debug';
 import {
   buildExtractedValueContextSections,
@@ -2095,15 +2095,14 @@ export class ObservationalMemory {
     timeZone?: string,
   ): string[] {
     // Optimize observations to save tokens unless retrieval mode needs durable group metadata preserved.
-    let optimized = retrieval
+    const optimized = retrieval
       ? (renderObservationGroupsForReflection(observations, { includeReflectionKind: true }) ??
         optimizeObservationsForContext(observations))
       : optimizeObservationsForContext(observations);
 
-    // Add relative time annotations to date headers if currentDate is provided
-    if (currentDate) {
-      optimized = addRelativeTimeToObservations(optimized, currentDate, timeZone);
-    }
+    // Relative dates change at record-local midnight; keep them outside the stable observation chunks.
+    const dateHints = currentDate ? buildObservationDateHints(optimized, currentDate, timeZone) : undefined;
+    const stableObservations = currentDate ? addObservationDateGaps(optimized) : optimized;
 
     const messages = [
       `${getObservationContextPrompt(this.scope)}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}${retrieval ? `\n\n${getRetrievalInstructions(this.retrievalScope, this.retrievalInstructions, this.retrievalSearch, this.storage.supportsObservationalMemoryHistorySearch === true)}` : ''}`,
@@ -2116,9 +2115,10 @@ export class ObservationalMemory {
       );
     }
 
-    const observationChunks = this.splitObservationContextChunks(optimized);
+    const observationChunks = this.splitObservationContextChunks(stableObservations);
     if (observationChunks.length > 0) {
       messages.push('<observations>', ...observationChunks, '</observations>');
+      if (dateHints) messages.push(dateHints);
     }
 
     // Dynamically inject current-task from thread metadata (not stored in observations)
