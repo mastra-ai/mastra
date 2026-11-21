@@ -141,6 +141,8 @@ export async function processWorkflowSleep(
   });
 
   setLongTimeout(async () => {
+    // The timer outlives cancel; the processor already drops routing for a canceled run.
+    if ((await runStorage.loadHeader())?.status === 'canceled') return;
     const output = prevResult.status === 'success' ? prevResult.output : undefined;
     const result = { status: 'success' as const, payload: output, output, startedAt, endedAt: Date.now() };
     await runStorage.writeStepResult({
@@ -276,6 +278,8 @@ export async function processWorkflowSleepUntil(
   }
 
   setLongTimeout(async () => {
+    // The timer outlives cancel; the processor already drops routing for a canceled run.
+    if ((await runStorage.loadHeader())?.status === 'canceled') return;
     const output = prevResult.status === 'success' ? prevResult.output : undefined;
     const result = { status: 'success' as const, payload: output, output, startedAt, endedAt: Date.now() };
     await runStorage.writeStepResult({
