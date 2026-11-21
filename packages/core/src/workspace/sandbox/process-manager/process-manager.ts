@@ -103,11 +103,13 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
           onAbort();
         } else {
           abortSignal.addEventListener('abort', onAbort, { once: true });
-          // Clean up listener when process exits
-          handle.wait().then(
-            () => abortSignal.removeEventListener('abort', onAbort),
-            () => abortSignal.removeEventListener('abort', onAbort),
-          );
+          // Clean up the listener when the process exits, not when `wait()`
+          // settles: a descendant the command left behind can hold the output
+          // open, so the handle is still running and still killable then.
+          const removeAbortListener = () => abortSignal.removeEventListener('abort', onAbort);
+          void handle.whenExited().then(removeAbortListener);
+          // Providers learn their exit state from `wait()`, so it still runs.
+          void handle.wait().catch(() => {});
         }
       }
 
