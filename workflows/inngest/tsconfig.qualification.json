@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": true, "types": ["node"] },
+  "include": ["src/__tests__/inngest-agent-observe.test.ts", "test-fixtures/qualification.ts"],
+  "exclude": ["node_modules"]
+}
