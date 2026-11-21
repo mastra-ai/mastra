@@ -218,12 +218,14 @@ describe('start row written before the input save (#30791)', () => {
   });
 
   it('is deleted when the workflow fails to start', async () => {
-    const { agent, loopRow } = await setup(true);
+    const { agent, memory, loopRow } = await setup(true);
     vi.spyOn(agent.getWorkflow(), 'createRun').mockRejectedValueOnce(new Error('engine down'));
     const stream = await agent.stream('hello', { runId: 'r-start-fails', memory: { thread: 't-st', resource: 'u' } });
     expect((await settle(stream)).length).toBeGreaterThan(0);
     expect(await loopRow('r-start-fails')).toBeNull();
     expect((await agent.listActiveRuns()).runs).toEqual([]);
+    // The input save succeeded, so the accepted message stays.
+    expect((await memory.recall({ threadId: 't-st', resourceId: 'u' })).messages).toHaveLength(1);
   });
 });
 
@@ -293,6 +295,81 @@ describe('start row whose write commits and then rejects (#30791)', () => {
         await mastra.recoverAllDurableAgents();
         await new Promise(resolve => setTimeout(resolve, 100));
         expect(prompts).toEqual([]);
+      } finally {
+        await mastra.stopWorkers?.();
+      }
+    },
+  );
+});
+
+describe('input save that commits and then rejects (#30791)', () => {
+  async function setup(kind: 'durable' | 'evented', storageVersion: 1 | 2) {
+    const storage = new InMemoryStore();
+    const memory = new MockMemory({ storage });
+    const prompts: string[][] = [];
+    const built = new Agent({
+      id: 'ambiguous-input',
+      name: 'Ambiguous input',
+      instructions: 'Reply.',
+      model: createModel(prompts),
+      memory,
+    });
+    const agent =
+      kind === 'durable'
+        ? createDurableAgent({ agent: built, storageVersion })
+        : createEventedAgent({ agent: built, storageVersion });
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      agents: { 'ambiguous-input': agent as any },
+      recovery: { durableAgents: 'auto' },
+    });
+    if (kind === 'evented') await mastra.startWorkers();
+    const workflows = (await mastra.getStorage()!.getStore('workflows'))! as any;
+    // The first save commits its messages, then reports the write as failed.
+    const save = memory.saveMessages.bind(memory);
+    let rejected = false;
+    memory.saveMessages = async (args: Parameters<typeof save>[0]) => {
+      const result = await save(args);
+      if (rejected) return result;
+      rejected = true;
+      throw new Error('save acknowledgement lost');
+    };
+    return { agent, mastra, memory, prompts, workflows, wasRejected: () => rejected };
+  }
+
+  async function errorsOf(stream: { fullStream: AsyncIterable<any> }) {
+    const errors: unknown[] = [];
+    for await (const chunk of stream.fullStream) if (chunk.type === 'error') errors.push(chunk.payload?.error);
+    return errors;
+  }
+
+  it.each([
+    { kind: 'durable', storageVersion: 1 },
+    { kind: 'durable', storageVersion: 2 },
+    { kind: 'evented', storageVersion: 1 },
+    { kind: 'evented', storageVersion: 2 },
+  ] as const)(
+    '$kind agent (storage v$storageVersion) reports the failure and runs nothing',
+    async ({ kind, storageVersion }) => {
+      const { agent, mastra, memory, prompts, workflows, wasRejected } = await setup(kind, storageVersion);
+      try {
+        const stream = await agent.stream('hello', { runId: 'r-input', memory: { thread: 't-in', resource: 'u' } });
+        const errors = await errorsOf(stream);
+        expect(wasRejected()).toBe(true);
+        expect(String(errors[0])).toContain('save acknowledgement lost');
+        expect(
+          await workflows.getWorkflowRunById({ runId: 'r-input', workflowName: DurableStepIds.AGENTIC_LOOP }),
+        ).toBeNull();
+        expect((await agent.listActiveRuns()).runs).toEqual([]);
+        await mastra.recoverAllDurableAgents();
+        await new Promise(resolve => setTimeout(resolve, 100));
+        expect(prompts).toEqual([]);
+        // No delete is safe without a conditional one in storage, so the committed message stays
+        // unanswered; the caller got the error. A retry that reuses the id
+        // overwrites it; one without leaves a second user turn.
+        const { messages } = await memory.recall({ threadId: 't-in', resourceId: 'u' });
+        expect(messages.map((message: { role: string }) => message.role)).toEqual(['user']);
       } finally {
         await mastra.stopWorkers?.();
       }
